@@ -48,6 +48,13 @@ import type {
   ModuleRow,
 } from "../api/types";
 
+/** Library-default reach modes. `pick` is deliberately absent — it
+ *  names live per-instance `_uid`s that don't exist at library
+ *  authoring time (instance-only, set on the modal's TargetReachSection).
+ *  Mirrors the `first`/`next`/`all` subset of `TargetSelect`. */
+type LibReachMode = "first" | "next" | "all";
+type LibTargetSelect = { mode: LibReachMode; count?: number };
+
 const props = defineProps<{ id?: string }>();
 const router = useRouter();
 const { resolveReturnTo } = useReturnTo();
@@ -118,6 +125,14 @@ const sourceWildcardId = ref<string | null>(null);
 const targetWildcardId = ref<string | null>(null);
 const matrix = ref<ConstraintMatrix>({});
 const exceptions = ref<ConstraintException[]>([]);
+// Library-default reach. `all` is the engine default — kept here as the
+// initial value; `save()` omits it from the payload when it stays `all`
+// (matches how the engine treats an absent `target_select`).
+const targetSelect = ref<LibTargetSelect>({ mode: "all" });
+const reachCount = computed<number>(() => {
+  const c = Number(targetSelect.value.count);
+  return Number.isFinite(c) && c >= 1 ? Math.floor(c) : 1;
+});
 const saving = ref(false);
 const saveState = ref<SaveState>("idle");
 const saveError = ref<string>("");
@@ -148,6 +163,7 @@ function snapshot(): string {
     targetWildcardId: targetWildcardId.value,
     matrix: matrix.value,
     exceptions: exceptions.value,
+    targetSelect: targetSelect.value,
   });
 }
 
@@ -175,6 +191,7 @@ function applyDraft(): void {
       targetWildcardId: string | null;
       matrix: ConstraintMatrix;
       exceptions: ConstraintException[];
+      targetSelect?: unknown;
     };
     name.value = parsed.name;
     description.value = parsed.description;
@@ -184,6 +201,7 @@ function applyDraft(): void {
     targetWildcardId.value = parsed.targetWildcardId;
     matrix.value = normalizeMatrix(parsed.matrix);
     exceptions.value = normalizeExceptions(parsed.exceptions);
+    targetSelect.value = normalizeTargetSelect(parsed.targetSelect);
   } catch {
     toast.push({ severity: "error", summary: "Draft restore failed", life: 3000 });
   }
@@ -456,6 +474,23 @@ function normalizeExceptions(raw: unknown): ConstraintException[] {
     .filter((x): x is ConstraintException => x !== null);
 }
 
+/** Coerce a loose payload `target_select` into the library subset
+ *  (`first`/`next`/`all`). A `pick` selector authored on an instance and
+ *  somehow round-tripped into the library payload degrades to `all` — the
+ *  manager can't edit instance picks, so showing them would be a lie.
+ *  Absent / malformed = `all` (the engine default). */
+function normalizeTargetSelect(raw: unknown): LibTargetSelect {
+  if (!raw || typeof raw !== "object") return { mode: "all" };
+  const r = raw as Record<string, unknown>;
+  if (r.mode === "first") return { mode: "first" };
+  if (r.mode === "next") {
+    const c = Number(r.count);
+    const count = Number.isFinite(c) && c >= 1 ? Math.floor(c) : 1;
+    return { mode: "next", count };
+  }
+  return { mode: "all" };
+}
+
 onMounted(async () => {
   await Promise.all([categoryStore.fetchAll(), moduleStore.fetchCatalog()]);
   if (props.id) {
@@ -471,6 +506,7 @@ onMounted(async () => {
       targetWildcardId.value = p.target_wildcard_id ?? null;
       matrix.value = normalizeMatrix(p.matrix);
       exceptions.value = normalizeExceptions(p.exceptions);
+      targetSelect.value = normalizeTargetSelect(p.target_select);
       // Refresh exception value-strings from source_id / target_id in case
       // an upstream wildcard's option value was renamed since this
       // constraint was last opened. Re-anchor baseline below so this
@@ -536,6 +572,26 @@ function setExceptionMode(idx: number, mode: ConstraintMode) {
   ex.factor = MODE_DEFAULT_FACTOR[mode] ?? 1;
 }
 
+const REACH_MODES: Array<{ key: LibReachMode; label: string }> = [
+  { key: "first", label: "first" },
+  { key: "next", label: "next N" },
+  { key: "all", label: "all" },
+];
+
+/** Switch reach mode. Entering `next` seeds `count` from the current
+ *  stepper value (min 1) so the field is never blank; `first`/`all` carry
+ *  no extra fields. */
+function setReachMode(mode: LibReachMode): void {
+  if (mode === targetSelect.value.mode) return;
+  targetSelect.value = mode === "next" ? { mode: "next", count: reachCount.value } : { mode };
+}
+
+function onReachCountInput(ev: Event): void {
+  const raw = Number((ev.target as HTMLInputElement).value);
+  const n = Number.isFinite(raw) && raw >= 1 ? Math.floor(raw) : 1;
+  targetSelect.value = { mode: "next", count: n };
+}
+
 function applyRestore(entry: ModuleHistoryEntry): void {
   name.value = entry.name;
   description.value = entry.description ?? "";
@@ -546,6 +602,7 @@ function applyRestore(entry: ModuleHistoryEntry): void {
   targetWildcardId.value = p.target_wildcard_id ?? null;
   matrix.value = normalizeMatrix(p.matrix);
   exceptions.value = normalizeExceptions(p.exceptions);
+  targetSelect.value = normalizeTargetSelect(p.target_select);
   rehydrateExceptionsFromIds();
   toast.push({
     severity: "info",
@@ -569,6 +626,15 @@ async function save() {
       target_wildcard_id: targetWildcardId.value,
       matrix: matrix.value,
       exceptions: exceptions.value,
+      // Always stamp the reach selector. `{mode:"all"}` is the engine
+      // default, but stamping it explicitly keeps the published payload
+      // self-describing (the download/install path doesn't have to infer
+      // intent from an absent field) and matches how the editor persists
+      // its other payload fields.
+      target_select:
+        targetSelect.value.mode === "next"
+          ? { mode: "next", count: reachCount.value }
+          : { mode: targetSelect.value.mode },
     };
     const newPayload = payload as unknown as Record<string, unknown>;
     if (isEdit.value && props.id) {
@@ -660,7 +726,7 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
   showErrors.value ? validationErrors.value : [],
 );
 
-defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRestore, displayLabel });
+defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, targetSelect, applyRestore, displayLabel });
 </script>
 
 <template>
@@ -800,6 +866,49 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
         data-test="matrix-grid"
         @update:model-value="onMatrixUpdate"
       />
+    </Card>
+    </div>
+
+    <div id="editor-section-reach">
+    <Card title="Target reach">
+      <template #actions>
+        <span class="wp-card__hint">How many downstream target instances this constraint covers by default</span>
+      </template>
+      <!-- Library default `target_select`. Modes first / next N / all
+           ONLY — `pick` names live per-instance occurrences that don't
+           exist at library-authoring time, so it's offered on the
+           instance modal (TargetReachSection), not here. -->
+      <div class="cn-reach">
+        <div class="cn-reach-seg" role="group" aria-label="Target reach mode">
+          <button
+            v-for="m in REACH_MODES"
+            :key="m.key"
+            type="button"
+            class="cn-reach-btn"
+            :class="{ active: targetSelect.mode === m.key }"
+            :aria-pressed="targetSelect.mode === m.key"
+            :data-test="`cn-reach-mode-${m.key}`"
+            @click="setReachMode(m.key)"
+          >{{ m.label }}</button>
+          <span v-if="targetSelect.mode === 'next'" class="cn-reach-step">
+            <input
+              class="cn-reach-step__field"
+              type="number"
+              min="1"
+              step="1"
+              :value="reachCount"
+              aria-label="Number of downstream targets"
+              data-test="cn-reach-count"
+              @input="onReachCountInput"
+            />
+          </span>
+        </div>
+        <span class="cn-reach-hint" data-test="cn-reach-hint">
+          <template v-if="targetSelect.mode === 'all'">Re-weights every downstream target instance.</template>
+          <template v-else-if="targetSelect.mode === 'first'">Re-weights only the first downstream target instance.</template>
+          <template v-else>Re-weights the first {{ reachCount }} downstream target {{ reachCount === 1 ? "instance" : "instances" }}.</template>
+        </span>
+      </div>
     </Card>
     </div>
 
@@ -979,4 +1088,62 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
 .cn-col-factor { width: 120px; }
 .cn-col-trash { width: 40px; }
 .cn-dash { font-size: var(--wp-text-xs); }
+
+/* ── Target reach — segmented first / next N / all + stepper. Mirrors
+ *    the instance modal's TargetReachSection control, restyled with the
+ *    manager's tokens. `pick` is intentionally absent (instance-only). */
+.cn-reach {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wp-space-3);
+  align-items: flex-start;
+}
+.cn-reach-seg {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius, 6px);
+  overflow: hidden;
+}
+.cn-reach-btn {
+  padding: 6px 14px;
+  border: 0;
+  border-right: 1px solid var(--wp-border);
+  background: transparent;
+  color: var(--wp-text-muted);
+  font-size: var(--wp-text-sm);
+  font-weight: 500;
+  cursor: pointer;
+}
+.cn-reach-btn:last-of-type { border-right: 0; }
+.cn-reach-btn:hover {
+  color: var(--wp-text);
+  background: color-mix(in srgb, var(--wp-text) 6%, transparent);
+}
+.cn-reach-btn.active {
+  background: var(--wp-accent);
+  color: #fff;
+}
+.cn-reach-step {
+  display: inline-flex;
+  align-items: stretch;
+  border-left: 1px solid var(--wp-border);
+}
+.cn-reach-step__field {
+  width: 52px;
+  background: transparent;
+  border: 0;
+  padding: 0 8px;
+  font-size: var(--wp-text-sm);
+  color: var(--wp-text);
+  text-align: center;
+  -moz-appearance: textfield;
+}
+.cn-reach-step__field::-webkit-outer-spin-button,
+.cn-reach-step__field::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.cn-reach-step__field:focus { outline: none; }
+.cn-reach-hint {
+  font-size: var(--wp-text-xs);
+  color: var(--wp-text-dim);
+}
 </style>

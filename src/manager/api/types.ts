@@ -157,6 +157,16 @@ export interface ConstraintPayload {
   matrix: ConstraintMatrix;
   exceptions: ConstraintException[];
   broken_exceptions?: BrokenConstraintException[];
+  /**
+   * SP3 library-default reach selector — decides which downstream
+   * instances of `target_wildcard_id` the constraint covers when no
+   * per-instance override is set. Library authoring offers `first` /
+   * `next N` / `all` only; `pick` references live per-instance `_uid`s
+   * that don't exist at authoring time, so it's instance-only (set on
+   * the modal, see `TargetSelect` in `widgets/_shared.ts`). Absent =
+   * engine default `{mode:"all"}`.
+   */
+  target_select?: { mode: "first" | "next" | "all"; count?: number };
 }
 
 export interface ModuleRow {

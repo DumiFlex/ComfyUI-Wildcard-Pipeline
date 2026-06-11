@@ -300,4 +300,74 @@ describe("ConstraintEditor.vue", () => {
     const opts = srcSelect!.props("options") as Array<{ label: string; value: string }>;
     expect(opts.some((o) => o.value === "" && /null/i.test(o.label))).toBe(true);
   });
+
+  // ── Target reach (library default `target_select`) ──────────────────
+  // The manager authors the LIBRARY constraint. The reach control writes
+  // payload.target_select with modes first / next N / all ONLY — `pick`
+  // is instance-only (it names live `_uid`s that don't exist at library
+  // authoring time) and must NOT be offered here.
+  async function mountWithWildcards(): Promise<ReturnType<typeof mount>> {
+    apiMod.list.mockResolvedValue({
+      items: [
+        makeWildcardRow("wc_src", "Outfit", { subs: ["jeans"] }),
+        makeWildcardRow("wc_tgt", "HairColor", { subs: ["warm"] }),
+      ],
+      total: 2,
+    });
+    apiMod.create.mockResolvedValue({
+      id: "cn_a", type: "constraint", name: "C1",
+      description: "", category_id: null, tags: [], is_favorite: false,
+      payload: {
+        source_wildcard_id: "wc_src", target_wildcard_id: "wc_tgt",
+        matrix: {}, exceptions: [],
+      },
+      version: 1, created_at: "", updated_at: "",
+    });
+    const wrap = mount(ConstraintEditor, { global: { plugins: [makeRouter()] } });
+    await flushPromises();
+    await wrap.find('[data-test="identity-name"]').setValue("C1");
+    const vm = wrap.vm as unknown as {
+      sourceWildcardId: string | null; targetWildcardId: string | null;
+    };
+    vm.sourceWildcardId = "wc_src";
+    vm.targetWildcardId = "wc_tgt";
+    await flushPromises();
+    return wrap;
+  }
+
+  function savedPayload(): Record<string, unknown> {
+    const calls = apiMod.create.mock.calls;
+    const call = calls[calls.length - 1];
+    return (call[0] as { payload: Record<string, unknown> }).payload;
+  }
+
+  it("reach control does NOT offer the instance-only 'pick' mode", async () => {
+    const wrap = await mountWithWildcards();
+    expect(wrap.find('[data-test="cn-reach-mode-first"]').exists()).toBe(true);
+    expect(wrap.find('[data-test="cn-reach-mode-next"]').exists()).toBe(true);
+    expect(wrap.find('[data-test="cn-reach-mode-all"]').exists()).toBe(true);
+    expect(wrap.find('[data-test="cn-reach-mode-pick"]').exists()).toBe(false);
+  });
+
+  it("clicking 'all' persists payload.target_select = {mode:'all'}", async () => {
+    const wrap = await mountWithWildcards();
+    await wrap.find('[data-test="cn-reach-mode-all"]').trigger("click");
+    await flushPromises();
+    await wrap.find('[data-test="save-btn"]').trigger("click");
+    await flushPromises();
+    expect(savedPayload().target_select).toEqual({ mode: "all" });
+  });
+
+  it("clicking 'next' + stepper persists payload.target_select = {mode:'next', count:N}", async () => {
+    const wrap = await mountWithWildcards();
+    await wrap.find('[data-test="cn-reach-mode-next"]').trigger("click");
+    await flushPromises();
+    const stepper = wrap.find<HTMLInputElement>('[data-test="cn-reach-count"]');
+    expect(stepper.exists()).toBe(true);
+    await stepper.setValue("3");
+    await flushPromises();
+    await wrap.find('[data-test="save-btn"]').trigger("click");
+    await flushPromises();
+    expect(savedPayload().target_select).toEqual({ mode: "next", count: 3 });
+  });
 });
