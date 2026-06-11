@@ -510,3 +510,57 @@ def test_resolve_instance_target_select_overrides_payload():
         ctx,
     )
     assert ctx["__wp_constraints__"][-1]["target_select"] == {"mode": "first"}
+
+
+# ── SP3: per-instance reach override beats the library default for EVERY
+# mode (first / next / all / pick). The canvas modal writes the placement's
+# reach to `instance.target_select`; the engine MUST apply that, not the
+# published library `payload.target_select`. `apply_constraints_for_target`
+# reads `meta["target_select"]`, so these lock the value the apply pass sees.
+
+
+def _recorded_target_select(payload_ts, instance_ts):
+    """Resolve with the given library (payload) + per-instance reach and
+    return the `target_select` recorded into ctx — exactly what
+    `apply_constraints_for_target` reads to decide coverage."""
+    ctx: dict = {"__wp_current_module_uid__": "u1", "__wp_current_module_id__": "lib1"}
+    payload = _ts_payload(
+        **({"target_select": payload_ts} if payload_ts is not None else {})
+    )
+    instance = {"target_select": instance_ts} if instance_ts is not None else {}
+    ConstraintHandler.resolve(payload, instance, ctx)
+    return ctx["__wp_constraints__"][-1]["target_select"]
+
+
+def test_instance_reach_next_overrides_library():
+    # Library default `all`; instance overrides to `next 3` → engine uses next 3.
+    assert _recorded_target_select(
+        {"mode": "all"}, {"mode": "next", "count": 3}
+    ) == {"mode": "next", "count": 3}
+
+
+def test_instance_reach_pick_overrides_library():
+    # Library default `first`; instance overrides to an explicit pick list.
+    picks = [{"kind": "direct", "uid": "abc123def456"}]
+    assert _recorded_target_select(
+        {"mode": "first"}, {"mode": "pick", "picks": picks}
+    ) == {"mode": "pick", "picks": picks}
+
+
+def test_instance_reach_explicit_all_overrides_nonall_library():
+    # The critical "all" case: library default `first`, instance explicitly
+    # widens to `all`. The engine honors the PRESENT instance value (its
+    # `instance or payload or default` chain), so an explicit `{mode:"all"}`
+    # override wins over a non-all library default. (The canvas modal must
+    # actually SEND `{mode:"all"}` here rather than collapsing it to null —
+    # see ConstraintInstanceModal.onTargetSelect.)
+    assert _recorded_target_select(
+        {"mode": "first"}, {"mode": "all"}
+    ) == {"mode": "all"}
+
+
+def test_library_reach_used_when_instance_absent():
+    # No per-instance override → fall back to the published library value.
+    assert _recorded_target_select(
+        {"mode": "next", "count": 2}, None
+    ) == {"mode": "next", "count": 2}

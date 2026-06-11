@@ -8,7 +8,8 @@
 import { describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
 import ConstraintInstanceModal from "./ConstraintInstanceModal.vue";
-import type { ModuleEntry } from "../../../../widgets/_shared";
+import TargetReachSection from "./sections/TargetReachSection.vue";
+import type { ModuleEntry, TargetSelect } from "../../../../widgets/_shared";
 
 function makeModule(overrides: Partial<ModuleEntry> = {}): ModuleEntry {
   return {
@@ -367,5 +368,63 @@ describe("ConstraintInstanceModal", () => {
     const matrix = w.findComponent({ name: "MatrixSection" });
     expect(matrix.props("sourceName")).toBe("chain_color");
     expect(matrix.props("sourceSubs")).toEqual(["chain_red", "chain_blue"]);
+  });
+});
+
+describe("ConstraintInstanceModal — target reach instance override", () => {
+  // The modal collapses a reach choice to `null` ("inherit library") ONLY
+  // when it equals the EFFECTIVE library default — so a real per-instance
+  // override (including an explicit `all` over a non-all library default)
+  // is preserved and reaches the engine's `instance ?? payload ?? all`.
+
+  function emitReach(w: ReturnType<typeof mount>, next: TargetSelect) {
+    return w.findComponent(TargetReachSection).vm.$emit("update:modelValue", next);
+  }
+
+  function lastReach(w: ReturnType<typeof mount>): TargetSelect | null | undefined {
+    const updates = w.emitted("update") as Array<[Partial<ModuleEntry>]> | undefined;
+    if (!updates?.length) return undefined;
+    return updates[updates.length - 1][0].instance?.target_select;
+  }
+
+  function moduleWithLibraryReach(reach?: TargetSelect): ModuleEntry {
+    const m = makeModule();
+    if (reach) (m.payload as Record<string, unknown>).target_select = reach;
+    return m;
+  }
+
+  it("collapses 'all' to null when the library default is already all (inherit)", async () => {
+    const w = mount(ConstraintInstanceModal, { props: { module: moduleWithLibraryReach() } });
+    emitReach(w, { mode: "all" });
+    await w.vm.$nextTick();
+    expect(lastReach(w)).toBeNull();
+  });
+
+  it("stores an explicit 'all' override when the library default is non-all (first)", async () => {
+    // Regression guard: the old `mode === "all"` collapse dropped this to
+    // null, so the engine fell back to the library `first` and the user's
+    // widen-to-all was silently ignored.
+    const w = mount(ConstraintInstanceModal, {
+      props: { module: moduleWithLibraryReach({ mode: "first" }) },
+    });
+    emitReach(w, { mode: "all" });
+    await w.vm.$nextTick();
+    expect(lastReach(w)).toEqual({ mode: "all" });
+  });
+
+  it("collapses to null when the choice equals a non-all library default (first == first)", async () => {
+    const w = mount(ConstraintInstanceModal, {
+      props: { module: moduleWithLibraryReach({ mode: "first" }) },
+    });
+    emitReach(w, { mode: "first" });
+    await w.vm.$nextTick();
+    expect(lastReach(w)).toBeNull();
+  });
+
+  it("stores a non-default reach (next N) as an explicit override", async () => {
+    const w = mount(ConstraintInstanceModal, { props: { module: moduleWithLibraryReach() } });
+    emitReach(w, { mode: "next", count: 2 });
+    await w.vm.$nextTick();
+    expect(lastReach(w)).toEqual({ mode: "next", count: 2 });
   });
 });

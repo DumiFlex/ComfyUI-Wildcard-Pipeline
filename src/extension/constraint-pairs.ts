@@ -125,13 +125,13 @@ export interface ChainModule {
    *  hold its own modules-list mirror. Optional — tests + legacy
    *  callers may omit. */
   displayName?: string;
-  /** Identity of the WP_Context node this module was flattened from —
-   *  the node's user-set `node_label`, or an auto upstream→downstream
-   *  letter (A, B, C…) when unset. Stamped by `collectFullChainModules`
-   *  so cross-node UI (constraint reach pick-list, pair popovers) can
-   *  name WHICH node a target instance lives in. Purely additive /
-   *  presentation-only; the pairing math never reads it. Optional —
-   *  tests + legacy callers may omit. */
+  /** Identity of the WP_Context node this module was flattened from — its
+   *  fixed CODENAME (`assignCodenames`: a stable `adjective-noun` derived
+   *  from the litegraph node id, POV-independent + unique on the canvas).
+   *  Stamped by `collectFullChainModules` so cross-node UI (constraint reach
+   *  pick-list, pair popovers) can name WHICH node a target instance lives
+   *  in. Purely additive / presentation-only; the pairing math never reads
+   *  it. Optional — tests + legacy callers may omit. */
   nodeLabel?: string;
 }
 
@@ -347,13 +347,14 @@ export function carrierOptionIdsFor(
  *    options host nested refs one or more constraints reach their target
  *    through). Drives the collapsed `↪×N` chip. Empty when nothing
  *    routes through this row.
- *  - `contributors` (SP3): EVERY constraint whose reach selector covers
- *    THIS target-instance row, in per-target registration (`#N`) order.
- *    The SP3 mark-all model lets multiple constraints cover one instance
- *    (no exclusive claim), so this is the authoritative per-row list the
- *    next-task badge layer renders. Empty (default `[]`) on rows no
- *    constraint covers — including every constraint/source/non-target
- *    row.
+ *  - `contributors` (SP3): every constraint whose reach selector covers
+ *    THIS row via a DIRECT top-level encounter, in per-target registration
+ *    (`#N`) order. The SP3 mark-all model lets multiple constraints cover
+ *    one instance (no exclusive claim). Nested-via coverage is deliberately
+ *    NOT here — it lands in `viaInbound` (the carrier's `↪×N` chip) so a
+ *    single constraint→target relationship renders as exactly one badge,
+ *    never a `#N` + `↪×N` pair on the same row. Empty (`[]`) on rows no
+ *    constraint directly covers — including every constraint/source row.
  *
  * Sender rows that target via a nested ref still go through `direct` with
  * `direct.via` set, so the constraint module itself only renders one
@@ -432,8 +433,10 @@ export function computePairingsFull(modules: ChainModule[]): Map<string, RowPair
     //   2. Walk the chain ONCE in execution order. At each downstream
     //      target encounter (a direct top-level instance OR a transitive
     //      carrier), bump every upstream constraint's per-constraint hit
-    //      counter and test coverage; push a contributor badge onto the
-    //      encounter row for each covering constraint (no claim/break).
+    //      counter and test coverage; record a badge on the encounter row
+    //      for each covering constraint (a direct hit → `contributors`
+    //      cluster; a nested carrier → `viaInbound` `↪×N` chip), no claim/
+    //      break.
     //   3. A constraint is an orphan iff its selector covered ZERO
     //      encounters. The sender badge carries `reach` + (the first
     //      covered carrier's) `via`.
@@ -516,9 +519,14 @@ export function computePairingsFull(modules: ChainModule[]): Map<string, RowPair
           isOrphan: false,
           ...(via ? { via } : {}),
         };
-        ensure(d.rowKey).contributors.push(badge);
-        // Carrier rows also feed the collapsed `↪×N` inbound chip.
+        // Route each badge to EXACTLY ONE bucket so a single
+        // constraint→target relationship never renders as two chips. A
+        // nested-via encounter is shown by the carrier's collapsed `↪×N`
+        // inbound chip; a direct top-level encounter by the `#N`
+        // contributor cluster. (Before SP3 QA: nested encounters pushed to
+        // BOTH, so a carrier row showed `#N` AND `↪×N` for one constraint.)
         if (via) ensure(d.rowKey).viaInbound.push(badge);
+        else ensure(d.rowKey).contributors.push(badge);
       }
     }
 
@@ -541,9 +549,14 @@ export function computePairingsFull(modules: ChainModule[]): Map<string, RowPair
   // contributor. Sender rows already set `direct` above; never overwrite
   // them (a constraint row has no contributors of its own).
   for (const entry of out.values()) {
-    if (entry.direct === null && entry.contributors.length > 0) {
-      entry.direct = entry.contributors[0];
-    }
+    if (entry.direct !== null) continue;
+    // Sender rows already set `direct` above. For a target/carrier row,
+    // mirror its first DIRECT contributor; else (a pure nested carrier with
+    // no direct coverage) its first inbound badge — keeps the legacy flat
+    // `computePairings` map populated for carrier rows now that nested
+    // coverage lives only in `viaInbound`.
+    if (entry.contributors.length > 0) entry.direct = entry.contributors[0];
+    else if (entry.viaInbound.length > 0) entry.direct = entry.viaInbound[0];
   }
   return out;
 }

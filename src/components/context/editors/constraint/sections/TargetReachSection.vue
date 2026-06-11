@@ -44,6 +44,7 @@ const bareUid = (rk: string): string => {
   return i >= 0 ? rk.slice(i + 1) : rk;
 };
 
+
 const props = withDefaults(
   defineProps<{
     /** Current `target_select` (effective: instance override or library,
@@ -59,8 +60,12 @@ const props = withDefaults(
     /** The constraint's `target_wildcard_id` — the uuid direct rows match
      *  on + nested carriers transitively ref. */
     targetWildcardId: string;
+    /** Display name of the target wildcard (the thing being constrained).
+     *  Used to label nested-pick rows as "<target> via @<carrier>" so the
+     *  user sees WHAT is reached, not the carrier name twice. */
+    targetName?: string;
   }>(),
-  { modelValue: () => ({ mode: "all" }), chainModules: () => [] },
+  { modelValue: () => ({ mode: "all" }), chainModules: () => [], targetName: "" },
 );
 
 const emit = defineEmits<{ "update:modelValue": [next: TargetSelect] }>();
@@ -74,6 +79,10 @@ const picks = computed<PickEntry[]>(() => {
   const p = props.modelValue?.picks;
   return Array.isArray(p) ? p : [];
 });
+
+/** Target wildcard's display name for nested-pick labels; "target" when the
+ *  modal didn't supply one (headless / legacy mounts). */
+const targetLabel = computed<string>(() => props.targetName?.trim() || "target");
 
 const MODES: Array<{ key: TargetSelect["mode"]; label: string }> = [
   { key: "first", label: "first" },
@@ -104,6 +113,16 @@ function onCountInput(ev: Event): void {
   const raw = Number((ev.target as HTMLInputElement).value);
   const n = Number.isFinite(raw) && raw >= 1 ? Math.floor(raw) : 1;
   emit("update:modelValue", { mode: "next", count: n });
+}
+
+/** Custom stepper ▲/▼. The native number-input spinners are suppressed
+ *  (they only show on hover and render inconsistently inside ComfyUI's
+ *  embedded DOM), so explicit buttons give the always-visible arrows the
+ *  user asked for. Clamped at the engine minimum of 1 (a `next 0` reach
+ *  covers nothing). */
+function bumpCount(delta: number): void {
+  const next = Math.max(1, count.value + delta);
+  emit("update:modelValue", { mode: "next", count: next });
 }
 
 // ── Pick checklist ──────────────────────────────────────────────
@@ -167,14 +186,18 @@ const pickRows = computed<PickRow[]>(() => {
     // Transitive carrier — one row per matching option id.
     const match = carrierOptionIdsFor(cm, tgt, lookup.value);
     for (const optionId of match.optionIds) {
-      const carrierName = cm.displayName?.trim() || cm.id;
       rows.push({
         // `key`/`data-test` keep the full rowKey (display-only); the
         // persisted `carrier_uid` is the BARE _uid the engine's nested
         // carrier_ctx stamps (wildcard_handler stamps bare `_uid`).
         key: `${cm.rowKey}::${optionId}`,
         entry: { kind: "nested", carrier_uid: bareUid(cm.rowKey), option_id: optionId },
-        name: `${carrierName} via @${carrierName}`,
+        // The nested ref IS the TARGET (`@{target}`), hosted inside this
+        // carrier's option. Name it "@<target-display-name> in <carrier-
+        // display-name>" — the `@` belongs to the referenced TARGET, NOT the
+        // host; both shown by display name (not binding). The host carrier
+        // here happens to be the constraint's source wildcard.
+        name: `@${targetLabel.value} in ${cm.displayName?.trim() || cm.id}`,
         kind: "nested",
         nodeLabel: cm.nodeLabel,
       });
@@ -262,11 +285,29 @@ const hint = computed<string>(() => {
           type="number"
           min="1"
           step="1"
+          inputmode="numeric"
           :value="count"
           aria-label="Number of downstream targets"
           data-test="reach-count"
           @input="onCountInput"
         />
+        <span class="rh-step__arrows">
+          <button
+            type="button"
+            class="rh-step__arrow"
+            aria-label="Increase count"
+            data-test="reach-count-up"
+            @click="bumpCount(1)"
+          >▲</button>
+          <button
+            type="button"
+            class="rh-step__arrow"
+            aria-label="Decrease count"
+            :disabled="count <= 1"
+            data-test="reach-count-down"
+            @click="bumpCount(-1)"
+          >▼</button>
+        </span>
       </span>
     </div>
 
@@ -304,9 +345,11 @@ const hint = computed<string>(() => {
 <style scoped>
 .rh {
   padding: 12px 16px;
-  /* Accent highlight (signed-off v6 contract) — visible on light + dark. */
-  background: color-mix(in oklab, var(--wp-accent) 14%, var(--wp-bg-2, var(--wp-bg2)));
-  box-shadow: inset 3px 0 0 var(--wp-accent);
+  /* Subtle neutral demarcation. The earlier accent wash + inset rail read
+     as too loud; a faint text-tinted panel (same idiom as `.rh-seg` /
+     row hover below) sets the section apart on both light + dark without
+     shouting. */
+  background: color-mix(in srgb, var(--wp-text) 3%, transparent);
   border-bottom: 1px solid var(--wp-border-soft, var(--wp-border));
 }
 .rh__label {
@@ -348,7 +391,8 @@ const hint = computed<string>(() => {
   color: #fff;
 }
 
-/* Stepper sits flush after the segmented group. */
+/* Stepper sits flush after the segmented group: number field + a stacked
+   ▲/▼ arrow column. */
 .rh-step {
   display: inline-flex;
   align-items: stretch;
@@ -356,18 +400,47 @@ const hint = computed<string>(() => {
   background: var(--wp-bg-deep, var(--wp-bg));
 }
 .rh-step__field {
-  width: 48px;
+  width: 38px;
   background: transparent;
   border: 0;
-  padding: 0 8px;
+  padding: 0 6px;
   font: 600 12px var(--wp-font-mono);
   color: var(--wp-text);
   text-align: center;
   -moz-appearance: textfield;
 }
+/* Native spinners are suppressed in favour of the custom always-visible
+   ▲/▼ buttons (native arrows only appear on hover + render inconsistently
+   in ComfyUI's embedded DOM). */
 .rh-step__field::-webkit-outer-spin-button,
 .rh-step__field::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .rh-step__field:focus { outline: none; }
+
+.rh-step__arrows {
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--wp-border);
+}
+.rh-step__arrow {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--wp-text-muted, var(--wp-text2));
+  font-size: 7px;
+  line-height: 1;
+  cursor: pointer;
+}
+.rh-step__arrow + .rh-step__arrow { border-top: 1px solid var(--wp-border); }
+.rh-step__arrow:hover:not(:disabled) {
+  color: var(--wp-text);
+  background: color-mix(in srgb, var(--wp-text) 8%, transparent);
+}
+.rh-step__arrow:disabled { opacity: 0.3; cursor: default; }
 
 /* ── Pick checklist ─────────────────────────────────────────────── */
 .rh-pick {

@@ -500,6 +500,70 @@ describe("collectUpstreamResolved nested @{uuid} fallback", () => {
 
 // ── Combine v2 instance overrides — preview must reflect modal edits ──
 
+describe("collectUpstreamResolved — wildcard instance variable_binding override", () => {
+  beforeEach(() => _resetForTests());
+
+  /** A duplicated wildcard keeps `payload.var_binding="mood"` but carries
+   *  `instance.variable_binding="mood_2"` (the auto-suffix). The engine
+   *  writes ctx["mood_2"]; the static walker MUST mirror that, else the
+   *  upstream-resolved map keys by the library name and cross-node shadow
+   *  detection misses the renamed twin (the duplicate's "override" badge
+   *  goes missing — SP3 QA report). */
+  function ctxWithRenamedWildcard(instanceBinding: string | null): {
+    asm: LiteNodeLike;
+    graph: LiteGraphLike;
+  } {
+    const inst: Record<string, unknown> = {};
+    if (instanceBinding !== null) inst.variable_binding = instanceBinding;
+    const ctx: LiteNodeLike = {
+      id: 1,
+      type: "WP_Context",
+      inputs: [{ name: "upstream", link: null }],
+      outputs: [{ name: "context", links: [], type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "wp_modules",
+        value: JSON.stringify({
+          version: 1,
+          modules: [{
+            id: "aaaaaaaa",
+            _uid: "u-dup",
+            type: "wildcard",
+            enabled: true,
+            meta: { name: "mood dup" },
+            entries: [],
+            payload: { var_binding: "mood", options: [{ id: "o1", value: "calm" }] },
+            ...(Object.keys(inst).length ? { instance: inst } : {}),
+          }],
+        }),
+      }],
+    };
+    const asm: LiteNodeLike = {
+      id: 2,
+      type: "WP_PromptAssembler",
+      inputs: [{ name: "context", link: 100 }],
+    };
+    const graph: LiteGraphLike = {
+      _nodes: [ctx, asm],
+      links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id) => ({ 1: ctx, 2: asm } as Record<number, LiteNodeLike>)[id] ?? null,
+    };
+    return { asm, graph };
+  }
+
+  it("keys the resolved map by instance.variable_binding, not payload.var_binding", () => {
+    const { graph, asm } = ctxWithRenamedWildcard("mood_2");
+    const resolved = collectUpstreamResolved(graph, asm);
+    expect(Object.keys(resolved)).toContain("mood_2");
+    expect(Object.keys(resolved)).not.toContain("mood");
+    expect(resolved.mood_2).toBe("calm");
+  });
+
+  it("falls back to payload.var_binding when no instance override", () => {
+    const { graph, asm } = ctxWithRenamedWildcard(null);
+    expect(collectUpstreamResolved(graph, asm)).toEqual({ mood: "calm" });
+  });
+});
+
 describe("collectUpstreamResolved — combine instance overrides", () => {
   beforeEach(() => _resetForTests());
 

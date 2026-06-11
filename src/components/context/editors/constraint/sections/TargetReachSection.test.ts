@@ -55,13 +55,17 @@ function last(xs: TargetSelect[]): TargetSelect | undefined {
   return xs[xs.length - 1];
 }
 
-function mountSection(modelValue: TargetSelect, opts: Partial<{ chainModules: ChainModule[] }> = {}) {
+function mountSection(
+  modelValue: TargetSelect,
+  opts: Partial<{ chainModules: ChainModule[]; targetName: string }> = {},
+) {
   const updates: TargetSelect[] = [];
   const w = mount(TargetReachSection, {
     props: {
       modelValue,
       constraintUid: CONSTRAINT_UID,
       targetWildcardId: TARGET_UUID,
+      targetName: opts.targetName ?? "test-target",
       chainModules: opts.chainModules ?? makeChain(),
       // Reflect emitted values back into the prop — the modal owns
       // `target_select` state, so the section re-renders from the new
@@ -86,6 +90,25 @@ describe("TargetReachSection — segmented control", () => {
     expect(stepper.exists()).toBe(true);
     await stepper.setValue("2");
     expect(last(updates)).toEqual({ mode: "next", count: 2 });
+  });
+
+  it("stepper ▲ button increments the count", async () => {
+    const { w, updates } = mountSection({ mode: "next", count: 2 });
+    await w.find('[data-test="reach-count-up"]').trigger("click");
+    expect(last(updates)).toEqual({ mode: "next", count: 3 });
+  });
+
+  it("stepper ▼ button decrements the count", async () => {
+    const { w, updates } = mountSection({ mode: "next", count: 3 });
+    await w.find('[data-test="reach-count-down"]').trigger("click");
+    expect(last(updates)).toEqual({ mode: "next", count: 2 });
+  });
+
+  it("stepper ▼ button is disabled at the minimum (count 1)", () => {
+    const { w } = mountSection({ mode: "next", count: 1 });
+    const down = w.find('[data-test="reach-count-down"]');
+    expect(down.exists()).toBe(true);
+    expect(down.attributes("disabled")).toBeDefined();
   });
 
   it("emits {mode:'all'} when 'all' clicked", async () => {
@@ -128,6 +151,20 @@ describe("TargetReachSection — pick checklist", () => {
       mode: "pick",
       picks: [{ kind: "direct", uid: "mood-a" }],
     });
+  });
+
+  it("nested row labels the @TARGET ref (display name) hosted in the carrier (display name, no @)", () => {
+    const { w } = mountSection({ mode: "pick", picks: [] }, { targetName: "test-target" });
+    const nestedRow = w.find('[data-test="reach-pick-2#backdrop-b::opt_a"]');
+    expect(nestedRow.exists()).toBe(true);
+    const txt = nestedRow.text();
+    // The nested ref is `@{target}` — the `@` belongs to the TARGET, shown by
+    // display name: "@test-target".
+    expect(txt).toContain("@test-target");
+    // Host carrier named by DISPLAY NAME, NOT @-prefixed (you don't @ the host).
+    expect(txt).toContain("in backdrop");
+    expect(txt).not.toContain("@backdrop");
+    expect(txt).not.toContain("@subject");
   });
 
   it("ticking a nested row emits a nested picks entry keyed by (bare carrier _uid, option_id)", async () => {

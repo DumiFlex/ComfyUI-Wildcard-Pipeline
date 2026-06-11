@@ -10,6 +10,7 @@ import {
 import { type ResolvedValue } from "../../widgets/richTokenize";
 import { scanConflicts, labelFor as conflictLabelFor, shortConflictLabel, type Conflict } from "../../extension/conflicts";
 import type { ChainModule, PairingBadge, RowPairings } from "../../extension/constraint-pairs";
+import { baseCodename } from "../../extension/node-codename";
 import {
   getCollapseMode,
   getCollapsedByDefault,
@@ -3682,7 +3683,12 @@ function toggleCollapsed(idx: number) {
  *  cards already match the target state (the deep watcher will
  *  diff-eq and skip the onChange emit). */
 function setAllCollapsed(collapsed: boolean) {
-  commitModules(value.value.modules.map((m) => ({ ...m, collapsed })));
+  const nextModules = value.value.modules.map((m) => ({ ...m, collapsed }));
+  // Bundle FRAMES carry their own `collapsed` flag (separate from the child
+  // module cards). Collapse/expand-all flips both so the action visibly folds
+  // bundle frames, not just loose modules.
+  const nextBundles = (value.value.bundles ?? []).map((b) => ({ ...b, collapsed }));
+  commitModules(nextModules, nextBundles);
 }
 
 /** Toolbar counts — total modules + how many are effectively enabled
@@ -3693,80 +3699,42 @@ const enabledCount = computed(() => {
   return value.value.modules.filter((m) => isModuleEffectivelyEnabled(m, bundleEnabled)).length;
 });
 
-// ── Node label chip ────────────────────────────────────────────────────────
-// A small editable chip in the header surfaces this WP_Context node's
-// identity (`value.node_label`) so cross-node UI — the constraint reach
-// pick-list + pair popovers built in later phases — can name WHICH node a
-// target instance lives in. When the user hasn't named the node, the chip
-// shows the same auto upstream→downstream letter the cross-node walker
-// assigns, kept in sync by reading it off the `chainModules` prop.
-
-/** Auto default label = the letter the walker stamped onto THIS node's
- *  modules. `chainModules` is keyed graph-wide via `${nodeId}#${_uid}`
- *  rowKeys, so the first entry whose rowKey starts with our nodeId carries
- *  our node's `nodeLabel`. Falls back to "A" for a lone / headless node
- *  with no chain (matches the walker's first-position letter). */
-const defaultNodeLabel = computed<string>(() => {
-  const prefix = `${props.nodeId}#`;
-  const mine = (props.chainModules ?? []).find((m) => m.rowKey.startsWith(prefix));
-  return mine?.nodeLabel ?? "A";
-});
-
-/** What the chip renders: the user-set label when present, else the auto
- *  default letter. */
-const displayNodeLabel = computed<string>(() => {
-  const explicit = value.value.node_label?.trim();
-  return explicit && explicit.length > 0 ? explicit : defaultNodeLabel.value;
-});
-
-const editingLabel = ref(false);
-const labelDraft = ref("");
-const labelInputEl = ref<HTMLInputElement | null>(null);
-
-/** Enter inline-edit: seed the draft with the CURRENT label (the explicit
- *  one if set, otherwise the auto default so the user edits from the
- *  visible value rather than an empty box) + focus/select on next tick. */
-function startLabelEdit(): void {
-  labelDraft.value = value.value.node_label?.trim() || defaultNodeLabel.value;
-  editingLabel.value = true;
-  void nextTick(() => {
-    labelInputEl.value?.focus();
-    labelInputEl.value?.select();
-  });
-}
-
-/** Commit the draft into `value.node_label` (deep-watch fires onChange so
- *  the workflow JSON persists). A draft equal to the auto default is still
- *  stored verbatim — the user explicitly chose it, and the walker only
- *  fills the default when the field is ABSENT, so round-tripping "A" keeps
- *  the chip showing "A" without surprise. Empty draft clears the override
- *  (deletes the field) so the chip reverts to the auto letter. */
-function commitLabelEdit(): void {
-  if (!editingLabel.value) return;
-  editingLabel.value = false;
-  const next = labelDraft.value.trim();
-  const prev = value.value.node_label ?? "";
-  if (next === prev) return; // no-op — don't churn onChange
-  if (next.length === 0) {
-    // Clear the override → revert to auto default.
-    const { node_label: _drop, ...rest } = value.value;
-    value.value = { ...rest };
-    return;
-  }
-  value.value = { ...value.value, node_label: next };
-}
-
-function cancelLabelEdit(): void {
-  editingLabel.value = false;
-}
+// ── Node codename chip ──────────────────────────────────────────────────────
+// A fixed, read-only CODENAME identifies THIS WP_Context node: a stable
+// `adjective-noun` derived from the litegraph node id (node-codename.ts).
+// POV-independent + unique on the canvas, and NOT user-editable — cross-node
+// UI (constraint reach pick-list, pair popovers) shows the SAME codename to
+// name WHICH node a target instance lives in. Replaced the old editable label
+// + walk-position A/B/C letter, which shifted by viewer (so two chain heads
+// both showed "A") and was editable (so not a stable identifier).
+const nodeCodename = computed<string>(() => baseCodename(props.nodeId));
 
 /** Toolbar bulk actions — wrappers so the toolbar template stays compact. */
 function collapseAll(): void { setAllCollapsed(true); }
 function expandAll(): void { setAllCollapsed(false); }
 function toggleAllEnabled(): void {
-  const anyEnabled = value.value.modules.some((m) => m.enabled);
-  // If any are enabled, disable all; otherwise enable all.
-  commitModules(value.value.modules.map((m) => ({ ...m, enabled: !anyEnabled })));
+  // Operate at the TOP LEVEL only. A standalone module is one unit (its own
+  // `enabled`); a bundle is one unit (its MASTER `enabled` gate). Children
+  // inside a bundle are governed by the master (effective = master AND
+  // child), so toggle-all NEVER reaches in to flip them — disabling a bundle
+  // goes through its master, leaving each child's own `enabled` intact for a
+  // restore-safe re-enable. Nested bundles (parent_uid set) follow their
+  // parent master via the AND chain, so only top-level masters are flipped.
+  const isChild = (m: ModuleEntry): boolean =>
+    !!(m as ModuleEntry & { bundle_origin?: string | null }).bundle_origin;
+  const bundles = value.value.bundles ?? [];
+  const topModules = value.value.modules.filter((m) => !isChild(m));
+  const topBundles = bundles.filter((b) => !b.parent_uid);
+  // Direction: if ANY top-level unit is on, turn everything off; else on.
+  const anyOn =
+    topModules.some((m) => m.enabled !== false)
+    || topBundles.some((b) => b.enabled !== false);
+  const next = !anyOn;
+  const nextModules = value.value.modules.map((m) =>
+    isChild(m) ? m : { ...m, enabled: next },
+  );
+  const nextBundles = bundles.map((b) => (b.parent_uid ? b : { ...b, enabled: next }));
+  commitModules(nextModules, nextBundles);
 }
 
 /** Open the SPA dashboard in a new tab. Mirrors `extension/topbar.ts`'s
@@ -4746,41 +4714,21 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
     :data-mode-label="isMuted ? muteLabel : undefined"
     @dragleave="onContainerLeave"
   >
-    <!-- Node identity strip. A small editable chip naming THIS WP_Context
-         node (value.node_label, or the auto upstream→downstream letter when
-         unset). Cross-node UI (constraint reach pick-list, pair popovers)
-         reads node_label to say WHICH node a target lives in. Sits above the
-         toolbar/hero so it shows in every state without touching their
-         layout. Double-click (or click the edit affordance) → inline input;
-         commit on Enter/blur, cancel on Escape. -->
+    <!-- Node identity strip. A fixed, read-only CODENAME naming THIS
+         WP_Context node — a stable `adjective-noun` derived from the
+         litegraph node id (node-codename.ts). POV-independent + unique on
+         the canvas, NOT editable. Cross-node UI (constraint reach pick-list,
+         pair popovers) shows the same codename to say WHICH node a target
+         lives in. Sits above the toolbar/hero so it shows in every state. -->
     <div class="wp-node-id">
       <span class="wp-node-id__tag">node</span>
-      <button
-        v-if="!editingLabel"
-        type="button"
-        class="wp-node-id__chip"
+      <span
+        class="wp-node-id__chip wp-node-id__chip--fixed"
         data-test="node-label"
-        :title="`Name this Context node — referenced by cross-node constraint UI. (${displayNodeLabel})`"
-        @click="startLabelEdit"
-        @dblclick="startLabelEdit"
+        :title="`Stable id for this Context node — referenced by cross-node constraint UI (${nodeCodename})`"
       >
-        <span class="wp-node-id__text">{{ displayNodeLabel }}</span>
-        <i class="pi pi-pencil wp-node-id__edit" aria-hidden="true" />
-      </button>
-      <input
-        v-else
-        ref="labelInputEl"
-        v-model="labelDraft"
-        type="text"
-        class="wp-node-id__input"
-        data-test="node-label-input"
-        aria-label="Context node label"
-        maxlength="40"
-        placeholder="node label"
-        @keydown.enter.prevent="commitLabelEdit"
-        @keydown.esc.prevent="cancelLabelEdit"
-        @blur="commitLabelEdit"
-      >
+        <span class="wp-node-id__text">{{ nodeCodename }}</span>
+      </span>
     </div>
 
     <!-- Corrupt-workflow recovery panel (5.6). Surfaces when JSON parse fails
@@ -4846,21 +4794,21 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
           <span class="wp-w-toolbar-spacer" />
           <button
             type="button"
-            class="wp-btn wp-btn--icon"
+            class="wp-btn--icon-sm"
             title="Collapse all"
             aria-label="Collapse all modules"
             @click="collapseAll"
           ><i class="pi pi-chevron-up" /></button>
           <button
             type="button"
-            class="wp-btn wp-btn--icon"
+            class="wp-btn--icon-sm"
             title="Expand all"
             aria-label="Expand all modules"
             @click="expandAll"
           ><i class="pi pi-chevron-down" /></button>
           <button
             type="button"
-            class="wp-btn wp-btn--icon"
+            class="wp-btn--icon-sm"
             title="Toggle all enabled"
             aria-label="Toggle all enabled"
             @click="toggleAllEnabled"
@@ -5948,30 +5896,20 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
   max-width: 220px;
   padding: 2px 8px;
   font: 600 11px/1.2 var(--wp-font-sans, sans-serif);
-  color: var(--wp-amber, #fbbf24);
-  background: var(--wp-amber-bg, rgba(251, 191, 36, 0.12));
-  border: 1px solid var(--wp-amber, #fbbf24);
+  /* Neutral — a fixed codename is an identity, not an attention cue (was
+     amber). Muted text + a faint text-tinted wash + standard border, the
+     same neutral idiom used elsewhere in the widget; reads on light + dark. */
+  color: var(--wp-text-muted, var(--wp-text2));
+  background: color-mix(in srgb, var(--wp-text) 6%, transparent);
+  border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius-sm, 4px);
-  cursor: text;
-  transition: background var(--wp-motion-quick, 120ms) ease, border-color var(--wp-motion-quick, 120ms) ease;
 }
-.wp-node-id__chip:hover { background: var(--wp-amber, #fbbf24); color: var(--wp-bg, #1e1e1e); }
+/* Fixed codename — a read-only identity, not an interactive control. */
+.wp-node-id__chip--fixed { cursor: default; }
 .wp-node-id__text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.wp-node-id__edit { font-size: 10px; opacity: 0.7; cursor: pointer; }
-.wp-node-id__chip:hover .wp-node-id__edit { opacity: 1; }
-.wp-node-id__input {
-  max-width: 220px;
-  padding: 2px 8px;
-  font: 600 11px/1.2 var(--wp-font-sans, sans-serif);
-  color: var(--wp-text, #ddd);
-  background: var(--wp-bg-2, var(--wp-bg2));
-  border: 1px solid var(--wp-amber, #fbbf24);
-  border-radius: var(--wp-radius-sm, 4px);
-  outline: none;
 }
 
 /* ── Generic button system (Task 10) ────────────────────────────────────

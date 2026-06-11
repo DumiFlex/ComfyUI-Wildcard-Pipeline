@@ -304,17 +304,32 @@ const constraintUid = computed<string>(() => {
   return hit?.rowKey ?? uid ?? props.module.id;
 });
 
+/** True when `next` is exactly what the constraint resolves to with NO
+ *  per-instance override — the EFFECTIVE library default
+ *  (`payload.target_select`, itself defaulting to `{mode:"all"}`). Only then
+ *  is collapsing to `null` ("inherit library") lossless. */
+function reachEqualsLibraryDefault(next: TargetSelect): boolean {
+  const lib = ((props.module.payload ?? {}) as ConstraintPayload).target_select ?? { mode: "all" };
+  if (next.mode !== lib.mode) return false;
+  if (next.mode === "next") return Number(next.count ?? 1) === Number(lib.count ?? 1);
+  // `pick` never matches the (pick-less) library default; first/all match on mode.
+  return next.mode !== "pick";
+}
+
 /** Persist a new `target_select` onto the instance. Mirrors the modal's
- *  other instance writes (full-replacement values, shallow-merged). The
- *  default `{mode:"all"}` is dropped to `null` so an untouched reach
- *  doesn't bloat the instance (keeps the override map minimal + the
- *  modified-state honest). */
+ *  other instance writes (full-replacement values, shallow-merged).
+ *  Collapse to `null` ONLY when `next` equals the effective library default
+ *  (null = "inherit library") — keeps an untouched reach out of the instance
+ *  while PRESERVING a real override. The old `mode === "all"` collapse lost
+ *  an explicit `all` placed over a non-all library default: the engine's
+ *  `instance ?? payload ?? all` then fell back to the library value, so the
+ *  user's widen-to-all was silently ignored. */
 function onTargetSelect(next: TargetSelect): void {
-  const isDefaultAll = next.mode === "all";
+  const inherits = reachEqualsLibraryDefault(next);
   emit("update", {
     instance: {
       ...(props.module.instance ?? {}),
-      target_select: isDefaultAll ? null : next,
+      target_select: inherits ? null : next,
     },
   });
 }
@@ -425,6 +440,7 @@ function onSpaClick(): void {
       :chain-modules="chainModules"
       :constraint-uid="constraintUid"
       :target-wildcard-id="targetWildcardId"
+      :target-name="targetName"
       @update:model-value="onTargetSelect"
     />
     <ExceptionsSection

@@ -18,7 +18,7 @@ import {
   type LiteNodeLike,
 } from "../extension/graph";
 import { collectCrossNodePairingsFull, collectFullChainModules } from "../extension/cross-node-pairings";
-import type { ChainModule, PairingBadge, RowPairings } from "../extension/constraint-pairs";
+import type { ChainModule, PairingBadge, RowPairings, TargetSelect } from "../extension/constraint-pairs";
 import { reactiveFromGraph, stringArrayEqual } from "../extension/reactive";
 import { applyVarAccessor, type ResolvedValue } from "./richTokenize";
 
@@ -40,13 +40,49 @@ function stringMapEqual(
   return true;
 }
 
-function pairingBadgeEqual(a: PairingBadge, b: PairingBadge): boolean {
+/** Deep-equal for a constraint's reach selector. Only the SENDER badge
+ *  carries `reach` (mode + count + picks); a `target_select` edit in the
+ *  modal must flip this so the gated `pairingsRef` re-renders the canvas
+ *  chip's reach suffix (·all → ·first → ·n2 → ·pick). Compares mode, count,
+ *  and the picks list element-by-element (order-sensitive — the UI appends
+ *  picks in toggle order so identical selections share order; a reorder
+ *  only costs one harmless extra render). Both-undefined short-circuits true
+ *  so the common case (every contributor / carrier badge) never churns. */
+function targetSelectEqual(
+  a: TargetSelect | undefined,
+  b: TargetSelect | undefined,
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if (a.mode !== b.mode || a.count !== b.count) return false;
+  const ap = a.picks ?? [];
+  const bp = b.picks ?? [];
+  if (ap.length !== bp.length) return false;
+  for (let i = 0; i < ap.length; i++) {
+    const x = ap[i];
+    const y = bp[i];
+    if (x.kind !== y.kind) return false;
+    if (x.kind === "direct" && y.kind === "direct") {
+      if (x.uid !== y.uid) return false;
+    } else if (x.kind === "nested" && y.kind === "nested") {
+      if (x.carrier_uid !== y.carrier_uid || x.option_id !== y.option_id) return false;
+    }
+  }
+  return true;
+}
+
+export function pairingBadgeEqual(a: PairingBadge, b: PairingBadge): boolean {
   if (
     a.number !== b.number ||
     a.targetUuid !== b.targetUuid ||
     a.colorIndex !== b.colorIndex ||
     a.isOrphan !== b.isOrphan
   ) return false;
+  // SP3 reach: only sender `direct` badges carry it; a selector edit must
+  // re-render the chip's reach suffix even when every scalar above is
+  // unchanged. targetSelectEqual short-circuits both-undefined, so the
+  // overwhelming majority of badges (no reach) don't pay any churn cost.
+  if (!targetSelectEqual(a.reach, b.reach)) return false;
   const av = a.via;
   const bv = b.via;
   if (!av && !bv) return true;
@@ -63,7 +99,7 @@ function pairingBadgeEqual(a: PairingBadge, b: PairingBadge): boolean {
  *  when an entry's `direct` badge OR any `viaInbound` badge actually
  *  changes — gate prevents per-frame poll churn re-rendering every
  *  ContextWidget when nothing's changed. */
-function pairingMapEqual(
+export function pairingMapEqual(
   a: Map<string, RowPairings>,
   b: Map<string, RowPairings>,
 ): boolean {
@@ -84,6 +120,15 @@ function pairingMapEqual(
     if (av.viaInbound.length !== bv.viaInbound.length) return false;
     for (let i = 0; i < av.viaInbound.length; i++) {
       if (!pairingBadgeEqual(av.viaInbound[i], bv.viaInbound[i])) return false;
+    }
+    // contributors (SP3 mark-all): the authoritative per-row coverage list
+    // the badge cluster renders. A reach edit can add/drop a NON-FIRST
+    // contributor without touching `direct` (which mirrors only
+    // contributors[0]), so the cluster would keep a stale chip count unless
+    // we compare the full list here.
+    if (av.contributors.length !== bv.contributors.length) return false;
+    for (let i = 0; i < av.contributors.length; i++) {
+      if (!pairingBadgeEqual(av.contributors[i], bv.contributors[i])) return false;
     }
   }
   return true;

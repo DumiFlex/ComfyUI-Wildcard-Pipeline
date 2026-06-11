@@ -981,7 +981,18 @@ function writeBindings(
   }
   const p = (m.payload ?? {}) as Record<string, unknown>;
   if (m.type === "wildcard") {
-    const binding = (p.var_binding as string | undefined)?.replace(/^\$/, "").trim();
+    // Honor `instance.variable_binding` over the library `payload.var_binding`
+    // — the engine + the conflict scanner's `bindingNameOf` both resolve the
+    // EFFECTIVE binding this way. Reading payload-only made a per-instance
+    // rename (e.g. a duplicate's auto-suffixed `$mood_2`) collapse back to the
+    // library name here, so the upstream-resolved map keyed by `mood` and
+    // cross-node shadow detection missed the renamed twin (the duplicate's
+    // `shadows_upstream` "override" badge went missing). Mirrors the combine
+    // branch below.
+    const overrideBinding = ((m.instance as { variable_binding?: string | null } | undefined)
+      ?.variable_binding ?? "").replace(/^\$/, "").trim();
+    const binding =
+      overrideBinding || (p.var_binding as string | undefined)?.replace(/^\$/, "").trim();
     const options =
       (p.options as
         | Array<{ value?: string; id?: string; sub_categories?: string[]; is_null?: boolean }>

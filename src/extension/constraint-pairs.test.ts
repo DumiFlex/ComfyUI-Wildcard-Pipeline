@@ -189,8 +189,10 @@ describe("computePairings", () => {
     const sender = full.get("cn1");
     expect(sender?.direct?.via?.carrierRowKey).toBe("carrier#a");
     expect(sender?.direct?.via?.optionIds).toEqual(["opt_a"]);
-    // Carrier is a contributor (via-routed).
-    expect(full.get("carrier#a")?.contributors.length).toBe(1);
+    // Carrier coverage lives in `viaInbound` (the `↪×N` chip), NOT
+    // `contributors` — a nested relationship renders as exactly one badge.
+    expect(full.get("carrier#a")?.viaInbound.length).toBe(1);
+    expect(full.get("carrier#a")?.contributors.length ?? 0).toBe(0);
     // SP3: the later direct instance is ALSO covered under default `all`.
     expect(full.get("target#a")?.contributors.length).toBe(1);
     expect(full.get("target#a")?.direct?.number).toBe(1);
@@ -464,10 +466,11 @@ describe("computePairingsFull — SP3 reach + contributors", () => {
     expect(full.get("t1#a")?.contributors.length).toBe(1);
   });
 
-  it("contributors flow through a transitive carrier with via metadata", () => {
+  it("nested coverage flows through a transitive carrier's viaInbound with via metadata", () => {
     // Default `all` reach over a carrier whose option transitively refs the
-    // target — the carrier row collects the constraint as a contributor,
-    // and the badge carries `via` (carrier + route).
+    // target — the carrier row collects the constraint in `viaInbound` (the
+    // `↪×N` chip), NOT `contributors`, and the badge carries `via` (carrier
+    // + route). One relationship → one badge.
     const tUuid = "cccccccc";
     const chain = [
       module_("s1", "wildcard"),
@@ -475,9 +478,10 @@ describe("computePairingsFull — SP3 reach + contributors", () => {
       module_("carrier", "wildcard", { options: [{ id: "opt_a", value: `@{${tUuid}}` }] }, "carrier#a"),
     ];
     const full = computePairingsFull(chain);
-    const contribs = full.get("carrier#a")?.contributors ?? [];
-    expect(contribs.length).toBe(1);
-    expect(contribs[0]?.via?.carrierRowKey).toBe("carrier#a");
-    expect(contribs[0]?.via?.routeChain).toEqual([tUuid]);
+    expect(full.get("carrier#a")?.contributors.length ?? 0).toBe(0);
+    const inbound = full.get("carrier#a")?.viaInbound ?? [];
+    expect(inbound.length).toBe(1);
+    expect(inbound[0]?.via?.carrierRowKey).toBe("carrier#a");
+    expect(inbound[0]?.via?.routeChain).toEqual([tUuid]);
   });
 });

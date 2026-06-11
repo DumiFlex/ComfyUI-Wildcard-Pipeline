@@ -384,19 +384,6 @@ export interface ContextWidgetValue {
    */
   modules: ModuleEntry[];
   /**
-   * User-facing identity for THIS WP_Context node. Surfaces in cross-node
-   * UI (the constraint reach pick-list + pair popovers) so a target
-   * instance living in another Context node can be named ("target lives
-   * in Detail pass"). Edited via the small header chip in ContextWidget;
-   * persisted in the widget JSON so it survives workflow save/load.
-   *
-   * Optional / absent on nodes the user never named — the cross-node
-   * walker (`collectFullChainModules`) then assigns an auto default
-   * (upstream→downstream letter A, B, C…), and the header chip shows
-   * the same fallback. Presentation-only: the engine never reads it.
-   */
-  node_label?: string;
-  /**
    * Library-tracked groupings wrapping a contiguous range of
    * `modules[]`. The engine ignores this field entirely — bundle
    * metadata is presentation-only. ContextWidget renders a colored
