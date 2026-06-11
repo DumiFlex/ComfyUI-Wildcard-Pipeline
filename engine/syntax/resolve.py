@@ -283,12 +283,31 @@ def _resolve_multi_pick(
             values = [str(o.get("value", "")) for o in pool]
             weights = [float(o.get("weight", 1) or 1) for o in pool]
             chosen = pick_k_unique(values, weights, count, ctx.rng)
-            return sep.join(
-                _resolve_tokens(
-                    tokenize_text(v), ctx, depth=depth + 1, visited=visited + (ref_uuid,)
-                ) if v else ""
-                for v in chosen
+            # The multi-picked ref is the carrier of any `@{X}` inside the
+            # values it resolves. We pick on VALUES (not option dicts) so a
+            # specific option id isn't tracked here — set carrier to
+            # (ref_uuid, None) for the recursion. option_id None can't match
+            # a real `pick` entry, so a deeper `@{X}` falls back to
+            # positional first/next/all (design: multi-pick children aren't
+            # individually pickable). Restore the enclosing carrier after.
+            get_carrier = getattr(ctx, "get_carrier", None)
+            set_carrier = getattr(ctx, "set_carrier", None)
+            saved_carrier = (
+                get_carrier() if callable(get_carrier) else None
             )
+            if callable(set_carrier):
+                set_carrier(ref_uuid, None)
+            try:
+                return sep.join(
+                    _resolve_tokens(
+                        tokenize_text(v), ctx, depth=depth + 1,
+                        visited=visited + (ref_uuid,),
+                    ) if v else ""
+                    for v in chosen
+                )
+            finally:
+                if callable(set_carrier) and saved_carrier is not None:
+                    set_carrier(*saved_carrier)
 
     weights = [_parse_branch_weight(b) for b in branches]
     branch_values = [_strip_branch_weight(b) for b in branches]
@@ -405,15 +424,21 @@ def ref_option_pool(tok: Token, ctx: ResolveContext) -> list[dict]:
             )
             # SP3: share the ctx-resident hit counter so a nested-ref
             # target occurrence counts toward the same first/next
-            # coverage as direct top-level instances. `carrier_ctx`
-            # stays None for now — nested-pick occurrence threading is a
-            # later task (the `pick` selector can't yet match a nested
-            # occurrence here, so it simply won't cover it).
+            # coverage as direct top-level instances. `carrier_ctx` is
+            # the identity of the carrier wildcard whose chosen option
+            # value textually contains THIS `@{uuid}` ref — set on the
+            # resolve frame by the enclosing wildcard handler (top-level
+            # carrier) or by `_resolve_ref` (deeper carrier). A `pick`
+            # selector's `nested` occurrence matches on it; first / next
+            # / all ignore it. None when no carrier is set (a ref at the
+            # surface root) — then `pick` simply won't cover.
             get_hits = getattr(ctx, "get_constraint_hits", None)
             hits = get_hits() if callable(get_hits) else {}
+            get_carrier_ctx = getattr(ctx, "get_carrier_ctx", None)
+            carrier_ctx = get_carrier_ctx() if callable(get_carrier_ctx) else None
             options, any_applied = apply_constraints_for_target(
                 options, uuid, constraints, get_picks(), ctx.warnings,
-                hits=hits, firing_uid=None, carrier_ctx=None,
+                hits=hits, firing_uid=None, carrier_ctx=carrier_ctx,
             )
             if any_applied:
                 warn_excludes_all(options, uuid, ctx.warnings)
@@ -502,6 +527,24 @@ def _resolve_ref(
     if not chosen_value:
         return ""
 
-    # Recursive resolve with depth+1, visited extended
+    # Recursive resolve with depth+1, visited extended. This ref'd
+    # wildcard is the carrier of any `@{X}` inside its OWN chosen option
+    # value, so stamp (its uuid, the chosen option's id) on the frame for
+    # the duration of the recursion, then restore the prior carrier. The
+    # carrier_uid here is the library uuid (a ref'd wildcard has no row
+    # `_uid`); a `pick` keyed on a top-level row uid won't match it —
+    # that's the expected deeper-than-one-hop behaviour (positional
+    # first/next/all cover deeper nesting). Mirrors the rng save/restore.
     nested_tokens = tokenize_text(chosen_value)
+    get_carrier = getattr(ctx, "get_carrier", None)
+    set_carrier = getattr(ctx, "set_carrier", None)
+    if callable(get_carrier) and callable(set_carrier):
+        saved_carrier = get_carrier()
+        set_carrier(uuid, chosen.get("id"))
+        try:
+            return _resolve_tokens(
+                nested_tokens, ctx, depth=depth + 1, visited=visited + (uuid,)
+            )
+        finally:
+            set_carrier(*saved_carrier)
     return _resolve_tokens(nested_tokens, ctx, depth=depth + 1, visited=visited + (uuid,))

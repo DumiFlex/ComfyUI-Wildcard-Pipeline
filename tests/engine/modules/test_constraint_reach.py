@@ -73,3 +73,33 @@ def test_two_constraints_stack_on_one_instance():
         _o(), "T", c, picks, [], hits=hits, firing_uid="u"
     )
     assert applied and out[0]["weight"] == 6.0
+
+
+def test_pick_nested_occurrence_matches_carrier_option():
+    from engine.modules._constraints import apply_constraints_for_target
+    picks = {"S": {"picks": [{"value": "rain", "tags": ["rainy"]}]}}
+    c = [{
+        "target_wildcard_id": "T",
+        "source_wildcard_id": "S",
+        "__constraint_module_id__": "c1",
+        "target_select": {
+            "mode": "pick",
+            "picks": [{"kind": "nested", "carrier_uid": "carrUID", "option_id": "optA"}],
+        },
+        "matrix": {"rainy": {"somber": {"mode": "boost", "factor": 2.0}}},
+        "exceptions": [],
+    }]
+    opts = [{"value": "blue", "sub_categories": ["somber"], "weight": 1.0}]
+    # Wrong carrier_uid → nested pick misses → weight untouched.
+    out, _ = apply_constraints_for_target(
+        opts, "T", c, picks, [], hits={},
+        carrier_ctx={"carrier_uid": "other", "option_id": "optA"},
+    )
+    assert out[0]["weight"] == 1.0
+    # Matching (carrier_uid, option_id) → nested pick covers → boost ×2.
+    opts2 = [{"value": "blue", "sub_categories": ["somber"], "weight": 1.0}]
+    out, _ = apply_constraints_for_target(
+        opts2, "T", c, picks, [], hits={},
+        carrier_ctx={"carrier_uid": "carrUID", "option_id": "optA"},
+    )
+    assert out[0]["weight"] == 2.0

@@ -363,6 +363,94 @@ def test_constraint_fires_on_ref_inside_nested_wildcard():
     assert out.get("$parent") == "ok"
 
 
+def test_pick_nested_threads_carrier_from_resolver():
+    """End-to-end carrier threading: a top-level carrier wildcard W
+    (known `_uid`) has a chosen option (known id) whose value is
+    `@{T}`. T is constrained with a `pick` selector keyed on
+    (carrier_uid=W._uid, option_id=W's option id). Resolving W must
+    thread that carrier identity into T's constraint apply so the pick
+    matches and the constraint fires (here: excludes T's only option →
+    `constraint_excludes_all_options` warning). Flipping the pick's
+    carrier_uid must make the selector miss → constraint does NOT fire.
+    """
+    target_uuid = "1a2b3c4d"
+    source_uuid = "ddccbbaa"
+    carrier_uid = "W-UID-1"
+    carrier_opt_id = "wopt1"
+    # T: single option tagged `wet`, excluded by the constraint when it
+    # fires — an all-excluded pool is a clean RNG-independent signal.
+    target = {
+        "id": target_uuid,
+        "type": "wildcard",
+        "var_binding": "tgt",
+        "options": [
+            {"id": "t1", "value": "rainwear", "weight": 1, "sub_categories": ["wet"]},
+        ],
+    }
+    carrier_opt = {"id": carrier_opt_id, "value": f"@{{{target_uuid}}}", "weight": 1}
+    carrier = _wildcard("55ee66ff", "carrier", [carrier_opt])
+
+    def _make_ctx(pick_carrier_uid: str) -> dict:
+        ctx = {
+            "__wp_rng__": random.Random(7),
+            "__wp_warnings__": [],
+            "__wp_catalog__": {target_uuid: target},
+            "__wp_constraints__": [{
+                "source_wildcard_id": source_uuid,
+                "target_wildcard_id": target_uuid,
+                "matrix": {"wet": {"wet": {"mode": "exclude", "factor": 1}}},
+                "exceptions": [],
+                "target_select": {
+                    "mode": "pick",
+                    "picks": [{
+                        "kind": "nested",
+                        "carrier_uid": pick_carrier_uid,
+                        "option_id": carrier_opt_id,
+                    }],
+                },
+                "__constraint_module_id__": "c1",
+            }],
+            "__wp_picks__": {
+                source_uuid: {"value": "rain", "sub_categories": ["wet"]},
+            },
+            "__wp_constraint_hits__": {},
+            # The carrier W's per-instance uid + module id (pipeline.py
+            # sets these on a real run; set by hand here so W has a
+            # known `_uid` the nested pick can key on).
+            "__wp_current_module_uid__": carrier_uid,
+            "__wp_current_module_id__": "55ee66ff",
+        }
+        return ctx
+
+    def _excludes_all(ctx: dict) -> list[dict]:
+        return [
+            w for w in ctx["__wp_warnings__"]
+            if w.get("type") == "constraint_excludes_all_options"
+        ]
+
+    # Matching carrier_uid → pick covers the nested occurrence → fires.
+    ctx_hit = _make_ctx(carrier_uid)
+    WildcardHandler.resolve(
+        carrier["payload"], instance={"variable_binding": "$carrier"}, ctx=ctx_hit,
+    )
+    assert ctx_hit["__wp_constraint_hits__"] == {"c1": 1}
+    assert len(_excludes_all(ctx_hit)) == 1, (
+        "matching nested pick must thread carrier identity → exclude fires"
+    )
+
+    # Flipped carrier_uid → selector misses → constraint never applies.
+    ctx_miss = _make_ctx("WRONG-UID")
+    out_miss = WildcardHandler.resolve(
+        carrier["payload"], instance={"variable_binding": "$carrier"}, ctx=ctx_miss,
+    )
+    # Hit counter still increments (encountered), but no exclusion fired.
+    assert ctx_miss["__wp_constraint_hits__"] == {"c1": 1}
+    assert _excludes_all(ctx_miss) == [], (
+        "non-matching carrier_uid must NOT cover the occurrence"
+    )
+    assert out_miss.get("$carrier") == "rainwear"
+
+
 def test_first_mode_does_not_recover_after_skipped_instance():
     """`first` mode: once the hit counter has passed 1, the selector
     stops covering — re-expresses the old 'already consumed → no-op'

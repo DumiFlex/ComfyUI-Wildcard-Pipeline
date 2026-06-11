@@ -682,6 +682,20 @@ class WildcardHandler(ModuleHandler):
         ctx["__wp_rng__"] = rng
         try:
             resolve_ctx = build_resolve_ctx(ctx, surface="wildcard")
+            # SP3 nested-pick reach: THIS wildcard is the carrier of any
+            # `@{T}` ref inside `value`. Stamp (its per-instance uid, the
+            # chosen option's id) on the resolve frame so a constraint on
+            # T whose `pick` selector lists this (carrier_uid, option_id)
+            # nested occurrence matches. A `pick` keyed on a DEEPER
+            # carrier won't match this top-level uid — that's by design
+            # (only one-hop carriers are individually pickable). Set on
+            # the freshly-built ctx (carrier defaults None); no restore
+            # needed — resolve_ctx is scoped to this resolve_text call.
+            set_carrier = getattr(resolve_ctx, "set_carrier", None)
+            if callable(set_carrier):
+                set_carrier(
+                    ctx.get("__wp_current_module_uid__"), chosen.get("id"),
+                )
             resolved = resolve_text(value, resolve_ctx)
         finally:
             ctx["__wp_rng__"] = saved_rng
