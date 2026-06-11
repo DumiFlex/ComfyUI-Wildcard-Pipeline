@@ -130,15 +130,36 @@ function bumpCount(delta: number): void {
 // Build a uuid → option-value-strings lookup from the chain (first-seen
 // wins, carriers only), EXACTLY as computePairingsFull does, so the
 // transitive carrier scan matches what the badge layer + engine resolve.
-const CARRIER_TYPES = new Set(["wildcard"]);
+const CARRIER_TYPES = new Set(["wildcard", "derivation"]);
 const lookup = computed<(uuid: string) => string[]>(() => {
   const byUuid = new Map<string, string[]>();
   for (const m of props.chainModules) {
     if (!CARRIER_TYPES.has(m.type) || byUuid.has(m.id)) continue;
-    const opts = (m.payload as { options?: Array<{ value?: string }> }).options;
-    if (!Array.isArray(opts)) continue;
     const values: string[] = [];
-    for (const o of opts) if (typeof o?.value === "string") values.push(o.value);
+    if (m.type === "derivation") {
+      // Derivation action values can host @{uuid} refs (engine stamps
+      // branchKey as the option_id). Mirrors refBearingEntries in
+      // constraint-pairs.ts — but here we only need the VALUE strings
+      // for the transitive reachPath lookup, not the ids.
+      const p = m.payload as {
+        rules?: Array<{
+          branches?: Array<{ action?: { value?: string } }>;
+          else?: { action?: { value?: string } } | null;
+        }>;
+      };
+      for (const r of Array.isArray(p.rules) ? p.rules : []) {
+        for (const b of Array.isArray(r?.branches) ? r.branches : []) {
+          const v = b?.action?.value;
+          if (typeof v === "string") values.push(v);
+        }
+        const elseV = r?.else?.action?.value;
+        if (typeof elseV === "string") values.push(elseV);
+      }
+    } else {
+      const opts = (m.payload as { options?: Array<{ value?: string }> }).options;
+      if (!Array.isArray(opts)) continue;
+      for (const o of opts) if (typeof o?.value === "string") values.push(o.value);
+    }
     byUuid.set(m.id, values);
   }
   return (uuid: string) => byUuid.get(uuid) ?? [];

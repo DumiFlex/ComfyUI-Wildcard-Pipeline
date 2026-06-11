@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
+  collectDownstreamNestedReachUuids,
   collectDownstreamWildcardUuids,
   collectLocalResolvedForModule,
   collectUpstreamResolved,
@@ -948,5 +949,60 @@ describe("hasUpstreamLoopOverridingSeed", () => {
       getNodeById: (id) => ({ 1: loop, 2: ctx } as Record<number, LiteNodeLike>)[id] ?? null,
     };
     expect(hasUpstreamLoopOverridingSeed(graph, ctx)).toBe(false);
+  });
+});
+
+describe("collectDownstreamNestedReachUuids — derivation carrier", () => {
+  /** Fake a WP_Context node that carries a single derivation module whose
+   *  branch action.value contains an @{uuid} nested ref. */
+  function fakeDerivContextNode(
+    id: number,
+    refUuid: string,
+    upstreamLink?: number,
+    outgoingLinkIds: number[] = [],
+  ): LiteNodeLike {
+    return {
+      id,
+      type: "WP_Context",
+      inputs: [{ name: "upstream", link: upstreamLink ?? null }],
+      outputs: [{ name: "context", links: outgoingLinkIds, type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "wp_modules",
+        value: JSON.stringify({
+          version: 1,
+          modules: [{
+            id: "d1aaaaaa",
+            type: "derivation",
+            enabled: true,
+            meta: { name: "" },
+            entries: [],
+            payload: {
+              rules: [{
+                id: "r1",
+                branches: [{ action: { value: `@{${refUuid}}` } }],
+              }],
+            },
+          }],
+        }),
+      }],
+    };
+  }
+
+  it("includes @{uuid} refs from derivation branch action values in downstream nodes", () => {
+    const TARGET = "aabbccdd";
+    const root: LiteNodeLike = {
+      id: 1,
+      type: "WP_Context",
+      inputs: [{ name: "upstream", link: null }],
+      outputs: [{ name: "context", links: [100], type: "PIPELINE_CONTEXT" }],
+      widgets: [{ name: "wp_modules", value: JSON.stringify({ version: 1, modules: [] }) }],
+    };
+    const downstream = fakeDerivContextNode(2, TARGET, 100);
+    const graph: LiteGraphLike = {
+      _nodes: [root, downstream],
+      links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id) => ({ 1: root, 2: downstream } as Record<number, LiteNodeLike>)[id] ?? null,
+    };
+    expect(collectDownstreamNestedReachUuids(graph, root)).toContain(TARGET);
   });
 });

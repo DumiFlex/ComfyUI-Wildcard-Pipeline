@@ -192,4 +192,17 @@ describe("TargetReachSection — pick checklist", () => {
     expect(w.find('[data-test="reach-pick-empty"]').exists()).toBe(true);
     expect(w.find('[data-test="reach-pick-1#mood-a"]').exists()).toBe(false);
   });
+
+  it("pick mode lists a derivation-nested occurrence keyed by branch key", () => {
+    const deriv: ChainModule = {
+      id: "d1aaaaaa", rowKey: "2#deriv-d", type: "derivation", displayName: "my deriv", nodeLabel: "B",
+      payload: { rules: [{ id: "r1", branches: [{ action: { value: `@{${TARGET_UUID}}` } }] }] },
+    };
+    // Derivation is downstream of the constraint row — append after makeChain().
+    const { w } = mountSection({ mode: "pick", picks: [] }, { chainModules: [...makeChain(), deriv], targetName: "test-target" });
+    const row = w.find('[data-test="reach-pick-2#deriv-d::r1:0"]');
+    expect(row.exists()).toBe(true);
+    expect(row.text()).toContain("@test-target");
+    expect(row.text()).toContain("in my deriv");
+  });
 });

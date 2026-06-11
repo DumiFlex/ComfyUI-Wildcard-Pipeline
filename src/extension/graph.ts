@@ -1318,18 +1318,33 @@ export function collectDownstreamNestedReachUuids(
           const bundleEnabled = buildBundleEnabledMap(v.bundles);
           for (const m of v.modules) {
             if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
-            if (m.type !== "wildcard") continue;
-            const payload = (m.payload ?? {}) as { options?: Array<{ value?: unknown }> };
-            for (const opt of payload.options ?? []) {
-              const val = opt.value;
-              if (typeof val !== "string") continue;
-              REF_RE.lastIndex = 0;
-              let match: RegExpExecArray | null;
-              while ((match = REF_RE.exec(val)) !== null) {
+            const scanValue = (val: unknown): void => {
+              if (typeof val !== "string") return;
+              for (const match of val.matchAll(REF_RE)) {
                 if (!reach.has(match[1])) {
                   reach.add(match[1]);
                   out.push(match[1]);
                 }
+              }
+            };
+            if (m.type === "wildcard") {
+              const payload = (m.payload ?? {}) as { options?: Array<{ value?: unknown }> };
+              for (const opt of payload.options ?? []) scanValue(opt.value);
+            } else if (m.type === "derivation") {
+              // Derivation action values can host @{uuid} refs — scan
+              // branches[].action.value + else.action.value with the
+              // same REF_RE. Mirrors the wildcard option scan above.
+              const dp = (m.payload ?? {}) as {
+                rules?: Array<{
+                  branches?: Array<{ action?: { value?: unknown } }>;
+                  else?: { action?: { value?: unknown } } | null;
+                }>;
+              };
+              for (const r of Array.isArray(dp.rules) ? dp.rules : []) {
+                for (const b of Array.isArray(r?.branches) ? r.branches : []) {
+                  scanValue(b?.action?.value);
+                }
+                scanValue(r?.else?.action?.value);
               }
             }
           }
