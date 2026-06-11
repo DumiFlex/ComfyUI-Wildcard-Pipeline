@@ -152,7 +152,12 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // across the lazy ContextWidget chunk; entry stays put. Approved with the
 // SP1 multi-tag + boolean-filter feature (docs/superpowers/specs/
 // 2026-06-06-wildcard-multi-subcategory-boolean-filter-design.md §4.2).
-const TOTAL_LIMIT = 405 * 1024;     // 405 KB
+// Bumped 405 -> 430 KB on 2026-06-11 for SP3 constraint reach UI headroom.
+// SP3 Task 13 lands the TS combineConstraintFactor mirror (+ shared corpus
+// parity test) now; the upcoming reach/constraint-matrix UI phases need the
+// total budget headroom in the lazy ContextWidget chunk. Approved alongside
+// the SP3 constraint feature.
+const TOTAL_LIMIT = 430 * 1024;     // 430 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;
