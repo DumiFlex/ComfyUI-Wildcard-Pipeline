@@ -6,6 +6,7 @@ import {
   type ModuleEntry,
 } from "../widgets/_shared";
 import { varBaseName } from "../widgets/richTokenize";
+import { computePairingsFull, type ChainModule } from "./constraint-pairs";
 
 /** Resolve a module's effective var-binding name. Mirrors engine
  *  precedence: per-instance override (`instance.variable_binding`)
@@ -151,10 +152,12 @@ export type ConflictType =
   | "constraint_source_missing"
   | "constraint_target_missing"
   | "constraint_orphan_source"   // no source instance upstream
-  | "constraint_orphan_target"   // no available target instance downstream
-                                  // (count-aware: N constraints targeting
-                                  //  the same wildcard need N downstream
-                                  //  instances; later ones get this rule)
+  | "constraint_orphan_target"   // SP3 reach model: this constraint's
+                                  //  `target_select` reach covers ZERO
+                                  //  reachable downstream target instances.
+                                  //  No exclusive claiming — multiple
+                                  //  constraints may cover one instance, so
+                                  //  orphan strictly means "reached nothing".
   | "injector_binding_missing";
 export type Severity = "info" | "warning" | "error";
 export interface Conflict {
@@ -404,40 +407,47 @@ export function scanConflicts(
   upstreamWildcardUuids: string[] = [],
   downstreamWildcardUuids: string[] = [],
   downstreamNestedReachUuids: string[] = [],
-  // Pair-logic result keyed by constraint's `_uid` (NOT the rowKey
-  // `${nodeId}#${_uid}` form used by cross-node-pairings, because the
-  // scanner runs per-node and doesn't carry the litegraph node id). The
-  // caller in `ContextWidget.vue` is expected to remap the global map
-  // to the per-node form before passing — or pass `null` to disable
-  // the cross-check and fall back to the local static analysis.
+  // Per-constraint orphan verdict keyed by the constraint's `_uid` (NOT
+  // the rowKey `${nodeId}#${_uid}` form used by cross-node-pairings,
+  // because the scanner runs per-node and doesn't carry the litegraph
+  // node id). Each value is `computePairingsFull`'s
+  // `RowPairings.direct.isOrphan` for that constraint — true exactly when
+  // its `target_select` reach covered ZERO reachable downstream target
+  // instances (cross-node + transitive). The caller in `ContextWidget.vue`
+  // remaps the global cross-node map to this per-node `_uid` form.
   //
-  // When provided: a constraint whose pair-logic result has
-  // `isOrphan === false` is treated as satisfied — the scanner won't
-  // emit `constraint_orphan_target` for it, no matter what
-  // `claimSlot` / nested-reach says. Same source of truth for the
-  // badge + the warning. Pair-logic walks the cross-node flat chain
-  // and sees configurations (disabled positionally, mixed-context
-  // routes) that the per-node scanner can't reconstruct, so deferring
-  // to it eliminates the mismatch class.
+  // SP3 source of truth: `constraint_orphan_target` is DRIVEN off this
+  // verdict — the same `isOrphan` that lights the constraint's pair badge
+  // also raises (or suppresses) the warning, so badge + scanner never
+  // disagree. The cross-node walker sees the full flat chain (mixed
+  // direct/via routes, downstream Context instances) the per-node scanner
+  // can't reconstruct, so its verdict is authoritative.
+  //
+  // Pass `null` (e.g. the subgraph-badge per-node path) to fall back to a
+  // LOCAL `computePairingsFull`: the scanner synthesises a chain from this
+  // node's modules plus the downstream / downstream-nested uuids it was
+  // handed and reads `isOrphan` off that. Same reach math, narrower
+  // visibility.
   constraintPairOrphanByUid: Map<string, boolean> | null = null,
 ): Conflict[] {
   const upstream = new Set(upstreamVars);
   const upstreamUuids = new Set(upstreamWildcardUuids);
-  // Per-uuid downstream instance count — distinct from a Set because
-  // the count-aware `constraint_orphan_target` check needs to know how
-  // many downstream slots a uuid offers. Two duplicated constraints
-  // targeting the same wildcard need two downstream instances; a Set
-  // would collapse to 1 and falsely orphan the second constraint.
+  // Per-uuid downstream instance count. The SP3 reach model no longer
+  // RESERVES slots (orphan is driven off `computePairingsFull`'s
+  // `isOrphan`), so the count is no longer load-bearing for orphan —
+  // the `> 0` reads below only ask "does this uuid appear downstream at
+  // all" for the `constraint_target_missing` reachability test + the
+  // source orphan check. The per-instance count is still synthesised
+  // into the local fallback chain (one wildcard per entry) so a target
+  // that appears downstream N times is reachable N times there too.
   const downstreamCounts = new Map<string, number>();
   for (const u of downstreamWildcardUuids) {
     downstreamCounts.set(u, (downstreamCounts.get(u) ?? 0) + 1);
   }
-  // Set (not counted) — via-nested route is non-consuming. Pair badge
-  // logic lets ↪×N multiple constraints route through the same downstream
-  // carrier, so the scanner mirrors that by treating cross-node nested
-  // reach as a slot that can satisfy any number of constraints. Used
-  // alongside `inLocalNestedAfter` to suppress the orphan warning when
-  // the pair badge would have found a downstream `@{uuid}` carrier.
+  // Set — cross-node `@{uuid}` carriers a constraint can reach its target
+  // through. Feeds the `constraint_target_missing` reachability test (a
+  // target reachable only via a downstream carrier is NOT missing) and is
+  // synthesised into the local fallback chain as a carrier wildcard.
   const downstreamNestedReach = new Set(downstreamNestedReachUuids);
   // Same-node wildcard index lookup. Used by the constraint ordering
   // checks: a constraint references its source/target by uuid, and we
@@ -484,41 +494,68 @@ export function scanConflicts(
     for (const r of nestedRefsOf(value.modules[i])) seedsAccumulator.push(r);
     localNestedReachAfter[i] = walkLocalReach(seedsAccumulator, localCatalog);
   }
-  // Per-target slot allocator (2026-05-24 first-instance spec).
-  // Each constraint at position i claims the FIRST unclaimed target
-  // instance reachable from i — a local wildcard at position > i, or
-  // (if no local slot left) a downstream Context instance. Modeling
-  // this as a counter was wrong: a constraint at position 4 with a
-  // local target at position 3 (BEFORE itself) cannot claim that
-  // local — it's upstream. The counter happily decremented anyway,
-  // falsely orphaning later constraints when an earlier one had
-  // already consumed the only downstream slot.
+  // Per-constraint orphan verdict (SP3 reach model). A constraint is an
+  // orphan-target iff its `target_select` reach covered ZERO reachable
+  // downstream target instances — exactly the condition
+  // `computePairingsFull` already stamps onto each sender's `direct`
+  // badge as `isOrphan`. Rather than re-derive reach here we DRIVE the
+  // warning off that same verdict so the pair badge and the scanner can
+  // never disagree.
   //
-  // `availableLocalSlots[tgtId]` is a *sorted* list of local indices
-  // where this target appears. `claimLocalSlot(tgtId, i)` removes and
-  // returns the smallest index > i; `remainingDownstream[tgtId]`
-  // tracks how many cross-node instances are still up for grabs.
-  const availableLocalSlots = new Map<string, number[]>();
-  for (const [uuid, indices] of localWildcardIndex) {
-    availableLocalSlots.set(uuid, [...indices].sort((a, b) => a - b));
-  }
-  const remainingDownstream = new Map<string, number>(downstreamCounts);
-  function claimSlot(tgtId: string, i: number): boolean {
-    const locals = availableLocalSlots.get(tgtId);
-    if (locals) {
-      const idx = locals.findIndex((slot) => slot > i);
-      if (idx !== -1) {
-        locals.splice(idx, 1);
-        return true;
+  // Two sources, keyed by the constraint's `_uid` (falling back to `id`):
+  //   - When the caller passed `constraintPairOrphanByUid` (the
+  //     ContextWidget path), it already carries the cross-node verdict —
+  //     use it verbatim.
+  //   - Otherwise (the subgraph-badge per-node path, or a bare-mount
+  //     test) we synthesise a LOCAL chain and run `computePairingsFull`
+  //     ourselves: this node's modules in order, then one synthetic
+  //     downstream wildcard per `downstreamWildcardUuids` entry, then a
+  //     synthetic carrier wildcard whose option `@{uuid}` ref re-creates
+  //     each `downstreamNestedReachUuids` route. Downstream instances are
+  //     appended AFTER the locals because, at runtime, a downstream
+  //     Context picks after this node — so a constraint's downstream-
+  //     relative reach can cover them. Upstream-only targets get no
+  //     synthetic instance (they pick before the constraint), so they
+  //     correctly come back orphan.
+  const orphanTargetByUid = ((): Map<string, boolean> => {
+    if (constraintPairOrphanByUid !== null) return constraintPairOrphanByUid;
+    // rowKey = the SAME `_uid ?? id` the readback below looks up by, so a
+    // constraint's `RowPairings` is addressable. Production rows always
+    // carry a unique `_uid` (ensureRowUids); bare-mount tests omit it but
+    // use distinct constraint ids, so constraint rowKeys never collide.
+    // (Duplicate same-id target wildcards may share a rowKey, but the
+    // encounter walk iterates by index regardless, and we only read
+    // constraint keys — harmless.)
+    const chain: ChainModule[] = value.modules.map((m) => ({
+      id: m.id,
+      rowKey: m._uid ?? m.id,
+      type: m.type,
+      payload: (m.payload ?? {}) as Record<string, unknown>,
+    }));
+    let synth = 0;
+    for (const [uuid, count] of downstreamCounts) {
+      for (let k = 0; k < count; k++) {
+        chain.push({ id: uuid, rowKey: `__ds_${uuid}_${synth++}`, type: "wildcard", payload: {} });
       }
     }
-    const left = remainingDownstream.get(tgtId) ?? 0;
-    if (left > 0) {
-      remainingDownstream.set(tgtId, left - 1);
-      return true;
+    for (const uuid of downstreamNestedReach) {
+      chain.push({
+        id: `__dsc_${uuid}_${synth++}`,
+        rowKey: `__dsc_${uuid}_${synth}`,
+        type: "wildcard",
+        payload: { options: [{ id: "o", value: `@{${uuid}}` }] },
+      });
     }
-    return false;
-  }
+    const full = computePairingsFull(chain);
+    const out = new Map<string, boolean>();
+    for (const m of value.modules) {
+      if (m.type !== "constraint") continue;
+      const key = m._uid ?? m.id;
+      const rp = full.get(key);
+      if (rp?.direct) out.set(key, rp.direct.isOrphan);
+    }
+    return out;
+  })();
   const written = new Set<string>();
   // Track the kind of the FIRST module to write each name in this
   // node. Used to distinguish intentional cross-kind overrides
@@ -601,33 +638,31 @@ export function scanConflicts(
       }
     }
 
-    // 3. Constraint orphan + count check (2026-05-24 first-instance
-    //    redesign). Per the new one-shot semantic, each constraint
-    //    targets ONE downstream target instance — and source must have
-    //    picked upstream of the constraint position. Replaces the
-    //    legacy after_self / before_self / in_upstream / in_downstream
-    //    rules with two unified orphan checks:
+    // 3. Constraint orphan + missing checks. SP3 reach model: a
+    //    constraint covers downstream target instances per its
+    //    `target_select` reach (`first`/`next`/`all`/`pick`, default
+    //    `all`) and multiple constraints may cover one instance — no
+    //    exclusive claiming. Three checks:
     //
     //      - `constraint_orphan_source`  : no source wildcard instance
     //        upstream of this constraint. Upstream = same-node at
     //        index < i, OR an upstream Context node. A source that
     //        ALSO appears downstream is fine — only flag when there's
-    //        no upstream instance at all.
+    //        no upstream instance at all. (Unchanged by SP3.)
     //
-    //      - `constraint_orphan_target`  : no available target
-    //        wildcard instance downstream of this constraint. Count-
-    //        aware: each prior constraint targeting the same wildcard
-    //        consumes one downstream instance slot. If N constraints
-    //        targeting target X share fewer than N downstream X
-    //        instances, the later constraints get this rule. Available
-    //        instances include same-node at index > i, downstream
-    //        Context, AND nested-ref reachable via `@{X}` from any
-    //        wildcard at index > i (the engine resolver applies
-    //        constraints to nested refs too).
+    //      - `constraint_orphan_target`  : this constraint's reach
+    //        covered ZERO reachable downstream target instances. DRIVEN
+    //        off `computePairingsFull`'s `isOrphan` via `orphanTargetByUid`
+    //        (cross-node when the caller supplied the verdict, else a
+    //        local synthetic-chain run) so the pair badge + this warning
+    //        share one source of truth.
     //
     //      - `constraint_source_missing` / `constraint_target_missing`
-    //        : uuid not findable in catalog at all. Independent of
-    //        position. Surfaces typos / dangling refs.
+    //        : uuid not findable in catalog at all (local, upstream,
+    //        downstream, or via a nested `@{X}` carrier). Independent of
+    //        position / reach. Surfaces typos / dangling refs. A missing
+    //        target takes precedence over orphan — when the uuid is
+    //        nowhere to be found we say "missing", not "reached nothing".
     if (m.type === "constraint") {
       const cp = (m.payload ?? {}) as { source_wildcard_id?: string; target_wildcard_id?: string };
       const srcId = cp.source_wildcard_id;
@@ -663,46 +698,17 @@ export function scanConflicts(
       }
 
       if (typeof tgtId === "string" && tgtId) {
-        // Count-aware target orphan check. Track per-target claim
-        // count across constraints in chain order. Each constraint at
-        // position i can claim the next unclaimed downstream instance.
-        // Available instance count = local-after-self count +
-        // downstream chain count + nested-reach count (each treated as
-        // one slot apiece — best-effort static analysis).
+        // Reachability for the MISSING check (position-independent): is
+        // this uuid present anywhere the engine could resolve it — a
+        // local instance, an upstream/downstream Context, or via a
+        // nested `@{tgtId}` carrier (local-after-self or downstream)? If
+        // not, it's a dangling ref → `constraint_target_missing`.
         const localIdxs = localWildcardIndex.get(tgtId);
         const inLocalDirect = localIdxs !== undefined && localIdxs.length > 0;
         const inUpstream = upstreamUuids.has(tgtId);
-        const downstreamCount = downstreamCounts.get(tgtId) ?? 0;
-        const inDownstream = downstreamCount > 0;
+        const inDownstream = (downstreamCounts.get(tgtId) ?? 0) > 0;
         const inLocalNestedAfter = localNestedReachAfter[i + 1].has(tgtId);
         const inDownstreamNested = downstreamNestedReach.has(tgtId);
-
-        // Pair-logic veto: when the cross-node pair walker found a
-        // non-orphan match for THIS constraint instance, trust it.
-        // The pair walker has visibility the per-node scanner can't
-        // reproduce (cross-node flat chain, mixed direct/via routes,
-        // per-constraint slot allocation across nodes), so its
-        // "non-orphan" verdict is the source of truth. Lookup keyed by
-        // `_uid` to match what cross-node-pairings.ts produces after
-        // the caller strips the node-id prefix from the global rowKey.
-        const cuid = (m._uid ?? m.id) as string;
-        const pairSaysNotOrphan
-          = constraintPairOrphanByUid !== null
-            && constraintPairOrphanByUid.has(cuid)
-            && constraintPairOrphanByUid.get(cuid) === false;
-
-        if (pairSaysNotOrphan) {
-          // Pair found a match — also bookkeep a slot claim so a
-          // sibling constraint counting on the same target doesn't
-          // double-claim. Best-effort: when pair routed via a nested
-          // carrier the slot isn't really a discrete unit, but
-          // consuming once still matches the count-aware semantic for
-          // direct-target cases without breaking via-nested cases
-          // (those will fall through to `inDownstreamNested` /
-          // `inLocalNestedAfter` for any later sibling).
-          claimSlot(tgtId, i);
-          continue;
-        }
 
         if (
           !inLocalDirect
@@ -717,25 +723,21 @@ export function scanConflicts(
             type: "constraint_target_missing",
             severity: "warning",
           });
-        } else {
-          // Slot allocation: first try a local instance at index > i,
-          // then a downstream cross-node instance. Falls back to
-          // nested-reach (best-effort — counts as one extra slot, not
-          // tracked per nested instance because static counting through
-          // `@{}` chains gets hairy fast). Cross-node via-nested
-          // (`inDownstreamNested`) mirrors the pair-badge `↪×N` semantic:
-          // multiple constraints can route through the same downstream
-          // carrier without consuming a slot — so it suppresses orphan
-          // unconditionally.
-          const claimed = claimSlot(tgtId, i);
-          if (!claimed && !inLocalNestedAfter && !inDownstreamNested) {
-            out.push({
-              moduleId: m._uid ?? m.id,
-              variable: tgtId,
-              type: "constraint_orphan_target",
-              severity: "warning",
-            });
-          }
+        } else if (orphanTargetByUid.get((m._uid ?? m.id) as string) === true) {
+          // Target IS findable, but this constraint's reach covered ZERO
+          // reachable downstream instances (computed by
+          // `computePairingsFull` — see `orphanTargetByUid`). A target
+          // that exists only upstream / only before this constraint lands
+          // here. When the verdict map has no entry for this constraint
+          // (shouldn't happen for a constraint carrying a target), the
+          // `=== true` guard defaults to NOT flagging — trust the reach
+          // walker's silence over a speculative orphan.
+          out.push({
+            moduleId: m._uid ?? m.id,
+            variable: tgtId,
+            type: "constraint_orphan_target",
+            severity: "warning",
+          });
         }
       }
     }
