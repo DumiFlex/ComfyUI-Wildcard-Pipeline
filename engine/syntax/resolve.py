@@ -492,8 +492,10 @@ def _resolve_ref(
         )
         return ""
 
-    # Surface check
-    if ctx.surface != "wildcard":
+    # Surface check — wildcard options AND derivation action values may host
+    # `@{}` refs (both run resolve_text inside a seeded Context with the chain
+    # constraint bucket threaded). combine + assembler stay gated.
+    if ctx.surface not in ("wildcard", "derivation"):
         if ctx.strict:
             raise RefOutOfSurfaceError(uuid, ctx.surface)
         # Try to resolve module name for the warning detail (best-effort)

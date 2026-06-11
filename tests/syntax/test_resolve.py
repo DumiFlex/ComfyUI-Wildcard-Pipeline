@@ -172,7 +172,7 @@ def test_resolve_ref_unknown_uuid_strict_raises():
     assert exc.value.uuid == "00000000"
 
 
-@pytest.mark.parametrize("surface", ["combine", "derivation", "assembler"])
+@pytest.mark.parametrize("surface", ["combine", "assembler"])
 def test_resolve_ref_out_of_surface_lenient_emits_empty(surface):
     ctx = _ctx(
         surface=surface,
@@ -183,7 +183,7 @@ def test_resolve_ref_out_of_surface_lenient_emits_empty(surface):
     assert any(w["type"] == "ref_out_of_surface" for w in ctx.warnings)
 
 
-@pytest.mark.parametrize("surface", ["combine", "derivation", "assembler"])
+@pytest.mark.parametrize("surface", ["combine", "assembler"])
 def test_resolve_ref_out_of_surface_strict_raises(surface):
     from engine.syntax import RefOutOfSurfaceError
     ctx = _ctx(
