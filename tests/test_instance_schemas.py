@@ -1,5 +1,9 @@
 """Type-only validation schema for instance overrides per kind."""
-from engine.schemas.instance_schemas import INSTANCE_SCHEMAS, validate_instance
+from engine.schemas.instance_schemas import (
+    INSTANCE_SCHEMAS,
+    _matches_type,
+    validate_instance,
+)
 
 
 def test_schemas_cover_all_kinds_with_instance_fields():
@@ -77,3 +81,28 @@ def test_wildcard_legacy_mode_emits_warning_not_error():
     warnings = validate_instance("wildcard", {"mode": "pinned", "pinned_option_id": "o1"})
     assert any("unknown instance field: wildcard.mode" in w for w in warnings)
     assert any("unknown instance field: wildcard.pinned_option_id" in w for w in warnings)
+
+
+# ── SP3: constraint target_select instance override field ───────────
+
+
+def test_constraint_instance_allows_target_select():
+    assert INSTANCE_SCHEMAS["constraint"]["target_select"] == "dict"
+
+
+def test_matches_type_dict_arm():
+    assert _matches_type({}, "dict") is True
+    assert _matches_type({"mode": "all"}, "dict") is True
+    assert _matches_type([], "dict") is False
+    assert _matches_type("all", "dict") is False
+    assert _matches_type(None, "dict") is False
+
+
+def test_validate_instance_constraint_target_select_clean():
+    warnings = validate_instance("constraint", {"target_select": {"mode": "first"}})
+    assert warnings == []
+
+
+def test_validate_instance_constraint_target_select_type_mismatch():
+    warnings = validate_instance("constraint", {"target_select": "not-a-dict"})
+    assert any("target_select" in w and "type mismatch" in w for w in warnings)

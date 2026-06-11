@@ -28,7 +28,9 @@ export type InstanceFieldKey =
   | "cell_factor_overrides"
   | "exception_mode_overrides"
   | "exception_factor_overrides"
-  | "extra_exceptions";
+  | "extra_exceptions"
+  // SP3 reach selector override (shape validated engine-side).
+  | "target_select";
 
 /** Single source of truth for which instance fields each kind exposes.
  *  Drives:
@@ -75,5 +77,9 @@ export const INSTANCE_FIELDS_PER_KIND: Record<ModuleEntryKind, readonly Instance
     "exception_mode_overrides",
     "exception_factor_overrides",
     "extra_exceptions",
+    // SP3 reach selector override (per-instance). Interior shape
+    // (mode/count/picks) is validated engine-side, not by the type-only
+    // instance schema. Kept in parity with engine INSTANCE_SCHEMAS.
+    "target_select",
   ],
 };

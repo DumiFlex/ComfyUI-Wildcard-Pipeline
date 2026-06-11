@@ -14,6 +14,9 @@ from typing import Any, Literal
 InstanceFieldType = Literal[
     "string", "list[string]", "dict[string,number]", "dict[string,dict]",
     "dict[string,string]",
+    # Generic object — used by SP3 `target_select`, whose interior shape is
+    # validated by the constraint handler rather than this type-only schema.
+    "dict",
     "boolean", "number", "list[dict]",
 ]
 
@@ -105,6 +108,9 @@ INSTANCE_SCHEMAS: dict[str, dict[str, InstanceFieldType]] = {
         "exception_mode_overrides":    "dict[string,string]",
         "exception_factor_overrides":  "dict[string,number]",
         "extra_exceptions":            "list[dict]",
+        # SP3 reach selector override. Interior shape (mode/count/picks) is
+        # validated by ConstraintHandler; here it is type-only ("is a dict").
+        "target_select":               "dict",
     },
 }
 
@@ -120,6 +126,8 @@ def _matches_type(value: Any, spec: InstanceFieldType) -> bool:
         return isinstance(value, list) and all(isinstance(x, str) for x in value)
     if spec == "list[dict]":
         return isinstance(value, list) and all(isinstance(x, dict) for x in value)
+    if spec == "dict":
+        return isinstance(value, dict)
     if spec == "dict[string,number]":
         return (
             isinstance(value, dict)

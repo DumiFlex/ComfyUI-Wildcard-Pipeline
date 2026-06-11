@@ -49,6 +49,8 @@ describe("INSTANCE_FIELDS_PER_KIND registry", () => {
       "exception_mode_overrides",
       "exception_factor_overrides",
       "extra_exceptions",
+      // SP3 reach selector override (parity with engine INSTANCE_SCHEMAS).
+      "target_select",
     ]);
   });
 });

@@ -375,3 +375,138 @@ def test_resolve_cell_factor_zero_accepted():
     ctx: dict = {}
     ConstraintHandler.resolve(payload, instance, ctx)
     assert ctx["__wp_constraints__"][0]["matrix"]["kimono"]["casual"]["factor"] == 0.0
+
+
+# ── SP3: target_select reach selector (shape + plumbing only) ───────
+#
+# {mode: "first"|"next"|"all"|"pick", count?, picks?}, default {mode:"all"}.
+# These cover validation + registration into ctx metadata; reach
+# *behaviour* lands in a later task and is NOT exercised here.
+
+
+def _ts_payload(**extra):
+    """Minimal valid constraint payload, optionally carrying target_select."""
+    base = {
+        "source_wildcard_id": "aaaaaaaa",
+        "target_wildcard_id": "bbbbbbbb",
+        "matrix": {},
+        "exceptions": [],
+    }
+    base.update(extra)
+    return base
+
+
+def test_target_select_defaults_all_when_absent():
+    # Absent target_select validates fine (defaults applied at resolve).
+    ConstraintHandler.validate_payload(_ts_payload())  # no raise
+
+
+def test_target_select_none_is_allowed():
+    ConstraintHandler.validate_payload(_ts_payload(target_select=None))  # no raise
+
+
+def test_target_select_explicit_all_accepted():
+    ConstraintHandler.validate_payload(
+        _ts_payload(target_select={"mode": "all"})
+    )  # no raise
+
+
+def test_target_select_rejects_non_object():
+    with pytest.raises(ValueError, match="target_select"):
+        ConstraintHandler.validate_payload(_ts_payload(target_select="all"))
+
+
+def test_target_select_rejects_bad_mode():
+    with pytest.raises(ValueError, match="target_select.mode"):
+        ConstraintHandler.validate_payload(
+            _ts_payload(target_select={"mode": "sometimes"})
+        )
+
+
+def test_target_select_next_requires_positive_count():
+    with pytest.raises(ValueError, match="count"):
+        ConstraintHandler.validate_payload(
+            _ts_payload(target_select={"mode": "next", "count": 0})
+        )
+
+
+def test_target_select_next_rejects_bool_count():
+    # bool is an int subclass; reject it explicitly.
+    with pytest.raises(ValueError, match="count"):
+        ConstraintHandler.validate_payload(
+            _ts_payload(target_select={"mode": "next", "count": True})
+        )
+
+
+def test_target_select_next_accepts_positive_count():
+    ConstraintHandler.validate_payload(
+        _ts_payload(target_select={"mode": "next", "count": 3})
+    )  # no raise
+
+
+def test_target_select_pick_requires_list():
+    with pytest.raises(ValueError, match="picks"):
+        ConstraintHandler.validate_payload(
+            _ts_payload(target_select={"mode": "pick", "picks": "nope"})
+        )
+
+
+def test_target_select_pick_rejects_bad_kind():
+    with pytest.raises(ValueError, match=r"picks\[0\].kind"):
+        ConstraintHandler.validate_payload(
+            _ts_payload(target_select={"mode": "pick", "picks": [{"kind": "weird"}]})
+        )
+
+
+def test_target_select_pick_direct_needs_string_uid():
+    with pytest.raises(ValueError, match=r"picks\[0\].uid"):
+        ConstraintHandler.validate_payload(
+            _ts_payload(target_select={"mode": "pick", "picks": [{"kind": "direct"}]})
+        )
+
+
+def test_target_select_pick_nested_needs_carrier_and_option():
+    with pytest.raises(ValueError, match=r"picks\[0\]"):
+        ConstraintHandler.validate_payload(
+            _ts_payload(
+                target_select={"mode": "pick", "picks": [{"kind": "nested"}]}
+            )
+        )
+
+
+def test_target_select_pick_accepts_valid_entries():
+    ConstraintHandler.validate_payload(
+        _ts_payload(
+            target_select={
+                "mode": "pick",
+                "picks": [
+                    {"kind": "direct", "uid": "u1"},
+                    {"kind": "nested", "carrier_uid": "c1", "option_id": "o1"},
+                ],
+            }
+        )
+    )  # no raise
+
+
+def test_resolve_registers_target_select_in_meta():
+    ctx = {"__wp_current_module_uid__": "u1", "__wp_current_module_id__": "lib1"}
+    ConstraintHandler.resolve(
+        _ts_payload(target_select={"mode": "next", "count": 2}), {}, ctx
+    )
+    assert ctx["__wp_constraints__"][-1]["target_select"] == {"mode": "next", "count": 2}
+
+
+def test_resolve_defaults_target_select_to_all_when_absent():
+    ctx = {"__wp_current_module_uid__": "u1", "__wp_current_module_id__": "lib1"}
+    ConstraintHandler.resolve(_ts_payload(), {}, ctx)
+    assert ctx["__wp_constraints__"][-1]["target_select"] == {"mode": "all"}
+
+
+def test_resolve_instance_target_select_overrides_payload():
+    ctx = {"__wp_current_module_uid__": "u1", "__wp_current_module_id__": "lib1"}
+    ConstraintHandler.resolve(
+        _ts_payload(target_select={"mode": "all"}),
+        {"target_select": {"mode": "first"}},
+        ctx,
+    )
+    assert ctx["__wp_constraints__"][-1]["target_select"] == {"mode": "first"}

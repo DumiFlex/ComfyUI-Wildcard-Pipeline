@@ -24,6 +24,55 @@ from engine.modules.dispatcher import ModuleHandler
 
 _VALID_MODES = {"allow", "exclude", "boost", "reduce"}
 
+# SP3 reach selector — which downstream target instance(s) a constraint
+# reaches. Shape only here; reach *behaviour* is applied by a later task.
+_REACH_MODES = {"first", "next", "all", "pick"}
+
+
+def _validate_target_select(ts):
+    """Validate the optional ``target_select`` reach selector.
+
+    Shape: ``{mode: "first"|"next"|"all"|"pick", count?, picks?}``. ``None``
+    (absent) is allowed — the resolver defaults it to ``{mode: "all"}``.
+    """
+    if ts is None:
+        return
+    if not isinstance(ts, dict):
+        raise ValueError("constraint payload.target_select must be an object")
+    mode = ts.get("mode", "all")
+    if mode not in _REACH_MODES:
+        raise ValueError(
+            f"constraint payload.target_select.mode must be one of {sorted(_REACH_MODES)}"
+        )
+    if mode == "next":
+        count = ts.get("count")
+        if not isinstance(count, int) or isinstance(count, bool) or count < 1:
+            raise ValueError(
+                "constraint payload.target_select.count must be an int >= 1 for mode 'next'"
+            )
+    if mode == "pick":
+        picks = ts.get("picks")
+        if not isinstance(picks, list):
+            raise ValueError(
+                "constraint payload.target_select.picks must be a list for mode 'pick'"
+            )
+        for i, p in enumerate(picks):
+            if not isinstance(p, dict) or p.get("kind") not in ("direct", "nested"):
+                raise ValueError(
+                    f"constraint payload.target_select.picks[{i}].kind must be 'direct' or 'nested'"
+                )
+            if p["kind"] == "direct" and not isinstance(p.get("uid"), str):
+                raise ValueError(
+                    f"constraint payload.target_select.picks[{i}].uid must be a string"
+                )
+            if p["kind"] == "nested" and not (
+                isinstance(p.get("carrier_uid"), str) and isinstance(p.get("option_id"), str)
+            ):
+                raise ValueError(
+                    f"constraint payload.target_select.picks[{i}] nested "
+                    "needs carrier_uid + option_id"
+                )
+
 
 def _ctx_set_constraint(ctx: Any, meta: dict[str, Any]) -> None:
     """Append ``meta`` to ``ctx['__wp_constraints__']`` (best-effort).
@@ -185,6 +234,7 @@ class ConstraintHandler(ModuleHandler):
                 raise ValueError(
                     f"constraint payload.exceptions[{i}].factor must not be negative"
                 )
+        _validate_target_select(payload.get("target_select"))
 
     @classmethod
     def resolve(
@@ -207,6 +257,16 @@ class ConstraintHandler(ModuleHandler):
         exception_mode_overrides = instance.get("exception_mode_overrides") or {}
         exception_factor_overrides = instance.get("exception_factor_overrides") or {}
         extra_exceptions = instance.get("extra_exceptions") or []
+
+        # SP3 reach selector — instance override wins over the payload's
+        # value, falling back to the {mode:"all"} default. Shape was
+        # already validated in validate_payload (payload side); the
+        # instance side is validated when the instance is loaded.
+        ts = (
+            instance.get("target_select")
+            or payload.get("target_select")
+            or {"mode": "all"}
+        )
 
         # ── Matrix: filter then override ─────────────────────────────
         raw_matrix = payload.get("matrix", {})
@@ -397,6 +457,8 @@ class ConstraintHandler(ModuleHandler):
             "target_wildcard_id": payload["target_wildcard_id"],
             "matrix": matrix,
             "exceptions": exceptions,
+            # SP3 reach selector — recorded for the (later) apply pass.
+            "target_select": ts,
             "__constraint_module_id__": module_id,
             "__constraint_library_id__": library_id,
             # Cached display name (e.g. "Starter pairing"). The never-applied
