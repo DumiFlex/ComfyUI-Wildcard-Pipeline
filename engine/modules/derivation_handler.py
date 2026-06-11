@@ -148,13 +148,32 @@ def _apply_action(
     action: dict[str, Any],
     ctx: Any,
     resolve_ctx: Any,
+    carrier_key: str | None = None,
 ) -> tuple[str, str] | None:
     target = action.get("target_var", "")
     if not target:
         return None
     mode = action.get("mode", "replace")
     raw_value = str(action.get("value", ""))
-    new_value = resolve_text(raw_value, resolve_ctx)
+    # Stamp this derivation instance as the CARRIER of any `@{}` in the action
+    # value, keyed by the branch key (`${rule_id}:${bi}` / `${rule_id}:else`) —
+    # the `option_id` the SP3 nested-occurrence model matches a `pick` against.
+    # Save/restore around the resolve, mirroring the resolver's own carrier
+    # save/restore for nested recursion.
+    set_carrier = getattr(resolve_ctx, "set_carrier", None)
+    get_carrier = getattr(resolve_ctx, "get_carrier", None)
+    if carrier_key is not None and callable(set_carrier) and callable(get_carrier):
+        module_uid = None
+        if isinstance(ctx, dict):
+            module_uid = ctx.get("__wp_current_module_uid__") or ctx.get("__wp_current_module_id__")
+        prev = get_carrier()
+        set_carrier(module_uid, carrier_key)
+        try:
+            new_value = resolve_text(raw_value, resolve_ctx)
+        finally:
+            set_carrier(*prev)
+    else:
+        new_value = resolve_text(raw_value, resolve_ctx)
     if mode == "replace":
         result = new_value
     elif mode == "append":
@@ -332,7 +351,7 @@ class DerivationHandler(ModuleHandler):
                     if isinstance(action_override, str):
                         action = {**action, "value": action_override}
 
-                    pair = _apply_action(action, ctx, resolve_ctx)
+                    pair = _apply_action(action, ctx, resolve_ctx, carrier_key=f"{rule_id}:{bi}")
                     if pair is not None:
                         out[pair[0]] = pair[1]
                     applied = True
@@ -353,7 +372,7 @@ class DerivationHandler(ModuleHandler):
                     )
                     if isinstance(action_override, str):
                         action = {**action, "value": action_override}
-                    pair = _apply_action(action, ctx, resolve_ctx)
+                    pair = _apply_action(action, ctx, resolve_ctx, carrier_key=f"{rule_id}:else")
                     if pair is not None:
                         out[pair[0]] = pair[1]
         return out
