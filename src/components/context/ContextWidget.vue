@@ -2062,6 +2062,17 @@ function viaInboundFor(rowUid: string): PairingBadge[] {
   return props.pairings?.get(key)?.viaInbound ?? [];
 }
 
+/** SP3 contributor cluster — every constraint whose reach covers this
+ *  target-instance row, in per-target `#N` order. Reads the same
+ *  cross-node `pairings` prop as `pairingFor` / `viaInboundFor`,
+ *  prefixing the local `_uid` with our `nodeId`. ModuleRow renders these
+ *  BEFORE the module name: ≤2 as individual `#N` chips, ≥3 as one
+ *  collapsed `↥×N` chip. Empty for rows no constraint covers. */
+function contributorsFor(rowUid: string): PairingBadge[] {
+  const key = `${props.nodeId}#${rowUid}`;
+  return props.pairings?.get(key)?.contributors ?? [];
+}
+
 function severityFor(id: string): "error" | "warning" | "info" | null {
   const list = conflictsByModule.value[id];
   if (!list?.length) return null;
@@ -4700,6 +4711,7 @@ const moduleRowCtx: ModuleRowCtx = {
   onDragStart, onDragEnd, openContextMenu, onCardKeydown,
   pairingFor,
   viaInboundFor,
+  contributorsFor,
 };
 provide(ModuleRowCtxKey, moduleRowCtx);
 

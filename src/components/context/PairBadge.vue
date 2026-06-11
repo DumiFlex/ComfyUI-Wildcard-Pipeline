@@ -35,16 +35,21 @@ import { computed, nextTick, onBeforeUnmount, ref } from "vue";
 import type { PairingBadge } from "../../extension/constraint-pairs";
 import { cacheVersion, ensure, lookup } from "../../extension/preview-resolver";
 
-type Variant = "sender" | "direct" | "carrier" | "option";
+type Variant = "sender" | "direct" | "carrier" | "option" | "collapse";
 
 const props = defineProps<{
   /** Single-pair variants (sender / direct / option / carrier-with-1) — the
-   *  one pair this chip represents. Carrier variant accepts the array
-   *  form via `pairs` instead. */
+   *  one pair this chip represents. Carrier + collapse variants accept the
+   *  array form via `pairs` instead. */
   pair?: PairingBadge;
-  /** Multi-pair carrier variant — aggregate inbound via-pairs collapsed
-   *  into one `↪×N` chip. Ignored for non-carrier variants. */
+  /** Multi-pair carrier / collapse variant — aggregate the pairs this chip
+   *  stands in for, collapsed into one chip. Ignored for single-pair
+   *  variants. */
   pairs?: readonly PairingBadge[];
+  /** Optional explicit count for the `collapse` variant. When omitted the
+   *  chip falls back to `pairs.length`. Lets a caller render `↥×N` from a
+   *  total even if it hands a partial list to the popover. */
+  count?: number;
   variant: Variant;
 }>();
 
@@ -52,7 +57,7 @@ const props = defineProps<{
  *  a list (collapsed) or a single (legacy / single-inbound). Other
  *  variants always single. */
 const pairList = computed<readonly PairingBadge[]>(() => {
-  if (props.variant === "carrier") {
+  if (props.variant === "carrier" || props.variant === "collapse") {
     if (props.pairs && props.pairs.length > 0) return props.pairs;
     if (props.pair) return [props.pair];
     return [];
@@ -170,8 +175,77 @@ function routeLabel(p: PairingBadge): string {
   return "Via this wildcard's nested ref";
 }
 
+/** Compact reach suffix for the SENDER chip, appended after `#N`.
+ *  ALWAYS shown — the default `all` reads `·all` so the chip never
+ *  hides which instances a constraint covers:
+ *    - all   → `·all`
+ *    - first → `·first`
+ *    - next  → `·n{count}` (count coerced, default 1 → `·n1`)
+ *    - pick  → `·pick`
+ *  Returns "" for any non-sender variant (only the originating
+ *  constraint carries its own reach). */
+const reachSuffix = computed<string>(() => {
+  if (props.variant !== "sender") return "";
+  const reach = primaryPair.value?.reach;
+  if (!reach) return "";
+  switch (reach.mode) {
+    case "first":
+      return "·first";
+    case "next": {
+      const cnt = Number.isFinite(Number(reach.count)) ? Number(reach.count) : 1;
+      return `·n${cnt}`;
+    }
+    case "pick":
+      return "·pick";
+    default:
+      return "·all";
+  }
+});
+
+/** Human-readable reach label for the popover REACH row. Mirrors
+ *  `reachSuffix` but spelled out: `all` / `first` / `next {count}` /
+ *  `pick`. Null when there's no reach to show (non-sender pairs). */
+function reachLabel(p: PairingBadge): string | null {
+  const reach = p.reach;
+  if (!reach) return null;
+  switch (reach.mode) {
+    case "first":
+      return "first";
+    case "next": {
+      const cnt = Number.isFinite(Number(reach.count)) ? Number(reach.count) : 1;
+      return `next ${cnt}`;
+    }
+    case "pick":
+      return "pick";
+    default:
+      return "all";
+  }
+}
+
+/** Hop labels for the popover PATH row, target LAST. Resolves each uuid
+ *  in `via.routeChain` to its display name via the preview-resolver
+ *  cache (rendered `@name`), falling back to the bare uuid when no name
+ *  is known yet. Empty when the pair has no routeChain. */
+function pathHops(p: PairingBadge): string[] {
+  const chain = p.via?.routeChain;
+  if (!chain || chain.length === 0) return [];
+  return chain.map((uuid) => {
+    const name = nameForUuid(uuid);
+    return name ? `@${name}` : uuid;
+  });
+}
+
 const chipClasses = computed<string[]>(() => {
   const cls = ["wp-pair-badge"];
+  // Collapse chip is its OWN solid surface (var(--wp-accent-300) fill via
+  // the modifier) — no per-target color class, no multi-color fallback,
+  // no carrier styling. Same base geometry (pad / font / radius) as a
+  // direct pair badge, just a different paint. Short-circuit so none of
+  // the color/carrier/orphan branches below apply.
+  if (props.variant === "collapse") {
+    cls.push("wp-pair-badge--collapse");
+    return cls;
+  }
   if (isMultiColor.value) {
     cls.push("wp-pair-badge--via-multi");
   } else if (primaryPair.value) {
@@ -201,14 +275,43 @@ const chipClasses = computed<string[]>(() => {
  *  against `×`, and keeps the glyph readable at chip-size. */
 const carrierText = computed<string>(() => `↪ ×${pairList.value.length}`);
 
+/** Collapse chip count — explicit `count` prop wins, else the popover
+ *  list length. Drives the `↥×N` glyph that REPLACES the individual
+ *  contributor chips on a target row with 3+ contributors. */
+const collapseCount = computed<number>(() =>
+  typeof props.count === "number" ? props.count : pairList.value.length,
+);
+const collapseText = computed<string>(() => `↥×${collapseCount.value}`);
+
 const popoverAriaLabel = computed<string>(() => {
   if (props.variant === "carrier") {
     return `${pairList.value.length} constraint pair${pairList.value.length === 1 ? "" : "s"} via nested refs`;
+  }
+  if (props.variant === "collapse") {
+    return `${collapseCount.value} constraint contributor${collapseCount.value === 1 ? "" : "s"}`;
   }
   return primaryPair.value
     ? `Constraint pair ${primaryPair.value.number}`
     : "Constraint pair";
 });
+
+/** True when the popover lists MORE THAN ONE pair (collapsed carrier or
+ *  the new collapse contributor cluster). Drives the `×N` head, the
+ *  per-entry `#N` head, and the multi-entry title/hint copy. */
+const isMultiEntry = computed<boolean>(
+  () =>
+    (props.variant === "carrier" || props.variant === "collapse")
+    && pairList.value.length > 1,
+);
+
+/** Head title for the multi-entry popover. Collapse (contributor
+ *  cluster) reads "Contributing constraints"; the carrier route chip
+ *  keeps its "Routed constraint pairs" wording. */
+const multiEntryTitle = computed<string>(() =>
+  props.variant === "collapse"
+    ? "Contributing constraints"
+    : "Routed constraint pairs",
+);
 </script>
 
 <template>
@@ -230,11 +333,14 @@ const popoverAriaLabel = computed<string>(() => {
   >
     <template v-if="variant === 'sender' || variant === 'direct'">
       <span v-if="primaryPair?.isOrphan" class="wp-pair-badge__warn">!</span>
-      <template v-if="variant === 'sender' && primaryPair?.via">#{{ primaryPair.number }} ↪</template>
-      <template v-else>#{{ primaryPair?.number }}</template>
+      <template v-if="variant === 'sender' && primaryPair?.via">#{{ primaryPair.number }} ↪{{ reachSuffix }}</template>
+      <template v-else>#{{ primaryPair?.number }}{{ reachSuffix }}</template>
     </template>
     <template v-else-if="variant === 'carrier'">
       {{ carrierText }}
+    </template>
+    <template v-else-if="variant === 'collapse'">
+      {{ collapseText }}
     </template>
     <template v-else>
       ↪#{{ primaryPair?.number }}
@@ -252,10 +358,10 @@ const popoverAriaLabel = computed<string>(() => {
       @mouseleave="onLeave"
     >
       <div class="wp-pair-pop__head">
-        <span v-if="variant === 'carrier' && pairList.length > 1" class="wp-pair-pop__num">×{{ pairList.length }}</span>
+        <span v-if="isMultiEntry" class="wp-pair-pop__num">×{{ pairList.length }}</span>
         <span v-else-if="primaryPair" class="wp-pair-pop__num">#{{ primaryPair.number }}</span>
         <span class="wp-pair-pop__title">
-          {{ variant === "carrier" && pairList.length > 1 ? "Routed constraint pairs" : "Constraint pair" }}
+          {{ isMultiEntry ? multiEntryTitle : "Constraint pair" }}
         </span>
       </div>
       <div
@@ -264,12 +370,24 @@ const popoverAriaLabel = computed<string>(() => {
         class="wp-pair-pop__entry"
         :class="`wp-pair-pop__entry--c${p.colorIndex}`"
       >
-        <div v-if="variant === 'carrier' && pairList.length > 1" class="wp-pair-pop__entry-head">
+        <div v-if="isMultiEntry" class="wp-pair-pop__entry-head">
           <span class="wp-pair-pop__entry-num">#{{ p.number }}</span>
         </div>
         <div class="wp-pair-pop__row">
           <span class="wp-pair-pop__lbl">Route</span>
           <span class="wp-pair-pop__val">{{ routeLabel(p) }}</span>
+        </div>
+        <div v-if="reachLabel(p)" class="wp-pair-pop__row wp-pair-pop__row--reach">
+          <span class="wp-pair-pop__lbl">Reach</span>
+          <span class="wp-pair-pop__val wp-pair-pop__reach">{{ reachLabel(p) }}</span>
+        </div>
+        <div v-if="pathHops(p).length > 0" class="wp-pair-pop__row wp-pair-pop__row--path">
+          <span class="wp-pair-pop__lbl">Path</span>
+          <span class="wp-pair-pop__val wp-pair-pop__path">
+            <template v-for="(hop, hi) in pathHops(p)" :key="`${hi}-${hop}`"><span
+              class="wp-pair-pop__hop">{{ hop }}</span><span
+              v-if="hi < pathHops(p).length - 1" class="wp-pair-pop__hop-arrow"> → </span></template>
+          </span>
         </div>
         <div class="wp-pair-pop__row">
           <span class="wp-pair-pop__lbl">Target</span>
@@ -295,6 +413,9 @@ const popoverAriaLabel = computed<string>(() => {
         <template v-else>
           The constraint claims the next downstream wildcard instance with this uuid.
         </template>
+      </div>
+      <div v-else-if="variant === 'collapse'" class="wp-pair-pop__hint">
+        Every constraint above covers this target instance. Each applies its own reach + weighting when it fires.
       </div>
       <div v-else class="wp-pair-pop__hint">
         Each constraint fires when this wildcard rolls an option carrying its target ref.
@@ -409,6 +530,23 @@ const popoverAriaLabel = computed<string>(() => {
   font: 10px var(--wp-font-sans, sans-serif);
   color: var(--wp-text-dim, var(--wp-text-muted, #8a8d99));
   line-height: 1.4;
+}
+/* Reach row — green so the constraint's coverage selector reads as a
+ * distinct, positive fact in the card (mirrors the green reach accent
+ * the reach-selector UI uses elsewhere). */
+.wp-pair-pop__reach {
+  color: var(--wp-green, #6bc96f);
+  font-weight: 600;
+}
+/* Path row — the transitive hop chain a constraint travels to reach a
+ * nested target, target last. Wraps + uses a dim arrow between hops. */
+.wp-pair-pop__path {
+  display: inline;
+  word-break: break-word;
+}
+.wp-pair-pop__hop-arrow {
+  color: var(--wp-text-dim, #7a7d88);
+  white-space: pre;
 }
 
 /* Color-band the head badge color to match the chip. */

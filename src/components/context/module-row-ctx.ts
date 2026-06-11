@@ -46,6 +46,13 @@ export interface ModuleRowCtx {
    *  `@{uuid}` ref inside this wildcard's options. Drives the
    *  collapsed `↪×N` chip in `ModuleRow.vue`. */
   viaInboundFor: (id: string) => PairingBadge[];
+  /** SP3 contributor cluster — every constraint whose reach covers THIS
+   *  target-instance row, in per-target `#N` order. Drives the badges
+   *  rendered BEFORE the module name on a wildcard (target) row:
+   *  ≤2 contributors render as individual `#N` chips, ≥3 collapse into a
+   *  single `↥×N` chip. Empty on rows no constraint covers (every
+   *  constraint / source / non-target row). */
+  contributorsFor: (id: string) => PairingBadge[];
 }
 
 export const ModuleRowCtxKey: InjectionKey<ModuleRowCtx> = Symbol("moduleRowCtx");
