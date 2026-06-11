@@ -488,7 +488,7 @@ describe("computePairingsFull — SP3 reach + contributors", () => {
 
 describe("B2+B3 — derivation as @{} carrier", () => {
   it("carrierOptionIdsFor reads derivation action values keyed by branch key", () => {
-    const tgt = "tttttttt";
+    const tgt = "aabbccdd";
     const deriv: ChainModule = {
       id: "d1", rowKey: "1#d1", type: "derivation",
       payload: { rules: [{
@@ -504,7 +504,7 @@ describe("B2+B3 — derivation as @{} carrier", () => {
   });
 
   it("a constraint targeting a wildcard reached only via a derivation marks the derivation carrier", () => {
-    const tgt = "tttttttt";
+    const tgt = "aabbccdd";
     const chain: ChainModule[] = [
       module_("s1", "wildcard"),
       module_("cn1", "constraint", { source_wildcard_id: "s1", target_wildcard_id: tgt }, "cn1#uid"),

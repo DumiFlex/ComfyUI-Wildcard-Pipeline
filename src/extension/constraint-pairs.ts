@@ -45,13 +45,11 @@ import type { TargetSelect } from "../widgets/_shared";
 
 export type { TargetSelect };
 
-// Mirrors the engine tokenize.py + dep-graph.ts twin. Uuid is captured;
-// name + subcat segments are non-capturing because the via-carrier
-// detection only matches on uuid. The character class accepts full
-// lowercase alphanum ([0-9a-z]) so test stubs using non-hex letters
-// (e.g. "tttttttt") round-trip correctly; production uuids are always
-// lowercase hex and remain a strict subset.
-const REF_REGEX_VIA = /@\{([0-9a-z]{8})(?:#[^#:}@{]*)?(?::[^}]*)?\}/g;
+// Mirrors the engine tokenize.py + dep-graph.ts twin — strict [0-9a-f]{8}
+// uuid (production uuids are lowercase hex; tests must use hex stubs, NOT
+// arbitrary letters). Uuid is captured; name + subcat segments are
+// non-capturing because the via-carrier detection only matches on uuid.
+const REF_REGEX_VIA = /@\{([0-9a-f]{8})(?:#[^#:}@{]*)?(?::[^}]*)?\}/g;
 
 /** Module types whose option values can host an `@{uuid}` ref the
  *  badge walk should follow. Wildcards carry refs in `payload.options`;
