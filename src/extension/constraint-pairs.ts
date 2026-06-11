@@ -47,14 +47,18 @@ export type { TargetSelect };
 
 // Mirrors the engine tokenize.py + dep-graph.ts twin. Uuid is captured;
 // name + subcat segments are non-capturing because the via-carrier
-// detection only matches on uuid.
-const REF_REGEX_VIA = /@\{([0-9a-f]{8})(?:#[^#:}@{]*)?(?::[^}]*)?\}/g;
+// detection only matches on uuid. The character class accepts full
+// lowercase alphanum ([0-9a-z]) so test stubs using non-hex letters
+// (e.g. "tttttttt") round-trip correctly; production uuids are always
+// lowercase hex and remain a strict subset.
+const REF_REGEX_VIA = /@\{([0-9a-z]{8})(?:#[^#:}@{]*)?(?::[^}]*)?\}/g;
 
 /** Module types whose option values can host an `@{uuid}` ref the
- *  badge walk should follow. SP3 seam: a future "derivation" type
- *  (whose body refs wildcards) gets added here without touching the
- *  reachability walk. Today only `wildcard` modules carry refs. */
-export const CARRIER_TYPES = new Set(["wildcard"]);
+ *  badge walk should follow. Wildcards carry refs in `payload.options`;
+ *  derivations carry refs in `payload.rules[].branches[].action.value`
+ *  and `payload.rules[].else.action.value`, keyed by the engine branch
+ *  key (`${rule_id}:${bi}` / `${rule_id}:else`). */
+export const CARRIER_TYPES = new Set(["wildcard", "derivation"]);
 
 /** Reachability hop cap. The runtime engine resolves `@{}` to any
  *  depth, but a static badge walk must bound itself against deep /
@@ -281,6 +285,43 @@ function reachCovers(
   }
 }
 
+/** The ref-bearing `(id, value)` entries of a carrier. For a wildcard these
+ *  are its options (`option.id` -> `option.value`). For a derivation they are
+ *  its rule action values, keyed by the branch key `${rule_id}:${bi}` /
+ *  `${rule_id}:else` -- the SAME key the engine stamps as the carrier
+ *  `option_id` (derivation_handler `_apply_action`). Byte-identical key
+ *  formats Py & TS is the parity contract. */
+function refBearingEntries(carrier: ChainModule): Array<{ id: string; value: string }> {
+  const p = carrier.payload as {
+    options?: Array<{ id?: string; value?: string }>;
+    rules?: Array<{
+      id?: string;
+      branches?: Array<{ action?: { value?: string } }>;
+      else?: { action?: { value?: string } } | null;
+    }>;
+  };
+  if (carrier.type === "derivation") {
+    const out: Array<{ id: string; value: string }> = [];
+    for (const r of Array.isArray(p.rules) ? p.rules : []) {
+      const ruleId = String(r?.id ?? "");
+      const branches = Array.isArray(r?.branches) ? r.branches : [];
+      branches.forEach((b, bi) => {
+        const v = b?.action?.value;
+        if (typeof v === "string") out.push({ id: `${ruleId}:${bi}`, value: v });
+      });
+      const elseV = r?.else?.action?.value;
+      if (typeof elseV === "string") out.push({ id: `${ruleId}:else`, value: elseV });
+    }
+    return out;
+  }
+  const opts = Array.isArray(p.options) ? p.options : [];
+  const out: Array<{ id: string; value: string }> = [];
+  for (const o of opts) {
+    if (typeof o?.value === "string" && o?.id) out.push({ id: String(o.id), value: o.value });
+  }
+  return out;
+}
+
 /** Find every option in a carrier module whose `value` reaches
  *  `targetUuid` — directly (`@{targetUuid}`) OR transitively (the
  *  option refs `@{X}` and `X`, recursively through its own options'
@@ -301,24 +342,18 @@ export function carrierOptionIdsFor(
   lookup: (uuid: string) => string[],
 ): CarrierMatch {
   if (!CARRIER_TYPES.has(carrier.type)) return { optionIds: [], routeChain: null };
-  const opts = (carrier.payload as { options?: Array<{ id?: string; value?: string }> })
-    .options;
-  if (!Array.isArray(opts)) return { optionIds: [], routeChain: null };
   const out: string[] = [];
   let routeChain: string[] | null = null;
-  for (const opt of opts) {
-    const value = opt?.value;
-    const id = opt?.id;
-    if (typeof value !== "string" || !id) continue;
+  for (const { id, value } of refBearingEntries(carrier)) {
     let optionRoute: string[] | null = null;
     for (const ref of refsIn(value)) {
       if (ref === targetUuid) {
-        // Direct one-hop: this option refs the target itself.
+        // Direct one-hop: this entry refs the target itself.
         optionRoute = [targetUuid];
         break;
       }
       // Transitive: chase the ref's own refs for the target. A fresh
-      // `seen` per ref scan keeps unrelated options independent; the
+      // `seen` per ref scan keeps unrelated entries independent; the
       // guard inside reachPath protects against cycles within a scan.
       const sub = reachPath(ref, targetUuid, lookup, new Set(), 1);
       if (sub) {
@@ -328,8 +363,8 @@ export function carrierOptionIdsFor(
     }
     if (optionRoute) {
       out.push(id);
-      // Capture the route from the first carrying option; later
-      // carrying options reach the same target so one route suffices.
+      // Capture the route from the first carrying entry; later
+      // carrying entries reach the same target so one route suffices.
       if (routeChain === null) routeChain = optionRoute;
     }
   }
@@ -398,13 +433,8 @@ export function computePairingsFull(modules: ChainModule[]): Map<string, RowPair
   const refValuesByUuid = new Map<string, string[]>();
   for (const m of modules) {
     if (!CARRIER_TYPES.has(m.type) || refValuesByUuid.has(m.id)) continue;
-    const opts = (m.payload as { options?: Array<{ value?: string }> }).options;
-    if (!Array.isArray(opts)) continue;
-    const values: string[] = [];
-    for (const opt of opts) {
-      if (typeof opt?.value === "string") values.push(opt.value);
-    }
-    refValuesByUuid.set(m.id, values);
+    const values = refBearingEntries(m).map((e) => e.value);
+    if (values.length) refValuesByUuid.set(m.id, values);
   }
   const lookup = (uuid: string): string[] => refValuesByUuid.get(uuid) ?? [];
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computePairings, computePairingsFull, type ChainModule } from "./constraint-pairs";
+import { computePairings, computePairingsFull, carrierOptionIdsFor, CARRIER_TYPES, type ChainModule } from "./constraint-pairs";
 import { varColorIndex } from "../components/shared/var-color";
 
 function module_(id: string, type: string, payload: Record<string, unknown> = {}, rowKey?: string): ChainModule {
@@ -483,5 +483,39 @@ describe("computePairingsFull — SP3 reach + contributors", () => {
     expect(inbound.length).toBe(1);
     expect(inbound[0]?.via?.carrierRowKey).toBe("carrier#a");
     expect(inbound[0]?.via?.routeChain).toEqual([tUuid]);
+  });
+});
+
+describe("B2+B3 — derivation as @{} carrier", () => {
+  it("carrierOptionIdsFor reads derivation action values keyed by branch key", () => {
+    const tgt = "tttttttt";
+    const deriv: ChainModule = {
+      id: "d1", rowKey: "1#d1", type: "derivation",
+      payload: { rules: [{
+        id: "r1",
+        branches: [{ action: { target_var: "out", value: `x @{${tgt}} y` } }],
+        else: { action: { target_var: "out", value: `@{${tgt}}` } },
+      }] },
+    };
+    expect(CARRIER_TYPES.has("derivation")).toBe(true);
+    const match = carrierOptionIdsFor(deriv, tgt, () => []);
+    expect(match.optionIds).toEqual(["r1:0", "r1:else"]);
+    expect(match.routeChain).toEqual([tgt]);
+  });
+
+  it("a constraint targeting a wildcard reached only via a derivation marks the derivation carrier", () => {
+    const tgt = "tttttttt";
+    const chain: ChainModule[] = [
+      module_("s1", "wildcard"),
+      module_("cn1", "constraint", { source_wildcard_id: "s1", target_wildcard_id: tgt }, "cn1#uid"),
+      { id: "d1", rowKey: "1#d1", type: "derivation",
+        payload: { rules: [{ id: "r1", branches: [{ action: { value: `@{${tgt}}` } }] }] } },
+    ];
+    const full = computePairingsFull(chain);
+    // Nested coverage lives in viaInbound (single-bucket rule); contributors stays empty.
+    expect(full.get("1#d1")?.viaInbound.length).toBe(1);
+    expect(full.get("1#d1")?.contributors.length ?? 0).toBe(0);
+    expect(full.get("cn1#uid")?.direct?.isOrphan).toBe(false);
+    expect(full.get("cn1#uid")?.direct?.via?.carrierRowKey).toBe("1#d1");
   });
 });
