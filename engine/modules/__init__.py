@@ -31,11 +31,12 @@ class _RuntimeResolveContext:
     # bucket is empty/None.
     _constraints: list[dict[str, Any]] = field(default_factory=list)
     _picks: dict[str, dict[str, Any]] = field(default_factory=dict)
-    # First-instance consume bookkeeping (2026-05-24 spec). Threaded
-    # by reference so mutations inside apply_constraints_for_target
-    # propagate back to the pipeline's ctx bucket and to subsequent
-    # target-instance resolves later in the same chain.
-    _consumed: set[str] = field(default_factory=set)
+    # SP3 reach-selector hit counter (per-constraint, keyed by
+    # `__constraint_module_id__`). Threaded by reference so increments
+    # inside apply_constraints_for_target on the nested-ref path share
+    # one counter with the chain-level direct path + the pipeline's ctx
+    # bucket — first/next coverage spans both surfaces.
+    _hits: dict[str, int] = field(default_factory=dict)
 
     def get_var(self, name: str) -> str | None:
         # SP2a: return the raw stored value (may be a ListVar from a
@@ -75,13 +76,13 @@ class _RuntimeResolveContext:
         source wildcard's pick when reweighting the target."""
         return self._picks
 
-    def get_consumed_constraints(self) -> set[str]:
-        """``ctx['__wp_consumed_constraints__']`` — set of constraint
-        module ids that have already fired against their first
-        downstream target instance. Threaded by reference so the
-        nested-ref resolver's mutation is observed by the pipeline + by
-        subsequent target-instance resolves later in the chain."""
-        return self._consumed
+    def get_constraint_hits(self) -> dict[str, int]:
+        """``ctx['__wp_constraint_hits__']`` — per-constraint firing
+        count keyed by module id. Threaded by reference so the
+        nested-ref resolver's increments are observed by the pipeline +
+        by subsequent target-instance resolves later in the chain
+        (first/next coverage spans direct + nested encounters)."""
+        return self._hits
 
 
 def build_resolve_ctx(
@@ -97,7 +98,7 @@ def build_resolve_ctx(
     """
     constraints = ctx.get("__wp_constraints__")
     picks = ctx.get("__wp_picks__")
-    consumed = ctx.setdefault("__wp_consumed_constraints__", set())
+    hits = ctx.setdefault("__wp_constraint_hits__", {})
     return _RuntimeResolveContext(  # type: ignore[return-value]
         rng=ctx["__wp_rng__"],
         max_ref_depth=int(ctx.get("__wp_max_ref_depth__", 8)),
@@ -114,10 +115,10 @@ def build_resolve_ctx(
         # support) — defaults handle that path.
         _constraints=constraints if isinstance(constraints, list) else [],
         _picks=picks if isinstance(picks, dict) else {},
-        # First-instance consume set — passed by reference so the
-        # nested-ref resolver's mutation sticks in ctx for subsequent
-        # target-instance resolves later in the chain.
-        _consumed=consumed if isinstance(consumed, set) else set(),
+        # SP3 hit counter — passed by reference so the nested-ref
+        # resolver's increments stick in ctx + share one counter with
+        # the direct path for first/next coverage.
+        _hits=hits if isinstance(hits, dict) else {},
     )
 
 

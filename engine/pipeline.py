@@ -252,10 +252,12 @@ class PipelineEngine:
         ctx.setdefault("__wp_warnings__", [])
         ctx.setdefault("__wp_trace__", [])
         ctx.setdefault("__wp_internal_flags__", {})
-        # Tracks constraint module ids that have already fired against
-        # their first downstream target instance. See
-        # docs/superpowers/specs/2026-05-24-constraint-first-instance-design.md.
-        ctx.setdefault("__wp_consumed_constraints__", set())
+        # SP3 reach selector: per-constraint firing count keyed by
+        # `__constraint_module_id__`. Drives first/next/all/pick
+        # coverage in apply_constraints_for_target + the never_applied /
+        # partial_reach finalisation below. Replaces the pre-SP3
+        # one-shot consumed-set.
+        ctx.setdefault("__wp_constraint_hits__", {})
 
         for index, module in enumerate(modules):
             # Normalise id/type/enabled reads to work for both dicts and objects.
@@ -470,19 +472,20 @@ class PipelineEngine:
         ctx.pop("__wp_current_module_uid__", None)
         ctx.pop("__wp_current_module_name__", None)
 
-        # First-instance one-shot semantic: emit a soft (info) warning
-        # for every registered constraint whose target instance never
-        # came up during the chain. Surfaces in WP_Debug so the user
-        # sees "you put a constraint here but nothing downstream took
-        # it" — the chain still succeeds.
-        # See docs/superpowers/specs/2026-05-24-constraint-first-instance-design.md.
+        # SP3 reach selector finalisation: emit `constraint_never_applied`
+        # for every registered constraint whose selector covered ZERO
+        # firing target instances (hit count 0). Surfaces in WP_Debug so
+        # the user sees "you put a constraint here but nothing downstream
+        # took it" — the chain still succeeds. The `partial_reach` pass
+        # below covers constraints that DID fire but reached fewer
+        # instances than a `next N` / `pick` selector asked for.
         #
         # Dedup by cid — sibling instances of the same library entry
         # share `__constraint_module_id__`, so they show up as two
         # entries in the bucket. Without the dedup the user sees the
         # same warning twice for the same logical constraint (2026-05-26).
         constraints_bucket = ctx.get("__wp_constraints__") or []
-        consumed_set = ctx.get("__wp_consumed_constraints__") or set()
+        hits = ctx.get("__wp_constraint_hits__") or {}
         catalog = ctx.get("__wp_catalog__")
         warned_cids: set[str] = set()
         if isinstance(constraints_bucket, list):
@@ -490,7 +493,7 @@ class PipelineEngine:
                 if not isinstance(c, dict):
                     continue
                 cid = c.get("__constraint_module_id__")
-                if not cid or cid in consumed_set:
+                if not cid or hits.get(cid, 0) != 0:
                     continue
                 if cid in warned_cids:
                     continue
@@ -526,24 +529,22 @@ class PipelineEngine:
                 cid_suffix = _build_ref_name_suffix(c.get("__constraint_library_name__"))
                 tgt_suffix = _build_ref_name_suffix(target_name)
                 # Classify the cause so the message is actionable.
-                # With the carrier-claim failsafe in place, a carrier
-                # that rolls ANY option claims its constraint — so an
-                # unconsumed constraint whose target IS present in the
-                # chain means the target instance/carrier ran BEFORE
-                # this constraint registered (ordering), or sits in a
+                # Reach is downstream-relative: a constraint only applies
+                # to target occurrences that resolve AFTER it registers.
+                # So a never-applied constraint whose target IS present in
+                # the chain means every occurrence ran BEFORE this
+                # constraint registered (ordering), or sits in a
                 # branch/Context this run didn't reach. Absent target =
                 # a wrong/stale uuid.
                 present = _target_present_in_chain(
                     target_uuid, modules, catalog,
                 )
                 if present:
-                    # Target IS in the chain. With the carrier-claim
-                    # failsafe, any carrier/instance that ROLLS after the
-                    # constraint registers claims it — so reaching this
-                    # branch means the target's only appearance(s) ran
+                    # Target IS in the chain but the selector covered no
+                    # firing occurrence — every appearance resolved
                     # BEFORE this constraint registered (e.g. a source
-                    # wildcard that nests its own @{target}), or live in
-                    # a branch / Context this run didn't execute, or are
+                    # wildcard that nests its own @{target}), or lives in
+                    # a branch / Context this run didn't execute, or is
                     # disabled. Deliberately NOT prescribing "move the
                     # constraint up" — that's wrong when the target's
                     # carrier is also the constraint's source (the source
@@ -592,6 +593,57 @@ class PipelineEngine:
                         # via the library cache (raw short-uuids would
                         # otherwise render as plain text).
                         "message": message,
+                    })
+
+        # SP3 partial-reach finalisation: a constraint that DID fire but
+        # whose `next N` / `pick` selector matched FEWER occurrences than
+        # requested. Distinct from never_applied (which fired zero times)
+        # — this is "the selector asked for more than the chain offered
+        # downstream". `all` / `first` can't be partial. Deduped by cid,
+        # same as never_applied.
+        partial_warned: set[str] = set()
+        if isinstance(constraints_bucket, list):
+            for c in constraints_bucket:
+                if not isinstance(c, dict):
+                    continue
+                cid = c.get("__constraint_module_id__")
+                seen = hits.get(cid, 0) if cid else 0
+                if not cid or seen == 0 or cid in partial_warned:
+                    continue
+                sel = c.get("target_select") or {"mode": "all"}
+                mode = sel.get("mode", "all")
+                if mode == "next":
+                    try:
+                        want = int(sel.get("count", 1))
+                    except (TypeError, ValueError):
+                        want = 1
+                elif mode == "pick":
+                    want = len(sel.get("picks") or [])
+                else:
+                    continue
+                if seen >= want:
+                    continue
+                partial_warned.add(cid)
+                warnings_bucket = ctx.setdefault("__wp_warnings__", [])
+                if isinstance(warnings_bucket, list):
+                    warnings_bucket.append({
+                        "type": "constraint_partial_reach",
+                        "severity": "warn",
+                        "module_id": cid,
+                        "source_field": "",
+                        "position": 0,
+                        "token_index": None,
+                        "detail": {
+                            "constraint_id": cid,
+                            "target_wildcard_id": c.get("target_wildcard_id"),
+                            "requested": want,
+                            "reached": seen,
+                        },
+                        "message": (
+                            f"constraint reach selector ({mode}) asked for "
+                            f"{want} target instance(s) but only {seen} "
+                            f"resolved downstream this run."
+                        ),
                     })
 
         return ctx

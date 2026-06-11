@@ -403,11 +403,17 @@ def ref_option_pool(tok: Token, ctx: ResolveContext) -> list[dict]:
                 apply_constraints_for_target,
                 warn_excludes_all,
             )
-            get_consumed = getattr(ctx, "get_consumed_constraints", None)
-            consumed = get_consumed() if callable(get_consumed) else set()
+            # SP3: share the ctx-resident hit counter so a nested-ref
+            # target occurrence counts toward the same first/next
+            # coverage as direct top-level instances. `carrier_ctx`
+            # stays None for now — nested-pick occurrence threading is a
+            # later task (the `pick` selector can't yet match a nested
+            # occurrence here, so it simply won't cover it).
+            get_hits = getattr(ctx, "get_constraint_hits", None)
+            hits = get_hits() if callable(get_hits) else {}
             options, any_applied = apply_constraints_for_target(
                 options, uuid, constraints, get_picks(), ctx.warnings,
-                consumed=consumed,
+                hits=hits, firing_uid=None, carrier_ctx=None,
             )
             if any_applied:
                 warn_excludes_all(options, uuid, ctx.warnings)

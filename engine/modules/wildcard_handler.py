@@ -569,16 +569,22 @@ class WildcardHandler(ModuleHandler):
         if my_id:
             constraints = ctx.get("__wp_constraints__") if ctx is not None else None
             picks = ctx.get("__wp_picks__") if ctx is not None else None
-            # First-instance one-shot: pass the ctx-resident consumed
-            # set so the apply_constraints helper marks fired
-            # constraints + skips them on subsequent target instances.
-            consumed = (
-                ctx.setdefault("__wp_consumed_constraints__", set())
+            # SP3 reach selector: thread the ctx-resident per-constraint
+            # hit counter so each covering constraint re-weights this
+            # firing target instance (no more one-shot / consumed-set).
+            # `firing_uid` identifies THIS direct top-level instance for
+            # the `pick` selector's occurrence match.
+            hits = (
+                ctx.setdefault("__wp_constraint_hits__", {})
+                if isinstance(ctx, dict) else {}
+            )
+            firing_uid = (
+                ctx.get("__wp_current_module_uid__")
                 if isinstance(ctx, dict) else None
             )
             options, any_constraint_applied = apply_constraints_for_target(
                 options, my_id, constraints, picks, ctx["__wp_warnings__"],
-                consumed=consumed,
+                hits=hits, firing_uid=firing_uid,
             )
         if any_constraint_applied:
             warn_excludes_all(options, my_id or "", ctx["__wp_warnings__"])
@@ -643,13 +649,6 @@ class WildcardHandler(ModuleHandler):
             finally:
                 ctx["__wp_rng__"] = saved_rng_multi
             _record_pick_multi(ctx, picks, sep)
-            from engine.modules._constraints import claim_carrier_constraints
-            claim_carrier_constraints(
-                options,
-                ctx.get("__wp_constraints__"),
-                ctx.get("__wp_picks__"),
-                ctx.get("__wp_consumed_constraints__"),
-            )
             return {binding: ListVar(items, sep)}
 
         chosen = _pick_weighted(options, rng)
@@ -662,39 +661,9 @@ class WildcardHandler(ModuleHandler):
         # constraint exception keys on the literal empty pick value).
         _record_pick(ctx, chosen)
 
-        # First-instance positional-claim failsafe. This wildcard may
-        # CARRY a constraint's target via an `@{target}` ref in one of
-        # its options. The pair badge already assigned the constraint to
-        # this carrier, so once the carrier ROLLS — regardless of which
-        # option won, including the `null` / empty-value option — it
-        # claims the constraint so it doesn't spill onto a later target
-        # instance. `claim_carrier_constraints` is a no-op when the
-        # chosen option DID resolve the ref (the nested-resolve path
-        # below already consumed it) or the source isn't picked yet.
-        #
-        # CRITICAL: must fire on EVERY roll path, including the
-        # empty-value early return — a backdrop that rolls its `null`
-        # option still "rolled" and must still claim its carried
-        # constraints. The 2026-05-26 bug was calling this only after
-        # resolve_text, so a null/empty pick skipped the claim and the
-        # constraint either spilled or surfaced a misleading
-        # never_applied warning.
-        def _claim_carried() -> None:
-            if ctx is None:
-                return
-            from engine.modules._constraints import claim_carrier_constraints
-            claim_carrier_constraints(
-                options,
-                ctx.get("__wp_constraints__"),
-                ctx.get("__wp_picks__"),
-                ctx.get("__wp_consumed_constraints__"),
-            )
-
         value = str(chosen.get("value", ""))
         if not value:
-            # Empty / null pick — no ref to resolve, but the carrier
-            # still rolled, so claim before returning.
-            _claim_carried()
+            # Empty / null pick — no ref to resolve.
             return {binding: ""}
 
         # Swap `ctx['__wp_rng__']` to the per-module rng for the
@@ -717,8 +686,4 @@ class WildcardHandler(ModuleHandler):
         finally:
             ctx["__wp_rng__"] = saved_rng
 
-        # Claim AFTER resolve_text so a chosen option that DID carry the
-        # ref gets consumed-with-effect by the nested-resolve path
-        # first; the claim then no-ops on it.
-        _claim_carried()
         return {binding: resolved}

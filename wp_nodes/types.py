@@ -358,11 +358,12 @@ _CROSS_NODE_INTERNAL_KEYS = (
     "__wp_constraints__",
     # `__wp_constraints__` propagates so a constraint registered in
     # Context A can fire on a wildcard rolled in Context B. The matching
-    # consumed bookkeeping ALSO has to propagate — without it, Context
-    # B re-runs the never_applied end-of-run check against constraints
-    # A already consumed and re-emits the same warnings. Surfaced as
-    # duplicate `constraint_never_applied` rows in WP_Debug (2026-05-26).
-    "__wp_consumed_constraints__",
+    # SP3 reach-selector hit counter ALSO has to propagate — without it,
+    # Context B's first/next counters reset (a `first` constraint would
+    # re-fire on B's first target instance even though A already spent
+    # it), and B re-runs the never_applied end-of-run check against
+    # constraints A already applied, re-emitting the same warnings.
+    "__wp_constraint_hits__",
     # User-marked-internal vars propagate across nodes as regular keys
     # in `context`, but downstream PromptAssemblers need to know WHICH
     # of those are internal so they can skip them at render time. Carry
@@ -411,14 +412,18 @@ def build_payload(
     upstream_warnings = upstream_debug.get("__wp_warnings__", [])
     this_trace = ctx.get("__wp_trace__", [])
     this_warnings = ctx.get("__wp_warnings__", [])
-    # Dedup constraint_never_applied warnings across the cross-node
-    # accumulator. Even with __wp_consumed_constraints__ now propagating
-    # cross-node (so downstream knows what upstream consumed), every
+    # Dedup constraint finalisation warnings across the cross-node
+    # accumulator. Even with __wp_constraint_hits__ now propagating
+    # cross-node (so downstream knows what upstream applied), every
     # Context still runs its own end-of-run check — if a constraint
     # legitimately never fires anywhere (target wildcard absent from
-    # the whole chain), every node along the way emits the same row
-    # and the user sees N copies. Keying on (type, module_id) here
-    # collapses them to one.
+    # the whole chain) or under-reaches a `next N` / `pick` selector,
+    # every node along the way emits the same row and the user sees N
+    # copies. Keying on (type, module_id) here collapses them to one.
+    _DEDUP_CONSTRAINT_WARNINGS = frozenset({
+        "constraint_never_applied",
+        "constraint_partial_reach",
+    })
     combined_warnings = list(upstream_warnings) + list(this_warnings)
     deduped: list[dict[str, Any]] = []
     seen_keys: set[tuple[str, str]] = set()
@@ -427,9 +432,9 @@ def build_payload(
             deduped.append(w)
             continue
         wtype = w.get("type")
-        if wtype == "constraint_never_applied":
+        if wtype in _DEDUP_CONSTRAINT_WARNINGS:
             mid = w.get("module_id") or ""
-            key = (wtype, str(mid))
+            key = (str(wtype), str(mid))
             if key in seen_keys:
                 continue
             seen_keys.add(key)
