@@ -31,6 +31,19 @@ import WpCheck from "../../../../shared/WpCheck.vue";
 
 type PickEntry = NonNullable<TargetSelect["picks"]>[number];
 
+/** Strip the badge-layer `${nodeId}#` prefix off a rowKey, yielding the
+ *  bare per-instance `_uid`. The persisted `pick` identity MUST be the
+ *  bare `_uid` because the ENGINE matches `firing_uid =
+ *  ctx["__wp_current_module_uid__"]` (the bare `_uid`, no node prefix —
+ *  see engine/pipeline.py + _constraints.py::_occurrence_matches). The
+ *  `nodeId#` prefix is a graph-wide-uniqueness convenience for the badge
+ *  map only; `_uid` is globally unique on its own. Keeping the full
+ *  rowKey for display keys, persisting the bare uid for engine match. */
+const bareUid = (rk: string): string => {
+  const i = rk.indexOf("#");
+  return i >= 0 ? rk.slice(i + 1) : rk;
+};
+
 const props = withDefaults(
   defineProps<{
     /** Current `target_select` (effective: instance override or library,
@@ -140,8 +153,11 @@ const pickRows = computed<PickRow[]>(() => {
     if (cm.type === "wildcard" && cm.id === tgt) {
       // Direct top-level instance.
       rows.push({
+        // `key`/`data-test` keep the full rowKey (display-only, graph-
+        // wide unique); the persisted pick `uid` is the BARE _uid the
+        // engine matches (see bareUid).
         key: cm.rowKey,
-        entry: { kind: "direct", uid: cm.rowKey },
+        entry: { kind: "direct", uid: bareUid(cm.rowKey) },
         name: cm.displayName?.trim() || cm.id,
         kind: "direct",
         nodeLabel: cm.nodeLabel,
@@ -153,8 +169,11 @@ const pickRows = computed<PickRow[]>(() => {
     for (const optionId of match.optionIds) {
       const carrierName = cm.displayName?.trim() || cm.id;
       rows.push({
+        // `key`/`data-test` keep the full rowKey (display-only); the
+        // persisted `carrier_uid` is the BARE _uid the engine's nested
+        // carrier_ctx stamps (wildcard_handler stamps bare `_uid`).
         key: `${cm.rowKey}::${optionId}`,
-        entry: { kind: "nested", carrier_uid: cm.rowKey, option_id: optionId },
+        entry: { kind: "nested", carrier_uid: bareUid(cm.rowKey), option_id: optionId },
         name: `${carrierName} via @${carrierName}`,
         kind: "nested",
         nodeLabel: cm.nodeLabel,

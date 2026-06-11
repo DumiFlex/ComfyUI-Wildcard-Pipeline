@@ -413,20 +413,22 @@ class ConstraintHandler(ModuleHandler):
             exceptions.append(dict(exc))
 
         # Carry the owning constraint module's id into the registered
-        # bucket entry so `apply_constraints_for_target` can mark it
-        # consumed once its first downstream target instance fires
-        # (one-shot semantic per 2026-05-24 first-instance spec).
+        # bucket entry as `__constraint_module_id__` (the `cid`). Under the
+        # SP3 reach model it identifies the constraint for two things:
+        # (1) the per-constraint hit counter `__wp_constraint_hits__[cid]`
+        # that drives first / next / pick coverage in
+        # `apply_constraints_for_target`, and (2) the dedup key + ref of
+        # the never-applied / partial-reach finalisation warnings.
         #
         # Key on the PER-INSTANCE uid (`__wp_current_module_uid__`), not
         # the library uuid (`__wp_current_module_id__`): two instances of
-        # the same library constraint entry must be INDEPENDENT one-shots
+        # the same library constraint entry must reach INDEPENDENTLY
         # (CLAUDE.md — "author multiple constraint modules" to affect
         # multiple target instances). Pre-2026-05-26 both keyed on the
-        # shared library uuid, so claiming/consuming one silently spent
-        # the other — a carrier could swallow the whole family and a
-        # downstream direct target then rolled unconstrained. The pipeline
-        # falls back to the library id when `_uid` is absent (legacy /
-        # hand-built test modules), preserving the old behaviour there.
+        # shared library uuid, so the two instances' counters collided —
+        # one instance's encounters advanced the other's first/next
+        # selector. The pipeline falls back to the library id when `_uid`
+        # is absent (legacy / hand-built test modules).
         module_id = None
         try:
             if hasattr(ctx, "get"):
@@ -436,13 +438,14 @@ class ConstraintHandler(ModuleHandler):
                 )
         except Exception:
             module_id = None
-        # The per-instance `_uid` (12+ chars) keys the consumed-set so two
-        # canvas instances of the same library constraint stay independent
-        # one-shots. The LIBRARY id (8-hex) is also stashed because the
-        # never-applied warning text needs it to render the chip — the SPA
-        # / Debug viewer's chip resolver looks up library uuids in the
-        # module catalog, and a per-instance `_uid` would never resolve
-        # (silently rendering as raw `@{…}` text in the warning).
+        # The per-instance `_uid` (12+ chars) keys the per-constraint hit
+        # counter so two canvas instances of the same library constraint
+        # reach independently. The LIBRARY id (8-hex) is also stashed
+        # because the never-applied / partial-reach warning text needs it
+        # to render the chip — the SPA / Debug viewer's chip resolver looks
+        # up library uuids in the module catalog, and a per-instance `_uid`
+        # would never resolve (silently rendering as raw `@{…}` text in the
+        # warning).
         library_id = None
         library_name = None
         try:

@@ -75,6 +75,42 @@ def test_two_constraints_stack_on_one_instance():
     assert applied and out[0]["weight"] == 6.0
 
 
+def test_pick_direct_matches_bare_uid_not_rowkey():
+    """Round-trip identity guard (holistic-review C1).
+
+    The reach modal persists a direct `pick` as the BARE per-instance
+    `_uid` — NOT the badge-layer rowKey (`${nodeId}#${_uid}`). The engine
+    fires with `firing_uid = ctx["__wp_current_module_uid__"]`, which is
+    the bare `_uid` (see pipeline.py: `_module_uid` carries no node
+    prefix). So a pick authored in the UI must match by the bare uid and
+    MUST NOT match the rowKey-prefixed form. This locks the contract in
+    both directions: bare-uid pick covers, rowKey-prefixed pick misses.
+    """
+    picks = {"S": _src()}
+    c = [{
+        "target_wildcard_id": "T",
+        "source_wildcard_id": "S",
+        "__constraint_module_id__": "c1",
+        "target_select": {
+            "mode": "pick",
+            "picks": [{"kind": "direct", "uid": "mood-a"}],  # BARE _uid
+        },
+        "matrix": {"rainy": {"somber": {"mode": "boost", "factor": 2.0}}},
+        "exceptions": [],
+    }]
+    # Bare uid fired → pick covers → boost ×2 (the shape the UI now emits).
+    out, applied = apply_constraints_for_target(
+        _o(), "T", c, picks, [], hits={}, firing_uid="mood-a",
+    )
+    assert applied and out[0]["weight"] == 2.0
+    # rowKey-prefixed firing uid → pick MISSES (the old buggy format the
+    # UI used to persist; would never fire at runtime).
+    out2, applied2 = apply_constraints_for_target(
+        _o(), "T", c, picks, [], hits={}, firing_uid="1#mood-a",
+    )
+    assert not applied2 and out2[0]["weight"] == 1.0
+
+
 def test_pick_nested_occurrence_matches_carrier_option():
     from engine.modules._constraints import apply_constraints_for_target
     picks = {"S": {"picks": [{"value": "rain", "tags": ["rainy"]}]}}

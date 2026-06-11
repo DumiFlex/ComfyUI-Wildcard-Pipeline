@@ -350,8 +350,37 @@ describe("computePairingsFull — SP3 reach + contributors", () => {
     expect(full.get("t1#c")?.contributors.length ?? 0).toBe(0);
   });
 
-  it("`pick` direct covers only the listed instance uid", () => {
-    // `pick` lists the SECOND instance's uid → only it is covered.
+  it("`pick` direct covers only the listed instance uid (bare _uid, not rowKey)", () => {
+    // `pick` lists the SECOND instance's BARE _uid (`b`, stripped of the
+    // `t1#` node prefix) → only it is covered. The badge derives the bare
+    // suffix of each row's rowKey so it agrees with both the UI-persisted
+    // pick format AND the engine's `_occurrence_matches`. A rowKey-format
+    // pick (`t1#b`) would NOT match — see the explicit guard below.
+    const chain = [
+      module_(
+        "cn1",
+        "constraint",
+        {
+          source_wildcard_id: "s1",
+          target_wildcard_id: "t1",
+          target_select: { mode: "pick", picks: [{ kind: "direct", uid: "b" }] },
+        },
+        "cn1#uid",
+      ),
+      module_("s1", "wildcard"),
+      module_("t1", "wildcard", {}, "t1#a"),
+      module_("t1", "wildcard", {}, "t1#b"),
+    ];
+    const full = computePairingsFull(chain);
+    expect(full.get("t1#a")?.contributors.length ?? 0).toBe(0);
+    expect(full.get("t1#b")?.contributors.length).toBe(1);
+  });
+
+  it("`pick` direct with a rowKey-format uid covers NOTHING (bare-uid contract)", () => {
+    // Round-trip guard mirroring the engine test: the OLD buggy format
+    // stored the full rowKey (`t1#b`) as the pick uid. Post-fix the badge
+    // matches the BARE suffix, so a rowKey-format pick never covers — the
+    // badge agrees with the engine that this pick is dead.
     const chain = [
       module_(
         "cn1",
@@ -369,7 +398,9 @@ describe("computePairingsFull — SP3 reach + contributors", () => {
     ];
     const full = computePairingsFull(chain);
     expect(full.get("t1#a")?.contributors.length ?? 0).toBe(0);
-    expect(full.get("t1#b")?.contributors.length).toBe(1);
+    expect(full.get("t1#b")?.contributors.length ?? 0).toBe(0);
+    // The constraint covered zero downstream instances → orphan badge.
+    expect(full.get("cn1#uid")?.direct?.isOrphan).toBe(true);
   });
 
   it("sender row's direct.reach equals the constraint's target_select", () => {

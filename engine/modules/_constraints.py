@@ -57,8 +57,10 @@ def _occurrence_matches(pick_entries, firing_uid, carrier_ctx) -> bool:
         for these (the wildcard handler fires them directly).
       - ``nested`` — a ``@{target}`` ref resolved inside a carrier
         wildcard's chosen option. Matched by (carrier_uid, option_id).
-        ``carrier_ctx`` carries those; threaded by the nested-resolve
-        path (a later task — callers pass ``None`` for now).
+        ``carrier_ctx`` carries those, threaded by the nested-resolve
+        path (``engine.syntax.resolve``). The direct-firing wildcard
+        handler passes ``carrier_ctx=None`` (it fires top-level
+        instances, not nested refs), so the two kinds never cross-match.
     """
     for p in pick_entries:
         if not isinstance(p, dict):

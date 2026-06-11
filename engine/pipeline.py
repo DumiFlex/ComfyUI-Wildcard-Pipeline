@@ -356,12 +356,16 @@ class PipelineEngine:
             #     wildcard handler matches THIS against a constraint's
             #     `target_wildcard_id` (which is a library uuid).
             #   - `__wp_current_module_uid__` = per-instance uid (`_uid`).
-            #     The constraint handler keys its consumed-set entry on
-            #     THIS so two instances of the same library constraint
-            #     entry are independent one-shots (per CLAUDE.md: "author
-            #     multiple constraint modules" to affect multiple
-            #     targets). Falls back to the library id when `_uid` is
-            #     absent (legacy / hand-built test modules).
+            #     This is the BARE per-instance uid (no node prefix). The
+            #     constraint handler keys its `__constraint_module_id__`
+            #     (the SP3 per-constraint hit counter) on THIS so two
+            #     instances of the same library constraint entry reach
+            #     INDEPENDENTLY (per CLAUDE.md: "author multiple constraint
+            #     modules" to affect multiple targets). It's ALSO the
+            #     `firing_uid` a direct `pick` selector matches against —
+            #     so a persisted `pick` must carry the bare `_uid`, not the
+            #     UI's badge rowKey (`${nodeId}#${_uid}`). Falls back to the
+            #     library id when `_uid` is absent (legacy / test modules).
             ctx["__wp_current_module_id__"] = _module_id
             ctx["__wp_current_module_uid__"] = _module_uid or _module_id
             ctx["__wp_current_module_name__"] = _module_name
@@ -621,14 +625,30 @@ class PipelineEngine:
                     want = len(sel.get("picks") or [])
                 else:
                     continue
+                # LIMITATION (holistic-review L1): `seen` is the per-cid
+                # TOTAL target-encounter count (`hits[cid]`, bumped on
+                # every firing in apply_constraints_for_target), NOT the
+                # count of picks that actually MATCHED. So a `pick`
+                # partial signal is imprecise: it compares encounters to
+                # `len(picks)` rather than matched-vs-listed. A precise
+                # count would need a separate ctx-threaded matched-pick
+                # counter (new bookkeeping across the _constraints apply
+                # boundary) — deferred to avoid over-plumbing. `next` is
+                # exact (it covers the first N encounters by construction).
                 if seen >= want:
                     continue
                 partial_warned.add(cid)
                 warnings_bucket = ctx.setdefault("__wp_warnings__", [])
                 if isinstance(warnings_bucket, list):
                     warnings_bucket.append({
+                        # Spec: partial reach is INFO, not warn — the
+                        # selector simply found fewer downstream targets
+                        # than requested this run (not an error condition).
+                        # `constraint_never_applied` stays `warn` (a
+                        # constraint that fired zero times is worth a louder
+                        # signal). DebugViewer maps `info` → blue/accent.
                         "type": "constraint_partial_reach",
-                        "severity": "warn",
+                        "severity": "info",
                         "module_id": cid,
                         "source_field": "",
                         "position": 0,

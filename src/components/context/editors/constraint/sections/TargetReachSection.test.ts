@@ -119,27 +119,32 @@ describe("TargetReachSection — pick checklist", () => {
     // Direct row tagged `direct`.
     expect(directRow.text().toLowerCase()).toContain("direct");
 
-    // Tick the direct row → picks gains the direct entry keyed by rowKey.
+    // Tick the direct row → picks gains the direct entry keyed by the
+    // BARE _uid (engine identity), NOT the rowKey. The row's data-test
+    // still uses the full rowKey (`1#mood-a`); the persisted uid strips
+    // the `1#` node prefix → `mood-a`.
     await directRow.find(".wp-check").trigger("click");
     expect(last(updates)).toEqual({
       mode: "pick",
-      picks: [{ kind: "direct", uid: "1#mood-a" }],
+      picks: [{ kind: "direct", uid: "mood-a" }],
     });
   });
 
-  it("ticking a nested row emits a nested picks entry keyed by (carrier rowKey, option_id)", async () => {
+  it("ticking a nested row emits a nested picks entry keyed by (bare carrier _uid, option_id)", async () => {
     const { w, updates } = mountSection({ mode: "pick", picks: [] });
     await w.find('[data-test="reach-pick-2#backdrop-b::opt_a"] .wp-check').trigger("click");
+    // carrier_uid is the BARE _uid (`backdrop-b`), stripped of the `2#`
+    // node prefix — the engine's nested carrier_ctx stamps bare uids.
     expect(last(updates)).toEqual({
       mode: "pick",
-      picks: [{ kind: "nested", carrier_uid: "2#backdrop-b", option_id: "opt_a" }],
+      picks: [{ kind: "nested", carrier_uid: "backdrop-b", option_id: "opt_a" }],
     });
   });
 
-  it("un-ticking a picked row removes its entry", async () => {
+  it("un-ticking a picked row removes its entry (bare-uid pick matches the row)", async () => {
     const { w, updates } = mountSection({
       mode: "pick",
-      picks: [{ kind: "direct", uid: "1#mood-a" }],
+      picks: [{ kind: "direct", uid: "mood-a" }],
     });
     await w.find('[data-test="reach-pick-1#mood-a"] .wp-check').trigger("click");
     expect(last(updates)).toEqual({ mode: "pick", picks: [] });

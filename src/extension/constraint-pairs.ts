@@ -62,6 +62,20 @@ export const CARRIER_TYPES = new Set(["wildcard"]);
  *  nesting while keeping the walk O(modules · options · 8). */
 const MAX_REF_HOPS = 8;
 
+/** Strip the `${nodeId}#` prefix off a rowKey, yielding the bare per-
+ *  instance `_uid`. A `pick` selector persists the BARE `_uid` (that's
+ *  what the engine matches via `firing_uid`/`carrier_ctx` — bare, no node
+ *  prefix; see engine/pipeline.py + _constraints.py). The badge layer
+ *  keys its row map on the full rowKey for graph-wide uniqueness, so to
+ *  test a persisted pick against an encounter row we compare the pick uid
+ *  to the row's BARE suffix. `_uid` is globally unique on its own, so the
+ *  strip never collides two distinct instances. Mirrors the identical
+ *  helper in TargetReachSection.vue (the persistence boundary). */
+function bareUid(rowKey: string): string {
+  const i = rowKey.indexOf("#");
+  return i >= 0 ? rowKey.slice(i + 1) : rowKey;
+}
+
 /** Every uuid referenced by `@{}` inside `value`, in source order.
  *  `m[1]` is the captured 8-hex uuid (REF_REGEX_VIA has the `g` flag,
  *  required for matchAll). */
@@ -224,6 +238,9 @@ function carrierViaFor(
  *    - `next`  → n <= count (count coerced, default 1).
  *    - `pick`  → the encounter's identity is in `picks` (direct uid for
  *      top-level encounters; carrier_uid + option_id for nested ones).
+ *      `directUid`/`carrierUid` are the BARE per-instance `_uid`s (the
+ *      caller strips the rowKey's `nodeId#` prefix), matching the engine
+ *      identity the persisted picks now carry.
  *  `optionIds` carries the carrier's matching option ids so a nested
  *  `pick` matches when ANY of them is listed (the engine fires per chosen
  *  option; statically we cover the carrier if any carried option is
@@ -473,11 +490,14 @@ export function computePairingsFull(modules: ChainModule[]): Map<string, RowPair
       const carrierMatch = match && match.optionIds.length > 0 ? match : null;
       if (!isDirect && !carrierMatch) continue;
 
-      // Carrier identity for `pick`/`via`; direct identity is the row key
-      // (the static stand-in for the engine's per-instance uid).
+      // Carrier/direct identity for `pick`/`via`. A persisted `pick`
+      // names the BARE per-instance `_uid` (engine identity), so we
+      // compare against the row's bare suffix — NOT the full rowKey the
+      // map is keyed on. This keeps the badge in lockstep with both the
+      // UI-persisted pick format AND the engine's `_occurrence_matches`.
       const via = carrierMatch ? carrierViaFor(d, carrierMatch, targetUuid) : null;
-      const directUid = isDirect ? d.rowKey : null;
-      const carrierUid = carrierMatch ? d.rowKey : null;
+      const directUid = isDirect ? bareUid(d.rowKey) : null;
+      const carrierUid = carrierMatch ? bareUid(d.rowKey) : null;
       const optionIds = carrierMatch ? carrierMatch.optionIds : [];
 
       for (const s of senders) {
