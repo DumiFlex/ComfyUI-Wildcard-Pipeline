@@ -1,7 +1,35 @@
 import { describe, it, expect } from "vitest";
 import { buildPublishBody, schemaVersionForPayload } from "@/manager/import-export/single-row-publish";
-import { CURRENT_SCHEMA_VERSION, SP2B_SCHEMA_VERSION } from "@/manager/import-export/migrations";
+import {
+  CURRENT_SCHEMA_VERSION,
+  SP2B_SCHEMA_VERSION,
+  SP3_REACH_SCHEMA_VERSION,
+} from "@/manager/import-export/migrations";
 import wildcardFixture from "@/validators/fixtures/v1/module-wildcard.json";
+
+/** Minimal engine-row constraint module carrying a `target_select`. Carries
+ *  every `moduleRowBase` required field so it also passes strict v2
+ *  validation inside `buildPublishBody`. The reach selector lives at
+ *  `payload.target_select` (library default) — see `ConstraintPayload` in
+ *  `manager/api/types.ts`. */
+function constraintRow(targetSelect?: unknown): Record<string, unknown> {
+  return {
+    id: "cn-001abc",
+    type: "constraint",
+    name: "mood-constraint",
+    description: "",
+    category_id: null,
+    tags: [],
+    is_favorite: false,
+    payload: {
+      source_wildcard_id: "wc-aaa",
+      target_wildcard_id: "wc-bbb",
+      matrix: {},
+      exceptions: [],
+      ...(targetSelect === undefined ? {} : { target_select: targetSelect }),
+    },
+  };
+}
 
 // Re-import the version constant from package.json so this test
 // stays in sync if the version is bumped.
@@ -88,5 +116,93 @@ describe("publish body stamping", () => {
       "{2-4~$$, $$@{aabbccdd}|warm}";
     const body = buildPublishBody({ payload: sp2b, name: "demo", description: "" });
     expect(body.schema_version).toBe(SP2B_SCHEMA_VERSION);
+  });
+
+  // --- SP3: stamp catalog v4 ONLY when a constraint's `target_select`
+  //     reach selector is NON-DEFAULT (mode != "all" / non-empty picks /
+  //     a count). An absent selector or the default `{mode:"all"}` does
+  //     NOT bump — those are byte-identical to a pre-SP3 payload. ---
+
+  it("schemaVersionForPayload bumps to SP3_REACH for a non-default `next` selector", () => {
+    expect(schemaVersionForPayload(constraintRow({ mode: "next", count: 2 }))).toBe(
+      SP3_REACH_SCHEMA_VERSION,
+    );
+  });
+
+  it("schemaVersionForPayload bumps to SP3_REACH for a `first` selector", () => {
+    expect(schemaVersionForPayload(constraintRow({ mode: "first" }))).toBe(
+      SP3_REACH_SCHEMA_VERSION,
+    );
+  });
+
+  it("schemaVersionForPayload bumps to SP3_REACH for a non-empty `pick` selector", () => {
+    expect(
+      schemaVersionForPayload(
+        constraintRow({ mode: "pick", picks: [{ kind: "direct", uid: "row-1" }] }),
+      ),
+    ).toBe(SP3_REACH_SCHEMA_VERSION);
+  });
+
+  it("schemaVersionForPayload keeps CURRENT for the default `{mode:'all'}` selector", () => {
+    expect(schemaVersionForPayload(constraintRow({ mode: "all" }))).toBe(CURRENT_SCHEMA_VERSION);
+  });
+
+  it("schemaVersionForPayload keeps CURRENT when there is no target_select at all", () => {
+    expect(schemaVersionForPayload(constraintRow())).toBe(CURRENT_SCHEMA_VERSION);
+  });
+
+  it("schemaVersionForPayload bumps for a `pick` selector even with empty picks", () => {
+    // `mode:"pick"` is itself a non-default mode — a pre-SP3 consumer can't
+    // parse the `pick` shape at all, so it must bump regardless of picks
+    // length (mode !== "all" is the deciding clause).
+    expect(schemaVersionForPayload(constraintRow({ mode: "pick", picks: [] }))).toBe(
+      SP3_REACH_SCHEMA_VERSION,
+    );
+  });
+
+  it("finds a non-default target_select nested in a bundle child", () => {
+    const bundle = {
+      id: "bd-001abc",
+      name: "reach-bundle",
+      children: [
+        { id: "wc-x", type: "wildcard", payload: { options: [] } },
+        constraintRow({ mode: "next", count: 3 }),
+      ],
+    } as Record<string, unknown>;
+    expect(schemaVersionForPayload(bundle)).toBe(SP3_REACH_SCHEMA_VERSION);
+  });
+
+  it("finds a non-default target_select in a constraint INSTANCE override", () => {
+    // Per-instance reach lives at `instance.target_select` (full TargetSelect,
+    // `pick` allowed). The deep scan must catch it wherever it sits.
+    const row = {
+      id: "cn-001abc",
+      type: "constraint",
+      payload: { target_wildcard_id: "wc-bbb", matrix: {}, exceptions: [] },
+      instance: { target_select: { mode: "first" } },
+    } as Record<string, unknown>;
+    expect(schemaVersionForPayload(row)).toBe(SP3_REACH_SCHEMA_VERSION);
+  });
+
+  it("stamps SP3_REACH (4) when a payload uses BOTH range syntax AND non-default reach", () => {
+    // range-only -> 3, reach-only -> 4, both -> max(3, 4) = 4.
+    const row = constraintRow({ mode: "next", count: 2 });
+    (row.payload as Record<string, unknown>).note = "{2-4~$$, $$a|b}";
+    expect(schemaVersionForPayload(row)).toBe(SP3_REACH_SCHEMA_VERSION);
+  });
+
+  it("keeps SP2B (3) for range syntax when reach is absent/default", () => {
+    const row = constraintRow({ mode: "all" });
+    (row.payload as Record<string, unknown>).note = "{2-4~$$, $$a|b}";
+    expect(schemaVersionForPayload(row)).toBe(SP2B_SCHEMA_VERSION);
+  });
+
+  it("buildPublishBody stamps SP3_REACH for a published constraint with non-default reach", () => {
+    const body = buildPublishBody({
+      payload: constraintRow({ mode: "next", count: 2 }),
+      name: "demo",
+      description: "",
+    });
+    expect(body.schema_version).toBe(SP3_REACH_SCHEMA_VERSION);
   });
 });

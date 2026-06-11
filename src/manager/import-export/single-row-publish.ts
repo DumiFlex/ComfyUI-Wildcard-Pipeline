@@ -20,7 +20,11 @@
 
 import type { Router } from "vue-router";
 import type { BundleRow, ModuleRow } from "../api/types";
-import { CURRENT_SCHEMA_VERSION, SP2B_SCHEMA_VERSION } from "./migrations";
+import {
+  CURRENT_SCHEMA_VERSION,
+  SP2B_SCHEMA_VERSION,
+  SP3_REACH_SCHEMA_VERSION,
+} from "./migrations";
 import { getValidator, type ModuleSubtype } from "@/validators";
 import { version as ENGINE_VERSION } from "../../../package.json";
 
@@ -60,15 +64,66 @@ export interface PublishBody {
 const SP2B_MARKER_RE = /\{\d+(?:-\d+~?|~)\$\$/;
 
 /**
- * Choose the community catalog `schema_version` to stamp for a payload:
- * `SP2B_SCHEMA_VERSION` when the payload TEXT uses a range or the `~`
- * independent flag, else `CURRENT_SCHEMA_VERSION`. Scans the whole serialised
- * payload so the marker is found wherever text lives (wildcard option values,
- * combine templates, bundle children). Stamping the lower version for plain
- * payloads keeps pre-SP2b consumers able to install everything that doesn't
- * actually use the new grammar.
+ * Is `sel` a NON-DEFAULT constraint reach selector? The engine default for an
+ * absent or `{mode:"all"}` selector covers every downstream target instance —
+ * byte-identical in EFFECT to a pre-SP3 constraint, so it must NOT bump the
+ * catalog version. A selector counts as non-default (SP3 reach actually in
+ * use) when it narrows reach: `mode !== "all"` OR it carries a numeric `count`
+ * OR a non-empty `picks` array. Mirrors `reachCovers` in
+ * `extension/constraint-pairs.ts` (same `{mode, count?, picks?}` shape) and
+ * the engine's coverage test. Note `{mode:"pick", picks:[]}` still bumps —
+ * `mode !== "all"` is the deciding clause and a pre-SP3 consumer can't parse
+ * the `pick`/`first`/`next` modes at all. The lone default that does NOT bump
+ * is an absent selector or an explicit `{mode:"all"}` (with no count/picks).
+ */
+function isNonDefaultTargetSelect(sel: unknown): boolean {
+  if (!sel || typeof sel !== "object") return false;
+  const s = sel as { mode?: unknown; count?: unknown; picks?: unknown };
+  if (typeof s.mode === "string" && s.mode !== "all") return true;
+  if (typeof s.count === "number") return true;
+  if (Array.isArray(s.picks) && s.picks.length > 0) return true;
+  return false;
+}
+
+/**
+ * Walk `node` (object/array, any depth) looking for ANY `target_select`
+ * property whose value is a non-default reach selector. Mirrors the SP2b
+ * whole-payload scan: a constraint's `target_select` can sit at
+ * `payload.target_select` (library default) OR `instance.target_select`
+ * (per-instance override), and constraints can be nested inside a bundle's
+ * `children`. A structural walk (vs. the SP2b text regex) is required because
+ * "non-default" depends on the selector's VALUE, not just its presence.
+ */
+export function usesTargetSelectReach(node: unknown): boolean {
+  if (Array.isArray(node)) {
+    return node.some((child) => usesTargetSelectReach(child));
+  }
+  if (!node || typeof node !== "object") return false;
+  const obj = node as Record<string, unknown>;
+  if (isNonDefaultTargetSelect(obj.target_select)) return true;
+  for (const value of Object.values(obj)) {
+    if (value && typeof value === "object" && usesTargetSelectReach(value)) return true;
+  }
+  return false;
+}
+
+/**
+ * Choose the community catalog `schema_version` to stamp for a payload — the
+ * MAX version any feature in the payload requires:
+ *   - `SP3_REACH_SCHEMA_VERSION` (4) when ANY constraint carries a non-default
+ *     `target_select` reach selector (`usesTargetSelectReach`).
+ *   - `SP2B_SCHEMA_VERSION` (3) when the payload TEXT uses a range count or the
+ *     `~` independent flag.
+ *   - `CURRENT_SCHEMA_VERSION` (2) baseline otherwise.
+ * A payload using BOTH range syntax and non-default reach stamps 4 (the max).
+ * Both scan the WHOLE serialised payload / structure so the marker is found
+ * wherever it lives (wildcard option values, combine templates, constraint
+ * selectors, bundle children, instance overrides). Stamping the LOWEST
+ * sufficient version keeps older consumers able to install everything that
+ * doesn't actually use a newer feature.
  */
 export function schemaVersionForPayload(payload: Record<string, unknown>): number {
+  if (usesTargetSelectReach(payload)) return SP3_REACH_SCHEMA_VERSION;
   return SP2B_MARKER_RE.test(JSON.stringify(payload))
     ? SP2B_SCHEMA_VERSION
     : CURRENT_SCHEMA_VERSION;

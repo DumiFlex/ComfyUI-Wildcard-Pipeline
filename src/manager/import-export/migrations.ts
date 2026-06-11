@@ -43,6 +43,23 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 export const SP2B_SCHEMA_VERSION = 3;
 
+/**
+ * Community catalog version for the SP3 constraint reach selector
+ * (`target_select` with a non-default `mode`/`count`/`picks`).
+ *
+ * Like SP2b this is an ADDITIVE shape change: a v2/v3 payload is shape-
+ * compatible — a constraint that omits `target_select` (or carries the
+ * default `{mode:"all"}`) is byte-identical to a pre-SP3 one. The new
+ * `target_select` field only appears when a constraint actually narrows
+ * its reach, so there is no `migrateV3ToV4` and `CURRENT_SCHEMA_VERSION`
+ * stays 2 (the per-row migration chain has nothing to do). The bump
+ * exists purely so the community catalog (already at v4, additive) can
+ * tolerant-strip the new field for a pre-SP3 consumer (server-first
+ * rollout). Publish stamps THIS version only when a constraint's reach
+ * is non-default — see `schemaVersionForPayload` / `usesTargetSelectReach`.
+ */
+export const SP3_REACH_SCHEMA_VERSION = 4;
+
 export interface MigrationOk<T> {
   ok: true;
   migrated: T;
