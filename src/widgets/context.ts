@@ -17,8 +17,8 @@ import {
   type LiteGraphLike,
   type LiteNodeLike,
 } from "../extension/graph";
-import { collectCrossNodePairingsFull } from "../extension/cross-node-pairings";
-import type { PairingBadge, RowPairings } from "../extension/constraint-pairs";
+import { collectCrossNodePairingsFull, collectFullChainModules } from "../extension/cross-node-pairings";
+import type { ChainModule, PairingBadge, RowPairings } from "../extension/constraint-pairs";
 import { reactiveFromGraph, stringArrayEqual } from "../extension/reactive";
 import { applyVarAccessor, type ResolvedValue } from "./richTokenize";
 
@@ -85,6 +85,47 @@ function pairingMapEqual(
     for (let i = 0; i < av.viaInbound.length; i++) {
       if (!pairingBadgeEqual(av.viaInbound[i], bv.viaInbound[i])) return false;
     }
+  }
+  return true;
+}
+
+/** Per-entry fingerprint for the cross-node chain gate. Only the fields
+ *  the constraint modal reads off a `ChainModule` participate — id, type,
+ *  display name, and the wildcard-resolution payload bits (var_binding,
+ *  sub_categories, option values + ids). Cheaper + more churn-stable than
+ *  deep-equal on the whole payload, while still flipping when an edit the
+ *  modal can observe lands. Mirrors the gating discipline the other
+ *  chain-derived polls use. */
+function chainModuleSig(m: ChainModule): string {
+  const p = m.payload as {
+    var_binding?: unknown;
+    sub_categories?: unknown;
+    options?: Array<{ id?: unknown; value?: unknown }>;
+  };
+  const subs = Array.isArray(p.sub_categories) ? p.sub_categories.join("") : "";
+  const opts = Array.isArray(p.options)
+    ? p.options.map((o) => `${String(o?.id ?? "")}=${String(o?.value ?? "")}`).join("")
+    : "";
+  return [
+    m.id,
+    m.rowKey,
+    m.type,
+    m.displayName ?? "",
+    typeof p.var_binding === "string" ? p.var_binding : "",
+    subs,
+    opts,
+  ].join("");
+}
+
+/** Order-sensitive equality for the flattened chain. Re-renders only
+ *  when an entry appears, disappears, moves, or changes a modal-visible
+ *  field — gate prevents per-poll churn re-rendering every ContextWidget
+ *  when the chain is structurally unchanged. */
+function chainModulesEqual(a: ChainModule[], b: ChainModule[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (chainModuleSig(a[i]) !== chainModuleSig(b[i])) return false;
   }
   return true;
 }
@@ -231,6 +272,33 @@ export function create(node: ContextNode, inputName: string) {
         pairingMapEqual,
       );
 
+      // Flattened cross-node module chain (upstream + own + downstream
+      // WP_Context modules in execution order). Threaded down to the
+      // constraint modal so it can resolve a source/target wildcard that
+      // lives in ANOTHER Context node, not just this node's siblings.
+      //
+      // Perf: this is a SECOND walk — `collectCrossNodePairingsFull`
+      // above already runs `collectFullChainModules` internally, so the
+      // flatten happens twice per poll tick. The flatten is O(chain
+      // modules) with one widget-JSON parse per Context node in the
+      // chain; bounded and cheap next to the conflict scanner. Sharing
+      // one walk would mean either restructuring the gated pairing poll
+      // (loses its `pairingMapEqual` re-render gate) or changing
+      // cross-node-pairings.ts (out of scope here). The `chainModulesEqual`
+      // gate suppresses re-render churn when the chain is unchanged, so
+      // the only added cost is the recompute itself, not extra renders.
+      const chainModulesRef = reactiveFromGraph(
+        node as unknown as Parameters<typeof reactiveFromGraph>[0],
+        () => {
+          const startGraph =
+            (node as unknown as { graph?: LiteGraphLike }).graph
+            ?? (app.graph as unknown as LiteGraphLike);
+          const rootGraph = findRootGraph(startGraph);
+          return collectFullChainModules(rootGraph, node);
+        },
+        chainModulesEqual,
+      );
+
       // Per-name resolved snapshot — drives the combine modal's
       // live-preview pane so the user sees `red portrait` instead of
       // `$style portrait` while editing. Same walker the assembler
@@ -346,6 +414,7 @@ export function create(node: ContextNode, inputName: string) {
           downstreamWildcardUuids: downstreamUuids.value,
           downstreamNestedReachUuids: downstreamNestedReach.value,
           pairings: pairingsRef.value,
+          chainModules: chainModulesRef.value,
           nodeMode: nodeMode.value,
           lastUsedSeedReader,
           onChange: (json: string) => host.setValue(json),

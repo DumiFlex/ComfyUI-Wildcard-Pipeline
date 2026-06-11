@@ -18,6 +18,7 @@
  */
 import { computed, watch } from "vue";
 import type { ModuleEntry } from "../../../../widgets/_shared";
+import type { ChainModule } from "../../../../extension/constraint-pairs";
 import IdentitySection from "./sections/IdentitySection.vue";
 import MatrixSection from "./sections/MatrixSection.vue";
 import ExceptionsSection from "./sections/ExceptionsSection.vue";
@@ -40,6 +41,15 @@ const props = withDefaults(
      *  matrix axes (sub_categories) + extra-exception autocomplete
      *  (option values). Optional; falls back to empty axes. */
     siblingModules?: ModuleEntry[];
+    /** Flattened cross-node module chain (upstream + own + downstream
+     *  WP_Context nodes), computed at the mount layer. Lets the modal
+     *  resolve a source/target wildcard that lives in a DOWNSTREAM (or
+     *  upstream) Context node — not just the same node. A superset of
+     *  `siblingModules` (the own node's modules appear in the chain
+     *  too), so merging is safe; chain entries win on uuid collision.
+     *  Optional — undefined in headless/legacy mounts falls back to
+     *  `siblingModules` alone. */
+    chainModules?: ChainModule[];
   }>(),
   { isDrifted: false, isModified: false, siblingModules: () => [] },
 );
@@ -67,9 +77,51 @@ interface WildcardPayload {
   options?: Array<{ value?: string }>;
 }
 
-function findWildcardModule(id: string | null | undefined): ModuleEntry | null {
+/** Normalised module shape the resolution lookups consume. Unifies the
+ *  two source shapes: `ModuleEntry` (same-node siblings — name under
+ *  `meta.name`) and `ChainModule` (cross-node chain — name under
+ *  `displayName`). Carrying a flat `name` lets `findWildcardModule` +
+ *  `wildcardName` stay shape-agnostic. */
+interface LookupModule {
+  id: string;
+  type: string;
+  payload: Record<string, unknown>;
+  name?: string;
+}
+
+/** Merge of the cross-node chain (`chainModules`) and same-node
+ *  siblings (`siblingModules`), keyed by uuid. Chain entries win on
+ *  collision: the chain is a superset that already includes the current
+ *  node's modules, and it carries the authoritative cross-node view, so
+ *  preferring it keeps same-node behaviour identical (same payload) while
+ *  adding reach to downstream/upstream targets. Deduped by id. */
+const modulesForLookup = computed<LookupModule[]>(() => {
+  const byId = new Map<string, LookupModule>();
+  // Siblings first so chain entries (added second) overwrite on uuid.
+  for (const s of props.siblingModules) {
+    if (s.type !== "wildcard") continue;
+    byId.set(s.id, {
+      id: s.id,
+      type: s.type,
+      payload: (s.payload ?? {}) as Record<string, unknown>,
+      name: s.meta?.name,
+    });
+  }
+  for (const c of props.chainModules ?? []) {
+    if (c.type !== "wildcard") continue;
+    byId.set(c.id, {
+      id: c.id,
+      type: c.type,
+      payload: (c.payload ?? {}) as Record<string, unknown>,
+      name: c.displayName,
+    });
+  }
+  return [...byId.values()];
+});
+
+function findWildcardModule(id: string | null | undefined): LookupModule | null {
   if (!id) return null;
-  const m = props.siblingModules.find((x) => x.id === id);
+  const m = modulesForLookup.value.find((x) => x.id === id);
   if (!m || m.type !== "wildcard") return null;
   return m;
 }
@@ -79,13 +131,18 @@ function findWildcard(id: string | null | undefined): WildcardPayload | null {
   return m ? ((m.payload ?? {}) as WildcardPayload) : null;
 }
 
-/** Sibling first, then preview-resolver cache. Returns the wildcard's
- *  display name; falls back to varBinding for cross-Context refs that
- *  have a `$var` name but no human title. Empty string when neither
- *  source knows the uuid. */
+/** Chain/sibling first, then preview-resolver cache. Returns the
+ *  wildcard's display name; for chain entries the `displayName` is
+ *  `meta.name` at flatten time. A `$var`-bound wildcard with no human
+ *  title (common for cross-node chain entries) falls to its
+ *  `var_binding`, then the cache's varBinding/name. Empty string when
+ *  no source knows the uuid. Display name is preferred over var_binding
+ *  so a same-node sibling's human title still wins (unchanged). */
 function wildcardName(id: string | null | undefined): string {
   const m = findWildcardModule(id);
-  if (m?.meta?.name) return m.meta.name;
+  if (m?.name) return m.name;
+  const binding = (m?.payload?.var_binding as string | undefined)?.trim().replace(/^\$+/, "");
+  if (binding) return binding;
   if (!id) return "";
   void cacheVersion.value;
   const hit = lookup(id);
@@ -262,10 +319,12 @@ const targetOptionsById = computed<ReadonlyMap<string, string>>(() => {
  *  chip the value editor shows — instead of raw `@{c0f09840}` text. */
 const uuidToName = computed<ReadonlyMap<string, string>>(() => {
   const m = new Map<string, string>();
-  for (const sib of props.siblingModules) {
-    if (sib.type !== "wildcard") continue;
-    const name = sib.meta?.name;
-    if (typeof name === "string" && name.length > 0) m.set(sib.id, name);
+  // modulesForLookup already merges chain (cross-node) + siblings and
+  // filters to wildcards, so nested `@{uuid}` refs pointing at a
+  // downstream-node wildcard resolve to a name too (not raw uuid).
+  for (const mod of modulesForLookup.value) {
+    const name = mod.name;
+    if (typeof name === "string" && name.length > 0) m.set(mod.id, name);
   }
   return m;
 });

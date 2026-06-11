@@ -16,7 +16,7 @@ import FixedValuesInstanceModal from "./editors/fixed-values/FixedValuesInstance
 import CombineInstanceModal from "./editors/combine/CombineInstanceModal.vue";
 import DerivationInstanceModal from "./editors/derivation/DerivationInstanceModal.vue";
 import ConstraintInstanceModal from "./editors/constraint/ConstraintInstanceModal.vue";
-import type { PairingBadge } from "../../extension/constraint-pairs";
+import type { ChainModule, PairingBadge } from "../../extension/constraint-pairs";
 
 
 const props = defineProps<{
@@ -33,6 +33,11 @@ const props = defineProps<{
    *  preview to resolve source/target uuids back to var-binding names.
    *  May include the module being edited; lookups by uuid skip self. */
   siblingModules?: ModuleEntry[];
+  /** Flattened cross-node module chain (upstream + own + downstream
+   *  WP_Context nodes). Forwarded to the constraint modal so it can
+   *  resolve a source/target wildcard that lives in another Context
+   *  node, not just `siblingModules` (same-node only). */
+  chainModules?: ChainModule[];
   /** Per-option pair badges for the currently-edited wildcard when it
    *  acts as a constraint carrier (target reached via nested `@{uuid}`).
    *  Keyed by option id. Empty for non-wildcard or non-carrier rows. */
@@ -448,6 +453,7 @@ function cancel() {
       :module="draft"
       :is-modified="instanceModified"
       :sibling-modules="siblingModules"
+      :chain-modules="chainModules"
       @update="onUpdate"
       @save="save"
       @cancel="cancel"

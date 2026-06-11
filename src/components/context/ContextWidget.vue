@@ -9,7 +9,7 @@ import {
 } from "../../widgets/_shared";
 import { type ResolvedValue } from "../../widgets/richTokenize";
 import { scanConflicts, labelFor as conflictLabelFor, shortConflictLabel, type Conflict } from "../../extension/conflicts";
-import type { PairingBadge, RowPairings } from "../../extension/constraint-pairs";
+import type { ChainModule, PairingBadge, RowPairings } from "../../extension/constraint-pairs";
 import {
   getCollapseMode,
   getCollapsedByDefault,
@@ -135,6 +135,13 @@ const props = withDefaults(defineProps<{
    *  via `pairingFor(module._uid)` in `moduleRowCtx`. Optional for
    *  headless mounts that don't simulate a graph. */
   pairings?: Map<string, RowPairings>;
+  /** Flattened cross-node module chain (upstream + own + downstream
+   *  WP_Context nodes), computed at the mount layer alongside
+   *  `pairings`. Forwarded to ModuleEditModal → ConstraintInstanceModal
+   *  so the constraint modal can resolve a source/target wildcard that
+   *  lives in another Context node — same flatten the pair badges use.
+   *  Optional for headless mounts. */
+  chainModules?: ChainModule[];
   /** Litegraph node mode: 0 ALWAYS, 2 NEVER (mute), 4 BYPASS.
    *  Used to dim the body when the host node is muted/bypassed so
    *  the runtime-skipped state is visually obvious. Other modes are
@@ -4872,6 +4879,7 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
       :upstream-resolved="resolvedForEditing"
       :sibling-vars="siblingNodeVars"
       :sibling-modules="value.modules"
+      :chain-modules="chainModules"
       :via-option-pairs="editingModuleViaOptionPairs"
       :last-used-seed-reader="lastUsedSeedReader"
       @save="saveEditedModule"

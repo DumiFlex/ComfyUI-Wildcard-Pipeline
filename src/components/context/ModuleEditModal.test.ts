@@ -583,6 +583,39 @@ describe("ModuleEditModal — constraint v2 dispatcher", () => {
     expect(saved.instance?.cell_mode_overrides).toEqual({ '["a","b"]': "exclude" });
   });
 
+  // Cross-node chain (SP3 P6 T16): the mount layer threads the flattened
+  // chain as `chainModules`; the shell must forward it verbatim to the
+  // constraint modal so a target wildcard in another Context node still
+  // resolves. Resolution itself is covered in ConstraintInstanceModal.test.ts.
+  it("forwards chainModules prop through to ConstraintInstanceModal", async () => {
+    const chain = [
+      {
+        id: "bbbbbbbb",
+        rowKey: "99#bbbbbbbb",
+        type: "wildcard",
+        displayName: "outfit",
+        payload: { sub_categories: ["tee", "gown"], options: [] },
+      },
+    ];
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeConstraint(), chainModules: chain },
+    });
+    await nextTick();
+    const cnm = wrapper.findComponent({ name: "ConstraintInstanceModal" });
+    expect(cnm.props("chainModules")).toEqual(chain);
+  });
+
+  it("leaves the child chainModules undefined when the prop is omitted", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeConstraint() },
+    });
+    await nextTick();
+    const cnm = wrapper.findComponent({ name: "ConstraintInstanceModal" });
+    expect(cnm.props("chainModules")).toBeUndefined();
+  });
+
   it("Reset overrides clears all override fields, preserves Identity", async () => {
     const m = {
       ...makeConstraint(),
