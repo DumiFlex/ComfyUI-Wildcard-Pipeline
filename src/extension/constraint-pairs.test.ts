@@ -151,4 +151,82 @@ describe("computePairings", () => {
     // Direct `target#a` should NOT be paired (carrier won the race).
     expect(full.get("target#a")?.direct).toBeUndefined();
   });
+
+  it("one-hop carrier reports routeChain = [targetUuid]", () => {
+    // The existing direct-nested case should now also stamp a routeChain
+    // ending (and starting) at the target uuid.
+    const targetUuid = "a1b2c3d4";
+    const chain = [
+      module_("s1", "wildcard"),
+      module_("cn1", "constraint", { source_wildcard_id: "s1", target_wildcard_id: targetUuid }),
+      module_(
+        "carrier",
+        "wildcard",
+        { options: [{ id: "opt_a", value: `@{${targetUuid}}` }] },
+        "carrier#a",
+      ),
+    ];
+    const full = computePairingsFull(chain);
+    const sender = full.get("cn1");
+    expect(sender?.direct?.via?.carrierRowKey).toBe("carrier#a");
+    expect(sender?.direct?.via?.routeChain).toEqual([targetUuid]);
+    // Carrier's inbound badge carries the same route chain.
+    expect(full.get("carrier#a")?.viaInbound[0]?.via?.routeChain).toEqual([targetUuid]);
+  });
+
+  it("detects a target reached two hops deep and reports the route chain", () => {
+    // Carrier A's option refs @{Buuid}; wildcard B's option refs
+    // @{Tuuid}; the constraint targets T. A is a TRANSITIVE carrier of
+    // T (A -> B -> T) — the old one-hop walk missed this entirely.
+    const aUuid = "aaaaaaaa";
+    const bUuid = "bbbbbbbb";
+    const tUuid = "cccccccc";
+    const chain = [
+      module_("s1", "wildcard"),
+      module_("cn1", "constraint", { source_wildcard_id: "s1", target_wildcard_id: tUuid }),
+      // A is the first downstream wildcard — it reaches T only through B.
+      module_(
+        aUuid,
+        "wildcard",
+        { options: [{ id: "opt_a", value: `@{${bUuid}}` }] },
+        "A#a",
+      ),
+      // B refs the actual target T.
+      module_(
+        bUuid,
+        "wildcard",
+        { options: [{ id: "opt_b", value: `@{${tUuid}}` }] },
+        "B#a",
+      ),
+    ];
+    const full = computePairingsFull(chain);
+    const sender = full.get("cn1");
+    // A's option is the carrier the engine reaches first.
+    expect(sender?.direct?.via?.carrierRowKey).toBe("A#a");
+    expect(sender?.direct?.via?.optionIds).toEqual(["opt_a"]);
+    // Route chain is the hop path after A, target last: [B, T].
+    expect(sender?.direct?.via?.routeChain).toEqual([bUuid, tUuid]);
+    // Carrier A picks up the inbound badge with the same route chain.
+    expect(full.get("A#a")?.viaInbound[0]?.via?.routeChain).toEqual([bUuid, tUuid]);
+  });
+
+  it("cycle A<->B does not infinite-loop", () => {
+    // A refs @{B}, B refs @{A}; the constraint targets a T that neither
+    // reaches. The cycle guard must terminate and the constraint falls
+    // through to an orphan badge (no carrier, no direct).
+    const aUuid = "aaaaaaaa";
+    const bUuid = "bbbbbbbb";
+    const tUuid = "dddddddd";
+    const chain = [
+      module_("s1", "wildcard"),
+      module_("cn1", "constraint", { source_wildcard_id: "s1", target_wildcard_id: tUuid }),
+      module_(aUuid, "wildcard", { options: [{ id: "opt_a", value: `@{${bUuid}}` }] }, "A#a"),
+      module_(bUuid, "wildcard", { options: [{ id: "opt_b", value: `@{${aUuid}}` }] }, "B#a"),
+    ];
+    expect(() => computePairingsFull(chain)).not.toThrow();
+    const sender = computePairingsFull(chain).get("cn1");
+    // T is unreachable → orphan, no carrier.
+    expect(sender?.direct?.isOrphan).toBe(true);
+    expect(sender?.direct?.via).toBeUndefined();
+  });
 });

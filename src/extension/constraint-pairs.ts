@@ -37,6 +37,52 @@ import { varColorIndex } from "../components/shared/var-color";
 // detection only matches on uuid.
 const REF_REGEX_VIA = /@\{([0-9a-f]{8})(?:#[^#:}@{]*)?(?::[^}]*)?\}/g;
 
+/** Module types whose option values can host an `@{uuid}` ref the
+ *  badge walk should follow. SP3 seam: a future "derivation" type
+ *  (whose body refs wildcards) gets added here without touching the
+ *  reachability walk. Today only `wildcard` modules carry refs. */
+export const CARRIER_TYPES = new Set(["wildcard"]);
+
+/** Reachability hop cap. The runtime engine resolves `@{}` to any
+ *  depth, but a static badge walk must bound itself against deep /
+ *  adversarial chains. 8 hops comfortably exceeds any hand-authored
+ *  nesting while keeping the walk O(modules · options · 8). */
+const MAX_REF_HOPS = 8;
+
+/** Every uuid referenced by `@{}` inside `value`, in source order.
+ *  `m[1]` is the captured 8-hex uuid (REF_REGEX_VIA has the `g` flag,
+ *  required for matchAll). */
+function refsIn(value: string): string[] {
+  const out: string[] = [];
+  for (const m of value.matchAll(REF_REGEX_VIA)) out.push(m[1]);
+  return out;
+}
+
+/** Does `start` reach `targetUuid` within MAX_REF_HOPS? Returns the hop
+ *  path (uuids AFTER `start`, ending at the target) or null. Cycle-
+ *  guarded via `seen`; depth-capped so a deep/adversarial ref chain
+ *  can't blow the stack. `lookup` yields a wildcard's option `value`
+ *  strings (empty for uuids not in the flattened chain — best-effort,
+ *  runtime is authoritative). */
+function reachPath(
+  start: string,
+  targetUuid: string,
+  lookup: (uuid: string) => string[],
+  seen: Set<string>,
+  depth: number,
+): string[] | null {
+  if (depth > MAX_REF_HOPS || seen.has(start)) return null;
+  seen.add(start);
+  for (const value of lookup(start)) {
+    for (const ref of refsIn(value)) {
+      if (ref === targetUuid) return [ref];
+      const sub = reachPath(ref, targetUuid, lookup, seen, depth + 1);
+      if (sub) return [ref, ...sub];
+    }
+  }
+  return null;
+}
+
 export interface ChainModule {
   /** Module id — uuid that constraint.target_wildcard_id matches against. */
   id: string;
@@ -76,6 +122,15 @@ export interface PairingVia {
    *  WildcardEditor row keys against. Empty when option ids weren't
    *  available (legacy rows). */
   optionIds: string[];
+  /** Hop path from the carrier option to the target uuid, target LAST.
+   *  One-hop (the carrier option refs the target directly) → just
+   *  `[targetUuid]`. Multi-hop (the option refs an intermediate
+   *  wildcard that, recursively, reaches the target) → the full chain
+   *  of intermediate uuids ending at the target, e.g. `[bUuid, tUuid]`.
+   *  Lets the popover render the route a constraint travels to reach a
+   *  nested target. Undefined only on legacy direct-target badges where
+   *  there is no carrier route at all. */
+  routeChain?: string[];
 }
 
 export interface PairingBadge {
@@ -94,33 +149,65 @@ export interface PairingBadge {
   via?: PairingVia;
 }
 
-/** Find every option in a wildcard module whose `value` references
- *  `targetUuid` via a nested `@{}` ref. Returns the matching option
- *  ids in order. Empty array when no options match — treat as "not a
- *  carrier of this target". */
+/** What a carrier scan found: the option ids whose `value` reaches
+ *  `targetUuid` (directly or transitively) plus the hop route from the
+ *  first such option to the target (target last). `optionIds` empty +
+ *  `routeChain` null ⇒ "not a carrier of this target". */
+interface CarrierMatch {
+  optionIds: string[];
+  routeChain: string[] | null;
+}
+
+/** Find every option in a carrier module whose `value` reaches
+ *  `targetUuid` — directly (`@{targetUuid}`) OR transitively (the
+ *  option refs `@{X}` and `X`, recursively through its own options'
+ *  refs, reaches the target). Mirrors the runtime engine, which already
+ *  resolves `@{}` to any depth, so the static badge matches what fires.
+ *
+ *  `lookup` yields a wildcard's option `value` strings (used to walk
+ *  the transitive closure). Returns the matching option ids in order
+ *  plus the route chain captured from the FIRST matching ref — one-hop
+ *  refs yield `[targetUuid]`, multi-hop yield `[X, …, targetUuid]`.
+ *  Cycle- and depth-guarded by `reachPath`. */
 function carrierOptionIdsFor(
   carrier: ChainModule,
   targetUuid: string,
-): string[] {
-  if (carrier.type !== "wildcard") return [];
+  lookup: (uuid: string) => string[],
+): CarrierMatch {
+  if (!CARRIER_TYPES.has(carrier.type)) return { optionIds: [], routeChain: null };
   const opts = (carrier.payload as { options?: Array<{ id?: string; value?: string }> })
     .options;
-  if (!Array.isArray(opts)) return [];
+  if (!Array.isArray(opts)) return { optionIds: [], routeChain: null };
   const out: string[] = [];
+  let routeChain: string[] | null = null;
   for (const opt of opts) {
     const value = opt?.value;
     const id = opt?.id;
     if (typeof value !== "string" || !id) continue;
-    REF_REGEX_VIA.lastIndex = 0;
-    let match: RegExpExecArray | null;
-    while ((match = REF_REGEX_VIA.exec(value)) !== null) {
-      if (match[1] === targetUuid) {
-        out.push(id);
+    let optionRoute: string[] | null = null;
+    for (const ref of refsIn(value)) {
+      if (ref === targetUuid) {
+        // Direct one-hop: this option refs the target itself.
+        optionRoute = [targetUuid];
+        break;
+      }
+      // Transitive: chase the ref's own refs for the target. A fresh
+      // `seen` per ref scan keeps unrelated options independent; the
+      // guard inside reachPath protects against cycles within a scan.
+      const sub = reachPath(ref, targetUuid, lookup, new Set(), 1);
+      if (sub) {
+        optionRoute = [ref, ...sub];
         break;
       }
     }
+    if (optionRoute) {
+      out.push(id);
+      // Capture the route from the first carrying option; later
+      // carrying options reach the same target so one route suffices.
+      if (routeChain === null) routeChain = optionRoute;
+    }
   }
-  return out;
+  return { optionIds: out, routeChain };
 }
 
 /** Bundle of pair data the renderer needs per row:
@@ -161,6 +248,28 @@ export function computePairingsFull(modules: ChainModule[]): Map<string, RowPair
     }
     return entry;
   }
+
+  // Transitive-ref lookup: uuid → that wildcard's option `value`
+  // strings. Built once from the flattened `modules` so the reachability
+  // walk (`reachPath`) can chase `@{X}` refs to any depth without re-
+  // scanning. Keyed by module `id` (the uuid `@{}` refs resolve to);
+  // duplicate library instances share an id + identical option values,
+  // so first-seen wins (later dups would only re-add the same strings).
+  // A ref to a uuid NOT in `modules` (cross-Context instance outside the
+  // flattened set) yields `[]` — best-effort, runtime is authoritative;
+  // never throws.
+  const refValuesByUuid = new Map<string, string[]>();
+  for (const m of modules) {
+    if (!CARRIER_TYPES.has(m.type) || refValuesByUuid.has(m.id)) continue;
+    const opts = (m.payload as { options?: Array<{ value?: string }> }).options;
+    if (!Array.isArray(opts)) continue;
+    const values: string[] = [];
+    for (const opt of opts) {
+      if (typeof opt?.value === "string") values.push(opt.value);
+    }
+    refValuesByUuid.set(m.id, values);
+  }
+  const lookup = (uuid: string): string[] => refValuesByUuid.get(uuid) ?? [];
 
   // Group constraints by target uuid. Within each group the badge
   // numbering is its own [1], [2], … sequence — distinct target
@@ -211,6 +320,7 @@ export function computePairingsFull(modules: ChainModule[]): Map<string, RowPair
       let claimedTarget: ChainModule | null = null;
       let viaCarrier: ChainModule | null = null;
       let viaOptionIds: string[] = [];
+      let viaRouteChain: string[] = [];
       for (let j = cnIdx + 1; j < modules.length; j++) {
         const d = modules[j];
         // Direct match: a downstream wildcard whose id is the target uuid.
@@ -218,13 +328,16 @@ export function computePairingsFull(modules: ChainModule[]): Map<string, RowPair
           claimedTarget = d;
           break;
         }
-        // Nested match: a downstream wildcard with one of its option
-        // values containing `@{targetUuid}`. Carriers aren't marked
-        // as claimed (multiple constraints can route through them).
-        const optionIds = carrierOptionIdsFor(d, targetUuid);
-        if (optionIds.length > 0) {
+        // Nested match: a downstream carrier with an option value that
+        // reaches `@{targetUuid}` directly OR transitively (through that
+        // ref's own options, to any depth). Carriers aren't marked as
+        // claimed (multiple constraints can route through them).
+        const match = carrierOptionIdsFor(d, targetUuid, lookup);
+        if (match.optionIds.length > 0) {
           viaCarrier = d;
-          viaOptionIds = optionIds;
+          viaOptionIds = match.optionIds;
+          // routeChain is non-null whenever optionIds is non-empty.
+          viaRouteChain = match.routeChain ?? [targetUuid];
           break;
         }
       }
@@ -256,6 +369,7 @@ export function computePairingsFull(modules: ChainModule[]): Map<string, RowPair
           carrierRowKey: viaCarrier.rowKey,
           carrierName,
           optionIds: viaOptionIds,
+          routeChain: viaRouteChain,
         };
         // Sender (constraint) row — its primary badge carries `via`
         // so the renderer knows to flip on the ↪ glyph + popover.
