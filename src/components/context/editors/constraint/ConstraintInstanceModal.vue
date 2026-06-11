@@ -18,9 +18,10 @@
  */
 import { computed, watch } from "vue";
 import type { ModuleEntry } from "../../../../widgets/_shared";
-import type { ChainModule } from "../../../../extension/constraint-pairs";
+import type { ChainModule, TargetSelect } from "../../../../extension/constraint-pairs";
 import IdentitySection from "./sections/IdentitySection.vue";
 import MatrixSection from "./sections/MatrixSection.vue";
+import TargetReachSection from "./sections/TargetReachSection.vue";
 import ExceptionsSection from "./sections/ExceptionsSection.vue";
 // Library fallback for cross-Context constraints. When the referenced
 // source/target wildcard isn't a sibling in this WP_Context (lives in
@@ -171,6 +172,7 @@ interface ConstraintPayload {
   target_wildcard_id?: string;
   matrix?: Record<string, Record<string, unknown>>;
   exceptions?: Array<{ source_value?: string; target_value?: string; source?: string; target?: string }>;
+  target_select?: TargetSelect;
 }
 
 /** Pull the wildcard's live sub_categories, preferring sibling module
@@ -266,6 +268,56 @@ const targetName = computed(() => {
   const pl = (props.module.payload ?? {}) as ConstraintPayload;
   return wildcardName(pl.target_wildcard_id);
 });
+
+// ── Target reach (SP3) ──────────────────────────────────────────
+//
+// Effective `target_select`: per-instance override wins, then the
+// library payload value, then the engine default `{mode:"all"}`. The
+// section reads this; writes flow back into `instance.target_select`.
+const targetSelect = computed<TargetSelect>(() => {
+  const inst = props.module.instance?.target_select;
+  if (inst && typeof inst === "object") return inst;
+  const pl = (props.module.payload ?? {}) as ConstraintPayload;
+  if (pl.target_select && typeof pl.target_select === "object") return pl.target_select;
+  return { mode: "all" };
+});
+
+const targetWildcardId = computed<string>(() => {
+  const pl = (props.module.payload ?? {}) as ConstraintPayload;
+  return pl.target_wildcard_id ?? "";
+});
+
+/** The edited constraint's row id, as it appears in `chainModules`
+ *  (`${nodeId}#${_uid}`). The pick checklist walks DOWNSTREAM of this
+ *  row, so it must match the chain's `rowKey` — find the constraint chain
+ *  entry by `_uid` suffix (preferred) or `id`. Falls back to the bare
+ *  `_uid`/`id` when the chain is absent (headless/legacy mounts) — the
+ *  section then renders an empty checklist rather than crashing. */
+const constraintUid = computed<string>(() => {
+  const uid = props.module._uid;
+  const chain = props.chainModules ?? [];
+  const hit = chain.find((m) => {
+    if (m.type !== "constraint") return false;
+    if (uid && m.rowKey.endsWith(`#${uid}`)) return true;
+    return m.id === props.module.id;
+  });
+  return hit?.rowKey ?? uid ?? props.module.id;
+});
+
+/** Persist a new `target_select` onto the instance. Mirrors the modal's
+ *  other instance writes (full-replacement values, shallow-merged). The
+ *  default `{mode:"all"}` is dropped to `null` so an untouched reach
+ *  doesn't bloat the instance (keeps the override map minimal + the
+ *  modified-state honest). */
+function onTargetSelect(next: TargetSelect): void {
+  const isDefaultAll = next.mode === "all";
+  emit("update", {
+    instance: {
+      ...(props.module.instance ?? {}),
+      target_select: isDefaultAll ? null : next,
+    },
+  });
+}
 
 /** Tell the ExceptionsSection whether the source / target wildcard
  *  carries a null option. Drives the pi-ban chip render on library
@@ -367,6 +419,13 @@ function onSpaClick(): void {
       :source-name="sourceName"
       :target-name="targetName"
       @update="onUpdate"
+    />
+    <TargetReachSection
+      :model-value="targetSelect"
+      :chain-modules="chainModules"
+      :constraint-uid="constraintUid"
+      :target-wildcard-id="targetWildcardId"
+      @update:model-value="onTargetSelect"
     />
     <ExceptionsSection
       :module="module"

@@ -779,6 +779,16 @@ export interface ModuleEntry {
       factor: number;
     }> | null;
     /**
+     * SP3 per-instance constraint reach override. Decides which downstream
+     * instances of the constraint's `target_wildcard_id` this instance
+     * covers (`first` / `next N` / `all` / explicit `pick`). `null` /
+     * absent = inherit `payload.target_select`, which itself defaults to
+     * `{mode:"all"}`. Engine reads this in
+     * `engine/modules/_constraints.py`; the pairings layer mirrors it
+     * statically via `computePairingsFull`. Shape is engine-validated.
+     */
+    target_select?: TargetSelect | null;
+    /**
      * UI-scratch namespace. Single-underscore prefix signals "not engine
      * input"; engine handlers ignore the entire `_ui` subtree. Persisted
      * across workflow save/load but excluded from drift hash and engine

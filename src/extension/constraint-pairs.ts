@@ -183,7 +183,7 @@ export interface PairingBadge {
  *  `targetUuid` (directly or transitively) plus the hop route from the
  *  first such option to the target (target last). `optionIds` empty +
  *  `routeChain` null ⇒ "not a carrier of this target". */
-interface CarrierMatch {
+export interface CarrierMatch {
   optionIds: string[];
   routeChain: string[] | null;
 }
@@ -274,8 +274,11 @@ function reachCovers(
  *  the transitive closure). Returns the matching option ids in order
  *  plus the route chain captured from the FIRST matching ref — one-hop
  *  refs yield `[targetUuid]`, multi-hop yield `[X, …, targetUuid]`.
- *  Cycle- and depth-guarded by `reachPath`. */
-function carrierOptionIdsFor(
+ *  Cycle- and depth-guarded by `reachPath`. Exported so the constraint
+ *  reach-selector UI (`TargetReachSection.vue`) can enumerate nested-via-
+ *  carrier target occurrences with the SAME match logic the badge layer
+ *  uses — keeps the pick checklist and the rendered pairings in lockstep. */
+export function carrierOptionIdsFor(
   carrier: ChainModule,
   targetUuid: string,
   lookup: (uuid: string) => string[],
