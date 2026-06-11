@@ -84,6 +84,27 @@ def test_record_pick_multi_stores_values_and_union_tags():
     assert rec["id"] == "o1"
 
 
+def test_record_pick_multi_carries_per_pick_structure():
+    from engine.modules.wildcard_handler import _record_pick_multi
+    ctx = {"__wp_current_module_id__": "m1"}
+    chosen = [
+        {"value": "red", "sub_categories": ["warm"], "id": "o1"},
+        {"value": "blue", "sub_categories": ["cool"], "id": "o2"},
+    ]
+    _record_pick_multi(ctx, chosen, ", ")
+    rec = ctx["__wp_picks__"]["m1"]
+    assert rec["picks"] == [{"value": "red", "tags": ["warm"]}, {"value": "blue", "tags": ["cool"]}]
+    assert rec["value"] == "red, blue"
+    assert rec["values"] == ["red", "blue"]
+
+
+def test_record_pick_single_carries_one_pick():
+    from engine.modules.wildcard_handler import _record_pick
+    ctx = {"__wp_current_module_id__": "m1"}
+    _record_pick(ctx, {"value": "red", "sub_categories": ["warm"], "id": "o1"})
+    assert ctx["__wp_picks__"]["m1"]["picks"] == [{"value": "red", "tags": ["warm"]}]
+
+
 def test_multi_pick_binds_listvar_unique():
     from engine.syntax.types import ListVar
     out = WildcardHandler.resolve(
@@ -155,29 +176,34 @@ def test_single_pick_default_binds_string():
     assert isinstance(out["c"], str)
 
 
-def test_constraint_source_multi_pick_emits_warning():
-    """SP2a guard: when a constraint SOURCE was a multi-pick (recorded a
-    `values` list of >1), the applier only honors the first tag and can't
-    match value-pair exceptions, so it must surface a warning. Full per-pick
-    constraint application is deferred to SP3."""
+def test_apply_constraint_multi_tag_option_multiplies():
+    """SP3: an option carrying MULTIPLE tags matched by the source's matrix
+    row multiplies one factor per matched cell. Here boost(2.0)×reduce(0.5)
+    on the two tags cancels to 1.0 — exercising the multi-tag combine path
+    the SP2a single-primary-tag applier could not."""
     from engine.modules.wildcard_handler import _apply_constraint_to_options
+    options = [{"value": "x", "sub_categories": ["somber", "tense"], "weight": 1.0}]
+    constraint = {"matrix": {"rainy": {"somber": {"mode": "boost", "factor": 2.0},
+                                       "tense":  {"mode": "reduce", "factor": 0.5}}},
+                  "exceptions": []}
+    # Carries both legacy `sub_categories` (what the SP2a primary-tag applier
+    # read) and SP3 `picks`, so the OLD code would boost only on the primary
+    # tag → 2.0, while the NEW combine path multiplies both cells → 1.0.
+    src = {"value": "rain", "sub_categories": ["rainy"],
+           "picks": [{"value": "rain", "tags": ["rainy"]}]}
+    out = _apply_constraint_to_options(options, constraint, src, [])
+    assert out[0]["weight"] == 1.0
 
-    opts = [{"id": "t1", "value": "x", "weight": 1, "sub_categories": ["a"]}]
-    constraint = {"matrix": {}, "exceptions": []}
 
-    warns: list = []
-    multi_src = {
-        "value": "red, blue", "values": ["red", "blue"],
-        "sub_categories": ["warm", "cool"],
-    }
-    _apply_constraint_to_options(opts, constraint, multi_src, warns)
-    assert any(w["type"] == "constraint_source_multi_pick" for w in warns)
-
-    # Single-pick source (no `values` list) must NOT warn.
-    warns2: list = []
-    single_src = {"value": "red", "sub_categories": ["warm"]}
-    _apply_constraint_to_options(opts, constraint, single_src, warns2)
-    assert not any(w["type"] == "constraint_source_multi_pick" for w in warns2)
+def test_apply_constraint_no_multi_pick_warning():
+    """SP3 drops the SP2a `constraint_source_multi_pick` guard — a multi-pick
+    source now applies per-pick, so there is nothing to warn about."""
+    from engine.modules.wildcard_handler import _apply_constraint_to_options
+    warns = []
+    src = {"picks": [{"value": "a", "tags": []}, {"value": "b", "tags": []}], "values": ["a", "b"]}
+    _apply_constraint_to_options([{"value": "x", "sub_categories": [], "weight": 1.0}],
+                                 {"matrix": {}, "exceptions": []}, src, warns)
+    assert not any(w.get("type") == "constraint_source_multi_pick" for w in warns)
 
 
 def test_multi_pick_non_numeric_fields_dont_crash():

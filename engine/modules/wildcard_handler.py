@@ -81,122 +81,153 @@ def _apply_constraint_to_options(
     adjustment_warnings: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Adjust option weights according to a single constraint, given the
-    already-picked source option.
+    already-picked source option(s).
 
-    Two layers, in order:
-      1. Matrix lookup keyed by `(source.sub_category, target.sub_category)`,
-         where an option's "sub_category" is its PRIMARY tag
-         (`sub_categories[0]`, or None when untagged). SP1 stopgap — true
-         multi-tag matrix matching (an option on N rows → multiply) is
-         SP3. Bulk rule expressing "long hair allows positive moods" etc.
-      2. Exception lookup keyed by the literal `(source.value, target.value)`
-         pair. Overrides the matrix cell when present — narrower rule wins.
+    SP3: weight adjustment is delegated to
+    :func:`engine.modules._constraint_math.combine_constraint_factor`, which
+    multiplies one factor per matching matrix cell (an option on N source-tag
+    rows multiplies N times — true multi-tag) across every source pick (true
+    multi-pick). The exception layer (literal `(source_value, target_value)`
+    pair) still overrides the matrix for that pick, and `exclude` is absorbing
+    (factor 0 → weight 0, option drops out).
 
-    Modes:
-      - ``allow``   → no change to weight (factor honoured but typically 1).
-      - ``exclude`` → weight set to 0 (option drops out of the pool).
-      - ``boost``   → multiply weight by factor (expect factor > 1).
-      - ``reduce``  → multiply weight by factor (expect factor < 1).
+    `source_pick["picks"]` is the per-pick list (`[{value, tags}]`) recorded by
+    `_record_pick` / `_record_pick_multi`. Legacy callers that hand-build a
+    source dict without it fall back to a single synthetic pick from the
+    top-level `value` + `sub_categories`.
 
-    Options not covered by either matrix or exception keep their
-    original weight. Returns shallow-copied list — the input options
-    array is never mutated, so the underlying snapshot stays clean
-    across runs.
+    Returns a shallow-copied list — the input options array is never mutated,
+    so the underlying snapshot stays clean across runs.
+
+    `adjustment_warnings` (optional) collects editor-footgun warnings the
+    caller forwards to the chain warning list:
+      - ``constraint_factor_ignored_on_allow`` — a `mode: allow` cell carries a
+        non-1 factor (user expects weight×factor, engine ignores it).
+      - ``unknown_constraint_mode`` — a typo'd mode (`exlcude`/`alllow`) the
+        combine fn treats as a no-op.
+    These are diagnostic only; they never change the computed weight.
     """
+    from engine.modules._constraint_math import EXCLUDE, combine_constraint_factor
+
     matrix = constraint.get("matrix") or {}
     exceptions = constraint.get("exceptions") or []
-    src_value = str(source_pick.get("value", ""))
-    # Primary tag = first of sub_categories (SP1 stopgap; SP3 multiplies).
-    src_subs = source_pick.get("sub_categories") or []
-    src_sub = src_subs[0] if src_subs else None
 
-    # SP2a guard: a multi-pick SOURCE recorded a `values` list (>1) + a UNION
-    # of every pick's tags, but this applier still keys the matrix on a single
-    # primary tag (src_sub) and exceptions on the literal joined value. So only
-    # the first picked option's tag drives the matrix, and value-pair
-    # exceptions never match the joined `src_value`. Warn once (not per option)
-    # so the user isn't silently misled; true per-pick application is SP3.
-    src_values = source_pick.get("values")
-    if (
-        isinstance(src_values, list)
-        and len(src_values) > 1
-        and adjustment_warnings is not None
-    ):
-        adjustment_warnings.append({
-            "type": "constraint_source_multi_pick",
-            "src_values": list(src_values),
-        })
+    # Per-pick source list (SP3). Fall back to a single synthetic pick for
+    # legacy callers that pass only the top-level value + sub_categories.
+    picks = source_pick.get("picks")
+    if not isinstance(picks, list):
+        picks = [{
+            "value": source_pick.get("value", ""),
+            "tags": list(source_pick.get("sub_categories") or []),
+        }]
 
-    # Index exceptions by (source_value, target_value) for O(1) lookup.
-    # Empty string is a valid key — it's the null-option marker (a
-    # wildcard option with `is_null: True` has `value: ""`). So
-    # `{source: "rain", target: ""}` excludes the null option when the
-    # source rolls "rain". The validator allows empty strings on these
-    # fields for the same reason; only fully-missing keys (None on both
-    # legacy + tier-2 names) are rejected upstream.
-    exc_by_pair: dict[tuple[str, str], dict[str, Any]] = {}
-    for exc in exceptions:
-        if not isinstance(exc, dict):
-            continue
-        s = exc.get("source")
-        t = exc.get("target")
-        if isinstance(s, str) and isinstance(t, str):
-            exc_by_pair[(s, t)] = exc
-
-    matrix_row = matrix.get(src_sub) if src_sub else None
+    # Pre-scan for diagnostic warnings only. The combine fn intentionally
+    # treats `allow` and unknown modes as factor 1.0 (no weight change), so it
+    # can't surface them — mirror its (pick × option) rule selection here,
+    # exception-pair winning over matrix cell, and warn where the selected rule
+    # is an ignored-factor `allow` or an unrecognised mode.
+    if adjustment_warnings is not None:
+        _scan_constraint_warnings(
+            picks, options, matrix, exceptions, adjustment_warnings,
+        )
 
     adjusted: list[dict[str, Any]] = []
     for opt in options:
-        opt_value = str(opt.get("value", ""))
-        opt_subs = opt.get("sub_categories") or []
-        opt_sub = opt_subs[0] if opt_subs else None
+        option = {"value": opt.get("value", ""), "tags": opt.get("sub_categories") or []}
+        f = combine_constraint_factor(picks, option, matrix, exceptions)
         weight = float(opt.get("weight", 1))
-
-        # Exception layer (specific value pair) wins over matrix layer.
-        rule = exc_by_pair.get((src_value, opt_value))
-        if rule is None and isinstance(matrix_row, dict) and opt_sub is not None:
-            rule = matrix_row.get(opt_sub)
-
-        if isinstance(rule, dict):
-            mode = rule.get("mode")
-            try:
-                factor = float(rule.get("factor", 1.0))
-            except (TypeError, ValueError):
-                factor = 1.0
-            if mode == "exclude":
-                weight = 0.0
-            elif mode == "boost" or mode == "reduce":
-                weight = max(0.0, weight * factor)
-            elif mode == "allow":
-                # `allow` is a no-op weight-wise; surface a warning when
-                # the SPA stored a non-1 factor on it because that's
-                # almost certainly a user expecting weight*factor and
-                # silently getting full weight.
-                if factor != 1.0:
-                    out_warns = adjustment_warnings if adjustment_warnings is not None else None
-                    if out_warns is not None:
-                        out_warns.append({
-                            "type": "constraint_factor_ignored_on_allow",
-                            "factor": factor,
-                            "src_value": src_value,
-                            "opt_value": opt_value,
-                        })
-            else:
-                # Unknown mode — typo like "exlcude" / "alllow". Silent
-                # no-op was the worst-of-both: weight unchanged + zero
-                # signal that the rule was malformed. Bubble it up so
-                # the caller can emit a `unknown_constraint_mode` warning.
-                out_warns = adjustment_warnings if adjustment_warnings is not None else None
-                if out_warns is not None:
-                    out_warns.append({
-                        "type": "unknown_constraint_mode",
-                        "mode": mode,
-                        "src_value": src_value,
-                        "opt_value": opt_value,
-                    })
-
+        weight = 0.0 if f is EXCLUDE else max(0.0, weight * float(f))
         adjusted.append({**opt, "weight": weight})
     return adjusted
+
+
+_KNOWN_CONSTRAINT_MODES = frozenset({"allow", "exclude", "boost", "reduce"})
+
+
+def _exc_pair_index(exceptions: list[Any]) -> dict[tuple[str, str], dict[str, Any]]:
+    """Index exceptions by (source_value, target_value), mirroring the
+    combine fn's key fallback (tier-2 `source_value`/`target_value` names,
+    then legacy `source`/`target`). Empty string is a valid key — it's the
+    null-option marker (`is_null` options carry `value: ""`)."""
+    out: dict[tuple[str, str], dict[str, Any]] = {}
+    for exc in exceptions or []:
+        if not isinstance(exc, dict):
+            continue
+        s = exc.get("source_value")
+        if s is None:
+            s = exc.get("source")
+        t = exc.get("target_value")
+        if t is None:
+            t = exc.get("target")
+        if isinstance(s, str) and isinstance(t, str):
+            out[(s, t)] = exc
+    return out
+
+
+def _scan_constraint_warnings(
+    picks: list[dict[str, Any]],
+    options: list[dict[str, Any]],
+    matrix: dict[str, Any],
+    exceptions: list[Any],
+    adjustment_warnings: list[dict[str, Any]],
+) -> None:
+    """Append `constraint_factor_ignored_on_allow` / `unknown_constraint_mode`
+    diagnostics for the rules that fire (per pick × option). Selection order
+    matches `combine_constraint_factor`: an exception on the literal value pair
+    wins over a matrix cell, and only the matched rule is inspected."""
+    exc_by_pair = _exc_pair_index(exceptions)
+    for pick in picks:
+        p_value = str(pick.get("value", ""))
+        p_tags = pick.get("tags") or []
+        for opt in options:
+            opt_value = str(opt.get("value", ""))
+            opt_tags = opt.get("sub_categories") or []
+
+            exc = exc_by_pair.get((p_value, opt_value))
+            if exc is not None:
+                _warn_for_rule(exc, p_value, opt_value, adjustment_warnings)
+                continue
+
+            for s in p_tags:
+                row = matrix.get(s)
+                if not isinstance(row, dict):
+                    continue
+                for t in opt_tags:
+                    rule = row.get(t)
+                    if isinstance(rule, dict):
+                        _warn_for_rule(rule, p_value, opt_value, adjustment_warnings)
+
+
+def _warn_for_rule(
+    rule: dict[str, Any],
+    src_value: str,
+    opt_value: str,
+    adjustment_warnings: list[dict[str, Any]],
+) -> None:
+    mode = rule.get("mode")
+    if mode == "allow":
+        # `allow` is a weight no-op; a non-1 factor is almost certainly a
+        # user expecting weight×factor and silently getting full weight.
+        try:
+            factor = float(rule.get("factor", 1.0))
+        except (TypeError, ValueError):
+            factor = 1.0
+        if factor != 1.0:
+            adjustment_warnings.append({
+                "type": "constraint_factor_ignored_on_allow",
+                "factor": factor,
+                "src_value": src_value,
+                "opt_value": opt_value,
+            })
+    elif mode not in _KNOWN_CONSTRAINT_MODES:
+        # Typo like "exlcude" / "alllow". The combine fn no-ops it; bubble up
+        # so the caller can surface `unknown_constraint_mode`.
+        adjustment_warnings.append({
+            "type": "unknown_constraint_mode",
+            "mode": mode,
+            "src_value": src_value,
+            "opt_value": opt_value,
+        })
 
 
 def _record_pick(ctx: Any, chosen: dict[str, Any]) -> None:
@@ -213,6 +244,13 @@ def _record_pick(ctx: Any, chosen: dict[str, Any]) -> None:
             "value": chosen.get("value"),
             "sub_categories": chosen.get("sub_categories", []),
             "id": chosen.get("id"),
+            # SP3: per-pick list the combine fn reads. A single pick is a
+            # one-element list so the multi-tag/multi-pick applier has a
+            # uniform shape regardless of single- vs multi-select source.
+            "picks": [{
+                "value": chosen.get("value", ""),
+                "tags": list(chosen.get("sub_categories") or []),
+            }],
         }
 
 
@@ -233,11 +271,19 @@ def _record_pick_multi(ctx: Any, chosen_list: list[dict[str, Any]], sep: str) ->
         for t in (c.get("sub_categories") or []):
             if t not in union:
                 union.append(t)
+    # SP3: per-pick list (value + that pick's own tags, NOT the union) so the
+    # combine fn can apply the matrix per pick. The union above stays for the
+    # debug Picks view; `picks` is what constraint application reads.
+    per_pick = [
+        {"value": str(c.get("value", "")), "tags": list(c.get("sub_categories") or [])}
+        for c in chosen_list
+    ]
     bucket[module_id] = {
         "value": sep.join(values),
         "values": values,
         "sub_categories": union,
         "id": chosen_list[0].get("id") if chosen_list else None,
+        "picks": per_pick,
     }
 
 
