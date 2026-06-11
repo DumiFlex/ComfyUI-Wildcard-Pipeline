@@ -283,6 +283,16 @@ function reachCovers(
   }
 }
 
+/** Carrier key for a derivation branch occurrence -- the `option_id` the SP3
+ *  nested-occurrence model matches a constraint `pick` against. `bi` is the
+ *  0-based branch index (0 = IF) or the literal `"else"`. MUST stay
+ *  byte-identical to the engine twin `branch_carrier_key` in
+ *  `engine/modules/derivation_handler.py`; both are corpus-locked against
+ *  `tests/fixtures/constraint-corpus.json` `branch_key_cases`. */
+export function branchKey(ruleId: string, bi: number | string): string {
+  return `${ruleId}:${bi}`;
+}
+
 /** The ref-bearing `(id, value)` entries of a carrier. For a wildcard these
  *  are its options (`option.id` -> `option.value`). For a derivation they are
  *  its rule action values, keyed by the branch key `${rule_id}:${bi}` /
@@ -305,10 +315,10 @@ function refBearingEntries(carrier: ChainModule): Array<{ id: string; value: str
       const branches = Array.isArray(r?.branches) ? r.branches : [];
       branches.forEach((b, bi) => {
         const v = b?.action?.value;
-        if (typeof v === "string") out.push({ id: `${ruleId}:${bi}`, value: v });
+        if (typeof v === "string") out.push({ id: branchKey(ruleId, bi), value: v });
       });
       const elseV = r?.else?.action?.value;
-      if (typeof elseV === "string") out.push({ id: `${ruleId}:else`, value: elseV });
+      if (typeof elseV === "string") out.push({ id: branchKey(ruleId, "else"), value: elseV });
     }
     return out;
   }

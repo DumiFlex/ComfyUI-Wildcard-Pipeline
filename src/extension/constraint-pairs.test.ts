@@ -1,10 +1,21 @@
 import { describe, it, expect } from "vitest";
-import { computePairings, computePairingsFull, carrierOptionIdsFor, CARRIER_TYPES, type ChainModule } from "./constraint-pairs";
+import { computePairings, computePairingsFull, carrierOptionIdsFor, CARRIER_TYPES, branchKey, type ChainModule } from "./constraint-pairs";
 import { varColorIndex } from "../components/shared/var-color";
+import corpus from "../../tests/fixtures/constraint-corpus.json";
 
 function module_(id: string, type: string, payload: Record<string, unknown> = {}, rowKey?: string): ChainModule {
   return { id, rowKey: rowKey ?? id, type, payload };
 }
+
+// Py≡TS branch-key parity: `branchKey` MUST produce the byte-identical string
+// the engine stamps as the carrier option_id (derivation_handler
+// `branch_carrier_key`). The shared corpus is the single source of truth so the
+// two formats cannot drift independently.
+describe("branchKey — Py≡TS branch-key parity (corpus)", () => {
+  it.each(corpus.branch_key_cases)("$name -> $key", (c: { rule_id: string; branch: number | string; key: string }) => {
+    expect(branchKey(c.rule_id, c.branch)).toBe(c.key);
+  });
+});
 
 /** Pair color hashed from `senderRowKey + ':' + targetUuid`, mirroring
  *  the production formula in `computePairingsFull`. Each (sender, target)

@@ -144,6 +144,18 @@ def _match_condition(condition: dict[str, Any], ctx: Any) -> bool:
     return False
 
 
+def branch_carrier_key(rule_id: str, branch: int | str) -> str:
+    """Carrier key for a derivation branch occurrence -- the `option_id` the
+    SP3 nested-occurrence model matches a constraint `pick` against. `branch`
+    is the 0-based branch index (0 = IF) or the literal ``"else"``.
+
+    MUST stay byte-identical to the TS twin ``branchKey`` in
+    ``src/extension/constraint-pairs.ts``; both are corpus-locked against
+    ``tests/fixtures/constraint-corpus.json`` ``branch_key_cases``.
+    """
+    return f"{rule_id}:{branch}"
+
+
 def _apply_action(
     action: dict[str, Any],
     ctx: Any,
@@ -327,7 +339,7 @@ class DerivationHandler(ModuleHandler):
                 # Branch-level disable — `r1:1` etc. IF (bi=0) ignored
                 # even when listed because disabling IF == disabling rule
                 # (the per-rule toggle handles that case cleanly).
-                if bi != 0 and f"{rule_id}:{bi}" in disabled_branch_keys:
+                if bi != 0 and branch_carrier_key(rule_id, bi) in disabled_branch_keys:
                     continue
 
                 # Condition-value override per branch index.
@@ -351,7 +363,9 @@ class DerivationHandler(ModuleHandler):
                     if isinstance(action_override, str):
                         action = {**action, "value": action_override}
 
-                    pair = _apply_action(action, ctx, resolve_ctx, carrier_key=f"{rule_id}:{bi}")
+                    pair = _apply_action(
+                        action, ctx, resolve_ctx, carrier_key=branch_carrier_key(rule_id, bi)
+                    )
                     if pair is not None:
                         out[pair[0]] = pair[1]
                     applied = True
@@ -359,7 +373,7 @@ class DerivationHandler(ModuleHandler):
 
             if not applied:
                 # ELSE skip when listed in disabled_branch_keys.
-                if f"{rule_id}:else" in disabled_branch_keys:
+                if branch_carrier_key(rule_id, "else") in disabled_branch_keys:
                     continue
                 else_clause = rule.get("else")
                 if isinstance(else_clause, dict):
@@ -372,7 +386,9 @@ class DerivationHandler(ModuleHandler):
                     )
                     if isinstance(action_override, str):
                         action = {**action, "value": action_override}
-                    pair = _apply_action(action, ctx, resolve_ctx, carrier_key=f"{rule_id}:else")
+                    pair = _apply_action(
+                        action, ctx, resolve_ctx, carrier_key=branch_carrier_key(rule_id, "else")
+                    )
                     if pair is not None:
                         out[pair[0]] = pair[1]
         return out
