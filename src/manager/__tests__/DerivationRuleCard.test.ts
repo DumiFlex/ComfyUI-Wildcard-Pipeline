@@ -1,6 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 import DerivationRuleCard from "../components/DerivationRuleCard.vue";
+import RichTextInput from "../components/RichTextInput.vue";
 import type { DerivationRule } from "../api/types";
 
 function makeRule(overrides: Partial<DerivationRule> = {}): DerivationRule {
@@ -226,6 +227,52 @@ describe("DerivationRuleCard.vue", () => {
     expect(hint.exists()).toBe(true);
     expect(hint.text()).toContain("$var");
     expect(hint.text()).toContain("{a|b|c}");
+    // Bug #1: action values are @{} carriers post-Layer-A → hint advertises it.
+    expect(hint.text()).toContain("@{");
+  });
+
+  // ── Bug #1: action values reuse the wildcard @{} nested-ref machinery ──
+
+  it("action + ELSE value inputs get allowNestedRefs + ref-data; condition value does NOT", () => {
+    const wrap = mount(DerivationRuleCard, {
+      props: {
+        modelValue: makeRule({
+          else: { action: { target_var: "o", mode: "replace", value: "e" } },
+        }),
+        index: 0,
+        varSuggestions: ["mood"],
+        refSuggestions: ["aabbccdd"],
+        uuidToName: new Map([["aabbccdd", "color"]]),
+        uuidToSubCategories: new Map([["aabbccdd", ["warm"]]]),
+        uuidToHasNull: new Map([["aabbccdd", false]]),
+        uuidToOptionsCount: new Map([["aabbccdd", 3]]),
+        uuidToOptionTagSets: new Map([["aabbccdd", [["warm"]]]]),
+        uuidToTagGroups: new Map([["aabbccdd", {}]]),
+      },
+    });
+    const rtis = wrap.findAllComponents(RichTextInput);
+    const byTest = (t: string) => rtis.find((c) => c.attributes("data-test") === t);
+
+    const condVal = byTest("cond-value-0-0");
+    const actVal = byTest("act-value-0-0");
+    const elseVal = byTest("else-value-0");
+    expect(condVal).toBeDefined();
+    expect(actVal).toBeDefined();
+    expect(elseVal).toBeDefined();
+
+    // Condition value: engine compares it RAW → no @{} carrier machinery.
+    expect(condVal!.props("allowNestedRefs")).toBeFalsy();
+
+    // Action + ELSE values: @{} carriers → reuse the full wildcard machinery.
+    for (const rti of [actVal!, elseVal!]) {
+      expect(rti.props("allowNestedRefs")).toBe(true);
+      expect(rti.props("refSuggestions")).toEqual(["aabbccdd"]);
+      expect(rti.props("uuidToSubCategories")).toBeInstanceOf(Map);
+      expect(rti.props("uuidToHasNull")).toBeInstanceOf(Map);
+      expect(rti.props("uuidToOptionsCount")).toBeInstanceOf(Map);
+      expect(rti.props("uuidToOptionTagSets")).toBeInstanceOf(Map);
+      expect(rti.props("uuidToTagGroups")).toBeInstanceOf(Map);
+    }
   });
 
   // ── 2026-05-24 final design: segmented refinement under `exists` ──

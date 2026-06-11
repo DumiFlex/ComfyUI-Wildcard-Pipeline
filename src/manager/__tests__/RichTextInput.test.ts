@@ -1148,3 +1148,76 @@ describe("RichTextInput / RichTextPreview — useResolveWarnings merge", () => {
     wrap.unmount();
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────
+// Bug #1 — derivation ACTION values reuse the wildcard `@{}` machinery via
+// the `allowNestedRefs` prop. The engine resolves @{} in a derivation action
+// value (carrier) post-Layer-A, so the SPA must chipify + autocomplete it
+// THERE — but NOT in condition values (engine compares condition.value raw),
+// which is the default (allowNestedRefs omitted).
+// ─────────────────────────────────────────────────────────────────────
+describe("allowNestedRefs — derivation action-value @{} reuse", () => {
+  it("derivation + allowNestedRefs: @{uuid} renders as a ref chip", () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "@{aabbccdd}",
+        surface: "derivation",
+        allowNestedRefs: true,
+        uuidToName: new Map([["aabbccdd", "color"]]),
+      },
+    });
+    expect(wrap.findAll(".wp-refchip--ref").length).toBe(1);
+    wrap.unmount();
+  });
+
+  it("derivation WITHOUT allowNestedRefs (condition value): @{uuid} stays plain text", () => {
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "@{aabbccdd}", surface: "derivation" },
+    });
+    expect(wrap.findAll(".wp-refchip--ref").length).toBe(0);
+    wrap.unmount();
+  });
+
+  it("derivation + allowNestedRefs: $var STILL chips (both kinds settle)", () => {
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "$mood", surface: "derivation", allowNestedRefs: true },
+    });
+    expect(wrap.findAll(".wp-refchip--var").length).toBe(1);
+    wrap.unmount();
+  });
+
+  it("derivation + allowNestedRefs: @ autocomplete popover lists ref suggestions", async () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "",
+        surface: "derivation",
+        allowNestedRefs: true,
+        refSuggestions: ["aabbccdd"],
+        uuidToName: new Map([["aabbccdd", "color"]]),
+      },
+      attachTo: document.body,
+    });
+    await (wrap.vm as unknown as { __triggerAutocompleteForTest: (t: "@" | "$") => Promise<void> })
+      .__triggerAutocompleteForTest("@");
+    await flushPromises();
+    expect(document.querySelectorAll(".wp-rt-suggestions__item").length).toBeGreaterThan(0);
+    wrap.unmount();
+  });
+
+  it("derivation WITHOUT allowNestedRefs: @ autocomplete popover is empty (gated)", async () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "",
+        surface: "derivation",
+        refSuggestions: ["aabbccdd"],
+        uuidToName: new Map([["aabbccdd", "color"]]),
+      },
+      attachTo: document.body,
+    });
+    await (wrap.vm as unknown as { __triggerAutocompleteForTest: (t: "@" | "$") => Promise<void> })
+      .__triggerAutocompleteForTest("@");
+    await flushPromises();
+    expect(document.querySelectorAll(".wp-rt-suggestions__item").length).toBe(0);
+    wrap.unmount();
+  });
+});

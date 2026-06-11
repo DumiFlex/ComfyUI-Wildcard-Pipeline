@@ -36,6 +36,7 @@ import { useRecentStore } from "../stores/recentStore";
 import { toIdentifier, VALID_IDENTIFIER_RE } from "../utils/slug";
 import { validateSubcatName } from "@/manager/parsing/subcatFilter";
 import {
+  buildWildcardRefData,
   collectLibraryWildcardRefs,
 } from "../utils/library-suggestions";
 import { appendSnapshot, readHistory } from "../utils/history";
@@ -231,101 +232,20 @@ const wcSuggestions = computed<string[]>(
   () => collectLibraryWildcardRefs(moduleStore, props.id, nameByUuid.value),
 );
 
-// UUID → display-name map used by RichTextInput to render `@{uuid}`
-// chips and the `@`-trigger autocomplete popover with human labels.
-// Keyed by `mod.id` (= 8-hex uuid) so the popover, the inline chip,
-// and the resolver all agree on identity.
-const nameByUuid = computed<Map<string, string>>(() => {
-  const m = new Map<string, string>();
-  for (const mod of moduleStore.catalog) {
-    if (mod.type !== "wildcard") continue;
-    const p = (mod.payload ?? {}) as { var_binding?: string };
-    const display = (p.var_binding && p.var_binding.trim()) || toIdentifier(mod.name);
-    if (display) m.set(mod.id, display);
-  }
-  return m;
-});
-
-// UUID → sub_categories[] map used by RichTextInput's step-2 picker
-// to surface the chosen wildcard's declared sub-category filters.
-// Wildcards without declared sub_categories map to an empty array so
-// the picker can still distinguish "known empty" from "missing entry".
-const uuidToSubCategories = computed<Map<string, string[]>>(() => {
-  const out = new Map<string, string[]>();
-  for (const mod of moduleStore.catalog) {
-    if (mod.type !== "wildcard") continue;
-    const subs = (mod.payload as { sub_categories?: unknown } | undefined)?.sub_categories;
-    if (Array.isArray(subs)) {
-      out.set(mod.id, subs.filter((s): s is string => typeof s === "string"));
-    } else {
-      out.set(mod.id, []);
-    }
-  }
-  return out;
-});
-
-/** Per-wildcard option count — drives the autocomplete row's right-
- *  side meta so two same-named wildcards (e.g. dupes from import) can
- *  be told apart by `N opts · 8hex` instead of looking identical. */
-const uuidToOptionsCount = computed<Map<string, number>>(() => {
-  const out = new Map<string, number>();
-  for (const mod of moduleStore.catalog) {
-    if (mod.type !== "wildcard") continue;
-    const opts = (mod.payload as { options?: unknown[] } | undefined)?.options;
-    out.set(mod.id, Array.isArray(opts) ? opts.length : 0);
-  }
-  return out;
-});
-
-/** Per-wildcard flag: true when the catalog row has an is_null option.
- *  Forwarded to RichTextInput so the nested-ref sub-cat picker can
- *  surface the "Include null" checkbox. */
-const uuidToHasNull = computed<Map<string, boolean>>(() => {
-  const out = new Map<string, boolean>();
-  for (const mod of moduleStore.catalog) {
-    if (mod.type !== "wildcard") continue;
-    const opts = (mod.payload as { options?: unknown[] } | undefined)?.options;
-    const has = Array.isArray(opts)
-      && opts.some((o) => (o as { is_null?: boolean } | null)?.is_null === true);
-    out.set(mod.id, has);
-  }
-  return out;
-});
-
-/** Per-wildcard option tag sets — each entry is one (non-null) option's
- *  `sub_categories`. Drives the nested-ref picker's "N of M match" count so
- *  the user can see when a filter would resolve empty instead of guessing (#2). */
-const uuidToOptionTagSets = computed<Map<string, string[][]>>(() => {
-  const out = new Map<string, string[][]>();
-  for (const mod of moduleStore.catalog) {
-    if (mod.type !== "wildcard") continue;
-    const opts = (mod.payload as { options?: unknown[] } | undefined)?.options;
-    const sets = Array.isArray(opts)
-      ? opts
-          .filter((o) => !(o as { is_null?: boolean } | null)?.is_null)
-          .map((o) => {
-            const sc = (o as { sub_categories?: unknown } | null)?.sub_categories;
-            return Array.isArray(sc)
-              ? sc.filter((s): s is string => typeof s === "string")
-              : [];
-          })
-      : [];
-    out.set(mod.id, sets);
-  }
-  return out;
-});
-
-/** Per-wildcard `tag_groups` axes — drives the picker's grouped insert
- *  palette so a nested-ref filter shows the target's groups, not a flat list. */
-const uuidToTagGroups = computed<Map<string, Record<string, string[]>>>(() => {
-  const out = new Map<string, Record<string, string[]>>();
-  for (const mod of moduleStore.catalog) {
-    if (mod.type !== "wildcard") continue;
-    const tg = (mod.payload as { tag_groups?: unknown } | undefined)?.tag_groups;
-    out.set(mod.id, tg && typeof tg === "object" ? (tg as Record<string, string[]>) : {});
-  }
-  return out;
-});
+// All six per-wildcard maps RichTextInput's `@{}` nested-ref UI consumes
+// (display name, declared sub-cats, has-null, option count, per-option tag
+// sets, tag-group axes) built in ONE catalog pass by the shared
+// `buildWildcardRefData` walker (utils/library-suggestions) — the SAME
+// source the derivation editor now reuses for its action-value carriers.
+// The thin wrappers below preserve the existing binding names so the
+// template + `wcSuggestions` sort key are untouched.
+const refData = computed(() => buildWildcardRefData(moduleStore.catalog));
+const nameByUuid = computed(() => refData.value.uuidToName);
+const uuidToSubCategories = computed(() => refData.value.uuidToSubCategories);
+const uuidToOptionsCount = computed(() => refData.value.uuidToOptionsCount);
+const uuidToHasNull = computed(() => refData.value.uuidToHasNull);
+const uuidToOptionTagSets = computed(() => refData.value.uuidToOptionTagSets);
+const uuidToTagGroups = computed(() => refData.value.uuidToTagGroups);
 
 // Var-suggestions removed: wildcard option values don't support $name
 // substitution at runtime (only @{uuid} nested refs + {a|b|c} inline

@@ -27,8 +27,11 @@ import { useModuleStore } from "../stores/moduleStore";
 import { useRecentStore } from "../stores/recentStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { appendSnapshot, readHistory } from "../utils/history";
-import { buildUuidToName } from "../utils/wildcardSyntax";
-import { collectLibraryVarHints } from "../utils/library-suggestions";
+import {
+  buildWildcardRefData,
+  collectLibraryVarHints,
+  collectLibraryWildcardRefs,
+} from "../utils/library-suggestions";
 import { useCascadeStore } from "../cascade/cascade-store";
 import { useCascadeApply } from "../cascade/useCascadeApply";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
@@ -171,11 +174,17 @@ const varSuggestions = computed<string[]>(
   () => collectLibraryVarHints(moduleStore, props.id).map((h) => h.label),
 );
 
-// 8-hex UUID → wildcard var-name. Forwarded into every nested
-// DerivationRuleCard so stray `@{uuid}` tokens (pasted, copied from a
-// wildcard editor, etc.) render as `@name` chips even though `@` refs
-// don't resolve on the derivation surface.
-const uuidToName = computed(() => buildUuidToName(moduleStore.catalog));
+// Wildcard-ref data (display names + the sub-cat picker maps) built ONCE from
+// the catalog by the shared `buildWildcardRefData` walker — the SAME source
+// the wildcard editor uses. Forwarded to each DerivationRuleCard so ACTION
+// values reuse the wildcard `@{}` nested-ref machinery (autocomplete + chips
+// + step-2 picker). `@{}` resolves on the derivation surface as a carrier
+// post-Layer-A (engine/syntax/resolve.py); condition values stay raw.
+const refData = computed(() => buildWildcardRefData(moduleStore.catalog));
+const uuidToName = computed(() => refData.value.uuidToName);
+const refSuggestions = computed(() =>
+  collectLibraryWildcardRefs(moduleStore, props.id, refData.value.uuidToName),
+);
 
 let ruleSeq = 0;
 function newRuleId(): string {
@@ -458,6 +467,12 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
           :index="idx"
           :var-suggestions="varSuggestions"
           :uuid-to-name="uuidToName"
+          :ref-suggestions="refSuggestions"
+          :uuid-to-sub-categories="refData.uuidToSubCategories"
+          :uuid-to-has-null="refData.uuidToHasNull"
+          :uuid-to-options-count="refData.uuidToOptionsCount"
+          :uuid-to-option-tag-sets="refData.uuidToOptionTagSets"
+          :uuid-to-tag-groups="refData.uuidToTagGroups"
           :default-collapsed="rules.length > 1"
           :data-test="`rule-${idx}`"
           @update:model-value="(v) => updateRule(idx, v)"

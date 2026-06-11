@@ -145,6 +145,12 @@ interface Props {
   placeholder?: string;
   varSuggestions?: string[];
   refSuggestions?: string[];
+  /** Opt-in: enable the `@{}` nested-wildcard-ref machinery (autocomplete
+   *  popover + sub-cat picker + ref chips) on a NON-wildcard surface. Set by
+   *  the derivation editor on ACTION-value inputs — the engine resolves `@{}`
+   *  there (carrier) but compares `condition.value` raw, so condition inputs
+   *  leave this false. The `wildcard` surface enables refs regardless. */
+  allowNestedRefs?: boolean;
   /** Map from UUID to display name; used to render `@{uuid}` refs as human labels. */
   uuidToName?: Map<string, string>;
   /** Map from wildcard UUID → its declared sub_categories. Used by the
@@ -187,6 +193,7 @@ const props = withDefaults(defineProps<Props>(), {
   placeholder: "",
   varSuggestions: () => [],
   refSuggestions: () => [],
+  allowNestedRefs: false,
   uuidToName: () => new Map(),
   uuidToSubCategories: () => new Map(),
   uuidToHasNull: () => new Map(),
@@ -207,6 +214,12 @@ const effectiveWarnings = computed<ResolveWarning[]>(() => [
   ...props.warnings,
   ...storeWarnings.value,
 ]);
+
+/** `@{}` nested-ref machinery is live when the surface is `wildcard` OR the
+ *  host opted in via `allowNestedRefs` (derivation action values). Single
+ *  source for the parse-collapse + the `@`-autocomplete gate so they can't
+ *  drift apart. */
+const refsEnabled = computed(() => props.surface === "wildcard" || props.allowNestedRefs);
 
 const emit = defineEmits<{
   "update:modelValue": [value: string];
@@ -394,6 +407,10 @@ function parseForSurface(text: string): Atom[] {
       : props.surface === "fixed_values"
         ? new Set(["var", "ref"])
         : new Set(["ref"]);
+  // Action-value derivation inputs (allowNestedRefs) chipify `@{}` refs like
+  // the wildcard surface does — drop `ref` from the collapse set so they
+  // settle into chips instead of staying literal text.
+  if (refsEnabled.value) collapseSet.delete("ref");
   const out: Atom[] = [];
   for (const a of atoms) {
     if ((a.kind === "var" || a.kind === "ref") && collapseSet.has(a.kind)) {
@@ -594,7 +611,7 @@ function clampPickerIntoView(): void {
 // even before `uuidToName` is hydrated.
 const acItems = computed(() => {
   if (!acOpen.value) return [];
-  if (acTrigger.value === "@" && props.surface !== "wildcard") return [];
+  if (acTrigger.value === "@" && !refsEnabled.value) return [];
   const pool = acTrigger.value === "@" ? props.refSuggestions : props.varSuggestions;
   const q = acQuery.value.toLowerCase();
   const labelOf = acTrigger.value === "@"
@@ -690,9 +707,10 @@ function refreshAutocompleteFromHost(): void {
     acOpen.value = false;
     return;
   }
-  // Gate `@` autocomplete — only available in the "wildcard" surface
-  // (nested wildcard refs make sense only inside a wildcard option).
-  if (hit.trigger === "@" && props.surface !== "wildcard") {
+  // Gate `@` autocomplete — the wildcard surface always allows nested refs;
+  // other surfaces opt in via `allowNestedRefs` (derivation action values,
+  // which the engine resolves `@{}` on post-Layer-A).
+  if (hit.trigger === "@" && !refsEnabled.value) {
     acOpen.value = false;
     return;
   }

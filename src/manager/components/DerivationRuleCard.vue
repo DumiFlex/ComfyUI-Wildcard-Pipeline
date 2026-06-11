@@ -26,8 +26,18 @@ interface Props {
   index: number;
   varSuggestions?: string[];
   /** UUID → display-name map forwarded to every nested RichTextInput so
-   *  stray `@{uuid}` chips read as `@name` instead of raw hex. */
+   *  `@{uuid}` chips read as `@name` instead of raw hex. */
   uuidToName?: Map<string, string>;
+  /** Wildcard-ref autocomplete + step-2 sub-cat picker data, forwarded to
+   *  the ACTION-value inputs only (the engine resolves `@{}` there as a
+   *  carrier; condition values are compared raw). Same maps the wildcard
+   *  editor feeds — built once by `buildWildcardRefData`. */
+  refSuggestions?: string[];
+  uuidToSubCategories?: Map<string, string[]>;
+  uuidToHasNull?: Map<string, boolean>;
+  uuidToOptionsCount?: Map<string, number>;
+  uuidToOptionTagSets?: Map<string, string[][]>;
+  uuidToTagGroups?: Map<string, Record<string, string[]>>;
   /** Default-collapsed when many rules exist (set by editor). */
   defaultCollapsed?: boolean;
 }
@@ -35,6 +45,12 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   varSuggestions: () => [],
   uuidToName: () => new Map(),
+  refSuggestions: () => [],
+  uuidToSubCategories: () => new Map(),
+  uuidToHasNull: () => new Map(),
+  uuidToOptionsCount: () => new Map(),
+  uuidToOptionTagSets: () => new Map(),
+  uuidToTagGroups: () => new Map(),
   defaultCollapsed: false,
 });
 
@@ -136,12 +152,12 @@ function placeholderFor(op: DerivationOp): string {
 }
 
 /** Single-line hint shown below the action value input, listing the
- *  inline-syntax tokens the engine resolves on derivation surface
- *  (`resolve_text(action.value, surface="derivation")`). Keeps the
- *  copy in one place so wording stays consistent across rule + ELSE
- *  blocks. `@{uuid}` refs deliberately omitted — derivation surface
- *  doesn't resolve them per the surface gate matrix. */
-const SUPPORTED_SYNTAX_HINT = "Supports $var · {a|b|c} · $$ · {N$$sep$$...}";
+ *  syntax the engine resolves on the derivation surface
+ *  (`resolve_text(action.value, surface="derivation")`). Includes `@{}`
+ *  nested-wildcard refs — the derivation surface resolves them as carriers
+ *  post-Layer-A (engine/syntax/resolve.py). Kept in one place so the wording
+ *  stays consistent across the rule + ELSE action blocks. */
+const SUPPORTED_SYNTAX_HINT = "Supports $var · @{wildcard} · {a|b|c} · $$ · {N$$sep$$...}";
 
 /** Open a regex tester in a new tab when the user clicks the [?]
  *  affordance next to a `matches`-op condition value. Python flavor
@@ -440,8 +456,15 @@ const branchCount = computed(() => rule.value.branches.length);
           <RichTextInput
             :model-value="branch.action.value"
             surface="derivation"
+            allow-nested-refs
             :var-suggestions="varSuggestions"
             :uuid-to-name="uuidToName"
+            :ref-suggestions="refSuggestions"
+            :uuid-to-sub-categories="uuidToSubCategories"
+            :uuid-to-has-null="uuidToHasNull"
+            :uuid-to-options-count="uuidToOptionsCount"
+            :uuid-to-option-tag-sets="uuidToOptionTagSets"
+            :uuid-to-tag-groups="uuidToTagGroups"
             class="dvr-value-input"
             placeholder="The new / appended / prepended value"
             :aria-label="`Action value for rule ${ruleNumber} branch ${bi + 1}`"
@@ -497,8 +520,15 @@ const branchCount = computed(() => rule.value.branches.length);
           <RichTextInput
             :model-value="rule.else.action.value"
             surface="derivation"
+            allow-nested-refs
             :var-suggestions="varSuggestions"
             :uuid-to-name="uuidToName"
+            :ref-suggestions="refSuggestions"
+            :uuid-to-sub-categories="uuidToSubCategories"
+            :uuid-to-has-null="uuidToHasNull"
+            :uuid-to-options-count="uuidToOptionsCount"
+            :uuid-to-option-tag-sets="uuidToOptionTagSets"
+            :uuid-to-tag-groups="uuidToTagGroups"
             class="dvr-value-input"
             placeholder="The new / appended / prepended value"
             :aria-label="`ELSE action value for rule ${ruleNumber}`"
