@@ -30,6 +30,10 @@ import ExceptionsSection from "./sections/ExceptionsSection.vue";
 // exception chips, and autocomplete suggestions reflect the live
 // wildcard instead of the saved-matrix's frozen keys.
 import { cacheVersion, ensure, lookup } from "../../../../extension/preview-resolver";
+import ConstraintReattachSection from "./sections/ConstraintReattachSection.vue";
+import { walkRemap } from "../../bundles/uuid-remap";
+import { buildWildcardRefData } from "../../../../manager/utils/library-suggestions";
+import type { ModuleRow } from "../../../../manager/api/types";
 
 const props = withDefaults(
   defineProps<{
@@ -269,6 +273,64 @@ const targetName = computed(() => {
   return wildcardName(pl.target_wildcard_id);
 });
 
+/** A source/target id is DANGLING when non-empty but it resolves to nothing
+ *  — neither a sibling/chain wildcard (findWildcardModule) nor the
+ *  preview-resolver cache (lookup). Today this silently falls back to matrix
+ *  keys; here it raises the reattach banner (spec Component B "Detection"). */
+function isDangling(id: string | undefined): boolean {
+  if (typeof id !== "string" || id.length === 0) return false;
+  if (findWildcardModule(id)) return false;
+  void cacheVersion.value;
+  return lookup(id) === undefined;
+}
+const danglingSource = computed(() =>
+  isDangling(((props.module.payload ?? {}) as ConstraintPayload).source_wildcard_id),
+);
+const danglingTarget = computed(() =>
+  isDangling(((props.module.payload ?? {}) as ConstraintPayload).target_wildcard_id),
+);
+const hasDangling = computed(() => danglingSource.value || danglingTarget.value);
+const danglingSourceUuid = computed(() =>
+  ((props.module.payload ?? {}) as ConstraintPayload).source_wildcard_id ?? "",
+);
+const danglingTargetUuid = computed(() =>
+  ((props.module.payload ?? {}) as ConstraintPayload).target_wildcard_id ?? "",
+);
+
+/** WildcardRefData for the reattach dropdown — from the same cross-node +
+ *  sibling wildcard set the modal already merges (modulesForLookup). */
+const reattachRefData = computed(() => {
+  const rows = modulesForLookup.value.map((m) => ({
+    id: m.id, name: m.name ?? "", type: "wildcard", payload: m.payload,
+  }) as unknown as ModuleRow);
+  return buildWildcardRefData(rows);
+});
+
+/** Conservative blast-radius signal: the constraint reaches beyond the
+ *  current node when the cross-node chain spans more than one context. The
+ *  modal can't cheaply run a full reverse-dep, so this errs toward the
+ *  WARNING (the safer default for a silent cross-context library mutation). */
+const referencedElsewhere = computed(() => {
+  const chain = props.chainModules ?? [];
+  const contexts = new Set(chain.map((m) => m.rowKey.split("#")[0]));
+  return contexts.size > 1;
+});
+
+function onReattach(payload: { side: "source" | "target"; oldUuid: string; newUuid: string; newName: string }): void {
+  const pl = (props.module.payload ?? {}) as Record<string, unknown>;
+  // Single walkRemap pass over the constraint's OWN payload: repoints the
+  // source/target whole-string id AND any embedded @{oldUuid} in exception
+  // values (segments preserved). Matrix axes re-derive from the new wildcard
+  // via the existing liveSubCategories → sourceSubs/targetSubs path. Mirrors
+  // cascade-restore.ts:rewriteChildId, which already walkRemaps a constraint
+  // payload to repoint source/target + @{} refs.
+  const rewritten = walkRemap(pl, { [payload.oldUuid]: payload.newUuid }) as Record<string, unknown>;
+  emit("update", { payload: rewritten });
+  // Reattach edits source/target — library-defining — so it rides
+  // Save-to-library (rewrites the library row → every context that uses it).
+  emit("save-to-library");
+}
+
 // ── Target reach (SP3) ──────────────────────────────────────────
 //
 // Effective `target_select`: per-instance override wins, then the
@@ -426,6 +488,18 @@ function onSpaClick(): void {
       ><i class="pi pi-times" aria-hidden="true" /></button>
     </header>
 
+    <ConstraintReattachSection
+      v-if="hasDangling"
+      :dangling-source="danglingSource"
+      :dangling-target="danglingTarget"
+      :source-uuid="danglingSourceUuid"
+      :source-cached-name="sourceName"
+      :target-uuid="danglingTargetUuid"
+      :target-cached-name="targetName"
+      :ref-data="reattachRefData"
+      :referenced-elsewhere="referencedElsewhere"
+      @reattach="onReattach"
+    />
     <IdentitySection :module="module" @update="onUpdate" />
     <MatrixSection
       :module="module"
