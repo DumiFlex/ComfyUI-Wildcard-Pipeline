@@ -230,6 +230,33 @@ def _warn_for_rule(
         })
 
 
+def _file_pick_by_origin(
+    ctx: Any,
+    entry: dict[str, Any],
+    bucket: dict[str, Any],
+    module_id: Any,
+) -> None:
+    """Attach `entry` under `bucket[module_id]["by_origin"][origin]` when the
+    active module carries a `bundle_origin` (stamped by pipeline.py). This is
+    the per-instance source-pick view a constraint in the same bundle copy
+    reads (task_5200c1fc); the top-level `bucket[module_id]` stays the
+    last-writer-wins fallback. No-op when no origin is stamped, so a
+    top-level / manual / legacy module's pick entry is byte-for-byte today's
+    shape. The `by_origin` map is carried FORWARD across re-records of the
+    same module_id so two origins writing the same library uuid each keep
+    their own view (the 2nd record must not drop the 1st origin's bucket).
+    """
+    origin = ctx.get("__wp_current_module_bundle_origin__") if ctx is not None else None
+    if not origin:
+        return
+    prev = bucket.get(module_id)
+    by_origin = {}
+    if isinstance(prev, dict) and isinstance(prev.get("by_origin"), dict):
+        by_origin = dict(prev["by_origin"])
+    by_origin[origin] = {k: v for k, v in entry.items() if k != "by_origin"}
+    entry["by_origin"] = by_origin
+
+
 def _record_pick(ctx: Any, chosen: dict[str, Any]) -> None:
     """Stash the picked option dict in `ctx["__wp_picks__"][module_id]` so a
     downstream constraint-aware wildcard can look up its source's value +
@@ -248,7 +275,7 @@ def _record_pick(ctx: Any, chosen: dict[str, Any]) -> None:
         return
     bucket = ctx.setdefault("__wp_picks__", {})
     if isinstance(bucket, dict):
-        bucket[module_id] = {
+        entry = {
             "value": chosen.get("value"),
             "sub_categories": chosen.get("sub_categories", []),
             "id": chosen.get("id"),
@@ -260,6 +287,15 @@ def _record_pick(ctx: Any, chosen: dict[str, Any]) -> None:
                 "tags": list(chosen.get("sub_categories") or []),
             }],
         }
+        # Additive per-instance view (task_5200c1fc). When this wildcard
+        # carries a `bundle_origin`, ALSO file the pick under
+        # `by_origin[origin]` so a constraint in the SAME bundle copy can
+        # read its own source instance instead of the last-writer survivor
+        # at the top-level key. The top-level entry above is left as the
+        # fallback bucket (unchanged shape) — anything reading it is
+        # unaffected. Omitted entirely when no origin is stamped.
+        _file_pick_by_origin(ctx, entry, bucket, module_id)
+        bucket[module_id] = entry
 
 
 def _record_pick_multi(ctx: Any, chosen_list: list[dict[str, Any]], sep: str) -> None:
@@ -287,13 +323,16 @@ def _record_pick_multi(ctx: Any, chosen_list: list[dict[str, Any]], sep: str) ->
         {"value": str(c.get("value", "")), "tags": list(c.get("sub_categories") or [])}
         for c in chosen_list
     ]
-    bucket[module_id] = {
+    entry = {
         "value": sep.join(values),
         "values": values,
         "sub_categories": union,
         "id": chosen_list[0].get("id") if chosen_list else None,
         "picks": per_pick,
     }
+    # Same per-instance view as `_record_pick` (task_5200c1fc).
+    _file_pick_by_origin(ctx, entry, bucket, module_id)
+    bucket[module_id] = entry
 
 
 class WildcardHandler(ModuleHandler):
