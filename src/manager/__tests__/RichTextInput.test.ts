@@ -161,6 +161,24 @@ describe("RichTextInput.vue", () => {
     expect(wrap.find(".wp-rt").classes()).toContain("wp-rt--multi");
   });
 
+  it("placeholder ghost gates on wp-rt__host--empty (host is never CSS :empty due to ZWSP pad)", async () => {
+    // The contenteditable host always carries a ZWSP pad span, so the legacy
+    // `.wp-rt__host:empty::before` placeholder never fired. The ghost is now
+    // gated on an explicit `wp-rt__host--empty` class tracking live content.
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "", placeholder: "default value" },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host");
+    expect(host.attributes("data-placeholder")).toBe("default value");
+    expect(host.classes()).toContain("wp-rt__host--empty");
+    // Non-empty value → ghost suppressed.
+    await wrap.setProps({ modelValue: "something" });
+    await flushPromises();
+    expect(wrap.find(".wp-rt__host").classes()).not.toContain("wp-rt__host--empty");
+    wrap.unmount();
+  });
+
   it("renders RefChip atoms for @{uuid}/@{uuid:subcat} tokens in wildcard surface", () => {
     // Surface enum gates which atom kinds chipify:
     //   - "wildcard": @{uuid} chips, $var stays plain text (wildcards

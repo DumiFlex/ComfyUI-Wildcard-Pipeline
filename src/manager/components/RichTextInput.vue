@@ -230,6 +230,13 @@ const hostEl = ref<HTMLDivElement | null>(null);
 const popoverEl = ref<HTMLDivElement | null>(null);
 const focused = ref(false);
 
+// Placeholder-ghost gate. The host ALWAYS carries a ZWSP pad span (padAtoms),
+// so `.wp-rt__host:empty` never matches — the placeholder must hang off an
+// explicit class instead. Tracks LIVE content (updated on every input +
+// programmatic apply) so the ghost hides on the first keystroke like a native
+// `<input placeholder>`.
+const isEmpty = ref((props.modelValue ?? "").length === 0);
+
 // Zero-width space rendered inside empty pad spans. Browsers can't reliably
 // land the caret inside a span that has no child text node (the kind Vue
 // emits for `{{ '' }}`) — clicking "after the last chip" then drops the
@@ -1110,6 +1117,7 @@ function syncTextSpansToAtoms(): void {
 
 function applyAtoms(next: Atom[]): void {
   atoms.value = padAtoms(next);
+  isEmpty.value = serialiseAtomsLocal(next).length === 0;
   void nextTick(() => syncTextSpansToAtoms());
 }
 
@@ -1544,6 +1552,7 @@ function onHostInput(ev?: Event): void {
   // consistent with what's actually visible.
   reconcileOrphanTextNodes();
   const next = readHostAsText();
+  isEmpty.value = next.length === 0;
   if (next !== props.modelValue) emitValue(next);
   // After every input we re-probe the caret for autocomplete trigger
   // — covers the user typing `@` mid-text, deleting back across a
@@ -2054,7 +2063,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
     <div
       ref="hostEl"
       class="wp-rt__host"
-      :class="multiline ? 'wp-rt__host--multi' : 'wp-rt__host--single'"
+      :class="[multiline ? 'wp-rt__host--multi' : 'wp-rt__host--single', { 'wp-rt__host--empty': isEmpty }]"
       :contenteditable="!disabled"
       :aria-label="ariaLabel"
       :data-placeholder="placeholder"
@@ -2227,6 +2236,8 @@ function onHostKeydown(ev: KeyboardEvent): void {
   font-size: inherit;
   letter-spacing: 0;
   box-sizing: border-box;
+  /* Anchor for the absolutely-positioned placeholder ghost (below). */
+  position: relative;
 }
 .wp-rt__host--single {
   height: var(--wp-input-h, 34px);
@@ -2244,12 +2255,22 @@ function onHostKeydown(ev: KeyboardEvent): void {
   word-break: break-word;
 }
 
-/* Placeholder ghost — fires only when the host is empty AND not focused.
-   Modern selector parity with `<input placeholder>`. */
-.wp-rt__host:empty::before {
+/* Placeholder ghost — shown when the field has no content. Gated on the
+   `--empty` class (NOT `:empty`): the host always holds a ZWSP pad span, so
+   `:empty` never matches. The class tracks live content so the ghost clears
+   on the first keystroke, matching `<input placeholder>`. */
+.wp-rt__host--empty::before {
   content: attr(data-placeholder);
+  /* Overlay the host's text area so the caret stays at the start (the host
+     still holds a ZWSP pad span); `padding: inherit` matches the single/multi
+     text inset so the ghost aligns with where real text would begin. */
+  position: absolute;
+  inset: 0;
+  padding: inherit;
   color: var(--wp-text-dim, #6e6e7c);
   pointer-events: none;
+  white-space: pre-wrap;
+  overflow: hidden;
 }
 
 /* Plain text atom — inherits host typography. Inline so it flows with
