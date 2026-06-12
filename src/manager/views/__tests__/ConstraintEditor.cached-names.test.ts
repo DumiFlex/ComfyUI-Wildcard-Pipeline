@@ -117,7 +117,7 @@ describe("ConstraintEditor — cached source/target ref names", () => {
     // The source dropdown emits the picked uuid via @update:model-value;
     // findComponent gives the <Select> instance so we can fire it. The string
     // selector returns a WrapperLike (no typed .vm), so narrow to VueWrapper.
-    const select = w.findComponent("[data-test='source-wildcard-select']") as VueWrapper;
+    const select = w.findComponent("[data-test='source-wildcard-select']") as unknown as VueWrapper;
     expect(select.exists()).toBe(true);
     select.vm.$emit("update:model-value", "beef0001");
     await flushPromises();
@@ -127,7 +127,7 @@ describe("ConstraintEditor — cached source/target ref names", () => {
   it("picking a target wildcard stamps target_wildcard_name from the catalog", async () => {
     const w = await mountNew();
     const vm = w.vm as unknown as { targetWildcardName: string | null };
-    const select = w.findComponent("[data-test='target-wildcard-select']") as VueWrapper;
+    const select = w.findComponent("[data-test='target-wildcard-select']") as unknown as VueWrapper;
     select.vm.$emit("update:model-value", "facade00");
     await flushPromises();
     expect(vm.targetWildcardName).toBe("texture");
