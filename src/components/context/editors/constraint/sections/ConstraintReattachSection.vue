@@ -54,6 +54,9 @@ interface Candidate { uuid: string; name: string }
 
 function candidates(): Candidate[] {
   const q = query.value.trim().toLowerCase();
+  // Cached name of the open side is the SORT KEY (auto-suggest), mirroring
+  // #3 RemapRefPopup: exact match floats to top WITHOUT filtering others out.
+  const cached = (openSide.value === "target" ? props.targetCachedName : props.sourceCachedName).trim().toLowerCase();
   const out: Candidate[] = [];
   const dead = new Set([props.sourceUuid, props.targetUuid]);
   for (const [uuid, name] of props.refData.uuidToName) {
@@ -61,15 +64,18 @@ function candidates(): Candidate[] {
     if (q && !name.toLowerCase().includes(q)) continue;
     out.push({ uuid, name });
   }
-  return out.sort((a, b) => a.name.localeCompare(b.name));
+  return out.sort((a, b) => {
+    const ax = a.name.toLowerCase() === cached ? 0 : 1;
+    const bx = b.name.toLowerCase() === cached ? 0 : 1;
+    return ax !== bx ? ax - bx : a.name.localeCompare(b.name);
+  });
 }
 
 function openDropdown(side: Side): void {
   openSide.value = side;
-  // Start with an empty query so every live candidate is visible. The
-  // cached name is the DANGLING wildcard's old label, which by definition
-  // won't substring-match the distinct local wildcard the user is remapping
-  // onto — pre-seeding it would hide the only valid candidates.
+  // Empty query keeps every live candidate visible; the cached name is the
+  // sort key in candidates() (auto-suggest), floating an exact match to top
+  // without filtering the rest out (mirrors #3 RemapRefPopup).
   query.value = "";
   picked.value = null;
 }

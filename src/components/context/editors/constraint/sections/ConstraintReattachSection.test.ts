@@ -73,4 +73,13 @@ describe("ConstraintReattachSection", () => {
     await w.find("[data-test-id='reattach-candidate-beef0001']").trigger("click");
     expect(w.find("[data-test='reattach-dropped-source']").text()).toMatch(/3 cells dropped/);
   });
+
+  it("floats the cached-name match to the top of the candidate list", async () => {
+    const rd = refData();
+    rd.uuidToName = new Map([["aaa00000", "zzz"], ["beef0001", "colour"]]);
+    const w = mountSection({ sourceCachedName: "colour", refData: rd });
+    await w.find("[data-test='reattach-btn-source']").trigger("click");
+    const first = w.findAll("[data-test='reattach-candidate']")[0];
+    expect(first.text()).toBe("colour");
+  });
 });
