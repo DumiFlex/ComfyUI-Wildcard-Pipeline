@@ -56,11 +56,16 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const emit = defineEmits<{
-  /** Fired when a ref-kind chip body is clicked. The MouseEvent
+  /** Fired when a RESOLVED ref-kind chip body is clicked. The MouseEvent
    *  payload lets the parent read the chip's bounding rect (via
-   *  `ev.currentTarget`) so it can anchor a popover near the chip
-   *  instead of centred on screen. Var-kind chips don't emit. */
+   *  `ev.currentTarget`) so it can anchor a popover near the chip. */
   "click": [event: MouseEvent];
+  /** Fired when an UNRESOLVED (broken) ref-kind chip body is clicked.
+   *  Distinct from `click` ON PURPOSE: hosts wired to `@click` expect
+   *  only the resolved edit-popover event, so the broken-chip remap
+   *  affordance gets its own channel (spec Component A "Trigger").
+   *  Var-kind chips never emit. */
+  "remap": [event: MouseEvent];
 }>();
 
 const isRef = computed(() => props.kind === "ref");
@@ -178,9 +183,11 @@ const icon = computed(() => {
 });
 
 function onClick(ev: MouseEvent): void {
-  // Only ref-kind chips have a click-to-edit affordance. Var-kind chips
-  // are pure visual marks — no picker to open.
-  if (isRef.value && props.resolved) emit("click", ev);
+  // Ref-kind only: resolved chips open the edit popover (`click`); broken
+  // chips open the remap popup (`remap`). Var-kind chips are pure marks.
+  if (!isRef.value) return;
+  if (props.resolved) emit("click", ev);
+  else emit("remap", ev);
 }
 </script>
 
@@ -256,7 +263,10 @@ function onClick(ev: MouseEvent): void {
   background: color-mix(in srgb, var(--wp-danger, #ef4444) 15%, transparent);
   border-color: color-mix(in srgb, var(--wp-danger, #ef4444) 50%, transparent);
   color: var(--wp-danger);
-  cursor: help;
+  cursor: pointer;
+}
+.wp-refchip--unresolved:hover {
+  background: color-mix(in srgb, var(--wp-danger, #ef4444) 25%, transparent);
 }
 .wp-refchip__icon { font-size: 8px; opacity: 0.75; }
 /* PrimeIcon variant (moduleKind set) — sized to align with the unicode glyph baseline. */
