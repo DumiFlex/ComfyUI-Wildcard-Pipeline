@@ -154,6 +154,18 @@ export interface BrokenConstraintException extends ConstraintException {
 export interface ConstraintPayload {
   source_wildcard_id: string | null;
   target_wildcard_id: string | null;
+  /**
+   * Cached source/target wildcard DISPLAY names, stamped on write (when
+   * the live wildcard is in hand). Display-only — the engine resolves by
+   * `source_wildcard_id` / `target_wildcard_id` and never reads these, so
+   * they're additive + non-load-bearing (diagnostic, like
+   * `producer_engine_version`). They let the broken-reference banner show
+   * `Source wildcard 'Starter subject' (54693e08)` after the wildcard is
+   * deleted (the name is otherwise unrecoverable from the library).
+   * Absent on legacy constraints → banner falls back to uuid-only.
+   */
+  source_wildcard_name?: string;
+  target_wildcard_name?: string;
   matrix: ConstraintMatrix;
   exceptions: ConstraintException[];
   broken_exceptions?: BrokenConstraintException[];

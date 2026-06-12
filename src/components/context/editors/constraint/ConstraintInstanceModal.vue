@@ -174,6 +174,11 @@ watch(
 interface ConstraintPayload {
   source_wildcard_id?: string;
   target_wildcard_id?: string;
+  /** Cached display names, stamped on write so the broken-reference banner
+   *  can show the name after the wildcard is deleted (the live lookup misses
+   *  then). Display-only; the engine never reads them. */
+  source_wildcard_name?: string;
+  target_wildcard_name?: string;
   matrix?: Record<string, Record<string, unknown>>;
   exceptions?: Array<{ source_value?: string; target_value?: string; source?: string; target?: string }>;
   target_select?: TargetSelect;
@@ -273,6 +278,20 @@ const targetName = computed(() => {
   return wildcardName(pl.target_wildcard_id);
 });
 
+/** Cached display name for the broken-reference banner. Prefer the LIVE
+ *  resolved name (`wildcardName`), falling back to the payload's stamped
+ *  `*_wildcard_name` when the wildcard is dangling — that's the whole point
+ *  of the cache: the live lookup returns "" once the wildcard is gone, so the
+ *  banner would otherwise show the bare uuid. Display-only. */
+const sourceCachedName = computed(() => {
+  const pl = (props.module.payload ?? {}) as ConstraintPayload;
+  return sourceName.value || pl.source_wildcard_name || "";
+});
+const targetCachedName = computed(() => {
+  const pl = (props.module.payload ?? {}) as ConstraintPayload;
+  return targetName.value || pl.target_wildcard_name || "";
+});
+
 /** A source/target id is DANGLING when non-empty but it resolves to nothing
  *  — neither a sibling/chain wildcard (findWildcardModule) nor the
  *  preview-resolver cache (lookup). Today this silently falls back to matrix
@@ -357,6 +376,11 @@ function onReattach(payload: { side: "source" | "target"; oldUuid: string; newUu
   // cascade-restore.ts:rewriteChildId, which already walkRemaps a constraint
   // payload to repoint source/target + @{} refs.
   const rewritten = walkRemap(pl, { [payload.oldUuid]: payload.newUuid }) as Record<string, unknown>;
+  // Re-cache the display name from the picked candidate (walkRemap leaves the
+  // OLD cached name in place — it only rewrites the uuid). Display-only; feeds
+  // the broken-reference banner if this new wildcard is later deleted too.
+  if (payload.side === "source") rewritten.source_wildcard_name = payload.newName;
+  else rewritten.target_wildcard_name = payload.newName;
   emit("update", { payload: rewritten });
   // Reattach edits source/target — library-defining — so it rides
   // Save-to-library (rewrites the library row → every context that uses it).
@@ -528,9 +552,9 @@ function onSpaClick(): void {
       :dangling-source="danglingSource"
       :dangling-target="danglingTarget"
       :source-uuid="danglingSourceUuid"
-      :source-cached-name="sourceName"
+      :source-cached-name="sourceCachedName"
       :target-uuid="danglingTargetUuid"
-      :target-cached-name="targetName"
+      :target-cached-name="targetCachedName"
       :ref-data="reattachRefData"
       :referenced-elsewhere="referencedElsewhere"
       :dropped-cell-count="reattachDroppedCellCount"

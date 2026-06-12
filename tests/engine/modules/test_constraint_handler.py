@@ -564,3 +564,35 @@ def test_library_reach_used_when_instance_absent():
     assert _recorded_target_select(
         {"mode": "next", "count": 2}, None
     ) == {"mode": "next", "count": 2}
+
+
+# ── Cached source/target ref NAMES (display-only, additive) ─────────
+#
+# The SPA + canvas constraint editors stamp the source/target wildcard
+# display name onto the payload (`source_wildcard_name` /
+# `target_wildcard_name`) so the broken-reference banner can show
+# "Source wildcard 'Starter subject' (54693e08)" after the wildcard is
+# deleted. The engine NEVER reads these names — they're additive,
+# non-load-bearing display state (like `producer_engine_version`). These
+# lock that `validate_payload` tolerates the extra keys (it checks only
+# specific fields, with no extra-key rejection); if this ever starts
+# raising, the additive assumption is broken.
+
+
+def test_validate_payload_tolerates_cached_ref_names():
+    payload = _payload()
+    payload["source_wildcard_name"] = "Starter subject"
+    payload["target_wildcard_name"] = "Outfit"
+    ConstraintHandler.validate_payload(payload)  # must not raise
+
+
+def test_resolve_tolerates_cached_ref_names():
+    """resolve() runs validate_payload first, then records meta — the
+    extra display-name keys must pass straight through without error."""
+    payload = _payload()
+    payload["source_wildcard_name"] = "Starter subject"
+    payload["target_wildcard_name"] = "Outfit"
+    ctx: dict = {}
+    out = ConstraintHandler.resolve(payload, instance={}, ctx=ctx)
+    assert out == {}
+    assert len(ctx["__wp_constraints__"]) == 1

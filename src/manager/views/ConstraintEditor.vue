@@ -126,6 +126,12 @@ const tags = ref<string[]>([]);
 const contentRating = ref<"safe" | "nsfw">("safe");
 const sourceWildcardId = ref<string | null>(null);
 const targetWildcardId = ref<string | null>(null);
+// Cached display names of the source/target wildcards, captured the moment
+// the id is SET (picker / reattach / load). Display-only — they feed the
+// broken-reference banner so it can show `(was "Starter subject")` after the
+// wildcard is deleted (the engine never reads them; see ConstraintPayload).
+const sourceWildcardName = ref<string | null>(null);
+const targetWildcardName = ref<string | null>(null);
 const matrix = ref<ConstraintMatrix>({});
 const exceptions = ref<ConstraintException[]>([]);
 // Library-default reach. `all` is the engine default — kept here as the
@@ -164,6 +170,8 @@ function snapshot(): string {
     tags: tags.value,
     sourceWildcardId: sourceWildcardId.value,
     targetWildcardId: targetWildcardId.value,
+    sourceWildcardName: sourceWildcardName.value,
+    targetWildcardName: targetWildcardName.value,
     matrix: matrix.value,
     exceptions: exceptions.value,
     targetSelect: targetSelect.value,
@@ -192,6 +200,8 @@ function applyDraft(): void {
       tags: string[];
       sourceWildcardId: string | null;
       targetWildcardId: string | null;
+      sourceWildcardName?: string | null;
+      targetWildcardName?: string | null;
       matrix: ConstraintMatrix;
       exceptions: ConstraintException[];
       targetSelect?: unknown;
@@ -202,6 +212,8 @@ function applyDraft(): void {
     tags.value = parsed.tags;
     sourceWildcardId.value = parsed.sourceWildcardId;
     targetWildcardId.value = parsed.targetWildcardId;
+    sourceWildcardName.value = parsed.sourceWildcardName ?? null;
+    targetWildcardName.value = parsed.targetWildcardName ?? null;
     matrix.value = normalizeMatrix(parsed.matrix);
     exceptions.value = normalizeExceptions(parsed.exceptions);
     targetSelect.value = normalizeTargetSelect(parsed.targetSelect);
@@ -236,6 +248,22 @@ function wildcardById(id: string | null): ModuleRow | undefined {
 
 const sourceWildcard = computed(() => wildcardById(sourceWildcardId.value));
 const targetWildcard = computed(() => wildcardById(targetWildcardId.value));
+
+/** Source/target dropdown handlers. Repoint the id, reset the matrix (its
+ *  axes derive from the new wildcard's sub_categories), and cache the picked
+ *  wildcard's display name so the broken-reference banner can show it after
+ *  the wildcard is later deleted. Clearing the pick (`v === null`) clears the
+ *  cached name too. */
+function onSourceWildcardPick(v: string | null): void {
+  sourceWildcardId.value = v;
+  sourceWildcardName.value = v ? wildcardById(v)?.name ?? null : null;
+  matrix.value = {};
+}
+function onTargetWildcardPick(v: string | null): void {
+  targetWildcardId.value = v;
+  targetWildcardName.value = v ? wildcardById(v)?.name ?? null : null;
+  matrix.value = {};
+}
 
 // ── Broken-reference reattach (spec Component B "both sides") ────────
 //
@@ -292,8 +320,15 @@ const reattachDroppedCellCount = computed(() => {
 });
 
 function onReattach(payload: { side: "source" | "target"; oldUuid: string; newUuid: string; newName: string }): void {
-  if (payload.side === "source") sourceWildcardId.value = payload.newUuid;
-  else targetWildcardId.value = payload.newUuid;
+  if (payload.side === "source") {
+    sourceWildcardId.value = payload.newUuid;
+    // Re-cache the display name from the picked candidate so the banner
+    // (and a later re-deletion) reflects the new wildcard, not the stale one.
+    sourceWildcardName.value = payload.newName;
+  } else {
+    targetWildcardId.value = payload.newUuid;
+    targetWildcardName.value = payload.newName;
+  }
   // walkRemap embedded @{oldUuid} refs inside matrix + exceptions so they
   // follow (segments preserved). Matrix rows/cols re-derive from the new
   // wildcard's sub_categories via sourceSubCategories/targetSubCategories,
@@ -576,6 +611,8 @@ onMounted(async () => {
       const p = row.payload as Partial<ConstraintPayload>;
       sourceWildcardId.value = p.source_wildcard_id ?? null;
       targetWildcardId.value = p.target_wildcard_id ?? null;
+      sourceWildcardName.value = p.source_wildcard_name ?? null;
+      targetWildcardName.value = p.target_wildcard_name ?? null;
       matrix.value = normalizeMatrix(p.matrix);
       exceptions.value = normalizeExceptions(p.exceptions);
       targetSelect.value = normalizeTargetSelect(p.target_select);
@@ -672,6 +709,8 @@ function applyRestore(entry: ModuleHistoryEntry): void {
   const p = (entry.payload ?? {}) as Partial<ConstraintPayload>;
   sourceWildcardId.value = p.source_wildcard_id ?? null;
   targetWildcardId.value = p.target_wildcard_id ?? null;
+  sourceWildcardName.value = p.source_wildcard_name ?? null;
+  targetWildcardName.value = p.target_wildcard_name ?? null;
   matrix.value = normalizeMatrix(p.matrix);
   exceptions.value = normalizeExceptions(p.exceptions);
   targetSelect.value = normalizeTargetSelect(p.target_select);
@@ -696,6 +735,11 @@ async function save() {
     const payload: ConstraintPayload = {
       source_wildcard_id: sourceWildcardId.value,
       target_wildcard_id: targetWildcardId.value,
+      // Cached display names — persisted only when known so legacy / never-set
+      // constraints stay clean (absent → banner falls back to uuid-only).
+      // Display-only; the engine never reads them.
+      ...(sourceWildcardName.value ? { source_wildcard_name: sourceWildcardName.value } : {}),
+      ...(targetWildcardName.value ? { target_wildcard_name: targetWildcardName.value } : {}),
       matrix: matrix.value,
       exceptions: exceptions.value,
       // Always stamp the reach selector. `{mode:"all"}` is the engine
@@ -798,7 +842,7 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
   showErrors.value ? validationErrors.value : [],
 );
 
-defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, targetSelect, applyRestore, displayLabel });
+defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWildcardName, matrix, exceptions, targetSelect, applyRestore, displayLabel });
 </script>
 
 <template>
@@ -865,9 +909,9 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, targetSel
       :dangling-source="danglingSource"
       :dangling-target="danglingTarget"
       :source-uuid="sourceWildcardId ?? ''"
-      :source-cached-name="''"
+      :source-cached-name="sourceWildcardName ?? ''"
       :target-uuid="targetWildcardId ?? ''"
-      :target-cached-name="''"
+      :target-cached-name="targetWildcardName ?? ''"
       :ref-data="reattachRefData"
       :referenced-elsewhere="referencedElsewhere"
       :dropped-cell-count="reattachDroppedCellCount"
@@ -900,7 +944,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, targetSel
             clearable
             data-test="source-wildcard-select"
             aria-label="Source wildcard"
-            @update:model-value="(v) => { sourceWildcardId = v as string | null; matrix = {}; }"
+            @update:model-value="(v) => onSourceWildcardPick(v as string | null)"
           />
         </div>
         <div class="cn-cross"><i class="pi pi-times" /></div>
@@ -913,7 +957,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, targetSel
             clearable
             data-test="target-wildcard-select"
             aria-label="Target wildcard"
-            @update:model-value="(v) => { targetWildcardId = v as string | null; matrix = {}; }"
+            @update:model-value="(v) => onTargetWildcardPick(v as string | null)"
           />
         </div>
         <div class="cn-pair-hint" style="grid-area: src-hint">Rows of the matrix</div>
