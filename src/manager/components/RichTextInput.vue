@@ -656,6 +656,30 @@ function clampPickerIntoView(): void {
   });
 }
 
+/** Post-paint re-anchor for the RemapRefPopup. `onChipRemap` seeds
+ *  `remapAnchor` from `setPickerAnchorFromElement`, whose flip maths assume
+ *  the ~380px SubcategoryFilterPicker — but the remap popup is far shorter,
+ *  so a flipped seed floats it ~230px above the chip (the QA "too far away"
+ *  bug). Mirror clampPickerIntoView, but RE-DECIDE the flip against the
+ *  popup's REAL measured height: hug 6px below the chip, flip above only
+ *  when the real box genuinely doesn't fit below. */
+function clampRemapIntoView(): void {
+  void nextTick(() => {
+    const el = document.querySelector("[data-test='remap-popup']") as HTMLElement | null;
+    if (!el || !pickerTriggerRect) return;
+    const r = el.getBoundingClientRect();
+    const gap = 6;
+    const t = pickerTriggerRect;
+    const spaceBelow = window.innerHeight - t.bottom;
+    const flip = r.height > 0 && spaceBelow < r.height && t.top > spaceBelow;
+    let top = flip ? t.top - r.height - gap : t.bottom + gap;
+    let left = remapAnchor.value.left;
+    if (r.height > 0) top = Math.max(8, Math.min(top, window.innerHeight - r.height - 8));
+    if (r.width > 0) left = Math.max(8, Math.min(left, window.innerWidth - r.width - 8));
+    remapAnchor.value = { top, left };
+  });
+}
+
 // --- Suggestion list filtering. ---
 // `@` autocomplete is only available in the "wildcard" surface.
 //
@@ -1448,8 +1472,15 @@ function onChipRemap(idx: number, ev?: MouseEvent): void {
   remapOldExcludeNull.value = excludeNull;
   // Reuse the picker's anchor maths to position the remap popup at the chip.
   setPickerAnchorFromElement((ev?.currentTarget as HTMLElement | null) ?? null);
-  remapAnchor.value = { top: pickerAnchor.value.top, left: pickerAnchor.value.left };
+  // Seed just BELOW the chip (not the tall-picker flip seed) so the first
+  // paint is already close — clampRemapIntoView then hugs it exactly using
+  // the popup's real height. Avoids the one-frame high-flash.
+  remapAnchor.value = {
+    top: (pickerTriggerRect?.bottom ?? pickerAnchor.value.top) + 6,
+    left: pickerAnchor.value.left,
+  };
   remapOpen.value = true;
+  clampRemapIntoView();
 }
 
 /** Rewrite EVERY occurrence of the dead uuid in THIS field's raw text once,
