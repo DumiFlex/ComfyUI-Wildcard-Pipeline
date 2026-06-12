@@ -58,3 +58,24 @@ describe("RichTextInput — @remap heals the open field", () => {
     expect(last).toBe("a @{beef0001#colour:warm} b @{beef0001#colour:warm}");
   });
 });
+
+describe("RichTextInput — @remap on allow-nested-refs (derivation action) surface", () => {
+  it("a broken chip on a non-wildcard allow-nested-refs surface emits remap and opens the popup", async () => {
+    const w = mount(RichTextInput, {
+      props: {
+        modelValue: "go @{deadbeef:warm}",
+        surface: "derivation",
+        allowNestedRefs: true,
+        uuidToName: new Map([["beef0001", "colour"]]),
+        uuidToSubCategories: new Map([["beef0001", ["warm"]]]),
+        refSuggestions: ["beef0001"],
+      },
+      attachTo: document.body,
+    });
+    await w.vm.$nextTick();
+    const chip = w.find(".wp-refchip--unresolved");
+    expect(chip.exists()).toBe(true);
+    await chip.trigger("click");
+    expect(document.querySelector("[data-test='remap-popup']")).toBeTruthy();
+  });
+});

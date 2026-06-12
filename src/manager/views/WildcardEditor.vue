@@ -1434,6 +1434,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                 v-else
                 v-model="o.value"
                 surface="wildcard"
+                :module-id="props.id"
                 :ref-suggestions="wcSuggestions"
                 :uuid-to-name="nameByUuid"
                 :uuid-to-sub-categories="uuidToSubCategories"

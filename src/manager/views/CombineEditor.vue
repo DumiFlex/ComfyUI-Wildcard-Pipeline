@@ -542,6 +542,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
         >
           <RichTextInput
             v-model="template"
+            :module-id="props.id"
             :var-suggestions="varSuggestions"
             :uuid-to-name="uuidToName"
             :multiline="true"

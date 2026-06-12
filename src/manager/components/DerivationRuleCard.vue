@@ -453,6 +453,7 @@ const branchCount = computed(() => rule.value.branches.length);
         </div>
         <div class="dvr-value-row">
           <span class="dvr-label">value</span>
+          <!-- no module-id here: derivation warnings clear at the editor level -->
           <RichTextInput
             :model-value="branch.action.value"
             surface="derivation"
@@ -517,6 +518,7 @@ const branchCount = computed(() => rule.value.branches.length);
         </div>
         <div class="dvr-value-row">
           <span class="dvr-label">value</span>
+          <!-- no module-id here: derivation warnings clear at the editor level -->
           <RichTextInput
             :model-value="rule.else.action.value"
             surface="derivation"
