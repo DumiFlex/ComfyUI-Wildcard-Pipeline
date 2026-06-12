@@ -40,6 +40,7 @@ import {
   buildLibraryChildrenWithIntegrity,
   toChildSnapshot,
 } from "./save";
+import { walkRemap } from "./uuid-remap";
 import type { BundleInstance, ModuleEntry } from "../../../widgets/_shared";
 
 export interface CascadeRestoreInputs {
@@ -175,24 +176,48 @@ export async function cascadeRestoreForBundle(
   };
 }
 
-/** Apply id rewrites to a single child entry. Bundle-typed children
- *  look up in `innerBundleMap`; module-typed children look up in
- *  `moduleMap`. Returns a NEW object only when a rewrite fires; otherwise
- *  reuses the original reference to avoid churn for downstream diff
- *  consumers. */
+/** Apply id rewrites to a single child entry. Two layers:
+ *
+ *   1. The child's OWN top-level `id` — bundle-typed children look up in
+ *      `innerBundleMap`; module-typed children in `moduleMap`.
+ *   2. References INSIDE the child's `payload` + `instance` that point at
+ *      any restored module/inner-bundle — a constraint's
+ *      `source_wildcard_id` / `target_wildcard_id`, or an `@{uuid}` ref in
+ *      a wildcard/derivation value. Without (2), restoring a missing
+ *      wildcard re-pointed its own child id but left a sibling
+ *      constraint pointing at the dead uuid → the pushed bundle shipped a
+ *      broken source/target (#2). The deep rewrite reuses `walkRemap`.
+ *
+ *  Returns a NEW object only when a rewrite fires; otherwise reuses the
+ *  original reference to avoid churn for downstream diff consumers. */
 function rewriteChildId(
   c: Record<string, unknown>,
   moduleMap: Map<string, string>,
   innerBundleMap: Map<string, string>,
 ): Record<string, unknown> {
+  let next: Record<string, unknown> = c;
+
+  // (1) Own id.
   const id = typeof c.id === "string" ? c.id : "";
-  if (!id) return c;
-  if (c.type === "bundle") {
-    const next = innerBundleMap.get(id);
-    return next ? { ...c, id: next } : c;
+  if (id) {
+    const newId = c.type === "bundle" ? innerBundleMap.get(id) : moduleMap.get(id);
+    if (newId) next = { ...next, id: newId };
   }
-  const next = moduleMap.get(id);
-  return next ? { ...c, id: next } : c;
+
+  // (2) Inner references (constraint source/target, @{} refs) → restored ids.
+  const table: Record<string, string> = {};
+  for (const [k, v] of moduleMap) table[k] = v;
+  for (const [k, v] of innerBundleMap) table[k] = v;
+  if (Object.keys(table).length > 0) {
+    if (next.payload && typeof next.payload === "object") {
+      next = { ...next, payload: walkRemap(next.payload, table) as Record<string, unknown> };
+    }
+    if (next.instance && typeof next.instance === "object") {
+      next = { ...next, instance: walkRemap(next.instance, table) as Record<string, unknown> };
+    }
+  }
+
+  return next;
 }
 
 /** Pre-scan to count what cascade would heal — used by the modal to
