@@ -80,10 +80,29 @@ export function walkRemap(value: unknown, remap: Record<string, string>): unknow
   return value;
 }
 
-/** Regenerate every child uuid in the snapshot list, then deep-walk
- *  every child's `payload` + `instance` rewriting any references to
- *  match. Constraint source/target ids + `@{uuid}` text refs all flow
- *  through `walkRemap` since they live inside `payload` / `instance`. */
+/**
+ * ⚠️ DEAD CODE — DO NOT WIRE. Zero production callers (tests only, as of
+ * 2026-06-12). It looks like the obvious fix for the constraint pick-bucket
+ * collision (task_5200c1fc); it is NOT.
+ *
+ * Two coherent, mutually-exclusive designs:
+ *   (A) regenerate child ids on bundle insert → self-contained copies, no
+ *       engine collision, but NO per-child library lineage.
+ *   (B) keep library ids + drift/refresh-by-id → live lineage, but the
+ *       engine pick bucket collides on duplicate instances.
+ * The codebase committed to (B): ContextWidget `matchStateOf` /
+ * `bundleChildDriftCount` and drift-store `refreshMany` all key drift +
+ * missing + refresh on the child's library `id`. Wiring this regenerates
+ * those ids → every freshly-inserted bundle child reads MISSING and the
+ * refresh path (the only legit way to update a frozen bundle child) is
+ * severed. The collision must be paid down IN THE ENGINE, never by reviving
+ * this. Delete or keep-as-reference per task_5200c1fc's decision.
+ *
+ * (Original intent:) Regenerate every child uuid, then deep-walk each
+ * child's `payload` + `instance` rewriting any references to match —
+ * constraint source/target ids + `@{uuid}` text refs flow through
+ * `walkRemap` since they live inside `payload` / `instance`.
+ */
 export function remapBundleUuids(children: ChildSnapshot[]): RemapResult {
   const remap: Record<string, string> = {};
   for (const c of children) {

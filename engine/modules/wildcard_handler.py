@@ -235,6 +235,14 @@ def _record_pick(ctx: Any, chosen: dict[str, Any]) -> None:
     downstream constraint-aware wildcard can look up its source's value +
     sub_categories. Keyed by the active module id (set by pipeline.py).
     """
+    # KNOWN COLLISION (task_5200c1fc): module_id is the LIBRARY uuid
+    # (pipeline.py stamps __wp_current_module_id__ = library id). Two
+    # instances of one library wildcard (bundle inserted twice, or the same
+    # wildcard added twice) share this bucket key — the 2nd pick clobbers the
+    # 1st, and every constraint sourcing that uuid reads the survivor. Fix =
+    # key on the per-instance _uid + give constraints a source-INSTANCE bind.
+    # Do NOT "fix" by regenerating ids on insert: that severs drift/refresh-
+    # by-id lineage (see the remapBundleUuids dead-code note + task_5200c1fc).
     module_id = ctx.get("__wp_current_module_id__") if ctx is not None else None
     if not module_id:
         return
@@ -259,6 +267,7 @@ def _record_pick_multi(ctx: Any, chosen_list: list[dict[str, Any]], sep: str) ->
     value + the individual picked values + the union of their sub-categories,
     so the debug Picks view can render the list. Single-pick records (via
     `_record_pick`) keep their original shape."""
+    # Same library-uuid bucket collision as `_record_pick` (see task_5200c1fc).
     module_id = ctx.get("__wp_current_module_id__") if ctx is not None else None
     if not module_id:
         return
