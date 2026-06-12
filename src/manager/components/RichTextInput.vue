@@ -291,6 +291,32 @@ const pickerAnchor = ref<{ top: number; left: number; flipped: boolean }>({
   top: 0, left: 0, flipped: false,
 });
 
+/** Theme class to stamp on the body-teleported overlays (`@`-autocomplete
+ *  popover + the SubcategoryFilterPicker anchor/backdrop).
+ *
+ *  Why: both overlays `<Teleport to="body">`, so they escape the host's
+ *  subtree. The `--wp-*` light + dark token variants are declared on
+ *  `.wp-theme-light` / `.wp-theme-dark`; when the HOST sits under a
+ *  non-default theme (canvas light mode, or the SPA's light theme) the
+ *  body-teleported node would otherwise resolve only the base `:root`
+ *  (dark) palette and paint with the wrong colors.
+ *
+ *  Mirroring the host's resolved theme onto the teleported root makes the
+ *  tokens resolve to the SAME values the host uses. We read the nearest
+ *  themed ancestor of the host live (re-evaluated each render, so it's
+ *  correct at open time in BOTH the SPA and the canvas without hard-coding
+ *  either). Empty string when no explicit theme class is on the ancestor
+ *  chain — the inherited cascade is then already correct (default dark). */
+function teleportThemeClass(): string {
+  const el = hostEl.value;
+  if (!el || typeof el.closest !== "function") return "";
+  const themed = el.closest(".wp-theme-light, .wp-theme-dark");
+  if (!themed) return "";
+  return themed.classList.contains("wp-theme-light")
+    ? "wp-theme-light"
+    : "wp-theme-dark";
+}
+
 // --- Atom rendering — semi-controlled pattern ---
 //
 // `atoms` is a `ref<Atom[]>`, NOT a computed off `props.modelValue`. The
@@ -2095,7 +2121,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
         v-if="acOpen && acItems.length > 0"
         ref="popoverEl"
         class="wp-rt-suggestions"
-        :class="{ 'wp-rt-suggestions--up': popupPos.flipped }"
+        :class="[teleportThemeClass(), { 'wp-rt-suggestions--up': popupPos.flipped }]"
         :style="{
           top: popupPos.top + 'px',
           left: popupPos.left + 'px',
@@ -2135,10 +2161,10 @@ function onHostKeydown(ev: KeyboardEvent): void {
          not a modal — so it feels like a contextual control on the
          element the user just touched. -->
     <Teleport v-if="pickerOpen" to="body">
-      <div class="wp-subcat-picker__backdrop" @click="cancelPicker"></div>
+      <div class="wp-subcat-picker__backdrop" :class="teleportThemeClass()" @click="cancelPicker"></div>
       <div
         class="wp-subcat-picker__anchor"
-        :class="{ 'wp-subcat-picker__anchor--flipped': pickerAnchor.flipped }"
+        :class="[teleportThemeClass(), { 'wp-subcat-picker__anchor--flipped': pickerAnchor.flipped }]"
         :style="{
           top: pickerAnchor.top + 'px',
           left: pickerAnchor.left + 'px',
@@ -2344,15 +2370,22 @@ function onHostKeydown(ev: KeyboardEvent): void {
    is a transparent click-target full-viewport layer that cancels the
    picker (Skip semantics — no insert). Escape key dismisses the
    same way. */
+/* Z-index sits in the autocomplete-popover tier (9999), NOT the old
+   1000/1001. On the canvas the derivation/wildcard instance modal renders
+   on its own high-z overlay; at 1000/1001 the body-teleported picker fell
+   BEHIND that modal. The `@`-autocomplete popover already clears the modal
+   at 9999, so the picker matches that tier (backdrop 10000, anchor 10001)
+   to sit ABOVE the modal too. The SPA's own modals live well below 9999,
+   so raising is safe there — no SPA regression. */
 .wp-subcat-picker__backdrop {
   position: fixed;
   inset: 0;
   background: transparent;
-  z-index: 1000;
+  z-index: 10000;
 }
 .wp-subcat-picker__anchor {
   position: fixed;
-  z-index: 1001;
+  z-index: 10001;
   /* Subtle drop-shadow so the popover reads as elevated even without
      the dimmed backdrop of the previous modal version. */
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.4));

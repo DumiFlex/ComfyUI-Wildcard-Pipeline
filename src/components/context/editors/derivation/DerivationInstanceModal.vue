@@ -14,6 +14,7 @@
  */
 import { computed, onMounted, ref } from "vue";
 import type { ModuleEntry } from "../../../../widgets/_shared";
+import type { PairingBadge } from "../../../../extension/constraint-pairs";
 import type { ModuleRow } from "../../../../manager/api/types";
 import {
   buildWildcardRefData,
@@ -35,8 +36,20 @@ const props = withDefaults(
     upstreamVars?: string[];
     /** Vars produced by other modules in the SAME Context node. */
     siblingVars?: string[];
+    /** Via-nested constraint-pair badges for this derivation when it acts
+     *  as a constraint carrier (a rule ACTION value hosts a nested `@{uuid}`
+     *  that resolves to a downstream constraint's target). Keyed by the
+     *  engine branch key (`${rule_id}:${bi}` / `${rule_id}:else`). Forwarded
+     *  verbatim to RulesSection, which renders the inline `↪#N` badge. */
+    viaOptionPairs?: Map<string, readonly PairingBadge[]>;
   }>(),
-  { isDrifted: false, isModified: false, upstreamVars: () => [], siblingVars: () => [] },
+  {
+    isDrifted: false,
+    isModified: false,
+    upstreamVars: () => [],
+    siblingVars: () => [],
+    viaOptionPairs: () => new Map(),
+  },
 );
 
 // ── Library catalog → `@{}` ref-data ───────────────────────────────
@@ -144,6 +157,7 @@ function onSpaClick(): void {
       :uuid-to-options-count="refData.uuidToOptionsCount"
       :uuid-to-option-tag-sets="refData.uuidToOptionTagSets"
       :uuid-to-tag-groups="refData.uuidToTagGroups"
+      :via-option-pairs="viaOptionPairs"
       @update="onUpdate"
     />
     <RuntimeSection :module="module" @update="onUpdate" />

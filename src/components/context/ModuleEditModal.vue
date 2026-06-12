@@ -441,6 +441,7 @@ function cancel() {
       :is-modified="instanceModified"
       :upstream-vars="upstreamVars"
       :sibling-vars="siblingVars"
+      :via-option-pairs="viaOptionPairs"
       @update="onUpdate"
       @save="save"
       @cancel="cancel"

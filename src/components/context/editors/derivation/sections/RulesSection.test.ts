@@ -516,3 +516,134 @@ describe("derivation RulesSection — @{} chip + autocomplete parity", () => {
     w.unmount();
   });
 });
+
+// ── Inline ↪#N constraint-pair badge in the rule summary ────────────
+//
+// When this derivation is the CARRIER of a downstream constraint (one of
+// its rule ACTION values hosts a nested `@{uuid}` ref the constraint
+// reaches its target through), the summary must surface a cyan `↪#N`
+// PairBadge inline — RIGHT AFTER the value chips — exactly like OptionRow
+// renders `↪#N` for a wildcard option's `@{}` ref. The badges arrive via a
+// `viaOptionPairs` map keyed by the engine branch key (`${rule_id}:${bi}` /
+// `${rule_id}:else`) — the SAME key `computePairingsFull` stamps as the
+// carrier option_id for a derivation occurrence, and the SAME map
+// ContextWidget builds for the wildcard option path. Reuses PairBadge.vue
+// (variant="option" → `↪#N`); no bespoke styling.
+import PairBadge from "../../../PairBadge.vue";
+import type { PairingBadge } from "../../../../../extension/constraint-pairs";
+
+function viaPair(number: number, over: Partial<PairingBadge> = {}): PairingBadge {
+  return {
+    number,
+    targetUuid: "ffeeddcc",
+    colorIndex: 4,
+    isOrphan: false,
+    via: {
+      carrierRowKey: "dv012345",
+      carrierName: "tint",
+      optionIds: ["r1:0"],
+      routeChain: ["ffeeddcc"],
+    },
+    ...over,
+  };
+}
+
+describe("derivation RulesSection — inline ↪#N pair badge", () => {
+  it("renders a PairBadge (↪#N) in the IF rule-head summary when the IF branch carries a via-pair", () => {
+    const w = mount(RulesSection, {
+      props: {
+        module: makeModule([refRule()]),
+        ...REF_DATA,
+        viaOptionPairs: new Map([["r1:0", [viaPair(1)]]]),
+      },
+    });
+    const summary = w.find('[data-test="rule-summary-r1"]');
+    const badge = summary.findComponent(PairBadge);
+    expect(badge.exists()).toBe(true);
+    expect(badge.props("variant")).toBe("option");
+    expect(summary.text()).toContain("↪#1");
+  });
+
+  it("does NOT render a PairBadge in the summary when no via-pairs are supplied", () => {
+    const w = mount(RulesSection, {
+      props: { module: makeModule([refRule()]), ...REF_DATA },
+    });
+    const summary = w.find('[data-test="rule-summary-r1"]');
+    expect(summary.findComponent(PairBadge).exists()).toBe(false);
+  });
+
+  it("renders the ↪#N badge inline AFTER the action value chips (mockup placement)", () => {
+    const w = mount(RulesSection, {
+      props: {
+        module: makeModule([refRule()]),
+        ...REF_DATA,
+        viaOptionPairs: new Map([["r1:0", [viaPair(1)]]]),
+      },
+    });
+    const summary = w.find('[data-test="rule-summary-r1"]');
+    // The badge must read AFTER the action value in the rendered text so it
+    // reads "→ $mood = @color ↪#1" — not the other way round. The IF action
+    // value resolves to "@color" (REF_DATA maps aabbccdd → color).
+    const text = summary.text();
+    expect(text).toContain("color");
+    expect(text).toContain("↪#1");
+    expect(text.indexOf("↪#1")).toBeGreaterThan(text.indexOf("color"));
+  });
+
+  it("renders ↪#N badges per-branch in the expanded IF/ELIF/ELSE summary rows", async () => {
+    const w = mount(RulesSection, {
+      props: {
+        module: makeModule([multiRule()]),
+        ...REF_DATA,
+        viaOptionPairs: new Map<string, PairingBadge[]>([
+          ["r1:0", [viaPair(1)]],
+          ["r1:1", [viaPair(2)]],
+          ["r1:else", [viaPair(3)]],
+        ]),
+      },
+    });
+    await w.find('[data-test="rule-head-r1"]').trigger("click");
+    const ifRow = w.find('[data-test="branch-row-r1-0"]');
+    const elifRow = w.find('[data-test="branch-row-r1-1"]');
+    const elseRow = w.find('[data-test="branch-row-r1-else"]');
+    expect(ifRow.findComponent(PairBadge).exists()).toBe(true);
+    expect(ifRow.text()).toContain("↪#1");
+    expect(elifRow.findComponent(PairBadge).exists()).toBe(true);
+    expect(elifRow.text()).toContain("↪#2");
+    expect(elseRow.findComponent(PairBadge).exists()).toBe(true);
+    expect(elseRow.text()).toContain("↪#3");
+  });
+
+  it("renders multiple ↪#N badges when several constraints route through one branch", () => {
+    const w = mount(RulesSection, {
+      props: {
+        module: makeModule([refRule()]),
+        ...REF_DATA,
+        viaOptionPairs: new Map([["r1:0", [viaPair(1), viaPair(2, { colorIndex: 5 })]]]),
+      },
+    });
+    const summary = w.find('[data-test="rule-summary-r1"]');
+    expect(summary.findAllComponents(PairBadge)).toHaveLength(2);
+    expect(summary.text()).toContain("↪#1");
+    expect(summary.text()).toContain("↪#2");
+  });
+});
+
+import DerivationInstanceModal from "../DerivationInstanceModal.vue";
+
+describe("DerivationInstanceModal — forwards viaOptionPairs to RulesSection", () => {
+  it("passes its viaOptionPairs prop through to the RulesSection", () => {
+    const pairs = new Map([["r1:0", [viaPair(1)]]]);
+    const w = mount(DerivationInstanceModal, {
+      props: {
+        module: makeModule([refRule()]),
+        viaOptionPairs: pairs,
+      },
+    });
+    const rules = w.findComponent(RulesSection);
+    expect(rules.exists()).toBe(true);
+    // Vue rewraps the prop through reactivity, so identity (toBe) can't hold;
+    // structural equality confirms the same map content reached RulesSection.
+    expect(rules.props("viaOptionPairs")).toEqual(pairs);
+  });
+});

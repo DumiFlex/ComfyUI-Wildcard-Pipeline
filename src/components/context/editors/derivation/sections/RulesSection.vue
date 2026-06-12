@@ -26,9 +26,11 @@
  */
 import { computed, defineAsyncComponent, ref } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
+import type { PairingBadge } from "../../../../../extension/constraint-pairs";
 import { patchInstance } from "../../instance/patch";
 import { varColorClass } from "../../../../shared/var-color";
 import RuleValueChips from "./RuleValueChips.vue";
+import PairBadge from "../../../PairBadge.vue";
 
 // Async-import the rich-text editor so its chunk stays split + is only
 // pulled in when a derivation instance modal expands a rule. RichTextInput
@@ -68,6 +70,14 @@ const props = withDefaults(
     uuidToOptionsCount?: Map<string, number>;
     uuidToOptionTagSets?: Map<string, string[][]>;
     uuidToTagGroups?: Map<string, Record<string, string[]>>;
+    /** Via-nested constraint pairs that reach a downstream target through a
+     *  nested `@{uuid}` ref hosted in this derivation's rule ACTION values.
+     *  Keyed by the engine branch key (`${rule_id}:${bi}` / `${rule_id}:else`)
+     *  — the SAME carrier-occurrence key `computePairingsFull` stamps. Drives
+     *  the inline `↪#N` PairBadge after the value chips in each branch's
+     *  summary row, mirroring the wildcard editor's per-option badge. Empty
+     *  when this derivation isn't a constraint carrier. */
+    viaOptionPairs?: Map<string, readonly PairingBadge[]>;
   }>(),
   {
     varSuggestions: () => [],
@@ -78,6 +88,7 @@ const props = withDefaults(
     uuidToOptionsCount: () => new Map(),
     uuidToOptionTagSets: () => new Map(),
     uuidToTagGroups: () => new Map(),
+    viaOptionPairs: () => new Map(),
   },
 );
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
@@ -117,6 +128,14 @@ const disabledBranchKeys = computed<Set<string>>(() => {
 
 function branchKey(ruleId: string, branchIdx: number | "else"): string {
   return `${ruleId}:${branchIdx}`;
+}
+
+/** Via-nested constraint-pair badges for one branch occurrence, looked up
+ *  by its engine branch key. Empty array when this derivation isn't a
+ *  carrier for that branch — keeps the template `v-for` inert without a
+ *  surrounding `v-if`. */
+function pairBadgesFor(ruleId: string, branchIdx: number | "else"): readonly PairingBadge[] {
+  return props.viaOptionPairs.get(branchKey(ruleId, branchIdx)) ?? [];
 }
 
 function isBranchEnabled(ruleId: string, branchIdx: number | "else"): boolean {
@@ -421,6 +440,16 @@ function opUsesValue(op: string | undefined): boolean {
               >${{ rule.branches[0].action.target_var }}</span>
               <span class="rule-tok-op">{{ modeLabel(rule.branches[0].action?.mode) }}</span>
               <span class="rule-tok-val"><RuleValueChips :value="rule.branches[0].action?.value" :uuid-to-name="uuidToName" /></span>
+              <!-- Inline ↪#N constraint-pair badge — rendered when this
+                   derivation is a constraint carrier through the IF branch's
+                   nested `@{uuid}` ref. Mirrors OptionRow's per-option badge
+                   so the summary reads "@{tint} ↪#1". -->
+              <PairBadge
+                v-for="p in pairBadgesFor(rule.id, 0)"
+                :key="`${p.number}-${p.targetUuid}`"
+                :pair="p"
+                variant="option"
+              />
             </template>
           </span>
 
@@ -506,6 +535,12 @@ function opUsesValue(op: string | undefined): boolean {
                 >${{ branch.action.target_var }}</span>
                 <span class="rule-tok-op">{{ modeLabel(branch.action?.mode) }}</span>
                 <span class="rule-tok-val"><RuleValueChips :value="branch.action?.value" :uuid-to-name="uuidToName" /></span>
+                <PairBadge
+                  v-for="p in pairBadgesFor(rule.id, bi)"
+                  :key="`${p.number}-${p.targetUuid}`"
+                  :pair="p"
+                  variant="option"
+                />
               </span>
               <span class="branch-cell branch-cell--cond-override">
                 <!-- condition.value override — RichTextInput on the
@@ -583,6 +618,12 @@ function opUsesValue(op: string | undefined): boolean {
                 >${{ rule.else.action.target_var }}</span>
                 <span class="rule-tok-op">{{ modeLabel(rule.else.action?.mode) }}</span>
                 <span class="rule-tok-val"><RuleValueChips :value="rule.else.action?.value" :uuid-to-name="uuidToName" /></span>
+                <PairBadge
+                  v-for="p in pairBadgesFor(rule.id, 'else')"
+                  :key="`${p.number}-${p.targetUuid}`"
+                  :pair="p"
+                  variant="option"
+                />
               </span>
               <!-- ELSE has no condition → no condition override cell -->
               <span class="branch-cell branch-cell--cond-override"></span>

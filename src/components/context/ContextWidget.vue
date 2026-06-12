@@ -682,11 +682,15 @@ const editingModule = computed<ModuleEntry | null>(() =>
   editingIdx.value != null ? (value.value.modules[editingIdx.value] ?? null) : null,
 );
 
-/** Per-option pair lookup for the currently-edited wildcard. Map keys
- *  are option ids; values are pair badges whose `via.optionIds` include
- *  that option. Drives the trailing `↪#N` chip inside the wildcard
- *  modal's options table. Empty for non-wildcard modules and for
- *  wildcards that aren't a constraint carrier. */
+/** Per-occurrence pair lookup for the currently-edited CARRIER module.
+ *  Map keys are the carrier's `via.optionIds` — wildcard option ids for a
+ *  wildcard carrier, engine branch keys (`${rule_id}:${bi}` / `:else`) for
+ *  a derivation carrier. Values are the pair badges whose nested `@{uuid}`
+ *  ref this occurrence hosts. Drives the trailing `↪#N` chip inside the
+ *  wildcard modal's options table AND the derivation modal's rule summary
+ *  rows. Empty for non-carrier modules. Carrier-type-agnostic: it reads
+ *  `viaInboundFor`, which `computePairingsFull` populates for every
+ *  CARRIER_TYPE. */
 const editingModuleViaOptionPairs = computed<Map<string, PairingBadge[]>>(() => {
   const m = editingModule.value;
   if (!m) return new Map();

@@ -1220,4 +1220,90 @@ describe("allowNestedRefs — derivation action-value @{} reuse", () => {
     expect(document.querySelectorAll(".wp-rt-suggestions__item").length).toBe(0);
     wrap.unmount();
   });
+
+  // ── Teleported-overlay theme propagation (Fix 2) ──────────────────
+  //
+  // The `@`-autocomplete popover + the SubcategoryFilterPicker both
+  // `<Teleport to="body">`, escaping the host's themed subtree. When the
+  // host sits under a non-default theme the body-teleported node must carry
+  // the SAME `wp-theme-*` class so the `--wp-*` tokens resolve to the host's
+  // palette (not the base `:root` dark default). We assert the detected
+  // class lands on the teleported roots; the FINAL color match still needs a
+  // human in-browser check (jsdom has no computed-style cascade).
+  it("stamps the host's wp-theme-light class onto the teleported autocomplete popover", async () => {
+    document.body.classList.add("wp-theme-light");
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "", surface: "combine", varSuggestions: ["person"] },
+      attachTo: document.body,
+    });
+    await (wrap.vm as unknown as { __triggerAutocompleteForTest: (t: "@" | "$") => Promise<void> })
+      .__triggerAutocompleteForTest("$");
+    await flushPromises();
+    const pop = document.querySelector(".wp-rt-suggestions");
+    expect(pop).not.toBeNull();
+    expect(pop!.classList.contains("wp-theme-light")).toBe(true);
+    expect(pop!.classList.contains("wp-theme-dark")).toBe(false);
+    wrap.unmount();
+    document.body.classList.remove("wp-theme-light");
+  });
+
+  it("stamps the host's wp-theme-light class onto the teleported subcat picker anchor + backdrop", async () => {
+    document.body.classList.add("wp-theme-light");
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "",
+        surface: "wildcard",
+        refSuggestions: ["aabbccdd"],
+        uuidToName: new Map([["aabbccdd", "color"]]),
+        uuidToSubCategories: new Map([["aabbccdd", ["warm", "cool"]]]),
+      },
+      attachTo: document.body,
+    });
+    await (wrap.vm as unknown as { __triggerAutocompleteForTest: (t: "@" | "$") => Promise<void> })
+      .__triggerAutocompleteForTest("@");
+    await (wrap.vm as unknown as { __applyAutocompleteForTest: (label: string) => Promise<void> })
+      .__applyAutocompleteForTest("aabbccdd");
+    const anchor = document.querySelector(".wp-subcat-picker__anchor");
+    const backdrop = document.querySelector(".wp-subcat-picker__backdrop");
+    expect(anchor).not.toBeNull();
+    expect(backdrop).not.toBeNull();
+    expect(anchor!.classList.contains("wp-theme-light")).toBe(true);
+    expect(backdrop!.classList.contains("wp-theme-light")).toBe(true);
+    wrap.unmount();
+    document.body.classList.remove("wp-theme-light");
+  });
+
+  it("stamps wp-theme-dark onto the teleported popover when the host is on a dark ancestor", async () => {
+    document.body.classList.add("wp-theme-dark");
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "", surface: "combine", varSuggestions: ["person"] },
+      attachTo: document.body,
+    });
+    await (wrap.vm as unknown as { __triggerAutocompleteForTest: (t: "@" | "$") => Promise<void> })
+      .__triggerAutocompleteForTest("$");
+    await flushPromises();
+    const pop = document.querySelector(".wp-rt-suggestions");
+    expect(pop).not.toBeNull();
+    expect(pop!.classList.contains("wp-theme-dark")).toBe(true);
+    expect(pop!.classList.contains("wp-theme-light")).toBe(false);
+    wrap.unmount();
+    document.body.classList.remove("wp-theme-dark");
+  });
+
+  it("adds NO wp-theme-* class to the teleported popover when no theme ancestor exists", async () => {
+    // No explicit theme class on any ancestor — the inherited cascade is
+    // already correct (default :root dark), so we must NOT force one.
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "", surface: "combine", varSuggestions: ["person"] },
+      attachTo: document.body,
+    });
+    await (wrap.vm as unknown as { __triggerAutocompleteForTest: (t: "@" | "$") => Promise<void> })
+      .__triggerAutocompleteForTest("$");
+    await flushPromises();
+    const pop = document.querySelector(".wp-rt-suggestions");
+    expect(pop).not.toBeNull();
+    expect(pop!.classList.contains("wp-theme-light")).toBe(false);
+    expect(pop!.classList.contains("wp-theme-dark")).toBe(false);
+    wrap.unmount();
+  });
 });
