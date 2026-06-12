@@ -431,11 +431,16 @@ function cancel() {
     <!-- v2 derivation branch — single-pane tailored modal. Library
          (rule conditions / branches / actions) stays in SPA; modal
          exposes only display-name override + per-rule disable
-         toggles via instance.disabled_rule_ids. -->
+         toggles via instance.disabled_rule_ids. upstream/sibling vars
+         feed the rule override fields' `$var` autocomplete; the `@{}`
+         nested-ref source is the LIBRARY (fetched inside the modal), so
+         sibling/chain MODULES are intentionally NOT forwarded here. -->
     <DerivationInstanceModal
       v-else-if="draft && draft.type === 'derivation'"
       :module="draft"
       :is-modified="instanceModified"
+      :upstream-vars="upstreamVars"
+      :sibling-vars="siblingVars"
       @update="onUpdate"
       @save="save"
       @cancel="cancel"

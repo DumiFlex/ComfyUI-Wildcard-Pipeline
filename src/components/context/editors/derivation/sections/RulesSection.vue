@@ -24,10 +24,21 @@
  *   - `condition_value_overrides` — same shape, but for IF + ELIF
  *     conditions only (ELSE has no condition).
  */
-import { computed, ref } from "vue";
+import { computed, defineAsyncComponent, ref } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import { patchInstance } from "../../instance/patch";
 import { varColorClass } from "../../../../shared/var-color";
+import RuleValueChips from "./RuleValueChips.vue";
+
+// Async-import the rich-text editor so its chunk stays split + is only
+// pulled in when a derivation instance modal expands a rule. RichTextInput
+// is ALREADY a lazy chunk in the extension (combine's TemplateSection imports
+// the same module) — Vite dedupes, so reusing the identical specifier adds
+// ~0 to the bundle. Bug parity: this brings `@{}` chips + autocomplete + the
+// sub-cat picker to the canvas override fields, matching the SPA editor.
+const RichTextInput = defineAsyncComponent(
+  () => import("../../../../../manager/components/RichTextInput.vue"),
+);
 
 interface DerivationCondition { var?: string; op?: string; value?: string }
 interface DerivationAction { target_var?: string; mode?: string; value?: string }
@@ -38,7 +49,37 @@ interface DerivationRule {
   else?: { action?: DerivationAction };
 }
 
-const props = defineProps<{ module: ModuleEntry }>();
+const props = withDefaults(
+  defineProps<{
+    module: ModuleEntry;
+    /** `$var` autocomplete list for the override RichTextInputs —
+     *  upstream + sibling producer vars, forwarded by the modal. */
+    varSuggestions?: string[];
+    /** Library WILDCARD uuids for the `@{}` autocomplete (ACTION /
+     *  ELSE-action inputs only — `condition.value` is compared raw). */
+    refSuggestions?: string[];
+    /** The six per-wildcard maps `buildWildcardRefData` returns — used
+     *  both to chipify `@{uuid}` in the read-only summary and to feed the
+     *  ACTION-value RichTextInputs' nested-ref autocomplete + step-2
+     *  sub-cat picker. Empty until the modal's catalog fetch resolves. */
+    uuidToName?: Map<string, string>;
+    uuidToSubCategories?: Map<string, string[]>;
+    uuidToHasNull?: Map<string, boolean>;
+    uuidToOptionsCount?: Map<string, number>;
+    uuidToOptionTagSets?: Map<string, string[][]>;
+    uuidToTagGroups?: Map<string, Record<string, string[]>>;
+  }>(),
+  {
+    varSuggestions: () => [],
+    refSuggestions: () => [],
+    uuidToName: () => new Map(),
+    uuidToSubCategories: () => new Map(),
+    uuidToHasNull: () => new Map(),
+    uuidToOptionsCount: () => new Map(),
+    uuidToOptionTagSets: () => new Map(),
+    uuidToTagGroups: () => new Map(),
+  },
+);
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
 
 const rules = computed<DerivationRule[]>(() => {
@@ -138,13 +179,14 @@ function setOverride(
   emit("update", patchInstance(props.module, field, collapsed));
 }
 
-function onActionOverrideInput(ruleId: string, key: string, ev: Event): void {
-  const value = (ev.target as HTMLInputElement).value;
+// RichTextInput emits the resolved string directly (not a DOM Event), so
+// these handlers take the value as-is. `setOverride` already collapses an
+// empty string to a dropped entry / null map.
+function onActionOverrideInput(ruleId: string, key: string, value: string): void {
   setOverride("action_value_overrides", ruleId, key, value);
 }
 
-function onCondOverrideInput(ruleId: string, key: string, ev: Event): void {
-  const value = (ev.target as HTMLInputElement).value;
+function onCondOverrideInput(ruleId: string, key: string, value: string): void {
   setOverride("condition_value_overrides", ruleId, key, value);
 }
 
@@ -371,14 +413,14 @@ function opUsesValue(op: string | undefined): boolean {
               <span
                 v-if="opUsesValue(rule.branches[0].condition?.op)"
                 class="rule-tok-val"
-              >{{ rule.branches[0].condition?.value || "?" }}</span>
+              ><RuleValueChips :value="rule.branches[0].condition?.value" :uuid-to-name="uuidToName" /></span>
               <span class="rule-tok-arrow">→</span>
               <span
                 v-if="rule.branches[0].action?.target_var"
                 :class="['rule-tok-var', varColorClass(rule.branches[0].action.target_var)]"
               >${{ rule.branches[0].action.target_var }}</span>
               <span class="rule-tok-op">{{ modeLabel(rule.branches[0].action?.mode) }}</span>
-              <span class="rule-tok-val">{{ rule.branches[0].action?.value || "?" }}</span>
+              <span class="rule-tok-val"><RuleValueChips :value="rule.branches[0].action?.value" :uuid-to-name="uuidToName" /></span>
             </template>
           </span>
 
@@ -456,38 +498,58 @@ function opUsesValue(op: string | undefined): boolean {
                 <span
                   v-if="opUsesValue(branch.condition?.op)"
                   class="rule-tok-val"
-                >{{ branch.condition?.value || "?" }}</span>
+                ><RuleValueChips :value="branch.condition?.value" :uuid-to-name="uuidToName" /></span>
                 <span class="rule-tok-arrow">→</span>
                 <span
                   v-if="branch.action?.target_var"
                   :class="['rule-tok-var', varColorClass(branch.action.target_var)]"
                 >${{ branch.action.target_var }}</span>
                 <span class="rule-tok-op">{{ modeLabel(branch.action?.mode) }}</span>
-                <span class="rule-tok-val">{{ branch.action?.value || "?" }}</span>
+                <span class="rule-tok-val"><RuleValueChips :value="branch.action?.value" :uuid-to-name="uuidToName" /></span>
               </span>
               <span class="branch-cell branch-cell--cond-override">
-                <input
+                <!-- condition.value override — RichTextInput on the
+                     `derivation` surface gives `$var` chips/autocomplete, but
+                     NO `@{}` machinery: the engine compares condition.value
+                     RAW (never resolves refs/vars there). Matches the SPA
+                     DerivationRuleCard condition field. -->
+                <RichTextInput
                   v-if="opUsesValue(branch.condition?.op)"
-                  type="text"
+                  surface="derivation"
+                  :var-suggestions="varSuggestions"
+                  :uuid-to-name="uuidToName"
+                  :model-value="getOverride('condition_value_overrides', rule.id, String(bi))"
+                  :placeholder="branch.condition?.value || ''"
                   class="branch-override-input"
                   :class="{ 'branch-override-input--mod': getOverride('condition_value_overrides', rule.id, String(bi)) !== '' }"
-                  :value="getOverride('condition_value_overrides', rule.id, String(bi))"
-                  :placeholder="branch.condition?.value || ''"
                   :data-test="`cond-override-${rule.id}-${bi}`"
                   :aria-label="`Condition value override for rule ${rule.id} branch ${bi}`"
-                  @input="(ev) => onCondOverrideInput(rule.id, String(bi), ev)"
+                  @update:model-value="(v: string) => onCondOverrideInput(rule.id, String(bi), v)"
                 />
               </span>
               <span class="branch-cell branch-cell--action-override">
-                <input
-                  type="text"
+                <!-- action.value override — full `@{}` carrier machinery
+                     (allow-nested-refs + the six ref-data maps): the engine
+                     resolves `@{}` here post-Layer-A. Matches the SPA
+                     DerivationRuleCard action field. -->
+                <RichTextInput
+                  surface="derivation"
+                  allow-nested-refs
+                  :var-suggestions="varSuggestions"
+                  :ref-suggestions="refSuggestions"
+                  :uuid-to-name="uuidToName"
+                  :uuid-to-sub-categories="uuidToSubCategories"
+                  :uuid-to-has-null="uuidToHasNull"
+                  :uuid-to-options-count="uuidToOptionsCount"
+                  :uuid-to-option-tag-sets="uuidToOptionTagSets"
+                  :uuid-to-tag-groups="uuidToTagGroups"
+                  :model-value="getOverride('action_value_overrides', rule.id, String(bi))"
+                  :placeholder="branch.action?.value || ''"
                   class="branch-override-input"
                   :class="{ 'branch-override-input--mod': getOverride('action_value_overrides', rule.id, String(bi)) !== '' }"
-                  :value="getOverride('action_value_overrides', rule.id, String(bi))"
-                  :placeholder="branch.action?.value || ''"
                   :data-test="`action-override-${rule.id}-${bi}`"
                   :aria-label="`Action value override for rule ${rule.id} branch ${bi}`"
-                  @input="(ev) => onActionOverrideInput(rule.id, String(bi), ev)"
+                  @update:model-value="(v: string) => onActionOverrideInput(rule.id, String(bi), v)"
                 />
               </span>
             </div>
@@ -520,20 +582,31 @@ function opUsesValue(op: string | undefined): boolean {
                   :class="['rule-tok-var', varColorClass(rule.else.action.target_var)]"
                 >${{ rule.else.action.target_var }}</span>
                 <span class="rule-tok-op">{{ modeLabel(rule.else.action?.mode) }}</span>
-                <span class="rule-tok-val">{{ rule.else.action?.value || "?" }}</span>
+                <span class="rule-tok-val"><RuleValueChips :value="rule.else.action?.value" :uuid-to-name="uuidToName" /></span>
               </span>
               <!-- ELSE has no condition → no condition override cell -->
               <span class="branch-cell branch-cell--cond-override"></span>
               <span class="branch-cell branch-cell--action-override">
-                <input
-                  type="text"
+                <!-- ELSE action.value override — full `@{}` carrier machinery,
+                     same as the IF/ELIF action field. -->
+                <RichTextInput
+                  surface="derivation"
+                  allow-nested-refs
+                  :var-suggestions="varSuggestions"
+                  :ref-suggestions="refSuggestions"
+                  :uuid-to-name="uuidToName"
+                  :uuid-to-sub-categories="uuidToSubCategories"
+                  :uuid-to-has-null="uuidToHasNull"
+                  :uuid-to-options-count="uuidToOptionsCount"
+                  :uuid-to-option-tag-sets="uuidToOptionTagSets"
+                  :uuid-to-tag-groups="uuidToTagGroups"
+                  :model-value="getOverride('action_value_overrides', rule.id, 'else')"
+                  :placeholder="rule.else.action?.value || ''"
                   class="branch-override-input"
                   :class="{ 'branch-override-input--mod': getOverride('action_value_overrides', rule.id, 'else') !== '' }"
-                  :value="getOverride('action_value_overrides', rule.id, 'else')"
-                  :placeholder="rule.else.action?.value || ''"
                   :data-test="`action-override-${rule.id}-else`"
                   :aria-label="`ELSE action value override for rule ${rule.id}`"
-                  @input="(ev) => onActionOverrideInput(rule.id, 'else', ev)"
+                  @update:model-value="(v: string) => onActionOverrideInput(rule.id, 'else', v)"
                 />
               </span>
             </div>
@@ -752,29 +825,28 @@ function opUsesValue(op: string | undefined): boolean {
 }
 .branch-toggle .pi { font-size: 8px; }
 
+/* The override fields are now RichTextInput hosts (atomic-chip editors)
+ * rather than bare `<input>`s — RichTextInput supplies its own `.wp-rt`
+ * border / background / padding / mono font. We only own the grid-cell
+ * sizing here + the `--mod` accent (same minimal approach combine's
+ * TemplateSection uses with `.wp-tpl__input--mod`). The `:deep()` rules
+ * tighten the embedded host to the compact 10px branch-table scale so the
+ * canvas override field doesn't tower over the summary row. */
 .branch-override-input {
   width: 100%;
-  background: var(--wp-bg2);
-  border: 1px dashed var(--wp-border);
-  border-radius: 3px;
-  padding: 3px 6px;
-  font: 10px var(--wp-font-mono);
-  color: var(--wp-text);
   min-width: 0;
 }
-.branch-override-input:focus {
-  border-color: var(--wp-accent);
-  outline: none;
+.branch-override-input :deep(.wp-rt) {
+  font: 10px var(--wp-font-mono);
+  border-style: dashed;
 }
-.branch-override-input--mod {
+.branch-override-input :deep(.wp-rt__host) {
+  padding: 3px 6px;
+}
+.branch-override-input--mod :deep(.wp-rt) {
   border-style: solid;
   border-color: var(--wp-accent);
-  color: var(--wp-accent-text, var(--wp-text));
   background: color-mix(in srgb, var(--wp-accent) 6%, var(--wp-bg2));
-}
-.branch-override-input::placeholder {
-  color: var(--wp-text-dim, var(--wp-text3));
-  opacity: 0.6;
 }
 
 /* Token coloring (re-used from prior list rendering) */

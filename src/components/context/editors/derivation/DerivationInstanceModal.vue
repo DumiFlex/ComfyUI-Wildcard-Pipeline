@@ -12,8 +12,13 @@
  * Section order matches all shipped v2 modals: Header → Identity →
  * Rules (kind-specific) → Runtime → Footer.
  */
-import { computed } from "vue";
+import { computed, onMounted, ref } from "vue";
 import type { ModuleEntry } from "../../../../widgets/_shared";
+import type { ModuleRow } from "../../../../manager/api/types";
+import {
+  buildWildcardRefData,
+  collectLibraryWildcardRefs,
+} from "../../../../manager/utils/library-suggestions";
 import IdentitySection from "./sections/IdentitySection.vue";
 import RulesSection from "./sections/RulesSection.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
@@ -25,9 +30,60 @@ const props = withDefaults(
     /** True when draft has unsaved instance edits. Gates "Save to library"
      *  visibility — pushing an unmodified payload back is a no-op. */
     isModified?: boolean;
+    /** Vars produced upstream of this Context node — forwarded as the
+     *  `$var` autocomplete list for the rule override fields. */
+    upstreamVars?: string[];
+    /** Vars produced by other modules in the SAME Context node. */
+    siblingVars?: string[];
   }>(),
-  { isDrifted: false, isModified: false },
+  { isDrifted: false, isModified: false, upstreamVars: () => [], siblingVars: () => [] },
 );
+
+// ── Library catalog → `@{}` ref-data ───────────────────────────────
+//
+// Bug parity: the rule ACTION-value override fields reuse the wildcard
+// `@{}` nested-ref machinery (autocomplete + chips + step-2 sub-cat
+// picker), and the read-only summary chips `@{uuid}` refs. Both need the
+// per-wildcard ref-data the SPA derivation editor builds from
+// `moduleStore.catalog`. The canvas has no Pinia store, so we fetch the
+// library ONCE when the modal mounts (same `/wp/api/modules` source the
+// ModulePickerModal reads) and build the SAME maps via the shared
+// `buildWildcardRefData`. The `@{}` source is the LIBRARY (by identity),
+// NOT this Context node's chain — a chain sibling would be a `$var`.
+const catalog = ref<ModuleRow[]>([]);
+
+const refData = computed(() => buildWildcardRefData(catalog.value));
+const uuidToName = computed(() => refData.value.uuidToName);
+// Library wildcard uuids for `@{}` autocomplete, excluding this module's own
+// id (a wildcard never nests itself) — sorted by display name to mirror the
+// SPA's `collectLibraryWildcardRefs`.
+const refSuggestions = computed(() =>
+  collectLibraryWildcardRefs({ catalog: catalog.value }, props.module.id, refData.value.uuidToName),
+);
+
+/** `$var` suggestion list for the override fields — upstream + sibling
+ *  producer vars, deduped + alpha-sorted (mirrors the combine modal). */
+const varSuggestions = computed<string[]>(() => {
+  const set = new Set<string>();
+  for (const n of props.upstreamVars) if (n) set.add(n);
+  for (const n of props.siblingVars) if (n) set.add(n);
+  return [...set].sort();
+});
+
+onMounted(async () => {
+  // Fire-and-forget: until this resolves the ref-data maps stay empty, so
+  // autocomplete simply shows nothing + summary chips fall back to cached
+  // names — no crash, no blocking. A failed fetch leaves the catalog empty.
+  try {
+    if (typeof fetch !== "function") return;
+    const res = await fetch("/wp/api/modules", { credentials: "same-origin" });
+    if (!res.ok) return;
+    const json = (await res.json()) as { items?: ModuleRow[] };
+    if (Array.isArray(json.items)) catalog.value = json.items;
+  } catch {
+    // Non-fatal — leave catalog empty (editor still works without @{} data).
+  }
+});
 
 const emit = defineEmits<{
   "update": [patch: Partial<ModuleEntry>];
@@ -78,7 +134,18 @@ function onSpaClick(): void {
     </header>
 
     <IdentitySection :module="module" @update="onUpdate" />
-    <RulesSection :module="module" @update="onUpdate" />
+    <RulesSection
+      :module="module"
+      :var-suggestions="varSuggestions"
+      :ref-suggestions="refSuggestions"
+      :uuid-to-name="uuidToName"
+      :uuid-to-sub-categories="refData.uuidToSubCategories"
+      :uuid-to-has-null="refData.uuidToHasNull"
+      :uuid-to-options-count="refData.uuidToOptionsCount"
+      :uuid-to-option-tag-sets="refData.uuidToOptionTagSets"
+      :uuid-to-tag-groups="refData.uuidToTagGroups"
+      @update="onUpdate"
+    />
     <RuntimeSection :module="module" @update="onUpdate" />
 
     <footer class="wp-dvm__foot">

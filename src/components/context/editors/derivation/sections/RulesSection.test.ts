@@ -8,9 +8,27 @@
 // / edit-mode UI here.
 
 import { describe, it, expect } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mount, flushPromises } from "@vue/test-utils";
 import RulesSection from "./RulesSection.vue";
+import RichTextInput from "../../../../../manager/components/RichTextInput.vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
+
+// The override fields are RichTextInput hosts loaded via defineAsyncComponent
+// (lazy chunk — keeps the bundle split). `flushPromises()` resolves the async
+// wrapper so `findAllComponents(RichTextInput)` matches the real instance, and
+// driving the field is `vm.$emit("update:modelValue", …)` rather than the
+// old `<input>` value-set + "input" event.
+async function expandAndFindRti(
+  w: ReturnType<typeof mount>,
+  ruleId: string,
+  testId: string,
+) {
+  await w.find(`[data-test="rule-head-${ruleId}"]`).trigger("click");
+  await flushPromises();
+  return w
+    .findAllComponents(RichTextInput)
+    .find((c) => c.attributes("data-test") === testId);
+}
 
 interface DerivationBranch {
   condition: { var: string; op: string; value: string };
@@ -192,19 +210,21 @@ describe("derivation RulesSection (tier-D accordion + branch table)", () => {
       props: { module: makeModule([multiRule()]) },
     });
     await w.find('[data-test="rule-head-r1"]').trigger("click");
-    expect(w.find('[data-test="action-override-r1-0"]').exists()).toBe(true);
-    expect(w.find('[data-test="action-override-r1-1"]').exists()).toBe(true);
-    expect(w.find('[data-test="action-override-r1-else"]').exists()).toBe(true);
+    await flushPromises();
+    const rtis = w.findAllComponents(RichTextInput);
+    const has = (t: string) => rtis.some((c) => c.attributes("data-test") === t);
+    expect(has("action-override-r1-0")).toBe(true);
+    expect(has("action-override-r1-1")).toBe(true);
+    expect(has("action-override-r1-else")).toBe(true);
   });
 
   it("typing into IF action override emits action_value_overrides patch", async () => {
     const w = mount(RulesSection, {
       props: { module: makeModule([multiRule()]) },
     });
-    await w.find('[data-test="rule-head-r1"]').trigger("click");
-    const input = w.find<HTMLInputElement>('[data-test="action-override-r1-0"]');
-    input.element.value = "fiery";
-    await input.trigger("input");
+    const input = await expandAndFindRti(w, "r1", "action-override-r1-0");
+    input!.vm.$emit("update:modelValue", "fiery");
+    await w.vm.$nextTick();
     const patch = lastPatch(w);
     expect(patch.instance?.action_value_overrides).toEqual({
       r1: { "0": "fiery" },
@@ -215,10 +235,9 @@ describe("derivation RulesSection (tier-D accordion + branch table)", () => {
     const w = mount(RulesSection, {
       props: { module: makeModule([multiRule()]) },
     });
-    await w.find('[data-test="rule-head-r1"]').trigger("click");
-    const input = w.find<HTMLInputElement>('[data-test="action-override-r1-else"]');
-    input.element.value = "blank";
-    await input.trigger("input");
+    const input = await expandAndFindRti(w, "r1", "action-override-r1-else");
+    input!.vm.$emit("update:modelValue", "blank");
+    await w.vm.$nextTick();
     expect(lastPatch(w).instance?.action_value_overrides).toEqual({
       r1: { else: "blank" },
     });
@@ -232,10 +251,9 @@ describe("derivation RulesSection (tier-D accordion + branch table)", () => {
         }),
       },
     });
-    await w.find('[data-test="rule-head-r1"]').trigger("click");
-    const input = w.find<HTMLInputElement>('[data-test="action-override-r1-0"]');
-    input.element.value = "";
-    await input.trigger("input");
+    const input = await expandAndFindRti(w, "r1", "action-override-r1-0");
+    input!.vm.$emit("update:modelValue", "");
+    await w.vm.$nextTick();
     expect(lastPatch(w).instance?.action_value_overrides).toBeNull();
   });
 
@@ -246,19 +264,21 @@ describe("derivation RulesSection (tier-D accordion + branch table)", () => {
       props: { module: makeModule([multiRule()]) },
     });
     await w.find('[data-test="rule-head-r1"]').trigger("click");
-    expect(w.find('[data-test="cond-override-r1-0"]').exists()).toBe(true);
-    expect(w.find('[data-test="cond-override-r1-1"]').exists()).toBe(true);
-    expect(w.find('[data-test="cond-override-r1-else"]').exists()).toBe(false);
+    await flushPromises();
+    const rtis = w.findAllComponents(RichTextInput);
+    const has = (t: string) => rtis.some((c) => c.attributes("data-test") === t);
+    expect(has("cond-override-r1-0")).toBe(true);
+    expect(has("cond-override-r1-1")).toBe(true);
+    expect(has("cond-override-r1-else")).toBe(false);
   });
 
   it("typing into IF condition override emits condition_value_overrides patch", async () => {
     const w = mount(RulesSection, {
       props: { module: makeModule([multiRule()]) },
     });
-    await w.find('[data-test="rule-head-r1"]').trigger("click");
-    const input = w.find<HTMLInputElement>('[data-test="cond-override-r1-0"]');
-    input.element.value = "purple";
-    await input.trigger("input");
+    const input = await expandAndFindRti(w, "r1", "cond-override-r1-0");
+    input!.vm.$emit("update:modelValue", "purple");
+    await w.vm.$nextTick();
     expect(lastPatch(w).instance?.condition_value_overrides).toEqual({
       r1: { "0": "purple" },
     });
@@ -348,5 +368,151 @@ describe("derivation RulesSection (tier-D accordion + branch table)", () => {
     expect(w.find('[data-test="rule-card-r1"]').classes()).toContain(
       "rule-card--drop-target",
     );
+  });
+});
+
+// ── @{} nested-ref parity (chips in summary + RichTextInput overrides) ──
+//
+// The canvas derivation modal must reach full parity with the SPA
+// DerivationRuleCard editor: `@{uuid}` refs render as CHIPS in the
+// read-only rule summary, and the ACTION / ELSE-action override fields
+// become RichTextInputs with the full wildcard `@{}` machinery
+// (allowNestedRefs + the six ref-data maps + $var suggestions). The
+// CONDITION override stays var-only (engine compares condition.value
+// raw — no `@{}` carrier resolution there). Mirrors the prop sets in
+// src/manager/components/DerivationRuleCard.vue.
+
+const REF_DATA = {
+  varSuggestions: ["mood", "age"],
+  refSuggestions: ["aabbccdd"],
+  uuidToName: new Map([["aabbccdd", "color"]]),
+  uuidToSubCategories: new Map([["aabbccdd", ["warm", "cool"]]]),
+  uuidToHasNull: new Map([["aabbccdd", false]]),
+  uuidToOptionsCount: new Map([["aabbccdd", 3]]),
+  uuidToOptionTagSets: new Map([["aabbccdd", [["warm"], ["cool"]]]]),
+  uuidToTagGroups: new Map([["aabbccdd", {}]]),
+};
+
+/** A rule whose IF action value carries a nested `@{uuid}` ref so the
+ *  summary has something to chipify. */
+function refRule(): DerivationRule {
+  return {
+    id: "r1",
+    branches: [{
+      condition: { var: "color", op: "equals", value: "red" },
+      action: { target_var: "mood", mode: "replace", value: "@{aabbccdd#color:warm}" },
+    }],
+    else: { action: { target_var: "mood", mode: "replace", value: "@{aabbccdd}" } },
+  };
+}
+
+describe("derivation RulesSection — @{} chip + autocomplete parity", () => {
+  it("summary renders an @{} ref as a chip (not raw @{uuid} text)", () => {
+    const w = mount(RulesSection, {
+      props: { module: makeModule([refRule()]), ...REF_DATA },
+    });
+    const summary = w.find('[data-test="rule-summary-r1"]');
+    // The chip carries the uuid as a data attribute (same as OptionRow).
+    const chip = summary.find('[data-uuid="aabbccdd"]');
+    expect(chip.exists()).toBe(true);
+    // Resolved name is shown, raw hex is NOT printed verbatim.
+    expect(summary.text()).toContain("color");
+    expect(summary.text()).not.toContain("@{aabbccdd");
+  });
+
+  it("action override + ELSE action override mount RichTextInput with allowNestedRefs + ref-data", async () => {
+    const w = mount(RulesSection, {
+      props: { module: makeModule([refRule()]), ...REF_DATA },
+    });
+    await w.find('[data-test="rule-head-r1"]').trigger("click");
+    await flushPromises();
+    const rtis = w.findAllComponents(RichTextInput);
+    const byTest = (t: string) => rtis.find((c) => c.attributes("data-test") === t);
+
+    const actVal = byTest("action-override-r1-0");
+    const elseVal = byTest("action-override-r1-else");
+    expect(actVal).toBeDefined();
+    expect(elseVal).toBeDefined();
+
+    for (const rti of [actVal!, elseVal!]) {
+      expect(rti.props("surface")).toBe("derivation");
+      expect(rti.props("allowNestedRefs")).toBe(true);
+      expect(rti.props("refSuggestions")).toEqual(["aabbccdd"]);
+      expect(rti.props("varSuggestions")).toEqual(["mood", "age"]);
+      expect(rti.props("uuidToName")).toBeInstanceOf(Map);
+      expect(rti.props("uuidToSubCategories")).toBeInstanceOf(Map);
+      expect(rti.props("uuidToHasNull")).toBeInstanceOf(Map);
+      expect(rti.props("uuidToOptionsCount")).toBeInstanceOf(Map);
+      expect(rti.props("uuidToOptionTagSets")).toBeInstanceOf(Map);
+      expect(rti.props("uuidToTagGroups")).toBeInstanceOf(Map);
+    }
+  });
+
+  it("condition override mounts RichTextInput WITHOUT allowNestedRefs (raw compare) but WITH var-suggestions", async () => {
+    const w = mount(RulesSection, {
+      props: { module: makeModule([refRule()]), ...REF_DATA },
+    });
+    await w.find('[data-test="rule-head-r1"]').trigger("click");
+    await flushPromises();
+    const rtis = w.findAllComponents(RichTextInput);
+    const condVal = rtis.find((c) => c.attributes("data-test") === "cond-override-r1-0");
+    expect(condVal).toBeDefined();
+    expect(condVal!.props("surface")).toBe("derivation");
+    // condition.value is compared RAW → no @{} carrier machinery.
+    expect(condVal!.props("allowNestedRefs")).toBeFalsy();
+    // …but $var autocomplete stays available (parity with the SPA field).
+    expect(condVal!.props("varSuggestions")).toEqual(["mood", "age"]);
+    // No ref-data passed to the condition input (empty default Map).
+    expect((condVal!.props("refSuggestions") as string[] | undefined) ?? []).toEqual([]);
+  });
+
+  it("typing into the action-override RichTextInput emits action_value_overrides patch", async () => {
+    const w = mount(RulesSection, {
+      props: { module: makeModule([refRule()]), ...REF_DATA },
+    });
+    const actVal = await expandAndFindRti(w, "r1", "action-override-r1-0");
+    actVal!.vm.$emit("update:modelValue", "fiery");
+    await w.vm.$nextTick();
+    const updates = w.emitted("update")! as unknown[][];
+    const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
+    expect(patch.instance?.action_value_overrides).toEqual({ r1: { "0": "fiery" } });
+  });
+
+  it("clearing the action-override RichTextInput back to empty collapses the override to null", async () => {
+    const w = mount(RulesSection, {
+      props: {
+        module: makeModule([refRule()], { action_value_overrides: { r1: { "0": "fiery" } } }),
+        ...REF_DATA,
+      },
+    });
+    const actVal = await expandAndFindRti(w, "r1", "action-override-r1-0");
+    actVal!.vm.$emit("update:modelValue", "");
+    await w.vm.$nextTick();
+    const updates = w.emitted("update")! as unknown[][];
+    const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
+    expect(patch.instance?.action_value_overrides).toBeNull();
+  });
+
+  // Filter-pop-up seam: picking an `@` ref whose target declares
+  // sub_categories must open the SubcategoryFilterPicker from inside the
+  // canvas action-override input. Driven via RichTextInput's test seams
+  // (jsdom can't fake the real keyboard path). This exercises the
+  // picker-open code path — real-browser z-index/positioning over the
+  // litegraph modal still needs a human check (see report).
+  it("action-override RichTextInput opens SubcategoryFilterPicker on @-pick with sub-cats", async () => {
+    const w = mount(RulesSection, {
+      props: { module: makeModule([refRule()]), ...REF_DATA },
+      attachTo: document.body,
+    });
+    const actVal = await expandAndFindRti(w, "r1", "action-override-r1-0");
+    const vm = actVal!.vm as unknown as {
+      __triggerAutocompleteForTest: (t: "@" | "$") => void;
+      __applyAutocompleteForTest: (label: string) => void;
+    };
+    vm.__triggerAutocompleteForTest("@");
+    vm.__applyAutocompleteForTest("aabbccdd");
+    await w.vm.$nextTick();
+    expect(document.querySelector('[data-test="subcat-picker"]')).not.toBeNull();
+    w.unmount();
   });
 });

@@ -1,9 +1,23 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
 import ModuleEditModal from "./ModuleEditModal.vue";
 import type { ModuleEntry } from "../../widgets/_shared";
 import { _resetForTests } from "../../extension/preview-resolver";
+
+// The v2 DerivationInstanceModal fetches /wp/api/modules on open to build
+// its `@{}` ref-data. Stub fetch so that round-trip settles harmlessly in
+// the derivation dispatcher tests below (shape mirrors ModulePickerModal).
+function stubEmptyModulesFetch(): void {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ items: [], total: 0 }),
+    })) as unknown as typeof fetch,
+  );
+}
 
 // ModalShell uses <Teleport to="body">. VTU's `find` only walks the
 // component's own subtree, so disable teleport globally for these tests
@@ -523,7 +537,11 @@ describe("ModuleEditModal — combine v2 dispatcher", () => {
 // ── Derivation v2 dispatcher branch ────────────────────────────────────
 
 describe("ModuleEditModal — derivation v2 dispatcher", () => {
-  beforeEach(() => _resetForTests());
+  beforeEach(() => {
+    _resetForTests();
+    stubEmptyModulesFetch();
+  });
+  afterEach(() => vi.unstubAllGlobals());
 
   it("renders DerivationInstanceModal (no tab strip) for derivation kind", async () => {
     const wrapper = mount(ModuleEditModal, {
@@ -548,6 +566,27 @@ describe("ModuleEditModal — derivation v2 dispatcher", () => {
     await wrapper.find('[data-test="dvm-save"]').trigger("click");
     const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
     expect(saved.instance?.disabled_rule_ids).toEqual(["r1"]);
+  });
+
+  // Bug parity: the shell must thread upstream + sibling vars into the
+  // derivation modal so its action/condition override fields can offer
+  // `$var` autocomplete — the SAME props the wildcard + combine modals
+  // already receive. The `@{}` source is the LIBRARY (fetched inside the
+  // modal), so sibling/chain MODULES are intentionally NOT forwarded.
+  it("forwards upstream-vars + sibling-vars to DerivationInstanceModal", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: {
+        visible: true,
+        module: makeDerivation(),
+        upstreamVars: ["age", "season"],
+        siblingVars: ["mood"],
+      },
+    });
+    await nextTick();
+    const dvm = wrapper.findComponent({ name: "DerivationInstanceModal" });
+    expect(dvm.props("upstreamVars")).toEqual(["age", "season"]);
+    expect(dvm.props("siblingVars")).toEqual(["mood"]);
   });
 });
 
