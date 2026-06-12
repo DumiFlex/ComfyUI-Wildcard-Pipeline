@@ -182,7 +182,12 @@ def apply_cascade(conn: sqlite3.Connection, req: dict[str, Any]) -> dict[str, An
             key = (kind, action)
 
             if key == ("wildcard", "delete"):
-                touched_before, diff = fix_wildcard_delete(conn, target_id)
+                # Opt-in nested-ref cleanup: only entities the caller
+                # lists get their @{wildcard_id...} token stripped.
+                # Constraints are never deleted (healed via reattach UI);
+                # an empty list strips nothing.
+                cleanup_ids = req.get("cleanup_ids") or []
+                touched_before, diff = fix_wildcard_delete(conn, target_id, cleanup_ids)
             elif key == ("subcategory", "delete"):
                 touched_before, diff = fix_subcat_delete(
                     conn, target_id, extra.get("subcat_name", "")

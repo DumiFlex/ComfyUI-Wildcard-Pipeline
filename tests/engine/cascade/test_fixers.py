@@ -1,7 +1,5 @@
 """Tests for per-mutation cleanup fixers in engine/cascade/fixers.py."""
 
-import pytest
-
 from engine.cascade.fixers import (
     _rewrite_var_in_string,
     fix_category_delete,
@@ -14,7 +12,6 @@ from engine.cascade.fixers import (
 from engine.db.repositories import (
     BundleRepository,
     CategoryRepository,
-    ModuleNotFound,
     ModuleRepository,
 )
 
@@ -29,7 +26,81 @@ def test_rewrite_var_preserves_list_accessor():
     assert _rewrite_var_in_string("$moodier", "mood", "vibe") == "$moodier"
 
 
-def test_fix_wildcard_delete_strips_constraints_but_preserves_bundle_snapshots(wp_db):
+def test_fix_wildcard_delete_never_touches_constraints(wp_db):
+    """Regression-lock: a dependent constraint (source OR target = the
+    deleted wildcard) SURVIVES the cascade — constraints are healable via
+    the reattach UI, never deleted here, regardless of cleanup_ids."""
+    mod = ModuleRepository(wp_db)
+    wc = mod.create(type="wildcard", name="x", description="", category_id=None, tags=[],
+                    payload={"options": []})
+    other = mod.create(type="wildcard", name="y", description="", category_id=None, tags=[],
+                       payload={"options": []})
+    c_src = mod.create(type="constraint", name="c1", description="", category_id=None, tags=[],
+                       payload={"source_wildcard_id": wc["id"], "target_wildcard_id": other["id"],
+                                "matrix": {}, "exceptions": []})
+    c_tgt = mod.create(type="constraint", name="c2", description="", category_id=None, tags=[],
+                       payload={"source_wildcard_id": other["id"], "target_wildcard_id": wc["id"],
+                                "matrix": {}, "exceptions": []})
+    b = BundleRepository(wp_db).create(name="b1",
+                                        children=[{"id": wc["id"], "type": "module"},
+                                                  {"id": other["id"], "type": "module"}])
+
+    # Pass the constraint ids in cleanup_ids too — they must STILL survive.
+    touched, diff = fix_wildcard_delete(wp_db, wc["id"], [c_src["id"], c_tgt["id"]])
+
+    # Both constraints referencing wc survive (left broken, healed later).
+    assert mod.get(c_src["id"]) is not None
+    assert mod.get(c_tgt["id"]) is not None
+    # Bundle children are frozen snapshots — untouched.
+    bundle_after = BundleRepository(wp_db).get(b["id"])
+    assert {ch["id"] for ch in bundle_after["children"]} == {wc["id"], other["id"]}
+    # Nothing was touched (no nested-ref wildcards/derivations in cleanup_ids).
+    assert not any(t["id"] == c_src["id"] for t in touched)
+    assert not any(t["id"] == c_tgt["id"] for t in touched)
+    assert not any(t["id"] == b["id"] for t in touched)
+    assert not any(d.get("entity_id") == c_src["id"] for d in diff)
+    assert not any(d.get("entity_id") == c_tgt["id"] for d in diff)
+    assert not any(d.get("entity_id") == b["id"] for d in diff)
+
+
+def test_fix_wildcard_delete_strips_nested_ref_only_for_cleanup_ids(wp_db):
+    """A nested-ref wildcard whose id IS in cleanup_ids gets its
+    @{deleted} token stripped from the option value; one whose id is NOT
+    in cleanup_ids is left untouched (ref intact, healed later via remap)."""
+    mod = ModuleRepository(wp_db)
+    wc = mod.create(type="wildcard", name="x", description="", category_id=None, tags=[],
+                    payload={"options": []})
+    ref = "@{" + wc["id"] + "}"
+    cleaned = mod.create(
+        type="wildcard", name="cleaned", description="", category_id=None, tags=[],
+        payload={"options": [{"id": "o1", "value": "warm " + ref + " glow", "weight": 1}]},
+    )
+    kept = mod.create(
+        type="wildcard", name="kept", description="", category_id=None, tags=[],
+        payload={"options": [{"id": "o2", "value": "cool " + ref + " shade", "weight": 1}]},
+    )
+
+    touched, diff = fix_wildcard_delete(wp_db, wc["id"], [cleaned["id"]])
+
+    # cleaned: token removed, surrounding text preserved, no doubled spaces.
+    cleaned_after = mod.get(cleaned["id"])
+    cleaned_val = cleaned_after["payload"]["options"][0]["value"]
+    assert ref not in cleaned_val
+    assert "@{" not in cleaned_val
+    assert cleaned_val == "warm glow"
+    # kept: ref fully intact (id not in cleanup_ids).
+    kept_after = mod.get(kept["id"])
+    assert kept_after["payload"]["options"][0]["value"] == "cool " + ref + " shade"
+    # touched/diff cover only the cleaned wildcard.
+    assert any(t["id"] == cleaned["id"] for t in touched)
+    assert not any(t["id"] == kept["id"] for t in touched)
+    assert any(d.get("entity_id") == cleaned["id"] for d in diff)
+    assert not any(d.get("entity_id") == kept["id"] for d in diff)
+
+
+def test_fix_wildcard_delete_empty_cleanup_ids_strips_nothing(wp_db):
+    """Empty cleanup_ids → constraints AND all nested refs untouched.
+    Only the wildcard row itself is deleted (by the orchestrator, not here)."""
     mod = ModuleRepository(wp_db)
     wc = mod.create(type="wildcard", name="x", description="", category_id=None, tags=[],
                     payload={"options": []})
@@ -38,27 +109,48 @@ def test_fix_wildcard_delete_strips_constraints_but_preserves_bundle_snapshots(w
     c = mod.create(type="constraint", name="c1", description="", category_id=None, tags=[],
                    payload={"source_wildcard_id": wc["id"], "target_wildcard_id": other["id"],
                             "matrix": {}, "exceptions": []})
-    b = BundleRepository(wp_db).create(name="b1",
-                                        children=[{"id": wc["id"], "type": "module"},
-                                                  {"id": other["id"], "type": "module"}])
-
-    touched, diff = fix_wildcard_delete(wp_db, wc["id"])
-
-    # Constraint referencing wc must be deleted (id-only ref, no fallback).
-    with pytest.raises(ModuleNotFound):
-        mod.get(c["id"])
-    # Bundle children are frozen snapshots — wc's entry stays intact
-    # even though the source library row is gone. The bundle keeps
-    # resolving with the captured payload.
-    bundle_after = BundleRepository(wp_db).get(b["id"])
-    assert {ch["id"] for ch in bundle_after["children"]} == {wc["id"], other["id"]}
-    # Only the constraint shows up in touched + diff; bundle untouched.
-    assert any(t["id"] == c["id"] for t in touched)
-    assert not any(t["id"] == b["id"] for t in touched)
-    assert any(
-        d.get("entity_id") == c["id"] and d.get("removed") is True for d in diff
+    ref = "@{" + wc["id"] + "}"
+    referrer = mod.create(
+        type="wildcard", name="r", description="", category_id=None, tags=[],
+        payload={"options": [{"id": "o1", "value": "see " + ref, "weight": 1}]},
     )
-    assert not any(d.get("entity_id") == b["id"] for d in diff)
+
+    touched, diff = fix_wildcard_delete(wp_db, wc["id"], [])
+
+    assert mod.get(c["id"]) is not None
+    assert mod.get(referrer["id"])["payload"]["options"][0]["value"] == "see " + ref
+    assert touched == []
+    assert diff == []
+
+
+def test_fix_wildcard_delete_strips_derivation_action_ref_in_cleanup_ids(wp_db):
+    """A derivation whose id is in cleanup_ids → its action string's
+    @{deleted} ref is stripped (mirrors how the scan walks
+    rules[].branches[].actions[])."""
+    mod = ModuleRepository(wp_db)
+    wc = mod.create(type="wildcard", name="x", description="", category_id=None, tags=[],
+                    payload={"options": []})
+    ref = "@{" + wc["id"] + "}"
+    deriv = mod.create(
+        type="derivation", name="d", description="", category_id=None, tags=[],
+        payload={"rules": [{
+            "id": "r1",
+            "branches": [{
+                "key": "default",
+                "actions": [{"set_text": "use " + ref + " now"}],
+            }],
+        }]},
+    )
+
+    touched, diff = fix_wildcard_delete(wp_db, wc["id"], [deriv["id"]])
+
+    deriv_after = mod.get(deriv["id"])
+    action_val = deriv_after["payload"]["rules"][0]["branches"][0]["actions"][0]["set_text"]
+    assert ref not in action_val
+    assert "@{" not in action_val
+    assert action_val == "use now"
+    assert any(t["id"] == deriv["id"] for t in touched)
+    assert any(d.get("entity_id") == deriv["id"] for d in diff)
 
 
 def test_fix_wildcard_rename_name_leaves_bundle_snapshots_frozen(wp_db):

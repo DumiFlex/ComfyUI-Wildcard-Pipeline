@@ -186,6 +186,29 @@ def _strip_subcat_ref_in_string(
     )
 
 
+def _strip_whole_ref_in_string(s: str, wildcard_id: str) -> str:
+    """Remove every whole ``@{wildcard_id...}`` token from *s*.
+
+    Unlike ``_strip_subcat_ref_in_string`` (which only drops the
+    ``:expr`` filter, collapsing to a bare ``@{uuid}``), this deletes the
+    entire nested-insertion token — used by ``fix_wildcard_delete`` when
+    the referenced wildcard itself is gone, so the insertion can't
+    resolve at all. Surrounding text is preserved; whitespace left at the
+    seam is collapsed (doubled spaces -> single) and the result trimmed,
+    so ``"warm @{u} glow"`` -> ``"warm glow"`` rather than
+    ``"warm  glow"``.
+
+    Reuses the shared 4-segment ref pattern (``_ref_expr_pattern``) so the
+    ``#name`` / ``:expr`` / ``!null`` variants of the token all match.
+    """
+    pattern = _ref_expr_pattern(wildcard_id)
+    stripped = pattern.sub("", s)
+    if stripped == s:
+        return s
+    # Collapse whitespace left at the seam, then trim edges.
+    return re.sub(r"[ \t]{2,}", " ", stripped).strip()
+
+
 def _rewrite_ref_name_in_string(
     s: str,
     wildcard_id: str,
@@ -217,21 +240,34 @@ def _rewrite_ref_name_in_string(
 def fix_wildcard_delete(
     conn: sqlite3.Connection,
     wildcard_id: str,
+    cleanup_ids: list[str],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Strip all references to *wildcard_id* from constraints.
+    """Opt-in strip of nested ``@{wildcard_id...}`` refs to a deleted wildcard.
 
-    * Constraints whose source or target is *wildcard_id* are deleted —
-      they reference the wildcard by id only, with no fallback shape.
+    Constraints are NEVER touched here. They reference the wildcard by id
+    only and are now healable via the reattach UI — the cascade leaves
+    them broken so the user can re-point them later, rather than deleting
+    them (the old behavior, removed).
 
-    Bundles are intentionally NOT touched. Bundle children are full
-    frozen snapshots: the wildcard's payload, options, and meta were
-    deep-copied into ``bundle.children[i]`` at insert time, so the
-    bundle keeps working even when the source library row is deleted.
-    Removing the snapshot would destroy data the user explicitly
-    captured for offline / portable use. The MISSING badge on the
-    referenced workflow rows still fires (drift-store sees the id is
-    gone) — that's the honest signal; stripping the snapshot would be
-    over-eager housekeeping.
+    Nested ``@{wildcard_id...}`` refs (the deleted wildcard inserted
+    inside ANOTHER wildcard's option value, or a derivation action's
+    string value) are stripped ONLY for the specific entity ids the
+    caller lists in *cleanup_ids*. Every entity not in *cleanup_ids* is
+    left untouched — its broken ref survives and is healed later via a
+    remap. An empty/absent *cleanup_ids* therefore strips nothing: only
+    the wildcard row itself is dropped (by the orchestrator), and all
+    constraints + nested refs survive.
+
+    For each entity in *cleanup_ids*:
+      * ``wildcard`` — every ``@{wildcard_id...}`` token is removed from
+        each ``options[].value`` string (whole token, surrounding text
+        preserved).
+      * ``derivation`` — same strip applied to every string value inside
+        ``rules[].branches[].actions[]`` (mirrors ``_scan_wildcard_delete``).
+
+    Bundles are intentionally NOT touched (unchanged): bundle children
+    are full frozen snapshots, so the bundle keeps resolving with its
+    captured payload even when the source library row is deleted.
 
     The fixer does NOT delete the wildcard row itself; the orchestrator
     owns that mutation.
@@ -239,18 +275,49 @@ def fix_wildcard_delete(
     touched: list[dict[str, Any]] = []
     diff: list[dict[str, Any]] = []
 
+    cleanup = set(cleanup_ids)
+    if not cleanup:
+        return touched, diff
+
     mod_repo = ModuleRepository(conn)
 
-    # --- Constraints --------------------------------------------------------
     for m in mod_repo.list():
-        if m["type"] != "constraint":
+        if m["id"] not in cleanup:
             continue
+        t = m["type"]
         p = m.get("payload") or {}
-        if (p.get("source_wildcard_id") == wildcard_id
-                or p.get("target_wildcard_id") == wildcard_id):
+        new_payload = copy.deepcopy(p)
+        changed = False
+
+        if t == "wildcard":
+            for opt in new_payload.get("options") or []:
+                v = opt.get("value")
+                if isinstance(v, str):
+                    new_v = _strip_whole_ref_in_string(v, wildcard_id)
+                    if new_v != v:
+                        opt["value"] = new_v
+                        changed = True
+
+        elif t == "derivation":
+            for rule in new_payload.get("rules") or []:
+                for branch in rule.get("branches") or []:
+                    for action in branch.get("actions") or []:
+                        if not isinstance(action, dict):
+                            continue
+                        for k, v in list(action.items()):
+                            if isinstance(v, str):
+                                new_v = _strip_whole_ref_in_string(v, wildcard_id)
+                                if new_v != v:
+                                    action[k] = new_v
+                                    changed = True
+
+        if changed:
             touched.append(_deepcopy_row(m))
-            mod_repo.delete(m["id"])
-            diff.append({"entity_id": m["id"], "removed": True})
+            mod_repo.update(m["id"], payload=new_payload)
+            diff.append({
+                "entity_id": m["id"],
+                "remove_ref": {"kind": "wildcard", "wildcard_id": wildcard_id},
+            })
 
     return touched, diff
 
