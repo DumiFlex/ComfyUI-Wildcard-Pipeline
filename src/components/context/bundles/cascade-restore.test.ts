@@ -1,5 +1,10 @@
-import { describe, it, expect } from "vitest";
-import { rewriteChildId } from "./cascade-restore";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { cascadeRestoreForBundle, rewriteChildId } from "./cascade-restore";
+import {
+  emptyBundleInstance,
+  type BundleInstance,
+  type ModuleEntry,
+} from "../../../widgets/_shared";
 
 /**
  * #2 regression: cascade-restore must remap references INSIDE a child's
@@ -68,5 +73,111 @@ describe("cascade-restore rewriteChildId — payload ref remap (#2)", () => {
     expect(mod.id).toBe("bbbbbbbb");
     const bun = rewriteChildId({ id: "bndl1111", type: "bundle" }, moduleMap, innerBundleMap);
     expect(bun.id).toBe("bndl2222");
+  });
+});
+
+/**
+ * #2 end-to-end: the headline claim is a CHAIN — push → cascade restore
+ * re-creates the missing wildcard under a fresh uuid → a sibling
+ * constraint pointing at the dead uuid is repointed in the children the
+ * outer ships. The pure `rewriteChildId` tests above lock the rewrite
+ * primitive; this exercises `cascadeRestoreForBundle` itself (Phase 1
+ * POST → Phase 3 children rebuild → Phase 4 workflow rebind) with the
+ * module POST mocked. Also re-asserts the #2 invariant inside the live
+ * flow: an embedded `@{uuid}` ref in the constraint follows the repoint
+ * too, not just the bare source/target fields.
+ */
+describe("cascadeRestoreForBundle — end-to-end ref repoint (#2)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function mkModule(
+    over: Partial<ModuleEntry> & { bundle_origin?: string },
+  ): ModuleEntry & { bundle_origin?: string } {
+    return {
+      id: "00000000",
+      type: "wildcard",
+      enabled: true,
+      collapsed: false,
+      meta: { name: "" },
+      entries: [],
+      payload: {},
+      instance: {},
+      payload_hash: "h",
+      _uid: "u",
+      ...over,
+    } as ModuleEntry & { bundle_origin?: string };
+  }
+
+  it("restores a missing wildcard and repoints its sibling constraint's source + embedded @{} ref", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          json: async () => ({ id: "beef0001" }),
+          text: async () => "",
+        }) as unknown as Response,
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    // deadbeef = the wildcard whose library row was deleted upstream.
+    const wildcard = mkModule({
+      id: "deadbeef",
+      type: "wildcard",
+      _uid: "u-w",
+      meta: { name: "Palette" },
+      payload: { options: [] },
+      bundle_origin: "outer-uid",
+    });
+    // A sibling constraint sources from deadbeef + carries an embedded
+    // @{deadbeef#palette} ref inside an exception value. facade00 is an
+    // EXTERNAL target (not restored) — it must survive untouched.
+    const constraint = mkModule({
+      id: "ca000001",
+      type: "constraint",
+      _uid: "u-c",
+      meta: { name: "Pairing" },
+      payload: {
+        source_wildcard_id: "deadbeef",
+        target_wildcard_id: "facade00",
+        matrix: {},
+        exceptions: [{ source_value: "see @{deadbeef#palette}", target_value: "sky" }],
+      },
+      bundle_origin: "outer-uid",
+    });
+    const outer: BundleInstance = {
+      ...emptyBundleInstance("bndllib0"),
+      _uid: "outer-uid",
+      start_idx: 0,
+      end_idx: 1,
+      name: "Kit",
+    };
+    const modules = [wildcard, constraint];
+
+    const result = await cascadeRestoreForBundle({
+      outer,
+      modules,
+      bundles: [outer],
+      isModuleMissing: (m) => m.id === "deadbeef",
+      isBundleMissing: () => false,
+    });
+
+    // Only the wildcard was missing → exactly one module POST.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.restoredModuleCount).toBe(1);
+
+    const cn = result.rewrittenChildren.find((c) => c.type === "constraint");
+    const p = cn?.payload as Record<string, unknown>;
+    expect(p.source_wildcard_id).toBe("beef0001"); // repointed to the restored id
+    expect(p.target_wildcard_id).toBe("facade00"); // external ref left alone
+    // #2 invariant re-asserted in the live flow: embedded @{} ref follows too,
+    // preserving its #name segment.
+    expect(JSON.stringify(cn?.payload)).toContain("@{beef0001#palette}");
+    expect(JSON.stringify(cn?.payload)).not.toContain("deadbeef");
+
+    // Workflow rebind swaps the dead id while preserving the per-instance _uid.
+    const w = result.newModules.find((m) => m._uid === "u-w");
+    expect(w?.id).toBe("beef0001");
   });
 });
