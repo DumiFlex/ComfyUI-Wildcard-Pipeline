@@ -280,12 +280,21 @@ class PipelineEngine:
                 # imported from someone else's machine), letting WP_Debug
                 # render a readable chip instead of a raw uuid.
                 _module_name = module.get("name", "") or ""
+                # Per-insertion bundle discriminator. Two instances of one
+                # library wildcard (a bundle inserted twice) carry DISTINCT
+                # `bundle_origin` values (insert.ts stamps each child with
+                # its immediate BundleInstance._uid). Threaded into ctx so a
+                # constraint can bind to the source pick from its OWN bundle
+                # copy (task_5200c1fc). Empty string when the module has no
+                # bundle origin (top-level / manually-added / legacy).
+                _module_bundle_origin = module.get("bundle_origin", "") or ""
             else:
                 _module_id = getattr(module, "id", "")
                 _module_uid = getattr(module, "_uid", "") or ""
                 _module_type_raw = getattr(module, "type", None) or ""
                 _module_enabled = getattr(module, "enabled", True)
                 _module_name = getattr(module, "name", "") or ""
+                _module_bundle_origin = getattr(module, "bundle_origin", "") or ""
 
             if not _module_enabled:
                 # Disabled modules don't run — but the trace row still
@@ -369,6 +378,11 @@ class PipelineEngine:
             ctx["__wp_current_module_id__"] = _module_id
             ctx["__wp_current_module_uid__"] = _module_uid or _module_id
             ctx["__wp_current_module_name__"] = _module_name
+            # See the `_module_bundle_origin` derivation above — exposed to
+            # handlers (wildcard_handler records it on the pick; constraint_
+            # handler captures it on the registered meta) so source-instance
+            # binding can match a constraint to its own bundle copy's pick.
+            ctx["__wp_current_module_bundle_origin__"] = _module_bundle_origin
             meta = _extract_static_meta(module)
             try:
                 bindings = resolve_module(snapshot, ctx)
@@ -475,6 +489,7 @@ class PipelineEngine:
         ctx.pop("__wp_current_module_id__", None)
         ctx.pop("__wp_current_module_uid__", None)
         ctx.pop("__wp_current_module_name__", None)
+        ctx.pop("__wp_current_module_bundle_origin__", None)
 
         # SP3 reach selector finalisation: emit `constraint_never_applied`
         # for every registered constraint whose selector covered ZERO
