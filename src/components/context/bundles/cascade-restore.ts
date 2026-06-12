@@ -92,7 +92,22 @@ export async function cascadeRestoreForBundle(
   // because inner-bundle children are still inside the outer's range —
   // they need their uuids in the moduleMap before Phase 2 rebuilds the
   // inner's children list.
+  //
+  // Two passes:
+  //   Pass 1 — POST each missing module RAW to MINT a fresh id. The raw
+  //     payload is just a seed; it may carry refs to SIBLING restored
+  //     modules that haven't minted their new ids yet (forward refs),
+  //     so the standalone library entry can ship dangling source/target
+  //     / `@{}` refs at this point.
+  //   Pass 2 — runs AFTER the loop, when `moduleMap` is COMPLETE. For
+  //     each restored module it walkRemaps the payload against the full
+  //     map; if any ref actually changed, it corrects the freshly-created
+  //     library entry via `api.modules.update`. This is the same rewrite
+  //     Phase 3 (pushed children) and Phase 4 (workflow rebind) apply —
+  //     the standalone library entries are the third output that needs it.
+  //     Ref-free modules (most wildcards) don't differ → no update.
   const moduleMap = new Map<string, string>();
+  const restored: { newId: string; module: ModuleEntry }[] = [];
   for (let i = outer.start_idx; i <= outer.end_idx; i++) {
     const m = modules[i];
     if (!m) continue;
@@ -114,6 +129,25 @@ export async function cascadeRestoreForBundle(
     const body = (await res.json()) as { id?: string };
     if (!body.id) throw new Error(`Module restore for "${baseName}" returned no id`);
     moduleMap.set(m.id, body.id);
+    restored.push({ newId: body.id, module: m });
+  }
+
+  // Pass 2: correct standalone library entries whose payload referenced a
+  // sibling restored module. `moduleMap` is complete now, so forward refs
+  // (a constraint POSTed before its target wildcard minted its id) resolve.
+  const restoreTable: Record<string, string> = {};
+  for (const [k, v] of moduleMap) restoreTable[k] = v;
+  if (Object.keys(restoreTable).length > 0) {
+    for (const { newId, module: m } of restored) {
+      const original = m.payload ?? {};
+      const rewrittenPayload = walkRemap(original, restoreTable) as Record<string, unknown>;
+      // Only PUT when a ref actually moved — ref-free modules are unchanged.
+      if (JSON.stringify(rewrittenPayload) === JSON.stringify(original)) continue;
+      await api.modules.update(newId, {
+        name: pickModuleName(m),
+        payload: rewrittenPayload,
+      });
+    }
   }
 
   // ── Phase 2: restore missing inner bundles ──────────────────────────

@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { cascadeRestoreForBundle, rewriteChildId } from "./cascade-restore";
+import { api } from "../../../manager/api/client";
+import type { ModuleRow } from "../../../manager/api/types";
 import {
   emptyBundleInstance,
   type BundleInstance,
@@ -222,6 +224,10 @@ describe("cascadeRestoreForBundle — Phase 4 workflow rebind rewrites payload r
       async () =>
         ({
           ok: true,
+          // `headers` present because Phase 1 Pass 2's corrective PUT for the
+          // restored constraint routes through `api.modules.update` →
+          // `request()` → `checkStartupId(resp)`, which reads `resp.headers`.
+          headers: { get: () => null },
           json: async () => ({ id: minted[n++] }),
           text: async () => "",
         }) as unknown as Response,
@@ -278,5 +284,130 @@ describe("cascadeRestoreForBundle — Phase 4 workflow rebind rewrites payload r
     const p = c?.payload as Record<string, unknown>;
     expect(p.source_wildcard_id).toBe("beef0001");
     expect(p.target_wildcard_id).toBe("beef0002");
+  });
+});
+
+/**
+ * Phase 1 third-output bug (forward-ref): each missing module is POSTed
+ * RAW to mint a fresh library id (Pass 1). For a restored constraint, that
+ * standalone library entry ships DANGLING source/target — they still point
+ * at the OLD (now-deleted) uuids, because the constraint is POSTed BEFORE
+ * its target wildcard mints a new id (moduleMap is incomplete mid-loop).
+ * Phase 3 (pushed bundle children) + Phase 4 (workflow rebind) both already
+ * rewrite refs; Phase 1's standalone library entries did not.
+ *
+ * The fix is a two-pass Phase 1: Pass 1 mints ids (raw POST); Pass 2 runs
+ * AFTER the loop (moduleMap COMPLETE), walkRemaps each restored module's
+ * payload and, when refs actually changed, corrects the freshly-created
+ * library entry via `api.modules.update`. A pure wildcard with no internal
+ * refs must NOT trigger a corrective PUT.
+ */
+describe("cascadeRestoreForBundle — Phase 1 Pass 2 corrects standalone library refs", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  function mkMod(
+    over: Partial<ModuleEntry> & { bundle_origin?: string },
+  ): ModuleEntry & { bundle_origin?: string } {
+    return {
+      id: "00000000",
+      type: "wildcard",
+      enabled: true,
+      collapsed: false,
+      meta: { name: "" },
+      entries: [],
+      payload: {},
+      instance: {},
+      payload_hash: "h",
+      _uid: "u",
+      ...over,
+    } as ModuleEntry & { bundle_origin?: string };
+  }
+
+  it("repoints a forward-ref constraint's source + target via api.modules.update, and skips a ref-free wildcard", async () => {
+    // Outer range order is FORWARD-REF: the constraint sits BEFORE its
+    // target wildcard, so moduleMap is incomplete when the constraint is
+    // POSTed — only a post-loop Pass 2 can repoint target_wildcard_id.
+    //   [ subject (deadbeef), constraint (ca000001 → src deadbeef / tgt facade00), mood (facade00) ]
+    // POSTs mint, in order: beef0001 (subject), ca110011 (constraint), beef0002 (mood).
+    const minted = ["beef0001", "ca110011", "beef0002"];
+    let n = 0;
+    const fetchMock = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          json: async () => ({ id: minted[n++] }),
+          text: async () => "",
+        }) as unknown as Response,
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    // Capture the corrective PUT(s) without hitting the network.
+    const updateSpy = vi
+      .spyOn(api.modules, "update")
+      .mockImplementation(async (id: string) => ({ id }) as unknown as ModuleRow);
+
+    const subject = mkMod({
+      id: "deadbeef",
+      type: "wildcard",
+      _uid: "u-s",
+      meta: { name: "subject" },
+      payload: { options: [] }, // no internal refs → must NOT trigger a PUT
+      bundle_origin: "outer-uid",
+    });
+    const constraint = mkMod({
+      id: "ca000001",
+      type: "constraint",
+      _uid: "u-c",
+      meta: { name: "pairing" },
+      payload: {
+        source_wildcard_id: "deadbeef",
+        target_wildcard_id: "facade00",
+        matrix: {},
+      },
+      bundle_origin: "outer-uid",
+    });
+    const mood = mkMod({
+      id: "facade00",
+      type: "wildcard",
+      _uid: "u-m",
+      meta: { name: "mood" },
+      payload: { options: [] }, // no internal refs → must NOT trigger a PUT
+      bundle_origin: "outer-uid",
+    });
+    const outer: BundleInstance = {
+      ...emptyBundleInstance("bndllib2"),
+      _uid: "outer-uid",
+      start_idx: 0,
+      end_idx: 2,
+      name: "Kit",
+    };
+    const modules = [subject, constraint, mood];
+
+    await cascadeRestoreForBundle({
+      outer,
+      modules,
+      bundles: [outer],
+      isModuleMissing: (m) => ["deadbeef", "ca000001", "facade00"].includes(m.id),
+      isBundleMissing: () => false,
+    });
+
+    // Exactly ONE corrective PUT — only the constraint carried sibling refs.
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+    const [calledId, calledBody] = updateSpy.mock.calls[0];
+    // Corrective PUT targets the constraint's freshly-minted id.
+    expect(calledId).toBe("ca110011");
+    const p = (calledBody as { payload?: Record<string, unknown> }).payload;
+    expect(p).toBeDefined();
+    // BOTH endpoints repointed despite the forward-ref POST order.
+    expect(p?.source_wildcard_id).toBe("beef0001"); // subject's new id
+    expect(p?.target_wildcard_id).toBe("beef0002"); // mood's new id (forward ref!)
+
+    // The two ref-free wildcards (beef0001, beef0002) were NOT corrected.
+    const correctedIds = updateSpy.mock.calls.map((c) => c[0]);
+    expect(correctedIds).not.toContain("beef0001");
+    expect(correctedIds).not.toContain("beef0002");
   });
 });
