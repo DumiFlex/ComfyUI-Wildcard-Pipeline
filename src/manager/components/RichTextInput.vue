@@ -1950,7 +1950,17 @@ function onHostKeydown(ev: KeyboardEvent): void {
       delStart = range.start;
       delEnd = range.end;
     } else {
-      if (range.start === 0) return; // caret at start — nothing to delete
+      // Caret at the absolute start — nothing to delete. MUST preventDefault
+      // even though there's no work: a bare `return` lets the browser run its
+      // native deleteContentBackward, which EATS the ZWSP pad char in the
+      // empty/leading text span. Losing the ZWSP strands the caret on the host
+      // root and the DOM permanently diverges from the atoms model (the
+      // "can't delete / stuck $#" corruption). Blocking the native delete
+      // keeps the pad intact.
+      if (range.start === 0) {
+        ev.preventDefault();
+        return;
+      }
       delStart = range.start - 1;
       delEnd = range.start;
     }
@@ -1974,7 +1984,13 @@ function onHostKeydown(ev: KeyboardEvent): void {
       delEnd = range.end;
     } else {
       const totalLen = serialiseAtomsLocal(live).length;
-      if (range.start >= totalLen) return; // caret at end — nothing forward
+      // Caret at the absolute end — nothing forward. preventDefault for the
+      // same reason as Backspace-at-start: a bare return lets native
+      // deleteContentForward eat the trailing ZWSP pad and corrupt the field.
+      if (range.start >= totalLen) {
+        ev.preventDefault();
+        return;
+      }
       delStart = range.start;
       delEnd = range.start + 1;
     }

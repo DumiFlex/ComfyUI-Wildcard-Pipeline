@@ -156,6 +156,48 @@ describe("Tier 1 — user-reported corruption regressions", () => {
     wrap.unmount();
   });
 
+  it("Backspace at start of empty field calls preventDefault (blocks native delete eating the ZWSP pad)", async () => {
+    // Real-browser bug: a bare `return` at range.start===0 let Chromium run
+    // native deleteContentBackward, eating the ZWSP pad char → caret stranded
+    // on host root → DOM/atoms divergence → stuck "$#" / can't-delete state.
+    // jsdom can't perform the native delete, so we assert the guard instead:
+    // preventDefault MUST fire so the browser never gets to delete the pad.
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "", surface: "combine" },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host").element as HTMLElement;
+    host.focus();
+    caretAtStart(host);
+    let prevented = false;
+    const ev = new KeyboardEvent("keydown", { key: "Backspace", bubbles: true, cancelable: true });
+    ev.preventDefault = () => { prevented = true; };
+    host.dispatchEvent(ev);
+    await flushPromises();
+    expect(prevented).toBe(true);
+    // Field stays intact + editable (no corruption).
+    expect(host.querySelectorAll(".wp-rt__text").length).toBeGreaterThanOrEqual(1);
+    expect(host.getAttribute("contenteditable")).toBe("true");
+    wrap.unmount();
+  });
+
+  it("Forward-Delete at end of empty field calls preventDefault (protects trailing ZWSP)", async () => {
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "", surface: "combine" },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host").element as HTMLElement;
+    host.focus();
+    caretAtEnd(host);
+    let prevented = false;
+    const ev = new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true });
+    ev.preventDefault = () => { prevented = true; };
+    host.dispatchEvent(ev);
+    await flushPromises();
+    expect(prevented).toBe(true);
+    wrap.unmount();
+  });
+
   it("Ctrl+A + Backspace leaves empty input with editable host + ZWSP span", async () => {
     const wrap = mount(RichTextInput, {
       props: { modelValue: "hello $person world", surface: "combine" },
