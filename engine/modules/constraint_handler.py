@@ -448,13 +448,16 @@ class ConstraintHandler(ModuleHandler):
         # warning).
         library_id = None
         library_name = None
+        bundle_origin = None
         try:
             if hasattr(ctx, "get"):
                 library_id = ctx.get("__wp_current_module_id__")
                 library_name = ctx.get("__wp_current_module_name__")
+                bundle_origin = ctx.get("__wp_current_module_bundle_origin__")
         except Exception:
             library_id = None
             library_name = None
+            bundle_origin = None
         meta = {
             "source_wildcard_id": payload["source_wildcard_id"],
             "target_wildcard_id": payload["target_wildcard_id"],
@@ -472,6 +475,15 @@ class ConstraintHandler(ModuleHandler):
             # endpoint would 404 there, leaving the chip stuck on the raw
             # uuid otherwise.
             "__constraint_library_name__": library_name,
+            # Per-insertion bundle discriminator (task_5200c1fc). When this
+            # constraint instance lives inside a bundle copy, it shares one
+            # `bundle_origin` with the source wildcard instance in the SAME
+            # copy. `apply_constraints_for_target` uses it to read that
+            # copy's source pick (`by_origin[origin]`) rather than the
+            # last-writer survivor. Falsy (None) for a top-level / manual /
+            # legacy constraint — then apply falls back to today's
+            # last-writer-wins lookup, unchanged.
+            "__constraint_bundle_origin__": bundle_origin,
         }
         _ctx_set_constraint(ctx, meta)
         return {}
