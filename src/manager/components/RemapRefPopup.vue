@@ -198,6 +198,12 @@ function doConfirm(): void {
   z-index: 10001;
   min-width: 320px;
   max-width: 480px;
+  /* Never exceed the viewport. Picking a wildcard expands the reconcile
+     section, which can push the popup past the screen on a short viewport —
+     scroll internally instead of overflowing. RichTextInput's ResizeObserver
+     also re-hugs the chip on every growth so the popup stays anchored. */
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
   background: var(--wp-bg-2, #15151f);
   border: 1px solid var(--wp-accent, #8b5cf6);
   border-radius: 8px;

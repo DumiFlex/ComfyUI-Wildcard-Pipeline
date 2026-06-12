@@ -656,28 +656,46 @@ function clampPickerIntoView(): void {
   });
 }
 
-/** Post-paint re-anchor for the RemapRefPopup. `onChipRemap` seeds
- *  `remapAnchor` from `setPickerAnchorFromElement`, whose flip maths assume
- *  the ~380px SubcategoryFilterPicker — but the remap popup is far shorter,
- *  so a flipped seed floats it ~230px above the chip (the QA "too far away"
- *  bug). Mirror clampPickerIntoView, but RE-DECIDE the flip against the
- *  popup's REAL measured height: hug 6px below the chip, flip above only
- *  when the real box genuinely doesn't fit below. */
+/** Live re-anchor for the RemapRefPopup. The popup GROWS when the user
+ *  picks a wildcard (the reconcile section + filter picker mount), so a
+ *  one-shot measure isn't enough — a popup that fit below the chip at open
+ *  can overflow the viewport after a pick. We measure the popup's REAL box
+ *  and re-hug the chip: 6px below, flipping above only when the real height
+ *  doesn't fit below; the top is clamped on-screen. Driven once on paint and
+ *  again on every size change via a ResizeObserver. */
+let remapResizeObs: ResizeObserver | null = null;
+
+function anchorRemapToTrigger(el: HTMLElement): void {
+  if (!pickerTriggerRect) return;
+  const r = el.getBoundingClientRect();
+  const gap = 6;
+  const t = pickerTriggerRect;
+  const spaceBelow = window.innerHeight - t.bottom;
+  const flip = r.height > 0 && spaceBelow < r.height && t.top > spaceBelow;
+  let top = flip ? t.top - r.height - gap : t.bottom + gap;
+  let left = remapAnchor.value.left;
+  if (r.height > 0) top = Math.max(8, Math.min(top, window.innerHeight - r.height - 8));
+  if (r.width > 0) left = Math.max(8, Math.min(left, window.innerWidth - r.width - 8));
+  remapAnchor.value = { top, left };
+}
+
 function clampRemapIntoView(): void {
   void nextTick(() => {
     const el = document.querySelector("[data-test='remap-popup']") as HTMLElement | null;
-    if (!el || !pickerTriggerRect) return;
-    const r = el.getBoundingClientRect();
-    const gap = 6;
-    const t = pickerTriggerRect;
-    const spaceBelow = window.innerHeight - t.bottom;
-    const flip = r.height > 0 && spaceBelow < r.height && t.top > spaceBelow;
-    let top = flip ? t.top - r.height - gap : t.bottom + gap;
-    let left = remapAnchor.value.left;
-    if (r.height > 0) top = Math.max(8, Math.min(top, window.innerHeight - r.height - 8));
-    if (r.width > 0) left = Math.max(8, Math.min(left, window.innerWidth - r.width - 8));
-    remapAnchor.value = { top, left };
+    if (!el) return;
+    anchorRemapToTrigger(el);
+    // Re-anchor on growth (pick expands the reconcile section). Guarded for
+    // jsdom, which has no ResizeObserver — the one-shot anchor above still runs.
+    if (typeof ResizeObserver === "undefined") return;
+    remapResizeObs?.disconnect();
+    remapResizeObs = new ResizeObserver(() => anchorRemapToTrigger(el));
+    remapResizeObs.observe(el);
   });
+}
+
+function teardownRemapObs(): void {
+  remapResizeObs?.disconnect();
+  remapResizeObs = null;
 }
 
 // --- Suggestion list filtering. ---
@@ -1492,10 +1510,12 @@ function applyRemap(next: { uuid: string; name: string; subcatExpr: string; excl
   applyAtoms(parseForSurface(rewritten));
   emitValue(rewritten);
   remapOpen.value = false;
+  teardownRemapObs();
 }
 
 function cancelRemap(): void {
   remapOpen.value = false;
+  teardownRemapObs();
 }
 
 // Test seam — drive confirm without faking the popup click chain in jsdom.
