@@ -32,6 +32,8 @@ import {
 import { escapeHtml, inlineTokenHtml, splitRefFilter, tokenizeRich } from "../../widgets/richTokenize";
 import RefChip from "./RefChip.vue";
 import SubcategoryFilterPicker from "./SubcategoryFilterPicker.vue";
+import RemapRefPopup from "./RemapRefPopup.vue";
+import { rewriteBrokenRef } from "../cascade/remap-ref-rewrite";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
 import { probeAutocomplete } from "../utils/autocompleteProbe";
@@ -297,6 +299,27 @@ const pendingInsertCaret = ref<{ caret: number; acStart: number } | null>(null);
 const pickerAnchor = ref<{ top: number; left: number; flipped: boolean }>({
   top: 0, left: 0, flipped: false,
 });
+
+// --- RemapRefPopup state (#3 broken-chip heal) ---
+const remapOpen = ref(false);
+const remapOldUuid = ref("");
+const remapCachedName = ref("");
+const remapOldExpr = ref("");
+const remapOldExcludeNull = ref(false);
+const remapAnchor = ref<{ top: number; left: number }>({ top: 0, left: 0 });
+
+/** WildcardRefData the popup's dropdown + reconcile consume. RichTextInput
+ *  already receives the per-uuid maps as props (uuidToName etc.), so we
+ *  assemble the WildcardRefData shape from them rather than re-walking a
+ *  catalog the editor host doesn't hold. */
+const remapRefData = computed(() => ({
+  uuidToName: props.uuidToName,
+  uuidToSubCategories: props.uuidToSubCategories,
+  uuidToHasNull: props.uuidToHasNull,
+  uuidToOptionsCount: props.uuidToOptionsCount,
+  uuidToOptionTagSets: props.uuidToOptionTagSets,
+  uuidToTagGroups: props.uuidToTagGroups,
+}));
 
 /** Theme class to stamp on the body-teleported overlays (`@`-autocomplete
  *  popover + the SubcategoryFilterPicker anchor/backdrop).
@@ -1415,6 +1438,44 @@ function cancelPicker(): void {
   pickerOpen.value = false;
 }
 
+function onChipRemap(idx: number, ev?: MouseEvent): void {
+  const atom = atoms.value[idx];
+  if (!atom || atom.kind !== "ref") return;
+  remapOldUuid.value = atom.uuid;
+  remapCachedName.value = atom.name ?? "";
+  const { expr, excludeNull } = refFilterOf(atom);
+  remapOldExpr.value = expr;
+  remapOldExcludeNull.value = excludeNull;
+  // Reuse the picker's anchor maths to position the remap popup at the chip.
+  setPickerAnchorFromElement((ev?.currentTarget as HTMLElement | null) ?? null);
+  remapAnchor.value = { top: pickerAnchor.value.top, left: pickerAnchor.value.left };
+  remapOpen.value = true;
+}
+
+/** Rewrite EVERY occurrence of the dead uuid in THIS field's raw text once,
+ *  per the spec's "Remap-everywhere scope" (walk root = the open module's
+ *  payload — here the single field RichTextInput edits). */
+function applyRemap(next: { uuid: string; name: string; subcatExpr: string; excludeNull: boolean }): void {
+  const text = readHostAsText();
+  const rewritten = rewriteBrokenRef(text, remapOldUuid.value, next);
+  applyAtoms(parseForSurface(rewritten));
+  emitValue(rewritten);
+  remapOpen.value = false;
+}
+
+function cancelRemap(): void {
+  remapOpen.value = false;
+}
+
+// Test seam — drive confirm without faking the popup click chain in jsdom.
+function __confirmRemapForTest(
+  oldUuid: string,
+  next: { uuid: string; name: string; subcatExpr: string; excludeNull: boolean },
+): void {
+  remapOldUuid.value = oldUuid;
+  applyRemap(next);
+}
+
 function onPickerEscape(ev: KeyboardEvent): void {
   if (ev.key === "Escape") cancelPicker();
 }
@@ -1440,7 +1501,7 @@ function __applyAutocompleteForTest(label: string): void {
   applyAutocomplete(label);
 }
 
-defineExpose({ __triggerAutocompleteForTest, __applyAutocompleteForTest });
+defineExpose({ __triggerAutocompleteForTest, __applyAutocompleteForTest, __confirmRemapForTest });
 
 function onSuggestionMouseDown(e: MouseEvent, label: string): void {
   // `mousedown` (not click) so we beat the textarea blur.
@@ -2092,6 +2153,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
           :index="atom.kind === 'var' ? atom.index : undefined"
           :data-atom-index="idx"
           @click="(ev: MouseEvent) => onChipClick(idx, ev)"
+          @remap="(ev: MouseEvent) => onChipRemap(idx, ev)"
         />
         <span
           v-else
@@ -2194,6 +2256,18 @@ function onHostKeydown(ev: KeyboardEvent): void {
         />
       </div>
     </Teleport>
+
+    <RemapRefPopup
+      v-if="remapOpen"
+      :old-uuid="remapOldUuid"
+      :cached-name="remapCachedName"
+      :ref-data="remapRefData"
+      :old-expr="remapOldExpr"
+      :old-exclude-null="remapOldExcludeNull"
+      :anchor="remapAnchor"
+      @confirm="applyRemap"
+      @cancel="cancelRemap"
+    />
   </div>
 </template>
 
