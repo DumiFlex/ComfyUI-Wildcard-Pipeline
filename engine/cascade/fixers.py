@@ -432,9 +432,12 @@ def fix_wildcard_rename_name(
     Combine templates, fixed-values, and constraint payloads don't hold
     ``@{}`` text refs (constraints reference by id only via
     ``source_wildcard_id`` / ``target_wildcard_id``), so they're
-    skipped. Bundle children carry frozen module snapshots whose option
-    values may contain refs; we walk those too so a save propagates
-    into bundle copies.
+    skipped. Bundle children are frozen point-in-time snapshots and are
+    intentionally NOT rewritten (mirrors ``fix_wildcard_delete``): a rename
+    leaves the bundle's cached ``#name`` / refs stale until the user
+    explicitly refreshes the bundle. Otherwise editing ANY module would
+    silently mutate every bundle holding a snapshot of it — a bundle must
+    stay a fixed snapshot, not auto-track its source modules.
 
     Skips the renamed wildcard itself — its own name lives on the row,
     not in its own option values.
@@ -443,7 +446,6 @@ def fix_wildcard_rename_name(
     diff: list[dict[str, Any]] = []
 
     mod_repo = ModuleRepository(conn)
-    bundle_repo = BundleRepository(conn)
 
     for m in mod_repo.list():
         if m["id"] == wildcard_id:
@@ -487,45 +489,10 @@ def fix_wildcard_rename_name(
                 },
             })
 
-    # Bundle child snapshots — walk frozen module copies and rewrite
-    # ref strings in their option values. Children may reference the
-    # renamed wildcard via @{uuid} in their stored snapshots.
-    for b in bundle_repo.list():
-        children = b.get("children") or []
-        new_children = copy.deepcopy(children)
-        bundle_changed = False
-        for ch in new_children:
-            if not isinstance(ch, dict):
-                continue
-            if ch.get("type") != "wildcard":
-                continue
-            if ch.get("id") == wildcard_id:
-                # The renamed wildcard's own snapshot in this bundle —
-                # update the cached `name` field instead of refs.
-                if ch.get("name") != new_name:
-                    ch["name"] = new_name
-                    bundle_changed = True
-                continue
-            payload = ch.get("payload") or {}
-            for opt in payload.get("options") or []:
-                v = opt.get("value")
-                if isinstance(v, str):
-                    new_v = _rewrite_ref_name_in_string(v, wildcard_id, new_name)
-                    if new_v != v:
-                        opt["value"] = new_v
-                        bundle_changed = True
-        if bundle_changed:
-            touched.append(_deepcopy_row(b))
-            bundle_repo.update(b["id"], children=new_children)
-            diff.append({
-                "entity_id": b["id"],
-                "rename_ref": {
-                    "kind": "wildcard_name",
-                    "wildcard_id": wildcard_id,
-                    "new": new_name,
-                },
-            })
-
+    # Bundle children are frozen snapshots — intentionally NOT rewritten
+    # here (see docstring). They drift; the explicit bundle-refresh flow
+    # re-snapshots them on demand, so a module edit never auto-mutates a
+    # bundle.
     return touched, diff
 
 

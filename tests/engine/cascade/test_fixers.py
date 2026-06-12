@@ -9,6 +9,7 @@ from engine.cascade.fixers import (
     fix_subcat_delete,
     fix_subcat_rename,
     fix_wildcard_delete,
+    fix_wildcard_rename_name,
 )
 from engine.db.repositories import (
     BundleRepository,
@@ -57,6 +58,40 @@ def test_fix_wildcard_delete_strips_constraints_but_preserves_bundle_snapshots(w
     assert any(
         d.get("entity_id") == c["id"] and d.get("removed") is True for d in diff
     )
+    assert not any(d.get("entity_id") == b["id"] for d in diff)
+
+
+def test_fix_wildcard_rename_name_leaves_bundle_snapshots_frozen(wp_db):
+    """A wildcard rename rewrites `@{uuid#name}` cached labels in LIVE
+    library modules, but a bundle is a frozen point-in-time snapshot: its
+    children (cached name + embedded refs) must NOT be auto-rewritten —
+    only the explicit "refresh drifted + update bundle" flow re-snapshots.
+    Mirrors fix_wildcard_delete's deliberate bundle-preservation stance."""
+    mod = ModuleRepository(wp_db)
+    wc = mod.create(type="wildcard", name="oldname", description="", category_id=None, tags=[],
+                    payload={"options": []})
+    ref = "@{" + wc["id"] + "#oldname}"
+    live = mod.create(type="wildcard", name="live", description="", category_id=None, tags=[],
+                      payload={"options": [{"id": "o1", "value": "see " + ref}]})
+    b = BundleRepository(wp_db).create(name="b1", children=[
+        {"id": wc["id"], "type": "wildcard", "name": "oldname", "payload": {"options": []}},
+        {"id": live["id"], "type": "wildcard",
+         "payload": {"options": [{"id": "o1", "value": "see " + ref}]}},
+    ])
+
+    touched, diff = fix_wildcard_rename_name(wp_db, wc["id"], "newname")
+
+    # LIVE module ref IS rewritten — library content tracks the rename.
+    live_after = mod.get(live["id"])
+    assert live_after["payload"]["options"][0]["value"] == "see @{" + wc["id"] + "#newname}"
+
+    # BUNDLE child snapshots stay FROZEN — cached name + embedded ref both
+    # untouched, and the bundle never appears in touched/diff.
+    bundle_after = BundleRepository(wp_db).get(b["id"])
+    ch = {child["id"]: child for child in bundle_after["children"]}
+    assert ch[wc["id"]]["name"] == "oldname"
+    assert ch[live["id"]]["payload"]["options"][0]["value"] == "see " + ref
+    assert not any(t["id"] == b["id"] for t in touched)
     assert not any(d.get("entity_id") == b["id"] for d in diff)
 
 
