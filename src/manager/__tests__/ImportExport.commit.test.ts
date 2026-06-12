@@ -102,6 +102,28 @@ function mkWildcardEntity(id: string, options: Array<{ value: string; weight?: n
   };
 }
 
+/**
+ * Constraint entity in raw-payload (import-side) shape: source/target ids
+ * live under `payload` (matches `engine.modules.constraint`; see
+ * dep-graph.ts:83 + extractWildcardsAndConstraints in ImportExport.vue).
+ * Used by the rename-follow-through case below.
+ */
+function mkConstraintEntity(id: string, sourceId: string, targetId: string) {
+  return {
+    id,
+    type: "constraint",
+    name: `con_${id}`,
+    description: "",
+    tags: [],
+    payload_hash: "0".repeat(64),
+    payload: {
+      source_wildcard_id: sourceId,
+      target_wildcard_id: targetId,
+      matrix: {},
+    },
+  };
+}
+
 beforeEach(() => {
   setActivePinia(createPinia());
   apiM.modules.list.mockReset();
@@ -828,5 +850,58 @@ describe("ImportExport.vue — commit orchestrator", () => {
       warnSpy.mockRestore();
       wrap.unmount();
     }
+  });
+
+  it("repoints an imported constraint's source to a renamed wildcard's new id", async () => {
+    // Import a wildcard `deadbeef` + a constraint whose source points at it.
+    // The library already holds `deadbeef` (no snapshot_fingerprint → the
+    // collision detector marks it `conflict`), so the user resolves it as
+    // install-as-new (batch default rename → fresh new_id). The constraint
+    // does NOT collide → lands in `adds`. After commit, the constraint's
+    // payload.source_wildcard_id MUST follow the wildcard to its minted
+    // new_id — NOT stay pointed at the friend uuid "deadbeef".
+    apiM.modules.list.mockResolvedValue({
+      items: [mkModule({ id: "deadbeef", type: "wildcard", name: "live" })],
+      total: 1,
+    });
+    apiM.importExport.commit.mockResolvedValue({
+      ok: true, undo_entry_id: "u", summary: { added: 1, replaced: 0, renamed: 1 },
+    });
+    const wrap = mountView();
+    await flushPromises();
+    // Multi-entity payload — drive selection-ready directly with both ids.
+    // Both constraint edges point at the selected wildcard `deadbeef` so
+    // neither side is a dangling/unselected dep (which would route the
+    // constraint to a per-item issue and drop it). The follow-through must
+    // then repoint the source to the wildcard's freshly-minted local id.
+    await feedPayloadAndContinueWithIds(
+      wrap,
+      mkPayload({
+        wildcards: [mkWildcardEntity("deadbeef")],
+        constraints: [mkConstraintEntity("c0c0c0c0", "deadbeef", "deadbeef")],
+      }),
+      new Set(["deadbeef", "c0c0c0c0"]),
+    );
+    // The wildcard `deadbeef` is a batch conflict → modal opens. Resolve via
+    // the batch default "rename" (install-as-new) with no per-item overrides.
+    const modal = wrap.findComponent(ConflictModal);
+    if (!modal.exists()) throw new Error("ConflictModal not mounted");
+    modal.vm.$emit("commit-ready", { batchDefault: "rename", perItemDecisions: {} });
+    await flushPromises();
+    expect(apiM.importExport.commit).toHaveBeenCalledTimes(1);
+    const firstCall = apiM.importExport.commit.mock.calls[0];
+    if (!firstCall) throw new Error("commit was not called");
+    const payload = firstCall[0] as CommitPayload;
+    // The wildcard was renamed → its fresh local id is in renames[].new_id.
+    const wcRename = payload.renames.find((r) => r.kind === "wildcard" && r.old_id === "deadbeef");
+    expect(wcRename).toBeDefined();
+    const newWildcardId = wcRename!.new_id;
+    expect(newWildcardId).not.toBe("deadbeef");
+    // The constraint added in `adds` must now point source at the new id.
+    const conAdd = payload.adds.find((a) => a.kind === "constraint" && a.entity.id === "c0c0c0c0");
+    expect(conAdd).toBeDefined();
+    const conPayload = conAdd!.entity.payload as { source_wildcard_id?: string };
+    expect(conPayload.source_wildcard_id).toBe(newWildcardId);
+    wrap.unmount();
   });
 });

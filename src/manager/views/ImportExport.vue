@@ -27,6 +27,7 @@ import {
   type ResolvedCategoryEntity,
   type ResolvedSelection,
 } from "../import-export/commit";
+import { applyImportRemap, buildImportRemapTable } from "../import-export/import-remap";
 import {
   discoverBrokenRefsForImport,
   type ImportedConstraint,
@@ -596,6 +597,21 @@ async function runCommit(resolution: {
   const perItemIds = new Set(perItemIssues.value.map((p) => p.entity.id));
   const selection = partitionSelection(selected, resolution, perItemIds);
   const payload = buildCommitPayload(selection);
+  // Friend→local follow-through: install-as-new mints fresh local ids; any
+  // imported constraint pointing at a renamed entity (source/target or an
+  // embedded @{} ref) must follow. One walkRemap pass over the committed
+  // entities, keyed by the renames the user's collision resolutions produced.
+  const remapTable = buildImportRemapTable(
+    payload.renames.map((r) => ({ oldId: r.old_id, newId: r.new_id })),
+  );
+  if (Object.keys(remapTable).length > 0) {
+    payload.adds = applyImportRemap(payload.adds.map((a) => a.entity), remapTable)
+      .map((entity, i) => ({ ...payload.adds[i], entity }));
+    payload.replaces = applyImportRemap(payload.replaces.map((r) => r.new_content), remapTable)
+      .map((new_content, i) => ({ ...payload.replaces[i], new_content }));
+    payload.renames = applyImportRemap(payload.renames.map((r) => r.content), remapTable)
+      .map((content, i) => ({ ...payload.renames[i], content }));
+  }
   const totalOps = payload.adds.length + payload.replaces.length + payload.renames.length;
   if (totalOps === 0) {
     toast.push({
