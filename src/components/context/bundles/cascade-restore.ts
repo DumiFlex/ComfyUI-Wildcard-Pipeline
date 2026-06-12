@@ -153,9 +153,28 @@ export async function cascadeRestoreForBundle(
   // since-deleted library entry at insert time) wouldn't match the new
   // entry's hash and the BundleHeader would render LIBRARY UPDATED
   // until the user manually reset.
-  const newModules = modules.map((m) =>
-    moduleMap.has(m.id) ? { ...m, id: moduleMap.get(m.id)! } : m,
-  );
+  // Rewrite table shared with Phase 3's child rewrite. The workflow modules
+  // need their INTERNAL refs repointed too — a restored constraint's
+  // source/target + any embedded `@{}` ref — not just their own `id`.
+  // Without this, after a cascade restore the canvas keeps a SRC/TGT-MISSING
+  // constraint even though the pushed library entry (rewrittenChildren) is
+  // correct: Phase 4 swapped ids but left payloads pointing at the dead uuids.
+  const refTable: Record<string, string> = {};
+  for (const [k, v] of moduleMap) refTable[k] = v;
+  for (const [k, v] of innerBundleMap) refTable[k] = v;
+  const hasRefs = Object.keys(refTable).length > 0;
+  const newModules = modules.map((m) => {
+    let next = moduleMap.has(m.id) ? { ...m, id: moduleMap.get(m.id)! } : m;
+    if (hasRefs) {
+      if (next.payload && typeof next.payload === "object") {
+        next = { ...next, payload: walkRemap(next.payload, refTable) as ModuleEntry["payload"] };
+      }
+      if (next.instance && typeof next.instance === "object") {
+        next = { ...next, instance: walkRemap(next.instance, refTable) as ModuleEntry["instance"] };
+      }
+    }
+    return next;
+  });
   const newBundles = bundles.map((b) => {
     const next = innerBundleMap.get(b.library_id);
     if (!next) return b;

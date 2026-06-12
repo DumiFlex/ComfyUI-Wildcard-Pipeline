@@ -181,3 +181,102 @@ describe("cascadeRestoreForBundle — end-to-end ref repoint (#2)", () => {
     expect(w?.id).toBe("beef0001");
   });
 });
+
+/**
+ * QA bug (2026-06-12): bundle push-with-cascade reattached the constraint's
+ * TARGET but not its SOURCE — in the WORKFLOW. Root cause: Phase 4's
+ * `newModules` swapped each module's own `id` but never rewrote payload refs,
+ * so a restored constraint's source/target stayed pointed at the dead uuids
+ * on the canvas (the pushed library children, Phase 3, were already correct).
+ * This locks the workflow rebind: a restored module's INTERNAL refs follow
+ * the restore too, both endpoints.
+ */
+describe("cascadeRestoreForBundle — Phase 4 workflow rebind rewrites payload refs", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function mkMod(
+    over: Partial<ModuleEntry> & { bundle_origin?: string },
+  ): ModuleEntry & { bundle_origin?: string } {
+    return {
+      id: "00000000",
+      type: "wildcard",
+      enabled: true,
+      collapsed: false,
+      meta: { name: "" },
+      entries: [],
+      payload: {},
+      instance: {},
+      payload_hash: "h",
+      _uid: "u",
+      ...over,
+    } as ModuleEntry & { bundle_origin?: string };
+  }
+
+  it("repoints a restored constraint's source AND target in newModules, not just rewrittenChildren", async () => {
+    // Distinct id per POST, in outer-range order: subject, mood, constraint.
+    const minted = ["beef0001", "beef0002", "ca110011"];
+    let n = 0;
+    const fetchMock = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          json: async () => ({ id: minted[n++] }),
+          text: async () => "",
+        }) as unknown as Response,
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const subject = mkMod({
+      id: "deadbeef",
+      type: "wildcard",
+      _uid: "u-s",
+      meta: { name: "subject" },
+      bundle_origin: "outer-uid",
+    });
+    const mood = mkMod({
+      id: "facade00",
+      type: "wildcard",
+      _uid: "u-m",
+      meta: { name: "mood" },
+      bundle_origin: "outer-uid",
+    });
+    const constraint = mkMod({
+      id: "ca000001",
+      type: "constraint",
+      _uid: "u-c",
+      meta: { name: "pairing" },
+      payload: { source_wildcard_id: "deadbeef", target_wildcard_id: "facade00", matrix: {} },
+      bundle_origin: "outer-uid",
+    });
+    const outer: BundleInstance = {
+      ...emptyBundleInstance("bndllib1"),
+      _uid: "outer-uid",
+      start_idx: 0,
+      end_idx: 2,
+      name: "Kit",
+    };
+    const modules = [subject, mood, constraint];
+
+    const result = await cascadeRestoreForBundle({
+      outer,
+      modules,
+      bundles: [outer],
+      isModuleMissing: (m) => ["deadbeef", "facade00", "ca000001"].includes(m.id),
+      isBundleMissing: () => false,
+    });
+
+    // All three restored → ids swapped in the workflow rebind.
+    const s = result.newModules.find((m) => m._uid === "u-s");
+    const t = result.newModules.find((m) => m._uid === "u-m");
+    const c = result.newModules.find((m) => m._uid === "u-c");
+    expect(s?.id).toBe("beef0001");
+    expect(t?.id).toBe("beef0002");
+    // The CANVAS constraint must repoint BOTH endpoints (the SRC-MISSING bug
+    // was: only target followed the restore, source stayed dead).
+    const p = c?.payload as Record<string, unknown>;
+    expect(p.source_wildcard_id).toBe("beef0001");
+    expect(p.target_wildcard_id).toBe("beef0002");
+  });
+});
