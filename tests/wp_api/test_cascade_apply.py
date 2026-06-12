@@ -82,6 +82,56 @@ async def test_cascade_apply_commit_returns_undo_id(wp_client):
     assert "diff" in body
 
 
+async def test_cascade_apply_cleanup_ids_strips_nested_ref(wp_client):
+    """cleanup_ids in the request body reaches apply_cascade end-to-end:
+    a nested-ref wildcard whose id IS in cleanup_ids gets its @{deleted}
+    token stripped; one whose id is omitted keeps the (now dead) ref."""
+    # Target wildcard to delete.
+    resp = await wp_client.post("/wp/api/modules", json={
+        "type": "wildcard", "name": "target", "description": "",
+        "category_id": None, "tags": [], "payload": {"options": []},
+    })
+    assert resp.status == 201
+    target_id = (await resp.json())["id"]
+    ref = "@{" + target_id + "}"
+
+    # Wildcard whose option value nests a ref to the target — gets cleaned.
+    resp = await wp_client.post("/wp/api/modules", json={
+        "type": "wildcard", "name": "cleaned", "description": "",
+        "category_id": None, "tags": [],
+        "payload": {"options": [{"id": "o1", "value": "warm " + ref + " glow", "weight": 1}]},
+    })
+    assert resp.status == 201
+    cleaned_id = (await resp.json())["id"]
+
+    # Wildcard with the same ref but omitted from cleanup_ids — left broken.
+    resp = await wp_client.post("/wp/api/modules", json={
+        "type": "wildcard", "name": "kept", "description": "",
+        "category_id": None, "tags": [],
+        "payload": {"options": [{"id": "o2", "value": "cool " + ref + " shade", "weight": 1}]},
+    })
+    assert resp.status == 201
+    kept_id = (await resp.json())["id"]
+
+    # Apply with only `cleaned_id` in cleanup_ids.
+    resp = await wp_client.post("/wp/api/cascade/apply", json={
+        "kind": "wildcard", "id": target_id, "action": "delete",
+        "cleanup_ids": [cleaned_id],
+    })
+    assert resp.status == 200
+    assert (await resp.json())["ok"] is True
+
+    # cleaned: ref stripped (proves cleanup_ids flowed to the engine).
+    resp = await wp_client.get(f"/wp/api/modules/{cleaned_id}")
+    cleaned_val = (await resp.json())["payload"]["options"][0]["value"]
+    assert "@{" not in cleaned_val
+
+    # kept: ref intact (not in cleanup_ids → engine left it broken).
+    resp = await wp_client.get(f"/wp/api/modules/{kept_id}")
+    kept_val = (await resp.json())["payload"]["options"][0]["value"]
+    assert ref in kept_val
+
+
 async def test_cascade_apply_rejects_non_dict_body(wp_client):
     """Non-dict body returns 400."""
     resp = await wp_client.post("/wp/api/cascade/apply", data="not json")

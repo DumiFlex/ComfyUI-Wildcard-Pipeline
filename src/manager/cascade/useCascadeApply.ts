@@ -26,6 +26,17 @@ export interface CascadeApplyRequest {
   id: string;
   action: "delete" | "rename";
   cascade_refs?: boolean;
+  /**
+   * Per-entity opt-in cleanup list for wildcard-delete. Each id names a
+   * nested-ref wildcard/derivation whose dead `@{deleted}` token the
+   * engine should strip; entities omitted here are left broken (healed
+   * later via chip remap). Constraints are NEVER listed — they're never
+   * cleaned (the engine ignores them and the user reattaches via the
+   * constraint editor). Only sent by the wildcard-delete branch; other
+   * kinds use `cascade_refs`. `apply()` forwards it when present;
+   * `dryRun()` never needs it (the scan reports full impact regardless).
+   */
+  cleanup_ids?: string[];
   new_name?: string;
   extra?: Record<string, unknown>;
 }
