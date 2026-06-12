@@ -140,3 +140,91 @@ def test_fallback_no_bundle_anywhere_unchanged():
     for seed in range(20):
         ctx = _run([src, con, _outfit_target()], seed=seed)
         assert strip_internals(ctx)["outfit"] == "kimono"
+
+
+def _hair_src(uuid: str, value: str, sub: str, *, uid: str,
+              bundle_origin: str) -> dict:
+    # Single-option pool → the source pick is deterministic across seeds.
+    return _wildcard(uuid, "hair", [
+        {"id": f"h_{value}", "value": value, "weight": 1, "sub_categories": [sub]},
+    ], uid=uid, bundle_origin=bundle_origin)
+
+
+def _mood_target(uuid: str, *, uid: str, bundle_origin: str) -> dict:
+    return _wildcard(uuid, "mood", [
+        {"id": "m_pos", "value": "joyful", "weight": 1, "sub_categories": ["positive"]},
+        {"id": "m_neg", "value": "melancholic", "weight": 1, "sub_categories": ["negative"]},
+    ], uid=uid, bundle_origin=bundle_origin)
+
+
+# Both constraints carry the SAME two-row matrix so that whichever source
+# tag a constraint actually reads forces a DEFINITE, seed-independent target
+# (exclude collapses the 2-option pool to exactly one survivor):
+#     source 'long'  -> exclude negative -> target MUST be joyful
+#     source 'short' -> exclude positive -> target MUST be melancholic
+# This makes the broken-vs-fixed outcome deterministic per seed: a constraint
+# reading the WRONG source flips its target to the wrong mood every time, not
+# just statistically.
+_BOTH_ROWS = {
+    "long": {"negative": {"mode": "exclude", "factor": 1}},
+    "short": {"positive": {"mode": "exclude", "factor": 1}},
+}
+
+
+def test_double_insert_each_constraint_reads_its_own_source_pick():
+    """Two copies of a bundle `[W ← C ← T]`. W is the SAME library uuid in
+    both copies (that's the collision); copy-1 pins source 'long', copy-2
+    pins source 'short'. Both constraints carry `_BOTH_ROWS`, so:
+        copy-1 reads 'long'  -> target tttt0001 MUST be joyful
+        copy-2 reads 'short' -> target tttt0002 MUST be melancholic
+
+    CHAIN ORDER is load-bearing: BOTH sources run BEFORE either target, so
+    the top-level `__wp_picks__['wwww0001']` bucket holds the LAST writer
+    ('short') by the time any target resolves. Pre-fix, both constraints
+    read that survivor 'short' → BOTH targets exclude positive → BOTH become
+    melancholic; copy-1's `joyful` expectation fails on EVERY seed. Post-fix,
+    each constraint reads its own copy's source via `by_origin[B_n]`, so the
+    two targets diverge as specified.
+
+    The mood targets use DISTINCT library uuids so each constraint's
+    `target_wildcard_id` resolves to exactly one target instance — keeps the
+    test about the SOURCE bucket, not target reach (SP3 untouched).
+    """
+    from engine.context import strip_internals
+
+    w1 = _hair_src("wwww0001", "long", "long",
+                   uid="uidw1000001", bundle_origin="B1")
+    c1 = _constraint(
+        "wwww0001", "tttt0001", matrix=_BOTH_ROWS,
+        uid="uidc1000001", bundle_origin="B1",
+    )
+    t1 = _mood_target("tttt0001", uid="uidt1000001", bundle_origin="B1")
+
+    w2 = _hair_src("wwww0001", "short", "short",
+                   uid="uidw2000001", bundle_origin="B2")
+    c2 = _constraint(
+        "wwww0001", "tttt0002", matrix=_BOTH_ROWS,
+        uid="uidc2000001", bundle_origin="B2",
+    )
+    t2 = _mood_target("tttt0002", uid="uidt2000001", bundle_origin="B2")
+
+    # BOTH sources first, THEN both constraint+target pairs. This is what
+    # makes the top-level bucket hold the wrong (survivor) source when each
+    # target resolves — the precise condition the collision needs.
+    for seed in range(20):
+        ctx = _run([w1, w2, c1, t1, c2, t2], seed=seed)
+        out = strip_internals(ctx)
+        picks = ctx["__wp_picks__"]
+        # Per-instance truth is read from each target's recorded pick: both
+        # targets bind `mood`, so the flattened `mood` var only shows the
+        # last write (tttt0002 = melancholic). The diverging assertion is on
+        # the per-target picks.
+        assert out["mood"] == "melancholic"  # last write (copy-2's target)
+        assert picks["tttt0001"]["value"] == "joyful", (
+            f"seed {seed}: copy-1 must read its OWN source 'long' "
+            f"(exclude negative -> joyful), not the survivor 'short'"
+        )
+        assert picks["tttt0002"]["value"] == "melancholic", (
+            f"seed {seed}: copy-2 must read its OWN source 'short' "
+            f"(exclude positive -> melancholic)"
+        )

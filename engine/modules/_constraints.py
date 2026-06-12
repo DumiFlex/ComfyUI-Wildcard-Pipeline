@@ -78,6 +78,49 @@ def _occurrence_matches(pick_entries, firing_uid, carrier_ctx) -> bool:
     return False
 
 
+def _select_source_pick(
+    picks: dict[str, dict[str, Any]],
+    src_id: Any,
+    constraint: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Resolve the source pick a constraint should re-weight against.
+
+    Selection rule (task_5200c1fc — source-instance binding):
+      1. Look up the top-level entry `picks[src_id]` (today's bucket, the
+         last-writer-wins survivor when two instances share a library uuid).
+      2. If the constraint carries a `bundle_origin` AND that entry has a
+         `by_origin[origin]` view, return that view — the source instance in
+         the SAME bundle copy as this constraint.
+      3. Otherwise return the top-level entry as-is = TODAY'S behavior,
+         exactly. Covers: a no-bundle constraint, a constraint inside a
+         bundle whose source is OUTSIDE the bundle, and every legacy
+         workflow. This exact-fallback is what makes the change safe.
+
+    DOCUMENTED LIMITATION (task_5200c1fc): the same library wildcard added
+    MANUALLY twice OUTSIDE any bundle shares no `bundle_origin`, so both
+    manual instances land in the same top-level bucket and the constraint
+    falls back to last-writer-wins. The constraint payload genuinely does
+    not encode WHICH manual instance the user meant, so the design declines
+    to guess rather than guessing wrong. This is a principled residual, not
+    a gap; an explicit stored `source_uid` binding (Option 2 in the design)
+    can be layered on later with precedence explicit > bundle-scope >
+    fallback, foreclosing nothing.
+    """
+    if not isinstance(src_id, str):
+        return None
+    top = picks.get(src_id)
+    if not isinstance(top, dict):
+        return None
+    origin = constraint.get("__constraint_bundle_origin__")
+    if origin:
+        by_origin = top.get("by_origin")
+        if isinstance(by_origin, dict):
+            scoped = by_origin.get(origin)
+            if isinstance(scoped, dict):
+                return scoped
+    return top
+
+
 def apply_constraints_for_target(
     options: list[dict[str, Any]],
     target_uuid: str,
@@ -138,7 +181,7 @@ def apply_constraints_for_target(
             continue
         cid = c.get("__constraint_module_id__")
         src_id = c.get("source_wildcard_id")
-        src_pick = picks.get(src_id) if isinstance(src_id, str) else None
+        src_pick = _select_source_pick(picks, src_id, c)
         if not isinstance(src_pick, dict):
             _push_constraint_warning(
                 warnings,
