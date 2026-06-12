@@ -38,6 +38,9 @@ import { tokenizeRefString, resolveWildcardChip } from "../cascade/resolveChip";
 import type { LibraryFixture } from "../cascade/reverse-dep-index";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
 import PillCountBadge from "../cascade/PillCountBadge.vue";
+import ConstraintReattachSection from "../../components/context/editors/constraint/sections/ConstraintReattachSection.vue";
+import { walkRemap } from "../../components/context/bundles/uuid-remap";
+import { buildWildcardRefData } from "../utils/library-suggestions";
 import type {
   ConstraintCell,
   ConstraintException,
@@ -233,6 +236,75 @@ function wildcardById(id: string | null): ModuleRow | undefined {
 
 const sourceWildcard = computed(() => wildcardById(sourceWildcardId.value));
 const targetWildcard = computed(() => wildcardById(targetWildcardId.value));
+
+// ── Broken-reference reattach (spec Component B "both sides") ────────
+//
+// The SPA editor is the OTHER place source/target are authored; it
+// mirrors the canvas modal's ConstraintReattachSection. A source/target
+// id is DANGLING when non-empty but absent from the live `moduleStore.catalog`
+// (the wildcard was deleted/never-installed). The banner above the
+// Wildcards card lets the user re-point at a live wildcard.
+/** Dangling = a non-empty id not present in the live catalog. */
+function isDangling(id: string | null): boolean {
+  if (!id) return false;
+  return !moduleStore.catalog.some((m) => m.id === id);
+}
+const danglingSource = computed(() => isDangling(sourceWildcardId.value));
+const danglingTarget = computed(() => isDangling(targetWildcardId.value));
+const hasDangling = computed(() => danglingSource.value || danglingTarget.value);
+const reattachRefData = computed(() => buildWildcardRefData(moduleStore.catalog));
+
+/** SPA editor edits the LIBRARY row directly (Save persists it). The
+ *  constraint's reverse-deps are surfaced by `cascadeRefs` (the used-by
+ *  count already in this view) — warn when >0. */
+const referencedElsewhere = computed(() => cascadeRefs.value.length > 0);
+
+/** Live pre-confirm reattach selection, surfaced by the section's `@pick`.
+ *  Drives the dropped-cell preview; reset to null when the section abandons
+ *  the pick (`@pickcleared`) or after a reattach is handled. */
+const reattachPick = ref<{ side: "source" | "target"; uuid: string } | null>(null);
+
+/** Cells the picked candidate would DROP from the current matrix, counted
+ *  at the cell level (not axis keys) so the pre-confirm preview is honest:
+ *   - a vanished SOURCE row drops every cell in that row;
+ *   - a vanished TARGET key drops one cell per row that carries it.
+ *  The candidate's sub_categories come from the same ref-data the dropdown
+ *  picks from; an empty/unknown set means every current key vanishes.
+ *  Mirrors ConstraintInstanceModal's `reattachDroppedCellCount`. */
+const reattachDroppedCellCount = computed(() => {
+  const pick = reattachPick.value;
+  if (!pick) return 0;
+  const m = matrix.value;
+  const newSubs = new Set(reattachRefData.value.uuidToSubCategories.get(pick.uuid) ?? []);
+  let dropped = 0;
+  if (pick.side === "source") {
+    for (const [srcKey, row] of Object.entries(m)) {
+      if (!newSubs.has(srcKey)) dropped += Object.keys(row ?? {}).length;
+    }
+  } else {
+    for (const row of Object.values(m)) {
+      for (const tgtKey of Object.keys(row ?? {})) {
+        if (!newSubs.has(tgtKey)) dropped += 1;
+      }
+    }
+  }
+  return dropped;
+});
+
+function onReattach(payload: { side: "source" | "target"; oldUuid: string; newUuid: string; newName: string }): void {
+  if (payload.side === "source") sourceWildcardId.value = payload.newUuid;
+  else targetWildcardId.value = payload.newUuid;
+  // walkRemap embedded @{oldUuid} refs inside matrix + exceptions so they
+  // follow (segments preserved). Matrix rows/cols re-derive from the new
+  // wildcard's sub_categories via sourceSubCategories/targetSubCategories,
+  // so cells on vanished keys drop from the grid + persist out on save.
+  const table = { [payload.oldUuid]: payload.newUuid };
+  matrix.value = walkRemap(matrix.value, table) as typeof matrix.value;
+  exceptions.value = walkRemap(exceptions.value, table) as typeof exceptions.value;
+  // Pick consumed — clear the live preview so a stale dropped-cell count
+  // can't survive into the next reattach.
+  reattachPick.value = null;
+}
 
 // Matrix axes are BOTH sub-categories — source's on the rows, target's
 // on the cols. Source-value-keyed cells (the prior shape) confused the
@@ -787,6 +859,22 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, targetSel
         @update:content-rating="(v) => (contentRating = v)"
       />
     </div>
+
+    <ConstraintReattachSection
+      v-if="hasDangling"
+      :dangling-source="danglingSource"
+      :dangling-target="danglingTarget"
+      :source-uuid="sourceWildcardId ?? ''"
+      :source-cached-name="''"
+      :target-uuid="targetWildcardId ?? ''"
+      :target-cached-name="''"
+      :ref-data="reattachRefData"
+      :referenced-elsewhere="referencedElsewhere"
+      :dropped-cell-count="reattachDroppedCellCount"
+      @reattach="onReattach"
+      @pick="reattachPick = $event"
+      @pickcleared="reattachPick = null"
+    />
 
     <div id="editor-section-wildcards">
     <Card title="Wildcards">
