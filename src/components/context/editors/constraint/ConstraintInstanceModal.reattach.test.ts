@@ -29,6 +29,32 @@ function moduleWithDanglingSource() {
   };
 }
 
+// Same dangling source, but a TWO-ROW matrix: `warm` survives under
+// candidate beef0001 (subs ["warm","cold"]) while `cool` VANISHES, so a
+// source reattach to beef0001 drops every cell in the `cool` row (2 cells).
+function moduleWithDroppingSource() {
+  return {
+    id: "c0ffee01",
+    _uid: "u1",
+    type: "constraint" as const,
+    enabled: true,
+    collapsed: false,
+    entries: [],
+    payload_hash: "h",
+    meta: { name: "warm-only", description: "", tags: [] },
+    payload: {
+      source_wildcard_id: "deadbeef", // missing locally
+      target_wildcard_id: "facade00", // present as a sibling below
+      matrix: {
+        warm: { rough: { mode: "boost", factor: 2 } }, // survives → 0 dropped
+        cool: { rough: { mode: "ban", factor: 0 }, smooth: { mode: "boost", factor: 2 } }, // vanishes → 2 cells dropped
+      },
+      exceptions: [],
+    },
+    instance: {},
+  };
+}
+
 function siblings() {
   return [
     {
@@ -72,5 +98,19 @@ describe("ConstraintInstanceModal — dangling source reattach", () => {
     const exc = (patch.payload.exceptions as Array<{ source_value: string }>)[0];
     expect(exc.source_value).toBe("@{beef0001:warm}"); // segments preserved
     expect(w.emitted("save-to-library")).toBeTruthy();
+  });
+
+  it("previews the per-cell dropped count for a non-surviving source pick (pre-confirm)", async () => {
+    const w = mount(ConstraintInstanceModal, {
+      props: { module: moduleWithDroppingSource(), siblingModules: siblings() },
+    });
+    await w.find("[data-test='reattach-btn-source']").trigger("click");
+    // Select candidate beef0001 (subs ["warm","cold"]) WITHOUT confirming:
+    // the `cool` row (2 cells) vanishes, `warm` (1 cell) survives → 2 dropped.
+    await w.find("[data-test-id='reattach-candidate-beef0001']").trigger("click");
+
+    const dropped = w.find("[data-test='reattach-dropped-source']");
+    expect(dropped.exists()).toBe(true);
+    expect(dropped.text()).toContain("2 cells dropped");
   });
 });

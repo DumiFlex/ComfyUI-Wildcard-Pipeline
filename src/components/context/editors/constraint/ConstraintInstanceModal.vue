@@ -16,7 +16,7 @@
  * `locked_seed` for this kind. Dropping the section is honest;
  * dimmed dead UI would lie.
  */
-import { computed, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import type { ModuleEntry } from "../../../../widgets/_shared";
 import type { ChainModule, TargetSelect } from "../../../../extension/constraint-pairs";
 import IdentitySection from "./sections/IdentitySection.vue";
@@ -306,6 +306,38 @@ const reattachRefData = computed(() => {
   return buildWildcardRefData(rows);
 });
 
+/** Live pre-confirm reattach selection, surfaced by the section's `@pick`.
+ *  Drives the dropped-cell preview; reset to null when the section abandons
+ *  the pick (`@pickcleared`) or after a reattach is handled. */
+const reattachPick = ref<{ side: "source" | "target"; uuid: string } | null>(null);
+
+/** Cells the picked candidate would DROP from the saved matrix, counted at
+ *  the cell level (not axis keys) so the pre-confirm preview is honest:
+ *   - a vanished SOURCE row drops every cell in that row;
+ *   - a vanished TARGET key drops one cell per row that carries it.
+ *  The candidate's sub_categories come from the same ref-data the dropdown
+ *  picks from; an empty/unknown set means every current key vanishes. */
+const reattachDroppedCellCount = computed(() => {
+  const pick = reattachPick.value;
+  if (!pick) return 0;
+  const pl = (props.module.payload ?? {}) as ConstraintPayload;
+  const matrix = pl.matrix ?? {};
+  const newSubs = new Set(reattachRefData.value.uuidToSubCategories.get(pick.uuid) ?? []);
+  let dropped = 0;
+  if (pick.side === "source") {
+    for (const [srcKey, row] of Object.entries(matrix)) {
+      if (!newSubs.has(srcKey)) dropped += Object.keys((row ?? {}) as Record<string, unknown>).length;
+    }
+  } else {
+    for (const row of Object.values(matrix)) {
+      for (const tgtKey of Object.keys((row ?? {}) as Record<string, unknown>)) {
+        if (!newSubs.has(tgtKey)) dropped += 1;
+      }
+    }
+  }
+  return dropped;
+});
+
 /** Conservative blast-radius signal: the constraint reaches beyond the
  *  current node when the cross-node chain spans more than one context. The
  *  modal can't cheaply run a full reverse-dep, so this errs toward the
@@ -329,6 +361,9 @@ function onReattach(payload: { side: "source" | "target"; oldUuid: string; newUu
   // Reattach edits source/target — library-defining — so it rides
   // Save-to-library (rewrites the library row → every context that uses it).
   emit("save-to-library");
+  // Pick consumed — clear the live preview so a stale dropped-cell count
+  // can't survive into the next reattach.
+  reattachPick.value = null;
 }
 
 // ── Target reach (SP3) ──────────────────────────────────────────
@@ -498,7 +533,10 @@ function onSpaClick(): void {
       :target-cached-name="targetName"
       :ref-data="reattachRefData"
       :referenced-elsewhere="referencedElsewhere"
+      :dropped-cell-count="reattachDroppedCellCount"
       @reattach="onReattach"
+      @pick="reattachPick = $event"
+      @pickcleared="reattachPick = null"
     />
     <IdentitySection :module="module" @update="onUpdate" />
     <MatrixSection

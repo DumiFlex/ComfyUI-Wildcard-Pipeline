@@ -43,6 +43,12 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   reattach: [payload: { side: "source" | "target"; oldUuid: string; newUuid: string; newName: string }];
+  /** Live pre-confirm selection — lets the parent derive the dropped-cell
+   *  preview against the candidate's sub_categories. Fired on every pick. */
+  pick: [payload: { side: "source" | "target"; uuid: string }];
+  /** Selection abandoned (dropdown opened/closed without confirming, or a
+   *  confirm consumed it) — parent resets its dropped-cell preview to 0. */
+  pickcleared: [];
 }>();
 
 type Side = "source" | "target";
@@ -78,10 +84,16 @@ function openDropdown(side: Side): void {
   // without filtering the rest out (mirrors #3 RemapRefPopup).
   query.value = "";
   picked.value = null;
+  // Opening (or re-opening the other side) abandons any prior selection —
+  // tell the parent so a stale dropped-cell preview can't linger.
+  emit("pickcleared");
 }
 
 function pick(c: Candidate): void {
   picked.value = c;
+  // Surface the live pre-confirm pick so the parent can derive the
+  // dropped-cell preview before the irreversible confirm.
+  if (openSide.value) emit("pick", { side: openSide.value, uuid: c.uuid });
 }
 
 function confirm(side: Side): void {
@@ -94,6 +106,9 @@ function confirm(side: Side): void {
   });
   openSide.value = null;
   picked.value = null;
+  // Confirm consumes the pick; the parent resets its preview (the reattach
+  // handler also clears it, this keeps the two emits self-consistent).
+  emit("pickcleared");
 }
 </script>
 
