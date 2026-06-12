@@ -79,3 +79,64 @@ def test_constraint_meta_bundle_origin_none_when_absent():
     bucket = ctx["__wp_constraints__"]
     assert len(bucket) == 1
     assert not bucket[0].get("__constraint_bundle_origin__")
+
+
+def _outfit_target(uuid: str = "bbbb2222", *, uid: str = "",
+                   bundle_origin: str | None = None) -> dict:
+    return _wildcard(uuid, "outfit", [
+        {"id": "o1", "value": "kimono", "weight": 1, "sub_categories": ["formal"]},
+        {"id": "o2", "value": "tshirt", "weight": 1, "sub_categories": ["casual"]},
+    ], uid=uid, bundle_origin=bundle_origin)
+
+
+def test_fallback_single_instance_unchanged():
+    """Single source instance + single constraint, no by_origin match path
+    needed: behaves exactly as today (source 'long' excludes 'formal')."""
+    from engine.context import strip_internals
+    src = _wildcard("aaaa1111", "hair", [
+        {"id": "h1", "value": "long", "weight": 1, "sub_categories": ["long"]},
+    ])
+    con = _constraint(
+        "aaaa1111", "bbbb2222",
+        matrix={"long": {"formal": {"mode": "exclude", "factor": 1}}},
+    )
+    for seed in range(20):
+        ctx = _run([src, con, _outfit_target()], seed=seed)
+        assert strip_internals(ctx)["outfit"] == "tshirt"
+
+
+def test_fallback_constraint_source_outside_its_bundle():
+    """A constraint INSIDE a bundle (origin B) whose SOURCE wildcard is
+    OUTSIDE the bundle (no origin) has no shared origin → falls back to the
+    top-level source pick (today's behavior)."""
+    from engine.context import strip_internals
+    # Source has NO bundle_origin (lives outside the bundle).
+    src = _wildcard("aaaa1111", "hair", [
+        {"id": "h1", "value": "long", "weight": 1, "sub_categories": ["long"]},
+    ])
+    # Constraint carries origin B; its by_origin lookup on the source will
+    # miss (source filed nothing under B) → fallback to top-level entry.
+    con = _constraint(
+        "aaaa1111", "bbbb2222",
+        matrix={"long": {"formal": {"mode": "exclude", "factor": 1}}},
+        uid="uidcon000001", bundle_origin="originB",
+    )
+    for seed in range(20):
+        ctx = _run([src, con, _outfit_target()], seed=seed)
+        assert strip_internals(ctx)["outfit"] == "tshirt"
+
+
+def test_fallback_no_bundle_anywhere_unchanged():
+    """Neither source nor constraint carries an origin (pure legacy chain):
+    identical to the pre-fix engine."""
+    from engine.context import strip_internals
+    src = _wildcard("aaaa1111", "hair", [
+        {"id": "h1", "value": "short", "weight": 1, "sub_categories": ["short"]},
+    ])
+    con = _constraint(
+        "aaaa1111", "bbbb2222",
+        matrix={"short": {"casual": {"mode": "exclude", "factor": 1}}},
+    )
+    for seed in range(20):
+        ctx = _run([src, con, _outfit_target()], seed=seed)
+        assert strip_internals(ctx)["outfit"] == "kimono"
