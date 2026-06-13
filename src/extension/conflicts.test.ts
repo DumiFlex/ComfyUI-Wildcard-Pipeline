@@ -1213,3 +1213,326 @@ describe("scanConflicts — per-selector orphan (SP3 reach model)", () => {
       .toMatchObject({ moduleId: "c1", variable: "aaaa1111" });
   });
 });
+
+// ── Broken nested @{uuid} refs at the module-row level ──────────────
+// Three per-module conflict types, each emitted when an embedded
+// `@{uuid}` is UNRESOLVABLE anywhere the scanner can see (local /
+// upstream / downstream / nested-reach). They reuse the SAME
+// reachability predicate the constraint-target-missing check uses, so a
+// ref pointing at any reachable wildcard must NOT false-positive.
+
+// Wildcard whose single option value is an arbitrary string (lets a test
+// embed an @{uuid} ref — or none — wherever it needs one).
+const wildcardOpt = (
+  id: string,
+  varBinding: string,
+  optValue: string,
+): ContextWidgetValue["modules"][number] => ({
+  id, type: "wildcard", enabled: true, meta: { name: "" },
+  entries: [],
+  payload: {
+    var_binding: varBinding,
+    options: [{ id: "o1", value: optValue, weight: 1 }],
+  },
+});
+
+// Derivation with a single IF branch whose action.value is an arbitrary
+// string. condition.var is satisfiable upstream so the derivation's own
+// missing-template-variable check stays quiet — we only assert on the
+// broken-ref type.
+const derivationAction = (
+  id: string,
+  actionValue: string,
+  conditionVar = "age",
+  elseValue?: string,
+): ContextWidgetValue["modules"][number] => ({
+  id, type: "derivation", enabled: true, meta: { name: "" },
+  entries: [],
+  payload: {
+    rules: [{
+      id: "r0",
+      branches: [{
+        condition: { var: conditionVar, op: "equals", value: "30" },
+        action: { target_var: "mood", mode: "replace", value: actionValue },
+      }],
+      ...(elseValue !== undefined
+        ? { else: { action: { target_var: "mood", mode: "replace", value: elseValue } } }
+        : {}),
+    }],
+  },
+});
+
+// Constraint carrying library exceptions whose source/target VALUES may
+// embed @{uuid} refs. `sources`/`targets` resolve fine; only the option
+// VALUE strings are scanned for nested refs.
+const constraintExc = (
+  id: string,
+  exceptions: Array<{ source_value: string; target_value: string }>,
+): ContextWidgetValue["modules"][number] => ({
+  id, type: "constraint", enabled: true, meta: { name: "" },
+  entries: [],
+  payload: {
+    source_wildcard_id: "aaaa1111",
+    target_wildcard_id: "bbbb2222",
+    matrix: {},
+    exceptions,
+  },
+});
+
+describe("scanConflicts — wildcard_broken_nested_ref", () => {
+  it("flags wildcard_broken_nested_ref when an option @{uuid} resolves nowhere", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [wildcardOpt("w1", "phrase", "see @{deadbeef}")],
+    };
+    const out = scanConflicts(value, []);
+    expect(out).toContainEqual({
+      moduleId: "w1",
+      variable: "deadbeef",
+      type: "wildcard_broken_nested_ref",
+      severity: "warning",
+    });
+  });
+
+  it("keys the conflict to the module's _uid when present", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [{ ...wildcardOpt("w1", "phrase", "@{deadbeef}"), _uid: "uid-w1" }],
+    };
+    const out = scanConflicts(value, []);
+    expect(out.find((c) => c.type === "wildcard_broken_nested_ref")?.moduleId).toBe("uid-w1");
+  });
+
+  it("does NOT flag when the ref resolves to a LOCAL sibling wildcard", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        wildcardOpt("w1", "phrase", "@{bbbb2222}"),
+        wildcard("bbbb2222", "outfit"),
+      ],
+    };
+    const out = scanConflicts(value, []);
+    expect(out.find((c) => c.type === "wildcard_broken_nested_ref")).toBeUndefined();
+  });
+
+  it("does NOT flag when the ref resolves UPSTREAM", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [wildcardOpt("w1", "phrase", "@{aaaa1111}")],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"]);
+    expect(out.find((c) => c.type === "wildcard_broken_nested_ref")).toBeUndefined();
+  });
+
+  it("does NOT flag when the ref resolves DOWNSTREAM", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [wildcardOpt("w1", "phrase", "@{ddddeeee}")],
+    };
+    const out = scanConflicts(value, [], [], ["ddddeeee"]);
+    expect(out.find((c) => c.type === "wildcard_broken_nested_ref")).toBeUndefined();
+  });
+
+  it("does NOT flag when the ref resolves via a downstream nested CARRIER", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [wildcardOpt("w1", "phrase", "@{aabbccdd}")],
+    };
+    const out = scanConflicts(value, [], [], [], ["aabbccdd"]);
+    expect(out.find((c) => c.type === "wildcard_broken_nested_ref")).toBeUndefined();
+  });
+
+  it("disabled wildcards do not generate broken-ref warnings", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [{ ...wildcardOpt("w1", "phrase", "@{deadbeef}"), enabled: false }],
+    };
+    expect(scanConflicts(value, [])).toEqual([]);
+  });
+});
+
+describe("scanConflicts — derivation_broken_nested_ref", () => {
+  it("flags derivation_broken_nested_ref when an action @{uuid} resolves nowhere", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [derivationAction("d1", "wear @{deadbeef}")],
+    };
+    const out = scanConflicts(value, ["age"]);
+    expect(out).toContainEqual({
+      moduleId: "d1",
+      variable: "deadbeef",
+      type: "derivation_broken_nested_ref",
+      severity: "warning",
+    });
+  });
+
+  it("scans the else action value too", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [derivationAction("d1", "ok", "age", "fallback @{deadbeef}")],
+    };
+    const out = scanConflicts(value, ["age"]);
+    expect(out).toContainEqual({
+      moduleId: "d1",
+      variable: "deadbeef",
+      type: "derivation_broken_nested_ref",
+      severity: "warning",
+    });
+  });
+
+  it("does NOT flag when the ref resolves to a LOCAL sibling wildcard", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        derivationAction("d1", "wear @{bbbb2222}"),
+        wildcard("bbbb2222", "outfit"),
+      ],
+    };
+    const out = scanConflicts(value, ["age"]);
+    expect(out.find((c) => c.type === "derivation_broken_nested_ref")).toBeUndefined();
+  });
+
+  it("does NOT flag when the ref resolves UPSTREAM", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [derivationAction("d1", "wear @{aaaa1111}")],
+    };
+    const out = scanConflicts(value, ["age"], ["aaaa1111"]);
+    expect(out.find((c) => c.type === "derivation_broken_nested_ref")).toBeUndefined();
+  });
+
+  it("does NOT flag when the ref resolves DOWNSTREAM", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [derivationAction("d1", "wear @{ddddeeee}")],
+    };
+    const out = scanConflicts(value, ["age"], [], ["ddddeeee"]);
+    expect(out.find((c) => c.type === "derivation_broken_nested_ref")).toBeUndefined();
+  });
+
+  it("disabled derivations do not generate broken-ref warnings", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [{ ...derivationAction("d1", "wear @{deadbeef}"), enabled: false }],
+    };
+    expect(scanConflicts(value, ["age"])).toEqual([]);
+  });
+});
+
+describe("scanConflicts — constraint_broken_exception_ref", () => {
+  it("flags constraint_broken_exception_ref when an exception value @{uuid} resolves nowhere", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraintExc("c1", [{ source_value: "see @{deadbeef}", target_value: "sky" }]),
+        wildcard("bbbb2222", "outfit"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"]);
+    expect(out).toContainEqual({
+      moduleId: "c1",
+      variable: "deadbeef",
+      type: "constraint_broken_exception_ref",
+      severity: "warning",
+    });
+  });
+
+  it("scans the exception target_value too", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraintExc("c1", [{ source_value: "red", target_value: "@{deadbeef}" }]),
+        wildcard("bbbb2222", "outfit"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"]);
+    expect(out).toContainEqual({
+      moduleId: "c1",
+      variable: "deadbeef",
+      type: "constraint_broken_exception_ref",
+      severity: "warning",
+    });
+  });
+
+  it("scans instance.extra_exceptions[] values too", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        {
+          ...constraintExc("c1", []),
+          instance: {
+            extra_exceptions: [
+              { source_value: "wear @{deadbeef}", target_value: "x", mode: "allow", factor: 1 },
+            ],
+          },
+        },
+        wildcard("bbbb2222", "outfit"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"]);
+    expect(out).toContainEqual({
+      moduleId: "c1",
+      variable: "deadbeef",
+      type: "constraint_broken_exception_ref",
+      severity: "warning",
+    });
+  });
+
+  it("does NOT flag when the exception ref resolves to a LOCAL sibling wildcard", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraintExc("c1", [{ source_value: "@{bbbb2222}", target_value: "sky" }]),
+        wildcard("bbbb2222", "outfit"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"]);
+    expect(out.find((c) => c.type === "constraint_broken_exception_ref")).toBeUndefined();
+  });
+
+  it("does NOT flag when the exception ref resolves UPSTREAM", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraintExc("c1", [{ source_value: "@{aaaa1111}", target_value: "sky" }]),
+        wildcard("bbbb2222", "outfit"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"]);
+    expect(out.find((c) => c.type === "constraint_broken_exception_ref")).toBeUndefined();
+  });
+
+  it("does NOT flag when the exception ref resolves DOWNSTREAM", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraintExc("c1", [{ source_value: "@{ddddeeee}", target_value: "sky" }]),
+        wildcard("bbbb2222", "outfit"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"], ["ddddeeee"]);
+    expect(out.find((c) => c.type === "constraint_broken_exception_ref")).toBeUndefined();
+  });
+
+  it("disabled constraints do not generate broken-exception-ref warnings", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        { ...constraintExc("c1", [{ source_value: "@{deadbeef}", target_value: "x" }]), enabled: false },
+      ],
+    };
+    expect(scanConflicts(value, [])).toEqual([]);
+  });
+});
+
+describe("scanConflicts — combine @{} templates are an intentional non-gap", () => {
+  it("a combine template containing @{uuid} emits NOTHING", () => {
+    // Combine treats `@{}` as literal text (never resolved), so there is
+    // deliberately no broken-ref scan for combine templates.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [combine("cb1", "see @{deadbeef} now")],
+    };
+    expect(scanConflicts(value, [])).toEqual([]);
+  });
+});

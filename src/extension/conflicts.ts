@@ -158,7 +158,17 @@ export type ConflictType =
                                   //  No exclusive claiming — multiple
                                   //  constraints may cover one instance, so
                                   //  orphan strictly means "reached nothing".
-  | "injector_binding_missing";
+  | "injector_binding_missing"
+  // Broken nested `@{uuid}` refs surfaced at the module-row level
+  // (2026-06-12). Each fires when a module embeds an `@{uuid}` that
+  // resolves NOWHERE the scanner can see — local, upstream, downstream,
+  // or via a nested-reach carrier. Shares the constraint-target-missing
+  // reachability predicate (`isUuidResolvable`) so the row badge agrees
+  // with the editor's red `?` chip. Combine templates are intentionally
+  // excluded — they treat `@{}` as literal text, never resolved.
+  | "wildcard_broken_nested_ref"      // dead @{} in a wildcard option value
+  | "derivation_broken_nested_ref"    // dead @{} in a derivation action/else value
+  | "constraint_broken_exception_ref";// dead @{} in a constraint exception value
 export type Severity = "info" | "warning" | "error";
 export interface Conflict {
   moduleId: string;
@@ -185,6 +195,9 @@ export function labelFor(type: ConflictType): string {
   if (type === "constraint_orphan_source") return "source missing — no upstream instance";
   if (type === "constraint_orphan_target") return "target missing — no available instance downstream";
   if (type === "injector_binding_missing") return "no binding";
+  if (type === "wildcard_broken_nested_ref") return "broken ref";
+  if (type === "derivation_broken_nested_ref") return "broken ref";
+  if (type === "constraint_broken_exception_ref") return "broken exception ref";
   return type;
 }
 
@@ -202,6 +215,9 @@ export function shortConflictLabel(type: ConflictType): string {
     case "constraint_orphan_source":    return "no src upstream";
     case "constraint_orphan_target":    return "no tgt downstream";
     case "injector_binding_missing":    return "no binding";
+    case "wildcard_broken_nested_ref":  return "broken ref";
+    case "derivation_broken_nested_ref": return "broken ref";
+    case "constraint_broken_exception_ref": return "broken exception ref";
     default:                            return "conflict";
   }
 }
@@ -577,6 +593,25 @@ export function scanConflicts(
   const firstWriterId = new Map<string, string>();
   const out: Conflict[] = [];
   const bundleEnabled = buildBundleEnabledMap(value.bundles);
+  // Single source of truth for "can the engine resolve this `@{uuid}`?"
+  // — the SAME reachability set the `constraint_target_missing` check
+  // uses: a local instance, an upstream/downstream Context, or via a
+  // nested `@{uuid}` carrier (local-after-position-`i`, or downstream).
+  // `i` is the position of the module carrying the ref; the local-nested
+  // disjunct reads `localNestedReachAfter[i + 1]` (uuids reachable from
+  // modules AFTER `i`) so a ref to a sibling wildcard that only appears
+  // later via nesting still resolves. Both the constraint-target path and
+  // the broken-nested-ref scans below call this so the row badge agrees
+  // with the editor's broken-ref chip.
+  const isUuidResolvable = (uuid: string, i: number): boolean => {
+    const localIdxs = localWildcardIndex.get(uuid);
+    const inLocalDirect = localIdxs !== undefined && localIdxs.length > 0;
+    const inUpstream = upstreamUuids.has(uuid);
+    const inDownstream = (downstreamCounts.get(uuid) ?? 0) > 0;
+    const inLocalNestedAfter = localNestedReachAfter[i + 1].has(uuid);
+    const inDownstreamNested = downstreamNestedReach.has(uuid);
+    return inLocalDirect || inUpstream || inDownstream || inLocalNestedAfter || inDownstreamNested;
+  };
   for (let i = 0; i < value.modules.length; i++) {
     const m = value.modules[i];
     if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
@@ -698,25 +733,13 @@ export function scanConflicts(
       }
 
       if (typeof tgtId === "string" && tgtId) {
-        // Reachability for the MISSING check (position-independent): is
-        // this uuid present anywhere the engine could resolve it — a
-        // local instance, an upstream/downstream Context, or via a
-        // nested `@{tgtId}` carrier (local-after-self or downstream)? If
-        // not, it's a dangling ref → `constraint_target_missing`.
-        const localIdxs = localWildcardIndex.get(tgtId);
-        const inLocalDirect = localIdxs !== undefined && localIdxs.length > 0;
-        const inUpstream = upstreamUuids.has(tgtId);
-        const inDownstream = (downstreamCounts.get(tgtId) ?? 0) > 0;
-        const inLocalNestedAfter = localNestedReachAfter[i + 1].has(tgtId);
-        const inDownstreamNested = downstreamNestedReach.has(tgtId);
-
-        if (
-          !inLocalDirect
-          && !inUpstream
-          && !inDownstream
-          && !inLocalNestedAfter
-          && !inDownstreamNested
-        ) {
+        // Reachability for the MISSING check: is this uuid present
+        // anywhere the engine could resolve it — a local instance, an
+        // upstream/downstream Context, or via a nested `@{tgtId}` carrier
+        // (local-after-self or downstream)? If not, it's a dangling ref →
+        // `constraint_target_missing`. Shares `isUuidResolvable` with the
+        // broken-nested-ref scans so all reachability decisions agree.
+        if (!isUuidResolvable(tgtId, i)) {
           out.push({
             moduleId: m._uid ?? m.id,
             variable: tgtId,
@@ -738,6 +761,71 @@ export function scanConflicts(
             type: "constraint_orphan_target",
             severity: "warning",
           });
+        }
+      }
+    }
+
+    // 4. Broken nested `@{uuid}` refs (2026-06-12). Each enabled module
+    //    kind that embeds `@{uuid}` refs in resolvable string fields gets
+    //    its dead refs surfaced at the row via the same `severityFor`
+    //    badge. "Dead" = NOT `isUuidResolvable` at this position — so a
+    //    ref to any reachable wildcard (local / upstream / downstream /
+    //    nested carrier) never false-positives. Combine templates are
+    //    intentionally NOT scanned (their `@{}` is literal text). Dedup
+    //    per-module per-uuid so a uuid repeated across option values /
+    //    exceptions surfaces once.
+    const brokenRefSources: Array<{ strings: Iterable<string>; type: ConflictType }> = [];
+    if (m.type === "wildcard") {
+      const payload = (m.payload ?? {}) as { options?: Array<{ value?: unknown }> };
+      brokenRefSources.push({
+        strings: (payload.options ?? [])
+          .map((o) => o?.value)
+          .filter((v): v is string => typeof v === "string"),
+        type: "wildcard_broken_nested_ref",
+      });
+    } else if (m.type === "derivation") {
+      // `templatesOf` already extracts every branch + else `action.value`
+      // string — the same fields the derivation resolver runs `@{}` refs
+      // through at runtime.
+      brokenRefSources.push({ strings: templatesOf(m), type: "derivation_broken_nested_ref" });
+    } else if (m.type === "constraint") {
+      const payload = (m.payload ?? {}) as {
+        exceptions?: Array<{
+          source?: unknown; target?: unknown;
+          source_value?: unknown; target_value?: unknown;
+        }>;
+      };
+      const inst = (m.instance ?? {}) as {
+        extra_exceptions?: Array<{ source_value?: unknown; target_value?: unknown }> | null;
+      };
+      const excStrings: string[] = [];
+      for (const ex of payload.exceptions ?? []) {
+        // Library exceptions key runtime lookups by `source`/`target`
+        // (migration 010 also stamps `*_value` mirrors); scan whichever
+        // string forms are present so an embedded ref is caught either way.
+        for (const v of [ex.source, ex.target, ex.source_value, ex.target_value]) {
+          if (typeof v === "string") excStrings.push(v);
+        }
+      }
+      for (const ex of inst.extra_exceptions ?? []) {
+        for (const v of [ex.source_value, ex.target_value]) {
+          if (typeof v === "string") excStrings.push(v);
+        }
+      }
+      brokenRefSources.push({ strings: excStrings, type: "constraint_broken_exception_ref" });
+    }
+    if (brokenRefSources.length > 0) {
+      const seenRef = new Set<string>();
+      for (const { strings, type } of brokenRefSources) {
+        for (const s of strings) {
+          for (const match of s.matchAll(REF_TOKEN_RE)) {
+            const uuid = match[1];
+            if (seenRef.has(uuid)) continue;
+            seenRef.add(uuid);
+            if (!isUuidResolvable(uuid, i)) {
+              out.push({ moduleId: m._uid ?? m.id, variable: uuid, type, severity: "warning" });
+            }
+          }
         }
       }
     }
