@@ -376,6 +376,22 @@ const targetSubCategories = computed<string[]>(() => {
  *  axes/options may have changed) — reattach a live wildcard to edit. */
 const refMissing = computed(() => danglingSource.value || danglingTarget.value);
 
+/** The name to persist for the source / target wildcard: the cached name if
+ *  present, else the LIVE wildcard's current name. This backfills the cache
+ *  for a legacy constraint whose ref is still live — capturing the name NOW,
+ *  while the wildcard exists, so a later deletion's broken-ref banner can show
+ *  "(was …)" instead of a bare uuid (the name is unrecoverable once the
+ *  wildcard is gone). A stranded ref has no live wildcard, so its cached value
+ *  (or null) is kept untouched. Consumed by `save()`; display-only — the
+ *  engine never reads these. Computed (not a load-time mutation) so opening a
+ *  constraint never marks it dirty. */
+const resolvedSourceName = computed(
+  () => sourceWildcardName.value || sourceWildcard.value?.name || null,
+);
+const resolvedTargetName = computed(
+  () => targetWildcardName.value || targetWildcard.value?.name || null,
+);
+
 // Display labels resolve `@{uuid}` tokens in option-value strings to
 // `@wildcard_name` chips so the Exceptions table renders the picked
 // wildcards' names instead of raw 8-hex ids. Backend value stays the
@@ -754,8 +770,8 @@ async function save() {
       // Cached display names — persisted only when known so legacy / never-set
       // constraints stay clean (absent → banner falls back to uuid-only).
       // Display-only; the engine never reads them.
-      ...(sourceWildcardName.value ? { source_wildcard_name: sourceWildcardName.value } : {}),
-      ...(targetWildcardName.value ? { target_wildcard_name: targetWildcardName.value } : {}),
+      ...(resolvedSourceName.value ? { source_wildcard_name: resolvedSourceName.value } : {}),
+      ...(resolvedTargetName.value ? { target_wildcard_name: resolvedTargetName.value } : {}),
       matrix: matrix.value,
       exceptions: exceptions.value,
       // Always stamp the reach selector. `{mode:"all"}` is the engine
@@ -858,7 +874,7 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
   showErrors.value ? validationErrors.value : [],
 );
 
-defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWildcardName, matrix, exceptions, targetSelect, applyRestore, displayLabel });
+defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWildcardName, resolvedSourceName, resolvedTargetName, matrix, exceptions, targetSelect, applyRestore, displayLabel });
 </script>
 
 <template>

@@ -110,6 +110,40 @@ async function mountDangling() {
   return w;
 }
 
+/** A legacy constraint: both source + target are LIVE in the catalog
+ *  (`beef0001` colour / `facade00` texture) but the payload carries NO
+ *  cached `*_wildcard_name` (pre-cache-feature). Backfill should resolve
+ *  the names from the live catalog so they persist on the next save. */
+function liveNamelessConstraint() {
+  return {
+    id: "c0ffee01",
+    name: "warm-only",
+    description: "",
+    category_id: null,
+    tags: [],
+    type: "constraint",
+    payload: {
+      source_wildcard_id: "beef0001", // LIVE → "colour"
+      target_wildcard_id: "facade00", // LIVE → "texture"
+      // no source_wildcard_name / target_wildcard_name
+      matrix: {},
+      exceptions: [],
+    },
+    version: 1, created_at: "", updated_at: "", is_favorite: false,
+  };
+}
+
+async function mountLiveNameless() {
+  apiMod.list.mockResolvedValue({ items: catalog(), total: catalog().length });
+  apiMod.get.mockResolvedValue(liveNamelessConstraint());
+  const w = mount(ConstraintEditor, {
+    props: { id: "c0ffee01" },
+    global: { plugins: [makeRouter()] },
+  });
+  await flushPromises();
+  return w;
+}
+
 describe("ConstraintEditor — cached source/target ref names", () => {
   it("picking a source wildcard stamps source_wildcard_name from the catalog", async () => {
     const w = await mountNew();
@@ -162,5 +196,27 @@ describe("ConstraintEditor — cached source/target ref names", () => {
     expect(txt).toContain("Starter subject");
     // … alongside the 8-char uuid prefix.
     expect(txt).toContain("deadbeef");
+  });
+
+  it("backfills the cached name from the LIVE wildcard when the constraint has none", async () => {
+    // Legacy constraint, no cached names, but both wildcards still live.
+    // resolvedSourceName/resolvedTargetName resolve the live names so the save
+    // payload stamps them — capturing the name BEFORE the wildcard can be
+    // deleted (after which it's unrecoverable).
+    const w = await mountLiveNameless();
+    const vm = w.vm as unknown as {
+      resolvedSourceName: string | null;
+      resolvedTargetName: string | null;
+    };
+    expect(vm.resolvedSourceName).toBe("colour");
+    expect(vm.resolvedTargetName).toBe("texture");
+  });
+
+  it("resolved name keeps the cached value for a stranded source (no live lookup)", async () => {
+    // Stranded source (deleted): no live wildcard to read, so the cached
+    // "Starter subject" is preserved rather than blanked.
+    const w = await mountDangling();
+    const vm = w.vm as unknown as { resolvedSourceName: string | null };
+    expect(vm.resolvedSourceName).toBe("Starter subject");
   });
 });
