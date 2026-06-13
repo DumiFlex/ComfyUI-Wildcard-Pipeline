@@ -32,10 +32,15 @@ interface Props {
   modelValue: ConstraintMatrix;
   sourceName?: string; // wildcard name shown in the source axis tag
   targetName?: string; // wildcard name shown in the target axis tag
+  // Read-only recovery view: the source/target wildcard was deleted, so the
+  // configured rules are shown for understanding only. Cells don't open the
+  // rule popover; reattach a live wildcard to edit.
+  readonly?: boolean;
 }
 const props = withDefaults(defineProps<Props>(), {
   sourceName: "",
   targetName: "",
+  readonly: false,
 });
 const emit = defineEmits<{ "update:modelValue": [value: ConstraintMatrix] }>();
 
@@ -150,6 +155,8 @@ function cssEscape(s: string): string {
 
 function openPopover(row: string, col: string, ev: MouseEvent): void {
   ev.stopPropagation();
+  // Read-only recovery view (deleted source/target): cells are inert.
+  if (props.readonly) return;
   if (isOpenAt(row, col)) {
     popover.value = null;
     return;
@@ -233,7 +240,7 @@ defineExpose({ cellAt });
 </script>
 
 <template>
-  <section class="wp-mx" data-test="constraint-matrix">
+  <section class="wp-mx" :class="{ 'wp-mx--readonly': readonly }" data-test="constraint-matrix">
     <!-- Axis tags — same purple-source / cyan-target language the
          canvas grid uses. Helps users keep "rows are source" vs
          "columns are target" straight when wildcard names are short
@@ -299,6 +306,14 @@ defineExpose({ cellAt });
         </tbody>
       </table>
     </div>
+
+    <p
+      v-if="readonly"
+      class="wp-mx-readonly-hint"
+      data-test="matrix-readonly-hint"
+    >
+      Reattach the source to edit these rules.
+    </p>
 
     <MatrixLegend />
 
@@ -476,4 +491,18 @@ defineExpose({ cellAt });
 }
 .glyph { font-size: 14px; line-height: 1; }
 .factor { font-size: 11px; font-weight: 700; }
+
+/* ── Read-only recovery view (deleted source/target) ───────────
+ *    Cells are inert: no pointer, no hover lift, no focus ring —
+ *    they're a snapshot of the configured rules, not editable. */
+.wp-mx--readonly .wp-mx-cell { cursor: default; }
+.wp-mx--readonly .wp-mx-cell:hover {
+  transform: none;
+  box-shadow: none;
+}
+.wp-mx-readonly-hint {
+  margin: 8px 0 0;
+  font-size: var(--wp-text-xs);
+  color: var(--wp-text-dim, var(--wp-text-muted));
+}
 </style>

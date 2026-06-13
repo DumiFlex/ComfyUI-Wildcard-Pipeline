@@ -348,17 +348,33 @@ function onReattach(payload: { side: "source" | "target"; oldUuid: string; newUu
 // belong in the Exceptions table beneath the matrix.
 const sourceSubCategories = computed<string[]>(() => {
   const wc = sourceWildcard.value;
-  if (!wc) return [];
-  const payload = wc.payload as WildcardPayloadShape;
-  return payload.sub_categories ?? [];
+  if (wc) return (wc.payload as WildcardPayloadShape).sub_categories ?? [];
+  // Stranded source (id set, wildcard deleted): reconstruct the row axis from
+  // the saved matrix keys so the configured rules stay visible read-only.
+  if (sourceWildcardId.value) return Object.keys(matrix.value ?? {});
+  return [];
 });
 
 const targetSubCategories = computed<string[]>(() => {
   const wc = targetWildcard.value;
-  if (!wc) return [];
-  const payload = wc.payload as WildcardPayloadShape;
-  return payload.sub_categories ?? [];
+  if (wc) return (wc.payload as WildcardPayloadShape).sub_categories ?? [];
+  // Stranded target: reconstruct the col axis from every cell's keys.
+  if (targetWildcardId.value) {
+    const cols = new Set<string>();
+    for (const row of Object.values(matrix.value ?? {})) {
+      for (const c of Object.keys((row ?? {}) as Record<string, unknown>)) cols.add(c);
+    }
+    return [...cols];
+  }
+  return [];
 });
+
+/** Source and/or target wildcard is missing (id set but absent from the
+ *  catalog). Reuses the existing dangling computeds, which mean exactly
+ *  that. Drives the read-only recovery render of the matrix + exceptions:
+ *  the data survives a deleted wildcard but can't be safely edited (its
+ *  axes/options may have changed) — reattach a live wildcard to edit. */
+const refMissing = computed(() => danglingSource.value || danglingTarget.value);
 
 // Display labels resolve `@{uuid}` tokens in option-value strings to
 // `@wildcard_name` chips so the Exceptions table renders the picked
@@ -984,17 +1000,27 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
         data-test="matrix-need-subs"
       >
         <i class="pi pi-info-circle" />
-        <span v-if="sourceSubCategories.length === 0">Source wildcard needs at least one sub-category. </span>
-        <span v-if="targetSubCategories.length === 0">Target wildcard needs at least one sub-category. </span>
-        Add them on the wildcard editor to define rules.
+        <!-- With the keys-fallback filling the axes for a stranded ref, this
+             branch only fires when the reconstructed axes are ALSO empty —
+             i.e. a deleted wildcard whose constraint has no saved rules. -->
+        <template v-if="refMissing">
+          The source or target wildcard was deleted and this constraint has no
+          saved rules — reattach a live wildcard to restore the matrix.
+        </template>
+        <template v-else>
+          <span v-if="sourceSubCategories.length === 0">Source wildcard needs at least one sub-category. </span>
+          <span v-if="targetSubCategories.length === 0">Target wildcard needs at least one sub-category. </span>
+          Add them on the wildcard editor to define rules.
+        </template>
       </div>
       <ConstraintMatrixGrid
         v-else
         :rows="sourceSubCategories"
         :cols="targetSubCategories"
         :model-value="matrix"
-        :source-name="sourceWildcard?.name ?? ''"
-        :target-name="targetWildcard?.name ?? ''"
+        :source-name="sourceWildcard?.name ?? (sourceWildcardName ?? '')"
+        :target-name="targetWildcard?.name ?? (targetWildcardName ?? '')"
+        :readonly="refMissing"
         data-test="matrix-grid"
         @update:model-value="onMatrixUpdate"
       />
@@ -1047,7 +1073,10 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
     <div id="editor-section-exceptions">
     <Card :title="`Exceptions (${exceptions.length})`" :padding="false">
       <template #actions>
-        <Button size="sm" variant="primary" icon="pi-plus" data-test="add-exception" @click="addException">
+        <!-- Editing requires a live wildcard — the value pickers are empty
+             when the ref is missing, so authoring a new exception is hidden
+             in the read-only recovery view. -->
+        <Button v-if="!refMissing" size="sm" variant="primary" icon="pi-plus" data-test="add-exception" @click="addException">
           Add exception
         </Button>
       </template>
@@ -1055,6 +1084,36 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
         <i class="pi pi-info-circle" />
         Per-pair overrides for specific option values that the matrix doesn't cover.
       </div>
+      <!-- Read-only recovery view: the source/target wildcard was deleted, so
+           the exception option lists (built from the LIVE wildcard's values)
+           are empty and would swallow the stored source/target in the edit
+           Selects. Show the configured overrides as plain text instead.
+           displayLabel resolves any @{uuid} token to its name. -->
+      <table
+        v-else-if="refMissing"
+        class="wp-table wp-options-table"
+        data-test="cn-ex-readonly"
+      >
+        <thead>
+          <tr>
+            <th>Source value</th>
+            <th>Target value</th>
+            <th class="cn-col-mode">Mode</th>
+            <th class="cn-col-factor">Factor</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(ex, idx) in exceptions" :key="idx">
+            <td class="wp-mono" data-test="cn-ex-ro-src">{{ displayLabel(ex.source) || "⌀ null" }}</td>
+            <td class="wp-mono" data-test="cn-ex-ro-tgt">{{ displayLabel(ex.target) || "⌀ null" }}</td>
+            <td data-test="cn-ex-ro-mode">{{ ex.mode }}</td>
+            <td data-test="cn-ex-ro-factor">
+              <span v-if="ex.mode === 'boost' || ex.mode === 'reduce'" class="wp-mono">×{{ ex.factor }}</span>
+              <span v-else class="wp-dim wp-mono cn-dash">—</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
       <table v-else class="wp-table wp-options-table">
         <thead>
           <tr>
