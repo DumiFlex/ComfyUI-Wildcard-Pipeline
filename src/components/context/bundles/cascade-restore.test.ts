@@ -509,5 +509,17 @@ describe("cascadeRestoreForBundle — Phase 4 syncs payload_hash to the library 
     // hash (which is what produced the DRIFT badge).
     expect(c?.payload_hash).toBe("cn-corrected");
     expect(c?.payload_hash).not.toBe("stale-frozen-hash");
+
+    // Gap #1 (holistic audit 2026-06-13): the PUSHED bundle children (Phase 3)
+    // must carry the SAME live hashes. `toChildSnapshot` froze the stale
+    // pre-cascade hash, so without the rewriteChildId hash-stamp the pushed
+    // bundle ships a child whose payload was corrected but whose payload_hash
+    // is stale → RE-INSERTING the bundle shows spurious DRIFT against the live
+    // library entry.
+    const childWild = result.rewrittenChildren.find((c2) => c2.type === "wildcard");
+    const childCon = result.rewrittenChildren.find((c2) => c2.type === "constraint");
+    expect(childWild?.payload_hash).toBe("wh-post");
+    expect(childCon?.payload_hash).toBe("cn-corrected");
+    expect(childCon?.payload_hash).not.toBe("stale-frozen-hash");
   });
 });

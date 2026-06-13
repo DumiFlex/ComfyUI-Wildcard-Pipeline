@@ -175,7 +175,9 @@ export async function cascadeRestoreForBundle(
     if (inner.parent_uid !== outer._uid) continue;
     if (!isBundleMissing(inner)) continue;
     const integrity = buildLibraryChildrenWithIntegrity(inner, modules, bundles);
-    const rewritten = integrity.children.map((c) => rewriteChildId(c, moduleMap, innerBundleMap));
+    const rewritten = integrity.children.map((c) =>
+      rewriteChildId(c, moduleMap, innerBundleMap, moduleHashMap),
+    );
     const created = await api.bundles.create({
       name: inner.name || "bundle",
       color: inner.color ?? null,
@@ -188,7 +190,7 @@ export async function cascadeRestoreForBundle(
   // ── Phase 3: build the outer's children with both rewrites applied ──
   const outerIntegrity = buildLibraryChildrenWithIntegrity(outer, modules, bundles);
   const rewrittenChildren = outerIntegrity.children.map((c) =>
-    rewriteChildId(c, moduleMap, innerBundleMap),
+    rewriteChildId(c, moduleMap, innerBundleMap, moduleHashMap),
   );
 
   // ── Phase 4: rebind workflow state so MISSING badges clear ──────────
@@ -263,6 +265,7 @@ function rewriteChildId(
   c: Record<string, unknown>,
   moduleMap: Map<string, string>,
   innerBundleMap: Map<string, string>,
+  moduleHashMap?: ReadonlyMap<string, string>,
 ): Record<string, unknown> {
   let next: Record<string, unknown> = c;
 
@@ -271,6 +274,18 @@ function rewriteChildId(
   if (id) {
     const newId = c.type === "bundle" ? innerBundleMap.get(id) : moduleMap.get(id);
     if (newId) next = { ...next, id: newId };
+
+    // (1b) Sync the child snapshot's `payload_hash` to the restored library
+    // entry's LIVE hash. `toChildSnapshot` froze the stale pre-cascade hash;
+    // for a restored module whose refs were corrected (Phase 1 Pass-2) the
+    // payload moved but the frozen hash didn't, so the pushed bundle would
+    // ship a child whose payload ≠ its payload_hash → RE-INSERTING the bundle
+    // shows spurious DRIFT against the live library entry. `moduleHashMap` is
+    // keyed by OLD id and holds only restored modules (POST hash, overridden
+    // by the corrective-update hash), so non-restored + bundle children are
+    // left untouched.
+    const freshHash = moduleHashMap?.get(id);
+    if (freshHash) next = { ...next, payload_hash: freshHash };
   }
 
   // (2) Inner references (constraint source/target, @{} refs) → restored ids.
