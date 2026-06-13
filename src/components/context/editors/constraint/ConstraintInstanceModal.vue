@@ -569,6 +569,7 @@ function onSpaClick(): void {
       :target-subs="targetSubs"
       :source-name="sourceName"
       :target-name="targetName"
+      :stranded="hasDangling"
       @update="onUpdate"
     />
     <TargetReachSection
@@ -588,6 +589,7 @@ function onSpaClick(): void {
       :source-options-by-id="sourceOptionsById"
       :target-options-by-id="targetOptionsById"
       :uuid-to-name="uuidToName"
+      :stranded="hasDangling"
       @update="onUpdate"
     />
 

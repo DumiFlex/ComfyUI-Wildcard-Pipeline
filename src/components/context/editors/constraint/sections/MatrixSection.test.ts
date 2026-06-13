@@ -355,6 +355,66 @@ describe("constraint MatrixSection — legacy migration", () => {
   });
 });
 
+// ── Stranded (read-only) matrix, mirroring the SPA ConstraintMatrix ─
+//
+// When the parent modal reports a dangling source/target wildcard
+// (`stranded`), the grid becomes a read-only snapshot of the configured
+// rules: cells are inert (no popover opens), the section root carries a
+// `mx--readonly` modifier (dashed frame + muted cells via CSS), and a
+// read-only lock affordance replaces the click-to-edit interaction.
+describe("constraint MatrixSection — stranded read-only", () => {
+  it("marks the section read-only and shows a lock affordance when stranded", () => {
+    const w = mount(MatrixSection, {
+      props: {
+        module: makeModule(),
+        sourceSubs: SOURCE_SUBS,
+        targetSubs: TARGET_SUBS,
+        stranded: true,
+      },
+    });
+    expect(w.find('[data-test="mx-section"]').classes()).toContain("mx--readonly");
+    expect(w.find('[data-test="mx-readonly-lock"]').exists()).toBe(true);
+  });
+
+  it("cells are inert — clicking does NOT open the rule popover when stranded", async () => {
+    const w = mount(MatrixSection, {
+      props: {
+        module: makeModule(),
+        sourceSubs: SOURCE_SUBS,
+        targetSubs: TARGET_SUBS,
+        stranded: true,
+      },
+    });
+    await w.find('[data-test="mx-cell-red-cotton"]').trigger("click");
+    expect(w.findComponent({ name: "CellRulePopover" }).exists()).toBe(false);
+    expect(w.find('[data-test="mx-cell-red-cotton"]').classes()).not.toContain("open");
+  });
+
+  it("cells keep their s-{state} hue class so the snapshot stays legible", () => {
+    const w = mount(MatrixSection, {
+      props: {
+        module: makeModule(),
+        sourceSubs: SOURCE_SUBS,
+        targetSubs: TARGET_SUBS,
+        stranded: true,
+      },
+    });
+    // Same mode hues as the editable grid (muting is a CSS concern).
+    expect(w.find('[data-test="mx-cell-red-silk"]').classes()).toContain("s-boost");
+    expect(w.find('[data-test="mx-cell-blue-silk"]').classes()).toContain("s-reduce");
+  });
+
+  it("control: a healthy (non-stranded) matrix stays interactive", async () => {
+    const w = mount(MatrixSection, {
+      props: { module: makeModule(), sourceSubs: SOURCE_SUBS, targetSubs: TARGET_SUBS },
+    });
+    expect(w.find('[data-test="mx-section"]').classes()).not.toContain("mx--readonly");
+    expect(w.find('[data-test="mx-readonly-lock"]').exists()).toBe(false);
+    await w.find('[data-test="mx-cell-red-cotton"]').trigger("click");
+    expect(w.findComponent({ name: "CellRulePopover" }).exists()).toBe(true);
+  });
+});
+
 describe("constraint MatrixSection — keyboard", () => {
   it("Escape closes the popover", async () => {
     const w = mount(MatrixSection, {

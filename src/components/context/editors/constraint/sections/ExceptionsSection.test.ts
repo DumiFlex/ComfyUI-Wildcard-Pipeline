@@ -300,3 +300,114 @@ describe("constraint ExceptionsSection", () => {
     expect(src.find(".pi-ban").exists()).toBe(false);
   });
 });
+
+// ── Colored mode chips (glyph + label), mirroring the SPA ──────────
+//
+// The SPA exception table renders each mode as a colored chip with a
+// glyph (↑ boost / ↓ reduce / × exclude / · neutral) + label. The canvas
+// mode chip keeps its click-to-cycle behaviour but gains the glyph so the
+// two surfaces speak one visual language.
+describe("constraint ExceptionsSection — mode chip glyph", () => {
+  it("editable mode chip renders the mode glyph alongside the label", () => {
+    const w = mount(ExceptionsSection, {
+      props: { module: makeModule(), sourceValues: SOURCE_VALUES, targetValues: TARGET_VALUES },
+    });
+    // Row 0 is exclude → × glyph; row 1 is boost → ↑ glyph.
+    const chip0 = w.find('[data-test="ex-mode-0"]');
+    expect(chip0.find(".ex__mode-glyph").exists()).toBe(true);
+    expect(chip0.find(".ex__mode-glyph").text()).toBe("×");
+    const chip1 = w.find('[data-test="ex-mode-1"]');
+    expect(chip1.find(".ex__mode-glyph").text()).toBe("↑");
+  });
+
+  it("editable rows carry a per-row mode accent class keyed to the mode", () => {
+    const w = mount(ExceptionsSection, {
+      props: { module: makeModule(), sourceValues: SOURCE_VALUES, targetValues: TARGET_VALUES },
+    });
+    expect(w.find('[data-test="ex-row-0"]').classes()).toContain("ex__row--exclude");
+    expect(w.find('[data-test="ex-row-1"]').classes()).toContain("ex__row--boost");
+  });
+});
+
+// ── Stranded (read-only) exceptions, mirroring the SPA ─────────────
+//
+// When the parent modal reports a dangling source/target wildcard
+// (`stranded`), the exception list becomes a read-only snapshot: static
+// colored chips (no cycle button), values as text, and none of the
+// edit affordances (checkbox / factor input / trash / add-extra).
+function strandedModule(overrides: Partial<ModuleEntry> = {}): ModuleEntry {
+  return makeModule({
+    instance: {
+      extra_exceptions: [
+        { source_value: "silver", target_value: "ivory", mode: "boost", factor: 2.0 },
+      ],
+    },
+    ...overrides,
+  });
+}
+
+describe("constraint ExceptionsSection — stranded read-only", () => {
+  it("renders the mode as a STATIC chip (no cycle button) when stranded", () => {
+    const w = mount(ExceptionsSection, {
+      props: {
+        module: strandedModule(),
+        sourceValues: SOURCE_VALUES,
+        targetValues: TARGET_VALUES,
+        stranded: true,
+      },
+    });
+    // The cycle button is gone; a read-only chip stands in its place.
+    expect(w.find('[data-test="ex-mode-0"]').exists()).toBe(false);
+    const ro = w.find('[data-test="ex-mode-ro-0"]');
+    expect(ro.exists()).toBe(true);
+    // It is NOT a button (no click-to-cycle); a span snapshot.
+    expect(ro.element.tagName).not.toBe("BUTTON");
+    // It still carries the glyph + label of the mode (row 0 = exclude).
+    expect(ro.find(".ex__mode-glyph").text()).toBe("×");
+    expect(ro.text().toLowerCase()).toContain("exclude");
+  });
+
+  it("drops all edit affordances (checkbox / factor / trash / add-extra) when stranded", () => {
+    const w = mount(ExceptionsSection, {
+      props: {
+        module: strandedModule(),
+        sourceValues: SOURCE_VALUES,
+        targetValues: TARGET_VALUES,
+        stranded: true,
+      },
+    });
+    expect(w.find('[data-test="ex-cb-0"]').exists()).toBe(false);
+    expect(w.find('[data-test="ex-factor-1"]').exists()).toBe(false);
+    expect(w.find('[data-test="ex-add-extra"]').exists()).toBe(false);
+    expect(w.find('[data-test="ex-extra-trash-0"]').exists()).toBe(false);
+  });
+
+  it("renders extra exceptions as read-only rows (no autocomplete inputs) when stranded", () => {
+    const w = mount(ExceptionsSection, {
+      props: {
+        module: strandedModule(),
+        sourceValues: SOURCE_VALUES,
+        targetValues: TARGET_VALUES,
+        stranded: true,
+      },
+    });
+    // The extra row still shows, but as a static snapshot.
+    expect(w.find('[data-test="ex-extra-0"]').exists()).toBe(true);
+    expect(w.findAllComponents({ name: "VarAutocompleteInput" }).length).toBe(0);
+  });
+
+  it("control: a healthy (non-stranded) constraint keeps the cycle button + edit controls", () => {
+    const w = mount(ExceptionsSection, {
+      props: {
+        module: strandedModule(),
+        sourceValues: SOURCE_VALUES,
+        targetValues: TARGET_VALUES,
+        // stranded omitted → defaults false
+      },
+    });
+    expect(w.find('[data-test="ex-mode-0"]').exists()).toBe(true);
+    expect(w.find('[data-test="ex-mode-ro-0"]').exists()).toBe(false);
+    expect(w.find('[data-test="ex-cb-0"]').exists()).toBe(true);
+    expect(w.find('[data-test="ex-add-extra"]').exists()).toBe(true);
+  });
+});

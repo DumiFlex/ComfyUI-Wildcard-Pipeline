@@ -22,6 +22,18 @@ import RichTextPreview from "../../../../../manager/components/RichTextPreview.v
 
 type Mode = "allow" | "exclude" | "boost" | "reduce";
 
+/** Mode → glyph + label for the colored mode chips. Glyphs mirror the
+ *  matrix's MODE_ICON / cellGlyph convention (boost ↑ / reduce ↓ /
+ *  exclude × / allow ·) and the SPA ConstraintEditor `MODE_META`, so the
+ *  whole constraint surface speaks one visual language. Colour stays in
+ *  the `ex__mode-chip--{mode}` CSS classes (already token-mapped). */
+const MODE_META: Record<Mode, { glyph: string; label: string }> = {
+  boost: { glyph: "↑", label: "Boost" },
+  reduce: { glyph: "↓", label: "Reduce" },
+  exclude: { glyph: "×", label: "Exclude" },
+  allow: { glyph: "·", label: "Neutral" },
+};
+
 /**
  * Engine accepts BOTH legacy (`source` / `target`) and tier 2
  * (`source_value` / `target_value`) library exception shapes — see
@@ -103,12 +115,19 @@ const props = withDefaults(defineProps<{
    *  raw `@{c0f09840}` text. Built by the parent modal from the
    *  Context's wildcard catalog. */
   uuidToName?: ReadonlyMap<string, string>;
+  /** Read-only recovery view: the source/target wildcard was deleted, so
+   *  the exception list is a snapshot for understanding only — static
+   *  colored chips, values as text, no edit controls. Reattach a live
+   *  wildcard (banner above) to edit. Mirrors the SPA ConstraintEditor's
+   *  stranded read-only exceptions table. */
+  stranded?: boolean;
 }>(), {
   sourceHasNull: false,
   targetHasNull: false,
   sourceOptionsById: () => new Map(),
   targetOptionsById: () => new Map(),
   uuidToName: () => new Map(),
+  stranded: false,
 });
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
 
@@ -289,14 +308,19 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
       v-for="(exc, i) in libraryExceptions"
       :key="libKey(exc)"
       class="ex__row"
-      :class="{ 'ex__row--off': disabledKeys.has(libKey(exc)) }"
+      :class="[
+        `ex__row--${effectiveMode(exc)}`,
+        { 'ex__row--off': disabledKeys.has(libKey(exc)) },
+      ]"
       :data-test="`ex-row-${i}`"
     >
       <!-- Styled checkbox matching OptionRow's wildcard pattern — a
            role-checkbox span with inline SVG tick. Replaces the bare
            native input for visual parity with the wildcard / fixed-
-           values edit modals. -->
+           values edit modals. Hidden when stranded: a broken constraint
+           is a read-only snapshot, so the enable/disable toggle is gone. -->
       <span
+        v-if="!stranded"
         class="ex__check"
         :class="{ 'ex__check--on': !disabledKeys.has(libKey(exc)) }"
         :data-test="`ex-cb-${i}`"
@@ -356,15 +380,36 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
           />
         </span>
       </span>
+      <!-- Editable: click-to-cycle chip with glyph + label. Read-only
+           (stranded): the same colored chip as a static span — no cycle. -->
       <button
+        v-if="!stranded"
         type="button"
         class="ex__mode-chip"
         :class="`ex__mode-chip--${effectiveMode(exc)}`"
         :data-test="`ex-mode-${i}`"
         @click="onLibModeCycle(exc)"
-      >{{ effectiveMode(exc) }}</button>
+      >
+        <span class="ex__mode-glyph" aria-hidden="true">{{ MODE_META[effectiveMode(exc)].glyph }}</span>
+        {{ MODE_META[effectiveMode(exc)].label }}
+      </button>
       <span
-        v-if="effectiveMode(exc) === 'boost' || effectiveMode(exc) === 'reduce'"
+        v-else
+        class="ex__mode-chip ex__mode-chip--ro"
+        :class="`ex__mode-chip--${effectiveMode(exc)}`"
+        :data-test="`ex-mode-ro-${i}`"
+      >
+        <span class="ex__mode-glyph" aria-hidden="true">{{ MODE_META[effectiveMode(exc)].glyph }}</span>
+        {{ MODE_META[effectiveMode(exc)].label }}
+      </span>
+      <!-- Factor: editable spinner when healthy; static ×N text when stranded. -->
+      <span
+        v-if="stranded && (effectiveMode(exc) === 'boost' || effectiveMode(exc) === 'reduce')"
+        class="ex__factor-ro"
+        :data-test="`ex-factor-ro-${i}`"
+      >×{{ effectiveFactor(exc) }}</span>
+      <span
+        v-else-if="effectiveMode(exc) === 'boost' || effectiveMode(exc) === 'reduce'"
         class="ex__factor-wrap"
         @wheel.stop
       >
@@ -403,8 +448,37 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
       </span>
     </div>
 
-    <div v-for="(exc, i) in extras" :key="`extra-${i}`" class="ex__row ex__row--extra" :data-test="`ex-extra-${i}`">
+    <div
+      v-for="(exc, i) in extras"
+      :key="`extra-${i}`"
+      class="ex__row ex__row--extra"
+      :class="`ex__row--${exc.mode}`"
+      :data-test="`ex-extra-${i}`"
+    >
       <span class="ex__extra-badge" data-test="ex-extra-badge">extra</span>
+      <!-- Editable inputs when healthy; read-only chips when stranded.
+           A stranded constraint is a snapshot, so extras lock alongside
+           the library rows (matches the SPA read-only exceptions table). -->
+      <template v-if="stranded">
+        <span class="ex__pair">
+          <span class="ex__src"><RichTextPreview :value="excSrc(exc, props.sourceOptionsById)" :uuid-to-name="uuidToName" surface="wildcard" /></span>
+          <span class="ex__arrow">→</span>
+          <span class="ex__tgt"><RichTextPreview :value="excTgt(exc, props.targetOptionsById)" :uuid-to-name="uuidToName" surface="wildcard" /></span>
+        </span>
+        <span
+          class="ex__mode-chip ex__mode-chip--ro"
+          :class="`ex__mode-chip--${exc.mode}`"
+          :data-test="`ex-extra-mode-ro-${i}`"
+        >
+          <span class="ex__mode-glyph" aria-hidden="true">{{ MODE_META[exc.mode].glyph }}</span>
+          {{ MODE_META[exc.mode].label }}
+        </span>
+        <span
+          v-if="exc.mode === 'boost' || exc.mode === 'reduce'"
+          class="ex__factor-ro"
+        >×{{ exc.factor }}</span>
+      </template>
+      <template v-else>
       <VarAutocompleteInput
         :model-value="excSrc(exc, props.sourceOptionsById)"
         :suggestions="[...sourceValues]"
@@ -427,7 +501,10 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
         class="ex__mode-chip"
         :class="`ex__mode-chip--${exc.mode}`"
         @click="onExtraModeCycle(i)"
-      >{{ exc.mode }}</button>
+      >
+        <span class="ex__mode-glyph" aria-hidden="true">{{ MODE_META[exc.mode].glyph }}</span>
+        {{ MODE_META[exc.mode].label }}
+      </button>
       <span
         v-if="exc.mode === 'boost' || exc.mode === 'reduce'"
         class="ex__factor-wrap"
@@ -472,14 +549,22 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
         aria-label="Remove extra exception"
         @click="onExtraTrash(i)"
       ><i class="pi pi-trash" /></button>
+      </template>
     </div>
 
     <button
+      v-if="!stranded"
       type="button"
       class="ex__add-extra"
       data-test="ex-add-extra"
       @click="onAddExtra"
     ><i class="pi pi-plus" /> Add extra exception</button>
+
+    <!-- Stranded snapshot has no editable list; a hint points to the
+         reattach banner above (mirrors the SPA read-only exceptions). -->
+    <p v-else class="ex__readonly-hint" data-test="ex-readonly-hint">
+      Reattach a live wildcard to edit these exceptions.
+    </p>
   </section>
 </template>
 
@@ -509,6 +594,28 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
   background: rgba(251, 146, 60, 0.06);
   border-left: 2px solid var(--wp-status-modified, #fb923c);
   padding-left: 6px;
+}
+
+/* ── Per-row mode accent — left bar + faint wash keyed to the row's
+ *    effective mode, mirroring the SPA ConstraintEditor `.cn-ex-row`.
+ *    Library rows only: the `--extra` orange accent owns its border-left,
+ *    so its row keeps the "instance-only" cue. The `allow`/neutral case
+ *    intentionally has no accent (no rule worth flagging). */
+.ex__row:not(.ex__row--extra) {
+  border-left: 3px solid transparent;
+  padding-left: 6px;
+}
+.ex__row--boost:not(.ex__row--extra) {
+  border-left-color: color-mix(in srgb, var(--wp-success, #22c55e) 60%, transparent);
+  background: color-mix(in srgb, var(--wp-success, #22c55e) 5%, transparent);
+}
+.ex__row--reduce:not(.ex__row--extra) {
+  border-left-color: color-mix(in srgb, var(--wp-warn, #f97316) 60%, transparent);
+  background: color-mix(in srgb, var(--wp-warn, #f97316) 5%, transparent);
+}
+.ex__row--exclude:not(.ex__row--extra) {
+  border-left-color: color-mix(in srgb, var(--wp-danger, #ef4444) 60%, transparent);
+  background: color-mix(in srgb, var(--wp-danger, #ef4444) 5%, transparent);
 }
 .ex__pair {
   flex: 1;
@@ -592,6 +699,9 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
   opacity: 0.5;
 }
 .ex__mode-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   background: transparent;
   border: 1px solid var(--wp-border);
   color: var(--wp-text);
@@ -600,6 +710,22 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
   padding: 2px 6px;
   border-radius: 3px;
   cursor: pointer;
+  white-space: nowrap;
+}
+/* Glyph mirrors the matrix cell icons (↑ ↓ × ·) — mono so it lines up. */
+.ex__mode-glyph {
+  font-family: var(--wp-font-mono, monospace);
+  font-size: 11px;
+  line-height: 1;
+}
+/* Read-only mode chip (stranded) — a static span, so kill the pointer
+ * affordance; colour stays via the shared ex__mode-chip--{mode} class. */
+.ex__mode-chip--ro { cursor: default; }
+/* Static factor text (stranded) — the ×N the editable spinner would
+ * show, rendered inert. */
+.ex__factor-ro {
+  font: 10px var(--wp-font-mono);
+  color: var(--wp-text-muted, var(--wp-text2));
 }
 /* Mode chip palette mirrors the matrix legend: boost = green,
  * reduce = orange/warn, exclude = red/danger. Allow uses the accent
@@ -714,4 +840,9 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
   color: var(--wp-accent-text, var(--wp-text));
 }
 .ex__add-extra .pi { font-size: 10px; }
+.ex__readonly-hint {
+  margin: 8px 0 0;
+  font: 10px var(--wp-font-sans);
+  color: var(--wp-text-dim, var(--wp-text3));
+}
 </style>

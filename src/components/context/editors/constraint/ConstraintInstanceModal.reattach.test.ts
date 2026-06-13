@@ -113,6 +113,20 @@ describe("ConstraintInstanceModal — dangling source reattach", () => {
     expect(dropped.exists()).toBe(true);
     expect(dropped.text()).toContain("2 cells dropped");
   });
+
+  // A dangling ref makes the whole constraint a read-only snapshot: the
+  // modal threads `stranded` into both the matrix + exceptions sections so
+  // they render their read-only treatment (muted/locked matrix, static
+  // colored exception chips), mirroring the SPA's stranded read-only view.
+  it("marks the matrix + exceptions sections stranded when a ref is dangling", () => {
+    const w = mount(ConstraintInstanceModal, {
+      props: { module: moduleWithDanglingSource(), siblingModules: siblings() },
+    });
+    expect(w.findComponent({ name: "MatrixSection" }).props("stranded")).toBe(true);
+    expect(w.findComponent({ name: "ExceptionsSection" }).props("stranded")).toBe(true);
+    // The rendered read-only affordances surface too.
+    expect(w.find("[data-test='mx-readonly-lock']").exists()).toBe(true);
+  });
 });
 
 // ── Cached source/target ref NAME (display-only, additive) ─────────
