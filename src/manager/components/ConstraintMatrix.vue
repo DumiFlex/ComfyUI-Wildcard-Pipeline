@@ -494,11 +494,33 @@ defineExpose({ cellAt });
 
 /* ── Read-only recovery view (deleted source/target) ───────────
  *    Cells are inert: no pointer, no hover lift, no focus ring —
- *    they're a snapshot of the configured rules, not editable. */
+ *    they're a snapshot of the configured rules, not editable. The
+ *    grid frame turns DASHED and the colored cells drop to ~1/3 of
+ *    their editable intensity (8% bg / 18% border, text softened toward
+ *    the dim grey) so the snapshot reads as "look, don't touch" while
+ *    the boost/reduce/exclude hues stay legible. */
+.wp-mx--readonly .wp-mx-grid {
+  border: 1px dashed color-mix(in srgb, var(--wp-text) 16%, transparent);
+}
 .wp-mx--readonly .wp-mx-cell { cursor: default; }
 .wp-mx--readonly .wp-mx-cell:hover {
   transform: none;
   box-shadow: none;
+}
+.wp-mx--readonly .wp-mx-cell.s-boost {
+  background: color-mix(in srgb, var(--wp-success, #22c55e) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-success, #22c55e) 18%, transparent);
+  color: color-mix(in srgb, var(--wp-success, #22c55e) 70%, var(--wp-text-dim));
+}
+.wp-mx--readonly .wp-mx-cell.s-reduce {
+  background: color-mix(in srgb, var(--wp-warn, #f97316) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-warn, #f97316) 18%, transparent);
+  color: color-mix(in srgb, var(--wp-warn, #f97316) 70%, var(--wp-text-dim));
+}
+.wp-mx--readonly .wp-mx-cell.s-exclude {
+  background: color-mix(in srgb, var(--wp-danger, #ef4444) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-danger, #ef4444) 18%, transparent);
+  color: color-mix(in srgb, var(--wp-danger, #ef4444) 70%, var(--wp-text-dim));
 }
 .wp-mx-readonly-hint {
   margin: 8px 0 0;

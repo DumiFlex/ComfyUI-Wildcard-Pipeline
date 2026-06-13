@@ -235,6 +235,23 @@ const MODE_OPTIONS = [
   { label: "Reduce", value: "reduce" },
 ];
 
+/** Mode → {glyph, label, CSS var} for the colored exception-mode chips
+ *  (editable Select + read-only table). Mirrors ConstraintMatrix's
+ *  MODE_ICON / mode→token mapping so the whole constraint surface speaks
+ *  one visual language: boost→success ↑, reduce→warn ↓, exclude→danger ×,
+ *  allow(neutral)→muted ·. `cssVar` feeds the chip's color-mix tints in
+ *  the template + scoped CSS via a `--cn-mode-var` custom property. */
+interface ModeMeta { glyph: string; label: string; cssVar: string }
+const MODE_META: Record<ConstraintMode, ModeMeta> = {
+  boost: { glyph: "↑", label: "Boost", cssVar: "--wp-success" },
+  reduce: { glyph: "↓", label: "Reduce", cssVar: "--wp-warn" },
+  exclude: { glyph: "×", label: "Exclude", cssVar: "--wp-danger" },
+  allow: { glyph: "·", label: "Neutral", cssVar: "--wp-text-dim" },
+};
+function modeMeta(mode: ConstraintMode | string | undefined): ModeMeta {
+  return MODE_META[(mode ?? "allow") as ConstraintMode] ?? MODE_META.allow;
+}
+
 const wildcardOptions = computed(() =>
   moduleStore.catalog
     .filter((m) => m.type === "wildcard")
@@ -391,6 +408,12 @@ const resolvedSourceName = computed(
 const resolvedTargetName = computed(
   () => targetWildcardName.value || targetWildcard.value?.name || null,
 );
+
+/** First 8 hex of a wildcard uuid for the locked-field "<short> · missing"
+ *  sub-line. Matches the short-id convention used across the cascade /
+ *  reattach surfaces (`id.slice(0, 8)`). */
+const sourceShortId = computed(() => (sourceWildcardId.value ?? "").slice(0, 8));
+const targetShortId = computed(() => (targetWildcardId.value ?? "").slice(0, 8));
 
 // Display labels resolve `@{uuid}` tokens in option-value strings to
 // `@wildcard_name` chips so the Exceptions table renders the picked
@@ -733,6 +756,15 @@ function onReachCountInput(ev: Event): void {
   targetSelect.value = { mode: "next", count: n };
 }
 
+/** Step the next-N reach count by ±1, clamped to >= 1. Backs the up/down
+ *  stepper chevrons so the control matches the exceptions factor Input
+ *  (which has stacked steppers). Reuses the same min-1 clamp as the typed
+ *  path above. */
+function bumpReach(direction: 1 | -1): void {
+  const n = reachCount.value + direction;
+  targetSelect.value = { mode: "next", count: n >= 1 ? n : 1 };
+}
+
 function applyRestore(entry: ModuleHistoryEntry): void {
   name.value = entry.name;
   description.value = entry.description ?? "";
@@ -968,7 +1000,24 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
           Target wildcard
         </label>
         <div style="grid-area: src-input">
+          <!-- Force-Reattach: while EITHER ref is broken, both dropdowns are
+               locked (a broken constraint can't be edited piecemeal — the
+               banner's Reattach is the only fix). The dangling side reads
+               danger + "<short> · missing"; the live side reads dim. -->
+          <div
+            v-if="refMissing"
+            class="cn-locked"
+            :class="{ 'cn-locked--danger': danglingSource }"
+            data-test="source-locked"
+          >
+            <i class="pi pi-lock cn-locked__icon" aria-hidden="true" />
+            <span class="cn-locked__body">
+              <span class="cn-locked__name">{{ resolvedSourceName || "—" }}</span>
+              <span v-if="danglingSource" class="cn-locked__sub">{{ sourceShortId }} · missing</span>
+            </span>
+          </div>
           <Select
+            v-else
             id="cn-source-select"
             :model-value="sourceWildcardId"
             :options="wildcardOptions"
@@ -981,7 +1030,20 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
         </div>
         <div class="cn-cross"><i class="pi pi-times" /></div>
         <div style="grid-area: tgt-input">
+          <div
+            v-if="refMissing"
+            class="cn-locked"
+            :class="{ 'cn-locked--danger': danglingTarget }"
+            data-test="target-locked"
+          >
+            <i class="pi pi-lock cn-locked__icon" aria-hidden="true" />
+            <span class="cn-locked__body">
+              <span class="cn-locked__name">{{ resolvedTargetName || "—" }}</span>
+              <span v-if="danglingTarget" class="cn-locked__sub">{{ targetShortId }} · missing</span>
+            </span>
+          </div>
           <Select
+            v-else
             id="cn-target-select"
             :model-value="targetWildcardId"
             :options="wildcardOptions"
@@ -1001,7 +1063,17 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
     <div id="editor-section-matrix">
     <Card title="Rule matrix">
       <template #actions>
-        <span class="wp-card__hint">Click a cell to edit rule + factor</span>
+        <!-- Stranded ref → the grid is a read-only snapshot, so swap the
+             "click to edit" affordance for a lock pill. Reattaching a live
+             wildcard (banner above) is the only way back to editing. -->
+        <span
+          v-if="refMissing"
+          class="cn-lock-pill"
+          data-test="matrix-readonly-pill"
+        >
+          <i class="pi pi-lock" aria-hidden="true" /> Read-only
+        </span>
+        <span v-else class="wp-card__hint">Click a cell to edit rule + factor</span>
       </template>
       <div
         v-if="!sourceWildcardId || !targetWildcardId"
@@ -1075,6 +1147,24 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
               data-test="cn-reach-count"
               @input="onReachCountInput"
             />
+            <!-- Stacked stepper chevrons — mirrors the exceptions factor
+                 Input's spinner so both numeric controls feel the same. -->
+            <span class="cn-reach-step__spin" aria-hidden="true">
+              <button
+                type="button"
+                class="cn-reach-step__btn"
+                tabindex="-1"
+                aria-label="Increase target count"
+                @click="bumpReach(1)"
+              ><i class="pi pi-chevron-up" /></button>
+              <button
+                type="button"
+                class="cn-reach-step__btn"
+                tabindex="-1"
+                aria-label="Decrease target count"
+                @click="bumpReach(-1)"
+              ><i class="pi pi-chevron-down" /></button>
+            </span>
           </span>
         </div>
         <span class="cn-reach-hint" data-test="cn-reach-hint">
@@ -1107,22 +1197,36 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
            displayLabel resolves any @{uuid} token to its name. -->
       <table
         v-else-if="refMissing"
-        class="wp-table wp-options-table"
+        class="wp-table wp-options-table cn-ex-table"
         data-test="cn-ex-readonly"
       >
         <thead>
           <tr>
-            <th>Source value</th>
-            <th>Target value</th>
+            <th class="cn-ex-th-src">Source value</th>
+            <th class="cn-ex-th-tgt">Target value</th>
             <th class="cn-col-mode">Mode</th>
             <th class="cn-col-factor">Factor</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(ex, idx) in exceptions" :key="idx">
+          <tr
+            v-for="(ex, idx) in exceptions"
+            :key="idx"
+            class="cn-ex-row"
+            :style="{ '--cn-mode-var': `var(${modeMeta(ex.mode).cssVar})` }"
+          >
             <td class="wp-mono" data-test="cn-ex-ro-src">{{ displayLabel(ex.source) || "⌀ null" }}</td>
             <td class="wp-mono" data-test="cn-ex-ro-tgt">{{ displayLabel(ex.target) || "⌀ null" }}</td>
-            <td data-test="cn-ex-ro-mode">{{ ex.mode }}</td>
+            <td data-test="cn-ex-ro-mode">
+              <span
+                class="cn-mode-chip cn-mode-chip--ro"
+                :style="{ '--cn-mode-var': `var(${modeMeta(ex.mode).cssVar})` }"
+                data-test="cn-ex-ro-mode-chip"
+              >
+                <span class="cn-mode-chip__glyph" aria-hidden="true">{{ modeMeta(ex.mode).glyph }}</span>
+                {{ modeMeta(ex.mode).label }}
+              </span>
+            </td>
             <td data-test="cn-ex-ro-factor">
               <span v-if="ex.mode === 'boost' || ex.mode === 'reduce'" class="wp-mono">×{{ ex.factor }}</span>
               <span v-else class="wp-dim wp-mono cn-dash">—</span>
@@ -1130,18 +1234,23 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
           </tr>
         </tbody>
       </table>
-      <table v-else class="wp-table wp-options-table">
+      <table v-else class="wp-table wp-options-table cn-ex-table">
         <thead>
           <tr>
-            <th>Source value</th>
-            <th>Target value</th>
+            <th class="cn-ex-th-src">Source value</th>
+            <th class="cn-ex-th-tgt">Target value</th>
             <th class="cn-col-mode">Mode</th>
             <th class="cn-col-factor">Factor</th>
             <th class="cn-col-trash" />
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(ex, idx) in exceptions" :key="idx">
+          <tr
+            v-for="(ex, idx) in exceptions"
+            :key="idx"
+            class="cn-ex-row"
+            :style="{ '--cn-mode-var': `var(${modeMeta(ex.mode).cssVar})` }"
+          >
             <td>
               <Select
                 :model-value="ex.source"
@@ -1202,8 +1311,31 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
                 :model-value="ex.mode"
                 :options="MODE_OPTIONS"
                 aria-label="Exception mode"
+                data-test="cn-ex-mode-select"
                 @update:model-value="(v) => setExceptionMode(idx, v as ConstraintMode)"
-              />
+              >
+                <!-- Trigger + dropdown items render the mode as a colored
+                     chip (MODE_META) so the table reads as boost/reduce/
+                     exclude/neutral at a glance, matching the matrix hues. -->
+                <template #label="{ option }">
+                  <span
+                    class="cn-mode-chip"
+                    :style="{ '--cn-mode-var': `var(${modeMeta(String(option.value)).cssVar})` }"
+                  >
+                    <span class="cn-mode-chip__glyph" aria-hidden="true">{{ modeMeta(String(option.value)).glyph }}</span>
+                    {{ modeMeta(String(option.value)).label }}
+                  </span>
+                </template>
+                <template #option="{ option }">
+                  <span
+                    class="cn-mode-chip"
+                    :style="{ '--cn-mode-var': `var(${modeMeta(String(option.value)).cssVar})` }"
+                  >
+                    <span class="cn-mode-chip__glyph" aria-hidden="true">{{ modeMeta(String(option.value)).glyph }}</span>
+                    {{ modeMeta(String(option.value)).label }}
+                  </span>
+                </template>
+              </Select>
             </td>
             <td>
               <Input
@@ -1291,10 +1423,114 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
   justify-content: center;
   color: var(--wp-text-dim);
 }
-.cn-col-mode { width: 130px; }
+
+/* ── Read-only lock pill (Rule matrix #actions when stranded) ──── */
+.cn-lock-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: var(--wp-radius, 6px);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--wp-text-dim);
+  background: color-mix(in srgb, var(--wp-text) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-text) 10%, transparent);
+}
+.cn-lock-pill .pi { font-size: 10px; }
+
+/* ── Locked wildcard field (replaces the Select when stranded) ───
+ *    Neutral by default (the live side of a broken pair); the dangling
+ *    side adds --danger so the missing wildcard reads as the problem.
+ *    Sized to sit in place of the Select's trigger button. */
+.cn-locked {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 5px 10px;
+  border-radius: var(--wp-radius, 6px);
+  background: color-mix(in srgb, var(--wp-text) 4%, transparent);
+  border: 1px solid var(--wp-border);
+  cursor: not-allowed;
+}
+.cn-locked__icon { font-size: 12px; color: var(--wp-text-dim); flex-shrink: 0; }
+.cn-locked__body { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.cn-locked__name {
+  font-size: var(--wp-text-sm);
+  color: var(--wp-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cn-locked__sub {
+  font-family: var(--wp-font-mono, monospace);
+  font-size: var(--wp-text-xs);
+  color: var(--wp-text-dim);
+}
+.cn-locked--danger {
+  background: color-mix(in srgb, var(--wp-danger) 6%, transparent);
+  border-color: color-mix(in srgb, var(--wp-danger) 30%, transparent);
+}
+.cn-locked--danger .cn-locked__icon { color: var(--wp-danger); }
+.cn-col-mode { width: 150px; }
 .cn-col-factor { width: 120px; }
 .cn-col-trash { width: 40px; }
 .cn-dash { font-size: var(--wp-text-xs); }
+
+/* ── Exceptions table — colored mode chips + per-row accent ──────
+ *    The Source/Target headers borrow the matrix's purple/cyan axis
+ *    language so the table reads as "source value → target value".
+ *    Each row carries a left accent + faint wash keyed to its mode
+ *    (--cn-mode-var set inline from MODE_META) so boost/reduce/exclude
+ *    rows are scannable; neutral falls back to the muted grey var. */
+.cn-ex-th-src {
+  color: var(--wp-constraint-source-text);
+  text-transform: uppercase;
+  font-size: var(--wp-text-xs);
+  letter-spacing: 0.06em;
+}
+.cn-ex-th-tgt {
+  color: var(--wp-constraint-target-text);
+  text-transform: uppercase;
+  font-size: var(--wp-text-xs);
+  letter-spacing: 0.06em;
+}
+.cn-ex-row > td:first-child {
+  border-left: 3px solid color-mix(in srgb, var(--cn-mode-var, var(--wp-border)) 60%, transparent);
+}
+.cn-ex-row {
+  background: color-mix(in srgb, var(--cn-mode-var, transparent) 5%, transparent);
+}
+
+/* Mode chip — icon glyph + label, tinted by --cn-mode-var. Editable +
+ * read-only share the base; the read-only modifier mutes it to the same
+ * ~1/3 intensity the read-only matrix cells use. */
+.cn-mode-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: var(--wp-text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--cn-mode-var, var(--wp-text-dim));
+  background: color-mix(in srgb, var(--cn-mode-var, var(--wp-text-dim)) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cn-mode-var, var(--wp-text-dim)) 36%, transparent);
+}
+.cn-mode-chip__glyph {
+  font-family: var(--wp-font-mono, monospace);
+  font-size: 13px;
+  line-height: 1;
+}
+.cn-mode-chip--ro {
+  color: color-mix(in srgb, var(--cn-mode-var, var(--wp-text-dim)) 70%, var(--wp-text-dim));
+  background: color-mix(in srgb, var(--cn-mode-var, var(--wp-text-dim)) 8%, transparent);
+  border-color: color-mix(in srgb, var(--cn-mode-var, var(--wp-text-dim)) 18%, transparent);
+}
 
 /* ── Target reach — segmented first / next N / all + stepper. Mirrors
  *    the instance modal's TargetReachSection control, restyled with the
@@ -1337,7 +1573,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
   border-left: 1px solid var(--wp-border);
 }
 .cn-reach-step__field {
-  width: 52px;
+  width: 44px;
   background: transparent;
   border: 0;
   padding: 0 8px;
@@ -1349,6 +1585,34 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
 .cn-reach-step__field::-webkit-outer-spin-button,
 .cn-reach-step__field::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .cn-reach-step__field:focus { outline: none; }
+/* Stacked up/down stepper — native spin buttons hidden above so these
+ * don't double up. Mirrors the exceptions factor Input's spinner. */
+.cn-reach-step__spin {
+  display: flex;
+  flex-direction: column;
+  width: 18px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--wp-border);
+}
+.cn-reach-step__btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  color: var(--wp-text-dim);
+  cursor: pointer;
+  line-height: 0;
+}
+.cn-reach-step__btn + .cn-reach-step__btn { border-top: 1px solid var(--wp-border); }
+.cn-reach-step__btn .pi { font-size: 8px; }
+.cn-reach-step__btn:hover {
+  color: var(--wp-text);
+  background: color-mix(in srgb, var(--wp-text) 8%, transparent);
+}
 .cn-reach-hint {
   font-size: var(--wp-text-xs);
   color: var(--wp-text-dim);

@@ -199,6 +199,39 @@ describe("ConstraintEditor — stranded constraint renders matrix + exceptions r
     w.unmount();
   });
 
+  it("renders the read-only exception mode as a colored chip", async () => {
+    const w = await mountStranded();
+    // The read-only exceptions table renders the mode as a static colored
+    // chip (MODE_META) rather than the bare mode word, mirroring the
+    // editable table's chip language.
+    const chip = w.find("[data-test='cn-ex-ro-mode-chip']");
+    expect(chip.exists()).toBe(true);
+    // The lone exception is a "reduce" — its label surfaces in the chip.
+    expect(chip.text().toLowerCase()).toContain("reduce");
+    w.unmount();
+  });
+
+  it("locks BOTH wildcard fields (dangling + live) instead of dropdowns when stranded", async () => {
+    const w = await mountStranded();
+    // Force-Reattach decision: while the ref is broken neither dropdown is
+    // usable, so both sides render as locked read-only fields. The dangling
+    // SOURCE shows its cached name; the LIVE target is locked too (dim).
+    expect(w.find("[data-test='source-locked']").exists()).toBe(true);
+    expect(w.find("[data-test='target-locked']").exists()).toBe(true);
+    // The editable dropdowns are NOT rendered in the stranded state.
+    expect(w.find("[data-test='source-wildcard-select']").exists()).toBe(false);
+    expect(w.find("[data-test='target-wildcard-select']").exists()).toBe(false);
+    // The dangling source's cached name surfaces in its locked field.
+    expect(w.find("[data-test='source-locked']").text()).toContain("Starter subject");
+    w.unmount();
+  });
+
+  it("shows the matrix Read-only lock pill when stranded", async () => {
+    const w = await mountStranded();
+    expect(w.find("[data-test='matrix-readonly-pill']").exists()).toBe(true);
+    w.unmount();
+  });
+
   it("control: a healthy constraint (both refs present) stays interactive", async () => {
     const w = await mountHealthy();
     // Grid renders, but NOT read-only.
@@ -207,6 +240,12 @@ describe("ConstraintEditor — stranded constraint renders matrix + exceptions r
     // The editable exception Select is present (an exception exists).
     expect(w.find("[data-test='cn-ex-src-select']").exists()).toBe(true);
     expect(w.find("[data-test='cn-ex-readonly']").exists()).toBe(false);
+    // The wildcard dropdowns ARE rendered, and nothing is locked.
+    expect(w.find("[data-test='source-wildcard-select']").exists()).toBe(true);
+    expect(w.find("[data-test='target-wildcard-select']").exists()).toBe(true);
+    expect(w.find("[data-test='source-locked']").exists()).toBe(false);
+    expect(w.find("[data-test='target-locked']").exists()).toBe(false);
+    expect(w.find("[data-test='matrix-readonly-pill']").exists()).toBe(false);
     w.unmount();
   });
 });
