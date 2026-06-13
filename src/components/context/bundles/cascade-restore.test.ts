@@ -411,3 +411,103 @@ describe("cascadeRestoreForBundle — Phase 1 Pass 2 corrects standalone library
     expect(correctedIds).not.toContain("beef0002");
   });
 });
+
+/**
+ * QA bug (2026-06-12): after a cascade restore the canvas flashed DRIFT on a
+ * restored constraint. Root cause — Phase 4 rebound the workflow row's id +
+ * payload (refs repointed) but kept the STALE frozen-snapshot payload_hash,
+ * which no longer matched the corrected library entry's hash (a ref-free
+ * wildcard didn't drift because its payload, hence hash, was unchanged).
+ * Phase 1 now captures the library hash (POST + corrective update) and Phase 4
+ * stamps it, mirroring the bundle inserted_at_hash sync.
+ */
+describe("cascadeRestoreForBundle — Phase 4 syncs payload_hash to the library entry", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  function mkMod(
+    over: Partial<ModuleEntry> & { bundle_origin?: string },
+  ): ModuleEntry & { bundle_origin?: string } {
+    return {
+      id: "00000000",
+      type: "wildcard",
+      enabled: true,
+      collapsed: false,
+      meta: { name: "" },
+      entries: [],
+      payload: {},
+      instance: {},
+      payload_hash: "stale-frozen-hash",
+      _uid: "u",
+      ...over,
+    } as ModuleEntry & { bundle_origin?: string };
+  }
+
+  it("stamps the corrected library hash on a restored constraint (no DRIFT), and the POST hash on a ref-free wildcard", async () => {
+    // POST mints {id, payload_hash} per restored module, in range order:
+    //   subject (deadbeef) → beef0001 / "wh-post"   (ref-free)
+    //   constraint (ca000001, src deadbeef) → ca110011 / "cn-post"
+    const minted = [
+      { id: "beef0001", payload_hash: "wh-post" },
+      { id: "ca110011", payload_hash: "cn-post" },
+    ];
+    let n = 0;
+    const fetchMock = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          json: async () => minted[n++],
+          text: async () => "",
+        }) as unknown as Response,
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    // The corrective PUT returns the CORRECTED hash (the constraint's payload moved).
+    vi.spyOn(api.modules, "update").mockImplementation(
+      async (id: string) => ({ id, payload_hash: "cn-corrected" }) as unknown as ModuleRow,
+    );
+
+    const subject = mkMod({
+      id: "deadbeef",
+      type: "wildcard",
+      _uid: "u-s",
+      meta: { name: "subject" },
+      payload: { options: [] }, // ref-free → no corrective PUT → POST hash
+      bundle_origin: "outer-uid",
+    });
+    const constraint = mkMod({
+      id: "ca000001",
+      type: "constraint",
+      _uid: "u-c",
+      meta: { name: "pairing" },
+      payload: { source_wildcard_id: "deadbeef", target_wildcard_id: "facade00", matrix: {} },
+      bundle_origin: "outer-uid",
+    });
+    const outer: BundleInstance = {
+      ...emptyBundleInstance("bndllib3"),
+      _uid: "outer-uid",
+      start_idx: 0,
+      end_idx: 1,
+      name: "Kit",
+    };
+
+    const result = await cascadeRestoreForBundle({
+      outer,
+      modules: [subject, constraint],
+      bundles: [outer],
+      isModuleMissing: (m) => ["deadbeef", "ca000001"].includes(m.id),
+      isBundleMissing: () => false,
+    });
+
+    const s = result.newModules.find((m) => m._uid === "u-s");
+    const c = result.newModules.find((m) => m._uid === "u-c");
+    // Ref-free wildcard → its POST hash.
+    expect(s?.payload_hash).toBe("wh-post");
+    // Corrected constraint → the corrective-update hash, NOT the stale frozen
+    // hash (which is what produced the DRIFT badge).
+    expect(c?.payload_hash).toBe("cn-corrected");
+    expect(c?.payload_hash).not.toBe("stale-frozen-hash");
+  });
+});

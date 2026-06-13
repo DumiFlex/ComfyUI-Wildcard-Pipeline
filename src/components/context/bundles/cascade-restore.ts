@@ -107,6 +107,12 @@ export async function cascadeRestoreForBundle(
   //     the standalone library entries are the third output that needs it.
   //     Ref-free modules (most wildcards) don't differ → no update.
   const moduleMap = new Map<string, string>();
+  // Library payload_hash per restored module (keyed by OLD id). Phase 4 stamps
+  // it on the workflow row so the canvas doesn't flash DRIFT against the
+  // freshly-created/corrected library entry — mirror of the bundle
+  // inserted_at_hash sync below. A corrected constraint is the case that bites:
+  // its stale frozen-snapshot hash != the new entry's hash (its payload moved).
+  const moduleHashMap = new Map<string, string>();
   const restored: { newId: string; module: ModuleEntry }[] = [];
   for (let i = outer.start_idx; i <= outer.end_idx; i++) {
     const m = modules[i];
@@ -126,9 +132,10 @@ export async function cascadeRestoreForBundle(
       const text = await res.text().catch(() => "");
       throw new Error(`Module restore failed for "${baseName}": HTTP ${res.status} ${text}`);
     }
-    const body = (await res.json()) as { id?: string };
+    const body = (await res.json()) as { id?: string; payload_hash?: string };
     if (!body.id) throw new Error(`Module restore for "${baseName}" returned no id`);
     moduleMap.set(m.id, body.id);
+    if (body.payload_hash) moduleHashMap.set(m.id, body.payload_hash);
     restored.push({ newId: body.id, module: m });
   }
 
@@ -143,10 +150,13 @@ export async function cascadeRestoreForBundle(
       const rewrittenPayload = walkRemap(original, restoreTable) as Record<string, unknown>;
       // Only PUT when a ref actually moved — ref-free modules are unchanged.
       if (JSON.stringify(rewrittenPayload) === JSON.stringify(original)) continue;
-      await api.modules.update(newId, {
+      const updated = await api.modules.update(newId, {
         name: pickModuleName(m),
         payload: rewrittenPayload,
       });
+      // The corrected payload changes the hash — capture it so Phase 4 stamps
+      // the workflow row with the LIVE library hash (overrides the POST hash).
+      moduleHashMap.set(m.id, updated.payload_hash);
     }
   }
 
@@ -207,6 +217,12 @@ export async function cascadeRestoreForBundle(
         next = { ...next, instance: walkRemap(next.instance, refTable) as ModuleEntry["instance"] };
       }
     }
+    // Sync payload_hash to the restored library entry so the canvas doesn't
+    // flash DRIFT against it (mirror of newBundles' inserted_at_hash below).
+    // moduleHashMap only holds restored modules, so a non-restored row keeps
+    // its own hash.
+    const newHash = moduleHashMap.get(m.id);
+    if (newHash) next = { ...next, payload_hash: newHash };
     return next;
   });
   const newBundles = bundles.map((b) => {
