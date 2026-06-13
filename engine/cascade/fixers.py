@@ -244,10 +244,16 @@ def fix_wildcard_delete(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Opt-in strip of nested ``@{wildcard_id...}`` refs to a deleted wildcard.
 
-    Constraints are NEVER touched here. They reference the wildcard by id
-    only and are now healable via the reattach UI — the cascade leaves
-    them broken so the user can re-point them later, rather than deleting
-    them (the old behavior, removed).
+    Constraints are never DELETED here. They reference the wildcard by id
+    only and are healable via the reattach UI — the cascade leaves them
+    broken so the user can re-point them later, rather than deleting them
+    (the old behavior, removed). The ONE constraint mutation that does run
+    is a display-only name stamp: the deleted wildcard's name is cached onto
+    every dependent constraint's ``source_wildcard_name`` /
+    ``target_wildcard_name`` (the last moment the live name is known), so the
+    broken-reference banner shows "(was …)" instead of a bare uuid. The
+    id/matrix/exceptions stay untouched. The stamp is in `touched` (undo) but
+    not in `diff` (it's not a ref removal). It runs regardless of cleanup_ids.
 
     Nested ``@{wildcard_id...}`` refs (the deleted wildcard inserted
     inside ANOTHER wildcard's option value, or a derivation action's
@@ -275,11 +281,42 @@ def fix_wildcard_delete(
     touched: list[dict[str, Any]] = []
     diff: list[dict[str, Any]] = []
 
+    mod_repo = ModuleRepository(conn)
+
+    # Stamp the about-to-be-deleted wildcard's name onto every dependent
+    # constraint's source/target name cache, BEFORE the orchestrator drops the
+    # row. This is the last moment the live name is known; without it a
+    # constraint broken by the deletion shows only a bare uuid in the reattach
+    # banner ("Source wildcard 1e9c0e2c is not in your library"). Display-only:
+    # the id/matrix/exceptions are untouched and the constraint is never deleted
+    # (still healable via reattach). Recorded in `touched` for undo but NOT
+    # emitted as a `diff` entry — it's not a ref removal, so it must not inflate
+    # affected_count. Runs regardless of cleanup_ids (the empty-cleanup
+    # early-return is below).
+    target = mod_repo.get(wildcard_id)
+    wc_name = target.get("name") if target else None
+    if wc_name:
+        for c in mod_repo.list():
+            if c["type"] != "constraint":
+                continue
+            cp = c.get("payload") or {}
+            new_cp = copy.deepcopy(cp)
+            stamped = False
+            if cp.get("source_wildcard_id") == wildcard_id:
+                if cp.get("source_wildcard_name") != wc_name:
+                    new_cp["source_wildcard_name"] = wc_name
+                    stamped = True
+            if cp.get("target_wildcard_id") == wildcard_id:
+                if cp.get("target_wildcard_name") != wc_name:
+                    new_cp["target_wildcard_name"] = wc_name
+                    stamped = True
+            if stamped:
+                touched.append(_deepcopy_row(c))
+                mod_repo.update(c["id"], payload=new_cp)
+
     cleanup = set(cleanup_ids)
     if not cleanup:
         return touched, diff
-
-    mod_repo = ModuleRepository(conn)
 
     for m in mod_repo.list():
         if m["id"] not in cleanup:

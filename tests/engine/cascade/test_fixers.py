@@ -29,7 +29,10 @@ def test_rewrite_var_preserves_list_accessor():
 def test_fix_wildcard_delete_never_touches_constraints(wp_db):
     """Regression-lock: a dependent constraint (source OR target = the
     deleted wildcard) SURVIVES the cascade — constraints are healable via
-    the reattach UI, never deleted here, regardless of cleanup_ids."""
+    the reattach UI, never deleted here, regardless of cleanup_ids. They DO
+    receive a display-only name stamp (so they appear in `touched` for undo),
+    but never a `diff` entry and never deletion. (Stamp value asserted in
+    test_fix_wildcard_delete_stamps_constraint_ref_names.)"""
     mod = ModuleRepository(wp_db)
     wc = mod.create(type="wildcard", name="x", description="", category_id=None, tags=[],
                     payload={"options": []})
@@ -54,13 +57,59 @@ def test_fix_wildcard_delete_never_touches_constraints(wp_db):
     # Bundle children are frozen snapshots — untouched.
     bundle_after = BundleRepository(wp_db).get(b["id"])
     assert {ch["id"] for ch in bundle_after["children"]} == {wc["id"], other["id"]}
-    # Nothing was touched (no nested-ref wildcards/derivations in cleanup_ids).
-    assert not any(t["id"] == c_src["id"] for t in touched)
-    assert not any(t["id"] == c_tgt["id"] for t in touched)
+    # The display-name stamp puts both constraints in `touched` (undo), but no
+    # nested-ref wildcards/derivations were in cleanup_ids and the bundle is
+    # frozen, so neither is touched.
+    assert any(t["id"] == c_src["id"] for t in touched)
+    assert any(t["id"] == c_tgt["id"] for t in touched)
     assert not any(t["id"] == b["id"] for t in touched)
+    # The stamp is display-only: it emits NO diff entry (not a ref removal).
     assert not any(d.get("entity_id") == c_src["id"] for d in diff)
     assert not any(d.get("entity_id") == c_tgt["id"] for d in diff)
     assert not any(d.get("entity_id") == b["id"] for d in diff)
+
+
+def test_fix_wildcard_delete_stamps_constraint_ref_names(wp_db):
+    """Before a wildcard is deleted, its name is stamped onto every dependent
+    constraint's ``source_wildcard_name`` / ``target_wildcard_name`` — captured
+    at the last moment the live name is known, so the broken-reference banner
+    shows "(was ...)" instead of a bare uuid. Constraints are still never
+    deleted; the stamp is display-only (no id/matrix change)."""
+    mod = ModuleRepository(wp_db)
+    wc = mod.create(type="wildcard", name="Starter subject", description="",
+                    category_id=None, tags=[], payload={"options": []})
+    other = mod.create(type="wildcard", name="texture", description="",
+                       category_id=None, tags=[], payload={"options": []})
+    # wc as SOURCE.
+    c_src = mod.create(type="constraint", name="c1", description="", category_id=None, tags=[],
+                       payload={"source_wildcard_id": wc["id"], "target_wildcard_id": other["id"],
+                                "matrix": {}, "exceptions": []})
+    # wc as TARGET.
+    c_tgt = mod.create(type="constraint", name="c2", description="", category_id=None, tags=[],
+                       payload={"source_wildcard_id": other["id"], "target_wildcard_id": wc["id"],
+                                "matrix": {}, "exceptions": []})
+
+    # cleanup_ids EMPTY: the name stamp must run regardless of nested-ref cleanup.
+    touched, diff = fix_wildcard_delete(wp_db, wc["id"], [])
+
+    # Source-side: the constraint whose SOURCE was wc gets source_wildcard_name;
+    # its (still-live) target is untouched.
+    c_src_after = mod.get(c_src["id"])
+    assert c_src_after is not None  # never deleted
+    assert c_src_after["payload"]["source_wildcard_name"] == "Starter subject"
+    assert "target_wildcard_name" not in c_src_after["payload"]
+
+    # Target-side: the constraint whose TARGET was wc gets target_wildcard_name.
+    c_tgt_after = mod.get(c_tgt["id"])
+    assert c_tgt_after is not None
+    assert c_tgt_after["payload"]["target_wildcard_name"] == "Starter subject"
+    assert "source_wildcard_name" not in c_tgt_after["payload"]
+
+    # Both stamped constraints are in `touched` (before-snapshots) so undo
+    # reverts the stamp. The stamp is NOT a diff entry (display-only, not a
+    # ref removal) so it doesn't inflate affected_count.
+    assert any(t["id"] == c_src["id"] for t in touched)
+    assert any(t["id"] == c_tgt["id"] for t in touched)
 
 
 def test_fix_wildcard_delete_strips_nested_ref_only_for_cleanup_ids(wp_db):
@@ -99,8 +148,11 @@ def test_fix_wildcard_delete_strips_nested_ref_only_for_cleanup_ids(wp_db):
 
 
 def test_fix_wildcard_delete_empty_cleanup_ids_strips_nothing(wp_db):
-    """Empty cleanup_ids → constraints AND all nested refs untouched.
-    Only the wildcard row itself is deleted (by the orchestrator, not here)."""
+    """Empty cleanup_ids → no nested-ref STRIPS and the constraint survives.
+    Only the wildcard row itself is deleted (by the orchestrator, not here).
+    The always-on display-name stamp still runs (independent of cleanup_ids),
+    so the dependent constraint is in `touched` — but nothing is stripped and
+    no `diff` entry is emitted."""
     mod = ModuleRepository(wp_db)
     wc = mod.create(type="wildcard", name="x", description="", category_id=None, tags=[],
                     payload={"options": []})
@@ -117,9 +169,14 @@ def test_fix_wildcard_delete_empty_cleanup_ids_strips_nothing(wp_db):
 
     touched, diff = fix_wildcard_delete(wp_db, wc["id"], [])
 
-    assert mod.get(c["id"]) is not None
+    # Constraint survives and gets the always-on display-name stamp (source = wc).
+    c_after = mod.get(c["id"])
+    assert c_after is not None
+    assert c_after["payload"]["source_wildcard_name"] == "x"
+    # Nested ref NOT stripped (referrer not in cleanup_ids) — strips nothing.
     assert mod.get(referrer["id"])["payload"]["options"][0]["value"] == "see " + ref
-    assert touched == []
+    # Only the stamped constraint is in touched; no strips → empty diff.
+    assert [t["id"] for t in touched] == [c["id"]]
     assert diff == []
 
 
