@@ -4,6 +4,7 @@
  * `<script>` block so they're unit-testable without mounting the view.
  */
 import type { ExtractedModule } from "../../components/context/bundles/extract-to-library";
+import { walkRemap } from "../../components/context/bundles/uuid-remap";
 import { MAX_KNOWN_SCHEMA_VERSION, type RawPayload } from "../import-export/migrations";
 
 /** Engine `type` (singular) → install-envelope bucket (plural). The five
@@ -56,6 +57,46 @@ export function buildExtractEnvelope(modules: ExtractedModule[]): RawPayload {
   }
   return envelope;
 }
+
+/**
+ * Relink a bundle's frozen children to freshly-installed module ids after
+ * "extract to library". `extractBundleChildren` mints new ids for the
+ * extracted leaves but does NOT touch the source bundle, so its children
+ * still point at the OLD ids and read as "target module missing". This
+ * rewrites each child's whole-string `id` AND any intra-bundle ref (a
+ * constraint's `source_wildcard_id` / `target_wildcard_id`, a nested
+ * `@{uuid}` in option text) via `walkRemap` using the same remap table.
+ *
+ * Ids absent from `remap` (refs pointing OUTSIDE the extracted set) pass
+ * through verbatim — they keep resolving against whatever else lives in
+ * the library. Pure: returns a new array, never mutates the input.
+ */
+export function relinkChildren<T extends Record<string, unknown>>(
+  children: T[],
+  remap: Record<string, string>,
+): T[] {
+  return walkRemap(children, remap) as T[];
+}
+
+/**
+ * True iff ANY child no longer resolves to a row in its kind's id-set:
+ * bundle-typed children (`type:"bundle"`) are looked up in `bundleIds`,
+ * every other (leaf module) child in `moduleIds`. Discrimination matches
+ * `validateBundle` — a child whose id lives only in the wrong set still
+ * dangles. Drives the extract button's enabled state: extract is a heal
+ * action, only offered when something actually needs relinking.
+ */
+export function computeHasDangling(
+  children: ReadonlyArray<{ id?: unknown; type?: unknown }>,
+  moduleIds: ReadonlySet<string>,
+  bundleIds: ReadonlySet<string>,
+): boolean {
+  return children.some((c) => {
+    if (typeof c.id !== "string") return true;
+    const ids = c.type === "bundle" ? bundleIds : moduleIds;
+    return !ids.has(c.id);
+  });
+}
 </script>
 
 <script setup lang="ts">
@@ -71,7 +112,7 @@ export function buildExtractEnvelope(modules: ExtractedModule[]): RawPayload {
  *   /bundles/new            → create-mode (disabled Save, points user to Context widget)
  *   /bundles/:id/edit       → edit-mode
  */
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, toRaw } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import type { SaveState, EditorFieldError } from "../components/EditorFrame.types";
 import { useRouter } from "vue-router";
@@ -483,6 +524,19 @@ async function save() {
  *  toolbar button so a double-click can't fire two installs. */
 const extracting = ref(false);
 
+/** Whether any child currently dangles (its id resolves to no library
+ *  row of its kind). Extract is a heal action — relinking a bundle whose
+ *  children all resolve would only churn ids for no benefit — so the
+ *  button is gated on this. Recomputes as the module/bundle catalogs
+ *  load and after extract relinks + refetches. */
+const hasDanglingChildren = computed<boolean>(() =>
+  computeHasDangling(
+    children.value,
+    new Set(moduleStore.catalog.map((m) => m.id)),
+    new Set(store.catalog.map((b) => b.id)),
+  ),
+);
+
 /**
  * Extract this bundle's leaf children into standalone library modules
  * (Feature 4). Runs the pure `extractBundleChildren` transform (fresh
@@ -498,7 +552,7 @@ const extracting = ref(false);
  */
 async function extractToLibrary(): Promise<void> {
   if (extracting.value) return;
-  const { modules, skipped } = extractBundleChildren(
+  const { modules, remap, skipped } = extractBundleChildren(
     children.value as unknown as ExtractableChild[],
   );
   if (modules.length === 0) {
@@ -519,13 +573,27 @@ async function extractToLibrary(): Promise<void> {
       }
       toast.push({ severity: "success", summary: "Extracted to library", detail, life: 4000 });
       // Refresh the catalog so the freshly-installed modules show up in
-      // the add-child picker + Library views without a manual reload.
+      // the add-child picker + Library views without a manual reload —
+      // AND so hasDanglingChildren re-evaluates against the new module
+      // ids once the relink lands below.
       try {
         await moduleStore.fetchCatalog();
       } catch {
         // Non-fatal: the install already committed; a stale catalog
         // self-heals on next navigation. Don't surface as an error.
       }
+      // Relink the bundle's frozen children to the freshly-installed
+      // module ids so the bundle resolves ("target module missing"
+      // clears). relinkChildren (walkRemap) rewrites each child's
+      // whole-string `id` + any intra-bundle ref. `save()` then PUTs the
+      // relinked children via bundles.update; it deliberately does NOT
+      // navigate away (see save() docs), so the user stays in the healed
+      // editor — no separate bundle-update call needed.
+      children.value = relinkChildren(
+        toRaw(children.value),
+        remap,
+      ) as typeof children.value;
+      await save();
     } else {
       toast.push({
         severity: "error",
@@ -771,7 +839,8 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
         icon="pi-clone"
         data-test="bd-extract-btn"
         :loading="extracting"
-        :disabled="!isEdit || children.length === 0"
+        :disabled="!isEdit || children.length === 0 || !hasDanglingChildren"
+        :title="!hasDanglingChildren ? 'All children are linked — nothing to extract' : undefined"
         @click="extractToLibrary"
       >Extract to library</Button>
       <CommunityRowActions
