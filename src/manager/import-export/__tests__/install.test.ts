@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  applyCollisionDecisions,
   detectInstallCollisions,
   enforceClashSafety,
   installEnvelope,
@@ -151,5 +152,34 @@ describe("installEnvelope — natively-supported future versions install as-is",
     expect(result.error?.message).toMatch(/future schema version/i);
     // Nothing was committed.
     expect(seen).toHaveLength(0);
+  });
+});
+
+describe("applyCollisionDecisions rename map", () => {
+  it("returns oldId→newId for every rename decision", () => {
+    const selection = {
+      bundles: [], wildcards: [
+        { entity: { id: "aaaa1111", name: "Sub", type: "wildcard" }, decision: { kind: "add" } },
+      ],
+      fixed_values: [], combines: [], derivations: [], constraints: [],
+      categories: [], templates: [],
+    } as unknown as Parameters<typeof applyCollisionDecisions>[0];
+    const renameMap = applyCollisionDecisions(selection, {
+      aaaa1111: { kind: "rename", new_name: "Sub copy" },
+    });
+    const newId = Object.keys(renameMap).length === 1 ? renameMap.aaaa1111 : "";
+    expect(newId).toMatch(/^[0-9a-f]{8,}$/);
+    expect((selection.wildcards[0].entity as { id: string }).id).toBe(newId);
+  });
+
+  it("returns an empty map when there are no renames", () => {
+    const selection = {
+      bundles: [], wildcards: [
+        { entity: { id: "aaaa1111", name: "Sub", type: "wildcard" }, decision: { kind: "add" } },
+      ],
+      fixed_values: [], combines: [], derivations: [], constraints: [],
+      categories: [], templates: [],
+    } as unknown as Parameters<typeof applyCollisionDecisions>[0];
+    expect(applyCollisionDecisions(selection, { aaaa1111: { kind: "replace" } })).toEqual({});
   });
 });

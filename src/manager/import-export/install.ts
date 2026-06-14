@@ -295,10 +295,11 @@ export function detectInstallCollisions(
  * entity's id field, set the rename decision carrying the new id +
  * user-supplied new name.
  */
-function applyCollisionDecisions(
+export function applyCollisionDecisions(
   selection: ResolvedSelection,
   decisions: Record<string, CollisionDecision>,
-): void {
+): Record<string, string> {
+  const renameMap: Record<string, string> = {};
   const buckets: Array<keyof Omit<ResolvedSelection, "categories">> = [
     "bundles",
     ...MODULE_BUCKETS,
@@ -324,6 +325,7 @@ function applyCollisionDecisions(
       // Rename: mint a new id, rewrite the entity's id field, and
       // emit a `rename` decision carrying old_id + new_id + new_name.
       const newId = newShortId();
+      renameMap[row.entity.id] = newId;
       const renamedEntity: Record<string, unknown> & { id: string } = {
         ...row.entity,
         id: newId,
@@ -339,6 +341,7 @@ function applyCollisionDecisions(
     // but the `buckets` array above excludes it, so the cast is sound.
     (selection as unknown as Record<string, ResolvedEntity[]>)[bucket] = next;
   }
+  return renameMap;
 }
 
 /**
