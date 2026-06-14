@@ -830,19 +830,12 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
     @save="save"
     @cancel="cancel"
   >
-    <template v-if="isEdit" #header-extra>
-      <span v-if="cascadeRefs.length > 0" class="wp-editor-used-by">
+    <template v-if="isEdit && cascadeRefs.length > 0" #title-extra>
+      <span class="wp-editor-used-by">
         used by <PillCountBadge :count="cascadeRefs.length" />
       </span>
-      <Button
-        variant="ghost"
-        icon="pi-clone"
-        data-test="bd-extract-btn"
-        :loading="extracting"
-        :disabled="!isEdit || children.length === 0 || !hasDanglingChildren"
-        :title="!hasDanglingChildren ? 'All children are linked — nothing to extract' : undefined"
-        @click="extractToLibrary"
-      >Extract to library</Button>
+    </template>
+    <template v-if="isEdit" #header-extra>
       <CommunityRowActions
         v-if="currentRow"
         :row="currentRow"
@@ -897,6 +890,17 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
         :title="`Children (${children.length})`"
         :subtitle="childrenSubtitle"
       >
+        <template #actions>
+          <Button
+            variant="ghost"
+            icon="pi-clone"
+            data-test="bd-extract-btn"
+            :loading="extracting"
+            :disabled="!isEdit || children.length === 0 || !hasDanglingChildren"
+            :title="!hasDanglingChildren ? 'All children are linked — nothing to extract' : undefined"
+            @click="extractToLibrary"
+          >Extract to library</Button>
+        </template>
         <div class="wp-bundle-children-grid">
           <div class="wp-bundle-children-stack" data-test="bundle-children-list">
             <div
@@ -978,12 +982,24 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
 </template>
 
 <style scoped>
+/* Rendered inline inside EditorFrame's <h1> via the #title-extra slot, so
+ * it reads as "test_bundle · used by N" beside the name. Reset the h1's
+ * weight back to normal and dim it; the leading separator + margin space
+ * it off the title text. */
 .wp-editor-used-by {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  margin-left: var(--wp-space-3);
   font-size: var(--wp-text-xs);
+  font-weight: 400;
   color: var(--wp-text-muted);
+  vertical-align: middle;
+}
+.wp-editor-used-by::before {
+  content: "·";
+  margin-right: var(--wp-space-2);
+  color: var(--wp-text-dim);
 }
 .wp-bundle-editor__loading { padding: var(--wp-space-8) 0; text-align: center; }
 .wp-bundle-editor__empty { padding: var(--wp-space-6) 0; font-size: var(--wp-text-base); }

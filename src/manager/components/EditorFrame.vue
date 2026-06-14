@@ -7,7 +7,8 @@
  * `EditorFrame` in `screens/editors.jsx`:
  *
  *   - top breadcrumb back-link
- *   - header with title + optional subtitle + free-form `header-extra` slot
+ *   - header with title (+ optional inline `title-extra` slot beside it)
+ *     + optional subtitle + free-form `header-extra` slot
  *   - body slot (cards laid out by each editor)
  *   - sticky footer with optional History button (left), Cancel + Save (right)
  *   - HistoryPanel mounted lazily (only when entries exist + opened)
@@ -130,6 +131,7 @@ function scrollToField(id: string): void {
       <div class="wp-page__title-wrap">
         <h1 class="wp-page__title">
           {{ title }}
+          <slot name="title-extra" />
           <span v-if="dirty" class="wp-editor__dirty-chip" data-test="editor-dirty-chip">
             <span class="wp-editor__dirty-dot" aria-hidden="true" />
             Unsaved
