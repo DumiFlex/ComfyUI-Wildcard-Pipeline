@@ -1,3 +1,63 @@
+<script lang="ts">
+/**
+ * Pure helpers for BundleEditor, exported from a plain (non-setup)
+ * `<script>` block so they're unit-testable without mounting the view.
+ */
+import type { ExtractedModule } from "../../components/context/bundles/extract-to-library";
+import { MAX_KNOWN_SCHEMA_VERSION, type RawPayload } from "../import-export/migrations";
+
+/** Engine `type` (singular) → install-envelope bucket (plural). The five
+ *  module subtypes share one server table but live in distinct envelope
+ *  arrays; `fixed_values` is identical in both spaces. */
+const TYPE_TO_BUCKET: Record<string, keyof RawPayload> = {
+  wildcard: "wildcards",
+  fixed_values: "fixed_values",
+  combine: "combines",
+  derivation: "derivations",
+  constraint: "constraints",
+};
+
+/**
+ * Group extracted leaf modules into the install envelope `installEnvelope`
+ * accepts (top-level `schema_version` + plural per-type arrays). Each module
+ * is emitted as an engine-row entity (`{ id, type, name, payload, ...}`),
+ * carrying `description`/`tags` only when present so we don't write empty
+ * keys the engine importer would otherwise have to ignore.
+ *
+ * Stamped with `MAX_KNOWN_SCHEMA_VERSION` — these rows came straight out of
+ * a live library bundle (already current shape), so they need no migration;
+ * stamping CURRENT (the chain head, which lags) would make `parsePayload`
+ * try to forward-migrate shapes that are already at head.
+ */
+export function buildExtractEnvelope(modules: ExtractedModule[]): RawPayload {
+  const envelope: RawPayload = {
+    schema_version: MAX_KNOWN_SCHEMA_VERSION,
+    bundles: [],
+    wildcards: [],
+    fixed_values: [],
+    combines: [],
+    derivations: [],
+    constraints: [],
+    categories: [],
+    templates: [],
+  };
+  for (const m of modules) {
+    const bucket = TYPE_TO_BUCKET[m.type];
+    if (!bucket) continue; // unknown/bundle type — skip rather than crash
+    const entity: Record<string, unknown> = {
+      id: m.id,
+      type: m.type,
+      name: m.name,
+      payload: m.payload,
+    };
+    if (m.description !== undefined) entity.description = m.description;
+    if (m.tags !== undefined) entity.tags = m.tags;
+    (envelope[bucket] as Array<Record<string, unknown>>).push(entity);
+  }
+  return envelope;
+}
+</script>
+
 <script setup lang="ts">
 /**
  * BundleEditor — SPA editor for library-tracked bundles.
@@ -41,6 +101,12 @@ import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
 import PillCountBadge from "../cascade/PillCountBadge.vue";
 import type { BundleRow, ModuleRow } from "../api/types";
 import type { ModuleEntry } from "../../widgets/_shared";
+import {
+  extractBundleChildren,
+  type ExtractableChild,
+} from "../../components/context/bundles/extract-to-library";
+import { installEnvelope } from "../import-export/install";
+import { api } from "../api/client";
 
 const props = defineProps<{ id?: string }>();
 
@@ -413,6 +479,73 @@ async function save() {
   }
 }
 
+/** True while an extract-to-library run is in flight — disables the
+ *  toolbar button so a double-click can't fire two installs. */
+const extracting = ref(false);
+
+/**
+ * Extract this bundle's leaf children into standalone library modules
+ * (Feature 4). Runs the pure `extractBundleChildren` transform (fresh
+ * ids + intra-bundle ref remap), groups the result into an install
+ * envelope, and reuses `installEnvelope` — the same atomic
+ * commit pipeline the Import tab + community embed use — so migrations,
+ * integrity checks, and collision handling all apply for free.
+ *
+ * Nested bundles are skipped by the helper (a bundle isn't a leaf
+ * module); the skipped count is surfaced in the success toast. On
+ * success the module catalog is refreshed so the new rows appear
+ * immediately in the add-child picker + library views.
+ */
+async function extractToLibrary(): Promise<void> {
+  if (extracting.value) return;
+  const { modules, skipped } = extractBundleChildren(
+    children.value as unknown as ExtractableChild[],
+  );
+  if (modules.length === 0) {
+    toast.push({ severity: "info", summary: "Nothing to extract", life: 3000 });
+    return;
+  }
+  extracting.value = true;
+  try {
+    const envelope = buildExtractEnvelope(modules);
+    const result = await installEnvelope(
+      { envelope },
+      { importExport: api.importExport },
+    );
+    if (result.ok) {
+      let detail = `Extracted ${modules.length} module${modules.length === 1 ? "" : "s"} to your library`;
+      if (skipped > 0) {
+        detail += `, ${skipped} nested bundle${skipped === 1 ? "" : "s"} skipped`;
+      }
+      toast.push({ severity: "success", summary: "Extracted to library", detail, life: 4000 });
+      // Refresh the catalog so the freshly-installed modules show up in
+      // the add-child picker + Library views without a manual reload.
+      try {
+        await moduleStore.fetchCatalog();
+      } catch {
+        // Non-fatal: the install already committed; a stale catalog
+        // self-heals on next navigation. Don't surface as an error.
+      }
+    } else {
+      toast.push({
+        severity: "error",
+        summary: "Extract failed",
+        detail: result.error?.message ?? "Extract failed",
+        life: 4000,
+      });
+    }
+  } catch (e) {
+    toast.push({
+      severity: "error",
+      summary: "Extract failed",
+      detail: e instanceof Error ? e.message : String(e),
+      life: 4000,
+    });
+  } finally {
+    extracting.value = false;
+  }
+}
+
 useEditorShortcuts({
   onSave: () => save(),
   onCancel: () => cancel(),
@@ -633,6 +766,14 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
       <span v-if="cascadeRefs.length > 0" class="wp-editor-used-by">
         used by <PillCountBadge :count="cascadeRefs.length" />
       </span>
+      <Button
+        variant="ghost"
+        icon="pi-clone"
+        data-test="bd-extract-btn"
+        :loading="extracting"
+        :disabled="!isEdit || children.length === 0"
+        @click="extractToLibrary"
+      >Extract to library</Button>
       <CommunityRowActions
         v-if="currentRow"
         :row="currentRow"
