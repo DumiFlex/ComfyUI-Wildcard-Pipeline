@@ -30,12 +30,13 @@ import { buildDepGraph, transitiveClosure } from "./dep-graph";
 import {
   buildBundlePublishable,
   buildModulePublishable,
-  publishToCommunity as publishToCommunityShared,
   type PublishablePayload,
 } from "./single-row-publish";
+import { useGuidedPublishStore } from "./guided-publish-store";
 
 const toast = useToast();
 const router = useRouter();
+const guidedPublish = useGuidedPublishStore();
 
 /**
  * Bucket key — matches the 8-bucket schema. `wildcard`, `fixed_values`,
@@ -575,12 +576,15 @@ const singleSelected = computed<PublishablePayload | null>(() => {
 });
 
 function publishToCommunity() {
+  // Route through the guided-publish gate (B3) — same seam as the per-row
+  // Publish button. If the selected module references in-library wildcards
+  // not yet on the community, the gate opens the UnmetDepsDialog; otherwise
+  // it publishes directly (B2b dependency auto-detect runs inside).
   // `modules` is this tab's full module list (all subtypes) — the catalog
-  // `publishToCommunityShared` resolves auto-detected dependency refs against
-  // (B2b). A referenced wildcard always lives here, so deps/unmet resolve
-  // correctly; bundles carry no refs so it's a no-op for them.
+  // the gate + the publish hash resolve refs against. A referenced wildcard
+  // always lives here; bundles carry no refs so they publish straight through.
   if (singleSelected.value) {
-    publishToCommunityShared(singleSelected.value, router, modules.value);
+    guidedPublish.requestPublish(singleSelected.value, router, modules.value);
   }
 }
 

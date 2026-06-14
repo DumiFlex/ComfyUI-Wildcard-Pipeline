@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { listReferencedUuids, resolveDependencies, type ReferencingModule } from "../dependencies";
+import {
+  listReferencedUuids,
+  resolveDependencies,
+  unmetDependencyRows,
+  type ReferencingModule,
+} from "../dependencies";
 import type { ModuleRow } from "../../api/types";
 
 /** Minimal module-shape builder. `listReferencedUuids` reads only
@@ -224,5 +229,98 @@ describe("resolveDependencies", () => {
 
   it("returns empty arrays for no refs", () => {
     expect(resolveDependencies([], [])).toEqual({ dependencies: [], unmet: [] });
+  });
+});
+
+/** Catalog-row builder carrying the fields `unmetDependencyRows` reads
+ *  off the matched row: id + name + community_post_slug (the published
+ *  signal). Cast to the full row type. */
+function catRow(parts: {
+  id: string;
+  name: string;
+  community_post_slug?: string | null;
+}): ModuleRow {
+  return parts as unknown as ModuleRow;
+}
+
+describe("unmetDependencyRows", () => {
+  it("includes a ref that is an UNPUBLISHED library row (in catalog, no slug)", () => {
+    const module: ReferencingModule = {
+      id: "cccc1111",
+      type: "constraint",
+      payload: { source_wildcard_id: "aaaa1111", target_wildcard_id: "bbbb2222" },
+    };
+    const catalog = [
+      catRow({ id: "aaaa1111", name: "Hair", community_post_slug: null }),
+      catRow({ id: "bbbb2222", name: "Colors" }), // slug absent → unpublished
+    ];
+    const rows = unmetDependencyRows(module, catalog);
+    expect(rows.map((r) => r.id)).toEqual(["aaaa1111", "bbbb2222"]);
+  });
+
+  it("excludes a ref that is a PUBLISHED library row (has a slug)", () => {
+    const module: ReferencingModule = {
+      id: "cccc1111",
+      type: "constraint",
+      payload: { source_wildcard_id: "aaaa1111", target_wildcard_id: "bbbb2222" },
+    };
+    const catalog = [
+      catRow({ id: "aaaa1111", name: "Hair", community_post_slug: "hair-styles" }),
+      catRow({ id: "bbbb2222", name: "Colors", community_post_slug: null }),
+    ];
+    const rows = unmetDependencyRows(module, catalog);
+    // Only the unpublished one survives; the published ref drops off.
+    expect(rows.map((r) => r.id)).toEqual(["bbbb2222"]);
+  });
+
+  it("excludes a ref that is NOT in the catalog at all (dangling)", () => {
+    const module: ReferencingModule = {
+      id: "cccc1111",
+      type: "constraint",
+      payload: { source_wildcard_id: "dangling1", target_wildcard_id: "bbbb2222" },
+    };
+    const catalog = [catRow({ id: "bbbb2222", name: "Colors", community_post_slug: null })];
+    const rows = unmetDependencyRows(module, catalog);
+    // `dangling1` isn't in the catalog → can't publish from here → excluded.
+    expect(rows.map((r) => r.id)).toEqual(["bbbb2222"]);
+  });
+
+  it("treats a blank/whitespace slug as unpublished (included)", () => {
+    const module: ReferencingModule = {
+      id: "cccc1111",
+      type: "constraint",
+      payload: { source_wildcard_id: "aaaa1111", target_wildcard_id: null },
+    };
+    const catalog = [catRow({ id: "aaaa1111", name: "Hair", community_post_slug: "   " })];
+    expect(unmetDependencyRows(module, catalog).map((r) => r.id)).toEqual(["aaaa1111"]);
+  });
+
+  it("returns [] for a bundle (no refs to gate)", () => {
+    const module: ReferencingModule = {
+      id: "bbbb1111",
+      type: "bundle",
+      payload: { children: [{ id: "aaaa1111", type: "wildcard" }] },
+    };
+    const catalog = [catRow({ id: "aaaa1111", name: "Hair", community_post_slug: null })];
+    expect(unmetDependencyRows(module, catalog)).toEqual([]);
+  });
+
+  it("dedupes the returned rows by id (first occurrence wins)", () => {
+    const module: ReferencingModule = {
+      id: "11111111",
+      type: "wildcard",
+      payload: {
+        options: [
+          { id: "o1", value: "@{aaaa1111} and @{aaaa1111}", weight: 1 },
+        ],
+      },
+    };
+    const catalog = [catRow({ id: "aaaa1111", name: "Hair", community_post_slug: null })];
+    expect(unmetDependencyRows(module, catalog)).toHaveLength(1);
+  });
+
+  it("returns [] when the module references nothing", () => {
+    const module: ReferencingModule = { id: "11111111", type: "wildcard", payload: { options: [] } };
+    expect(unmetDependencyRows(module, [])).toEqual([]);
   });
 });

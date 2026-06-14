@@ -17,11 +17,11 @@ import type { BundleRow, ModuleRow } from "../api/types";
 import Button from "./ui/Button.vue";
 import { useToast } from "../composables/useToast";
 import { useModuleStore } from "../stores/moduleStore";
+import { useGuidedPublishStore } from "../import-export/guided-publish-store";
 import {
   buildBundlePublishable,
   buildModulePublishable,
   copyPayloadToClipboard,
-  publishToCommunity,
   type PublishablePayload,
 } from "../import-export/single-row-publish";
 
@@ -42,6 +42,7 @@ const props = defineProps<Props>();
 const toast = useToast();
 const router = useRouter();
 const moduleStore = useModuleStore();
+const guidedPublish = useGuidedPublishStore();
 
 /** Build the publishable payload. Bundle children ship as verbatim
  *  widget snapshots (history stripped); modules ship as engine rows. */
@@ -54,9 +55,12 @@ function publishablePayload(): PublishablePayload {
 
 function onPublish() {
   try {
-    // Pass the unfiltered catalog so the publish hash carries auto-detected
-    // dependencies (B2b). Bundles resolve to no refs, so it's a no-op there.
-    publishToCommunity(publishablePayload(), router, moduleStore.catalog);
+    // Route through the guided-publish gate (B3): if the module references
+    // wildcards that are in the library but not yet on the community, the
+    // gate opens the UnmetDepsDialog; otherwise it publishes directly (B2b
+    // dependency auto-detect still runs inside publishToCommunity). The
+    // unfiltered catalog is both the gate's resolution set and the hash's.
+    guidedPublish.requestPublish(publishablePayload(), router, moduleStore.catalog);
   } catch (e) {
     toast.push({
       severity: "error",

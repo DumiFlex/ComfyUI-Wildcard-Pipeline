@@ -9,6 +9,7 @@ import ToastHost from "../components/ui/ToastHost.vue";
 import TweaksPanel from "../components/TweaksPanel.vue";
 import CommandPalette from "../components/CommandPalette.vue";
 import ShortcutsHelp from "../components/ShortcutsHelp.vue";
+import UnmetDepsDialog from "../components/UnmetDepsDialog.vue";
 import { useUiStore } from "../stores/uiStore";
 import { useCommandIndex } from "../composables/useCommandIndex";
 import { useRecentStore } from "../stores/recentStore";
@@ -20,6 +21,7 @@ import { useTemplateStore } from "../stores/templateStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { useCommunityUpdateStore } from "../stores/communityUpdateStore";
 import { useCascadeStore } from "../cascade/cascade-store";
+import { useGuidedPublishStore } from "../import-export/guided-publish-store";
 import { api } from "../api/client";
 import {
   hashes as libraryHashes,
@@ -39,6 +41,7 @@ const templateStore = useTemplateStore();
 const categoryStore = useCategoryStore();
 const communityUpdateStore = useCommunityUpdateStore();
 const cascadeStore = useCascadeStore();
+const guidedPublish = useGuidedPublishStore();
 
 const paletteOpen = ref(false);
 const shortcutsOpen = ref(false);
@@ -281,6 +284,17 @@ onBeforeUnmount(() => {
     <TweaksPanel />
     <CommandPalette v-model:open="paletteOpen" :items="commandIndex" :recent-ids="recent.recentIds" />
     <ShortcutsHelp v-model:open="shortcutsOpen" />
+    <!-- Single host for the guided-publish gate (B3). Both publish entry
+         points (CommunityRowActions, ExportTab) route through the
+         guided-publish store; this lone dialog renders whenever it opens. -->
+    <UnmetDepsDialog
+      :open="guidedPublish.open"
+      :module-name="guidedPublish.pendingModule?.name ?? ''"
+      :unmet-rows="guidedPublish.unmetRows"
+      @publish-dep="guidedPublish.publishDep"
+      @publish-anyway="guidedPublish.publishAnyway"
+      @cancel="guidedPublish.cancel"
+    />
   </div>
 </template>
 

@@ -193,3 +193,40 @@ export function resolveDependencies(
 
   return { dependencies, unmet };
 }
+
+/**
+ * The library catalog rows `module` references that are IN the library but
+ * NOT yet on the community — the gate set for the B3 guided-publish dialog.
+ *
+ * Each referenced uuid (`listReferencedUuids`) is matched against `catalog`;
+ * a row is kept iff it EXISTS in the catalog AND has no `community_post_slug`
+ * (in-library, unpublished). Two cases are excluded:
+ *   - refs already published (carry a non-blank slug) — nothing to do.
+ *   - refs absent from the catalog (dangling) — can't be published from here.
+ * Bundles reference nothing (`listReferencedUuids` → []), so they return []
+ * and are never gated.
+ *
+ * Returns the actual `ModuleRow`s (de-duplicated by id, first occurrence
+ * wins) so the dialog can render each dep's name + type icon and build its
+ * publishable. Pure — reads only the passed module + catalog.
+ */
+export function unmetDependencyRows(
+  module: ReferencingModule,
+  catalog: ModuleRow[],
+): ModuleRow[] {
+  const byId = new Map<string, ModuleRow>();
+  for (const r of catalog) byId.set(r.id, r);
+
+  const out: ModuleRow[] = [];
+  const seen = new Set<string>();
+  for (const uuid of listReferencedUuids(module)) {
+    if (seen.has(uuid)) continue;
+    const row = byId.get(uuid);
+    if (!row) continue; // dangling — not in the catalog, can't publish here.
+    const slug = row.community_post_slug;
+    if (typeof slug === "string" && slug.trim() !== "") continue; // published.
+    seen.add(uuid);
+    out.push(row);
+  }
+  return out;
+}
