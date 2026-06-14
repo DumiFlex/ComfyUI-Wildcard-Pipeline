@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { migrateImportEnvelope, CURRENT_SCHEMA_VERSION } from "../migrations";
+import {
+  migrateImportEnvelope,
+  CURRENT_SCHEMA_VERSION,
+  MAX_KNOWN_SCHEMA_VERSION,
+} from "../migrations";
 
 describe("migrateImportEnvelope", () => {
   it("returns payload as-is if version matches CURRENT_SCHEMA_VERSION", () => {
@@ -15,9 +19,9 @@ describe("migrateImportEnvelope", () => {
     }
   });
 
-  it("rejects payload with version > CURRENT_SCHEMA_VERSION", () => {
+  it("rejects payload with version > MAX_KNOWN_SCHEMA_VERSION", () => {
     const payload = {
-      schema_version: CURRENT_SCHEMA_VERSION + 1,
+      schema_version: MAX_KNOWN_SCHEMA_VERSION + 1,
       bundles: [], wildcards: [], fixed_values: [], combines: [], derivations: [], constraints: [], categories: [],
     };
     const result = migrateImportEnvelope(payload);
@@ -166,6 +170,94 @@ describe("migrateImportEnvelope", () => {
     if (result.ok) {
       // 2 templates x 2 chain steps (v0->v1, v1->v2) = 4.
       expect(result.migratedEntityCount).toBe(4);
+    }
+  });
+});
+
+/**
+ * Install-path fork (spec §"Install path: accept natively-supported future
+ * versions"): the reject threshold reads MAX_KNOWN_SCHEMA_VERSION (4), not
+ * CURRENT_SCHEMA_VERSION (2). A payload at CURRENT < v <= MAX_KNOWN (v3 =
+ * text-grammar only, v4 = additive `target_select`) is shape-compatible with
+ * v2 and natively handled at runtime, so it must pass through AS-IS: not
+ * rejected, not migrated (the chain loop bound stays CURRENT so there is
+ * nothing to do), schema_version preserved. Only v > MAX_KNOWN still rejects.
+ */
+describe("migrateImportEnvelope — accepts natively-supported future versions (<= MAX_KNOWN)", () => {
+  it("passes a v3 (range-syntax) payload through unchanged — not rejected, not migrated", () => {
+    const v3Payload = {
+      schema_version: 3,
+      bundles: [], fixed_values: [], combines: [], derivations: [], constraints: [], categories: [], templates: [],
+      wildcards: [
+        { id: "wc-aaa", type: "wildcard", name: "w", payload: { options: [{ id: "o", value: "{1-2$$a|b}", weight: 1 }] } },
+      ],
+    };
+    const result = migrateImportEnvelope(v3Payload);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // No migration ran: schema_version stays 3 and nothing was touched.
+      expect(result.migrated.schema_version).toBe(3);
+      expect(result.migrated).toEqual(v3Payload);
+      expect(result.migratedEntityCount).toBe(0);
+    }
+  });
+
+  it("passes a v4 (target_select reach) constraint payload through unchanged", () => {
+    const v4Payload = {
+      schema_version: 4,
+      bundles: [], wildcards: [], fixed_values: [], combines: [], derivations: [], categories: [], templates: [],
+      constraints: [
+        {
+          id: "cn-001abc",
+          type: "constraint",
+          name: "c",
+          payload: {
+            source_wildcard_id: "wc-aaa",
+            target_wildcard_id: "wc-bbb",
+            matrix: {},
+            exceptions: [],
+            target_select: { mode: "next", count: 2 },
+          },
+        },
+      ],
+    };
+    const result = migrateImportEnvelope(v4Payload);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.migrated.schema_version).toBe(4);
+      expect(result.migrated).toEqual(v4Payload);
+      expect(result.migratedEntityCount).toBe(0);
+      // The additive `target_select` field survives the pass-through verbatim.
+      const cn = result.migrated.constraints[0] as Record<string, unknown>;
+      expect((cn.payload as Record<string, unknown>).target_select).toEqual({ mode: "next", count: 2 });
+    }
+  });
+
+  it("a v2 payload still migrates to the chain head (chain unchanged)", () => {
+    const v0Payload = {
+      schema_version: 0,
+      bundles: [], wildcards: [{ id: "w", name: "old" }],
+      fixed_values: [], combines: [], derivations: [], constraints: [], categories: [], templates: [],
+    };
+    const result = migrateImportEnvelope(v0Payload);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.migrated.schema_version).toBe(CURRENT_SCHEMA_VERSION);
+      expect(result.migratedEntityCount).toBe(2);
+    }
+  });
+
+  it("a v5 payload (> MAX_KNOWN) still rejects with the future-version error", () => {
+    const v5Payload = {
+      schema_version: MAX_KNOWN_SCHEMA_VERSION + 1,
+      bundles: [], wildcards: [], fixed_values: [], combines: [], derivations: [], constraints: [], categories: [], templates: [],
+    };
+    const result = migrateImportEnvelope(v5Payload);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toMatch(/future schema version/i);
+      // The reject reason names the max-known ceiling, not the chain head.
+      expect(result.reason).toContain(String(MAX_KNOWN_SCHEMA_VERSION));
     }
   });
 });

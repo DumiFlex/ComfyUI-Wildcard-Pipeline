@@ -14,6 +14,19 @@ from engine.migrations.v1_to_v2 import migrate_v1_to_v2
 
 CURRENT_SCHEMA_VERSION = 2
 
+# Highest schema version this runtime can natively READ + WRITE — distinct
+# from CURRENT_SCHEMA_VERSION (the migration-chain head, which stays 2 because
+# v2->v3/v3->v4 are no-ops). v3 is the SP2b text-grammar bump (shape-identical
+# to v2) and v4 is the additive `target_select` constraint reach; both are
+# handled natively, so a payload at CURRENT < v <= MAX_KNOWN installs AS-IS
+# with no migration. Mirror of TS `MAX_KNOWN_SCHEMA_VERSION` in
+# `src/manager/import-export/migrations.ts`.
+#
+# MAINTENANCE CONTRACT: bump this whenever the TS `schemaVersionForPayload()`
+# learns to stamp a new (higher) version — otherwise this commit-side
+# re-validate will reject the very shapes the runtime just learned to produce.
+MAX_KNOWN_SCHEMA_VERSION = 4
+
 _CHAIN = {
     0: migrate_v0_to_v1,
     1: migrate_v1_to_v2,
@@ -34,10 +47,16 @@ def migrate_payload(payload: dict[str, Any]) -> dict[str, Any]:
     version = payload.get("schema_version")
     if not isinstance(version, int):
         return {"ok": False, "reason": "payload missing schema_version field"}
-    if version > CURRENT_SCHEMA_VERSION:
+    # Reject threshold reads MAX_KNOWN (highest natively-supported version),
+    # NOT CURRENT (the migration-chain head). A payload at
+    # CURRENT < v <= MAX_KNOWN is shape-compatible and handled natively, so it
+    # passes through AS-IS — the while-loop below is bound by CURRENT, so there
+    # is nothing to migrate and schema_version is preserved. Only > MAX_KNOWN
+    # rejects. Mirror of TS `migrateImportEnvelope`.
+    if version > MAX_KNOWN_SCHEMA_VERSION:
         return {
             "ok": False,
-            "reason": f"future schema version {version} (current: {CURRENT_SCHEMA_VERSION})",
+            "reason": f"future schema version {version} (max known: {MAX_KNOWN_SCHEMA_VERSION})",
         }
     current = {
         "schema_version": version,

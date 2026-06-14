@@ -285,10 +285,18 @@ export function migrateImportEnvelope(payload: Partial<RawPayload>): MigrationRe
   if (typeof payload.schema_version !== "number") {
     return { ok: false, reason: "payload missing schema_version field" };
   }
-  if (payload.schema_version > CURRENT_SCHEMA_VERSION) {
+  // Reject threshold reads MAX_KNOWN (the highest version this runtime can
+  // natively READ + WRITE), NOT CURRENT (the migration-chain head). A payload
+  // at CURRENT < v <= MAX_KNOWN (v3 = text-grammar only; v4 = additive
+  // `target_select`) is shape-compatible with v2 and handled natively at
+  // runtime, so it passes through AS-IS — the migration loop below is bound by
+  // CURRENT, so for such a payload there is nothing to migrate and its
+  // schema_version is preserved. Only genuinely-future shapes (> MAX_KNOWN) are
+  // rejected here.
+  if (payload.schema_version > MAX_KNOWN_SCHEMA_VERSION) {
     return {
       ok: false,
-      reason: `future schema version ${payload.schema_version} (current: ${CURRENT_SCHEMA_VERSION})`,
+      reason: `future schema version ${payload.schema_version} (max known: ${MAX_KNOWN_SCHEMA_VERSION})`,
     };
   }
   let current: RawPayload = {
