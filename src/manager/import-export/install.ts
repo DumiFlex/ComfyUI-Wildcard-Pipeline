@@ -26,7 +26,11 @@ import { api } from "../api/client";
  *  exported ApiClient type, so we widen via `typeof` and pluck the
  *  one bucket we need. Tests inject a fake of this shape. */
 type ImportExportApi = (typeof api)["importExport"];
-import { CURRENT_SCHEMA_VERSION, type RawPayload } from "./migrations";
+import {
+  CURRENT_SCHEMA_VERSION,
+  MAX_KNOWN_SCHEMA_VERSION,
+  type RawPayload,
+} from "./migrations";
 import { parsePayload, type IntegrityWarning } from "./parse";
 import {
   buildCommitPayload,
@@ -472,8 +476,12 @@ export async function installEnvelope(
 }
 
 /** Re-exported so the host-bridge global can advertise the runtime's
- *  current schema number alongside the install function. */
-export { CURRENT_SCHEMA_VERSION };
+ *  schema numbers alongside the install function. The bridge advertises
+ *  MAX_KNOWN_SCHEMA_VERSION (the support ceiling the publish-gate checks),
+ *  NOT CURRENT_SCHEMA_VERSION (the migration-chain head) — see
+ *  `migrations.ts` for the fork rationale. CURRENT stays re-exported for
+ *  the install-path decision logic above (`decideInstallPath`). */
+export { CURRENT_SCHEMA_VERSION, MAX_KNOWN_SCHEMA_VERSION };
 
 // ---------------------------------------------------------------------------
 // Install path decision (spec §4 Flow 3)

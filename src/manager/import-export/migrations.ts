@@ -29,6 +29,19 @@ import { RESERVED } from "../parsing/subcatFilter";
 export const CURRENT_SCHEMA_VERSION = 2;
 
 /**
+ * Highest schema version this runtime can correctly READ + WRITE — distinct
+ * from CURRENT_SCHEMA_VERSION (the migration-chain head, which stays 2 because
+ * v2→v3/v3→v4 are no-ops). This is the value advertised to the community
+ * publish-gate / boot catalog-probe ("am I new enough to publish?").
+ *
+ * MAINTENANCE CONTRACT: bump this whenever `schemaVersionForPayload()` learns
+ * to stamp a new (higher) version — otherwise the publish gate will reject the
+ * very shapes this runtime just learned to produce, one version up. The
+ * regression test below pins MAX_KNOWN >= the highest content-stamp.
+ */
+export const MAX_KNOWN_SCHEMA_VERSION = 4;
+
+/**
  * Community catalog version for the SP2b nested multi-pick TEXT grammar
  * (`{N-M~$$sep$$…}` — range count and/or the `~` independent flag).
  *

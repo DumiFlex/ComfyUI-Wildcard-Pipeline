@@ -10,7 +10,7 @@ import { useUiStore } from "./stores/uiStore";
 import { useTweaksStore } from "./stores/tweaksStore";
 import { api as managerApi } from "./api/client";
 import {
-  CURRENT_SCHEMA_VERSION,
+  MAX_KNOWN_SCHEMA_VERSION,
   installEnvelope,
   type CollisionDecision,
   type InstallCollision,
@@ -44,10 +44,13 @@ app.mount("#app");
 
    `abi` is a coarse version on the bridge contract itself. Bump
    when the shape changes incompatibly (add a field = no bump; remove
-   or rename a field = bump). `schemaVersion` is the entity-payload
-   schema the engine accepts today. The embed compares its envelope's
-   `schema_version` to this number: greater = "update extension to
-   install"; less or equal = migrations run during install.
+   or rename a field = bump). `schemaVersion` advertises the HIGHEST
+   schema version this runtime can read + write (MAX_KNOWN, currently
+   4) — NOT the migration-chain head (CURRENT, 2). The community
+   publish-gate checks `advertised < minCompatible` (its breaking
+   floor), so advertising the support ceiling is what lets the gate
+   clear; advertising the chain head wrongly reported the runtime as
+   behind. See `migrations.ts` for the CURRENT-vs-MAX_KNOWN fork.
 
    Threat model: same-origin globals are readable by every script
    running in this document — other ComfyUI extensions already have
@@ -122,7 +125,7 @@ window.__wpcRuntime = {
   // markPublished is a brand-new optional method the embed guards on.
   // Adding fields/methods is non-breaking; bump only on remove/rename.
   abi: 1,
-  schemaVersion: CURRENT_SCHEMA_VERSION,
+  schemaVersion: MAX_KNOWN_SCHEMA_VERSION,
   install: (envelope, opts) => installEnvelope(
     { envelope },
     {
