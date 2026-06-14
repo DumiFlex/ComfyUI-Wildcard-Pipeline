@@ -369,8 +369,14 @@ function varReadsOf(m: ModuleEntry): string[] {
  *  matched but not captured because the scanner only cares about
  *  reachability, not the filter contents. Kept in sync with
  *  `engine/syntax/tokenize.py:_REF_RE` so the scanner's reach-set
- *  walker recognises every form the engine resolver accepts. */
-const REF_TOKEN_RE = /@\{([0-9a-f]{8})(?:#[^#:}@{]*)?(?::[^}]*)?\}/g;
+ *  walker recognises every form the engine resolver accepts.
+ *
+ *  Exported so the upload-dependency detector
+ *  (`manager/import-export/dependencies.ts`) scans the SAME `@{8hex}`
+ *  token shape — a single shared regex, never a forked second copy.
+ *  Always consume via `String.matchAll` (the `g` flag makes `.exec`
+ *  stateful AND trips the security pre-tool hook). */
+export const REF_TOKEN_RE = /@\{([0-9a-f]{8})(?:#[^#:}@{]*)?(?::[^}]*)?\}/g;
 
 /** Extract every nested `@{uuid}` ref a wildcard module would walk at
  *  runtime — currently only the option `value` strings. Used by the
