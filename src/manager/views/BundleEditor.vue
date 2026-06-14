@@ -112,7 +112,7 @@ export function computeHasDangling(
  *   /bundles/new            → create-mode (disabled Save, points user to Context widget)
  *   /bundles/:id/edit       → edit-mode
  */
-import { computed, onMounted, ref, toRaw } from "vue";
+import { computed, onMounted, ref, toRaw, watch } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import type { SaveState, EditorFieldError } from "../components/EditorFrame.types";
 import { useRouter } from "vue-router";
@@ -126,6 +126,7 @@ import ColorPicker from "../components/ColorPicker.vue";
 import BundleChildRow from "../components/BundleChildRow.vue";
 import BundleChildPane from "../components/BundleChildPane.vue";
 import BundleAddChildModal from "../components/BundleAddChildModal.vue";
+import BundleReattachSection from "../components/BundleReattachSection.vue";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
@@ -148,6 +149,13 @@ import {
 } from "../../components/context/bundles/extract-to-library";
 import { installEnvelope } from "../import-export/install";
 import { api } from "../api/client";
+import {
+  fetchCommunityPostDetail,
+  downloadCommunityVersion,
+  type CommunityDepEdge,
+} from "../community/community-posts";
+import { collectTransitiveDeps } from "../community/transitive-deps";
+import { downloadDepsForDangling } from "../community/download-and-reattach";
 
 const props = defineProps<{ id?: string }>();
 
@@ -537,6 +545,185 @@ const hasDanglingChildren = computed<boolean>(() =>
   ),
 );
 
+// ── Manual per-child reattach (Feature: bundle analog of constraint
+//    ConstraintReattachSection) ─────────────────────────────────────────
+//
+// A frozen child can dangle: its `id` no longer resolves in the library
+// ("Child N: target module/bundle missing"). The section above the CHILDREN
+// card lets the user re-point a dangling child at a live local row of the
+// matching kind (leaf module → MODULE catalog, `type:"bundle"` ref → BUNDLE
+// catalog — same discrimination `hasDanglingChildren`/`validateBundle` use),
+// OR pull the missing dep from the community when this bundle's post declares
+// an edge providing it.
+
+/** One descriptor per dangling child for the reattach section. A child
+ *  dangles when its id isn't in the matching catalog id-set; `cachedName`
+ *  prefers the snapshot's `meta.name`, falling back to the raw id. */
+const danglingChildren = computed(() => {
+  const modIds = new Set(moduleStore.catalog.map((m) => m.id));
+  const bunIds = new Set(store.catalog.map((b) => b.id));
+  const out: Array<{ childId: string; type: string; cachedName: string }> = [];
+  for (const c of children.value) {
+    if (typeof c.id !== "string") continue;
+    const type = typeof c.type === "string" ? c.type : "";
+    const ids = type === "bundle" ? bunIds : modIds;
+    if (ids.has(c.id)) continue;
+    const meta = c.meta as { name?: string } | undefined;
+    const cachedName =
+      meta?.name ?? (typeof c.name === "string" ? c.name : undefined) ?? c.id;
+    out.push({ childId: c.id, type, cachedName });
+  }
+  return out;
+});
+
+const moduleCandidates = computed(() =>
+  moduleStore.catalog.map((m) => ({ id: m.id, name: m.name })),
+);
+const bundleCandidates = computed(() =>
+  store.catalog.map((b) => ({ id: b.id, name: b.name })),
+);
+
+/** The bundle post's OWN dependency edges, lazily fetched once a child
+ *  dangles AND the bundle was installed from a community post. `null` =
+ *  not yet fetched; `[]` = fetched (or fetch failed → "no downloadable
+ *  deps"). Mirrors ConstraintEditor.constraintPostDeps. */
+const bundlePostDeps = ref<CommunityDepEdge[] | null>(null);
+
+/** Child ids whose missing id IS provided by a post dependency edge — i.e.
+ *  the dep is actually pullable. Gates the section's per-child download
+ *  button. */
+const downloadableChildIds = computed<string[]>(() => {
+  const deps = bundlePostDeps.value;
+  if (!deps) return [];
+  const providable = new Set(
+    deps.map((e) => e.module_id).filter((x): x is string => typeof x === "string"),
+  );
+  return danglingChildren.value
+    .map((c) => c.childId)
+    .filter((id) => providable.has(id));
+});
+
+// Lazily populate `bundlePostDeps` the first time a child dangles on a
+// community-installed bundle. Fetch errors degrade to `[]` so the manual
+// reattach dropdown still works.
+watch(
+  [hasDanglingChildren, currentRow],
+  async ([dangling, row]) => {
+    if (!dangling) return;
+    if (bundlePostDeps.value !== null) return;
+    const slug = row?.community_post_slug;
+    if (!slug) return;
+    try {
+      const detail = await fetchCommunityPostDetail(slug);
+      bundlePostDeps.value = detail.dependencies;
+    } catch {
+      bundlePostDeps.value = [];
+    }
+  },
+  { immediate: true },
+);
+
+/** Manual reattach confirmed: rewrite the child's whole-string `id` (and any
+ *  intra-bundle ref) from the dead id to the picked live id via walkRemap,
+ *  re-cache its display name to the picked candidate, then persist. */
+async function onReattach({ childId, newId, newName }: { childId: string; newId: string; newName: string }): Promise<void> {
+  const remapped = relinkChildren(toRaw(children.value), { [childId]: newId });
+  // Refresh the relinked child's cached display name so the row + a later
+  // re-deletion reflect the new target rather than the stale snapshot name.
+  children.value = remapped.map((c) => {
+    if (c.id !== newId) return c;
+    const next = { ...c };
+    if (typeof next.name === "string") next.name = newName;
+    const meta = next.meta as { name?: string } | undefined;
+    if (meta && typeof meta === "object") next.meta = { ...meta, name: newName };
+    return next;
+  }) as typeof children.value;
+  await save();
+}
+
+// Confirm-dialog state for the download flow (mirror ConstraintEditor).
+const downloadConfirmOpen = ref(false);
+const downloadConfirmBody = ref("");
+const pendingDownloadChildId = ref<string | null>(null);
+const downloading = ref(false);
+
+async function onDownloadReattach({ childId }: { childId: string }): Promise<void> {
+  if (!bundlePostDeps.value) return;
+  const provider = bundlePostDeps.value.find((e) => e.module_id === childId);
+  if (!provider) return;
+  // Resolve the transitive closure up front so the confirm body lists exactly
+  // what's about to be pulled (the orchestrator re-walks it at install time).
+  const { slugs, capped } = await collectTransitiveDeps(
+    [provider.slug],
+    async (s) => (await fetchCommunityPostDetail(s)).dependencies.map((e) => e.slug).filter(Boolean),
+  );
+  downloadConfirmBody.value =
+    `Download ${slugs.length} post(s) from the community:\n` +
+    slugs.map((s) => `• ${s}`).join("\n") +
+    (capped ? "\n(+ more — list capped)" : "");
+  pendingDownloadChildId.value = childId;
+  downloadConfirmOpen.value = true;
+}
+
+async function confirmDownload(): Promise<void> {
+  downloadConfirmOpen.value = false;
+  downloading.value = true;
+  try {
+    const childId = pendingDownloadChildId.value!;
+    const res = await downloadDepsForDangling({
+      danglingUuid: childId,
+      constraintDeps: bundlePostDeps.value!,
+      fetchDetail: fetchCommunityPostDetail,
+      download: downloadCommunityVersion,
+      install: (env, deps, origin) =>
+        installEnvelope({ envelope: env }, { importExport: api.importExport, dependencies: deps, origin }),
+    });
+    if (!res.ok) {
+      toast.push({
+        severity: "error",
+        summary: "Download failed",
+        detail: res.error ?? "Could not download the missing dependency.",
+        life: 4000,
+      });
+      return;
+    }
+    // Pull the freshly-installed rows into both catalogs so resolution can see
+    // the new child (a downloaded dep may be a module OR a bundle).
+    try {
+      await Promise.all([moduleStore.fetchCatalog(), store.fetchCatalog()]);
+    } catch {
+      // Non-fatal — the install committed; a stale catalog self-heals.
+    }
+    const stillDangling = danglingChildren.value.some((c) => c.childId === childId);
+    if (!stillDangling) {
+      // Resolved by local landing — the dep installed at its original id, so
+      // the child now resolves. Nothing more to do; banner clears.
+      toast.push({ severity: "success", summary: "Dependency installed", detail: `Pulled ${res.pulled.length} post(s).`, life: 3000 });
+      return;
+    }
+    // Collision-rename tail: the dep landed under a NEW id (install-as-new on
+    // an id clash), so reattach explicitly to the renamed local row found by
+    // its community origin slug. Search both catalogs — the provider may be a
+    // module or a bundle.
+    const localMod = moduleStore.catalog.find((m) => m.community_post_slug === res.providerSlug);
+    const localBun = store.catalog.find((b) => b.community_post_slug === res.providerSlug);
+    const local = localMod ?? localBun;
+    if (local) {
+      await onReattach({ childId, newId: local.id, newName: local.name });
+      toast.push({ severity: "success", summary: "Dependency installed & reattached", detail: `Pulled ${res.pulled.length} post(s).`, life: 3000 });
+    } else {
+      toast.push({
+        severity: "warn",
+        summary: "Installed, but still unresolved",
+        detail: "Downloaded the dependency but couldn't auto-reattach — pick it manually.",
+        life: 5000,
+      });
+    }
+  } finally {
+    downloading.value = false;
+  }
+}
+
 /**
  * Extract this bundle's leaf children into standalone library modules
  * (Feature 4). Runs the pure `extractBundleChildren` transform (fresh
@@ -886,6 +1073,16 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
         </IdentityCard>
       </div>
 
+      <BundleReattachSection
+        v-if="hasDanglingChildren"
+        :dangling-children="danglingChildren"
+        :module-candidates="moduleCandidates"
+        :bundle-candidates="bundleCandidates"
+        :downloadable-child-ids="downloadableChildIds"
+        @reattach="onReattach"
+        @downloadreattach="onDownloadReattach"
+      />
+
       <Card
         :title="`Children (${children.length})`"
         :subtitle="childrenSubtitle"
@@ -977,6 +1174,16 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
       variant="danger"
       @confirm="onConfirmLeave"
       @cancel="onCancelLeave"
+    />
+    <!-- Confirm pulling a missing child dependency (+ its closure) from the
+         community before any network/install side effect. -->
+    <ConfirmDialog
+      :visible="downloadConfirmOpen"
+      title="Download dependencies"
+      :body="downloadConfirmBody"
+      confirm-label="Download & install"
+      @confirm="confirmDownload"
+      @cancel="downloadConfirmOpen = false"
     />
   </EditorFrame>
 </template>
