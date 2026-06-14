@@ -327,6 +327,10 @@ export function publishToCommunity(
   const b64 = textToB64(JSON.stringify(pub.payload));
   const hash = new URLSearchParams();
   hash.set("payload", b64);
+  // The embed reads this and forwards it to the publish POST so the server
+  // stamps the real content-derived version instead of grace-defaulting to 1
+  // (a v2+ payload, e.g. wildcard sub_categories, is rejected at v1).
+  hash.set("schema_version", String(schemaVersionForPayload(pub.payload)));
   if (pub.name) hash.set("name", pub.name);
   if (pub.description) hash.set("description", pub.description);
   // Engine stores 'safe'/'nsfw'; community publish form takes 'sfw'/'nsfw'.

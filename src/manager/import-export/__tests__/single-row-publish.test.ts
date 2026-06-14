@@ -54,10 +54,12 @@ function catalogRow(parts: { id: string; name: string; community_post_slug?: str
 function constraintPub(
   sourceId: string | null,
   targetId: string | null,
+  targetSelect?: Record<string, unknown>,
 ): PublishablePayload {
   const inner: Record<string, unknown> = { matrix: {}, exceptions: [] };
   if (sourceId !== null) inner.source_wildcard_id = sourceId;
   if (targetId !== null) inner.target_wildcard_id = targetId;
+  if (targetSelect !== undefined) inner.target_select = targetSelect;
   const payload: Record<string, unknown> = {
     id: "cn-001abc",
     type: "constraint",
@@ -126,5 +128,40 @@ describe("publishToCommunity — dependency hash injection", () => {
 
     expect(hashParam("dependencies")).toBeNull();
     expect(decodeHashParam("unmet_deps")).toEqual(["Source WC", "Target WC"]);
+  });
+});
+
+/**
+ * The embed forwards the content-derived `schema_version` into the publish
+ * POST so the server stamps the real version instead of grace-defaulting to 1
+ * (which rejects a v2+ payload). `schemaVersionForPayload` resolves to 2 for a
+ * plain CURRENT payload (no range text, default reach) and 4 when a constraint
+ * carries a non-default `target_select` reach selector. These pin that the
+ * built hash carries the stamp as a plain string.
+ */
+describe("publishToCommunity — schema_version hash stamp", () => {
+  beforeEach(() => {
+    window.location.hash = "";
+  });
+  afterEach(() => {
+    window.location.hash = "";
+    vi.restoreAllMocks();
+  });
+
+  it("stamps schema_version 2 for a plain CURRENT publishable", async () => {
+    publishToCommunity(constraintPub("wc-aaa", "wc-bbb"), routerStub(), []);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(hashParam("schema_version")).toBe("2");
+  });
+
+  it("stamps schema_version 4 for a constraint with a non-default target_select reach", async () => {
+    const reach = { mode: "pick", picks: ["target-a"] };
+    publishToCommunity(constraintPub("wc-aaa", "wc-bbb", reach), routerStub(), []);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(hashParam("schema_version")).toBe("4");
   });
 });
