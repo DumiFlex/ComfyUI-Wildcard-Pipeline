@@ -21,6 +21,12 @@ describe("downloadDepsForDangling", () => {
     expect(out.providerSlug).toBe("author/subject");
     expect(out.pulled).toEqual(["author/subject"]);
     expect(install).toHaveBeenCalledTimes(1);
+    // Origin-stamped so the installed dep gets the community badge + update tracking.
+    expect(install).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      { post_slug: "author/subject", version_number: 1 },
+    );
     expect(out.ok).toBe(true);
   });
 

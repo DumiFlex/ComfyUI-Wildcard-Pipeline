@@ -487,8 +487,8 @@ async function confirmDownload(): Promise<void> {
       constraintDeps: constraintPostDeps.value!,
       fetchDetail: fetchCommunityPostDetail,
       download: downloadCommunityVersion,
-      install: (env, deps) =>
-        installEnvelope({ envelope: env }, { importExport: api.importExport, dependencies: deps }),
+      install: (env, deps, origin) =>
+        installEnvelope({ envelope: env }, { importExport: api.importExport, dependencies: deps, origin }),
     });
     if (!res.ok) {
       downloadError.value = res.error ?? "Could not download the missing dependency.";

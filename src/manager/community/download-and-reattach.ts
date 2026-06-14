@@ -24,8 +24,14 @@ export interface DownloadDepsArgs {
   constraintDeps: CommunityDepEdge[];
   fetchDetail: (slug: string) => Promise<CommunityPostDetail>;
   download: (slug: string) => Promise<CommunityDownload>;
-  /** Install ONE downloaded post. Wraps the UI's installEnvelope closure. */
-  install: (envelope: unknown, deps: InstallDependencyEdge[]) => Promise<{ ok: boolean; error?: { message: string } }>;
+  /** Install ONE downloaded post, origin-stamped (post_slug + version) so the
+   *  installed row gets the "installed from community" badge + update tracking.
+   *  Wraps the UI's installEnvelope closure. */
+  install: (
+    envelope: unknown,
+    deps: InstallDependencyEdge[],
+    origin: { post_slug: string; version_number: number },
+  ) => Promise<{ ok: boolean; error?: { message: string } }>;
   maxPosts?: number;
 }
 
@@ -86,7 +92,10 @@ export async function downloadDepsForDangling(
     const deps: InstallDependencyEdge[] = detail.dependencies
       .filter((e) => typeof e.module_id === "string" && e.module_id)
       .map((e) => ({ module_id: e.module_id, slug: e.slug }));
-    const res = await args.install(envelopeFor(dl.payload), deps);
+    const res = await args.install(envelopeFor(dl.payload), deps, {
+      post_slug: slug,
+      version_number: dl.version_number,
+    });
     if (!res.ok) {
       return { ok: false, providerSlug: provider.slug, pulled, capped,
         error: res.error?.message ?? `install failed for ${slug}` };
