@@ -30,6 +30,7 @@ import type {
   ConstraintException,
   ConstraintPayload,
   DerivationPayload,
+  ModuleRow,
   ModuleType,
   WildcardPayload,
 } from "../api/types";
@@ -122,4 +123,73 @@ export function listReferencedUuids(module: ReferencingModule): string[] {
     out.push(uuid);
   }
   return out;
+}
+
+/** A referenced wildcard the publishing user has ALREADY published to the
+ *  community — keyed by its community post slug so the embed can prefill the
+ *  dependency row, pre-verified "exists". `optional` is always `false` here:
+ *  a detected ref is a hard dependency of the module being published (the
+ *  user can still toggle it optional in the embed). */
+export interface ResolvedDependency {
+  slug: string;
+  optional: false;
+}
+
+/** A referenced wildcard that is NOT on the community (no `community_post_slug`
+ *  on its catalog row, or absent from the catalog entirely). The embed warns
+ *  about these — a downloader couldn't reattach them. `name` is the catalog
+ *  row's display name, falling back to the raw uuid when unknown. */
+export interface UnmetDependency {
+  name: string;
+}
+
+/** The split of a module's referenced uuids into prefill-able dependencies
+ *  (published) and unmet refs (warn). See `resolveDependencies`. */
+export interface ResolvedDependencies {
+  dependencies: ResolvedDependency[];
+  unmet: UnmetDependency[];
+}
+
+/**
+ * Resolve the uuids from `listReferencedUuids` against the library `catalog`
+ * (the unfiltered `useModuleStore().catalog` — passed in so this stays a pure,
+ * store-free function the publish flow + tests can call directly):
+ *   - uuid → catalog row WITH a non-blank `community_post_slug` → a
+ *     **dependency** `{ slug, optional: false }` (the embed prefills it).
+ *   - uuid → catalog row WITHOUT a slug, OR uuid absent from the catalog → an
+ *     **unmet** `{ name }` (the embed warns). Name is the row's display name,
+ *     or the raw uuid when the row is unknown.
+ *
+ * Both lists are de-duplicated independently: dependencies by `slug`, unmet by
+ * `name` (two different uuids that resolve to the same slug/name collapse to a
+ * single entry). Insertion order is preserved (first occurrence wins).
+ */
+export function resolveDependencies(
+  refUuids: string[],
+  catalog: ModuleRow[],
+): ResolvedDependencies {
+  const byId = new Map<string, ModuleRow>();
+  for (const row of catalog) byId.set(row.id, row);
+
+  const dependencies: ResolvedDependency[] = [];
+  const unmet: UnmetDependency[] = [];
+  const seenSlugs = new Set<string>();
+  const seenNames = new Set<string>();
+
+  for (const uuid of refUuids) {
+    const row = byId.get(uuid);
+    const slug = row?.community_post_slug;
+    if (typeof slug === "string" && slug.trim() !== "") {
+      if (seenSlugs.has(slug)) continue;
+      seenSlugs.add(slug);
+      dependencies.push({ slug, optional: false });
+    } else {
+      const name = row?.name ?? uuid;
+      if (seenNames.has(name)) continue;
+      seenNames.add(name);
+      unmet.push({ name });
+    }
+  }
+
+  return { dependencies, unmet };
 }

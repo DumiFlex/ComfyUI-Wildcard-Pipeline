@@ -21,6 +21,11 @@
 import type { Router } from "vue-router";
 import type { BundleRow, ModuleRow } from "../api/types";
 import {
+  listReferencedUuids,
+  resolveDependencies,
+  type ReferencingModule,
+} from "./dependencies";
+import {
   CURRENT_SCHEMA_VERSION,
   SP2B_SCHEMA_VERSION,
   SP3_REACH_SCHEMA_VERSION,
@@ -293,10 +298,20 @@ function textToB64(text: string): string {
  * the browser threw away the in-extension bearer token (different
  * origin storage) and forced a fresh device-flow login. Routing
  * inside the SPA keeps auth alive + the user inside ComfyUI.
+ *
+ * Dependency-aware (B2b): the published module's referenced wildcards are
+ * auto-detected (`listReferencedUuids`) and resolved against `catalog` (the
+ * unfiltered `useModuleStore().catalog`, passed in — this helper stays
+ * framework-free, the `.vue` callers wire the store). The resolution is
+ * injected into the hash as two extra params the embed hydrates from
+ * (`dependencies` prefills published deps, `unmet_deps` warns about the rest);
+ * see the hash-building block below. `catalog` defaults to `[]` so callers
+ * that don't (yet) pass it just omit both params.
  */
 export function publishToCommunity(
   pub: PublishablePayload,
   router: Router,
+  catalog: ModuleRow[] = [],
 ): void {
   // Validate before navigation — same validator that consumers run at
   // install-time strict validation (spec §5f). Throws if invalid.
@@ -323,6 +338,35 @@ export function publishToCommunity(
   // and "fork foreign post" flows.
   if (pub.community_post_slug) {
     hash.set("origin_slug", pub.community_post_slug);
+  }
+  // Dependency auto-detect (B2b): the engine-row `pub.payload` carries the
+  // module's `id`/`type` at top level + the type-specific content nested
+  // under `payload.payload` — exactly the `{id, type, payload}` shape
+  // `listReferencedUuids` reads. Bundles (no `type`, `children` instead of
+  // `payload`) resolve to `[]` refs, so both params are simply omitted.
+  // Resolve against the live catalog: published refs (have a community slug)
+  // become `dependencies` the embed prefills; the rest become `unmet_deps`
+  // it warns about. Same b64 encoding as `payload=` (textToB64); appended
+  // ONLY when non-empty so the no-dependency case leaves the hash unchanged.
+  const inner = pub.payload as {
+    id?: unknown;
+    type?: unknown;
+    payload?: Record<string, unknown>;
+  };
+  const referencing: ReferencingModule = {
+    id: typeof inner.id === "string" ? inner.id : "",
+    type: inner.type as ReferencingModule["type"],
+    payload: inner.payload ?? {},
+  };
+  const { dependencies, unmet } = resolveDependencies(
+    listReferencedUuids(referencing),
+    catalog,
+  );
+  if (dependencies.length > 0) {
+    hash.set("dependencies", textToB64(JSON.stringify(dependencies)));
+  }
+  if (unmet.length > 0) {
+    hash.set("unmet_deps", textToB64(JSON.stringify(unmet.map((u) => u.name))));
   }
   // Navigate via the router first, then set the hash directly via
   // window.location.hash. Passing the hash through router.push lets

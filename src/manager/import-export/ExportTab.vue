@@ -575,7 +575,13 @@ const singleSelected = computed<PublishablePayload | null>(() => {
 });
 
 function publishToCommunity() {
-  if (singleSelected.value) publishToCommunityShared(singleSelected.value, router);
+  // `modules` is this tab's full module list (all subtypes) — the catalog
+  // `publishToCommunityShared` resolves auto-detected dependency refs against
+  // (B2b). A referenced wildcard always lives here, so deps/unmet resolve
+  // correctly; bundles carry no refs so it's a no-op for them.
+  if (singleSelected.value) {
+    publishToCommunityShared(singleSelected.value, router, modules.value);
+  }
 }
 
 function clearAll() {

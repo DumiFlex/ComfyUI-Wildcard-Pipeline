@@ -16,6 +16,7 @@ import { useRouter } from "vue-router";
 import type { BundleRow, ModuleRow } from "../api/types";
 import Button from "./ui/Button.vue";
 import { useToast } from "../composables/useToast";
+import { useModuleStore } from "../stores/moduleStore";
 import {
   buildBundlePublishable,
   buildModulePublishable,
@@ -40,6 +41,7 @@ interface Props {
 const props = defineProps<Props>();
 const toast = useToast();
 const router = useRouter();
+const moduleStore = useModuleStore();
 
 /** Build the publishable payload. Bundle children ship as verbatim
  *  widget snapshots (history stripped); modules ship as engine rows. */
@@ -52,7 +54,9 @@ function publishablePayload(): PublishablePayload {
 
 function onPublish() {
   try {
-    publishToCommunity(publishablePayload(), router);
+    // Pass the unfiltered catalog so the publish hash carries auto-detected
+    // dependencies (B2b). Bundles resolve to no refs, so it's a no-op there.
+    publishToCommunity(publishablePayload(), router, moduleStore.catalog);
   } catch (e) {
     toast.push({
       severity: "error",

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { listReferencedUuids, type ReferencingModule } from "../dependencies";
+import { listReferencedUuids, resolveDependencies, type ReferencingModule } from "../dependencies";
+import type { ModuleRow } from "../../api/types";
 
 /** Minimal module-shape builder. `listReferencedUuids` reads only
  *  `id` / `type` / `payload`, so the test fixtures carry just those —
@@ -162,5 +163,66 @@ describe("listReferencedUuids", () => {
     it("a constraint with no ids and no exceptions returns []", () => {
       expect(listReferencedUuids(mod({ id: "cccc1111", type: "constraint", payload: {} }))).toEqual([]);
     });
+  });
+});
+
+/** Minimal catalog-row builder. `resolveDependencies` reads only `id`,
+ *  `name`, and `community_post_slug` off each `ModuleRow`, so the fixtures
+ *  carry just those (cast to the full row type). */
+function row(parts: { id: string; name: string; community_post_slug?: string | null }): ModuleRow {
+  return parts as unknown as ModuleRow;
+}
+
+describe("resolveDependencies", () => {
+  it("maps a ref whose catalog row carries a community_post_slug to a dependency", () => {
+    const catalog = [row({ id: "aaaa1111", name: "Hair", community_post_slug: "hair-styles" })];
+    expect(resolveDependencies(["aaaa1111"], catalog)).toEqual({
+      dependencies: [{ slug: "hair-styles", optional: false }],
+      unmet: [],
+    });
+  });
+
+  it("maps a ref whose catalog row has no slug to an unmet entry (by name)", () => {
+    const catalog = [row({ id: "bbbb2222", name: "Local Colors", community_post_slug: null })];
+    expect(resolveDependencies(["bbbb2222"], catalog)).toEqual({
+      dependencies: [],
+      unmet: [{ name: "Local Colors" }],
+    });
+  });
+
+  it("maps a ref absent from the catalog to an unmet entry keyed by the uuid", () => {
+    expect(resolveDependencies(["cccc3333"], [])).toEqual({
+      dependencies: [],
+      unmet: [{ name: "cccc3333" }],
+    });
+  });
+
+  it("splits a mix of published, unpublished, and absent refs", () => {
+    const catalog = [
+      row({ id: "aaaa1111", name: "Hair", community_post_slug: "hair-styles" }),
+      row({ id: "bbbb2222", name: "Local Colors", community_post_slug: null }),
+    ];
+    expect(resolveDependencies(["aaaa1111", "bbbb2222", "cccc3333"], catalog)).toEqual({
+      dependencies: [{ slug: "hair-styles", optional: false }],
+      unmet: [{ name: "Local Colors" }, { name: "cccc3333" }],
+    });
+  });
+
+  it("dedupes dependencies by slug and unmet by name", () => {
+    const catalog = [
+      row({ id: "aaaa1111", name: "Hair", community_post_slug: "hair-styles" }),
+      row({ id: "aaaa2222", name: "Hair Alt", community_post_slug: "hair-styles" }),
+      row({ id: "bbbb1111", name: "Dup Unmet", community_post_slug: null }),
+      row({ id: "bbbb2222", name: "Dup Unmet", community_post_slug: null }),
+    ];
+    const refs = ["aaaa1111", "aaaa1111", "aaaa2222", "bbbb1111", "bbbb2222", "zzzz9999", "zzzz9999"];
+    expect(resolveDependencies(refs, catalog)).toEqual({
+      dependencies: [{ slug: "hair-styles", optional: false }],
+      unmet: [{ name: "Dup Unmet" }, { name: "zzzz9999" }],
+    });
+  });
+
+  it("returns empty arrays for no refs", () => {
+    expect(resolveDependencies([], [])).toEqual({ dependencies: [], unmet: [] });
   });
 });
