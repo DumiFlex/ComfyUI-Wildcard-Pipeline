@@ -80,6 +80,10 @@ declare global {
            *  version_number} when invoking install via the community
            *  Install / Install vN buttons. */
           origin?: InstallOrigin;
+          /** Dependency edges from the installing community post (module_id +
+           *  slug). Drives install-time reference reattachment in
+           *  installEnvelope. Omitted → reattach no-ops. */
+          dependencies?: Array<{ module_id?: string; slug: string }>;
         },
       ) => Promise<InstallResult>;
       /** Publish-writeback. The embed calls this AFTER it successfully
@@ -109,9 +113,9 @@ declare global {
 function snapshotLibrary(): LibrarySnapshot {
   const moduleStore = useModuleStore();
   const bundleStore = useBundleStore();
-  const modules = new Map<string, { id: string; name: string; type?: string }>();
+  const modules = new Map<string, { id: string; name: string; type?: string; community_post_slug?: string }>();
   for (const m of moduleStore.catalog) {
-    modules.set(m.id, { id: m.id, name: m.name, type: m.type });
+    modules.set(m.id, { id: m.id, name: m.name, type: m.type, community_post_slug: m.community_post_slug ?? undefined });
   }
   const bundles = new Map<string, { id: string; name: string }>();
   for (const b of bundleStore.catalog) {
@@ -133,6 +137,7 @@ window.__wpcRuntime = {
       library: snapshotLibrary(),
       ...(opts?.resolveCollisions ? { resolveCollisions: opts.resolveCollisions } : {}),
       ...(opts?.origin ? { origin: opts.origin } : {}),
+      ...(opts?.dependencies ? { dependencies: opts.dependencies } : {}),
     },
   ),
   markPublished: async (localId, kind, postSlug, versionNumber) => {
