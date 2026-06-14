@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Router } from "vue-router";
 import { publishToCommunity, type PublishablePayload } from "../single-row-publish";
-import type { ModuleRow } from "../../api/types";
+import type { BundleRow, ModuleRow } from "../../api/types";
 
 /**
  * B2b — `publishToCommunity` auto-detects the published module's dependency
@@ -128,6 +128,88 @@ describe("publishToCommunity — dependency hash injection", () => {
 
     expect(hashParam("dependencies")).toBeNull();
     expect(decodeHashParam("unmet_deps")).toEqual(["Source WC", "Target WC"]);
+  });
+});
+
+/**
+ * BR-A2 — a bundle's INNER-BUNDLE children are dependencies too. They resolve
+ * against the BUNDLE catalog (4th arg), mirroring how a constraint's wildcard
+ * refs resolve against the module catalog: a published inner bundle → a
+ * recorded `dependencies` edge; an unpublished one → an `unmet_deps` warning.
+ */
+/** Bundle-catalog row — `bundleChildBundleRefs` + `resolveDependencies` read
+ *  id/name/slug off a BundleRow. The 4th `publishToCommunity` arg is `BundleRow[]`. */
+function bundleCatalogRow(parts: { id: string; name: string; community_post_slug?: string | null }): BundleRow {
+  return parts as unknown as BundleRow;
+}
+
+function bundlePub(innerBundleIds: string[]): PublishablePayload {
+  const payload: Record<string, unknown> = {
+    id: "bd-outer1",
+    name: "outer-bundle",
+    description: "",
+    color: null,
+    category_id: null,
+    tags: [],
+    is_favorite: false,
+    children: [
+      // A leaf widget child (NOT a dependency) + the inner-bundle refs.
+      { id: "wc-leaf1", type: "wildcard", meta: { name: "leaf" }, payload: {} },
+      ...innerBundleIds.map((id) => ({ id, type: "bundle", name: id, color: null })),
+    ],
+  };
+  return {
+    payload,
+    name: "outer-bundle",
+    description: "",
+    content_rating: "safe",
+    tags: [],
+    community_post_slug: null,
+  };
+}
+
+describe("publishToCommunity — inner-bundle dependency hash injection (BR-A2)", () => {
+  beforeEach(() => {
+    window.location.hash = "";
+  });
+  afterEach(() => {
+    window.location.hash = "";
+    vi.restoreAllMocks();
+  });
+
+  it("records a published inner bundle as a dependency edge", async () => {
+    const bundleCatalog = [
+      bundleCatalogRow({ id: "bd-inner1", name: "Inner Bundle", community_post_slug: "inner-bundle" }),
+    ];
+    // 3rd arg (module catalog) empty — inner-bundle refs use the 4th arg.
+    publishToCommunity(bundlePub(["bd-inner1"]), routerStub(), [], bundleCatalog);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(decodeHashParam("dependencies")).toEqual([{ slug: "inner-bundle", optional: false }]);
+    expect(hashParam("unmet_deps")).toBeNull();
+  });
+
+  it("warns about an unpublished inner bundle via unmet_deps", async () => {
+    const bundleCatalog = [
+      bundleCatalogRow({ id: "bd-inner1", name: "Inner Bundle", community_post_slug: null }),
+    ];
+    publishToCommunity(bundlePub(["bd-inner1"]), routerStub(), [], bundleCatalog);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(hashParam("dependencies")).toBeNull();
+    expect(decodeHashParam("unmet_deps")).toEqual(["Inner Bundle"]);
+  });
+
+  it("omits both params for a bundle with no inner-bundle children", async () => {
+    publishToCommunity(bundlePub([]), routerStub(), [], []);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(hashParam("dependencies")).toBeNull();
+    expect(hashParam("unmet_deps")).toBeNull();
+    expect(hashParam("payload")).not.toBeNull();
   });
 });
 

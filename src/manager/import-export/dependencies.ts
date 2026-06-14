@@ -27,6 +27,7 @@
 
 import { REF_TOKEN_RE } from "../../extension/conflicts";
 import type {
+  BundleRow,
   ConstraintException,
   ConstraintPayload,
   DerivationPayload,
@@ -150,6 +151,19 @@ export interface ResolvedDependencies {
   unmet: UnmetDependency[];
 }
 
+/** The minimal catalog-row shape the dependency resolvers read: a stable `id`,
+ *  a display `name`, and the published signal `community_post_slug`. BOTH
+ *  `ModuleRow` (module wildcard refs) AND `BundleRow` (inner-bundle refs)
+ *  satisfy it — bundles resolve against the bundle catalog (BR-A2), and a
+ *  `BundleRow` carries no `type`, so the dialog's kind-icon falls back to the
+ *  bundle glyph. Kept structural so callers can pass either catalog without a
+ *  cast; the matched rows are returned as-is. */
+export interface CatalogRow {
+  id: string;
+  name?: string;
+  community_post_slug?: string | null;
+}
+
 /**
  * Resolve the uuids from `listReferencedUuids` against the library `catalog`
  * (the unfiltered `useModuleStore().catalog` — passed in so this stays a pure,
@@ -166,9 +180,9 @@ export interface ResolvedDependencies {
  */
 export function resolveDependencies(
   refUuids: string[],
-  catalog: ModuleRow[],
+  catalog: CatalogRow[],
 ): ResolvedDependencies {
-  const byId = new Map<string, ModuleRow>();
+  const byId = new Map<string, CatalogRow>();
   for (const row of catalog) byId.set(row.id, row);
 
   const dependencies: ResolvedDependency[] = [];
@@ -214,12 +228,52 @@ export function unmetDependencyRows(
   module: ReferencingModule,
   catalog: ModuleRow[],
 ): ModuleRow[] {
-  const byId = new Map<string, ModuleRow>();
+  return unmetRowsForRefs(listReferencedUuids(module), catalog);
+}
+
+/**
+ * The deduped `id`s of a bundle's INNER-BUNDLE children — every child whose
+ * `type === "bundle"` (a `{id, type:"bundle", name?, color?}` reference, see
+ * `validators/bundle/v1.ts`). Leaf module children (wildcard/constraint/…) and
+ * blank / non-string ids are skipped. First occurrence wins; a fresh array.
+ *
+ * These are the bundle's publish dependencies: a downloader can't reattach an
+ * inner bundle that isn't itself on the community, so the publish flow surfaces
+ * them in the SAME guided-publish dialog a constraint's wildcard refs use —
+ * resolved against the BUNDLE catalog (`bundleUnmetDependencyRows`), since inner
+ * bundles live in the bundle store, not the module store.
+ */
+export function bundleChildBundleRefs(
+  children: Array<{ id?: unknown; type?: unknown }>,
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const child of children) {
+    if (child?.type !== "bundle") continue;
+    const id = child.id;
+    if (typeof id !== "string" || id.trim() === "" || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+/**
+ * Shared resolver: the catalog rows for `refUuids` that EXIST in `catalog` but
+ * carry no `community_post_slug` (in-library, unpublished) — the gate set for
+ * the guided-publish dialog. Refs already published (non-blank slug) and refs
+ * absent from the catalog (dangling) are excluded. De-duplicated by id (first
+ * occurrence wins). Backs both `unmetDependencyRows` (module wildcard refs vs.
+ * the module catalog) and `bundleUnmetDependencyRows` (inner-bundle refs vs.
+ * the bundle catalog) — same published/unpublished/dangling split either way.
+ */
+function unmetRowsForRefs<T extends CatalogRow>(refUuids: string[], catalog: T[]): T[] {
+  const byId = new Map<string, T>();
   for (const r of catalog) byId.set(r.id, r);
 
-  const out: ModuleRow[] = [];
+  const out: T[] = [];
   const seen = new Set<string>();
-  for (const uuid of listReferencedUuids(module)) {
+  for (const uuid of refUuids) {
     if (seen.has(uuid)) continue;
     const row = byId.get(uuid);
     if (!row) continue; // dangling — not in the catalog, can't publish here.
@@ -229,4 +283,20 @@ export function unmetDependencyRows(
     out.push(row);
   }
   return out;
+}
+
+/**
+ * The inner-bundle children of `children` that are IN the bundle library but
+ * NOT yet on the community — the bundle analogue of `unmetDependencyRows`. Refs
+ * come from `bundleChildBundleRefs`; they're resolved against `bundleCatalog`
+ * (the unfiltered `useBundleStore().catalog`, passed in to keep this pure).
+ * Returns the matched `BundleRow`s (deduped by id) so the dialog renders each
+ * inner bundle's name + bundle kind icon (a `BundleRow` has no `type`, so the
+ * icon falls back to the bundle glyph).
+ */
+export function bundleUnmetDependencyRows(
+  children: Array<{ id?: unknown; type?: unknown }>,
+  bundleCatalog: BundleRow[],
+): BundleRow[] {
+  return unmetRowsForRefs(bundleChildBundleRefs(children), bundleCatalog);
 }

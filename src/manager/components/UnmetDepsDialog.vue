@@ -13,24 +13,29 @@
  * `publishToCommunity` (per-dep build, publish-anyway, reset). Mirrors
  * `ExportDepWarningModal`'s props+emits shape so the host wiring is uniform.
  */
-import type { ModuleRow } from "../api/types";
+import type { BundleRow, ModuleRow } from "../api/types";
 import { kindIcon } from "../../components/shared/kind-icons";
 import Modal from "./ui/Modal.vue";
 import Button from "./ui/Button.vue";
+
+/** A gated dependency row: a wildcard `ModuleRow` (module publish) or an
+ *  inner-bundle `BundleRow` (bundle publish, BR-A2). A `BundleRow` carries no
+ *  `type`, so the kind icon falls back to the bundle glyph. */
+type UnmetRow = ModuleRow | BundleRow;
 
 interface Props {
   open: boolean;
   /** Display name of the module the user is trying to publish. */
   moduleName: string;
   /** In-library, unpublished dependency rows to gate on. */
-  unmetRows: ModuleRow[];
+  unmetRows: UnmetRow[];
 }
 const props = defineProps<Props>();
 
 const emit = defineEmits<{
   (e: "update:open", v: boolean): void;
   /** User chose to publish ONE missing dependency first. */
-  (e: "publish-dep", row: ModuleRow): void;
+  (e: "publish-dep", row: UnmetRow): void;
   /** User chose to publish the module despite the unmet deps. */
   (e: "publish-anyway"): void;
   /** User dismissed the gate. */
@@ -52,6 +57,12 @@ function kindClass(kind: string): string {
   return KIND_CLASS[kind] ?? "bundle";
 }
 
+/** The row's kind for icon lookup. A `BundleRow` has no `type` field, so an
+ *  inner-bundle dep resolves to `"bundle"`. */
+function rowKind(row: UnmetRow): string {
+  return "type" in row && typeof row.type === "string" ? row.type : "bundle";
+}
+
 function onModalUpdateOpen(v: boolean): void {
   emit("update:open", v);
   if (!v) emit("cancel");
@@ -60,7 +71,7 @@ function onCancel(): void {
   emit("update:open", false);
   emit("cancel");
 }
-function onPublishDep(row: ModuleRow): void {
+function onPublishDep(row: UnmetRow): void {
   emit("publish-dep", row);
 }
 function onPublishAnyway(): void {
@@ -96,10 +107,10 @@ function onPublishAnyway(): void {
         >
           <span
             class="wp-row-type-icon"
-            :class="`wp-row-type-icon--${kindClass(row.type)}`"
+            :class="`wp-row-type-icon--${kindClass(rowKind(row))}`"
             aria-hidden="true"
           >
-            <i :class="kindIcon(row.type)" />
+            <i :class="kindIcon(rowKind(row))" />
           </span>
           <div class="wpc-unmet-deps__row-name">
             <span class="wpc-unmet-deps__row-text">{{ row.name }}</span>

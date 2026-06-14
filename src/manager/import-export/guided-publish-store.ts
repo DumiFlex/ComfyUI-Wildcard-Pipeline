@@ -29,8 +29,12 @@
 import { ref } from "vue";
 import { defineStore } from "pinia";
 import type { Router } from "vue-router";
-import type { ModuleRow } from "../api/types";
-import { unmetDependencyRows, type ReferencingModule } from "./dependencies";
+import type { BundleRow, ModuleRow } from "../api/types";
+import {
+  bundleUnmetDependencyRows,
+  unmetDependencyRows,
+  type ReferencingModule,
+} from "./dependencies";
 import {
   buildModulePublishable,
   publishToCommunity,
@@ -43,7 +47,8 @@ import {
  * extraction in `publishToCommunity` — the engine row carries `id`/`type` at
  * the top level with the type-specific content nested under `payload.payload`.
  * Bundles (no `type`, `children` instead of `payload`) yield a typeless
- * module whose `listReferencedUuids` resolves to [] → never gated.
+ * module whose `listReferencedUuids` resolves to [] → never gated as a MODULE;
+ * their inner-bundle deps are detected separately via `bundleUnmetDependencyRows`.
  */
 function toReferencingModule(pub: PublishablePayload): ReferencingModule {
   const inner = pub.payload as {
@@ -58,13 +63,23 @@ function toReferencingModule(pub: PublishablePayload): ReferencingModule {
   };
 }
 
+/** A publishable's engine-row `children` array iff it's a bundle (no `type`,
+ *  `children` instead of `payload.payload`). Empty array for modules. The
+ *  inner-bundle refs among these are the bundle's publish dependencies. */
+function bundleChildrenOf(pub: PublishablePayload): Array<{ id?: unknown; type?: unknown }> {
+  const children = (pub.payload as { children?: unknown }).children;
+  return Array.isArray(children) ? (children as Array<{ id?: unknown; type?: unknown }>) : [];
+}
+
 export const useGuidedPublishStore = defineStore("guidedPublish", () => {
   const open = ref<boolean>(false);
   /** The module the user is trying to publish — held so `publishAnyway`
    *  can forward it after the gate. */
   const pendingModule = ref<PublishablePayload | null>(null);
-  /** The in-library, unpublished dependency rows the dialog lists. */
-  const unmetRows = ref<ModuleRow[]>([]);
+  /** The in-library, unpublished dependency rows the dialog lists. A module
+   *  publish yields wildcard `ModuleRow`s; a bundle publish yields inner-bundle
+   *  `BundleRow`s — the dialog renders either by id/name/(kind icon). */
+  const unmetRows = ref<Array<ModuleRow | BundleRow>>([]);
 
   // Router + catalog captured at request time so the dialog actions can
   // re-enter publishToCommunity with the originating context. Held as plain
@@ -73,6 +88,11 @@ export const useGuidedPublishStore = defineStore("guidedPublish", () => {
   // which breaks the Router type on read-back.
   let pendingRouter: Router | null = null;
   let pendingCatalog: ModuleRow[] = [];
+  // The bundle catalog captured at request time. Inner-bundle deps resolve
+  // against this (not the module catalog), and the re-entry into
+  // publishToCommunity forwards it so a published inner bundle becomes a
+  // recorded dep edge in the hash.
+  let pendingBundleCatalog: BundleRow[] = [];
 
   /** Reset all gate state (after publish/cancel). */
   function reset(): void {
@@ -81,37 +101,58 @@ export const useGuidedPublishStore = defineStore("guidedPublish", () => {
     unmetRows.value = [];
     pendingRouter = null;
     pendingCatalog = [];
+    pendingBundleCatalog = [];
   }
 
   /**
-   * Gate seam. Compute the module's unmet deps; publish directly when there
-   * are none, otherwise open the dialog with the pending module + unmet rows.
+   * Gate seam. Compute the publishable's unmet deps — a MODULE's referenced
+   * wildcards against `cat` (the module catalog), OR a BUNDLE's inner-bundle
+   * children against `bundleCat` (the bundle catalog). Publish directly when
+   * there are none, otherwise open the dialog with the pending publishable +
+   * unmet rows. `bundleCat` defaults to `[]` so module-only callers can omit it.
    */
   function requestPublish(
     pub: PublishablePayload,
     r: Router,
     cat: ModuleRow[],
+    bundleCat: BundleRow[] = [],
   ): void {
-    const unmet = unmetDependencyRows(toReferencingModule(pub), cat);
+    const children = bundleChildrenOf(pub);
+    // A bundle gates on its inner-bundle refs (resolved against the bundle
+    // catalog); a module gates on its wildcard refs (against the module
+    // catalog). The two ref sources are disjoint, so a single branch suffices.
+    const unmet =
+      children.length > 0
+        ? bundleUnmetDependencyRows(children, bundleCat)
+        : unmetDependencyRows(toReferencingModule(pub), cat);
     if (unmet.length === 0) {
-      publishToCommunity(pub, r, cat);
+      publishToCommunity(pub, r, cat, bundleCat);
       return;
     }
     pendingModule.value = pub;
     unmetRows.value = unmet;
     pendingRouter = r;
     pendingCatalog = cat;
+    pendingBundleCatalog = bundleCat;
     open.value = true;
   }
 
-  /** Publish ONE unmet dependency via the normal flow (navigates → closes). */
-  function publishDep(row: ModuleRow): void {
+  /** Publish ONE unmet dependency via the normal flow (navigates → closes).
+   *  Module deps build via `buildModulePublishable` + publish as today. An
+   *  unmet inner-bundle dep is itself a bundle (no `type`); `buildModulePublishable`
+   *  only handles module rows, so a bundle dep is a no-op here (publishing an
+   *  inner bundle from the gate is out of scope — BR-B owns inner-bundle
+   *  install/reattach). The `type` discriminator distinguishes the two. */
+  function publishDep(row: ModuleRow | BundleRow): void {
     if (!pendingRouter) return;
+    // A BundleRow carries no `type`; only module rows are publishable here.
+    if (!("type" in row) || typeof row.type !== "string") return;
     // pendingCatalog also feeds the constraint axis-name backfill.
     publishToCommunity(
       buildModulePublishable(row, pendingCatalog),
       pendingRouter,
       pendingCatalog,
+      pendingBundleCatalog,
     );
     reset();
   }
@@ -120,7 +161,7 @@ export const useGuidedPublishStore = defineStore("guidedPublish", () => {
   function publishAnyway(): void {
     const pub = pendingModule.value;
     if (!pendingRouter || !pub) return;
-    publishToCommunity(pub, pendingRouter, pendingCatalog);
+    publishToCommunity(pub, pendingRouter, pendingCatalog, pendingBundleCatalog);
     reset();
   }
 

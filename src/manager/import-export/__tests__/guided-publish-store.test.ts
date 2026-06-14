@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import type { Router } from "vue-router";
-import type { ModuleRow } from "../../api/types";
+import type { BundleRow, ModuleRow } from "../../api/types";
 import type { PublishablePayload } from "../single-row-publish";
 
 /**
@@ -55,6 +55,16 @@ function catRow(parts: {
   return parts as unknown as ModuleRow;
 }
 
+/** Bundle-catalog row — `bundleUnmetDependencyRows` reads the same id/name/slug
+ *  off a BundleRow. The 4th `requestPublish` arg is typed `BundleRow[]`. */
+function bundleCatRow(parts: {
+  id: string;
+  name: string;
+  community_post_slug?: string | null;
+}): BundleRow {
+  return parts as unknown as BundleRow;
+}
+
 describe("useGuidedPublishStore.requestPublish (gate seam)", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
@@ -76,7 +86,8 @@ describe("useGuidedPublishStore.requestPublish (gate seam)", () => {
     store.requestPublish(modulePub, router, catalog);
 
     expect(publishToCommunity).toHaveBeenCalledTimes(1);
-    expect(publishToCommunity).toHaveBeenCalledWith(modulePub, router, catalog);
+    // The 4th arg is the bundle catalog (BR-A2), defaulting to [] for modules.
+    expect(publishToCommunity).toHaveBeenCalledWith(modulePub, router, catalog, []);
     expect(store.open).toBe(false);
   });
 
@@ -100,7 +111,7 @@ describe("useGuidedPublishStore.requestPublish (gate seam)", () => {
     expect(store.pendingModule).toEqual(modulePub);
   });
 
-  it("bundles publish directly (no refs, never gated)", () => {
+  it("bundles publish directly when their children carry no inner-bundle refs", () => {
     const store = useGuidedPublishStore();
     const router = routerStub();
     const catalog = [catRow({ id: "aaaa1111", name: "Hair", community_post_slug: null })];
@@ -118,6 +129,62 @@ describe("useGuidedPublishStore.requestPublish (gate seam)", () => {
     expect(publishToCommunity).toHaveBeenCalledTimes(1);
     expect(store.open).toBe(false);
   });
+
+  it("opens the dialog for a bundle with an UNPUBLISHED inner-bundle child", () => {
+    const store = useGuidedPublishStore();
+    const router = routerStub();
+    // Inner bundles live in the BUNDLE catalog (4th arg), not the module catalog.
+    const bundleCatalog = [
+      bundleCatRow({ id: "bd001abc", name: "Inner Bundle", community_post_slug: null }),
+    ];
+    const bundlePub: PublishablePayload = {
+      payload: {
+        id: "bbbb1111",
+        name: "Outer",
+        children: [
+          { id: "wc001abc", type: "wildcard" },
+          { id: "bd001abc", type: "bundle", name: "Inner Bundle" },
+        ],
+      },
+      name: "Outer",
+      description: "",
+      content_rating: "safe",
+      tags: [],
+      community_post_slug: null,
+    };
+
+    store.requestPublish(bundlePub, router, [], bundleCatalog);
+
+    expect(publishToCommunity).not.toHaveBeenCalled();
+    expect(store.open).toBe(true);
+    expect(store.unmetRows.map((r) => r.id)).toEqual(["bd001abc"]);
+    expect(store.pendingModule).toEqual(bundlePub);
+  });
+
+  it("publishes a bundle directly when its inner-bundle child is PUBLISHED", () => {
+    const store = useGuidedPublishStore();
+    const router = routerStub();
+    const bundleCatalog = [
+      bundleCatRow({ id: "bd001abc", name: "Inner Bundle", community_post_slug: "inner-bundle" }),
+    ];
+    const bundlePub: PublishablePayload = {
+      payload: {
+        id: "bbbb1111",
+        name: "Outer",
+        children: [{ id: "bd001abc", type: "bundle", name: "Inner Bundle" }],
+      },
+      name: "Outer",
+      description: "",
+      content_rating: "safe",
+      tags: [],
+      community_post_slug: null,
+    };
+
+    store.requestPublish(bundlePub, router, [], bundleCatalog);
+
+    expect(publishToCommunity).toHaveBeenCalledTimes(1);
+    expect(store.open).toBe(false);
+  });
 });
 
 describe("useGuidedPublishStore dialog actions", () => {
@@ -130,7 +197,9 @@ describe("useGuidedPublishStore dialog actions", () => {
   it("publishDep builds the dep row's publishable and publishes THAT dep", () => {
     const store = useGuidedPublishStore();
     const router = routerStub();
-    const depRow = catRow({ id: "aaaa1111", name: "Hair", community_post_slug: null });
+    // A real module dep row always carries `type` — that's how publishDep tells
+    // a module dep (publishable here) from an inner-bundle dep (no `type`).
+    const depRow = { id: "aaaa1111", type: "wildcard", name: "Hair", community_post_slug: null } as unknown as ModuleRow;
     const catalog = [depRow];
     const modulePub = pub({
       id: "cccc1111",
@@ -147,9 +216,39 @@ describe("useGuidedPublishStore dialog actions", () => {
     // that's itself a constraint gets its axis names backfilled on publish.
     expect(buildModulePublishable).toHaveBeenCalledWith(depRow, catalog);
     expect(publishToCommunity).toHaveBeenCalledTimes(1);
-    expect(publishToCommunity).toHaveBeenCalledWith(depPub, router, catalog);
+    // The 4th arg is the captured bundle catalog (BR-A2); [] for a module dep.
+    expect(publishToCommunity).toHaveBeenCalledWith(depPub, router, catalog, []);
     // Navigation closes the dialog.
     expect(store.open).toBe(false);
+  });
+
+  it("publishDep is a no-op for an inner-bundle dep (no `type`; BR-B owns reattach)", () => {
+    const store = useGuidedPublishStore();
+    const router = routerStub();
+    const bundleDepRow = bundleCatRow({ id: "bd001abc", name: "Inner Bundle", community_post_slug: null });
+    const bundleCatalog = [bundleDepRow];
+    const bundlePub: PublishablePayload = {
+      payload: {
+        id: "bbbb1111",
+        name: "Outer",
+        children: [{ id: "bd001abc", type: "bundle", name: "Inner Bundle" }],
+      },
+      name: "Outer",
+      description: "",
+      content_rating: "safe",
+      tags: [],
+      community_post_slug: null,
+    };
+
+    store.requestPublish(bundlePub, router, [], bundleCatalog); // opens the dialog
+    store.publishDep(bundleDepRow);
+
+    // A BundleRow has no `type`, so buildModulePublishable can't build it —
+    // publishing an inner bundle from the gate is out of scope (BR-B).
+    expect(buildModulePublishable).not.toHaveBeenCalled();
+    expect(publishToCommunity).not.toHaveBeenCalled();
+    // The gate stays open (nothing happened).
+    expect(store.open).toBe(true);
   });
 
   it("publishAnyway publishes the pending MODULE (not a dep)", () => {
@@ -166,7 +265,8 @@ describe("useGuidedPublishStore dialog actions", () => {
     store.publishAnyway();
 
     expect(publishToCommunity).toHaveBeenCalledTimes(1);
-    expect(publishToCommunity).toHaveBeenCalledWith(modulePub, router, catalog);
+    // The 4th arg is the captured bundle catalog (BR-A2); [] in the module case.
+    expect(publishToCommunity).toHaveBeenCalledWith(modulePub, router, catalog, []);
     expect(store.open).toBe(false);
   });
 

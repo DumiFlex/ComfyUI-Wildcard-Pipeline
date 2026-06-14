@@ -21,6 +21,7 @@
 import type { Router } from "vue-router";
 import type { BundleRow, ModuleRow } from "../api/types";
 import {
+  bundleChildBundleRefs,
   listReferencedUuids,
   resolveDependencies,
   type ReferencingModule,
@@ -348,19 +349,23 @@ function textToB64(text: string): string {
  * origin storage) and forced a fresh device-flow login. Routing
  * inside the SPA keeps auth alive + the user inside ComfyUI.
  *
- * Dependency-aware (B2b): the published module's referenced wildcards are
- * auto-detected (`listReferencedUuids`) and resolved against `catalog` (the
- * unfiltered `useModuleStore().catalog`, passed in — this helper stays
- * framework-free, the `.vue` callers wire the store). The resolution is
- * injected into the hash as two extra params the embed hydrates from
- * (`dependencies` prefills published deps, `unmet_deps` warns about the rest);
- * see the hash-building block below. `catalog` defaults to `[]` so callers
- * that don't (yet) pass it just omit both params.
+ * Dependency-aware (B2b + BR-A2): the published payload's dependencies are
+ * auto-detected and resolved into the hash as two params the embed hydrates
+ * from (`dependencies` prefills published deps, `unmet_deps` warns about the
+ * rest); see the hash-building block below. Two disjoint sources:
+ *   - a MODULE's referenced wildcards (`listReferencedUuids`) resolved against
+ *     `catalog` (the unfiltered `useModuleStore().catalog`).
+ *   - a BUNDLE's inner-bundle children (`bundleChildBundleRefs`) resolved
+ *     against `bundleCatalog` (the unfiltered `useBundleStore().catalog`) — an
+ *     inner bundle that's already on the community becomes a recorded dep edge.
+ * Both catalogs default to `[]` so callers that don't need them just omit them;
+ * this helper stays framework-free, the `.vue` callers wire the stores.
  */
 export function publishToCommunity(
   pub: PublishablePayload,
   router: Router,
   catalog: ModuleRow[] = [],
+  bundleCatalog: BundleRow[] = [],
 ): void {
   // Validate before navigation — same validator that consumers run at
   // install-time strict validation (spec §5f). Throws if invalid.
@@ -392,29 +397,37 @@ export function publishToCommunity(
   if (pub.community_post_slug) {
     hash.set("origin_slug", pub.community_post_slug);
   }
-  // Dependency auto-detect (B2b): the engine-row `pub.payload` carries the
-  // module's `id`/`type` at top level + the type-specific content nested
-  // under `payload.payload` — exactly the `{id, type, payload}` shape
-  // `listReferencedUuids` reads. Bundles (no `type`, `children` instead of
-  // `payload`) resolve to `[]` refs, so both params are simply omitted.
-  // Resolve against the live catalog: published refs (have a community slug)
-  // become `dependencies` the embed prefills; the rest become `unmet_deps`
-  // it warns about. Same b64 encoding as `payload=` (textToB64); appended
-  // ONLY when non-empty so the no-dependency case leaves the hash unchanged.
+  // Dependency auto-detect (B2b + BR-A2). Two disjoint sources resolved into
+  // the same dependencies/unmet split (published refs → `dependencies` the
+  // embed prefills; the rest → `unmet_deps` it warns about). Same b64 encoding
+  // as `payload=` (textToB64); appended ONLY when non-empty so the
+  // no-dependency case leaves the hash unchanged.
   const inner = pub.payload as {
     id?: unknown;
     type?: unknown;
     payload?: Record<string, unknown>;
+    children?: unknown;
   };
+  // MODULE refs: the engine-row carries `id`/`type` at top level + the
+  // type-specific content nested under `payload.payload` — exactly the
+  // `{id, type, payload}` shape `listReferencedUuids` reads. A bundle has no
+  // `type`, so this resolves to `[]`.
   const referencing: ReferencingModule = {
     id: typeof inner.id === "string" ? inner.id : "",
     type: inner.type as ReferencingModule["type"],
     payload: inner.payload ?? {},
   };
-  const { dependencies, unmet } = resolveDependencies(
-    listReferencedUuids(referencing),
-    catalog,
-  );
+  const moduleDeps = resolveDependencies(listReferencedUuids(referencing), catalog);
+  // BUNDLE inner-bundle refs: a bundle carries `children`; its `type:"bundle"`
+  // children resolve against the bundle catalog. A module has no `children`, so
+  // this resolves to `[]`. The two sources never overlap (a payload is either a
+  // module or a bundle), so concatenation can't double-count.
+  const innerBundleRefs = Array.isArray(inner.children)
+    ? bundleChildBundleRefs(inner.children as Array<{ id?: unknown; type?: unknown }>)
+    : [];
+  const bundleDeps = resolveDependencies(innerBundleRefs, bundleCatalog);
+  const dependencies = [...moduleDeps.dependencies, ...bundleDeps.dependencies];
+  const unmet = [...moduleDeps.unmet, ...bundleDeps.unmet];
   if (dependencies.length > 0) {
     hash.set("dependencies", textToB64(JSON.stringify(dependencies)));
   }

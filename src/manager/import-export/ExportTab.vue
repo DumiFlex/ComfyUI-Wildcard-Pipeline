@@ -578,14 +578,15 @@ const singleSelected = computed<PublishablePayload | null>(() => {
 
 function publishToCommunity() {
   // Route through the guided-publish gate (B3) — same seam as the per-row
-  // Publish button. If the selected module references in-library wildcards
-  // not yet on the community, the gate opens the UnmetDepsDialog; otherwise
-  // it publishes directly (B2b dependency auto-detect runs inside).
-  // `modules` is this tab's full module list (all subtypes) — the catalog
-  // the gate + the publish hash resolve refs against. A referenced wildcard
-  // always lives here; bundles carry no refs so they publish straight through.
+  // Publish button. If the selected module references in-library wildcards not
+  // yet on the community — OR the selected bundle references an inner bundle
+  // not yet on the community (BR-A2) — the gate opens the UnmetDepsDialog;
+  // otherwise it publishes directly (B2b dependency auto-detect runs inside).
+  // `modules` resolves a module's wildcard refs; `bundles` resolves a bundle's
+  // inner-bundle refs. Both are this tab's full lists (the gate + publish hash
+  // resolution sets).
   if (singleSelected.value) {
-    guidedPublish.requestPublish(singleSelected.value, router, modules.value);
+    guidedPublish.requestPublish(singleSelected.value, router, modules.value, bundles.value);
   }
 }
 

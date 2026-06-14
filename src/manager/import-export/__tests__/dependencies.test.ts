@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  bundleChildBundleRefs,
+  bundleUnmetDependencyRows,
   listReferencedUuids,
   resolveDependencies,
   unmetDependencyRows,
   type ReferencingModule,
 } from "../dependencies";
-import type { ModuleRow } from "../../api/types";
+import type { BundleRow, ModuleRow } from "../../api/types";
 
 /** Minimal module-shape builder. `listReferencedUuids` reads only
  *  `id` / `type` / `payload`, so the test fixtures carry just those —
@@ -322,5 +324,90 @@ describe("unmetDependencyRows", () => {
   it("returns [] when the module references nothing", () => {
     const module: ReferencingModule = { id: "11111111", type: "wildcard", payload: { options: [] } };
     expect(unmetDependencyRows(module, [])).toEqual([]);
+  });
+});
+
+describe("bundleChildBundleRefs", () => {
+  it("returns the ids of `type:\"bundle\"` children only", () => {
+    const children = [
+      { id: "wc001abc", type: "wildcard" },
+      { id: "bd001abc", type: "bundle", name: "Inner", color: "#fff" },
+      { id: "fv001abc", type: "fixed_values" },
+      { id: "bd002abc", type: "bundle", name: "Inner 2" },
+    ];
+    expect(bundleChildBundleRefs(children)).toEqual(["bd001abc", "bd002abc"]);
+  });
+
+  it("dedupes (first occurrence wins)", () => {
+    const children = [
+      { id: "bd001abc", type: "bundle" },
+      { id: "bd001abc", type: "bundle" },
+      { id: "bd002abc", type: "bundle" },
+    ];
+    expect(bundleChildBundleRefs(children)).toEqual(["bd001abc", "bd002abc"]);
+  });
+
+  it("skips blank / whitespace / non-string ids", () => {
+    const children = [
+      { id: "", type: "bundle" },
+      { id: "   ", type: "bundle" },
+      { id: 42, type: "bundle" },
+      { id: "bd001abc", type: "bundle" },
+    ];
+    expect(bundleChildBundleRefs(children)).toEqual(["bd001abc"]);
+  });
+
+  it("returns [] when there are no inner-bundle children", () => {
+    expect(bundleChildBundleRefs([{ id: "wc001abc", type: "wildcard" }])).toEqual([]);
+    expect(bundleChildBundleRefs([])).toEqual([]);
+  });
+});
+
+/** Bundle-catalog row builder — `bundleUnmetDependencyRows` reads the same
+ *  id/name/slug fields off a BundleRow as `unmetDependencyRows` reads off a
+ *  ModuleRow. Cast to the full row type. */
+function bundleRow(parts: {
+  id: string;
+  name: string;
+  community_post_slug?: string | null;
+}): BundleRow {
+  return parts as unknown as BundleRow;
+}
+
+describe("bundleUnmetDependencyRows", () => {
+  it("includes an inner-bundle ref that is UNPUBLISHED (in catalog, no slug)", () => {
+    const children = [
+      { id: "wc001abc", type: "wildcard" },
+      { id: "bd001abc", type: "bundle", name: "Inner" },
+    ];
+    const bundleCatalog = [
+      bundleRow({ id: "bd001abc", name: "Inner Bundle", community_post_slug: null }),
+    ];
+    const rows = bundleUnmetDependencyRows(children, bundleCatalog);
+    expect(rows.map((r) => r.id)).toEqual(["bd001abc"]);
+  });
+
+  it("excludes an inner-bundle ref that is PUBLISHED (has a slug)", () => {
+    const children = [{ id: "bd001abc", type: "bundle", name: "Inner" }];
+    const bundleCatalog = [
+      bundleRow({ id: "bd001abc", name: "Inner Bundle", community_post_slug: "inner-bundle" }),
+    ];
+    expect(bundleUnmetDependencyRows(children, bundleCatalog)).toEqual([]);
+  });
+
+  it("excludes an inner-bundle ref that is NOT in the catalog (dangling)", () => {
+    const children = [{ id: "gone9999", type: "bundle", name: "Gone" }];
+    const bundleCatalog = [
+      bundleRow({ id: "bd001abc", name: "Inner Bundle", community_post_slug: null }),
+    ];
+    expect(bundleUnmetDependencyRows(children, bundleCatalog)).toEqual([]);
+  });
+
+  it("ignores non-bundle children (only inner bundles gate)", () => {
+    const children = [{ id: "wc001abc", type: "wildcard" }];
+    const bundleCatalog = [
+      bundleRow({ id: "wc001abc", name: "Wildcard", community_post_slug: null }),
+    ];
+    expect(bundleUnmetDependencyRows(children, bundleCatalog)).toEqual([]);
   });
 });
