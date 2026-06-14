@@ -43,7 +43,9 @@ import {
 } from "./commit";
 import { newShortId } from "../utils/ids";
 import type { SchemaCatalogEntry } from "@/api/types";
-import type { InstallDependencyEdge } from "./reattach";
+import { buildReattachRemap, type InstallDependencyEdge } from "./reattach";
+import { listReferencedUuids, type ReferencingModuleType } from "./dependencies";
+import { walkRemap } from "../../components/context/bundles/uuid-remap";
 
 /**
  * Library snapshot used by the install collision pre-check. Modules
@@ -438,6 +440,7 @@ export async function installEnvelope(
   // we fall through and let the server's commit endpoint surface the
   // conflict as a 4xx, preserving the original behaviour for callers
   // that haven't opted in to the new UX.
+  let renameMap: Record<string, string> = {};
   if (opts.library && opts.resolveCollisions) {
     const collisions = detectInstallCollisions(selection, opts.library);
     if (collisions.length > 0) {
@@ -451,7 +454,46 @@ export async function installEnvelope(
           error: { code: "cancelled", message: "Install cancelled by user." },
         };
       }
-      applyCollisionDecisions(selection, enforceClashSafety(collisions, decisions));
+      renameMap = applyCollisionDecisions(selection, enforceClashSafety(collisions, decisions));
+    }
+  }
+
+  // --- Install-time reference reattachment (spec §4 — Features 1 + 3). ---
+  // Build the local views: which slugs map to which local module ids, and
+  // which ids already resolve (locally OR co-installed this envelope).
+  const localBySlug = new Map<string, string[]>();
+  const liveLocalIds = new Set<string>();
+  if (opts.library) {
+    for (const m of opts.library.modules.values()) {
+      liveLocalIds.add(m.id);
+      const slug = m.community_post_slug;
+      if (typeof slug === "string" && slug.trim() !== "") {
+        const arr = localBySlug.get(slug);
+        if (arr) arr.push(m.id);
+        else localBySlug.set(slug, [m.id]);
+      }
+    }
+    for (const b of opts.library.bundles.values()) liveLocalIds.add(b.id);
+  }
+  for (const bucket of MODULE_BUCKETS) {
+    for (const row of selection[bucket]) liveLocalIds.add(row.entity.id);
+  }
+  const deps = opts.dependencies ?? [];
+  let reattachedRefCount = 0;
+  for (const bucket of MODULE_BUCKETS) {
+    for (const row of selection[bucket]) {
+      const entity = row.entity as { id: string; type?: string; payload?: Record<string, unknown> };
+      const refs = listReferencedUuids({
+        id: entity.id,
+        type: (entity.type ?? "wildcard") as ReferencingModuleType,
+        payload: entity.payload ?? {},
+      });
+      if (refs.length === 0) continue;
+      const remap = buildReattachRemap(refs, deps, localBySlug, liveLocalIds, renameMap);
+      const remapKeys = Object.keys(remap);
+      if (remapKeys.length === 0) continue;
+      entity.payload = walkRemap(entity.payload ?? {}, remap) as Record<string, unknown>;
+      reattachedRefCount += remapKeys.length;
     }
   }
 
@@ -474,6 +516,7 @@ export async function installEnvelope(
       warnings: parsed.integrityWarnings,
       migratedEntityCount: parsed.migratedEntityCount,
       commit: result,
+      reattachedRefCount,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

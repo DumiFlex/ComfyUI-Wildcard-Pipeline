@@ -200,3 +200,104 @@ describe("reattach type surface", () => {
     expect(res.reattachedRefCount).toBe(3);
   });
 });
+
+describe("installEnvelope reattach pass", () => {
+  function fakeCommit(): {
+    importExport: InstallOptions["importExport"];
+    seen: CommitPayload[];
+  } {
+    const seen: CommitPayload[] = [];
+    const commit = vi.fn(async (payload: CommitPayload): Promise<CommitOk> => {
+      seen.push(payload);
+      return { ok: true, undo_entry_id: "deadbeefdeadbeef" };
+    });
+    return { importExport: { commit } as unknown as InstallOptions["importExport"], seen };
+  }
+
+  // Publisher uuids must be valid 8-hex: both the nested-`@{}` detector
+  // (`REF_TOKEN_RE`) and the rewrite (`uuid-remap`'s `REF_RE`) are hex-gated,
+  // so a `@{pubsub01}` (non-hex) ref would be invisible to the machinery. The
+  // sketch's mnemonic ids are mapped to hex here (pubsub01→aabb0001 etc.); the
+  // slug-bridge + local target ids keep the sketch's intent verbatim.
+  const PUB_SUBJECT = "aabb0001";
+  const PUB_MOOD = "ccdd0002";
+
+  /** Envelope carrying a constraint (source/target ids) + a wildcard whose
+   *  first option embeds an `@{}` ref — both pointing at publisher uuids. */
+  function reattachEnvelope() {
+    return {
+      schema_version: 4,
+      bundles: [], fixed_values: [], combines: [], derivations: [], categories: [], templates: [],
+      wildcards: [
+        {
+          id: "wc0001aa",
+          type: "wildcard",
+          name: "Scene",
+          payload: { options: [{ value: `a @{${PUB_SUBJECT}} b` }] },
+        },
+      ],
+      constraints: [
+        {
+          id: "cn0001aa",
+          type: "constraint",
+          name: "pairing",
+          payload: {
+            source_wildcard_id: PUB_SUBJECT,
+            target_wildcard_id: PUB_MOOD,
+            matrix: {},
+            exceptions: [],
+          },
+        },
+      ],
+    };
+  }
+
+  it("remaps a constraint axis + a nested @{} ref to slug-matched local modules", async () => {
+    const { importExport, seen } = fakeCommit();
+    const library: LibrarySnapshot = {
+      modules: new Map([
+        ["localsub1", { id: "localsub1", name: "Subject", type: "wildcard", community_post_slug: "author/subject" }],
+        ["localmod1", { id: "localmod1", name: "Mood", type: "wildcard", community_post_slug: "author/mood" }],
+      ]),
+      bundles: new Map(),
+    };
+    const result = await installEnvelope(
+      { envelope: reattachEnvelope() },
+      {
+        importExport,
+        library,
+        dependencies: [
+          { module_id: PUB_SUBJECT, slug: "author/subject" },
+          { module_id: PUB_MOOD, slug: "author/mood" },
+        ],
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.reattachedRefCount).toBe(3);
+
+    expect(seen).toHaveLength(1);
+    const constraint = seen[0].adds.find((a) => a.kind === "constraint");
+    if (!constraint) throw new Error("constraint add not found in commit payload");
+    const cp = constraint.entity.payload as Record<string, unknown>;
+    expect(cp.source_wildcard_id).toBe("localsub1");
+    expect(cp.target_wildcard_id).toBe("localmod1");
+
+    const wildcard = seen[0].adds.find((a) => a.kind === "wildcard");
+    if (!wildcard) throw new Error("wildcard add not found in commit payload");
+    const wp = wildcard.entity.payload as { options: Array<{ value: string }> };
+    expect(wp.options[0].value).toBe("a @{localsub1} b");
+  });
+
+  it("no-ops when no dependencies are provided", async () => {
+    const { importExport, seen } = fakeCommit();
+    const result = await installEnvelope({ envelope: reattachEnvelope() }, { importExport });
+
+    expect(result.ok).toBe(true);
+    expect(result.reattachedRefCount ?? 0).toBe(0);
+
+    const constraint = seen[0].adds.find((a) => a.kind === "constraint");
+    if (!constraint) throw new Error("constraint add not found in commit payload");
+    expect((constraint.entity.payload as Record<string, unknown>).source_wildcard_id).toBe(PUB_SUBJECT);
+  });
+});
