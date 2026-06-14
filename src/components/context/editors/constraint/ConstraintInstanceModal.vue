@@ -31,9 +31,19 @@ import ExceptionsSection from "./sections/ExceptionsSection.vue";
 // wildcard instead of the saved-matrix's frozen keys.
 import { cacheVersion, ensure, lookup } from "../../../../extension/preview-resolver";
 import ConstraintReattachSection from "./sections/ConstraintReattachSection.vue";
+import ConfirmDialog from "../../../shared/ConfirmDialog.vue";
 import { walkRemap } from "../../bundles/uuid-remap";
 import { buildWildcardRefData } from "../../../../manager/utils/library-suggestions";
 import type { ModuleRow } from "../../../../manager/api/types";
+import { api } from "../../../../manager/api/client";
+import {
+  fetchCommunityPostDetail,
+  downloadCommunityVersion,
+  type CommunityDepEdge,
+} from "../../../../manager/community/community-posts";
+import { collectTransitiveDeps } from "../../../../manager/community/transitive-deps";
+import { downloadDepsForDangling } from "../../../../manager/community/download-and-reattach";
+import { installEnvelope } from "../../../../manager/import-export/install";
 
 const props = withDefaults(
   defineProps<{
@@ -182,6 +192,11 @@ interface ConstraintPayload {
   matrix?: Record<string, Record<string, unknown>>;
   exceptions?: Array<{ source_value?: string; target_value?: string; source?: string; target?: string }>;
   target_select?: TargetSelect;
+  /** Community post this constraint was installed from (engine migration
+   *  013, denormalized onto the picked module's payload). Drives Feature 2's
+   *  "Download from community" affordance — only when set can the modal pull
+   *  a missing dependency. Absent for hand-authored / non-community modules. */
+  community_post_slug?: string;
 }
 
 /** Pull the wildcard's live sub_categories, preferring sibling module
@@ -390,6 +405,105 @@ function onReattach(payload: { side: "source" | "target"; oldUuid: string; newUu
   reattachPick.value = null;
 }
 
+// ── Download-missing-dep-from-community (Feature 2) ──────────────────
+//
+// Mirrors ConstraintEditor.vue's SPA flow, adapted to the canvas modal's
+// data sources. The modal has no moduleStore catalog — it resolves refs via
+// the preview-resolver cache (`ensure`/`lookup`). After install, the dep
+// lands at its original id (installEnvelope preserves publisher ids); a
+// fresh `ensure([uuid])` repopulates the cache and the `isDangling`
+// computed (which reads `cacheVersion`) clears the banner. Gated by the
+// post slug being present on the picked module's payload — absent (e.g. a
+// hand-authored constraint) means the affordance never shows.
+
+/** The constraint's community post slug, if it was installed from one. */
+const constraintModalSlug = computed<string>(
+  () => ((props.module.payload ?? {}) as ConstraintPayload).community_post_slug ?? "",
+);
+
+/** The constraint post's OWN dependency edges, lazily fetched once. `null`
+ *  = not fetched; `[]` = fetched (or failed → "no downloadable deps"). */
+const constraintPostDeps = ref<CommunityDepEdge[] | null>(null);
+
+function hasEdgeFor(uuid: string): boolean {
+  if (!uuid) return false;
+  return !!constraintPostDeps.value?.some((e) => e.module_id === uuid);
+}
+
+const downloadableSides = computed(() => ({
+  source: danglingSource.value && hasEdgeFor(danglingSourceUuid.value),
+  target: danglingTarget.value && hasEdgeFor(danglingTargetUuid.value),
+}));
+
+// Lazily fetch the post's dependency edges the first time a side dangles on
+// a community-installed constraint. Errors degrade to `[]`.
+watch(
+  [hasDangling, constraintModalSlug],
+  async ([dangling, slug]) => {
+    if (!dangling || !slug) return;
+    if (constraintPostDeps.value !== null) return;
+    try {
+      const detail = await fetchCommunityPostDetail(slug);
+      constraintPostDeps.value = detail.dependencies;
+    } catch {
+      constraintPostDeps.value = [];
+    }
+  },
+  { immediate: true },
+);
+
+const downloadConfirmOpen = ref(false);
+const downloadConfirmBody = ref("");
+const pendingDownloadSide = ref<"source" | "target" | null>(null);
+const pendingDownloadUuid = ref<string | null>(null);
+const downloading = ref(false);
+const downloadError = ref<string>("");
+
+async function onDownloadReattach({ side }: { side: "source" | "target" }): Promise<void> {
+  const uuid = side === "source" ? danglingSourceUuid.value : danglingTargetUuid.value;
+  if (!uuid || !constraintPostDeps.value) return;
+  const provider = constraintPostDeps.value.find((e) => e.module_id === uuid);
+  if (!provider) return;
+  const { slugs, capped } = await collectTransitiveDeps(
+    [provider.slug],
+    async (s) => (await fetchCommunityPostDetail(s)).dependencies.map((e) => e.slug).filter(Boolean),
+  );
+  downloadConfirmBody.value =
+    `Download ${slugs.length} post(s) from the community:\n` +
+    slugs.map((s) => `• ${s}`).join("\n") +
+    (capped ? "\n(+ more — list capped)" : "");
+  pendingDownloadSide.value = side;
+  pendingDownloadUuid.value = uuid;
+  downloadConfirmOpen.value = true;
+}
+
+async function confirmDownload(): Promise<void> {
+  downloadConfirmOpen.value = false;
+  downloading.value = true;
+  downloadError.value = "";
+  try {
+    const res = await downloadDepsForDangling({
+      danglingUuid: pendingDownloadUuid.value!,
+      constraintDeps: constraintPostDeps.value!,
+      fetchDetail: fetchCommunityPostDetail,
+      download: downloadCommunityVersion,
+      install: (env, deps) =>
+        installEnvelope({ envelope: env }, { importExport: api.importExport, dependencies: deps }),
+    });
+    if (!res.ok) {
+      downloadError.value = res.error ?? "Could not download the missing dependency.";
+      return;
+    }
+    // Refresh the preview-resolver cache for the (now-installed) uuid so the
+    // dangling computed re-evaluates. The dep lands at its original id, so
+    // this resolves the reference; the banner clears on the next tick.
+    const uuid = pendingDownloadUuid.value!;
+    ensure([uuid]);
+  } finally {
+    downloading.value = false;
+  }
+}
+
 // ── Target reach (SP3) ──────────────────────────────────────────
 //
 // Effective `target_select`: per-instance override wins, then the
@@ -558,10 +672,15 @@ function onSpaClick(): void {
       :ref-data="reattachRefData"
       :referenced-elsewhere="referencedElsewhere"
       :dropped-cell-count="reattachDroppedCellCount"
+      :downloadable-sides="downloadableSides"
       @reattach="onReattach"
       @pick="reattachPick = $event"
       @pickcleared="reattachPick = null"
+      @downloadreattach="onDownloadReattach"
     />
+    <p v-if="downloadError" class="wp-cnm__dl-error" data-test="cnm-download-error">
+      <i class="pi pi-exclamation-triangle" aria-hidden="true" /> {{ downloadError }}
+    </p>
     <IdentitySection :module="module" @update="onUpdate" />
     <MatrixSection
       :module="module"
@@ -629,6 +748,17 @@ function onSpaClick(): void {
       <button type="button" class="wp-cnm__btn" data-test="cnm-cancel" @click="emit('cancel')">Cancel</button>
       <button type="button" class="wp-cnm__btn wp-cnm__btn--primary" data-test="cnm-save" @click="emit('save')">Save</button>
     </footer>
+
+    <!-- Feature 2: confirm pulling the missing dependency (+ its closure)
+         from the community before any network/install side effect. -->
+    <ConfirmDialog
+      :visible="downloadConfirmOpen"
+      title="Download dependencies"
+      :body="downloadConfirmBody"
+      confirm-label="Download & install"
+      @confirm="confirmDownload"
+      @cancel="downloadConfirmOpen = false"
+    />
   </div>
 </template>
 
@@ -706,4 +836,17 @@ function onSpaClick(): void {
   color: var(--wp-text-muted, var(--wp-text2));
 }
 .wp-cnm__btn--quiet .pi { font-size: 10px; }
+/* Inline download-failure note under the reattach banner — the modal has no
+ * toast surface, so a failed community pull reports here. */
+.wp-cnm__dl-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 16px;
+  font: 11px var(--wp-font-sans);
+  color: var(--wp-danger, var(--wp-red));
+  background: color-mix(in oklab, var(--wp-danger, #ef4444) 8%, transparent);
+}
+.wp-cnm__dl-error .pi { font-size: 12px; }
 </style>

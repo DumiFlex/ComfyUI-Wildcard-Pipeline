@@ -82,4 +82,30 @@ describe("ConstraintReattachSection", () => {
     const first = w.findAll("[data-test='reattach-candidate']")[0];
     expect(first.text()).toBe("colour");
   });
+
+  it("renders the community-download button only on a downloadable side", () => {
+    const w = mountSection({ downloadableSides: { source: true, target: false } });
+    expect(w.find("[data-test='reattach-download-source']").exists()).toBe(true);
+    // Target isn't dangling here, but even its (absent) row shouldn't carry
+    // the download button when not flagged downloadable.
+    expect(w.find("[data-test='reattach-download-target']").exists()).toBe(false);
+  });
+
+  it("hides the community-download button when the side isn't downloadable", () => {
+    const w = mountSection({ downloadableSides: { source: false, target: false } });
+    expect(w.find("[data-test='reattach-download-source']").exists()).toBe(false);
+  });
+
+  it("omits the community-download button by default (no downloadableSides prop)", () => {
+    const w = mountSection();
+    expect(w.find("[data-test='reattach-download-source']").exists()).toBe(false);
+  });
+
+  it("emits downloadreattach with the side when the download button is clicked", async () => {
+    const w = mountSection({ downloadableSides: { source: true, target: false } });
+    await w.find("[data-test='reattach-download-source']").trigger("click");
+    const ev = w.emitted("downloadreattach");
+    expect(ev).toBeTruthy();
+    expect(ev![0][0]).toEqual({ side: "source" });
+  });
 });

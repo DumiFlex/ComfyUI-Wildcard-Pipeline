@@ -39,7 +39,13 @@ const props = withDefaults(defineProps<{
   /** Optional preview: cells that would be dropped by the picked candidate
    *  (computed by the parent against the candidate's sub_categories). */
   droppedCellCount?: number;
-}>(), { droppedCellCount: 0 });
+  /** Per-side gate for the "Download from community" affordance (Feature 2).
+   *  True only when the constraint was installed from a community post AND
+   *  that post declares a dependency edge providing the dangling uuid — i.e.
+   *  the missing wildcard is actually pullable. The parent owns that check;
+   *  the section just renders the button when the matching side is flagged. */
+  downloadableSides?: { source: boolean; target: boolean };
+}>(), { droppedCellCount: 0, downloadableSides: () => ({ source: false, target: false }) });
 
 const emit = defineEmits<{
   reattach: [payload: { side: "source" | "target"; oldUuid: string; newUuid: string; newName: string }];
@@ -49,6 +55,10 @@ const emit = defineEmits<{
   /** Selection abandoned (dropdown opened/closed without confirming, or a
    *  confirm consumed it) — parent resets its dropped-cell preview to 0. */
   pickcleared: [];
+  /** "Download from community" clicked for a side (Feature 2). The parent
+   *  resolves the dep closure, opens its own confirm dialog, then pulls +
+   *  installs; reattach falls out of local resolution afterwards. */
+  downloadreattach: [payload: { side: "source" | "target" }];
 }>();
 
 type Side = "source" | "target";
@@ -124,6 +134,13 @@ function confirm(side: Side): void {
         is not in your library.
       </span>
       <button type="button" class="rb__btn" data-test="reattach-btn-source" @click="openDropdown('source')">Reattach</button>
+      <button
+        v-if="downloadableSides.source"
+        type="button"
+        class="rb__btn rb__btn--download"
+        data-test="reattach-download-source"
+        @click="emit('downloadreattach', { side: 'source' })"
+      ><i class="pi pi-cloud-download" aria-hidden="true" /> Download from community</button>
 
       <div v-if="openSide === 'source'" class="rb__picker">
         <input v-model="query" type="text" class="rb__search" placeholder="Search wildcards…" spellcheck="false" aria-label="Search wildcards to reattach source" />
@@ -158,6 +175,13 @@ function confirm(side: Side): void {
         is not in your library.
       </span>
       <button type="button" class="rb__btn" data-test="reattach-btn-target" @click="openDropdown('target')">Reattach</button>
+      <button
+        v-if="downloadableSides.target"
+        type="button"
+        class="rb__btn rb__btn--download"
+        data-test="reattach-download-target"
+        @click="emit('downloadreattach', { side: 'target' })"
+      ><i class="pi pi-cloud-download" aria-hidden="true" /> Download from community</button>
 
       <div v-if="openSide === 'target'" class="rb__picker">
         <input v-model="query" type="text" class="rb__search" placeholder="Search wildcards…" spellcheck="false" aria-label="Search wildcards to reattach target" />
@@ -214,6 +238,21 @@ function confirm(side: Side): void {
   cursor: pointer;
 }
 .rb__confirm { background: var(--wp-accent, #8b5cf6); color: #fff; margin-top: 6px; }
+/* Secondary affordance beside Reattach — pulls the missing dep from the
+ * community. Quieter than the primary accent border so the manual dropdown
+ * stays the obvious first action; the cloud icon signals the network pull. */
+.rb__btn--download {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-color: var(--wp-border, rgba(255,255,255,0.12));
+  color: var(--wp-text-muted, var(--wp-text2, var(--wp-text)));
+}
+.rb__btn--download:hover {
+  border-color: var(--wp-accent, #8b5cf6);
+  color: var(--wp-accent-text, var(--wp-text));
+}
+.rb__btn--download .pi { font-size: 11px; }
 .rb__picker {
   flex-basis: 100%;
   margin-top: 8px;

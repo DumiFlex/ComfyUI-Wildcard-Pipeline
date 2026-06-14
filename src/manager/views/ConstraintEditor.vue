@@ -8,7 +8,7 @@
  *  3. Rule matrix (ConstraintMatrix)
  *  4. Exceptions table
  */
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import type { SaveState, EditorFieldError } from "../components/EditorFrame.types";
 import { useRouter } from "vue-router";
@@ -41,6 +41,15 @@ import PillCountBadge from "../cascade/PillCountBadge.vue";
 import ConstraintReattachSection from "../../components/context/editors/constraint/sections/ConstraintReattachSection.vue";
 import { walkRemap } from "../../components/context/bundles/uuid-remap";
 import { buildWildcardRefData } from "../utils/library-suggestions";
+import { api } from "../api/client";
+import {
+  fetchCommunityPostDetail,
+  downloadCommunityVersion,
+  type CommunityDepEdge,
+} from "../community/community-posts";
+import { collectTransitiveDeps } from "../community/transitive-deps";
+import { downloadDepsForDangling } from "../community/download-and-reattach";
+import { installEnvelope } from "../import-export/install";
 import type {
   ConstraintCell,
   ConstraintException,
@@ -356,6 +365,141 @@ function onReattach(payload: { side: "source" | "target"; oldUuid: string; newUu
   // Pick consumed — clear the live preview so a stale dropped-cell count
   // can't survive into the next reattach.
   reattachPick.value = null;
+}
+
+// ── Download-missing-dep-from-community (Feature 2) ──────────────────
+//
+// When the dangling wildcard was a dependency of the community post this
+// constraint was installed from, the user can pull it (+ its transitive
+// closure) instead of hand-picking a local stand-in. Reattach then falls
+// out of local resolution: installEnvelope preserves publisher ids, so the
+// dep lands at exactly the dangling uuid and the reference resolves once
+// the catalog refreshes. Only a collision-rename tail needs an explicit
+// remap (handled below by re-checking isDangling + applying onReattach).
+
+/** The constraint post's OWN dependency edges, lazily fetched once when a
+ *  side dangles AND the constraint was installed from a community post.
+ *  `null` = not yet fetched; `[]` = fetched (or fetch failed → treated as
+ *  "no downloadable deps"). */
+const constraintPostDeps = ref<CommunityDepEdge[] | null>(null);
+
+/** True when the post deps declare an edge whose `module_id` IS this uuid —
+ *  i.e. the missing wildcard is one this post can actually provide. */
+function hasEdgeFor(uuid: string | null): boolean {
+  if (!uuid) return false;
+  return !!constraintPostDeps.value?.some((e) => e.module_id === uuid);
+}
+
+/** Per-side gate for the section's "Download from community" button: the
+ *  side dangles AND a dep edge provides its uuid. */
+const downloadableSides = computed(() => ({
+  source: danglingSource.value && hasEdgeFor(sourceWildcardId.value),
+  target: danglingTarget.value && hasEdgeFor(targetWildcardId.value),
+}));
+
+// Lazily populate `constraintPostDeps` the first time a side dangles on a
+// community-installed constraint. Fetch errors degrade to `[]` (no
+// downloadable deps) so the manual reattach dropdown still works.
+watch(
+  [hasDangling, currentRow],
+  async ([dangling, row]) => {
+    if (!dangling) return;
+    if (constraintPostDeps.value !== null) return;
+    const slug = row?.community_post_slug;
+    if (!slug) return;
+    try {
+      const detail = await fetchCommunityPostDetail(slug);
+      constraintPostDeps.value = detail.dependencies;
+    } catch {
+      constraintPostDeps.value = [];
+    }
+  },
+  { immediate: true },
+);
+
+// Confirm-dialog state for the download flow.
+const downloadConfirmOpen = ref(false);
+const downloadConfirmBody = ref("");
+const pendingDownloadSide = ref<"source" | "target" | null>(null);
+const pendingDownloadUuid = ref<string | null>(null);
+const downloading = ref(false);
+
+async function onDownloadReattach({ side }: { side: "source" | "target" }): Promise<void> {
+  const uuid = side === "source" ? sourceWildcardId.value : targetWildcardId.value;
+  if (!uuid || !constraintPostDeps.value) return;
+  const provider = constraintPostDeps.value.find((e) => e.module_id === uuid);
+  if (!provider) return;
+  // Resolve the transitive closure up front so the confirm body can list
+  // exactly what's about to be pulled (the orchestrator re-walks it at
+  // install time — cheap, and keeps the preview honest).
+  const { slugs, capped } = await collectTransitiveDeps(
+    [provider.slug],
+    async (s) => (await fetchCommunityPostDetail(s)).dependencies.map((e) => e.slug).filter(Boolean),
+  );
+  downloadConfirmBody.value =
+    `Download ${slugs.length} post(s) from the community:\n` +
+    slugs.map((s) => `• ${s}`).join("\n") +
+    (capped ? "\n(+ more — list capped)" : "");
+  pendingDownloadSide.value = side;
+  pendingDownloadUuid.value = uuid;
+  downloadConfirmOpen.value = true;
+}
+
+async function confirmDownload(): Promise<void> {
+  downloadConfirmOpen.value = false;
+  downloading.value = true;
+  try {
+    const res = await downloadDepsForDangling({
+      danglingUuid: pendingDownloadUuid.value!,
+      constraintDeps: constraintPostDeps.value!,
+      fetchDetail: fetchCommunityPostDetail,
+      download: downloadCommunityVersion,
+      install: (env, deps) =>
+        installEnvelope({ envelope: env }, { importExport: api.importExport, dependencies: deps }),
+    });
+    if (!res.ok) {
+      toast.push({
+        severity: "error",
+        summary: "Download failed",
+        detail: res.error ?? "Could not download the missing dependency.",
+        life: 4000,
+      });
+      return;
+    }
+    // Pull the freshly-installed rows into the catalog so resolution can see
+    // the new wildcard.
+    await moduleStore.fetchCatalog();
+    const uuid = pendingDownloadUuid.value!;
+    if (!isDangling(uuid)) {
+      // Resolved by local landing — the dep installed at its original id, so
+      // the reference now resolves. The banner clears + name resolves from
+      // the catalog; nothing more to do.
+      toast.push({ severity: "success", summary: "Dependency installed", detail: `Pulled ${res.pulled.length} post(s).`, life: 3000 });
+      return;
+    }
+    // Collision-rename tail: the dep landed under a NEW id (install-as-new on
+    // an id clash), so reattach explicitly to the renamed local row found by
+    // its community origin slug.
+    const local = moduleStore.catalog.find((m) => m.community_post_slug === res.providerSlug);
+    if (local) {
+      onReattach({
+        side: pendingDownloadSide.value!,
+        oldUuid: uuid,
+        newUuid: local.id,
+        newName: local.name,
+      });
+      toast.push({ severity: "success", summary: "Dependency installed & reattached", detail: `Pulled ${res.pulled.length} post(s).`, life: 3000 });
+    } else {
+      toast.push({
+        severity: "warn",
+        summary: "Installed, but still unresolved",
+        detail: "Downloaded the dependency but couldn't auto-reattach — pick it manually.",
+        life: 5000,
+      });
+    }
+  } finally {
+    downloading.value = false;
+  }
 }
 
 // Matrix axes are BOTH sub-categories — source's on the rows, target's
@@ -979,9 +1123,11 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
       :ref-data="reattachRefData"
       :referenced-elsewhere="referencedElsewhere"
       :dropped-cell-count="reattachDroppedCellCount"
+      :downloadable-sides="downloadableSides"
       @reattach="onReattach"
       @pick="reattachPick = $event"
       @pickcleared="reattachPick = null"
+      @downloadreattach="onDownloadReattach"
     />
 
     <div id="editor-section-wildcards">
@@ -1384,6 +1530,16 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
       variant="danger"
       @confirm="onConfirmLeave"
       @cancel="onCancelLeave"
+    />
+    <!-- Feature 2: confirm pulling the missing dependency (+ its closure)
+         from the community before any network/install side effect. -->
+    <ConfirmDialog
+      :visible="downloadConfirmOpen"
+      title="Download dependencies"
+      :body="downloadConfirmBody"
+      confirm-label="Download & install"
+      @confirm="confirmDownload"
+      @cancel="downloadConfirmOpen = false"
     />
   </EditorFrame>
 </template>
