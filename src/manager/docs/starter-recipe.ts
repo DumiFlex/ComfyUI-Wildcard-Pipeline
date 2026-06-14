@@ -81,10 +81,17 @@ export const STARTER_MODULE_NAMES: Record<Exclude<StarterSlot, "template">, stri
 };
 
 /** Context the constraint (`pairing`) builder needs: the two created
- *  wildcard ids it wires `source_wildcard_id` / `target_wildcard_id` to. */
+ *  wildcard ids it wires `source_wildcard_id` / `target_wildcard_id` to.
+ *  The optional display names let the constraint self-describe its axes —
+ *  stamped into `source_wildcard_name` / `target_wildcard_name` so a starter
+ *  constraint that's never opened in the editor still renders the wildcard
+ *  name (not a raw uuid) on the community. Display-only; the engine resolves
+ *  by id and never reads them. Absent → names are simply omitted. */
 export interface PairingBuildContext {
   subjectId: string;
   moodId: string;
+  subjectName?: string;
+  moodName?: string;
 }
 
 /** Minimal shape of the fixed_values payload. Mirrors the server's
@@ -165,6 +172,10 @@ export function buildPairingPayload(ctx: PairingBuildContext): ConstraintPayload
   return {
     source_wildcard_id: ctx.subjectId,
     target_wildcard_id: ctx.moodId,
+    // Cached axis names — stamped only when the ctx carries them so legacy
+    // callers (ids-only) stay clean. Display-only; the engine never reads them.
+    ...(ctx.subjectName ? { source_wildcard_name: ctx.subjectName } : {}),
+    ...(ctx.moodName ? { target_wildcard_name: ctx.moodName } : {}),
     exceptions: [],
     matrix: {
       feline: {

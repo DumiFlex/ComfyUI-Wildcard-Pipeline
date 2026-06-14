@@ -197,12 +197,61 @@ function stripHistory(
 }
 
 /**
+ * Backfill a CONSTRAINT payload's cached axis names from the live module
+ * catalog. A constraint built by the starter recipe — or any constraint never
+ * opened in the ConstraintEditor (the only place that stamps these on save,
+ * see `ConstraintEditor.vue` save()) — carries `source_wildcard_id` /
+ * `target_wildcard_id` but no `*_wildcard_name`, so the community renders the
+ * axis as a raw uuid. Resolving id→name here (same `catalog.find(m => m.id ===
+ * id)?.name` lookup the editor uses) makes EVERY published constraint
+ * self-describe its axes, regardless of how it was authored.
+ *
+ * Non-mutating: returns a new payload object. Only fills a name that's ABSENT
+ * (never overwrites an editor-cached value) and only when the id resolves in
+ * the catalog (a dangling ref leaves its name absent → banner falls back to
+ * uuid-only, same as a legacy constraint). A no-op for non-constraint rows and
+ * when `catalog` is empty.
+ */
+function backfillConstraintNames(
+  type: string,
+  payload: Record<string, unknown>,
+  catalog: ModuleRow[],
+): Record<string, unknown> {
+  if (type !== "constraint" || catalog.length === 0) return payload;
+  const nameById = (id: unknown): string | undefined =>
+    typeof id === "string" ? catalog.find((m) => m.id === id)?.name : undefined;
+  const out = { ...payload };
+  if (typeof out.source_wildcard_name !== "string") {
+    const name = nameById(out.source_wildcard_id);
+    if (name) out.source_wildcard_name = name;
+  }
+  if (typeof out.target_wildcard_name !== "string") {
+    const name = nameById(out.target_wildcard_id);
+    if (name) out.target_wildcard_name = name;
+  }
+  return out;
+}
+
+/**
  * Build the engine-row payload for a module library row. Strips
  * server-stamped lifecycle fields + the local `history` sidecar —
  * community + the user's clipboard both want a fresh, history-free row
  * that they can re-stamp.
+ *
+ * `catalog` (the unfiltered `useModuleStore().catalog`, passed by the `.vue`
+ * callers to keep this helper framework-free) is used ONLY to backfill a
+ * constraint's missing axis names (`backfillConstraintNames`). Defaults to
+ * `[]` so callers that don't need the backfill simply omit it.
  */
-export function buildModulePublishable(row: ModuleRow): PublishablePayload {
+export function buildModulePublishable(
+  row: ModuleRow,
+  catalog: ModuleRow[] = [],
+): PublishablePayload {
+  const inner = backfillConstraintNames(
+    row.type,
+    stripHistory(row.payload as Record<string, unknown>),
+    catalog,
+  );
   const payload: Record<string, unknown> = {
     id: row.id,
     type: row.type,
@@ -211,7 +260,7 @@ export function buildModulePublishable(row: ModuleRow): PublishablePayload {
     category_id: row.category_id,
     tags: row.tags,
     is_favorite: row.is_favorite,
-    payload: stripHistory(row.payload as Record<string, unknown>),
+    payload: inner,
   };
   return {
     payload,

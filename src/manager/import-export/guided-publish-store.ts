@@ -107,7 +107,12 @@ export const useGuidedPublishStore = defineStore("guidedPublish", () => {
   /** Publish ONE unmet dependency via the normal flow (navigates → closes). */
   function publishDep(row: ModuleRow): void {
     if (!pendingRouter) return;
-    publishToCommunity(buildModulePublishable(row), pendingRouter, pendingCatalog);
+    // pendingCatalog also feeds the constraint axis-name backfill.
+    publishToCommunity(
+      buildModulePublishable(row, pendingCatalog),
+      pendingRouter,
+      pendingCatalog,
+    );
     reset();
   }
 

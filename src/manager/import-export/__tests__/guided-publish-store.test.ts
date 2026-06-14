@@ -143,7 +143,9 @@ describe("useGuidedPublishStore dialog actions", () => {
     store.requestPublish(modulePub, router, catalog); // opens the dialog
     store.publishDep(depRow);
 
-    expect(buildModulePublishable).toHaveBeenCalledWith(depRow);
+    // The dep's publishable is built WITH the pending catalog too, so a dep
+    // that's itself a constraint gets its axis names backfilled on publish.
+    expect(buildModulePublishable).toHaveBeenCalledWith(depRow, catalog);
     expect(publishToCommunity).toHaveBeenCalledTimes(1);
     expect(publishToCommunity).toHaveBeenCalledWith(depPub, router, catalog);
     // Navigation closes the dialog.

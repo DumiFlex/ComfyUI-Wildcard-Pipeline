@@ -50,7 +50,9 @@ function publishablePayload(): PublishablePayload {
   if (props.kind === "bundle") {
     return buildBundlePublishable(props.row as BundleRow);
   }
-  return buildModulePublishable(props.row as ModuleRow);
+  // Pass the catalog so a constraint missing its cached axis names gets them
+  // backfilled from the live wildcards (same catalog the editor resolves from).
+  return buildModulePublishable(props.row as ModuleRow, moduleStore.catalog);
 }
 
 function onPublish() {

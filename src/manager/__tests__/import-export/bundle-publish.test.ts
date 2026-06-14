@@ -122,3 +122,108 @@ describe("buildModulePublishable", () => {
     ).not.toThrow();
   });
 });
+
+describe("buildModulePublishable — constraint axis-name backfill", () => {
+  // The two wildcards the constraint points at, as they appear in the live
+  // module catalog (id -> name). Same lookup the ConstraintEditor uses.
+  const subjectRow = { id: "subj0001", type: "wildcard", name: "Starter subject" } as unknown as ModuleRow;
+  const moodRow = { id: "mood0001", type: "wildcard", name: "Starter mood" } as unknown as ModuleRow;
+  const catalog: ModuleRow[] = [subjectRow, moodRow];
+
+  /** A constraint row whose payload carries ids but NO cached names -- the
+   *  starter-recipe / never-opened-in-editor case the fix targets. */
+  function constraintRow(payload: Record<string, unknown>): ModuleRow {
+    return {
+      id: "cn000001",
+      type: "constraint",
+      name: "Starter pairing",
+      description: "",
+      category_id: null,
+      tags: [],
+      is_favorite: false,
+      payload,
+      payload_hash: "h".repeat(64),
+      version: 1,
+      created_at: "2026-01-01",
+      updated_at: "2026-01-01",
+      content_rating: "safe" as const,
+    } as unknown as ModuleRow;
+  }
+
+  it("backfills source/target names from the catalog when absent", () => {
+    const row = constraintRow({
+      source_wildcard_id: "subj0001",
+      target_wildcard_id: "mood0001",
+      matrix: {},
+      exceptions: [],
+    });
+    const pub = buildModulePublishable(row, catalog);
+    const inner = pub.payload.payload as Record<string, unknown>;
+    expect(inner.source_wildcard_name).toBe("Starter subject");
+    expect(inner.target_wildcard_name).toBe("Starter mood");
+  });
+
+  it("does NOT overwrite a name that's already cached on the payload", () => {
+    const row = constraintRow({
+      source_wildcard_id: "subj0001",
+      target_wildcard_id: "mood0001",
+      source_wildcard_name: "Custom source label",
+      target_wildcard_name: "Custom target label",
+      matrix: {},
+      exceptions: [],
+    });
+    const pub = buildModulePublishable(row, catalog);
+    const inner = pub.payload.payload as Record<string, unknown>;
+    expect(inner.source_wildcard_name).toBe("Custom source label");
+    expect(inner.target_wildcard_name).toBe("Custom target label");
+  });
+
+  it("leaves a name absent when its id is not in the catalog (dangling ref)", () => {
+    const row = constraintRow({
+      source_wildcard_id: "subj0001",
+      target_wildcard_id: "gone9999",
+      matrix: {},
+      exceptions: [],
+    });
+    const pub = buildModulePublishable(row, catalog);
+    const inner = pub.payload.payload as Record<string, unknown>;
+    expect(inner.source_wildcard_name).toBe("Starter subject");
+    expect(inner).not.toHaveProperty("target_wildcard_name");
+  });
+
+  it("is a no-op for non-constraint payloads", () => {
+    const fixedRow = {
+      id: "fv000001",
+      type: "fixed_values",
+      name: "Starter style",
+      description: "",
+      category_id: null,
+      tags: [],
+      is_favorite: false,
+      payload: { values: [{ id: "v0000001", name: "style", value: "oil painting" }] },
+      payload_hash: "h".repeat(64),
+      version: 1,
+      created_at: "2026-01-01",
+      updated_at: "2026-01-01",
+      content_rating: "safe" as const,
+    } as unknown as ModuleRow;
+    const pub = buildModulePublishable(fixedRow, catalog);
+    const inner = pub.payload.payload as Record<string, unknown>;
+    expect(inner).not.toHaveProperty("source_wildcard_name");
+    expect(inner).not.toHaveProperty("target_wildcard_name");
+    expect(inner.values).toBeDefined();
+  });
+
+  it("no catalog passed (default) leaves the payload untouched", () => {
+    const row = constraintRow({
+      source_wildcard_id: "subj0001",
+      target_wildcard_id: "mood0001",
+      matrix: {},
+      exceptions: [],
+    });
+    const pub = buildModulePublishable(row);
+    const inner = pub.payload.payload as Record<string, unknown>;
+    expect(inner).not.toHaveProperty("source_wildcard_name");
+    expect(inner).not.toHaveProperty("target_wildcard_name");
+  });
+});

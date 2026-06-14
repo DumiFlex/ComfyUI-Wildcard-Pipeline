@@ -129,6 +129,25 @@ describe("starter-recipe — constraint payload", () => {
     expect(p.exceptions).toEqual([]);
   });
 
+  it("stamps source/target wildcard names when the ctx carries them", () => {
+    const p = buildPairingPayload({
+      subjectId: "aaaa1111",
+      moodId: "bbbb2222",
+      subjectName: "Starter subject",
+      moodName: "Starter mood",
+    });
+    // Self-describing axis names so a never-opened starter constraint renders
+    // the wildcard name on the community instead of a raw uuid.
+    expect(p.source_wildcard_name).toBe("Starter subject");
+    expect(p.target_wildcard_name).toBe("Starter mood");
+  });
+
+  it("omits the name fields when the ctx has no names (legacy callers stay clean)", () => {
+    const p = buildPairingPayload({ subjectId: "aaaa1111", moodId: "bbbb2222" });
+    expect(p).not.toHaveProperty("source_wildcard_name");
+    expect(p).not.toHaveProperty("target_wildcard_name");
+  });
+
   it("matrix keys equal subject sub_categories; inner keys equal mood sub_categories", () => {
     const subject = buildSubjectPayload();
     const mood = buildMoodPayload();

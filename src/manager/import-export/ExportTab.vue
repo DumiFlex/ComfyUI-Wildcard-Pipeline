@@ -572,7 +572,8 @@ const singleSelected = computed<PublishablePayload | null>(() => {
     return row ? buildBundlePublishable(row) : null;
   }
   const mod = modules.value.find((m) => m.id === id);
-  return mod ? buildModulePublishable(mod) : null;
+  // Pass the module list so a constraint's missing axis names get backfilled.
+  return mod ? buildModulePublishable(mod, modules.value) : null;
 });
 
 function publishToCommunity() {
