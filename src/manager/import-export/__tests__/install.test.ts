@@ -7,6 +7,7 @@ import {
   type CollisionDecision,
   type InstallCollision,
   type InstallOptions,
+  type InstallResult,
   type LibrarySnapshot,
 } from "../install";
 import type { CommitOk, CommitPayload, ResolvedSelection } from "../commit";
@@ -181,5 +182,21 @@ describe("applyCollisionDecisions rename map", () => {
       categories: [], templates: [],
     } as unknown as Parameters<typeof applyCollisionDecisions>[0];
     expect(applyCollisionDecisions(selection, { aaaa1111: { kind: "replace" } })).toEqual({});
+  });
+});
+
+describe("reattach type surface", () => {
+  it("LibrarySnapshot module entries accept community_post_slug", () => {
+    const snap: LibrarySnapshot = {
+      modules: new Map([["aaaa1111", { id: "aaaa1111", name: "Sub", type: "wildcard", community_post_slug: "author/sub" }]]),
+      bundles: new Map(),
+    };
+    expect(snap.modules.get("aaaa1111")?.community_post_slug).toBe("author/sub");
+  });
+  it("InstallOptions accepts dependencies, InstallResult carries reattachedRefCount", () => {
+    const opts = { importExport: {} as InstallOptions["importExport"], dependencies: [{ module_id: "aaaa1111", slug: "author/sub" }] };
+    const res: InstallResult = { ok: true, installed: {} as InstallResult["installed"], warnings: [], migratedEntityCount: 0, reattachedRefCount: 3 };
+    expect(opts.dependencies[0].slug).toBe("author/sub");
+    expect(res.reattachedRefCount).toBe(3);
   });
 });

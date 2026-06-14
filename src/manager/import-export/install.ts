@@ -43,6 +43,7 @@ import {
 } from "./commit";
 import { newShortId } from "../utils/ids";
 import type { SchemaCatalogEntry } from "@/api/types";
+import type { InstallDependencyEdge } from "./reattach";
 
 /**
  * Library snapshot used by the install collision pre-check. Modules
@@ -51,7 +52,7 @@ import type { SchemaCatalogEntry } from "@/api/types";
  * Pinia stores. Missing entries are taken as "no collision".
  */
 export interface LibrarySnapshot {
-  modules: Map<string, { id: string; name: string; type?: string }>;
+  modules: Map<string, { id: string; name: string; type?: string; community_post_slug?: string }>;
   bundles: Map<string, { id: string; name: string }>;
 }
 
@@ -121,6 +122,10 @@ export interface InstallOptions {
    * as add" behaviour and the server surfaces conflicts as 4xx.
    */
   library?: LibrarySnapshot;
+  /** The installing post's dependency edges (module_id + slug), from the
+   *  community post detail. Drives install-time reference reattachment
+   *  (reattach.ts). Omitted by non-community installs → reattach no-ops. */
+  dependencies?: InstallDependencyEdge[];
   /**
    * Resolver callback invoked when client-side collision detection
    * finds duplicates. Receives one row per conflict; returns a map
@@ -153,6 +158,10 @@ export interface InstallResult {
   /** Set when something failed (parse, schema mismatch, server). One
    *  of ``commit`` / ``error`` is always populated. */
   error?: { code: string; message: string };
+  /** Count of references auto-reattached to local library modules during
+   *  install (reattach.ts). Only set on the success path; undefined/0 means
+   *  nothing was remapped. */
+  reattachedRefCount?: number;
 }
 
 const EMPTY_COUNTS: Record<EntityKind, number> = {
