@@ -117,9 +117,9 @@ function snapshotLibrary(): LibrarySnapshot {
   for (const m of moduleStore.catalog) {
     modules.set(m.id, { id: m.id, name: m.name, type: m.type, community_post_slug: m.community_post_slug ?? undefined });
   }
-  const bundles = new Map<string, { id: string; name: string }>();
+  const bundles = new Map<string, { id: string; name: string; community_post_slug?: string }>();
   for (const b of bundleStore.catalog) {
-    bundles.set(b.id, { id: b.id, name: b.name });
+    bundles.set(b.id, { id: b.id, name: b.name, community_post_slug: b.community_post_slug ?? undefined });
   }
   return { modules, bundles };
 }

@@ -44,7 +44,11 @@ import {
 import { newShortId } from "../utils/ids";
 import type { SchemaCatalogEntry } from "@/api/types";
 import { buildReattachRemap, type InstallDependencyEdge } from "./reattach";
-import { listReferencedUuids, type ReferencingModuleType } from "./dependencies";
+import {
+  bundleChildBundleRefs,
+  listReferencedUuids,
+  type ReferencingModuleType,
+} from "./dependencies";
 import { walkRemap } from "../../components/context/bundles/uuid-remap";
 
 /**
@@ -55,7 +59,7 @@ import { walkRemap } from "../../components/context/bundles/uuid-remap";
  */
 export interface LibrarySnapshot {
   modules: Map<string, { id: string; name: string; type?: string; community_post_slug?: string }>;
-  bundles: Map<string, { id: string; name: string }>;
+  bundles: Map<string, { id: string; name: string; community_post_slug?: string }>;
 }
 
 /**
@@ -458,26 +462,35 @@ export async function installEnvelope(
     }
   }
 
-  // --- Install-time reference reattachment (spec §4 — Features 1 + 3). ---
-  // Build the local views: which slugs map to which local module ids, and
-  // which ids already resolve (locally OR co-installed this envelope).
+  // --- Install-time reference reattachment (spec §4 — Features 1 + 3, BR-B1). ---
+  // Build the local views: which slugs map to which local module/bundle ids,
+  // and which ids already resolve (locally OR co-installed this envelope).
+  // Modules and bundles share one slug→id index: a constraint axis remaps to
+  // a slug-matched local module, and an inner-bundle child ref remaps to a
+  // slug-matched local bundle, via the same slug-bridge.
   const localBySlug = new Map<string, string[]>();
   const liveLocalIds = new Set<string>();
+  const foldSlug = (slug: string | undefined, id: string): void => {
+    if (typeof slug !== "string" || slug.trim() === "") return;
+    const arr = localBySlug.get(slug);
+    if (arr) arr.push(id);
+    else localBySlug.set(slug, [id]);
+  };
   if (opts.library) {
     for (const m of opts.library.modules.values()) {
       liveLocalIds.add(m.id);
-      const slug = m.community_post_slug;
-      if (typeof slug === "string" && slug.trim() !== "") {
-        const arr = localBySlug.get(slug);
-        if (arr) arr.push(m.id);
-        else localBySlug.set(slug, [m.id]);
-      }
+      foldSlug(m.community_post_slug, m.id);
     }
-    for (const b of opts.library.bundles.values()) liveLocalIds.add(b.id);
+    for (const b of opts.library.bundles.values()) {
+      liveLocalIds.add(b.id);
+      foldSlug(b.community_post_slug, b.id);
+    }
   }
   for (const bucket of MODULE_BUCKETS) {
     for (const row of selection[bucket]) liveLocalIds.add(row.entity.id);
   }
+  // Co-installed bundles in THIS envelope already resolve locally too.
+  for (const row of selection.bundles) liveLocalIds.add(row.entity.id);
   const deps = opts.dependencies ?? [];
   let reattachedRefCount = 0;
   for (const bucket of MODULE_BUCKETS) {
@@ -495,6 +508,22 @@ export async function installEnvelope(
       entity.payload = walkRemap(entity.payload ?? {}, remap) as Record<string, unknown>;
       reattachedRefCount += remapKeys.length;
     }
+  }
+  // Bundles: an inner-bundle child ref ({id, type:"bundle"}) reattaches to a
+  // slug-matched local bundle, mirroring the constraint-axis remap above. The
+  // refs live on the engine-row bundle's `children` array (not a typed
+  // `payload`), so walkRemap targets `entity.children` — its whole-string id
+  // rewrite swaps each inner child's `id` to the local bundle id.
+  for (const row of selection.bundles) {
+    const entity = row.entity as { id: string; children?: unknown[] };
+    const children = (entity.children ?? []) as Array<{ id?: unknown; type?: unknown }>;
+    const refs = bundleChildBundleRefs(children);
+    if (refs.length === 0) continue;
+    const remap = buildReattachRemap(refs, deps, localBySlug, liveLocalIds, renameMap);
+    const remapKeys = Object.keys(remap);
+    if (remapKeys.length === 0) continue;
+    entity.children = walkRemap(entity.children, remap) as unknown[];
+    reattachedRefCount += remapKeys.length;
   }
 
   const commitPayload = buildCommitPayload(selection);

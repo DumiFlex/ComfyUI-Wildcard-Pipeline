@@ -300,4 +300,59 @@ describe("installEnvelope reattach pass", () => {
     if (!constraint) throw new Error("constraint add not found in commit payload");
     expect((constraint.entity.payload as Record<string, unknown>).source_wildcard_id).toBe(PUB_SUBJECT);
   });
+
+  // BR-B1: a bundle's inner-bundle child ref ({id, type:"bundle"}) reattaches
+  // to a local bundle matched by community_post_slug, exactly like a
+  // constraint's wildcard axis reattaches to a slug-matched local module.
+  const PUB_INNER = "eeff0003";
+
+  /** Envelope carrying a BUNDLE whose children include an inner-bundle ref
+   *  (pointing at a publisher bundle uuid) + a leaf wildcard child. */
+  function bundleReattachEnvelope() {
+    return {
+      schema_version: 4,
+      wildcards: [], fixed_values: [], combines: [], derivations: [], constraints: [], categories: [], templates: [],
+      bundles: [
+        {
+          id: "bn0001aa",
+          name: "Outer",
+          children: [
+            { id: PUB_INNER, type: "bundle", name: "Inner" },
+            { id: "wcleaf01", type: "wildcard", name: "Leaf" },
+          ],
+        },
+      ],
+    };
+  }
+
+  it("remaps an inner-bundle child ref to a slug-matched local bundle", async () => {
+    const { importExport, seen } = fakeCommit();
+    const library: LibrarySnapshot = {
+      modules: new Map(),
+      bundles: new Map([
+        ["localinner", { id: "localinner", name: "Inner", community_post_slug: "author/inner" }],
+      ]),
+    };
+    const result = await installEnvelope(
+      { envelope: bundleReattachEnvelope() },
+      {
+        importExport,
+        library,
+        dependencies: [{ module_id: PUB_INNER, slug: "author/inner" }],
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.reattachedRefCount).toBe(1);
+
+    expect(seen).toHaveLength(1);
+    const bundle = seen[0].adds.find((a) => a.kind === "bundle");
+    if (!bundle) throw new Error("bundle add not found in commit payload");
+    const children = bundle.entity.children as Array<{ id: string; type: string }>;
+    const inner = children.find((c) => c.type === "bundle");
+    if (!inner) throw new Error("inner-bundle child not found");
+    expect(inner.id).toBe("localinner");
+    // The leaf wildcard child is untouched.
+    expect(children.find((c) => c.type === "wildcard")?.id).toBe("wcleaf01");
+  });
 });
