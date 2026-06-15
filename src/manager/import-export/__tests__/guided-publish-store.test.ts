@@ -17,10 +17,12 @@ import type { PublishablePayload } from "../single-row-publish";
  */
 const publishToCommunity = vi.fn();
 const buildModulePublishable = vi.fn();
+const buildBundlePublishable = vi.fn();
 
 vi.mock("../single-row-publish", () => ({
   publishToCommunity: (...args: unknown[]) => publishToCommunity(...args),
   buildModulePublishable: (...args: unknown[]) => buildModulePublishable(...args),
+  buildBundlePublishable: (...args: unknown[]) => buildBundlePublishable(...args),
 }));
 
 import { useGuidedPublishStore } from "../guided-publish-store";
@@ -192,6 +194,7 @@ describe("useGuidedPublishStore dialog actions", () => {
     setActivePinia(createPinia());
     publishToCommunity.mockReset();
     buildModulePublishable.mockReset();
+    buildBundlePublishable.mockReset();
   });
 
   it("publishDep builds the dep row's publishable and publishes THAT dep", () => {
@@ -222,10 +225,18 @@ describe("useGuidedPublishStore dialog actions", () => {
     expect(store.open).toBe(false);
   });
 
-  it("publishDep is a no-op for an inner-bundle dep (no `type`; BR-B owns reattach)", () => {
+  it("publishDep navigates to publish an inner-bundle dep (no `type`; BR-A2b)", () => {
     const store = useGuidedPublishStore();
     const router = routerStub();
-    const bundleDepRow = bundleCatRow({ id: "bd001abc", name: "Inner Bundle", community_post_slug: null });
+    // A bundle catalog row carries populated `children` (the list endpoint
+    // returns them, see engine `_row_to_bundle`), so buildBundlePublishable
+    // can build it directly from the row — no fetch needed.
+    const bundleDepRow = {
+      id: "bd001abc",
+      name: "Inner Bundle",
+      community_post_slug: null,
+      children: [{ id: "wc999abc", type: "wildcard", meta: { name: "Hair" } }],
+    } as unknown as BundleRow;
     const bundleCatalog = [bundleDepRow];
     const bundlePub: PublishablePayload = {
       payload: {
@@ -239,16 +250,30 @@ describe("useGuidedPublishStore dialog actions", () => {
       tags: [],
       community_post_slug: null,
     };
+    // The publishable buildBundlePublishable returns for the dep: a payload
+    // carrying `children` and NO `type` (the bundle shape).
+    const depPub: PublishablePayload = {
+      payload: { id: "bd001abc", name: "Inner Bundle", children: bundleDepRow.children },
+      name: "Inner Bundle",
+      description: "",
+      content_rating: "safe",
+      tags: [],
+      community_post_slug: null,
+    };
+    buildBundlePublishable.mockReturnValue(depPub);
 
     store.requestPublish(bundlePub, router, [], bundleCatalog); // opens the dialog
     store.publishDep(bundleDepRow);
 
-    // A BundleRow has no `type`, so buildModulePublishable can't build it —
-    // publishing an inner bundle from the gate is out of scope (BR-B).
+    // A bundle dep navigates to publish THAT bundle, exactly like a module dep.
     expect(buildModulePublishable).not.toHaveBeenCalled();
-    expect(publishToCommunity).not.toHaveBeenCalled();
-    // The gate stays open (nothing happened).
-    expect(store.open).toBe(true);
+    expect(buildBundlePublishable).toHaveBeenCalledWith(bundleDepRow);
+    expect(publishToCommunity).toHaveBeenCalledTimes(1);
+    // The bundle catalog (4th arg) is forwarded so a published inner bundle
+    // becomes a recorded dep edge in the hash.
+    expect(publishToCommunity).toHaveBeenCalledWith(depPub, router, [], bundleCatalog);
+    // Navigation closes the dialog.
+    expect(store.open).toBe(false);
   });
 
   it("publishAnyway publishes the pending MODULE (not a dep)", () => {

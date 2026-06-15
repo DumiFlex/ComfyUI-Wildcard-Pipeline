@@ -36,6 +36,7 @@ import {
   type ReferencingModule,
 } from "./dependencies";
 import {
+  buildBundlePublishable,
   buildModulePublishable,
   publishToCommunity,
   type PublishablePayload,
@@ -138,22 +139,27 @@ export const useGuidedPublishStore = defineStore("guidedPublish", () => {
   }
 
   /** Publish ONE unmet dependency via the normal flow (navigates → closes).
-   *  Module deps build via `buildModulePublishable` + publish as today. An
-   *  unmet inner-bundle dep is itself a bundle (no `type`); `buildModulePublishable`
-   *  only handles module rows, so a bundle dep is a no-op here (publishing an
-   *  inner bundle from the gate is out of scope — BR-B owns inner-bundle
-   *  install/reattach). The `type` discriminator distinguishes the two. */
+   *  Both kinds navigate to publish THAT dependency, exactly like the per-row
+   *  Publish in `CommunityRowActions` does — the `type` discriminator picks the
+   *  builder. A module dep builds via `buildModulePublishable` (with the pending
+   *  catalog, so a constraint dep gets its axis names backfilled); an inner-bundle
+   *  dep (a `BundleRow`, no `type`) builds via `buildBundlePublishable` (BR-A2b).
+   *  A bundle catalog row carries its `children` populated (the list endpoint
+   *  returns them — engine `_row_to_bundle`), so the bundle publishable builds
+   *  directly from the row, no fetch. */
   function publishDep(row: ModuleRow | BundleRow): void {
     if (!pendingRouter) return;
-    // A BundleRow carries no `type`; only module rows are publishable here.
-    if (!("type" in row) || typeof row.type !== "string") return;
-    // pendingCatalog also feeds the constraint axis-name backfill.
-    publishToCommunity(
-      buildModulePublishable(row, pendingCatalog),
-      pendingRouter,
-      pendingCatalog,
-      pendingBundleCatalog,
-    );
+    // A module row carries a `type`; a BundleRow does not. Build the matching
+    // publishable, then publish through the same path. The `as BundleRow` cast
+    // mirrors `CommunityRowActions.vue` — `BundleRow` isn't a discriminated
+    // union with `ModuleRow` (it has no `type` tag), so the absence-of-`type`
+    // check doesn't narrow the union for TS; the cast is the established idiom.
+    const isModule = "type" in row && typeof row.type === "string";
+    const pub = isModule
+      ? // pendingCatalog also feeds the constraint axis-name backfill.
+        buildModulePublishable(row as ModuleRow, pendingCatalog)
+      : buildBundlePublishable(row as BundleRow);
+    publishToCommunity(pub, pendingRouter, pendingCatalog, pendingBundleCatalog);
     reset();
   }
 
