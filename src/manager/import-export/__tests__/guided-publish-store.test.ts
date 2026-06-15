@@ -25,6 +25,20 @@ vi.mock("../single-row-publish", () => ({
   buildBundlePublishable: (...args: unknown[]) => buildBundlePublishable(...args),
 }));
 
+/**
+ * The gate now VERIFIES each auto-detected "published" dep's slug against the
+ * community before treating it as met (a dep whose community post was DELETED
+ * still carries a local `community_post_slug`, so without this check it would
+ * bypass the gate and dead-end at the publish form). `communityPostExists` is
+ * mocked per-test: default true (slug live), overridden to false for the stale
+ * case. The default mock returns true so the existing pre-verify tests (which
+ * reference only PUBLISHED-and-live or unpublished deps) keep their behavior.
+ */
+const communityPostExists = vi.fn((..._args: unknown[]): Promise<boolean> => Promise.resolve(true));
+vi.mock("../../community/community-posts", () => ({
+  communityPostExists: (...args: unknown[]) => communityPostExists(...args),
+}));
+
 import { useGuidedPublishStore } from "../guided-publish-store";
 
 /** Router stub — only identity matters; the gate forwards it verbatim. */
@@ -72,12 +86,17 @@ describe("useGuidedPublishStore.requestPublish (gate seam)", () => {
     setActivePinia(createPinia());
     publishToCommunity.mockReset();
     buildModulePublishable.mockReset();
+    // Default: every published dep's slug verifies as live. Stale-case tests
+    // override this with a per-slug false.
+    communityPostExists.mockReset();
+    communityPostExists.mockResolvedValue(true);
   });
 
-  it("publishes DIRECTLY (no dialog) when there are no unmet deps", () => {
+  it("publishes DIRECTLY (no dialog) when there are no unmet deps", async () => {
     const store = useGuidedPublishStore();
     const router = routerStub();
-    // Constraint references a PUBLISHED wildcard → no unmet deps.
+    // Constraint references a PUBLISHED wildcard → no unmet deps. Its slug
+    // verifies as live (default mock), so the gate proceeds as before.
     const catalog = [catRow({ id: "aaaa1111", name: "Hair", community_post_slug: "hair" })];
     const modulePub = pub({
       id: "cccc1111",
@@ -85,7 +104,7 @@ describe("useGuidedPublishStore.requestPublish (gate seam)", () => {
       payload: { source_wildcard_id: "aaaa1111" },
     });
 
-    store.requestPublish(modulePub, router, catalog);
+    await store.requestPublish(modulePub, router, catalog);
 
     expect(publishToCommunity).toHaveBeenCalledTimes(1);
     // The 4th arg is the bundle catalog (BR-A2), defaulting to [] for modules.
@@ -93,7 +112,7 @@ describe("useGuidedPublishStore.requestPublish (gate seam)", () => {
     expect(store.open).toBe(false);
   });
 
-  it("opens the dialog (no direct publish) when there ARE unmet deps", () => {
+  it("opens the dialog (no direct publish) when there ARE unmet deps", async () => {
     const store = useGuidedPublishStore();
     const router = routerStub();
     // Constraint references an UNPUBLISHED in-library wildcard → unmet.
@@ -104,7 +123,7 @@ describe("useGuidedPublishStore.requestPublish (gate seam)", () => {
       payload: { source_wildcard_id: "aaaa1111" },
     });
 
-    store.requestPublish(modulePub, router, catalog);
+    await store.requestPublish(modulePub, router, catalog);
 
     expect(publishToCommunity).not.toHaveBeenCalled();
     expect(store.open).toBe(true);
@@ -113,7 +132,7 @@ describe("useGuidedPublishStore.requestPublish (gate seam)", () => {
     expect(store.pendingModule).toEqual(modulePub);
   });
 
-  it("bundles publish directly when their children carry no inner-bundle refs", () => {
+  it("bundles publish directly when their children carry no inner-bundle refs", async () => {
     const store = useGuidedPublishStore();
     const router = routerStub();
     const catalog = [catRow({ id: "aaaa1111", name: "Hair", community_post_slug: null })];
@@ -126,13 +145,13 @@ describe("useGuidedPublishStore.requestPublish (gate seam)", () => {
       community_post_slug: null,
     };
 
-    store.requestPublish(bundlePub, router, catalog);
+    await store.requestPublish(bundlePub, router, catalog);
 
     expect(publishToCommunity).toHaveBeenCalledTimes(1);
     expect(store.open).toBe(false);
   });
 
-  it("opens the dialog for a bundle with an UNPUBLISHED inner-bundle child", () => {
+  it("opens the dialog for a bundle with an UNPUBLISHED inner-bundle child", async () => {
     const store = useGuidedPublishStore();
     const router = routerStub();
     // Inner bundles live in the BUNDLE catalog (4th arg), not the module catalog.
@@ -155,7 +174,7 @@ describe("useGuidedPublishStore.requestPublish (gate seam)", () => {
       community_post_slug: null,
     };
 
-    store.requestPublish(bundlePub, router, [], bundleCatalog);
+    await store.requestPublish(bundlePub, router, [], bundleCatalog);
 
     expect(publishToCommunity).not.toHaveBeenCalled();
     expect(store.open).toBe(true);
@@ -163,7 +182,7 @@ describe("useGuidedPublishStore.requestPublish (gate seam)", () => {
     expect(store.pendingModule).toEqual(bundlePub);
   });
 
-  it("opens the dialog for a bundle whose child constraint has an EXTERNAL unpublished target", () => {
+  it("opens the dialog for a bundle whose child constraint has an EXTERNAL unpublished target", async () => {
     const store = useGuidedPublishStore();
     const router = routerStub();
     // The external target wildcard lives in the MODULE catalog, unpublished —
@@ -191,7 +210,7 @@ describe("useGuidedPublishStore.requestPublish (gate seam)", () => {
     };
 
     // Module catalog (3rd arg) carries the external ref; no inner bundles.
-    store.requestPublish(bundlePub, router, catalog, []);
+    await store.requestPublish(bundlePub, router, catalog, []);
 
     expect(publishToCommunity).not.toHaveBeenCalled();
     expect(store.open).toBe(true);
@@ -199,7 +218,7 @@ describe("useGuidedPublishStore.requestPublish (gate seam)", () => {
     expect(store.unmetRows.map((r) => r.id)).toEqual(["ext99999"]);
   });
 
-  it("does NOT gate a bundle whose child constraint target is a sibling module child", () => {
+  it("does NOT gate a bundle whose child constraint target is a sibling module child", async () => {
     const store = useGuidedPublishStore();
     const router = routerStub();
     // The constraint's target is a sibling wildcard child → satisfied (ships) →
@@ -224,13 +243,13 @@ describe("useGuidedPublishStore.requestPublish (gate seam)", () => {
       community_post_slug: null,
     };
 
-    store.requestPublish(bundlePub, router, [], []);
+    await store.requestPublish(bundlePub, router, [], []);
 
     expect(publishToCommunity).toHaveBeenCalledTimes(1);
     expect(store.open).toBe(false);
   });
 
-  it("publishes a bundle directly when its inner-bundle child is PUBLISHED", () => {
+  it("publishes a bundle directly when its inner-bundle child is PUBLISHED", async () => {
     const store = useGuidedPublishStore();
     const router = routerStub();
     const bundleCatalog = [
@@ -249,10 +268,143 @@ describe("useGuidedPublishStore.requestPublish (gate seam)", () => {
       community_post_slug: null,
     };
 
-    store.requestPublish(bundlePub, router, [], bundleCatalog);
+    await store.requestPublish(bundlePub, router, [], bundleCatalog);
 
     expect(publishToCommunity).toHaveBeenCalledTimes(1);
     expect(store.open).toBe(false);
+  });
+
+  // ---------- Stale "published" dep verification ----------
+  //
+  // A dep classified "published" purely from its local `community_post_slug`
+  // can be a phantom: the community post was DELETED, so the slug no longer
+  // resolves. The gate VERIFIES each detected published slug; a missing one
+  // (404/410) is RECLASSIFIED as unmet so it shows in the same dialog with a
+  // Publish button. A 5xx/network blip does NOT reclassify (transient).
+
+  it("opens the dialog when a module's ONLY 'published' dep slug is now MISSING (deleted post)", async () => {
+    const store = useGuidedPublishStore();
+    const router = routerStub();
+    // The wildcard CARRIES a slug locally (looks published), so the pre-verify
+    // unmet set is empty — without the verify, the module would publish straight
+    // through and dead-end at the publish form.
+    const catalog = [
+      catRow({ id: "aaaa1111", name: "Hair", community_post_slug: "author/hair" }),
+    ];
+    const modulePub = pub({
+      id: "cccc1111",
+      type: "constraint",
+      payload: { source_wildcard_id: "aaaa1111" },
+    });
+    // The community no longer has that slug (post deleted) → 404 → not exists.
+    communityPostExists.mockResolvedValue(false);
+
+    await store.requestPublish(modulePub, router, catalog);
+
+    // The gate did NOT publish directly (it would have, pre-verify) — instead it
+    // opened the dialog with the stale dep's LOCAL row so the user can Publish it.
+    expect(publishToCommunity).not.toHaveBeenCalled();
+    expect(store.open).toBe(true);
+    expect(store.unmetRows.map((r) => r.id)).toEqual(["aaaa1111"]);
+    // It verified the detected published slug against the community.
+    expect(communityPostExists).toHaveBeenCalledWith("author/hair");
+  });
+
+  it("publishes directly when the 'published' dep slug still EXISTS (not reclassified)", async () => {
+    const store = useGuidedPublishStore();
+    const router = routerStub();
+    const catalog = [
+      catRow({ id: "aaaa1111", name: "Hair", community_post_slug: "author/hair" }),
+    ];
+    const modulePub = pub({
+      id: "cccc1111",
+      type: "constraint",
+      payload: { source_wildcard_id: "aaaa1111" },
+    });
+    // Slug verifies live (default true, set explicit for clarity).
+    communityPostExists.mockResolvedValue(true);
+
+    await store.requestPublish(modulePub, router, catalog);
+
+    expect(communityPostExists).toHaveBeenCalledWith("author/hair");
+    expect(publishToCommunity).toHaveBeenCalledTimes(1);
+    expect(store.open).toBe(false);
+  });
+
+  it("reclassifies a bundle's stale inner-bundle dep (missing slug) into the dialog", async () => {
+    const store = useGuidedPublishStore();
+    const router = routerStub();
+    // Inner bundle looks published locally (carries a slug) but its community
+    // post is gone.
+    const bundleCatalog = [
+      bundleCatRow({ id: "bd001abc", name: "Inner Bundle", community_post_slug: "author/inner" }),
+    ];
+    const bundlePub: PublishablePayload = {
+      payload: {
+        id: "bbbb1111",
+        name: "Outer",
+        children: [{ id: "bd001abc", type: "bundle", name: "Inner Bundle" }],
+      },
+      name: "Outer",
+      description: "",
+      content_rating: "safe",
+      tags: [],
+      community_post_slug: null,
+    };
+    communityPostExists.mockResolvedValue(false);
+
+    await store.requestPublish(bundlePub, router, [], bundleCatalog);
+
+    expect(publishToCommunity).not.toHaveBeenCalled();
+    expect(store.open).toBe(true);
+    // The stale inner-bundle row surfaces so the user re-publishes it.
+    expect(store.unmetRows.map((r) => r.id)).toEqual(["bd001abc"]);
+    expect(communityPostExists).toHaveBeenCalledWith("author/inner");
+  });
+
+  it("does NOT reclassify a 'published' dep on a transient verify failure (5xx)", async () => {
+    const store = useGuidedPublishStore();
+    const router = routerStub();
+    const catalog = [
+      catRow({ id: "aaaa1111", name: "Hair", community_post_slug: "author/hair" }),
+    ];
+    const modulePub = pub({
+      id: "cccc1111",
+      type: "constraint",
+      payload: { source_wildcard_id: "aaaa1111" },
+    });
+    // communityPostExists returns true on a 5xx/network blip (its own contract),
+    // so the gate must NOT reclassify and publishes straight through.
+    communityPostExists.mockResolvedValue(true);
+
+    await store.requestPublish(modulePub, router, catalog);
+
+    expect(publishToCommunity).toHaveBeenCalledTimes(1);
+    expect(store.open).toBe(false);
+  });
+
+  it("merges a stale published dep with a genuinely unmet dep (no duplicates)", async () => {
+    const store = useGuidedPublishStore();
+    const router = routerStub();
+    // aaaa1111: published-looking but stale. bbbb2222: plainly unpublished.
+    const catalog = [
+      catRow({ id: "aaaa1111", name: "Hair", community_post_slug: "author/hair" }),
+      catRow({ id: "bbbb2222", name: "Eyes", community_post_slug: null }),
+    ];
+    const modulePub = pub({
+      id: "cccc1111",
+      type: "constraint",
+      payload: { source_wildcard_id: "aaaa1111", target_wildcard_id: "bbbb2222" },
+    });
+    communityPostExists.mockResolvedValue(false); // author/hair is gone
+
+    await store.requestPublish(modulePub, router, catalog);
+
+    expect(publishToCommunity).not.toHaveBeenCalled();
+    expect(store.open).toBe(true);
+    // Both rows show; the base-unmet bbbb2222 first, then the reclassified stale
+    // aaaa1111 — deduped by id (no row appears twice).
+    expect([...store.unmetRows.map((r) => r.id)].sort()).toEqual(["aaaa1111", "bbbb2222"]);
   });
 });
 
@@ -262,9 +414,11 @@ describe("useGuidedPublishStore dialog actions", () => {
     publishToCommunity.mockReset();
     buildModulePublishable.mockReset();
     buildBundlePublishable.mockReset();
+    communityPostExists.mockReset();
+    communityPostExists.mockResolvedValue(true);
   });
 
-  it("publishDep builds the dep row's publishable and publishes THAT dep", () => {
+  it("publishDep builds the dep row's publishable and publishes THAT dep", async () => {
     const store = useGuidedPublishStore();
     const router = routerStub();
     // A real module dep row always carries `type` — that's how publishDep tells
@@ -279,7 +433,7 @@ describe("useGuidedPublishStore dialog actions", () => {
     const depPub = pub({ id: "aaaa1111", type: "wildcard" }, "Hair");
     buildModulePublishable.mockReturnValue(depPub);
 
-    store.requestPublish(modulePub, router, catalog); // opens the dialog
+    await store.requestPublish(modulePub, router, catalog); // opens the dialog
     store.publishDep(depRow);
 
     // The dep's publishable is built WITH the pending catalog too, so a dep
@@ -292,7 +446,7 @@ describe("useGuidedPublishStore dialog actions", () => {
     expect(store.open).toBe(false);
   });
 
-  it("publishDep navigates to publish an inner-bundle dep (no `type`; BR-A2b)", () => {
+  it("publishDep navigates to publish an inner-bundle dep (no `type`; BR-A2b)", async () => {
     const store = useGuidedPublishStore();
     const router = routerStub();
     // A bundle catalog row carries populated `children` (the list endpoint
@@ -329,7 +483,7 @@ describe("useGuidedPublishStore dialog actions", () => {
     };
     buildBundlePublishable.mockReturnValue(depPub);
 
-    store.requestPublish(bundlePub, router, [], bundleCatalog); // opens the dialog
+    await store.requestPublish(bundlePub, router, [], bundleCatalog); // opens the dialog
     store.publishDep(bundleDepRow);
 
     // A bundle dep navigates to publish THAT bundle, exactly like a module dep.
@@ -343,7 +497,7 @@ describe("useGuidedPublishStore dialog actions", () => {
     expect(store.open).toBe(false);
   });
 
-  it("publishAnyway publishes the pending MODULE (not a dep)", () => {
+  it("publishAnyway publishes the pending MODULE (not a dep)", async () => {
     const store = useGuidedPublishStore();
     const router = routerStub();
     const catalog = [catRow({ id: "aaaa1111", name: "Hair", community_post_slug: null })];
@@ -353,7 +507,7 @@ describe("useGuidedPublishStore dialog actions", () => {
       payload: { source_wildcard_id: "aaaa1111" },
     });
 
-    store.requestPublish(modulePub, router, catalog);
+    await store.requestPublish(modulePub, router, catalog);
     store.publishAnyway();
 
     expect(publishToCommunity).toHaveBeenCalledTimes(1);
@@ -362,7 +516,7 @@ describe("useGuidedPublishStore dialog actions", () => {
     expect(store.open).toBe(false);
   });
 
-  it("cancel closes the dialog without publishing", () => {
+  it("cancel closes the dialog without publishing", async () => {
     const store = useGuidedPublishStore();
     const router = routerStub();
     const catalog = [catRow({ id: "aaaa1111", name: "Hair", community_post_slug: null })];
@@ -372,7 +526,7 @@ describe("useGuidedPublishStore dialog actions", () => {
       payload: { source_wildcard_id: "aaaa1111" },
     });
 
-    store.requestPublish(modulePub, router, catalog);
+    await store.requestPublish(modulePub, router, catalog);
     store.cancel();
 
     expect(publishToCommunity).not.toHaveBeenCalled();

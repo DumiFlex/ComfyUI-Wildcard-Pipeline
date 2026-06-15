@@ -21,6 +21,13 @@
  * carrying a slug) drops off, so the user iterates until unmet is empty and
  * the module publishes directly.
  *
+ * `requestPublish` is ASYNC: it also VERIFIES each auto-detected "published"
+ * dep's slug against the community (`communityPostExists`). A dep whose
+ * community post was deleted still carries a local `community_post_slug` and
+ * would otherwise pass the gate, only to dead-end at the publish form; the
+ * verify reclassifies such a stale dep as unmet (its local row joins the
+ * dialog) so the user re-publishes it. See `requestPublish` for the loop.
+ *
  * Holding the router + catalog from the request lets the dialog actions
  * re-enter `publishToCommunity` with the same context the entry point had,
  * without the host re-plumbing them.
@@ -31,11 +38,17 @@ import { defineStore } from "pinia";
 import type { Router } from "vue-router";
 import type { BundleRow, ModuleRow } from "../api/types";
 import {
+  bundleChildBundleRefs,
+  bundleChildExternalRefs,
   bundleChildExternalUnmetRows,
   bundleUnmetDependencyRows,
+  listReferencedUuids,
+  localRowsForSlugs,
+  resolveDependencies,
   unmetDependencyRows,
   type ReferencingModule,
 } from "./dependencies";
+import { communityPostExists } from "../community/community-posts";
 import {
   buildBundlePublishable,
   buildModulePublishable,
@@ -71,6 +84,61 @@ function toReferencingModule(pub: PublishablePayload): ReferencingModule {
 function bundleChildrenOf(pub: PublishablePayload): Array<{ id?: unknown; type?: unknown }> {
   const children = (pub.payload as { children?: unknown }).children;
   return Array.isArray(children) ? (children as Array<{ id?: unknown; type?: unknown }>) : [];
+}
+
+/** De-duplicate library rows by `id`, first occurrence wins. The base unmet set
+ *  and the reclassified-stale set can overlap only by coincidence, but a row
+ *  must never appear twice in the dialog. */
+function dedupeById<T extends { id: string }>(rows: T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const row of rows) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    out.push(row);
+  }
+  return out;
+}
+
+/**
+ * The community-post slugs a publishable WOULD ship as already-published
+ * dependencies — the slug-carrying half of `resolveDependencies` across every
+ * dep source the publish hash uses. These are exactly the deps the gate treats
+ * as "met" purely from local catalog state, so they're the set the gate must
+ * re-verify against the community (a deleted post leaves a stale slug here).
+ *
+ *   - MODULE: its referenced wildcards (`listReferencedUuids`) resolved against
+ *     the module catalog.
+ *   - BUNDLE: its inner-bundle children (`bundleChildBundleRefs`) resolved
+ *     against the bundle catalog, PLUS its children's external module refs
+ *     (`bundleChildExternalRefs`) resolved against the module catalog.
+ *
+ * De-duplicated (a slug surfaced by more than one source is verified once).
+ * Mirrors the three-source resolution in `single-row-publish.publishToCommunity`
+ * so the gate verifies precisely the slugs the hash would prefill as published.
+ */
+function publishedDepSlugs(
+  pub: PublishablePayload,
+  children: Array<{ id?: unknown; type?: unknown }>,
+  cat: ModuleRow[],
+  bundleCat: BundleRow[],
+): string[] {
+  const slugs: string[] =
+    children.length > 0
+      ? [
+          ...resolveDependencies(bundleChildBundleRefs(children), bundleCat).dependencies.map(
+            (d) => d.slug,
+          ),
+          ...resolveDependencies(
+            bundleChildExternalRefs(children as Array<Record<string, unknown>>, bundleCat),
+            cat,
+          ).dependencies.map((d) => d.slug),
+        ]
+      : resolveDependencies(
+          listReferencedUuids(toReferencingModule(pub)),
+          cat,
+        ).dependencies.map((d) => d.slug);
+  return [...new Set(slugs)];
 }
 
 export const useGuidedPublishStore = defineStore("guidedPublish", () => {
@@ -112,13 +180,27 @@ export const useGuidedPublishStore = defineStore("guidedPublish", () => {
    * children against `bundleCat` (the bundle catalog). Publish directly when
    * there are none, otherwise open the dialog with the pending publishable +
    * unmet rows. `bundleCat` defaults to `[]` so module-only callers can omit it.
+   *
+   * ASYNC (verify step): a dep classified "published" comes purely from the
+   * local row's `community_post_slug`, so a dep whose community post was DELETED
+   * still looks published — it bypasses this gate and dead-ends later at the
+   * community publish form ("not found, can't publish"). Before publishing, we
+   * VERIFY each detected published-dep slug against the community
+   * (`communityPostExists`, in parallel); a slug the community no longer has
+   * (404/410) is RECLASSIFIED as unmet by mapping it back to its LOCAL row
+   * (`localRowsForSlugs`) and merging it into the unmet set. The user then
+   * re-publishes it from the same dialog (minting a fresh slug); re-initiating
+   * the publish re-runs this verify, the slug now resolves, and the dep drops
+   * off — the loop converges. A transient verify failure (5xx/network) does NOT
+   * reclassify (`communityPostExists` returns `true` on those), so a real dep
+   * is never spuriously downgraded on a blip.
    */
-  function requestPublish(
+  async function requestPublish(
     pub: PublishablePayload,
     r: Router,
     cat: ModuleRow[],
     bundleCat: BundleRow[] = [],
-  ): void {
+  ): Promise<void> {
     const children = bundleChildrenOf(pub);
     // A bundle gates on TWO disjoint dep sources: its inner-bundle refs
     // (resolved against the bundle catalog) AND its children's own external
@@ -126,7 +208,7 @@ export const useGuidedPublishStore = defineStore("guidedPublish", () => {
     // child's nested `@{}` pointing OUTSIDE the bundle's closure (resolved
     // against the module catalog, `bundleChildExternalUnmetRows`). A module
     // gates on its own wildcard refs. The dialog renders ModuleRow | BundleRow.
-    const unmet =
+    const baseUnmet =
       children.length > 0
         ? [
             ...bundleUnmetDependencyRows(children, bundleCat),
@@ -137,6 +219,18 @@ export const useGuidedPublishStore = defineStore("guidedPublish", () => {
             ),
           ]
         : unmetDependencyRows(toReferencingModule(pub), cat);
+
+    // VERIFY the "published" deps: any slug the post would ship as already-on-
+    // community, re-checked against the live community. A slug that no longer
+    // resolves (deleted post) maps back to its local row and joins the unmet set
+    // so the user re-publishes it. Verified in parallel; a missing/transient
+    // result is folded by `communityPostExists` (false ONLY on 404/410).
+    const slugs = publishedDepSlugs(pub, children, cat, bundleCat);
+    const existence = await Promise.all(slugs.map((slug) => communityPostExists(slug)));
+    const staleSlugs = slugs.filter((_, i) => !existence[i]);
+    const staleRows = localRowsForSlugs(staleSlugs, cat, bundleCat);
+
+    const unmet = dedupeById<ModuleRow | BundleRow>([...baseUnmet, ...staleRows]);
     if (unmet.length === 0) {
       publishToCommunity(pub, r, cat, bundleCat);
       return;

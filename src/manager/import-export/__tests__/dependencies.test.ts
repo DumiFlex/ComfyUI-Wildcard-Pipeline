@@ -6,6 +6,7 @@ import {
   bundleSatisfiedIds,
   bundleUnmetDependencyRows,
   listReferencedUuids,
+  localRowsForSlugs,
   resolveDependencies,
   unmetDependencyRows,
   type ReferencingModule,
@@ -592,5 +593,42 @@ describe("bundleChildExternalUnmetRows", () => {
     // ext-gone isn't in the catalog → dangling → excluded.
     const rows = bundleChildExternalUnmetRows(children, [], moduleCatalog);
     expect(rows.map((r) => r.id)).toEqual(["ext-unp1"]);
+  });
+});
+
+describe("localRowsForSlugs", () => {
+  it("returns the module catalog row whose community_post_slug matches", () => {
+    const cat = [
+      catRow({ id: "aaaa1111", name: "Hair", community_post_slug: "author/hair" }),
+      catRow({ id: "bbbb2222", name: "Eyes", community_post_slug: "author/eyes" }),
+    ];
+    const rows = localRowsForSlugs(["author/hair"], cat, []);
+    expect(rows.map((r) => r.id)).toEqual(["aaaa1111"]);
+  });
+
+  it("searches the module catalog first, then the bundle catalog", () => {
+    const cat = [catRow({ id: "aaaa1111", name: "Hair", community_post_slug: "author/hair" })];
+    const bundleCat = [
+      bundleRow({ id: "bd001abc", name: "Inner Bundle", community_post_slug: "author/inner" }),
+    ];
+    const rows = localRowsForSlugs(["author/inner", "author/hair"], cat, bundleCat);
+    // Insertion order of the requested slugs is preserved.
+    expect(rows.map((r) => r.id)).toEqual(["bd001abc", "aaaa1111"]);
+  });
+
+  it("dedupes by id when two slugs resolve to the same row", () => {
+    // Defensive: a single row carrying a slug should appear once even if the
+    // slug list repeats it.
+    const cat = [catRow({ id: "aaaa1111", name: "Hair", community_post_slug: "author/hair" })];
+    const rows = localRowsForSlugs(["author/hair", "author/hair"], cat, []);
+    expect(rows.map((r) => r.id)).toEqual(["aaaa1111"]);
+  });
+
+  it("skips a slug with no matching local row", () => {
+    const cat = [catRow({ id: "aaaa1111", name: "Hair", community_post_slug: "author/hair" })];
+    // "author/gone" matches nothing → dropped (the local row was deleted, or
+    // the slug belongs to someone else's post).
+    const rows = localRowsForSlugs(["author/gone", "author/hair"], cat, []);
+    expect(rows.map((r) => r.id)).toEqual(["aaaa1111"]);
   });
 });

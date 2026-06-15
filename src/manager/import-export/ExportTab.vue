@@ -583,7 +583,11 @@ const singleSelected = computed<PublishablePayload | null>(() => {
   return mod ? buildModulePublishable(mod, modules.value) : null;
 });
 
-function publishToCommunity() {
+/** Busy flag while the gate verifies published deps against the community
+ *  (a short async hop before the dialog/navigation). */
+const publishingCommunity = ref<boolean>(false);
+
+async function publishToCommunity() {
   // Route through the guided-publish gate (B3) — same seam as the per-row
   // Publish button. If the selected module references in-library wildcards not
   // yet on the community — OR the selected bundle references an inner bundle
@@ -591,9 +595,15 @@ function publishToCommunity() {
   // otherwise it publishes directly (B2b dependency auto-detect runs inside).
   // `modules` resolves a module's wildcard refs; `bundles` resolves a bundle's
   // inner-bundle refs. Both are this tab's full lists (the gate + publish hash
-  // resolution sets).
-  if (singleSelected.value) {
-    guidedPublish.requestPublish(singleSelected.value, router, modules.value, bundles.value);
+  // resolution sets). The gate is async (it verifies each detected "published"
+  // dep's slug against the community, reclassifying a deleted-post dep as
+  // publish-first), so we await it.
+  if (!singleSelected.value || publishingCommunity.value) return;
+  publishingCommunity.value = true;
+  try {
+    await guidedPublish.requestPublish(singleSelected.value, router, modules.value, bundles.value);
+  } finally {
+    publishingCommunity.value = false;
   }
 }
 
@@ -763,7 +773,8 @@ function presetFavoritesOnly(): void {
         variant="secondary"
         size="sm"
         icon="pi-share-alt"
-        :disabled="!singleSelected"
+        :disabled="!singleSelected || publishingCommunity"
+        :loading="publishingCommunity"
         :title="singleSelected ? 'Open the community Publish form pre-filled with this entity' : 'Select exactly one module or bundle to publish'"
         data-test="export-tab-publish-community"
         @click="publishToCommunity"

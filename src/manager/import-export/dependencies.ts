@@ -371,3 +371,37 @@ export function bundleUnmetDependencyRows(
 ): BundleRow[] {
   return unmetRowsForRefs(bundleChildBundleRefs(children), bundleCatalog);
 }
+
+/**
+ * The local library rows whose `community_post_slug` matches one of `slugs` —
+ * the reverse of the publish hash's slug resolution. Used by the guided-publish
+ * gate to turn a set of STALE published-dep slugs (community posts that were
+ * deleted) back into their local `ModuleRow | BundleRow`s so the dialog can
+ * offer a Publish button (re-publishing mints a fresh slug).
+ *
+ * Each slug is resolved against `cat` FIRST (module rows), then `bundleCat`
+ * (bundle rows) — a slug never belongs to both, but the module catalog is the
+ * common case so it's searched first. Results are de-duplicated by `id` (a slug
+ * that repeats, or two slugs that somehow map to one row, yield a single row)
+ * and slugs with no matching local row are skipped (the row was deleted locally,
+ * or the slug points at someone else's post — nothing to publish from here).
+ * Requested-slug insertion order is preserved.
+ */
+export function localRowsForSlugs(
+  slugs: string[],
+  cat: ModuleRow[],
+  bundleCat: BundleRow[],
+): Array<ModuleRow | BundleRow> {
+  const out: Array<ModuleRow | BundleRow> = [];
+  const seenIds = new Set<string>();
+  for (const slug of slugs) {
+    if (typeof slug !== "string" || slug.trim() === "") continue;
+    const row: ModuleRow | BundleRow | undefined =
+      cat.find((r) => r.community_post_slug === slug) ??
+      bundleCat.find((r) => r.community_post_slug === slug);
+    if (!row || seenIds.has(row.id)) continue;
+    seenIds.add(row.id);
+    out.push(row);
+  }
+  return out;
+}

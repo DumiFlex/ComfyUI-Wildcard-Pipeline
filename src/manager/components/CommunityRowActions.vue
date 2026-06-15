@@ -12,6 +12,7 @@
  * actions-column convention (the trash icon at the row's right
  * edge). Sized small so they don't dominate the row.
  */
+import { ref } from "vue";
 import { useRouter } from "vue-router";
 import type { BundleRow, ModuleRow } from "../api/types";
 import Button from "./ui/Button.vue";
@@ -57,7 +58,13 @@ function publishablePayload(): PublishablePayload {
   return buildModulePublishable(props.row as ModuleRow, moduleStore.catalog);
 }
 
-function onPublish() {
+/** Disable the Publish button while the gate verifies published deps against
+ *  the community (a short async hop before the dialog/navigation). */
+const publishing = ref(false);
+
+async function onPublish() {
+  if (publishing.value) return;
+  publishing.value = true;
   try {
     // Route through the guided-publish gate (B3): if the module references
     // wildcards that are in the library but not yet on the community — OR a
@@ -65,8 +72,10 @@ function onPublish() {
     // gate opens the UnmetDepsDialog; otherwise it publishes directly (B2b
     // dependency auto-detect still runs inside publishToCommunity). The module
     // catalog resolves wildcard refs; the bundle catalog resolves inner-bundle
-    // refs. Both are the gate's resolution set and the hash's.
-    guidedPublish.requestPublish(
+    // refs. Both are the gate's resolution set and the hash's. The gate is async
+    // (it verifies each detected "published" dep's slug against the community,
+    // reclassifying a deleted-post dep as publish-first), so we await it.
+    await guidedPublish.requestPublish(
       publishablePayload(),
       router,
       moduleStore.catalog,
@@ -79,6 +88,8 @@ function onPublish() {
       detail: e instanceof Error ? e.message : String(e),
       life: 5000,
     });
+  } finally {
+    publishing.value = false;
   }
 }
 
@@ -114,6 +125,8 @@ async function onCopy() {
       variant="secondary"
       size="sm"
       icon="pi-share-alt"
+      :loading="publishing"
+      :disabled="publishing"
       :aria-label="`Publish ${row.name} to community`"
       :title="`Publish ${row.name} to community`"
       @click="onPublish"
@@ -132,6 +145,8 @@ async function onCopy() {
       variant="ghost"
       size="sm"
       icon="pi-share-alt"
+      :loading="publishing"
+      :disabled="publishing"
       :aria-label="`Publish ${row.name} to community`"
       :title="`Publish ${row.name} to community`"
       @click="onPublish"
