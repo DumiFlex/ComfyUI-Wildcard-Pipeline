@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   bundleChildBundleRefs,
+  bundleChildExternalRefs,
+  bundleChildExternalUnmetRows,
+  bundleSatisfiedIds,
   bundleUnmetDependencyRows,
   listReferencedUuids,
   resolveDependencies,
@@ -409,5 +412,185 @@ describe("bundleUnmetDependencyRows", () => {
       bundleRow({ id: "wc001abc", name: "Wildcard", community_post_slug: null }),
     ];
     expect(bundleUnmetDependencyRows(children, bundleCatalog)).toEqual([]);
+  });
+});
+
+/** Bundle-catalog row carrying its `children` (inner-bundle expansion). The
+ *  catalog list endpoint returns these populated, so the closure is buildable
+ *  client-side. Cast to the full row type. */
+function bundleRowWithChildren(parts: {
+  id: string;
+  name: string;
+  children: Array<Record<string, unknown>>;
+  community_post_slug?: string | null;
+}): BundleRow {
+  return parts as unknown as BundleRow;
+}
+
+describe("bundleSatisfiedIds", () => {
+  it("covers direct module children", () => {
+    const children = [
+      { id: "wc001abc", type: "wildcard" },
+      { id: "cn001abc", type: "constraint" },
+    ];
+    expect(bundleSatisfiedIds(children, [])).toEqual(new Set(["wc001abc", "cn001abc"]));
+  });
+
+  it("covers an inner bundle's children (looked up in the bundle catalog)", () => {
+    const children = [
+      { id: "wc001abc", type: "wildcard" },
+      { id: "bd001abc", type: "bundle" },
+    ];
+    const bundleCatalog = [
+      bundleRowWithChildren({
+        id: "bd001abc",
+        name: "Inner",
+        children: [{ id: "wc999abc", type: "wildcard" }],
+      }),
+    ];
+    expect(bundleSatisfiedIds(children, bundleCatalog)).toEqual(
+      new Set(["wc001abc", "bd001abc", "wc999abc"]),
+    );
+  });
+
+  it("skips blank / non-string ids", () => {
+    const children = [
+      { id: "", type: "wildcard" },
+      { id: 42, type: "wildcard" },
+      { id: "wc001abc", type: "wildcard" },
+    ];
+    expect(bundleSatisfiedIds(children, [])).toEqual(new Set(["wc001abc"]));
+  });
+});
+
+describe("bundleChildExternalRefs", () => {
+  it("does NOT return a constraint child's source that is a sibling module child", () => {
+    const children = [
+      { id: "wc001abc", type: "wildcard", payload: {} },
+      {
+        id: "cn001abc",
+        type: "constraint",
+        payload: { source_wildcard_id: "wc001abc", target_wildcard_id: "wc001abc" },
+      },
+    ];
+    expect(bundleChildExternalRefs(children, [])).toEqual([]);
+  });
+
+  it("does NOT return a constraint target that lives inside an inner bundle", () => {
+    const children = [
+      { id: "bd001abc", type: "bundle" },
+      {
+        id: "cn001abc",
+        type: "constraint",
+        payload: { source_wildcard_id: null, target_wildcard_id: "wc999abc" },
+      },
+    ];
+    const bundleCatalog = [
+      bundleRowWithChildren({
+        id: "bd001abc",
+        name: "Inner",
+        children: [{ id: "wc999abc", type: "wildcard" }],
+      }),
+    ];
+    expect(bundleChildExternalRefs(children, bundleCatalog)).toEqual([]);
+  });
+
+  it("RETURNS a constraint target absent from the bundle and every inner bundle", () => {
+    const children = [
+      { id: "bd001abc", type: "bundle" },
+      {
+        id: "cn001abc",
+        type: "constraint",
+        payload: { source_wildcard_id: null, target_wildcard_id: "ext99999" },
+      },
+    ];
+    const bundleCatalog = [
+      bundleRowWithChildren({
+        id: "bd001abc",
+        name: "Inner",
+        children: [{ id: "wc999abc", type: "wildcard" }],
+      }),
+    ];
+    expect(bundleChildExternalRefs(children, bundleCatalog)).toEqual(["ext99999"]);
+  });
+
+  it("RETURNS a wildcard child's nested @{} ref outside the closure but not a sibling one", () => {
+    // Nested @{} refs are strict 8-hex (REF_TOKEN_RE), so sibling + external
+    // ids here are hex; the sibling child id must match the @{} token verbatim.
+    const children = [
+      { id: "aaaa1111", type: "wildcard", payload: {} },
+      {
+        id: "bbbb2222",
+        type: "wildcard",
+        payload: { options: [{ id: "o1", value: "@{aaaa1111} and @{ffff9999}", weight: 1 }] },
+      },
+    ];
+    // aaaa1111 is a sibling (satisfied); ffff9999 is external.
+    expect(bundleChildExternalRefs(children, [])).toEqual(["ffff9999"]);
+  });
+
+  it("skips type:\"bundle\" children (their refs are inner-bundle deps, handled elsewhere)", () => {
+    const children = [
+      { id: "bd001abc", type: "bundle", payload: { source_wildcard_id: "ext99999" } },
+    ];
+    expect(bundleChildExternalRefs(children, [])).toEqual([]);
+  });
+
+  it("dedupes external refs (first occurrence wins)", () => {
+    const children = [
+      {
+        id: "cn001abc",
+        type: "constraint",
+        payload: { source_wildcard_id: "ext11111", target_wildcard_id: "ext22222" },
+      },
+      {
+        id: "cn002abc",
+        type: "constraint",
+        payload: { source_wildcard_id: "ext22222", target_wildcard_id: "ext11111" },
+      },
+    ];
+    expect(bundleChildExternalRefs(children, [])).toEqual(["ext11111", "ext22222"]);
+  });
+});
+
+describe("bundleChildExternalUnmetRows", () => {
+  const children = [
+    {
+      id: "cn001abc",
+      type: "constraint",
+      payload: { source_wildcard_id: "ext-pub1", target_wildcard_id: "ext-unp1" },
+    },
+    {
+      id: "cn002abc",
+      type: "constraint",
+      payload: { source_wildcard_id: "ext-gone", target_wildcard_id: null },
+    },
+  ];
+
+  it("returns the ModuleRow for an external ref that is in-library-unpublished", () => {
+    const moduleCatalog = [
+      catRow({ id: "ext-unp1", name: "Unpublished WC", community_post_slug: null }),
+    ];
+    const rows = bundleChildExternalUnmetRows(children, [], moduleCatalog);
+    expect(rows.map((r) => r.id)).toEqual(["ext-unp1"]);
+  });
+
+  it("excludes an external ref that is published (has a slug)", () => {
+    const moduleCatalog = [
+      catRow({ id: "ext-pub1", name: "Published WC", community_post_slug: "published-wc" }),
+      catRow({ id: "ext-unp1", name: "Unpublished WC", community_post_slug: null }),
+    ];
+    const rows = bundleChildExternalUnmetRows(children, [], moduleCatalog);
+    // The published ref drops off; only the unpublished one survives.
+    expect(rows.map((r) => r.id)).toEqual(["ext-unp1"]);
+  });
+
+  it("excludes an external ref absent from the module catalog (dangling)", () => {
+    const moduleCatalog = [
+      catRow({ id: "ext-unp1", name: "Unpublished WC", community_post_slug: null }),
+    ];
+    // ext-gone isn't in the catalog → dangling → excluded.
+    const rows = bundleChildExternalUnmetRows(children, [], moduleCatalog);
+    expect(rows.map((r) => r.id)).toEqual(["ext-unp1"]);
   });
 });

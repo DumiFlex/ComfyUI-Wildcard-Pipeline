@@ -22,6 +22,7 @@ import type { Router } from "vue-router";
 import type { BundleRow, ModuleRow } from "../api/types";
 import {
   bundleChildBundleRefs,
+  bundleChildExternalRefs,
   listReferencedUuids,
   resolveDependencies,
   type ReferencingModule,
@@ -336,6 +337,22 @@ function textToB64(text: string): string {
   return btoa(bin);
 }
 
+/** Keep the first occurrence of each `key(item)`. Used to collapse dependency
+ *  / unmet entries that more than one dep source resolves to the same slug or
+ *  name — `resolveDependencies` already dedupes WITHIN a source, this dedupes
+ *  ACROSS the merged sources. Insertion order preserved. */
+function dedupeBy<T>(items: T[], key: (item: T) => string): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const item of items) {
+    const k = key(item);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(item);
+  }
+  return out;
+}
+
 /**
  * Navigate the extension to the Community tab's publish view with the
  * payload pre-filled via the URL hash. The community embed's
@@ -426,8 +443,27 @@ export function publishToCommunity(
     ? bundleChildBundleRefs(inner.children as Array<{ id?: unknown; type?: unknown }>)
     : [];
   const bundleDeps = resolveDependencies(innerBundleRefs, bundleCatalog);
-  const dependencies = [...moduleDeps.dependencies, ...bundleDeps.dependencies];
-  const unmet = [...moduleDeps.unmet, ...bundleDeps.unmet];
+  // BUNDLE child EXTERNAL module refs: a child constraint's source/target or a
+  // wildcard/derivation child's nested `@{}` pointing OUTSIDE the bundle's
+  // closure (not a direct module child, not inside an inner bundle) is an
+  // external module dependency a downloader must reattach. Resolved against the
+  // MODULE catalog (these are module uuids, like a module's own refs). A module
+  // has no `children`, so this resolves to `[]`.
+  const bundleChildExtRefs = Array.isArray(inner.children)
+    ? bundleChildExternalRefs(inner.children as Array<Record<string, unknown>>, bundleCatalog)
+    : [];
+  const bundleChildDeps = resolveDependencies(bundleChildExtRefs, catalog);
+  // Merge all three sources, de-duping consistently with `resolveDependencies`'
+  // own split (dependencies by slug, unmet by name) — a slug/name surfaced by
+  // more than one source collapses to a single entry.
+  const dependencies = dedupeBy(
+    [...moduleDeps.dependencies, ...bundleDeps.dependencies, ...bundleChildDeps.dependencies],
+    (d) => d.slug,
+  );
+  const unmet = dedupeBy(
+    [...moduleDeps.unmet, ...bundleDeps.unmet, ...bundleChildDeps.unmet],
+    (u) => u.name,
+  );
   if (dependencies.length > 0) {
     hash.set("dependencies", textToB64(JSON.stringify(dependencies)));
   }

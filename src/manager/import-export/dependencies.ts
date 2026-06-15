@@ -258,6 +258,77 @@ export function bundleChildBundleRefs(
   return out;
 }
 
+/** Tier-2 inner-bundle nesting cap (matches the bundle insert cap). */
+const BUNDLE_CLOSURE_DEPTH = 2;
+
+/** Every id the bundle SHIPS or COVERS: its direct children + every inner
+ *  bundle's children, recursively (bounded). A child ref whose target is in
+ *  this set is satisfied — it arrives with the bundle (direct child snapshot)
+ *  or via an inner-bundle dependency. Inner bundles are looked up in
+ *  `bundleCatalog` (rows carry `children`). */
+export function bundleSatisfiedIds(
+  children: Array<{ id?: unknown; type?: unknown }>,
+  bundleCatalog: BundleRow[],
+): Set<string> {
+  const byId = new Map(bundleCatalog.map((b) => [b.id, b]));
+  const out = new Set<string>();
+  const walk = (kids: Array<{ id?: unknown; type?: unknown }>, depth: number): void => {
+    for (const child of kids) {
+      const id = child?.id;
+      if (typeof id !== "string" || id === "") continue;
+      out.add(id);
+      if (child.type === "bundle" && depth < BUNDLE_CLOSURE_DEPTH) {
+        const inner = byId.get(id);
+        if (inner && Array.isArray(inner.children)) {
+          walk(inner.children as Array<{ id?: unknown; type?: unknown }>, depth + 1);
+        }
+      }
+    }
+  };
+  walk(children, 0);
+  return out;
+}
+
+/** Module uuids the bundle's CHILDREN reference (constraint source/target +
+ *  nested @{} in wildcard/derivation/constraint values) that are NOT satisfied
+ *  within the bundle's closure — external module dependencies. Inner-bundle
+ *  refs are handled separately (`bundleChildBundleRefs`); skip `type:"bundle"`
+ *  children here. Deduped, first-occurrence order. */
+export function bundleChildExternalRefs(
+  children: Array<Record<string, unknown>>,
+  bundleCatalog: BundleRow[],
+): string[] {
+  const satisfied = bundleSatisfiedIds(children, bundleCatalog);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const child of children) {
+    const type = child?.type;
+    if (typeof type !== "string" || type === "bundle") continue;
+    const refs = listReferencedUuids({
+      id: typeof child.id === "string" ? child.id : "",
+      type: type as ReferencingModule["type"],
+      payload: (child.payload ?? {}) as Record<string, unknown>,
+    });
+    for (const uuid of refs) {
+      if (satisfied.has(uuid) || seen.has(uuid)) continue;
+      seen.add(uuid);
+      out.push(uuid);
+    }
+  }
+  return out;
+}
+
+/** The module catalog rows for a bundle's external child refs that are
+ *  in-library-unpublished — the dialog gate set (module analogue of
+ *  `bundleUnmetDependencyRows`). */
+export function bundleChildExternalUnmetRows(
+  children: Array<Record<string, unknown>>,
+  bundleCatalog: BundleRow[],
+  moduleCatalog: ModuleRow[],
+): ModuleRow[] {
+  return unmetRowsForRefs(bundleChildExternalRefs(children, bundleCatalog), moduleCatalog);
+}
+
 /**
  * Shared resolver: the catalog rows for `refUuids` that EXIST in `catalog` but
  * carry no `community_post_slug` (in-library, unpublished) — the gate set for

@@ -163,6 +163,73 @@ describe("useGuidedPublishStore.requestPublish (gate seam)", () => {
     expect(store.pendingModule).toEqual(bundlePub);
   });
 
+  it("opens the dialog for a bundle whose child constraint has an EXTERNAL unpublished target", () => {
+    const store = useGuidedPublishStore();
+    const router = routerStub();
+    // The external target wildcard lives in the MODULE catalog, unpublished —
+    // it's NOT a child of the bundle and NOT inside any inner bundle, so the
+    // child constraint's `target_wildcard_id` is an external module dependency.
+    const catalog = [catRow({ id: "ext99999", name: "External WC", community_post_slug: null })];
+    const bundlePub: PublishablePayload = {
+      payload: {
+        id: "bbbb1111",
+        name: "Outer",
+        children: [
+          { id: "wc001abc", type: "wildcard", payload: {} },
+          {
+            id: "cn001abc",
+            type: "constraint",
+            payload: { source_wildcard_id: "wc001abc", target_wildcard_id: "ext99999" },
+          },
+        ],
+      },
+      name: "Outer",
+      description: "",
+      content_rating: "safe",
+      tags: [],
+      community_post_slug: null,
+    };
+
+    // Module catalog (3rd arg) carries the external ref; no inner bundles.
+    store.requestPublish(bundlePub, router, catalog, []);
+
+    expect(publishToCommunity).not.toHaveBeenCalled();
+    expect(store.open).toBe(true);
+    // The external module dep surfaces in the gate (alongside any inner-bundle deps).
+    expect(store.unmetRows.map((r) => r.id)).toEqual(["ext99999"]);
+  });
+
+  it("does NOT gate a bundle whose child constraint target is a sibling module child", () => {
+    const store = useGuidedPublishStore();
+    const router = routerStub();
+    // The constraint's target is a sibling wildcard child → satisfied (ships) →
+    // not an external dep. No inner-bundle deps either → publish straight through.
+    const bundlePub: PublishablePayload = {
+      payload: {
+        id: "bbbb1111",
+        name: "Outer",
+        children: [
+          { id: "wc001abc", type: "wildcard", payload: {} },
+          {
+            id: "cn001abc",
+            type: "constraint",
+            payload: { source_wildcard_id: "wc001abc", target_wildcard_id: "wc001abc" },
+          },
+        ],
+      },
+      name: "Outer",
+      description: "",
+      content_rating: "safe",
+      tags: [],
+      community_post_slug: null,
+    };
+
+    store.requestPublish(bundlePub, router, [], []);
+
+    expect(publishToCommunity).toHaveBeenCalledTimes(1);
+    expect(store.open).toBe(false);
+  });
+
   it("publishes a bundle directly when its inner-bundle child is PUBLISHED", () => {
     const store = useGuidedPublishStore();
     const router = routerStub();

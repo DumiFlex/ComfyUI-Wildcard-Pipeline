@@ -31,6 +31,7 @@ import { defineStore } from "pinia";
 import type { Router } from "vue-router";
 import type { BundleRow, ModuleRow } from "../api/types";
 import {
+  bundleChildExternalUnmetRows,
   bundleUnmetDependencyRows,
   unmetDependencyRows,
   type ReferencingModule,
@@ -119,12 +120,22 @@ export const useGuidedPublishStore = defineStore("guidedPublish", () => {
     bundleCat: BundleRow[] = [],
   ): void {
     const children = bundleChildrenOf(pub);
-    // A bundle gates on its inner-bundle refs (resolved against the bundle
-    // catalog); a module gates on its wildcard refs (against the module
-    // catalog). The two ref sources are disjoint, so a single branch suffices.
+    // A bundle gates on TWO disjoint dep sources: its inner-bundle refs
+    // (resolved against the bundle catalog) AND its children's own external
+    // module refs — a constraint child's source/target or a wildcard/derivation
+    // child's nested `@{}` pointing OUTSIDE the bundle's closure (resolved
+    // against the module catalog, `bundleChildExternalUnmetRows`). A module
+    // gates on its own wildcard refs. The dialog renders ModuleRow | BundleRow.
     const unmet =
       children.length > 0
-        ? bundleUnmetDependencyRows(children, bundleCat)
+        ? [
+            ...bundleUnmetDependencyRows(children, bundleCat),
+            ...bundleChildExternalUnmetRows(
+              children as Array<Record<string, unknown>>,
+              bundleCat,
+              cat,
+            ),
+          ]
         : unmetDependencyRows(toReferencingModule(pub), cat);
     if (unmet.length === 0) {
       publishToCommunity(pub, r, cat, bundleCat);

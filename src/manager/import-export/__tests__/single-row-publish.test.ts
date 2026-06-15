@@ -214,6 +214,93 @@ describe("publishToCommunity — inner-bundle dependency hash injection (BR-A2)"
 });
 
 /**
+ * A bundle's CHILDREN have their OWN external module refs — a child constraint's
+ * source/target (or a wildcard/derivation child's nested `@{}`) pointing OUTSIDE
+ * the bundle's closure. Those are external module deps the downloader must
+ * reattach: resolved against the MODULE catalog (3rd arg) and merged into the
+ * same dependencies/unmet hash split as a module's own refs. A child ref that
+ * IS a sibling module child (ships in the bundle) is satisfied → not surfaced.
+ */
+/** A bundle whose child constraint points at `source`/`target` wildcard ids
+ *  that are NOT children of the bundle (external module refs). The sibling
+ *  wildcard child `wc-sib1` ships in the bundle (satisfied — never surfaced). */
+function bundleWithExternalChildRef(
+  source: string | null,
+  target: string | null,
+): PublishablePayload {
+  const cn: Record<string, unknown> = { matrix: {}, exceptions: [] };
+  if (source !== null) cn.source_wildcard_id = source;
+  if (target !== null) cn.target_wildcard_id = target;
+  const payload: Record<string, unknown> = {
+    id: "bd-outer1",
+    name: "outer-bundle",
+    description: "",
+    color: null,
+    category_id: null,
+    tags: [],
+    is_favorite: false,
+    children: [
+      { id: "wc-sib1", type: "wildcard", meta: { name: "sibling" }, payload: { options: [] } },
+      { id: "cn-chld1", type: "constraint", meta: { name: "child-cn" }, payload: cn },
+    ],
+  };
+  return {
+    payload,
+    name: "outer-bundle",
+    description: "",
+    content_rating: "safe",
+    tags: [],
+    community_post_slug: null,
+  };
+}
+
+describe("publishToCommunity — bundle child external refs in the dep hash", () => {
+  beforeEach(() => {
+    window.location.hash = "";
+  });
+  afterEach(() => {
+    window.location.hash = "";
+    vi.restoreAllMocks();
+  });
+
+  it("records a published external child ref as a dependency edge (against the module catalog)", async () => {
+    const catalog = [
+      catalogRow({ id: "ext-pub1", name: "External Pub", community_post_slug: "external-pub" }),
+    ];
+    // 3rd arg = module catalog (external child refs are module uuids); 4th empty.
+    publishToCommunity(bundleWithExternalChildRef("ext-pub1", null), routerStub(), catalog, []);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(decodeHashParam("dependencies")).toEqual([{ slug: "external-pub", optional: false }]);
+    expect(hashParam("unmet_deps")).toBeNull();
+  });
+
+  it("warns about an unpublished external child ref via unmet_deps", async () => {
+    const catalog = [
+      catalogRow({ id: "ext-unp1", name: "External Unpub", community_post_slug: null }),
+    ];
+    publishToCommunity(bundleWithExternalChildRef("ext-unp1", null), routerStub(), catalog, []);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(hashParam("dependencies")).toBeNull();
+    expect(decodeHashParam("unmet_deps")).toEqual(["External Unpub"]);
+  });
+
+  it("does NOT surface a child ref that is a sibling module child (ships in the bundle)", async () => {
+    // The constraint's source IS the sibling wildcard child `wc-sib1` → satisfied.
+    publishToCommunity(bundleWithExternalChildRef("wc-sib1", null), routerStub(), [], []);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(hashParam("dependencies")).toBeNull();
+    expect(hashParam("unmet_deps")).toBeNull();
+    expect(hashParam("payload")).not.toBeNull();
+  });
+});
+
+/**
  * The embed forwards the content-derived `schema_version` into the publish
  * POST so the server stamps the real version instead of grace-defaulting to 1
  * (which rejects a v2+ payload). `schemaVersionForPayload` resolves to 2 for a
