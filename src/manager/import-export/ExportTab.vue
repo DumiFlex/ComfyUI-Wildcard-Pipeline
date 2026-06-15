@@ -121,6 +121,13 @@ async function loadLibrary() {
 
 onMounted(loadLibrary);
 
+// Let the parent ImportExport view re-run our library fetch from its
+// shared Refresh button. ExportTab keeps its OWN modules/bundles/
+// categories/templates refs (the export listing renders from them), so
+// the parent's loadLibrary — which only refills the import-side refs —
+// can't refresh this tab. Exposing loadLibrary lets Refresh reload both.
+defineExpose({ loadLibrary });
+
 // ---------- Selection state ----------
 
 /**

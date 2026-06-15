@@ -105,6 +105,21 @@ async function loadLibrary() {
 
 onMounted(loadLibrary);
 
+// Template ref to the Export tab so the shared Refresh button can also
+// reload ITS listing. ExportTab maintains its own library refs (the
+// export picker renders from them), which the parent loadLibrary above
+// never touches — without this the export listing stayed stale after
+// adds/removes until a full tab remount.
+const exportTabRef = ref<InstanceType<typeof ExportTab> | null>(null);
+
+/** Refresh both sides: the parent import/collision snapshot AND the
+ *  Export tab's own listing (null-safe — ExportTab is only mounted in
+ *  export mode). */
+async function onRefresh() {
+  await loadLibrary();
+  await exportTabRef.value?.loadLibrary?.();
+}
+
 function setMode(next: Mode) {
   mode.value = next;
 }
@@ -727,7 +742,7 @@ function clearImport() {
           aria-label="Refresh library"
           :disabled="refreshing"
           :class="{ 'wp-refresh-btn--spin': refreshing }"
-          @click="loadLibrary"
+          @click="onRefresh"
         >Refresh</Button>
       </div>
     </div>
@@ -759,7 +774,7 @@ function clearImport() {
       class="wp-io-export-pane"
       data-test="io-export-pane"
     >
-      <ExportTab />
+      <ExportTab ref="exportTabRef" />
     </div>
 
     <!-- Import tab — 7-bucket parse + picker + commit orchestrator -->
