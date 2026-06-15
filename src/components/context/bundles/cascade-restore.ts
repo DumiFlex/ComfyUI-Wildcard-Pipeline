@@ -40,6 +40,7 @@ import {
   buildLibraryChildrenWithIntegrity,
   toChildSnapshot,
 } from "./save";
+import { computeBundleFingerprint } from "./bundle-fingerprint";
 import { walkRemap } from "./uuid-remap";
 import type { BundleInstance, ModuleEntry } from "../../../widgets/_shared";
 
@@ -231,10 +232,22 @@ export async function cascadeRestoreForBundle(
     const next = innerBundleMap.get(b.library_id);
     if (!next) return b;
     const hash = innerHashMap.get(b.library_id);
-    return {
+    const rebound: BundleInstance = {
       ...b,
       library_id: next,
       ...(hash ? { inserted_at_hash: hash } : {}),
+    };
+    // Reconcile the restored inner's snapshot_fingerprint to its freshly-
+    // restored content. Without this the rebound instance keeps the STALE
+    // fingerprint captured before the restore, so `bundleSnapshotModified`
+    // (live vs stored) flips true and the canvas flashes a false MODIFIED
+    // badge on a bundle that was just re-created to match the library.
+    // Mirror of the inserted_at_hash sync above. ONLY restored inners are
+    // reconciled (this branch) — a non-restored bundle returns early and
+    // keeps its own fingerprint, so genuine drift still surfaces.
+    return {
+      ...rebound,
+      snapshot_fingerprint: computeBundleFingerprint(rebound, newModules),
     };
   });
 

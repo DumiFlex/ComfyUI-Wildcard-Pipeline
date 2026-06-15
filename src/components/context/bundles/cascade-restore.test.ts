@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { cascadeRestoreForBundle, rewriteChildId } from "./cascade-restore";
+import {
+  bundleSnapshotModified,
+  computeBundleFingerprint,
+} from "./bundle-fingerprint";
 import { api } from "../../../manager/api/client";
-import type { ModuleRow } from "../../../manager/api/types";
+import type { BundleRow, ModuleRow } from "../../../manager/api/types";
 import {
   emptyBundleInstance,
   type BundleInstance,
@@ -521,5 +525,227 @@ describe("cascadeRestoreForBundle — Phase 4 syncs payload_hash to the library 
     expect(childWild?.payload_hash).toBe("wh-post");
     expect(childCon?.payload_hash).toBe("cn-corrected");
     expect(childCon?.payload_hash).not.toBe("stale-frozen-hash");
+  });
+});
+
+/**
+ * QA bug (2026-06-15): pushing an outer bundle with the cascade "Restore N
+ * missing references first" option re-creates a missing INNER bundle, but the
+ * inner then flashes a false MODIFIED drift badge — even though it was just
+ * freshly created and matches the library. Root cause — Phase 4's `newBundles`
+ * rebinds each restored inner's `library_id` + `inserted_at_hash` but kept the
+ * STALE `snapshot_fingerprint` captured before the restore. The drift detector
+ * `bundleSnapshotModified` compares the LIVE fingerprint against that stale
+ * stored value → they differ → false MODIFIED. (`onBundlePushSaved` only
+ * recomputes the OUTER's fingerprint, never the inner ones.)
+ *
+ * The fix is the symmetric sibling of the inserted_at_hash sync: Phase 4 also
+ * reconciles each RESTORED inner's `snapshot_fingerprint` to
+ * `computeBundleFingerprint(rebound, newModules)` so the freshly-restored
+ * content matches its stored baseline (no drift). Only restored inners are
+ * touched — a genuinely-modified, non-restored bundle keeps its own
+ * fingerprint so real drift still surfaces.
+ */
+describe("cascadeRestoreForBundle — Phase 4 reconciles restored inner-bundle fingerprint", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  function mkMod(
+    over: Partial<ModuleEntry> & { bundle_origin?: string },
+  ): ModuleEntry & { bundle_origin?: string } {
+    return {
+      id: "00000000",
+      type: "wildcard",
+      enabled: true,
+      collapsed: false,
+      meta: { name: "" },
+      entries: [],
+      payload: {},
+      instance: {},
+      payload_hash: "h",
+      _uid: "u",
+      ...over,
+    } as ModuleEntry & { bundle_origin?: string };
+  }
+
+  it("clears false drift on a restored inner bundle carrying a stale snapshot_fingerprint", async () => {
+    // No modules are missing → fetch (module POST) is never called; only the
+    // inner bundle's library row was deleted upstream.
+    const fetchMock = vi.fn(
+      async () =>
+        ({ ok: true, json: async () => ({}), text: async () => "" }) as unknown as Response,
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    // The restored inner bundle's fresh library entry.
+    const createSpy = vi
+      .spyOn(api.bundles, "create")
+      .mockResolvedValue({ id: "innernew", payload_hash: "inner-fresh-hash" } as BundleRow);
+
+    // Outer (range 0-2): a top-level wildcard at idx 0, then an inner bundle
+    // covering idx 1-2 (two wildcards owned by the inner).
+    const topWild = mkMod({
+      id: "top00001",
+      type: "wildcard",
+      _uid: "u-top",
+      meta: { name: "top" },
+      bundle_origin: "outer-uid",
+    });
+    const innerA = mkMod({
+      id: "inna0001",
+      type: "wildcard",
+      _uid: "u-ia",
+      meta: { name: "innerA" },
+      payload_hash: "ha",
+      bundle_origin: "inner-uid",
+    });
+    const innerB = mkMod({
+      id: "innb0001",
+      type: "wildcard",
+      _uid: "u-ib",
+      meta: { name: "innerB" },
+      payload_hash: "hb",
+      bundle_origin: "inner-uid",
+    });
+    const outer: BundleInstance = {
+      ...emptyBundleInstance("outerlib"),
+      _uid: "outer-uid",
+      start_idx: 0,
+      end_idx: 2,
+      name: "Kit",
+    };
+    // Missing inner bundle carrying a STALE fingerprint that won't match the
+    // live content — this is what produces the false MODIFIED badge today.
+    const inner: BundleInstance = {
+      ...emptyBundleInstance("innerlibOLD"),
+      _uid: "inner-uid",
+      parent_uid: "outer-uid",
+      start_idx: 1,
+      end_idx: 2,
+      name: "Inner",
+      snapshot_fingerprint: "v2:stale",
+    };
+    const modules = [topWild, innerA, innerB];
+    const bundles = [outer, inner];
+
+    const result = await cascadeRestoreForBundle({
+      outer,
+      modules,
+      bundles,
+      isModuleMissing: () => false,
+      isBundleMissing: (b) => b._uid === "inner-uid",
+    });
+
+    // The inner bundle was restored (Phase 2 POST) and rebound (Phase 4).
+    expect(createSpy).toHaveBeenCalledTimes(1);
+    expect(result.restoredBundleCount).toBe(1);
+
+    const reboundInner = result.newBundles.find((b) => b._uid === "inner-uid")!;
+    // Sanity: rebind swapped the dead library_id + synced inserted_at_hash.
+    expect(reboundInner.library_id).toBe("innernew");
+    expect(reboundInner.inserted_at_hash).toBe("inner-fresh-hash");
+
+    // The headline fix: the rebound inner's snapshot_fingerprint matches the
+    // freshly-restored content → NO false drift. (Stale "v2:stale" would fail.)
+    expect(reboundInner.snapshot_fingerprint).toBe(
+      computeBundleFingerprint(reboundInner, result.newModules),
+    );
+    expect(bundleSnapshotModified(reboundInner, result.newModules)).toBe(false);
+  });
+
+  it("does NOT touch a non-restored, genuinely-modified bundle's fingerprint", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        ({ ok: true, json: async () => ({}), text: async () => "" }) as unknown as Response,
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const createSpy = vi
+      .spyOn(api.bundles, "create")
+      .mockResolvedValue({ id: "innernew", payload_hash: "inner-fresh-hash" } as BundleRow);
+
+    // Outer (range 0-3): top-level wildcard, a MISSING inner (idx 1), and a
+    // SIBLING inner (idx 2-3) that is NOT missing but genuinely drifted.
+    const topWild = mkMod({
+      id: "top00001",
+      type: "wildcard",
+      _uid: "u-top",
+      meta: { name: "top" },
+      bundle_origin: "outer-uid",
+    });
+    const missingChild = mkMod({
+      id: "miss0001",
+      type: "wildcard",
+      _uid: "u-miss",
+      meta: { name: "missingChild" },
+      payload_hash: "hm",
+      bundle_origin: "missing-uid",
+    });
+    const siblingA = mkMod({
+      id: "sibl0001",
+      type: "wildcard",
+      _uid: "u-sa",
+      meta: { name: "siblingA" },
+      payload_hash: "hs",
+      bundle_origin: "sibling-uid",
+    });
+    const siblingB = mkMod({
+      id: "sibl0002",
+      type: "wildcard",
+      _uid: "u-sb",
+      meta: { name: "siblingB" },
+      payload_hash: "hs2",
+      bundle_origin: "sibling-uid",
+    });
+    const outer: BundleInstance = {
+      ...emptyBundleInstance("outerlib"),
+      _uid: "outer-uid",
+      start_idx: 0,
+      end_idx: 3,
+      name: "Kit",
+    };
+    const missingInner: BundleInstance = {
+      ...emptyBundleInstance("missinglibOLD"),
+      _uid: "missing-uid",
+      parent_uid: "outer-uid",
+      start_idx: 1,
+      end_idx: 1,
+      name: "Missing",
+      snapshot_fingerprint: "v2:stale",
+    };
+    // A genuine pre-existing drift baseline: the sibling's stored fingerprint
+    // intentionally does NOT match its live content. Cascade must NOT erase it.
+    const driftedSibling: BundleInstance = {
+      ...emptyBundleInstance("siblinglib"),
+      _uid: "sibling-uid",
+      parent_uid: "outer-uid",
+      start_idx: 2,
+      end_idx: 3,
+      name: "Sibling",
+      snapshot_fingerprint: "v2:genuinedrift",
+    };
+    const modules = [topWild, missingChild, siblingA, siblingB];
+    const bundles = [outer, missingInner, driftedSibling];
+
+    const result = await cascadeRestoreForBundle({
+      outer,
+      modules,
+      bundles,
+      isModuleMissing: () => false,
+      isBundleMissing: (b) => b._uid === "missing-uid",
+    });
+
+    expect(createSpy).toHaveBeenCalledTimes(1);
+
+    // The non-restored sibling keeps its stored fingerprint untouched → its
+    // genuine drift still surfaces. Blanket-recompute would have erased it.
+    const reboundSibling = result.newBundles.find((b) => b._uid === "sibling-uid")!;
+    expect(reboundSibling.snapshot_fingerprint).toBe("v2:genuinedrift");
+    expect(bundleSnapshotModified(reboundSibling, result.newModules)).toBe(true);
+
+    // The restored inner is still clean (fix applies only to it).
+    const reboundMissing = result.newBundles.find((b) => b._uid === "missing-uid")!;
+    expect(bundleSnapshotModified(reboundMissing, result.newModules)).toBe(false);
   });
 });
