@@ -14,7 +14,7 @@ import pathlib
 from engine.syntax.subcat_filter import matches, parse, reads_as, validate_expression
 
 CASES = json.loads(
-    (pathlib.Path(__file__).parent / "fixtures" / "subcat_filter_cases.json").read_text()
+    (pathlib.Path(__file__).parent.parent / "fixtures" / "subcat_filter_cases.json").read_text()
 )
 # Superset of every tag used by the valid fixture cases.
 KNOWN = {"warm", "cold", "red", "pink", "green", "blue"}
