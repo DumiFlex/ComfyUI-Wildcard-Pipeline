@@ -255,7 +255,12 @@ onMounted(async () => {
 
 function issuesFor(row: LibraryRow): ValidationIssue[] {
   if (row.kind === "bundle") {
-    return validateBundle(row.source as BundleRow, moduleStore.catalog, bundleStore.items);
+    // Resolve child module + bundle ids against the data THIS view loaded
+    // (localModules / localBundles on mount + Refresh) — not the Pinia
+    // stores, which AllItems never populates. Passing the empty stores made
+    // every inner-bundle child read as "target bundle missing" until the
+    // user visited the Bundles tab (which happens to fill moduleStore.catalog).
+    return validateBundle(row.source as BundleRow, localModules.value, localBundles.value);
   }
   return validateModule(row.source as ModuleRow, moduleStore.catalog);
 }
