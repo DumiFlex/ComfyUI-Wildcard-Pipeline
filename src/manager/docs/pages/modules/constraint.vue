@@ -15,6 +15,13 @@ const reweightModes = [
   { term: "Boost", desc: "These options have their weight increased, making them more likely without removing anything." },
   { term: "Reduce", desc: "These options have their weight decreased, making them less likely without removing anything." },
 ];
+
+const reachModes = [
+  { term: "All", desc: "Default — re-weight every matching target instance downstream of the constraint." },
+  { term: "First", desc: "Only the first target instance after the constraint; later ones roll unconstrained." },
+  { term: "Next N", desc: "The next N target instances (you set the count); the rest roll unconstrained." },
+  { term: "Pick", desc: "Only specific target rows you tick — direct instances, or nested-ref carrier options that reach the target." },
+];
 </script>
 
 <template>
@@ -53,7 +60,7 @@ const reweightModes = [
           { icon: 'pi pi-sparkles', name: 'Target wildcard', sub: 'picks to match', tone: 'wildcard' },
         ]"
         :arrows="['if it lands on X', 'limits']"
-        caption="The constraint fires on the first target instance downstream, nudging its odds — it sets no $vars itself."
+        caption="The constraint nudges the odds of its downstream target instances — every match by default, or a narrower set you choose. It sets no $vars itself."
       />
     </DocSection>
 
@@ -72,19 +79,47 @@ const reweightModes = [
         target wildcard in the stack. The engine runs modules top-to-bottom, so position controls
         the source → constraint → target chain.
       </p>
-      <DocCallout variant="warn">
-        Each Constraint is a one-shot — it fires on the first instance of the target wildcard it
-        encounters and is then consumed. If you need to influence multiple uses of the same target,
-        add a separate Constraint module for each. Position in the stack controls which target
-        instance each constraint claims.
+      <DocCallout variant="tip">
+        By default a Constraint re-weights <em>every</em> matching target instance below it. Use
+        the <strong>Target reach</strong> selector (below) to narrow that to the first, the next N,
+        or a hand-picked set — and remember that position in the stack decides which instances are
+        even reachable, since a constraint only sees targets after it.
       </DocCallout>
+    </DocSection>
+
+    <DocSection title="Target reach">
+      <p>
+        By default a constraint re-weights <em>every</em> matching target instance it can reach
+        downstream. The per-instance <strong>Target reach</strong> selector narrows that scope:
+      </p>
+      <DocKeyList :items="reachModes" />
+      <DocCallout variant="warn">
+        If a constraint's reach lands on zero reachable targets — e.g. its only target sits above
+        it, or you picked rows that aren't downstream — the editor flags it
+        <VarToken>constraint_orphan_target</VarToken> so the dead pairing doesn't fail silently.
+      </DocCallout>
+    </DocSection>
+
+    <DocSection title="Reattach a broken axis">
+      <p>
+        A constraint points at two wildcards by id — its <em>source</em> and its <em>target</em>.
+        If one of those isn't in your library (you installed the constraint without its wildcards,
+        or deleted one later), that axis is <strong>stranded</strong>: the editor shows the dead id
+        with its remembered name and locks the rule matrix read-only until you fix it.
+      </p>
+      <p>
+        Use <strong>Reattach</strong> to re-point the stranded axis at a local wildcard — or
+        <strong>Download from community</strong> to pull the missing one. The matrix and exceptions
+        then remap onto the new wildcard's sub-categories; any rows that don't exist there are
+        dropped (the editor previews the count before you confirm).
+      </p>
     </DocSection>
 
     <DocSection title="Deeper topics">
       <p>
         Full constraint mechanics — matrix vs exception priority, how constraints carry through
-        nested references, and the "never fired" runtime notice — are covered on the Constraints
-        concept page.
+        nested references, the Target reach selectors in detail, and the "never fired" runtime
+        notice — are covered on the Constraints concept page.
       </p>
     </DocSection>
 
