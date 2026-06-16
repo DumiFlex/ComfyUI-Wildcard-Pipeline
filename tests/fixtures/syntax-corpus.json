@@ -3,6 +3,44 @@
   "schema_url": "tests/fixtures/syntax-corpus.schema.json",
   "cases": [
     {
+      "name": "var_accessor_index",
+      "input": "$colors.0",
+      "expected_tokens": [
+        {"kind": "var", "raw": "$colors.0", "start": 0, "end": 9, "meta": {"name": "colors", "index": 0}}
+      ]
+    },
+    {
+      "name": "var_accessor_multidigit",
+      "input": "$x.123",
+      "expected_tokens": [
+        {"kind": "var", "raw": "$x.123", "start": 0, "end": 6, "meta": {"name": "x", "index": 123}}
+      ]
+    },
+    {
+      "name": "var_lone_dot_is_text",
+      "input": "$x.",
+      "expected_tokens": [
+        {"kind": "var", "raw": "$x", "start": 0, "end": 2, "meta": {"name": "x"}},
+        {"kind": "text", "raw": ".", "start": 2, "end": 3, "meta": {}}
+      ]
+    },
+    {
+      "name": "var_nondigit_accessor_is_text",
+      "input": "$x.y",
+      "expected_tokens": [
+        {"kind": "var", "raw": "$x", "start": 0, "end": 2, "meta": {"name": "x"}},
+        {"kind": "text", "raw": ".y", "start": 2, "end": 4, "meta": {}}
+      ]
+    },
+    {
+      "name": "var_double_accessor_first_only",
+      "input": "$x.0.1",
+      "expected_tokens": [
+        {"kind": "var", "raw": "$x.0", "start": 0, "end": 4, "meta": {"name": "x", "index": 0}},
+        {"kind": "text", "raw": ".1", "start": 4, "end": 6, "meta": {}}
+      ]
+    },
+    {
       "name": "empty_input",
       "input": "",
       "expected_tokens": [],
@@ -222,7 +260,7 @@
       "input": "{2$$, $$red|blue|green}",
       "expected_tokens": [
         {"kind": "dp_multi", "raw": "{2$$, $$red|blue|green}", "start": 0, "end": 23,
-         "meta": {"count": 2, "sep": ", ", "branches": ["red", "blue", "green"]}}
+         "meta": {"min": 2, "max": 2, "independent": false, "count": 2, "sep": ", ", "branches": ["red", "blue", "green"]}}
       ]
     },
     {
@@ -230,7 +268,23 @@
       "input": "{3$$$$a|b|c}",
       "expected_tokens": [
         {"kind": "dp_multi", "raw": "{3$$$$a|b|c}", "start": 0, "end": 12,
-         "meta": {"count": 3, "sep": "", "branches": ["a", "b", "c"]}}
+         "meta": {"min": 3, "max": 3, "independent": false, "count": 3, "sep": "", "branches": ["a", "b", "c"]}}
+      ]
+    },
+    {
+      "name": "multi_pick_range_independent",
+      "input": "{2-4~$$, $$a|b|c}",
+      "expected_tokens": [
+        {"kind": "dp_multi", "raw": "{2-4~$$, $$a|b|c}", "start": 0, "end": 17,
+         "meta": {"min": 2, "max": 4, "independent": true, "count": 4, "sep": ", ", "branches": ["a", "b", "c"]}}
+      ]
+    },
+    {
+      "name": "multi_pick_lone_ref",
+      "input": "{3$$, $$@{aabbccdd}}",
+      "expected_tokens": [
+        {"kind": "dp_multi", "raw": "{3$$, $$@{aabbccdd}}", "start": 0, "end": 20,
+         "meta": {"min": 3, "max": 3, "independent": false, "count": 3, "sep": ", ", "branches": ["@{aabbccdd}"]}}
       ]
     },
     {

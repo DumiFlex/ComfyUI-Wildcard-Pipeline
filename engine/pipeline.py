@@ -20,11 +20,14 @@ from engine.modules.snapshot import coerce_legacy_module
 
 logger = logging.getLogger(__name__)
 
-# `@{uuid}` ref matcher — mirror of engine.syntax.tokenize._REF_RE.
-# Used by the never_applied warning classifier to tell "target has a
-# carrier/instance somewhere in the chain" apart from "target uuid is
-# nowhere to be found".
-_PIPELINE_REF_RE = re.compile(r"@\{([0-9a-f]{8})(?:#[^#:}@{]*)?(?::[^}]*)?\}")
+# `@{uuid}` ref matcher — mirror of engine.syntax.tokenize._REF_RE
+# (4-segment: uuid + optional #name / :expr / !null; only the uuid is
+# captured here). Used by the never_applied warning classifier to tell
+# "target has a carrier/instance somewhere in the chain" apart from
+# "target uuid is nowhere to be found".
+_PIPELINE_REF_RE = re.compile(
+    r"@\{([0-9a-f]{8})(?:#[^#:}@{!]*)?(?::[^}!]*)?(?:![^}]*)?\}"
+)
 
 
 def _module_field(module: Any, key: str) -> Any:
@@ -249,10 +252,12 @@ class PipelineEngine:
         ctx.setdefault("__wp_warnings__", [])
         ctx.setdefault("__wp_trace__", [])
         ctx.setdefault("__wp_internal_flags__", {})
-        # Tracks constraint module ids that have already fired against
-        # their first downstream target instance. See
-        # docs/superpowers/specs/2026-05-24-constraint-first-instance-design.md.
-        ctx.setdefault("__wp_consumed_constraints__", set())
+        # SP3 reach selector: per-constraint firing count keyed by
+        # `__constraint_module_id__`. Drives first/next/all/pick
+        # coverage in apply_constraints_for_target + the never_applied /
+        # partial_reach finalisation below. Replaces the pre-SP3
+        # one-shot consumed-set.
+        ctx.setdefault("__wp_constraint_hits__", {})
 
         for index, module in enumerate(modules):
             # Normalise id/type/enabled reads to work for both dicts and objects.
@@ -275,12 +280,21 @@ class PipelineEngine:
                 # imported from someone else's machine), letting WP_Debug
                 # render a readable chip instead of a raw uuid.
                 _module_name = module.get("name", "") or ""
+                # Per-insertion bundle discriminator. Two instances of one
+                # library wildcard (a bundle inserted twice) carry DISTINCT
+                # `bundle_origin` values (insert.ts stamps each child with
+                # its immediate BundleInstance._uid). Threaded into ctx so a
+                # constraint can bind to the source pick from its OWN bundle
+                # copy (task_5200c1fc). Empty string when the module has no
+                # bundle origin (top-level / manually-added / legacy).
+                _module_bundle_origin = module.get("bundle_origin", "") or ""
             else:
                 _module_id = getattr(module, "id", "")
                 _module_uid = getattr(module, "_uid", "") or ""
                 _module_type_raw = getattr(module, "type", None) or ""
                 _module_enabled = getattr(module, "enabled", True)
                 _module_name = getattr(module, "name", "") or ""
+                _module_bundle_origin = getattr(module, "bundle_origin", "") or ""
 
             if not _module_enabled:
                 # Disabled modules don't run — but the trace row still
@@ -351,15 +365,24 @@ class PipelineEngine:
             #     wildcard handler matches THIS against a constraint's
             #     `target_wildcard_id` (which is a library uuid).
             #   - `__wp_current_module_uid__` = per-instance uid (`_uid`).
-            #     The constraint handler keys its consumed-set entry on
-            #     THIS so two instances of the same library constraint
-            #     entry are independent one-shots (per CLAUDE.md: "author
-            #     multiple constraint modules" to affect multiple
-            #     targets). Falls back to the library id when `_uid` is
-            #     absent (legacy / hand-built test modules).
+            #     This is the BARE per-instance uid (no node prefix). The
+            #     constraint handler keys its `__constraint_module_id__`
+            #     (the SP3 per-constraint hit counter) on THIS so two
+            #     instances of the same library constraint entry reach
+            #     INDEPENDENTLY (per CLAUDE.md: "author multiple constraint
+            #     modules" to affect multiple targets). It's ALSO the
+            #     `firing_uid` a direct `pick` selector matches against —
+            #     so a persisted `pick` must carry the bare `_uid`, not the
+            #     UI's badge rowKey (`${nodeId}#${_uid}`). Falls back to the
+            #     library id when `_uid` is absent (legacy / test modules).
             ctx["__wp_current_module_id__"] = _module_id
             ctx["__wp_current_module_uid__"] = _module_uid or _module_id
             ctx["__wp_current_module_name__"] = _module_name
+            # See the `_module_bundle_origin` derivation above — exposed to
+            # handlers (wildcard_handler records it on the pick; constraint_
+            # handler captures it on the registered meta) so source-instance
+            # binding can match a constraint to its own bundle copy's pick.
+            ctx["__wp_current_module_bundle_origin__"] = _module_bundle_origin
             meta = _extract_static_meta(module)
             try:
                 bindings = resolve_module(snapshot, ctx)
@@ -466,20 +489,22 @@ class PipelineEngine:
         ctx.pop("__wp_current_module_id__", None)
         ctx.pop("__wp_current_module_uid__", None)
         ctx.pop("__wp_current_module_name__", None)
+        ctx.pop("__wp_current_module_bundle_origin__", None)
 
-        # First-instance one-shot semantic: emit a soft (info) warning
-        # for every registered constraint whose target instance never
-        # came up during the chain. Surfaces in WP_Debug so the user
-        # sees "you put a constraint here but nothing downstream took
-        # it" — the chain still succeeds.
-        # See docs/superpowers/specs/2026-05-24-constraint-first-instance-design.md.
+        # SP3 reach selector finalisation: emit `constraint_never_applied`
+        # for every registered constraint whose selector covered ZERO
+        # firing target instances (hit count 0). Surfaces in WP_Debug so
+        # the user sees "you put a constraint here but nothing downstream
+        # took it" — the chain still succeeds. The `partial_reach` pass
+        # below covers constraints that DID fire but reached fewer
+        # instances than a `next N` / `pick` selector asked for.
         #
         # Dedup by cid — sibling instances of the same library entry
         # share `__constraint_module_id__`, so they show up as two
         # entries in the bucket. Without the dedup the user sees the
         # same warning twice for the same logical constraint (2026-05-26).
         constraints_bucket = ctx.get("__wp_constraints__") or []
-        consumed_set = ctx.get("__wp_consumed_constraints__") or set()
+        hits = ctx.get("__wp_constraint_hits__") or {}
         catalog = ctx.get("__wp_catalog__")
         warned_cids: set[str] = set()
         if isinstance(constraints_bucket, list):
@@ -487,7 +512,7 @@ class PipelineEngine:
                 if not isinstance(c, dict):
                     continue
                 cid = c.get("__constraint_module_id__")
-                if not cid or cid in consumed_set:
+                if not cid or hits.get(cid, 0) != 0:
                     continue
                 if cid in warned_cids:
                     continue
@@ -523,24 +548,22 @@ class PipelineEngine:
                 cid_suffix = _build_ref_name_suffix(c.get("__constraint_library_name__"))
                 tgt_suffix = _build_ref_name_suffix(target_name)
                 # Classify the cause so the message is actionable.
-                # With the carrier-claim failsafe in place, a carrier
-                # that rolls ANY option claims its constraint — so an
-                # unconsumed constraint whose target IS present in the
-                # chain means the target instance/carrier ran BEFORE
-                # this constraint registered (ordering), or sits in a
+                # Reach is downstream-relative: a constraint only applies
+                # to target occurrences that resolve AFTER it registers.
+                # So a never-applied constraint whose target IS present in
+                # the chain means every occurrence ran BEFORE this
+                # constraint registered (ordering), or sits in a
                 # branch/Context this run didn't reach. Absent target =
                 # a wrong/stale uuid.
                 present = _target_present_in_chain(
                     target_uuid, modules, catalog,
                 )
                 if present:
-                    # Target IS in the chain. With the carrier-claim
-                    # failsafe, any carrier/instance that ROLLS after the
-                    # constraint registers claims it — so reaching this
-                    # branch means the target's only appearance(s) ran
+                    # Target IS in the chain but the selector covered no
+                    # firing occurrence — every appearance resolved
                     # BEFORE this constraint registered (e.g. a source
-                    # wildcard that nests its own @{target}), or live in
-                    # a branch / Context this run didn't execute, or are
+                    # wildcard that nests its own @{target}), or lives in
+                    # a branch / Context this run didn't execute, or is
                     # disabled. Deliberately NOT prescribing "move the
                     # constraint up" — that's wrong when the target's
                     # carrier is also the constraint's source (the source
@@ -589,6 +612,73 @@ class PipelineEngine:
                         # via the library cache (raw short-uuids would
                         # otherwise render as plain text).
                         "message": message,
+                    })
+
+        # SP3 partial-reach finalisation: a constraint that DID fire but
+        # whose `next N` / `pick` selector matched FEWER occurrences than
+        # requested. Distinct from never_applied (which fired zero times)
+        # — this is "the selector asked for more than the chain offered
+        # downstream". `all` / `first` can't be partial. Deduped by cid,
+        # same as never_applied.
+        partial_warned: set[str] = set()
+        if isinstance(constraints_bucket, list):
+            for c in constraints_bucket:
+                if not isinstance(c, dict):
+                    continue
+                cid = c.get("__constraint_module_id__")
+                seen = hits.get(cid, 0) if cid else 0
+                if not cid or seen == 0 or cid in partial_warned:
+                    continue
+                sel = c.get("target_select") or {"mode": "all"}
+                mode = sel.get("mode", "all")
+                if mode == "next":
+                    try:
+                        want = int(sel.get("count", 1))
+                    except (TypeError, ValueError):
+                        want = 1
+                elif mode == "pick":
+                    want = len(sel.get("picks") or [])
+                else:
+                    continue
+                # LIMITATION (holistic-review L1): `seen` is the per-cid
+                # TOTAL target-encounter count (`hits[cid]`, bumped on
+                # every firing in apply_constraints_for_target), NOT the
+                # count of picks that actually MATCHED. So a `pick`
+                # partial signal is imprecise: it compares encounters to
+                # `len(picks)` rather than matched-vs-listed. A precise
+                # count would need a separate ctx-threaded matched-pick
+                # counter (new bookkeeping across the _constraints apply
+                # boundary) — deferred to avoid over-plumbing. `next` is
+                # exact (it covers the first N encounters by construction).
+                if seen >= want:
+                    continue
+                partial_warned.add(cid)
+                warnings_bucket = ctx.setdefault("__wp_warnings__", [])
+                if isinstance(warnings_bucket, list):
+                    warnings_bucket.append({
+                        # Spec: partial reach is INFO, not warn — the
+                        # selector simply found fewer downstream targets
+                        # than requested this run (not an error condition).
+                        # `constraint_never_applied` stays `warn` (a
+                        # constraint that fired zero times is worth a louder
+                        # signal). DebugViewer maps `info` → blue/accent.
+                        "type": "constraint_partial_reach",
+                        "severity": "info",
+                        "module_id": cid,
+                        "source_field": "",
+                        "position": 0,
+                        "token_index": None,
+                        "detail": {
+                            "constraint_id": cid,
+                            "target_wildcard_id": c.get("target_wildcard_id"),
+                            "requested": want,
+                            "reached": seen,
+                        },
+                        "message": (
+                            f"constraint reach selector ({mode}) asked for "
+                            f"{want} target instance(s) but only {seen} "
+                            f"resolved downstream this run."
+                        ),
                     })
 
         return ctx

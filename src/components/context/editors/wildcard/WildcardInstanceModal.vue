@@ -41,6 +41,16 @@ const emit = defineEmits<{
 // the older gate of `isLibraryTracked && isModified` is gone.
 const canSaveToLibrary = computed(() => Boolean(props.module.payload));
 
+/** SP2a: when the instance picks more than one option the var resolves to a
+ *  list, so the header subtitle drops the singular "per pick" framing. */
+const isMultiPick = computed(() => {
+  const inst = props.module.instance ?? {};
+  const lo = typeof inst.pick_min === "number" ? inst.pick_min : 1;
+  const hi = typeof inst.pick_max === "number" ? inst.pick_max : lo;
+  const loC = Math.max(0, Math.min(lo, hi));
+  return !(loC === 1 && Math.max(loC, hi) === 1);
+});
+
 function spaUrl(): string {
   // SPA base is `/wp/` (see `src/manager/router/index.ts:44`),
   // so wildcard editor lives at `/wp/wildcards/<id>/edit`. The
@@ -67,7 +77,11 @@ function onSpaClick(): void {
           <span class="wp-wcm__name" data-test="wcm-name">{{ module.meta?.name ?? module.type }}</span>
           <span class="wp-wcm__chip" data-test="wcm-chip">wildcard</span>
         </div>
-        <div class="wp-wcm__sub">Library entry · weighted options resolved per pick</div>
+        <div class="wp-wcm__sub" data-test="wcm-sub">
+          {{ isMultiPick
+            ? "Library entry · resolves a list (multi-pick)"
+            : "Library entry · weighted options resolved per pick" }}
+        </div>
       </div>
       <button
         type="button"

@@ -54,6 +54,29 @@ describe("VarAutocompleteInput", () => {
     expect(items[1].text()).toContain("comment");
   });
 
+  it("strips a trailing .K accessor so $colors.0 keeps matching the base var (SP2a)", async () => {
+    // SP2a list accessors: typing `colors.0` (or a mid-typed `colors.`)
+    // must still match the base `colors` suggestion — the trailing `.K`
+    // (or bare `.`) is stripped before the substring filter runs, so the
+    // accessor never leaks into the query and drops every match.
+    const wrap = mount(VarAutocompleteInput, {
+      ...mountOpts,
+      props: { modelValue: "colors.0", suggestions: ["colors", "mood"] },
+    });
+    await wrap.find("input").trigger("focus");
+    let items = wrap.findAll(".wp-rt-suggestions__item");
+    expect(items.length).toBe(1);
+    expect(items[0].text()).toContain("colors");
+    expect(items.some((i) => i.text().includes("mood"))).toBe(false);
+
+    // Lone trailing dot (the keystroke between `colors` and `colors.0`)
+    // strips the same way.
+    await wrap.setProps({ modelValue: "colors." });
+    items = wrap.findAll(".wp-rt-suggestions__item");
+    expect(items.length).toBe(1);
+    expect(items[0].text()).toContain("colors");
+  });
+
   it("emits update:modelValue with selected label on Enter", async () => {
     const wrap = mount(VarAutocompleteInput, {
       ...mountOpts,

@@ -18,7 +18,25 @@
  *     mean it (empty options array, empty matrix). Reads as amber.
  */
 import type { BundleRow, ModuleRow } from "../api/types";
-import { tokenizeRich, type RichToken } from "../../widgets/richTokenize";
+import { tokenizeRich, varBaseName, type RichToken } from "../../widgets/richTokenize";
+import { validateExpression } from "../parsing/subcatFilter";
+import { VALID_IDENTIFIER_RE } from "./slug";
+
+/** A produced-var NAME must be a clean `$varname` identifier
+ *  (`[A-Za-z_][A-Za-z0-9_]*`). Anything else — a comma, space, or other
+ *  punctuation — can never be referenced as `$name`: the tokenizer won't
+ *  match it and the rich-text editor's settle delimiters (`,;:/(){}[]!?`
+ *  + whitespace) would split it. Mirrors the engine's `_IDENT_RE`
+ *  payload check (Python ≡ TS). Returns true when a NON-EMPTY name is
+ *  invalid (the empty case is reported separately as a "missing" warn). */
+function isInvalidVarName(name: string): boolean {
+  return name.length > 0 && !VALID_IDENTIFIER_RE.test(name);
+}
+
+/** Shared error message for an invalid produced-var name. */
+function invalidVarNameMessage(label: string, name: string): string {
+  return `${label} "$${name}" is not a valid name — use letters, digits, underscores; no leading digit`;
+}
 
 export type ValidationSeverity = "error" | "warn";
 
@@ -70,21 +88,21 @@ function tokensFor(text: string): RichToken[] {
   }
 }
 
-function extractRefs(text: string): Array<{ uuid: string; subcat?: string; name?: string }> {
-  const out: Array<{ uuid: string; subcat?: string; name?: string }> = [];
+function extractRefs(text: string): Array<{ uuid: string; filter?: string; name?: string }> {
+  const out: Array<{ uuid: string; filter?: string; name?: string }> = [];
   for (const t of tokensFor(text)) {
     if (t.kind === "ref" && t.meta?.uuid) {
       const subs = t.meta.sub_categories;
       const cachedName = typeof t.meta.name === "string" && t.meta.name.length > 0
         ? t.meta.name
         : undefined;
-      if (Array.isArray(subs) && subs.length > 0) {
-        for (const sub of subs) {
-          out.push({ uuid: t.meta.uuid, subcat: sub, name: cachedName });
-        }
-      } else {
-        out.push({ uuid: t.meta.uuid, name: cachedName });
-      }
+      // The lexer comma-splits the raw `:`-body for legacy reasons; rejoin
+      // it into the canonical SP1 boolean filter (`warm or intense`, the
+      // `a,b` comma-OR shorthand, optionally a trailing `!null`). One entry
+      // per ref — carry the whole expression, not a per-tag fan-out.
+      const filter =
+        Array.isArray(subs) && subs.length > 0 ? subs.join(",") : undefined;
+      out.push({ uuid: t.meta.uuid, filter, name: cachedName });
     }
   }
   return out;
@@ -141,7 +159,10 @@ function validateWildcard(
   vars: Set<string>,
 ): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  const p = (row.payload ?? {}) as { options?: unknown[] };
+  const p = (row.payload ?? {}) as { options?: unknown[]; var_binding?: unknown };
+  if (typeof p.var_binding === "string" && isInvalidVarName(p.var_binding)) {
+    issues.push({ severity: "error", message: invalidVarNameMessage("Variable binding", p.var_binding) });
+  }
   const opts = Array.isArray(p.options) ? p.options : [];
   if (opts.length === 0) {
     issues.push({ severity: "warn", message: "No options - resolves to empty string" });
@@ -170,12 +191,21 @@ function validateWildcard(
         });
         continue;
       }
-      if (ref.subcat) {
-        const subs = idx.subcatsByWildcardId.get(ref.uuid);
-        if (!subs || !subs.has(ref.subcat)) {
+      if (ref.filter) {
+        // SP1 boolean filter: validate every *tag* in the expression
+        // against the target's sub-categories using the shared parser —
+        // the same check the picker runs inline, so list view and editor
+        // agree by construction. Peel the trailing `!null` exclude marker
+        // first: it governs the null option, it is not a tag. Names/expr
+        // atoms never contain `!`, so the only `!` is the null marker.
+        const subs = idx.subcatsByWildcardId.get(ref.uuid) ?? new Set<string>();
+        const bang = ref.filter.lastIndexOf("!");
+        const expr = bang >= 0 ? ref.filter.slice(0, bang) : ref.filter;
+        const err = validateExpression(expr, subs);
+        if (err) {
           issues.push({
             severity: "error",
-            message: `Option ${i + 1}: ${target.name} has no subcategory "${ref.subcat}"`,
+            message: `Option ${i + 1}: ${target.name} filter — ${err}`,
           });
         }
       }
@@ -247,6 +277,8 @@ function validateCombine(
   }
   if (typeof p.output_var !== "string" || p.output_var.length === 0) {
     issues.push({ severity: "warn", message: "Output variable name missing" });
+  } else if (isInvalidVarName(p.output_var)) {
+    issues.push({ severity: "error", message: invalidVarNameMessage("Output variable", p.output_var) });
   }
   if (typeof p.template === "string") {
     for (const ref of extractRefs(p.template)) {
@@ -288,11 +320,17 @@ function validateDerivation(
         action?: { target_var?: unknown; value?: unknown };
       };
       const condVar = b.condition?.var;
-      if (typeof condVar === "string" && condVar.length > 0 && !vars.has(condVar)) {
-        issues.push({
-          severity: "warn",
-          message: `Rule ${ri + 1} branch ${bi + 1}: $${condVar} not bound`,
-        });
+      if (typeof condVar === "string" && condVar.length > 0) {
+        // SP2a: a `.K` list accessor resolves against the base var, so
+        // `$mood.0` checks `mood` — not a phantom `mood.0` binding. Message
+        // keeps the raw `$${condVar}` so the user sees what they typed.
+        const condBase = varBaseName(condVar);
+        if (condBase.length > 0 && !vars.has(condBase)) {
+          issues.push({
+            severity: "warn",
+            message: `Rule ${ri + 1} branch ${bi + 1}: $${condVar} not bound`,
+          });
+        }
       }
       const condValue = b.condition?.value;
       if (typeof condValue === "string") {
@@ -334,6 +372,11 @@ function validateFixedValues(row: ModuleRow): ValidationIssue[] {
     const val = v as { name?: unknown };
     if (typeof val.name !== "string" || val.name.length === 0) {
       issues.push({ severity: "warn", message: `Value ${i + 1}: variable name missing` });
+    } else if (isInvalidVarName(val.name)) {
+      issues.push({
+        severity: "error",
+        message: `Value ${i + 1}: ${invalidVarNameMessage("name", val.name)}`,
+      });
     }
   }
   return issues;

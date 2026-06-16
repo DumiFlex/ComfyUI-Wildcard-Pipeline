@@ -31,15 +31,30 @@ class _RuntimeResolveContext:
     # bucket is empty/None.
     _constraints: list[dict[str, Any]] = field(default_factory=list)
     _picks: dict[str, dict[str, Any]] = field(default_factory=dict)
-    # First-instance consume bookkeeping (2026-05-24 spec). Threaded
-    # by reference so mutations inside apply_constraints_for_target
-    # propagate back to the pipeline's ctx bucket and to subsequent
-    # target-instance resolves later in the same chain.
-    _consumed: set[str] = field(default_factory=set)
+    # SP3 reach-selector hit counter (per-constraint, keyed by
+    # `__constraint_module_id__`). Threaded by reference so increments
+    # inside apply_constraints_for_target on the nested-ref path share
+    # one counter with the chain-level direct path + the pipeline's ctx
+    # bucket — first/next coverage spans both surfaces.
+    _hits: dict[str, int] = field(default_factory=dict)
+    # SP3 nested-pick carrier identity for the CURRENT resolve frame:
+    # the wildcard whose chosen option value textually contains the
+    # `@{T}` ref being resolved, plus that option's id. MUTABLE +
+    # save/restored by the resolver around each nested-option recursion
+    # (mirroring the rng swap) so `_resolve_ref` can tell
+    # apply_constraints_for_target which (carrier_uid, option_id) is
+    # firing target T — the only thing a `pick` selector's `nested`
+    # occurrence matches on. None outside any carrier option.
+    _carrier_uid: str | None = None
+    _carrier_option_id: str | None = None
 
     def get_var(self, name: str) -> str | None:
+        # SP2a: return the raw stored value (may be a ListVar from a
+        # multi-select wildcard); the resolver formats it. Typed str | None
+        # for the Protocol — a ListVar flows through at runtime via the
+        # Any-valued vars dict, and the resolver narrows on isinstance.
         if name in self._vars:
-            return str(self._vars[name])
+            return self._vars[name]
         return None
 
     def get_module(self, uuid: str) -> dict[str, Any] | None:
@@ -71,13 +86,37 @@ class _RuntimeResolveContext:
         source wildcard's pick when reweighting the target."""
         return self._picks
 
-    def get_consumed_constraints(self) -> set[str]:
-        """``ctx['__wp_consumed_constraints__']`` — set of constraint
-        module ids that have already fired against their first
-        downstream target instance. Threaded by reference so the
-        nested-ref resolver's mutation is observed by the pipeline + by
-        subsequent target-instance resolves later in the chain."""
-        return self._consumed
+    def get_constraint_hits(self) -> dict[str, int]:
+        """``ctx['__wp_constraint_hits__']`` — per-constraint firing
+        count keyed by module id. Threaded by reference so the
+        nested-ref resolver's increments are observed by the pipeline +
+        by subsequent target-instance resolves later in the chain
+        (first/next coverage spans direct + nested encounters)."""
+        return self._hits
+
+    def set_carrier(self, carrier_uid: str | None, option_id: str | None) -> None:
+        """Set the CURRENT carrier identity (the wildcard whose chosen
+        option value contains the `@{T}` ref about to resolve, + that
+        option's id). The resolver save/restores this around each nested
+        option recursion (mirroring the rng swap)."""
+        self._carrier_uid = carrier_uid
+        self._carrier_option_id = option_id
+
+    def get_carrier(self) -> tuple[str | None, str | None]:
+        """Return the current ``(carrier_uid, option_id)`` so the
+        resolver can save it before a recursion and restore it after."""
+        return self._carrier_uid, self._carrier_option_id
+
+    def get_carrier_ctx(self) -> dict[str, Any] | None:
+        """The current carrier as the dict shape
+        ``apply_constraints_for_target`` /
+        ``_constraints._occurrence_matches`` expect, or ``None`` when no
+        carrier is set (outside any carrier option — e.g. a top-level
+        ref). A `pick` selector's `nested` entry matches on these two
+        keys; every other selector mode ignores them."""
+        if self._carrier_uid is None and self._carrier_option_id is None:
+            return None
+        return {"carrier_uid": self._carrier_uid, "option_id": self._carrier_option_id}
 
 
 def build_resolve_ctx(
@@ -93,7 +132,7 @@ def build_resolve_ctx(
     """
     constraints = ctx.get("__wp_constraints__")
     picks = ctx.get("__wp_picks__")
-    consumed = ctx.setdefault("__wp_consumed_constraints__", set())
+    hits = ctx.setdefault("__wp_constraint_hits__", {})
     return _RuntimeResolveContext(  # type: ignore[return-value]
         rng=ctx["__wp_rng__"],
         max_ref_depth=int(ctx.get("__wp_max_ref_depth__", 8)),
@@ -110,10 +149,10 @@ def build_resolve_ctx(
         # support) — defaults handle that path.
         _constraints=constraints if isinstance(constraints, list) else [],
         _picks=picks if isinstance(picks, dict) else {},
-        # First-instance consume set — passed by reference so the
-        # nested-ref resolver's mutation sticks in ctx for subsequent
-        # target-instance resolves later in the chain.
-        _consumed=consumed if isinstance(consumed, set) else set(),
+        # SP3 hit counter — passed by reference so the nested-ref
+        # resolver's increments stick in ctx + share one counter with
+        # the direct path for first/next coverage.
+        _hits=hits if isinstance(hits, dict) else {},
     )
 
 

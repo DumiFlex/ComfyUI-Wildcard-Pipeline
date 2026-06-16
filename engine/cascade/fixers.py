@@ -37,6 +37,9 @@ import sqlite3
 from typing import Any
 
 from engine.db.repositories import BundleRepository, ModuleRepository
+from engine.syntax.subcat_filter import ParseError as _ParseError
+from engine.syntax.subcat_filter import parse as _parse_subcat
+from engine.syntax.subcat_filter import reads_as as _reads_as
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -59,24 +62,112 @@ def _rewrite_var_in_string(s: str, old_name: str, new_name: str) -> str:
     return pattern.sub(f"${new_name}", s)
 
 
+def _map_tags(ast: dict[str, Any] | None, fn) -> dict[str, Any] | None:
+    """Apply *fn* to each tag leaf of a parsed sub-category expression;
+    drop tags *fn* maps to ``None`` and collapse the now-childless
+    operator (a one-child and/or becomes that child). Returns ``None``
+    when the whole expression empties. Mirror of TS `mapTags`
+    (src/manager/cascade/subcatExprCascade.ts)."""
+    if ast is None:
+        return None
+    if "tag" in ast:
+        v = fn(ast["tag"])
+        return None if v is None else {"tag": v}
+    if ast["op"] == "not":
+        x = _map_tags(ast["x"], fn)
+        return {"op": "not", "x": x} if x is not None else None
+    kids = [k for k in (_map_tags(c, fn) for c in ast["kids"]) if k is not None]
+    if not kids:
+        return None
+    return kids[0] if len(kids) == 1 else {"op": ast["op"], "kids": kids}
+
+
+def _expr_tags(ast: dict[str, Any] | None) -> set[str]:
+    out: set[str] = set()
+
+    def walk(n: dict[str, Any] | None) -> None:
+        if n is None:
+            return
+        if "tag" in n:
+            out.add(n["tag"])
+            return
+        if n["op"] == "not":
+            walk(n["x"])
+            return
+        for k in n["kids"]:
+            walk(k)
+
+    walk(ast)
+    return out
+
+
+def collect_tags(expr: str | None) -> set[str]:
+    """Distinct sub-category tags referenced by a filter *expr* string.
+
+    Mirror of TS ``collectTags`` (src/manager/cascade/subcatExprCascade.ts).
+    Empty or malformed expressions yield the empty set — the caller simply
+    won't link the ref; ``validate_expression`` surfaces real syntax errors
+    elsewhere. Used by the discovery scan so a rename/delete of any one tag
+    finds every ref whose boolean filter mentions it (negated tags count).
+    """
+    if not expr or not expr.strip():
+        return set()
+    try:
+        ast = _parse_subcat(expr)
+    except _ParseError:
+        return set()
+    return _expr_tags(ast)
+
+
+def _ref_expr_pattern(wildcard_id: str) -> re.Pattern[str]:
+    # 4-segment ref to a specific wildcard: groups = (#name, :expr, !null).
+    return re.compile(
+        r"@\{" + re.escape(wildcard_id)
+        + r"(?:#([^#:}@{!]*))?(?::([^}!]*))?(?:!([^}]*))?\}"
+    )
+
+
+def _rewrite_ref_expr(s: str, wildcard_id: str, target: str, fn) -> str:
+    """Rewrite the boolean ``:expr`` of every ``@{wildcard_id...}`` ref
+    whose expression contains *target*, mapping its tags via *fn*
+    (rename, or remove + collapse). Refs that don't mention *target* are
+    left verbatim — no cosmetic re-serialization. ``#name`` + ``!null``
+    are preserved; an expression that empties drops the ``:expr``
+    segment, collapsing ``@{uuid:cold}`` to a bare ``@{uuid}``."""
+    pattern = _ref_expr_pattern(wildcard_id)
+
+    def repl(m: re.Match[str]) -> str:
+        name, expr, null = m.group(1), m.group(2), m.group(3)
+        if expr is None or not expr.strip():
+            return m.group(0)
+        ast = _parse_subcat(expr)
+        if target not in _expr_tags(ast):
+            return m.group(0)
+        new_expr = _reads_as(_map_tags(ast, fn))
+        out = "@{" + wildcard_id + (f"#{name}" if name else "")
+        if new_expr:
+            out += ":" + new_expr
+        if null == "null":
+            out += "!null"
+        return out + "}"
+
+    return pattern.sub(repl, s)
+
+
 def _rewrite_subcat_ref_in_string(
     s: str,
     wildcard_id: str,
     old_subcat: str,
     new_subcat: str,
 ) -> str:
-    """Replace ``@{wildcard_id[#name]:old_subcat}`` →
-    ``@{wildcard_id[#name]:new_subcat}``. Preserves any optional
-    ``#name`` segment so a subcat rename doesn't strip the wildcard's
-    cached display name from refs."""
-    pattern = re.compile(
-        r"@\{" + re.escape(wildcard_id)
-        + r"(#[^#:}@{]*)?:" + re.escape(old_subcat) + r"\}"
+    """Rename ``old_subcat`` -> ``new_subcat`` inside every
+    ``@{wildcard_id...}`` ref's boolean expression (e.g.
+    ``@{u:warm or cold}`` -> ``@{u:warm or chilly}``). Structure,
+    ``#name``, and ``!null`` are preserved."""
+    return _rewrite_ref_expr(
+        s, wildcard_id, old_subcat,
+        lambda t: new_subcat if t == old_subcat else t,
     )
-    def repl(m: re.Match[str]) -> str:
-        name_seg = m.group(1) or ""
-        return f"@{{{wildcard_id}{name_seg}:{new_subcat}}}"
-    return pattern.sub(repl, s)
 
 
 def _strip_subcat_ref_in_string(
@@ -84,13 +175,38 @@ def _strip_subcat_ref_in_string(
     wildcard_id: str,
     subcat_name: str,
 ) -> str:
-    """Remove ``@{wildcard_id[#name]:subcat_name}`` occurrences from
-    *s*. Matches with or without the optional ``#name`` segment."""
-    pattern = re.compile(
-        r"@\{" + re.escape(wildcard_id)
-        + r"(?:#[^#:}@{]*)?:" + re.escape(subcat_name) + r"\}"
+    """Remove ``subcat_name`` from every ``@{wildcard_id...}`` ref's
+    expression, collapsing operators (``@{u:warm or cold}`` ->
+    ``@{u:warm}``); a ref whose expression empties collapses to the bare
+    ``@{wildcard_id}`` (the nested insertion survives, only its filter
+    is dropped)."""
+    return _rewrite_ref_expr(
+        s, wildcard_id, subcat_name,
+        lambda t: None if t == subcat_name else t,
     )
-    return pattern.sub("", s)
+
+
+def _strip_whole_ref_in_string(s: str, wildcard_id: str) -> str:
+    """Remove every whole ``@{wildcard_id...}`` token from *s*.
+
+    Unlike ``_strip_subcat_ref_in_string`` (which only drops the
+    ``:expr`` filter, collapsing to a bare ``@{uuid}``), this deletes the
+    entire nested-insertion token — used by ``fix_wildcard_delete`` when
+    the referenced wildcard itself is gone, so the insertion can't
+    resolve at all. Surrounding text is preserved; whitespace left at the
+    seam is collapsed (doubled spaces -> single) and the result trimmed,
+    so ``"warm @{u} glow"`` -> ``"warm glow"`` rather than
+    ``"warm  glow"``.
+
+    Reuses the shared 4-segment ref pattern (``_ref_expr_pattern``) so the
+    ``#name`` / ``:expr`` / ``!null`` variants of the token all match.
+    """
+    pattern = _ref_expr_pattern(wildcard_id)
+    stripped = pattern.sub("", s)
+    if stripped == s:
+        return s
+    # Collapse whitespace left at the seam, then trim edges.
+    return re.sub(r"[ \t]{2,}", " ", stripped).strip()
 
 
 def _rewrite_ref_name_in_string(
@@ -124,21 +240,40 @@ def _rewrite_ref_name_in_string(
 def fix_wildcard_delete(
     conn: sqlite3.Connection,
     wildcard_id: str,
+    cleanup_ids: list[str],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Strip all references to *wildcard_id* from constraints.
+    """Opt-in strip of nested ``@{wildcard_id...}`` refs to a deleted wildcard.
 
-    * Constraints whose source or target is *wildcard_id* are deleted —
-      they reference the wildcard by id only, with no fallback shape.
+    Constraints are never DELETED here. They reference the wildcard by id
+    only and are healable via the reattach UI — the cascade leaves them
+    broken so the user can re-point them later, rather than deleting them
+    (the old behavior, removed). The ONE constraint mutation that does run
+    is a display-only name stamp: the deleted wildcard's name is cached onto
+    every dependent constraint's ``source_wildcard_name`` /
+    ``target_wildcard_name`` (the last moment the live name is known), so the
+    broken-reference banner shows "(was …)" instead of a bare uuid. The
+    id/matrix/exceptions stay untouched. The stamp is in `touched` (undo) but
+    not in `diff` (it's not a ref removal). It runs regardless of cleanup_ids.
 
-    Bundles are intentionally NOT touched. Bundle children are full
-    frozen snapshots: the wildcard's payload, options, and meta were
-    deep-copied into ``bundle.children[i]`` at insert time, so the
-    bundle keeps working even when the source library row is deleted.
-    Removing the snapshot would destroy data the user explicitly
-    captured for offline / portable use. The MISSING badge on the
-    referenced workflow rows still fires (drift-store sees the id is
-    gone) — that's the honest signal; stripping the snapshot would be
-    over-eager housekeeping.
+    Nested ``@{wildcard_id...}`` refs (the deleted wildcard inserted
+    inside ANOTHER wildcard's option value, or a derivation action's
+    string value) are stripped ONLY for the specific entity ids the
+    caller lists in *cleanup_ids*. Every entity not in *cleanup_ids* is
+    left untouched — its broken ref survives and is healed later via a
+    remap. An empty/absent *cleanup_ids* therefore strips nothing: only
+    the wildcard row itself is dropped (by the orchestrator), and all
+    constraints + nested refs survive.
+
+    For each entity in *cleanup_ids*:
+      * ``wildcard`` — every ``@{wildcard_id...}`` token is removed from
+        each ``options[].value`` string (whole token, surrounding text
+        preserved).
+      * ``derivation`` — same strip applied to every string value inside
+        ``rules[].branches[].actions[]`` (mirrors ``_scan_wildcard_delete``).
+
+    Bundles are intentionally NOT touched (unchanged): bundle children
+    are full frozen snapshots, so the bundle keeps resolving with its
+    captured payload even when the source library row is deleted.
 
     The fixer does NOT delete the wildcard row itself; the orchestrator
     owns that mutation.
@@ -148,16 +283,78 @@ def fix_wildcard_delete(
 
     mod_repo = ModuleRepository(conn)
 
-    # --- Constraints --------------------------------------------------------
+    # Stamp the about-to-be-deleted wildcard's name onto every dependent
+    # constraint's source/target name cache, BEFORE the orchestrator drops the
+    # row. This is the last moment the live name is known; without it a
+    # constraint broken by the deletion shows only a bare uuid in the reattach
+    # banner ("Source wildcard 1e9c0e2c is not in your library"). Display-only:
+    # the id/matrix/exceptions are untouched and the constraint is never deleted
+    # (still healable via reattach). Recorded in `touched` for undo but NOT
+    # emitted as a `diff` entry — it's not a ref removal, so it must not inflate
+    # affected_count. Runs regardless of cleanup_ids (the empty-cleanup
+    # early-return is below).
+    target = mod_repo.get(wildcard_id)
+    wc_name = target.get("name") if target else None
+    if wc_name:
+        for c in mod_repo.list():
+            if c["type"] != "constraint":
+                continue
+            cp = c.get("payload") or {}
+            new_cp = copy.deepcopy(cp)
+            stamped = False
+            if cp.get("source_wildcard_id") == wildcard_id:
+                if cp.get("source_wildcard_name") != wc_name:
+                    new_cp["source_wildcard_name"] = wc_name
+                    stamped = True
+            if cp.get("target_wildcard_id") == wildcard_id:
+                if cp.get("target_wildcard_name") != wc_name:
+                    new_cp["target_wildcard_name"] = wc_name
+                    stamped = True
+            if stamped:
+                touched.append(_deepcopy_row(c))
+                mod_repo.update(c["id"], payload=new_cp)
+
+    cleanup = set(cleanup_ids)
+    if not cleanup:
+        return touched, diff
+
     for m in mod_repo.list():
-        if m["type"] != "constraint":
+        if m["id"] not in cleanup:
             continue
+        t = m["type"]
         p = m.get("payload") or {}
-        if (p.get("source_wildcard_id") == wildcard_id
-                or p.get("target_wildcard_id") == wildcard_id):
+        new_payload = copy.deepcopy(p)
+        changed = False
+
+        if t == "wildcard":
+            for opt in new_payload.get("options") or []:
+                v = opt.get("value")
+                if isinstance(v, str):
+                    new_v = _strip_whole_ref_in_string(v, wildcard_id)
+                    if new_v != v:
+                        opt["value"] = new_v
+                        changed = True
+
+        elif t == "derivation":
+            for rule in new_payload.get("rules") or []:
+                for branch in rule.get("branches") or []:
+                    for action in branch.get("actions") or []:
+                        if not isinstance(action, dict):
+                            continue
+                        for k, v in list(action.items()):
+                            if isinstance(v, str):
+                                new_v = _strip_whole_ref_in_string(v, wildcard_id)
+                                if new_v != v:
+                                    action[k] = new_v
+                                    changed = True
+
+        if changed:
             touched.append(_deepcopy_row(m))
-            mod_repo.delete(m["id"])
-            diff.append({"entity_id": m["id"], "removed": True})
+            mod_repo.update(m["id"], payload=new_payload)
+            diff.append({
+                "entity_id": m["id"],
+                "remove_ref": {"kind": "wildcard", "wildcard_id": wildcard_id},
+            })
 
     return touched, diff
 
@@ -193,11 +390,12 @@ def fix_subcat_delete(
                     s for s in declared if s != subcat_name
                 ]
                 changed = True
-            # Per-option singular assignment — null out options pointing at
-            # the deleted subcat (preserves the option, releases the link)
+            # Per-option membership — drop the deleted subcat from each
+            # option's sub_categories list (preserves the option).
             for opt in new_payload.get("options") or []:
-                if opt.get("sub_category") == subcat_name:
-                    opt["sub_category"] = None
+                subs = opt.get("sub_categories")
+                if isinstance(subs, list) and subcat_name in subs:
+                    opt["sub_categories"] = [s for s in subs if s != subcat_name]
                     changed = True
 
         elif t == "constraint":
@@ -270,10 +468,13 @@ def fix_subcat_rename(
                     new_name if s == old_name else s for s in declared
                 ]
                 changed = True
-            # Per-option singular assignment (`opt.sub_category`, not plural)
+            # Per-option membership list (`opt.sub_categories`)
             for opt in new_payload.get("options") or []:
-                if opt.get("sub_category") == old_name:
-                    opt["sub_category"] = new_name
+                subs = opt.get("sub_categories")
+                if isinstance(subs, list) and old_name in subs:
+                    opt["sub_categories"] = [
+                        new_name if s == old_name else s for s in subs
+                    ]
                     changed = True
 
         elif t == "constraint":
@@ -335,9 +536,12 @@ def fix_wildcard_rename_name(
     Combine templates, fixed-values, and constraint payloads don't hold
     ``@{}`` text refs (constraints reference by id only via
     ``source_wildcard_id`` / ``target_wildcard_id``), so they're
-    skipped. Bundle children carry frozen module snapshots whose option
-    values may contain refs; we walk those too so a save propagates
-    into bundle copies.
+    skipped. Bundle children are frozen point-in-time snapshots and are
+    intentionally NOT rewritten (mirrors ``fix_wildcard_delete``): a rename
+    leaves the bundle's cached ``#name`` / refs stale until the user
+    explicitly refreshes the bundle. Otherwise editing ANY module would
+    silently mutate every bundle holding a snapshot of it — a bundle must
+    stay a fixed snapshot, not auto-track its source modules.
 
     Skips the renamed wildcard itself — its own name lives on the row,
     not in its own option values.
@@ -346,7 +550,6 @@ def fix_wildcard_rename_name(
     diff: list[dict[str, Any]] = []
 
     mod_repo = ModuleRepository(conn)
-    bundle_repo = BundleRepository(conn)
 
     for m in mod_repo.list():
         if m["id"] == wildcard_id:
@@ -390,45 +593,10 @@ def fix_wildcard_rename_name(
                 },
             })
 
-    # Bundle child snapshots — walk frozen module copies and rewrite
-    # ref strings in their option values. Children may reference the
-    # renamed wildcard via @{uuid} in their stored snapshots.
-    for b in bundle_repo.list():
-        children = b.get("children") or []
-        new_children = copy.deepcopy(children)
-        bundle_changed = False
-        for ch in new_children:
-            if not isinstance(ch, dict):
-                continue
-            if ch.get("type") != "wildcard":
-                continue
-            if ch.get("id") == wildcard_id:
-                # The renamed wildcard's own snapshot in this bundle —
-                # update the cached `name` field instead of refs.
-                if ch.get("name") != new_name:
-                    ch["name"] = new_name
-                    bundle_changed = True
-                continue
-            payload = ch.get("payload") or {}
-            for opt in payload.get("options") or []:
-                v = opt.get("value")
-                if isinstance(v, str):
-                    new_v = _rewrite_ref_name_in_string(v, wildcard_id, new_name)
-                    if new_v != v:
-                        opt["value"] = new_v
-                        bundle_changed = True
-        if bundle_changed:
-            touched.append(_deepcopy_row(b))
-            bundle_repo.update(b["id"], children=new_children)
-            diff.append({
-                "entity_id": b["id"],
-                "rename_ref": {
-                    "kind": "wildcard_name",
-                    "wildcard_id": wildcard_id,
-                    "new": new_name,
-                },
-            })
-
+    # Bundle children are frozen snapshots — intentionally NOT rewritten
+    # here (see docstring). They drift; the explicit bundle-refresh flow
+    # re-snapshots them on demand, so a module edit never auto-mutates a
+    # bundle.
     return touched, diff
 
 

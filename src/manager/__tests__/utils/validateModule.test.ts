@@ -27,6 +27,14 @@ function mkConstraint(id: string, name: string, payload: Record<string, unknown>
     version: 1, created_at: "", updated_at: "",
   };
 }
+function mkDerivation(id: string, name: string, rules: unknown[]): ModuleRow {
+  return {
+    id, name, type: "derivation",
+    description: "", category_id: null, tags: [], is_favorite: false,
+    payload: { rules }, payload_hash: "0".repeat(64),
+    version: 1, created_at: "", updated_at: "",
+  };
+}
 
 describe("validateModule - wildcards", () => {
   it("flags empty options array as warn", () => {
@@ -66,6 +74,35 @@ describe("validateModule - wildcards", () => {
     });
     const issues = validateModule(referrer, [target, referrer]);
     expect(issues.some((i) => i.message.includes("notreal"))).toBe(true);
+  });
+
+  it("flags an unknown tag inside a v2 boolean ref filter", () => {
+    // SP1: `:warm or intense!null` is a boolean expression, not a single
+    // sub-category named "warm or intense!null". The validator must parse
+    // the expression and check each *tag*: `warm` is fine, `intense` is not
+    // a sub-category of mood, and the trailing `!null` marker is not a tag.
+    const target = mkWildcard("bbbbbbbb", "mood", {
+      options: [], sub_categories: ["warm"],
+    });
+    const referrer = mkWildcard("aaaaaaaa", "ref", {
+      options: [{ id: "o1", value: "uses @{bbbbbbbb:warm or intense!null}", weight: 1 }],
+      sub_categories: [],
+    });
+    const issues = validateModule(referrer, [target, referrer]);
+    expect(
+      issues.some((i) => i.message.includes("Unknown sub-category: 'intense'")),
+    ).toBe(true);
+  });
+
+  it("accepts a valid v2 boolean ref filter and ignores the !null marker", () => {
+    const target = mkWildcard("bbbbbbbb", "mood", {
+      options: [], sub_categories: ["warm", "intense"],
+    });
+    const referrer = mkWildcard("aaaaaaaa", "ref", {
+      options: [{ id: "o1", value: "uses @{bbbbbbbb:warm or intense!null}", weight: 1 }],
+      sub_categories: [],
+    });
+    expect(validateModule(referrer, [target, referrer])).toEqual([]);
   });
 });
 
@@ -136,6 +173,124 @@ describe("validateModule - inline brace syntax", () => {
     });
     const issues = validateModule(row, [row]);
     expect(issues.some((i) => /\$ghost/.test(i.message))).toBe(true);
+  });
+
+  it("treats $colors.0 (SP2a accessor) as a reference to the bound $colors var", () => {
+    // The list accessor must validate against the BASE var name — not flag
+    // `colors.0` as an unbound variable.
+    const producer = mkWildcard("aaaaaaaa", "colors", {
+      sub_categories: [], options: [], var_binding: "colors",
+    });
+    const referrer = mkWildcard("bbbbbbbb", "ref", {
+      sub_categories: [],
+      options: [{ id: "o1", value: "uses $colors.0 here", weight: 1 }],
+    });
+    const issues = validateModule(referrer, [producer, referrer]);
+    expect(issues.some((i) => /not bound/i.test(i.message))).toBe(false);
+  });
+});
+
+describe("validateModule - derivations", () => {
+  it("treats $mood.0 (SP2a accessor) as a reference to the bound $mood var", () => {
+    // The derivation condition `var: "mood.0"` must validate against the
+    // BASE var `mood` (bound by the producer wildcard), not a phantom
+    // `mood.0` binding that would wrongly read as "not bound".
+    const producer = mkWildcard("aaaaaaaa", "mood", {
+      sub_categories: [], options: [], var_binding: "mood",
+    });
+    const deriv = mkDerivation("bbbbbbbb", "d", [{
+      id: "r1",
+      branches: [{
+        condition: { var: "mood.0", op: "equals", value: "calm" },
+        action: { target_var: "tone", mode: "replace", value: "x" },
+      }],
+    }]);
+    const issues = validateModule(deriv, [producer, deriv]);
+    expect(issues.some((i) => /not bound/i.test(i.message))).toBe(false);
+  });
+
+  it("still flags an unbound derivation condition var carrying an accessor", () => {
+    const deriv = mkDerivation("bbbbbbbb", "d", [{
+      id: "r1",
+      branches: [{
+        condition: { var: "ghost.0", op: "equals", value: "x" },
+        action: { target_var: "tone", mode: "replace", value: "y" },
+      }],
+    }]);
+    const issues = validateModule(deriv, [deriv]);
+    // Base name `ghost` is unbound -> warns, and the message shows the raw
+    // accessor the user typed.
+    expect(issues.some((i) => /\$ghost\.0 not bound/.test(i.message))).toBe(true);
+  });
+});
+
+describe("validateModule - variable name grammar", () => {
+  // A produced var name must be a clean identifier (letters/digits/underscore,
+  // no leading digit) — anything else can never be referenced as `$name`
+  // (the tokenizer + the editor's settle delimiters `,;:/(){}[]!?`+space all
+  // break on it). The editors block it at input; this is the catch-all that
+  // also flags bad names arriving via import / embed override / legacy data.
+  function mkCombine(id: string, payload: Record<string, unknown>): ModuleRow {
+    return {
+      id, name: "c", type: "combine",
+      description: "", category_id: null, tags: [], is_favorite: false,
+      payload, payload_hash: "0".repeat(64),
+      version: 1, created_at: "", updated_at: "",
+    };
+  }
+  function mkFixed(id: string, values: unknown[]): ModuleRow {
+    return {
+      id, name: "f", type: "fixed_values",
+      description: "", category_id: null, tags: [], is_favorite: false,
+      payload: { values }, payload_hash: "0".repeat(64),
+      version: 1, created_at: "", updated_at: "",
+    };
+  }
+
+  it("combine: flags output_var containing a comma as error", () => {
+    const row = mkCombine("aaaaaaaa", { template: "$x", output_var: "scene,bad" });
+    const issues = validateModule(row, [row]);
+    expect(issues.some((i) => i.severity === "error" && /not a valid name/i.test(i.message))).toBe(true);
+  });
+
+  it("combine: a clean output_var raises no name-grammar error", () => {
+    const row = mkCombine("aaaaaaaa", { template: "portrait", output_var: "scene" });
+    const issues = validateModule(row, [row]);
+    expect(issues.some((i) => /not a valid name/i.test(i.message))).toBe(false);
+  });
+
+  it("combine: empty output_var stays a single 'missing' warn, no grammar error", () => {
+    const row = mkCombine("aaaaaaaa", { template: "portrait", output_var: "" });
+    const issues = validateModule(row, [row]);
+    expect(issues.some((i) => /not a valid name/i.test(i.message))).toBe(false);
+    expect(issues.some((i) => i.severity === "warn" && /missing/i.test(i.message))).toBe(true);
+  });
+
+  it("combine: flags a leading-digit output_var as error", () => {
+    const row = mkCombine("aaaaaaaa", { template: "x", output_var: "3scene" });
+    const issues = validateModule(row, [row]);
+    expect(issues.some((i) => i.severity === "error" && /not a valid name/i.test(i.message))).toBe(true);
+  });
+
+  it("wildcard: flags var_binding containing punctuation as error", () => {
+    const row = mkWildcard("aaaaaaaa", "w", {
+      options: [{ id: "o1", value: "red", weight: 1 }],
+      sub_categories: [], var_binding: "mood;bad",
+    });
+    const issues = validateModule(row, [row]);
+    expect(issues.some((i) => i.severity === "error" && /not a valid name/i.test(i.message))).toBe(true);
+  });
+
+  it("fixed_values: flags a value name containing a comma as error", () => {
+    const row = mkFixed("aaaaaaaa", [{ id: "v1", name: "col,or", value: "red" }]);
+    const issues = validateModule(row, [row]);
+    expect(issues.some((i) => i.severity === "error" && /not a valid name/i.test(i.message))).toBe(true);
+  });
+
+  it("fixed_values: a clean value name raises no grammar error", () => {
+    const row = mkFixed("aaaaaaaa", [{ id: "v1", name: "color", value: "red" }]);
+    const issues = validateModule(row, [row]);
+    expect(issues.some((i) => /not a valid name/i.test(i.message))).toBe(false);
   });
 });
 

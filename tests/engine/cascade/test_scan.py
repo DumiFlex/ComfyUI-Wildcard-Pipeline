@@ -92,6 +92,58 @@ def test_scan_subcat_delete_also_catches_text_refs(wp_db):
     assert referrer["id"] in {a["id"] for a in affected}
 
 
+def test_scan_subcat_delete_catches_boolean_filter_text_refs(wp_db):
+    # SP1: a boolean filter `@{target:warm or cool!null}` references BOTH
+    # tags. Deleting/renaming "warm" must surface this referrer in the
+    # preview — the fixer WILL rewrite it (engine/cascade/fixers.py token-
+    # matches), so the discovery scan must agree or the affected-count lies.
+    mod = ModuleRepository(wp_db)
+    target = mod.create(
+        type="wildcard", name="palette", description="", category_id=None, tags=[],
+        payload={"options": [
+            {"id": "o1", "value": "red", "weight": 1, "sub_categories": ["warm", "cool"]},
+        ]},
+    )
+    referrer = mod.create(
+        type="wildcard", name="user", description="", category_id=None, tags=[],
+        payload={"options": [
+            {"id": "u1", "value": "see @{" + target["id"] + ":warm or cool!null} now", "weight": 1},
+        ]},
+    )
+
+    affected = scan_affected(
+        wp_db, kind="subcategory", id=target["id"], action="delete",
+        extra={"subcat_name": "warm"},
+    )
+
+    assert referrer["id"] in {a["id"] for a in affected}
+
+
+def test_scan_subcat_rename_catches_negated_filter_text_refs(wp_db):
+    # The tag inside a `not` is still a dependency: renaming "warm" must
+    # rewrite `@{target:not warm}`, so the scan must surface the referrer.
+    mod = ModuleRepository(wp_db)
+    target = mod.create(
+        type="wildcard", name="palette", description="", category_id=None, tags=[],
+        payload={"options": [
+            {"id": "o1", "value": "red", "weight": 1, "sub_categories": ["warm"]},
+        ]},
+    )
+    referrer = mod.create(
+        type="wildcard", name="user", description="", category_id=None, tags=[],
+        payload={"options": [
+            {"id": "u1", "value": "x @{" + target["id"] + ":not warm} y", "weight": 1},
+        ]},
+    )
+
+    affected = scan_affected(
+        wp_db, kind="subcategory", id=target["id"], action="rename",
+        extra={"subcat_name": "warm"},
+    )
+
+    assert referrer["id"] in {a["id"] for a in affected}
+
+
 def test_scan_combine_output_var_rename_returns_derivations_and_wildcards(wp_db):
     mod = ModuleRepository(wp_db)
     combine = mod.create(

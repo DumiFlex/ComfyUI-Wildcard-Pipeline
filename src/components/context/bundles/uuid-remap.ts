@@ -18,8 +18,6 @@
  * Pure-TS, no engine imports. Safe to import from frontend bundle code.
  */
 
-import { newRowUid } from "../../../widgets/_shared";
-
 export interface ChildSnapshot {
   id: string;
   type: string;
@@ -46,8 +44,10 @@ export interface RemapResult {
 const REF_RE = /@\{([0-9a-f]{6,16})(#[^#:}@{]*)?(:[^}]*)?\}/gi;
 
 /** Deep walks an unknown value, applying the remap. Returns a new
- *  object — never mutates input. */
-function walkRemap(value: unknown, remap: Record<string, string>): unknown {
+ *  object — never mutates input. Exported so the cascade-restore path
+ *  can re-point constraint source/target + `@{}` refs at restored module
+ *  uuids using a partial remap table (not a full id regen). */
+export function walkRemap(value: unknown, remap: Record<string, string>): unknown {
   if (typeof value === "string") {
     let out = value;
     // Whole-string match — e.g. constraint.source_wildcard_id = "src11111"
@@ -76,26 +76,4 @@ function walkRemap(value: unknown, remap: Record<string, string>): unknown {
     return obj;
   }
   return value;
-}
-
-/** Regenerate every child uuid in the snapshot list, then deep-walk
- *  every child's `payload` + `instance` rewriting any references to
- *  match. Constraint source/target ids + `@{uuid}` text refs all flow
- *  through `walkRemap` since they live inside `payload` / `instance`. */
-export function remapBundleUuids(children: ChildSnapshot[]): RemapResult {
-  const remap: Record<string, string> = {};
-  for (const c of children) {
-    remap[c.id] = newRowUid();
-  }
-  const remapped: ChildSnapshot[] = children.map((c) => {
-    const next: ChildSnapshot = { ...c, id: remap[c.id] };
-    if (c.payload) {
-      next.payload = walkRemap(c.payload, remap) as Record<string, unknown>;
-    }
-    if (c.instance) {
-      next.instance = walkRemap(c.instance, remap) as Record<string, unknown>;
-    }
-    return next;
-  });
-  return { children: remapped, remap };
 }

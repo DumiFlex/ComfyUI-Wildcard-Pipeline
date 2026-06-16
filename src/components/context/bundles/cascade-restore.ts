@@ -40,6 +40,8 @@ import {
   buildLibraryChildrenWithIntegrity,
   toChildSnapshot,
 } from "./save";
+import { computeBundleFingerprint } from "./bundle-fingerprint";
+import { walkRemap } from "./uuid-remap";
 import type { BundleInstance, ModuleEntry } from "../../../widgets/_shared";
 
 export interface CascadeRestoreInputs {
@@ -91,7 +93,28 @@ export async function cascadeRestoreForBundle(
   // because inner-bundle children are still inside the outer's range —
   // they need their uuids in the moduleMap before Phase 2 rebuilds the
   // inner's children list.
+  //
+  // Two passes:
+  //   Pass 1 — POST each missing module RAW to MINT a fresh id. The raw
+  //     payload is just a seed; it may carry refs to SIBLING restored
+  //     modules that haven't minted their new ids yet (forward refs),
+  //     so the standalone library entry can ship dangling source/target
+  //     / `@{}` refs at this point.
+  //   Pass 2 — runs AFTER the loop, when `moduleMap` is COMPLETE. For
+  //     each restored module it walkRemaps the payload against the full
+  //     map; if any ref actually changed, it corrects the freshly-created
+  //     library entry via `api.modules.update`. This is the same rewrite
+  //     Phase 3 (pushed children) and Phase 4 (workflow rebind) apply —
+  //     the standalone library entries are the third output that needs it.
+  //     Ref-free modules (most wildcards) don't differ → no update.
   const moduleMap = new Map<string, string>();
+  // Library payload_hash per restored module (keyed by OLD id). Phase 4 stamps
+  // it on the workflow row so the canvas doesn't flash DRIFT against the
+  // freshly-created/corrected library entry — mirror of the bundle
+  // inserted_at_hash sync below. A corrected constraint is the case that bites:
+  // its stale frozen-snapshot hash != the new entry's hash (its payload moved).
+  const moduleHashMap = new Map<string, string>();
+  const restored: { newId: string; module: ModuleEntry }[] = [];
   for (let i = outer.start_idx; i <= outer.end_idx; i++) {
     const m = modules[i];
     if (!m) continue;
@@ -110,9 +133,32 @@ export async function cascadeRestoreForBundle(
       const text = await res.text().catch(() => "");
       throw new Error(`Module restore failed for "${baseName}": HTTP ${res.status} ${text}`);
     }
-    const body = (await res.json()) as { id?: string };
+    const body = (await res.json()) as { id?: string; payload_hash?: string };
     if (!body.id) throw new Error(`Module restore for "${baseName}" returned no id`);
     moduleMap.set(m.id, body.id);
+    if (body.payload_hash) moduleHashMap.set(m.id, body.payload_hash);
+    restored.push({ newId: body.id, module: m });
+  }
+
+  // Pass 2: correct standalone library entries whose payload referenced a
+  // sibling restored module. `moduleMap` is complete now, so forward refs
+  // (a constraint POSTed before its target wildcard minted its id) resolve.
+  const restoreTable: Record<string, string> = {};
+  for (const [k, v] of moduleMap) restoreTable[k] = v;
+  if (Object.keys(restoreTable).length > 0) {
+    for (const { newId, module: m } of restored) {
+      const original = m.payload ?? {};
+      const rewrittenPayload = walkRemap(original, restoreTable) as Record<string, unknown>;
+      // Only PUT when a ref actually moved — ref-free modules are unchanged.
+      if (JSON.stringify(rewrittenPayload) === JSON.stringify(original)) continue;
+      const updated = await api.modules.update(newId, {
+        name: pickModuleName(m),
+        payload: rewrittenPayload,
+      });
+      // The corrected payload changes the hash — capture it so Phase 4 stamps
+      // the workflow row with the LIVE library hash (overrides the POST hash).
+      moduleHashMap.set(m.id, updated.payload_hash);
+    }
   }
 
   // ── Phase 2: restore missing inner bundles ──────────────────────────
@@ -130,7 +176,9 @@ export async function cascadeRestoreForBundle(
     if (inner.parent_uid !== outer._uid) continue;
     if (!isBundleMissing(inner)) continue;
     const integrity = buildLibraryChildrenWithIntegrity(inner, modules, bundles);
-    const rewritten = integrity.children.map((c) => rewriteChildId(c, moduleMap, innerBundleMap));
+    const rewritten = integrity.children.map((c) =>
+      rewriteChildId(c, moduleMap, innerBundleMap, moduleHashMap),
+    );
     const created = await api.bundles.create({
       name: inner.name || "bundle",
       color: inner.color ?? null,
@@ -143,7 +191,7 @@ export async function cascadeRestoreForBundle(
   // ── Phase 3: build the outer's children with both rewrites applied ──
   const outerIntegrity = buildLibraryChildrenWithIntegrity(outer, modules, bundles);
   const rewrittenChildren = outerIntegrity.children.map((c) =>
-    rewriteChildId(c, moduleMap, innerBundleMap),
+    rewriteChildId(c, moduleMap, innerBundleMap, moduleHashMap),
   );
 
   // ── Phase 4: rebind workflow state so MISSING badges clear ──────────
@@ -152,17 +200,54 @@ export async function cascadeRestoreForBundle(
   // since-deleted library entry at insert time) wouldn't match the new
   // entry's hash and the BundleHeader would render LIBRARY UPDATED
   // until the user manually reset.
-  const newModules = modules.map((m) =>
-    moduleMap.has(m.id) ? { ...m, id: moduleMap.get(m.id)! } : m,
-  );
+  // Rewrite table shared with Phase 3's child rewrite. The workflow modules
+  // need their INTERNAL refs repointed too — a restored constraint's
+  // source/target + any embedded `@{}` ref — not just their own `id`.
+  // Without this, after a cascade restore the canvas keeps a SRC/TGT-MISSING
+  // constraint even though the pushed library entry (rewrittenChildren) is
+  // correct: Phase 4 swapped ids but left payloads pointing at the dead uuids.
+  const refTable: Record<string, string> = {};
+  for (const [k, v] of moduleMap) refTable[k] = v;
+  for (const [k, v] of innerBundleMap) refTable[k] = v;
+  const hasRefs = Object.keys(refTable).length > 0;
+  const newModules = modules.map((m) => {
+    let next = moduleMap.has(m.id) ? { ...m, id: moduleMap.get(m.id)! } : m;
+    if (hasRefs) {
+      if (next.payload && typeof next.payload === "object") {
+        next = { ...next, payload: walkRemap(next.payload, refTable) as ModuleEntry["payload"] };
+      }
+      if (next.instance && typeof next.instance === "object") {
+        next = { ...next, instance: walkRemap(next.instance, refTable) as ModuleEntry["instance"] };
+      }
+    }
+    // Sync payload_hash to the restored library entry so the canvas doesn't
+    // flash DRIFT against it (mirror of newBundles' inserted_at_hash below).
+    // moduleHashMap only holds restored modules, so a non-restored row keeps
+    // its own hash.
+    const newHash = moduleHashMap.get(m.id);
+    if (newHash) next = { ...next, payload_hash: newHash };
+    return next;
+  });
   const newBundles = bundles.map((b) => {
     const next = innerBundleMap.get(b.library_id);
     if (!next) return b;
     const hash = innerHashMap.get(b.library_id);
-    return {
+    const rebound: BundleInstance = {
       ...b,
       library_id: next,
       ...(hash ? { inserted_at_hash: hash } : {}),
+    };
+    // Reconcile the restored inner's snapshot_fingerprint to its freshly-
+    // restored content. Without this the rebound instance keeps the STALE
+    // fingerprint captured before the restore, so `bundleSnapshotModified`
+    // (live vs stored) flips true and the canvas flashes a false MODIFIED
+    // badge on a bundle that was just re-created to match the library.
+    // Mirror of the inserted_at_hash sync above. ONLY restored inners are
+    // reconciled (this branch) — a non-restored bundle returns early and
+    // keeps its own fingerprint, so genuine drift still surfaces.
+    return {
+      ...rebound,
+      snapshot_fingerprint: computeBundleFingerprint(rebound, newModules),
     };
   });
 
@@ -175,24 +260,61 @@ export async function cascadeRestoreForBundle(
   };
 }
 
-/** Apply id rewrites to a single child entry. Bundle-typed children
- *  look up in `innerBundleMap`; module-typed children look up in
- *  `moduleMap`. Returns a NEW object only when a rewrite fires; otherwise
- *  reuses the original reference to avoid churn for downstream diff
- *  consumers. */
+/** Apply id rewrites to a single child entry. Two layers:
+ *
+ *   1. The child's OWN top-level `id` — bundle-typed children look up in
+ *      `innerBundleMap`; module-typed children in `moduleMap`.
+ *   2. References INSIDE the child's `payload` + `instance` that point at
+ *      any restored module/inner-bundle — a constraint's
+ *      `source_wildcard_id` / `target_wildcard_id`, or an `@{uuid}` ref in
+ *      a wildcard/derivation value. Without (2), restoring a missing
+ *      wildcard re-pointed its own child id but left a sibling
+ *      constraint pointing at the dead uuid → the pushed bundle shipped a
+ *      broken source/target (#2). The deep rewrite reuses `walkRemap`.
+ *
+ *  Returns a NEW object only when a rewrite fires; otherwise reuses the
+ *  original reference to avoid churn for downstream diff consumers. */
 function rewriteChildId(
   c: Record<string, unknown>,
   moduleMap: Map<string, string>,
   innerBundleMap: Map<string, string>,
+  moduleHashMap?: ReadonlyMap<string, string>,
 ): Record<string, unknown> {
+  let next: Record<string, unknown> = c;
+
+  // (1) Own id.
   const id = typeof c.id === "string" ? c.id : "";
-  if (!id) return c;
-  if (c.type === "bundle") {
-    const next = innerBundleMap.get(id);
-    return next ? { ...c, id: next } : c;
+  if (id) {
+    const newId = c.type === "bundle" ? innerBundleMap.get(id) : moduleMap.get(id);
+    if (newId) next = { ...next, id: newId };
+
+    // (1b) Sync the child snapshot's `payload_hash` to the restored library
+    // entry's LIVE hash. `toChildSnapshot` froze the stale pre-cascade hash;
+    // for a restored module whose refs were corrected (Phase 1 Pass-2) the
+    // payload moved but the frozen hash didn't, so the pushed bundle would
+    // ship a child whose payload ≠ its payload_hash → RE-INSERTING the bundle
+    // shows spurious DRIFT against the live library entry. `moduleHashMap` is
+    // keyed by OLD id and holds only restored modules (POST hash, overridden
+    // by the corrective-update hash), so non-restored + bundle children are
+    // left untouched.
+    const freshHash = moduleHashMap?.get(id);
+    if (freshHash) next = { ...next, payload_hash: freshHash };
   }
-  const next = moduleMap.get(id);
-  return next ? { ...c, id: next } : c;
+
+  // (2) Inner references (constraint source/target, @{} refs) → restored ids.
+  const table: Record<string, string> = {};
+  for (const [k, v] of moduleMap) table[k] = v;
+  for (const [k, v] of innerBundleMap) table[k] = v;
+  if (Object.keys(table).length > 0) {
+    if (next.payload && typeof next.payload === "object") {
+      next = { ...next, payload: walkRemap(next.payload, table) as Record<string, unknown> };
+    }
+    if (next.instance && typeof next.instance === "object") {
+      next = { ...next, instance: walkRemap(next.instance, table) as Record<string, unknown> };
+    }
+  }
+
+  return next;
 }
 
 /** Pre-scan to count what cascade would heal — used by the modal to

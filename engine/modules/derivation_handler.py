@@ -19,6 +19,7 @@ from engine.modules import build_resolve_ctx
 from engine.modules._seed import derive_module_rng
 from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
+from engine.syntax.types import deref_var_value, split_var_accessor
 
 _VALID_OPS = {
     "equals", "not_equals", "contains", "matches",
@@ -33,25 +34,34 @@ _VALID_OPS = {
 _VALID_MODES = {"replace", "append", "prepend"}
 
 
-def _ctx_get(ctx: Any, name: str) -> str:
+def _ctx_get_raw(ctx: Any, name: str) -> Any:
+    """Read the RAW stored value for `name` (may be a ListVar) through the
+    callable-getter -> dict-lookup indirection. Missing / error -> None."""
     if ctx is None:
-        return ""
+        return None
     getter = getattr(ctx, "get", None)
     if callable(getter):
         try:
-            value = getter(name, "")
+            return getter(name, None)
         except TypeError:
             try:
-                value = getter(name)
+                return getter(name)
             except Exception:
-                return ""
-        return "" if value is None else str(value)
+                return None
     try:
         if name in ctx:  # type: ignore[operator]
-            return str(ctx[name])  # type: ignore[index]
+            return ctx[name]  # type: ignore[index]
     except Exception:
-        return ""
-    return ""
+        return None
+    return None
+
+
+def _ctx_get(ctx: Any, name: str) -> str:
+    """Read `name` as a string, honoring a `.K` list accessor and folding a
+    ListVar to its joined value (SP2a): `$mood.0` splits to base `mood` +
+    index 0. The fold/accessor contract lives in deref_var_value."""
+    base, index = split_var_accessor(name)
+    return deref_var_value(_ctx_get_raw(ctx, base), index)
 
 
 def _ctx_has(ctx: Any, name: str) -> bool:
@@ -66,6 +76,7 @@ def _ctx_has(ctx: Any, name: str) -> bool:
     """
     if ctx is None:
         return False
+    name = split_var_accessor(name)[0]  # SP2a: presence checks the base var
     # Engine ctx is a dict in tests + at runtime; check `__contains__`
     # before falling back to a getter probe so we get the cheap path.
     try:
@@ -91,6 +102,7 @@ def _ctx_has(ctx: Any, name: str) -> bool:
 def _ctx_set(ctx: Any, name: str, value: str) -> None:
     if ctx is None:
         return
+    name = split_var_accessor(name)[0]  # SP2a: writing $x.K targets the base var
     setter = getattr(ctx, "set", None)
     if callable(setter):
         setter(name, value)
@@ -132,17 +144,48 @@ def _match_condition(condition: dict[str, Any], ctx: Any) -> bool:
     return False
 
 
+def branch_carrier_key(rule_id: str, branch: int | str) -> str:
+    """Carrier key for a derivation branch occurrence -- the `option_id` the
+    SP3 nested-occurrence model matches a constraint `pick` against. `branch`
+    is the 0-based branch index (0 = IF) or the literal ``"else"``.
+
+    MUST stay byte-identical to the TS twin ``branchKey`` in
+    ``src/extension/constraint-pairs.ts``; both are corpus-locked against
+    ``tests/fixtures/constraint-corpus.json`` ``branch_key_cases``.
+    """
+    return f"{rule_id}:{branch}"
+
+
 def _apply_action(
     action: dict[str, Any],
     ctx: Any,
     resolve_ctx: Any,
+    carrier_key: str | None = None,
 ) -> tuple[str, str] | None:
     target = action.get("target_var", "")
     if not target:
         return None
     mode = action.get("mode", "replace")
     raw_value = str(action.get("value", ""))
-    new_value = resolve_text(raw_value, resolve_ctx)
+    # Stamp this derivation instance as the CARRIER of any `@{}` in the action
+    # value, keyed by the branch key (`${rule_id}:${bi}` / `${rule_id}:else`) —
+    # the `option_id` the SP3 nested-occurrence model matches a `pick` against.
+    # Save/restore around the resolve, mirroring the resolver's own carrier
+    # save/restore for nested recursion.
+    set_carrier = getattr(resolve_ctx, "set_carrier", None)
+    get_carrier = getattr(resolve_ctx, "get_carrier", None)
+    if carrier_key is not None and callable(set_carrier) and callable(get_carrier):
+        module_uid = None
+        if isinstance(ctx, dict):
+            module_uid = ctx.get("__wp_current_module_uid__") or ctx.get("__wp_current_module_id__")
+        prev = get_carrier()
+        set_carrier(module_uid, carrier_key)
+        try:
+            new_value = resolve_text(raw_value, resolve_ctx)
+        finally:
+            set_carrier(*prev)
+    else:
+        new_value = resolve_text(raw_value, resolve_ctx)
     if mode == "replace":
         result = new_value
     elif mode == "append":
@@ -296,7 +339,7 @@ class DerivationHandler(ModuleHandler):
                 # Branch-level disable — `r1:1` etc. IF (bi=0) ignored
                 # even when listed because disabling IF == disabling rule
                 # (the per-rule toggle handles that case cleanly).
-                if bi != 0 and f"{rule_id}:{bi}" in disabled_branch_keys:
+                if bi != 0 and branch_carrier_key(rule_id, bi) in disabled_branch_keys:
                     continue
 
                 # Condition-value override per branch index.
@@ -320,7 +363,9 @@ class DerivationHandler(ModuleHandler):
                     if isinstance(action_override, str):
                         action = {**action, "value": action_override}
 
-                    pair = _apply_action(action, ctx, resolve_ctx)
+                    pair = _apply_action(
+                        action, ctx, resolve_ctx, carrier_key=branch_carrier_key(rule_id, bi)
+                    )
                     if pair is not None:
                         out[pair[0]] = pair[1]
                     applied = True
@@ -328,7 +373,7 @@ class DerivationHandler(ModuleHandler):
 
             if not applied:
                 # ELSE skip when listed in disabled_branch_keys.
-                if f"{rule_id}:else" in disabled_branch_keys:
+                if branch_carrier_key(rule_id, "else") in disabled_branch_keys:
                     continue
                 else_clause = rule.get("else")
                 if isinstance(else_clause, dict):
@@ -341,7 +386,9 @@ class DerivationHandler(ModuleHandler):
                     )
                     if isinstance(action_override, str):
                         action = {**action, "value": action_override}
-                    pair = _apply_action(action, ctx, resolve_ctx)
+                    pair = _apply_action(
+                        action, ctx, resolve_ctx, carrier_key=branch_carrier_key(rule_id, "else")
+                    )
                     if pair is not None:
                         out[pair[0]] = pair[1]
         return out

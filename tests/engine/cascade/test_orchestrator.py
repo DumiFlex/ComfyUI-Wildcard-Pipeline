@@ -60,6 +60,9 @@ def test_dry_run_returns_affected_without_mutating(wp_db):
 
 
 def test_wildcard_delete_commits_and_returns_undo_id_plus_diff(wp_db):
+    """Default delete (no cleanup_ids): the wildcard row is dropped, but a
+    dependent constraint SURVIVES (left broken, healed later via reattach
+    UI). Constraints are never deleted by the cascade."""
     mod = ModuleRepository(wp_db)
     wc = mod.create(type="wildcard", name="x", description="", category_id=None,
                     tags=[], payload={"options": []})
@@ -76,13 +79,43 @@ def test_wildcard_delete_commits_and_returns_undo_id_plus_diff(wp_db):
 
     assert resp["ok"] is True
     assert resp["undo_entry_id"]
-    assert resp["affected_count"] >= 1
+    # Only the wildcard row itself is in the diff (constraint untouched).
     assert resp["diff"]
-    # Wildcard + constraint should be gone.
+    # Wildcard row is gone; the dependent constraint survives.
     with pytest.raises(ModuleNotFound):
         mod.get(wc["id"])
+    assert mod.get(c["id"]) is not None
+
+
+def test_wildcard_delete_strips_nested_ref_for_cleanup_ids(wp_db):
+    """End-to-end: cleanup_ids in the request body reaches the fixer —
+    a nested-ref wildcard listed there has its @{deleted} token stripped,
+    while a constraint and an un-listed referrer are left untouched."""
+    mod = ModuleRepository(wp_db)
+    wc = mod.create(type="wildcard", name="x", description="", category_id=None,
+                    tags=[], payload={"options": []})
+    other = mod.create(type="wildcard", name="y", description="", category_id=None,
+                       tags=[], payload={"options": []})
+    c = mod.create(type="constraint", name="c1", description="", category_id=None,
+                   tags=[], payload={"source_wildcard_id": wc["id"],
+                                     "target_wildcard_id": other["id"],
+                                     "matrix": {}, "exceptions": []})
+    ref = "@{" + wc["id"] + "}"
+    cleaned = mod.create(type="wildcard", name="cleaned", description="", category_id=None,
+                         tags=[], payload={"options": [
+                             {"id": "o1", "value": "see " + ref, "weight": 1}]})
+
+    resp = apply_cascade(wp_db, {
+        "kind": "wildcard", "id": wc["id"], "action": "delete",
+        "cleanup_ids": [cleaned["id"]],
+    })
+
+    assert resp["ok"] is True
     with pytest.raises(ModuleNotFound):
-        mod.get(c["id"])
+        mod.get(wc["id"])
+    # Constraint survives; cleaned referrer had its ref stripped.
+    assert mod.get(c["id"]) is not None
+    assert ref not in mod.get(cleaned["id"])["payload"]["options"][0]["value"]
 
 
 def test_subcat_delete_does_not_delete_wildcard_target(wp_db):
@@ -91,7 +124,7 @@ def test_subcat_delete_does_not_delete_wildcard_target(wp_db):
                     payload={
                         "sub_categories": ["warm", "cool"],
                         "options": [{"id": "o", "value": "v", "weight": 1,
-                                     "sub_category": "warm"}],
+                                     "sub_categories": ["warm"]}],
                     })
 
     resp = apply_cascade(wp_db, {
@@ -103,7 +136,7 @@ def test_subcat_delete_does_not_delete_wildcard_target(wp_db):
     # Wildcard still exists — only the subcat was stripped.
     wc_after = mod.get(wc["id"])
     assert wc_after["payload"]["sub_categories"] == ["cool"]
-    assert wc_after["payload"]["options"][0]["sub_category"] is None
+    assert wc_after["payload"]["options"][0]["sub_categories"] == []
 
 
 def test_subcat_rename_with_cascade_false_returns_broken_refs(wp_db):
@@ -112,7 +145,7 @@ def test_subcat_rename_with_cascade_false_returns_broken_refs(wp_db):
                     payload={
                         "sub_categories": ["warm"],
                         "options": [{"id": "o", "value": "v", "weight": 1,
-                                     "sub_category": "warm"}],
+                                     "sub_categories": ["warm"]}],
                     })
     other = mod.create(type="wildcard", name="y", description="", category_id=None, tags=[],
                        payload={"options": []})
@@ -135,7 +168,7 @@ def test_subcat_rename_with_cascade_false_returns_broken_refs(wp_db):
     # Wildcard's own subcat WAS renamed though.
     wc_after = mod.get(wc["id"])
     assert wc_after["payload"]["sub_categories"] == ["hot"]
-    assert wc_after["payload"]["options"][0]["sub_category"] == "hot"
+    assert wc_after["payload"]["options"][0]["sub_categories"] == ["hot"]
 
 
 def test_category_delete_removes_category_and_nulls_refs(wp_db):

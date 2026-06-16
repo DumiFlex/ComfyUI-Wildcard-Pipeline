@@ -10,6 +10,8 @@ Each function:
 import re
 from typing import Protocol
 
+from engine.syntax.types import deref_var_value, split_var_accessor
+
 
 class _CtxLike(Protocol):
     context: dict[str, object]
@@ -80,7 +82,6 @@ def lookup_var(context: _CtxLike, name: str) -> str:
     bare = (name or "").lstrip("$").strip()
     if not bare:
         return ""
-    value = context.context.get(bare) if context and getattr(context, "context", None) else None
-    if value is None:
-        return ""
-    return value if isinstance(value, str) else str(value)
+    base, index = split_var_accessor(bare)
+    raw = context.context.get(base) if context and getattr(context, "context", None) else None
+    return deref_var_value(raw, index)

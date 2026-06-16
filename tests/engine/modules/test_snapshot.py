@@ -55,6 +55,12 @@ def test_freeze_snapshot_includes_required_fields():
         "enabled_options": None,
         "category_filter": None,
         "option_weights": None,
+        # SP2a multi-select + null toggle — part of the snapshot baseline.
+        "exclude_null": None,
+        "pick_min": None,
+        "pick_max": None,
+        "pick_separator": None,
+        "pick_independent": None,
         "mode": None,
         "pinned_option_id": None,
         "locked_seed": None,

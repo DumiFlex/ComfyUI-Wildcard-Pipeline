@@ -12,6 +12,17 @@ def test_fresh_instance_includes_tier2_fields_with_none_default():
     assert inst["disabled_matrix_cells"] is None
 
 
+def test_fresh_instance_includes_sp2a_pick_fields_and_exclude_null():
+    """SP2a: the multi-select pick range + the null toggle must be part of
+    the snapshot baseline so a frozen instance carries every override the
+    instance schema knows (all default None)."""
+    inst = _fresh_instance()
+    assert inst["exclude_null"] is None
+    assert inst["pick_min"] is None
+    assert inst["pick_max"] is None
+    assert inst["pick_separator"] is None
+
+
 def test_fresh_instance_does_not_include_ui_namespace():
     inst = _fresh_instance()
     # _ui is set lazily by UI on first interaction, not by snapshot baseline.

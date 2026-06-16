@@ -14,10 +14,10 @@ describe("DisabledRulesSection", () => {
     const wrapper = renderSection(DisabledRulesSection, {
       library: lib, modelValue: null,
     });
-    const checks = wrapper.findAll('input[data-test^="dr-cb-"]');
+    const checks = wrapper.findAll('[data-test^="dr-cb-"]');
     expect(checks).toHaveLength(3);
     checks.forEach((c) => {
-      expect((c.element as HTMLInputElement).checked).toBe(false);
+      expect(c.attributes("aria-checked")).toBe("false");
     });
     expect(wrapper.find('[data-test="dr-reset"]').exists()).toBe(false);
   });
@@ -26,9 +26,9 @@ describe("DisabledRulesSection", () => {
     const wrapper = renderSection(DisabledRulesSection, {
       library: lib, modelValue: ["r1", "r3"],
     });
-    expect((wrapper.find('input[data-test="dr-cb-r1"]').element as HTMLInputElement).checked).toBe(true);
-    expect((wrapper.find('input[data-test="dr-cb-r2"]').element as HTMLInputElement).checked).toBe(false);
-    expect((wrapper.find('input[data-test="dr-cb-r3"]').element as HTMLInputElement).checked).toBe(true);
+    expect(wrapper.find('[data-test="dr-cb-r1"]').attributes("aria-checked")).toBe("true");
+    expect(wrapper.find('[data-test="dr-cb-r2"]').attributes("aria-checked")).toBe("false");
+    expect(wrapper.find('[data-test="dr-cb-r3"]').attributes("aria-checked")).toBe("true");
     expect(wrapper.find('[data-test="dr-reset"]').exists()).toBe(true);
   });
 
@@ -36,9 +36,8 @@ describe("DisabledRulesSection", () => {
     const wrapper = renderSection(DisabledRulesSection, {
       library: lib, modelValue: null,
     });
-    const cb = wrapper.find('input[data-test="dr-cb-r2"]');
-    (cb.element as HTMLInputElement).checked = true;
-    await cb.trigger("change");
+    const cb = wrapper.find('[data-test="dr-cb-r2"]');
+    await cb.trigger("click");
     const next = getEmittedUpdate<string[] | null>(wrapper);
     expect(next).toEqual(["r2"]);
   });
@@ -47,9 +46,8 @@ describe("DisabledRulesSection", () => {
     const wrapper = renderSection(DisabledRulesSection, {
       library: lib, modelValue: ["r1"],
     });
-    const cb = wrapper.find('input[data-test="dr-cb-r3"]');
-    (cb.element as HTMLInputElement).checked = true;
-    await cb.trigger("change");
+    const cb = wrapper.find('[data-test="dr-cb-r3"]');
+    await cb.trigger("click");
     const next = getEmittedUpdate<string[] | null>(wrapper);
     expect(next).toContain("r1");
     expect(next).toContain("r3");
@@ -60,9 +58,8 @@ describe("DisabledRulesSection", () => {
     const wrapper = renderSection(DisabledRulesSection, {
       library: lib, modelValue: ["r1"],
     });
-    const cb = wrapper.find('input[data-test="dr-cb-r1"]');
-    (cb.element as HTMLInputElement).checked = false;
-    await cb.trigger("change");
+    const cb = wrapper.find('[data-test="dr-cb-r1"]');
+    await cb.trigger("click");
     const next = getEmittedUpdate<string[] | null>(wrapper);
     expect(next).toBeNull();
   });

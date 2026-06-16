@@ -13,13 +13,19 @@ Chain order (matches screenshot 2026-05-26):
        6b. mood     wildcard (top-level instance)
        6c. outfit   wildcard
 
-Expected behaviour:
+Expected behaviour (SP3 reach selector, default `all`):
 
-    - hair_x_mood #1 fires on backdrop's nested `@{mood}` resolution
-    - shirt_x_color_compat #1 fires on backdrop's nested `@{color}`
-    - hair_x_mood #2 fires on the top-level `mood` wildcard in final framing
-    - all three constraints land in `__wp_consumed_constraints__`
+    - hair_x_mood #1 (registered first) covers BOTH the backdrop nested
+      `@{mood}` AND the top-level `mood` → hit count 2
+    - shirt_x_color_compat covers backdrop's nested `@{color}` → hit count 1
+    - hair_x_mood #2 (registered after backdrop) covers only the
+      top-level `mood` → hit count 1
+    - every constraint has a non-zero hit count in `__wp_constraint_hits__`
     - zero `constraint_never_applied` warnings
+
+Pre-SP3 this chain rode the one-shot consumed-set (each constraint
+fired exactly once); SP3 retired that for the reach selector, so the
+default `all` constraints now re-weight every downstream occurrence.
 
 If any of those expectations fail the constraint runtime is broken in
 some subtle way — useful diagnostic for the "never_applied" warnings
@@ -70,8 +76,8 @@ def _constraint(module_id: str, source_uuid: str, target_uuid: str, matrix=None,
     }
     # Per-instance uid — distinct from the library `id`. Two sibling
     # instances of one library constraint entry share `id` but get their
-    # own `_uid`; the engine keys the consumed-set on `_uid` so they're
-    # independent one-shots.
+    # own `_uid`; the engine keys the SP3 hit counter on `_uid` so they
+    # count independently.
     if uid is not None:
         out["_uid"] = uid
     return out
@@ -83,20 +89,20 @@ def _build_catalog():
     other wildcard so the constraint sources are findable."""
     return {
         HAIR_STYLE: _wildcard(HAIR_STYLE, "hair_style", [
-            {"id": "h1", "value": "long", "weight": 1, "sub_category": "long"},
-            {"id": "h2", "value": "short", "weight": 1, "sub_category": "short"},
+            {"id": "h1", "value": "long", "weight": 1, "sub_categories": ["long"]},
+            {"id": "h2", "value": "short", "weight": 1, "sub_categories": ["short"]},
         ]),
         SHIRT: _wildcard(SHIRT, "shirt", [
-            {"id": "s1", "value": "tee", "weight": 1, "sub_category": "casual"},
-            {"id": "s2", "value": "blouse", "weight": 1, "sub_category": "formal"},
+            {"id": "s1", "value": "tee", "weight": 1, "sub_categories": ["casual"]},
+            {"id": "s2", "value": "blouse", "weight": 1, "sub_categories": ["formal"]},
         ]),
         MOOD: _wildcard(MOOD, "mood", [
-            {"id": "m1", "value": "BAD_warm", "weight": 1, "sub_category": "warm"},
-            {"id": "m2", "value": "ok_cool", "weight": 1, "sub_category": "cool"},
+            {"id": "m1", "value": "BAD_warm", "weight": 1, "sub_categories": ["warm"]},
+            {"id": "m2", "value": "ok_cool", "weight": 1, "sub_categories": ["cool"]},
         ]),
         COLOR: _wildcard(COLOR, "color", [
-            {"id": "c1", "value": "BAD_red", "weight": 1, "sub_category": "warm"},
-            {"id": "c2", "value": "ok_blue", "weight": 1, "sub_category": "cool"},
+            {"id": "c1", "value": "BAD_red", "weight": 1, "sub_categories": ["warm"]},
+            {"id": "c2", "value": "ok_blue", "weight": 1, "sub_categories": ["cool"]},
         ]),
         BACKDROP: _wildcard(BACKDROP, "backdrop", [
             # Carrier option — references BOTH nested wildcards in one
@@ -114,10 +120,10 @@ def _build_modules():
     """Flat module list — same order as user's WP_Context view."""
     return [
         _wildcard(HAIR_STYLE, "hair_style", [
-            {"id": "h1", "value": "long", "weight": 1, "sub_category": "long"},
+            {"id": "h1", "value": "long", "weight": 1, "sub_categories": ["long"]},
         ]),
         _wildcard(SHIRT, "shirt", [
-            {"id": "s1", "value": "tee", "weight": 1, "sub_category": "casual"},
+            {"id": "s1", "value": "tee", "weight": 1, "sub_categories": ["casual"]},
         ]),
         _constraint(
             CN_HAIR_X_MOOD_1, HAIR_STYLE, MOOD,
@@ -139,8 +145,8 @@ def _build_modules():
             matrix={"long": {"warm": {"mode": "exclude", "factor": 1}}},
         ),
         _wildcard(MOOD, "mood", [
-            {"id": "m1", "value": "BAD_warm", "weight": 1, "sub_category": "warm"},
-            {"id": "m2", "value": "ok_cool", "weight": 1, "sub_category": "cool"},
+            {"id": "m1", "value": "BAD_warm", "weight": 1, "sub_categories": ["warm"]},
+            {"id": "m2", "value": "ok_cool", "weight": 1, "sub_categories": ["cool"]},
         ]),
         _wildcard(OUTFIT, "outfit", [
             {"id": "o1", "value": "jacket", "weight": 1},
@@ -178,32 +184,36 @@ def test_backdrop_resolves_with_both_nested_refs():
     assert "@{" not in val, f"unresolved ref token in backdrop: {val!r}"
 
 
-def test_constraint_hair_x_mood_1_consumed():
-    """First hair_x_mood should fire when backdrop's @{mood} rolls."""
+def test_constraint_hair_x_mood_1_covers_both_mood_occurrences():
+    """hair_x_mood #1 (registered first) covers BOTH the backdrop nested
+    @{mood} and the top-level mood under default `all` → hit count 2."""
     ctx = _run()
-    consumed = ctx.get("__wp_consumed_constraints__", set())
-    assert CN_HAIR_X_MOOD_1 in consumed, (
-        f"hair_x_mood #1 never consumed. consumed={consumed}, "
+    hits = ctx.get("__wp_constraint_hits__", {})
+    assert hits.get(CN_HAIR_X_MOOD_1) == 2, (
+        f"hair_x_mood #1 expected to cover both mood occurrences. hits={hits}, "
         f"warnings={[w.get('detail') for w in ctx.get('__wp_warnings__', [])]}"
     )
 
 
-def test_constraint_shirt_x_color_consumed():
-    """shirt_x_color_compat should fire when backdrop's @{color} rolls."""
+def test_constraint_shirt_x_color_fires():
+    """shirt_x_color_compat covers backdrop's nested @{color} → hit count 1
+    (the only color occurrence downstream of it)."""
     ctx = _run()
-    consumed = ctx.get("__wp_consumed_constraints__", set())
-    assert CN_SHIRT_X_COLOR in consumed, (
-        f"shirt_x_color_compat never consumed. consumed={consumed}, "
+    hits = ctx.get("__wp_constraint_hits__", {})
+    assert hits.get(CN_SHIRT_X_COLOR) == 1, (
+        f"shirt_x_color_compat never fired. hits={hits}, "
         f"warnings={[w.get('detail') for w in ctx.get('__wp_warnings__', [])]}"
     )
 
 
-def test_constraint_hair_x_mood_2_consumed():
-    """Second hair_x_mood should fire on top-level `mood` in final framing."""
+def test_constraint_hair_x_mood_2_fires_on_top_level_only():
+    """hair_x_mood #2 registers AFTER backdrop, so it misses backdrop's
+    nested mood (resolved earlier) and covers only the top-level mood in
+    final framing → hit count 1."""
     ctx = _run()
-    consumed = ctx.get("__wp_consumed_constraints__", set())
-    assert CN_HAIR_X_MOOD_2 in consumed, (
-        f"hair_x_mood #2 never consumed. consumed={consumed}, "
+    hits = ctx.get("__wp_constraint_hits__", {})
+    assert hits.get(CN_HAIR_X_MOOD_2) == 1, (
+        f"hair_x_mood #2 never fired. hits={hits}, "
         f"warnings={[w.get('detail') for w in ctx.get('__wp_warnings__', [])]}"
     )
 
@@ -247,109 +257,104 @@ def test_backdrop_nested_color_respects_constraint():
     )
 
 
-def test_multiple_seeds_consistent_constraint_consumption():
-    """Sanity check across seeds — every seed should consume all three
+def test_multiple_seeds_consistent_constraint_firing():
+    """Sanity check across seeds — every seed should fire all three
     constraints (the only roll that varies is which option within a
     given sub-category wins, not whether the constraint fires)."""
     for seed in (0, 1, 7, 42, 99, 1234):
         ctx = {"__wp_catalog__": _build_catalog()}
         engine = PipelineEngine()
         ctx = engine.run(_build_modules(), ctx=ctx, seed=seed)
-        consumed = ctx.get("__wp_consumed_constraints__", set())
-        assert {CN_HAIR_X_MOOD_1, CN_SHIRT_X_COLOR, CN_HAIR_X_MOOD_2}.issubset(consumed), (
-            f"seed {seed}: missing constraints in consumed={consumed}"
-        )
+        hits = ctx.get("__wp_constraint_hits__", {})
+        for cid in (CN_HAIR_X_MOOD_1, CN_SHIRT_X_COLOR, CN_HAIR_X_MOOD_2):
+            assert hits.get(cid, 0) >= 1, (
+                f"seed {seed}: constraint {cid} never fired, hits={hits}"
+            )
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Carrier-claim failsafe (2026-05-26) — no spill past a carrier.
+# Carrier that doesn't resolve the ref (SP3: no claim, no spill — the
+# constraint simply applies on the next ACTUAL target resolution).
 
 
-def test_carrier_claims_constraint_no_spill_to_later_instance():
-    """A carrier (backdrop) that rolls an option WITHOUT the @{target}
-    ref still claims the constraint positionally — so a later top-level
-    target instance is NOT constrained (no spill). Matches the pair
-    badge, which assigns the constraint to backdrop (the first carrier).
+def test_carrier_without_ref_does_not_block_later_target():
+    """SP3 retired the carrier-claim failsafe. A carrier (backdrop) that
+    rolls an option WITHOUT the @{target} ref does NOT count as a target
+    occurrence — the constraint just applies on the next ACTUAL target
+    resolution (the top-level color after backdrop), which is now
+    constrained. (Pre-SP3 the carrier "claimed" the one-shot so the
+    later target rolled free — that consumed-set model is gone.)
 
-    Chain: shirt → shirt_x_color constraint → backdrop (carries @{color}
-    in some options, but we force the no-ref option) → color (top-level
-    AFTER backdrop). The top-level color must roll FREE (unconstrained)
-    because backdrop already claimed the constraint."""
+    Chain: shirt → shirt_x_color constraint → backdrop (rolls a no-ref
+    option) → color (top-level AFTER backdrop). The top-level color must
+    be CONSTRAINED (warm excluded → never warm_red)."""
     SHIRT = "b2b2b2b2"
     COLOR = "a361dbdc"
     BACKDROP = "b0b0b0b0"
     CN = "cc222222"
     modules = [
         _wildcard(SHIRT, "shirt", [
-            {"id": "s1", "value": "tee", "weight": 1, "sub_category": "casual"},
+            {"id": "s1", "value": "tee", "weight": 1, "sub_categories": ["casual"]},
         ]),
         _constraint(
             CN, SHIRT, COLOR,
             matrix={"casual": {"warm": {"mode": "exclude", "factor": 1}}},
         ),
-        # Backdrop CARRIES @{color} (it's a carrier) but the ONLY option
-        # has no ref — forces the "carrier rolled, ref omitted" path.
-        # A second option WITH the ref makes it a genuine carrier in the
-        # static sense; weight 0 so RNG never picks it (deterministic).
+        # Backdrop's only reachable option has no ref (the weight-0
+        # ref option never wins) — so backdrop resolves no @{color}.
         _wildcard(BACKDROP, "backdrop", [
             {"id": "bd1", "value": "plain studio", "weight": 1},
             {"id": "bd2", "value": f"with @{{{COLOR}}}", "weight": 0},
         ]),
-        # Top-level color AFTER backdrop — should NOT be constrained.
+        # Top-level color AFTER backdrop — IS constrained now.
         _wildcard(COLOR, "color", [
-            {"id": "c1", "value": "warm_red", "weight": 1, "sub_category": "warm"},
-            {"id": "c2", "value": "cool_blue", "weight": 1, "sub_category": "cool"},
+            {"id": "c1", "value": "warm_red", "weight": 1, "sub_categories": ["warm"]},
+            {"id": "c2", "value": "cool_blue", "weight": 1, "sub_categories": ["cool"]},
         ]),
     ]
     catalog = {
         COLOR: _wildcard(COLOR, "color", [
-            {"id": "c1", "value": "warm_red", "weight": 1, "sub_category": "warm"},
-            {"id": "c2", "value": "cool_blue", "weight": 1, "sub_category": "cool"},
+            {"id": "c1", "value": "warm_red", "weight": 1, "sub_categories": ["warm"]},
+            {"id": "c2", "value": "cool_blue", "weight": 1, "sub_categories": ["cool"]},
         ]),
     }
-    # Across seeds the top-level color should sometimes roll warm_red —
-    # proving it's NOT being constrained (constraint excludes warm).
-    saw_warm = False
     for seed in range(20):
         ctx = {"__wp_catalog__": dict(catalog)}
         ctx = PipelineEngine().run(modules, ctx=ctx, seed=seed)
-        consumed = ctx.get("__wp_consumed_constraints__", set())
-        # Backdrop claimed the constraint (consumed-as-skipped).
-        assert CN in consumed, f"seed {seed}: carrier didn't claim constraint"
-        if "warm_red" in (ctx.get("color") or ""):
-            saw_warm = True
-    assert saw_warm, (
-        "top-level color never rolled warm across 20 seeds — it's being "
-        "constrained, meaning the constraint spilled past the carrier"
-    )
+        hits = ctx.get("__wp_constraint_hits__", {})
+        # The top-level color is the single actual occurrence → fired once.
+        assert hits.get(CN) == 1, f"seed {seed}: expected one firing, hits={hits}"
+        # Constrained → warm excluded → never warm_red.
+        assert "warm_red" not in (ctx.get("color") or ""), (
+            f"seed {seed}: top-level color ignored constraint (rolled warm)"
+        )
 
 
-def test_carrier_claims_on_null_empty_pick():
-    """Regression (2026-05-26): a carrier that rolls its `null` /
-    empty-value option still claims its carried constraints. The bug
-    was the wildcard handler's empty-value early-return skipping the
-    claim_carrier_constraints call (it sat only after resolve_text), so
-    a null backdrop pick let the constraint surface a misleading
-    never_applied warning + spill.
+def test_carrier_null_pick_does_not_count_as_occurrence():
+    """A carrier (backdrop) whose winning option is empty/null resolves
+    no @{color}, so it does NOT count as a target occurrence — no
+    never_applied warning is emitted on its account (the constraint
+    legitimately found no downstream color this run). Under SP3 there's
+    nothing to "claim"; hits stays 0 and the never_applied warning is
+    the correct signal.
 
-    Chain: shirt → shirt_x_color → backdrop (ONLY option is empty/null,
-    but it CARRIES @{color} via a weight-0 option so it's statically a
-    carrier). The constraint must be consumed-as-skipped, zero
-    never_applied warnings."""
+    Chain: shirt → shirt_x_color → backdrop (winning option empty,
+    weight-0 option carries @{color}). No actual color resolution
+    anywhere → constraint never fires → exactly one never_applied."""
     SHIRT = "b2b2b2b2"
     COLOR = "a361dbdc"
     BACKDROP = "b0b0b0b0"
     CN = "cc222222"
     modules = [
         _wildcard(SHIRT, "shirt", [
-            {"id": "s1", "value": "tee", "weight": 1, "sub_category": "casual"},
+            {"id": "s1", "value": "tee", "weight": 1, "sub_categories": ["casual"]},
         ]),
         _constraint(
             CN, SHIRT, COLOR,
             matrix={"casual": {"warm": {"mode": "exclude", "factor": 1}}},
         ),
-        # Backdrop: the winning option is empty (null), but a weight-0
-        # option carries @{color} → backdrop is a carrier of color.
+        # Backdrop: the winning option is empty (null); the weight-0
+        # option carries @{color} but never wins → no color resolves.
         _wildcard(BACKDROP, "backdrop", [
             {"id": "bd_null", "value": "", "weight": 1},
             {"id": "bd_color", "value": f"@{{{COLOR}}}", "weight": 0},
@@ -357,22 +362,23 @@ def test_carrier_claims_on_null_empty_pick():
     ]
     catalog = {
         COLOR: _wildcard(COLOR, "color", [
-            {"id": "c1", "value": "warm_red", "weight": 1, "sub_category": "warm"},
-            {"id": "c2", "value": "cool_blue", "weight": 1, "sub_category": "cool"},
+            {"id": "c1", "value": "warm_red", "weight": 1, "sub_categories": ["warm"]},
+            {"id": "c2", "value": "cool_blue", "weight": 1, "sub_categories": ["cool"]},
         ]),
     }
     for seed in (0, 1, 7, 42, 99):
         ctx = {"__wp_catalog__": dict(catalog)}
         ctx = PipelineEngine().run(modules, ctx=ctx, seed=seed)
-        consumed = ctx.get("__wp_consumed_constraints__", set())
+        hits = ctx.get("__wp_constraint_hits__", {})
         warns = [
             w for w in ctx.get("__wp_warnings__", [])
             if w.get("type") == "constraint_never_applied"
         ]
-        assert CN in consumed, (
-            f"seed {seed}: carrier rolled null but didn't claim the constraint"
-        )
-        assert warns == [], f"seed {seed}: unexpected warnings {warns}"
+        # No actual color resolution → constraint never fired.
+        assert hits.get(CN, 0) == 0, f"seed {seed}: unexpected firing, hits={hits}"
+        # The target IS present in the chain (carrier + top-level absent;
+        # only the weight-0 carrier ref) → one never_applied warning.
+        assert len(warns) == 1, f"seed {seed}: expected one never_applied, got {warns}"
 
 
 def test_sibling_constraints_same_library_uuid_are_independent_oneshots():
@@ -392,9 +398,10 @@ def test_sibling_constraints_same_library_uuid_are_independent_oneshots():
     LIB_CID = "e41f5bc4"  # shared library uuid for both hair_x_mood
     modules = [
         _wildcard(HAIR, "hair_style", [
-            {"id": "h1", "value": "long", "weight": 1, "sub_category": "long"},
+            {"id": "h1", "value": "long", "weight": 1, "sub_categories": ["long"]},
         ]),
-        # Two instances, SAME library id, distinct _uid.
+        # Two instances, SAME library id, distinct _uid → independently
+        # keyed in the hit counter (cid = `_uid`).
         _constraint(
             LIB_CID, HAIR, MOOD,
             matrix={"long": {"warm": {"mode": "exclude", "factor": 1}}},
@@ -405,37 +412,40 @@ def test_sibling_constraints_same_library_uuid_are_independent_oneshots():
             matrix={"long": {"warm": {"mode": "exclude", "factor": 1}}},
             uid="uidB",
         ),
-        # Backdrop carries @{mood} (weight-0 ref option) but rolls null.
+        # Backdrop carries @{mood} (weight-0 ref option) but rolls null —
+        # resolves no nested mood.
         _wildcard(BACKDROP, "backdrop", [
             {"id": "bd_null", "value": "", "weight": 1},
             {"id": "bd_mood", "value": f"@{{{MOOD}}}", "weight": 0},
         ]),
-        # Top-level mood AFTER backdrop — must be constrained by uid B.
+        # Top-level mood AFTER backdrop — the single actual occurrence.
         _wildcard(MOOD, "mood", [
-            {"id": "m1", "value": "warm_bad", "weight": 1, "sub_category": "warm"},
-            {"id": "m2", "value": "cool_ok", "weight": 1, "sub_category": "cool"},
+            {"id": "m1", "value": "warm_bad", "weight": 1, "sub_categories": ["warm"]},
+            {"id": "m2", "value": "cool_ok", "weight": 1, "sub_categories": ["cool"]},
         ]),
     ]
     catalog = {
         MOOD: _wildcard(MOOD, "mood", [
-            {"id": "m1", "value": "warm_bad", "weight": 1, "sub_category": "warm"},
-            {"id": "m2", "value": "cool_ok", "weight": 1, "sub_category": "cool"},
+            {"id": "m1", "value": "warm_bad", "weight": 1, "sub_categories": ["warm"]},
+            {"id": "m2", "value": "cool_ok", "weight": 1, "sub_categories": ["cool"]},
         ]),
     }
     for seed in range(15):
         ctx = {"__wp_catalog__": dict(catalog)}
         ctx = PipelineEngine().run(modules, ctx=ctx, seed=seed)
-        consumed = ctx.get("__wp_consumed_constraints__", set())
-        # Backdrop claimed instance A; top-level mood claimed instance B.
-        assert "uidA" in consumed and "uidB" in consumed, (
-            f"seed {seed}: both instances should be consumed independently "
-            f"(consumed={consumed})"
+        hits = ctx.get("__wp_constraint_hits__", {})
+        # Both instances register before the top-level mood, so under the
+        # default `all` reach BOTH cover it independently → each fired once.
+        # (The per-`_uid` keying keeps siblings distinct — pre-SP3 both
+        # keyed on the shared library uuid and a single fire spent both.)
+        assert hits.get("uidA") == 1 and hits.get("uidB") == 1, (
+            f"seed {seed}: both sibling instances should fire independently "
+            f"(hits={hits})"
         )
-        # mood was constrained by instance B → never the warm option.
+        # mood was constrained → never the warm option.
         assert ctx.get("mood") == "cool_ok", (
             f"seed {seed}: top-level mood rolled {ctx.get('mood')!r} — it "
-            f"wasn't constrained, meaning backdrop's claim of instance A "
-            f"wrongly spent instance B too"
+            f"wasn't constrained"
         )
         # No leftover warnings.
         warns = [
@@ -445,17 +455,21 @@ def test_sibling_constraints_same_library_uuid_are_independent_oneshots():
         assert warns == [], f"seed {seed}: unexpected warnings {warns}"
 
 
-def test_carrier_claim_noop_when_source_not_picked():
-    """The carrier only claims when the constraint's source is already
-    picked. If the source rolls AFTER the carrier, the carrier must NOT
-    claim (leaves the constraint free to apply once the source + a real
-    target resolution land later)."""
+def test_constraint_skipped_when_source_not_picked_yet():
+    """A constraint whose source rolls AFTER it (so the source pick
+    isn't recorded when the target would be reached) does not apply —
+    it's skipped with an unknown_constraint_source signal rather than
+    firing on stale/absent source data. (Pre-SP3 this was framed as the
+    carrier-claim deferring; SP3 has no claim — the apply path itself
+    skips + warns when the source pick is missing.)
+
+    Chain: constraint(src=shirt) → backdrop (no-ref roll) → shirt. The
+    constraint never reaches an actual color target AND its source rolls
+    last, so it never fires."""
     SHIRT = "b2b2b2b2"
     COLOR = "a361dbdc"
     BACKDROP = "b0b0b0b0"
     CN = "cc222222"
-    # Carrier (backdrop) comes BEFORE the source (shirt) — source not
-    # picked when carrier rolls, so no claim.
     modules = [
         _constraint(
             CN, SHIRT, COLOR,
@@ -466,15 +480,15 @@ def test_carrier_claim_noop_when_source_not_picked():
             {"id": "bd2", "value": f"with @{{{COLOR}}}", "weight": 0},
         ]),
         _wildcard(SHIRT, "shirt", [
-            {"id": "s1", "value": "tee", "weight": 1, "sub_category": "casual"},
+            {"id": "s1", "value": "tee", "weight": 1, "sub_categories": ["casual"]},
         ]),
     ]
     ctx = {"__wp_catalog__": {}}
     ctx = PipelineEngine().run(modules, ctx=ctx, seed=0)
-    consumed = ctx.get("__wp_consumed_constraints__", set())
-    assert CN not in consumed, (
-        "carrier claimed the constraint despite source not being picked "
-        "yet — claim must wait for source readiness"
+    hits = ctx.get("__wp_constraint_hits__", {})
+    assert hits.get(CN, 0) == 0, (
+        f"constraint fired despite no actual target resolution + source "
+        f"picked last (hits={hits})"
     )
 
 
@@ -485,7 +499,7 @@ def test_never_applied_message_distinguishes_present_vs_absent():
     GHOST = "deadbeef"
     modules_absent = [
         _wildcard("11111111", "src", [
-            {"id": "s1", "value": "a", "weight": 1, "sub_category": "x"},
+            {"id": "s1", "value": "a", "weight": 1, "sub_categories": ["x"]},
         ]),
         _constraint("22222222", "11111111", GHOST),
     ]
@@ -501,10 +515,10 @@ def test_never_applied_message_distinguishes_present_vs_absent():
     TGT = "33333333"
     modules_present = [
         _wildcard(TGT, "tgt", [
-            {"id": "t1", "value": "early", "weight": 1, "sub_category": "warm"},
+            {"id": "t1", "value": "early", "weight": 1, "sub_categories": ["warm"]},
         ]),
         _wildcard("11111111", "src", [
-            {"id": "s1", "value": "a", "weight": 1, "sub_category": "x"},
+            {"id": "s1", "value": "a", "weight": 1, "sub_categories": ["x"]},
         ]),
         _constraint("22222222", "11111111", TGT),
     ]
@@ -520,16 +534,17 @@ def test_never_applied_message_distinguishes_present_vs_absent():
 # ─────────────────────────────────────────────────────────────────────
 # Cross-node propagation regression (2026-05-26)
 #
-# Before today's fix, two sequential WP_Context nodes downstream of
-# each other duplicated `constraint_never_applied` warnings: Context A
-# ran the never_applied check at end of run + emitted warnings, then
-# Context B inherited `__wp_constraints__` (which IS cross-node) but
-# NOT `__wp_consumed_constraints__` (which used to NOT propagate), so
-# B re-ran the same check with a fresh consumed set and re-warned for
-# every constraint already consumed in A. The user saw 4 warnings for
-# a 3-constraint chain.
+# Before the original fix, two sequential WP_Context nodes downstream
+# of each other duplicated `constraint_never_applied` warnings: Context
+# A ran the never_applied check at end of run + emitted warnings, then
+# Context B inherited `__wp_constraints__` (which IS cross-node) but NOT
+# the constraint bookkeeping (which used to NOT propagate), so B re-ran
+# the same check with fresh state and re-warned for every constraint A
+# already applied. The user saw 4 warnings for a 3-constraint chain.
+# SP3 swapped the consumed-set for `__wp_constraint_hits__`, which
+# stays in the cross-node key set for the same reason.
 #
-# Repro: build A's bucket + consumed via PipelineEngine, copy the same
+# Repro: build A's bucket + hits via PipelineEngine, copy the same
 # pattern the cross-node copy in `WP_Context.execute` does, run a
 # second pipeline on a different module set, then count warnings after
 # the `build_payload` merge.
@@ -540,12 +555,12 @@ def test_end_of_run_dedupes_warnings_by_cid():
     register two entries in the bucket. End-of-run check used to emit
     a warning per entry — now emits one per distinct cid."""
     # Use a target uuid that NEVER rolls so neither constraint can
-    # consume. Two siblings, same library uuid, registered twice.
+    # fire. Two siblings, same library uuid, registered twice.
     GHOST_TGT = "00000000"
     modules = [
         # Source for both — needs to roll so source_pick exists.
         _wildcard("11111111", "src", [
-            {"id": "s1", "value": "a", "weight": 1, "sub_category": "x"},
+            {"id": "s1", "value": "a", "weight": 1, "sub_categories": ["x"]},
         ]),
         # Two sibling constraints, same library uuid → same
         # `__constraint_module_id__`.
@@ -564,54 +579,58 @@ def test_end_of_run_dedupes_warnings_by_cid():
     )
 
 
-def test_consumed_set_propagates_cross_node():
-    """`__wp_consumed_constraints__` must be in cross-node-internals so
-    a downstream Context doesn't re-warn constraints already consumed
-    upstream. Simulates the WP_Context.execute cross-node copy step
-    + the build_payload warning dedup."""
+def test_constraint_hits_propagate_cross_node():
+    """`__wp_constraint_hits__` must be in cross-node-internals so a
+    downstream Context shares the SP3 reach-selector counters (first/next
+    coverage spans nodes) and doesn't re-warn constraints already applied
+    upstream. Simulates the WP_Context.execute cross-node copy step + the
+    build_payload warning dedup."""
     from wp_nodes.types import _CROSS_NODE_INTERNAL_KEYS, build_payload
 
-    assert "__wp_consumed_constraints__" in _CROSS_NODE_INTERNAL_KEYS, (
-        "consumed bookkeeping must propagate cross-node — otherwise "
-        "downstream Contexts re-warn every constraint upstream already "
-        "consumed"
+    assert "__wp_constraint_hits__" in _CROSS_NODE_INTERNAL_KEYS, (
+        "constraint hit counter must propagate cross-node — otherwise "
+        "downstream Contexts reset first/next counters and re-warn every "
+        "constraint upstream already applied"
     )
 
-    # Sanity: build_payload writes the consumed set into internals
+    # Sanity: build_payload writes the hit counter into internals
     # (verifies _CROSS_NODE_INTERNAL_KEYS is actually consulted).
     ctx = {
-        "__wp_consumed_constraints__": {"abc12345"},
+        "__wp_constraint_hits__": {"abc12345": 2},
         "__wp_constraints__": [],
         "__wp_picks__": {},
         "__wp_trace__": [],
         "__wp_warnings__": [],
     }
     payload = build_payload(ctx, upstream_debug={}, seed=0)
-    assert payload.internals.get("__wp_consumed_constraints__") == {"abc12345"}
+    assert payload.internals.get("__wp_constraint_hits__") == {"abc12345": 2}
 
 
 def test_constraint_targets_next_color_not_source_nested():
-    """User's mental model (2026-05-26): when the SOURCE wildcard's own
-    option carries a nested `@{target}` ref AND the constraint sits
-    after the source, the constraint should NOT try to grab the
-    source's own nested roll (it happened before the constraint
-    registered). It should claim the NEXT target instance downstream —
-    e.g. a `@{color}` inside a backdrop wildcard placed after the
-    constraint.
+    """User's mental model (2026-05-26), still true under SP3's
+    downstream-relative reach: when the SOURCE wildcard's own option
+    carries a nested `@{target}` ref AND the constraint sits after the
+    source, the constraint does NOT reach the source's own nested roll
+    (it resolved before the constraint registered). It reaches the NEXT
+    target occurrence downstream — e.g. a `@{color}` inside a backdrop
+    wildcard placed after the constraint.
 
     Chain: shirt (option = `@{color} t-shirt`) → shirt_x_color
     constraint → backdrop (option = `studio with @{color} accents`).
 
     Expected: shirt's nested color rolls FREE (no constraint yet),
     backdrop's nested color is CONSTRAINED (warm excluded → ok_blue),
-    constraint consumed, zero warnings."""
+    constraint fires once, zero warnings."""
     SHIRT = "b2b2b2b2"
     COLOR = "a361dbdc"
     BACKDROP = "b0219910"
     CN = "cc222222"
     modules = [
         _wildcard(SHIRT, "shirt", [
-            {"id": "s1", "value": f"@{{{COLOR}}} t-shirt", "weight": 1, "sub_category": "casual"},
+            {
+                "id": "s1", "value": f"@{{{COLOR}}} t-shirt", "weight": 1,
+                "sub_categories": ["casual"],
+            },
         ]),
         _constraint(
             CN, SHIRT, COLOR,
@@ -623,20 +642,24 @@ def test_constraint_targets_next_color_not_source_nested():
     ]
     catalog = {
         COLOR: _wildcard(COLOR, "color", [
-            {"id": "c1", "value": "BAD_red", "weight": 1, "sub_category": "warm"},
-            {"id": "c2", "value": "ok_blue", "weight": 1, "sub_category": "cool"},
+            {"id": "c1", "value": "BAD_red", "weight": 1, "sub_categories": ["warm"]},
+            {"id": "c2", "value": "ok_blue", "weight": 1, "sub_categories": ["cool"]},
         ]),
     }
     for seed in (0, 1, 7, 42, 99):
         ctx = {"__wp_catalog__": dict(catalog)}
         ctx = PipelineEngine().run(modules, ctx=ctx, seed=seed)
-        consumed = ctx.get("__wp_consumed_constraints__", set())
+        hits = ctx.get("__wp_constraint_hits__", {})
         warns = [
             w for w in ctx.get("__wp_warnings__", [])
             if w.get("type") == "constraint_never_applied"
         ]
         backdrop_val = ctx.get("backdrop") or ""
-        assert CN in consumed, f"seed {seed}: constraint didn't fire on backdrop's color"
+        # Backdrop's color is the only occurrence AFTER the constraint
+        # (shirt's nested color resolved before it) → fired once.
+        assert hits.get(CN) == 1, (
+            f"seed {seed}: constraint didn't fire on backdrop's color, hits={hits}"
+        )
         assert warns == [], f"seed {seed}: unexpected warnings {warns}"
         # Backdrop's nested color must respect the constraint → ok_blue.
         assert "BAD_red" not in backdrop_val, (
@@ -691,7 +714,7 @@ def test_build_payload_dedupes_constraint_never_applied():
         "__wp_trace__": [],
         "__wp_constraints__": [],
         "__wp_picks__": {},
-        "__wp_consumed_constraints__": set(),
+        "__wp_constraint_hits__": {},
     }
     payload = build_payload(ctx, upstream_debug=upstream_debug, seed=0)
     out_warnings = payload.debug["__wp_warnings__"]
@@ -722,7 +745,7 @@ def test_build_payload_propagates_loop_internals():
         "__wp_warnings__": [],
         "__wp_constraints__": [],
         "__wp_picks__": {},
-        "__wp_consumed_constraints__": set(),
+        "__wp_constraint_hits__": {},
     }
     payload = build_payload(ctx, upstream_debug={}, seed=0)
     assert payload.internals.get("__wp_loop_index__") == 3

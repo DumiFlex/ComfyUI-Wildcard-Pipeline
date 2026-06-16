@@ -18,6 +18,7 @@ import Textarea from "./ui/Textarea.vue";
 import Select, { type SelectOption } from "./ui/Select.vue";
 import Chip from "./ui/Chip.vue";
 import Button from "./ui/Button.vue";
+import Toggle from "./ui/Toggle.vue";
 import { useCategoryStore } from "../stores/categoryStore";
 import { toIdentifier } from "../utils/slug";
 
@@ -32,6 +33,21 @@ interface Props {
   varBindingHint?: string;
   /** When true, render the description Textarea. */
   showDescription?: boolean;
+  /**
+   * NSFW flag stamped onto the row (engine migration 015). The
+   * IdentityCard exposes a Toggle so the author of any module/bundle
+   * can mark their own row as adult content; the same field is also
+   * auto-stamped at install time when a community post carries
+   * `content_rating='nsfw'`. Default 'safe'.
+   */
+  contentRating?: "safe" | "nsfw";
+  /**
+   * Whether to render the NSFW toggle. Default true. Editors whose
+   * underlying table lacks a `content_rating` column (templates --
+   * migration 015 only covers modules + bundles) pass false to hide
+   * the toggle entirely.
+   */
+  showContentRating?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -39,6 +55,8 @@ const props = withDefaults(defineProps<Props>(), {
   varBindingError: "",
   varBindingHint: "Reference this in templates as $name. Auto-derived from the name unless you customize it.",
   showDescription: true,
+  contentRating: "safe",
+  showContentRating: true,
 });
 
 const emit = defineEmits<{
@@ -47,7 +65,13 @@ const emit = defineEmits<{
   "update:categoryId": [value: string | null];
   "update:tags": [value: string[]];
   "update:varBinding": [value: string];
+  "update:contentRating": [value: "safe" | "nsfw"];
 }>();
+
+const isNsfw = computed(() => props.contentRating === "nsfw");
+function onNsfwToggle(next: boolean) {
+  emit("update:contentRating", next ? "nsfw" : "safe");
+}
 
 const categoryStore = useCategoryStore();
 
@@ -192,6 +216,21 @@ function removeTag(t: string) {
             @remove="removeTag(t)"
           >{{ t }}</Chip>
         </div>
+      </Field>
+
+      <Field
+        v-if="showContentRating"
+        label="Content rating"
+        hint="Marks this entry as adult content. Community posts you install carry this automatically."
+        class="identity-grid__full"
+      >
+        <Toggle
+          :model-value="isNsfw"
+          label="Mark as NSFW (18+)"
+          aria-label="Mark as NSFW"
+          data-test="identity-nsfw-toggle"
+          @update:model-value="onNsfwToggle"
+        />
       </Field>
     </div>
   </Card>

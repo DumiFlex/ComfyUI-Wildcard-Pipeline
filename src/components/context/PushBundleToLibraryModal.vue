@@ -18,6 +18,7 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { bundleHashes } from "./drift-store";
 import { api } from "../../manager/api/client";
 import type { BundleInstance } from "../../widgets/_shared";
+import WpCheck from "@/components/shared/WpCheck.vue";
 
 interface ChildPreview {
   name: string;
@@ -393,11 +394,11 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
               class="wp-ptl-cascade"
               data-test="pbtl-cascade"
             >
-              <label class="wp-ptl-cascade__toggle">
-                <input
+              <span class="wp-ptl-cascade__toggle">
+                <WpCheck
                   v-model="cascadeEnabled"
-                  type="checkbox"
                   data-test="pbtl-cascade-toggle"
+                  aria-label="Restore missing references first"
                 />
                 <span>
                   Restore
@@ -408,7 +409,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
                       : "s"
                   }} first
                 </span>
-              </label>
+              </span>
               <div class="wp-ptl-cascade__hint">
                 Cascade-creates fresh library entries for every missing
                 child (bottom-up — modules first, then inner bundles)

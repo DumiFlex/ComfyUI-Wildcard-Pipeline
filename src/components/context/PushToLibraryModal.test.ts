@@ -253,9 +253,9 @@ describe("PushToLibraryModal", () => {
     pushResponse({ payload_hash: "h", bundles_updated: [], name: "test_w" });
     const wrap = await openModal(makeDraft());
 
-    const cb = document.querySelector<HTMLInputElement>('[data-test="ptl-propagate"]')!;
-    cb.checked = false;
-    cb.dispatchEvent(new Event("change"));
+    // propagate defaults on; one click toggles it off (wp-check span).
+    const cb = document.querySelector<HTMLElement>('[data-test="ptl-propagate"]')!;
+    cb.click();
     await flushPromises();
 
     document.querySelector<HTMLButtonElement>('[data-test="ptl-update"]')!.click();

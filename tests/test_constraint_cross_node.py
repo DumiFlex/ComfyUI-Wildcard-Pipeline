@@ -37,7 +37,7 @@ def _hair_module() -> dict:
         "payload": {
             "var_binding": "hair_style",
             "options": [
-                {"id": "h1", "value": "long flowing", "weight": 1, "sub_category": "long"},
+                {"id": "h1", "value": "long flowing", "weight": 1, "sub_categories": ["long"]},
             ],
         },
         "instance": {},
@@ -52,8 +52,8 @@ def _mood_module() -> dict:
         "payload": {
             "var_binding": "mood",
             "options": [
-                {"id": "m1", "value": "joyful",      "weight": 1, "sub_category": "positive"},
-                {"id": "m2", "value": "melancholic", "weight": 1, "sub_category": "negative"},
+                {"id": "m1", "value": "joyful",      "weight": 1, "sub_categories": ["positive"]},
+                {"id": "m2", "value": "melancholic", "weight": 1, "sub_categories": ["negative"]},
             ],
         },
         "instance": {},
@@ -93,7 +93,7 @@ def test_picks_carried_via_internals_field():
     picks = payload.internals.get("__wp_picks__")
     assert isinstance(picks, dict)
     assert "ae07018b" in picks
-    assert picks["ae07018b"]["sub_category"] == "long"
+    assert picks["ae07018b"]["sub_categories"] == ["long"]
     # User-facing context stays free of the bookkeeping bucket.
     assert "__wp_picks__" not in payload.context
 
@@ -164,7 +164,7 @@ def test_three_node_chain_short_hair_excludes_positive_mood():
     (e.g. only the first matrix row applied)."""
     short_hair = _hair_module()
     short_hair["payload"]["options"] = [
-        {"id": "h2", "value": "buzz cut", "weight": 1, "sub_category": "short"},
+        {"id": "h2", "value": "buzz cut", "weight": 1, "sub_categories": ["short"]},
     ]
     a_out = WPContext.execute(
         seed=1, wp_modules=_modules_json([short_hair]), upstream=None,

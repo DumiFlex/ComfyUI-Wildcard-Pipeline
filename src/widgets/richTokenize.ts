@@ -41,6 +41,8 @@ export type TokenKind =
 export interface TokenMeta {
   // var tokens
   name?: string;
+  /** SP2a list accessor: `$name.K` -> 0-based index K (omitted when absent). */
+  index?: number;
   // ref tokens
   uuid?: string;
   sub_categories?: string[];
@@ -51,9 +53,62 @@ export interface TokenMeta {
   // dp-multi tokens
   count?: number;
   sep?: string;
+  /** SP2b: count range — `min`==`max` for a fixed `{N$$}`, `min<max` for a
+   *  `{N-M$$}` range. `independent` is the `~` flag (repeats allowed). */
+  min?: number;
+  max?: number;
+  independent?: boolean;
   // dp-weight tokens (type kept for compat; not emitted)
   weight?: number;
   range?: string;
+}
+
+/** SP2a: reduce a var reference to its BASE name — drop an optional leading
+ *  `$` and an optional trailing `.K` list accessor. `$mood.0` -> `mood`;
+ *  `mood` -> `mood`; `weird.name` (non-digit suffix) -> unchanged. Used by
+ *  validation + conflict scanning so a `.K` accessor resolves against the
+ *  bound base var, not a phantom `mood.0`. */
+export function varBaseName(raw: string): string {
+  return raw.replace(/^\$/, "").replace(/\.\d+$/, "").trim();
+}
+
+/** SP2a: a resolved variable value as a TS preview surface sees it — a plain
+ *  string, or a list value `{items, sep}` mirroring the engine ListVar (the
+ *  /wp/api/preview/resolve endpoint emits the structured form for a
+ *  multi-pick var). */
+export interface ListVarValue {
+  items: string[];
+  sep: string;
+}
+export type ResolvedValue = string | ListVarValue;
+
+/** True when `v` is the structured list-value shape (vs a plain string). */
+export function isListVarValue(v: unknown): v is ListVarValue {
+  return (
+    typeof v === "object" &&
+    v !== null &&
+    Array.isArray((v as { items?: unknown }).items)
+  );
+}
+
+/** SP2a: render a resolved var value to a string, honoring an optional `.K`
+ *  list accessor — the TS mirror of engine `deref_var_value`
+ *  (engine/syntax/types.py). ListVar: bare -> `items.join(sep)`; `.K` ->
+ *  `items[K]` or "" when out of range. A plain string behaves as a 1-element
+ *  list (`.0` == itself, `.K` > 0 == ""). null/undefined -> "". */
+export function applyVarAccessor(
+  value: ResolvedValue | null | undefined,
+  index: number | undefined,
+): string {
+  if (value == null) return "";
+  if (isListVarValue(value)) {
+    if (index != null) {
+      return index >= 0 && index < value.items.length ? value.items[index] : "";
+    }
+    return value.items.join(value.sep);
+  }
+  if (index != null) return index === 0 ? value : "";
+  return value;
 }
 
 export interface RichToken {
@@ -62,6 +117,34 @@ export interface RichToken {
   end: number;
   raw: string;
   meta?: TokenMeta;
+}
+
+/** Peeled view of a nested ref's `:`-filter body. */
+export interface RefFilterParts {
+  /** Boolean sub-category expression, with the `!null` marker removed. */
+  expr: string;
+  /** True when the body carried the trailing `!null` exclude-null marker. */
+  excludeNull: boolean;
+}
+
+/**
+ * Peel a trailing `!null` exclude marker off a ref's raw `:`-body, returning
+ * the pure boolean expression + the exclude-null flag:
+ *   `"warm or intense!null"` → `{ expr: "warm or intense", excludeNull: true }`
+ *   `"warm or cool"`         → `{ expr: "warm or cool",   excludeNull: false }`
+ *
+ * Sub-category names and the boolean expression never contain `!` (see the
+ * grammar in `subcatFilter.ts`), so the only `!` in a serialized body is the
+ * null marker. Single source for the peel that RefChip, the canvas OptionRow,
+ * and RichTextInput's editor model all need — keeps them from re-deriving it
+ * (and drifting) independently.
+ */
+export function splitRefFilter(body: string): RefFilterParts {
+  const bang = body.lastIndexOf("!");
+  if (bang >= 0) {
+    return { expr: body.slice(0, bang).trim(), excludeNull: body.slice(bang + 1) === "null" };
+  }
+  return { expr: body.trim(), excludeNull: false };
 }
 
 // ---------------------------------------------------------------------------
@@ -89,9 +172,11 @@ function splitTopLevelPipes(s: string): string[] {
   return parts;
 }
 
-// Multi-pick prefix: {N$$sep$$ - N is one or more digits, sep can be empty.
-// Applied against the whole raw block including the leading `{`.
-const MULTI_PREFIX_RE = /^\{(\d+)\$\$([\s\S]*?)\$\$/;
+// Multi-pick prefix: {N$$sep$$ or {N-M~$$sep$$ — group 1 is the count (fixed
+// `N` or a `N-M` range), group 2 is the optional `~` independent flag (absent
+// = unique), group 3 is the separator. Applied against the whole raw block
+// including the leading `{`. SP2b.
+const MULTI_PREFIX_RE = /^\{(\d+(?:-\d+)?)(~?)\$\$([\s\S]*?)\$\$/;
 
 /**
  * Try to scan a `{...}` block starting at `text[start]` (must be `{`).
@@ -103,7 +188,7 @@ const MULTI_PREFIX_RE = /^\{(\d+)\$\$([\s\S]*?)\$\$/;
 function scanBraceBlock(
   text: string,
   start: number,
-): [number, string[], number | null, string | null] | null {
+): [number, string[], [number, number, boolean] | null, string | null] | null {
   const n = text.length;
   if (start >= n || text[start] !== "{") return null;
 
@@ -127,13 +212,20 @@ function scanBraceBlock(
   const raw = text.slice(start, endIndex);
   const multiMatch = MULTI_PREFIX_RE.exec(raw);
   if (multiMatch) {
-    const count = parseInt(multiMatch[1], 10);
-    const sep = multiMatch[2];
+    const countRaw = multiMatch[1];                 // "N" or "N-M"
+    const independent = multiMatch[2] === "~";      // SP2b: repeats allowed
+    const sep = multiMatch[3];
     // Prefix length excluding the leading `{`
     const prefixLen = multiMatch[0].length - 1;
     const rest = body.slice(prefixLen);
     const branches = splitTopLevelPipes(rest);
-    return [endIndex, branches, count, sep];
+    const [lo, hi] = countRaw.includes("-")
+      ? countRaw.split("-")
+      : [countRaw, countRaw];
+    let cmin = parseInt(lo, 10);
+    let cmax = parseInt(hi, 10);
+    if (cmin > cmax) { const t = cmin; cmin = cmax; cmax = t; }
+    return [endIndex, branches, [cmin, cmax, independent], sep];
   }
 
   // Plain pick: must contain at least one top-level `|`
@@ -193,18 +285,22 @@ export function tokenizeRich(text: string): RichToken[] {
       continue;
     }
 
-    // -- Variable: $name ----------------------------------------------------
+    // -- Variable: $name or $name.K (SP2a list accessor) --------------------
     if (ch === "$") {
-      const m = /^([A-Za-z_][A-Za-z0-9_]*)/.exec(text.slice(i + 1));
+      // `.match` (not `.exec`) keeps the matcher off the security-hook's radar
+      // while giving the same match-array shape. Group 2 = optional `.K` index.
+      const m = text.slice(i + 1).match(/^([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?/);
       if (m) {
         flushText(i);
-        const raw = "$" + m[1];
+        const raw = "$" + m[1] + (m[2] !== undefined ? "." + m[2] : "");
+        const meta: { name: string; index?: number } = { name: m[1] };
+        if (m[2] !== undefined) meta.index = parseInt(m[2], 10);
         out.push({
           kind: "var",
           raw,
           start: i,
           end: i + raw.length,
-          meta: { name: m[1] },
+          meta,
         });
         i += raw.length;
         continue;
@@ -212,12 +308,16 @@ export function tokenizeRich(text: string): RichToken[] {
       // Lone $ or $ not followed by ident -- fall through to text accumulation
     }
 
-    // -- Ref: @{8hex} or @{8hex:subcat[,subcat]} ----------------------------
-    // Optional `:subcat,subcat` filter restricts the nested wildcard's
-    // pick to options whose `sub_category` is in the list. Keeps one
-    // library wildcard reusable while letting each call site narrow
-    // surgically (e.g. `@{color:warm}` vs `@{color:cool}` referencing
-    // the same `color` wildcard). Empty filter → no filter.
+    // -- Ref: @{8hex} or @{8hex#name:expr!null} -----------------------------
+    // Optional `:expr` is an SP1 boolean sub-category filter (`warm or
+    // intense`, `not cool`, parens; comma = or) with an optional trailing
+    // `!null` exclude-null marker. The lexer does NOT parse the grammar — it
+    // just captures the raw `:`-body, comma-split into `sub_categories` for
+    // legacy callers. Downstream (RichTextInput, validateModule) rejoins on
+    // `,`, peels `!null`, and hands the rest to the shared subcat-filter
+    // parser. Keeps one library wildcard reusable while each call site
+    // narrows surgically (e.g. `@{color:warm}` vs `@{color:cool or warm}`).
+    // Empty filter → no filter.
     if (ch === "@") {
       // Groups: 1=uuid, 2=optional `#name` cache, 3=optional subcat filter.
       const refMatch = text.slice(i).match(/^@\{([0-9a-f]{8})(?:#([^#:}@{]*))?(?::([^}]*))?\}/);
@@ -259,12 +359,15 @@ export function tokenizeRich(text: string): RichToken[] {
             meta: { branches },
           });
         } else {
+          const [cmin, cmax, independent] = count;
           out.push({
             kind: "dp-multi",
             raw: text.slice(i, endIndex),
             start: i,
             end: endIndex,
-            meta: { count, sep: sep ?? "", branches },
+            // `count` kept == max for back-compat; min/max carry the range,
+            // independent carries the `~` flag (SP2b). Mirrors the Python meta.
+            meta: { min: cmin, max: cmax, independent, count: cmax, sep: sep ?? "", branches },
           });
         }
         i = endIndex;
@@ -294,7 +397,7 @@ const HTML_ESCAPE: Record<string, string> = {
   "'": "&#39;",
 };
 
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => HTML_ESCAPE[c] ?? c);
 }
 

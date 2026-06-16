@@ -14,6 +14,9 @@
 import { reactive } from "vue";
 import "../components/shared/a11y.css";
 import "../components/shared/display-prefs.css";
+// Rich-text inline-syntax colours for canvas-mounted RichTextInput/Preview
+// (the SPA's rich-text.css isn't loaded on the canvas — see the file header).
+import "../components/shared/rich-text-canvas.css";
 import { pushToast } from "../components/shared/toast-store";
 import { openPlayground } from "../components/settings/playground-store";
 

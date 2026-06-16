@@ -14,6 +14,7 @@ import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
+import CommunityRowActions from "../components/CommunityRowActions.vue";
 import DraftBanner from "../components/DraftBanner.vue";
 import DerivationRuleCard from "../components/DerivationRuleCard.vue";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
@@ -26,8 +27,11 @@ import { useModuleStore } from "../stores/moduleStore";
 import { useRecentStore } from "../stores/recentStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { appendSnapshot, readHistory } from "../utils/history";
-import { buildUuidToName } from "../utils/wildcardSyntax";
-import { collectLibraryVarHints } from "../utils/library-suggestions";
+import {
+  buildWildcardRefData,
+  collectLibraryVarHints,
+  collectLibraryWildcardRefs,
+} from "../utils/library-suggestions";
 import { useCascadeStore } from "../cascade/cascade-store";
 import { useCascadeApply } from "../cascade/useCascadeApply";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
@@ -44,6 +48,9 @@ import type {
 const props = defineProps<{ id?: string }>();
 const router = useRouter();
 const moduleStore = useModuleStore();
+const currentRow = computed(() =>
+  props.id ? moduleStore.catalog.find((m) => m.id === props.id) ?? null : null,
+);
 const { resolveReturnTo } = useReturnTo();
 const categoryStore = useCategoryStore();
 const toast = useToast();
@@ -60,35 +67,7 @@ const cascadeRefs = computed(() => {
 
 async function onEntityDeleteClick(): Promise<void> {
   if (!props.id) return;
-  if (cascadeRefs.value.length === 0) {
-    const result = await cascadeApply.apply({
-      kind: "derivation", id: props.id, action: "delete",
-    });
-    if (result.ok) {
-      moduleStore.remove(props.id);
-      const undoId = result.undo_entry_id;
-      toast.push({
-        severity: "success",
-        summary: `"${name.value}" deleted`,
-        life: 5000,
-        action: {
-          label: "Undo",
-          run: async () => {
-            const undoResult = await cascadeApply.undo(undoId);
-            if (!undoResult.ok) {
-              toast.push({ severity: "error", summary: "Undo failed", detail: undoResult.error, life: 4000 });
-            } else {
-              toast.push({ severity: "info", summary: `"${name.value}" restored`, life: 3000 });
-            }
-          },
-        },
-      });
-      router.push(resolveReturnTo("/derivations"));
-    } else {
-      toast.push({ severity: "error", summary: "Delete failed", detail: (result as { ok: false; error: string }).error, life: 4000 });
-    }
-    return;
-  }
+  // Always confirm — see WildcardEditor for the rationale.
   cascadeDialogOpen.value = true;
 }
 
@@ -121,6 +100,7 @@ const name = ref("");
 const description = ref("");
 const categoryId = ref<string | null>(null);
 const tags = ref<string[]>([]);
+const contentRating = ref<"safe" | "nsfw">("safe");
 const rules = ref<DerivationRule[]>([]);
 const saving = ref(false);
 const saveState = ref<SaveState>("idle");
@@ -194,11 +174,17 @@ const varSuggestions = computed<string[]>(
   () => collectLibraryVarHints(moduleStore, props.id).map((h) => h.label),
 );
 
-// 8-hex UUID → wildcard var-name. Forwarded into every nested
-// DerivationRuleCard so stray `@{uuid}` tokens (pasted, copied from a
-// wildcard editor, etc.) render as `@name` chips even though `@` refs
-// don't resolve on the derivation surface.
-const uuidToName = computed(() => buildUuidToName(moduleStore.catalog));
+// Wildcard-ref data (display names + the sub-cat picker maps) built ONCE from
+// the catalog by the shared `buildWildcardRefData` walker — the SAME source
+// the wildcard editor uses. Forwarded to each DerivationRuleCard so ACTION
+// values reuse the wildcard `@{}` nested-ref machinery (autocomplete + chips
+// + step-2 picker). `@{}` resolves on the derivation surface as a carrier
+// post-Layer-A (engine/syntax/resolve.py); condition values stay raw.
+const refData = computed(() => buildWildcardRefData(moduleStore.catalog));
+const uuidToName = computed(() => refData.value.uuidToName);
+const refSuggestions = computed(() =>
+  collectLibraryWildcardRefs(moduleStore, props.id, refData.value.uuidToName),
+);
 
 let ruleSeq = 0;
 function newRuleId(): string {
@@ -283,6 +269,7 @@ onMounted(async () => {
       description.value = row.description;
       categoryId.value = row.category_id;
       tags.value = row.tags;
+      contentRating.value = row.content_rating ?? "safe";
       const p = row.payload as Partial<DerivationPayload>;
       const incoming = Array.isArray(p.rules) ? p.rules : [];
       rules.value = incoming.length ? incoming.map(migrateRule) : [];
@@ -349,6 +336,7 @@ async function save() {
         description: description.value,
         category_id: categoryId.value,
         tags: tags.value,
+        content_rating: contentRating.value,
         payload: { ...newPayload, history: nextHistory },
       });
       historyEntries.value = nextHistory;
@@ -362,6 +350,7 @@ async function save() {
         description: description.value,
         category_id: categoryId.value,
         tags: tags.value,
+        content_rating: contentRating.value,
         payload: newPayload,
       });
     }
@@ -427,6 +416,12 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
       <span v-if="cascadeRefs.length > 0" class="wp-editor-used-by">
         used by <PillCountBadge :count="cascadeRefs.length" />
       </span>
+      <CommunityRowActions
+        v-if="currentRow"
+        :row="currentRow"
+        kind="module"
+        labeled
+      />
     </template>
     <template v-if="isEdit" #footer-left>
       <Button
@@ -445,7 +440,9 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
       @update:name="(v) => (name = v)"
       @update:description="(v) => (description = v)"
       @update:category-id="(v) => (categoryId = v)"
+      :content-rating="contentRating"
       @update:tags="(v) => (tags = v)"
+      @update:content-rating="(v) => (contentRating = v)"
     />
 
     <Card :title="`Rules (${rules.length})`">
@@ -470,6 +467,12 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
           :index="idx"
           :var-suggestions="varSuggestions"
           :uuid-to-name="uuidToName"
+          :ref-suggestions="refSuggestions"
+          :uuid-to-sub-categories="refData.uuidToSubCategories"
+          :uuid-to-has-null="refData.uuidToHasNull"
+          :uuid-to-options-count="refData.uuidToOptionsCount"
+          :uuid-to-option-tag-sets="refData.uuidToOptionTagSets"
+          :uuid-to-tag-groups="refData.uuidToTagGroups"
           :default-collapsed="rules.length > 1"
           :data-test="`rule-${idx}`"
           @update:model-value="(v) => updateRule(idx, v)"

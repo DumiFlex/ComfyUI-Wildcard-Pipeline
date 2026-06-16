@@ -27,6 +27,8 @@ export interface PreviewToken {
   raw: string;
   invalid?: boolean;
   varName?: string;
+  /** SP2a `.K` list accessor on a var token (`$mood.0` -> index 0). */
+  index?: number;
   refUuid?: string;
   branches?: string[];
   count?: number;
@@ -37,7 +39,10 @@ export interface PreviewToken {
 const VAR_VALID_SURFACES = new Set<Surface>(["combine", "derivation", "assembler"]);
 const REF_VALID_SURFACES = new Set<Surface>(["wildcard"]);
 
-const VAR_RE = /\$([A-Za-z_][A-Za-z0-9_]*)/y;
+// Group 2 = optional `.K` list accessor (SP2a) so `$mood.0` is ONE var token
+// (base name in m[1], index in m[2]) — mirrors engine tokenize.py +
+// richTokenize.ts, so the `.K` never strands as a separate text token.
+const VAR_RE = /\$([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?/y;
 // Optional `:subcat[,subcat]` per-call sub-category filter — empty
 // filter is equivalent to no filter, sub-categories are stripped of
 // whitespace + comma-separated.
@@ -45,7 +50,11 @@ const VAR_RE = /\$([A-Za-z_][A-Za-z0-9_]*)/y;
 // filter. Consumers below only use m[1] (uuid) — name + subcat are
 // preserved verbatim in m[0] for display.
 const REF_RE = /@\{([0-9a-f]{8})(?:#([^#:}@{]*))?(?::([^}]*))?\}/y;
-const DP_MULTI_RE = /\{(\d+)\$\$([^$]*)\$\$([^}]*)\}/y;
+// SP2b: accept a range count `N-M` and the `~` independent flag in the
+// multi-pick prefix so the canvas preview colours `{2-4~$$sep$$…}` too.
+// `count` parses the leading integer (the min) — enough for preview colouring
+// + the deterministic combine resolve.
+const DP_MULTI_RE = /\{(\d+(?:-\d+)?~?)\$\$([^$]*)\$\$([^}]*)\}/y;
 const DP_BRACE_RE = /\{([^{}]*\|[^{}]*)\}/y;
 
 function pushText(out: PreviewToken[], buf: string): void {
@@ -80,6 +89,7 @@ export function tokenize(text: string, surface: Surface): PreviewToken[] {
           kind: "var",
           raw: m[0],
           varName: m[1],
+          index: m[2] !== undefined ? Number.parseInt(m[2], 10) : undefined,
           invalid: !VAR_VALID_SURFACES.has(surface),
         });
         i += m[0].length;

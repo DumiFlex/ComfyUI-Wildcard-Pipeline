@@ -147,6 +147,10 @@ describe("useStarterSet", () => {
       const constraintBody = apiMock.modules.create.mock.calls[2][0];
       expect(constraintBody.payload.source_wildcard_id).toBe(store.idFor("subject"));
       expect(constraintBody.payload.target_wildcard_id).toBe(store.idFor("mood"));
+      // ...and stamps the axis display names so the constraint self-describes
+      // on the community even when it's never opened in the editor.
+      expect(constraintBody.payload.source_wildcard_name).toBe(STARTER_MODULE_NAMES.subject);
+      expect(constraintBody.payload.target_wildcard_name).toBe(STARTER_MODULE_NAMES.mood);
     });
   });
 
@@ -263,6 +267,9 @@ describe("useStarterSet", () => {
       );
       expect(constraintCreate?.[0].payload.source_wildcard_id).toBe(store.idFor("subject"));
       expect(constraintCreate?.[0].payload.target_wildcard_id).toBe(store.idFor("mood"));
+      // The failsafe bundle path stamps the axis names too.
+      expect(constraintCreate?.[0].payload.source_wildcard_name).toBe(STARTER_MODULE_NAMES.subject);
+      expect(constraintCreate?.[0].payload.target_wildcard_name).toBe(STARTER_MODULE_NAMES.mood);
     });
 
     it("emits library-linked children in the canonical ChildSnapshot shape", async () => {

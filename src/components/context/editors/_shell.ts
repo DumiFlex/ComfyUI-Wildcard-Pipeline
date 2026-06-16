@@ -12,6 +12,8 @@ export const KIND_TITLE: Record<string, string> = {
 
 export type InstanceFieldKey =
   | "variable_binding" | "enabled_options" | "option_weights" | "category_filter"
+  | "exclude_null"
+  | "pick_min" | "pick_max" | "pick_separator" | "pick_independent"
   | "mode" | "pinned_option_id" | "locked_seed" | "internal" | "values_overrides"
   | "template_override"
   | "disabled_rule_ids"
@@ -26,7 +28,9 @@ export type InstanceFieldKey =
   | "cell_factor_overrides"
   | "exception_mode_overrides"
   | "exception_factor_overrides"
-  | "extra_exceptions";
+  | "extra_exceptions"
+  // SP3 reach selector override (shape validated engine-side).
+  | "target_select";
 
 /** Single source of truth for which instance fields each kind exposes.
  *  Drives:
@@ -42,7 +46,10 @@ export const INSTANCE_FIELDS_PER_KIND: Record<ModuleEntryKind, readonly Instance
     // implicit in pool state. Engine handler still reads them on
     // legacy snapshots; UI never writes them.
     "variable_binding", "enabled_options",
-    "option_weights", "category_filter", "locked_seed", "internal",
+    "option_weights", "category_filter", "exclude_null", "locked_seed", "internal",
+    // SP2a multi-select: count range + join separator (per-instance, local).
+    // SP2c: pick_independent (allow repeats / with replacement).
+    "pick_min", "pick_max", "pick_separator", "pick_independent",
   ],
   fixed_values: ["values_overrides", "enabled_options", "locked_seed"],
   combine: ["template_override", "variable_binding", "locked_seed", "internal"],
@@ -70,5 +77,9 @@ export const INSTANCE_FIELDS_PER_KIND: Record<ModuleEntryKind, readonly Instance
     "exception_mode_overrides",
     "exception_factor_overrides",
     "extra_exceptions",
+    // SP3 reach selector override (per-instance). Interior shape
+    // (mode/count/picks) is validated engine-side, not by the type-only
+    // instance schema. Kept in parity with engine INSTANCE_SCHEMAS.
+    "target_select",
   ],
 };

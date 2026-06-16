@@ -14,7 +14,7 @@ if (!ctx) throw new Error("ModuleRow: missing moduleRowCtx provider");
 const {
   KIND_TITLE, kindIcon, kindChipModifier, varColorClass,
   isCollapsed, isLocked, isInternal, isSeedLockable,
-  isModified, isDrifted, isMissingFromLibrary,
+  isModified, isDrifted, isMissingFromLibrary, isTypeConflict,
   severityFor, conflictTooltip, conflictBadgeText,
   modifiedTooltip, summaryFor, summaryTokens, siblingInfo,
   rowGap,
@@ -23,6 +23,7 @@ const {
   onDragStart, onDragEnd, openContextMenu, onCardKeydown,
   pairingFor,
   viaInboundFor,
+  contributorsFor,
 } = ctx;
 </script>
 
@@ -84,11 +85,36 @@ const {
         class="wp-kind-chip" :class="`wp-kind-chip--${kindChipModifier(module.type)}`">
         {{ KIND_TITLE[module.type] ?? module.type }}
       </span>
+      <!-- Constraint (SENDER) row: the constraint's own `#N` chip,
+           carrying its reach selector (`·all` / `·first` / `·n2` /
+           `·pick`) + the ↪ via-glyph when its target is reached through
+           a nested ref. One chip per constraint row. -->
       <PairBadge
-        v-if="pairingFor(module._uid ?? module.id)"
+        v-if="module.type === 'constraint' && pairingFor(module._uid ?? module.id)"
         :pair="pairingFor(module._uid ?? module.id)!"
-        :variant="module.type === 'constraint' ? 'sender' : 'direct'"
+        variant="sender"
       />
+      <!-- Target (WILDCARD) row: the CONTRIBUTOR CLUSTER — every
+           constraint whose reach covers this instance. ≤2 contributors
+           render as individual `#N` chips; ≥3 collapse into ONE solid
+           `↥×N` chip (popover lists them all) so a heavily-constrained
+           row never sprawls into 3+ chips. -->
+      <template v-else-if="module.type !== 'constraint' && contributorsFor(module._uid ?? module.id).length > 0">
+        <template v-if="contributorsFor(module._uid ?? module.id).length <= 2">
+          <PairBadge
+            v-for="(c, ci) in contributorsFor(module._uid ?? module.id)"
+            :key="`contrib-${c.number}-${c.targetUuid}-${ci}`"
+            :pair="c"
+            variant="direct"
+          />
+        </template>
+        <PairBadge
+          v-else
+          :pairs="contributorsFor(module._uid ?? module.id)"
+          :count="contributorsFor(module._uid ?? module.id).length"
+          variant="collapse"
+        />
+      </template>
       <!-- Carrier-side: ONE collapsed `↪×N` chip aggregating every
            constraint whose target lives in one of THIS wildcard's
            nested @{} refs. Solid background; multi-color fallback when
@@ -109,6 +135,10 @@ const {
           title="Drifted — library has a newer version. Right-click → Refresh from library." aria-hidden="true"></span>
         <span v-if="isDrifted(module)" class="wp-mod-badge wp-mod-badge--drift"
           title="Drifted — library has a newer version. Right-click → Refresh from library.">drift</span>
+        <span v-if="isTypeConflict(module)" class="wp-mod-dot wp-mod-dot--clash"
+          title="Id clash — a different kind of item uses this id in your library. Right-click → Push to library to add this one as a new entry." aria-hidden="true"></span>
+        <span v-if="isTypeConflict(module)" class="wp-mod-badge wp-mod-badge--clash"
+          title="Id clash — a different kind of item uses this id in your library. Right-click → Push to library to add this one as a new entry.">clash</span>
         <span v-if="isMissingFromLibrary(module)" class="wp-mod-dot wp-mod-dot--missing"
           title="Not in library — right-click → Save to library to add it" aria-hidden="true"></span>
         <span v-if="isMissingFromLibrary(module)" class="wp-mod-badge wp-mod-badge--missing"

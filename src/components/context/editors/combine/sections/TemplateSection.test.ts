@@ -245,7 +245,7 @@ describe("combine TemplateSection", () => {
     expect(unresolved.text()).toBe("$unknown");
   });
 
-  it("live preview leaves alternations + repeats raw (need RNG to resolve)", () => {
+  it("resolves an inline alternation deterministically (first branch) + $vars (#1)", () => {
     const w = mount(TemplateSection, {
       props: {
         module: makeModule({
@@ -259,7 +259,62 @@ describe("combine TemplateSection", () => {
     });
     const pane = w.find('[data-test="tpl-preview-resolved"]');
     expect(pane.exists()).toBe(true);
-    // Alt stays raw, $color resolves.
-    expect(pane.text()).toBe("{red|blue} shiny");
+    // Seedless preview → deterministic first branch. `$color` resolves.
+    expect(pane.text()).toBe("red shiny");
+  });
+
+  it("resolves a multi-pick to its first N branches joined by the separator (#1)", () => {
+    const w = mount(TemplateSection, {
+      props: {
+        module: makeModule({
+          payload: { output_var: "out", template: "{2$$, $$a|b|c}" },
+        }),
+        upstreamResolved: {},
+      },
+    });
+    const pane = w.find('[data-test="tpl-preview-resolved"]');
+    expect(pane.exists()).toBe(true);
+    expect(pane.text()).toBe("a, b");
+  });
+
+  it("resolves $vars nested inside an inline branch (#1)", () => {
+    const w = mount(TemplateSection, {
+      props: {
+        module: makeModule({
+          payload: { output_var: "out", template: "{$mood|calm}" },
+        }),
+        upstreamResolved: { mood: "serene" },
+      },
+    });
+    const pane = w.find('[data-test="tpl-preview-resolved"]');
+    expect(pane.text()).toBe("serene");
+  });
+
+  it("resolves a $color.0 list accessor without leaking the .K literal (SP2a)", () => {
+    const w = mount(TemplateSection, {
+      props: {
+        module: makeModule({ payload: { output_var: "out", template: "$color.0 hat" } }),
+        upstreamResolved: { color: "red" },
+      },
+    });
+    const pane = w.find('[data-test="tpl-preview-resolved"]');
+    expect(pane.exists()).toBe(true);
+    // `$color.0` resolves via the shared accessor (string = 1-element list,
+    // `.0` == itself); the literal ".0" must NOT survive as a text token.
+    expect(pane.text()).toBe("red hat");
+    expect(pane.find(".tpl-tok--var-resolved").text()).toBe("red");
+  });
+
+  it("indexes a list-valued $mood.0 in the resolved preview (SP2a)", () => {
+    const w = mount(TemplateSection, {
+      props: {
+        module: makeModule({ payload: { output_var: "out", template: "$mood.0 | $mood" } }),
+        upstreamResolved: { mood: { items: ["serene", "sleepy"], sep: ", " } },
+      },
+    });
+    const pane = w.find('[data-test="tpl-preview-resolved"]');
+    // `$mood.0` -> first item "serene"; bare `$mood` -> joined list. The whole
+    // list never leaks into the `.0` slot.
+    expect(pane.text()).toBe("serene | serene, sleepy");
   });
 });

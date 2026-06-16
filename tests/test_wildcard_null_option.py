@@ -30,7 +30,7 @@ def _payload(options, sub_categories=None):
 def test_validate_accepts_single_null_option():
     payload = _payload([
         {"id": "aaaaaaaa", "value": "", "weight": 1, "is_null": True},
-        {"id": "bbbbbbbb", "value": "red", "weight": 1, "sub_category": "warm"},
+        {"id": "bbbbbbbb", "value": "red", "weight": 1, "sub_categories": ["warm"]},
     ], sub_categories=["warm"])
     WildcardHandler.validate_payload(payload)  # no raise
 
@@ -55,15 +55,15 @@ def test_validate_rejects_null_option_with_value():
 def test_validate_rejects_null_option_with_subcategory():
     payload = _payload([
         {"id": "aaaaaaaa", "value": "", "weight": 1,
-         "is_null": True, "sub_category": "warm"},
+         "is_null": True, "sub_categories": ["warm"]},
     ], sub_categories=["warm"])
-    with pytest.raises(ValueError, match=r"null option .* sub_category"):
+    with pytest.raises(ValueError, match=r"null option .* must have no sub_categories"):
         WildcardHandler.validate_payload(payload)
 
 
 def test_validate_rejects_subcategory_named_null():
     payload = _payload([
-        {"id": "aaaaaaaa", "value": "x", "weight": 1, "sub_category": "warm"},
+        {"id": "aaaaaaaa", "value": "x", "weight": 1, "sub_categories": ["warm"]},
     ], sub_categories=["null"])
     with pytest.raises(ValueError, match=r"reserved"):
         WildcardHandler.validate_payload(payload)
@@ -117,7 +117,7 @@ def test_nested_ref_filter_default_keeps_null_option():
     the bound output is the empty string."""
     target_opts = [
         {"id": "n", "value": "", "weight": 999, "is_null": True},
-        {"id": "r", "value": "red", "weight": 1, "sub_category": "warm"},
+        {"id": "r", "value": "red", "weight": 1, "sub_categories": ["warm"]},
     ]
     out, _ = _resolve_parent_with_ref("@{aabbccdd:warm}", "aabbccdd", target_opts)
     assert out == {"$out": ""}
@@ -128,9 +128,9 @@ def test_nested_ref_filter_with_null_keyword_excludes_null():
     option — the reserved `null` keyword is a negation."""
     target_opts = [
         {"id": "n", "value": "", "weight": 999, "is_null": True},
-        {"id": "r", "value": "red", "weight": 1, "sub_category": "warm"},
+        {"id": "r", "value": "red", "weight": 1, "sub_categories": ["warm"]},
     ]
-    out, _ = _resolve_parent_with_ref("@{aabbccdd:warm,null}", "aabbccdd", target_opts)
+    out, _ = _resolve_parent_with_ref("@{aabbccdd:warm!null}", "aabbccdd", target_opts)
     # Null is excluded → only "red" remains regardless of its tiny weight.
     assert out == {"$out": "red"}
 
@@ -140,9 +140,9 @@ def test_nested_ref_filter_null_only_excludes_null():
     sub-cat filter" — all non-null options pass."""
     target_opts = [
         {"id": "n", "value": "", "weight": 1, "is_null": True},
-        {"id": "r", "value": "red", "weight": 999, "sub_category": "warm"},
+        {"id": "r", "value": "red", "weight": 999, "sub_categories": ["warm"]},
     ]
-    out, _ = _resolve_parent_with_ref("@{aabbccdd:null}", "aabbccdd", target_opts)
+    out, _ = _resolve_parent_with_ref("@{aabbccdd!null}", "aabbccdd", target_opts)
     assert out == {"$out": "red"}
 
 
@@ -154,13 +154,13 @@ def test_null_option_bypasses_matrix_exclude():
     and survives at full weight."""
     options = [
         {"id": "n", "value": "", "weight": 2, "is_null": True},
-        {"id": "r", "value": "red", "weight": 1, "sub_category": "warm"},
+        {"id": "r", "value": "red", "weight": 1, "sub_categories": ["warm"]},
     ]
     constraint = {
         "matrix": {"src_sub": {"warm": {"mode": "exclude", "factor": 1}}},
         "exceptions": [],
     }
-    src_pick = {"value": "anything", "sub_category": "src_sub"}
+    src_pick = {"value": "anything", "sub_categories": ["src_sub"]}
     out = _apply_constraint_to_options(options, constraint, src_pick)
     weights = {o["id"]: o["weight"] for o in out}
     assert weights["n"] == 2, "null option weight should be untouched"
@@ -174,7 +174,7 @@ def test_null_option_matched_by_exception():
     """
     options = [
         {"id": "n", "value": "", "weight": 5, "is_null": True},
-        {"id": "r", "value": "red", "weight": 1, "sub_category": "warm"},
+        {"id": "r", "value": "red", "weight": 1, "sub_categories": ["warm"]},
     ]
     constraint = {
         "matrix": {},
@@ -182,7 +182,7 @@ def test_null_option_matched_by_exception():
             {"source": "rain", "target": "", "mode": "exclude", "factor": 1},
         ],
     }
-    src_pick = {"value": "rain", "sub_category": "wet"}
+    src_pick = {"value": "rain", "sub_categories": ["wet"]}
     out = _apply_constraint_to_options(options, constraint, src_pick)
     weights = {o["id"]: o["weight"] for o in out}
     assert weights["n"] == 0, "null option should be excluded by exception"

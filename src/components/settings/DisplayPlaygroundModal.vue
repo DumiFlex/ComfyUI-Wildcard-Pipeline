@@ -36,6 +36,7 @@ import {
   type SettingKey,
 } from "./playground-store";
 import PlaygroundMockup from "./PlaygroundMockup.vue";
+import WpCheck from "@/components/shared/WpCheck.vue";
 
 type Density = "comfortable" | "compact" | "minimal";
 type Decoration = "full" | "minimal" | "off";
@@ -317,34 +318,22 @@ onBeforeUnmount(() => {
                   <option value="both">Both (verbose)</option>
                 </select>
               </label>
-              <label class="wp-pg__row wp-pg__row--switch">
+              <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Border highlights</span>
-                <input
-                  v-model="borderHighlight"
-                  type="checkbox"
-                  class="wp-pg__check"
-                />
-              </label>
+                <WpCheck v-model="borderHighlight" aria-label="Border highlights" />
+              </div>
             </fieldset>
 
             <fieldset class="wp-pg__group">
               <legend class="wp-pg__group-title">Collapse &amp; focus</legend>
-              <label class="wp-pg__row wp-pg__row--switch">
+              <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Collapse new modules by default</span>
-                <input
-                  v-model="collapsedByDefault"
-                  type="checkbox"
-                  class="wp-pg__check"
-                />
-              </label>
-              <label class="wp-pg__row wp-pg__row--switch">
+                <WpCheck v-model="collapsedByDefault" aria-label="Collapse new modules by default" />
+              </div>
+              <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Collapse new bundles by default</span>
-                <input
-                  v-model="bundleCollapsedByDefault"
-                  type="checkbox"
-                  class="wp-pg__check"
-                />
-              </label>
+                <WpCheck v-model="bundleCollapsedByDefault" aria-label="Collapse new bundles by default" />
+              </div>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Collapse stack mode</span>
                 <select v-model="collapseMode" class="wp-pg__select">
@@ -352,14 +341,10 @@ onBeforeUnmount(() => {
                   <option value="accordion">Accordion (one at a time)</option>
                 </select>
               </label>
-              <label class="wp-pg__row wp-pg__row--switch">
+              <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Focus mode (dim non-hovered)</span>
-                <input
-                  v-model="focusMode"
-                  type="checkbox"
-                  class="wp-pg__check"
-                />
-              </label>
+                <WpCheck v-model="focusMode" aria-label="Focus mode (dim non-hovered)" />
+              </div>
             </fieldset>
 
             <fieldset class="wp-pg__group">
@@ -401,30 +386,18 @@ onBeforeUnmount(() => {
                   <option value="sticky">Sticky</option>
                 </select>
               </label>
-              <label class="wp-pg__row wp-pg__row--switch">
+              <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Suppress info toasts</span>
-                <input
-                  v-model="suppressInfoToasts"
-                  type="checkbox"
-                  class="wp-pg__check"
-                />
-              </label>
-              <label class="wp-pg__row wp-pg__row--switch">
+                <WpCheck v-model="suppressInfoToasts" aria-label="Suppress info toasts" />
+              </div>
+              <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">New modules start disabled</span>
-                <input
-                  v-model="newModuleDisabled"
-                  type="checkbox"
-                  class="wp-pg__check"
-                />
-              </label>
-              <label class="wp-pg__row wp-pg__row--switch">
+                <WpCheck v-model="newModuleDisabled" aria-label="New modules start disabled" />
+              </div>
+              <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Confirm destructive bundle actions</span>
-                <input
-                  v-model="confirmDestructiveBundle"
-                  type="checkbox"
-                  class="wp-pg__check"
-                />
-              </label>
+                <WpCheck v-model="confirmDestructiveBundle" aria-label="Confirm destructive bundle actions" />
+              </div>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Bundle master OFF behavior</span>
                 <select v-model="bundleMasterOffBehavior" class="wp-pg__select">
@@ -598,13 +571,6 @@ onBeforeUnmount(() => {
   outline: 2px solid var(--wp-violet);
   outline-offset: 1px;
 }
-.wp-pg__check {
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-  accent-color: var(--wp-accent);
-}
-
 .wp-pg__preview {
   display: flex;
   flex-direction: column;

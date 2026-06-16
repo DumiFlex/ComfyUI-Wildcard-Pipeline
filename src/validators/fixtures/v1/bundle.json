@@ -1,0 +1,25 @@
+{
+  "id": "bd-001abc",
+  "name": "starter-bundle",
+  "description": "",
+  "color": null,
+  "category_id": null,
+  "tags": [],
+  "is_favorite": false,
+  "children": [
+    {
+      "id": "wc-001abc",
+      "type": "wildcard",
+      "name": "starter-mood",
+      "description": "",
+      "category_id": null,
+      "tags": [],
+      "is_favorite": false,
+      "payload": {
+        "var_binding": "mood",
+        "sub_categories": [],
+        "options": [{ "id": "opt-001a", "value": "serene", "weight": 1, "sub_category": null }]
+      }
+    }
+  ]
+}

@@ -115,7 +115,7 @@ describe("parsePayload", () => {
     if (!result.ok) expect(result.reason).toMatch(/templates/);
   });
 
-  it("migrates v0 payload to v1", () => {
+  it("migrates v0 payload to current schema version", () => {
     const v0 = {
       schema_version: 0,
       bundles: [],
@@ -125,8 +125,10 @@ describe("parsePayload", () => {
     const result = parsePayload(JSON.stringify(v0));
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.payload.schema_version).toBe(1);
-      expect(result.migratedEntityCount).toBe(1);
+      // CURRENT_SCHEMA_VERSION === 2: v0 migrates v0->v1->v2.
+      expect(result.payload.schema_version).toBe(2);
+      // One entity counted once per step across two steps → 1 * 2 = 2.
+      expect(result.migratedEntityCount).toBe(2);
       // Migrated entity should carry `migrated_from: 0` tag.
       const w = result.payload.wildcards[0] as { migrated_from?: number };
       expect(w.migrated_from).toBe(0);

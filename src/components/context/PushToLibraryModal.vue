@@ -29,6 +29,7 @@ import { forkModule } from "./duplicates/fork";
 import { hashes as libraryHashes } from "./drift-store";
 import { app } from "#comfyui/app";
 import type { ModuleEntry } from "../../widgets/_shared";
+import WpCheck from "@/components/shared/WpCheck.vue";
 
 interface Bundle {
   id: string;
@@ -395,14 +396,14 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
               <ul class="wp-ptl-bundles__list">
                 <li v-for="b in bundles" :key="b.id">{{ b.name }}</li>
               </ul>
-              <label class="wp-ptl-checkbox">
-                <input
+              <span class="wp-ptl-checkbox">
+                <WpCheck
                   v-model="propagate"
-                  type="checkbox"
                   data-test="ptl-propagate"
+                  aria-label="Propagate update to those bundles"
                 />
                 Propagate update to those bundles
-              </label>
+              </span>
             </div>
 
             <div v-if="siblings > 1" class="wp-ptl-note wp-ptl-note--warn" data-test="ptl-siblings">

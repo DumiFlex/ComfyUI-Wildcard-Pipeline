@@ -8,7 +8,8 @@
 import { describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
 import ConstraintInstanceModal from "./ConstraintInstanceModal.vue";
-import type { ModuleEntry } from "../../../../widgets/_shared";
+import TargetReachSection from "./sections/TargetReachSection.vue";
+import type { ModuleEntry, TargetSelect } from "../../../../widgets/_shared";
 
 function makeModule(overrides: Partial<ModuleEntry> = {}): ModuleEntry {
   return {
@@ -267,5 +268,163 @@ describe("ConstraintInstanceModal", () => {
     expect(matrix.props("sourceName")).toBe("live_name");
     expect(matrix.props("sourceSubs")).toEqual(["live_warm", "live_cool"]);
     _resetForTests();
+  });
+
+  // ── Cross-node chain resolution (SP3 P6 T16) ──
+  // The target wildcard lives in a DOWNSTREAM Context node, so it is
+  // absent from `siblingModules` (same-node only). The mount layer
+  // threads the flattened cross-node chain as `chainModules`; the modal
+  // must resolve the target's name + subcats + option values from it
+  // instead of degrading to raw-uuid / matrix-key fallbacks.
+  it("resolves target wildcard from chainModules when it lives in a downstream node", () => {
+    const m = makeModule({
+      payload: {
+        source_wildcard_id: "wc_color",
+        target_wildcard_id: "wc_fabric",
+        // Deliberately empty matrix so any axis output MUST come from the
+        // live wildcard (via chainModules), not from saved-matrix keys.
+        matrix: {},
+        exceptions: [],
+      },
+    });
+    // Same-node siblings hold only the source; the target is cross-node.
+    const sourceSibling: ModuleEntry = {
+      id: "wc_color",
+      type: "wildcard",
+      enabled: true,
+      meta: { name: "color" },
+      entries: [],
+      payload: { sub_categories: ["red", "blue"], options: [{ id: "o1", value: "red" }] },
+    };
+    // Cross-node chain entry for the target — shape is ChainModule
+    // (`displayName` not `meta.name`, `rowKey` graph-unique).
+    const targetChain = {
+      id: "wc_fabric",
+      rowKey: "99#wc_fabric",
+      type: "wildcard",
+      displayName: "fabric",
+      payload: {
+        var_binding: "fabric",
+        sub_categories: ["cotton", "silk"],
+        options: [
+          { id: "f0", value: "denim" },
+          { id: "f1", value: "linen" },
+        ],
+      },
+    };
+    const w = mount(ConstraintInstanceModal, {
+      props: {
+        module: m,
+        siblingModules: [sourceSibling],
+        chainModules: [targetChain],
+      },
+    });
+    const matrix = w.findComponent({ name: "MatrixSection" });
+    // Target name resolves from the chain entry (var_binding > displayName).
+    expect(matrix.props("targetName")).toBe("fabric");
+    // Target subcats come from the cross-node wildcard, not matrix keys.
+    expect(matrix.props("targetSubs")).toEqual(["cotton", "silk"]);
+    // Source still resolves from the same-node sibling.
+    expect(matrix.props("sourceName")).toBe("color");
+    expect(matrix.props("sourceSubs")).toEqual(["red", "blue"]);
+    const exSection = w.findComponent({ name: "ExceptionsSection" });
+    // Target option values flow from the chain entry into autocomplete.
+    expect(exSection.props("targetValues")).toEqual(["denim", "linen"]);
+  });
+
+  it("chainModules wins over siblingModules for the same uuid (chain is the superset)", () => {
+    const m = makeModule({
+      payload: {
+        source_wildcard_id: "wc_color",
+        target_wildcard_id: "wc_fabric",
+        matrix: {},
+        exceptions: [],
+      },
+    });
+    // Same uuid present in BOTH: chain entry must win so the merge is
+    // safe for the current node (which appears inside the chain too).
+    const sourceSibling: ModuleEntry = {
+      id: "wc_color",
+      type: "wildcard",
+      enabled: true,
+      meta: { name: "sibling_color" },
+      entries: [],
+      payload: { sub_categories: ["sib_red"], options: [] },
+    };
+    const sourceChain = {
+      id: "wc_color",
+      rowKey: "7#wc_color",
+      type: "wildcard",
+      displayName: "chain_color",
+      payload: { sub_categories: ["chain_red", "chain_blue"], options: [] },
+    };
+    const w = mount(ConstraintInstanceModal, {
+      props: {
+        module: m,
+        siblingModules: [sourceSibling],
+        chainModules: [sourceChain],
+      },
+    });
+    const matrix = w.findComponent({ name: "MatrixSection" });
+    expect(matrix.props("sourceName")).toBe("chain_color");
+    expect(matrix.props("sourceSubs")).toEqual(["chain_red", "chain_blue"]);
+  });
+});
+
+describe("ConstraintInstanceModal — target reach instance override", () => {
+  // The modal collapses a reach choice to `null` ("inherit library") ONLY
+  // when it equals the EFFECTIVE library default — so a real per-instance
+  // override (including an explicit `all` over a non-all library default)
+  // is preserved and reaches the engine's `instance ?? payload ?? all`.
+
+  function emitReach(w: ReturnType<typeof mount>, next: TargetSelect) {
+    return w.findComponent(TargetReachSection).vm.$emit("update:modelValue", next);
+  }
+
+  function lastReach(w: ReturnType<typeof mount>): TargetSelect | null | undefined {
+    const updates = w.emitted("update") as Array<[Partial<ModuleEntry>]> | undefined;
+    if (!updates?.length) return undefined;
+    return updates[updates.length - 1][0].instance?.target_select;
+  }
+
+  function moduleWithLibraryReach(reach?: TargetSelect): ModuleEntry {
+    const m = makeModule();
+    if (reach) (m.payload as Record<string, unknown>).target_select = reach;
+    return m;
+  }
+
+  it("collapses 'all' to null when the library default is already all (inherit)", async () => {
+    const w = mount(ConstraintInstanceModal, { props: { module: moduleWithLibraryReach() } });
+    emitReach(w, { mode: "all" });
+    await w.vm.$nextTick();
+    expect(lastReach(w)).toBeNull();
+  });
+
+  it("stores an explicit 'all' override when the library default is non-all (first)", async () => {
+    // Regression guard: the old `mode === "all"` collapse dropped this to
+    // null, so the engine fell back to the library `first` and the user's
+    // widen-to-all was silently ignored.
+    const w = mount(ConstraintInstanceModal, {
+      props: { module: moduleWithLibraryReach({ mode: "first" }) },
+    });
+    emitReach(w, { mode: "all" });
+    await w.vm.$nextTick();
+    expect(lastReach(w)).toEqual({ mode: "all" });
+  });
+
+  it("collapses to null when the choice equals a non-all library default (first == first)", async () => {
+    const w = mount(ConstraintInstanceModal, {
+      props: { module: moduleWithLibraryReach({ mode: "first" }) },
+    });
+    emitReach(w, { mode: "first" });
+    await w.vm.$nextTick();
+    expect(lastReach(w)).toBeNull();
+  });
+
+  it("stores a non-default reach (next N) as an explicit override", async () => {
+    const w = mount(ConstraintInstanceModal, { props: { module: moduleWithLibraryReach() } });
+    emitReach(w, { mode: "next", count: 2 });
+    await w.vm.$nextTick();
+    expect(lastReach(w)).toEqual({ mode: "next", count: 2 });
   });
 });

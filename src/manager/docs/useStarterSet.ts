@@ -32,6 +32,7 @@ import {
   STARTER_BUNDLE_NAME,
   STARTER_BUNDLE_ORDER,
   STARTER_MODULE_DESCRIPTORS,
+  STARTER_MODULE_NAMES,
   STARTER_MODULE_SLOTS,
   STARTER_TEMPLATE_NAME,
   buildTemplateInput,
@@ -173,7 +174,15 @@ export function useStarterSet() {
   async function ensurePairing(): Promise<string> {
     const subjectId = await ensureSlot("subject");
     const moodId = await ensureSlot("mood");
-    return ensureSlot("pairing", { subjectId, moodId });
+    // Pass the wildcard display names too (the slots are created with exactly
+    // these constant names) so the constraint payload self-describes its axes
+    // instead of shipping bare uuids to the community.
+    return ensureSlot("pairing", {
+      subjectId,
+      moodId,
+      subjectName: STARTER_MODULE_NAMES.subject,
+      moodName: STARTER_MODULE_NAMES.mood,
+    });
   }
 
   /**
@@ -263,7 +272,12 @@ export function useStarterSet() {
     for (const slot of STARTER_MODULE_SLOTS) {
       let id: string;
       if (slot === "pairing") {
-        id = await ensureSlot("pairing", { subjectId, moodId });
+        id = await ensureSlot("pairing", {
+          subjectId,
+          moodId,
+          subjectName: STARTER_MODULE_NAMES.subject,
+          moodName: STARTER_MODULE_NAMES.mood,
+        });
       } else {
         id = await ensureSlot(slot);
         if (slot === "subject") subjectId = id;

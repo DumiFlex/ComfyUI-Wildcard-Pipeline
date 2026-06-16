@@ -7,7 +7,10 @@ describe("INSTANCE_FIELDS_PER_KIND registry", () => {
       // v2 dropped `mode` + `pinned_option_id` — see
       // docs/superpowers/specs/2026-05-08-instance-overrides-v2-design.md §6.1.
       "variable_binding", "enabled_options",
-      "option_weights", "category_filter", "locked_seed", "internal",
+      "option_weights", "category_filter", "exclude_null", "locked_seed", "internal",
+      // SP2a multi-select (2026-06-08): per-instance count range + separator.
+      // SP2c: pick_independent (allow repeats / with replacement).
+      "pick_min", "pick_max", "pick_separator", "pick_independent",
     ]);
     expect(INSTANCE_FIELDS_PER_KIND.fixed_values).toEqual([
       // `locked_seed` added in the combine + fixed_values syntax-parity
@@ -46,6 +49,8 @@ describe("INSTANCE_FIELDS_PER_KIND registry", () => {
       "exception_mode_overrides",
       "exception_factor_overrides",
       "extra_exceptions",
+      // SP3 reach selector override (parity with engine INSTANCE_SCHEMAS).
+      "target_select",
     ]);
   });
 });

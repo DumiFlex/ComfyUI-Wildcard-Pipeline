@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   applyConstraint,
+  applyReachConstraints,
   evalDerivation,
   expandInlineChoices,
   expandRefs,
   fillTemplate,
   pickWeightedOption,
   resolveWildcard,
+  type PreviewConstraint,
+  type SourcePick,
 } from "../utils/resolver";
 import type {
+  ConstraintMatrix,
   ConstraintPayload,
   DerivationPayload,
   ModuleRow,
@@ -33,7 +37,7 @@ function makeWildcard(
         id: o.id ?? `o${i}`,
         value: o.value,
         weight: o.weight,
-        sub_category: o.sub_category ?? null,
+        sub_categories: o.sub_categories ?? [],
       })),
       sub_categories: extras.sub_categories ?? [],
       var_binding: extras.var_binding,
@@ -52,8 +56,8 @@ describe("pickWeightedOption", () => {
 
   it("returns roughly proportional picks across many trials", () => {
     const opts: WildcardOption[] = [
-      { id: "a", value: "a", weight: 10 },
-      { id: "b", value: "b", weight: 1 },
+      { id: "a", value: "a", weight: 10, sub_categories: [] },
+      { id: "b", value: "b", weight: 1, sub_categories: [] },
     ];
     let aHits = 0;
     const N = 4000;
@@ -68,8 +72,8 @@ describe("pickWeightedOption", () => {
 
   it("falls back to first when all weights are zero", () => {
     const opts: WildcardOption[] = [
-      { id: "a", value: "a", weight: 0 },
-      { id: "b", value: "b", weight: 0 },
+      { id: "a", value: "a", weight: 0, sub_categories: [] },
+      { id: "b", value: "b", weight: 0, sub_categories: [] },
     ];
     expect(pickWeightedOption(opts)?.value).toBe("a");
   });
@@ -192,11 +196,11 @@ describe("fillTemplate", () => {
 describe("applyConstraint", () => {
   it("zeroes excluded options and boosts boosted ones", () => {
     const target = makeWildcard("Outfit", [
-      { value: "linen", weight: 2, sub_category: "casual" },
-      { value: "tux",   weight: 1, sub_category: "formal" },
+      { value: "linen", weight: 2, sub_categories: ["casual"] },
+      { value: "tux",   weight: 1, sub_categories: ["formal"] },
     ], { id: "wc_target", sub_categories: ["casual", "formal"] });
     const source = makeWildcard("Weather", [
-      { value: "rain", weight: 1, sub_category: "wet" },
+      { value: "rain", weight: 1, sub_categories: ["wet"] },
     ], { id: "wc_source", sub_categories: ["wet"] });
     const cn: ConstraintPayload = {
       source_wildcard_id: "wc_source",
@@ -217,10 +221,10 @@ describe("applyConstraint", () => {
     // Matrix says casual = exclude → weight 0. Exception says
     // (rain, linen) = allow → exception wins, original weight survives.
     const target = makeWildcard("Outfit", [
-      { value: "linen", weight: 2, sub_category: "casual" },
+      { value: "linen", weight: 2, sub_categories: ["casual"] },
     ], { id: "wc_target", sub_categories: ["casual"] });
     const source = makeWildcard("Weather", [
-      { value: "rain", weight: 1, sub_category: "wet" },
+      { value: "rain", weight: 1, sub_categories: ["wet"] },
     ], { id: "wc_source", sub_categories: ["wet"] });
     const cn: ConstraintPayload = {
       source_wildcard_id: "wc_source",
@@ -236,10 +240,10 @@ describe("applyConstraint", () => {
 
   it("exception overrides a matrix BOOST — reduce exception applies its own factor", () => {
     const target = makeWildcard("Outfit", [
-      { value: "linen", weight: 2, sub_category: "casual" },
+      { value: "linen", weight: 2, sub_categories: ["casual"] },
     ], { id: "wc_target", sub_categories: ["casual"] });
     const source = makeWildcard("Weather", [
-      { value: "rain", weight: 1, sub_category: "wet" },
+      { value: "rain", weight: 1, sub_categories: ["wet"] },
     ], { id: "wc_source", sub_categories: ["wet"] });
     const cn: ConstraintPayload = {
       source_wildcard_id: "wc_source",
@@ -260,10 +264,10 @@ describe("applyConstraint", () => {
     // The SPA test runner must too — otherwise users see exceptions
     // appearing to be ignored when they're actually applied at runtime.
     const target = makeWildcard("Outfit", [
-      { value: "linen", weight: 2, sub_category: "casual" },
+      { value: "linen", weight: 2, sub_categories: ["casual"] },
     ], { id: "wc_target", sub_categories: ["casual"] });
     const source = makeWildcard("Weather", [
-      { value: "rain", weight: 1, sub_category: "wet" },
+      { value: "rain", weight: 1, sub_categories: ["wet"] },
     ], { id: "wc_source", sub_categories: ["wet"] });
     const cn: ConstraintPayload = {
       source_wildcard_id: "wc_source",
@@ -282,11 +286,11 @@ describe("applyConstraint", () => {
     // Two options under the same sub_cat — matrix excludes both; only
     // the specifically-exception'd one survives.
     const target = makeWildcard("Outfit", [
-      { value: "linen", weight: 2, sub_category: "casual" },
-      { value: "denim", weight: 2, sub_category: "casual" },
+      { value: "linen", weight: 2, sub_categories: ["casual"] },
+      { value: "denim", weight: 2, sub_categories: ["casual"] },
     ], { id: "wc_target", sub_categories: ["casual"] });
     const source = makeWildcard("Weather", [
-      { value: "rain", weight: 1, sub_category: "wet" },
+      { value: "rain", weight: 1, sub_categories: ["wet"] },
     ], { id: "wc_source", sub_categories: ["wet"] });
     const cn: ConstraintPayload = {
       source_wildcard_id: "wc_source",
@@ -488,6 +492,172 @@ describe("presence ops (exists / is_set / not_exists / is_unset)", () => {
     ctx = { color: "" };
     evalDerivation(payload, ctx);
     expect(ctx.out).toBeUndefined();
+  });
+});
+
+describe("applyReachConstraints (SP3 combine + reach selector)", () => {
+  // Mirror engine `apply_constraints_for_target`: the caller invokes the
+  // applier once per downstream target ENCOUNTER, threading a shared
+  // per-constraint hit counter. The selector mode decides which encounters
+  // a constraint covers. These tests exercise the smallest unit that drives
+  // the new combine + reach path — the preview has no multi-instance chain
+  // walker of its own (TestRunner renders a single deterministic table), so
+  // the reach core is tested directly.
+
+  const targetOptions: WildcardOption[] = [
+    { id: "o0", value: "blue", weight: 4, sub_categories: ["somber"] },
+    { id: "o1", value: "red", weight: 4, sub_categories: ["warm"] },
+  ];
+  const picks: Record<string, SourcePick> = {
+    src: { value: "rain", sub_categories: ["rainy"] },
+  };
+  // rainy×somber = reduce ×0.5 → blue weight 4 → 2; red untouched.
+  const matrix: ConstraintMatrix = {
+    rainy: { somber: { mode: "reduce", factor: 0.5 } },
+  };
+
+  function makeConstraint(
+    over: Partial<PreviewConstraint> = {},
+  ): PreviewConstraint {
+    return {
+      id: "c1",
+      source_wildcard_id: "src",
+      target_wildcard_id: "tgt",
+      matrix,
+      exceptions: [],
+      ...over,
+    };
+  }
+
+  it("mode:'all' re-weights EVERY downstream target instance", () => {
+    const cn = makeConstraint({ target_select: { mode: "all" } });
+    const hits: Record<string, number> = {};
+    const first = applyReachConstraints(targetOptions, [cn], "tgt", picks, hits);
+    const second = applyReachConstraints(targetOptions, [cn], "tgt", picks, hits);
+    // Both encounters reflect the reduce.
+    expect(first.find((o) => o.value === "blue")?.weight).toBe(2);
+    expect(second.find((o) => o.value === "blue")?.weight).toBe(2);
+    // Untouched option unchanged on both.
+    expect(first.find((o) => o.value === "red")?.weight).toBe(4);
+    expect(second.find((o) => o.value === "red")?.weight).toBe(4);
+  });
+
+  it("default selector (omitted) behaves as mode:'all'", () => {
+    const cn = makeConstraint(); // no target_select
+    const hits: Record<string, number> = {};
+    const first = applyReachConstraints(targetOptions, [cn], "tgt", picks, hits);
+    const second = applyReachConstraints(targetOptions, [cn], "tgt", picks, hits);
+    expect(first.find((o) => o.value === "blue")?.weight).toBe(2);
+    expect(second.find((o) => o.value === "blue")?.weight).toBe(2);
+  });
+
+  it("mode:'first' re-weights only the FIRST downstream instance", () => {
+    const cn = makeConstraint({ target_select: { mode: "first" } });
+    const hits: Record<string, number> = {};
+    const first = applyReachConstraints(targetOptions, [cn], "tgt", picks, hits);
+    const second = applyReachConstraints(targetOptions, [cn], "tgt", picks, hits);
+    expect(first.find((o) => o.value === "blue")?.weight).toBe(2); // covered
+    expect(second.find((o) => o.value === "blue")?.weight).toBe(4); // NOT covered
+  });
+
+  it("mode:'next' covers the first `count` instances then stops", () => {
+    const cn = makeConstraint({ target_select: { mode: "next", count: 2 } });
+    const hits: Record<string, number> = {};
+    const w = () =>
+      applyReachConstraints(targetOptions, [cn], "tgt", picks, hits)
+        .find((o) => o.value === "blue")?.weight;
+    expect(w()).toBe(2); // n=1 ≤ 2
+    expect(w()).toBe(2); // n=2 ≤ 2
+    expect(w()).toBe(4); // n=3 > 2 → uncovered
+  });
+
+  it("multi-tag option multiplies each matching cell (engine corpus parity)", () => {
+    // Corpus 'multi-pick multiply' analogue at the reach layer: two source
+    // picks, each boosting `somber`, target carries one tag → ×2 × ×3 = ×6.
+    const multiPicks: Record<string, SourcePick> = {
+      src: {
+        value: "rain, frost",
+        sub_categories: ["rainy", "cold"],
+        picks: [
+          { value: "rain", tags: ["rainy"] },
+          { value: "frost", tags: ["cold"] },
+        ],
+      },
+    };
+    const cn = makeConstraint({
+      matrix: {
+        rainy: { somber: { mode: "boost", factor: 2 } },
+        cold: { somber: { mode: "boost", factor: 3 } },
+      } satisfies ConstraintMatrix,
+      target_select: { mode: "all" },
+    });
+    const hits: Record<string, number> = {};
+    const out = applyReachConstraints(
+      [{ id: "o0", value: "blue", weight: 1, sub_categories: ["somber"] }],
+      [cn], "tgt", multiPicks, hits,
+    );
+    expect(out[0].weight).toBeCloseTo(6); // 1 × 2 × 3
+  });
+
+  it("stacks two covering constraints — exclude is absorbing", () => {
+    const reduceCn = makeConstraint({
+      id: "c_reduce",
+      matrix: {
+        rainy: { somber: { mode: "reduce", factor: 0.5 } },
+      } satisfies ConstraintMatrix,
+      target_select: { mode: "all" },
+    });
+    const excludeCn = makeConstraint({
+      id: "c_exclude",
+      source_wildcard_id: "src2",
+      matrix: {
+        cold: { somber: { mode: "exclude", factor: 0 } },
+      } satisfies ConstraintMatrix,
+      target_select: { mode: "all" },
+    });
+    const stackPicks: Record<string, SourcePick> = {
+      src: { value: "rain", sub_categories: ["rainy"] },
+      src2: { value: "frost", sub_categories: ["cold"] },
+    };
+    const hits: Record<string, number> = {};
+    const out = applyReachConstraints(
+      targetOptions, [reduceCn, excludeCn], "tgt", stackPicks, hits,
+    );
+    // reduce → 2, then exclude → 0 (absorbing).
+    expect(out.find((o) => o.value === "blue")?.weight).toBe(0);
+  });
+
+  it("skips a constraint whose source has not been picked", () => {
+    const cn = makeConstraint({ source_wildcard_id: "never_picked" });
+    const hits: Record<string, number> = {};
+    const out = applyReachConstraints(targetOptions, [cn], "tgt", picks, hits);
+    // No source pick → no adjustment; weights unchanged.
+    expect(out.find((o) => o.value === "blue")?.weight).toBe(4);
+  });
+
+  it("ignores constraints whose target is a different wildcard", () => {
+    const cn = makeConstraint({ target_wildcard_id: "other" });
+    const hits: Record<string, number> = {};
+    const out = applyReachConstraints(targetOptions, [cn], "tgt", picks, hits);
+    expect(out.find((o) => o.value === "blue")?.weight).toBe(4);
+  });
+
+  it("mode:'pick' covers a listed DIRECT firing instance (best-effort)", () => {
+    const cn = makeConstraint({
+      target_select: {
+        mode: "pick",
+        picks: [{ kind: "direct", uid: "u-match" }],
+      },
+    });
+    const hits: Record<string, number> = {};
+    const covered = applyReachConstraints(
+      targetOptions, [cn], "tgt", picks, hits, { firingUid: "u-match" },
+    );
+    const uncovered = applyReachConstraints(
+      targetOptions, [cn], "tgt", picks, hits, { firingUid: "u-other" },
+    );
+    expect(covered.find((o) => o.value === "blue")?.weight).toBe(2);
+    expect(uncovered.find((o) => o.value === "blue")?.weight).toBe(4);
   });
 });
 

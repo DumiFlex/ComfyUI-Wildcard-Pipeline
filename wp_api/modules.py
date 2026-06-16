@@ -106,6 +106,7 @@ def _validate_payload_for_type(type_id: str, payload: dict) -> str | None:
 
 _UPDATABLE_FIELDS = (
     "name", "description", "tags", "payload", "is_favorite", "category_id",
+    "content_rating",
 )
 
 
@@ -227,6 +228,7 @@ async def create_module(request: web.Request) -> web.Response:
                 tags=body.get("tags", []),
                 payload=body["payload"],
                 is_favorite=bool(body.get("is_favorite", False)),
+                content_rating=body.get("content_rating", "safe"),
             )
     except ValueError as e:
         return json_error(str(e), status=400)
@@ -293,6 +295,7 @@ async def import_from_workflow(request: web.Request) -> web.Response:
                 tags=body.get("tags", []),
                 payload=body["payload"],
                 is_favorite=bool(body.get("is_favorite", False)),
+                content_rating=body.get("content_rating", "safe"),
             )
     except ValueError as e:
         return json_error(str(e), status=400)
@@ -562,6 +565,42 @@ async def toggle_favorite(request: web.Request) -> web.Response:
     return json_ok(updated)
 
 
+async def set_community_origin(request: web.Request) -> web.Response:
+    """POST /wp/api/modules/{id}/community-origin -- stamp the row as
+    published to a community post.
+
+    Called by the host bridge's `markPublished` after the embed
+    successfully creates a post (or new version) from this row. Links
+    the local row to its community post so the SPA shows the community
+    pill, the update-available checker tracks it, and a re-publish is
+    recognized as a version bump rather than a fresh post.
+
+    Body: ``{post_slug: str, version_number: int}``. Does NOT bump the
+    row version (origin metadata isn't runtime-affecting)."""
+    mid = request.match_info["id"]
+    try:
+        body = await request.json()
+    except Exception:
+        return json_error("invalid JSON body", status=400)
+    if not isinstance(body, dict):
+        return json_error("body must be a JSON object", status=400)
+    slug = body.get("post_slug")
+    version = body.get("version_number")
+    if not isinstance(slug, str) or not slug:
+        return json_error("post_slug must be a non-empty string", status=400)
+    if not isinstance(version, int) or isinstance(version, bool):
+        return json_error("version_number must be an integer", status=400)
+    with db_session(request) as conn:
+        repo = ModuleRepository(conn)
+        try:
+            row = repo.set_community_origin(
+                mid, post_slug=slug, version_number=version,
+            )
+        except ModuleNotFound:
+            return json_error(f"module not found: {mid}", status=404)
+    return json_ok(row)
+
+
 async def list_hashes(request: web.Request) -> web.Response:
     """Lightweight bulk hash fetch for drift detection.
 
@@ -578,12 +617,19 @@ async def list_hashes(request: web.Request) -> web.Response:
     workflow load without measurable cost."""
     with db_session(request) as conn:
         rows = ModuleRepository(conn).list()
-    # Post-migration-004 the row's `id` IS the 8-hex uuid that the
-    # tokenizer's `@{8hex}` ref captures; the published `hashes` map
-    # keys remain `uuid`-named on the wire so existing SPA consumers
-    # don't need to relabel.
+    # Wire key stays "hashes" (value string -> object) to avoid relabeling
+    # consumers. `type` enables cross-kind id-clash detection; `payload_hash`
+    # is the existing drift signal the in-graph WP_Context compares against
+    # its embedded snapshot. Post-migration-004 the row's `id` IS the 8-hex
+    # uuid the tokenizer's `@{8hex}` ref captures.
     return json_ok({
-        "hashes": {row["id"]: row["payload_hash"] for row in rows},
+        "hashes": {
+            row["id"]: {
+                "type": row["type"],
+                "payload_hash": row["payload_hash"],
+            }
+            for row in rows
+        },
     })
 
 
@@ -665,3 +711,6 @@ def register(router) -> None:
     router.add_post("/wp/api/modules/{id}/snapshot", snapshot_module)
     router.add_post("/wp/api/modules/{id}/duplicate", duplicate_module)
     router.add_post("/wp/api/modules/{id}/favorite", toggle_favorite)
+    router.add_post(
+        "/wp/api/modules/{id}/community-origin", set_community_origin,
+    )

@@ -3,6 +3,7 @@ import { computed, ref, watch } from "vue";
 import { varColorClass } from "../shared/var-color";
 import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
 import { kindIcon, type WpKind } from "../shared/kind-icons";
+import { applyVarAccessor, type ResolvedValue } from "../../widgets/richTokenize";
 
 const props = defineProps<{
   /** Flat array of upstream variable names. Primary prop shape. */
@@ -15,7 +16,7 @@ const props = defineProps<{
    * fragile parallel-walk over the resolved string. When present, takes
    * precedence over `resolved`.
    */
-  resolvedMap?: Record<string, string>;
+  resolvedMap?: Record<string, ResolvedValue>;
   /**
    * Pre-resolved string — template with $var replaced by resolved values.
    * Legacy fallback when `resolvedMap` not provided. Suffers from
@@ -81,7 +82,10 @@ const upstreamNames = computed(() => props.upstreamVars ?? []);
 // doubled, it can't appear in real prompts.
 const ESCAPE_PLACEHOLDER = "��";
 const VAR_RE = /\$([A-Za-z_][A-Za-z0-9_]*)/g;
-const TEMPLATE_VAR_RE = /(?<!\$)\$([A-Za-z_][A-Za-z0-9_]*)/g;
+// SP2a: capture an optional `.K` list accessor (group 2) so `$mood.0` consumes
+// the whole token — `m[0].length` then advances past `.K` (no stranded ".0"
+// literal) and group 2 drives applyVarAccessor in the substitution below.
+const TEMPLATE_VAR_RE = /(?<!\$)\$([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?/g;
 
 /** Variable names referenced in the template. */
 const templateVarsInternal = computed(() => {
@@ -142,11 +146,16 @@ const previewTokens = computed<PreviewToken[]>(() => {
       const idx = m.index ?? 0;
       if (idx > last) tokens.push({ kind: "literal", text: props.template.slice(last, idx) });
       const name = m[1];
+      const idxStr = m[2];
+      const index = idxStr != null ? parseInt(idxStr, 10) : undefined;
       const has = Object.prototype.hasOwnProperty.call(props.resolvedMap, name);
-      // Unresolved var → keep `$name` so user sees what's missing.
+      // Resolved → join (bare $name) or index (.K) via the shared accessor;
+      // unresolved → keep the raw `$name.K` so the user sees what's missing.
       tokens.push({
         kind: "var",
-        text: has ? props.resolvedMap[name] : `$${name}`,
+        text: has
+          ? applyVarAccessor(props.resolvedMap[name], index)
+          : `$${name}${idxStr != null ? "." + idxStr : ""}`,
         varName: name,
       });
       last = idx + m[0].length;
@@ -165,7 +174,7 @@ const previewTokens = computed<PreviewToken[]>(() => {
       for (const m of props.template.matchAll(TEMPLATE_VAR_RE)) {
         const idx = m.index ?? 0;
         if (idx > last) tokens.push({ kind: "literal", text: props.template.slice(last, idx) });
-        tokens.push({ kind: "var", text: `$${m[1]}`, varName: m[1] });
+        tokens.push({ kind: "var", text: m[0], varName: m[1] });
         last = idx + m[0].length;
       }
       if (last < props.template.length) tokens.push({ kind: "literal", text: props.template.slice(last) });

@@ -25,6 +25,54 @@ import Modal from "./ui/Modal.vue";
 import Select from "./ui/Select.vue";
 import RelativeDate from "./RelativeDate.vue";
 import EmptyState from "./ui/EmptyState.vue";
+import { useCommunityUpdateStore } from "../stores/communityUpdateStore";
+import type { UpdateEntry } from "../stores/communityUpdateStore";
+import CommunityUpdateDialog from "./CommunityUpdateDialog.vue";
+
+const communityUpdates = useCommunityUpdateStore();
+const updateDialogEntry = ref<UpdateEntry | null>(null);
+function openUpdateDialog(rowId: string) {
+  const e = communityUpdates.entryFor(rowId);
+  if (e) updateDialogEntry.value = e;
+}
+function closeUpdateDialog() {
+  updateDialogEntry.value = null;
+}
+
+/** Title for the update-available pill. Built as a function instead
+ *  of inline template-string so vue-tsc's template parser doesn't
+ *  choke on nested optional chaining inside attribute interpolation. */
+function updatePillTitle(rowId: string): string {
+  const e = communityUpdates.entryFor(rowId);
+  if (!e) return "";
+  return `Update available - v${e.latest_version} (${e.post_slug})`;
+}
+function updatePillLatest(rowId: string): number | string {
+  return communityUpdates.entryFor(rowId)?.latest_version ?? "?";
+}
+
+interface CommunityOrigin {
+  community_post_slug?: string | null;
+  community_version_number?: number | null;
+}
+function communityOriginSlug(row: T): string | null {
+  const r = row as T & CommunityOrigin;
+  return r.community_post_slug ?? null;
+}
+function communityPillTitle(row: T): string {
+  const r = row as T & CommunityOrigin;
+  const slug = r.community_post_slug ?? "";
+  const ver = r.community_version_number ?? "?";
+  return `Installed from community - ${slug} v${ver}`;
+}
+
+interface ContentRated {
+  content_rating?: "safe" | "nsfw";
+}
+function isNsfw(row: T): boolean {
+  const r = row as T & ContentRated;
+  return r.content_rating === "nsfw";
+}
 
 interface Filter {
   q?: string;
@@ -32,7 +80,17 @@ interface Filter {
   category?: string | null;
   tags?: string[];
   sortBy?: string;
+  /** Content-rating filter. Undefined / "all" shows everything; "sfw"
+   *  and "nsfw" narrow by the row's content_rating. Client-side — the
+   *  rows already carry content_rating (it drives the 18+ pill). */
+  nsfw?: "all" | "sfw" | "nsfw";
 }
+
+const NSFW_FILTER_OPTIONS: { value: "all" | "sfw" | "nsfw"; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "sfw", label: "SFW" },
+  { value: "nsfw", label: "18+" },
+];
 
 interface ExtraFilter<R> {
   key: string;
@@ -202,6 +260,7 @@ const activeFilterCount = computed(() => {
   if (props.filter.category) n++;
   n += props.filter.tags?.length ?? 0;
   n += activeExtras.value.length;
+  if (props.filter.nsfw === "sfw" || props.filter.nsfw === "nsfw") n++;
   return n;
 });
 
@@ -223,6 +282,10 @@ const filteredItems = computed(() => {
   if (extras.length > 0) {
     out = out.filter((m) => extras.every((f) => f.check(m)));
   }
+
+  // Content-rating filter (client-side; content_rating is on the rows).
+  if (props.filter.nsfw === "nsfw") out = out.filter((m) => isNsfw(m));
+  else if (props.filter.nsfw === "sfw") out = out.filter((m) => !isNsfw(m));
 
   switch (props.filter.sortBy) {
     case "name-asc":
@@ -251,6 +314,7 @@ watch(
     props.filter.tags?.length ?? 0,
     activeExtras.value.length,
     props.filter.sortBy,
+    props.filter.nsfw,
     pageSize.value,
   ],
   () => {
@@ -335,6 +399,10 @@ function isExpanded(id: string): boolean {
 }
 
 const focusedRowId = ref<string | null>(null);
+// The <tbody> is the keyboard entry point. We move REAL DOM focus onto
+// rows so :focus-visible tracks our roving-tabindex state (see
+// focusFocusedRow) — that needs a handle to query the live <tr>s.
+const tbodyEl = ref<HTMLElement | null>(null);
 
 // Reset focus when paged content changes — focused row may have scrolled out
 // (filter change, page change, sort, etc.). Snap to first row on new page.
@@ -349,6 +417,21 @@ function focusedIndex(): number {
   return paged.value.findIndex((r) => r.id === focusedRowId.value);
 }
 
+/**
+ * Push real DOM focus onto the row `focusedRowId` points at. Keyboard
+ * nav only mutates `focusedRowId` (the reactive source of truth); the
+ * browser's focus would otherwise stay on whatever row the user first
+ * clicked, leaving that row outlined via :focus-visible while the accent
+ * stripe moves elsewhere — two rows look active at once. Driving focus
+ * from state keeps a single highlight (#7) and lets arrow keys work the
+ * moment the list is focused (#8).
+ */
+function focusFocusedRow() {
+  tbodyEl.value
+    ?.querySelector<HTMLElement>('tr[data-focused="true"]')
+    ?.focus();
+}
+
 function moveFocus(delta: number) {
   const list = paged.value;
   if (list.length === 0) return;
@@ -357,6 +440,7 @@ function moveFocus(delta: number) {
   if (i < 0) next = delta > 0 ? 0 : list.length - 1;
   else next = Math.max(0, Math.min(list.length - 1, i + delta));
   focusedRowId.value = list[next].id;
+  void nextTick(focusFocusedRow);
 }
 
 function onTableKeydown(e: KeyboardEvent) {
@@ -368,10 +452,12 @@ function onTableKeydown(e: KeyboardEvent) {
     case "Home":
       e.preventDefault();
       focusedRowId.value = paged.value[0]?.id ?? null;
+      void nextTick(focusFocusedRow);
       return;
     case "End":
       e.preventDefault();
       focusedRowId.value = paged.value[paged.value.length - 1]?.id ?? null;
+      void nextTick(focusFocusedRow);
       return;
     case " ": {
       if (!focusedRowId.value) return;
@@ -405,6 +491,7 @@ function clearFilters() {
   props.filter.favorites = false;
   props.filter.category = null;
   props.filter.tags = [];
+  props.filter.nsfw = "all";
   clearExtraActive();
   // Fire `clear` so parents can wipe view-specific URL state that the
   // shared filter object doesn't know about (e.g. AllItems' kinds[]).
@@ -636,6 +723,20 @@ defineExpose({
               </button>
             </div>
           </div>
+          <!-- Content-rating filter (shared across every list view).
+               Tri-state: All / SFW / 18+. Client-side over content_rating. -->
+          <div class="wp-filter-panel__extra">
+            <span class="wp-filter-panel__extra-label">Content</span>
+            <div class="wp-filter-panel__extra-chips">
+              <button
+                v-for="opt in NSFW_FILTER_OPTIONS" :key="opt.value"
+                type="button"
+                class="wp-chip wp-chip--toggle"
+                :data-active="(filter.nsfw ?? 'all') === opt.value ? '' : null"
+                @click="filter.nsfw = opt.value"
+              >{{ opt.label }}</button>
+            </div>
+          </div>
           <div v-if="hasActiveFilters" class="wp-filter-panel__footer">
             <Button variant="link" size="sm" @click="clearFilters">Clear filters</Button>
           </div>
@@ -843,8 +944,17 @@ defineExpose({
       </div>
     </Transition>
 
-    <!-- Table -->
-    <div class="wp-table-wrap wp-table-wrap--scroll">
+    <!-- Table. Keyboard nav lives on the SCROLL WRAPPER, not the <tbody>:
+         clicking a row focuses one of its cell buttons (select / expand /
+         tag / pill), never the tbody, so a tbody-scoped @keydown never
+         fired. The wrapper is a common ancestor — keydown from any focused
+         descendant bubbles here — and is itself focusable so Tab / a click
+         in the gutter lands keyboard nav. -->
+    <div
+      class="wp-table-wrap wp-table-wrap--scroll"
+      tabindex="0"
+      @keydown="onTableKeydown"
+    >
       <table class="wp-table wp-table--sticky-head" :class="{ 'wp-table--empty': showEmptyRow }">
         <thead>
           <tr>
@@ -861,7 +971,7 @@ defineExpose({
             <th scope="col" class="wp-table__actions-col" style="text-align:right">Actions</th>
           </tr>
         </thead>
-        <tbody @keydown="onTableKeydown">
+        <tbody ref="tbodyEl">
           <template v-for="row in paged" :key="row.id">
             <tr
               :tabindex="focusedRowId === row.id ? 0 : -1"
@@ -914,12 +1024,53 @@ defineExpose({
                 <slot name="favorite" :row="row" />
               </td>
               <td>
-                <slot name="name" :row="row">
-                  <div class="wp-row-name">
-                    <span class="wp-row-name__text">{{ row.name }}</span>
-                    <span class="wp-id">{{ row.id }}</span>
-                  </div>
-                </slot>
+                <!-- Slot + pills wrapped in one flex line. Every list view
+                     overrides #name, so pills rendered ONLY inside the
+                     slot fallback would never appear. Render them
+                     alongside the slot output so they stay visible
+                     regardless of the override's markup. -->
+                <div class="wp-row-name-wrap">
+                  <slot name="name" :row="row">
+                    <div class="wp-row-name">
+                      <span class="wp-row-name__text">{{ row.name }}</span>
+                      <span class="wp-id">{{ row.id }}</span>
+                    </div>
+                  </slot>
+                  <!-- Community-origin pill. Only renders when the
+                       engine stamped `community_post_slug` on this
+                       row at install time (migration 013). Locally
+                       authored rows have NULL here and stay
+                       unmarked. Icon-only — the globe glyph carries
+                       the meaning; redundant "community" text was
+                       removed when the pill system was harmonized. -->
+                  <span
+                    v-if="communityOriginSlug(row)"
+                    class="wp-row-community-pill"
+                    :title="communityPillTitle(row)"
+                  >
+                    <i class="pi pi-globe" />
+                  </span>
+                  <!-- Update-available indicator. Distinct pill so the
+                       user can tell which rows are behind, not just
+                       which rows came from community. -->
+                  <button
+                    v-if="communityUpdates.entryFor(row.id)"
+                    type="button"
+                    class="wp-row-community-pill wp-row-community-pill--update wp-row-community-pill--button"
+                    :title="updatePillTitle(row.id)"
+                    @click.stop="openUpdateDialog(row.id)"
+                  >
+                    <i class="pi pi-arrow-up" />v{{ updatePillLatest(row.id) }}
+                  </button>
+                  <!-- NSFW pill (engine migration 015). Stamped by the
+                       IdentityCard NSFW toggle or auto-stamped at
+                       community install time from `opts.origin.content_rating`. -->
+                  <span
+                    v-if="isNsfw(row)"
+                    class="wp-row-community-pill wp-row-community-pill--nsfw"
+                    title="NSFW content"
+                  >18+</span>
+                </div>
               </td>
               <slot name="columns" :row="row" />
               <td v-if="showTags" @click.stop>
@@ -1040,6 +1191,16 @@ defineExpose({
         />
       </div>
     </div>
+
+    <!-- Mounted once at the list level (not once per row) so a single
+         active dialog doesn't get stuck behind a re-render of its
+         host row's chrome. The pill's @click stores the entry; the
+         dialog reads + drives the action. -->
+    <CommunityUpdateDialog
+      :open="updateDialogEntry !== null"
+      :entry="updateDialogEntry"
+      @close="closeUpdateDialog"
+    />
   </div>
 </template>
 
@@ -1195,6 +1356,17 @@ defineExpose({
 .wp-row-fav-btn[data-on="true"] { color: var(--wp-warn, #fcd34d); }
 .wp-row-fav-btn .pi { font-size: var(--wp-text-base); }
 
+.wp-row-name-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--wp-space-2);
+  min-width: 0;
+}
+.wp-row-name-wrap > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
 .wp-row-name {
   display: flex;
   flex-direction: column;
@@ -1202,6 +1374,51 @@ defineExpose({
 }
 .wp-row-name__text {
   font-weight: 500;
+}
+/* Row-level metadata pills. One canonical shape (bordered 4px rect,
+ * 18px tall, 10px label) shared across community-origin and
+ * update-available variants. Future variants (e.g. nsfw, once the
+ * data is plumbed) plug into the same primitive. */
+.wp-row-community-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  align-self: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: color-mix(in oklab, #06b6d4 12%, transparent);
+  border: 1px solid color-mix(in oklab, #06b6d4 24%, transparent);
+  color: #67e8f9;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+.wp-row-community-pill .pi {
+  font-size: 9px;
+}
+.wp-row-community-pill--update {
+  background: color-mix(in oklab, var(--wp-warn, #f59e0b) 16%, transparent);
+  border-color: color-mix(in oklab, var(--wp-warn, #f59e0b) 30%, transparent);
+  color: var(--wp-warn, #f59e0b);
+}
+.wp-row-community-pill--button {
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.wp-row-community-pill--button:hover {
+  background: color-mix(in oklab, var(--wp-warn, #f59e0b) 22%, transparent);
+  border-color: color-mix(in oklab, var(--wp-warn, #f59e0b) 40%, transparent);
+}
+.wp-row-community-pill--nsfw {
+  background: color-mix(in oklab, var(--wp-danger, #ef4444) 14%, transparent);
+  border-color: color-mix(in oklab, var(--wp-danger, #ef4444) 28%, transparent);
+  color: var(--wp-danger, #ef4444);
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 .wp-row-tags {
   display: flex;
@@ -1248,12 +1465,14 @@ defineExpose({
   opacity: 0;
   transition: opacity 0.12s ease;
 }
-/* Reveal row actions on hover / focus-within / when the row is keyboard-focused.
- * data-focused="true" comes from the keyboard-nav state in Task 3.7 — so a row
- * with focus ring also shows its actions. */
+/* Reveal row actions on hover (mouse) or keyboard focus only. We use
+ * :focus-visible (not :focus-within / the data-focused state) so a row
+ * the mouse merely CLICKED doesn't keep showing its actions after the
+ * pointer leaves — actions track the pointer or the keyboard cursor,
+ * never a stale selection. Keyboard nav DOM-focuses the row
+ * (focusFocusedRow), so :focus-visible lights up the right one. */
 .wp-table tbody tr:hover .wp-row-actions,
-.wp-table tbody tr:focus-within .wp-row-actions,
-.wp-table tbody tr[data-focused="true"] .wp-row-actions {
+.wp-table tbody tr:focus-visible .wp-row-actions {
   opacity: 1;
 }
 /* Always visible on touch (no hover capability). */
@@ -1315,12 +1534,15 @@ defineExpose({
   border-left: 2px solid var(--wp-warn, #f7b955);
 }
 
-/* Focused-row marker (keyboard-nav) — subtle accent stripe on the left. Separate
- * from selected (checkbox) and hover. Outline appears via :focus-visible. */
-.wp-table__row--focused > td:first-child {
+/* Keyboard-nav focus marker. Driven by :focus-visible only (NOT the
+ * focusedRowId state) so a mouse click never leaves a row looking
+ * "active" after the pointer moves on — only real keyboard focus shows
+ * the accent stripe + outline. focusFocusedRow() moves DOM focus with the
+ * arrow keys, so the marker follows the cursor. */
+.wp-table tr:focus { outline: none; }
+.wp-table tbody tr:focus-visible > td:first-child {
   box-shadow: inset 2px 0 0 var(--wp-accent-500);
 }
-.wp-table tr:focus { outline: none; }
 .wp-table tr:focus-visible {
   outline: 2px solid var(--wp-accent-500);
   outline-offset: -2px;

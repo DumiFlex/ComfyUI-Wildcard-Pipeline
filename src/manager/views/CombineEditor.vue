@@ -16,6 +16,7 @@ import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
+import CommunityRowActions from "../components/CommunityRowActions.vue";
 import DraftBanner from "../components/DraftBanner.vue";
 import Field from "../components/ui/Field.vue";
 import Chip from "../components/ui/Chip.vue";
@@ -51,6 +52,9 @@ import type {
 const props = defineProps<{ id?: string }>();
 const router = useRouter();
 const moduleStore = useModuleStore();
+const currentRow = computed(() =>
+  props.id ? moduleStore.catalog.find((m) => m.id === props.id) ?? null : null,
+);
 const categoryStore = useCategoryStore();
 const toast = useToast();
 const recent = useRecentStore();
@@ -75,35 +79,7 @@ const cascadeRefs = computed(() => {
 
 async function onEntityDeleteClick(): Promise<void> {
   if (!props.id) return;
-  if (cascadeRefs.value.length === 0) {
-    const result = await cascadeApply.apply({
-      kind: "combine", id: props.id, action: "delete",
-    });
-    if (result.ok) {
-      moduleStore.remove(props.id);
-      const undoId = result.undo_entry_id;
-      toast.push({
-        severity: "success",
-        summary: `"${name.value}" deleted`,
-        life: 5000,
-        action: {
-          label: "Undo",
-          run: async () => {
-            const undoResult = await cascadeApply.undo(undoId);
-            if (!undoResult.ok) {
-              toast.push({ severity: "error", summary: "Undo failed", detail: undoResult.error, life: 4000 });
-            } else {
-              toast.push({ severity: "info", summary: `"${name.value}" restored`, life: 3000 });
-            }
-          },
-        },
-      });
-      router.push(resolveReturnTo("/combines"));
-    } else {
-      toast.push({ severity: "error", summary: "Delete failed", detail: (result as { ok: false; error: string }).error, life: 4000 });
-    }
-    return;
-  }
+  // Always confirm — see WildcardEditor for the rationale.
   cascadeDialogOpen.value = true;
 }
 
@@ -191,6 +167,7 @@ async function onOutputVarRenameConfirmed(result: {
         description: description.value,
         category_id: categoryId.value,
         tags: tags.value,
+        content_rating: contentRating.value,
         payload: { ...(payload as unknown as Record<string, unknown>), history: historyNext },
       });
       historyEntries.value = historyNext;
@@ -221,6 +198,7 @@ const name = ref("");
 const description = ref("");
 const categoryId = ref<string | null>(null);
 const tags = ref<string[]>([]);
+const contentRating = ref<"safe" | "nsfw">("safe");
 const template = ref("");
 const outputVar = ref("");
 const outputVarTouched = ref(false);
@@ -345,6 +323,7 @@ onMounted(async () => {
       description.value = row.description;
       categoryId.value = row.category_id;
       tags.value = row.tags;
+      contentRating.value = row.content_rating ?? "safe";
       const p = row.payload as Partial<CombinePayload>;
       template.value = p.template ?? "";
       const o = (p.output_var ?? "").replace(/^\$+/, "");
@@ -448,6 +427,7 @@ async function save() {
         description: description.value,
         category_id: categoryId.value,
         tags: tags.value,
+        content_rating: contentRating.value,
         payload: { ...newPayload, history: nextHistory },
       });
       historyEntries.value = nextHistory;
@@ -461,6 +441,7 @@ async function save() {
         description: description.value,
         category_id: categoryId.value,
         tags: tags.value,
+        content_rating: contentRating.value,
         payload: newPayload,
       });
     }
@@ -524,6 +505,12 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
       <span v-if="cascadeRefs.length > 0" class="wp-editor-used-by">
         used by <PillCountBadge :count="cascadeRefs.length" />
       </span>
+      <CommunityRowActions
+        v-if="currentRow"
+        :row="currentRow"
+        kind="module"
+        labeled
+      />
     </template>
     <template v-if="isEdit" #footer-left>
       <Button
@@ -542,7 +529,9 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
       @update:name="(v) => (name = v)"
       @update:description="(v) => (description = v)"
       @update:category-id="(v) => (categoryId = v)"
+      :content-rating="contentRating"
       @update:tags="(v) => (tags = v)"
+      @update:content-rating="(v) => (contentRating = v)"
     />
 
     <Card title="Template & Output">
@@ -553,6 +542,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
         >
           <RichTextInput
             v-model="template"
+            :module-id="props.id"
             :var-suggestions="varSuggestions"
             :uuid-to-name="uuidToName"
             :multiline="true"

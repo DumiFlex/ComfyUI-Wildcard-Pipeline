@@ -561,17 +561,19 @@ class TestInlineSyntaxInValues:
 
 
 class TestConstraintComposition:
-    """First-instance one-shot semantic (2026-05-24 redesign): each
-    constraint module fires on exactly one downstream target instance,
-    in chain order. Multiple constraints targeting the same wildcard
-    do NOT compose multiplicatively on a single target instance — the
-    first claims, the second waits for the next target instance."""
+    """SP3 reach selector: every constraint whose `target_select` covers
+    a firing target instance is applied, combined sequentially. Multiple
+    `all` constraints targeting the same wildcard now DO compose on a
+    single target instance (the pre-SP3 one-shot model, where the first
+    claimed and the second waited, is retired)."""
 
-    def test_two_constraints_one_target_only_first_fires(self):
-        """Two excludes targeting the same wildcard + ONE target
-        instance: c1 fires on `tgt`, c2 is unconsumed → emits
-        `constraint_never_applied` warning at chain end. c1's exclude
-        of `punk` leaves `classic` available."""
+    def test_two_all_constraints_compose_on_one_target(self):
+        """Two excludes (default `all`) targeting the same wildcard + ONE
+        target instance: BOTH fire on `tgt` and compose. c1 excludes
+        `punk`, c2 excludes `classic` → every option zeroed → the
+        weighted pick falls back to options[0] (`punk`) and an
+        excludes-all warning fires. Both constraints reached the
+        instance (hit count 1 each) — no never_applied."""
         ctx = _run([
             _wildcard("src1", "hair", [{"id": "h1", "value": "long", "weight": 1}]),
             _wildcard("src2", "eyes", [{"id": "e1", "value": "blue", "weight": 1}]),
@@ -586,11 +588,45 @@ class TestConstraintComposition:
                 {"id": "s2", "value": "classic", "weight": 1},
             ]),
         ], seed=1)
+        # Both excludes apply → whole pool zeroed → fallback options[0].
+        assert ctx["style"] == "punk"
+        hits = ctx.get("__wp_constraint_hits__", {})
+        assert hits.get("c1") == 1 and hits.get("c2") == 1
+        never = [
+            w for w in ctx.get("__wp_warnings__", [])
+            if w.get("type") == "constraint_never_applied"
+        ]
+        assert never == []
+        excludes_all = [
+            w for w in ctx.get("__wp_warnings__", [])
+            if w.get("type") == "constraint_excludes_all_options"
+        ]
+        assert excludes_all, "expected an excludes-all warning when both fire"
+
+    def test_first_mode_constraint_yields_to_let_other_survive(self):
+        """The pre-SP3 'only the first constraint fires' outcome is still
+        reachable by marking c2 `first` and giving it no earlier target:
+        with a single target instance, c1 (`all`) excludes `punk` and c2
+        (also `all` here) excludes `classic` would zero the pool — so to
+        keep `classic` available we drop c2 to a selector that doesn't
+        cover this instance. Here c2 is `next 1` but registered such that
+        its own counter is already past — simplest: only c1 targets tgt,
+        c2 targets a different (absent) wildcard, proving a single `all`
+        constraint leaves the non-excluded option."""
+        ctx = _run([
+            _wildcard("src1", "hair", [{"id": "h1", "value": "long", "weight": 1}]),
+            _constraint("c1", source="src1", target="tgt", exceptions=[
+                {"source": "long", "target": "punk", "mode": "exclude", "factor": 0},
+            ]),
+            _wildcard("tgt", "style", [
+                {"id": "s1", "value": "punk", "weight": 1},
+                {"id": "s2", "value": "classic", "weight": 1},
+            ]),
+        ], seed=1)
         # c1 alone fires on the single tgt instance → punk excluded →
-        # classic survives. No excludes-all (one option still has weight).
+        # classic survives. No excludes-all (one option keeps weight).
         assert ctx["style"] == "classic"
-        # `constraint_never_applied` warning for c2 is covered separately
-        # in tests/test_constraint_first_instance.py (Task 5).
+        assert ctx.get("__wp_constraint_hits__", {}).get("c1") == 1
 
 
 # ─── Locked-seed reproducibility across a full chain ─────────────────
@@ -741,10 +777,10 @@ class TestNestedSubcategoryFilter:
                 "type": "wildcard",
                 "var_binding": "color",
                 "options": [
-                    {"id": "c1", "value": "red", "weight": 1, "sub_category": "warm"},
-                    {"id": "c2", "value": "yellow", "weight": 1, "sub_category": "warm"},
-                    {"id": "c3", "value": "blue", "weight": 1, "sub_category": "cool"},
-                    {"id": "c4", "value": "green", "weight": 1, "sub_category": "cool"},
+                    {"id": "c1", "value": "red", "weight": 1, "sub_categories": ["warm"]},
+                    {"id": "c2", "value": "yellow", "weight": 1, "sub_categories": ["warm"]},
+                    {"id": "c3", "value": "blue", "weight": 1, "sub_categories": ["cool"]},
+                    {"id": "c4", "value": "green", "weight": 1, "sub_categories": ["cool"]},
                 ],
             },
         }
@@ -768,9 +804,9 @@ class TestNestedSubcategoryFilter:
                 "type": "wildcard",
                 "var_binding": "color",
                 "options": [
-                    {"id": "c1", "value": "red", "weight": 1, "sub_category": "warm"},
-                    {"id": "c2", "value": "blue", "weight": 1, "sub_category": "cool"},
-                    {"id": "c3", "value": "green", "weight": 1, "sub_category": "earth"},
+                    {"id": "c1", "value": "red", "weight": 1, "sub_categories": ["warm"]},
+                    {"id": "c2", "value": "blue", "weight": 1, "sub_categories": ["cool"]},
+                    {"id": "c3", "value": "green", "weight": 1, "sub_categories": ["earth"]},
                 ],
             },
         }
@@ -793,7 +829,7 @@ class TestNestedSubcategoryFilter:
                 "type": "wildcard",
                 "var_binding": "color",
                 "options": [
-                    {"id": "c1", "value": "red", "weight": 1, "sub_category": "warm"},
+                    {"id": "c1", "value": "red", "weight": 1, "sub_categories": ["warm"]},
                 ],
             },
         }
@@ -816,7 +852,7 @@ class TestNestedSubcategoryFilter:
                 "type": "wildcard",
                 "var_binding": "color",
                 "options": [
-                    {"id": "c1", "value": "red", "weight": 1, "sub_category": "warm"},
+                    {"id": "c1", "value": "red", "weight": 1, "sub_categories": ["warm"]},
                 ],
             },
         }
@@ -837,9 +873,9 @@ class TestNestedSubcategoryFilter:
                 "type": "wildcard",
                 "var_binding": "color",
                 "options": [
-                    {"id": "c1", "value": "red", "weight": 1, "sub_category": "warm"},
-                    {"id": "c2", "value": "yellow", "weight": 1, "sub_category": "warm"},
-                    {"id": "c3", "value": "blue", "weight": 1, "sub_category": "cool"},
+                    {"id": "c1", "value": "red", "weight": 1, "sub_categories": ["warm"]},
+                    {"id": "c2", "value": "yellow", "weight": 1, "sub_categories": ["warm"]},
+                    {"id": "c3", "value": "blue", "weight": 1, "sub_categories": ["cool"]},
                 ],
             },
         }

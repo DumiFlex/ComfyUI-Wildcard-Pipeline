@@ -480,3 +480,14 @@
   background: var(--wp-text-muted, #8a8d99);
   color: var(--wp-bg, #0e1015);
 }
+/* Collapse chip — `↥×N` cluster shown on a TARGET (wildcard) row that
+ * has 3+ contributing constraints, REPLACING the individual `#N` chips so
+ * a heavily-constrained row doesn't sprawl. Deliberately NOT per-target
+ * colored: it's a fixed solid accent surface so it reads as a single
+ * "expand me" affordance rather than belonging to one constraint's hue.
+ * Same base geometry as `.wp-pair-badge` (pad / font / radius / size) —
+ * no border, no transparency, not enlarged. */
+.wp-pair-badge--collapse {
+  background: var(--wp-accent-300);
+  color: #1a1a1a;
+}

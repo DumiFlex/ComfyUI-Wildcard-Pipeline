@@ -4,6 +4,14 @@ import {
   parseWidgetJson,
   type ContextWidgetValue,
 } from "../widgets/_shared";
+import { applyVarAccessor, type ResolvedValue } from "../widgets/richTokenize";
+// probability.ts is a pure (no-Vue) module despite its path — reused here so
+// the static multi-pick representative mirrors the engine pool exactly.
+import {
+  isEnabled,
+  type InstanceLike,
+  type WildcardOption,
+} from "../components/context/editors/wildcard/probability";
 import { ensure as ensurePreviewLookup, lookup as previewLookup } from "./preview-resolver";
 
 // ── Subgraph boundary primer ────────────────────────────────────────────
@@ -306,7 +314,7 @@ function pipelineUpstreamOf(
 export function collectUpstreamResolved(
   rootGraph: LiteGraphLike,
   node: LiteNodeLike,
-): Record<string, string> {
+): Record<string, ResolvedValue> {
   const parents = buildSubgraphParents(rootGraph);
   const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
   const chain: LiteNodeLike[] = [];
@@ -342,7 +350,7 @@ export function collectLocalResolvedForModule(
   rootGraph: LiteGraphLike,
   node: LiteNodeLike,
   excludeModuleId?: string,
-): Record<string, string> {
+): Record<string, ResolvedValue> {
   // Step 1: pull upstream-only resolution as the base ctx.
   const ctx = collectUpstreamResolved(rootGraph, node);
 
@@ -760,7 +768,9 @@ export function collectUpstreamKinds(
  * matching the runtime walker's `max_ref_depth`.
  * -------------------------------------------------------------------- */
 
-const VAR_REF_RE = /\$([A-Za-z_][A-Za-z0-9_]*)/g;
+// SP2a: optional `.K` list accessor (group 2) so `$mood.0` is consumed whole
+// (no stranded ".0" literal) and the index drives applyVarAccessor below.
+const VAR_REF_RE = /\$([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?/g;
 const WC_REF_RE = /@\{([0-9a-f]{8})(?:#[^#:}@{]*)?(?::[^}]*)?\}/g;
 const MAX_REF_DEPTH = 8;
 
@@ -769,7 +779,7 @@ interface MinimalWildcard {
   var_binding?: string;
 }
 
-function resolveChainStatic(chain: LiteNodeLike[]): Record<string, string> {
+function resolveChainStatic(chain: LiteNodeLike[]): Record<string, ResolvedValue> {
   // First pass: collect every wildcard payload across the whole chain
   // into one `id → payload` catalog so `@{}` refs inside option values
   // can resolve to picked-but-not-yet-walked siblings as well as
@@ -825,7 +835,7 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, string> {
   // never fire). Bypass routes input → output topologically; the
   // walker already gets that for free because the link still points
   // at the bypassed node — we just skip its OWN contributions.
-  const ctx: Record<string, string> = {};
+  const ctx: Record<string, ResolvedValue> = {};
   for (let i = chain.length - 1; i >= 0; i--) {
     const n = chain[i];
     if (isSkippedMode(n)) continue;
@@ -913,7 +923,7 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, string> {
 }
 
 function writeBindings(
-  ctx: Record<string, string>,
+  ctx: Record<string, ResolvedValue>,
   m: ContextWidgetValue["modules"][number],
   catalog: Map<string, MinimalWildcard>,
 ): void {
@@ -971,10 +981,56 @@ function writeBindings(
   }
   const p = (m.payload ?? {}) as Record<string, unknown>;
   if (m.type === "wildcard") {
-    const binding = (p.var_binding as string | undefined)?.replace(/^\$/, "").trim();
-    const options = (p.options as Array<{ value?: string }> | undefined) ?? [];
+    // Honor `instance.variable_binding` over the library `payload.var_binding`
+    // — the engine + the conflict scanner's `bindingNameOf` both resolve the
+    // EFFECTIVE binding this way. Reading payload-only made a per-instance
+    // rename (e.g. a duplicate's auto-suffixed `$mood_2`) collapse back to the
+    // library name here, so the upstream-resolved map keyed by `mood` and
+    // cross-node shadow detection missed the renamed twin (the duplicate's
+    // `shadows_upstream` "override" badge went missing). Mirrors the combine
+    // branch below.
+    const overrideBinding = ((m.instance as { variable_binding?: string | null } | undefined)
+      ?.variable_binding ?? "").replace(/^\$/, "").trim();
+    const binding =
+      overrideBinding || (p.var_binding as string | undefined)?.replace(/^\$/, "").trim();
+    const options =
+      (p.options as
+        | Array<{ value?: string; id?: string; sub_categories?: string[]; is_null?: boolean }>
+        | undefined) ?? [];
     if (binding && options.length > 0) {
-      ctx[binding] = expandValue(String(options[0].value ?? ""), ctx, catalog, 0);
+      const inst = (m.instance ?? {}) as {
+        pick_min?: unknown; pick_max?: unknown; pick_separator?: unknown;
+      };
+      const coerce = (v: unknown, dflt: number): number => {
+        if (v == null) return dflt;
+        const n = Number(v);
+        return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : dflt;
+      };
+      const lo = coerce(inst.pick_min, 1);
+      const hi = Math.max(lo, coerce(inst.pick_max, lo));
+      if (lo === 1 && hi === 1) {
+        ctx[binding] = expandValue(String(options[0].value ?? ""), ctx, catalog, 0);
+      } else {
+        // SP2a multi-pick: the static resolver isn't seed-faithful (the engine
+        // rolls N at random), so show a representative join of the first N
+        // options. Mirror the engine POOL via isEnabled — drop the null option
+        // + apply enabled_options + category_filter — so the preview never
+        // leaks null (a stray leading separator) or filtered-out options. The
+        // API-backed preview shows the real seeded roll.
+        const pool = options.filter((o) =>
+          isEnabled(o as unknown as WildcardOption, m.instance as unknown as InstanceLike, true),
+        );
+        const sep = typeof inst.pick_separator === "string" ? inst.pick_separator : ", ";
+        const n = Math.min(hi, pool.length);
+        const items: string[] = [];
+        for (let i = 0; i < n; i++) {
+          items.push(expandValue(String(pool[i].value ?? ""), ctx, catalog, 0));
+        }
+        // Bind a STRUCTURED ListVar (not a pre-joined string) so a downstream
+        // `$mood.0` can index the first item — `applyVarAccessor` joins it for
+        // a bare `$mood`. Pre-joining lost the per-index access.
+        ctx[binding] = { items, sep };
+      }
     }
     return;
   }
@@ -1039,18 +1095,21 @@ function writeBindings(
 
 function matchDerivationCondition(
   cond: { var?: string; op?: string; value?: string } | undefined,
-  ctx: Record<string, string>,
+  ctx: Record<string, ResolvedValue>,
 ): boolean {
   if (!cond) return false;
   const varName = cond.var ?? "";
   const op = cond.op ?? "";
   const value = cond.value ?? "";
-  // Presence-check ops short-circuit before reading the stored value.
+  // SP2a: normalise the stored value to its string form (a multi-pick var is
+  // a ListVar — join it; mirrors engine derivation_handler) so the string ops
+  // below never run on an object.
+  const actual = applyVarAccessor(ctx[varName], undefined);
+  // Presence-check ops short-circuit on key presence + non-empty value.
   if (op === "exists") return varName in ctx;
   if (op === "not_exists") return !(varName in ctx);
-  if (op === "is_set") return varName in ctx && ctx[varName] !== "";
-  if (op === "is_unset") return !(varName in ctx) || ctx[varName] === "";
-  const actual = ctx[varName] ?? "";
+  if (op === "is_set") return varName in ctx && actual !== "";
+  if (op === "is_unset") return !(varName in ctx) || actual === "";
   if (op === "equals") return actual === value;
   if (op === "not_equals") return actual !== value;
   if (op === "contains") return actual.includes(value);
@@ -1062,7 +1121,7 @@ function matchDerivationCondition(
 
 function applyDerivationAction(
   action: { target_var?: string; mode?: string; value?: string } | undefined,
-  ctx: Record<string, string>,
+  ctx: Record<string, ResolvedValue>,
   catalog: Map<string, MinimalWildcard>,
 ): void {
   if (!action) return;
@@ -1071,22 +1130,30 @@ function applyDerivationAction(
   const mode = action.mode ?? "replace";
   const raw = action.value ?? "";
   const newValue = expandValue(raw, ctx, catalog, 0);
+  // SP2a: read the existing target value in string form (join a ListVar)
+  // before append/prepend so we never concatenate onto "[object Object]".
+  const cur = applyVarAccessor(ctx[target], undefined);
   if (mode === "replace") ctx[target] = newValue;
-  else if (mode === "append") ctx[target] = (ctx[target] ?? "") + newValue;
-  else if (mode === "prepend") ctx[target] = newValue + (ctx[target] ?? "");
+  else if (mode === "append") ctx[target] = cur + newValue;
+  else if (mode === "prepend") ctx[target] = newValue + cur;
 }
 
 function expandValue(
   raw: string,
-  ctx: Record<string, string>,
+  ctx: Record<string, ResolvedValue>,
   catalog: Map<string, MinimalWildcard>,
   depth: number,
 ): string {
   if (!raw) return raw;
   if (depth > MAX_REF_DEPTH) return raw;
-  // 1. Substitute `$var` with ctx values, leave unknowns as `$name`.
-  let out = raw.replace(VAR_REF_RE, (_, name) =>
-    Object.prototype.hasOwnProperty.call(ctx, name) ? ctx[name] : `$${name}`,
+  // 1. Substitute `$var` (+ optional `.K` accessor) with ctx values; leave
+  //    unknowns (incl. their accessor) intact. ctx values are strings in this
+  //    static resolver, so applyVarAccessor treats `$s.0` as `$s` and `$s.K>0`
+  //    as "" — never leaking the literal ".K" into the preview.
+  let out = raw.replace(VAR_REF_RE, (full, name, idx) =>
+    Object.prototype.hasOwnProperty.call(ctx, name)
+      ? applyVarAccessor(ctx[name], idx != null ? parseInt(idx, 10) : undefined)
+      : full,
   );
   // 2. Substitute `@{8hex}` with the referenced wildcard's first option,
   //    recursively expanded so chains (`@{a}` → "@{b} hat" → "blue hat")
@@ -1251,18 +1318,33 @@ export function collectDownstreamNestedReachUuids(
           const bundleEnabled = buildBundleEnabledMap(v.bundles);
           for (const m of v.modules) {
             if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
-            if (m.type !== "wildcard") continue;
-            const payload = (m.payload ?? {}) as { options?: Array<{ value?: unknown }> };
-            for (const opt of payload.options ?? []) {
-              const val = opt.value;
-              if (typeof val !== "string") continue;
-              REF_RE.lastIndex = 0;
-              let match: RegExpExecArray | null;
-              while ((match = REF_RE.exec(val)) !== null) {
+            const scanValue = (val: unknown): void => {
+              if (typeof val !== "string") return;
+              for (const match of val.matchAll(REF_RE)) {
                 if (!reach.has(match[1])) {
                   reach.add(match[1]);
                   out.push(match[1]);
                 }
+              }
+            };
+            if (m.type === "wildcard") {
+              const payload = (m.payload ?? {}) as { options?: Array<{ value?: unknown }> };
+              for (const opt of payload.options ?? []) scanValue(opt.value);
+            } else if (m.type === "derivation") {
+              // Derivation action values can host @{uuid} refs — scan
+              // branches[].action.value + else.action.value with the
+              // same REF_RE. Mirrors the wildcard option scan above.
+              const dp = (m.payload ?? {}) as {
+                rules?: Array<{
+                  branches?: Array<{ action?: { value?: unknown } }>;
+                  else?: { action?: { value?: unknown } } | null;
+                }>;
+              };
+              for (const r of Array.isArray(dp.rules) ? dp.rules : []) {
+                for (const b of Array.isArray(r?.branches) ? r.branches : []) {
+                  scanValue(b?.action?.value);
+                }
+                scanValue(r?.else?.action?.value);
               }
             }
           }

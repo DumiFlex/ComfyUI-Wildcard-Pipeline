@@ -108,6 +108,102 @@ describe("CascadeConfirmDialog", () => {
     wrap.unmount();
   });
 
+  it("wildcard delete: constraint row is informational (no checkbox), nested-ref row has an unchecked strip checkbox", async () => {
+    mockComposable.dryRun.mockResolvedValue({
+      ok: true, affected_count: 2,
+      affected_entities: [
+        { kind: "constraint", id: "c1", name: "constraint A" },
+        { kind: "wildcard", id: "w2", name: "nested wildcard" },
+      ],
+    });
+    const wrap = mount(CascadeConfirmDialog, {
+      props: { open: true, kind: "wildcard", id: "w1", action: "delete" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+
+    // Constraint → informational, NO strip checkbox for its id.
+    expect(document.body.querySelector("[data-test='cascade-keep-constraint']")).toBeTruthy();
+    expect(document.body.querySelector("[data-test='cascade-strip'][data-test-id='c1']")).toBeFalsy();
+    expect(document.body.textContent).toMatch(/reattach to heal/i);
+
+    // Nested-ref wildcard → strip checkbox, present + defaulting unchecked.
+    const stripBtn = document.body.querySelector(
+      "[data-test='cascade-strip'][data-test-id='w2'] [role='checkbox']",
+    ) as HTMLButtonElement | null;
+    expect(stripBtn).toBeTruthy();
+    expect(stripBtn!.getAttribute("aria-checked")).toBe("false");
+
+    // The single legacy "Update N references" checkbox must NOT render for wildcard delete.
+    expect(document.body.querySelector("[data-test='cascade-cleanup-checkbox']")).toBeFalsy();
+
+    wrap.unmount();
+  });
+
+  it("wildcard delete: checking a nested-ref row sends cleanup_ids with that id only (not the constraint)", async () => {
+    mockComposable.dryRun.mockResolvedValue({
+      ok: true, affected_count: 2,
+      affected_entities: [
+        { kind: "constraint", id: "c1", name: "constraint A" },
+        { kind: "wildcard", id: "w2", name: "nested wildcard" },
+      ],
+    });
+    mockComposable.apply.mockResolvedValue({
+      ok: true, undo_entry_id: "u1", affected_count: 1, affected_entities: [], diff: [],
+    });
+    const wrap = mount(CascadeConfirmDialog, {
+      props: { open: true, kind: "wildcard", id: "w1", action: "delete" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+
+    // Check the nested-ref wildcard's strip box.
+    const stripBtn = document.body.querySelector(
+      "[data-test='cascade-strip'][data-test-id='w2'] [role='checkbox']",
+    ) as HTMLButtonElement;
+    stripBtn.click();
+    await flushPromises();
+
+    const confirm = document.body.querySelector("[data-test='cascade-confirm']") as HTMLButtonElement;
+    confirm.click();
+    await flushPromises();
+
+    expect(mockComposable.apply).toHaveBeenCalledTimes(1);
+    const sent = mockComposable.apply.mock.calls[0][0] as { cleanup_ids?: string[] };
+    expect(sent.cleanup_ids).toContain("w2");
+    expect(sent.cleanup_ids).not.toContain("c1");
+    wrap.unmount();
+  });
+
+  it("non-wildcard delete still renders the single cascade_refs checkbox + sends cascade_refs", async () => {
+    mockComposable.dryRun.mockResolvedValue({
+      ok: true, affected_count: 1,
+      affected_entities: [{ kind: "bundle", id: "b2", name: "parent bundle" }],
+    });
+    mockComposable.apply.mockResolvedValue({
+      ok: true, undo_entry_id: "u1", affected_count: 1, affected_entities: [], diff: [],
+    });
+    const wrap = mount(CascadeConfirmDialog, {
+      props: { open: true, kind: "bundle", id: "b1", action: "delete" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+
+    // The single legacy checkbox renders for bundle delete…
+    expect(document.body.querySelector("[data-test='cascade-cleanup-checkbox']")).toBeTruthy();
+    // …and no per-row strip checkboxes appear.
+    expect(document.body.querySelector("[data-test='cascade-strip']")).toBeFalsy();
+
+    const confirm = document.body.querySelector("[data-test='cascade-confirm']") as HTMLButtonElement;
+    confirm.click();
+    await flushPromises();
+
+    const sent = mockComposable.apply.mock.calls[0][0] as { cascade_refs?: boolean; cleanup_ids?: string[] };
+    expect(sent.cascade_refs).toBe(true);
+    expect(sent.cleanup_ids).toBeUndefined();
+    wrap.unmount();
+  });
+
   it("renders inside the shared Modal wrapper", async () => {
     mockComposable.dryRun.mockResolvedValue({ ok: true, affected_count: 0, affected_entities: [] });
     const wrap = mount(CascadeConfirmDialog, {

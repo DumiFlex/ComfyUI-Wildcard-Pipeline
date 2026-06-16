@@ -14,6 +14,7 @@ import ConflictModal from "../import-export/ConflictModal.vue";
 import {
   detectCollisions,
   detectTemplateCollisions,
+  type CollisionState,
   type LibraryRow,
 } from "../import-export/collision";
 import { templateFingerprint } from "../import-export/fingerprint";
@@ -26,6 +27,7 @@ import {
   type ResolvedCategoryEntity,
   type ResolvedSelection,
 } from "../import-export/commit";
+import { applyImportRemap, buildImportRemapTable } from "../import-export/import-remap";
 import {
   discoverBrokenRefsForImport,
   type ImportedConstraint,
@@ -59,7 +61,7 @@ const mode = ref<Mode>("export");
 // separate templateFingerprint path. Categories aren't fetched here —
 // they merge by name server-side and never produce a collision badge.
 
-interface LibraryModule { id: string; snapshot_fingerprint?: string }
+interface LibraryModule { id: string; type?: string; snapshot_fingerprint?: string }
 interface LibraryBundle { id: string; snapshot_fingerprint?: string }
 /** Templates carry no snapshot_fingerprint; the orchestrator computes a
  *  `templateFingerprint` from these literal fields for collision detection. */
@@ -102,6 +104,21 @@ async function loadLibrary() {
 }
 
 onMounted(loadLibrary);
+
+// Template ref to the Export tab so the shared Refresh button can also
+// reload ITS listing. ExportTab maintains its own library refs (the
+// export picker renders from them), which the parent loadLibrary above
+// never touches — without this the export listing stayed stale after
+// adds/removes until a full tab remount.
+const exportTabRef = ref<InstanceType<typeof ExportTab> | null>(null);
+
+/** Refresh both sides: the parent import/collision snapshot AND the
+ *  Export tab's own listing (null-safe — ExportTab is only mounted in
+ *  export mode). */
+async function onRefresh() {
+  await loadLibrary();
+  await exportTabRef.value?.loadLibrary?.();
+}
 
 function setMode(next: Mode) {
   mode.value = next;
@@ -148,7 +165,7 @@ interface ImportState {
 interface SelectedEntity {
   kind: EntityKind;
   entity: Record<string, unknown> & { id: string };
-  collision: "no-collision" | "silent-skip" | "conflict" | "exists-unknown";
+  collision: CollisionState;
 }
 
 const importState = ref<ImportState | null>(null);
@@ -192,7 +209,7 @@ function hasStringId(row: Record<string, unknown>): row is Record<string, unknow
 function buildLibraryMap(): Map<string, LibraryRow> {
   const m = new Map<string, LibraryRow>();
   for (const row of localModules.value) {
-    m.set(row.id, { snapshot_fingerprint: row.snapshot_fingerprint });
+    m.set(row.id, { type: row.type, snapshot_fingerprint: row.snapshot_fingerprint });
   }
   for (const row of localBundles.value) {
     m.set(row.id, { snapshot_fingerprint: row.snapshot_fingerprint });
@@ -376,6 +393,7 @@ function buildBatchConflicts(selected: SelectedEntity[]): BatchConflict[] {
       s.collision !== "conflict"
       && s.collision !== "exists-unknown"
       && s.collision !== "silent-skip"
+      && s.collision !== "type-conflict"
     ) continue;
     out.push({
       kind: s.kind,
@@ -418,9 +436,15 @@ function partitionSelection(
       if (pd.kind === "skip") {
         decision = null;
       } else if (pd.kind === "replace") {
-        decision = { kind: "replace" };
+        // A cross-kind id clash can never replace (would clobber a
+        // different-kind live row) — coerce to install-as-new.
+        decision = s.collision === "type-conflict"
+          ? mintRenameDecision(s.entity)
+          : { kind: "replace" };
       } else if (pd.kind === "accept") {
-        if (
+        if (s.collision === "type-conflict") {
+          decision = mintRenameDecision(s.entity); // install-as-new; never clobber
+        } else if (
           s.collision === "conflict"
           || s.collision === "exists-unknown"
           || s.collision === "silent-skip"
@@ -443,6 +467,10 @@ function partitionSelection(
         `[import-commit] no decision recorded for per-item issue ${s.entity.id}; dropping`,
       );
       decision = null;
+    } else if (s.collision === "type-conflict") {
+      // Clash batch default: install-as-new (or skip). Never replace/add —
+      // both would clobber or hard-fail against the different-kind live row.
+      decision = resolution.batchDefault === "skip" ? null : mintRenameDecision(s.entity);
     } else if (s.collision === "conflict" || s.collision === "exists-unknown") {
       if (resolution.batchDefault === "replace") {
         decision = { kind: "replace" };
@@ -584,6 +612,21 @@ async function runCommit(resolution: {
   const perItemIds = new Set(perItemIssues.value.map((p) => p.entity.id));
   const selection = partitionSelection(selected, resolution, perItemIds);
   const payload = buildCommitPayload(selection);
+  // Friend→local follow-through: install-as-new mints fresh local ids; any
+  // imported constraint pointing at a renamed entity (source/target or an
+  // embedded @{} ref) must follow. One walkRemap pass over the committed
+  // entities, keyed by the renames the user's collision resolutions produced.
+  const remapTable = buildImportRemapTable(
+    payload.renames.map((r) => ({ oldId: r.old_id, newId: r.new_id })),
+  );
+  if (Object.keys(remapTable).length > 0) {
+    payload.adds = applyImportRemap(payload.adds.map((a) => a.entity), remapTable)
+      .map((entity, i) => ({ ...payload.adds[i], entity }));
+    payload.replaces = applyImportRemap(payload.replaces.map((r) => r.new_content), remapTable)
+      .map((new_content, i) => ({ ...payload.replaces[i], new_content }));
+    payload.renames = applyImportRemap(payload.renames.map((r) => r.content), remapTable)
+      .map((content, i) => ({ ...payload.renames[i], content }));
+  }
   const totalOps = payload.adds.length + payload.replaces.length + payload.renames.length;
   if (totalOps === 0) {
     toast.push({
@@ -699,7 +742,7 @@ function clearImport() {
           aria-label="Refresh library"
           :disabled="refreshing"
           :class="{ 'wp-refresh-btn--spin': refreshing }"
-          @click="loadLibrary"
+          @click="onRefresh"
         >Refresh</Button>
       </div>
     </div>
@@ -731,7 +774,7 @@ function clearImport() {
       class="wp-io-export-pane"
       data-test="io-export-pane"
     >
-      <ExportTab />
+      <ExportTab ref="exportTabRef" />
     </div>
 
     <!-- Import tab — 7-bucket parse + picker + commit orchestrator -->

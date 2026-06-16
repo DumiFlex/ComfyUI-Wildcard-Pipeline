@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
+  collectDownstreamNestedReachUuids,
   collectDownstreamWildcardUuids,
   collectLocalResolvedForModule,
   collectUpstreamResolved,
@@ -500,6 +501,70 @@ describe("collectUpstreamResolved nested @{uuid} fallback", () => {
 
 // ── Combine v2 instance overrides — preview must reflect modal edits ──
 
+describe("collectUpstreamResolved — wildcard instance variable_binding override", () => {
+  beforeEach(() => _resetForTests());
+
+  /** A duplicated wildcard keeps `payload.var_binding="mood"` but carries
+   *  `instance.variable_binding="mood_2"` (the auto-suffix). The engine
+   *  writes ctx["mood_2"]; the static walker MUST mirror that, else the
+   *  upstream-resolved map keys by the library name and cross-node shadow
+   *  detection misses the renamed twin (the duplicate's "override" badge
+   *  goes missing — SP3 QA report). */
+  function ctxWithRenamedWildcard(instanceBinding: string | null): {
+    asm: LiteNodeLike;
+    graph: LiteGraphLike;
+  } {
+    const inst: Record<string, unknown> = {};
+    if (instanceBinding !== null) inst.variable_binding = instanceBinding;
+    const ctx: LiteNodeLike = {
+      id: 1,
+      type: "WP_Context",
+      inputs: [{ name: "upstream", link: null }],
+      outputs: [{ name: "context", links: [], type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "wp_modules",
+        value: JSON.stringify({
+          version: 1,
+          modules: [{
+            id: "aaaaaaaa",
+            _uid: "u-dup",
+            type: "wildcard",
+            enabled: true,
+            meta: { name: "mood dup" },
+            entries: [],
+            payload: { var_binding: "mood", options: [{ id: "o1", value: "calm" }] },
+            ...(Object.keys(inst).length ? { instance: inst } : {}),
+          }],
+        }),
+      }],
+    };
+    const asm: LiteNodeLike = {
+      id: 2,
+      type: "WP_PromptAssembler",
+      inputs: [{ name: "context", link: 100 }],
+    };
+    const graph: LiteGraphLike = {
+      _nodes: [ctx, asm],
+      links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id) => ({ 1: ctx, 2: asm } as Record<number, LiteNodeLike>)[id] ?? null,
+    };
+    return { asm, graph };
+  }
+
+  it("keys the resolved map by instance.variable_binding, not payload.var_binding", () => {
+    const { graph, asm } = ctxWithRenamedWildcard("mood_2");
+    const resolved = collectUpstreamResolved(graph, asm);
+    expect(Object.keys(resolved)).toContain("mood_2");
+    expect(Object.keys(resolved)).not.toContain("mood");
+    expect(resolved.mood_2).toBe("calm");
+  });
+
+  it("falls back to payload.var_binding when no instance override", () => {
+    const { graph, asm } = ctxWithRenamedWildcard(null);
+    expect(collectUpstreamResolved(graph, asm)).toEqual({ mood: "calm" });
+  });
+});
+
 describe("collectUpstreamResolved — combine instance overrides", () => {
   beforeEach(() => _resetForTests());
 
@@ -667,6 +732,83 @@ describe("collectLocalResolvedForModule", () => {
     expect(result.self).toBe("x");
   });
 
+  it("binds a multi-pick wildcard to a joined representative of the first N options (SP2a)", () => {
+    const { ctx, graph } = singleNode([
+      {
+        id: "wc000001", type: "wildcard", enabled: true, meta: { name: "" }, entries: [],
+        instance: { pick_min: 2, pick_max: 2, pick_separator: " / " },
+        payload: { var_binding: "mood", options: [
+          { id: "o1", value: "red" }, { id: "o2", value: "blue" }, { id: "o3", value: "green" },
+        ] },
+      },
+    ]);
+    const result = collectLocalResolvedForModule(graph, ctx);
+    // Static preview isn't seed-faithful — bind a STRUCTURED ListVar of the
+    // first N options so downstream `.K` can index it (runtime rolls a seeded
+    // N via the engine; the API preview shows the real roll).
+    expect(result.mood).toEqual({ items: ["red", "blue"], sep: " / " });
+  });
+
+  it("multi-pick representative mirrors the engine pool — drops null + filtered options (SP2a)", () => {
+    const { ctx, graph } = singleNode([
+      {
+        id: "wc000001", type: "wildcard", enabled: true, meta: { name: "" }, entries: [],
+        instance: { pick_min: 1, pick_max: 3, pick_separator: ", ", category_filter: "warm" },
+        payload: { var_binding: "mood", options: [
+          { id: "n", value: "", is_null: true, sub_categories: [] },
+          { id: "a", value: "serene", sub_categories: ["warm"] },
+          { id: "b", value: "sleepy", sub_categories: ["cold"] },
+          { id: "c", value: "fierce", sub_categories: ["warm"] },
+        ] },
+      },
+    ]);
+    const result = collectLocalResolvedForModule(graph, ctx);
+    // Pool after the engine filter: null dropped, only "warm" survives
+    // (serene + fierce; sleepy is cold) — NOT the raw first-N (which leaked
+    // the null's "" leading comma + the filtered-out sleepy).
+    expect(result.mood).toEqual({ items: ["serene", "fierce"], sep: ", " });
+  });
+
+  it("a combine $mood.0 indexes the first picked item, not the whole list (SP2a)", () => {
+    const { ctx, graph } = singleNode([
+      {
+        id: "wc000001", type: "wildcard", enabled: true, meta: { name: "" }, entries: [],
+        instance: { pick_min: 1, pick_max: 3, pick_separator: ", " },
+        payload: { var_binding: "mood", options: [
+          { id: "a", value: "serene", sub_categories: [] },
+          { id: "b", value: "sleepy", sub_categories: [] },
+          { id: "c", value: "fierce", sub_categories: [] },
+        ] },
+      },
+      {
+        id: "cb000001", type: "combine", enabled: true, meta: { name: "" }, entries: [],
+        payload: { template: "$mood.0 + $mood", output_var: "scene" },
+      },
+    ]);
+    const result = collectLocalResolvedForModule(graph, ctx);
+    // mood = ListVar([serene, sleepy, fierce]). `$mood.0` -> "serene" (first
+    // item); bare `$mood` -> the joined list. Previously `$mood.0` wrongly
+    // showed the whole joined list (the bug the user reported).
+    expect(result.scene).toBe("serene + serene, sleepy, fierce");
+  });
+
+  it("resolves a $style.0 accessor in a combine template without leaking the .K literal (SP2a)", () => {
+    const { ctx, graph } = singleNode([
+      {
+        id: "wc000001", type: "wildcard", enabled: true, meta: { name: "" }, entries: [],
+        payload: { var_binding: "$style", options: [{ id: "o1", value: "moody" }] },
+      },
+      {
+        id: "cb000001", type: "combine", enabled: true, meta: { name: "" }, entries: [],
+        payload: { template: "$style.0 portrait", output_var: "result" },
+      },
+    ]);
+    const result = collectLocalResolvedForModule(graph, ctx);
+    // `$style.0` against a plain-string ctx value resolves to the value (a
+    // string acts as a 1-element list); the literal ".0" must NOT survive.
+    expect(result.result).toBe("moody portrait");
+  });
+
   it("respects sibling fixed_values bindings", () => {
     const { ctx, graph } = singleNode([
       {
@@ -807,5 +949,60 @@ describe("hasUpstreamLoopOverridingSeed", () => {
       getNodeById: (id) => ({ 1: loop, 2: ctx } as Record<number, LiteNodeLike>)[id] ?? null,
     };
     expect(hasUpstreamLoopOverridingSeed(graph, ctx)).toBe(false);
+  });
+});
+
+describe("collectDownstreamNestedReachUuids — derivation carrier", () => {
+  /** Fake a WP_Context node that carries a single derivation module whose
+   *  branch action.value contains an @{uuid} nested ref. */
+  function fakeDerivContextNode(
+    id: number,
+    refUuid: string,
+    upstreamLink?: number,
+    outgoingLinkIds: number[] = [],
+  ): LiteNodeLike {
+    return {
+      id,
+      type: "WP_Context",
+      inputs: [{ name: "upstream", link: upstreamLink ?? null }],
+      outputs: [{ name: "context", links: outgoingLinkIds, type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "wp_modules",
+        value: JSON.stringify({
+          version: 1,
+          modules: [{
+            id: "d1aaaaaa",
+            type: "derivation",
+            enabled: true,
+            meta: { name: "" },
+            entries: [],
+            payload: {
+              rules: [{
+                id: "r1",
+                branches: [{ action: { value: `@{${refUuid}}` } }],
+              }],
+            },
+          }],
+        }),
+      }],
+    };
+  }
+
+  it("includes @{uuid} refs from derivation branch action values in downstream nodes", () => {
+    const TARGET = "aabbccdd";
+    const root: LiteNodeLike = {
+      id: 1,
+      type: "WP_Context",
+      inputs: [{ name: "upstream", link: null }],
+      outputs: [{ name: "context", links: [100], type: "PIPELINE_CONTEXT" }],
+      widgets: [{ name: "wp_modules", value: JSON.stringify({ version: 1, modules: [] }) }],
+    };
+    const downstream = fakeDerivContextNode(2, TARGET, 100);
+    const graph: LiteGraphLike = {
+      _nodes: [root, downstream],
+      links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id) => ({ 1: root, 2: downstream } as Record<number, LiteNodeLike>)[id] ?? null,
+    };
+    expect(collectDownstreamNestedReachUuids(graph, root)).toContain(TARGET);
   });
 });

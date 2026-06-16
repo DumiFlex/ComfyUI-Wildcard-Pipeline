@@ -2,6 +2,10 @@
  * Per-module collision classifier. Pure function.
  *
  *   no-collision    — UUID absent from receiver library.
+ *   type-conflict   — UUID present but the live row is a DIFFERENT kind
+ *                     (the 8-hex module id-space is shared across all 5
+ *                     kinds). Only safe resolution is install-as-new;
+ *                     replace/refresh would clobber an unrelated item.
  *   silent-skip     — UUID + content fingerprint both match. True dup.
  *   conflict        — UUID matches AND library row carries a fingerprint
  *                     that differs from the incoming row. Definitely
@@ -32,11 +36,19 @@ import {
 
 export type CollisionState =
   | "no-collision"
+  | "type-conflict"
   | "silent-skip"
   | "conflict"
   | "exists-unknown";
 
 export interface LibraryRow {
+  /**
+   * Entity kind of the live row. When present, an incoming entity of a
+   * DIFFERENT kind at the same id is a `type-conflict` (the module
+   * id-space is shared across all 5 kinds). Optional so legacy callers
+   * that only carry a fingerprint keep their existing behavior.
+   */
+  type?: string;
   snapshot_fingerprint?: string;
   /**
    * Template content fingerprint (djb2 over the template's literal
@@ -48,27 +60,58 @@ export interface LibraryRow {
   template_fingerprint?: string;
 }
 
+/**
+ * Library-side row for `classifyOne`: the entity `type` plus an opaque
+ * `contentKey`. The key is whatever the CALLER compares — the import
+ * picker passes the module `snapshot_fingerprint`; the in-graph workflow
+ * drift path passes the `payload_hash`. `classifyOne` never interprets
+ * the key, it only checks equality, so a single verdict serves both.
+ */
+export interface ClassifyRow {
+  type?: string;
+  contentKey?: string | null;
+}
+
+/**
+ * Classify ONE entity against its (optional) live-library row. The shared
+ * identity verdict used by the import picker, the install collision
+ * pre-check, and the in-graph workflow drift/missing path.
+ *
+ * Ordered — `type` gates BEFORE the content-key check, so a cross-kind id
+ * clash can never be mislabeled as content drift. The type gate runs
+ * independently of content-key availability (a null/empty key never masks
+ * a type clash). `incomingContentKey` is the caller's content key for the
+ * incoming entity (fingerprint or payload_hash — must match what it stores
+ * in `ClassifyRow.contentKey`).
+ */
+export function classifyOne(
+  incomingType: string,
+  incomingContentKey: string,
+  libRow: ClassifyRow | undefined,
+): CollisionState {
+  if (!libRow) return "no-collision";
+  if (libRow.type !== undefined && libRow.type !== incomingType) return "type-conflict";
+  const libKey = libRow.contentKey;
+  if (!libKey) {
+    // Library row exists but we have no content key to compare. Surface
+    // the presence-only state instead of falsely promising "MODIFIED".
+    return "exists-unknown";
+  }
+  return incomingContentKey === libKey ? "silent-skip" : "conflict";
+}
+
 export function detectCollisions(
   incoming: Array<ModuleRow & { id: string }>,
   library: Map<string, LibraryRow>,
 ): Record<string, CollisionState> {
   const result: Record<string, CollisionState> = {};
   for (const entity of incoming) {
-    const id = entity.id;
-    const libRow = library.get(id);
-    if (!libRow) {
-      result[id] = "no-collision";
-      continue;
-    }
-    const libFp = libRow.snapshot_fingerprint;
-    if (!libFp) {
-      // Library row exists but we have no fingerprint to compare. Surface
-      // the presence-only state instead of falsely promising "MODIFIED".
-      result[id] = "exists-unknown";
-      continue;
-    }
-    const incomingFp = moduleFingerprint(entity);
-    result[id] = incomingFp === libFp ? "silent-skip" : "conflict";
+    const libRow = library.get(entity.id);
+    result[entity.id] = classifyOne(
+      entity.type,
+      moduleFingerprint(entity),
+      libRow ? { type: libRow.type, contentKey: libRow.snapshot_fingerprint } : undefined,
+    );
   }
   return result;
 }

@@ -662,13 +662,18 @@ const batchRowNoun = computed<string>(() => {
 
 /**
  * Per-row badge variant + label for a batch override row. Phase 8 split:
- * conflict (proven drift) → orange MOD; exists-unknown (no library
- * fingerprint) → amber DRIFT/EXISTING; unspecified → MOD fallback so
- * pre-Phase-8 orchestrators still render a familiar badge.
+ * type-conflict (id reused by a DIFFERENT kind) → violet CLASH; conflict
+ * (proven drift) → orange MOD; exists-unknown (no library fingerprint) →
+ * amber DRIFT/EXISTING; unspecified → MOD fallback so pre-Phase-8
+ * orchestrators still render a familiar badge.
  */
 function batchOverrideBadge(
   conflict: BatchConflict,
-): { variant: "mod" | "drift" | "duplicate"; label: string } {
+): { variant: "mod" | "drift" | "duplicate" | "clash"; label: string } {
+  if (conflict.collisionState === "type-conflict") {
+    // id reused by a DIFFERENT kind — install-as-new only; never replace.
+    return { variant: "clash", label: "CLASH" };
+  }
   if (conflict.collisionState === "exists-unknown") {
     return { variant: "drift", label: "EXISTING" };
   }

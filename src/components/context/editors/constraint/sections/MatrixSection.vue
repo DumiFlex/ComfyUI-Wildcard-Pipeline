@@ -33,8 +33,14 @@ const props = withDefaults(
     targetSubs: readonly string[];
     sourceName?: string;
     targetName?: string;
+    /** Read-only recovery view: the source/target wildcard was deleted, so
+     *  the configured rules are shown for understanding only. Cells don't
+     *  open the rule popover; the grid frame + cells mute to a snapshot.
+     *  Reattach a live wildcard (banner above) to edit. Mirrors the SPA
+     *  ConstraintMatrix `readonly` prop / `wp-mx--readonly` treatment. */
+    stranded?: boolean;
   }>(),
-  { sourceName: "", targetName: "" },
+  { sourceName: "", targetName: "", stranded: false },
 );
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
 
@@ -128,7 +134,10 @@ function cellFactorText(src: string, tgt: string): string {
 function cellAriaLabel(src: string, tgt: string): string {
   const s = effectiveState(src, tgt);
   const factor = (s === "boost" || s === "reduce") ? ` ×${effectiveFactor(src, tgt).toFixed(1)}` : "";
-  return `Rule: ${src} → ${tgt}, current state ${s}${factor}. Click to edit.`;
+  // Stranded → the grid is a read-only snapshot, so drop the "Click to
+  // edit" affordance from the label (the cell is inert).
+  const suffix = props.stranded ? " (read-only)" : ". Click to edit.";
+  return `Rule: ${src} → ${tgt}, current state ${s}${factor}${suffix}`;
 }
 
 // ── Popover ────────────────────────────────────────────────────
@@ -170,6 +179,8 @@ function cssEscape(s: string): string {
 }
 
 function onCellClick(src: string, tgt: string): void {
+  // Read-only recovery view (deleted source/target): cells are inert.
+  if (props.stranded) return;
   const open = openPopover.value;
   if (open && open.src === src && open.tgt === tgt) {
     openPopover.value = null;
@@ -302,8 +313,16 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="mx" data-test="mx-section">
-    <div class="mx__label">Rule matrix</div>
+  <section class="mx" :class="{ 'mx--readonly': stranded }" data-test="mx-section">
+    <div class="mx__label-row">
+      <div class="mx__label">Rule matrix</div>
+      <!-- Stranded ref → the grid is a read-only snapshot, so a lock pill
+           replaces the click-to-edit interaction. Reattaching a live
+           wildcard (banner above) is the only way back to editing. -->
+      <span v-if="stranded" class="mx__lock-pill" data-test="mx-readonly-lock">
+        <i class="pi pi-lock" aria-hidden="true" /> Read-only
+      </span>
+    </div>
 
     <div class="mx-axes">
       <span class="mx-axis mx-axis--src" data-test="mx-axis-src">
@@ -331,6 +350,10 @@ onBeforeUnmount(() => {
           <tr v-for="s in sourceSubs" :key="s">
             <th class="mx-th-row">{{ s }}</th>
             <td v-for="t in targetSubs" :key="`${s}-${t}`" class="mx-td">
+              <!-- role/tabindex stay static even when stranded (mirrors the
+                   SPA ConstraintMatrix): the cell is still a labelled
+                   snapshot a screen-reader can land on; `onCellClick` early-
+                   returns so it's inert. -->
               <div
                 :class="cellClasses(s, t)"
                 :data-test="`mx-cell-${s}-${t}`"
@@ -349,6 +372,10 @@ onBeforeUnmount(() => {
         </tbody>
       </table>
     </div>
+
+    <p v-if="stranded" class="mx__readonly-hint" data-test="mx-readonly-hint">
+      Reattach a live wildcard to edit these rules.
+    </p>
 
     <MatrixLegend />
 
@@ -390,13 +417,34 @@ onBeforeUnmount(() => {
   background: var(--wp-bg2);
   border-bottom: 1px solid var(--wp-border-soft, var(--wp-border));
 }
+.mx__label-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
 .mx__label {
   font: 600 9px var(--wp-font-sans);
   text-transform: uppercase;
   letter-spacing: 0.14em;
   color: var(--wp-text-dim, var(--wp-text3));
-  margin-bottom: 8px;
 }
+/* Read-only lock pill — mirrors the SPA ConstraintEditor `.cn-lock-pill`
+ * (Rule matrix actions when stranded). */
+.mx__lock-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: var(--wp-radius, 6px);
+  font: 600 9px var(--wp-font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--wp-text-dim, var(--wp-text3));
+  background: color-mix(in srgb, var(--wp-text) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-text) 10%, transparent);
+}
+.mx__lock-pill .pi { font-size: 9px; }
 
 /* ── Axis tags ─────────────────────────────────────────────── */
 .mx-axes {
@@ -522,6 +570,42 @@ onBeforeUnmount(() => {
 }
 .glyph { font-size: 14px; line-height: 1; }
 .factor { font-size: 11px; font-weight: 700; }
+
+/* ── Read-only recovery view (deleted source/target) ───────────
+ *    Mirrors the SPA ConstraintMatrix `wp-mx--readonly`. Cells are
+ *    inert: no pointer, no hover lift. The grid frame turns DASHED and
+ *    the colored cells drop to ~1/3 of their editable intensity (8% bg /
+ *    18% border, text softened toward the dim grey) so the snapshot reads
+ *    as "look, don't touch" while the boost/reduce/exclude hues stay
+ *    legible. */
+.mx--readonly .mx-grid {
+  border: 1px dashed color-mix(in srgb, var(--wp-text) 16%, transparent);
+}
+.mx--readonly .mx-cell { cursor: default; }
+.mx--readonly .mx-cell:hover {
+  transform: none;
+  box-shadow: none;
+}
+.mx--readonly .mx-cell.s-boost {
+  background: color-mix(in srgb, var(--wp-success, #22c55e) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-success, #22c55e) 18%, transparent);
+  color: color-mix(in srgb, var(--wp-success, #22c55e) 70%, var(--wp-text-dim));
+}
+.mx--readonly .mx-cell.s-reduce {
+  background: color-mix(in srgb, var(--wp-warn, #f97316) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-warn, #f97316) 18%, transparent);
+  color: color-mix(in srgb, var(--wp-warn, #f97316) 70%, var(--wp-text-dim));
+}
+.mx--readonly .mx-cell.s-exclude {
+  background: color-mix(in srgb, var(--wp-danger, #ef4444) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-danger, #ef4444) 18%, transparent);
+  color: color-mix(in srgb, var(--wp-danger, #ef4444) 70%, var(--wp-text-dim));
+}
+.mx__readonly-hint {
+  margin: 8px 0 0;
+  font: 10px var(--wp-font-sans);
+  color: var(--wp-text-dim, var(--wp-text3));
+}
 
 /* Popover is teleported to body so positioning is handled by inline
  * styles on the anchor wrapper. Nothing extra needed here. */

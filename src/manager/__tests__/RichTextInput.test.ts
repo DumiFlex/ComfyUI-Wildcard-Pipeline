@@ -114,6 +114,39 @@ describe("RichTextInput.vue", () => {
     wrap.unmount();
   });
 
+  it("Enter after $mood.0 settles the var with no stray newline (multiline combine, SP2a)", async () => {
+    // Regression: probeAutocomplete stopped scanning back at `.`, so after
+    // `$mood.0` the popover was closed and Enter fell through to a newline on
+    // the multiline combine surface — splitting the token. The accessor-aware
+    // probe keeps the popover open so Enter chipifies the var instead.
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "", surface: "combine", multiline: true, varSuggestions: [] },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host");
+    const span = (host.element as HTMLElement).querySelector(".wp-rt__text") as HTMLElement;
+    span.textContent = "$mood.0";
+    // Caret at end so probeAutocomplete sees the `$mood.0` run.
+    const sel = window.getSelection();
+    const range = document.createRange();
+    const tn = span.firstChild as Text;
+    range.setStart(tn, tn.length);
+    range.collapse(true);
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    await host.trigger("input", { inputType: "insertText", data: "0" });
+    await host.trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    const chips = wrap.findAll(".wp-refchip--var");
+    expect(chips.length).toBe(1);
+    expect(chips[0].text()).toContain("$mood.0");
+    const events = wrap.emitted("update:modelValue") ?? [];
+    const last = String(events[events.length - 1]?.[0] ?? "");
+    expect(last).toBe("$mood.0");        // no newline split
+    expect(last).not.toContain("\n");
+    wrap.unmount();
+  });
+
   it("multiline=true sets data-multiline + wp-rt--multi on the host (no textarea)", () => {
     // Multiline mode used to swap the input for a <textarea>; now it's a
     // single contenteditable host with a data attribute + size variant.
@@ -126,6 +159,24 @@ describe("RichTextInput.vue", () => {
     expect(host.attributes("aria-multiline")).toBe("true");
     expect(host.classes()).toContain("wp-rt__host--multi");
     expect(wrap.find(".wp-rt").classes()).toContain("wp-rt--multi");
+  });
+
+  it("placeholder ghost gates on wp-rt__host--empty (host is never CSS :empty due to ZWSP pad)", async () => {
+    // The contenteditable host always carries a ZWSP pad span, so the legacy
+    // `.wp-rt__host:empty::before` placeholder never fired. The ghost is now
+    // gated on an explicit `wp-rt__host--empty` class tracking live content.
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "", placeholder: "default value" },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host");
+    expect(host.attributes("data-placeholder")).toBe("default value");
+    expect(host.classes()).toContain("wp-rt__host--empty");
+    // Non-empty value → ghost suppressed.
+    await wrap.setProps({ modelValue: "something" });
+    await flushPromises();
+    expect(wrap.find(".wp-rt__host").classes()).not.toContain("wp-rt__host--empty");
+    wrap.unmount();
   });
 
   it("renders RefChip atoms for @{uuid}/@{uuid:subcat} tokens in wildcard surface", () => {
@@ -461,13 +512,15 @@ describe("RichTextInput.vue", () => {
     expect(picker).not.toBeNull();
     // Edit-mode → delete button present.
     expect(document.querySelector('[data-test="picker-delete"]')).not.toBeNull();
-    // The "warm" subcat chip should be preselected.
-    const warmChip = document.querySelector('[data-test="subcat-chip"][data-value="warm"]');
-    expect(warmChip?.classList.contains("wp-subcat-chip--selected")).toBe(true);
+    // The boolean editor seeds its expression input from the ref's
+    // existing `:expr` segment.
+    const exprInput = document.querySelector('[data-test="expr-input"]') as HTMLInputElement;
+    expect(exprInput).not.toBeNull();
+    expect(exprInput.value).toBe("warm");
     wrap.unmount();
   });
 
-  it("apply in edit mode replaces the chip's subCategories in place", async () => {
+  it("apply in edit mode rewrites the chip's filter expression in place", async () => {
     const wrap = mount(RichTextInput, {
       props: {
         modelValue: "hi @{aabbccdd:warm} foo",
@@ -478,15 +531,16 @@ describe("RichTextInput.vue", () => {
       attachTo: document.body,
     });
     await wrap.find(".wp-refchip--ref").trigger("click");
-    // Click "cool" to add it to selection.
-    const coolChip = document.querySelector('[data-test="subcat-chip"][data-value="cool"]') as HTMLElement;
-    coolChip.click();
+    // Type a new boolean expression into the editor.
+    const exprInput = document.querySelector('[data-test="expr-input"]') as HTMLInputElement;
+    exprInput.value = "warm or cool";
+    exprInput.dispatchEvent(new Event("input"));
     await flushPromises();
     // Apply.
     (document.querySelector('[data-test="picker-apply"]') as HTMLElement).click();
     await flushPromises();
     const events = wrap.emitted("update:modelValue") ?? [];
-    expect(events[events.length - 1]?.[0]).toBe("hi @{aabbccdd#color:warm,cool} foo");
+    expect(events[events.length - 1]?.[0]).toBe("hi @{aabbccdd#color:warm or cool} foo");
     wrap.unmount();
   });
 
@@ -533,6 +587,199 @@ describe("RichTextInput.vue", () => {
     await wrap.find(".wp-rt__host").trigger("keydown", { key: "Backspace" });
     const events = wrap.emitted("update:modelValue") ?? [];
     expect(events[events.length - 1]?.[0]).toBe("a  b");
+    wrap.unmount();
+  });
+
+  // --- SP2a: $var.K list-accessor chip stability ---
+
+  it("preserves the .K accessor when a $mood.0 chip round-trips through readHostAsText", async () => {
+    // Bug A regression: readHostAsText dropped atom.index, so any edit that
+    // re-read the host (input/blur/settle) silently rewrote `$mood.0`→`$mood`.
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "a $mood.0 b", surface: "combine", varSuggestions: ["mood"] },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host");
+    const spans = (host.element as HTMLElement).querySelectorAll(".wp-rt__text");
+    const trailing = spans[spans.length - 1];
+    trailing.textContent = " bz";
+    await host.trigger("input");
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(events[events.length - 1]?.[0]).toBe("a $mood.0 bz");
+    wrap.unmount();
+  });
+
+  it("Backspace after a $mood.0 chip deletes the whole accessor atomically", async () => {
+    // Bug B regression: the chip-delete regex stopped at the identifier, so
+    // `$mood.0` fell through to single-char delete (removing `0`→`$mood.`).
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "a $mood.0 b", surface: "combine", varSuggestions: ["mood"] },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host").element as HTMLElement;
+    host.focus();
+    const spans = host.querySelectorAll(".wp-rt__text");
+    const trailing = spans[spans.length - 1];
+    const tn = trailing.firstChild;
+    const range = document.createRange();
+    if (tn) range.setStart(tn, 0);
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    if (tn) sel?.addRange(range);
+    await wrap.find(".wp-rt__host").trigger("keydown", { key: "Backspace" });
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(events[events.length - 1]?.[0]).toBe("a  b");
+    wrap.unmount();
+  });
+
+  it("Backspace on raw-typed $mood (not yet a chip) deletes ONE char, not the whole token (SP2a)", async () => {
+    // Raw `$mood` typed in a combine template hasn't settled into a chip atom.
+    // Backspace must delete one char — NOT atomic-delete the whole
+    // serialisation (regression: it ate the entire `$mood`/`$mood.0` text
+    // before any chip existed, because the chip regex matched raw text).
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "", surface: "combine", multiline: true, varSuggestions: [] },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host");
+    const span = (host.element as HTMLElement).querySelector(".wp-rt__text") as HTMLElement;
+    span.textContent = "$mood";
+    await host.trigger("input");
+    // Caret at the end of the raw text (a real char precedes it).
+    const sel = window.getSelection();
+    const range = document.createRange();
+    const tn = span.firstChild as Text;
+    range.setStart(tn, tn.length);
+    range.collapse(true);
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    await host.trigger("keydown", { key: "Backspace" });
+    await flushPromises();
+    const events = wrap.emitted("update:modelValue") ?? [];
+    const last = String(events[events.length - 1]?.[0] ?? "");
+    expect(last).toBe("$moo");   // one char removed, NOT "" (whole token eaten)
+    wrap.unmount();
+  });
+
+  it("raw-typed $mood.1 + Backspace deletes only the '1' to '$mood.', never chipifies (SP2a Wave5)", async () => {
+    // Headline Wave-5 bug: Backspace on raw `$mood.1` re-tokenized the
+    // remaining `$mood.` and chipified `$mood` (+ a stray `.` after it). Chip
+    // formation must NEVER fire on Backspace — only on settle/blur/autocomplete.
+    // The accessor digit is plain text mid-edit, so exactly one char goes and
+    // the rest stays raw text (no chip).
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "", surface: "combine", multiline: true, varSuggestions: ["mood"] },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host");
+    const span = (host.element as HTMLElement).querySelector(".wp-rt__text") as HTMLElement;
+    span.textContent = "$mood.1";
+    await host.trigger("input");
+    const tn = span.firstChild as Text;
+    const range = document.createRange();
+    range.setStart(tn, tn.length);
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    await host.trigger("keydown", { key: "Backspace" });
+    await flushPromises();
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(String(events[events.length - 1]?.[0] ?? "")).toBe("$mood.");
+    // The remaining `$mood.` stays raw — Backspace must not have formed a chip.
+    expect(wrap.findAll(".wp-refchip--var").length).toBe(0);
+    wrap.unmount();
+  });
+
+  it("repeated Backspace through a raw-typed $mood.1 never forms a chip mid-edit (SP2a Wave5)", async () => {
+    // The principle, exhaustively: backspacing one char at a time through a
+    // raw token never chipifies any intermediate state. Each step deletes a
+    // single char and the surviving text stays raw until a real commit point.
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "", surface: "combine", multiline: true, varSuggestions: ["mood"] },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host");
+    const hostEl = host.element as HTMLElement;
+    const span = hostEl.querySelector(".wp-rt__text") as HTMLElement;
+    span.textContent = "$mood.1";
+    await host.trigger("input");
+    const expectedAfter = ["$mood.", "$mood", "$moo", "$mo", "$m", "$", ""];
+    for (const expected of expectedAfter) {
+      // Re-place caret at content-end. Can't target a text node directly:
+      // an unsettled `$mood` re-renders into a colored sub-span, so the
+      // span's firstChild is an element. Anchoring the collapsed selection
+      // on the host (selectNodeContents + collapse-to-end) is sub-span
+      // agnostic — rangeOffsetToRaw special-cases host-anchored offsets.
+      const range = document.createRange();
+      range.selectNodeContents(hostEl);
+      range.collapse(false);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+      await host.trigger("keydown", { key: "Backspace" });
+      await flushPromises();
+      const events = wrap.emitted("update:modelValue") ?? [];
+      expect(String(events[events.length - 1]?.[0] ?? "")).toBe(expected);
+      expect(wrap.findAll(".wp-refchip--var").length).toBe(0);
+    }
+    wrap.unmount();
+  });
+
+  it("unsettled $var renders as plain text in the editor — no inline highlight, only the chip colors", async () => {
+    // User feedback (2026-06-09): a half-typed `$var` needs no separate
+    // colour — the absence of a chip already signals "not committed yet".
+    // After an edit re-renders the raw token through textAtomHtml, it must
+    // NOT carry the `.wp-rt-var` inline highlight. Settled chips keep their
+    // green; the read-only preview is unaffected.
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "", surface: "combine", multiline: true, varSuggestions: ["mood"] },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host");
+    const hostEl = host.element as HTMLElement;
+    const span = hostEl.querySelector(".wp-rt__text") as HTMLElement;
+    span.textContent = "$moodx";
+    await host.trigger("input");
+    // Backspace the trailing "x" — triggers applyAtoms → textAtomHtml re-render.
+    const range = document.createRange();
+    range.selectNodeContents(hostEl);
+    range.collapse(false);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    await host.trigger("keydown", { key: "Backspace" });
+    await flushPromises();
+    // Raw "$mood" survived as text — not chipified, not inline-highlighted.
+    expect(wrap.findAll(".wp-refchip").length).toBe(0);
+    expect(hostEl.innerHTML).not.toContain("wp-rt-var");
+    expect((hostEl.textContent ?? "").replace(/​/g, "")).toBe("$mood");
+    wrap.unmount();
+  });
+
+  it("typing $mood.0 does not chip prematurely on the dot; settles on the next boundary", async () => {
+    // Symptom #1 regression: `.` was a settle delimiter, so `$mood` chipped
+    // the instant the user typed `.`, stranding the accessor. `.` is no
+    // longer a settle char — the token waits for the digit + a real boundary,
+    // then chips as a single `$mood.0`.
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "", surface: "combine", varSuggestions: [] },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host");
+    const span = (host.element as HTMLElement).querySelector(".wp-rt__text") as HTMLElement;
+    span.textContent = "$mood.";
+    await host.trigger("input", { inputType: "insertText", data: "." });
+    expect(wrap.findAll(".wp-refchip--var")).toHaveLength(0);  // no premature chip
+    span.textContent = "$mood.0 ";
+    await host.trigger("input", { inputType: "insertText", data: " " });
+    await flushPromises();
+    const chips = wrap.findAll(".wp-refchip--var");
+    expect(chips.length).toBe(1);
+    expect(chips[0].text()).toContain("$mood.0");
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(events[events.length - 1]?.[0]).toBe("$mood.0 ");
     wrap.unmount();
   });
 
@@ -715,7 +962,11 @@ describe("RichTextPreview.vue", () => {
     expect(chips.length).toBe(2);
     expect(chips[0].text()).toContain("$person");
     expect(chips[1].text()).toContain("@color");
-    expect(chips[1].text()).toContain("warm");
+    // The filter expression is NOT shown inline (§4.1) — a funnel marks
+    // "filtered" and the expression lives in the hover title.
+    expect(chips[1].text()).not.toContain("warm");
+    expect(chips[1].find('[data-test="refchip-filter"]').exists()).toBe(true);
+    expect(chips[1].attributes("title")).toContain("warm");
   });
 });
 
@@ -791,6 +1042,286 @@ describe("RichTextInput / RichTextPreview — useResolveWarnings merge", () => {
     });
     await flushPromises();
     expect(wrap.findAll(".wp-rt-warn-marker").length).toBe(1);
+    wrap.unmount();
+  });
+
+  // --- SP2b: brace-block decomposition renders V2 (continuous block-coloured
+  //     scaffolding text + inner @{uuid}/$var arms as chips) ---
+
+  it("renders an inner @{uuid} arm of a multi-block as a chip + scaffolding as block-coloured text (V2, no bg)", () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "{2$$, $$@{aabbccdd}|warm}",
+        surface: "wildcard",
+        uuidToName: new Map([["aabbccdd", "hair"]]),
+      },
+    });
+    // The lone @{uuid} arm chips; the literal "warm" arm + braces/count/sep
+    // stay as scaffolding text.
+    expect(wrap.findAll(".wp-refchip--ref").length).toBe(1);
+    // Scaffolding renders via the V2 `.wp-rt-block-scaf` class (colour only).
+    const scaf = wrap.findAll(".wp-rt-block-scaf");
+    expect(scaf.length).toBeGreaterThan(0);
+    // dp-multi block → green ("multi") modifier.
+    expect(scaf.some((s) => s.classes().includes("wp-rt-block-scaf--multi"))).toBe(true);
+    // V2 drops the background-bearing `.wp-rt-dp-multi` span: scaffolding
+    // must not re-tokenise into one.
+    expect(wrap.findAll(".wp-rt-block-scaf .wp-rt-dp-multi").length).toBe(0);
+    expect(wrap.find(".wp-rt__host").text()).toContain("warm");
+  });
+
+  it("colours a plain alternation block amber ('alt') scaffolding", () => {
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "{red|blue|green}", surface: "wildcard" },
+    });
+    // Literal-only alternation → no chips, all arms are scaffolding text.
+    expect(wrap.findAll(".wp-refchip").length).toBe(0);
+    const scaf = wrap.findAll(".wp-rt-block-scaf");
+    expect(scaf.length).toBeGreaterThan(0);
+    expect(scaf.some((s) => s.classes().includes("wp-rt-block-scaf--alt"))).toBe(true);
+  });
+
+  it("backspace right after an inner block chip deletes the chip whole, scaffolding intact", async () => {
+    // Wave-5 atom-direct delete treats a decomposed inner block chip as one
+    // cursor stop — Backspace removes the whole `@{uuid}` and leaves the
+    // braces/count/sep + sibling arm untouched.
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "{2$$, $$@{aabbccdd}|warm}",
+        surface: "wildcard",
+        uuidToName: new Map([["aabbccdd", "hair"]]),
+      },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host").element as HTMLElement;
+    host.focus();
+    // Caret at the start of the scaffolding text immediately AFTER the ref
+    // chip (the "|warm}" span — the last wp-rt__text span).
+    const textSpans = host.querySelectorAll(".wp-rt__text");
+    const after = textSpans[textSpans.length - 1];
+    const tn = after.firstChild;
+    const range = document.createRange();
+    if (tn) range.setStart(tn, 0);
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    if (tn) sel?.addRange(range);
+    await wrap.find(".wp-rt__host").trigger("keydown", { key: "Backspace" });
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(events[events.length - 1]?.[0]).toBe("{2$$, $$|warm}");
+    wrap.unmount();
+  });
+
+  it("drops block colour when an edit breaks the block — deleting the closing } (SP2b #3)", async () => {
+    // recolorBlocks re-derives the scaffolding colour from the live text after
+    // an atom-direct edit: deleting the `}` makes `{2$$, $$@{…}` no longer a
+    // valid block, so the scaffolding must de-colour (it is not a block).
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "{2$$, $$@{aabbccdd}}",
+        surface: "wildcard",
+        uuidToName: new Map([["aabbccdd", "hair"]]),
+      },
+      attachTo: document.body,
+    });
+    expect(wrap.findAll(".wp-rt-block-scaf--multi").length).toBeGreaterThan(0);
+    const host = wrap.find(".wp-rt__host").element as HTMLElement;
+    host.focus();
+    const range = document.createRange();
+    range.selectNodeContents(host);
+    range.collapse(false); // caret at end
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    await wrap.find(".wp-rt__host").trigger("keydown", { key: "Backspace" }); // delete `}`
+    await flushPromises();
+    // Block broken → scaffolding no longer coloured.
+    expect(wrap.findAll(".wp-rt-block-scaf--multi").length).toBe(0);
+    wrap.unmount();
+  });
+
+  it("keeps block colour when an edit leaves the block valid (SP2b #3)", async () => {
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "{warm|cool}", surface: "wildcard" },
+      attachTo: document.body,
+    });
+    expect(wrap.findAll(".wp-rt-block-scaf--alt").length).toBeGreaterThan(0);
+    const host = wrap.find(".wp-rt__host").element as HTMLElement;
+    host.focus();
+    // Caret just BEFORE the closing `}` (offset 10 of "{warm|cool}").
+    const span = host.querySelector(".wp-rt__text") as HTMLElement;
+    const tn = span.firstChild as Text;
+    const range = document.createRange();
+    range.setStart(tn, 10);
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    // Backspace deletes the 'l' of "cool" → "{warm|coo}" — still a valid block.
+    await wrap.find(".wp-rt__host").trigger("keydown", { key: "Backspace" });
+    await flushPromises();
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(events[events.length - 1]?.[0]).toBe("{warm|coo}");
+    expect(wrap.findAll(".wp-rt-block-scaf--alt").length).toBeGreaterThan(0);
+    wrap.unmount();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// Bug #1 — derivation ACTION values reuse the wildcard `@{}` machinery via
+// the `allowNestedRefs` prop. The engine resolves @{} in a derivation action
+// value (carrier) post-Layer-A, so the SPA must chipify + autocomplete it
+// THERE — but NOT in condition values (engine compares condition.value raw),
+// which is the default (allowNestedRefs omitted).
+// ─────────────────────────────────────────────────────────────────────
+describe("allowNestedRefs — derivation action-value @{} reuse", () => {
+  it("derivation + allowNestedRefs: @{uuid} renders as a ref chip", () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "@{aabbccdd}",
+        surface: "derivation",
+        allowNestedRefs: true,
+        uuidToName: new Map([["aabbccdd", "color"]]),
+      },
+    });
+    expect(wrap.findAll(".wp-refchip--ref").length).toBe(1);
+    wrap.unmount();
+  });
+
+  it("derivation WITHOUT allowNestedRefs (condition value): @{uuid} stays plain text", () => {
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "@{aabbccdd}", surface: "derivation" },
+    });
+    expect(wrap.findAll(".wp-refchip--ref").length).toBe(0);
+    wrap.unmount();
+  });
+
+  it("derivation + allowNestedRefs: $var STILL chips (both kinds settle)", () => {
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "$mood", surface: "derivation", allowNestedRefs: true },
+    });
+    expect(wrap.findAll(".wp-refchip--var").length).toBe(1);
+    wrap.unmount();
+  });
+
+  it("derivation + allowNestedRefs: @ autocomplete popover lists ref suggestions", async () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "",
+        surface: "derivation",
+        allowNestedRefs: true,
+        refSuggestions: ["aabbccdd"],
+        uuidToName: new Map([["aabbccdd", "color"]]),
+      },
+      attachTo: document.body,
+    });
+    await (wrap.vm as unknown as { __triggerAutocompleteForTest: (t: "@" | "$") => Promise<void> })
+      .__triggerAutocompleteForTest("@");
+    await flushPromises();
+    expect(document.querySelectorAll(".wp-rt-suggestions__item").length).toBeGreaterThan(0);
+    wrap.unmount();
+  });
+
+  it("derivation WITHOUT allowNestedRefs: @ autocomplete popover is empty (gated)", async () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "",
+        surface: "derivation",
+        refSuggestions: ["aabbccdd"],
+        uuidToName: new Map([["aabbccdd", "color"]]),
+      },
+      attachTo: document.body,
+    });
+    await (wrap.vm as unknown as { __triggerAutocompleteForTest: (t: "@" | "$") => Promise<void> })
+      .__triggerAutocompleteForTest("@");
+    await flushPromises();
+    expect(document.querySelectorAll(".wp-rt-suggestions__item").length).toBe(0);
+    wrap.unmount();
+  });
+
+  // ── Teleported-overlay theme propagation (Fix 2) ──────────────────
+  //
+  // The `@`-autocomplete popover + the SubcategoryFilterPicker both
+  // `<Teleport to="body">`, escaping the host's themed subtree. When the
+  // host sits under a non-default theme the body-teleported node must carry
+  // the SAME `wp-theme-*` class so the `--wp-*` tokens resolve to the host's
+  // palette (not the base `:root` dark default). We assert the detected
+  // class lands on the teleported roots; the FINAL color match still needs a
+  // human in-browser check (jsdom has no computed-style cascade).
+  it("stamps the host's wp-theme-light class onto the teleported autocomplete popover", async () => {
+    document.body.classList.add("wp-theme-light");
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "", surface: "combine", varSuggestions: ["person"] },
+      attachTo: document.body,
+    });
+    await (wrap.vm as unknown as { __triggerAutocompleteForTest: (t: "@" | "$") => Promise<void> })
+      .__triggerAutocompleteForTest("$");
+    await flushPromises();
+    const pop = document.querySelector(".wp-rt-suggestions");
+    expect(pop).not.toBeNull();
+    expect(pop!.classList.contains("wp-theme-light")).toBe(true);
+    expect(pop!.classList.contains("wp-theme-dark")).toBe(false);
+    wrap.unmount();
+    document.body.classList.remove("wp-theme-light");
+  });
+
+  it("stamps the host's wp-theme-light class onto the teleported subcat picker anchor + backdrop", async () => {
+    document.body.classList.add("wp-theme-light");
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "",
+        surface: "wildcard",
+        refSuggestions: ["aabbccdd"],
+        uuidToName: new Map([["aabbccdd", "color"]]),
+        uuidToSubCategories: new Map([["aabbccdd", ["warm", "cool"]]]),
+      },
+      attachTo: document.body,
+    });
+    await (wrap.vm as unknown as { __triggerAutocompleteForTest: (t: "@" | "$") => Promise<void> })
+      .__triggerAutocompleteForTest("@");
+    await (wrap.vm as unknown as { __applyAutocompleteForTest: (label: string) => Promise<void> })
+      .__applyAutocompleteForTest("aabbccdd");
+    const anchor = document.querySelector(".wp-subcat-picker__anchor");
+    const backdrop = document.querySelector(".wp-subcat-picker__backdrop");
+    expect(anchor).not.toBeNull();
+    expect(backdrop).not.toBeNull();
+    expect(anchor!.classList.contains("wp-theme-light")).toBe(true);
+    expect(backdrop!.classList.contains("wp-theme-light")).toBe(true);
+    wrap.unmount();
+    document.body.classList.remove("wp-theme-light");
+  });
+
+  it("stamps wp-theme-dark onto the teleported popover when the host is on a dark ancestor", async () => {
+    document.body.classList.add("wp-theme-dark");
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "", surface: "combine", varSuggestions: ["person"] },
+      attachTo: document.body,
+    });
+    await (wrap.vm as unknown as { __triggerAutocompleteForTest: (t: "@" | "$") => Promise<void> })
+      .__triggerAutocompleteForTest("$");
+    await flushPromises();
+    const pop = document.querySelector(".wp-rt-suggestions");
+    expect(pop).not.toBeNull();
+    expect(pop!.classList.contains("wp-theme-dark")).toBe(true);
+    expect(pop!.classList.contains("wp-theme-light")).toBe(false);
+    wrap.unmount();
+    document.body.classList.remove("wp-theme-dark");
+  });
+
+  it("adds NO wp-theme-* class to the teleported popover when no theme ancestor exists", async () => {
+    // No explicit theme class on any ancestor — the inherited cascade is
+    // already correct (default :root dark), so we must NOT force one.
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "", surface: "combine", varSuggestions: ["person"] },
+      attachTo: document.body,
+    });
+    await (wrap.vm as unknown as { __triggerAutocompleteForTest: (t: "@" | "$") => Promise<void> })
+      .__triggerAutocompleteForTest("$");
+    await flushPromises();
+    const pop = document.querySelector(".wp-rt-suggestions");
+    expect(pop).not.toBeNull();
+    expect(pop!.classList.contains("wp-theme-light")).toBe(false);
+    expect(pop!.classList.contains("wp-theme-dark")).toBe(false);
     wrap.unmount();
   });
 });

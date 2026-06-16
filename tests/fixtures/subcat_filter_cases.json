@@ -1,0 +1,13 @@
+[
+  {"expr": "warm", "valid": true, "reads_as": "warm", "matches": {"warm": true, "cold": false}},
+  {"expr": "warm or cold", "valid": true, "reads_as": "warm or cold", "matches": {"warm": true, "cold,warm": true, "red": false}},
+  {"expr": "warm,cold", "valid": true, "reads_as": "warm or cold", "matches": {"cold": true}},
+  {"expr": "warm and cold", "valid": true, "reads_as": "warm and cold", "matches": {"warm": false, "warm,cold": true}},
+  {"expr": "not green", "valid": true, "reads_as": "not green", "matches": {"warm": true, "green": false}},
+  {"expr": "(red or pink) and not cold", "valid": true, "reads_as": "(red or pink) and not cold", "matches": {"red": true, "red,cold": false}},
+  {"expr": "( (blue or red) or pink and warm ) and not green", "valid": true, "reads_as": "(blue or red or (pink and warm)) and not green", "matches": {"blue": true, "pink,warm": true, "pink": false}},
+  {"expr": "(warm or cold", "valid": false, "error": "paren"},
+  {"expr": "pink not warm", "valid": false, "error": "operator"},
+  {"expr": "warm or null", "valid": false, "error": "reserved"},
+  {"expr": "warm or banana", "valid": false, "error": "unknown"}
+]

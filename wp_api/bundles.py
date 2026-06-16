@@ -19,7 +19,7 @@ from wp_api.modules import _hydrate_constraint_exceptions
 
 _UPDATABLE_FIELDS = (
     "name", "description", "color", "category_id", "tags",
-    "children", "is_favorite",
+    "children", "is_favorite", "content_rating",
 )
 
 
@@ -414,6 +414,7 @@ async def create_bundle(request: web.Request) -> web.Response:
                 tags=body.get("tags", []),
                 children=children,
                 is_favorite=bool(body.get("is_favorite", False)),
+                content_rating=body.get("content_rating", "safe"),
             )
             row["children"] = _expand_bundle_children(row.get("children") or [], repo)
     except ValueError as e:
@@ -582,6 +583,33 @@ async def toggle_favorite(request: web.Request) -> web.Response:
     return json_ok(row)
 
 
+async def set_community_origin(request: web.Request) -> web.Response:
+    """POST /wp/api/bundles/{id}/community-origin -- stamp the bundle
+    row as published. See modules.set_community_origin for rationale."""
+    bundle_id = request.match_info["id"]
+    try:
+        body = await request.json()
+    except Exception:
+        return json_error("invalid JSON body", status=400)
+    if not isinstance(body, dict):
+        return json_error("body must be a JSON object", status=400)
+    slug = body.get("post_slug")
+    version = body.get("version_number")
+    if not isinstance(slug, str) or not slug:
+        return json_error("post_slug must be a non-empty string", status=400)
+    if not isinstance(version, int) or isinstance(version, bool):
+        return json_error("version_number must be an integer", status=400)
+    with db_session(request) as conn:
+        repo = BundleRepository(conn)
+        try:
+            row = repo.set_community_origin(
+                bundle_id, post_slug=slug, version_number=version,
+            )
+        except BundleNotFound:
+            return json_error(f"bundle {bundle_id!r} not found", status=404)
+    return json_ok(row)
+
+
 async def list_hashes(request: web.Request) -> web.Response:
     """GET /wp/api/bundles/hashes — bulk hash fetch for bundle-drift
     detection. Mirrors `/wp/api/modules/hashes` shape so the SPA's
@@ -605,3 +633,6 @@ def register(router) -> None:
     router.add_put("/wp/api/bundles/{id}", update_bundle)
     router.add_delete("/wp/api/bundles/{id}", delete_bundle)
     router.add_post("/wp/api/bundles/{id}/favorite", toggle_favorite)
+    router.add_post(
+        "/wp/api/bundles/{id}/community-origin", set_community_origin,
+    )

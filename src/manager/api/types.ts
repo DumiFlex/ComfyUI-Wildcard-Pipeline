@@ -11,12 +11,21 @@ export interface WildcardOption {
   id: string;
   value: string;
   weight: number;
-  sub_category?: string | null;
+  /** Multi-tag membership (SP1). Which registry sub-categories this
+   * option belongs to — a subset of `WildcardPayload.sub_categories`.
+   * Replaces the pre-SP1 singular `sub_category?: string | null`.
+   * Defaults to `[]` (untagged: bypasses every tag filter). The null
+   * option always carries `[]`. The boolean filter expression
+   * (`@{uuid:expr}` + instance `category_filter`) is matched against
+   * this set; the constraint matrix uses the PRIMARY tag
+   * (`sub_categories[0]`) as an SP1 stopgap (SP3 multiplies). Mirrors
+   * engine `engine/modules/wildcard_handler.py:validate_payload`. */
+  sub_categories: string[];
   /** Exactly one option per wildcard may be flagged `is_null: true`.
-   * The null option carries `value: ""` and no `sub_category`. When
+   * The null option carries `value: ""` and `sub_categories: []`. When
    * picked, the wildcard resolves to the empty string — a
    * probabilistic "no output" slot that bypasses the constraint matrix
-   * (which is keyed by sub_category) but can still be targeted by
+   * (which is keyed by the primary tag) but can still be targeted by
    * constraint exceptions (keyed by the empty-string value). Validated
    * server-side in `engine/modules/wildcard_handler.py:validate_payload`.
    * See `docs/superpowers/specs/2026-05-24-null-wildcard-option-design.md`. */
@@ -26,6 +35,16 @@ export interface WildcardOption {
 export interface WildcardPayload {
   options: WildcardOption[];
   sub_categories: string[];
+  /**
+   * Optional UI-only grouping of registry `sub_categories` into named
+   * axes (SP1). Axis name → member tags; each member must be in
+   * `sub_categories`, and a tag may appear in at most one axis.
+   * **The engine ignores it** — only the editors use it to render
+   * grouped chips/pills and to colour tags per axis. Travels in the
+   * payload so grouping survives sharing. Ungrouped tags render in a
+   * default "ungrouped/other" box. See design §2.2 / §4.3.
+   */
+  tag_groups?: Record<string, string[]>;
   /**
    * The `$varname` other modules use to read this wildcard's resolved value.
    * Optional — defaults to `slug(name)` when missing/blank. User-editable so
@@ -135,9 +154,31 @@ export interface BrokenConstraintException extends ConstraintException {
 export interface ConstraintPayload {
   source_wildcard_id: string | null;
   target_wildcard_id: string | null;
+  /**
+   * Cached source/target wildcard DISPLAY names, stamped on write (when
+   * the live wildcard is in hand). Display-only — the engine resolves by
+   * `source_wildcard_id` / `target_wildcard_id` and never reads these, so
+   * they're additive + non-load-bearing (diagnostic, like
+   * `producer_engine_version`). They let the broken-reference banner show
+   * `Source wildcard 'Starter subject' (54693e08)` after the wildcard is
+   * deleted (the name is otherwise unrecoverable from the library).
+   * Absent on legacy constraints → banner falls back to uuid-only.
+   */
+  source_wildcard_name?: string;
+  target_wildcard_name?: string;
   matrix: ConstraintMatrix;
   exceptions: ConstraintException[];
   broken_exceptions?: BrokenConstraintException[];
+  /**
+   * SP3 library-default reach selector — decides which downstream
+   * instances of `target_wildcard_id` the constraint covers when no
+   * per-instance override is set. Library authoring offers `first` /
+   * `next N` / `all` only; `pick` references live per-instance `_uid`s
+   * that don't exist at authoring time, so it's instance-only (set on
+   * the modal, see `TargetSelect` in `widgets/_shared.ts`). Absent =
+   * engine default `{mode:"all"}`.
+   */
+  target_select?: { mode: "first" | "next" | "all"; count?: number };
 }
 
 export interface ModuleRow {
@@ -159,6 +200,23 @@ export interface ModuleRow {
   version: number;
   created_at: string;
   updated_at: string;
+  /**
+   * Community origin (engine migration 013). Stamped on rows that
+   * were installed via the community embed's host-bridge install
+   * call with `origin: { post_slug, version_number }`. Drives the
+   * "installed from community" badge + the update-available check
+   * that compares `community_version_number` against the post's
+   * current `latest_version_number`. Null on locally-authored rows.
+   */
+  community_post_slug?: string | null;
+  community_version_number?: number | null;
+  /**
+   * NSFW flag (engine migration 015). 'safe' by default; flipped to
+   * 'nsfw' by the IdentityCard toggle in any editor or auto-stamped
+   * at install time when a community post carried content_rating='nsfw'.
+   * Drives the `18+` pill on ModuleListView.
+   */
+  content_rating?: "safe" | "nsfw";
 }
 
 /**
@@ -191,6 +249,7 @@ export interface ModuleCreateInput {
   tags?: string[];
   payload: Record<string, unknown>;
   is_favorite?: boolean;
+  content_rating?: "safe" | "nsfw";
 }
 
 export interface ModuleUpdateInput {
@@ -200,6 +259,7 @@ export interface ModuleUpdateInput {
   tags?: string[];
   payload?: Record<string, unknown>;
   is_favorite?: boolean;
+  content_rating?: "safe" | "nsfw";
 }
 
 export interface CategoryRow {
@@ -227,6 +287,11 @@ export interface BundleRow {
   version: number;
   created_at: string;
   updated_at: string;
+  /** See ModuleRow.community_post_slug — same semantics for bundles. */
+  community_post_slug?: string | null;
+  community_version_number?: number | null;
+  /** See ModuleRow.content_rating — same semantics for bundles. */
+  content_rating?: "safe" | "nsfw";
 }
 
 export interface BundleListResponse {
@@ -242,6 +307,7 @@ export interface BundleCreateInput {
   tags?: string[];
   children?: Array<Record<string, unknown>>;
   is_favorite?: boolean;
+  content_rating?: "safe" | "nsfw";
 }
 
 export interface BundleUpdateInput {
@@ -252,6 +318,7 @@ export interface BundleUpdateInput {
   tags?: string[];
   children?: Array<Record<string, unknown>>;
   is_favorite?: boolean;
+  content_rating?: "safe" | "nsfw";
 }
 
 export interface TemplateRow {
@@ -308,6 +375,12 @@ export interface SnapshotShape {
     variable_binding: string;
     enabled_options: string[] | null;
     category_filter: string | null;
+    option_weights?: Record<string, number> | null;
+    exclude_null?: boolean | null;
+    // SP2a multi-select pick range + the separator that joins a bare `$var`.
+    pick_min?: number | null;
+    pick_max?: number | null;
+    pick_separator?: string | null;
   };
 }
 

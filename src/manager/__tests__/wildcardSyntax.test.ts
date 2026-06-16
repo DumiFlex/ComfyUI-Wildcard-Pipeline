@@ -38,7 +38,7 @@ function wc(
 }
 
 function opt(value: string, weight = 1, id = "o1"): WildcardOption {
-  return { id, value, weight };
+  return { id, value, weight, sub_categories: [] };
 }
 
 describe("getWildcardSyntax", () => {

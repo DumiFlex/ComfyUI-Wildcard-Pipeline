@@ -70,6 +70,15 @@ def _fresh_instance() -> dict[str, Any]:
         "enabled_options": None,
         "category_filter": None,
         "option_weights": None,
+        # SP2a multi-select + the null toggle — part of the pool-shaping
+        # override set, so a frozen snapshot carries them too (all None =
+        # "no override"). Keeps this dict honest with the "every field" claim
+        # above + the instance schema (engine/schemas/instance_schemas.py).
+        "exclude_null": None,
+        "pick_min": None,
+        "pick_max": None,
+        "pick_separator": None,
+        "pick_independent": None,  # SP2c: multi-pick with replacement when true
         # Pick mode — `None`/missing → `random` (legacy behavior:
         # weighted RNG over enabled options). `pinned` short-circuits
         # the RNG and always picks `pinned_option_id`. `subcategory`

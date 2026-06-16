@@ -4,10 +4,12 @@ import { RouterView } from "vue-router";
 import AppTopbar from "./AppTopbar.vue";
 import AppSidebar from "./AppSidebar.vue";
 import StaleBanner from "../components/StaleBanner.vue";
+import ErrorBoundary from "../components/ErrorBoundary.vue";
 import ToastHost from "../components/ui/ToastHost.vue";
 import TweaksPanel from "../components/TweaksPanel.vue";
 import CommandPalette from "../components/CommandPalette.vue";
 import ShortcutsHelp from "../components/ShortcutsHelp.vue";
+import UnmetDepsDialog from "../components/UnmetDepsDialog.vue";
 import { useUiStore } from "../stores/uiStore";
 import { useCommandIndex } from "../composables/useCommandIndex";
 import { useRecentStore } from "../stores/recentStore";
@@ -17,7 +19,9 @@ import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import { useTemplateStore } from "../stores/templateStore";
 import { useCategoryStore } from "../stores/categoryStore";
+import { useCommunityUpdateStore } from "../stores/communityUpdateStore";
 import { useCascadeStore } from "../cascade/cascade-store";
+import { useGuidedPublishStore } from "../import-export/guided-publish-store";
 import { api } from "../api/client";
 import {
   hashes as libraryHashes,
@@ -35,7 +39,9 @@ const moduleStore = useModuleStore();
 const bundleStore = useBundleStore();
 const templateStore = useTemplateStore();
 const categoryStore = useCategoryStore();
+const communityUpdateStore = useCommunityUpdateStore();
 const cascadeStore = useCascadeStore();
+const guidedPublish = useGuidedPublishStore();
 
 const paletteOpen = ref(false);
 const shortcutsOpen = ref(false);
@@ -57,11 +63,18 @@ function isTypingTarget(t: EventTarget | null): boolean {
  *  Changes when ANY key is added, removed, or its hash flips. Returns
  *  empty string while the polled map is still null (first fetch in
  *  flight) so the watcher doesn't fire on transition-to-loaded. */
-function hashesFingerprint(map: Record<string, string> | null): string {
+function hashesFingerprint(
+  map: Record<string, string | { type?: string; payload_hash: string }> | null,
+): string {
   if (map === null) return "";
   const keys = Object.keys(map).sort();
   if (keys.length === 0) return "empty";
-  return keys.map((k) => `${k}:${map[k]}`).join("|");
+  // Handles both the module map ({type, payload_hash}) and the bundle map
+  // (flat payload_hash strings) — both feed this watcher.
+  return keys.map((k) => {
+    const v = map[k];
+    return typeof v === "string" ? `${k}:${v}` : `${k}:${v.type ?? ""}:${v.payload_hash}`;
+  }).join("|");
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -162,6 +175,14 @@ onMounted(() => {
     cascadeStore.rebuildFromCatalogs(
       moduleStore.catalog, bundleStore.catalog, categoryStore.items,
     );
+    // Cross-check community-installed rows against the community
+    // for newer versions. Runs after the library snapshot is in
+    // place; failures (offline, CORS, server down) clear the
+    // store quietly so we never block the UI on the embed host.
+    void communityUpdateStore.check({
+      modules: moduleStore.catalog,
+      bundles: bundleStore.catalog,
+    });
   }).catch(() => undefined);
 
   // Live-refresh sidebar count badges + catalogs whenever the drift
@@ -189,9 +210,20 @@ onMounted(() => {
     (next, prev) => {
       if (prev === undefined || prev === "" || next === prev) return;
       moduleStore.fetchCatalog()
-        .then(() => cascadeStore.rebuildFromCatalogs(
-          moduleStore.catalog, bundleStore.catalog, categoryStore.items,
-        ))
+        .then(() => {
+          cascadeStore.rebuildFromCatalogs(
+            moduleStore.catalog, bundleStore.catalog, categoryStore.items,
+          );
+          // Library changed (insert / delete / edit, from ANY surface) —
+          // re-run the community update check so per-row pills track
+          // reality without a manual refresh: a pill clears after an
+          // in-place update, and reappears after the user deletes an
+          // install-as-new copy of a post (#4 / #6).
+          void communityUpdateStore.check({
+            modules: moduleStore.catalog,
+            bundles: bundleStore.catalog,
+          });
+        })
         .catch(() => undefined);
     },
   );
@@ -200,9 +232,17 @@ onMounted(() => {
     (next, prev) => {
       if (prev === undefined || prev === "" || next === prev) return;
       bundleStore.fetchCatalog()
-        .then(() => cascadeStore.rebuildFromCatalogs(
-          moduleStore.catalog, bundleStore.catalog, categoryStore.items,
-        ))
+        .then(() => {
+          cascadeStore.rebuildFromCatalogs(
+            moduleStore.catalog, bundleStore.catalog, categoryStore.items,
+          );
+          // See the module-hash watch above — same recheck, for bundle
+          // inserts / deletes / edits (#4 / #6).
+          void communityUpdateStore.check({
+            modules: moduleStore.catalog,
+            bundles: bundleStore.catalog,
+          });
+        })
         .catch(() => undefined);
     },
   );
@@ -224,24 +264,37 @@ onBeforeUnmount(() => {
     <div class="wp-body" :data-collapsed="ui.sidebarCollapsed || undefined">
       <AppSidebar />
       <main id="wp-main" class="wp-content" tabindex="-1">
-        <RouterView v-slot="{ Component, route }">
-          <Transition name="route-fade" mode="out-in">
-            <!-- Key by `route.meta.layoutKey` when set so a view that backs
-                 several param routes (e.g. Docs.vue across /docs/:page) stays
-                 mounted across those navigations — its sub-nav keeps scroll
-                 position. Falls back to route.path for every other view. -->
-            <component
-              :is="Component"
-              :key="typeof route.meta.layoutKey === 'string' ? route.meta.layoutKey : route.path"
-            />
-          </Transition>
-        </RouterView>
+        <ErrorBoundary>
+          <RouterView v-slot="{ Component, route }">
+            <Transition name="route-fade" mode="out-in">
+              <!-- Key by `route.meta.layoutKey` when set so a view that backs
+                   several param routes (e.g. Docs.vue across /docs/:page) stays
+                   mounted across those navigations — its sub-nav keeps scroll
+                   position. Falls back to route.path for every other view. -->
+              <component
+                :is="Component"
+                :key="typeof route.meta.layoutKey === 'string' ? route.meta.layoutKey : route.path"
+              />
+            </Transition>
+          </RouterView>
+        </ErrorBoundary>
       </main>
     </div>
     <ToastHost />
     <TweaksPanel />
     <CommandPalette v-model:open="paletteOpen" :items="commandIndex" :recent-ids="recent.recentIds" />
     <ShortcutsHelp v-model:open="shortcutsOpen" />
+    <!-- Single host for the guided-publish gate (B3). Both publish entry
+         points (CommunityRowActions, ExportTab) route through the
+         guided-publish store; this lone dialog renders whenever it opens. -->
+    <UnmetDepsDialog
+      :open="guidedPublish.open"
+      :module-name="guidedPublish.pendingModule?.name ?? ''"
+      :unmet-rows="guidedPublish.unmetRows"
+      @publish-dep="guidedPublish.publishDep"
+      @publish-anyway="guidedPublish.publishAnyway"
+      @cancel="guidedPublish.cancel"
+    />
   </div>
 </template>
 

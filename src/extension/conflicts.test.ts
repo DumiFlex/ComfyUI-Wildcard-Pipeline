@@ -240,6 +240,41 @@ describe("scanConflicts — derivation var/template scanning", () => {
     ]);
   });
 
+  it("does not flag a $mood.0 accessor read when base mood is upstream (SP2a)", () => {
+    // `if $mood.0 == "calm"` reads index 0 of the list var `mood`; the base
+    // `mood` is upstream, so the read is satisfied — no missing-var conflict.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        derivation("d1", [{
+          branches: [{
+            condition: { var: "mood.0", op: "equals", value: "calm" },
+            action: { target_var: "tone", mode: "replace", value: "x" },
+          }],
+        }]),
+      ],
+    };
+    expect(scanConflicts(value, ["mood"])).toEqual([]);
+  });
+
+  it("flags a $ghost.0 accessor read by its BASE name when unbound (SP2a)", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        derivation("d1", [{
+          branches: [{
+            condition: { var: "ghost.0", op: "equals", value: "x" },
+            action: { target_var: "tone", mode: "replace", value: "y" },
+          }],
+        }]),
+      ],
+    };
+    // The conflict reports the BASE name `ghost`, not the raw `ghost.0`.
+    expect(scanConflicts(value, [])).toEqual([
+      { moduleId: "d1", variable: "ghost", type: "missing_template_variable", severity: "warning" },
+    ]);
+  });
+
   it("flags missing_template_variable when action.value template references unknown $var", () => {
     // action.value passes through resolve_text under derivation surface, so
     // `$style` inside MUST resolve at runtime — same gap as combine.
@@ -549,15 +584,11 @@ describe("scanConflicts — constraint ordering", () => {
     expect(types).toContain("constraint_orphan_target");
   });
 
-  it("two duplicated constraints both find their downstream slot when the target has TWO downstream instances", () => {
-    // Regression: pre-2026-05-24 the scanner collapsed the downstream
-    // count to 0/1 via a Set, so duplicating a constraint when the
-    // target wildcard also lived downstream cross-node twice still
-    // false-flagged the second constraint as `constraint_orphan_target`.
-    // collectDownstreamWildcardUuids now returns per-instance entries
-    // and scanConflicts counts them, matching the engine's one-shot
-    // first-instance semantics (each constraint claims one downstream
-    // target slot).
+  it("two duplicated constraints both reach their target when it has TWO downstream instances", () => {
+    // Both default-`all` constraints cover every downstream `ddddeeee`
+    // instance under the SP3 reach model — neither orphans. (Even with a
+    // single downstream instance neither would orphan; this just confirms
+    // the multi-instance case stays clean.)
     const value: ContextWidgetValue = {
       version: 1,
       modules: [
@@ -569,10 +600,11 @@ describe("scanConflicts — constraint ordering", () => {
     expect(out.find((c) => c.type === "constraint_orphan_target")).toBeUndefined();
   });
 
-  it("two duplicated constraints with only ONE downstream target instance → second flags orphan", () => {
-    // Mirror of the case above: not enough downstream slots, so the
-    // second constraint correctly orphans (matches engine: only the
-    // first constraint would ever apply).
+  it("two duplicated constraints with only ONE downstream target instance → NEITHER orphan (SP3 mark-all)", () => {
+    // Pre-SP3 the claim-order model gave the single downstream slot to
+    // `c1` and orphaned `c2`. The reach model drops exclusive claiming:
+    // both default-`all` constraints cover the one downstream instance,
+    // so neither orphans.
     const value: ContextWidgetValue = {
       version: 1,
       modules: [
@@ -581,23 +613,19 @@ describe("scanConflicts — constraint ordering", () => {
       ],
     };
     const out = scanConflicts(value, [], ["aaaa1111"], ["ddddeeee"]);
-    const orphans = out.filter((c) => c.type === "constraint_orphan_target");
-    expect(orphans).toHaveLength(1);
-    expect(orphans[0].moduleId).toBe("c2");
+    expect(out.filter((c) => c.type === "constraint_orphan_target")).toHaveLength(0);
   });
 
-  it("constraint #1 claims local slot between itself and #2; #2 claims downstream — no orphan", () => {
-    // User-reported regression. Setup:
-    //   idx 0: c1                          local mood at idx 1 available
-    //   idx 1: wildcard mood               consumed by c1's claim
-    //   idx 2: c2                          no local mood after idx 2
+  it("c1 reaches its local target after itself; c2 reaches the downstream instance — no orphan", () => {
+    // Setup:
+    //   idx 0: c1                          local mood at idx 1 is downstream of it
+    //   idx 1: wildcard mood
+    //   idx 2: c2                          no local mood after idx 2, but downstream chain has one
     //   downstream chain: one mood instance
     //
-    // The pre-slot-allocator logic used a flat `claimedSoFar` counter:
-    // c1's claim incremented it to 1, and c2 saw available = local-after-
-    // self(0) + downstream(1) = 1, so claimedSoFar(1) >= available(1)
-    // false-orphaned c2. Slot allocator pairs c1 → idx 1, c2 → downstream
-    // instance, neither flags.
+    // Under the reach model c1 (idx 0) covers BOTH the local mood (idx 1)
+    // and the downstream instance; c2 (idx 2) covers the downstream
+    // instance (which sits after every local module). Neither orphans.
     const value: ContextWidgetValue = {
       version: 1,
       modules: [
@@ -612,9 +640,8 @@ describe("scanConflicts — constraint ordering", () => {
 
   it("constraint after its local target + no downstream — orphans", () => {
     // The local mood instance sits at idx 0 (upstream of the constraint
-    // at idx 1) and there's no downstream chain. Engine resolves
-    // first-instance-AFTER the constraint, so this constraint has no
-    // claim available.
+    // at idx 1) and there's no downstream chain. The constraint's reach is
+    // downstream-relative, so it covers ZERO instances → orphan.
     const value: ContextWidgetValue = {
       version: 1,
       modules: [
@@ -1105,8 +1132,47 @@ describe("scanConflicts — nested bundle gate cascade", () => {
   });
 });
 
-describe("scanConflicts — first-instance orphan + count check (2026-05-24)", () => {
-  it("2 constraints + 1 downstream target → second is orphan", () => {
+describe("scanConflicts — per-selector orphan (SP3 reach model)", () => {
+  it("constraint targeting a wildcard with NO downstream instance → orphan_target", () => {
+    // Target uuid is nowhere reachable AFTER the constraint: the only
+    // instance sits BEFORE it (upstream of the constraint position) and
+    // there's no downstream chain. Default `all` reach therefore covers
+    // ZERO downstream instances → orphan. (Target IS findable locally so
+    // it's an orphan, not a `target_missing`.)
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        wildcard("bbbb2222", "outfit"),            // index 0 — too early
+        constraint("c1", "aaaa1111", "bbbb2222"),  // index 1
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"]);
+    expect(out).toContainEqual({
+      moduleId: "c1",
+      variable: "bbbb2222",
+      type: "constraint_orphan_target",
+      severity: "warning",
+    });
+  });
+
+  it("single default(all)-reach constraint with one downstream target → NOT orphan", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraint("c1", "aaaa1111", "bbbb2222"),
+        wildcard("bbbb2222", "outfit"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"]);
+    expect(out.filter((c) => c.type === "constraint_orphan_target")).toHaveLength(0);
+  });
+
+  it("two all-reach constraints, ONE downstream instance → NEITHER orphan", () => {
+    // SP3 mark-all regression. The pre-SP3 claim-order model EXCLUSIVELY
+    // reserved the single downstream instance for the first constraint and
+    // flagged the SECOND as `constraint_orphan_target`. Under the reach
+    // model both default-`all` constraints cover the one instance, so
+    // neither is an orphan.
     const value: ContextWidgetValue = {
       version: 1,
       modules: [
@@ -1116,9 +1182,7 @@ describe("scanConflicts — first-instance orphan + count check (2026-05-24)", (
       ],
     };
     const out = scanConflicts(value, [], ["aaaa1111"]);
-    const orphans = out.filter((c) => c.type === "constraint_orphan_target");
-    expect(orphans).toHaveLength(1);
-    expect(orphans[0].moduleId).toBe("c2");
+    expect(out.filter((c) => c.type === "constraint_orphan_target")).toHaveLength(0);
   });
 
   it("2 constraints + 2 downstream targets → no orphan", () => {
@@ -1147,5 +1211,328 @@ describe("scanConflicts — first-instance orphan + count check (2026-05-24)", (
     const out = scanConflicts(value, []);
     expect(out.find((c) => c.type === "constraint_orphan_source"))
       .toMatchObject({ moduleId: "c1", variable: "aaaa1111" });
+  });
+});
+
+// ── Broken nested @{uuid} refs at the module-row level ──────────────
+// Three per-module conflict types, each emitted when an embedded
+// `@{uuid}` is UNRESOLVABLE anywhere the scanner can see (local /
+// upstream / downstream / nested-reach). They reuse the SAME
+// reachability predicate the constraint-target-missing check uses, so a
+// ref pointing at any reachable wildcard must NOT false-positive.
+
+// Wildcard whose single option value is an arbitrary string (lets a test
+// embed an @{uuid} ref — or none — wherever it needs one).
+const wildcardOpt = (
+  id: string,
+  varBinding: string,
+  optValue: string,
+): ContextWidgetValue["modules"][number] => ({
+  id, type: "wildcard", enabled: true, meta: { name: "" },
+  entries: [],
+  payload: {
+    var_binding: varBinding,
+    options: [{ id: "o1", value: optValue, weight: 1 }],
+  },
+});
+
+// Derivation with a single IF branch whose action.value is an arbitrary
+// string. condition.var is satisfiable upstream so the derivation's own
+// missing-template-variable check stays quiet — we only assert on the
+// broken-ref type.
+const derivationAction = (
+  id: string,
+  actionValue: string,
+  conditionVar = "age",
+  elseValue?: string,
+): ContextWidgetValue["modules"][number] => ({
+  id, type: "derivation", enabled: true, meta: { name: "" },
+  entries: [],
+  payload: {
+    rules: [{
+      id: "r0",
+      branches: [{
+        condition: { var: conditionVar, op: "equals", value: "30" },
+        action: { target_var: "mood", mode: "replace", value: actionValue },
+      }],
+      ...(elseValue !== undefined
+        ? { else: { action: { target_var: "mood", mode: "replace", value: elseValue } } }
+        : {}),
+    }],
+  },
+});
+
+// Constraint carrying library exceptions whose source/target VALUES may
+// embed @{uuid} refs. `sources`/`targets` resolve fine; only the option
+// VALUE strings are scanned for nested refs.
+const constraintExc = (
+  id: string,
+  exceptions: Array<{ source_value: string; target_value: string }>,
+): ContextWidgetValue["modules"][number] => ({
+  id, type: "constraint", enabled: true, meta: { name: "" },
+  entries: [],
+  payload: {
+    source_wildcard_id: "aaaa1111",
+    target_wildcard_id: "bbbb2222",
+    matrix: {},
+    exceptions,
+  },
+});
+
+describe("scanConflicts — wildcard_broken_nested_ref", () => {
+  it("flags wildcard_broken_nested_ref when an option @{uuid} resolves nowhere", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [wildcardOpt("w1", "phrase", "see @{deadbeef}")],
+    };
+    const out = scanConflicts(value, []);
+    expect(out).toContainEqual({
+      moduleId: "w1",
+      variable: "deadbeef",
+      type: "wildcard_broken_nested_ref",
+      severity: "warning",
+    });
+  });
+
+  it("keys the conflict to the module's _uid when present", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [{ ...wildcardOpt("w1", "phrase", "@{deadbeef}"), _uid: "uid-w1" }],
+    };
+    const out = scanConflicts(value, []);
+    expect(out.find((c) => c.type === "wildcard_broken_nested_ref")?.moduleId).toBe("uid-w1");
+  });
+
+  it("does NOT flag when the ref resolves to a LOCAL sibling wildcard", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        wildcardOpt("w1", "phrase", "@{bbbb2222}"),
+        wildcard("bbbb2222", "outfit"),
+      ],
+    };
+    const out = scanConflicts(value, []);
+    expect(out.find((c) => c.type === "wildcard_broken_nested_ref")).toBeUndefined();
+  });
+
+  it("does NOT flag when the ref resolves UPSTREAM", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [wildcardOpt("w1", "phrase", "@{aaaa1111}")],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"]);
+    expect(out.find((c) => c.type === "wildcard_broken_nested_ref")).toBeUndefined();
+  });
+
+  it("does NOT flag when the ref resolves DOWNSTREAM", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [wildcardOpt("w1", "phrase", "@{ddddeeee}")],
+    };
+    const out = scanConflicts(value, [], [], ["ddddeeee"]);
+    expect(out.find((c) => c.type === "wildcard_broken_nested_ref")).toBeUndefined();
+  });
+
+  it("does NOT flag when the ref resolves via a downstream nested CARRIER", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [wildcardOpt("w1", "phrase", "@{aabbccdd}")],
+    };
+    const out = scanConflicts(value, [], [], [], ["aabbccdd"]);
+    expect(out.find((c) => c.type === "wildcard_broken_nested_ref")).toBeUndefined();
+  });
+
+  it("disabled wildcards do not generate broken-ref warnings", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [{ ...wildcardOpt("w1", "phrase", "@{deadbeef}"), enabled: false }],
+    };
+    expect(scanConflicts(value, [])).toEqual([]);
+  });
+});
+
+describe("scanConflicts — derivation_broken_nested_ref", () => {
+  it("flags derivation_broken_nested_ref when an action @{uuid} resolves nowhere", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [derivationAction("d1", "wear @{deadbeef}")],
+    };
+    const out = scanConflicts(value, ["age"]);
+    expect(out).toContainEqual({
+      moduleId: "d1",
+      variable: "deadbeef",
+      type: "derivation_broken_nested_ref",
+      severity: "warning",
+    });
+  });
+
+  it("scans the else action value too", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [derivationAction("d1", "ok", "age", "fallback @{deadbeef}")],
+    };
+    const out = scanConflicts(value, ["age"]);
+    expect(out).toContainEqual({
+      moduleId: "d1",
+      variable: "deadbeef",
+      type: "derivation_broken_nested_ref",
+      severity: "warning",
+    });
+  });
+
+  it("does NOT flag when the ref resolves to a LOCAL sibling wildcard", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        derivationAction("d1", "wear @{bbbb2222}"),
+        wildcard("bbbb2222", "outfit"),
+      ],
+    };
+    const out = scanConflicts(value, ["age"]);
+    expect(out.find((c) => c.type === "derivation_broken_nested_ref")).toBeUndefined();
+  });
+
+  it("does NOT flag when the ref resolves UPSTREAM", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [derivationAction("d1", "wear @{aaaa1111}")],
+    };
+    const out = scanConflicts(value, ["age"], ["aaaa1111"]);
+    expect(out.find((c) => c.type === "derivation_broken_nested_ref")).toBeUndefined();
+  });
+
+  it("does NOT flag when the ref resolves DOWNSTREAM", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [derivationAction("d1", "wear @{ddddeeee}")],
+    };
+    const out = scanConflicts(value, ["age"], [], ["ddddeeee"]);
+    expect(out.find((c) => c.type === "derivation_broken_nested_ref")).toBeUndefined();
+  });
+
+  it("disabled derivations do not generate broken-ref warnings", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [{ ...derivationAction("d1", "wear @{deadbeef}"), enabled: false }],
+    };
+    expect(scanConflicts(value, ["age"])).toEqual([]);
+  });
+});
+
+describe("scanConflicts — constraint_broken_exception_ref", () => {
+  it("flags constraint_broken_exception_ref when an exception value @{uuid} resolves nowhere", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraintExc("c1", [{ source_value: "see @{deadbeef}", target_value: "sky" }]),
+        wildcard("bbbb2222", "outfit"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"]);
+    expect(out).toContainEqual({
+      moduleId: "c1",
+      variable: "deadbeef",
+      type: "constraint_broken_exception_ref",
+      severity: "warning",
+    });
+  });
+
+  it("scans the exception target_value too", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraintExc("c1", [{ source_value: "red", target_value: "@{deadbeef}" }]),
+        wildcard("bbbb2222", "outfit"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"]);
+    expect(out).toContainEqual({
+      moduleId: "c1",
+      variable: "deadbeef",
+      type: "constraint_broken_exception_ref",
+      severity: "warning",
+    });
+  });
+
+  it("scans instance.extra_exceptions[] values too", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        {
+          ...constraintExc("c1", []),
+          instance: {
+            extra_exceptions: [
+              { source_value: "wear @{deadbeef}", target_value: "x", mode: "allow", factor: 1 },
+            ],
+          },
+        },
+        wildcard("bbbb2222", "outfit"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"]);
+    expect(out).toContainEqual({
+      moduleId: "c1",
+      variable: "deadbeef",
+      type: "constraint_broken_exception_ref",
+      severity: "warning",
+    });
+  });
+
+  it("does NOT flag when the exception ref resolves to a LOCAL sibling wildcard", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraintExc("c1", [{ source_value: "@{bbbb2222}", target_value: "sky" }]),
+        wildcard("bbbb2222", "outfit"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"]);
+    expect(out.find((c) => c.type === "constraint_broken_exception_ref")).toBeUndefined();
+  });
+
+  it("does NOT flag when the exception ref resolves UPSTREAM", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraintExc("c1", [{ source_value: "@{aaaa1111}", target_value: "sky" }]),
+        wildcard("bbbb2222", "outfit"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"]);
+    expect(out.find((c) => c.type === "constraint_broken_exception_ref")).toBeUndefined();
+  });
+
+  it("does NOT flag when the exception ref resolves DOWNSTREAM", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraintExc("c1", [{ source_value: "@{ddddeeee}", target_value: "sky" }]),
+        wildcard("bbbb2222", "outfit"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"], ["ddddeeee"]);
+    expect(out.find((c) => c.type === "constraint_broken_exception_ref")).toBeUndefined();
+  });
+
+  it("disabled constraints do not generate broken-exception-ref warnings", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        { ...constraintExc("c1", [{ source_value: "@{deadbeef}", target_value: "x" }]), enabled: false },
+      ],
+    };
+    expect(scanConflicts(value, [])).toEqual([]);
+  });
+});
+
+describe("scanConflicts — combine @{} templates are an intentional non-gap", () => {
+  it("a combine template containing @{uuid} emits NOTHING", () => {
+    // Combine treats `@{}` as literal text (never resolved), so there is
+    // deliberately no broken-ref scan for combine templates.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [combine("cb1", "see @{deadbeef} now")],
+    };
+    expect(scanConflicts(value, [])).toEqual([]);
   });
 });

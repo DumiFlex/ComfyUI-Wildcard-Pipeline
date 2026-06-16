@@ -2,6 +2,7 @@
 import { ref, computed, watch, onBeforeUnmount } from "vue";
 import ModalShell from "../shared/ModalShell.vue";
 import type { ModuleEntry, ModuleEntryKind } from "../../widgets/_shared";
+import { type ResolvedValue } from "../../widgets/richTokenize";
 import {
   INSTANCE_FIELDS_PER_KIND,
   type InstanceFieldKey,
@@ -15,7 +16,7 @@ import FixedValuesInstanceModal from "./editors/fixed-values/FixedValuesInstance
 import CombineInstanceModal from "./editors/combine/CombineInstanceModal.vue";
 import DerivationInstanceModal from "./editors/derivation/DerivationInstanceModal.vue";
 import ConstraintInstanceModal from "./editors/constraint/ConstraintInstanceModal.vue";
-import type { PairingBadge } from "../../extension/constraint-pairs";
+import type { ChainModule, PairingBadge } from "../../extension/constraint-pairs";
 
 
 const props = defineProps<{
@@ -25,13 +26,18 @@ const props = defineProps<{
   upstreamVars?: string[];
   /** Resolved upstream `$name → value` map. Combine modal uses this
    *  to render a live preview pane with vars substituted. */
-  upstreamResolved?: Record<string, string>;
+  upstreamResolved?: Record<string, ResolvedValue>;
   /** Variable names defined by OTHER modules in the same node. */
   siblingVars?: string[];
   /** Other modules in the same WP_Context node — used by the constraint
    *  preview to resolve source/target uuids back to var-binding names.
    *  May include the module being edited; lookups by uuid skip self. */
   siblingModules?: ModuleEntry[];
+  /** Flattened cross-node module chain (upstream + own + downstream
+   *  WP_Context nodes). Forwarded to the constraint modal so it can
+   *  resolve a source/target wildcard that lives in another Context
+   *  node, not just `siblingModules` (same-node only). */
+  chainModules?: ChainModule[];
   /** Per-option pair badges for the currently-edited wildcard when it
    *  acts as a constraint carrier (target reached via nested `@{uuid}`).
    *  Keyed by option id. Empty for non-wildcard or non-carrier rows. */
@@ -141,7 +147,10 @@ function onConfirmDialogCancel(): void {
  * it's still on v1 and doesn't separate runtime from overrides.
  */
 const RESET_FIELDS_PER_KIND: Record<ModuleEntryKind, readonly InstanceFieldKey[]> = {
-  wildcard: ["enabled_options", "option_weights", "category_filter"],
+  wildcard: [
+    "enabled_options", "option_weights", "category_filter", "exclude_null",
+    "pick_min", "pick_max", "pick_separator",
+  ],
   fixed_values: ["values_overrides", "enabled_options"],
   combine: ["template_override", "variable_binding"],
   derivation: [
@@ -422,11 +431,17 @@ function cancel() {
     <!-- v2 derivation branch — single-pane tailored modal. Library
          (rule conditions / branches / actions) stays in SPA; modal
          exposes only display-name override + per-rule disable
-         toggles via instance.disabled_rule_ids. -->
+         toggles via instance.disabled_rule_ids. upstream/sibling vars
+         feed the rule override fields' `$var` autocomplete; the `@{}`
+         nested-ref source is the LIBRARY (fetched inside the modal), so
+         sibling/chain MODULES are intentionally NOT forwarded here. -->
     <DerivationInstanceModal
       v-else-if="draft && draft.type === 'derivation'"
       :module="draft"
       :is-modified="instanceModified"
+      :upstream-vars="upstreamVars"
+      :sibling-vars="siblingVars"
+      :via-option-pairs="viaOptionPairs"
       @update="onUpdate"
       @save="save"
       @cancel="cancel"
@@ -444,6 +459,7 @@ function cancel() {
       :module="draft"
       :is-modified="instanceModified"
       :sibling-modules="siblingModules"
+      :chain-modules="chainModules"
       @update="onUpdate"
       @save="save"
       @cancel="cancel"

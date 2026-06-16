@@ -1,0 +1,17 @@
+{
+  "id": "parityco",
+  "type": "combine",
+  "name": "parity-combine",
+  "description": "",
+  "category_id": null,
+  "tags": [],
+  "is_favorite": false,
+  "payload": {
+    "template": "$mood $subject",
+    "output_var": "scene",
+    "input_vars": [
+      "mood",
+      "subject"
+    ]
+  }
+}

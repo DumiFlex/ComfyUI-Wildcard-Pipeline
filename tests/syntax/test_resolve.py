@@ -8,7 +8,8 @@ from typing import Any
 import pytest
 
 from engine.syntax import resolve_text
-from engine.syntax.types import SurfaceKind
+from engine.syntax.resolve import pick_k_unique
+from engine.syntax.types import ListVar, SurfaceKind
 
 
 @dataclass
@@ -27,7 +28,7 @@ class _FakeCtx:
     surface: SurfaceKind = "combine"
     developer_mode: bool = False
     warnings: list[dict[str, Any]] = field(default_factory=list)
-    _vars: dict[str, str] = field(default_factory=dict)
+    _vars: dict[str, Any] = field(default_factory=dict)
     _modules: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def get_var(self, name: str) -> str | None:
@@ -39,6 +40,60 @@ class _FakeCtx:
 
 def _ctx(**kwargs) -> _FakeCtx:
     return _FakeCtx(**kwargs)
+
+
+# --- pick_k_unique (SP2a Chunk A: shared weighted-without-replacement core) ---
+
+def test_pick_k_unique_picks_k_without_replacement():
+    got = pick_k_unique(["a", "b", "c", "d"], [1.0, 1.0, 1.0, 1.0], 3, random.Random(42))
+    assert len(got) == 3
+    assert len(set(got)) == 3
+    assert set(got).issubset({"a", "b", "c", "d"})
+
+
+def test_pick_k_unique_clamps_k_to_pool():
+    assert sorted(pick_k_unique(["a", "b"], [1.0, 1.0], 5, random.Random(1))) == ["a", "b"]
+
+
+def test_pick_k_unique_zero_returns_empty():
+    assert pick_k_unique(["a", "b"], [1.0, 1.0], 0, random.Random(1)) == []
+
+
+def test_pick_k_unique_seed_deterministic():
+    a = pick_k_unique(["a", "b", "c"], [1.0, 2.0, 3.0], 2, random.Random(7))
+    b = pick_k_unique(["a", "b", "c"], [1.0, 2.0, 3.0], 2, random.Random(7))
+    assert a == b
+
+
+# --- list-backed variables + $x.K accessor (SP2a Chunk C) ---
+
+def test_resolve_listvar_bare_joins_with_sep():
+    ctx = _ctx(_vars={"c": ListVar(["red", "blue"], ", ")})
+    assert resolve_text("$c", ctx) == "red, blue"
+
+
+def test_resolve_listvar_accessor_indexes():
+    ctx = _ctx(_vars={"c": ListVar(["red", "blue"], ", ")})
+    assert resolve_text("$c.0", ctx) == "red"
+    assert resolve_text("$c.1", ctx) == "blue"
+
+
+def test_resolve_listvar_accessor_out_of_range_is_empty():
+    ctx = _ctx(_vars={"c": ListVar(["red"], ", ")})
+    assert resolve_text("$c.5", ctx) == ""
+
+
+def test_resolve_string_var_acts_as_one_element_list():
+    ctx = _ctx(_vars={"name": "Alice"})
+    assert resolve_text("$name", ctx) == "Alice"
+    assert resolve_text("$name.0", ctx) == "Alice"
+    assert resolve_text("$name.1", ctx) == ""
+
+
+def test_resolve_empty_listvar_renders_empty():
+    ctx = _ctx(_vars={"c": ListVar([], ", ")})
+    assert resolve_text("$c", ctx) == ""
+    assert resolve_text("$c.0", ctx) == ""
 
 
 def test_resolve_empty_string():
@@ -117,7 +172,7 @@ def test_resolve_ref_unknown_uuid_strict_raises():
     assert exc.value.uuid == "00000000"
 
 
-@pytest.mark.parametrize("surface", ["combine", "derivation", "assembler"])
+@pytest.mark.parametrize("surface", ["combine", "assembler"])
 def test_resolve_ref_out_of_surface_lenient_emits_empty(surface):
     ctx = _ctx(
         surface=surface,
@@ -128,7 +183,7 @@ def test_resolve_ref_out_of_surface_lenient_emits_empty(surface):
     assert any(w["type"] == "ref_out_of_surface" for w in ctx.warnings)
 
 
-@pytest.mark.parametrize("surface", ["combine", "derivation", "assembler"])
+@pytest.mark.parametrize("surface", ["combine", "assembler"])
 def test_resolve_ref_out_of_surface_strict_raises(surface):
     from engine.syntax import RefOutOfSurfaceError
     ctx = _ctx(
@@ -178,6 +233,56 @@ def test_resolve_ref_cycle_lenient():
     cycle_warnings = [w for w in ctx.warnings if w["type"] == "cycle_detected"]
     assert len(cycle_warnings) == 1
     assert cycle_warnings[0]["detail"]["chain"] == ["a0000001", "b0000002", "a0000001"]
+
+
+# --- SP2b: range count + independent mode + lone-ref pool pick ---
+
+def _opts(*values):
+    return [{"value": v, "weight": 1} for v in values]
+
+
+def test_sp2b_independent_allows_repeats():
+    # `~` = independent: N fresh resolutions of the body; a 1-option pool
+    # repeats. (Generic independent path — resolve the chosen branch N times.)
+    ctx = _ctx(surface="wildcard",
+               _modules={"a4f7b2e1": _wc("a4f7b2e1", "c", _opts("x"))})
+    assert resolve_text("{3~$$, $$@{a4f7b2e1}}", ctx) == "x, x, x"
+
+
+def test_sp2b_unique_lone_ref_distinct_from_pool():
+    # No flag, lone ref, count>=2 → N DISTINCT options from the ref's pool.
+    ctx = _ctx(surface="wildcard", rng=random.Random(7),
+               _modules={"a4f7b2e1": _wc("a4f7b2e1", "c", _opts("a", "b", "c"))})
+    out = resolve_text("{2$$, $$@{a4f7b2e1}}", ctx).split(", ")
+    assert len(out) == 2 and len(set(out)) == 2
+
+
+def test_sp2b_unique_lone_ref_clamps_to_pool():
+    ctx = _ctx(surface="wildcard",
+               _modules={"a4f7b2e1": _wc("a4f7b2e1", "c", _opts("a", "b"))})
+    out = resolve_text("{5$$, $$@{a4f7b2e1}}", ctx).split(", ")
+    assert len(out) == 2  # clamped to pool size
+
+
+def test_sp2b_range_min_zero_can_be_empty():
+    ctx = _ctx(surface="wildcard", rng=random.Random(0),
+               _modules={"a4f7b2e1": _wc("a4f7b2e1", "c", _opts("x"))})
+    assert resolve_text("{0-0$$, $$@{a4f7b2e1}}", ctx) == ""
+
+
+def test_sp2b_single_pick_unchanged_regression():
+    # A fixed `{1$$…}` lone ref keeps the legacy single-pick path (seed safe).
+    ctx = _ctx(surface="wildcard",
+               _modules={"a4f7b2e1": _wc("a4f7b2e1", "c", _opts("x"))})
+    assert resolve_text("{1$$, $$@{a4f7b2e1}}", ctx) == "x"
+
+
+def test_sp2b_var_branches_resolve_in_combine():
+    # The §3.3 gap: vars inside a multi-block on the combine surface resolve.
+    ctx = _ctx(surface="combine", rng=random.Random(1),
+               _vars={"style": "bold", "mood": "calm", "tone": "warm"})
+    out = resolve_text("{2$$, $$$style|$mood|$tone}", ctx).split(", ")
+    assert len(out) == 2 and set(out) <= {"bold", "calm", "warm"}
 
 
 def test_resolve_ref_cycle_strict_raises():

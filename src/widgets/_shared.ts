@@ -505,6 +505,28 @@ export type ModuleEntryKind =
   | "derivation"
   | "constraint";
 
+/** SP3 reach selector — decides which downstream instances of a
+ *  constraint's `target_wildcard_id` it covers. Mirrors the engine's
+ *  `target_select` (`engine/modules/_constraints.py`):
+ *   - `all`   — every downstream target occurrence (default when absent).
+ *   - `first` — only the 1st encounter (per-constraint hit counter == 1).
+ *   - `next`  — the first `count` encounters (hit counter <= count).
+ *   - `pick`  — the explicitly-listed occurrences. A `direct` pick names
+ *     a top-level instance by its per-instance `uid`; a `nested` pick
+ *     names a one-hop carrier occurrence by `(carrier_uid, option_id)`.
+ *
+ *  Lives at instance level on the constraint (`payload.target_select` /
+ *  the `instance.target_select` override). Shape is engine-validated;
+ *  the type-only schema treats it as an opaque `dict`. */
+export interface TargetSelect {
+  mode: "first" | "next" | "all" | "pick";
+  count?: number;
+  picks?: Array<
+    | { kind: "direct"; uid: string }
+    | { kind: "nested"; carrier_uid: string; option_id: string }
+  >;
+}
+
 export interface ModuleEntry {
   /**
    * For library-picked modules: the canonical 8-hex uuid (matches the
@@ -588,13 +610,30 @@ export interface ModuleEntry {
      */
     option_weights?: Record<string, number> | null;
     /**
-     * Sub-category names allowed in the option pool. `null` / empty =
-     * no filter (every sub-category eligible). When set, only options
-     * whose `sub_category` field is in the list survive — options
-     * without a sub_category get excluded by an explicit filter.
-     * Combines with `enabled_options` (intersection).
+     * Boolean sub-category filter expression (SP1; `and`/`or`/`not`/
+     * parens, comma = or). `null` / empty = no filter (every option
+     * eligible). An option survives when its `sub_categories` tag set
+     * satisfies the expression. Combines with `enabled_options`
+     * (intersection).
      */
-    category_filter?: string[] | null;
+    category_filter?: string | null;
+    /**
+     * Exclude the null option from the pool (SP1). Separate flag — the
+     * `category_filter` expression never applies to the null option.
+     */
+    exclude_null?: boolean;
+    /**
+     * SP2a multi-select: pick N options (without replacement) per resolution
+     * into a list-valued variable. `pick_min`..`pick_max` is the count range
+     * (anything other than 1..1 activates multi-pick; min may be 0 for "maybe
+     * nothing"); `pick_separator` joins the list for a bare `$var`.
+     */
+    pick_min?: number;
+    pick_max?: number;
+    pick_separator?: string;
+    /** SP2c: multi-pick draws WITH replacement (repeats allowed) when true,
+     *  unique (without replacement) when false/absent. Mirrors inline `~`. */
+    pick_independent?: boolean;
     /**
      * Pick mode for this instance:
      *   - `random` / unset — weighted RNG (library default).
@@ -726,6 +765,16 @@ export interface ModuleEntry {
       mode: "allow" | "exclude" | "boost" | "reduce";
       factor: number;
     }> | null;
+    /**
+     * SP3 per-instance constraint reach override. Decides which downstream
+     * instances of the constraint's `target_wildcard_id` this instance
+     * covers (`first` / `next N` / `all` / explicit `pick`). `null` /
+     * absent = inherit `payload.target_select`, which itself defaults to
+     * `{mode:"all"}`. Engine reads this in
+     * `engine/modules/_constraints.py`; the pairings layer mirrors it
+     * statically via `computePairingsFull`. Shape is engine-validated.
+     */
+    target_select?: TargetSelect | null;
     /**
      * UI-scratch namespace. Single-underscore prefix signals "not engine
      * input"; engine handlers ignore the entire `_ui` subtree. Persisted

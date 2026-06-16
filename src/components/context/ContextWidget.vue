@@ -7,8 +7,10 @@ import {
   emptyContextValue, newModuleId, newRowUid,
   type ContextWidgetValue, type ModuleEntry,
 } from "../../widgets/_shared";
+import { type ResolvedValue } from "../../widgets/richTokenize";
 import { scanConflicts, labelFor as conflictLabelFor, shortConflictLabel, type Conflict } from "../../extension/conflicts";
-import type { PairingBadge, RowPairings } from "../../extension/constraint-pairs";
+import type { ChainModule, PairingBadge, RowPairings } from "../../extension/constraint-pairs";
+import { baseCodename } from "../../extension/node-codename";
 import {
   getCollapseMode,
   getCollapsedByDefault,
@@ -84,6 +86,7 @@ import {
   subscribe as subscribeDrift,
   unsubscribe as unsubscribeDrift,
 } from "./drift-store";
+import { classifyOne, type CollisionState } from "../../manager/import-export/collision";
 import {
   getBundleCollapsedByDefault,
   getConfirmDestructiveBundle,
@@ -98,13 +101,13 @@ const props = withDefaults(defineProps<{
    *  Drives the combine modal's live-preview pane so users see the
    *  template with vars substituted (e.g. `red portrait` instead of
    *  `$style portrait`) at edit time. Optional for headless mounts. */
-  upstreamResolved?: Record<string, string>;
+  upstreamResolved?: Record<string, ResolvedValue>;
   /** Per-module resolved reader — given a moduleId, returns the map of
    *  vars visible from that module's perspective (upstream chain +
    *  earlier siblings, excluding the module itself). Modal uses this
    *  for the combine live preview because static `upstreamResolved`
    *  alone misses sibling bindings produced in the same node. */
-  localResolvedReader?: (moduleId?: string) => Record<string, string>;
+  localResolvedReader?: (moduleId?: string) => Record<string, ResolvedValue>;
   /** Wildcard module uuids reachable upstream of this node. Used by
    *  the constraint-ordering scanner to validate constraint
    *  source/target references — sources in the upstream chain are
@@ -133,6 +136,13 @@ const props = withDefaults(defineProps<{
    *  via `pairingFor(module._uid)` in `moduleRowCtx`. Optional for
    *  headless mounts that don't simulate a graph. */
   pairings?: Map<string, RowPairings>;
+  /** Flattened cross-node module chain (upstream + own + downstream
+   *  WP_Context nodes), computed at the mount layer alongside
+   *  `pairings`. Forwarded to ModuleEditModal → ConstraintInstanceModal
+   *  so the constraint modal can resolve a source/target wildcard that
+   *  lives in another Context node — same flatten the pair badges use.
+   *  Optional for headless mounts. */
+  chainModules?: ChainModule[];
   /** Litegraph node mode: 0 ALWAYS, 2 NEVER (mute), 4 BYPASS.
    *  Used to dim the body when the host node is muted/bypassed so
    *  the runtime-skipped state is visually obvious. Other modes are
@@ -672,11 +682,15 @@ const editingModule = computed<ModuleEntry | null>(() =>
   editingIdx.value != null ? (value.value.modules[editingIdx.value] ?? null) : null,
 );
 
-/** Per-option pair lookup for the currently-edited wildcard. Map keys
- *  are option ids; values are pair badges whose `via.optionIds` include
- *  that option. Drives the trailing `↪#N` chip inside the wildcard
- *  modal's options table. Empty for non-wildcard modules and for
- *  wildcards that aren't a constraint carrier. */
+/** Per-occurrence pair lookup for the currently-edited CARRIER module.
+ *  Map keys are the carrier's `via.optionIds` — wildcard option ids for a
+ *  wildcard carrier, engine branch keys (`${rule_id}:${bi}` / `:else`) for
+ *  a derivation carrier. Values are the pair badges whose nested `@{uuid}`
+ *  ref this occurrence hosts. Drives the trailing `↪#N` chip inside the
+ *  wildcard modal's options table AND the derivation modal's rule summary
+ *  rows. Empty for non-carrier modules. Carrier-type-agnostic: it reads
+ *  `viaInboundFor`, which `computePairingsFull` populates for every
+ *  CARRIER_TYPE. */
 const editingModuleViaOptionPairs = computed<Map<string, PairingBadge[]>>(() => {
   const m = editingModule.value;
   if (!m) return new Map();
@@ -700,7 +714,7 @@ const editingModuleViaOptionPairs = computed<Map<string, PairingBadge[]>>(() => 
  *  prop when the per-module reader isn't wired (legacy mounts /
  *  headless tests). Recomputed on every editingIdx change so the
  *  preview pane reflects the right perspective. */
-const resolvedForEditing = computed<Record<string, string>>(() => {
+const resolvedForEditing = computed<Record<string, ResolvedValue>>(() => {
   const m = editingModule.value;
   if (props.localResolvedReader && m) {
     return props.localResolvedReader(m.id);
@@ -2053,6 +2067,17 @@ function viaInboundFor(rowUid: string): PairingBadge[] {
   return props.pairings?.get(key)?.viaInbound ?? [];
 }
 
+/** SP3 contributor cluster — every constraint whose reach covers this
+ *  target-instance row, in per-target `#N` order. Reads the same
+ *  cross-node `pairings` prop as `pairingFor` / `viaInboundFor`,
+ *  prefixing the local `_uid` with our `nodeId`. ModuleRow renders these
+ *  BEFORE the module name: ≤2 as individual `#N` chips, ≥3 as one
+ *  collapsed `↥×N` chip. Empty for rows no constraint covers. */
+function contributorsFor(rowUid: string): PairingBadge[] {
+  const key = `${props.nodeId}#${rowUid}`;
+  return props.pairings?.get(key)?.contributors ?? [];
+}
+
 function severityFor(id: string): "error" | "warning" | "info" | null {
   const list = conflictsByModule.value[id];
   if (!list?.length) return null;
@@ -2140,25 +2165,47 @@ function conflictTooltip(id: string): string {
  * Returns false until `libraryHashes` first loads so we don't flash
  * "missing" everywhere while the initial fetch is in flight.
  */
+/**
+ * Identity verdict of an embedded row against the live library — or null
+ * until the first poll lands / for local-only rows (no payload_hash).
+ * Single source for the card dots. Content key is `payload_hash`, so
+ * drift semantics match the historical behavior (content-only); the
+ * `type` gate is the new cross-kind clash detector. Shared verdict logic
+ * lives in `classifyOne` (import-export/collision).
+ */
+function matchStateOf(m: ModuleEntry): CollisionState | null {
+  if (!m.payload_hash) return null;
+  if (libraryHashes.value === null) return null;
+  const live = libraryHashes.value[m.id];
+  return classifyOne(
+    m.type,
+    m.payload_hash,
+    live ? { type: live.type, contentKey: live.payload_hash } : undefined,
+  );
+}
+
 function isMissingFromLibrary(m: ModuleEntry): boolean {
-  if (!m.payload_hash) return false;
-  if (libraryHashes.value === null) return false;
-  return !(m.id in libraryHashes.value);
+  return matchStateOf(m) === "no-collision";
 }
 
 /**
- * Drift = library still has this uuid, but the live `payload_hash`
- * differs from what was embedded into the workflow at pick time.
- * Independent of `isModified` (user overrides) and `isMissingFromLibrary`
- * (uuid gone). Reads `false` until the store's first fetch lands so we
- * don't flash drift before we know the truth.
+ * Drift = library still has this uuid (SAME kind), but the live
+ * `payload_hash` differs from what was embedded at pick time. Independent
+ * of `isModified` (user overrides). Mutually exclusive with the clash
+ * state below — a different-kind row is `type-conflict`, not drift.
  */
 function isDrifted(m: ModuleEntry): boolean {
-  if (!m.payload_hash) return false;
-  if (libraryHashes.value === null) return false;
-  const live = libraryHashes.value[m.id];
-  if (live === undefined) return false;       // covered by isMissingFromLibrary
-  return live !== m.payload_hash;
+  return matchStateOf(m) === "conflict";
+}
+
+/**
+ * Type clash = the live library row at this uuid is a DIFFERENT kind (the
+ * 8-hex id-space is shared across all 5 kinds). Refresh / Push-update
+ * would clobber an unrelated item, so the card offers neither — only
+ * "Push to library…" as a fresh entry.
+ */
+function isTypeConflict(m: ModuleEntry): boolean {
+  return matchStateOf(m) === "type-conflict";
 }
 
 /** Per-card refresh — replace one drifted entry with the live snapshot.
@@ -2964,8 +3011,8 @@ function modifiedTooltip(m: ModuleEntry): string {
     case "wildcard":
       if (inst.mode === "pinned") bits.push("pinned");
       else if (inst.mode === "subcategory") bits.push("subset");
-      if (nonEmptyArr(inst.category_filter)) {
-        bits.push(`cats: ${(inst.category_filter as string[]).join(", ")}`);
+      if (inst.category_filter) {
+        bits.push(`cats: ${inst.category_filter}`);
       }
       if (Array.isArray(inst.enabled_options)) {
         bits.push(`${inst.enabled_options.length} option(s) enabled`);
@@ -3640,7 +3687,12 @@ function toggleCollapsed(idx: number) {
  *  cards already match the target state (the deep watcher will
  *  diff-eq and skip the onChange emit). */
 function setAllCollapsed(collapsed: boolean) {
-  commitModules(value.value.modules.map((m) => ({ ...m, collapsed })));
+  const nextModules = value.value.modules.map((m) => ({ ...m, collapsed }));
+  // Bundle FRAMES carry their own `collapsed` flag (separate from the child
+  // module cards). Collapse/expand-all flips both so the action visibly folds
+  // bundle frames, not just loose modules.
+  const nextBundles = (value.value.bundles ?? []).map((b) => ({ ...b, collapsed }));
+  commitModules(nextModules, nextBundles);
 }
 
 /** Toolbar counts — total modules + how many are effectively enabled
@@ -3651,13 +3703,42 @@ const enabledCount = computed(() => {
   return value.value.modules.filter((m) => isModuleEffectivelyEnabled(m, bundleEnabled)).length;
 });
 
+// ── Node codename chip ──────────────────────────────────────────────────────
+// A fixed, read-only CODENAME identifies THIS WP_Context node: a stable
+// `adjective-noun` derived from the litegraph node id (node-codename.ts).
+// POV-independent + unique on the canvas, and NOT user-editable — cross-node
+// UI (constraint reach pick-list, pair popovers) shows the SAME codename to
+// name WHICH node a target instance lives in. Replaced the old editable label
+// + walk-position A/B/C letter, which shifted by viewer (so two chain heads
+// both showed "A") and was editable (so not a stable identifier).
+const nodeCodename = computed<string>(() => baseCodename(props.nodeId));
+
 /** Toolbar bulk actions — wrappers so the toolbar template stays compact. */
 function collapseAll(): void { setAllCollapsed(true); }
 function expandAll(): void { setAllCollapsed(false); }
 function toggleAllEnabled(): void {
-  const anyEnabled = value.value.modules.some((m) => m.enabled);
-  // If any are enabled, disable all; otherwise enable all.
-  commitModules(value.value.modules.map((m) => ({ ...m, enabled: !anyEnabled })));
+  // Operate at the TOP LEVEL only. A standalone module is one unit (its own
+  // `enabled`); a bundle is one unit (its MASTER `enabled` gate). Children
+  // inside a bundle are governed by the master (effective = master AND
+  // child), so toggle-all NEVER reaches in to flip them — disabling a bundle
+  // goes through its master, leaving each child's own `enabled` intact for a
+  // restore-safe re-enable. Nested bundles (parent_uid set) follow their
+  // parent master via the AND chain, so only top-level masters are flipped.
+  const isChild = (m: ModuleEntry): boolean =>
+    !!(m as ModuleEntry & { bundle_origin?: string | null }).bundle_origin;
+  const bundles = value.value.bundles ?? [];
+  const topModules = value.value.modules.filter((m) => !isChild(m));
+  const topBundles = bundles.filter((b) => !b.parent_uid);
+  // Direction: if ANY top-level unit is on, turn everything off; else on.
+  const anyOn =
+    topModules.some((m) => m.enabled !== false)
+    || topBundles.some((b) => b.enabled !== false);
+  const next = !anyOn;
+  const nextModules = value.value.modules.map((m) =>
+    isChild(m) ? m : { ...m, enabled: next },
+  );
+  const nextBundles = bundles.map((b) => (b.parent_uid ? b : { ...b, enabled: next }));
+  commitModules(nextModules, nextBundles);
 }
 
 /** Open the SPA dashboard in a new tab. Mirrors `extension/topbar.ts`'s
@@ -4593,7 +4674,7 @@ const moduleRowCtx: ModuleRowCtx = {
   KIND_TITLE,
   kindIcon, kindChipModifier, varColorClass,
   isCollapsed, isLocked, isInternal, isSeedLockable,
-  isModified, isDrifted, isMissingFromLibrary,
+  isModified, isDrifted, isMissingFromLibrary, isTypeConflict,
   severityFor, conflictTooltip, conflictBadgeText,
   modifiedTooltip, summaryFor, summaryTokens, siblingInfo,
   rowGap, draggingModuleUid, recentDropUids, pulseDelayFor,
@@ -4602,6 +4683,7 @@ const moduleRowCtx: ModuleRowCtx = {
   onDragStart, onDragEnd, openContextMenu, onCardKeydown,
   pairingFor,
   viaInboundFor,
+  contributorsFor,
 };
 provide(ModuleRowCtxKey, moduleRowCtx);
 
@@ -4636,6 +4718,23 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
     :data-mode-label="isMuted ? muteLabel : undefined"
     @dragleave="onContainerLeave"
   >
+    <!-- Node identity strip. A fixed, read-only CODENAME naming THIS
+         WP_Context node — a stable `adjective-noun` derived from the
+         litegraph node id (node-codename.ts). POV-independent + unique on
+         the canvas, NOT editable. Cross-node UI (constraint reach pick-list,
+         pair popovers) shows the same codename to say WHICH node a target
+         lives in. Sits above the toolbar/hero so it shows in every state. -->
+    <div class="wp-node-id">
+      <span class="wp-node-id__tag">node</span>
+      <span
+        class="wp-node-id__chip wp-node-id__chip--fixed"
+        data-test="node-label"
+        :title="`Stable id for this Context node — referenced by cross-node constraint UI (${nodeCodename})`"
+      >
+        <span class="wp-node-id__text">{{ nodeCodename }}</span>
+      </span>
+    </div>
+
     <!-- Corrupt-workflow recovery panel (5.6). Surfaces when JSON parse fails
          or returns a non-object. View raw exposes the bad payload so users
          can copy it out before resetting. -->
@@ -4699,21 +4798,21 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
           <span class="wp-w-toolbar-spacer" />
           <button
             type="button"
-            class="wp-btn wp-btn--icon"
+            class="wp-btn--icon-sm"
             title="Collapse all"
             aria-label="Collapse all modules"
             @click="collapseAll"
           ><i class="pi pi-chevron-up" /></button>
           <button
             type="button"
-            class="wp-btn wp-btn--icon"
+            class="wp-btn--icon-sm"
             title="Expand all"
             aria-label="Expand all modules"
             @click="expandAll"
           ><i class="pi pi-chevron-down" /></button>
           <button
             type="button"
-            class="wp-btn wp-btn--icon"
+            class="wp-btn--icon-sm"
             title="Toggle all enabled"
             aria-label="Toggle all enabled"
             @click="toggleAllEnabled"
@@ -4721,8 +4820,8 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
         </div>
 
         <div
-          class="wp-modules-frame"
           ref="modulesContainer"
+          class="wp-modules-frame"
         >
         <div
           class="wp-modules"
@@ -4848,6 +4947,7 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
       :upstream-resolved="resolvedForEditing"
       :sibling-vars="siblingNodeVars"
       :sibling-modules="value.modules"
+      :chain-modules="chainModules"
       :via-option-pairs="editingModuleViaOptionPairs"
       :last-used-seed-reader="lastUsedSeedReader"
       @save="saveEditedModule"
@@ -5700,6 +5800,12 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
   background:   color-mix(in oklab, var(--wp-danger) 14%, transparent);
   border-color: var(--wp-danger);
 }
+/* clash → --wp-accent (violet): id reused by a DIFFERENT kind. Distinct
+ * from modified/drift/missing so a cross-kind collision reads at a glance. */
+.wp-mod-dot--clash {
+  background:   color-mix(in oklab, var(--wp-accent) 14%, transparent);
+  border-color: var(--wp-accent);
+}
 
 /* ── Sibling badge ──────────────────────────────────────────────────────
  * Rendered when the same uuid appears more than once in this Context.
@@ -5775,6 +5881,40 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
 .wp-w-toolbar-label { font: 500 11px/1 var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text3)); text-transform: lowercase; letter-spacing: 0.02em; }
 .wp-w-count { font: 500 11px/1 var(--wp-font-mono); color: var(--wp-text-dim, var(--wp-text3)); padding: 2px 6px; background: var(--wp-bg-deep, var(--wp-bg)); border-radius: var(--wp-radius, 4px); }
 .wp-w-toolbar-spacer { flex: 1; }
+
+/* ── Node identity chip (SP3 P7) ────────────────────────────────────────
+ * A small, unobtrusive header strip naming this WP_Context node. Amber
+ * accent (matches the design proposal); sits above the toolbar/hero in a
+ * compact row so it never disturbs their layout. */
+.wp-node-id { display: flex; align-items: center; gap: 6px; padding: 2px 0 4px; }
+.wp-node-id__tag {
+  font: 500 10px/1 var(--wp-font-sans, sans-serif);
+  color: var(--wp-text-dim, var(--wp-text3));
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.wp-node-id__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 220px;
+  padding: 2px 8px;
+  font: 600 11px/1.2 var(--wp-font-sans, sans-serif);
+  /* Neutral — a fixed codename is an identity, not an attention cue (was
+     amber). Muted text + a faint text-tinted wash + standard border, the
+     same neutral idiom used elsewhere in the widget; reads on light + dark. */
+  color: var(--wp-text-muted, var(--wp-text2));
+  background: color-mix(in srgb, var(--wp-text) 6%, transparent);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius-sm, 4px);
+}
+/* Fixed codename — a read-only identity, not an interactive control. */
+.wp-node-id__chip--fixed { cursor: default; }
+.wp-node-id__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* ── Generic button system (Task 10) ────────────────────────────────────
  * .wp-btn--icon-sm (Task 9) already exists for inline card actions;

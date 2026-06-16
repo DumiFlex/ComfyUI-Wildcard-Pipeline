@@ -61,6 +61,207 @@ def test_resolve_empty_options_returns_empty_string():
     assert out == {"$x": ""}
 
 
+# --- SP2a multi-select wildcards (Chunk D) ---
+
+_MULTI = [
+    {"id": "o1", "value": "red", "weight": 1, "sub_categories": []},
+    {"id": "o2", "value": "blue", "weight": 1, "sub_categories": []},
+    {"id": "o3", "value": "green", "weight": 1, "sub_categories": []},
+]
+
+
+def test_record_pick_multi_stores_values_and_union_tags():
+    from engine.modules.wildcard_handler import _record_pick_multi
+    ctx = {"__wp_current_module_id__": "m1"}
+    _record_pick_multi(ctx, [
+        {"value": "red", "sub_categories": ["warm"], "id": "o1"},
+        {"value": "blue", "sub_categories": ["cool"], "id": "o2"},
+    ], ", ")
+    rec = ctx["__wp_picks__"]["m1"]
+    assert rec["value"] == "red, blue"
+    assert rec["values"] == ["red", "blue"]
+    assert set(rec["sub_categories"]) == {"warm", "cool"}
+    assert rec["id"] == "o1"
+
+
+def test_record_pick_multi_carries_per_pick_structure():
+    from engine.modules.wildcard_handler import _record_pick_multi
+    ctx = {"__wp_current_module_id__": "m1"}
+    chosen = [
+        {"value": "red", "sub_categories": ["warm"], "id": "o1"},
+        {"value": "blue", "sub_categories": ["cool"], "id": "o2"},
+    ]
+    _record_pick_multi(ctx, chosen, ", ")
+    rec = ctx["__wp_picks__"]["m1"]
+    assert rec["picks"] == [{"value": "red", "tags": ["warm"]}, {"value": "blue", "tags": ["cool"]}]
+    assert rec["value"] == "red, blue"
+    assert rec["values"] == ["red", "blue"]
+
+
+def test_record_pick_single_carries_one_pick():
+    from engine.modules.wildcard_handler import _record_pick
+    ctx = {"__wp_current_module_id__": "m1"}
+    _record_pick(ctx, {"value": "red", "sub_categories": ["warm"], "id": "o1"})
+    assert ctx["__wp_picks__"]["m1"]["picks"] == [{"value": "red", "tags": ["warm"]}]
+
+
+def test_multi_pick_binds_listvar_unique():
+    from engine.syntax.types import ListVar
+    out = WildcardHandler.resolve(
+        _payload(list(_MULTI)),
+        instance={"variable_binding": "c", "pick_min": 2, "pick_max": 2, "pick_separator": ", "},
+        ctx=_ctx(seed=42),
+    )
+    assert isinstance(out["c"], ListVar)
+    assert len(out["c"].items) == 2
+    assert len(set(out["c"].items)) == 2
+
+
+def test_multi_pick_independent_allows_repeats():
+    # SP2c: independent (with replacement) draws the FULL requested count even
+    # when it exceeds the pool size — 5 picks from a 2-option pool → 5 items.
+    from engine.syntax.types import ListVar
+    out = WildcardHandler.resolve(
+        _payload([
+            {"id": "a", "value": "alpha", "weight": 1},
+            {"id": "b", "value": "beta", "weight": 1},
+        ]),
+        instance={
+            "variable_binding": "c", "pick_min": 5, "pick_max": 5,
+            "pick_independent": True, "pick_separator": ", ",
+        },
+        ctx=_ctx(seed=7),
+    )
+    assert isinstance(out["c"], ListVar)
+    assert len(out["c"].items) == 5
+    assert all(v in ("alpha", "beta") for v in out["c"].items)
+
+
+def test_multi_pick_unique_clamps_to_pool():
+    # Default (unique): 5 requested from a 2-option pool clamps to 2 distinct.
+    from engine.syntax.types import ListVar
+    out = WildcardHandler.resolve(
+        _payload([
+            {"id": "a", "value": "alpha", "weight": 1},
+            {"id": "b", "value": "beta", "weight": 1},
+        ]),
+        instance={"variable_binding": "c", "pick_min": 5, "pick_max": 5, "pick_separator": ", "},
+        ctx=_ctx(seed=7),
+    )
+    assert isinstance(out["c"], ListVar)
+    assert len(out["c"].items) == 2
+    assert len(set(out["c"].items)) == 2
+
+
+def test_multi_pick_seed_deterministic():
+    a = WildcardHandler.resolve(
+        _payload(list(_MULTI)),
+        instance={"variable_binding": "c", "pick_min": 2, "pick_max": 3, "pick_separator": ", "},
+        ctx=_ctx(seed=9),
+    )
+    b = WildcardHandler.resolve(
+        _payload(list(_MULTI)),
+        instance={"variable_binding": "c", "pick_min": 2, "pick_max": 3, "pick_separator": ", "},
+        ctx=_ctx(seed=9),
+    )
+    assert list(a["c"].items) == list(b["c"].items)
+
+
+def test_single_pick_default_binds_string():
+    out = WildcardHandler.resolve(
+        _payload(list(_MULTI)),
+        instance={"variable_binding": "c"},
+        ctx=_ctx(seed=42),
+    )
+    assert isinstance(out["c"], str)
+
+
+def test_apply_constraint_multi_tag_option_multiplies():
+    """SP3: an option carrying MULTIPLE tags matched by the source's matrix
+    row multiplies one factor per matched cell. Here boost(2.0)×reduce(0.5)
+    on the two tags cancels to 1.0 — exercising the multi-tag combine path
+    the SP2a single-primary-tag applier could not."""
+    from engine.modules.wildcard_handler import _apply_constraint_to_options
+    options = [{"value": "x", "sub_categories": ["somber", "tense"], "weight": 1.0}]
+    constraint = {"matrix": {"rainy": {"somber": {"mode": "boost", "factor": 2.0},
+                                       "tense":  {"mode": "reduce", "factor": 0.5}}},
+                  "exceptions": []}
+    # Carries both legacy `sub_categories` (what the SP2a primary-tag applier
+    # read) and SP3 `picks`, so the OLD code would boost only on the primary
+    # tag → 2.0, while the NEW combine path multiplies both cells → 1.0.
+    src = {"value": "rain", "sub_categories": ["rainy"],
+           "picks": [{"value": "rain", "tags": ["rainy"]}]}
+    out = _apply_constraint_to_options(options, constraint, src, [])
+    assert out[0]["weight"] == 1.0
+
+
+def test_apply_constraint_no_multi_pick_warning():
+    """SP3 drops the SP2a `constraint_source_multi_pick` guard — a multi-pick
+    source now applies per-pick, so there is nothing to warn about."""
+    from engine.modules.wildcard_handler import _apply_constraint_to_options
+    warns = []
+    src = {"picks": [{"value": "a", "tags": []}, {"value": "b", "tags": []}], "values": ["a", "b"]}
+    _apply_constraint_to_options([{"value": "x", "sub_categories": [], "weight": 1.0}],
+                                 {"matrix": {}, "exceptions": []}, src, warns)
+    assert not any(w.get("type") == "constraint_source_multi_pick" for w in warns)
+
+
+def test_multi_pick_non_numeric_fields_dont_crash():
+    """SP2a hardening: junk pick_min/pick_max (hand-built or legacy instance)
+    must degrade, never raise a ValueError/TypeError out of resolve()."""
+    from engine.syntax.types import ListVar
+
+    # Both junk -> defaults collapse to (1, 1) -> single-pick string.
+    out = WildcardHandler.resolve(
+        _payload(list(_MULTI)),
+        instance={"variable_binding": "c", "pick_min": "abc", "pick_max": []},
+        ctx=_ctx(seed=42),
+    )
+    assert isinstance(out["c"], str)
+
+    # Junk min + valid max=3 -> min defaults to 1 -> multi (1, 3) still engages.
+    out2 = WildcardHandler.resolve(
+        _payload(list(_MULTI)),
+        instance={"variable_binding": "c", "pick_min": "xyz", "pick_max": 3},
+        ctx=_ctx(seed=42),
+    )
+    assert isinstance(out2["c"], ListVar)
+
+
+def test_multi_pick_min_zero_can_be_empty():
+    from engine.syntax.types import ListVar
+    out = WildcardHandler.resolve(
+        _payload(list(_MULTI)),
+        instance={"variable_binding": "c", "pick_min": 0, "pick_max": 0, "pick_separator": ", "},
+        ctx=_ctx(seed=1),
+    )
+    assert isinstance(out["c"], ListVar)
+    assert out["c"].items == []
+
+
+def test_multi_pick_count_clamped_to_pool_unique():
+    out = WildcardHandler.resolve(
+        _payload(list(_MULTI)),
+        instance={"variable_binding": "c", "pick_min": 9, "pick_max": 9, "pick_separator": ", "},
+        ctx=_ctx(seed=1),
+    )
+    assert len(out["c"].items) == 3
+    assert len(set(out["c"].items)) == 3
+
+
+def test_multi_pick_excludes_null_option():
+    payload = _payload([
+        {"id": "o1", "value": "red", "weight": 1, "sub_categories": []},
+        {"id": "n", "value": "", "weight": 1, "is_null": True, "sub_categories": []},
+    ])
+    out = WildcardHandler.resolve(
+        payload,
+        instance={"variable_binding": "c", "pick_min": 2, "pick_max": 2},
+        ctx=_ctx(seed=1),
+    )
+    assert list(out["c"].items) == ["red"]
+
+
 def test_resolve_filters_by_enabled_options():
     # Only "b" is enabled; with seed=0 only option is beta → picks beta
     ctx = _ctx(seed=0)
@@ -320,16 +521,16 @@ def test_resolve_option_weights_override_skips_non_numeric_value():
 
 
 def test_resolve_category_filter_keeps_only_matching_options():
-    """instance.category_filter narrows the pool by `sub_category`."""
+    """instance.category_filter narrows the pool by `sub_categories`."""
     ctx = _ctx(seed=0)
     payload = _payload([
-        {"id": "a", "value": "alpha", "weight": 1, "sub_category": "warm"},
-        {"id": "b", "value": "beta",  "weight": 1, "sub_category": "cool"},
-        {"id": "c", "value": "gamma", "weight": 1, "sub_category": "warm"},
+        {"id": "a", "value": "alpha", "weight": 1, "sub_categories": ["warm"]},
+        {"id": "b", "value": "beta",  "weight": 1, "sub_categories": ["cool"]},
+        {"id": "c", "value": "gamma", "weight": 1, "sub_categories": ["warm"]},
     ])
     out = WildcardHandler.resolve(
         payload,
-        instance={"variable_binding": "$x", "category_filter": ["warm"]},
+        instance={"variable_binding": "$x", "category_filter": "warm"},
         ctx=ctx,
     )
     # Pool is now {alpha, gamma} — both weight=1. With per-module
@@ -345,12 +546,12 @@ def test_resolve_category_filter_excludes_options_without_sub_category():
     """Options missing sub_category get dropped by an explicit filter."""
     ctx = _ctx(seed=0)
     payload = _payload([
-        {"id": "a", "value": "alpha", "weight": 1, "sub_category": "warm"},
+        {"id": "a", "value": "alpha", "weight": 1, "sub_categories": ["warm"]},
         {"id": "b", "value": "beta",  "weight": 1},  # no sub_category
     ])
     out = WildcardHandler.resolve(
         payload,
-        instance={"variable_binding": "$x", "category_filter": ["warm"]},
+        instance={"variable_binding": "$x", "category_filter": "warm"},
         ctx=ctx,
     )
     assert out == {"$x": "alpha"}
@@ -360,12 +561,12 @@ def test_resolve_category_filter_empty_list_falls_through():
     """Empty list = no filter, same as None."""
     ctx = _ctx(seed=1)
     payload = _payload([
-        {"id": "a", "value": "alpha", "weight": 1, "sub_category": "warm"},
-        {"id": "b", "value": "beta",  "weight": 1, "sub_category": "cool"},
+        {"id": "a", "value": "alpha", "weight": 1, "sub_categories": ["warm"]},
+        {"id": "b", "value": "beta",  "weight": 1, "sub_categories": ["cool"]},
     ])
     out = WildcardHandler.resolve(
         payload,
-        instance={"variable_binding": "$x", "category_filter": []},
+        instance={"variable_binding": "$x", "category_filter": ""},
         ctx=ctx,
     )
     # Empty filter = no filtering; seed=1 → alpha at 50/50.
@@ -376,15 +577,15 @@ def test_resolve_category_filter_combines_with_enabled_options():
     """Both filters apply — category narrows first, then enable list."""
     ctx = _ctx(seed=0)
     payload = _payload([
-        {"id": "a", "value": "alpha", "weight": 1, "sub_category": "warm"},
-        {"id": "b", "value": "beta",  "weight": 1, "sub_category": "warm"},
-        {"id": "c", "value": "gamma", "weight": 1, "sub_category": "cool"},
+        {"id": "a", "value": "alpha", "weight": 1, "sub_categories": ["warm"]},
+        {"id": "b", "value": "beta",  "weight": 1, "sub_categories": ["warm"]},
+        {"id": "c", "value": "gamma", "weight": 1, "sub_categories": ["cool"]},
     ])
     out = WildcardHandler.resolve(
         payload,
         instance={
             "variable_binding": "$x",
-            "category_filter": ["warm"],
+            "category_filter": "warm",
             "enabled_options": ["b", "c"],  # c excluded by category
         },
         ctx=ctx,

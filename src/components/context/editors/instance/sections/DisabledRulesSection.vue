@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import WpCheck from "../../../../shared/WpCheck.vue";
 
 interface Rule {
   id: string;
@@ -32,14 +33,13 @@ function emitList(ids: string[]): void {
   emit("update:modelValue", ids);
 }
 
-function onToggle(id: string, ev: Event): void {
-  const checked = (ev.target as HTMLInputElement).checked;
+function onToggle(id: string, next: boolean): void {
   const current = new Set(props.modelValue ?? []);
-  if (checked) current.add(id);
+  if (next) current.add(id);
   else current.delete(id);
   // Preserve library order in emitted array.
-  const next = props.library.map((r) => r.id).filter((rid) => current.has(rid));
-  emitList(next);
+  const ordered = props.library.map((r) => r.id).filter((rid) => current.has(rid));
+  emitList(ordered);
 }
 
 function ruleLabel(rule: Rule): string {
@@ -71,20 +71,20 @@ function onClickReset(): void {
       </button>
     </div>
     <div class="wp-instance-section-body wp-instance-section-body-col">
-      <label
+      <div
         v-for="rule in library"
         :key="rule.id"
         class="wp-instance-row"
       >
-        <input
-          type="checkbox"
+        <WpCheck
           :data-test="`dr-cb-${rule.id}`"
-          :checked="isDisabled(rule.id)"
-          @change="(ev) => onToggle(rule.id, ev)"
+          :model-value="isDisabled(rule.id)"
+          :aria-label="`disable rule ${rule.id}`"
+          @update:model-value="(v) => onToggle(rule.id, v)"
         />
         <span class="wp-instance-row-id">{{ rule.id }}</span>
         <span class="wp-instance-row-value">{{ ruleLabel(rule) }}</span>
-      </label>
+      </div>
     </div>
   </section>
 </template>

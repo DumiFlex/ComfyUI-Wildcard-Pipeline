@@ -25,14 +25,113 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import {
   parse,
   replaceAtom,
-  serialise,
   type Atom,
+  type RefAtom,
+  type TextAtom,
 } from "./atomicEditorModel";
-import { inlineTokenHtml } from "../../widgets/richTokenize";
+import { escapeHtml, inlineTokenHtml, splitRefFilter, tokenizeRich } from "../../widgets/richTokenize";
 import RefChip from "./RefChip.vue";
 import SubcategoryFilterPicker from "./SubcategoryFilterPicker.vue";
+import RemapRefPopup from "./RemapRefPopup.vue";
+import { rewriteBrokenRef } from "../cascade/remap-ref-rewrite";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
+import { probeAutocomplete } from "../utils/autocompleteProbe";
+
+// --- 4-segment nested-ref serialization (SP1, §3.2) -----------------------
+//
+// The canonical ref form is `@{uuid[#name][:expr][!null]}` — a boolean
+// sub-category EXPRESSION after `:` (not a comma list) plus a trailing
+// `!null` exclude-null marker. The shared `atomicEditorModel` /
+// `richTokenize` layer still models a ref's `:`-segment as the legacy
+// `subCategories: string[]` (comma-split). Rather than fork that shared
+// layer, RichTextInput owns the 4-segment view locally:
+//
+//   - The atom STREAM (text/var/ref boundaries) still comes from
+//     `atomicEditorModel.parse` — the legacy regex's `:` group is
+//     `[^}]*`, so it still captures the full `expr!null` body and the
+//     token boundary (`}`) stays correct. Only the INTERPRETATION of
+//     that body changed.
+//   - `refFilterOf` reconstructs the raw `:`-body from `subCategories`
+//     (join on `,` is loss-free for the comma-OR shorthand) and peels a
+//     trailing `!null` into the `excludeNull` flag, yielding `{expr,
+//     excludeNull}`. A freshly-applied filter stashes those on the atom
+//     directly (extra fields survive `replaceAtom`'s shallow clone), so
+//     the live edit round-trips without going through the lossy
+//     comma-split.
+//   - `serialiseAtomsLocal` emits the 4-segment form, omitting each
+//     segment when empty. It replaces `atomicEditorModel.serialise`
+//     everywhere RichTextInput needs raw text (emit value + caret-length
+//     math) so `!null` + multi-word expressions survive round-trips.
+
+/** A ref's filter, lifted out of the legacy `subCategories` list. */
+interface RefFilter {
+  /** Boolean sub-category expression (the `:` segment). Empty = none. */
+  expr: string;
+  /** Exclude-null flag (the trailing `!null` segment). */
+  excludeNull: boolean;
+}
+
+/** Ref atom augmented with the 4-segment filter view. The extra fields
+ *  are optional so a plain `RefAtom` (e.g. fresh from `atomicEditorModel
+ *  .parse`) is assignable; `refFilterOf` falls back to reconstructing
+ *  them from `subCategories` when absent. */
+type RefAtomX = RefAtom & Partial<RefFilter>;
+
+/** Peel a trailing `!null` marker off a raw `:`-segment body, returning
+ *  the pure expression + the exclude-null flag. `@{uuid:warm!null}` →
+ *  `{ expr: "warm", excludeNull: true }`. The `!null` must be the whole
+ *  trailing segment (the name/expr captures exclude `!`, so a `!` can
+ *  only introduce the null marker). */
+function splitColonBody(body: string): RefFilter {
+  // Delegate to the single-source peel in richTokenize so the editor,
+  // RefChip, and the canvas OptionRow can never drift on `!null` handling.
+  return splitRefFilter(body);
+}
+
+/** The 4-segment filter for a ref atom. Prefers explicit `expr` /
+ *  `excludeNull` (set by a live picker apply); otherwise reconstructs
+ *  from the legacy `subCategories` body. */
+function refFilterOf(atom: RefAtomX): RefFilter {
+  if (atom.expr !== undefined || atom.excludeNull !== undefined) {
+    return { expr: atom.expr ?? "", excludeNull: atom.excludeNull ?? false };
+  }
+  if (atom.subCategories.length === 0) return { expr: "", excludeNull: false };
+  return splitColonBody(atom.subCategories.join(","));
+}
+
+/** Serialize one ref atom to the canonical `@{uuid[#name][:expr][!null]}`
+ *  form, omitting each absent segment. */
+function serialiseRefAtom(atom: RefAtomX): string {
+  let out = "@{" + atom.uuid;
+  if (atom.name && atom.name.length > 0) out += "#" + atom.name;
+  const { expr, excludeNull } = refFilterOf(atom);
+  if (expr.length > 0) out += ":" + expr;
+  if (excludeNull) out += "!null";
+  out += "}";
+  return out;
+}
+
+/** Local replacement for `atomicEditorModel.serialise` that emits the
+ *  4-segment ref form. Text / var atoms serialize identically. */
+function serialiseAtomsLocal(atoms: Atom[]): string {
+  let out = "";
+  for (const a of atoms) {
+    if (a.kind === "text") out += a.text;
+    else if (a.kind === "var") out += "$" + a.name + (a.index != null ? "." + a.index : "");
+    else out += serialiseRefAtom(a);
+  }
+  return out;
+}
+
+/** Template-safe filter accessor: returns the `{expr, excludeNull}` for
+ *  a ref atom, or empty defaults for any other atom kind. Lets the
+ *  RefChip binding stay terse without narrowing the union inline. */
+function chipFilterOf(atom: Atom): RefFilter {
+  return atom.kind === "ref"
+    ? refFilterOf(atom)
+    : { expr: "", excludeNull: false };
+}
 
 interface Props {
   modelValue: string;
@@ -48,6 +147,12 @@ interface Props {
   placeholder?: string;
   varSuggestions?: string[];
   refSuggestions?: string[];
+  /** Opt-in: enable the `@{}` nested-wildcard-ref machinery (autocomplete
+   *  popover + sub-cat picker + ref chips) on a NON-wildcard surface. Set by
+   *  the derivation editor on ACTION-value inputs — the engine resolves `@{}`
+   *  there (carrier) but compares `condition.value` raw, so condition inputs
+   *  leave this false. The `wildcard` surface enables refs regardless. */
+  allowNestedRefs?: boolean;
   /** Map from UUID to display name; used to render `@{uuid}` refs as human labels. */
   uuidToName?: Map<string, string>;
   /** Map from wildcard UUID → its declared sub_categories. Used by the
@@ -64,6 +169,13 @@ interface Props {
    *  the uuid so two same-named wildcards (e.g. duplicates from import)
    *  can be told apart at-a-glance. */
   uuidToOptionsCount?: Map<string, number>;
+  /** Map from wildcard UUID → each option's sub-category tag set. Feeds
+   *  the boolean-filter picker's live "N of M options match" count so
+   *  the user sees how many options the typed expression keeps. */
+  uuidToOptionTagSets?: Map<string, string[][]>;
+  /** Map from wildcard UUID → its `tag_groups` axes (axis → member
+   *  tags). Feeds the picker's grouped insert palette. */
+  uuidToTagGroups?: Map<string, Record<string, string[]>>;
   ariaLabel?: string;
   disabled?: boolean;
 }
@@ -83,10 +195,13 @@ const props = withDefaults(defineProps<Props>(), {
   placeholder: "",
   varSuggestions: () => [],
   refSuggestions: () => [],
+  allowNestedRefs: false,
   uuidToName: () => new Map(),
   uuidToSubCategories: () => new Map(),
   uuidToHasNull: () => new Map(),
   uuidToOptionsCount: () => new Map(),
+  uuidToOptionTagSets: () => new Map(),
+  uuidToTagGroups: () => new Map(),
   ariaLabel: undefined,
   disabled: false,
 });
@@ -102,6 +217,12 @@ const effectiveWarnings = computed<ResolveWarning[]>(() => [
   ...storeWarnings.value,
 ]);
 
+/** `@{}` nested-ref machinery is live when the surface is `wildcard` OR the
+ *  host opted in via `allowNestedRefs` (derivation action values). Single
+ *  source for the parse-collapse + the `@`-autocomplete gate so they can't
+ *  drift apart. */
+const refsEnabled = computed(() => props.surface === "wildcard" || props.allowNestedRefs);
+
 const emit = defineEmits<{
   "update:modelValue": [value: string];
 }>();
@@ -110,6 +231,13 @@ const emit = defineEmits<{
 const hostEl = ref<HTMLDivElement | null>(null);
 const popoverEl = ref<HTMLDivElement | null>(null);
 const focused = ref(false);
+
+// Placeholder-ghost gate. The host ALWAYS carries a ZWSP pad span (padAtoms),
+// so `.wp-rt__host:empty` never matches — the placeholder must hang off an
+// explicit class instead. Tracks LIVE content (updated on every input +
+// programmatic apply) so the ghost hides on the first keystroke like a native
+// `<input placeholder>`.
+const isEmpty = ref((props.modelValue ?? "").length === 0);
 
 // Zero-width space rendered inside empty pad spans. Browsers can't reliably
 // land the caret inside a span that has no child text node (the kind Vue
@@ -142,7 +270,15 @@ const popupPos = ref<{ top: number; left: number; width: number; flipped: boolea
 // picker — `pickerMode` distinguishes them.
 const pickerOpen = ref(false);
 const pickerSubCats = ref<string[]>([]);
-const pickerInitial = ref<string[]>([]);
+// 4-segment filter seed for the boolean-expression picker (§4.1):
+// initial expression text + exclude-null flag, replacing the legacy
+// flat sub-category selection.
+const pickerInitialExpr = ref<string>("");
+const pickerInitialExcludeNull = ref<boolean>(false);
+// Per-option tag sets (match-count denominator) + tag-group axes
+// (grouped insert palette) for the picked wildcard.
+const pickerOptionTagSets = ref<string[][]>([]);
+const pickerTagGroups = ref<Record<string, string[]>>({});
 const pickerHasNull = ref<boolean>(false);
 const pickerMode = ref<"insert" | "edit">("insert");
 // The atom-index this picker is editing — null when inserting fresh.
@@ -163,6 +299,53 @@ const pendingInsertCaret = ref<{ caret: number; acStart: number } | null>(null);
 const pickerAnchor = ref<{ top: number; left: number; flipped: boolean }>({
   top: 0, left: 0, flipped: false,
 });
+
+// --- RemapRefPopup state (#3 broken-chip heal) ---
+const remapOpen = ref(false);
+const remapOldUuid = ref("");
+const remapCachedName = ref("");
+const remapOldExpr = ref("");
+const remapOldExcludeNull = ref(false);
+const remapAnchor = ref<{ top: number; left: number }>({ top: 0, left: 0 });
+
+/** WildcardRefData the popup's dropdown + reconcile consume. RichTextInput
+ *  already receives the per-uuid maps as props (uuidToName etc.), so we
+ *  assemble the WildcardRefData shape from them rather than re-walking a
+ *  catalog the editor host doesn't hold. */
+const remapRefData = computed(() => ({
+  uuidToName: props.uuidToName,
+  uuidToSubCategories: props.uuidToSubCategories,
+  uuidToHasNull: props.uuidToHasNull,
+  uuidToOptionsCount: props.uuidToOptionsCount,
+  uuidToOptionTagSets: props.uuidToOptionTagSets,
+  uuidToTagGroups: props.uuidToTagGroups,
+}));
+
+/** Theme class to stamp on the body-teleported overlays (`@`-autocomplete
+ *  popover + the SubcategoryFilterPicker anchor/backdrop).
+ *
+ *  Why: both overlays `<Teleport to="body">`, so they escape the host's
+ *  subtree. The `--wp-*` light + dark token variants are declared on
+ *  `.wp-theme-light` / `.wp-theme-dark`; when the HOST sits under a
+ *  non-default theme (canvas light mode, or the SPA's light theme) the
+ *  body-teleported node would otherwise resolve only the base `:root`
+ *  (dark) palette and paint with the wrong colors.
+ *
+ *  Mirroring the host's resolved theme onto the teleported root makes the
+ *  tokens resolve to the SAME values the host uses. We read the nearest
+ *  themed ancestor of the host live (re-evaluated each render, so it's
+ *  correct at open time in BOTH the SPA and the canvas without hard-coding
+ *  either). Empty string when no explicit theme class is on the ancestor
+ *  chain — the inherited cascade is then already correct (default dark). */
+function teleportThemeClass(): string {
+  const el = hostEl.value;
+  if (!el || typeof el.closest !== "function") return "";
+  const themed = el.closest(".wp-theme-light, .wp-theme-dark");
+  if (!themed) return "";
+  return themed.classList.contains("wp-theme-light")
+    ? "wp-theme-light"
+    : "wp-theme-dark";
+}
 
 // --- Atom rendering — semi-controlled pattern ---
 //
@@ -229,6 +412,49 @@ function padAtoms(list: Atom[]): Atom[] {
  *
  *  Adjacent text atoms produced by the collapse are merged so the
  *  padAtoms invariant ("no adjacent text atoms") still holds. */
+/** Lift a freshly-parsed ref atom into the 4-segment view (§3.2).
+ *
+ *  The shared tokenizer (`richTokenize`) still models the ref body as
+ *  the legacy `subCategories` list and its name capture does not exclude
+ *  `!`. So for the exclude-null-only form `@{uuid#name!null}` the `!null`
+ *  leaks into `name` (no `:` to stop the name group), and for the
+ *  `:expr!null` form the marker lands at the tail of the (comma-joined)
+ *  body. Both are reconciled here: peel a trailing `!…` off whichever
+ *  segment carries it, yielding a clean `name` + explicit `{expr,
+ *  excludeNull}`. Storing the explicit fields means later `refFilterOf`
+ *  reads them directly rather than re-deriving from the lossy body. */
+function chipRefAtom(atom: RefAtom): RefAtomX {
+  let name = atom.name;
+  // Body the legacy parser captured for the `:` segment (loss-free for
+  // the comma-OR shorthand).
+  const body = atom.subCategories.join(",");
+  // Exclude-null marker leaked into the name (no `:expr` present).
+  if (body.length === 0 && name && name.includes("!")) {
+    const bang = name.indexOf("!");
+    const tail = name.slice(bang + 1);
+    name = name.slice(0, bang);
+    const cleaned: RefAtomX = {
+      kind: "ref",
+      uuid: atom.uuid,
+      subCategories: [],
+      expr: "",
+      excludeNull: tail === "null",
+    };
+    if (name.length > 0) cleaned.name = name;
+    return cleaned;
+  }
+  const { expr, excludeNull } = splitColonBody(body);
+  const cleaned: RefAtomX = {
+    kind: "ref",
+    uuid: atom.uuid,
+    subCategories: [],
+    expr,
+    excludeNull,
+  };
+  if (name && name.length > 0) cleaned.name = name;
+  return cleaned;
+}
+
 function parseForSurface(text: string): Atom[] {
   const atoms = parse(text);
   const collapseSet: Set<"var" | "ref"> =
@@ -237,26 +463,46 @@ function parseForSurface(text: string): Atom[] {
       : props.surface === "fixed_values"
         ? new Set(["var", "ref"])
         : new Set(["ref"]);
+  // Action-value derivation inputs (allowNestedRefs) chipify `@{}` refs like
+  // the wildcard surface does — drop `ref` from the collapse set so they
+  // settle into chips instead of staying literal text.
+  if (refsEnabled.value) collapseSet.delete("ref");
   const out: Atom[] = [];
   for (const a of atoms) {
     if ((a.kind === "var" || a.kind === "ref") && collapseSet.has(a.kind)) {
       // Re-serialise back to raw text and merge into adjacent text.
-      const raw = a.kind === "var"
-        ? "$" + a.name
-        : (a.subCategories.length > 0
-            ? "@{" + a.uuid + ":" + a.subCategories.join(",") + "}"
-            : "@{" + a.uuid + "}");
+      // Refs use the 4-segment form so a collapsed-surface round-trip
+      // keeps `:expr` + `!null` intact (legacy comma body reconstructs
+      // loss-free via `refFilterOf`).
+      const raw = a.kind === "var" ? "$" + a.name : serialiseRefAtom(a);
       const last = out[out.length - 1];
       if (last && last.kind === "text") {
-        out[out.length - 1] = { kind: "text", text: last.text + raw };
+        // A collapsed arm folds into its surrounding run and inherits that
+        // run's blockColor (SP2b: a brace-block arm stays block-coloured even
+        // when the surface renders it as literal scaffolding text).
+        out[out.length - 1] = last.blockColor
+          ? { kind: "text", text: last.text + raw, blockColor: last.blockColor }
+          : { kind: "text", text: last.text + raw };
       } else {
         out.push({ kind: "text", text: raw });
       }
       continue;
     }
+    // Chipified ref → lift into the 4-segment `{expr, excludeNull}` view
+    // so the filter survives the next round-trip without re-deriving
+    // from the lossy legacy body.
+    if (a.kind === "ref") {
+      out.push(chipRefAtom(a));
+      continue;
+    }
     const last = out[out.length - 1];
-    if (a.kind === "text" && last && last.kind === "text") {
-      out[out.length - 1] = { kind: "text", text: last.text + a.text };
+    // Only merge text atoms that share a blockColor — fusing a block's
+    // scaffolding ("multi"/"alt") with adjacent plain text (undefined) would
+    // bleed the block colour onto prose between two blocks (`{a|b} x {c|d}`).
+    if (a.kind === "text" && last && last.kind === "text" && last.blockColor === a.blockColor) {
+      out[out.length - 1] = a.blockColor
+        ? { kind: "text", text: last.text + a.text, blockColor: a.blockColor }
+        : { kind: "text", text: last.text + a.text };
     } else {
       out.push(a);
     }
@@ -267,25 +513,38 @@ function parseForSurface(text: string): Atom[] {
 const atoms = ref<Atom[]>(padAtoms(parseForSurface(props.modelValue || "")));
 let lastEmittedValue = props.modelValue || "";
 
-/** Surface-aware text-atom HTML: tokenises the atom's raw text and
- *  emits colored sub-spans for inline syntax (brace blocks, escapes,
- *  unsettled `$name` / `@{uuid}`). The `collapsedKinds` argument
- *  neutralises whichever kinds the surface treats as literal so users
- *  don't see misleading var/ref styling on tokens the engine won't
- *  expand. Empty atoms render a single ZWSP so the caret has a
- *  landing position.
+/** Text-atom HTML: tokenises the atom's raw text and emits colored
+ *  sub-spans for inline syntax (brace blocks, multi-select, weights,
+ *  escapes). Empty atoms render a single ZWSP so the caret has a landing
+ *  position.
  *
- *  Surface → collapse:
- *    wildcard     → vars literal (refs chipify)
- *    fixed_values → both literal (only brace/multi/escape color)
- *    others       → refs literal (vars chipify) */
+ *  `$name` / `@{uuid}` are ALWAYS collapsed to plain text here (both kinds
+ *  passed to `inlineTokenHtml`). Rationale (user feedback 2026-06-09): an
+ *  UNSETTLED token — raw text mid-edit, not yet a chip — needs no separate
+ *  colour. The absence of a chip already signals "not committed"; a violet
+ *  `.wp-rt-var` / magenta `.wp-rt-ref` inline highlight only competes with
+ *  the settled-chip palette (RefChip is the sole var/ref colour). This is
+ *  surface-independent: on every surface, a chippable token that hasn't
+ *  settled reads as plain text and a settled one reads as a chip.
+ *
+ *  Inline `{a|b}` brace / multi / weight / escape colouring is untouched —
+ *  those aren't chippable tokens, so their highlight IS the only signal. */
 function textAtomHtml(text: string): string {
   if (!text) return ZWSP;
-  const collapsed: ReadonlyArray<"var" | "ref"> =
-    props.surface === "wildcard" ? ["var"]
-    : props.surface === "fixed_values" ? ["var", "ref"]
-    : ["ref"];
-  return inlineTokenHtml(text, collapsed);
+  return inlineTokenHtml(text, ["var", "ref"]);
+}
+
+/** HTML for one text atom. SP2b brace-block scaffolding (the braces, count,
+ *  `$$sep$$`, pipes, and literal arms a `{…}` block decomposes into) renders
+ *  its raw text ESCAPED but NOT re-tokenised — re-running the tokenizer on a
+ *  fragment like `{2$$, $$` would mis-read the `$$` sep delimiters as `$$`
+ *  escapes. The amber/green colour comes from the `.wp-rt-block-scaf--*`
+ *  wrapper class instead. Ordinary atoms keep the inline-token colouring
+ *  (weights, escapes) via `textAtomHtml`. Keeping the fast-path escape also
+ *  leaves the span's `firstChild` a text node, so caret math stays correct. */
+function renderTextAtom(atom: TextAtom): string {
+  if (atom.blockColor) return atom.text ? escapeHtml(atom.text) : ZWSP;
+  return textAtomHtml(atom.text);
 }
 
 watch(() => props.modelValue, (next) => {
@@ -320,15 +579,27 @@ function atomIsResolved(atom: Atom): boolean {
   return true;
 }
 
+/** Populate the picker's per-wildcard context (declared sub-cats, the
+ *  grouped palette axes, the match-count option tag sets, and the
+ *  null-option flag) from a target uuid. Shared by the insert + edit
+ *  entry points so both surfaces see the same data. */
+function loadPickerContext(uuid: string): void {
+  pickerSubCats.value = props.uuidToSubCategories.get(uuid) ?? [];
+  pickerOptionTagSets.value = props.uuidToOptionTagSets.get(uuid) ?? [];
+  pickerTagGroups.value = props.uuidToTagGroups.get(uuid) ?? {};
+  pickerHasNull.value = props.uuidToHasNull.get(uuid) ?? false;
+}
+
 function onChipClick(idx: number, ev?: MouseEvent): void {
   const atom = atoms.value[idx];
   if (!atom || atom.kind !== "ref") return;
   // Unresolved refs have no edit affordance — RefChip already gates the click
   // emit but be defensive in case a future caller routes here directly.
   if (!props.uuidToName.has(atom.uuid)) return;
-  pickerSubCats.value = props.uuidToSubCategories.get(atom.uuid) ?? [];
-  pickerInitial.value = atom.subCategories;
-  pickerHasNull.value = props.uuidToHasNull.get(atom.uuid) ?? false;
+  loadPickerContext(atom.uuid);
+  const { expr, excludeNull } = refFilterOf(atom);
+  pickerInitialExpr.value = expr;
+  pickerInitialExcludeNull.value = excludeNull;
   pickerMode.value = "edit";
   pickerTargetAtomIndex.value = idx;
   pendingInsert.value = null;
@@ -336,25 +607,95 @@ function onChipClick(idx: number, ev?: MouseEvent): void {
   // the host's rect if the event target isn't a chip element.
   setPickerAnchorFromElement((ev?.currentTarget as HTMLElement | null) ?? null);
   pickerOpen.value = true;
+  clampPickerIntoView();
 }
 
-const PICKER_APPROX_H = 140;
-const PICKER_W = 240;
+// Rough first-paint bounds for the flip decision; the precise size (which
+// grows with the target's palette) is measured in clampPickerIntoView(),
+// which then re-anchors the popover snug against the trigger.
+const PICKER_APPROX_H = 380;
+const PICKER_W = 440;
+// The trigger's rect (chip or host) captured at open, so the post-paint
+// re-clamp can hug it using the popover's real height instead of the
+// over-estimated APPROX_H (which floated it too far from the pill).
+let pickerTriggerRect: { top: number; bottom: number; left: number } | null = null;
 
 function setPickerAnchorFromElement(el: HTMLElement | null): void {
   const fallback = hostEl.value;
   const rect = (el ?? fallback)?.getBoundingClientRect();
   if (!rect) return;
+  pickerTriggerRect = { top: rect.top, bottom: rect.bottom, left: rect.left };
   const spaceBelow = window.innerHeight - rect.bottom;
-  const flipped = spaceBelow < PICKER_APPROX_H && rect.top > PICKER_APPROX_H;
+  const flipped = spaceBelow < PICKER_APPROX_H && rect.top > spaceBelow;
   // Clamp horizontally so the picker doesn't run off the right edge.
   const maxLeft = window.innerWidth - PICKER_W - 8;
   const left = Math.max(8, Math.min(rect.left, maxLeft));
-  pickerAnchor.value = {
-    top: flipped ? Math.max(8, rect.top - PICKER_APPROX_H - 6) : rect.bottom + 6,
-    left,
-    flipped,
-  };
+  let top = flipped ? rect.top - PICKER_APPROX_H - 6 : rect.bottom + 6;
+  // Keep both ends on-screen even before the exact measure lands.
+  top = Math.max(8, Math.min(top, window.innerHeight - PICKER_APPROX_H - 8));
+  pickerAnchor.value = { top, left, flipped };
+}
+
+/** Once the popover has painted, measure its real box and re-anchor it
+ *  tight against the trigger (6px gap), then clamp into the viewport. The
+ *  approximate constants can't know the exact height, so without this the
+ *  flipped popover floats far above the pill / clips off a short viewport. */
+function clampPickerIntoView(): void {
+  void nextTick(() => {
+    const el = document.querySelector(".wp-subcat-picker__anchor") as HTMLElement | null;
+    if (!el || !pickerTriggerRect) return;
+    const r = el.getBoundingClientRect();
+    const gap = 6;
+    const t = pickerTriggerRect;
+    // Sit just above (flipped) or just below the trigger using the REAL height.
+    let top = pickerAnchor.value.flipped ? t.top - r.height - gap : t.bottom + gap;
+    let left = pickerAnchor.value.left;
+    if (r.height > 0) top = Math.max(8, Math.min(top, window.innerHeight - r.height - 8));
+    if (r.width > 0) left = Math.max(8, Math.min(left, window.innerWidth - r.width - 8));
+    pickerAnchor.value = { ...pickerAnchor.value, top, left };
+  });
+}
+
+/** Live re-anchor for the RemapRefPopup. The popup GROWS when the user
+ *  picks a wildcard (the reconcile section + filter picker mount), so a
+ *  one-shot measure isn't enough — a popup that fit below the chip at open
+ *  can overflow the viewport after a pick. We measure the popup's REAL box
+ *  and re-hug the chip: 6px below, flipping above only when the real height
+ *  doesn't fit below; the top is clamped on-screen. Driven once on paint and
+ *  again on every size change via a ResizeObserver. */
+let remapResizeObs: ResizeObserver | null = null;
+
+function anchorRemapToTrigger(el: HTMLElement): void {
+  if (!pickerTriggerRect) return;
+  const r = el.getBoundingClientRect();
+  const gap = 6;
+  const t = pickerTriggerRect;
+  const spaceBelow = window.innerHeight - t.bottom;
+  const flip = r.height > 0 && spaceBelow < r.height && t.top > spaceBelow;
+  let top = flip ? t.top - r.height - gap : t.bottom + gap;
+  let left = remapAnchor.value.left;
+  if (r.height > 0) top = Math.max(8, Math.min(top, window.innerHeight - r.height - 8));
+  if (r.width > 0) left = Math.max(8, Math.min(left, window.innerWidth - r.width - 8));
+  remapAnchor.value = { top, left };
+}
+
+function clampRemapIntoView(): void {
+  void nextTick(() => {
+    const el = document.querySelector("[data-test='remap-popup']") as HTMLElement | null;
+    if (!el) return;
+    anchorRemapToTrigger(el);
+    // Re-anchor on growth (pick expands the reconcile section). Guarded for
+    // jsdom, which has no ResizeObserver — the one-shot anchor above still runs.
+    if (typeof ResizeObserver === "undefined") return;
+    remapResizeObs?.disconnect();
+    remapResizeObs = new ResizeObserver(() => anchorRemapToTrigger(el));
+    remapResizeObs.observe(el);
+  });
+}
+
+function teardownRemapObs(): void {
+  remapResizeObs?.disconnect();
+  remapResizeObs = null;
 }
 
 // --- Suggestion list filtering. ---
@@ -368,7 +709,7 @@ function setPickerAnchorFromElement(el: HTMLElement | null): void {
 // even before `uuidToName` is hydrated.
 const acItems = computed(() => {
   if (!acOpen.value) return [];
-  if (acTrigger.value === "@" && props.surface !== "wildcard") return [];
+  if (acTrigger.value === "@" && !refsEnabled.value) return [];
   const pool = acTrigger.value === "@" ? props.refSuggestions : props.varSuggestions;
   const q = acQuery.value.toLowerCase();
   const labelOf = acTrigger.value === "@"
@@ -400,22 +741,10 @@ watch(acItems, (items) => {
   if (acActive.value >= items.length) acActive.value = 0;
 });
 
-// --- Autocomplete probe: scan back from caret through `[a-zA-Z0-9_]` until
-//     we hit a `$` or `@` trigger (and bail if it's a `$$` / `@@` escape). ---
-function probeAutocomplete(str: string, caret: number): {
-  start: number;
-  query: string;
-  trigger: "$" | "@";
-} | null {
-  let i = caret - 1;
-  while (i >= 0 && /[a-zA-Z0-9_]/.test(str[i])) i--;
-  if (i < 0) return null;
-  const trigger = str[i];
-  if (trigger !== "$" && trigger !== "@") return null;
-  if (i > 0 && str[i - 1] === trigger) return null;       // mid-escape `$$x`
-  if (str[i + 1] === trigger) return null;                 // immediate `$$`
-  return { start: i, query: str.slice(i + 1, caret), trigger };
-}
+// Autocomplete trigger probe lives in `../utils/autocompleteProbe` (pure +
+// unit-tested). It scans back from the caret to the nearest `$` / `@` trigger
+// and uses `$`-run parity to tell a real `$var` start from a `$$` escape /
+// `$$sep$$` multi-pick delimiter.
 
 // --- Popup placement ---
 // Anchor to the wrapper's bounding box. We use the host's parent (`.wp-rt`)
@@ -476,9 +805,10 @@ function refreshAutocompleteFromHost(): void {
     acOpen.value = false;
     return;
   }
-  // Gate `@` autocomplete — only available in the "wildcard" surface
-  // (nested wildcard refs make sense only inside a wildcard option).
-  if (hit.trigger === "@" && props.surface !== "wildcard") {
+  // Gate `@` autocomplete — the wildcard surface always allows nested refs;
+  // other surfaces opt in via `allowNestedRefs` (derivation action values,
+  // which the engine resolves `@{}` on post-Layer-A).
+  if (hit.trigger === "@" && !refsEnabled.value) {
     acOpen.value = false;
     return;
   }
@@ -507,10 +837,10 @@ function applyAutocomplete(label: string | undefined): void {
       // No sub-categories declared AND no null option — insert plain
       // ref immediately. (When the target has a null option we still
       // open the picker so the user can opt the null option in.)
-      insertRefAtCursor(label, []);
+      insertRefAtCursor(label, { expr: "", excludeNull: false });
     } else {
-      // Open step-2 picker so the user can multi-select sub-categories
-      // and/or toggle the "Include null" checkbox.
+      // Open step-2 picker so the user can type a boolean filter
+      // expression and/or toggle the exclude-null flag.
       //
       // Snapshot the caret + acStart BEFORE opening the picker. The
       // picker popover steals focus from the contenteditable host;
@@ -523,9 +853,9 @@ function applyAutocomplete(label: string | undefined): void {
         acStart: acStart.value,
       };
       pendingInsert.value = { uuid: label };
-      pickerSubCats.value = subCats;
-      pickerInitial.value = [];
-      pickerHasNull.value = hasNull;
+      loadPickerContext(label);
+      pickerInitialExpr.value = "";
+      pickerInitialExcludeNull.value = false;
       pickerMode.value = "insert";
       pickerTargetAtomIndex.value = null;
       // Insert flow has no chip to anchor to yet — use the host's
@@ -533,6 +863,7 @@ function applyAutocomplete(label: string | undefined): void {
       // typed `@` into.
       setPickerAnchorFromElement(hostEl.value);
       pickerOpen.value = true;
+      clampPickerIntoView();
     }
   } else {
     // `$var` trigger — insert var atom directly (no step-2 picker for vars).
@@ -570,7 +901,7 @@ function restoreCursorAtChar(targetChar: number): void {
         const idx = Number(el.getAttribute("data-atom-index"));
         const atom = atoms.value[idx];
         if (atom && atom.kind !== "text") {
-          meaningful.push({ el, len: serialise([atom]).length, kind: "chip" });
+          meaningful.push({ el, len: serialiseAtomsLocal([atom]).length, kind: "chip" });
         }
       }
     }
@@ -692,7 +1023,7 @@ function rangeOffsetToRaw(targetNode: Node, targetOffset: number): number {
     if (el.classList.contains("wp-refchip")) {
       const idx = Number(el.getAttribute("data-atom-index"));
       const atom = atoms.value[idx];
-      if (atom && atom.kind !== "text") return serialise([atom]).length;
+      if (atom && atom.kind !== "text") return serialiseAtomsLocal([atom]).length;
       return 0;
     }
     if (el.classList.contains("wp-rt__text")) {
@@ -851,7 +1182,168 @@ function syncTextSpansToAtoms(): void {
 
 function applyAtoms(next: Atom[]): void {
   atoms.value = padAtoms(next);
+  isEmpty.value = serialiseAtomsLocal(next).length === 0;
   void nextTick(() => syncTextSpansToAtoms());
+}
+
+/** Live structure-aware read of the host as an `Atom[]` — the deletion-path
+ *  counterpart to `readHostAsText`. Walks the same `host.childNodes` but
+ *  PRESERVES the chip/text structure instead of flattening to a string, and
+ *  crucially does NOT tokenize:
+ *
+ *    - text spans become plain text atoms read from their LIVE `textContent`
+ *      (which `atoms.value` does NOT track during raw typing — see
+ *      `syncTextSpansToAtoms`), so a half-typed token like `$mood.` stays
+ *      plain text;
+ *    - chips are read from `atoms.value` via `data-atom-index` (chips only
+ *      mutate through programmatic ops, so the atom is authoritative there).
+ *
+ *  The Backspace/Delete handlers feed this into `deleteRawRange` so editing
+ *  never re-chipifies — chip formation stays on the commit paths only
+ *  (settle-delimiter / blur / autocomplete). Adjacent text is merged to keep
+ *  the list canonical. */
+function readHostAsAtoms(): Atom[] {
+  const host = hostEl.value;
+  if (!host) return [{ kind: "text", text: "" }];
+  const out: Atom[] = [];
+  const pushText = (t: string): void => {
+    if (t.length === 0) return;
+    const last = out[out.length - 1];
+    if (last && last.kind === "text") {
+      out[out.length - 1] = { kind: "text", text: last.text + t };
+    } else {
+      out.push({ kind: "text", text: t });
+    }
+  };
+  for (const node of host.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      pushText((node.textContent ?? "").replace(ZWSP_RE, ""));
+      continue;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) continue;
+    const el = node as HTMLElement;
+    if (el.classList.contains("wp-refchip")) {
+      const atom = atoms.value[Number(el.getAttribute("data-atom-index"))];
+      if (atom && atom.kind !== "text") out.push(atom);
+      else if (atom && atom.kind === "text") pushText(atom.text);
+      continue;
+    }
+    // wp-rt__text spans + any defensive fallback: read live text. (Block
+    // colour is re-derived from the post-edit text by `recolorBlocks`, so we
+    // don't try to carry it through the flattened DOM read here.)
+    pushText((el.textContent ?? "").replace(ZWSP_RE, ""));
+  }
+  return out.length > 0 ? out : [{ kind: "text", text: "" }];
+}
+
+/** Delete the raw-text span `[delStart, delEnd)` directly off a live atom
+ *  list — WITHOUT re-tokenizing. This is what keeps chip formation off the
+ *  delete path: text atoms are sliced char-exact; a chip is one cursor stop,
+ *  so any overlap removes the WHOLE chip (the span widens to chip
+ *  boundaries). No `parse`/`parseForSurface` runs, so raw text that merely
+ *  looks like a chip (`$mood`, `$mood.`) survives a Backspace as plain text.
+ *
+ *  Offsets are in the same serialised raw-text space `rangeOffsetToRaw`
+ *  produces (chip length = `serialiseAtomsLocal([atom]).length`), so the
+ *  caret arithmetic lines up. Returns the new atom list plus the caret
+ *  offset to restore (the start of the deleted span, widened to a chip
+ *  boundary when a chip was removed). */
+function deleteRawRange(
+  live: Atom[],
+  delStart: number,
+  delEnd: number,
+): { atoms: Atom[]; caret: number } {
+  const spans: { atom: Atom; start: number; end: number }[] = [];
+  let cursor = 0;
+  for (const atom of live) {
+    const len = serialiseAtomsLocal([atom]).length;
+    spans.push({ atom, start: cursor, end: cursor + len });
+    cursor += len;
+  }
+  // Widen the deletion span to fully cover any chip it partially intersects —
+  // chips can't be half-deleted.
+  let lo = delStart;
+  let hi = delEnd;
+  for (const s of spans) {
+    if (s.atom.kind === "text") continue;
+    if (s.start < hi && s.end > lo) {
+      lo = Math.min(lo, s.start);
+      hi = Math.max(hi, s.end);
+    }
+  }
+  const out: Atom[] = [];
+  const pushAtom = (a: Atom): void => {
+    const last = out[out.length - 1];
+    if (a.kind === "text" && last && last.kind === "text") {
+      out[out.length - 1] = { kind: "text", text: last.text + a.text };
+    } else {
+      out.push(a);
+    }
+  };
+  for (const s of spans) {
+    const atom = s.atom;
+    if (s.end <= lo || s.start >= hi) {
+      pushAtom(atom); // fully outside the deletion span — keep as-is
+      continue;
+    }
+    if (atom.kind === "text") {
+      const cutFrom = Math.max(0, lo - s.start);
+      const cutTo = Math.min(atom.text.length, hi - s.start);
+      const kept = atom.text.slice(0, cutFrom) + atom.text.slice(cutTo);
+      if (kept.length > 0) pushAtom({ kind: "text", text: kept });
+      continue;
+    }
+    // Chip fully covered by [lo, hi) (widened above) — drop it.
+  }
+  return { atoms: out, caret: lo };
+}
+
+/** Re-derive brace-block scaffolding colour from the CURRENT serialised text,
+ *  WITHOUT chipifying (chips are left exactly as-is, so Wave-5's "never
+ *  chipify on delete" holds). Used after an atom-direct edit so the amber/green
+ *  colour tracks the live text: a still-valid block keeps its colour, and
+ *  breaking a block — deleting its `{`/`}`/`|` or the `$$` delimiter — drops it.
+ *  Text atoms are split at block-token boundaries so a span straddling a block
+ *  edge (the atom-direct read merges adjacent text) colours each side right. */
+function recolorBlocks(list: Atom[]): Atom[] {
+  const text = serialiseAtomsLocal(list);
+  if (!text) return list;
+  const colorAt: Array<"alt" | "multi" | null> = new Array(text.length).fill(null);
+  for (const tok of tokenizeRich(text)) {
+    const c = tok.kind === "dp-multi" ? "multi" : tok.kind === "dp-brace" ? "alt" : null;
+    if (!c) continue;
+    for (let k = tok.start; k < tok.end; k++) colorAt[k] = c;
+  }
+  const out: Atom[] = [];
+  const pushText = (t: string, bc: "alt" | "multi" | null): void => {
+    if (!t) return;
+    const last = out[out.length - 1];
+    if (last && last.kind === "text" && (last.blockColor ?? null) === bc) {
+      out[out.length - 1] = bc
+        ? { kind: "text", text: last.text + t, blockColor: bc }
+        : { kind: "text", text: last.text + t };
+    } else {
+      out.push(bc ? { kind: "text", text: t, blockColor: bc } : { kind: "text", text: t });
+    }
+  };
+  let off = 0;
+  for (const a of list) {
+    const len = serialiseAtomsLocal([a]).length;
+    if (a.kind === "text") {
+      let i = 0;
+      while (i < a.text.length) {
+        const c = colorAt[off + i] ?? null;
+        let j = i + 1;
+        while (j < a.text.length && (colorAt[off + j] ?? null) === c) j++;
+        pushText(a.text.slice(i, j), c);
+        i = j;
+      }
+    } else {
+      out.push(a);
+    }
+    off += len;
+  }
+  return out;
 }
 
 function insertChipAtCaret(
@@ -897,19 +1389,25 @@ function insertChipAtCaret(
 
 function insertRefAtCursor(
   uuid: string,
-  subCategories: string[],
+  filter: RefFilter,
   caretOverride?: { caret: number; acStart: number },
 ): void {
   // Cache the wildcard's current display name in the ref so the chip
   // can render a label even when the library entry is later deleted.
   // Resolver matches on uuid only — the name is purely a fossil for
   // the UI. Missing-name fallback emits the bare-uuid form (legacy
-  // workflows stay parseable round-trip).
+  // workflows stay parseable round-trip). The expression + exclude-null
+  // flag serialize as the `:expr` + `!null` segments (§3.2).
   const name = props.uuidToName.get(uuid);
-  const namePart = name ? "#" + name : "";
-  const subPart = subCategories.length > 0 ? ":" + subCategories.join(",") : "";
-  const chipText = "@{" + uuid + namePart + subPart + "}";
-  insertChipAtCaret(chipText, caretOverride);
+  const refAtom: RefAtomX = {
+    kind: "ref",
+    uuid,
+    subCategories: [],
+    expr: filter.expr,
+    excludeNull: filter.excludeNull,
+    ...(name ? { name } : {}),
+  };
+  insertChipAtCaret(serialiseRefAtom(refAtom), caretOverride);
 }
 
 function insertVarAtCursor(name: string): void {
@@ -917,11 +1415,11 @@ function insertVarAtCursor(name: string): void {
 }
 
 // --- SubcategoryFilterPicker handlers ---
-function onPickerApply(subCats: string[]): void {
+function onPickerApply(filter: { expr: string; excludeNull: boolean }): void {
   if (pickerMode.value === "insert" && pendingInsert.value) {
     insertRefAtCursor(
       pendingInsert.value.uuid,
-      subCats,
+      filter,
       pendingInsertCaret.value ?? undefined,
     );
     pendingInsert.value = null;
@@ -930,15 +1428,20 @@ function onPickerApply(subCats: string[]): void {
     const target = atoms.value[pickerTargetAtomIndex.value];
     if (target && target.kind === "ref") {
       // Refresh the cached display name on edit — the library may
-      // have been renamed since this token was first written.
+      // have been renamed since this token was first written. Write the
+      // new `{expr, excludeNull}` onto the atom; clear the legacy
+      // `subCategories` so `refFilterOf` reads the explicit fields.
       const liveName = props.uuidToName.get(target.uuid);
-      const next = replaceAtom(atoms.value, pickerTargetAtomIndex.value, {
+      const nextAtom: RefAtomX = {
         ...target,
-        subCategories: subCats,
+        subCategories: [],
+        expr: filter.expr,
+        excludeNull: filter.excludeNull,
         ...(liveName ? { name: liveName } : {}),
-      });
+      };
+      const next = replaceAtom(atoms.value, pickerTargetAtomIndex.value, nextAtom);
       applyAtoms(next);
-      emitValue(serialise(atoms.value));
+      emitValue(serialiseAtomsLocal(atoms.value));
     }
   }
   pickerOpen.value = false;
@@ -948,7 +1451,7 @@ function onPickerSkip(): void {
   if (pickerMode.value === "insert" && pendingInsert.value) {
     insertRefAtCursor(
       pendingInsert.value.uuid,
-      [],
+      { expr: "", excludeNull: false },
       pendingInsertCaret.value ?? undefined,
     );
     pendingInsert.value = null;
@@ -962,7 +1465,7 @@ function onPickerDelete(): void {
     const idx = pickerTargetAtomIndex.value;
     const next = atoms.value.filter((_, i) => i !== idx);
     applyAtoms(next);
-    emitValue(serialise(atoms.value));
+    emitValue(serialiseAtomsLocal(atoms.value));
   }
   pickerOpen.value = false;
 }
@@ -975,6 +1478,53 @@ function cancelPicker(): void {
   pendingInsertCaret.value = null;
   pickerTargetAtomIndex.value = null;
   pickerOpen.value = false;
+}
+
+function onChipRemap(idx: number, ev?: MouseEvent): void {
+  const atom = atoms.value[idx];
+  if (!atom || atom.kind !== "ref") return;
+  remapOldUuid.value = atom.uuid;
+  remapCachedName.value = atom.name ?? "";
+  const { expr, excludeNull } = refFilterOf(atom);
+  remapOldExpr.value = expr;
+  remapOldExcludeNull.value = excludeNull;
+  // Reuse the picker's anchor maths to position the remap popup at the chip.
+  setPickerAnchorFromElement((ev?.currentTarget as HTMLElement | null) ?? null);
+  // Seed just BELOW the chip (not the tall-picker flip seed) so the first
+  // paint is already close — clampRemapIntoView then hugs it exactly using
+  // the popup's real height. Avoids the one-frame high-flash.
+  remapAnchor.value = {
+    top: (pickerTriggerRect?.bottom ?? pickerAnchor.value.top) + 6,
+    left: pickerAnchor.value.left,
+  };
+  remapOpen.value = true;
+  clampRemapIntoView();
+}
+
+/** Rewrite EVERY occurrence of the dead uuid in THIS field's raw text once,
+ *  per the spec's "Remap-everywhere scope" (walk root = the open module's
+ *  payload — here the single field RichTextInput edits). */
+function applyRemap(next: { uuid: string; name: string; subcatExpr: string; excludeNull: boolean }): void {
+  const text = readHostAsText();
+  const rewritten = rewriteBrokenRef(text, remapOldUuid.value, next);
+  applyAtoms(parseForSurface(rewritten));
+  emitValue(rewritten);
+  remapOpen.value = false;
+  teardownRemapObs();
+}
+
+function cancelRemap(): void {
+  remapOpen.value = false;
+  teardownRemapObs();
+}
+
+// Test seam — drive confirm without faking the popup click chain in jsdom.
+function __confirmRemapForTest(
+  oldUuid: string,
+  next: { uuid: string; name: string; subcatExpr: string; excludeNull: boolean },
+): void {
+  remapOldUuid.value = oldUuid;
+  applyRemap(next);
 }
 
 function onPickerEscape(ev: KeyboardEvent): void {
@@ -1002,7 +1552,7 @@ function __applyAutocompleteForTest(label: string): void {
   applyAutocomplete(label);
 }
 
-defineExpose({ __triggerAutocompleteForTest, __applyAutocompleteForTest });
+defineExpose({ __triggerAutocompleteForTest, __applyAutocompleteForTest, __confirmRemapForTest });
 
 function onSuggestionMouseDown(e: MouseEvent, label: string): void {
   // `mousedown` (not click) so we beat the textarea blur.
@@ -1077,17 +1627,17 @@ function readHostAsText(): string {
       const atom = atoms.value[idx];
       if (!atom) continue;
       if (atom.kind === "ref") {
-        out += "@{" + atom.uuid;
-        // Preserve the cached `#name` segment so re-tokenization
-        // round-trips the display label intact. Without this, every
-        // host-input event (typing, focus changes, etc.) re-derives
-        // text-only refs as `@{uuid}` and broken chips lose their
-        // friendly fallback label.
-        if (atom.name && atom.name.length > 0) out += "#" + atom.name;
-        if (atom.subCategories.length > 0) out += ":" + atom.subCategories.join(",");
-        out += "}";
+        // Reconstruct the canonical 4-segment form (`@{uuid#name:expr
+        // !null}`). `serialiseRefAtom` preserves the cached `#name` so
+        // re-tokenization round-trips the display label, and reads the
+        // `{expr, excludeNull}` filter (explicit fields or reconstructed
+        // from the legacy `subCategories` body).
+        out += serialiseRefAtom(atom);
       } else if (atom.kind === "var") {
-        out += "$" + atom.name;
+        // SP2a: keep the `.K` list accessor (matches serialiseAtomsLocal +
+        // atomicEditorModel.serialise). Dropping it here silently rewrote
+        // `$mood.0` -> `$mood` on every host re-read (input / blur / settle).
+        out += "$" + atom.name + (atom.index != null ? "." + atom.index : "");
       }
       continue;
     }
@@ -1114,6 +1664,7 @@ function onHostInput(ev?: Event): void {
   // consistent with what's actually visible.
   reconcileOrphanTextNodes();
   const next = readHostAsText();
+  isEmpty.value = next.length === 0;
   if (next !== props.modelValue) emitValue(next);
   // After every input we re-probe the caret for autocomplete trigger
   // — covers the user typing `@` mid-text, deleting back across a
@@ -1133,7 +1684,11 @@ function onHostInput(ev?: Event): void {
   }
 }
 
-const SETTLE_DELIMITERS = /[\s,;:./()[\]{}!?]/;
+// NB: `.` is deliberately NOT a settle delimiter (SP2a). A var's `.K` list
+// accessor (`$mood.0`) types the `.` before the digit; settling on `.` would
+// chipify `$mood` prematurely and strand the accessor. `.` settles one
+// boundary later (on the following space/comma/etc) instead.
+const SETTLE_DELIMITERS = /[\s,;:/()[\]{}!?]/;
 
 /** Re-parse the host's raw text into atoms, preserving the caret in
  *  raw-text space. Chipifies any complete `$name` / `@{uuid}` tokens
@@ -1153,7 +1708,7 @@ function settleAtomsFromHost(): void {
   // sub-span. Compare the user-typed text against the atoms' current
   // serialised form so we still skip true no-ops (e.g. typing a space
   // after a chip that was already settled).
-  const liveSerialised = serialise(atoms.value);
+  const liveSerialised = serialiseAtomsLocal(atoms.value);
   if (liveSerialised === text) return;
   applyAtoms(parsed);
   void nextTick(() => restoreCursorAtChar(caret));
@@ -1416,7 +1971,7 @@ function onHostBlur(): void {
   // enough. Mirrors `settleAtomsFromHost`'s "live text differs from
   // serialised atoms" check so a closed brace block re-colors on blur.
   const text = readHostAsText();
-  if (serialise(atoms.value) === text) return;
+  if (serialiseAtomsLocal(atoms.value) === text) return;
   applyAtoms(parseForSurface(text));
 }
 
@@ -1523,127 +2078,74 @@ function onHostKeydown(ev: KeyboardEvent): void {
     return;
   }
   if (ev.key === "Backspace") {
-    // Backspace right after a chip should remove the chip atomically.
-    // Work entirely in raw-text space: read the host's raw text + caret,
-    // peek at the chars immediately before the caret, and if they form
-    // a complete chip serialisation (`$name` / `@{uuid}` / `@{uuid:sub}`)
-    // delete that whole syntax in one keystroke.
+    // Atom-direct deletion — NEVER re-tokenize on delete, so editing can't
+    // chipify. We read the live atom structure (`readHostAsAtoms`: text from
+    // the DOM, chips from `atoms.value`), delete a raw-text span directly off
+    // those atoms via `deleteRawRange`, and re-apply. Chip formation stays on
+    // the commit paths (settle-delimiter / blur / autocomplete) ONLY —
+    // matching the rule that Backspace must never form a chip.
     //
-    // Earlier the handler diffed `currentCursor` (DOM atom indices) against
-    // `padAtoms(parse(liveText))` (re-parsed atom indices). Those two index
-    // spaces diverge whenever the user typed a fresh chip-able token (e.g.
-    // `$test`) into a text span since the last settle — parse adds new chip
-    // atoms that the DOM-derived cursor doesn't know about, so the wrong
-    // atom gets deleted. Raw-text space sidesteps the alignment problem.
-    const rawText = readHostAsText();
-    // Non-collapsed selection (e.g. Ctrl+A + Backspace, or any drag-select +
-    // Backspace) — delete the entire selected range as a raw-text slice. The
-    // native Backspace path corrupts the atom model because the browser
-    // collapses across `contenteditable=false` chip nodes and leaves orphan
-    // chip elements that re-render as zombie atoms. Handle it imperatively.
+    // A committed chip (a `.wp-refchip` element) is removed whole because
+    // `deleteRawRange` widens the span to chip boundaries; raw text that only
+    // LOOKS like a chip (`$mood`, `$mood.` mid-edit) is a plain text atom and
+    // loses exactly one char. The same path also handles non-collapsed
+    // selections (Ctrl+A, drag-select) — the whole selected raw span goes.
     const range = currentSelectionRangeRaw();
+    let delStart: number;
+    let delEnd: number;
     if (range.start !== range.end) {
-      ev.preventDefault();
-      const newText = rawText.slice(0, range.start) + rawText.slice(range.end);
-      applyAtoms(parseForSurface(newText));
-      emitValue(newText);
-      void nextTick(() => restoreCursorAtChar(range.start));
-      return;
-    }
-    const rawCaret = range.start;
-    if (rawCaret === 0) return;
-    const before = rawText.slice(0, rawCaret);
-    // Surface-gated chip detection: only patterns that ACTUALLY chipify
-    // on this surface qualify for atomic delete. Without this, `$name`
-    // in a wildcard option (where $ is plain text per surface contract)
-    // would be eaten whole by a single Backspace — user reported.
-    const chipRegex = props.surface === "wildcard"
-      ? /(@\{[0-9a-f]{8}(?:#[^#:}@{]*)?(?::[^}]*)?\})$/
-      : /(\$[A-Za-z_][A-Za-z0-9_]*)$/;
-    const chipMatch = before.match(chipRegex);
-    if (chipMatch) {
-      // Escape-boundary guard: end-anchored regex scans backwards and
-      // would match `$cost` inside `$$cost` (the second `$` + ident).
-      // If the char immediately preceding the matched chip serialisation
-      // is the same trigger char, this is a literal escape (`$$cost`,
-      // `@@literal`) — let the browser handle native single-char delete.
-      const matchStart = before.length - chipMatch[0].length;
-      const trigger = chipMatch[0][0]; // '$' or '@'
-      const charBefore = matchStart > 0 ? before[matchStart - 1] : "";
-      if (charBefore === trigger) {
+      delStart = range.start;
+      delEnd = range.end;
+    } else {
+      // Caret at the absolute start — nothing to delete. MUST preventDefault
+      // even though there's no work: a bare `return` lets the browser run its
+      // native deleteContentBackward, which EATS the ZWSP pad char in the
+      // empty/leading text span. Losing the ZWSP strands the caret on the host
+      // root and the DOM permanently diverges from the atoms model (the
+      // "can't delete / stuck $#" corruption). Blocking the native delete
+      // keeps the pad intact.
+      if (range.start === 0) {
+        ev.preventDefault();
         return;
       }
-      ev.preventDefault();
-      const newText = before.slice(0, -chipMatch[0].length) + rawText.slice(rawCaret);
-      applyAtoms(parseForSurface(newText));
-      emitValue(newText);
-      const newCaret = before.length - chipMatch[0].length;
-      void nextTick(() => restoreCursorAtChar(newCaret));
-      return;
+      delStart = range.start - 1;
+      delEnd = range.start;
     }
-    // No chip match — single-char delete imperatively. Relying on native
-    // browser Backspace here is the source of user-reported corruption:
-    // when the chip-flanking text span shrinks to empty, the browser may
-    // collapse the caret across a `contenteditable=false` chip into the
-    // wrong adjacent span, and Vue's v-for diff (index-keyed) can patch
-    // the wrong text node. Imperative slice → applyAtoms → restore caret
-    // keeps the atom model and DOM in lock-step.
     ev.preventDefault();
-    const newText = rawText.slice(0, rawCaret - 1) + rawText.slice(rawCaret);
-    applyAtoms(parseForSurface(newText));
-    emitValue(newText);
-    void nextTick(() => restoreCursorAtChar(rawCaret - 1));
+    const { atoms: nextAtoms, caret } = deleteRawRange(readHostAsAtoms(), delStart, delEnd);
+    applyAtoms(recolorBlocks(nextAtoms));
+    emitValue(serialiseAtomsLocal(atoms.value));
+    void nextTick(() => restoreCursorAtChar(caret));
     return;
   }
   if (ev.key === "Delete") {
-    // Forward-delete (key right of Backspace on most keyboards). Mirror
-    // the Backspace path but check the chars immediately AFTER the
-    // caret for a complete chip serialisation. Same atomic-removal
-    // contract so the user can't end up half-deleting a chip — AND
-    // same surface gate so `$name` in a wildcard-surface input
-    // forward-deletes one char at a time, not the whole serialisation.
-    const rawText = readHostAsText();
-    // Symmetric to Backspace: non-collapsed selection means range delete.
+    // Forward-delete — mirror of Backspace, atom-direct (no re-tokenize). The
+    // deletion span is the one char AFTER the caret (or the whole selection);
+    // `deleteRawRange` widens it to remove a committed chip whole.
+    const live = readHostAsAtoms();
     const range = currentSelectionRangeRaw();
+    let delStart: number;
+    let delEnd: number;
     if (range.start !== range.end) {
-      ev.preventDefault();
-      const newText = rawText.slice(0, range.start) + rawText.slice(range.end);
-      applyAtoms(parseForSurface(newText));
-      emitValue(newText);
-      void nextTick(() => restoreCursorAtChar(range.start));
-      return;
-    }
-    const rawCaret = range.start;
-    if (rawCaret >= rawText.length) return;
-    const after = rawText.slice(rawCaret);
-    const chipRegex = props.surface === "wildcard"
-      ? /^(@\{[0-9a-f]{8}(?:#[^#:}@{]*)?(?::[^}]*)?\})/
-      : /^(\$[A-Za-z_][A-Za-z0-9_]*)/;
-    const chipMatch = after.match(chipRegex);
-    if (chipMatch) {
-      // Escape-boundary guard (mirror of Backspace path): the chip
-      // serialisation is at offset `rawCaret`, immediately after the
-      // caret. If the char at `rawCaret - 1` is the SAME trigger, the
-      // pair is an escape sequence (`$$cost` / `@@literal`) — skip
-      // atomic delete, native single-char delete handles it.
-      const trigger = chipMatch[0][0]; // '$' or '@'
-      const charBefore = rawCaret > 0 ? rawText[rawCaret - 1] : "";
-      if (charBefore === trigger) {
+      delStart = range.start;
+      delEnd = range.end;
+    } else {
+      const totalLen = serialiseAtomsLocal(live).length;
+      // Caret at the absolute end — nothing forward. preventDefault for the
+      // same reason as Backspace-at-start: a bare return lets native
+      // deleteContentForward eat the trailing ZWSP pad and corrupt the field.
+      if (range.start >= totalLen) {
+        ev.preventDefault();
         return;
       }
-      ev.preventDefault();
-      const newText = rawText.slice(0, rawCaret) + after.slice(chipMatch[0].length);
-      applyAtoms(parseForSurface(newText));
-      emitValue(newText);
-      void nextTick(() => restoreCursorAtChar(rawCaret));
-      return;
+      delStart = range.start;
+      delEnd = range.start + 1;
     }
-    // Symmetric to Backspace: imperative single-char forward-delete.
     ev.preventDefault();
-    const newText = rawText.slice(0, rawCaret) + rawText.slice(rawCaret + 1);
-    applyAtoms(parseForSurface(newText));
-    emitValue(newText);
-    void nextTick(() => restoreCursorAtChar(rawCaret));
+    const { atoms: nextAtoms, caret } = deleteRawRange(live, delStart, delEnd);
+    applyAtoms(recolorBlocks(nextAtoms));
+    emitValue(serialiseAtomsLocal(atoms.value));
+    void nextTick(() => restoreCursorAtChar(caret));
     return;
   }
   // Arrow keys: defer to native browser handling. Modern browsers skip
@@ -1673,7 +2175,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
     <div
       ref="hostEl"
       class="wp-rt__host"
-      :class="multiline ? 'wp-rt__host--multi' : 'wp-rt__host--single'"
+      :class="[multiline ? 'wp-rt__host--multi' : 'wp-rt__host--single', { 'wp-rt__host--empty': isEmpty }]"
       :contenteditable="!disabled"
       :aria-label="ariaLabel"
       :data-placeholder="placeholder"
@@ -1696,16 +2198,22 @@ function onHostKeydown(ev: KeyboardEvent): void {
             ? atom.name
             : (uuidToName.get(atom.uuid) ?? atom.name ?? '')"
           :uuid="atom.kind === 'ref' ? atom.uuid : ''"
-          :sub-categories="atom.kind === 'ref' ? atom.subCategories : []"
+          :expr="atom.kind === 'ref' ? chipFilterOf(atom).expr : ''"
+          :exclude-null="atom.kind === 'ref' ? chipFilterOf(atom).excludeNull : false"
           :resolved="atomIsResolved(atom)"
+          :index="atom.kind === 'var' ? atom.index : undefined"
           :data-atom-index="idx"
           @click="(ev: MouseEvent) => onChipClick(idx, ev)"
+          @remap="(ev: MouseEvent) => onChipRemap(idx, ev)"
         />
         <span
           v-else
           :data-atom-index="idx"
           class="wp-rt__text"
-          v-html="textAtomHtml(atom.text)"
+          :class="atom.blockColor
+            ? ['wp-rt-block-scaf', 'wp-rt-block-scaf--' + atom.blockColor]
+            : null"
+          v-html="renderTextAtom(atom)"
         ></span>
       </template>
     </div>
@@ -1735,7 +2243,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
         v-if="acOpen && acItems.length > 0"
         ref="popoverEl"
         class="wp-rt-suggestions"
-        :class="{ 'wp-rt-suggestions--up': popupPos.flipped }"
+        :class="[teleportThemeClass(), { 'wp-rt-suggestions--up': popupPos.flipped }]"
         :style="{
           top: popupPos.top + 'px',
           left: popupPos.left + 'px',
@@ -1774,11 +2282,11 @@ function onHostKeydown(ev: KeyboardEvent): void {
          clicked chip / host element via `pickerAnchor` — a popover,
          not a modal — so it feels like a contextual control on the
          element the user just touched. -->
-    <Teleport to="body" v-if="pickerOpen">
-      <div class="wp-subcat-picker__backdrop" @click="cancelPicker"></div>
+    <Teleport v-if="pickerOpen" to="body">
+      <div class="wp-subcat-picker__backdrop" :class="teleportThemeClass()" @click="cancelPicker"></div>
       <div
         class="wp-subcat-picker__anchor"
-        :class="{ 'wp-subcat-picker__anchor--flipped': pickerAnchor.flipped }"
+        :class="[teleportThemeClass(), { 'wp-subcat-picker__anchor--flipped': pickerAnchor.flipped }]"
         :style="{
           top: pickerAnchor.top + 'px',
           left: pickerAnchor.left + 'px',
@@ -1787,7 +2295,10 @@ function onHostKeydown(ev: KeyboardEvent): void {
       >
         <SubcategoryFilterPicker
           :sub-categories="pickerSubCats"
-          :initial-selection="pickerInitial"
+          :tag-groups="pickerTagGroups"
+          :option-tag-sets="pickerOptionTagSets"
+          :initial-expr="pickerInitialExpr"
+          :initial-exclude-null="pickerInitialExcludeNull"
           :mode="pickerMode"
           :has-null-option="pickerHasNull"
           @apply="onPickerApply"
@@ -1796,6 +2307,18 @@ function onHostKeydown(ev: KeyboardEvent): void {
         />
       </div>
     </Teleport>
+
+    <RemapRefPopup
+      v-if="remapOpen"
+      :old-uuid="remapOldUuid"
+      :cached-name="remapCachedName"
+      :ref-data="remapRefData"
+      :old-expr="remapOldExpr"
+      :old-exclude-null="remapOldExcludeNull"
+      :anchor="remapAnchor"
+      @confirm="applyRemap"
+      @cancel="cancelRemap"
+    />
   </div>
 </template>
 
@@ -1838,6 +2361,8 @@ function onHostKeydown(ev: KeyboardEvent): void {
   font-size: inherit;
   letter-spacing: 0;
   box-sizing: border-box;
+  /* Anchor for the absolutely-positioned placeholder ghost (below). */
+  position: relative;
 }
 .wp-rt__host--single {
   height: var(--wp-input-h, 34px);
@@ -1855,12 +2380,22 @@ function onHostKeydown(ev: KeyboardEvent): void {
   word-break: break-word;
 }
 
-/* Placeholder ghost — fires only when the host is empty AND not focused.
-   Modern selector parity with `<input placeholder>`. */
-.wp-rt__host:empty::before {
+/* Placeholder ghost — shown when the field has no content. Gated on the
+   `--empty` class (NOT `:empty`): the host always holds a ZWSP pad span, so
+   `:empty` never matches. The class tracks live content so the ghost clears
+   on the first keystroke, matching `<input placeholder>`. */
+.wp-rt__host--empty::before {
   content: attr(data-placeholder);
+  /* Overlay the host's text area so the caret stays at the start (the host
+     still holds a ZWSP pad span); `padding: inherit` matches the single/multi
+     text inset so the ghost aligns with where real text would begin. */
+  position: absolute;
+  inset: 0;
+  padding: inherit;
   color: var(--wp-text-dim, #6e6e7c);
   pointer-events: none;
+  white-space: pre-wrap;
+  overflow: hidden;
 }
 
 /* Plain text atom — inherits host typography. Inline so it flows with
@@ -1981,15 +2516,22 @@ function onHostKeydown(ev: KeyboardEvent): void {
    is a transparent click-target full-viewport layer that cancels the
    picker (Skip semantics — no insert). Escape key dismisses the
    same way. */
+/* Z-index sits in the autocomplete-popover tier (9999), NOT the old
+   1000/1001. On the canvas the derivation/wildcard instance modal renders
+   on its own high-z overlay; at 1000/1001 the body-teleported picker fell
+   BEHIND that modal. The `@`-autocomplete popover already clears the modal
+   at 9999, so the picker matches that tier (backdrop 10000, anchor 10001)
+   to sit ABOVE the modal too. The SPA's own modals live well below 9999,
+   so raising is safe there — no SPA regression. */
 .wp-subcat-picker__backdrop {
   position: fixed;
   inset: 0;
   background: transparent;
-  z-index: 1000;
+  z-index: 10000;
 }
 .wp-subcat-picker__anchor {
   position: fixed;
-  z-index: 1001;
+  z-index: 10001;
   /* Subtle drop-shadow so the popover reads as elevated even without
      the dimmed backdrop of the previous modal version. */
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.4));

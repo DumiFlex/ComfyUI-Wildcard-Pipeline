@@ -6,7 +6,7 @@ import { _resetForTests, _setForTests } from "../../extension/preview-resolver";
 const SAMPLE_SNAPSHOT = JSON.stringify({
   hair_style: "long flowing",
   mood: "joyful",
-  __wp_picks__: { abc12345: { value: "long flowing", sub_category: "long" } },
+  __wp_picks__: { abc12345: { value: "long flowing", sub_categories: ["long"] } },
   __wp_constraints__: [{ source: "abc12345", target: "def67890" }],
   // Trace entry includes `writes[].variable` so the picks-tab lookup
   // can re-key `abc12345 → $hair_style` instead of showing the raw uuid.
@@ -49,6 +49,33 @@ describe("DebugViewer", () => {
     const wrapper = mount(DebugViewer, { props: { snapshot: SAMPLE_SNAPSHOT } });
     const picksTab = wrapper.findAll(".wp-dbg-tab")[2];
     expect(picksTab.text()).toMatch(/Picks\s*1/);
+  });
+
+  it("renders a multi-select pick record's joined value + union tags (SP2a)", async () => {
+    const snap = JSON.stringify({
+      colors: "red, blue, green",
+      __wp_picks__: {
+        m1: {
+          value: "red, blue, green",
+          values: ["red", "blue", "green"],
+          sub_categories: ["warm", "cool"],
+        },
+      },
+      __wp_trace__: [
+        {
+          id: "m1",
+          type: "wildcard",
+          status: "ok",
+          seed: 1,
+          writes: [{ variable: "colors", value: "red, blue, green", source: "wildcard" }],
+        },
+      ],
+      __wp_warnings__: [],
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: snap } });
+    await wrapper.findAll(".wp-dbg-tab")[2].trigger("click");
+    expect(wrapper.text()).toContain("red, blue, green");
+    expect(wrapper.text()).toContain("$colors");
   });
 
   it("Warnings tab badge shows the warn count + warn-tone class", () => {
@@ -266,7 +293,7 @@ describe("DebugViewer", () => {
       __wp_picks__: {
         backdrop1: {
           value: "minimal interior with @{a361dbdc} accents",
-          sub_category: "indoor",
+          sub_categories: ["indoor"],
         },
       },
       __wp_trace__: [
@@ -903,13 +930,76 @@ describe("DebugViewer", () => {
     _resetForTests();
   });
 
+  it("renders human-readable rows for SP3 constraint reach warnings", async () => {
+    // SP3 adds two reach-finalisation warnings. Each carries a
+    // structured `detail` dict — the viewer should surface a friendly
+    // label + the reached/requested ratio for partial_reach, not just
+    // the raw `type` string.
+    const snap = JSON.stringify({
+      __wp_trace__: [
+        {
+          id: "kNever",
+          type: "constraint",
+          status: "ok",
+          writes: [],
+          constraint_source: "s1",
+          constraint_target: "t1",
+        },
+        {
+          id: "kPartial",
+          type: "constraint",
+          status: "ok",
+          writes: [],
+          constraint_source: "s2",
+          constraint_target: "t2",
+        },
+      ],
+      __wp_warnings__: [
+        {
+          type: "constraint_never_applied",
+          severity: "warn",
+          module_id: "kNever",
+          detail: {
+            constraint_id: "kNever",
+            target_wildcard_id: "t1",
+            source_wildcard_id: "s1",
+            target_present: false,
+          },
+          message: "constraint @{kNever} did not apply — no @{t1} instance.",
+        },
+        {
+          type: "constraint_partial_reach",
+          severity: "warn",
+          module_id: "kPartial",
+          detail: {
+            constraint_id: "kPartial",
+            target_wildcard_id: "t2",
+            requested: 3,
+            reached: 1,
+          },
+          message: "constraint reach selector (next) asked for 3 but only 1 resolved.",
+        },
+      ],
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: snap } });
+    await wrapper.findAll(".wp-dbg-tab")[3].trigger("click");
+    const rows = wrapper.findAll(".wp-dbg-warn-row");
+    expect(rows).toHaveLength(2);
+    // Human-readable labels, not the raw snake_case type token.
+    const labels = wrapper.findAll(".wp-dbg-warn-label").map((l) => l.text());
+    expect(labels[0]).toMatch(/never applied/i);
+    expect(labels[1]).toMatch(/partial reach/i);
+    // partial_reach surfaces the reached/requested ratio.
+    expect(rows[1].text()).toMatch(/reached\s*1\s*of\s*3/i);
+  });
+
   it("right-click on a pick row opens the shared ContextMenu", async () => {
     const snap = JSON.stringify({
       __wp_trace__: [
         { id: "w1", type: "wildcard", status: "ok", writes: [{ variable: "color", value: "blue" }] },
       ],
       __wp_picks__: {
-        w1: { value: "blue", sub_category: "primary" },
+        w1: { value: "blue", sub_categories: ["primary"] },
       },
     });
     const wrapper = mount(DebugViewer, {

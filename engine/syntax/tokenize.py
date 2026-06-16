@@ -13,26 +13,34 @@ import re
 
 from engine.syntax.types import Token, TokenKind
 
-# `$name` — identifier starts with letter or underscore, then word chars
-_VAR_RE = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)")
-# `@{8hex}`, `@{8hex#name}`, `@{8hex:subcat[,subcat...]}`, or
-# `@{8hex#name:subcat[,subcat...]}` — exactly 8 lowercase hex chars,
-# optionally followed by a `#name` segment (display label cached at
-# write-time so a broken ref still tells the user what the wildcard
-# was called), optionally followed by a `:` + comma-separated
-# sub-category filter. Filter restricts the nested wildcard's pick to
-# options whose `sub_category` is in the supplied list — same
-# semantics as instance.category_filter at the chain level, but
-# scoped per-call so one library wildcard can be narrowed differently
-# from each call site. The name segment is purely informational —
-# resolver matches on uuid only.
+# `$name` or `$name.K` — identifier starts with letter or underscore, then
+# word chars, with an optional `.K` list-index accessor (SP2a). Group 2 = the
+# index digits when present.
+_VAR_RE = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?")
+# 4-segment ref grammar (fixed order): `@{8hex [#name] [:expr] [!null]}`.
+#   group 1 — uuid: exactly 8 lowercase hex chars.
+#   group 2 — optional `#name`: display label cached at write-time so a
+#             broken ref still tells the user what the wildcard was
+#             called. Purely informational — the resolver matches uuid.
+#   group 3 — optional `:expr`: a BOOLEAN sub-category filter expression
+#             (`and`/`or`/`not`/parens/comma=or). Parsed + matched by the
+#             shared `engine.syntax.subcat_filter` matcher; narrows the
+#             nested pick to options whose tag set satisfies the
+#             expression — same matcher as instance.category_filter.
+#   group 4 — optional `!null`: the exclude-null marker (drops the null
+#             option from the nested pick). Separate from the expression.
 #
-# Name char-class `[^#:}@{]` mirrors the wildcard-name validator so
-# names that would re-trigger this regex (or break it) are rejected at
-# the editor + API boundary, not at parse time.
-_REF_RE = re.compile(r"@\{([0-9a-f]{8})(?:#([^#:}@{]*))?(?::([^}]*))?\}")
-# Multi-pick prefix: {N$$sep$$ where N is one or more digits and sep can be empty.
-_MULTI_PREFIX_RE = re.compile(r"^\{(\d+)\$\$(.*?)\$\$", flags=re.DOTALL)
+# Name/expr char-classes exclude `!` (the null-marker delimiter) so the
+# segments stay unambiguous; sub-category names additionally forbid the
+# boolean grammar chars (see `subcat_filter.validate_subcat_name`),
+# enforced at the editor + API boundary, not at parse time.
+_REF_RE = re.compile(
+    r"@\{([0-9a-f]{8})(?:#([^#:}@{!]*))?(?::([^}!]*))?(?:!([^}]*))?\}"
+)
+# Multi-pick prefix: {N$$sep$$ or {N-M~$$sep$$ — group 1 is the count (a fixed
+# `N` or a `N-M` range), group 2 is the optional `~` independent flag (repeats
+# allowed; absent = unique), group 3 is the separator (may be empty). SP2b.
+_MULTI_PREFIX_RE = re.compile(r"^\{(\d+(?:-\d+)?)(~?)\$\$(.*?)\$\$", flags=re.DOTALL)
 
 
 def _split_top_level_pipes(s: str) -> list[str]:
@@ -54,7 +62,7 @@ def _split_top_level_pipes(s: str) -> list[str]:
 
 def _scan_brace_block(
     text: str, start: int
-) -> tuple[int, list[str], int | None, str | None] | None:
+) -> tuple[int, list[str], tuple[int, int, bool] | None, str | None] | None:
     """Try to scan a `{...}` block starting at `text[start] == '{'`.
 
     Returns:
@@ -97,13 +105,21 @@ def _scan_brace_block(
     body_with_braces = "{" + body  # match against `{N$$sep$$...`
     multi_match = _MULTI_PREFIX_RE.match(body_with_braces)
     if multi_match:
-        count = int(multi_match.group(1))
-        sep = multi_match.group(2)
+        count_raw = multi_match.group(1)            # "N" or "N-M"
+        independent = multi_match.group(2) == "~"   # SP2b: repeats allowed
+        sep = multi_match.group(3)
         # Body remaining after the prefix is the branch list
         prefix_len = multi_match.end() - 1  # subtract the leading `{` we added
         rest = body[prefix_len:]
         branches = _split_top_level_pipes(rest)
-        return (end_index, branches, count, sep)
+        if "-" in count_raw:
+            lo, hi = count_raw.split("-", 1)
+            cmin, cmax = int(lo), int(hi)
+        else:
+            cmin = cmax = int(count_raw)
+        if cmin > cmax:                             # normalize a swapped range
+            cmin, cmax = cmax, cmin
+        return (end_index, branches, (cmin, cmax, independent), sep)
 
     # Single-pick: must contain at least one top-level `|`
     branches = _split_top_level_pipes(body)
@@ -169,12 +185,15 @@ def tokenize_text(text: str) -> list[Token]:
             m = _VAR_RE.match(text, i)
             if m:
                 _flush_text(i)
+                var_meta: dict[str, object] = {"name": m.group(1)}
+                if m.group(2) is not None:
+                    var_meta["index"] = int(m.group(2))
                 out.append(Token(
                     kind=TokenKind.VAR,
                     raw=m.group(0),
                     start=i,
                     end=m.end(),
-                    meta={"name": m.group(1)},
+                    meta=var_meta,
                 ))
                 i = m.end()
                 continue
@@ -185,24 +204,21 @@ def tokenize_text(text: str) -> list[Token]:
             m = _REF_RE.match(text, i)
             if m:
                 _flush_text(i)
-                # Group 1: uuid. Group 2: optional display name. Group
-                # 3: optional sub-category filter (split on comma, strip
-                # whitespace, drop empties). Empty / whitespace-only
-                # filter is equivalent to "no filter" — keeps
-                # `@{xyz:}` from accidentally banning every option.
-                filter_raw = m.group(3)
-                sub_categories: list[str] = []
-                if filter_raw is not None:
-                    sub_categories = [
-                        sc for sc in (s.strip() for s in filter_raw.split(","))
-                        if sc
-                    ]
+                # Group 1: uuid. Group 2: optional cached display name.
+                # Group 3: optional boolean sub-category filter
+                # expression (stored raw; the resolver parses it via the
+                # shared subcat_filter matcher). A whitespace-only
+                # `:expr` is "no filter" — keeps `@{xyz:}` from banning
+                # every option. Group 4: the `!null` exclude-null marker.
                 meta: dict = {"uuid": m.group(1)}
                 name_raw = m.group(2)
                 if name_raw:
                     meta["name"] = name_raw
-                if sub_categories:
-                    meta["sub_categories"] = sub_categories
+                expr_raw = m.group(3)
+                if expr_raw is not None and expr_raw.strip():
+                    meta["filter_expr"] = expr_raw
+                if m.group(4) == "null":
+                    meta["exclude_null"] = True
                 out.append(Token(
                     kind=TokenKind.REF,
                     raw=m.group(0),
@@ -228,12 +244,18 @@ def tokenize_text(text: str) -> list[Token]:
                         meta={"branches": branches},
                     ))
                 else:
+                    cmin, cmax, independent = count
                     out.append(Token(
                         kind=TokenKind.DP_MULTI,
                         raw=text[i:end_index],
                         start=i,
                         end=end_index,
-                        meta={"count": count, "sep": sep, "branches": branches},
+                        # `count` kept == max for back-compat readers; min/max
+                        # carry the range, independent carries the `~` flag (SP2b).
+                        meta={
+                            "min": cmin, "max": cmax, "independent": independent,
+                            "count": cmax, "sep": sep, "branches": branches,
+                        },
                     ))
                 i = end_index
                 continue

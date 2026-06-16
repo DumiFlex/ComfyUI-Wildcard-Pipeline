@@ -69,6 +69,19 @@ def test_parse_bool(text, index, default, expected):
     assert parse_bool(text, index, default) is expected
 
 
+def test_lookup_var_joins_and_indexes_listvar():
+    """SP2a: a ListVar var read by the WP_VarTo* nodes joins (bare $c) or
+    indexes (`$c.K`) instead of stringifying the dataclass repr (which fed
+    stray digits into parse_int/parse_float)."""
+    from engine.syntax.types import ListVar
+
+    ctx = _StubCtx({"c": ListVar(["red", "blue"], ", ")})
+    assert lookup_var(ctx, "$c") == "red, blue"
+    assert lookup_var(ctx, "c.0") == "red"
+    assert lookup_var(ctx, "$c.1") == "blue"
+    assert lookup_var(ctx, "c.9") == ""  # out of range -> ""
+
+
 @pytest.mark.parametrize(
     "ctx,name,expected",
     [

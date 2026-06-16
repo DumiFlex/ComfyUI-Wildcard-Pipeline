@@ -38,6 +38,41 @@ const error = ref<string>("");
  *  prior false doesn't stick across dialog instances. */
 const cascadeRefsLocal = ref<boolean>(props.cascadeRefs);
 
+/** Wildcard-delete gets a per-entity cleanup model instead of the single
+ *  cascade_refs flag: the engine strips a dead `@{deleted}` ref ONLY from
+ *  the nested-ref wildcards/derivations whose id the user opts in here.
+ *  Constraints are never cleaned (informational rows; healed via the
+ *  reattach banner), so they never enter this set. */
+const isWildcardDelete = computed<boolean>(
+  () => props.kind === "wildcard" && props.action === "delete",
+);
+
+/** Ids the user has ticked for "strip dead reference". Re-seeded empty
+ *  each open (mirrors the cascadeRefsLocal reset) so a prior dialog's
+ *  ticks don't carry over. Default-UNCHECKED = leave broken → heal via
+ *  chip remap. */
+const checkedCleanupIds = ref<Set<string>>(new Set());
+
+/** Constraints are the only affected kind rendered without a checkbox —
+ *  they're never stripped, just re-pointed later via the constraint
+ *  editor's reattach banner. */
+function isConstraintRow(a: { kind: string }): boolean {
+  return a.kind === "constraint";
+}
+
+function isCleanupChecked(id: string): boolean {
+  return checkedCleanupIds.value.has(id);
+}
+
+/** Toggle a row's opt-in. Replace the Set so the ref's dependents
+ *  re-render (mutating in place wouldn't trip reactivity on `.has`). */
+function setCleanupChecked(id: string, checked: boolean): void {
+  const next = new Set(checkedCleanupIds.value);
+  if (checked) next.add(id);
+  else next.delete(id);
+  checkedCleanupIds.value = next;
+}
+
 /** Resolve the actual color a bundle row should render with. The
  *  cascade scan returns only {kind, id, name}; the library row carries
  *  the user-picked color. When the bundle isn't in the catalog yet
@@ -140,6 +175,9 @@ watch(
       // state from sticking when the dialog reopens on a different
       // target.
       cascadeRefsLocal.value = props.cascadeRefs;
+      // Clear per-entity cleanup opt-ins so a prior wildcard-delete's
+      // ticks don't carry over to this open. Default-unchecked.
+      checkedCleanupIds.value = new Set();
       await refreshDryRun();
     }
   },
@@ -147,14 +185,26 @@ watch(
 );
 
 async function onConfirm(): Promise<void> {
-  const req: CascadeApplyRequest = {
-    kind: props.kind,
-    id: props.id,
-    action: props.action,
-    cascade_refs: cascadeRefsLocal.value,
-    new_name: props.newName,
-    extra: props.extra,
-  };
+  // Wildcard-delete drives the engine via cleanup_ids (per-entity opt-in);
+  // every other kind keeps the single cascade_refs flag. The engine
+  // ignores cascade_refs for wildcard-delete, so we omit it on that path.
+  const req: CascadeApplyRequest = isWildcardDelete.value
+    ? {
+        kind: props.kind,
+        id: props.id,
+        action: props.action,
+        cleanup_ids: [...checkedCleanupIds.value],
+        new_name: props.newName,
+        extra: props.extra,
+      }
+    : {
+        kind: props.kind,
+        id: props.id,
+        action: props.action,
+        cascade_refs: cascadeRefsLocal.value,
+        new_name: props.newName,
+        extra: props.extra,
+      };
   const result = await m.apply(req);
   if (result.ok) {
     emit("confirmed", {
@@ -222,13 +272,47 @@ function onOpenUpdate(v: boolean): void {
           >
             {{ kindLabelFor(a.kind) }}
           </span>
+          <!-- Per-entity cleanup control, wildcard-delete only.
+               Constraints render an informational "reattach to heal"
+               tag (never cleaned); nested-ref wildcards/derivations get
+               an opt-in "strip dead reference" checkbox (default off). -->
+          <template v-if="isWildcardDelete">
+            <span
+              v-if="isConstraintRow(a)"
+              class="wp-cascade-confirm__keep-tag"
+              data-test="cascade-keep-constraint"
+              title="This constraint still points at the deleted wildcard. Re-point it later via the constraint editor's reattach banner."
+            >
+              reattach to heal
+            </span>
+            <span
+              v-else
+              class="wp-cascade-confirm__strip"
+              data-test="cascade-strip"
+              :data-test-id="a.id"
+            >
+              <Checkbox
+                :model-value="isCleanupChecked(a.id)"
+                aria-label="Strip dead reference"
+                @update:model-value="(v: boolean) => setCleanupChecked(a.id, v)"
+              />
+              <span
+                class="wp-cascade-confirm__strip-text"
+                @click="setCleanupChecked(a.id, !isCleanupChecked(a.id))"
+              >
+                strip dead reference
+              </span>
+            </span>
+          </template>
         </li>
       </ul>
       <!-- Cleanup is opt-out — checked by default + marked recommended.
            Unchecking lets the user delete the target without touching
-           dependents; refs become broken but recoverable. -->
+           dependents; refs become broken but recoverable. Wildcard-delete
+           opts out of this single flag — it uses the per-row controls
+           above (cleanup_ids) instead. -->
       <div
-        v-if="affected.length > 0 && action === 'delete'"
+        v-if="affected.length > 0 && action === 'delete' && !isWildcardDelete"
         class="wp-cascade-confirm__cleanup"
         data-test="cascade-cleanup"
       >
@@ -314,6 +398,28 @@ function onOpenUpdate(v: boolean): void {
   color: var(--wp-text-dim, #8a8a93);
   font-size: 12px;
   margin-left: 4px;
+}
+/* Per-row wildcard-delete controls. Both sit at the row's trailing edge
+ * after the kind badge. */
+.wp-cascade-confirm__keep-tag {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  font-style: italic;
+  color: var(--wp-text-dim, var(--wp-text3, #8a8a93));
+  white-space: nowrap;
+}
+.wp-cascade-confirm__strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.wp-cascade-confirm__strip-text {
+  cursor: pointer;
+  user-select: none;
+  font-size: 11px;
+  color: var(--wp-text-dim, var(--wp-text3, #8a8a93));
+  white-space: nowrap;
 }
 .wp-cascade-confirm__row {
   display: flex;

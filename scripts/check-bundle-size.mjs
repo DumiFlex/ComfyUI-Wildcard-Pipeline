@@ -144,7 +144,20 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // in onUpdate/onValueRestored/microtask). Net ~0.5 KB gzip; 2 KB
 // headroom buffer to avoid the "17 bytes from budget" tightness from
 // the previous bump.
-const TOTAL_LIMIT = 395 * 1024;     // 395 KB
+// Bumped 395 -> 405 KB on 2026-06-07 for SP1 Chunk G (in-graph multi-tag
+// pool editor). PoolSection gains grouped quick pills + an ƒ(x) Advanced
+// boolean-expression editor; OptionRow gains per-tag CATEGORY chips; and
+// the shared engine-parity subcat_filter parser (parse/matches/readsAs)
+// is now imported into the wildcard graph editor chunk. ~4 KB net gzip
+// across the lazy ContextWidget chunk; entry stays put. Approved with the
+// SP1 multi-tag + boolean-filter feature (docs/superpowers/specs/
+// 2026-06-06-wildcard-multi-subcategory-boolean-filter-design.md §4.2).
+// Bumped 405 -> 430 KB on 2026-06-11 for SP3 constraint reach UI headroom.
+// SP3 Task 13 lands the TS combineConstraintFactor mirror (+ shared corpus
+// parity test) now; the upcoming reach/constraint-matrix UI phases need the
+// total budget headroom in the lazy ContextWidget chunk. Approved alongside
+// the SP3 constraint feature.
+const TOTAL_LIMIT = 430 * 1024;     // 430 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

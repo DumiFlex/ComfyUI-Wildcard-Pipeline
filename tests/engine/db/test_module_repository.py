@@ -370,3 +370,109 @@ def test_get_many_returns_rows_in_input_order(wp_db):
     requested = [rows[3]["id"], rows[1]["id"], rows[2]["id"], rows[0]["id"]]
     fetched = repo.get_many(requested)
     assert [r["id"] for r in fetched] == requested
+
+
+# ─── content_rating (migration 015) ───────────────────────────────
+
+
+def test_create_defaults_content_rating_to_safe(wp_db):
+    repo = ModuleRepository(wp_db)
+    row = repo.create(
+        type="wildcard", name="m", description="",
+        category_id=None, tags=[], payload=_new_payload(),
+    )
+    assert row["content_rating"] == "safe"
+
+
+def test_create_accepts_nsfw_content_rating(wp_db):
+    repo = ModuleRepository(wp_db)
+    row = repo.create(
+        type="wildcard", name="m", description="",
+        category_id=None, tags=[], payload=_new_payload(),
+        content_rating="nsfw",
+    )
+    assert row["content_rating"] == "nsfw"
+
+
+def test_create_rejects_invalid_content_rating(wp_db):
+    repo = ModuleRepository(wp_db)
+    with pytest.raises(ValueError, match="content_rating"):
+        repo.create(
+            type="wildcard", name="m", description="",
+            category_id=None, tags=[], payload=_new_payload(),
+            content_rating="explicit",
+        )
+
+
+def test_update_toggles_content_rating(wp_db):
+    """User flips NSFW on/off via the IdentityCard toggle. Round-trip
+    through the repo's update path mirrors what the SPA does on save."""
+    repo = ModuleRepository(wp_db)
+    row = repo.create(
+        type="wildcard", name="m", description="",
+        category_id=None, tags=[], payload=_new_payload(),
+    )
+    assert row["content_rating"] == "safe"
+    updated = repo.update(row["id"], content_rating="nsfw")
+    assert updated["content_rating"] == "nsfw"
+    flipped = repo.update(row["id"], content_rating="safe")
+    assert flipped["content_rating"] == "safe"
+
+
+def test_update_without_content_rating_preserves_existing(wp_db):
+    """Updating other fields must not reset content_rating to 'safe' --
+    the field is opt-in via the new kwarg, defaulting to _UNSET."""
+    repo = ModuleRepository(wp_db)
+    row = repo.create(
+        type="wildcard", name="m", description="",
+        category_id=None, tags=[], payload=_new_payload(),
+        content_rating="nsfw",
+    )
+    after = repo.update(row["id"], name="renamed")
+    assert after["content_rating"] == "nsfw"
+    assert after["name"] == "renamed"
+
+
+# ─── set_community_origin (publish writeback) ─────────────────────
+
+
+def test_set_community_origin_stamps_slug_and_version(wp_db):
+    """After publishing, the local row gets linked to its community
+    post so the SPA renders the pill + tracks updates."""
+    repo = ModuleRepository(wp_db)
+    row = repo.create(
+        type="wildcard", name="m", description="",
+        category_id=None, tags=[], payload=_new_payload(),
+    )
+    assert row["community_post_slug"] is None
+    stamped = repo.set_community_origin(
+        row["id"], post_slug="alice/m", version_number=1,
+    )
+    assert stamped["community_post_slug"] == "alice/m"
+    assert stamped["community_version_number"] == 1
+
+
+def test_set_community_origin_no_version_bump(wp_db):
+    """Origin metadata is not runtime-affecting -- stamping must NOT
+    bump the row version or it would falsely signal library drift to
+    inserted workflow instances."""
+    repo = ModuleRepository(wp_db)
+    row = repo.create(
+        type="wildcard", name="m", description="",
+        category_id=None, tags=[], payload=_new_payload(),
+    )
+    before_version = row["version"]
+    before_fp = row["snapshot_fingerprint"]
+    stamped = repo.set_community_origin(
+        row["id"], post_slug="alice/m", version_number=1,
+    )
+    assert stamped["version"] == before_version
+    assert stamped["snapshot_fingerprint"] == before_fp
+
+
+def test_set_community_origin_missing_row_raises(wp_db):
+    repo = ModuleRepository(wp_db)
+    with pytest.raises(ModuleNotFound):
+        repo.set_community_origin(
+            "deadbeef", post_slug="alice/x", version_number=1,
+        )

@@ -16,7 +16,6 @@
  */
 import type {
   CombinePayload,
-  ConstraintCell,
   ConstraintMatrix,
   ConstraintPayload,
   DerivationPayload,
@@ -25,6 +24,7 @@ import type {
   WildcardOption,
   WildcardPayload,
 } from "../api/types";
+import { combineConstraintFactor, EXCLUDE } from "./constraint-math";
 import { toIdentifier } from "./slug";
 
 /* -------------------------------------------------------------------------- */
@@ -206,14 +206,146 @@ export function fillTemplate(
 /* -------------------------------------------------------------------------- */
 
 /**
- * Apply a constraint matrix to the target wildcard's options, conditioned on
- * a single source value. Returns a new option list with reweighted entries +
- * a `_mode` annotation describing how each row was modulated.
+ * SP3 constraint preview parity.
+ *
+ * The engine re-weights an option pool through
+ * `combine_constraint_factor` (one multiply per matching matrix cell —
+ * per source pick × per target-option tag — with `exclude` absorbing and
+ * the exception pair overriding the matrix). A REACH SELECTOR
+ * (`target_select`) then decides which downstream target ENCOUNTERS a
+ * constraint covers. This module mirrors both halves so the SPA preview
+ * matches the runtime:
+ *
+ *   - `applyConstraint` — the single-source-value table the Test Runner
+ *     renders (`runConstraintMatrix`). Weight math now flows through the
+ *     shared `combineConstraintFactor` mirror (multi-tag aware), replacing
+ *     the SP1 primary-tag-only matrix lookup. Single-tag / single-pick
+ *     cells collapse to the same numbers as before.
+ *   - `applyReachConstraints` — the reach-aware core mirroring engine
+ *     `apply_constraints_for_target`: invoked once per downstream target
+ *     encounter, threading a per-constraint hit counter, applying EVERY
+ *     covering constraint combined (multiply; exclude wins).
  */
 export interface AdjustedOption extends WildcardOption {
   _mode: "allow" | "exclude" | "boost" | "reduce";
 }
 
+/** Per-pick `{value, tags}` the combine fn reads (mirror of the engine's
+ *  `source_pick["picks"]` entries). */
+export interface SourcePickEntry {
+  value: string;
+  tags: string[];
+}
+
+/** A source wildcard's recorded pick, as the preview threads it. Mirrors
+ *  engine `ctx["__wp_picks__"][source_id]`: a top-level `value` +
+ *  `sub_categories`, plus the SP3 per-pick `picks` list. When `picks` is
+ *  absent the applier falls back to a single synthetic pick built from
+ *  `value` + `sub_categories` — exactly the legacy fallback in
+ *  `_apply_constraint_to_options`. */
+export interface SourcePick {
+  value: string;
+  sub_categories?: string[];
+  picks?: SourcePickEntry[];
+}
+
+/** Reach selector. `mode` defaults to `all` when the whole object is
+ *  omitted. `count` applies to `next`; `picks` to `pick`. Mirrors engine
+ *  `target_select`. */
+export interface ReachPickOccurrence {
+  kind: "direct" | "nested";
+  uid?: string;
+  carrier_uid?: string;
+  option_id?: string;
+}
+export interface ReachSelector {
+  mode: "all" | "first" | "next" | "pick";
+  count?: number;
+  picks?: ReachPickOccurrence[];
+}
+
+/** A constraint as the reach applier consumes it — the payload fields it
+ *  needs plus an `id` (the engine's `__constraint_module_id__`, used to
+ *  key the hit counter) and the optional `target_select`. */
+export interface PreviewConstraint {
+  id: string;
+  source_wildcard_id: string | null;
+  target_wildcard_id: string | null;
+  matrix: ConstraintMatrix;
+  exceptions: ConstraintPayload["exceptions"];
+  target_select?: ReachSelector;
+}
+
+/** Build the per-pick list the combine fn reads, mirroring engine
+ *  `_apply_constraint_to_options`: use the recorded `picks` when present,
+ *  else fall back to a single synthetic pick from `value` +
+ *  `sub_categories`. */
+function buildSourcePicks(pick: SourcePick): SourcePickEntry[] {
+  if (Array.isArray(pick.picks)) {
+    return pick.picks.map((p) => ({
+      value: String(p.value ?? ""),
+      tags: Array.isArray(p.tags) ? p.tags : [],
+    }));
+  }
+  return [{
+    value: String(pick.value ?? ""),
+    tags: Array.isArray(pick.sub_categories) ? pick.sub_categories : [],
+  }];
+}
+
+/** Collapse a combine factor to the table's `_mode` annotation. The
+ *  engine's matrix carries a discrete mode per cell, but after multi-cell
+ *  multiplication only the net effect is meaningful for the preview table:
+ *  EXCLUDE → "exclude", >1 → "boost", <1 → "reduce", ==1 → "allow". */
+function factorToMode(
+  f: number | typeof EXCLUDE,
+): AdjustedOption["_mode"] {
+  if (f === EXCLUDE) return "exclude";
+  if (f > 1) return "boost";
+  if (f < 1) return "reduce";
+  return "allow";
+}
+
+/** Apply ONE constraint's matrix+exceptions to an option pool via the
+ *  shared combine mirror. EXCLUDE → weight 0, else `max(0, weight × f)`.
+ *  Mirrors engine `_apply_constraint_to_options`. */
+function applyConstraintFactor(
+  options: WildcardOption[],
+  matrix: ConstraintMatrix,
+  exceptions: ConstraintPayload["exceptions"],
+  picks: SourcePickEntry[],
+): AdjustedOption[] {
+  // The combine fn types `matrix`/`exceptions` against its own structural
+  // `Rule` shape; ConstraintCell/ConstraintException are compatible
+  // supersets (mode + factor [+ source/target]). Cast at the boundary.
+  const m = matrix as unknown as Record<string, Record<string, { mode?: string; factor?: number }>>;
+  const exc = (exceptions ?? []) as unknown as Array<Record<string, unknown>>;
+  return options.map((opt): AdjustedOption => {
+    const f = combineConstraintFactor(
+      picks,
+      { value: String(opt.value ?? ""), tags: opt.sub_categories ?? [] },
+      m,
+      exc,
+    );
+    const w = Number(opt.weight) || 0;
+    const weight = f === EXCLUDE ? 0 : Math.max(0, w * Number(f));
+    return { ...opt, weight, _mode: factorToMode(f) };
+  });
+}
+
+/**
+ * Apply a constraint matrix to the target wildcard's options, conditioned on
+ * a single source value. Returns a new option list with reweighted entries +
+ * a `_mode` annotation describing how each row was modulated. Used by the
+ * Test Runner's deterministic per-source-value table (`runConstraintMatrix`).
+ *
+ * Weight math flows through the shared `combineConstraintFactor` mirror so
+ * the table reflects true multi-tag multiplication (an option on N source-tag
+ * rows multiplies N times) and exception-pair override, exactly as the engine
+ * resolves it. The source pick is synthesised from the matched source option
+ * (`value` + its `sub_categories`) — the table conditions on one source value
+ * at a time, so a single synthetic pick is the right shape.
+ */
 export function applyConstraint(
   cn: ConstraintPayload,
   sourceValue: string,
@@ -225,51 +357,86 @@ export function applyConstraint(
   const targetPayload = target.payload as Partial<WildcardPayload>;
   const sourcePayload = source.payload as Partial<WildcardPayload>;
   const targetOptions = targetPayload.options ?? [];
-  const sourceOptions = sourcePayload.options ?? [];
-  const sSubs = sourcePayload.sub_categories ?? [];
-  const tSubs = targetPayload.sub_categories ?? [];
-  const sourceOpt = sourceOptions.find((o) => o.value === sourceValue);
-  const sSub = sourceOpt?.sub_category ?? "";
-  const sCol = sSubs.indexOf(sSub);
-  const matrix: ConstraintMatrix = cn.matrix ?? {};
+  const sourceOpt = (sourcePayload.options ?? []).find(
+    (o) => o.value === sourceValue,
+  );
+  // Synthetic single pick for this source value — all of the matched
+  // option's tags participate (multi-tag), mirroring the engine fallback
+  // shape `[{value, tags: sub_categories}]`.
+  const picks: SourcePickEntry[] = [{
+    value: sourceValue,
+    tags: sourceOpt?.sub_categories ?? [],
+  }];
+  return applyConstraintFactor(
+    targetOptions, cn.matrix ?? {}, cn.exceptions ?? [], picks,
+  );
+}
 
-  const lookupCell = (sourceSub: string, targetSub: string): ConstraintCell | null => {
-    const row = matrix[sourceSub];
-    if (!row) return null;
-    return row[targetSub] ?? null;
-  };
-
-  return targetOptions.map((opt): AdjustedOption => {
-    const tSub = opt.sub_category ?? "";
-    const tRow = tSubs.indexOf(tSub);
-    let mode: AdjustedOption["_mode"] = "allow";
-    let factor = 1;
-    if (sCol >= 0 && tRow >= 0 && sSub) {
-      const cell = lookupCell(sSub, tSub);
-      if (cell) { mode = cell.mode; factor = cell.factor; }
+/**
+ * Reach-aware constraint applier — the preview mirror of engine
+ * `apply_constraints_for_target`. Call ONCE per downstream target
+ * ENCOUNTER (in chain order), threading `hits` across calls.
+ *
+ * For each constraint targeting `targetId` whose source has been picked:
+ *   - increment the per-constraint hit counter `hits[id]`;
+ *   - test coverage against `target_select` (default `all`):
+ *       all   → every encounter;
+ *       first → n === 1;
+ *       next  → n <= count;
+ *       pick  → the firing occurrence is listed.
+ *   - if covered, fold its matrix+exceptions into the pool (multiply;
+ *     `exclude` absorbing).
+ * Every covering constraint stacks in registration order.
+ *
+ * `picks` maps a source wildcard id → its recorded pick (see `SourcePick`).
+ * A constraint whose source is absent is skipped (mirrors the engine's
+ * `unknown_constraint_source` no-op — the preview just omits the warning).
+ *
+ * Reach for `pick`: a `{kind:"direct", uid}` occurrence matches `firingUid`.
+ * The SPA preview does NOT model nested `@{}` carrier occurrences with
+ * per-carrier identity (it has no multi-instance chain walker — the Test
+ * Runner renders a single deterministic table), so `{kind:"nested", ...}`
+ * picks are treated as best-effort and never match here. The runtime engine
+ * is authoritative for nested-pick reach; this preview is advisory.
+ */
+export function applyReachConstraints(
+  options: WildcardOption[],
+  constraints: PreviewConstraint[],
+  targetId: string,
+  picks: Record<string, SourcePick>,
+  hits: Record<string, number>,
+  opts: { firingUid?: string } = {},
+): AdjustedOption[] {
+  // Seed `_mode: "allow"` so an uncovered pool still returns the annotated
+  // shape the table consumes; each covering constraint overwrites it.
+  let out: AdjustedOption[] = options.map((o) => ({ ...o, _mode: "allow" }));
+  for (const c of constraints ?? []) {
+    if (!c || c.target_wildcard_id !== targetId) continue;
+    const srcId = c.source_wildcard_id;
+    const srcPick = typeof srcId === "string" ? picks[srcId] : undefined;
+    if (!srcPick) continue; // source not yet picked → skip (engine no-op)
+    hits[c.id] = (hits[c.id] ?? 0) + 1;
+    const n = hits[c.id];
+    const sel: ReachSelector = c.target_select ?? { mode: "all" };
+    let covered: boolean;
+    if (sel.mode === "first") {
+      covered = n === 1;
+    } else if (sel.mode === "next") {
+      const cnt = Number.isFinite(Number(sel.count)) ? Number(sel.count) : 1;
+      covered = n <= cnt;
+    } else if (sel.mode === "pick") {
+      covered = (sel.picks ?? []).some(
+        (p) => p.kind === "direct" && p.uid === opts.firingUid,
+      );
+    } else {
+      covered = true; // all (and any unknown mode) covers every encounter
     }
-    // Exception lookup — engine accepts BOTH the canonical `source` /
-    // `target` fields and the legacy `source_value` / `target_value`
-    // shape (see engine/modules/_constraints.py + constraint_handler.py).
-    // Mirror the same fallback here so the SPA test runner doesn't
-    // silently miss exceptions stored under the legacy keys, which
-    // would make it look like the exception isn't taking priority when
-    // it actually is — at runtime.
-    const ex = (cn.exceptions ?? []).find((e) => {
-      const eRec = e as unknown as Record<string, unknown>;
-      const eSrc = typeof eRec.source === "string" ? eRec.source
-        : (typeof eRec.source_value === "string" ? eRec.source_value : "");
-      const eTgt = typeof eRec.target === "string" ? eRec.target
-        : (typeof eRec.target_value === "string" ? eRec.target_value : "");
-      return eSrc === sourceValue && eTgt === opt.value;
-    });
-    if (ex) { mode = ex.mode; factor = ex.factor; }
-    let w = Number(opt.weight) || 0;
-    if (mode === "exclude") w = 0;
-    else if (mode === "reduce") w = w * (factor || 0.25);
-    else if (mode === "boost")  w = w * (factor || 3);
-    return { ...opt, weight: w, _mode: mode };
-  });
+    if (!covered) continue;
+    out = applyConstraintFactor(
+      out, c.matrix ?? {}, c.exceptions ?? [], buildSourcePicks(srcPick),
+    );
+  }
+  return out;
 }
 
 /* -------------------------------------------------------------------------- */

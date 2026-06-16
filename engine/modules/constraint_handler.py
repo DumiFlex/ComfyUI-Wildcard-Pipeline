@@ -24,6 +24,55 @@ from engine.modules.dispatcher import ModuleHandler
 
 _VALID_MODES = {"allow", "exclude", "boost", "reduce"}
 
+# SP3 reach selector — which downstream target instance(s) a constraint
+# reaches. Shape only here; reach *behaviour* is applied by a later task.
+_REACH_MODES = {"first", "next", "all", "pick"}
+
+
+def _validate_target_select(ts):
+    """Validate the optional ``target_select`` reach selector.
+
+    Shape: ``{mode: "first"|"next"|"all"|"pick", count?, picks?}``. ``None``
+    (absent) is allowed — the resolver defaults it to ``{mode: "all"}``.
+    """
+    if ts is None:
+        return
+    if not isinstance(ts, dict):
+        raise ValueError("constraint payload.target_select must be an object")
+    mode = ts.get("mode", "all")
+    if mode not in _REACH_MODES:
+        raise ValueError(
+            f"constraint payload.target_select.mode must be one of {sorted(_REACH_MODES)}"
+        )
+    if mode == "next":
+        count = ts.get("count")
+        if not isinstance(count, int) or isinstance(count, bool) or count < 1:
+            raise ValueError(
+                "constraint payload.target_select.count must be an int >= 1 for mode 'next'"
+            )
+    if mode == "pick":
+        picks = ts.get("picks")
+        if not isinstance(picks, list):
+            raise ValueError(
+                "constraint payload.target_select.picks must be a list for mode 'pick'"
+            )
+        for i, p in enumerate(picks):
+            if not isinstance(p, dict) or p.get("kind") not in ("direct", "nested"):
+                raise ValueError(
+                    f"constraint payload.target_select.picks[{i}].kind must be 'direct' or 'nested'"
+                )
+            if p["kind"] == "direct" and not isinstance(p.get("uid"), str):
+                raise ValueError(
+                    f"constraint payload.target_select.picks[{i}].uid must be a string"
+                )
+            if p["kind"] == "nested" and not (
+                isinstance(p.get("carrier_uid"), str) and isinstance(p.get("option_id"), str)
+            ):
+                raise ValueError(
+                    f"constraint payload.target_select.picks[{i}] nested "
+                    "needs carrier_uid + option_id"
+                )
+
 
 def _ctx_set_constraint(ctx: Any, meta: dict[str, Any]) -> None:
     """Append ``meta`` to ``ctx['__wp_constraints__']`` (best-effort).
@@ -185,6 +234,7 @@ class ConstraintHandler(ModuleHandler):
                 raise ValueError(
                     f"constraint payload.exceptions[{i}].factor must not be negative"
                 )
+        _validate_target_select(payload.get("target_select"))
 
     @classmethod
     def resolve(
@@ -207,6 +257,16 @@ class ConstraintHandler(ModuleHandler):
         exception_mode_overrides = instance.get("exception_mode_overrides") or {}
         exception_factor_overrides = instance.get("exception_factor_overrides") or {}
         extra_exceptions = instance.get("extra_exceptions") or []
+
+        # SP3 reach selector — instance override wins over the payload's
+        # value, falling back to the {mode:"all"} default. Shape was
+        # already validated in validate_payload (payload side); the
+        # instance side is validated when the instance is loaded.
+        ts = (
+            instance.get("target_select")
+            or payload.get("target_select")
+            or {"mode": "all"}
+        )
 
         # ── Matrix: filter then override ─────────────────────────────
         raw_matrix = payload.get("matrix", {})
@@ -353,20 +413,22 @@ class ConstraintHandler(ModuleHandler):
             exceptions.append(dict(exc))
 
         # Carry the owning constraint module's id into the registered
-        # bucket entry so `apply_constraints_for_target` can mark it
-        # consumed once its first downstream target instance fires
-        # (one-shot semantic per 2026-05-24 first-instance spec).
+        # bucket entry as `__constraint_module_id__` (the `cid`). Under the
+        # SP3 reach model it identifies the constraint for two things:
+        # (1) the per-constraint hit counter `__wp_constraint_hits__[cid]`
+        # that drives first / next / pick coverage in
+        # `apply_constraints_for_target`, and (2) the dedup key + ref of
+        # the never-applied / partial-reach finalisation warnings.
         #
         # Key on the PER-INSTANCE uid (`__wp_current_module_uid__`), not
         # the library uuid (`__wp_current_module_id__`): two instances of
-        # the same library constraint entry must be INDEPENDENT one-shots
+        # the same library constraint entry must reach INDEPENDENTLY
         # (CLAUDE.md — "author multiple constraint modules" to affect
         # multiple target instances). Pre-2026-05-26 both keyed on the
-        # shared library uuid, so claiming/consuming one silently spent
-        # the other — a carrier could swallow the whole family and a
-        # downstream direct target then rolled unconstrained. The pipeline
-        # falls back to the library id when `_uid` is absent (legacy /
-        # hand-built test modules), preserving the old behaviour there.
+        # shared library uuid, so the two instances' counters collided —
+        # one instance's encounters advanced the other's first/next
+        # selector. The pipeline falls back to the library id when `_uid`
+        # is absent (legacy / hand-built test modules).
         module_id = None
         try:
             if hasattr(ctx, "get"):
@@ -376,27 +438,33 @@ class ConstraintHandler(ModuleHandler):
                 )
         except Exception:
             module_id = None
-        # The per-instance `_uid` (12+ chars) keys the consumed-set so two
-        # canvas instances of the same library constraint stay independent
-        # one-shots. The LIBRARY id (8-hex) is also stashed because the
-        # never-applied warning text needs it to render the chip — the SPA
-        # / Debug viewer's chip resolver looks up library uuids in the
-        # module catalog, and a per-instance `_uid` would never resolve
-        # (silently rendering as raw `@{…}` text in the warning).
+        # The per-instance `_uid` (12+ chars) keys the per-constraint hit
+        # counter so two canvas instances of the same library constraint
+        # reach independently. The LIBRARY id (8-hex) is also stashed
+        # because the never-applied / partial-reach warning text needs it
+        # to render the chip — the SPA / Debug viewer's chip resolver looks
+        # up library uuids in the module catalog, and a per-instance `_uid`
+        # would never resolve (silently rendering as raw `@{…}` text in the
+        # warning).
         library_id = None
         library_name = None
+        bundle_origin = None
         try:
             if hasattr(ctx, "get"):
                 library_id = ctx.get("__wp_current_module_id__")
                 library_name = ctx.get("__wp_current_module_name__")
+                bundle_origin = ctx.get("__wp_current_module_bundle_origin__")
         except Exception:
             library_id = None
             library_name = None
+            bundle_origin = None
         meta = {
             "source_wildcard_id": payload["source_wildcard_id"],
             "target_wildcard_id": payload["target_wildcard_id"],
             "matrix": matrix,
             "exceptions": exceptions,
+            # SP3 reach selector — recorded for the (later) apply pass.
+            "target_select": ts,
             "__constraint_module_id__": module_id,
             "__constraint_library_id__": library_id,
             # Cached display name (e.g. "Starter pairing"). The never-applied
@@ -407,6 +475,15 @@ class ConstraintHandler(ModuleHandler):
             # endpoint would 404 there, leaving the chip stuck on the raw
             # uuid otherwise.
             "__constraint_library_name__": library_name,
+            # Per-insertion bundle discriminator (task_5200c1fc). When this
+            # constraint instance lives inside a bundle copy, it shares one
+            # `bundle_origin` with the source wildcard instance in the SAME
+            # copy. `apply_constraints_for_target` uses it to read that
+            # copy's source pick (`by_origin[origin]`) rather than the
+            # last-writer survivor. Falsy (None) for a top-level / manual /
+            # legacy constraint — then apply falls back to today's
+            # last-writer-wins lookup, unchanged.
+            "__constraint_bundle_origin__": bundle_origin,
         }
         _ctx_set_constraint(ctx, meta)
         return {}

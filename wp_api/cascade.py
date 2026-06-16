@@ -23,9 +23,17 @@ async def cascade_apply(request: web.Request) -> web.Response:
             "action": str,  # "delete", "rename", etc.
             "dry_run": bool,  # optional, default False
             "cascade_refs": bool,  # optional, default True
+            "cleanup_ids": list[str],  # optional, wildcard-delete only — ids of
+                                       # nested-ref wildcards/derivations whose dead
+                                       # @{uuid} token to strip; default []
             "new_name": str,  # optional, for rename actions
             "extra": dict,  # optional, for subcategory/combine_var ops
         }
+
+    The whole body dict is forwarded verbatim to ``apply_cascade``; any
+    field the engine reads (incl. ``cleanup_ids``, which it pulls via
+    ``req.get("cleanup_ids") or []``) flows through without per-field
+    plumbing here.
 
     On success: ``{"ok": True, "undo_entry_id": str, "affected_count": int, "diff": list}``
     (dry_run mode returns ``affected_count`` and ``affected_entities`` instead of ``diff``).

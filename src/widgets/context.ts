@@ -17,28 +17,72 @@ import {
   type LiteGraphLike,
   type LiteNodeLike,
 } from "../extension/graph";
-import { collectCrossNodePairingsFull } from "../extension/cross-node-pairings";
-import type { PairingBadge, RowPairings } from "../extension/constraint-pairs";
+import { collectCrossNodePairingsFull, collectFullChainModules } from "../extension/cross-node-pairings";
+import type { ChainModule, PairingBadge, RowPairings, TargetSelect } from "../extension/constraint-pairs";
 import { reactiveFromGraph, stringArrayEqual } from "../extension/reactive";
+import { applyVarAccessor, type ResolvedValue } from "./richTokenize";
 
 /** Shallow-equal map comparator for `reactiveFromGraph` so the
  *  upstream-resolved snapshot only triggers a re-render when its
- *  contents actually change (not just object identity). */
-function stringMapEqual(a: Record<string, string>, b: Record<string, string>): boolean {
+ *  contents actually change (not just object identity). SP2a: values may be
+ *  a `ListVarValue` object (multi-pick) — compare by string form so a freshly
+ *  rebuilt list with identical contents doesn't churn the snapshot each poll. */
+function stringMapEqual(
+  a: Record<string, ResolvedValue>,
+  b: Record<string, ResolvedValue>,
+): boolean {
   if (a === b) return true;
   const ak = Object.keys(a);
   if (ak.length !== Object.keys(b).length) return false;
-  for (const k of ak) if (a[k] !== b[k]) return false;
+  for (const k of ak) {
+    if (applyVarAccessor(a[k], undefined) !== applyVarAccessor(b[k], undefined)) return false;
+  }
   return true;
 }
 
-function pairingBadgeEqual(a: PairingBadge, b: PairingBadge): boolean {
+/** Deep-equal for a constraint's reach selector. Only the SENDER badge
+ *  carries `reach` (mode + count + picks); a `target_select` edit in the
+ *  modal must flip this so the gated `pairingsRef` re-renders the canvas
+ *  chip's reach suffix (·all → ·first → ·n2 → ·pick). Compares mode, count,
+ *  and the picks list element-by-element (order-sensitive — the UI appends
+ *  picks in toggle order so identical selections share order; a reorder
+ *  only costs one harmless extra render). Both-undefined short-circuits true
+ *  so the common case (every contributor / carrier badge) never churns. */
+function targetSelectEqual(
+  a: TargetSelect | undefined,
+  b: TargetSelect | undefined,
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if (a.mode !== b.mode || a.count !== b.count) return false;
+  const ap = a.picks ?? [];
+  const bp = b.picks ?? [];
+  if (ap.length !== bp.length) return false;
+  for (let i = 0; i < ap.length; i++) {
+    const x = ap[i];
+    const y = bp[i];
+    if (x.kind !== y.kind) return false;
+    if (x.kind === "direct" && y.kind === "direct") {
+      if (x.uid !== y.uid) return false;
+    } else if (x.kind === "nested" && y.kind === "nested") {
+      if (x.carrier_uid !== y.carrier_uid || x.option_id !== y.option_id) return false;
+    }
+  }
+  return true;
+}
+
+export function pairingBadgeEqual(a: PairingBadge, b: PairingBadge): boolean {
   if (
     a.number !== b.number ||
     a.targetUuid !== b.targetUuid ||
     a.colorIndex !== b.colorIndex ||
     a.isOrphan !== b.isOrphan
   ) return false;
+  // SP3 reach: only sender `direct` badges carry it; a selector edit must
+  // re-render the chip's reach suffix even when every scalar above is
+  // unchanged. targetSelectEqual short-circuits both-undefined, so the
+  // overwhelming majority of badges (no reach) don't pay any churn cost.
+  if (!targetSelectEqual(a.reach, b.reach)) return false;
   const av = a.via;
   const bv = b.via;
   if (!av && !bv) return true;
@@ -55,7 +99,7 @@ function pairingBadgeEqual(a: PairingBadge, b: PairingBadge): boolean {
  *  when an entry's `direct` badge OR any `viaInbound` badge actually
  *  changes — gate prevents per-frame poll churn re-rendering every
  *  ContextWidget when nothing's changed. */
-function pairingMapEqual(
+export function pairingMapEqual(
   a: Map<string, RowPairings>,
   b: Map<string, RowPairings>,
 ): boolean {
@@ -77,6 +121,56 @@ function pairingMapEqual(
     for (let i = 0; i < av.viaInbound.length; i++) {
       if (!pairingBadgeEqual(av.viaInbound[i], bv.viaInbound[i])) return false;
     }
+    // contributors (SP3 mark-all): the authoritative per-row coverage list
+    // the badge cluster renders. A reach edit can add/drop a NON-FIRST
+    // contributor without touching `direct` (which mirrors only
+    // contributors[0]), so the cluster would keep a stale chip count unless
+    // we compare the full list here.
+    if (av.contributors.length !== bv.contributors.length) return false;
+    for (let i = 0; i < av.contributors.length; i++) {
+      if (!pairingBadgeEqual(av.contributors[i], bv.contributors[i])) return false;
+    }
+  }
+  return true;
+}
+
+/** Per-entry fingerprint for the cross-node chain gate. Only the fields
+ *  the constraint modal reads off a `ChainModule` participate — id, type,
+ *  display name, and the wildcard-resolution payload bits (var_binding,
+ *  sub_categories, option values + ids). Cheaper + more churn-stable than
+ *  deep-equal on the whole payload, while still flipping when an edit the
+ *  modal can observe lands. Mirrors the gating discipline the other
+ *  chain-derived polls use. */
+function chainModuleSig(m: ChainModule): string {
+  const p = m.payload as {
+    var_binding?: unknown;
+    sub_categories?: unknown;
+    options?: Array<{ id?: unknown; value?: unknown }>;
+  };
+  const subs = Array.isArray(p.sub_categories) ? p.sub_categories.join("") : "";
+  const opts = Array.isArray(p.options)
+    ? p.options.map((o) => `${String(o?.id ?? "")}=${String(o?.value ?? "")}`).join("")
+    : "";
+  return [
+    m.id,
+    m.rowKey,
+    m.type,
+    m.displayName ?? "",
+    typeof p.var_binding === "string" ? p.var_binding : "",
+    subs,
+    opts,
+  ].join("");
+}
+
+/** Order-sensitive equality for the flattened chain. Re-renders only
+ *  when an entry appears, disappears, moves, or changes a modal-visible
+ *  field — gate prevents per-poll churn re-rendering every ContextWidget
+ *  when the chain is structurally unchanged. */
+function chainModulesEqual(a: ChainModule[], b: ChainModule[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (chainModuleSig(a[i]) !== chainModuleSig(b[i])) return false;
   }
   return true;
 }
@@ -223,6 +317,33 @@ export function create(node: ContextNode, inputName: string) {
         pairingMapEqual,
       );
 
+      // Flattened cross-node module chain (upstream + own + downstream
+      // WP_Context modules in execution order). Threaded down to the
+      // constraint modal so it can resolve a source/target wildcard that
+      // lives in ANOTHER Context node, not just this node's siblings.
+      //
+      // Perf: this is a SECOND walk — `collectCrossNodePairingsFull`
+      // above already runs `collectFullChainModules` internally, so the
+      // flatten happens twice per poll tick. The flatten is O(chain
+      // modules) with one widget-JSON parse per Context node in the
+      // chain; bounded and cheap next to the conflict scanner. Sharing
+      // one walk would mean either restructuring the gated pairing poll
+      // (loses its `pairingMapEqual` re-render gate) or changing
+      // cross-node-pairings.ts (out of scope here). The `chainModulesEqual`
+      // gate suppresses re-render churn when the chain is unchanged, so
+      // the only added cost is the recompute itself, not extra renders.
+      const chainModulesRef = reactiveFromGraph(
+        node as unknown as Parameters<typeof reactiveFromGraph>[0],
+        () => {
+          const startGraph =
+            (node as unknown as { graph?: LiteGraphLike }).graph
+            ?? (app.graph as unknown as LiteGraphLike);
+          const rootGraph = findRootGraph(startGraph);
+          return collectFullChainModules(rootGraph, node);
+        },
+        chainModulesEqual,
+      );
+
       // Per-name resolved snapshot — drives the combine modal's
       // live-preview pane so the user sees `red portrait` instead of
       // `$style portrait` while editing. Same walker the assembler
@@ -302,7 +423,7 @@ export function create(node: ContextNode, inputName: string) {
        *  binding). Drives the combine modal's live-preview pane.
        *  Function (vs static prop) because the answer depends on
        *  which module the modal is currently editing. */
-      function localResolvedReader(moduleId?: string): Record<string, string> {
+      function localResolvedReader(moduleId?: string): Record<string, ResolvedValue> {
         const startGraph =
           (node as unknown as { graph?: LiteGraphLike }).graph
           ?? (app.graph as unknown as LiteGraphLike);
@@ -338,6 +459,7 @@ export function create(node: ContextNode, inputName: string) {
           downstreamWildcardUuids: downstreamUuids.value,
           downstreamNestedReachUuids: downstreamNestedReach.value,
           pairings: pairingsRef.value,
+          chainModules: chainModulesRef.value,
           nodeMode: nodeMode.value,
           lastUsedSeedReader,
           onChange: (json: string) => host.setValue(json),

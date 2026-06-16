@@ -14,6 +14,9 @@ from typing import Any, Literal
 InstanceFieldType = Literal[
     "string", "list[string]", "dict[string,number]", "dict[string,dict]",
     "dict[string,string]",
+    # Generic object — used by SP3 `target_select`, whose interior shape is
+    # validated by the constraint handler rather than this type-only schema.
+    "dict",
     "boolean", "number", "list[dict]",
 ]
 
@@ -22,9 +25,28 @@ INSTANCE_SCHEMAS: dict[str, dict[str, InstanceFieldType]] = {
         "variable_binding": "string",
         "enabled_options": "list[string]",
         "option_weights": "dict[string,number]",
-        "category_filter": "list[string]",
+        # `category_filter` is a boolean sub-category expression string
+        # (SP1). The separate `exclude_null` instance flag is declared
+        # here + in the TS `_shell.ts` twin together in the SP1 UI chunk
+        # (keeps the parity guard green); the engine resolver already
+        # reads it directly.
+        "category_filter": "string",
+        "exclude_null": "boolean",
         "locked_seed": "number",
         "internal": "boolean",
+        # SP2a multi-select: per-instance count range (pick_min..pick_max; a
+        # range other than 1..1 resolves N options without replacement into a
+        # list-valued variable) + the separator used to join it for a bare
+        # `$var`. Instance-local: NOT part of a standalone module's published
+        # payload — but bundle children freeze the whole instance as a
+        # snapshot, so a published bundle DOES carry them (intentional
+        # frozen-snapshot fidelity).
+        "pick_min": "number",
+        "pick_max": "number",
+        "pick_separator": "string",
+        # SP2c: multi-pick draws WITH replacement (repeats allowed) when true,
+        # without (unique) when false/absent. Mirrors the inline `~` flag.
+        "pick_independent": "boolean",
         # `mode` and `pinned_option_id` removed in v2 — resolve mode is
         # implicit in pool state. Engine handler still reads them when
         # present in legacy snapshots; the schema validator now flags
@@ -86,6 +108,9 @@ INSTANCE_SCHEMAS: dict[str, dict[str, InstanceFieldType]] = {
         "exception_mode_overrides":    "dict[string,string]",
         "exception_factor_overrides":  "dict[string,number]",
         "extra_exceptions":            "list[dict]",
+        # SP3 reach selector override. Interior shape (mode/count/picks) is
+        # validated by ConstraintHandler; here it is type-only ("is a dict").
+        "target_select":               "dict",
     },
 }
 
@@ -101,6 +126,8 @@ def _matches_type(value: Any, spec: InstanceFieldType) -> bool:
         return isinstance(value, list) and all(isinstance(x, str) for x in value)
     if spec == "list[dict]":
         return isinstance(value, list) and all(isinstance(x, dict) for x in value)
+    if spec == "dict":
+        return isinstance(value, dict)
     if spec == "dict[string,number]":
         return (
             isinstance(value, dict)
@@ -140,4 +167,17 @@ def validate_instance(kind: str, instance: dict[str, Any]) -> list[str]:
             warnings.append(
                 f"{kind}.{field} type mismatch: expected {spec}, got {type(value).__name__}"
             )
+    # SP2a advisory soft-warns for the pick range (not type errors).
+    if kind == "wildcard":
+        pmin = instance.get("pick_min")
+        pmax = instance.get("pick_max")
+        nums = (int, float)
+        if (isinstance(pmin, nums) and not isinstance(pmin, bool)
+                and isinstance(pmax, nums) and not isinstance(pmax, bool)):
+            if pmin == 0 and pmax == 0:
+                warnings.append("wildcard pick range 0..0 — always empty (resolves to nothing)")
+            elif pmax < pmin:
+                warnings.append(
+                    f"wildcard.pick_max ({pmax}) is below pick_min ({pmin}) — clamped to pick_max"
+                )
     return warnings

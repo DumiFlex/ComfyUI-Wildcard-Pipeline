@@ -61,10 +61,21 @@
 .wp-rt .wp-rt-dp-multi,
 .wp-rt-preview .wp-rt-dp-multi {
   color: var(--wp-rt-token-good);
-  background: var(--wp-rt-token-good-bg);
-  border-radius: 3px;
   font-weight: 500;
 }
+
+/* SP2b V2: a decomposed brace block renders its scaffolding (braces, count,
+   `$$sep$$`, pipes, literal arms) as CONTINUOUS block-coloured text — colour
+   only, no background, no box. The inner @{uuid}/$var arms are the only
+   bordered elements (RefChip). "alt" = plain alternation `{a|b}` (amber, like
+   dp-brace); "multi" = count/multi `{N$$…}` (green, like dp-multi). Colours
+   match the dp-brace/dp-multi tokens above so a full block and a decomposed
+   one read identically. */
+.wp-rt .wp-rt-block-scaf--alt,
+.wp-rt-preview .wp-rt-block-scaf--alt { color: var(--wp-warn, #fcd34d); font-weight: 600; }
+
+.wp-rt .wp-rt-block-scaf--multi,
+.wp-rt-preview .wp-rt-block-scaf--multi { color: var(--wp-rt-token-good); font-weight: 500; }
 
 .wp-rt .wp-rt-dp-weight,
 .wp-rt-preview .wp-rt-dp-weight {

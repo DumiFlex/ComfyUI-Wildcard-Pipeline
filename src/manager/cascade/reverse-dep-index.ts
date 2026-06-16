@@ -1,3 +1,5 @@
+import { collectTags } from "./subcatExprCascade";
+
 export interface IncomingRef {
   from_kind: "wildcard" | "fixed_values" | "combine" | "derivation" | "constraint" | "bundle";
   from_id: string;
@@ -40,8 +42,8 @@ export interface DiffEntry {
 
 // Mirrors `engine/syntax/tokenize.py:_REF_RE` and the scan-side twin
 // in `engine/cascade/scan.py`. Captures uuid + optional `#name` cache
-// + optional `:subcat,subcat...` filter. Name is informational —
-// scanner only ever reads the uuid.
+// + optional `:expr!null` SP1 boolean filter. Name is informational —
+// scanner only ever reads the uuid + the filter's tags.
 const REF_REGEX = /@\{([0-9a-f]{8})(?:#([^#:}@{]*))?(?::([^}]*))?\}/g;
 const VAR_REGEX = /\$([A-Za-z_][A-Za-z0-9_]*)/g;
 
@@ -52,13 +54,25 @@ function pushRef(map: Map<string, IncomingRef[]>, key: string, ref: IncomingRef)
   map.get(key)!.push(ref);
 }
 
-function extractRefs(text: string): Array<{ uuid: string; subcat: string | undefined }> {
-  const refs: Array<{ uuid: string; subcat: string | undefined }> = [];
+function extractRefs(text: string): Array<{ uuid: string; subcats: string[] }> {
+  const refs: Array<{ uuid: string; subcats: string[] }> = [];
   REF_REGEX.lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = REF_REGEX.exec(text)) !== null) {
-    // Groups: 1=uuid, 2=cached name (display-only, ignored), 3=subcat
-    refs.push({ uuid: match[1], subcat: match[3] });
+    // Groups: 1=uuid, 2=cached name (display-only, ignored), 3=filter body.
+    // The body is an SP1 boolean expression with an optional trailing `!null`
+    // exclude marker. Peel `!null` (names/expr never contain `!`, so the only
+    // `!` is the marker), then collect each referenced tag so the index can
+    // key per-tag — a `warm or intense` filter must be found by a rename of
+    // EITHER tag, not by a literal "warm or intense" lookup that never comes.
+    const body = match[3];
+    let subcats: string[] = [];
+    if (typeof body === "string" && body.length > 0) {
+      const bang = body.lastIndexOf("!");
+      const expr = bang >= 0 ? body.slice(0, bang) : body;
+      subcats = collectTags(expr);
+    }
+    refs.push({ uuid: match[1], subcats });
   }
   return refs;
 }
@@ -118,8 +132,8 @@ export function buildIndex(lib: LibraryFixture): ReverseDepIndex {
             ref_path: value,
           };
           pushRef(idx.toEntity, ref.uuid, incomingRef);
-          if (ref.subcat) {
-            pushRef(idx.toSubcat, `${ref.uuid}:${ref.subcat}`, incomingRef);
+          for (const sc of ref.subcats) {
+            pushRef(idx.toSubcat, `${ref.uuid}:${sc}`, incomingRef);
           }
         }
 
@@ -195,8 +209,8 @@ export function buildIndex(lib: LibraryFixture): ReverseDepIndex {
                 ref_path: val,
               };
               pushRef(idx.toEntity, ref.uuid, incomingRef);
-              if (ref.subcat) {
-                pushRef(idx.toSubcat, `${ref.uuid}:${ref.subcat}`, incomingRef);
+              for (const sc of ref.subcats) {
+                pushRef(idx.toSubcat, `${ref.uuid}:${sc}`, incomingRef);
               }
             }
 

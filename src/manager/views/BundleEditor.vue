@@ -1,3 +1,104 @@
+<script lang="ts">
+/**
+ * Pure helpers for BundleEditor, exported from a plain (non-setup)
+ * `<script>` block so they're unit-testable without mounting the view.
+ */
+import type { ExtractedModule } from "../../components/context/bundles/extract-to-library";
+import { walkRemap } from "../../components/context/bundles/uuid-remap";
+import { MAX_KNOWN_SCHEMA_VERSION, type RawPayload } from "../import-export/migrations";
+
+/** Engine `type` (singular) → install-envelope bucket (plural). The five
+ *  module subtypes share one server table but live in distinct envelope
+ *  arrays; `fixed_values` is identical in both spaces. */
+const TYPE_TO_BUCKET: Record<string, keyof RawPayload> = {
+  wildcard: "wildcards",
+  fixed_values: "fixed_values",
+  combine: "combines",
+  derivation: "derivations",
+  constraint: "constraints",
+};
+
+/**
+ * Group extracted leaf modules into the install envelope `installEnvelope`
+ * accepts (top-level `schema_version` + plural per-type arrays). Each module
+ * is emitted as an engine-row entity (`{ id, type, name, payload, ...}`),
+ * carrying `description`/`tags` only when present so we don't write empty
+ * keys the engine importer would otherwise have to ignore.
+ *
+ * Stamped with `MAX_KNOWN_SCHEMA_VERSION` — these rows came straight out of
+ * a live library bundle (already current shape), so they need no migration;
+ * stamping CURRENT (the chain head, which lags) would make `parsePayload`
+ * try to forward-migrate shapes that are already at head.
+ */
+export function buildExtractEnvelope(modules: ExtractedModule[]): RawPayload {
+  const envelope: RawPayload = {
+    schema_version: MAX_KNOWN_SCHEMA_VERSION,
+    bundles: [],
+    wildcards: [],
+    fixed_values: [],
+    combines: [],
+    derivations: [],
+    constraints: [],
+    categories: [],
+    templates: [],
+  };
+  for (const m of modules) {
+    const bucket = TYPE_TO_BUCKET[m.type];
+    if (!bucket) continue; // unknown/bundle type — skip rather than crash
+    const entity: Record<string, unknown> = {
+      id: m.id,
+      type: m.type,
+      name: m.name,
+      payload: m.payload,
+    };
+    if (m.description !== undefined) entity.description = m.description;
+    if (m.tags !== undefined) entity.tags = m.tags;
+    (envelope[bucket] as Array<Record<string, unknown>>).push(entity);
+  }
+  return envelope;
+}
+
+/**
+ * Relink a bundle's frozen children to freshly-installed module ids after
+ * "extract to library". `extractBundleChildren` mints new ids for the
+ * extracted leaves but does NOT touch the source bundle, so its children
+ * still point at the OLD ids and read as "target module missing". This
+ * rewrites each child's whole-string `id` AND any intra-bundle ref (a
+ * constraint's `source_wildcard_id` / `target_wildcard_id`, a nested
+ * `@{uuid}` in option text) via `walkRemap` using the same remap table.
+ *
+ * Ids absent from `remap` (refs pointing OUTSIDE the extracted set) pass
+ * through verbatim — they keep resolving against whatever else lives in
+ * the library. Pure: returns a new array, never mutates the input.
+ */
+export function relinkChildren<T extends Record<string, unknown>>(
+  children: T[],
+  remap: Record<string, string>,
+): T[] {
+  return walkRemap(children, remap) as T[];
+}
+
+/**
+ * True iff ANY child no longer resolves to a row in its kind's id-set:
+ * bundle-typed children (`type:"bundle"`) are looked up in `bundleIds`,
+ * every other (leaf module) child in `moduleIds`. Discrimination matches
+ * `validateBundle` — a child whose id lives only in the wrong set still
+ * dangles. Drives the extract button's enabled state: extract is a heal
+ * action, only offered when something actually needs relinking.
+ */
+export function computeHasDangling(
+  children: ReadonlyArray<{ id?: unknown; type?: unknown }>,
+  moduleIds: ReadonlySet<string>,
+  bundleIds: ReadonlySet<string>,
+): boolean {
+  return children.some((c) => {
+    if (typeof c.id !== "string") return true;
+    const ids = c.type === "bundle" ? bundleIds : moduleIds;
+    return !ids.has(c.id);
+  });
+}
+</script>
+
 <script setup lang="ts">
 /**
  * BundleEditor — SPA editor for library-tracked bundles.
@@ -11,7 +112,7 @@
  *   /bundles/new            → create-mode (disabled Save, points user to Context widget)
  *   /bundles/:id/edit       → edit-mode
  */
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, toRaw, watch } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import type { SaveState, EditorFieldError } from "../components/EditorFrame.types";
 import { useRouter } from "vue-router";
@@ -19,11 +120,13 @@ import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
+import CommunityRowActions from "../components/CommunityRowActions.vue";
 import DraftBanner from "../components/DraftBanner.vue";
 import ColorPicker from "../components/ColorPicker.vue";
 import BundleChildRow from "../components/BundleChildRow.vue";
 import BundleChildPane from "../components/BundleChildPane.vue";
 import BundleAddChildModal from "../components/BundleAddChildModal.vue";
+import BundleReattachSection from "../components/BundleReattachSection.vue";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
@@ -40,12 +143,28 @@ import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
 import PillCountBadge from "../cascade/PillCountBadge.vue";
 import type { BundleRow, ModuleRow } from "../api/types";
 import type { ModuleEntry } from "../../widgets/_shared";
+import {
+  extractBundleChildren,
+  type ExtractableChild,
+} from "../../components/context/bundles/extract-to-library";
+import { installEnvelope } from "../import-export/install";
+import { api } from "../api/client";
+import {
+  fetchCommunityPostDetail,
+  downloadCommunityVersion,
+  type CommunityDepEdge,
+} from "../community/community-posts";
+import { collectTransitiveDeps } from "../community/transitive-deps";
+import { downloadDepsForDangling } from "../community/download-and-reattach";
 
 const props = defineProps<{ id?: string }>();
 
 const router = useRouter();
 const { resolveReturnTo } = useReturnTo();
 const store = useBundleStore();
+const currentRow = computed(() =>
+  props.id ? store.catalog.find((b) => b.id === props.id) ?? null : null,
+);
 const categoryStore = useCategoryStore();
 const moduleStore = useModuleStore();
 const toast = useToast();
@@ -62,35 +181,7 @@ const cascadeRefs = computed(() => {
 
 async function onEntityDeleteClick(): Promise<void> {
   if (!props.id) return;
-  if (cascadeRefs.value.length === 0) {
-    const result = await cascadeApply.apply({
-      kind: "bundle", id: props.id, action: "delete",
-    });
-    if (result.ok) {
-      store.remove(props.id);
-      const undoId = result.undo_entry_id;
-      toast.push({
-        severity: "success",
-        summary: `"${name.value}" deleted`,
-        life: 5000,
-        action: {
-          label: "Undo",
-          run: async () => {
-            const undoResult = await cascadeApply.undo(undoId);
-            if (!undoResult.ok) {
-              toast.push({ severity: "error", summary: "Undo failed", detail: undoResult.error, life: 4000 });
-            } else {
-              toast.push({ severity: "info", summary: `"${name.value}" restored`, life: 3000 });
-            }
-          },
-        },
-      });
-      router.push(resolveReturnTo("/bundles"));
-    } else {
-      toast.push({ severity: "error", summary: "Delete failed", detail: (result as { ok: false; error: string }).error, life: 4000 });
-    }
-    return;
-  }
+  // Always confirm — see WildcardEditor for the rationale.
   cascadeDialogOpen.value = true;
 }
 
@@ -171,6 +262,7 @@ const description = ref("");
 const color = ref<string>(defaultColor.value);
 const categoryId = ref<string | null>(null);
 const tags = ref<string[]>([]);
+const contentRating = ref<"safe" | "nsfw">("safe");
 
 /** Mutable local copy of bundle children. Edits in the row stack
  *  (and the side pane in Task 3) update this; Save persists it via PUT. */
@@ -363,6 +455,7 @@ onMounted(async () => {
     color.value = row.color || defaultColor.value;
     categoryId.value = row.category_id;
     tags.value = [...(row.tags ?? [])];
+    contentRating.value = row.content_rating ?? "safe";
     children.value = Array.isArray(row.children)
       ? row.children.map((c) => ({ ...(c as Record<string, unknown>) }))
       : [];
@@ -414,6 +507,7 @@ async function save() {
       category_id: categoryId.value,
       tags: [...tags.value],
       children: stripBundleChildrenForSave(children.value),
+      content_rating: contentRating.value,
     });
     original.value = updated;
     children.value = Array.isArray(updated.children)
@@ -431,6 +525,279 @@ async function save() {
     toast.push({ severity: "error", summary: "Save failed", detail: saveError.value, life: 4000 });
   } finally {
     saving.value = false;
+  }
+}
+
+/** True while an extract-to-library run is in flight — disables the
+ *  toolbar button so a double-click can't fire two installs. */
+const extracting = ref(false);
+
+/** Whether any child currently dangles (its id resolves to no library
+ *  row of its kind). Extract is a heal action — relinking a bundle whose
+ *  children all resolve would only churn ids for no benefit — so the
+ *  button is gated on this. Recomputes as the module/bundle catalogs
+ *  load and after extract relinks + refetches. */
+const hasDanglingChildren = computed<boolean>(() =>
+  computeHasDangling(
+    children.value,
+    new Set(moduleStore.catalog.map((m) => m.id)),
+    new Set(store.catalog.map((b) => b.id)),
+  ),
+);
+
+// ── Manual per-child reattach (Feature: bundle analog of constraint
+//    ConstraintReattachSection) ─────────────────────────────────────────
+//
+// A frozen child can dangle: its `id` no longer resolves in the library
+// ("Child N: target module/bundle missing"). The section above the CHILDREN
+// card lets the user re-point a dangling child at a live local row of the
+// matching kind (leaf module → MODULE catalog, `type:"bundle"` ref → BUNDLE
+// catalog — same discrimination `hasDanglingChildren`/`validateBundle` use),
+// OR pull the missing dep from the community when this bundle's post declares
+// an edge providing it.
+
+/** One descriptor per dangling child for the reattach section. A child
+ *  dangles when its id isn't in the matching catalog id-set; `cachedName`
+ *  prefers the snapshot's `meta.name`, falling back to the raw id. */
+const danglingChildren = computed(() => {
+  const modIds = new Set(moduleStore.catalog.map((m) => m.id));
+  const bunIds = new Set(store.catalog.map((b) => b.id));
+  const out: Array<{ childId: string; type: string; cachedName: string }> = [];
+  for (const c of children.value) {
+    if (typeof c.id !== "string") continue;
+    const type = typeof c.type === "string" ? c.type : "";
+    const ids = type === "bundle" ? bunIds : modIds;
+    if (ids.has(c.id)) continue;
+    const meta = c.meta as { name?: string } | undefined;
+    const cachedName =
+      meta?.name ?? (typeof c.name === "string" ? c.name : undefined) ?? c.id;
+    out.push({ childId: c.id, type, cachedName });
+  }
+  return out;
+});
+
+const moduleCandidates = computed(() =>
+  moduleStore.catalog.map((m) => ({ id: m.id, name: m.name })),
+);
+const bundleCandidates = computed(() =>
+  store.catalog.map((b) => ({ id: b.id, name: b.name })),
+);
+
+/** The bundle post's OWN dependency edges, lazily fetched once a child
+ *  dangles AND the bundle was installed from a community post. `null` =
+ *  not yet fetched; `[]` = fetched (or fetch failed → "no downloadable
+ *  deps"). Mirrors ConstraintEditor.constraintPostDeps. */
+const bundlePostDeps = ref<CommunityDepEdge[] | null>(null);
+
+/** Child ids whose missing id IS provided by a post dependency edge — i.e.
+ *  the dep is actually pullable. Gates the section's per-child download
+ *  button. */
+const downloadableChildIds = computed<string[]>(() => {
+  const deps = bundlePostDeps.value;
+  if (!deps) return [];
+  const providable = new Set(
+    deps.map((e) => e.module_id).filter((x): x is string => typeof x === "string"),
+  );
+  return danglingChildren.value
+    .map((c) => c.childId)
+    .filter((id) => providable.has(id));
+});
+
+// Lazily populate `bundlePostDeps` the first time a child dangles on a
+// community-installed bundle. Fetch errors degrade to `[]` so the manual
+// reattach dropdown still works.
+watch(
+  [hasDanglingChildren, currentRow],
+  async ([dangling, row]) => {
+    if (!dangling) return;
+    if (bundlePostDeps.value !== null) return;
+    const slug = row?.community_post_slug;
+    if (!slug) return;
+    try {
+      const detail = await fetchCommunityPostDetail(slug);
+      bundlePostDeps.value = detail.dependencies;
+    } catch {
+      bundlePostDeps.value = [];
+    }
+  },
+  { immediate: true },
+);
+
+/** Manual reattach confirmed: rewrite the child's whole-string `id` (and any
+ *  intra-bundle ref) from the dead id to the picked live id via walkRemap,
+ *  re-cache its display name to the picked candidate, then persist. */
+async function onReattach({ childId, newId, newName }: { childId: string; newId: string; newName: string }): Promise<void> {
+  const remapped = relinkChildren(toRaw(children.value), { [childId]: newId });
+  // Refresh the relinked child's cached display name so the row + a later
+  // re-deletion reflect the new target rather than the stale snapshot name.
+  children.value = remapped.map((c) => {
+    if (c.id !== newId) return c;
+    const next = { ...c };
+    if (typeof next.name === "string") next.name = newName;
+    const meta = next.meta as { name?: string } | undefined;
+    if (meta && typeof meta === "object") next.meta = { ...meta, name: newName };
+    return next;
+  }) as typeof children.value;
+  await save();
+}
+
+// Confirm-dialog state for the download flow (mirror ConstraintEditor).
+const downloadConfirmOpen = ref(false);
+const downloadConfirmBody = ref("");
+const pendingDownloadChildId = ref<string | null>(null);
+const downloading = ref(false);
+
+async function onDownloadReattach({ childId }: { childId: string }): Promise<void> {
+  if (!bundlePostDeps.value) return;
+  const provider = bundlePostDeps.value.find((e) => e.module_id === childId);
+  if (!provider) return;
+  // Resolve the transitive closure up front so the confirm body lists exactly
+  // what's about to be pulled (the orchestrator re-walks it at install time).
+  const { slugs, capped } = await collectTransitiveDeps(
+    [provider.slug],
+    async (s) => (await fetchCommunityPostDetail(s)).dependencies.map((e) => e.slug).filter(Boolean),
+  );
+  downloadConfirmBody.value =
+    `Download ${slugs.length} post(s) from the community:\n` +
+    slugs.map((s) => `• ${s}`).join("\n") +
+    (capped ? "\n(+ more — list capped)" : "");
+  pendingDownloadChildId.value = childId;
+  downloadConfirmOpen.value = true;
+}
+
+async function confirmDownload(): Promise<void> {
+  downloadConfirmOpen.value = false;
+  downloading.value = true;
+  try {
+    const childId = pendingDownloadChildId.value!;
+    const res = await downloadDepsForDangling({
+      danglingUuid: childId,
+      constraintDeps: bundlePostDeps.value!,
+      fetchDetail: fetchCommunityPostDetail,
+      download: downloadCommunityVersion,
+      install: (env, deps, origin) =>
+        installEnvelope({ envelope: env }, { importExport: api.importExport, dependencies: deps, origin }),
+    });
+    if (!res.ok) {
+      toast.push({
+        severity: "error",
+        summary: "Download failed",
+        detail: res.error ?? "Could not download the missing dependency.",
+        life: 4000,
+      });
+      return;
+    }
+    // Pull the freshly-installed rows into both catalogs so resolution can see
+    // the new child (a downloaded dep may be a module OR a bundle).
+    try {
+      await Promise.all([moduleStore.fetchCatalog(), store.fetchCatalog()]);
+    } catch {
+      // Non-fatal — the install committed; a stale catalog self-heals.
+    }
+    const stillDangling = danglingChildren.value.some((c) => c.childId === childId);
+    if (!stillDangling) {
+      // Resolved by local landing — the dep installed at its original id, so
+      // the child now resolves. Nothing more to do; banner clears.
+      toast.push({ severity: "success", summary: "Dependency installed", detail: `Pulled ${res.pulled.length} post(s).`, life: 3000 });
+      return;
+    }
+    // Collision-rename tail: the dep landed under a NEW id (install-as-new on
+    // an id clash), so reattach explicitly to the renamed local row found by
+    // its community origin slug. Search both catalogs — the provider may be a
+    // module or a bundle.
+    const localMod = moduleStore.catalog.find((m) => m.community_post_slug === res.providerSlug);
+    const localBun = store.catalog.find((b) => b.community_post_slug === res.providerSlug);
+    const local = localMod ?? localBun;
+    if (local) {
+      await onReattach({ childId, newId: local.id, newName: local.name });
+      toast.push({ severity: "success", summary: "Dependency installed & reattached", detail: `Pulled ${res.pulled.length} post(s).`, life: 3000 });
+    } else {
+      toast.push({
+        severity: "warn",
+        summary: "Installed, but still unresolved",
+        detail: "Downloaded the dependency but couldn't auto-reattach — pick it manually.",
+        life: 5000,
+      });
+    }
+  } finally {
+    downloading.value = false;
+  }
+}
+
+/**
+ * Extract this bundle's leaf children into standalone library modules
+ * (Feature 4). Runs the pure `extractBundleChildren` transform (fresh
+ * ids + intra-bundle ref remap), groups the result into an install
+ * envelope, and reuses `installEnvelope` — the same atomic
+ * commit pipeline the Import tab + community embed use — so migrations,
+ * integrity checks, and collision handling all apply for free.
+ *
+ * Nested bundles are skipped by the helper (a bundle isn't a leaf
+ * module); the skipped count is surfaced in the success toast. On
+ * success the module catalog is refreshed so the new rows appear
+ * immediately in the add-child picker + library views.
+ */
+async function extractToLibrary(): Promise<void> {
+  if (extracting.value) return;
+  const { modules, remap, skipped } = extractBundleChildren(
+    children.value as unknown as ExtractableChild[],
+  );
+  if (modules.length === 0) {
+    toast.push({ severity: "info", summary: "Nothing to extract", life: 3000 });
+    return;
+  }
+  extracting.value = true;
+  try {
+    const envelope = buildExtractEnvelope(modules);
+    const result = await installEnvelope(
+      { envelope },
+      { importExport: api.importExport },
+    );
+    if (result.ok) {
+      let detail = `Extracted ${modules.length} module${modules.length === 1 ? "" : "s"} to your library`;
+      if (skipped > 0) {
+        detail += `, ${skipped} nested bundle${skipped === 1 ? "" : "s"} skipped`;
+      }
+      toast.push({ severity: "success", summary: "Extracted to library", detail, life: 4000 });
+      // Refresh the catalog so the freshly-installed modules show up in
+      // the add-child picker + Library views without a manual reload —
+      // AND so hasDanglingChildren re-evaluates against the new module
+      // ids once the relink lands below.
+      try {
+        await moduleStore.fetchCatalog();
+      } catch {
+        // Non-fatal: the install already committed; a stale catalog
+        // self-heals on next navigation. Don't surface as an error.
+      }
+      // Relink the bundle's frozen children to the freshly-installed
+      // module ids so the bundle resolves ("target module missing"
+      // clears). relinkChildren (walkRemap) rewrites each child's
+      // whole-string `id` + any intra-bundle ref. `save()` then PUTs the
+      // relinked children via bundles.update; it deliberately does NOT
+      // navigate away (see save() docs), so the user stays in the healed
+      // editor — no separate bundle-update call needed.
+      children.value = relinkChildren(
+        toRaw(children.value),
+        remap,
+      ) as typeof children.value;
+      await save();
+    } else {
+      toast.push({
+        severity: "error",
+        summary: "Extract failed",
+        detail: result.error?.message ?? "Extract failed",
+        life: 4000,
+      });
+    }
+  } catch (e) {
+    toast.push({
+      severity: "error",
+      summary: "Extract failed",
+      detail: e instanceof Error ? e.message : String(e),
+      life: 4000,
+    });
+  } finally {
+    extracting.value = false;
   }
 }
 
@@ -650,10 +1017,18 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
     @save="save"
     @cancel="cancel"
   >
-    <template v-if="isEdit" #header-extra>
-      <span v-if="cascadeRefs.length > 0" class="wp-editor-used-by">
+    <template v-if="isEdit && cascadeRefs.length > 0" #title-extra>
+      <span class="wp-editor-used-by">
         used by <PillCountBadge :count="cascadeRefs.length" />
       </span>
+    </template>
+    <template v-if="isEdit" #header-extra>
+      <CommunityRowActions
+        v-if="currentRow"
+        :row="currentRow"
+        kind="bundle"
+        labeled
+      />
     </template>
     <template v-if="isEdit" #footer-left>
       <Button
@@ -684,7 +1059,9 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
           @update:name="(v) => (name = v)"
           @update:description="(v) => (description = v)"
           @update:category-id="(v) => (categoryId = v)"
+          :content-rating="contentRating"
           @update:tags="(v) => (tags = v)"
+          @update:content-rating="(v) => (contentRating = v)"
         >
           <template #nameLeading>
             <ColorPicker
@@ -696,10 +1073,31 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
         </IdentityCard>
       </div>
 
+      <BundleReattachSection
+        v-if="hasDanglingChildren"
+        :dangling-children="danglingChildren"
+        :module-candidates="moduleCandidates"
+        :bundle-candidates="bundleCandidates"
+        :downloadable-child-ids="downloadableChildIds"
+        @reattach="onReattach"
+        @downloadreattach="onDownloadReattach"
+      />
+
       <Card
         :title="`Children (${children.length})`"
         :subtitle="childrenSubtitle"
       >
+        <template #actions>
+          <Button
+            variant="ghost"
+            icon="pi-clone"
+            data-test="bd-extract-btn"
+            :loading="extracting"
+            :disabled="!isEdit || children.length === 0 || !hasDanglingChildren"
+            :title="!hasDanglingChildren ? 'All children are linked — nothing to extract' : undefined"
+            @click="extractToLibrary"
+          >Extract to library</Button>
+        </template>
         <div class="wp-bundle-children-grid">
           <div class="wp-bundle-children-stack" data-test="bundle-children-list">
             <div
@@ -738,6 +1136,7 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
           </div>
           <BundleChildPane
             :child="selectedChild"
+            :sibling-modules="children"
             @update="onPaneUpdate"
             @close="onPaneClose"
           />
@@ -776,16 +1175,38 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
       @confirm="onConfirmLeave"
       @cancel="onCancelLeave"
     />
+    <!-- Confirm pulling a missing child dependency (+ its closure) from the
+         community before any network/install side effect. -->
+    <ConfirmDialog
+      :visible="downloadConfirmOpen"
+      title="Download dependencies"
+      :body="downloadConfirmBody"
+      confirm-label="Download & install"
+      @confirm="confirmDownload"
+      @cancel="downloadConfirmOpen = false"
+    />
   </EditorFrame>
 </template>
 
 <style scoped>
+/* Rendered inline inside EditorFrame's <h1> via the #title-extra slot, so
+ * it reads as "test_bundle · used by N" beside the name. Reset the h1's
+ * weight back to normal and dim it; the leading separator + margin space
+ * it off the title text. */
 .wp-editor-used-by {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  margin-left: var(--wp-space-3);
   font-size: var(--wp-text-xs);
+  font-weight: 400;
   color: var(--wp-text-muted);
+  vertical-align: middle;
+}
+.wp-editor-used-by::before {
+  content: "·";
+  margin-right: var(--wp-space-2);
+  color: var(--wp-text-dim);
 }
 .wp-bundle-editor__loading { padding: var(--wp-space-8) 0; text-align: center; }
 .wp-bundle-editor__empty { padding: var(--wp-space-6) 0; font-size: var(--wp-text-base); }

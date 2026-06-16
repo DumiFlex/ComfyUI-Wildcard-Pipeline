@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  classifyOne,
   detectCollisions,
   detectTemplateCollisions,
   type LibraryRow,
@@ -113,6 +114,66 @@ describe("detectCollisions", () => {
     ]);
     const result = detectCollisions([constraint], library);
     expect(result["ccccdddd"]).toBe("silent-skip");
+  });
+
+  it("returns type-conflict when id matches but type differs", () => {
+    const incoming = [modRow({ id: "11111111", type: "fixed_values" })];
+    const library = new Map<string, LibraryRow>([
+      ["11111111", { type: "wildcard", snapshot_fingerprint: "deadbeef" }],
+    ]);
+    const result = detectCollisions(incoming, library);
+    expect(result["11111111"]).toBe("type-conflict");
+  });
+
+  it("type-conflict wins even when fingerprints coincide", () => {
+    // type gate runs BEFORE the fingerprint check
+    const incoming = modRow({ id: "11111111", type: "constraint", name: "c" });
+    const fp = moduleFingerprint(incoming);
+    const library = new Map<string, LibraryRow>([
+      ["11111111", { type: "wildcard", snapshot_fingerprint: fp }],
+    ]);
+    expect(detectCollisions([incoming], library)["11111111"]).toBe("type-conflict");
+  });
+
+  it("type matches + no stored fingerprint -> exists-unknown (not type-conflict)", () => {
+    const incoming = [modRow({ id: "11111111", type: "wildcard" })];
+    const library = new Map<string, LibraryRow>([
+      ["11111111", { type: "wildcard" }],
+    ]);
+    expect(detectCollisions(incoming, library)["11111111"]).toBe("exists-unknown");
+  });
+
+  it("legacy library row with no type does NOT raise type-conflict", () => {
+    const incoming = modRow({ id: "11111111", type: "wildcard", name: "c" });
+    const fp = moduleFingerprint(incoming);
+    const library = new Map<string, LibraryRow>([["11111111", { snapshot_fingerprint: fp }]]);
+    expect(detectCollisions([incoming], library)["11111111"]).toBe("silent-skip");
+  });
+});
+
+describe("classifyOne", () => {
+  it("no library row -> no-collision", () => {
+    expect(classifyOne("wildcard", "k", undefined)).toBe("no-collision");
+  });
+  it("type differs -> type-conflict (ignores content key)", () => {
+    expect(classifyOne("constraint", "k", { type: "wildcard", contentKey: "k" }))
+      .toBe("type-conflict");
+  });
+  it("type matches, no content key -> exists-unknown", () => {
+    expect(classifyOne("wildcard", "k", { type: "wildcard" })).toBe("exists-unknown");
+  });
+  it("type + content key match -> silent-skip", () => {
+    expect(classifyOne("wildcard", "k", { type: "wildcard", contentKey: "k" }))
+      .toBe("silent-skip");
+  });
+  it("type matches, content key differs -> conflict", () => {
+    expect(classifyOne("wildcard", "kA", { type: "wildcard", contentKey: "kB" }))
+      .toBe("conflict");
+  });
+  it("content key is opaque — works with a payload_hash just as well", () => {
+    // workflow path passes payload_hash as the key; import passes fingerprint
+    expect(classifyOne("wildcard", "ph-LIVE", { type: "wildcard", contentKey: "ph-OLD" }))
+      .toBe("conflict");
   });
 });
 

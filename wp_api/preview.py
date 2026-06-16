@@ -34,6 +34,7 @@ from engine.db.migrations import migrate
 from engine.db.repositories import ModuleNotFound, ModuleRepository
 from engine.modules.snapshot import walk_transitive_refs
 from engine.pipeline import PipelineEngine
+from engine.syntax.types import ListVar
 from wp_api._helpers import json_error, json_ok
 
 logger = logging.getLogger(__name__)
@@ -106,6 +107,18 @@ def _expand_with_db(catalog: dict[str, dict[str, Any]]) -> dict[str, dict[str, A
     return walk.snapshots
 
 
+def _jsonify_resolved(resolved: dict[str, Any]) -> dict[str, Any]:
+    """Make a resolved ctx map JSON-serialisable. A multi-pick var is a
+    `ListVar` dataclass (engine/syntax/types.py) that aiohttp's JSON encoder
+    can't handle — without this the endpoint 500s. Emit it as
+    ``{"items": [...], "sep": ...}`` so the TS preview can join (bare $name)
+    or index ($name.K) it, matching the engine's resolution exactly."""
+    out: dict[str, Any] = {}
+    for k, v in resolved.items():
+        out[k] = {"items": list(v.items), "sep": v.sep} if isinstance(v, ListVar) else v
+    return out
+
+
 async def resolve_preview(request: web.Request) -> web.Response:
     try:
         body = await request.json()
@@ -146,7 +159,7 @@ async def resolve_preview(request: web.Request) -> web.Response:
             # whatever we resolved up to this point.
             break
 
-    return json_ok({"resolved": strip_internals(ctx)})
+    return json_ok({"resolved": _jsonify_resolved(strip_internals(ctx))})
 
 
 def register(router) -> None:

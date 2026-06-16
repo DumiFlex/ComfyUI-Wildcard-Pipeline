@@ -1,5 +1,6 @@
 import { mount, flushPromises } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createPinia, setActivePinia } from "pinia";
 
 vi.mock("../../api/client", () => ({
   api: {
@@ -134,6 +135,9 @@ function seedLibrary() {
 }
 
 beforeEach(() => {
+  // ExportTab now instantiates the guided-publish store (B3) at setup, so an
+  // active Pinia must exist before mount.
+  setActivePinia(createPinia());
   apiAny.modules.list.mockReset();
   apiAny.bundles.list.mockReset();
   apiAny.categories.list.mockReset();

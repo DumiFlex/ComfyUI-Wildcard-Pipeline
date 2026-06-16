@@ -23,7 +23,7 @@
  */
 import type { DerivationPayload, ModuleRow, WildcardPayload } from "../api/types";
 import { toIdentifier } from "./slug";
-import { buildUuidToName } from "./wildcardSyntax";
+import { buildUuidToName, wildcardVarName } from "./wildcardSyntax";
 
 /** Minimal shape of the Pinia module store the walkers need. The
  *  walkers consume `catalog` (the unfiltered library cache) — not
@@ -123,6 +123,79 @@ export function collectLibraryWildcardRefs(
     }
     return a.localeCompare(b);
   });
+}
+
+/** The per-wildcard maps RichTextInput's `@{}` nested-ref autocomplete +
+ *  step-2 sub-category picker consume. Single source so the wildcard editor
+ *  and the derivation editor (action values are `@{}` carriers post-Layer-A)
+ *  feed the SAME reused machinery without duplicating six catalog walkers. */
+export interface WildcardRefData {
+  /** 8-hex UUID → display name (`var_binding` or slug of `name`). */
+  uuidToName: Map<string, string>;
+  /** UUID → declared `sub_categories` (string-only; `[]` when absent). */
+  uuidToSubCategories: Map<string, string[]>;
+  /** UUID → true iff some option is `is_null`. */
+  uuidToHasNull: Map<string, boolean>;
+  /** UUID → total option count (incl. null). */
+  uuidToOptionsCount: Map<string, number>;
+  /** UUID → each NON-null option's `sub_categories` (match-count denominator). */
+  uuidToOptionTagSets: Map<string, string[][]>;
+  /** UUID → `tag_groups` axes (`{}` when absent). */
+  uuidToTagGroups: Map<string, Record<string, string[]>>;
+}
+
+/** Build every per-wildcard map RichTextInput's nested-ref UI needs in ONE
+ *  pass over the catalog. Pure (no store/reactivity) so both the wildcard
+ *  editor and the derivation editor call it identically. Only `wildcard`
+ *  rows contribute; other module kinds are ignored. Replaces the six
+ *  hand-rolled `computed`s that previously lived in WildcardEditor.vue. */
+export function buildWildcardRefData(catalog: ModuleRow[]): WildcardRefData {
+  const uuidToName = new Map<string, string>();
+  const uuidToSubCategories = new Map<string, string[]>();
+  const uuidToHasNull = new Map<string, boolean>();
+  const uuidToOptionsCount = new Map<string, number>();
+  const uuidToOptionTagSets = new Map<string, string[][]>();
+  const uuidToTagGroups = new Map<string, Record<string, string[]>>();
+
+  const onlyStrings = (xs: unknown): string[] =>
+    Array.isArray(xs) ? xs.filter((s): s is string => typeof s === "string") : [];
+
+  for (const mod of catalog) {
+    if (mod.type !== "wildcard") continue;
+    uuidToName.set(mod.id, wildcardVarName(mod));
+
+    const p = (mod.payload ?? {}) as {
+      sub_categories?: unknown;
+      options?: unknown[];
+      tag_groups?: unknown;
+    };
+
+    uuidToSubCategories.set(mod.id, onlyStrings(p.sub_categories));
+
+    const opts = Array.isArray(p.options) ? p.options : [];
+    uuidToOptionsCount.set(mod.id, opts.length);
+
+    const isNull = (o: unknown): boolean => (o as { is_null?: boolean } | null)?.is_null === true;
+    uuidToHasNull.set(mod.id, opts.some(isNull));
+    uuidToOptionTagSets.set(
+      mod.id,
+      opts
+        .filter((o) => !isNull(o))
+        .map((o) => onlyStrings((o as { sub_categories?: unknown } | null)?.sub_categories)),
+    );
+
+    const tg = p.tag_groups;
+    uuidToTagGroups.set(mod.id, tg && typeof tg === "object" ? (tg as Record<string, string[]>) : {});
+  }
+
+  return {
+    uuidToName,
+    uuidToSubCategories,
+    uuidToHasNull,
+    uuidToOptionsCount,
+    uuidToOptionTagSets,
+    uuidToTagGroups,
+  };
 }
 
 // Re-export so callers have a single import path for autocomplete

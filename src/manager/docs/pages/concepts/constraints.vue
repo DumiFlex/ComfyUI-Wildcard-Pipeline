@@ -26,6 +26,25 @@ const modes = [
     desc: "Multiply the weight of matching options by a factor less than 1 (= less likely).",
   },
 ];
+
+const reachModes = [
+  {
+    term: "All",
+    desc: "Default. Re-weight every target instance the constraint can reach downstream — direct rows and instances reached through nested refs alike.",
+  },
+  {
+    term: "First",
+    desc: "Re-weight only the first reachable target instance; every later one rolls unconstrained.",
+  },
+  {
+    term: "Next N",
+    desc: "Re-weight the next N reachable instances (you set the count, minimum 1); the rest roll unconstrained.",
+  },
+  {
+    term: "Pick",
+    desc: "Re-weight only the instances you tick from a checklist of reachable targets — direct rows, or nested-ref carrier options that resolve to the target.",
+  },
+];
 </script>
 
 <template>
@@ -34,7 +53,7 @@ const modes = [
     title="Constraints in depth"
     icon="pi pi-share-alt"
     tone="neutral"
-    blurb="Source→target pairing, matrix vs exception rules, first-instance one-shot consumption, and ordering requirements."
+    blurb="Source→target pairing, matrix vs exception rules, the target reach selectors, and ordering requirements."
   >
     <DocSection title="What a constraint does">
       <p>
@@ -106,18 +125,32 @@ const modes = [
       />
     </DocSection>
 
-    <DocSection title="One-shot per target instance">
+    <DocSection title="Target reach">
       <p>
-        Each Constraint module fires exactly once — on the first downstream target wildcard instance
-        it finds, including instances reached through nested <VarToken kind="ref">@{uuid}</VarToken>
-        refs. After that it is consumed for this generation and has no further effect on any
-        additional instances of the same target wildcard.
+        A constraint is not a one-shot. By default it re-weights <em>every</em> target wildcard
+        instance it can reach downstream — including instances reached through nested
+        <VarToken kind="ref">@{uuid}</VarToken> refs. The per-instance <b>Target reach</b> selector
+        lets you narrow that scope when re-weighting every match is too broad:
+      </p>
+      <DocKeyList :items="reachModes" />
+      <p>
+        Reach is always measured <em>downstream</em> of the constraint: it can only see — and count
+        toward First / Next N — target instances that come after it in the run. A
+        <b>Pick</b> selection names each instance the same way the engine matches it: a direct row
+        by its per-instance id, or a nested ref by its carrier row plus the option that hosts the
+        <VarToken kind="ref">@{uuid}</VarToken>.
       </p>
       <DocCallout variant="warn">
-        There are no global or repeating scope modes. If you need a pairing rule to affect multiple
-        downstream instances of the same target, add multiple Constraint modules — one per instance
-        you want to influence. The position of each constraint in the stack controls which instance
-        it claims.
+        If a constraint's reach covers zero reachable targets — its only target sits above it, the
+        count overshoots what's downstream, or a picked instance no longer exists — it is flagged
+        <VarToken>constraint_orphan_target</VarToken> so a dead pairing surfaces instead of silently
+        doing nothing. Separately, a constraint that reaches fewer instances than a Next N / Pick
+        selector asked for is noted as a partial reach.
+      </DocCallout>
+      <DocCallout variant="tip">
+        You can still add multiple Constraint modules for the same source→target pair — one per
+        distinct rule — and give each its own reach. Stack position plus each module's reach decide
+        which instances every constraint claims.
       </DocCallout>
     </DocSection>
 
@@ -125,9 +158,21 @@ const modes = [
       <p>
         If the target wildcard appears only inside another wildcard's option text (via a
         <VarToken kind="ref">@{uuid}</VarToken> nested reference), the constraint still applies —
-        it follows the reference chain to find the target. A safeguard prevents the same constraint
-        from claiming the same downstream instance more than once even when multiple reference paths
-        converge on it.
+        it follows the reference chain to find the target. Each such reachable instance counts as
+        one target for the reach selector above, and a <b>Pick</b> entry can name it by its carrier
+        row plus the hosting option. A safeguard counts each downstream instance only once even when
+        multiple reference paths converge on it.
+      </p>
+    </DocSection>
+
+    <DocSection title="When a source or target is missing">
+      <p>
+        A constraint refers to its source and target wildcards by id. If one isn't in your library —
+        you installed the constraint without its wildcards, or deleted one — that axis is
+        <b>stranded</b>: the editor shows the dead id with its remembered name and keeps the rule
+        matrix read-only until you heal it. <b>Reattach</b> re-points the axis at a local wildcard
+        (or downloads the missing one from the community), then remaps the matrix and exceptions onto
+        the new wildcard's sub-categories.
       </p>
     </DocSection>
 

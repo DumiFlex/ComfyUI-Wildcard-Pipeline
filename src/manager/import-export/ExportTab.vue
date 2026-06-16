@@ -15,6 +15,7 @@
  * keys (`*_uuids`) match the Python endpoint exactly.
  */
 import { computed, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import Button from "../components/ui/Button.vue";
 import { useToast } from "../composables/useToast";
 import { api, ApiError, type ExportBuildRequest } from "../api/client";
@@ -26,8 +27,16 @@ import ExportDepWarningModal from "./ExportDepWarningModal.vue";
 import type { ExportDepWarningRow } from "./ExportDepWarningModal.vue";
 import { liveLibraryToRawPayload } from "./live-library-adapter";
 import { buildDepGraph, transitiveClosure } from "./dep-graph";
+import {
+  buildBundlePublishable,
+  buildModulePublishable,
+  type PublishablePayload,
+} from "./single-row-publish";
+import { useGuidedPublishStore } from "./guided-publish-store";
 
 const toast = useToast();
+const router = useRouter();
+const guidedPublish = useGuidedPublishStore();
 
 /**
  * Bucket key — matches the 8-bucket schema. `wildcard`, `fixed_values`,
@@ -111,6 +120,13 @@ async function loadLibrary() {
 }
 
 onMounted(loadLibrary);
+
+// Let the parent ImportExport view re-run our library fetch from its
+// shared Refresh button. ExportTab keeps its OWN modules/bundles/
+// categories/templates refs (the export listing renders from them), so
+// the parent's loadLibrary — which only refills the import-side refs —
+// can't refresh this tab. Exposing loadLibrary lets Refresh reload both.
+defineExpose({ loadLibrary });
 
 // ---------- Selection state ----------
 
@@ -524,6 +540,73 @@ async function onDepWarningExportAnyway(): Promise<void> {
   await performExport();
 }
 
+// ---------- Publish to community ----------
+//
+// Single-row deeplink to the community web's /upload?from=spa flow. The
+// SPA payload is the source of truth — we ship the row's engine-row JSON
+// verbatim through the URL hash so the community PublishView can prefill
+// payload + name + description. Hash (not query) avoids both Edge's
+// ~2KB address-bar limit and any chance of the payload being captured by
+// the server's request log on the way in.
+//
+// Enabled only when EXACTLY ONE module or bundle is selected and nothing
+// else — single-row publish is the only flow the community currently
+// supports (each post is one entity).
+
+/**
+ * Detect whether the current selection is a single publishable entity.
+ * Single publishable = exactly one module OR exactly one bundle, and
+ * every other bucket empty (including categories + templates, which
+ * the community can't host yet). Returns the engine-row payload via
+ * the shared `single-row-publish` helpers so per-row buttons on
+ * ModuleListView / editors emit byte-for-byte the same shape.
+ */
+const singleSelected = computed<PublishablePayload | null>(() => {
+  let total = 0;
+  let kind: "module" | "bundle" | null = null;
+  let id: string | null = null;
+  for (const b of BUCKETS) {
+    const sz = selection.value[b.key].size;
+    total += sz;
+    if (sz === 1) {
+      kind = b.key === "bundle" ? "bundle" : (b.key === "category" || b.key === "template" ? null : "module");
+      id = [...selection.value[b.key]][0] ?? null;
+    }
+  }
+  if (total !== 1 || !kind || !id) return null;
+  if (kind === "bundle") {
+    const row = bundles.value.find((b) => b.id === id);
+    return row ? buildBundlePublishable(row) : null;
+  }
+  const mod = modules.value.find((m) => m.id === id);
+  // Pass the module list so a constraint's missing axis names get backfilled.
+  return mod ? buildModulePublishable(mod, modules.value) : null;
+});
+
+/** Busy flag while the gate verifies published deps against the community
+ *  (a short async hop before the dialog/navigation). */
+const publishingCommunity = ref<boolean>(false);
+
+async function publishToCommunity() {
+  // Route through the guided-publish gate (B3) — same seam as the per-row
+  // Publish button. If the selected module references in-library wildcards not
+  // yet on the community — OR the selected bundle references an inner bundle
+  // not yet on the community (BR-A2) — the gate opens the UnmetDepsDialog;
+  // otherwise it publishes directly (B2b dependency auto-detect runs inside).
+  // `modules` resolves a module's wildcard refs; `bundles` resolves a bundle's
+  // inner-bundle refs. Both are this tab's full lists (the gate + publish hash
+  // resolution sets). The gate is async (it verifies each detected "published"
+  // dep's slug against the community, reclassifying a deleted-post dep as
+  // publish-first), so we await it.
+  if (!singleSelected.value || publishingCommunity.value) return;
+  publishingCommunity.value = true;
+  try {
+    await guidedPublish.requestPublish(singleSelected.value, router, modules.value, bundles.value);
+  } finally {
+    publishingCommunity.value = false;
+  }
+}
+
 function clearAll() {
   selection.value = {
     bundle:       new Set(),
@@ -686,6 +769,16 @@ function presetFavoritesOnly(): void {
         class="wp-picker-footer__counter"
         data-test="export-tab-counter"
       ><strong>{{ totalSelected }}</strong> of {{ totalRowsCount }} selected</span>
+      <Button
+        variant="secondary"
+        size="sm"
+        icon="pi-share-alt"
+        :disabled="!singleSelected || publishingCommunity"
+        :loading="publishingCommunity"
+        :title="singleSelected ? 'Open the community Publish form pre-filled with this entity' : 'Select exactly one module or bundle to publish'"
+        data-test="export-tab-publish-community"
+        @click="publishToCommunity"
+      >Publish to community</Button>
       <Button
         variant="primary"
         icon="pi-download"

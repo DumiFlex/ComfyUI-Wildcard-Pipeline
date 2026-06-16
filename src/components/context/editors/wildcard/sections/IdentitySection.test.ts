@@ -70,6 +70,21 @@ describe("IdentitySection", () => {
     expect(patch.instance?.variable_binding).toBeNull();
   });
 
+  it("strips comma + punctuation from the binding on input (var names must be identifiers)", async () => {
+    // The binding becomes a `$var`; a comma is a settle delimiter and other
+    // punctuation can't appear in an identifier. Sanitize on keystroke so a
+    // junk char can never enter the produced-var name. DOM reflects it too
+    // (controlled input — force-sync so it can't diverge from the model).
+    const w = mount(IdentitySection, { props: { module: makeModule() } });
+    const input = w.find<HTMLInputElement>('[data-test="id-binding"]');
+    input.element.value = "out,fit;top!";
+    await input.trigger("input");
+    const updates = w.emitted("update")!;
+    const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
+    expect(patch.instance?.variable_binding).toBe("outfittop");
+    expect(input.element.value).toBe("outfittop");
+  });
+
   it("renders $-prefix label on binding input", () => {
     const w = mount(IdentitySection, { props: { module: makeModule() } });
     expect(w.find('[data-test="id-binding-prefix"]').text()).toBe("$");

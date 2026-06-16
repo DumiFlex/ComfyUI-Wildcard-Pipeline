@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "cases": [
+    {"name": "multi-tag multiply", "picks": [{"value": "rain", "tags": ["rainy"]}],
+     "option": {"value": "x", "tags": ["somber", "tense"]},
+     "matrix": {"rainy": {"somber": {"mode": "boost", "factor": 2.0}, "tense": {"mode": "reduce", "factor": 0.5}}},
+     "exceptions": [], "expect": 1.0},
+    {"name": "multi-pick multiply", "picks": [{"value": "rain", "tags": ["rainy"]}, {"value": "frost", "tags": ["cold"]}],
+     "option": {"value": "blue", "tags": ["somber"]},
+     "matrix": {"rainy": {"somber": {"mode": "boost", "factor": 2.0}}, "cold": {"somber": {"mode": "boost", "factor": 3.0}}},
+     "exceptions": [], "expect": 6.0},
+    {"name": "exclude absorbing", "picks": [{"value": "rain", "tags": ["rainy"]}],
+     "option": {"value": "blue", "tags": ["somber"]},
+     "matrix": {"rainy": {"somber": {"mode": "exclude", "factor": 0.0}}}, "exceptions": [], "expect": "EXCLUDE"},
+    {"name": "exception replaces matrix", "picks": [{"value": "rain", "tags": ["rainy"]}],
+     "option": {"value": "blue", "tags": ["somber"]},
+     "matrix": {"rainy": {"somber": {"mode": "boost", "factor": 2.0}}},
+     "exceptions": [{"source_value": "rain", "target_value": "blue", "mode": "reduce", "factor": 0.25}], "expect": 0.25}
+  ],
+  "branch_key_cases": [
+    {"name": "if-branch", "rule_id": "r1", "branch": 0, "key": "r1:0"},
+    {"name": "elif-branch-1", "rule_id": "r1", "branch": 1, "key": "r1:1"},
+    {"name": "elif-branch-2", "rule_id": "r1", "branch": 2, "key": "r1:2"},
+    {"name": "else-branch", "rule_id": "r1", "branch": "else", "key": "r1:else"},
+    {"name": "uuid-rule-if", "rule_id": "ab12cd34", "branch": 0, "key": "ab12cd34:0"},
+    {"name": "uuid-rule-else", "rule_id": "ab12cd34", "branch": "else", "key": "ab12cd34:else"}
+  ]
+}

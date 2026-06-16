@@ -19,6 +19,21 @@ from engine.modules.snapshot import payload_hash
 _VALID_TYPES: frozenset[str] = frozenset({
     "wildcard", "fixed_values", "combine", "derivation", "constraint",
 })
+
+# Free-text adult-content flag on every library row (migration 015).
+# Stamped by the IdentityCard's NSFW toggle or auto-stamped at install
+# time when a community post carried `content_rating='nsfw'`. No DB-level
+# CHECK constraint (SQLite ALTER limit); validate at the repository.
+_VALID_CONTENT_RATINGS: frozenset[str] = frozenset({"safe", "nsfw"})
+
+
+def _validate_content_rating(rating: str) -> str:
+    if rating not in _VALID_CONTENT_RATINGS:
+        raise ValueError(
+            f"content_rating must be one of {sorted(_VALID_CONTENT_RATINGS)}, "
+            f"got {rating!r}"
+        )
+    return rating
 # Module ids are 8-hex short uuids — same shape the tokenizer's
 # `@{8hex}` ref token captures and the engine catalog keys by. Slug
 # prefixes (e.g. `wc_outfit_a1b2c3d4`) were removed in migration 004
@@ -55,6 +70,24 @@ class ModuleNotFound(LookupError):
 
 def _row_to_module(row: sqlite3.Row) -> dict[str, Any]:
     payload = json.loads(row["payload"])
+    # Community origin columns (migration 013) — NULL for any row that
+    # didn't come from a community install. Surfaced verbatim so the
+    # SPA can render an "installed from community" badge + drive
+    # update-available checks.
+    try:
+        community_post_slug = row["community_post_slug"]
+        community_version_number = row["community_version_number"]
+    except (IndexError, KeyError):
+        # Defensive: a connection opened against a DB that hasn't run
+        # migration 013 yet (e.g. mid-rollout, test fixtures) won't
+        # have these columns. Treat absence as NULL.
+        community_post_slug = None
+        community_version_number = None
+    try:
+        content_rating = row["content_rating"]
+    except (IndexError, KeyError):
+        # Pre-015 fixture: column absent, treat as 'safe'.
+        content_rating = "safe"
     return {
         "id": row["id"],
         "type": row["type"],
@@ -69,6 +102,9 @@ def _row_to_module(row: sqlite3.Row) -> dict[str, Any]:
         "version": row["version"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
+        "community_post_slug": community_post_slug,
+        "community_version_number": community_version_number,
+        "content_rating": content_rating,
     }
 
 
@@ -125,13 +161,14 @@ class ModuleRepository:
         payload: dict[str, Any],
         is_favorite: bool = False,
         id: str | None = None,
+        content_rating: str = "safe",
     ) -> dict[str, Any]:
         """Insert a new module row.
 
         ``id`` is normally generated; pass an explicit id to import
         a workflow-resident snapshot back into the library at the
         SAME uuid (so a freshly-saved row immediately matches the
-        workflow's existing references — no broken `@{uuid}` refs).
+        workflow's existing references -- no broken `@{uuid}` refs).
         Validates the supplied id is 8-hex to prevent the workflow
         from injecting arbitrary primary-key shapes.
         """
@@ -139,6 +176,7 @@ class ModuleRepository:
             raise ValueError(
                 f"unknown module type {type!r}; expected one of {sorted(_VALID_TYPES)}"
             )
+        _validate_content_rating(content_rating)
         if type == "wildcard":
             payload = self._backfill_option_ids(payload)
         if id is None:
@@ -163,12 +201,13 @@ class ModuleRepository:
             self._conn.execute(
                 "INSERT INTO modules("
                 "id, type, name, description, category_id, tags, "
-                "is_favorite, payload, snapshot_fingerprint, version, created_at, updated_at"
-                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?);",
+                "is_favorite, payload, snapshot_fingerprint, version, "
+                "created_at, updated_at, content_rating"
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?);",
                 (
                     mid, type, name, description, category_id,
                     json.dumps(tags), int(is_favorite),
-                    json.dumps(payload), fp, now, now,
+                    json.dumps(payload), fp, now, now, content_rating,
                 ),
             )
         return self.get(mid)
@@ -226,6 +265,7 @@ class ModuleRepository:
         tags: list[str] | _Unset = _UNSET,
         payload: dict[str, Any] | _Unset = _UNSET,
         is_favorite: bool | _Unset = _UNSET,
+        content_rating: str | _Unset = _UNSET,
     ) -> dict[str, Any]:
         existing = self.get(module_id)
         # Backfill missing option ids when caller writes a fresh wildcard payload.
@@ -235,6 +275,8 @@ class ModuleRepository:
             and isinstance(payload, dict)
         ):
             payload = self._backfill_option_ids(payload)
+        if not isinstance(content_rating, _Unset):
+            _validate_content_rating(content_rating)
         new = {
             "name": existing["name"] if isinstance(name, _Unset) else name,
             "description": (
@@ -247,6 +289,11 @@ class ModuleRepository:
             "payload": existing["payload"] if isinstance(payload, _Unset) else payload,
             "is_favorite": (
                 existing["is_favorite"] if isinstance(is_favorite, _Unset) else is_favorite
+            ),
+            "content_rating": (
+                existing["content_rating"]
+                if isinstance(content_rating, _Unset)
+                else content_rating
             ),
         }
         new_payload_hash = payload_hash(new["payload"])
@@ -263,14 +310,42 @@ class ModuleRepository:
                 "UPDATE modules SET "
                 "name = ?, description = ?, category_id = ?, tags = ?, "
                 "is_favorite = ?, payload = ?, snapshot_fingerprint = ?, "
-                "version = version + 1, updated_at = ? "
+                "version = version + 1, updated_at = ?, content_rating = ? "
                 "WHERE id = ?;",
                 (
                     new["name"], new["description"], new["category_id"],
                     json.dumps(new["tags"]), int(new["is_favorite"]),
-                    json.dumps(new["payload"]), new_fp, now, module_id,
+                    json.dumps(new["payload"]), new_fp, now,
+                    new["content_rating"], module_id,
                 ),
             )
+        return self.get(module_id)
+
+    def set_community_origin(
+        self, module_id: str, *, post_slug: str, version_number: int,
+    ) -> dict[str, Any]:
+        """Stamp community origin on an existing row WITHOUT a version
+        bump or fingerprint change.
+
+        Used by the publish-writeback path (host bridge
+        ``markPublished``): after a row is published to community, the
+        local row gets linked to the resulting post so the SPA renders
+        the community pill, the update-available checker tracks it, and
+        a future re-publish detects "this is my own post" (version bump
+        vs fork). Origin metadata is NOT runtime-affecting, so unlike
+        ``update`` this neither bumps ``version`` nor recomputes the
+        snapshot fingerprint -- a published row stays byte-identical to
+        what consumers already installed.
+        """
+        with self._conn:
+            cur = self._conn.execute(
+                "UPDATE modules SET "
+                "community_post_slug = ?, community_version_number = ? "
+                "WHERE id = ?;",
+                (post_slug, version_number, module_id),
+            )
+        if cur.rowcount == 0:
+            raise ModuleNotFound(module_id)
         return self.get(module_id)
 
     def delete(self, module_id: str) -> None:
@@ -481,6 +556,16 @@ def _row_to_bundle(row: sqlite3.Row) -> dict[str, Any]:
     intentionally frozen — the saved hash is the source of truth for
     insert-time `inserted_at_hash` capture + library-drift detection.
     """
+    try:
+        community_post_slug = row["community_post_slug"]
+        community_version_number = row["community_version_number"]
+    except (IndexError, KeyError):
+        community_post_slug = None
+        community_version_number = None
+    try:
+        content_rating = row["content_rating"]
+    except (IndexError, KeyError):
+        content_rating = "safe"
     return {
         "id": row["id"],
         "name": row["name"],
@@ -494,6 +579,9 @@ def _row_to_bundle(row: sqlite3.Row) -> dict[str, Any]:
         "version": row["version"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
+        "community_post_slug": community_post_slug,
+        "community_version_number": community_version_number,
+        "content_rating": content_rating,
     }
 
 
@@ -529,7 +617,9 @@ class BundleRepository:
         children: list[dict[str, Any]] | None = None,
         is_favorite: bool = False,
         id: str | None = None,
+        content_rating: str = "safe",
     ) -> dict[str, Any]:
+        _validate_content_rating(content_rating)
         if id is None:
             bid = self._gen_id()
         else:
@@ -541,7 +631,7 @@ class BundleRepository:
                 )
             bid = id
         children_blob = list(children) if children else []
-        # `payload_hash` is computed off the children blob — the only
+        # `payload_hash` is computed off the children blob -- the only
         # field whose change should signal "library has a newer
         # version" to inserted instances.
         ph = payload_hash({"children": children_blob})
@@ -551,12 +641,12 @@ class BundleRepository:
                 "INSERT INTO bundles("
                 "id, name, description, color, category_id, tags, "
                 "is_favorite, children, payload_hash, version, "
-                "created_at, updated_at"
-                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?);",
+                "created_at, updated_at, content_rating"
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?);",
                 (
                     bid, name, description, color, category_id,
                     json.dumps(tags or []), int(is_favorite),
-                    json.dumps(children_blob), ph, now, now,
+                    json.dumps(children_blob), ph, now, now, content_rating,
                 ),
             )
         return self.get(bid)
@@ -580,8 +670,11 @@ class BundleRepository:
         tags: list[str] | _Unset = _UNSET,
         children: list[dict[str, Any]] | _Unset = _UNSET,
         is_favorite: bool | _Unset = _UNSET,
+        content_rating: str | _Unset = _UNSET,
     ) -> dict[str, Any]:
         existing = self.get(bundle_id)
+        if not isinstance(content_rating, _Unset):
+            _validate_content_rating(content_rating)
         new = {
             "name": existing["name"] if isinstance(name, _Unset) else name,
             "description": (
@@ -598,11 +691,16 @@ class BundleRepository:
             "is_favorite": (
                 existing["is_favorite"] if isinstance(is_favorite, _Unset) else is_favorite
             ),
+            "content_rating": (
+                existing["content_rating"]
+                if isinstance(content_rating, _Unset)
+                else content_rating
+            ),
         }
         # Recompute payload_hash whenever children change. Other field
-        # edits (rename, recolor, retag) don't affect runtime behavior
-        # so they don't bump the hash — inserted instances stay clean
-        # on a pure-cosmetic library update.
+        # edits (rename, recolor, retag, NSFW toggle) don't affect runtime
+        # behavior so they don't bump the hash -- inserted instances stay
+        # clean on a pure-cosmetic library update.
         ph = (
             existing["payload_hash"]
             if isinstance(children, _Unset)
@@ -614,15 +712,33 @@ class BundleRepository:
                 "UPDATE bundles SET "
                 "name = ?, description = ?, color = ?, category_id = ?, "
                 "tags = ?, is_favorite = ?, children = ?, payload_hash = ?, "
-                "version = version + 1, updated_at = ? "
+                "version = version + 1, updated_at = ?, content_rating = ? "
                 "WHERE id = ?;",
                 (
                     new["name"], new["description"], new["color"],
                     new["category_id"], json.dumps(new["tags"]),
                     int(new["is_favorite"]),
-                    json.dumps(new["children"]), ph, now, bundle_id,
+                    json.dumps(new["children"]), ph, now,
+                    new["content_rating"], bundle_id,
                 ),
             )
+        return self.get(bundle_id)
+
+    def set_community_origin(
+        self, bundle_id: str, *, post_slug: str, version_number: int,
+    ) -> dict[str, Any]:
+        """Stamp community origin on a bundle row WITHOUT a version bump
+        or payload-hash change. See ModuleRepository.set_community_origin
+        for the rationale -- origin metadata is not runtime-affecting."""
+        with self._conn:
+            cur = self._conn.execute(
+                "UPDATE bundles SET "
+                "community_post_slug = ?, community_version_number = ? "
+                "WHERE id = ?;",
+                (post_slug, version_number, bundle_id),
+            )
+        if cur.rowcount == 0:
+            raise BundleNotFound(bundle_id)
         return self.get(bundle_id)
 
     def delete(self, bundle_id: str) -> None:

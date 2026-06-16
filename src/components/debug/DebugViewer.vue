@@ -154,15 +154,40 @@ interface TraceEntry {
 
 interface WarningEntry {
   type?: string;
+  /** Human-readable label for the warning type chip — friendly phrasing
+   *  ("Constraint never applied") instead of the raw snake_case `type`
+   *  token. Falls back to `type` for warnings without a mapped label. */
+  label?: string;
   /** Binding label rendered before the message — raw text passed to
    *  RichTextPreview so embedded `@{uuid}` refs render as colored
    *  chips. */
   bindingText?: string;
+  /** Plain-text detail derived from the warning's structured `detail`
+   *  dict (e.g. SP3 reach warnings render `reached 1 of 3`). Rendered as
+   *  a terse qualifier alongside the message. Empty for warnings whose
+   *  detail isn't worth surfacing separately from the message. */
+  detailText?: string;
   /** Message body — raw text passed to RichTextPreview so embedded
    *  `@{uuid}` refs render as colored chips. */
   messageText?: string;
   severity?: "info" | "warning" | "error";
 }
+
+/** Friendly labels for known warning types. Keeps the warning-type chip
+ *  human-readable; unmapped types fall back to their raw token. Covers
+ *  every type the engine currently emits (`engine/pipeline.py` +
+ *  `engine/modules/*_handler.py`); SP3 adds the two constraint-reach
+ *  finalisation warnings (`constraint_never_applied` /
+ *  `constraint_partial_reach`). */
+const WARNING_LABELS: Record<string, string> = {
+  constraint_never_applied: "Constraint never applied",
+  constraint_partial_reach: "Constraint partial reach",
+  constraint_register_failed: "Constraint failed to register",
+  constraint_factor_ignored_on_allow: "Constraint factor ignored (allow)",
+  unknown_constraint_mode: "Unknown constraint mode",
+  fixed_values_overrides_malformed: "Fixed-values overrides malformed",
+  handler_error: "Handler error",
+};
 
 /** A `module_id → variable_name` lookup built from the trace. Used to
  *  re-key the raw `__wp_picks__` map (which is keyed by uuid) into a
@@ -692,7 +717,16 @@ const pickRows = computed<PickRow[]>(() => {
     if (opt && typeof opt === "object") {
       const o = opt as Record<string, unknown>;
       value = formatValue(o.value);
-      subCategory = typeof o.sub_category === "string" ? o.sub_category : "";
+      // SP1: the pick record now stashes `sub_categories: string[]`
+      // (engine `_record_pick`). Render the membership as a comma list.
+      // Fall back to the legacy singular `sub_category` string so an
+      // older cached snapshot (or a not-yet-restarted Python process)
+      // still surfaces its tag in this column.
+      if (Array.isArray(o.sub_categories)) {
+        subCategory = o.sub_categories.filter((s): s is string => typeof s === "string").join(", ");
+      } else if (typeof o.sub_category === "string") {
+        subCategory = o.sub_category;
+      }
     } else {
       value = formatValue(opt);
     }
@@ -728,9 +762,12 @@ const warningEntries = computed<WarningEntry[]>(() => {
     const o = w as Record<string, unknown>;
     const rawMsg = typeof o.message === "string" ? wrapBareUuids(o.message) : "";
     const rawBinding = typeof o.binding === "string" ? o.binding : "";
+    const type = typeof o.type === "string" ? o.type : "unknown";
     return {
-      type: typeof o.type === "string" ? o.type : "unknown",
+      type,
+      label: WARNING_LABELS[type] ?? type,
       bindingText: rawBinding || undefined,
+      detailText: warningDetailText(type, o.detail) || undefined,
       messageText: rawMsg || undefined,
       severity: (o.severity === "info" || o.severity === "warning" || o.severity === "error")
         ? o.severity
@@ -738,6 +775,32 @@ const warningEntries = computed<WarningEntry[]>(() => {
     };
   });
 });
+
+/** Render the warning's structured `detail` dict into a terse, plain
+ *  qualifier the row shows next to the message. Only the SP3 reach
+ *  warnings surface a detail string today:
+ *   - `constraint_partial_reach` → `reached R of N` (how much of the
+ *     requested reach the chain actually offered downstream).
+ *   - `constraint_never_applied` → `target not in chain` when the engine
+ *     flagged the target wildcard as absent (vs present-but-unclaimed),
+ *     a one-glance reason the constraint did nothing.
+ *  Returns "" for everything else (the message already says enough). */
+function warningDetailText(type: string, detail: unknown): string {
+  if (!detail || typeof detail !== "object") return "";
+  const d = detail as Record<string, unknown>;
+  if (type === "constraint_partial_reach") {
+    const reached = Number(d.reached);
+    const requested = Number(d.requested);
+    if (Number.isFinite(reached) && Number.isFinite(requested)) {
+      return `reached ${reached} of ${requested}`;
+    }
+    return "";
+  }
+  if (type === "constraint_never_applied") {
+    return d.target_present === false ? "target not in chain" : "";
+  }
+  return "";
+}
 
 const toolbarCopyFlash = ref(false);
 let toolbarCopyFlashTimer: number | null = null;
@@ -1438,7 +1501,9 @@ function openPickRowMenu(ev: MouseEvent, row: PickRow): void {
           :class="`wp-dbg-warn-row--${w.severity}`"
         >
           <span class="wp-dbg-warn-dot" :class="`wp-dbg-warn-dot--${w.severity}`" aria-hidden="true"></span>
-          <span class="wp-dbg-warn-type">{{ w.type }}</span>
+          <!-- Friendly label drives the chip; raw `type` token stays on
+               the title for power-users grepping the engine source. -->
+          <span class="wp-dbg-warn-type wp-dbg-warn-label" :title="w.type">{{ w.label }}</span>
           <span v-if="w.bindingText" class="wp-dbg-warn-binding">
             <RichTextPreview
               :value="`$${w.bindingText}`"
@@ -1447,13 +1512,21 @@ function openPickRowMenu(ev: MouseEvent, row: PickRow): void {
               surface="wildcard"
             />
           </span>
-          <span v-if="w.messageText" class="wp-dbg-warn-msg">
-            <RichTextPreview
-              :value="w.messageText"
-              :uuid-to-name="uuidToNameMap"
-              :uuid-to-kind="uuidToKindMap"
-              surface="wildcard"
-            />
+          <!-- Detail + message share the final grid cell so the
+               structured detail (e.g. SP3 `reached 1 of 3`) reads as a
+               qualifier right before the prose message, without adding a
+               grid column that would mis-place rows whose binding is
+               absent. -->
+          <span class="wp-dbg-warn-body">
+            <span v-if="w.detailText" class="wp-dbg-warn-detail">{{ w.detailText }}</span>
+            <span v-if="w.messageText" class="wp-dbg-warn-msg">
+              <RichTextPreview
+                :value="w.messageText"
+                :uuid-to-name="uuidToNameMap"
+                :uuid-to-kind="uuidToKindMap"
+                surface="wildcard"
+              />
+            </span>
           </span>
         </div>
       </div>
@@ -2186,9 +2259,32 @@ function openPickRowMenu(ev: MouseEvent, row: PickRow): void {
   font: 600 11px/1 var(--wp-font-mono);
   color: var(--wp-amber);
 }
+/* Body cell — holds the optional detail chip + the prose message in
+ * one grid cell so they wrap together as a unit. */
+.wp-dbg-warn-body {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
 .wp-dbg-warn-msg {
   color: var(--wp-text);
   word-break: break-word;
+}
+/* Structured-detail chip — terse machine-derived qualifier (e.g. the
+ * SP3 reach ratio `reached 1 of 3`). Mono + neutral so it reads as a
+ * data badge distinct from the prose message beside it. */
+.wp-dbg-warn-detail {
+  font: 600 9px/1.4 var(--wp-font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--wp-bg2);
+  color: var(--wp-text-muted, var(--wp-text2));
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* JSON syntax highlight — spans emitted by `highlightJson` inside the

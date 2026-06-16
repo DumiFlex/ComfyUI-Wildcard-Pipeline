@@ -6,6 +6,7 @@ import {
   type LibraryRow,
 } from "../defaults";
 import { tokenize, type PreviewToken } from "../../_shared/preview-tokens";
+import { stripNonIdentifierChars } from "../../../../../manager/utils/slug";
 
 const props = defineProps<{
   row: DraftRow;
@@ -53,7 +54,12 @@ function onToggle(): void {
   emit("toggle", props.row.id);
 }
 function onNameInput(ev: Event): void {
-  emit("update", props.row.id, { name: (ev.target as HTMLInputElement).value });
+  const el = ev.target as HTMLInputElement;
+  // The name becomes a `$var` — strip non-identifier chars on keystroke +
+  // force the DOM. The value field stays free-form (onValueInput unchanged).
+  const name = stripNonIdentifierChars(el.value);
+  if (el.value !== name) el.value = name;
+  emit("update", props.row.id, { name });
 }
 function onValueInput(ev: Event): void {
   emit("update", props.row.id, { value: (ev.target as HTMLInputElement).value });

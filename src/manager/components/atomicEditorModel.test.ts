@@ -37,6 +37,49 @@ describe("atomicEditorModel.parse + serialise", () => {
     const atoms = parse("a @{notvalid} b");
     expect(atoms).toEqual([{ kind: "text", text: "a @{notvalid} b" }]);
   });
+
+  // --- SP2b: brace blocks decompose into scaffolding + inner chip atoms ---
+
+  it("decomposes a multi-block into scaffolding (blockColor=multi) + inner ref chip", () => {
+    const atoms = parse("{2$$, $$@{aabbccdd}|warm}");
+    expect(atoms.some((a) => a.kind === "ref" && a.uuid === "aabbccdd")).toBe(true);
+    expect(atoms.some((a) => a.kind === "text" && a.blockColor === "multi")).toBe(true);
+    expect(serialise(atoms)).toBe("{2$$, $$@{aabbccdd}|warm}");
+  });
+
+  it("decomposes a plain alternation (blockColor=alt) with var + ref arms", () => {
+    const atoms = parse("{$style|@{aabbccdd}}");
+    expect(atoms.some((a) => a.kind === "var" && a.name === "style")).toBe(true);
+    expect(atoms.some((a) => a.kind === "ref" && a.uuid === "aabbccdd")).toBe(true);
+    expect(atoms.some((a) => a.kind === "text" && a.blockColor === "alt")).toBe(true);
+    expect(serialise(atoms)).toBe("{$style|@{aabbccdd}}");
+  });
+
+  it("round-trips a range + independent multi-block", () => {
+    expect(serialise(parse("{2-4~$$, $$@{aabbccdd}|warm}"))).toBe("{2-4~$$, $$@{aabbccdd}|warm}");
+  });
+
+  it("a literal-only alternation keeps every arm as scaffolding (no chips)", () => {
+    const atoms = parse("{red|blue|green}");
+    expect(atoms.some((a) => a.kind === "ref" || a.kind === "var")).toBe(false);
+    expect(serialise(atoms)).toBe("{red|blue|green}");
+  });
+
+  it("chips a $var branch that carries leading whitespace (the space-before-$ case)", () => {
+    // `{2$$, $$ $variable1|$variable2}` — the leading space in the first arm
+    // makes ` $variable1` two tokens; the var must still chip, the space stays
+    // scaffolding.
+    const atoms = parse("{2$$, $$ $variable1|$variable2}");
+    expect(atoms.filter((a) => a.kind === "var" && /^variable[12]$/.test(a.name)).length).toBe(2);
+    expect(serialise(atoms)).toBe("{2$$, $$ $variable1|$variable2}");
+  });
+
+  it("decomposes a mixed branch (literal + ref) into scaffolding + chip", () => {
+    const atoms = parse("{warm @{aabbccdd} tone|cool}");
+    expect(atoms.some((a) => a.kind === "ref" && a.uuid === "aabbccdd")).toBe(true);
+    expect(atoms.some((a) => a.kind === "text" && /warm/.test(a.text))).toBe(true);
+    expect(serialise(atoms)).toBe("{warm @{aabbccdd} tone|cool}");
+  });
 });
 
 describe("atomicEditorModel operations", () => {

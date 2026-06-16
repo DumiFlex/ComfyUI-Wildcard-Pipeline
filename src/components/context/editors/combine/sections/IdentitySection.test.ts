@@ -66,6 +66,17 @@ describe("combine IdentitySection", () => {
     expect(patch.instance?.variable_binding).toBe("header_text");
   });
 
+  it("strips comma + punctuation from the binding on input (var names must be identifiers)", async () => {
+    const w = mount(IdentitySection, { props: { module: makeModule() } });
+    const input = w.find<HTMLInputElement>('[data-test="id-binding"]');
+    input.element.value = "head,er;text!";
+    await input.trigger("input");
+    const updates = w.emitted("update")!;
+    const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
+    expect(patch.instance?.variable_binding).toBe("headertext");
+    expect(input.element.value).toBe("headertext");
+  });
+
   it("empty binding emits null collapse", async () => {
     const w = mount(IdentitySection, {
       props: { module: makeModule({ instance: { variable_binding: "header_text" } }) },

@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import ContextWidget from "./ContextWidget.vue";
+import { baseCodename } from "../../extension/node-codename";
 import { _resetForTests as resetDriftStore } from "./drift-store";
 
 beforeEach(() => {
@@ -171,7 +172,7 @@ describe("ContextWidget drift dot", () => {
       vi.fn(async (url: string) => {
         if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
           // Live hash differs from embedded → drift.
-          return new Response(JSON.stringify({ hashes: { aaaaaaaa: "h-LIVE" } }), { status: 200 });
+          return new Response(JSON.stringify({ hashes: { aaaaaaaa: { type: "wildcard", payload_hash: "h-LIVE" } } }), { status: 200 });
         }
         return new Response("{}", { status: 200 });
       }),
@@ -215,7 +216,7 @@ describe("ContextWidget bulk refresh", () => {
       "fetch",
       vi.fn(async (url: string) => {
         if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
-          return new Response(JSON.stringify({ hashes: { aaaaaaaa: "h-A", bbbbbbbb: "h-B" } }), { status: 200 });
+          return new Response(JSON.stringify({ hashes: { aaaaaaaa: { type: "wildcard", payload_hash: "h-A" }, bbbbbbbb: { type: "wildcard", payload_hash: "h-B" } } }), { status: 200 });
         }
         return new Response("{}", { status: 200 });
       }),
@@ -251,7 +252,7 @@ describe("ContextWidget bulk refresh", () => {
       vi.fn(async (url: string) => {
         if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
           // Both embedded hashes differ from live → both drifted.
-          return new Response(JSON.stringify({ hashes: { aaaaaaaa: "live-A", bbbbbbbb: "live-B" } }), { status: 200 });
+          return new Response(JSON.stringify({ hashes: { aaaaaaaa: { type: "wildcard", payload_hash: "live-A" }, bbbbbbbb: { type: "wildcard", payload_hash: "live-B" } } }), { status: 200 });
         }
         return new Response("{}", { status: 200 });
       }),
@@ -292,7 +293,7 @@ describe("ContextWidget bulk refresh", () => {
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
         if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
-          return new Response(JSON.stringify({ hashes: { aaaaaaaa: "live-A" } }), { status: 200 });
+          return new Response(JSON.stringify({ hashes: { aaaaaaaa: { type: "wildcard", payload_hash: "live-A" } } }), { status: 200 });
         }
         if (typeof url === "string" && url.endsWith("/embed-bundle")) {
           const body = JSON.parse(String(init?.body ?? "{}")) as { uuids: string[] };
@@ -402,7 +403,7 @@ describe("ContextWidget bulk refresh", () => {
       "fetch",
       vi.fn(async (url: string) => {
         if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
-          return new Response(JSON.stringify({ hashes: { aaaaaaaa: "live-A" } }), { status: 200 });
+          return new Response(JSON.stringify({ hashes: { aaaaaaaa: { type: "wildcard", payload_hash: "live-A" } } }), { status: 200 });
         }
         return new Response("{}", { status: 200 });
       }),
@@ -1120,7 +1121,7 @@ describe("ContextWidget status badges", () => {
       "fetch",
       vi.fn(async (url: string) => {
         if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
-          return new Response(JSON.stringify({ hashes: { aaaaaaaa: "live" } }), { status: 200 });
+          return new Response(JSON.stringify({ hashes: { aaaaaaaa: { type: "wildcard", payload_hash: "live" } } }), { status: 200 });
         }
         return new Response("{}", { status: 200 });
       }),
@@ -1182,6 +1183,49 @@ describe("ContextWidget status badges", () => {
       expect(badge.exists()).toBe(true);
       expect(badge.text()).toBe("missing");
     });
+    wrapper.unmount();
+  });
+
+  it("renders 'clash' badge when the library row at this id is a different kind", async () => {
+    resetDriftStore();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
+          // Same id, DIFFERENT kind in library (wildcard) than the embedded
+          // constraint → type-conflict, not drift/missing.
+          return new Response(
+            JSON.stringify({ hashes: { aaaaaaaa: { type: "wildcard", payload_hash: "live" } } }),
+            { status: 200 },
+          );
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: {
+        nodeId: 802,
+        initialJson: JSON.stringify({
+          version: 1,
+          modules: [
+            { id: "aaaaaaaa", type: "constraint", enabled: true, meta: { name: "c" }, entries: [], payload: {}, payload_hash: "embedded" },
+          ],
+        }),
+        upstreamVars: [],
+        onChange: () => {},
+      },
+    });
+
+    await vi.waitFor(() => {
+      const badge = wrapper.find(".wp-mod-badge--clash");
+      expect(badge.exists()).toBe(true);
+      expect(badge.text()).toBe("clash");
+    });
+    // type-conflict is mutually exclusive with drift + missing.
+    expect(wrapper.find(".wp-mod-badge--drift").exists()).toBe(false);
+    expect(wrapper.find(".wp-mod-badge--missing").exists()).toBe(false);
     wrapper.unmount();
   });
 });
@@ -2102,5 +2146,166 @@ describe("ContextWidget bundle MOD detection", () => {
     expect(wrapper.find(".wp-mod-badge--mod").exists()).toBe(true);
     wrapper.unmount();
     bundleHashes.value = null; // restore
+  });
+});
+
+// ── Node codename header chip ───────────────────────────────────────────────
+// The node header shows a FIXED, read-only codename — a stable
+// adjective-noun derived from the litegraph node id (node-codename.ts) — so
+// cross-node UI (constraint reach pick-list, pair popovers) can name WHICH
+// node a target instance lives in. POV-independent + unique on the canvas,
+// and NOT editable (replaced the old editable label + walk-position letter).
+
+describe("ContextWidget node codename chip", () => {
+  it("renders [data-test=node-label] showing the node's stable codename", () => {
+    const wrapper = mount(ContextWidget, {
+      props: {
+        nodeId: 7000,
+        initialJson: '{"version":1,"modules":[]}',
+        upstreamVars: [],
+        onChange: () => {},
+      },
+    });
+    const chip = wrapper.find('[data-test="node-label"]');
+    expect(chip.exists()).toBe(true);
+    expect(chip.text()).toContain(baseCodename(7000));
+    wrapper.unmount();
+  });
+
+  it("is read-only — exposes no edit input", () => {
+    const wrapper = mount(ContextWidget, {
+      props: {
+        nodeId: 7001,
+        initialJson: '{"version":1,"modules":[]}',
+        upstreamVars: [],
+        onChange: () => {},
+      },
+    });
+    expect(wrapper.find('[data-test="node-label-input"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("derives the codename from the node id, ignoring chainModules / position", () => {
+    // The core fix for the old A/B/C scheme: the chip is purely id-derived
+    // now, so it never depends on walk position or any chainModules label.
+    const wrapper = mount(ContextWidget, {
+      props: {
+        nodeId: 7002,
+        initialJson: '{"version":1,"modules":[]}',
+        upstreamVars: [],
+        chainModules: [
+          { id: "own", rowKey: "7002#own-uid", type: "wildcard", payload: {}, nodeLabel: "ignored-label" },
+        ],
+        onChange: () => {},
+      },
+    });
+    const chip = wrapper.find('[data-test="node-label"]');
+    expect(chip.text()).toContain(baseCodename(7002));
+    expect(chip.text()).not.toContain("ignored-label");
+    wrapper.unmount();
+  });
+});
+
+// ── Bulk toolbar: bundle-aware collapse / expand / toggle-all ────────────────
+// Toggle-all must operate on TOP-LEVEL units — standalone modules + bundle
+// MASTER toggles — never reach inside a bundle to flip child modules (the
+// master gates them; effective = master AND child). Collapse/expand-all must
+// flip bundle FRAMES too, not just module cards. The three buttons match the
+// small row-icon size.
+
+describe("ContextWidget bulk toolbar — bundle-aware", () => {
+  function mountMixed(opts: { bundleEnabled?: boolean; stdEnabled?: boolean } = {}) {
+    const bundleEnabled = opts.bundleEnabled ?? true;
+    const stdEnabled = opts.stdEnabled ?? true;
+    const modules = [
+      {
+        id: "ch0aaaaa", _uid: "u0", type: "wildcard", enabled: true, collapsed: false,
+        meta: { name: "ch0" }, entries: [], payload: { var_binding: "v0", options: [] },
+        payload_hash: "ph0", bundle_origin: "bUID",
+      },
+      {
+        id: "ch1aaaaa", _uid: "u1", type: "wildcard", enabled: true, collapsed: false,
+        meta: { name: "ch1" }, entries: [], payload: { var_binding: "v1", options: [] },
+        payload_hash: "ph1", bundle_origin: "bUID",
+      },
+      {
+        id: "stdaaaaa", _uid: "u2", type: "wildcard", enabled: stdEnabled, collapsed: false,
+        meta: { name: "std" }, entries: [], payload: { var_binding: "vs", options: [] },
+        payload_hash: "phs",
+      },
+    ];
+    const bundles = [{
+      _uid: "bUID", library_id: "lib_b", start_idx: 0, end_idx: 1,
+      enabled: bundleEnabled, collapsed: false, name: "Group", color: null,
+    }];
+    const onChange = vi.fn();
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: {
+        nodeId: 9400,
+        initialJson: JSON.stringify({ version: 1, modules, bundles }),
+        upstreamVars: [],
+        onChange,
+      },
+    });
+    return { wrapper, onChange };
+  }
+  function lastParsed(onChange: ReturnType<typeof vi.fn>) {
+    const calls = onChange.mock.calls;
+    return JSON.parse(calls[calls.length - 1][0] as string) as {
+      modules: Array<{ _uid: string; enabled: boolean; collapsed?: boolean }>;
+      bundles: Array<{ _uid: string; enabled: boolean; collapsed: boolean }>;
+    };
+  }
+  const findMod = (p: ReturnType<typeof lastParsed>, uid: string) =>
+    p.modules.find((m) => m._uid === uid)!;
+
+  it("toggle-all flips the bundle MASTER + standalone module, leaving bundle children untouched", async () => {
+    const { wrapper, onChange } = mountMixed();
+    onChange.mockClear();
+    await wrapper.find('[aria-label="Toggle all enabled"]').trigger("click");
+    const p = lastParsed(onChange);
+    expect(p.bundles[0].enabled).toBe(false);          // master flipped off
+    expect(findMod(p, "u2").enabled).toBe(false);      // standalone flipped off
+    // Children NOT reached — gated by the master, restore-safe.
+    expect(findMod(p, "u0").enabled).toBe(true);
+    expect(findMod(p, "u1").enabled).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("toggle-all re-enables when every top-level unit is already off", async () => {
+    const { wrapper, onChange } = mountMixed({ bundleEnabled: false, stdEnabled: false });
+    onChange.mockClear();
+    await wrapper.find('[aria-label="Toggle all enabled"]').trigger("click");
+    const p = lastParsed(onChange);
+    expect(p.bundles[0].enabled).toBe(true);
+    expect(findMod(p, "u2").enabled).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("collapse-all collapses bundle FRAMES + module cards; expand-all expands both", async () => {
+    const { wrapper, onChange } = mountMixed();
+    onChange.mockClear();
+    await wrapper.find('[aria-label="Collapse all modules"]').trigger("click");
+    let p = lastParsed(onChange);
+    expect(p.bundles[0].collapsed).toBe(true);
+    expect(p.modules.every((m) => m.collapsed === true)).toBe(true);
+    onChange.mockClear();
+    await wrapper.find('[aria-label="Expand all modules"]').trigger("click");
+    p = lastParsed(onChange);
+    expect(p.bundles[0].collapsed).toBe(false);
+    expect(p.modules.every((m) => m.collapsed === false)).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("the three bulk buttons use the small row-icon size class", () => {
+    const { wrapper } = mountMixed();
+    for (const label of ["Collapse all modules", "Expand all modules", "Toggle all enabled"]) {
+      const btn = wrapper.find(`[aria-label="${label}"]`);
+      expect(btn.exists()).toBe(true);
+      expect(btn.classes()).toContain("wp-btn--icon-sm");
+      expect(btn.classes()).not.toContain("wp-btn--icon");
+    }
+    wrapper.unmount();
   });
 });

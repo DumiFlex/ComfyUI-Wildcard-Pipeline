@@ -29,10 +29,10 @@ describe("pruneStaleInstanceRefs — wildcard", () => {
     expect(result.warnings.length).toBe(1);
   });
 
-  it("drops stale category_filter values", () => {
-    const inst = { category_filter: ["cat1", "ghost"] };
+  it("drops stale category_filter tokens from the expression", () => {
+    const inst = { category_filter: "cat1 or ghost" };
     const result = pruneStaleInstanceRefs(inst, newPayload, "wildcard");
-    expect(result.instance?.category_filter).toEqual(["cat1"]);
+    expect(result.instance?.category_filter).toBe("cat1");
     expect(result.warnings.length).toBe(1);
   });
 

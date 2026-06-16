@@ -40,15 +40,29 @@ const routes: RouteRecordRaw[] = [
       // scroll position); only the content pane swaps reactively.
       { path: "docs", name: "documentation", component: () => import("../views/Docs.vue"), meta: { layoutKey: "docs" } },
       { path: "docs/:page", name: "documentation-page", component: () => import("../views/Docs.vue"), props: true, meta: { layoutKey: "docs" } },
-      // Community hub is on `feat/community-tab` while it bakes; main ships
-      // a WIP placeholder so the sidebar entry has somewhere to land. The
-      // catch-all `community/:rest(.*)?` swallows any deep-links saved from
-      // the old routes (/community/discover, /community/m/:id, etc.).
-      { path: "community", name: "community", component: () => import("../views/CommunityWip.vue") },
-      { path: "community/:rest(.*)*", redirect: "/community" },
+      // Community tab dynamically loads the wpc-embed bundle from
+      // WPC_API_URL. The `:rest(.*)*` catch-all lets the embed
+      // surface its own deep-link routes (/community/p/owner/name,
+      // /community/u/username) without forcing a separate route per
+      // shape. Community.vue parses the rest segment and forwards
+      // to the embed's navigate(target).
+      //
+      // Both records share `layoutKey: "community"` so AppLayout's
+      // keyed <RouterView> does NOT re-mount the host when navigating
+      // between /community and /community/p/... — otherwise the embed
+      // bundle would tear down + re-mount on every internal nav, and
+      // the first click on a card would silently re-mount instead of
+      // navigating (only the second click would land).
+      { path: "community", name: "community", component: () => import("../views/Community.vue"), meta: { layoutKey: "community" } },
+      { path: "community/:rest(.*)*", name: "community-deep", component: () => import("../views/Community.vue"), meta: { layoutKey: "community" } },
     ],
   },
-  { path: "/:pathMatch(.*)*", redirect: "/dashboard" },
+  // Unknown URL surfaces a 404 instead of hard-redirecting to
+  // /dashboard. The previous redirect silently swallowed typos +
+  // dead links — users assumed nothing was wrong because they
+  // landed home. NotFound.vue makes the failure visible + gives
+  // them a clear path back.
+  { path: "/:pathMatch(.*)*", name: "not-found", component: () => import("../views/NotFound.vue") },
 ];
 
 export default createRouter({ history: createWebHistory("/wp/"), routes });

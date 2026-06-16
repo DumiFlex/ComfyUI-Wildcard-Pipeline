@@ -1,4 +1,8 @@
-from engine.migrations import CURRENT_SCHEMA_VERSION, migrate_payload
+from engine.migrations import (
+    CURRENT_SCHEMA_VERSION,
+    MAX_KNOWN_SCHEMA_VERSION,
+    migrate_payload,
+)
 
 EMPTY_7 = {
     "bundles": [], "wildcards": [], "fixed_values": [],
@@ -15,7 +19,9 @@ def test_returns_payload_as_is_at_current_version():
 
 
 def test_rejects_future_version():
-    payload = {"schema_version": CURRENT_SCHEMA_VERSION + 1, **EMPTY_7}
+    # The reject threshold is MAX_KNOWN (4), not CURRENT (2): only versions
+    # beyond what the runtime natively supports are rejected.
+    payload = {"schema_version": MAX_KNOWN_SCHEMA_VERSION + 1, **EMPTY_7}
     result = migrate_payload(payload)
     assert result["ok"] is False
     assert "future" in result["reason"].lower()
@@ -37,7 +43,8 @@ def test_walks_chain_to_current():
     assert result["ok"] is True
     assert result["migrated"]["schema_version"] == CURRENT_SCHEMA_VERSION
     assert result["migrated"]["wildcards"][0]["migrated_from"] == 0
-    assert result["migrated_entity_count"] == 1
+    # 2 chain steps (v0->v1, v1->v2) each pass the 1 wildcard => count 2.
+    assert result["migrated_entity_count"] == 2
 
 
 def test_walks_chain_on_empty_payload():
@@ -80,7 +87,8 @@ def test_sums_all_7_arrays_for_migrated_entity_count():
     }
     result = migrate_payload(v0_payload)
     assert result["ok"] is True
-    assert result["migrated_entity_count"] == 7
+    # 7 entities x 2 chain steps (v0->v1, v1->v2) = 14.
+    assert result["migrated_entity_count"] == 14
 
 
 def test_defaults_missing_arrays_to_empty():
@@ -93,3 +101,69 @@ def test_defaults_missing_arrays_to_empty():
     assert result["migrated"]["combines"] == []
     assert result["migrated"]["derivations"] == []
     assert result["migrated"]["categories"] == []
+
+
+# === Install-path fork: accept natively-supported future versions ==========
+# Mirror of the TS `migrateImportEnvelope` fork. A payload at
+# CURRENT < v <= MAX_KNOWN (v3 = text-grammar only; v4 = additive
+# `target_select`) is shape-compatible with v2 and natively handled at
+# runtime, so the engine's commit-side re-validate must accept it AS-IS:
+# not rejected, not migrated (the while-loop bound stays CURRENT so there is
+# nothing to do), schema_version preserved. Only v > MAX_KNOWN rejects.
+
+
+def test_max_known_schema_version_is_4():
+    assert MAX_KNOWN_SCHEMA_VERSION == 4
+
+
+def test_v3_payload_passes_through_unchanged():
+    payload = {
+        "schema_version": 3,
+        **EMPTY_7,
+        "wildcards": [
+            {"id": "wcaaa", "payload": {"options": [
+                {"id": "o", "value": "{1-2$$a|b}", "weight": 1}]}}
+        ],
+    }
+    result = migrate_payload(payload)
+    assert result["ok"] is True
+    # No migration ran — schema_version preserved, count zero.
+    assert result["migrated"]["schema_version"] == 3
+    assert result["migrated_entity_count"] == 0
+
+
+def test_v4_target_select_payload_passes_through_unchanged():
+    payload = {
+        "schema_version": 4,
+        **EMPTY_7,
+        "constraints": [
+            {"id": "cn001", "type": "constraint", "name": "c", "payload": {
+                "source_wildcard_id": "wcaaa", "target_wildcard_id": "wcbbb",
+                "matrix": {}, "exceptions": [],
+                "target_select": {"mode": "next", "count": 2}}}
+        ],
+    }
+    result = migrate_payload(payload)
+    assert result["ok"] is True
+    assert result["migrated"]["schema_version"] == 4
+    assert result["migrated_entity_count"] == 0
+    # The additive target_select field survives verbatim.
+    cn = result["migrated"]["constraints"][0]
+    assert cn["payload"]["target_select"] == {"mode": "next", "count": 2}
+
+
+def test_v2_still_migrates_from_older_version():
+    v0_payload = {"schema_version": 0, **EMPTY_7, "wildcards": [{"uuid": "u", "name": "old"}]}
+    result = migrate_payload(v0_payload)
+    assert result["ok"] is True
+    assert result["migrated"]["schema_version"] == CURRENT_SCHEMA_VERSION
+    assert result["migrated"]["wildcards"][0]["migrated_from"] == 0
+
+
+def test_v5_payload_still_rejects_with_future_error():
+    payload = {"schema_version": MAX_KNOWN_SCHEMA_VERSION + 1, **EMPTY_7}
+    result = migrate_payload(payload)
+    assert result["ok"] is False
+    assert "future" in result["reason"].lower()
+    # The reject reason names the max-known ceiling, not the chain head.
+    assert str(MAX_KNOWN_SCHEMA_VERSION) in result["reason"]

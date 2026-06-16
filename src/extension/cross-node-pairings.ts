@@ -34,6 +34,7 @@ import {
   type PairingBadge,
   type RowPairings,
 } from "./constraint-pairs";
+import { assignCodenames, baseCodename } from "./node-codename";
 
 /** Compose a globally-unique row key. Module `_uid` is per-Context-node
  *  unique; prefixing with the litegraph node id makes it graph-wide
@@ -69,11 +70,36 @@ function extractModules(node: LiteNodeLike): ModuleEntry[] {
   return v.modules;
 }
 
+/** Effective payload for the badge layer: the library `m.payload` with the
+ *  per-instance `target_select` override folded in when present. SP3 reach
+ *  edits in the editor modal write to `instance.target_select` (the default
+ *  `all` collapsed to `null`), but `computePairingsFull` reads
+ *  `payload.target_select`. Without folding the override here, an
+ *  instance-level reach change never reaches the canvas badge — it keeps
+ *  showing the library reach (`all`). Precedence mirrors
+ *  `ConstraintInstanceModal.targetSelect`: a non-null instance override wins;
+ *  `null`/absent inherits the library payload value. Only constraints carry
+ *  `target_select`; for every other module the spread is a harmless copy. */
+function effectiveChainPayload(m: ModuleEntry): Record<string, unknown> {
+  const base = (m.payload ?? {}) as Record<string, unknown>;
+  const override = m.instance?.target_select;
+  if (override === undefined || override === null) return base;
+  return { ...base, target_select: override };
+}
+
 /**
  * Flatten the upstream + own + downstream Context chain into a single
  * `ChainModule[]` ready for `computePairings`. Each entry carries a
  * graph-wide-unique `rowKey` so pairings work across duplicate library
  * instances + across Context-node boundaries.
+ *
+ * Every flattened module is tagged with `nodeLabel` — its source Context
+ * node's CODENAME (`assignCodenames`): a fixed `adjective-noun` derived from
+ * the litegraph node id. Unlike the pre-2026 walk-position letters, a
+ * codename is POV-independent (the same node reads the same name from any
+ * viewer — the old letters shifted by viewer + by empty upstream nodes, so
+ * two chain heads both showed "A") and unique on the canvas. Cross-node UI
+ * reads this to name WHICH node a target instance lives in.
  */
 export function collectFullChainModules(
   rootGraph: LiteGraphLike,
@@ -81,47 +107,63 @@ export function collectFullChainModules(
 ): ChainModule[] {
   const out: ChainModule[] = [];
 
-  // Upstream chain — already returns ContextWidgetValue.modules arrays
-  // upstream-first. We need the matching node ids for rowKey, but the
-  // existing helper returns just modules. Re-walk locally to get the
-  // node + modules pairs in the same order.
-  // (collectUpstreamChain returns modules without nodeId; cheaper to
-  // re-walk than re-tag.)
+  // Re-walk the upstream Context nodes locally so we have their node refs —
+  // collectUpstreamChain returns modules without their owning node.
   const upstreamMods = collectUpstreamChain(rootGraph, node) as ModuleEntry[][];
   const upstreamNodes = upstreamContextNodes(rootGraph, node);
+  const downstreamNodes = collectDownstreamContextNodes(rootGraph, node);
+
+  // Assign a fixed, unique codename to every Context node in the chain,
+  // keyed by litegraph node id. POV-independent — `assignCodenames` sorts
+  // by id internally, so a node reads the same name regardless of which
+  // node we walked from. `labelOf` falls back to the bare base codename for
+  // any node the assignment somehow missed (defensive; shouldn't happen).
+  const codenames = assignCodenames([
+    ...upstreamNodes.map((n) => n.id),
+    node.id,
+    ...downstreamNodes.map((n) => n.id),
+  ]);
+  const labelOf = (n: LiteNodeLike): string =>
+    codenames.get(String(n.id)) ?? baseCodename(n.id);
   for (let i = 0; i < Math.min(upstreamMods.length, upstreamNodes.length); i++) {
-    const nId = upstreamNodes[i].id;
+    const upNode = upstreamNodes[i];
+    const nodeLabel = labelOf(upNode);
     for (const m of upstreamMods[i]) {
       out.push({
         id: m.id,
-        rowKey: rowKey(nId, m),
+        rowKey: rowKey(upNode.id, m),
         type: m.type,
-        payload: (m.payload ?? {}) as Record<string, unknown>,
+        payload: effectiveChainPayload(m),
         displayName: m.meta?.name,
+        nodeLabel,
       });
     }
   }
 
   // Own node's modules.
+  const ownLabel = labelOf(node);
   for (const m of extractModules(node)) {
     out.push({
       id: m.id,
       rowKey: rowKey(node.id, m),
       type: m.type,
-      payload: (m.payload ?? {}) as Record<string, unknown>,
+      payload: effectiveChainPayload(m),
       displayName: m.meta?.name,
+      nodeLabel: ownLabel,
     });
   }
 
   // Downstream chain.
-  for (const dn of collectDownstreamContextNodes(rootGraph, node)) {
+  for (const dn of downstreamNodes) {
+    const nodeLabel = labelOf(dn);
     for (const m of extractModules(dn)) {
       out.push({
         id: m.id,
         rowKey: rowKey(dn.id, m),
         type: m.type,
-        payload: (m.payload ?? {}) as Record<string, unknown>,
+        payload: effectiveChainPayload(m),
         displayName: m.meta?.name,
+        nodeLabel,
       });
     }
   }

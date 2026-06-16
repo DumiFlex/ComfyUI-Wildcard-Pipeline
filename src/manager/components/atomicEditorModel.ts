@@ -1,6 +1,14 @@
-import { tokenizeRich } from "../../widgets/richTokenize";
+import { tokenizeRich, type RichToken } from "../../widgets/richTokenize";
 
-export interface TextAtom { kind: "text"; text: string }
+export interface TextAtom {
+  kind: "text";
+  text: string;
+  /** SP2b: set when this text atom is brace-block scaffolding (the braces,
+   *  count, `$$sep$$`, pipes, and literal arms of a `{…}` block). Drives the
+   *  block-colour highlight — "alt" (amber `{a|b}`) or "multi" (green
+   *  `{N$$…}`). Absent for ordinary text. Ignored by serialise. */
+  blockColor?: "alt" | "multi";
+}
 /** RefAtom — `@{uuid[#name][:subcat,subcat...]}` token.
  *
  * `name` is the cached display label captured at chip-insert time
@@ -14,8 +22,35 @@ export interface RefAtom {
   subCategories: string[];
   name?: string;
 }
-export interface VarAtom { kind: "var"; name: string }
+export interface VarAtom {
+  kind: "var";
+  name: string;
+  /** SP2a list accessor: `$name.K` -> 0-based index K (omitted when absent). */
+  index?: number;
+}
 export type Atom = TextAtom | RefAtom | VarAtom;
+
+/** Build a chip atom (ref/var) from a token, or null for any other kind.
+ *  Shared by the top-level scan and the SP2b per-branch block decomposition. */
+function tokenToChipAtom(tok: RichToken): RefAtom | VarAtom | null {
+  if (tok.kind === "ref") {
+    const meta = tok.meta as { uuid?: string; name?: string; sub_categories?: string[] } | undefined;
+    const refAtom: RefAtom = {
+      kind: "ref",
+      uuid: meta?.uuid ?? "",
+      subCategories: Array.isArray(meta?.sub_categories) ? meta.sub_categories : [],
+    };
+    if (typeof meta?.name === "string" && meta.name.length > 0) refAtom.name = meta.name;
+    return refAtom;
+  }
+  if (tok.kind === "var") {
+    const meta = tok.meta as { name?: string; index?: number } | undefined;
+    const varAtom: VarAtom = { kind: "var", name: meta?.name ?? "" };
+    if (typeof meta?.index === "number") varAtom.index = meta.index;
+    return varAtom;
+  }
+  return null;
+}
 
 export function parse(text: string): Atom[] {
   if (!text) return [];
@@ -29,26 +64,50 @@ export function parse(text: string): Atom[] {
     }
   };
   for (const tok of tokens) {
-    if (tok.kind === "ref") {
+    const chip = tok.kind === "ref" || tok.kind === "var" ? tokenToChipAtom(tok) : null;
+    if (chip) {
       flush();
-      const meta = tok.meta as { uuid?: string; name?: string; sub_categories?: string[] } | undefined;
-      const uuid = meta?.uuid ?? "";
-      const subRaw = meta?.sub_categories;
-      const refAtom: RefAtom = {
-        kind: "ref",
-        uuid,
-        subCategories: Array.isArray(subRaw) ? subRaw : [],
+      out.push(chip);
+    } else if (tok.kind === "dp-multi" || tok.kind === "dp-brace") {
+      // SP2b: decompose a brace block into scaffolding-text (block-coloured) +
+      // inner chip atoms instead of one opaque text atom. The scaffolding
+      // (braces / count / `$$sep$$` / pipes / literal arms) carries blockColor;
+      // a lone ref/var arm becomes the chip it would be standalone. Serialise
+      // (concatenation) reconstructs the original `{…}` string exactly.
+      flush();
+      const color: "alt" | "multi" = tok.kind === "dp-multi" ? "multi" : "alt";
+      const m = (tok.meta ?? {}) as {
+        branches?: string[]; min?: number; max?: number;
+        independent?: boolean; sep?: string; count?: number;
       };
-      if (typeof meta?.name === "string" && meta.name.length > 0) {
-        refAtom.name = meta.name;
+      const branches = Array.isArray(m.branches) ? m.branches : [];
+      let prefix: string;
+      if (tok.kind === "dp-multi") {
+        const cmin = m.min ?? m.count ?? 0;
+        const cmax = m.max ?? m.count ?? 0;
+        const countStr = cmin === cmax ? String(cmin) : `${cmin}-${cmax}`;
+        prefix = `{${countStr}${m.independent ? "~" : ""}$$${m.sep ?? ""}$$`;
+      } else {
+        prefix = "{";
       }
-      out.push(refAtom);
-    } else if (tok.kind === "var") {
-      flush();
-      const name = (tok.meta as { name?: string } | undefined)?.name ?? "";
-      out.push({ kind: "var", name });
+      out.push({ kind: "text", text: prefix, blockColor: color });
+      branches.forEach((branch, bi) => {
+        if (bi > 0) out.push({ kind: "text", text: "|", blockColor: color });
+        // Decompose each branch token-by-token: a ref/var token becomes its
+        // chip; everything else (literals AND surrounding whitespace) stays
+        // block-coloured scaffolding. An earlier "single token only" check
+        // dropped the chip whenever the branch carried whitespace — e.g.
+        // `{2$$, $$ $v|$w}` made ` $v` two tokens (space + var), so `$v`
+        // rendered as text instead of a chip.
+        for (const bt of tokenizeRich(branch)) {
+          const chip = bt.kind === "ref" || bt.kind === "var" ? tokenToChipAtom(bt) : null;
+          if (chip) out.push(chip);
+          else out.push({ kind: "text", text: bt.raw, blockColor: color });
+        }
+      });
+      out.push({ kind: "text", text: "}", blockColor: color });
     } else {
-      // text / escape / dp-* — collapse back into the running text buffer
+      // text / escape / dp-pipe / dp-weight — collapse into the running buffer
       textBuf += tok.raw;
     }
   }
@@ -60,7 +119,7 @@ export function serialise(atoms: Atom[]): string {
   let out = "";
   for (const a of atoms) {
     if (a.kind === "text") out += a.text;
-    else if (a.kind === "var") out += "$" + a.name;
+    else if (a.kind === "var") out += "$" + a.name + (a.index != null ? "." + a.index : "");
     else if (a.kind === "ref") {
       out += "@{" + a.uuid;
       if (a.name && a.name.length > 0) out += "#" + a.name;

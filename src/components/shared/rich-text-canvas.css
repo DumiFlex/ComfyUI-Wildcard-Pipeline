@@ -1,0 +1,26 @@
+/* Rich-text inline-syntax COLOURS for the ComfyUI canvas.
+ *
+ * The SPA gets these from manager/styles/rich-text.css (loaded in
+ * manager/main.ts), but that file is NOT loaded on the canvas — the canvas
+ * only pulls component-scoped styles + theme.css (which is :root vars only,
+ * no selectors). So a RichTextInput / RichTextPreview mounted inside a Context
+ * node (combine template field, constraint exception preview, …) rendered its
+ * brace-block scaffolding and inline tokens UNCOLOURED.
+ *
+ * Imported once, globally, from src/extension/settings.ts. Colour values mirror
+ * rich-text.css (colour only, no background — SP2b V2). Vars resolve from
+ * components/shared/theme.css on canvas. Keep in sync with rich-text.css. */
+
+.wp-rt .wp-rt-block-scaf--alt,
+.wp-rt-preview .wp-rt-block-scaf--alt { color: var(--wp-warn, #fcd34d); font-weight: 600; }
+.wp-rt .wp-rt-block-scaf--multi,
+.wp-rt-preview .wp-rt-block-scaf--multi { color: var(--wp-rt-token-good); font-weight: 500; }
+
+.wp-rt .wp-rt-dp-brace,
+.wp-rt-preview .wp-rt-dp-brace { color: var(--wp-warn, #fcd34d); font-weight: 600; }
+.wp-rt .wp-rt-dp-pipe,
+.wp-rt-preview .wp-rt-dp-pipe { color: var(--wp-warn, #fcd34d); opacity: 0.65; }
+.wp-rt .wp-rt-dp-multi,
+.wp-rt-preview .wp-rt-dp-multi { color: var(--wp-rt-token-good); font-weight: 500; }
+.wp-rt .wp-rt-dp-weight,
+.wp-rt-preview .wp-rt-dp-weight { color: var(--wp-rt-token-mut); font-weight: 500; }

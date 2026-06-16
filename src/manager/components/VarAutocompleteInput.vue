@@ -62,7 +62,9 @@ const popupPos = ref<{ top: number; left: number; width: number; flipped: boolea
  *  RichTextInput) so users discover available vars when they focus a
  *  blank field. */
 const filtered = computed<string[]>(() => {
-  const q = props.modelValue.trim().toLowerCase();
+  // SP2a: strip a trailing `.K` (and a lone trailing `.`) so typing
+  // `$colors.0` still matches the base `colors` suggestion.
+  const q = props.modelValue.trim().toLowerCase().replace(/\.\d*$/, "");
   if (!q) return props.suggestions.slice(0, 8);
   return props.suggestions
     .filter((s) => s.toLowerCase().includes(q))

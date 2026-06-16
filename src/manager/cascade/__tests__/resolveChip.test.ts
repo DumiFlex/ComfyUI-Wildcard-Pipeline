@@ -16,7 +16,7 @@ const fixture: LibraryFixture = {
       payload: {
         sub_categories: ["positive"],
         options: [
-          { id: "opt_aaaa", value: "serene", sub_category: "positive" },
+          { id: "opt_aaaa", value: "serene", sub_categories: ["positive"] },
         ],
       },
     },

@@ -36,6 +36,11 @@ import type { ModuleEntry } from "../../widgets/_shared";
 
 interface Props {
   child: Record<string, unknown> | null;
+  /** All children of the parent bundle. Lets a constraint child resolve
+   *  its source/target wildcard refs to the sibling wildcard's display
+   *  name for the matrix axis labels (otherwise they read "source" /
+   *  "target"). */
+  siblingModules?: Array<Record<string, unknown>>;
 }
 const props = defineProps<Props>();
 
@@ -113,6 +118,33 @@ interface ConstraintPayload {
 
 const constraintPayload = computed<ConstraintPayload>(
   () => ((moduleEntry.value?.payload ?? {}) as ConstraintPayload),
+);
+
+/** Resolve a wildcard-id ref to the sibling wildcard's display name so
+ *  the matrix axes read "Source · <name>" instead of the bare "source"
+ *  fallback. All siblings are in-memory in the bundle, so no async
+ *  preview-resolver lookup is needed (unlike the Context modal). */
+function siblingWildcardName(id: string | undefined): string {
+  if (!id) return "";
+  const sib = (props.siblingModules ?? []).find(
+    (m) => (m as { id?: string }).id === id,
+  ) as
+    | {
+        meta?: { name?: string };
+        name?: string;
+        payload?: { var_binding?: string };
+      }
+    | undefined;
+  if (!sib) return "";
+  return (
+    sib.meta?.name ?? sib.name ?? sib.payload?.var_binding ?? ""
+  );
+}
+const constraintSourceName = computed<string>(() =>
+  siblingWildcardName(constraintPayload.value.source_wildcard_id),
+);
+const constraintTargetName = computed<string>(() =>
+  siblingWildcardName(constraintPayload.value.target_wildcard_id),
 );
 
 const constraintSourceSubs = computed<string[]>(
@@ -256,6 +288,8 @@ const constraintTargetValues = computed<string[]>(() => {
           :module="moduleEntry"
           :source-subs="constraintSourceSubs"
           :target-subs="constraintTargetSubs"
+          :source-name="constraintSourceName"
+          :target-name="constraintTargetName"
           @update="onUpdate"
         />
         <ConstraintExceptionsSection

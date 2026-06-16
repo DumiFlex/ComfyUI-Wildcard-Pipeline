@@ -1,8 +1,19 @@
+import { removeSubcatFromExpr } from "@/manager/cascade/subcatExprCascade";
+import { parse as parseSubcatExpr, type Ast } from "@/manager/parsing/subcatFilter";
+
 import type { ModuleEntry } from "../../../../widgets/_shared";
 import type { ModuleKind } from "../_shell";
 import { encodeKey } from "./keys";
 
 type Instance = NonNullable<ModuleEntry["instance"]>;
+
+/** Distinct sub-category tags referenced by a parsed filter expression. */
+function exprTags(ast: Ast | null): string[] {
+  if (!ast) return [];
+  if ("tag" in ast) return [ast.tag];
+  if (ast.op === "not") return exprTags(ast.x);
+  return ast.kids.flatMap(exprTags);
+}
 
 export interface PruneResult {
   instance: Instance;
@@ -55,14 +66,16 @@ export function pruneStaleInstanceRefs(
       out.pinned_option_id = null;
       out.mode = "random";
     }
-    if (Array.isArray(out.category_filter)) {
-      const before = out.category_filter;
-      const after = before.filter((c) => subCats.has(c));
-      if (after.length !== before.length) {
-        for (const dropped of before.filter((c) => !subCats.has(c))) {
+    if (typeof out.category_filter === "string" && out.category_filter.trim()) {
+      const stale = [...new Set(exprTags(parseSubcatExpr(out.category_filter)))]
+        .filter((c) => !subCats.has(c));
+      if (stale.length > 0) {
+        let expr = out.category_filter;
+        for (const dropped of stale) {
           warnings.push(`category_filter: dropped stale category '${dropped}'`);
+          expr = removeSubcatFromExpr(expr, dropped);
         }
-        out.category_filter = after.length > 0 ? after : null;
+        out.category_filter = expr || null;
       }
     }
   } else if (kind === "derivation") {

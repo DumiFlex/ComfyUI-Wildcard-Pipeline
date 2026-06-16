@@ -7,9 +7,10 @@ import {
   type InstanceLike,
   type WildcardOption,
 } from "../probability";
-import { tokenizeRich, type RichToken } from "../../../../../widgets/richTokenize";
+import { splitRefFilter, tokenizeRich, type RichToken } from "../../../../../widgets/richTokenize";
 import { cacheVersion, ensure, lookup } from "../../../../../extension/preview-resolver";
 import type { PairingBadge } from "../../../../../extension/constraint-pairs";
+import { matches, parse, readsAs } from "@/manager/parsing/subcatFilter";
 import PairBadge from "../../../PairBadge.vue";
 
 interface OptionFull extends WildcardOption {
@@ -25,8 +26,18 @@ const props = withDefaults(
      *  option's `@{uuid}` ref. Rendered as trailing `↪#N` chips at the
      *  end of the value cell. Empty when this option isn't a carrier. */
     pairBadges?: readonly PairingBadge[];
+    /** `payload.tag_groups` — axis name → member tags. Drives the
+     *  per-axis colour of the CATEGORY chips so a tag reads with the
+     *  same hue here as in the pool pills. Ungrouped tags fall back to
+     *  a neutral hue. Read-only on this surface (membership is edited
+     *  in the SPA library editor, §4.3). */
+    tagGroups?: Record<string, string[]>;
+    /** SP2a: the instance is in multi-pick mode (count range != 1..1). When
+     *  true the null option is excluded from the pool, so its row renders
+     *  disabled/greyed + non-toggleable. Real option rows are unaffected. */
+    multiActive?: boolean;
   }>(),
-  { pairBadges: () => [] },
+  { pairBadges: () => [], tagGroups: () => ({}), multiActive: false },
 );
 
 const emit = defineEmits<{
@@ -34,7 +45,7 @@ const emit = defineEmits<{
   "weight": [optionId: string, weight: number | null];
 }>();
 
-const enabled = computed(() => isEnabled(props.option, props.instance));
+const enabled = computed(() => isEnabled(props.option, props.instance, props.multiActive === true));
 
 /**
  * Tokenize the option's `value` so nested `@{uuid}` refs render with
@@ -47,15 +58,54 @@ const enabled = computed(() => isEnabled(props.option, props.instance));
  * row tokenizes — fires-and-forgets, the resolver picks up missing
  * names asynchronously and bumps `cacheVersion`.
  */
+/** SP2b: split a `{a|b}` / `{N$$sep$$…}` block into a flat run of scaffolding
+ *  fragments (kept as dp-brace/dp-multi tokens carrying braces / count /
+ *  `$$sep$$` / pipes / literal arms) + the inner `@{uuid}`/`$var` arms as their
+ *  own ref/var tokens. The render loop then chips inner refs/vars exactly like
+ *  top-level ones, instead of dumping the whole block as raw text. Mirrors the
+ *  SPA editor's decomposition (`manager/components/atomicEditorModel.parse`) so
+ *  the canvas reads identically. */
+function decomposeBlock(tok: RichToken): RichToken[] {
+  const meta = (tok.meta ?? {}) as {
+    branches?: string[]; min?: number; max?: number;
+    independent?: boolean; sep?: string; count?: number;
+  };
+  const branches = Array.isArray(meta.branches) ? meta.branches : [];
+  const frag = (raw: string): RichToken => ({ kind: tok.kind, raw, start: 0, end: 0 });
+  const out: RichToken[] = [];
+  if (tok.kind === "dp-multi") {
+    const cmin = meta.min ?? meta.count ?? 0;
+    const cmax = meta.max ?? meta.count ?? 0;
+    const countStr = cmin === cmax ? String(cmin) : `${cmin}-${cmax}`;
+    out.push(frag(`{${countStr}${meta.independent ? "~" : ""}$$${meta.sep ?? ""}$$`));
+  } else {
+    out.push(frag("{"));
+  }
+  branches.forEach((b, i) => {
+    if (i > 0) out.push(frag("|"));
+    for (const bt of tokenizeRich(b)) {
+      if (bt.kind === "ref" || bt.kind === "var") out.push(bt);
+      else out.push(frag(bt.raw));
+    }
+  });
+  out.push(frag("}"));
+  return out;
+}
+
 const tokens = computed<RichToken[]>(() => {
   void cacheVersion.value;
-  const toks = tokenizeRich(props.option.value ?? "");
-  const uuids = toks
+  const out: RichToken[] = [];
+  for (const t of tokenizeRich(props.option.value ?? "")) {
+    if (t.kind === "dp-brace" || t.kind === "dp-multi") out.push(...decomposeBlock(t));
+    else out.push(t);
+  }
+  // Resolve names for EVERY ref — including refs nested inside a block.
+  const uuids = out
     .filter((t) => t.kind === "ref")
     .map((t) => t.meta?.uuid)
     .filter((u): u is string => typeof u === "string");
   if (uuids.length > 0) ensure(uuids);
-  return toks;
+  return out;
 });
 
 function refDisplay(
@@ -71,7 +121,12 @@ function refDisplay(
   const hit = lookup(uuid);
   if (hit?.varBinding && hit.varBinding.trim()) return `@${hit.varBinding.trim()}`;
   if (hit?.name && hit.name.trim()) return `@${hit.name.trim()}`;
-  if (cachedName && cachedName.trim()) return `@${cachedName.trim()}`;
+  if (cachedName && cachedName.trim()) {
+    // Drop a leaked `!null` exclude-null marker so the label reads `@mood`,
+    // not `@mood!null` (the marker surfaces as the ban icon instead).
+    const clean = cachedName.split("!")[0].trim();
+    return `@${clean || cachedName.trim()}`;
+  }
   return raw;
 }
 
@@ -88,30 +143,119 @@ function refIsUnresolved(uuid: string | undefined): boolean {
   return !lookup(uuid);
 }
 
+/** Compact filter indicators for a nested-ref token — mirrors the SPA
+ *  RefChip grammar so the canvas reads identically: a funnel when a
+ *  sub-category expression is set, a ban when the null option is excluded,
+ *  and the normalized expression ("reads as") + "null excluded" in the
+ *  hover title. The widget lexer comma-splits the raw `:`-body WITHOUT
+ *  peeling `!null`, so rejoin + `splitRefFilter` here rather than printing
+ *  the glued `sub_categories` inline. Memoized per token object so the
+ *  several template bindings don't each re-parse. */
+interface RefFilterInfo { hasExpr: boolean; excludeNull: boolean; isFiltered: boolean; title: string }
+const _refFilterMemo = new WeakMap<RichToken, RefFilterInfo>();
+function refFilter(tok: RichToken): RefFilterInfo {
+  const cached = _refFilterMemo.get(tok);
+  if (cached) return cached;
+  const subs = tok.meta?.sub_categories;
+  let expr = "";
+  let excludeNull = false;
+  if (Array.isArray(subs) && subs.length > 0) {
+    ({ expr, excludeNull } = splitRefFilter(subs.join(",")));
+  } else {
+    // Exclude-null-only form `@{uuid#name!null}`: with no `:expr` the lexer
+    // has no `:` to stop the name capture, so `!null` leaks into the name.
+    // Peel it here (mirrors the SPA RefChip's 4-segment lift) so the chip
+    // still shows the "null excluded" ban mark.
+    const name = typeof tok.meta?.name === "string" ? tok.meta.name : "";
+    const bang = name.indexOf("!");
+    if (bang >= 0) excludeNull = name.slice(bang + 1) === "null";
+  }
+  let reads = "";
+  if (expr) {
+    try { reads = readsAs(parse(expr)); } catch { reads = expr; }
+  }
+  const parts: string[] = [];
+  if (reads) parts.push(reads);
+  if (excludeNull) parts.push("null excluded");
+  const info: RefFilterInfo = {
+    hasExpr: expr.length > 0,
+    excludeNull,
+    isFiltered: expr.length > 0 || excludeNull,
+    title: parts.join(" · "),
+  };
+  _refFilterMemo.set(tok, info);
+  return info;
+}
+
 /** Distinguish two reasons a row might be disabled:
  *   - per-option toggle off (`enabled_options` array excludes this id)
- *   - sub-category filtered out (`category_filter` excludes this option's bucket)
+ *   - sub-category filtered out (`category_filter` boolean expression
+ *     excludes this option's tag set)
  *
  * Per-option toggle remains interactive (user can re-check).
- * Category-filtered rows are read-only — the sub-category chip is the
- * authority. Clicking the per-option checkbox while filtered would write
- * to `enabled_options` invisibly and surprise the user when they re-enable
- * the category. So we no-op the click in that case.
+ * Category-filtered rows are read-only — the pool pills / advanced
+ * expression are the authority. Clicking the per-option checkbox while
+ * filtered would write to `enabled_options` invisibly and surprise the
+ * user when they re-enable the category. So we no-op the click in that
+ * case. The null option is never category-filtered (its membership is
+ * governed by `exclude_null`, not the tag expression).
  */
 const filteredByCategory = computed(() => {
-  const filter = props.instance.category_filter;
-  if (!Array.isArray(filter) || filter.length === 0) return false;
-  if (!props.option.sub_category) return true;
-  return !filter.includes(props.option.sub_category);
+  if (props.option.is_null) return false;
+  const expr = (props.instance.category_filter ?? "").trim();
+  if (expr === "") return false;
+  return !matches(parse(expr), new Set(props.option.sub_categories ?? []));
 });
-const probability = computed(() => probabilityFor(props.option, props.allOptions, props.instance));
+
+/**
+ * Per-axis chip colour. Each `tag_groups` axis gets a stable hue from a
+ * small palette of graph-theme tokens so a tag reads with the same colour
+ * here as in the pool pills. Ungrouped tags fall back to a neutral hue.
+ * Returned as inline custom properties the scoped CSS consumes — keeps the
+ * palette out of per-tag class explosions.
+ */
+const AXIS_HUES = [
+  "var(--wp-kind-wildcard, #a78bfa)",
+  "var(--wp-teal, #33d6c6)",
+  "var(--wp-status-modified, #fb923c)",
+  "var(--wp-accent2, #a970ff)",
+  "var(--wp-success, #22c55e)",
+];
+
+function axisOf(tag: string): number {
+  // Index of the axis whose member list contains `tag`; -1 when ungrouped.
+  const axes = Object.keys(props.tagGroups);
+  for (let i = 0; i < axes.length; i++) {
+    if (props.tagGroups[axes[i]]?.includes(tag)) return i;
+  }
+  return -1;
+}
+
+function chipStyle(tag: string): Record<string, string> {
+  const idx = axisOf(tag);
+  if (idx < 0) return { "--chip-hue": "var(--wp-text-dim, var(--wp-text3))" };
+  return { "--chip-hue": AXIS_HUES[idx % AXIS_HUES.length] };
+}
+const probability = computed(() =>
+  probabilityFor(props.option, props.allOptions, props.instance, props.multiActive === true),
+);
 const weight = computed(() => effectiveWeight(props.option, props.instance));
 const overrideWeight = computed(
   () => typeof props.instance.option_weights?.[props.option.id] === "number",
 );
 
+/** SP2a: the null option leaves the pool in multi-pick mode, so its row is
+ *  inert. Only the null option is affected. */
+const nullDisabledInMulti = computed(
+  () => props.multiActive === true && props.option.is_null === true,
+);
+/** Combined "this row can't be toggled" signal for the checkbox. */
+const interactionLocked = computed(
+  () => filteredByCategory.value || nullDisabledInMulti.value,
+);
+
 function onToggle(): void {
-  if (filteredByCategory.value) return;
+  if (interactionLocked.value) return;
   emit("toggle", props.option.id);
 }
 
@@ -199,20 +343,20 @@ function fmtPct(p: number): string {
   <div
     class="opt"
     :class="{
-      'opt--on': enabled,
-      'opt--off': !enabled,
+      'opt--on': enabled && !nullDisabledInMulti,
+      'opt--off': !enabled || nullDisabledInMulti,
       'opt--weighted': overrideWeight,
       'opt--filtered': filteredByCategory,
     }"
   >
     <span
       class="opt__check"
-      :class="{ 'opt__check--on': enabled }"
+      :class="{ 'opt__check--on': enabled && !nullDisabledInMulti }"
       data-test="opt-check"
       role="checkbox"
       :aria-checked="enabled"
-      :aria-disabled="filteredByCategory"
-      :tabindex="filteredByCategory ? -1 : 0"
+      :aria-disabled="interactionLocked"
+      :tabindex="interactionLocked ? -1 : 0"
       @click="onToggle"
       @keydown.space.prevent="onToggle"
     >
@@ -220,7 +364,7 @@ function fmtPct(p: number): string {
            (8×8 inside 14px box) without the icon-font's intrinsic
            line-height inflating the glyph past the box edge. -->
       <svg
-        v-if="enabled"
+        v-if="enabled && !nullDisabledInMulti"
         class="opt__check-tick"
         width="8"
         height="8"
@@ -242,25 +386,32 @@ function fmtPct(p: number): string {
         <i class="pi pi-ban" aria-hidden="true" />
         <span>null</span>
       </span>
-      <template v-else v-for="(tok, idx) in tokens" :key="idx">
+      <template v-for="(tok, idx) in tokens" v-else :key="idx">
         <span
           v-if="tok.kind === 'ref'"
           class="opt__tok opt__tok--ref"
           :class="{
-            'opt__tok--filtered': Array.isArray(tok.meta?.sub_categories) && tok.meta.sub_categories.length > 0,
+            'opt__tok--filtered': refFilter(tok).isFiltered,
             'opt__tok--unresolved': refIsUnresolved(tok.meta?.uuid),
           }"
           :data-uuid="tok.meta?.uuid"
           :title="refIsUnresolved(tok.meta?.uuid)
             ? `Reference ${tok.meta?.uuid} not in library`
-            : undefined"
+            : (refFilter(tok).title || undefined)"
         >
           <span class="opt__tok-icon" aria-hidden="true">{{ refIsUnresolved(tok.meta?.uuid) ? '?' : '✦' }}</span>
           <span class="opt__tok-label">{{ refDisplay(tok.meta?.uuid, tok.meta?.name, tok.raw) }}</span>
+          <!-- Compact filter mark, matching SPA RefChip: funnel = expression
+               set (full expr in hover title), ban = null option excluded.
+               The expression is never printed inline (it can be long). -->
           <span
-            v-if="Array.isArray(tok.meta?.sub_categories) && tok.meta.sub_categories.length > 0"
-            class="opt__tok-suffix"
-          >·&nbsp;{{ tok.meta.sub_categories.join(", ") }}</span>
+            v-if="refFilter(tok).isFiltered"
+            class="opt__tok-filter"
+            aria-hidden="true"
+          >
+            <i v-if="refFilter(tok).hasExpr" class="pi pi-filter opt__tok-funnel"></i>
+            <i v-if="refFilter(tok).excludeNull" class="pi pi-ban opt__tok-nonull"></i>
+          </span>
         </span>
         <span
           v-else-if="tok.kind === 'var'"
@@ -338,7 +489,15 @@ function fmtPct(p: number): string {
         </svg></button>
       </span>
     </span>
-    <span class="opt__cat" data-test="opt-cat">{{ option.is_null ? "" : (option.sub_category ?? "") }}</span>
+    <span class="opt__cat">
+      <span
+        v-for="tag in (option.is_null ? [] : (option.sub_categories ?? []))"
+        :key="tag"
+        class="opt__cat-chip"
+        :data-test="`opt-cat-${tag}`"
+        :style="chipStyle(tag)"
+      >{{ tag }}</span>
+    </span>
   </div>
 </template>
 
@@ -348,8 +507,10 @@ function fmtPct(p: number): string {
   /* Columns: check · option name (1fr — generous for long values) ·
    * probability (compact, ~110px is enough for a 50px bar + 32px %
    * label) · weight input · category. The earlier 1fr-on-probability
-   * stretched the bar past usefulness and squeezed the name. */
-  grid-template-columns: 22px 1fr 110px 64px 60px;
+   * stretched the bar past usefulness and squeezed the name. Category
+   * widened from 60px → 96px now that it holds multiple wrapping tag
+   * chips instead of one right-aligned label (§4.2). */
+  grid-template-columns: 22px 1fr 110px 64px 96px;
   align-items: center;
   gap: 12px;
   padding: 7px 10px;
@@ -382,7 +543,10 @@ function fmtPct(p: number): string {
 /* Category-filtered rows are read-only — the chip controls them.
  * Show a "not-allowed" cursor + slight opacity so the user knows the
  * per-option checkbox is intentionally inert in this state. */
-.opt--filtered .opt__check {
+/* Any locked checkbox — category-filtered OR the null row in multi-pick —
+ * reads as intentionally inert: not-allowed cursor + dimmed. Keyed on
+ * aria-disabled so both lock reasons share one rule. */
+.opt__check[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.45;
 }
@@ -429,6 +593,13 @@ function fmtPct(p: number): string {
   color: var(--wp-text-dim, var(--wp-text3));
   text-decoration: line-through;
 }
+/* The null chip is `display: inline-flex`, so the ancestor line-through on
+ * `.opt__name` doesn't cross into it — strike it explicitly so a disabled
+ * null row (e.g. excluded from a multi-pick pool) reads as cut-out. */
+.opt--off .opt__null-chip {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
 /* Inline-syntax chips inside option values. Matches the SPA's
  * `wp-refchip` palette + icon prefix so an `@nestedName` reads the
  * same on the canvas as in the SPA editor — purple ✦ for refs,
@@ -455,11 +626,18 @@ function fmtPct(p: number): string {
   font: 10px/1.4 var(--wp-font-mono);
 }
 .opt__tok-icon { font-size: 8px; opacity: 0.75; }
-.opt__tok-suffix {
+/* Compact filter indicator — funnel (expression set) + optional ban
+ * (null excluded). Mirrors RefChip's `wp-refchip__filter` so the canvas
+ * + SPA chips read the same; full expression lives in the hover title. */
+.opt__tok-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 2px;
   color: var(--wp-status-modified, #fbbf24);
-  font-size: 9px;
-  opacity: 0.9;
 }
+.opt__tok-funnel { font-size: 8px; line-height: 1; }
+.opt__tok-nonull { font-size: 8px; line-height: 1; opacity: 0.85; }
 .opt__tok--ref {
   background: color-mix(in srgb, var(--wp-kind-wildcard, #a855f7) 15%, transparent);
   border-color: color-mix(in srgb, var(--wp-kind-wildcard, #a855f7) 50%, transparent);
@@ -489,12 +667,11 @@ function fmtPct(p: number): string {
 }
 /* `{N$$sep$$a|b|c}` multi-pick block — distinct teal/green tone so users
  * can tell it apart from the plain brace block at a glance. Matches the
- * SPA `wp-rt-dp-multi` palette (`--wp-rt-token-good`). */
+ * SPA `wp-rt-dp-multi` palette (`--wp-rt-token-good`). SP2b V2: colour only,
+ * NO background / box (continuous block-coloured text) — same treatment the
+ * SPA editor + preview now use for brace-block scaffolding. */
 .opt__tok--multi {
   color: var(--wp-rt-token-good, #4ad4c4);
-  background: var(--wp-rt-token-good-bg, color-mix(in srgb, #4ad4c4 14%, transparent));
-  border-radius: 3px;
-  padding: 0 3px;
   font-weight: 500;
 }
 .opt__tok--escape {
@@ -617,11 +794,31 @@ function fmtPct(p: number): string {
   opacity: 0.4;
   background: transparent;
 }
+/* CATEGORY column — option's sub-category tags as small chips, one per
+ * axis-coloured tag. Wraps + right-aligns so multi-tag options stay
+ * readable in the narrow column. Read-only here (membership is edited in
+ * the SPA library editor, §4.3). */
 .opt__cat {
-  font: 9px var(--wp-font-sans);
-  color: var(--wp-text-dim, var(--wp-text3));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  justify-content: flex-end;
+  align-content: center;
+}
+.opt__cat-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border-radius: 999px;
+  font: 8px var(--wp-font-sans);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  text-align: right;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  color: var(--chip-hue, var(--wp-text-dim, var(--wp-text3)));
+  border: 1px solid color-mix(in srgb, var(--chip-hue, var(--wp-text3)) 45%, transparent);
+  background: color-mix(in srgb, var(--chip-hue, var(--wp-text3)) 13%, transparent);
+}
+.opt--off .opt__cat-chip {
+  opacity: 0.5;
 }
 </style>

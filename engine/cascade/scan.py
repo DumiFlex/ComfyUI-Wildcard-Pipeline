@@ -17,14 +17,18 @@ import re
 import sqlite3
 from typing import Any
 
+from engine.cascade.fixers import collect_tags
 from engine.db.repositories import ModuleRepository
 
-# ``@{8hex}``, ``@{8hex#name}``, ``@{8hex:subcat}``, or
-# ``@{8hex#name:subcat}`` — uuid + optional cached display name +
-# optional subcat filter. Mirrors `engine/syntax/tokenize.py:_REF_RE`
-# and the TS twin in `src/manager/cascade/dep-graph.ts`. Name segment
-# is informational; this scanner only ever reads the captured uuid.
-_REF_REGEX = re.compile(r"@\{([0-9a-f]{8})(?:#([^#:}@{]*))?(?::([^}]*))?\}")
+# 4-segment ref: ``@{8hex [#name] [:expr] [!null]}`` — uuid + optional
+# cached display name + optional boolean sub-category filter expression
+# + optional exclude-null marker. Mirrors `engine/syntax/tokenize.py:_REF_RE`
+# and the TS twin in `src/manager/cascade/dep-graph.ts`. findall groups:
+# (uuid, name, expr, null-marker). This scanner reads the uuid; the
+# subcat scan also reads the raw expr (see `_scan_subcat`).
+_REF_REGEX = re.compile(
+    r"@\{([0-9a-f]{8})(?:#([^#:}@{!]*))?(?::([^}!]*))?(?:!([^}]*))?\}"
+)
 # ``$varname`` — leading-letter identifier
 _VAR_REGEX = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)")
 
@@ -66,7 +70,7 @@ def _scan_wildcard_delete(conn: sqlite3.Connection, wildcard_id: str) -> list[di
                 v = opt.get("value")
                 if not isinstance(v, str):
                     continue
-                if any(uid == wildcard_id for uid, _name, _sub in _REF_REGEX.findall(v)):
+                if any(m.group(1) == wildcard_id for m in _REF_REGEX.finditer(v)):
                     out.append(_ref_entry("wildcard", m, f"options[{idx}].value"))
                     break
             continue
@@ -85,7 +89,7 @@ def _scan_wildcard_delete(conn: sqlite3.Connection, wildcard_id: str) -> list[di
                             continue
                         for v in action.values():
                             if isinstance(v, str) and any(
-                                uid == wildcard_id for uid, _name, _sub in _REF_REGEX.findall(v)
+                                m.group(1) == wildcard_id for m in _REF_REGEX.finditer(v)
                             ):
                                 out.append(_ref_entry(
                                     "derivation", m,
@@ -149,8 +153,15 @@ def _scan_subcat(
                 v = opt.get("value")
                 if not isinstance(v, str):
                     continue
-                for uid, _name, sub in _REF_REGEX.findall(v):
-                    if uid == wildcard_id and sub == subcat_name:
+                # SP1: `sub` is the raw `:expr` segment (the 4-segment regex
+                # already split `!null` into the null group). A boolean filter
+                # like `warm or cold` references multiple tags, so parse it and
+                # test tag membership — the same set the fixer rewrites
+                # (engine/cascade/fixers.py). Exact-string equality would miss
+                # every multi-tag / negated / parenthesized filter and make the
+                # preview undercount what the apply actually changes.
+                for uid, _name, sub, _null in _REF_REGEX.findall(v):
+                    if uid == wildcard_id and subcat_name in collect_tags(sub):
                         out.append(_ref_entry("wildcard", m, f"options[{idx}].value"))
                         break
 

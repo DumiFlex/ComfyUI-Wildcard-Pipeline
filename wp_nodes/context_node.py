@@ -142,9 +142,11 @@ class WPContext(io.ComfyNode):
             elif isinstance(value, dict):
                 ctx[key] = dict(value)
             elif isinstance(value, set):
-                # `__wp_consumed_constraints__` is a set keyed by
-                # constraint module id. Defensive copy so upstream
-                # payload's set isn't mutated by this node's run.
+                # Defensive copy of any set-valued cross-node internal so
+                # upstream payload's set isn't mutated by this node's run.
+                # (SP3 swapped the constraint bookkeeping from a set to
+                # the `__wp_constraint_hits__` dict — handled by the dict
+                # branch above — but keep this for any future set keys.)
                 ctx[key] = set(value)
             else:
                 ctx[key] = value
