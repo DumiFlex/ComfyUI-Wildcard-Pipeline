@@ -50,8 +50,9 @@ watch(
       </div>
       <h1 class="wp-error__title">Something broke</h1>
       <p class="wp-error__copy">
-        This view hit an unexpected error while rendering. Try
-        reloading, or head to a different tab.
+        This view hit an unexpected error while rendering. Your unsaved
+        changes were auto-saved as a draft — reload and you'll be offered to
+        restore them, or switch to another tab to keep working.
       </p>
       <div class="wp-error__detail">
         <button

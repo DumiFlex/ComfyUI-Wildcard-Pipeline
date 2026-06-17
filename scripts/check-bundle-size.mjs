@@ -157,7 +157,14 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // parity test) now; the upcoming reach/constraint-matrix UI phases need the
 // total budget headroom in the lazy ContextWidget chunk. Approved alongside
 // the SP3 constraint feature.
-const TOTAL_LIMIT = 430 * 1024;     // 430 KB
+// Bumped 430 -> 431 KB on 2026-06-18 for the editor robustness pass:
+// RichTextInput's scoped renderEpoch rebuild (nested-ref picker crash fix)
+// + useEditorDraft flush-on-unmount/unload + ErrorBoundary copy, plus the
+// clipboard-shield wired into _shared.ts + main.ts (Ctrl-A/C/V/X guard on
+// editable widget inputs). ~0.3 KB net gzip across the extension entry +
+// shared chunks. Landed on the bulk-editor branch (the bulk UI itself is
+// manager-only and adds nothing to js/).
+const TOTAL_LIMIT = 431 * 1024;     // 431 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;
