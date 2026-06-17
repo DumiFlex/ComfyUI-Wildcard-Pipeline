@@ -34,6 +34,9 @@ export interface EditorDraft {
   draftSnapshot: ComputedRef<string | null>;
   restore: () => string | null;
   discard: () => void;
+  /** Persist a pending draft immediately (bypass the debounce). Fires
+   *  automatically on unmount + beforeunload; exposed for explicit use. */
+  flush: () => void;
 }
 
 function defaultStorage(): Storage | null {
@@ -58,6 +61,9 @@ export function useEditorDraft(opts: EditorDraftOptions): EditorDraft {
   const storage = opts.storage === undefined ? defaultStorage() : opts.storage;
   const key = `wp-draft-${opts.kind}-${opts.id}`;
   const disabled = ref(false);
+  // An unsaved dirty change waiting to be drafted (debounce in flight).
+  // `flush()` reads it to decide whether there's anything to persist now.
+  let pending = false;
 
   function readStored(): StoredDraft | null {
     if (!storage) return null;
@@ -85,6 +91,7 @@ export function useEditorDraft(opts: EditorDraftOptions): EditorDraft {
   const bootstrap = ref<StoredDraft | null>(readStored());
 
   function persist(): void {
+    pending = false;
     if (disabled.value || !storage) return;
     try {
       const payload: StoredDraft = { snapshot: opts.snapshot(), savedAt: new Date().toISOString() };
@@ -99,8 +106,22 @@ export function useEditorDraft(opts: EditorDraftOptions): EditorDraft {
 
   let timer: ReturnType<typeof setTimeout> | null = null;
   function schedule(): void {
+    pending = true;
     if (timer) clearTimeout(timer);
     timer = setTimeout(persist, DRAFT_DEBOUNCE_MS);
+  }
+
+  /** Persist a pending draft RIGHT NOW, bypassing the 2s debounce. Called on
+   *  unmount — including when the ErrorBoundary swaps the view out from under
+   *  a crashed editor — and on `beforeunload` (tab close / refresh), so the
+   *  user's in-flight work lands in localStorage BEFORE the page goes away.
+   *  Without this, a crash-then-refresh (or just a refresh inside the 2s
+   *  window) silently dropped the unsaved edit. No-ops when nothing is
+   *  pending. */
+  function flush(): void {
+    if (!pending) return;
+    if (timer) { clearTimeout(timer); timer = null; }
+    persist();
   }
 
   watch(
@@ -108,7 +129,15 @@ export function useEditorDraft(opts: EditorDraftOptions): EditorDraft {
     () => { if (opts.dirty.value) schedule(); },
   );
 
-  onBeforeUnmount(() => { if (timer) clearTimeout(timer); });
+  // `beforeunload` flush is the backstop for the FROZEN-page case: if a crash
+  // wedges the renderer so the boundary can't unmount the editor gracefully,
+  // the user's refresh still fires this first → draft saved → restore on reload.
+  const onUnload = (): void => flush();
+  if (typeof window !== "undefined") window.addEventListener("beforeunload", onUnload);
+  onBeforeUnmount(() => {
+    if (typeof window !== "undefined") window.removeEventListener("beforeunload", onUnload);
+    flush();
+  });
 
   const hasDraft = computed<boolean>(() => bootstrap.value !== null);
   const draftAge = computed<number | null>(() =>
@@ -127,5 +156,5 @@ export function useEditorDraft(opts: EditorDraftOptions): EditorDraft {
     bootstrap.value = null;
   }
 
-  return { hasDraft, draftAge, draftSnapshot, restore, discard };
+  return { hasDraft, draftAge, draftSnapshot, restore, discard, flush };
 }

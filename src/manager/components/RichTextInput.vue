@@ -511,6 +511,11 @@ function parseForSurface(text: string): Atom[] {
 }
 
 const atoms = ref<Atom[]>(padAtoms(parseForSurface(props.modelValue || "")));
+// Bumped only on structural-insert applies (autocomplete / ref-picker) to
+// force a clean teardown+remount of the atom v-for instead of patching the
+// new structure over a hand-mutated, out-of-sync contenteditable DOM. Folded
+// into the v-for :key. See applyAtoms() for why the typing path never bumps it.
+const renderEpoch = ref(0);
 let lastEmittedValue = props.modelValue || "";
 
 /** Text-atom HTML: tokenises the atom's raw text and emits colored
@@ -1180,7 +1185,19 @@ function syncTextSpansToAtoms(): void {
   }
 }
 
-function applyAtoms(next: Atom[]): void {
+function applyAtoms(next: Atom[], opts?: { rebuild?: boolean }): void {
+  // `rebuild` forces a full teardown+remount of the atom v-for (via the
+  // renderEpoch key) instead of an in-place patch. Used ONLY on the
+  // structural-insert paths (autocomplete / ref-picker apply): there the
+  // contenteditable already lost focus to the popover/modal, so no live
+  // caret or typing is disturbed, AND the host DOM may have been hand-mutated
+  // (orphan text nodes, in-place span textContent) out of sync with Vue's
+  // vdom. Patching the new atom structure over that stale DOM is what throws
+  // `insertBefore: Child to insert before is not a child of this node`.
+  // The raw typing / Backspace paths deliberately do NOT rebuild — they keep
+  // the imperative syncTextSpansToAtoms approach for caret stability (the
+  // removed global renderTick churned those paths; this scopes it to inserts).
+  if (opts?.rebuild) renderEpoch.value += 1;
   atoms.value = padAtoms(next);
   isEmpty.value = serialiseAtomsLocal(next).length === 0;
   void nextTick(() => syncTextSpansToAtoms());
@@ -1381,7 +1398,10 @@ function insertChipAtCaret(
   const before = text.slice(0, cutFrom);
   const after = text.slice(caret);
   const newText = before + chipText + after;
-  applyAtoms(parseForSurface(newText));
+  // rebuild: this is a structural insert from a popover/modal (focus already
+  // left the host), so remount the atom nodes fresh rather than patch over
+  // the hand-mutated DOM — avoids the Vue insertBefore desync crash.
+  applyAtoms(parseForSurface(newText), { rebuild: true });
   emitValue(newText);
   const newCaret = (before + chipText).length;
   void nextTick(() => restoreCursorAtChar(newCaret));
@@ -2190,7 +2210,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
       @beforeinput="onHostBeforeInput"
       @paste="onHostPaste"
     >
-      <template v-for="(atom, idx) in atoms" :key="idx">
+      <template v-for="(atom, idx) in atoms" :key="renderEpoch + ':' + idx">
         <RefChip
           v-if="atom.kind === 'ref' || atom.kind === 'var'"
           :kind="atom.kind"
