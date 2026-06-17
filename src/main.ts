@@ -1,6 +1,7 @@
 import { app } from "#comfyui/app";
 import { createApp } from "vue";
 import type { LiteGraphLike } from "./extension/graph";
+import { installClipboardShield } from "./widgets/clipboard-shield";
 
 // ComfyUI's `getCustomWidgets` invokes each factory synchronously and destructures
 // the return value. Returning a Promise from `import()` yields `{ widget: undefined }`
@@ -69,6 +70,14 @@ playgroundRoot.id = "wp-playground-root";
 document.body.appendChild(playgroundRoot);
 createApp(PlaygroundModule.default).mount(playgroundRoot);
 playgroundStoreMod.setComfyApp(app);
+
+// Global clipboard shield. WP modals Teleport to <body>, so their editable
+// inputs (the Injector variable-binding field, instance-edit modals, blocklist,
+// pickers, …) sit OUTSIDE the per-widget `inner` shield — Ctrl+A/C/V there
+// would bubble to ComfyUI's canvas and select/copy/paste NODES instead of text.
+// A body-level bubble shield is the catch-all: it fires before ComfyUI's
+// document/window handlers, lets the native text op run, and never preventDefaults.
+installClipboardShield(document.body);
 
 // ComfyUI hands us untyped LiteGraph nodes; we only care about the surface
 // the glue files import. Typing the param as the parameter of `create` /
