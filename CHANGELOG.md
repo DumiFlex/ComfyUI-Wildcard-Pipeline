@@ -1,3 +1,18 @@
+## 🎉 Wildcard Pipeline 2.3.0
+
+📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
+
+<details>
+<summary><b>📋 Full changelog</b> — click to expand the per-commit list</summary>
+
+
+* Merge pull request #2 from DumiFlex/feat/manager-bulk-editor ([6e8696f](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/6e8696f)), closes [#2](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues/2)
+* feat(manager): add bulk editor for wildcard options and fixed values ([959cfbe](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/959cfbe))
+* feat(widgets): shield clipboard shortcuts on editable widget inputs ([325c908](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/325c908))
+* fix(manager): recover from rich-text editor crash and persist drafts on unload ([0f5166e](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/0f5166e))
+
+</details>
+
 ## 🎉 Wildcard Pipeline 2.2.0
 
 📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
