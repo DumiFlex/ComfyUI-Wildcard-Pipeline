@@ -19,6 +19,8 @@ import Button from "../components/ui/Button.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
 import DraftBanner from "../components/DraftBanner.vue";
 import RichTextInput from "../components/RichTextInput.vue";
+import BulkAddPanel from "../components/BulkAddPanel.vue";
+import type { ParsedFixedValue } from "../utils/bulkParse";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
@@ -194,6 +196,33 @@ function addValue() {
   });
 }
 function removeValue(idx: number) { values.value.splice(idx, 1); }
+
+/* ── Bulk add ───────────────────────────────────────────────────────────
+ * Inline paste panel: `name = value` per line. Existing names update in
+ * place; new names append. Names are sanitised to the same identifier rule
+ * the per-row input enforces (`onVarInput`). */
+const bulkAddOpen = ref(false);
+const existingValueNames = computed(() =>
+  values.value.map((v) => v.name).filter((n) => n.trim().length > 0),
+);
+function commitBulkValues(parsed: ParsedFixedValue[]): void {
+  let updated = 0;
+  let added = 0;
+  for (const p of parsed) {
+    const cleanName = p.name.replace(/[^a-zA-Z0-9_]/g, "");
+    if (!cleanName) continue;
+    const existing = values.value.find((v) => v.name.toLowerCase() === cleanName.toLowerCase());
+    if (existing) {
+      existing.value = p.value;
+      updated += 1;
+    } else {
+      values.value.push({ id: `val_${Math.random().toString(16).slice(2, 8)}`, name: cleanName, value: p.value });
+      added += 1;
+    }
+  }
+  bulkAddOpen.value = false;
+  toast.push({ severity: "success", summary: `${added} added, ${updated} updated`, life: 2500 });
+}
 
 function onVarInput(idx: number, raw: string) {
   values.value[idx].name = (raw ?? "").replace(/[^a-zA-Z0-9_]/g, "");
@@ -375,10 +404,25 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
 
     <Card :title="`Values (${values.length})`" :padding="false">
       <template #actions>
+        <Button
+          size="sm"
+          :variant="bulkAddOpen ? 'secondary' : 'ghost'"
+          icon="pi-clipboard"
+          data-test="fv-bulk-add"
+          @click="bulkAddOpen = !bulkAddOpen"
+        >Bulk add</Button>
         <Button size="sm" variant="primary" icon="pi-plus" data-test="fv-add" @click="addValue">
           Add value
         </Button>
       </template>
+      <div v-if="bulkAddOpen" class="wpc-bulk-controls">
+        <BulkAddPanel
+          mode="values"
+          :existing-values="existingValueNames"
+          @commit-values="commitBulkValues"
+          @cancel="bulkAddOpen = false"
+        />
+      </div>
       <table class="wp-table wp-options-table">
         <thead>
           <tr>
@@ -474,6 +518,12 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
   color: var(--wp-text-muted);
 }
 .fv-col-var { width: 220px; }
+.wpc-bulk-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px 14px;
+}
 .fv-col-trash { width: 40px; }
 .fv-row__err {
   font-size: var(--wp-text-xs);
