@@ -182,6 +182,7 @@ interface WarningEntry {
 const WARNING_LABELS: Record<string, string> = {
   constraint_never_applied: "Constraint never applied",
   constraint_partial_reach: "Constraint partial reach",
+  constraint_source_missing: "Constraint source missing",
   constraint_register_failed: "Constraint failed to register",
   constraint_factor_ignored_on_allow: "Constraint factor ignored (allow)",
   unknown_constraint_mode: "Unknown constraint mode",

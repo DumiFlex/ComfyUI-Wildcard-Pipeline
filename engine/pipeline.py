@@ -613,6 +613,44 @@ class PipelineEngine:
                         # otherwise render as plain text).
                         "message": message,
                     })
+                # Source-side companion warning. The `never_applied` message
+                # above is target-focused; when the constraint's SOURCE
+                # wildcard is ALSO absent from the chain, surface that
+                # distinctly so the Debug viewer shows BOTH ends (mirrors the
+                # editor's separate "source missing" / "target missing" row
+                # badges). A constraint registers by its own module position,
+                # so it can sit in the bucket with neither end present.
+                source_uuid = c.get("source_wildcard_id", "")
+                if source_uuid and not _target_present_in_chain(
+                    source_uuid, modules, catalog,
+                ):
+                    src_row = (
+                        catalog.get(source_uuid) if isinstance(catalog, dict) else None
+                    )
+                    source_name = (
+                        (src_row.get("name", "") or "")
+                        if isinstance(src_row, dict) else ""
+                    )
+                    src_suffix = _build_ref_name_suffix(source_name)
+                    warnings_bucket = ctx.setdefault("__wp_warnings__", [])
+                    if isinstance(warnings_bucket, list):
+                        warnings_bucket.append({
+                            "type": "constraint_source_missing",
+                            "severity": "warn",
+                            "module_id": cid,
+                            "source_field": "",
+                            "position": 0,
+                            "token_index": None,
+                            "detail": {
+                                "constraint_id": cid,
+                                "source_wildcard_id": source_uuid,
+                            },
+                            "message": (
+                                f"constraint @{{{library_cid}{cid_suffix}}} did not apply — "
+                                f"its source @{{{source_uuid}{src_suffix}}} wildcard isn't in "
+                                f"this chain, so it never registers a source pick."
+                            ),
+                        })
 
         # SP3 partial-reach finalisation: a constraint that DID fire but
         # whose `next N` / `pick` selector matched FEWER occurrences than
