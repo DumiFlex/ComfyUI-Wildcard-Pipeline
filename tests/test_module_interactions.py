@@ -603,6 +603,21 @@ class TestConstraintComposition:
         ]
         assert excludes_all, "expected an excludes-all warning when both fire"
 
+    def test_constraint_both_ends_missing_emits_source_and_target_warnings(self):
+        """A constraint whose SOURCE and TARGET wildcards are both absent from
+        the chain surfaces BOTH a `constraint_never_applied` (target-focused)
+        AND a `constraint_source_missing` warning — so the Debug viewer shows
+        both ends, matching the editor's separate per-end row badges."""
+        ctx = _run([
+            _wildcard("present", "color", [{"id": "c1", "value": "red", "weight": 1}]),
+            _constraint("cX", source="missing_src", target="missing_tgt", exceptions=[
+                {"source": "a", "target": "b", "mode": "exclude", "factor": 0},
+            ]),
+        ], seed=1)
+        types = [w.get("type") for w in ctx.get("__wp_warnings__", [])]
+        assert "constraint_never_applied" in types, types
+        assert "constraint_source_missing" in types, types
+
     def test_first_mode_constraint_yields_to_let_other_survive(self):
         """The pre-SP3 'only the first constraint fires' outcome is still
         reachable by marking c2 `first` and giving it no earlier target:

@@ -388,6 +388,33 @@ def test_resolve_inline_pick_empty_branch_valid():
     assert out in {"a", "", "c"}
 
 
+def test_resolve_inline_pick_strips_branch_weight_prefix():
+    """`{N::value}` weight prefix must never leak into the output. Regression:
+    simple inline picks ignored `N::`, emitting the literal `2::a`."""
+    for seed in range(12):
+        ctx = _ctx(rng=random.Random(seed))
+        out = resolve_text("{2::a|b}", ctx)
+        assert out in {"a", "b"}, f"seed {seed}: {out!r}"
+        assert "::" not in out, f"seed {seed}: weight prefix leaked: {out!r}"
+
+
+def test_resolve_inline_pick_respects_branch_weight():
+    """A zero-weight branch is never picked — weighting drives the choice."""
+    for seed in range(12):
+        ctx = _ctx(rng=random.Random(seed))
+        assert resolve_text("{1::keep|0::drop}", ctx) == "keep", f"seed {seed}"
+
+
+def test_resolve_inline_pick_weighted_empty_branch():
+    """User repro `{2::|, long shadows}`: the `2::` empty branch emits empty,
+    never the literal prefix. Zero-weight variant pins the assertion."""
+    for seed in range(12):
+        ctx = _ctx(rng=random.Random(seed))
+        assert resolve_text("{0::|, long shadows}", ctx) == ", long shadows"
+        out = resolve_text("{2::|, long shadows}", ctx)
+        assert out in {"", ", long shadows"}, f"seed {seed}: {out!r}"
+
+
 def test_resolve_inline_pick_single_branch_is_text_token():
     """`{just_one}` is NOT a pick (no pipe) — tokenizer returns it as text,
     so resolver passes through verbatim."""

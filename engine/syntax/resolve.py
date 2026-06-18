@@ -169,8 +169,19 @@ def _resolve_inline_pick(
     branches: list[str] = tok.meta.get("branches", [])
     if not branches:
         return ""
-    chosen_idx = ctx.rng.randrange(len(branches))
-    chosen = branches[chosen_idx]
+    # Per-branch weights (`N::value`), same micro-syntax the multi-pick block
+    # honors. Strip the prefix off every branch so it never leaks into output;
+    # only switch to weighted selection when a branch actually carries a weight,
+    # so unweighted `{a|b|c}` keeps its byte-for-byte seed sequence (legacy
+    # randrange path — changing the draw would shift every existing seed).
+    values = [_strip_branch_weight(b) for b in branches]
+    has_weights = any(v != b for v, b in zip(values, branches, strict=True))
+    if has_weights:
+        weights = [_parse_branch_weight(b) for b in branches]
+        chosen_idx = _weighted_pick_index(weights, ctx.rng)
+    else:
+        chosen_idx = ctx.rng.randrange(len(branches))
+    chosen = values[chosen_idx]
     if not chosen:
         return ""
     nested_tokens = tokenize_text(chosen)
