@@ -1,3 +1,17 @@
+## 🎉 Wildcard Pipeline 2.3.1
+
+📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
+
+<details>
+<summary><b>📋 Full changelog</b> — click to expand the per-commit list</summary>
+
+
+* Merge pull request #3 from DumiFlex/fix/instance-modal-scroll ([6a5a8d3](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/6a5a8d3)), closes [#3](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues/3)
+* Merge remote-tracking branch 'origin/main' into fix/instance-modal-scroll ([a19e5f4](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/a19e5f4))
+* fix(extension): scroll instance edit modals with pinned header + footer ([c43bff0](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/c43bff0))
+
+</details>
+
 ## 🎉 Wildcard Pipeline 2.3.0
 
 📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
