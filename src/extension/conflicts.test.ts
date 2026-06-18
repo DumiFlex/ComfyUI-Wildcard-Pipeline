@@ -1294,6 +1294,32 @@ describe("scanConflicts — wildcard_broken_nested_ref", () => {
     });
   });
 
+  it("does NOT flag when the ref resolves to a LIBRARY wildcard not in the chain", () => {
+    // `deadbeef` isn't in the chain, but it's a live-library wildcard — the
+    // Context node fills it from the DB at run (`_expand_catalog_via_live_db`),
+    // so the ref resolves and must NOT read as broken.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [wildcardOpt("w1", "phrase", "see @{deadbeef}")],
+    };
+    const out = scanConflicts(value, [], [], [], [], null, new Set(["deadbeef"]));
+    expect(out.find((c) => c.type === "wildcard_broken_nested_ref")).toBeUndefined();
+  });
+
+  it("STILL flags a ref absent from BOTH the chain and the library", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [wildcardOpt("w1", "phrase", "see @{deadbeef}")],
+    };
+    const out = scanConflicts(value, [], [], [], [], null, new Set(["other999"]));
+    expect(out).toContainEqual({
+      moduleId: "w1",
+      variable: "deadbeef",
+      type: "wildcard_broken_nested_ref",
+      severity: "warning",
+    });
+  });
+
   it("keys the conflict to the module's _uid when present", () => {
     const value: ContextWidgetValue = {
       version: 1,

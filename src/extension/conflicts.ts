@@ -451,6 +451,13 @@ export function scanConflicts(
   // handed and reads `isOrphan` off that. Same reach math, narrower
   // visibility.
   constraintPairOrphanByUid: Map<string, boolean> | null = null,
+  // Uuids of every wildcard in the live library. A nested `@{uuid}` ref to a
+  // library wildcard that ISN'T in this chain still resolves at run time — the
+  // Context node expands its catalog from the live DB (`_expand_catalog_via_live_db`),
+  // so the ref is NOT broken. Only flag refs absent from BOTH chain + library.
+  // Constraint TARGET reachability deliberately stays chain-only (a constraint
+  // needs a downstream instance to re-weight — library presence isn't enough).
+  knownLibraryUuids: ReadonlySet<string> = new Set(),
 ): Conflict[] {
   const upstream = new Set(upstreamVars);
   const upstreamUuids = new Set(upstreamWildcardUuids);
@@ -618,6 +625,11 @@ export function scanConflicts(
     const inDownstreamNested = downstreamNestedReach.has(uuid);
     return inLocalDirect || inUpstream || inDownstream || inLocalNestedAfter || inDownstreamNested;
   };
+  // Nested `@{uuid}` refs additionally resolve from the live library catalog
+  // (the engine pulls them from the DB at run time even when they're not in
+  // the chain), so a ref to any known library wildcard is NOT a broken ref.
+  const isNestedRefResolvable = (uuid: string, i: number): boolean =>
+    isUuidResolvable(uuid, i) || knownLibraryUuids.has(uuid);
   for (let i = 0; i < value.modules.length; i++) {
     const m = value.modules[i];
     if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
@@ -828,7 +840,7 @@ export function scanConflicts(
             const uuid = match[1];
             if (seenRef.has(uuid)) continue;
             seenRef.add(uuid);
-            if (!isUuidResolvable(uuid, i)) {
+            if (!isNestedRefResolvable(uuid, i)) {
               out.push({ moduleId: m._uid ?? m.id, variable: uuid, type, severity: "warning" });
             }
           }

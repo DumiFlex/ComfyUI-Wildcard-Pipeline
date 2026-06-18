@@ -29,6 +29,7 @@ import { BundleFrameCtxKey, type BundleFrameCtx } from "./bundles/bundle-frame-c
 import ModuleRow from "./ModuleRow.vue";
 import { ModuleRowCtxKey, type ModuleRowCtx } from "./module-row-ctx";
 import { buildBundleInsertion, type BundleLibraryEntry } from "./bundles/insert";
+import { isEnabled, type WildcardOption, type InstanceLike } from "./editors/wildcard/probability";
 import { buildLibraryChildrenWithIntegrity, toChildSnapshot } from "./bundles/save";
 import {
   cascadeRestoreForBundle,
@@ -2027,6 +2028,9 @@ const conflicts = computed<Conflict[]>(() => {
     props.downstreamWildcardUuids,
     props.downstreamNestedReachUuids,
     pairOrphanByUid,
+    // Live-library uuids — a nested @{} ref to any of these resolves at run
+    // time (DB-expanded catalog), so it must not read as a broken ref.
+    new Set(Object.keys(libraryHashes.value ?? {})),
   );
   // Filter by user's validation-strictness preference. The accessor
   // reads from the same module-level state map the panel onChange
@@ -2806,7 +2810,16 @@ function isModified(m: ModuleEntry): boolean {
       if (nonEmptyObj(inst.option_weights)) return true;
       if (inst.mode && inst.mode !== "random") return true;
       if (inst.pinned_option_id) return true;
-      if (nonEmptyArr(inst.category_filter)) return true;
+      // `category_filter` is a STRING expr — the old `nonEmptyArr()` test
+      // never matched it, so toggling the pool filter never lit the dot.
+      if (typeof inst.category_filter === "string" && inst.category_filter.trim() !== "") return true;
+      if (inst.exclude_null) return true;
+      // Pick-range override (multi-pick / narrowed). Sparse — absent or 1..1
+      // is the library default; anything else is a behavioural override.
+      if (inst.pick_min != null && inst.pick_min !== 1) return true;
+      if (inst.pick_max != null && inst.pick_max !== 1) return true;
+      if (inst.pick_independent) return true;
+      if (typeof inst.pick_separator === "string" && inst.pick_separator !== "") return true;
       return false;
     case "fixed_values":
       // Library-tracked: `values_overrides` non-empty = user edited entries,
@@ -3181,14 +3194,37 @@ function summaryTokens(m: ModuleEntry): SummaryToken[] {
       // Card summary respects the per-instance binding override so a
       // renamed wildcard reads as `$<override>` on the canvas. Engine
       // applies the same precedence at run time.
-      const inst = m.instance?.variable_binding;
+      const instBind = m.instance?.variable_binding;
       const payloadBinding = (p.var_binding as string | undefined)?.trim();
-      const binding = (typeof inst === "string" && inst.trim()) || payloadBinding;
-      const opts = Array.isArray(p.options) ? p.options.length : 0;
+      const binding = (typeof instBind === "string" && instBind.trim()) || payloadBinding;
       const head: SummaryToken = binding ? v(binding) : lit("wildcard");
-      return opts
-        ? [head, lit(` · ${opts} option${opts === 1 ? "" : "s"}`)]
-        : [head];
+      const allOpts = (Array.isArray(p.options) ? p.options : []) as WildcardOption[];
+      const total = allOpts.length;
+      if (!total) return [head];
+      const inst = (m.instance ?? {}) as InstanceLike & { pick_min?: number; pick_max?: number };
+      const pmin = typeof inst.pick_min === "number" ? inst.pick_min : 1;
+      const pmax = typeof inst.pick_max === "number" ? Math.max(pmin, inst.pick_max) : pmin;
+      const multiActive = pmax > 1;
+      // "X of Y options" only when a filter / enabled-subset actually narrows
+      // the pool — a plain count when nothing is filtering (keeps the common
+      // case clean). The null-option drop in multi mode alone never triggers it.
+      const hasFilter =
+        (typeof inst.category_filter === "string" && inst.category_filter.trim() !== "") ||
+        Array.isArray(inst.enabled_options);
+      const eligible = allOpts.filter((o) => isEnabled(o, inst, multiActive)).length;
+      const tokens: SummaryToken[] = [
+        head,
+        lit(
+          hasFilter && eligible < total
+            ? ` · ${eligible} of ${total} options`
+            : ` · ${total} option${total === 1 ? "" : "s"}`,
+        ),
+      ];
+      // Multi-pick hint — surface when the instance resolves more than one.
+      if (pmax > 1) {
+        tokens.push(lit(pmin === pmax ? ` · picks ${pmin}` : ` · picks ${pmin}-${pmax}`));
+      }
+      return tokens;
     }
     case "combine": {
       // Same per-instance precedence as wildcard: rebinding via the v2

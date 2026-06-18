@@ -165,7 +165,13 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 //  - instance-modal scroll/sticky: sticky header + runtime/footer dock +
 //    own-scrollbar inner lists (options/values/rules/exceptions) + compact
 //    exceptions trash, across all 6 edit modals.
-const TOTAL_LIMIT = 431 * 1024;     // 431 KB
+// Bumped 431 -> 432 KB on 2026-06-18 for the syntax + UI fix batch: inline
+// `{N::a|b}` branch weights (engine + TS resolver mirror), the filter / pick /
+// exclude-null MOD-dot fix, the "X of Y options" + "picks N-M" wildcard
+// subtitle, the library-aware nested-ref check (kills the false BROKEN REF),
+// and the constraint source-missing debug warning + label. ~0.4 KB net gzip
+// across the ContextWidget + conflicts chunks; entry stays put.
+const TOTAL_LIMIT = 432 * 1024;     // 432 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;
