@@ -41,7 +41,7 @@ import {
   type ResolvedEntity,
   type ResolvedSelection,
 } from "./commit";
-import { newShortId } from "../utils/ids";
+import { newShortId, isValidId } from "../utils/ids";
 import type { SchemaCatalogEntry } from "@/api/types";
 import { buildReattachRemap, type InstallDependencyEdge } from "./reattach";
 import {
@@ -360,6 +360,37 @@ export function applyCollisionDecisions(
 }
 
 /**
+ * Mint a fresh valid id for any module / bundle / template whose id isn't a
+ * canonical 8-hex uuid (e.g. a hand-authored `coloruni` that round-tripped
+ * through import → community → download), rewriting `entity.id` in place.
+ * Returns the old→new map so the caller folds it into the reattach remap —
+ * `walkRemap` then rewrites every `@{oldid}` ref + constraint source/target
+ * axis to the new id. Option ids are left alone (opaque; never `@{}`-matched).
+ *
+ * Runs BEFORE collision detection so the minted ids (fresh, non-colliding)
+ * never trip the collision path and the two rename maps merge cleanly.
+ */
+export function normalizeInvalidIds(selection: ResolvedSelection): Record<string, string> {
+  const renameMap: Record<string, string> = {};
+  const buckets: Array<keyof Omit<ResolvedSelection, "categories">> = [
+    "bundles",
+    ...MODULE_BUCKETS,
+    "templates",
+  ];
+  for (const bucket of buckets) {
+    for (const row of selection[bucket]) {
+      const id = (row.entity as { id?: unknown }).id;
+      if (typeof id === "string" && !isValidId(id)) {
+        const newId = newShortId();
+        renameMap[id] = newId;
+        (row.entity as { id: string }).id = newId;
+      }
+    }
+  }
+  return renameMap;
+}
+
+/**
  * Safety backstop for the shared id-space: a cross-kind id clash
  * (`typeConflict`) must NEVER resolve to `replace` — replacing the live
  * row would clobber an unrelated, different-kind item. Regardless of what
@@ -444,7 +475,9 @@ export async function installEnvelope(
   // we fall through and let the server's commit endpoint surface the
   // conflict as a 4xx, preserving the original behaviour for callers
   // that haven't opted in to the new UX.
-  let renameMap: Record<string, string> = {};
+  // Normalize any non-8-hex module/bundle id (mint + rewrite in place) FIRST,
+  // so the minted ids feed both collision detection and the reattach remap.
+  const renameMap: Record<string, string> = normalizeInvalidIds(selection);
   if (opts.library && opts.resolveCollisions) {
     const collisions = detectInstallCollisions(selection, opts.library);
     if (collisions.length > 0) {
@@ -458,7 +491,8 @@ export async function installEnvelope(
           error: { code: "cancelled", message: "Install cancelled by user." },
         };
       }
-      renameMap = applyCollisionDecisions(selection, enforceClashSafety(collisions, decisions));
+      // Merge (not replace) so the invalid-id renames from normalizeInvalidIds survive.
+      Object.assign(renameMap, applyCollisionDecisions(selection, enforceClashSafety(collisions, decisions)));
     }
   }
 

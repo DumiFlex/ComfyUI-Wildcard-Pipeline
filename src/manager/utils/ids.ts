@@ -35,3 +35,19 @@ export function newShortId(): string {
   crypto.getRandomValues(bytes);
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
+
+/**
+ * Canonical module / bundle id shape — exactly 8 lowercase hex chars,
+ * matching `newShortId()` and the engine's `secrets.token_hex(4)`. Both
+ * the nested-`@{uuid}` ref tokenizer (`engine/syntax/tokenize.py`,
+ * `richTokenize.ts`) and the constraint axis refs key off this shape, so
+ * an id outside it (e.g. a hand-authored slug like `coloruni`) silently
+ * can't be nested-referenced. Option ids are intentionally NOT covered —
+ * they're opaque strings the ref tokenizer never matches.
+ */
+export const VALID_ID_RE = /^[0-9a-f]{8}$/;
+
+/** True when `id` is a canonical 8-lowercase-hex module/bundle id. */
+export function isValidId(id: unknown): id is string {
+  return typeof id === "string" && VALID_ID_RE.test(id);
+}

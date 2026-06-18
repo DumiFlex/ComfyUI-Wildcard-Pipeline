@@ -4,6 +4,7 @@ import {
   detectInstallCollisions,
   enforceClashSafety,
   installEnvelope,
+  normalizeInvalidIds,
   type CollisionDecision,
   type InstallCollision,
   type InstallOptions,
@@ -24,6 +25,37 @@ function emptySelection(): ResolvedSelection {
     templates: [],
   } as unknown as ResolvedSelection;
 }
+
+describe("normalizeInvalidIds", () => {
+  it("mints a valid 8-hex id for a non-hex module id, rewrites it in place", () => {
+    const selection = emptySelection();
+    selection.wildcards = [
+      { entity: { id: "coloruni", name: "color" }, decision: { kind: "add" } },
+      { entity: { id: "ed1bccf8", name: "decor" }, decision: { kind: "add" } },
+    ] as unknown as ResolvedSelection["wildcards"];
+    const map = normalizeInvalidIds(selection);
+    expect(Object.keys(map)).toEqual(["coloruni"]); // valid id untouched
+    expect(map.coloruni).toMatch(/^[0-9a-f]{8}$/);
+    expect((selection.wildcards[0].entity as { id: string }).id).toBe(map.coloruni);
+    expect((selection.wildcards[1].entity as { id: string }).id).toBe("ed1bccf8");
+  });
+
+  it("returns an empty map when every id is already valid", () => {
+    const selection = emptySelection();
+    selection.wildcards = [
+      { entity: { id: "ed1bccf8", name: "decor" }, decision: { kind: "add" } },
+    ] as unknown as ResolvedSelection["wildcards"];
+    expect(normalizeInvalidIds(selection)).toEqual({});
+  });
+
+  it("normalizes bundle ids too", () => {
+    const selection = emptySelection();
+    selection.bundles = [
+      { entity: { id: "mybundle", name: "b" }, decision: { kind: "add" } },
+    ] as unknown as ResolvedSelection["bundles"];
+    expect(normalizeInvalidIds(selection).mybundle).toMatch(/^[0-9a-f]{8}$/);
+  });
+});
 
 describe("detectInstallCollisions — type-conflict flag", () => {
   it("flags a same-id DIFFERENT-kind collision as typeConflict", () => {
