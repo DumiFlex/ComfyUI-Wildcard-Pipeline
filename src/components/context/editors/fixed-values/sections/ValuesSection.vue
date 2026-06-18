@@ -183,9 +183,14 @@ const addedCount = computed(() => draftRows.value.filter((r) => r.libraryId === 
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
   border-radius: 3px;
-  overflow: hidden;
+  /* Long value lists scroll in place; the header row stays pinned. */
+  max-height: 42vh;
+  overflow-y: auto;
 }
 .vals__head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: grid;
   grid-template-columns: 22px 180px 1fr 28px 28px;
   gap: 10px;

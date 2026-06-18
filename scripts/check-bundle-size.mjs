@@ -157,7 +157,12 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // parity test) now; the upcoming reach/constraint-matrix UI phases need the
 // total budget headroom in the lazy ContextWidget chunk. Approved alongside
 // the SP3 constraint feature.
-const TOTAL_LIMIT = 430 * 1024;     // 430 KB
+// Bumped 430 -> 431 KB on 2026-06-18 for the instance-modal scroll/sticky
+// pass: sticky header + sticky runtime/footer dock + own-scrollbar inner
+// lists (options / values / rules / exceptions) across all 6 edit modals,
+// plus the compact exceptions trash button. ~0.3 KB gzip of CSS across the
+// lazy modal chunks; entry stays put.
+const TOTAL_LIMIT = 431 * 1024;     // 431 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

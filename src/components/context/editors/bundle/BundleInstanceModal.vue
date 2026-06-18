@@ -102,6 +102,7 @@ const headerName = computed(() => props.bundle.name || props.libraryName || "Bun
       :library-color="libraryColor"
       @update="(patch) => emit('update', patch)"
     />
+    <div class="wp-bdm__dock">
     <RuntimeSection
       :lock-state="lockState"
       :internal-state="internalState"
@@ -157,12 +158,13 @@ const headerName = computed(() => props.bundle.name || props.libraryName || "Bun
         Save
       </button>
     </footer>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.wp-bdm { background: var(--wp-bg2); border: 1px solid var(--wp-border); border-radius: var(--wp-radius); width: 720px; max-width: 100%; max-height: 80vh; display: flex; flex-direction: column; overflow: hidden; font-family: var(--wp-font-sans, sans-serif); font-size: 12px; color: var(--wp-text); }
-.wp-bdm__head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: linear-gradient(180deg, color-mix(in srgb, var(--modal-accent, var(--wp-accent)) 18%, var(--wp-bg2)) 0%, var(--wp-bg2) 100%); border-bottom: 1px solid var(--wp-border); }
+.wp-bdm { background: var(--wp-bg2); border: 1px solid var(--wp-border); border-radius: var(--wp-radius); width: 720px; max-width: 100%; max-height: 80vh; display: flex; flex-direction: column; overflow-y: auto; font-family: var(--wp-font-sans, sans-serif); font-size: 12px; color: var(--wp-text); }
+.wp-bdm__head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: linear-gradient(180deg, color-mix(in srgb, var(--modal-accent, var(--wp-accent)) 18%, var(--wp-bg2)) 0%, var(--wp-bg2) 100%); border-bottom: 1px solid var(--wp-border); }
 .wp-bdm__head-icon { color: var(--modal-accent, var(--wp-accent)); font-size: 18px; width: 24px; text-align: center; }
 .wp-bdm__title-block { flex: 1; min-width: 0; }
 .wp-bdm__title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -175,6 +177,7 @@ const headerName = computed(() => props.bundle.name || props.libraryName || "Bun
 .wp-bdm__close { background: transparent; border: 0; color: var(--wp-text-dim, var(--wp-text3)); cursor: pointer; padding: 4px; }
 .wp-bdm__close:hover { color: var(--wp-text); }
 .wp-bdm__close .pi { font-size: 12px; }
+.wp-bdm__dock { position: sticky; bottom: 0; z-index: 2; background: var(--wp-bg2); }
 .wp-bdm__foot { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--wp-bg3); border-top: 1px solid var(--wp-border); }
 .wp-bdm__spa-link { display: inline-flex; align-items: center; gap: 5px; font: 10px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); text-decoration: none; }
 .wp-bdm__spa-link:hover { color: var(--wp-accent-text, var(--wp-text)); }

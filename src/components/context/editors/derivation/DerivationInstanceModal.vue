@@ -160,6 +160,7 @@ function onSpaClick(): void {
       :via-option-pairs="viaOptionPairs"
       @update="onUpdate"
     />
+    <div class="wp-dvm__dock">
     <RuntimeSection :module="module" @update="onUpdate" />
 
     <footer class="wp-dvm__foot">
@@ -198,6 +199,7 @@ function onSpaClick(): void {
       <button type="button" class="wp-dvm__btn" data-test="dvm-cancel" @click="emit('cancel')">Cancel</button>
       <button type="button" class="wp-dvm__btn wp-dvm__btn--primary" data-test="dvm-save" @click="emit('save')">Save</button>
     </footer>
+    </div>
   </div>
 </template>
 
@@ -211,13 +213,19 @@ function onSpaClick(): void {
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
   font-family: var(--wp-font-sans, sans-serif);
   font-size: 12px;
   color: var(--wp-text);
 }
 /* Head styling lives in src/components/context/editors/_modal-head.css
  * (imported once by ContextWidget). */
+.wp-dvm__dock {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: var(--wp-bg2);
+}
 .wp-dvm__foot {
   display: flex;
   align-items: center;
