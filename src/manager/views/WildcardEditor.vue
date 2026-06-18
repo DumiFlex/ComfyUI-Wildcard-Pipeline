@@ -23,6 +23,10 @@ import Button from "../components/ui/Button.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
 import Input from "../components/ui/Input.vue";
 import RichTextInput from "../components/RichTextInput.vue";
+import BulkAddPanel from "../components/BulkAddPanel.vue";
+import SelectionToolbar from "../components/SelectionToolbar.vue";
+import Checkbox from "../components/ui/Checkbox.vue";
+import type { ParsedBulkOption } from "../utils/bulkParse";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
@@ -930,6 +934,151 @@ function addOption() {
   options.value.push({ id: _newOptionId(), value: "", weight: 1, sub_categories: [] });
 }
 
+/* ── Bulk edit ──────────────────────────────────────────────────────────
+ * Bulk mode adds a checkbox column + a selection toolbar that mutates every
+ * checked row at once, plus an inline paste panel for bulk-adding options.
+ * All mutations go through the same `options` / `subCategories` refs so
+ * snapshot()/dirty tracking stays correct. */
+const bulkMode = ref(false);
+const bulkAddOpen = ref(false);
+const selectedIds = ref<Set<string>>(new Set());
+const bulkNote = ref("");
+
+/** Options eligible for bulk selection — the null option is excluded since
+ *  its weight + sub-categories are meaningless. */
+const selectableOptions = computed(() => options.value.filter((o) => !o.is_null));
+const selectedCount = computed(() => selectedIds.value.size);
+const allSelected = computed(
+  () =>
+    selectableOptions.value.length > 0 &&
+    selectableOptions.value.every((o) => selectedIds.value.has(o.id as string)),
+);
+/** ≥1 (but not necessarily all) selectable rows checked — drives the
+ *  select-all checkbox's indeterminate dash. */
+const someSelected = computed(() =>
+  selectableOptions.value.some((o) => selectedIds.value.has(o.id as string)),
+);
+
+function toggleBulkMode(): void {
+  bulkMode.value = !bulkMode.value;
+  if (!bulkMode.value) {
+    selectedIds.value = new Set();
+    bulkAddOpen.value = false;
+    bulkNote.value = "";
+  }
+}
+function isSelected(id: string | undefined): boolean {
+  return typeof id === "string" && selectedIds.value.has(id);
+}
+function toggleSelect(id: string | undefined): void {
+  if (typeof id !== "string") return;
+  const next = new Set(selectedIds.value);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  selectedIds.value = next;
+}
+function toggleSelectAll(): void {
+  if (allSelected.value) selectedIds.value = new Set();
+  else selectedIds.value = new Set(selectableOptions.value.map((o) => o.id as string));
+}
+function clearSelection(): void {
+  selectedIds.value = new Set();
+}
+function selectedOptionList(): WildcardOption[] {
+  return options.value.filter((o) => isSelected(o.id));
+}
+
+/** Existing option values (non-empty) for the bulk-add duplicate check. */
+const existingOptionValues = computed(() =>
+  options.value.map((o) => o.value).filter((v) => v.trim().length > 0),
+);
+
+/** Ensure a sub-category is registered, auto-creating it in the Ungrouped
+ *  box when new. Returns false (and registers nothing) on an invalid name. */
+function ensureSubcat(name: string): boolean {
+  const raw = name.trim();
+  if (!raw) return false;
+  if (subCategories.value.includes(raw)) return true;
+  if (validateSubcatName(raw)) return false;
+  subCategories.value = [...subCategories.value, raw];
+  return true;
+}
+
+function applyTagToSelected(tag: string): void {
+  bulkNote.value = "";
+  if (!ensureSubcat(tag)) {
+    bulkNote.value = `"${tag.trim()}" is not a valid sub-category name.`;
+    return;
+  }
+  const t = tag.trim();
+  for (const o of selectedOptionList()) {
+    const current = new Set(o.sub_categories ?? []);
+    current.add(t);
+    // Re-derive in registry order so chips stay stably sorted (mirrors toggleOptionTag).
+    o.sub_categories = subCategories.value.filter((s) => current.has(s));
+  }
+}
+function removeTagFromSelected(tag: string): void {
+  bulkNote.value = "";
+  for (const o of selectedOptionList()) {
+    o.sub_categories = (o.sub_categories ?? []).filter((s) => s !== tag);
+  }
+}
+function setWeightSelected(weight: number): void {
+  bulkNote.value = "";
+  // Floor at 0.01 like the per-row weight input — weight 0 never picks.
+  const w = Number.isFinite(weight) && weight > 0 ? weight : 0.01;
+  for (const o of selectedOptionList()) o.weight = w;
+}
+
+/** Bulk-delete checked options. Options referenced by constraints are kept
+ *  (those need the per-option cascade review via the single-row trash) and
+ *  reported so the deletion stays safe. */
+function deleteSelected(): void {
+  bulkNote.value = "";
+  const removable = new Set<string>();
+  let blocked = 0;
+  for (const o of selectedOptionList()) {
+    const id = o.id;
+    const refd = props.id && typeof id === "string" && id && cascade.optionRefsTo(id).length > 0;
+    if (refd) blocked += 1;
+    else if (typeof id === "string") removable.add(id);
+  }
+  options.value = options.value.filter((o) => !removable.has(o.id as string));
+  const next = new Set(selectedIds.value);
+  for (const id of removable) next.delete(id);
+  selectedIds.value = next;
+  if (blocked > 0) {
+    bulkNote.value = `${blocked} referenced option${blocked === 1 ? "" : "s"} kept — remove individually to review affected constraints.`;
+  }
+}
+
+/** Commit bulk-added options from the paste panel: register any new tags
+ *  (auto-created in Ungrouped), then append one option per parsed line with
+ *  its tags in registry order. */
+function commitBulkAddOptions(parsed: ParsedBulkOption[]): void {
+  bulkNote.value = "";
+  let skippedTags = 0;
+  for (const p of parsed) {
+    const tagSet = new Set<string>();
+    for (const tag of p.tags) {
+      if (ensureSubcat(tag)) tagSet.add(tag.trim());
+      else skippedTags += 1;
+    }
+    options.value.push({
+      id: _newOptionId(),
+      value: p.value,
+      weight: p.weight,
+      sub_categories: subCategories.value.filter((s) => tagSet.has(s)),
+    });
+  }
+  bulkAddOpen.value = false;
+  toast.push({ severity: "success", summary: `Added ${parsed.length} option${parsed.length === 1 ? "" : "s"}`, life: 2500 });
+  if (skippedTags > 0) {
+    bulkNote.value = `${skippedTags} invalid tag${skippedTags === 1 ? "" : "s"} skipped.`;
+  }
+}
+
 /** Returns true when the options list already contains a null option. */
 const hasNullOption = computed<boolean>(
   () => options.value.some((o) => o.is_null === true),
@@ -1379,6 +1528,21 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
       <template #actions>
         <Button
           size="sm"
+          :variant="bulkMode ? 'secondary' : 'ghost'"
+          icon="pi-check-square"
+          data-test="wc-bulk-toggle"
+          @click="toggleBulkMode"
+        >{{ bulkMode ? "Done" : "Bulk edit" }}</Button>
+        <Button
+          v-if="bulkMode"
+          size="sm"
+          variant="ghost"
+          icon="pi-clipboard"
+          data-test="wc-bulk-add"
+          @click="bulkAddOpen = !bulkAddOpen"
+        >Bulk add</Button>
+        <Button
+          size="sm"
           variant="ghost"
           icon="pi-ban"
           :disabled="hasNullOption"
@@ -1389,9 +1553,39 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
           Add option
         </Button>
       </template>
+      <div v-if="bulkMode && (bulkAddOpen || selectedCount > 0 || bulkNote)" class="wpc-bulk-controls">
+        <BulkAddPanel
+          v-if="bulkAddOpen"
+          mode="options"
+          :existing-values="existingOptionValues"
+          :existing-tags="subCategories"
+          @commit-options="commitBulkAddOptions"
+          @cancel="bulkAddOpen = false"
+        />
+        <SelectionToolbar
+          v-if="selectedCount > 0"
+          :count="selectedCount"
+          :tags="subCategories"
+          @apply-tag="applyTagToSelected"
+          @remove-tag="removeTagFromSelected"
+          @set-weight="setWeightSelected"
+          @delete-selected="deleteSelected"
+          @clear="clearSelection"
+        />
+        <p v-if="bulkNote" class="wpc-bulk-note" role="status">{{ bulkNote }}</p>
+      </div>
       <table class="wp-table wp-options-table">
         <thead>
           <tr>
+            <th v-if="bulkMode" scope="col" class="opt-col-check">
+              <Checkbox
+                :model-value="allSelected"
+                :indeterminate="someSelected"
+                aria-label="Select all options"
+                data-test="wc-bulk-select-all"
+                @update:model-value="toggleSelectAll"
+              />
+            </th>
             <th scope="col" class="opt-col-weight">Weight</th>
             <th scope="col">Value</th>
             <th scope="col" class="opt-col-sub">Sub-category</th>
@@ -1404,8 +1598,25 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
             v-for="(o, i) in options"
             :key="o.id"
             :data-test="o.is_null ? 'wc-opt-row-null' : `wc-opt-row-${i}`"
-            :class="{ 'wc-opt-row--null': o.is_null }"
+            :class="{ 'wc-opt-row--null': o.is_null, 'wc-opt-row--selected': bulkMode && isSelected(o.id) }"
           >
+            <td v-if="bulkMode" class="opt-col-check">
+              <button
+                v-if="!o.is_null"
+                type="button"
+                class="wp-check"
+                role="checkbox"
+                :aria-checked="isSelected(o.id)"
+                :data-checked="isSelected(o.id) ? 'true' : 'false'"
+                :aria-label="`Select option ${i + 1}`"
+                :data-test="`wc-opt-check-${i}`"
+                @click="toggleSelect(o.id)"
+              >
+                <svg v-if="isSelected(o.id)" viewBox="0 0 12 12" fill="none" style="display:block">
+                  <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </button>
+            </td>
             <td>
               <Input
                 :model-value="o.weight"
@@ -1542,7 +1753,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
             </td>
           </tr>
           <tr v-if="!options.length">
-            <td colspan="5" class="opt-empty">No options yet.</td>
+            <td :colspan="bulkMode ? 6 : 5" class="opt-empty">No options yet.</td>
           </tr>
         </tbody>
       </table>
@@ -1623,6 +1834,19 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
 }
 .opt-col-weight { width: 90px; }
 .opt-col-sub { width: 200px; }
+.opt-col-check { width: 34px; text-align: center; }
+.wc-opt-row--selected > td { background: color-mix(in oklab, var(--wp-accent) 8%, transparent); }
+.wpc-bulk-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px 14px;
+}
+.wpc-bulk-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--wp-warn);
+}
 .opt-col-prob { width: 130px; }
 .opt-col-trash { width: 40px; }
 .opt-empty {

@@ -157,4 +157,56 @@ describe("useEditorDraft", () => {
     expect(api.hasDraft.value).toBe(false);
     wrap.unmount();
   });
+
+  it("flushes a pending draft on unmount instead of discarding it", async () => {
+    const storage = fakeStorage();
+    const dirty = ref(false);
+    const snap = ref("v0");
+    const { wrap } = harness({
+      kind: "wildcard", id: "abc",
+      dirty,
+      snapshot: () => snap.value,
+      storage,
+    });
+    dirty.value = true;
+    snap.value = "v1";
+    await wrap.vm.$nextTick();
+    // Unmount BEFORE the 2s debounce fires (the ErrorBoundary view-swap /
+    // route-leave path). The in-flight edit must be persisted, not dropped.
+    wrap.unmount();
+    const stored = JSON.parse(storage.getItem("wp-draft-wildcard-abc") || "{}");
+    expect(stored.snapshot).toBe("v1");
+  });
+
+  it("flushes a pending draft on beforeunload (refresh) before the debounce", async () => {
+    const storage = fakeStorage();
+    const dirty = ref(false);
+    const snap = ref("v0");
+    const { wrap } = harness({
+      kind: "wildcard", id: "abc",
+      dirty,
+      snapshot: () => snap.value,
+      storage,
+    });
+    dirty.value = true;
+    snap.value = "v1";
+    await wrap.vm.$nextTick();
+    window.dispatchEvent(new Event("beforeunload"));
+    const stored = JSON.parse(storage.getItem("wp-draft-wildcard-abc") || "{}");
+    expect(stored.snapshot).toBe("v1");
+    wrap.unmount();
+  });
+
+  it("flush() is a no-op when nothing is pending", () => {
+    const storage = fakeStorage();
+    const { api, wrap } = harness({
+      kind: "wildcard", id: "abc",
+      dirty: ref(false),
+      snapshot: () => "x",
+      storage,
+    });
+    api.flush();
+    expect(storage.getItem("wp-draft-wildcard-abc")).toBeNull();
+    wrap.unmount();
+  });
 });
