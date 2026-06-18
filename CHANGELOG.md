@@ -1,3 +1,18 @@
+## 🎉 Wildcard Pipeline 2.4.0
+
+📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
+
+<details>
+<summary><b>📋 Full changelog</b> — click to expand the per-commit list</summary>
+
+
+* Merge pull request #4 from DumiFlex/feat/inline-weights-pool-ui-debug ([ccb8392](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/ccb8392)), closes [#4](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues/4)
+* fix(engine): apply N:: branch weights in simple inline {a|b|c} choices ([a951699](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/a951699))
+* fix(extension): wildcard pool MOD dot, subtitle counts, library-aware refs ([d8c2072](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/d8c2072))
+* feat(engine): emit a constraint source-missing debug warning ([0e9e5db](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/0e9e5db))
+
+</details>
+
 ## 🎉 Wildcard Pipeline 2.3.1
 
 📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
