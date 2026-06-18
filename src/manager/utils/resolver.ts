@@ -49,10 +49,34 @@ export function pickWeightedOption(
   return options[options.length - 1];
 }
 
+/** Parse the `N::` branch-weight prefix — 1 when absent, 0 when ≤0, 1 on a
+ *  non-numeric prefix. Mirrors the engine's `_parse_branch_weight`. */
+function parseBranchWeight(branch: string): number {
+  const i = branch.indexOf("::");
+  if (i < 0) return 1;
+  const prefix = branch.slice(0, i);
+  if (prefix.trim() === "") return 1;
+  const n = Number(prefix);
+  if (Number.isNaN(n)) return 1;
+  return n <= 0 ? 0 : n;
+}
+
+/** Strip a numeric `N::` weight prefix; leave the branch untouched when the
+ *  prefix isn't a number (a literal `foo::bar` survives). Mirrors the
+ *  engine's `_strip_branch_weight`. */
+function stripBranchWeight(branch: string): string {
+  const i = branch.indexOf("::");
+  if (i < 0) return branch;
+  const prefix = branch.slice(0, i);
+  if (prefix.trim() === "" || Number.isNaN(Number(prefix))) return branch;
+  return branch.slice(i + 2);
+}
+
 /**
  * Expand inline `{a|b|c}` choices in a value string. Each occurrence is
- * resolved to one of its `|`-separated branches at random. Nested braces are
- * resolved innermost-first via a fixpoint loop.
+ * resolved to one of its `|`-separated branches at random (weighted when a
+ * branch carries an `N::` prefix). Nested braces are resolved innermost-first
+ * via a fixpoint loop.
  *
  * Important — this function MUST NOT touch `@{...}` refs. The previous
  * implementation delegated to `resolveTokens` which tokenized `@{8hex}`
@@ -74,8 +98,21 @@ export function expandInlineChoices(text: string): string {
     const next = out.replace(
       /\{([^{}]*\|[^{}]*)\}/g,
       (_, content: string) => {
-        const branches = content.split("|");
-        return branches[Math.floor(Math.random() * branches.length)];
+        const raw = content.split("|");
+        const values = raw.map(stripBranchWeight);
+        const hasWeights = values.some((v, i) => v !== raw[i]);
+        if (!hasWeights) {
+          return values[Math.floor(Math.random() * values.length)];
+        }
+        const weights = raw.map(parseBranchWeight);
+        const total = weights.reduce((a, w) => a + Math.max(0, w), 0);
+        if (total <= 0) return values[0];
+        let r = Math.random() * total;
+        for (let i = 0; i < values.length; i++) {
+          r -= Math.max(0, weights[i]);
+          if (r <= 0) return values[i];
+        }
+        return values[values.length - 1];
       },
     );
     if (next === out) break;
