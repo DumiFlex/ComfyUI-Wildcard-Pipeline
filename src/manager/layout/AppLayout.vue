@@ -22,6 +22,7 @@ import { useCategoryStore } from "../stores/categoryStore";
 import { useCommunityUpdateStore } from "../stores/communityUpdateStore";
 import { useCascadeStore } from "../cascade/cascade-store";
 import { useGuidedPublishStore } from "../import-export/guided-publish-store";
+import { repairLibraryOnce } from "../import-export/uuid-repair-boot";
 import { api } from "../api/client";
 import {
   hashes as libraryHashes,
@@ -175,6 +176,20 @@ onMounted(() => {
     cascadeStore.rebuildFromCatalogs(
       moduleStore.catalog, bundleStore.catalog, categoryStore.items,
     );
+    // One-time repair of any pre-existing non-8-hex module/bundle ids (a
+    // `coloruni`-style id can't be nested-referenced). Gated + fire-and-forget;
+    // refresh the catalogs + cascade index only if it actually rekeyed rows.
+    void repairLibraryOnce().then((repaired) => {
+      if (repaired <= 0) return;
+      void Promise.all([
+        moduleStore.fetchCatalog().catch(() => undefined),
+        bundleStore.fetchCatalog().catch(() => undefined),
+      ]).then(() => {
+        cascadeStore.rebuildFromCatalogs(
+          moduleStore.catalog, bundleStore.catalog, categoryStore.items,
+        );
+      });
+    });
     // Cross-check community-installed rows against the community
     // for newer versions. Runs after the library snapshot is in
     // place; failures (offline, CORS, server down) clear the
