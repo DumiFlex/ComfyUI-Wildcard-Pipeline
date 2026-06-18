@@ -1,3 +1,16 @@
+## 🎉 Wildcard Pipeline 2.5.0
+
+📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
+
+<details>
+<summary><b>📋 Full changelog</b> — click to expand the per-commit list</summary>
+
+
+* feat(manager): one-time library repair for non-hex module/bundle ids ([02cc9f7](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/02cc9f7))
+* fix(import): normalize non-hex module/bundle ids on import + download ([a1d0511](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/a1d0511))
+
+</details>
+
 ## 🎉 Wildcard Pipeline 2.4.0
 
 📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
