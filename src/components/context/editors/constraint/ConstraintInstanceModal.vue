@@ -691,14 +691,6 @@ function onSpaClick(): void {
       :stranded="hasDangling"
       @update="onUpdate"
     />
-    <TargetReachSection
-      :model-value="targetSelect"
-      :chain-modules="chainModules"
-      :constraint-uid="constraintUid"
-      :target-wildcard-id="targetWildcardId"
-      :target-name="targetName"
-      @update:model-value="onTargetSelect"
-    />
     <ExceptionsSection
       :module="module"
       :source-values="sourceValues"
@@ -712,6 +704,15 @@ function onSpaClick(): void {
       @update="onUpdate"
     />
 
+    <div class="wp-cnm__dock">
+    <TargetReachSection
+      :model-value="targetSelect"
+      :chain-modules="chainModules"
+      :constraint-uid="constraintUid"
+      :target-wildcard-id="targetWildcardId"
+      :target-name="targetName"
+      @update:model-value="onTargetSelect"
+    />
     <footer class="wp-cnm__foot">
       <a
         v-if="isLibraryTracked"
@@ -748,6 +749,7 @@ function onSpaClick(): void {
       <button type="button" class="wp-cnm__btn" data-test="cnm-cancel" @click="emit('cancel')">Cancel</button>
       <button type="button" class="wp-cnm__btn wp-cnm__btn--primary" data-test="cnm-save" @click="emit('save')">Save</button>
     </footer>
+    </div>
 
     <!-- Feature 2: confirm pulling the missing dependency (+ its closure)
          from the community before any network/install side effect. -->
@@ -772,13 +774,19 @@ function onSpaClick(): void {
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
   font-family: var(--wp-font-sans, sans-serif);
   font-size: 12px;
   color: var(--wp-text);
 }
 /* Head styling lives in src/components/context/editors/_modal-head.css
  * (imported once by ContextWidget). */
+.wp-cnm__dock {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: var(--wp-bg2);
+}
 .wp-cnm__foot {
   display: flex;
   align-items: center;

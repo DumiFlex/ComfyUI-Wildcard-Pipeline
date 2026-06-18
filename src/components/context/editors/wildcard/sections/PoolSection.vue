@@ -903,9 +903,15 @@ const skewedTowards = computed(() => {
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
   border-radius: 3px;
-  overflow: hidden;
+  /* Long option lists scroll in place so the axes / pick / footer stay
+   * visible; the column-header row below stays pinned via sticky. */
+  max-height: 40vh;
+  overflow-y: auto;
 }
 .pool__opt-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: grid;
   /* Match OptionRow column widths so cell alignment stays in lockstep. */
   grid-template-columns: 22px 1fr 110px 64px 96px;

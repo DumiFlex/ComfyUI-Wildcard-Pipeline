@@ -304,6 +304,7 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
   <section class="ex" data-test="ex-section">
     <div class="ex__label">Exceptions</div>
 
+    <div class="ex__list">
     <div
       v-for="(exc, i) in libraryExceptions"
       :key="libKey(exc)"
@@ -551,6 +552,7 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
       ><i class="pi pi-trash" /></button>
       </template>
     </div>
+    </div>
 
     <button
       v-if="!stranded"
@@ -581,11 +583,18 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
   color: var(--wp-text-dim, var(--wp-text3));
   margin-bottom: 8px;
 }
+.ex__list {
+  /* Long exception lists scroll in place; the label + add button stay put. */
+  max-height: 34vh;
+  overflow-y: auto;
+}
 .ex__row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 0;
+  /* right padding keeps the trash off the section edge + the list
+   * scrollbar when the exceptions list scrolls. */
+  padding: 4px 8px 4px 0;
   font: 11px var(--wp-font-mono);
   border-bottom: 1px dashed var(--wp-border-soft, var(--wp-border));
 }
@@ -801,17 +810,17 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   padding: 0;
-  background: color-mix(in srgb, var(--wp-text) 3%, transparent);
-  border: 1px solid var(--wp-border);
+  background: transparent;
+  border: 0;
   border-radius: 4px;
   color: var(--wp-text-dim, var(--wp-text3));
   cursor: pointer;
   font-size: 11px;
   flex-shrink: 0;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  transition: background 0.12s, color 0.12s;
 }
 .ex__trash:hover {
   background: color-mix(in srgb, var(--wp-danger, #e05252) 18%, transparent);

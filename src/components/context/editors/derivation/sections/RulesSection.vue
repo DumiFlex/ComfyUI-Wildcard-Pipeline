@@ -693,6 +693,9 @@ function opUsesValue(op: string | undefined): boolean {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  /* Long rule lists scroll in place so identity / footer stay visible. */
+  max-height: 44vh;
+  overflow-y: auto;
 }
 
 /* Rule card */

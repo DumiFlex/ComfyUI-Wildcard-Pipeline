@@ -101,6 +101,7 @@ function onSpaClick(): void {
       @update="onUpdate"
     />
     <PoolSection :module="module" :via-option-pairs="viaOptionPairs" @update="onUpdate" />
+    <div class="wp-wcm__dock">
     <RuntimeSection :module="module" @update="onUpdate" />
 
     <footer class="wp-wcm__foot">
@@ -150,6 +151,7 @@ function onSpaClick(): void {
         Save
       </button>
     </footer>
+    </div>
   </div>
 </template>
 
@@ -163,7 +165,7 @@ function onSpaClick(): void {
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
   font-family: var(--wp-font-sans, sans-serif);
   font-size: 12px;
   color: var(--wp-text);
@@ -171,6 +173,12 @@ function onSpaClick(): void {
 /* Head styling lives in src/components/context/editors/_modal-head.css
  * (imported once by ContextWidget). Adopted from InjectorBindingModal
  * so every per-instance edit modal reads as one design family. */
+.wp-wcm__dock {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: var(--wp-bg2);
+}
 .wp-wcm__foot {
   display: flex;
   align-items: center;
