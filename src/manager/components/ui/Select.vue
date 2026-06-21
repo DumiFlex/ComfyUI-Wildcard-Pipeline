@@ -35,11 +35,22 @@ const btnRef = ref<HTMLButtonElement | null>(null);
 const open = ref(false);
 const flip = ref(false);
 const active = ref(0);
+/** Type-to-filter query, built from printable keystrokes while the menu
+ *  is open. Reset every time the menu opens or closes. */
+const query = ref("");
 
 /** Fixed-position coordinates for the teleported menu. */
 const menuStyle = ref<Record<string, string>>({});
 
 const selected = computed(() => props.options.find((o) => o.value === props.modelValue) ?? null);
+
+/** Options narrowed by `query` (case-insensitive substring on the label).
+ *  Empty query → all options, so every dropdown is type-to-filter. */
+const filtered = computed<SelectOption[]>(() => {
+  const q = query.value.trim().toLowerCase();
+  if (!q) return props.options;
+  return props.options.filter((o) => o.label.toLowerCase().includes(q));
+});
 
 const btnClasses = computed(() => [
   "wp-select",
@@ -137,11 +148,13 @@ function computeMenuStyle() {
 
 watch(open, (v) => {
   if (!v) {
+    query.value = "";
     window.removeEventListener("scroll", closeOnScroll, true);
     window.removeEventListener("resize", reposition);
     return;
   }
   if (!btnRef.value) return;
+  query.value = "";
   computeMenuStyle();
   // Highlight currently-selected option (or first).
   const idx = props.options.findIndex((o) => o.value === props.modelValue);
@@ -177,19 +190,29 @@ function onKeydown(e: KeyboardEvent) {
     }
     return;
   }
+  const list = filtered.value;
   if (e.key === "Escape") {
     e.preventDefault();
     open.value = false;
   } else if (e.key === "ArrowDown") {
     e.preventDefault();
-    active.value = (active.value + 1) % props.options.length;
+    if (list.length) active.value = (active.value + 1) % list.length;
   } else if (e.key === "ArrowUp") {
     e.preventDefault();
-    active.value = (active.value - 1 + props.options.length) % props.options.length;
+    if (list.length) active.value = (active.value - 1 + list.length) % list.length;
   } else if (e.key === "Enter") {
     e.preventDefault();
-    const opt = props.options[active.value];
+    const opt = list[active.value];
     if (opt) pick(opt);
+  } else if (e.key === "Backspace") {
+    e.preventDefault();
+    query.value = query.value.slice(0, -1);
+    active.value = 0;
+  } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    // Printable key → type-to-filter; jump the highlight back to the top.
+    e.preventDefault();
+    query.value += e.key;
+    active.value = 0;
   }
 }
 </script>
@@ -242,7 +265,14 @@ function onKeydown(e: KeyboardEvent) {
         data-test="select-menu"
       >
         <li
-          v-for="(opt, i) in options"
+          v-if="query"
+          class="wp-select__filter"
+          aria-hidden="true"
+          data-test="select-filter"
+          style="display:flex;align-items:center;padding:4px 12px;font-size:11px;opacity:0.6;"
+        >Filtering: {{ query }}</li>
+        <li
+          v-for="(opt, i) in filtered"
           :key="String(opt.value)"
           class="wp-select__option"
           role="option"
@@ -262,6 +292,13 @@ function onKeydown(e: KeyboardEvent) {
           <span class="wp-spacer" />
           <Icon v-if="opt.value === modelValue" name="check" :size="ICON_SM" />
         </li>
+        <li
+          v-if="!filtered.length"
+          class="wp-select__empty"
+          aria-disabled="true"
+          data-test="select-empty"
+          style="padding:6px 12px;opacity:0.55;"
+        >No matches</li>
       </ul>
     </Teleport>
   </div>

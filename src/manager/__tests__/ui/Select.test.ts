@@ -66,4 +66,46 @@ describe("Select.vue", () => {
     expect(wrap.get("[data-test='select-trigger']").attributes("aria-invalid")).toBe("true");
     wrap.unmount();
   });
+
+  it("type-to-filter narrows the options", async () => {
+    const wrap = mount(Select, {
+      props: { modelValue: null, options: opts },
+      attachTo: document.body,
+    });
+    const trigger = wrap.get("[data-test='select-trigger']");
+    await trigger.trigger("click");
+    expect(document.querySelectorAll(".wp-select__option").length).toBe(3);
+    await trigger.trigger("keydown", { key: "a" });
+    await trigger.trigger("keydown", { key: "l" }); // "al" → only "Alpha"
+    expect(document.querySelectorAll(".wp-select__option").length).toBe(1);
+    expect(document.querySelector(".wp-select__option")?.textContent).toContain("Alpha");
+    expect(document.querySelector("[data-test='select-filter']")?.textContent).toContain("al");
+    wrap.unmount();
+  });
+
+  it("Enter selects the single filtered match", async () => {
+    const wrap = mount(Select, {
+      props: { modelValue: null, options: opts },
+      attachTo: document.body,
+    });
+    const trigger = wrap.get("[data-test='select-trigger']");
+    await trigger.trigger("click");
+    await trigger.trigger("keydown", { key: "g" }); // → only "Gamma"
+    await trigger.trigger("keydown", { key: "Enter" });
+    expect(wrap.emitted("update:modelValue")![0]).toEqual(["c"]);
+    wrap.unmount();
+  });
+
+  it("shows No matches when the query matches nothing", async () => {
+    const wrap = mount(Select, {
+      props: { modelValue: null, options: opts },
+      attachTo: document.body,
+    });
+    const trigger = wrap.get("[data-test='select-trigger']");
+    await trigger.trigger("click");
+    await trigger.trigger("keydown", { key: "z" });
+    expect(document.querySelectorAll(".wp-select__option").length).toBe(0);
+    expect(document.querySelector("[data-test='select-empty']")).not.toBeNull();
+    wrap.unmount();
+  });
 });
