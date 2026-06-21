@@ -12,6 +12,7 @@ import { cacheVersion, ensure, lookup } from "../../../../../extension/preview-r
 import type { PairingBadge } from "../../../../../extension/constraint-pairs";
 import { matches, parse, readsAs } from "@/manager/parsing/subcatFilter";
 import PairBadge from "../../../PairBadge.vue";
+import { axisHueAt } from "../../../../shared/axis-color";
 
 interface OptionFull extends WildcardOption {
   value: string;
@@ -208,20 +209,11 @@ const filteredByCategory = computed(() => {
 });
 
 /**
- * Per-axis chip colour. Each `tag_groups` axis gets a stable hue from a
- * small palette of graph-theme tokens so a tag reads with the same colour
- * here as in the pool pills. Ungrouped tags fall back to a neutral hue.
- * Returned as inline custom properties the scoped CSS consumes — keeps the
- * palette out of per-tag class explosions.
+ * Per-axis chip colour via the shared `axisHueAt` palette so a tag reads
+ * with the same colour here as in the pool pills. Ungrouped tags fall back
+ * to a neutral hue. Returned as an inline custom property the scoped CSS
+ * consumes — keeps the palette out of per-tag class explosions.
  */
-const AXIS_HUES = [
-  "var(--wp-kind-wildcard, #a78bfa)",
-  "var(--wp-teal, #33d6c6)",
-  "var(--wp-status-modified, #fb923c)",
-  "var(--wp-accent2, #a970ff)",
-  "var(--wp-success, #22c55e)",
-];
-
 function axisOf(tag: string): number {
   // Index of the axis whose member list contains `tag`; -1 when ungrouped.
   const axes = Object.keys(props.tagGroups);
@@ -232,9 +224,7 @@ function axisOf(tag: string): number {
 }
 
 function chipStyle(tag: string): Record<string, string> {
-  const idx = axisOf(tag);
-  if (idx < 0) return { "--chip-hue": "var(--wp-text-dim, var(--wp-text3))" };
-  return { "--chip-hue": AXIS_HUES[idx % AXIS_HUES.length] };
+  return { "--chip-hue": axisHueAt(axisOf(tag)) };
 }
 const probability = computed(() =>
   probabilityFor(props.option, props.allOptions, props.instance, props.multiActive === true),

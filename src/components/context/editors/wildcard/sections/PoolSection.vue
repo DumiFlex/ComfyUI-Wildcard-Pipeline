@@ -13,6 +13,7 @@ import {
 } from "@/manager/parsing/subcatFilter";
 import OptionRow from "./OptionRow.vue";
 import WpCheck from "../../../../shared/WpCheck.vue";
+import { axisHueAt, UNGROUPED_HUE } from "../../../../shared/axis-color";
 
 interface OptionFull extends WildcardOption {
   value: string;
@@ -137,19 +138,11 @@ function onPillClick(tag: string): void {
   emit("update", patchInstance(props.module, "category_filter", expr));
 }
 
-/** Per-axis pill colour — mirrors OptionRow's CATEGORY chip hues so a tag
- *  reads with the same colour in both surfaces. */
-const AXIS_HUES = [
-  "var(--wp-kind-wildcard, #a78bfa)",
-  "var(--wp-teal, #33d6c6)",
-  "var(--wp-status-modified, #fb923c)",
-  "var(--wp-accent2, #a970ff)",
-  "var(--wp-success, #22c55e)",
-];
+/** Per-axis pill colour via the shared `axisHueAt` palette — mirrors
+ *  OptionRow's chip hues so a tag reads the same in both surfaces. */
 function axisHue(axis: string): string {
-  if (axis === OTHER) return "var(--wp-text-dim, var(--wp-text3))";
-  const idx = pillGroups.value.findIndex((g) => g.axis === axis);
-  return AXIS_HUES[(idx < 0 ? 0 : idx) % AXIS_HUES.length];
+  if (axis === OTHER) return UNGROUPED_HUE;
+  return axisHueAt(pillGroups.value.findIndex((g) => g.axis === axis));
 }
 
 function categoryOptionCount(cat: string): number {

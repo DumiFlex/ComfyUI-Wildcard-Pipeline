@@ -28,6 +28,7 @@ import SelectionToolbar from "../components/SelectionToolbar.vue";
 import Checkbox from "../components/ui/Checkbox.vue";
 import type { ParsedBulkOption } from "../utils/bulkParse";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
+import { axisHueAt, UNGROUPED_HUE } from "../../components/shared/axis-color";
 import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
@@ -44,6 +45,7 @@ import {
   collectLibraryWildcardRefs,
 } from "../utils/library-suggestions";
 import { appendSnapshot, readHistory } from "../utils/history";
+import { formatProbability } from "../utils/percent";
 import type {
   ModuleHistoryEntry,
   WildcardOption,
@@ -293,16 +295,8 @@ const subcatGroups = computed<SubcatGroup[]>(() => {
 });
 
 /** Index of the axis a tag belongs to (-1 when ungrouped) — drives the
- *  per-axis chip hue, mirroring OptionRow/PoolSection so a tag reads with
- *  the same colour across every surface. */
-const AXIS_HUES = [
-  "var(--wp-kind-wildcard, #a78bfa)",
-  "var(--wp-teal, #33d6c6)",
-  "var(--wp-status-modified, #fb923c)",
-  "var(--wp-accent2, #a970ff)",
-  "var(--wp-success, #22c55e)",
-];
-
+ *  per-axis chip hue via the shared `axisHueAt` palette so a tag reads
+ *  with the same colour across every surface. */
 function axisIndexOf(tag: string): number {
   const axes = Object.keys(tagGroups.value);
   for (let i = 0; i < axes.length; i++) {
@@ -312,9 +306,7 @@ function axisIndexOf(tag: string): number {
 }
 
 function tagHue(tag: string): string {
-  const idx = axisIndexOf(tag);
-  if (idx < 0) return "var(--wp-text-dim, var(--wp-text3))";
-  return AXIS_HUES[idx % AXIS_HUES.length];
+  return axisHueAt(axisIndexOf(tag));
 }
 
 function chipStyle(tag: string): Record<string, string> {
@@ -325,9 +317,8 @@ function chipStyle(tag: string): Record<string, string> {
  *  member tag). Drives the coloured group header + left accent so each axis
  *  reads as a distinct colour cluster (#8). OTHER_AXIS stays neutral. */
 function axisHue(axis: string): string {
-  if (axis === OTHER_AXIS) return "var(--wp-text-dim, var(--wp-text3))";
-  const idx = Object.keys(tagGroups.value).indexOf(axis);
-  return AXIS_HUES[(idx < 0 ? 0 : idx) % AXIS_HUES.length];
+  if (axis === OTHER_AXIS) return UNGROUPED_HUE;
+  return axisHueAt(Object.keys(tagGroups.value).indexOf(axis));
 }
 
 /** How many options carry this tag — the pill's `(count)` badge. */
@@ -1738,7 +1729,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                 <div class="opt-prob__bar">
                   <div class="opt-prob__fill" :style="{ width: probabilityFor(o) + '%' }" />
                 </div>
-                <span class="opt-prob__value wp-mono">{{ probabilityFor(o).toFixed(0) }}%</span>
+                <span class="opt-prob__value wp-mono">{{ formatProbability(probabilityFor(o)) }}</span>
               </div>
             </td>
             <td>
