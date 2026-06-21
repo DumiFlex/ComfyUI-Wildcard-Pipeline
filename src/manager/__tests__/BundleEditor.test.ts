@@ -38,6 +38,7 @@ function makeRouter() {
     routes: [
       { path: "/", component: { template: "<div/>" } },
       { path: "/bundles", name: "bundles", component: { template: "<div/>" } },
+      { path: "/bundles/:id/edit", name: "bundles-edit", component: { template: "<div/>" } },
     ],
   });
 }
@@ -581,5 +582,23 @@ describe("BundleEditor.vue", () => {
     // `_uid`, stamped at Context-insert time, not at edit time.
     expect(payload.children![0].id).toBe("wc_a");
     expect(payload.children![1].id).toBe("wc_a");
+  });
+
+  it("create-mode saves a new bundle directly (no Context wrap needed)", async () => {
+    apiBundles.create.mockResolvedValue({
+      id: "bn_new", name: "My Kit", description: "", color: null,
+      category_id: null, tags: [], is_favorite: false, children: [],
+      payload_hash: "h", version: 1, created_at: "", updated_at: "",
+    });
+    const wrap = mountEditor(); // no id → create mode
+    await flushPromises();
+    await wrap.find('[data-test="identity-name"]').setValue("My Kit");
+    await flushPromises();
+    const saveBtn = wrap.findAll("button").find((b) => b.text().includes("Save"));
+    await saveBtn!.trigger("click");
+    await flushPromises();
+    expect(apiBundles.create).toHaveBeenCalledTimes(1);
+    expect(apiBundles.create.mock.calls[0][0].name).toBe("My Kit");
+    expect(apiBundles.update).not.toHaveBeenCalled();
   });
 });

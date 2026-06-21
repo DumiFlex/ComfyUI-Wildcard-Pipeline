@@ -478,15 +478,6 @@ function cancel() {
 // after every save would force the user to re-enter the editor for each
 // tweak. cancel() uses resolveReturnTo for the explicit-exit path.
 async function save() {
-  if (!isEdit.value || !props.id) {
-    toast.push({
-      severity: "info",
-      summary: "Create from Context",
-      detail: "New bundles are created by wrapping modules in the Context widget.",
-      life: 4000,
-    });
-    return;
-  }
   if (validationErrors.value.length > 0) {
     showErrors.value = true;
     return;
@@ -500,7 +491,7 @@ async function save() {
     // the current token value (which would freeze the colour across
     // theme switches + future token retunes).
     const colorOut = color.value === defaultColor.value ? null : color.value;
-    const updated = await store.update(props.id, {
+    const body = {
       name: name.value.trim(),
       description: description.value,
       color: colorOut,
@@ -508,7 +499,22 @@ async function save() {
       tags: [...tags.value],
       children: stripBundleChildrenForSave(children.value),
       content_rating: contentRating.value,
-    });
+    };
+    if (!isEdit.value || !props.id) {
+      // Create a brand-new bundle directly in the manager. (Previously
+      // gated to the Context-wrap flow; the add-child picker builds the
+      // same child shape edit-mode saves, so authoring here is safe.)
+      const created = await store.create(body);
+      bundleBaseline.value = bundleSnapshot();
+      draft.discard();
+      recent.push({ id: created.id, kind: "bundle", name: created.name });
+      setSaveState("saved", 1500);
+      toast.push({ severity: "success", summary: "Created", detail: created.name });
+      // Land in the new bundle's edit page so further tweaks PATCH it.
+      router.replace({ name: "bundles-edit", params: { id: created.id } });
+      return;
+    }
+    const updated = await store.update(props.id, body);
     original.value = updated;
     children.value = Array.isArray(updated.children)
       ? updated.children.map((c) => ({ ...(c as Record<string, unknown>) }))
@@ -1012,7 +1018,7 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
     :save-state="saveState"
     :save-error="saveError"
     :dirty="dirty"
-    :save-disabled="!isEdit"
+    :save-disabled="validationErrors.length > 0"
     :errors="visibleErrors"
     @save="save"
     @cancel="cancel"
