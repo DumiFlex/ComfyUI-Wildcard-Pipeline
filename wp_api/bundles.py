@@ -23,31 +23,6 @@ _UPDATABLE_FIELDS = (
 )
 
 
-def _dedupe_children(children: list[dict]) -> list[dict]:
-    """Drop second+ occurrences of any child sharing an ``id`` with an
-    earlier child in the same list.
-
-    Without this guard the same module could appear twice (or three,
-    four) times in ``children[]`` and every propagation pass would
-    rewrite every copy identically — harmless but bloats the bundle
-    payload and confuses the SPA bundle preview (two "framing" cards,
-    same id). Order is preserved; the first occurrence wins.
-    """
-    seen: set[str] = set()
-    out: list[dict] = []
-    for child in children:
-        if not isinstance(child, dict):
-            out.append(child)
-            continue
-        cid = child.get("id")
-        if isinstance(cid, str) and cid in seen:
-            continue
-        if isinstance(cid, str):
-            seen.add(cid)
-        out.append(child)
-    return out
-
-
 def _auto_suffix_bundle_name(repo: BundleRepository, name: str) -> str:
     """If ``name`` is already taken by another bundle in the library,
     append ``" (copy)"`` / ``" (copy 2)"`` / etc. until a free name is
@@ -401,8 +376,10 @@ async def create_bundle(request: web.Request) -> web.Response:
             if err is not None:
                 return json_error(err, status=400)
             if isinstance(children_raw, list):
-                normalised = _normalise_bundle_children(children_raw)
-                children = _dedupe_children(normalised)
+                # Keep duplicate child ids — multi-instance bundles
+                # (e.g. one wildcard used 3×) repeat an id on purpose;
+                # per-instance `_uid` is stamped at Context-insert time.
+                children = _normalise_bundle_children(children_raw)
             else:
                 children = []
             unique_name = _auto_suffix_bundle_name(repo, body["name"])
@@ -522,8 +499,8 @@ async def update_bundle(request: web.Request) -> web.Response:
             if err is not None:
                 return json_error(err, status=409)
             if isinstance(patch["children"], list):
-                normalised = _normalise_bundle_children(patch["children"])
-                patch["children"] = _dedupe_children(normalised)
+                # Preserve duplicates (see create path) — no dedupe.
+                patch["children"] = _normalise_bundle_children(patch["children"])
         # Auto-suffix rename collisions only when the new name actually
         # changed AND collides with a DIFFERENT row. PUTting a row with
         # its own current name must be a no-op for the suffix logic.

@@ -199,10 +199,13 @@ async def test_bundle_update_keeps_own_name_unsuffixed(wp_client):
     assert (await resp.json())["name"] == "qa_self"
 
 
-# ─── Fix 12: bundle children dedup ───────────────────────────────────
+# ─── bundle children: duplicates preserved ───────────────────────────
+# Reverses the former "Fix 12" dedup: multi-instance bundles repeat a
+# module id on purpose (one wildcard used as garment/hair/eyes), and
+# per-instance disambiguation happens at Context-insert time, not here.
 
 
-async def test_bundle_create_dedupes_children_by_id(wp_client):
+async def test_bundle_create_preserves_duplicate_children(wp_client):
     create = await _create_wildcard(wp_client, name="qa_shared_child")
     mid = (await create.json())["id"]
 
@@ -216,10 +219,10 @@ async def test_bundle_create_dedupes_children_by_id(wp_client):
     })
     assert resp.status == 201
     body = await resp.json()
-    assert len(body["children"]) == 1
+    assert len(body["children"]) == 3
 
 
-async def test_bundle_update_dedupes_children_by_id(wp_client):
+async def test_bundle_update_preserves_duplicate_children(wp_client):
     create = await _create_wildcard(wp_client, name="qa_shared_child_2")
     mid = (await create.json())["id"]
     bun = await wp_client.post("/wp/api/bundles", json={"name": "qa_dup_children_put"})
@@ -233,4 +236,4 @@ async def test_bundle_update_dedupes_children_by_id(wp_client):
     })
     assert resp.status == 200
     body = await resp.json()
-    assert len(body["children"]) == 1
+    assert len(body["children"]) == 2

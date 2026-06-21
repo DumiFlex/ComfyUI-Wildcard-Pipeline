@@ -66,6 +66,35 @@ async def test_create_with_color_and_children(wp_client):
     assert body["payload_hash"] != ""
 
 
+async def test_create_preserves_duplicate_children(wp_client):
+    """Multi-instance bundles intentionally repeat a module id (e.g. the
+    Universal Color used 3× as garment/hair/eyes). The create path must
+    keep every occurrence — per-instance disambiguation happens at
+    Context-insert time, not at bundle-store time."""
+    dup = {"id": "c0107a11", "type": "wildcard", "payload": {"options": []}}
+    resp = await wp_client.post("/wp/api/bundles", json={
+        "name": "color_triple",
+        "children": [dict(dup), dict(dup), dict(dup)],
+    })
+    assert resp.status == 201
+    body = await resp.json()
+    assert [c["id"] for c in body["children"]] == ["c0107a11"] * 3
+
+
+async def test_update_preserves_duplicate_children(wp_client):
+    created = await (await wp_client.post("/wp/api/bundles", json={
+        "name": "color_triple_upd",
+        "children": [],
+    })).json()
+    dup = {"id": "c0107a22", "type": "wildcard", "payload": {"options": []}}
+    resp = await wp_client.put(f"/wp/api/bundles/{created['id']}", json={
+        "children": [dict(dup), dict(dup)],
+    })
+    assert resp.status == 200
+    body = await resp.json()
+    assert [c["id"] for c in body["children"]] == ["c0107a22", "c0107a22"]
+
+
 async def test_create_missing_name_returns_400(wp_client):
     resp = await wp_client.post("/wp/api/bundles", json={
         "color": "#FB7185",
