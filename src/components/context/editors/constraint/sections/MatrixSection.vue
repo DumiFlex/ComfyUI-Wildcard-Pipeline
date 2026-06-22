@@ -581,7 +581,11 @@ onBeforeUnmount(() => {
   background: var(--wp-bg-deep, #0e1015);
   border: 1px solid var(--wp-border);
   border-radius: 6px;
-  padding: 6px;
+  /* No padding on the SCROLL container — see ConstraintMatrix: sticky pins
+   * headers at the padding edge while overflow still renders scrolling cells
+   * inside the padding, so padding leaves a scrolled-cell bleed strip on the
+   * top/left. Content sits flush; the border + radius give the frame. */
+  padding: 0;
   vertical-align: top;
 }
 /* `separate` + zero spacing (NOT `collapse`) — sticky header cells with

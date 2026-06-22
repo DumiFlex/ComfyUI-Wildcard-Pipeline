@@ -496,7 +496,12 @@ defineExpose({ cellAt });
   background: var(--wp-bg-deep, var(--wp-bg-1, #0e1015));
   border: 1px solid var(--wp-border);
   border-radius: 6px;
-  padding: 6px;
+  /* No padding on the SCROLL container: position:sticky pins headers at the
+   * padding edge while overflow still renders scrolling cells INSIDE the
+   * padding, so any padding leaves a bleed strip of scrolled cells on the
+   * top/left scroll-start sides. Content sits flush; the border + radius give
+   * the frame. */
+  padding: 0;
   overflow: auto;
   max-width: 100%;
   max-height: 60vh;
