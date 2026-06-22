@@ -90,6 +90,7 @@ function spaUrl(): string {
 interface WildcardPayload {
   sub_categories?: string[];
   options?: Array<{ value?: string }>;
+  tag_groups?: Record<string, string[]>;
 }
 
 /** Normalised module shape the resolution lookups consume. Unifies the
@@ -282,6 +283,19 @@ const targetValues = computed<string[]>(() => {
     if (v) set.add(v);
   }
   return Array.from(set);
+});
+
+/** Per-axis grouping (tag_groups) for the matrix headers — orders + colours
+ *  the row/col tags by sub-category axis. Sibling/chain wildcard payloads
+ *  carry it; the preview-resolver cache does not, so a cross-context ref
+ *  resolved only via cache groups flat (acceptable degradation). */
+const sourceGroups = computed<Record<string, string[]>>(() => {
+  const pl = (props.module.payload ?? {}) as ConstraintPayload;
+  return findWildcard(pl.source_wildcard_id)?.tag_groups ?? {};
+});
+const targetGroups = computed<Record<string, string[]>>(() => {
+  const pl = (props.module.payload ?? {}) as ConstraintPayload;
+  return findWildcard(pl.target_wildcard_id)?.tag_groups ?? {};
 });
 
 const sourceName = computed(() => {
@@ -688,6 +702,8 @@ function onSpaClick(): void {
       :target-subs="targetSubs"
       :source-name="sourceName"
       :target-name="targetName"
+      :source-groups="sourceGroups"
+      :target-groups="targetGroups"
       :stranded="hasDangling"
       @update="onUpdate"
     />

@@ -93,6 +93,64 @@ describe("constraint MatrixSection — layout", () => {
   });
 });
 
+describe("constraint MatrixSection — grouped axes", () => {
+  it("renders a column band per target axis + a row header chip per source axis", () => {
+    const w = mount(MatrixSection, {
+      props: {
+        module: makeModule(),
+        sourceSubs: SOURCE_SUBS,
+        targetSubs: TARGET_SUBS,
+        sourceGroups: { warmth: ["red", "blue"] },
+        targetGroups: { fabric: ["cotton", "silk"] },
+      },
+    });
+    expect(w.findAll(".mx-th-band").map((b) => b.text()).filter((t) => t.length)).toEqual(["fabric"]);
+    expect(w.findAll(".mx-grp-head").map((h) => h.text())).toEqual(["warmth"]);
+    // Cells stay keyed by tag name, so the grouped layout is reorder-safe.
+    expect(w.find('[data-test="mx-cell-red-silk"]').exists()).toBe(true);
+    expect(w.find('[data-test="mx-cell-blue-cotton"]').exists()).toBe(true);
+  });
+
+  it("a solo source axis folds its name into the tag eyebrow (no header chip)", () => {
+    const w = mount(MatrixSection, {
+      props: {
+        module: makeModule(),
+        sourceSubs: ["red", "blue", "green"],
+        targetSubs: TARGET_SUBS,
+        sourceGroups: { warmth: ["red", "blue"], shade: ["green"] },
+      },
+    });
+    expect(w.findAll(".mx-grp-head").map((h) => h.text())).toEqual(["warmth"]); // shade is solo
+    const solo = w.find(".mx-th-row.solo");
+    expect(solo.exists()).toBe(true);
+    expect(solo.text()).toContain("shade");
+    expect(solo.text()).toContain("green");
+  });
+
+  it("labels the leftover ungrouped run 'uncategorized' instead of leaving it blank", () => {
+    const w = mount(MatrixSection, {
+      props: {
+        module: makeModule(),
+        sourceSubs: ["red", "blue", "extra"],
+        targetSubs: ["cotton", "silk", "wool"],
+        sourceGroups: { warmth: ["red", "blue"] },
+        targetGroups: { fabric: ["cotton", "silk"] },
+      },
+    });
+    expect(w.findAll(".mx-grp-head").map((h) => h.text())).toEqual(["warmth", "uncategorized"]);
+    expect(w.findAll(".mx-th-band").map((b) => b.text()).filter((t) => t.length))
+      .toEqual(["fabric", "uncategorized"]);
+  });
+
+  it("stays flat (no bands / chips) when no groups are passed", () => {
+    const w = mount(MatrixSection, {
+      props: { module: makeModule(), sourceSubs: ["red"], targetSubs: ["cotton"] },
+    });
+    expect(w.findAll(".mx-th-band").length).toBe(0);
+    expect(w.findAll(".mx-grp-head").length).toBe(0);
+  });
+});
+
 describe("constraint MatrixSection — override marker", () => {
   it("renders override marker when mode differs from library", () => {
     const w = mount(MatrixSection, {

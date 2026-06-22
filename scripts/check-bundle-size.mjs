@@ -171,7 +171,14 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // subtitle, the library-aware nested-ref check (kills the false BROKEN REF),
 // and the constraint source-missing debug warning + label. ~0.4 KB net gzip
 // across the ContextWidget + conflicts chunks; entry stays put.
-const TOTAL_LIMIT = 432 * 1024;     // 432 KB
+// Bumped 432 -> 435 KB on 2026-06-22 for the canvas constraint-matrix grouping
+// parity. MatrixSection (the ComfyUI instance-modal grid) gains the SPA's
+// grouped-axis layout — column bands, row header chips, solo eyebrow, the
+// labelled "uncategorized" bucket, and frozen headers + both-axis scroll —
+// plus the shared components/shared/matrix-axis module the SPA matrix now
+// imports too. ~1.1 KB net gzip in the lazy ContextWidget chunk; entry stays
+// put. Approved with the matrix-parity feature request.
+const TOTAL_LIMIT = 435 * 1024;     // 435 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

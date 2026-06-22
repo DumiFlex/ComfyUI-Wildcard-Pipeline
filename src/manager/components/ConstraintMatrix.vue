@@ -23,7 +23,13 @@ import type {
 } from "../api/types";
 import CellRulePopover from "../../components/context/editors/constraint/CellRulePopover.vue";
 import MatrixLegend from "../../components/context/editors/constraint/MatrixLegend.vue";
-import { axisHueAt } from "../../components/shared/axis-color";
+import {
+  groupHue as tagHue,
+  groupLabel,
+  isBucket,
+  orderByGroups,
+  toGroups,
+} from "../../components/shared/matrix-axis";
 
 type RuleState = "neutral" | "exclude" | "boost" | "reduce";
 
@@ -126,84 +132,18 @@ function fmtFactor(f: number): string {
   return f.toFixed(2).replace(/\.?0+$/, "");
 }
 
-// ── Axis grouping (target = columns, source = rows) ─────────────
-interface TagMeta {
-  tag: string;
-  axisIndex: number;   // -1 = ungrouped
-  axisName: string;
-  groupStart: boolean; // first tag of its axis — drives the divider + label
-}
-/** Order `tags` by axis (grouped first, in axis order; ungrouped last) and
- *  stamp each with its axis index + whether it opens a new group. Cell
- *  lookups stay keyed by tag name, so reordering for display is safe. */
-function orderByGroups(tags: string[], groups: Record<string, string[]>): TagMeta[] {
-  const out: TagMeta[] = [];
-  const seen = new Set<string>();
-  Object.keys(groups).forEach((axis, ai) => {
-    let first = true;
-    for (const t of groups[axis] ?? []) {
-      if (seen.has(t) || !tags.includes(t)) continue;
-      seen.add(t);
-      out.push({ tag: t, axisIndex: ai, axisName: axis, groupStart: first });
-      first = false;
-    }
-  });
-  let firstUngrouped = true;
-  for (const t of tags) {
-    if (seen.has(t)) continue;
-    out.push({ tag: t, axisIndex: -1, axisName: "", groupStart: firstUngrouped });
-    firstUngrouped = false;
-  }
-  return out;
-}
+// ── Axis grouping (target = columns, source = rows). Ordering, grouping,
+// bucket detection + hues come from the shared matrix-axis module so this grid
+// and the canvas MatrixSection stay identical. ──────────────────
 const orderedRows = computed(() => orderByGroups(props.rows, props.sourceGroups));
 const orderedCols = computed(() => orderByGroups(props.cols, props.targetGroups));
-
-/** A contiguous run of tags belonging to one axis (or the trailing ungrouped
- *  run). Columns render one band per group spanning its tags; row groups with
- *  >1 tag get a header chip, solo groups fold the name into the tag. */
-interface AxisGroup {
-  axisIndex: number;   // -1 = ungrouped
-  axisName: string;
-  tags: string[];
-  grouped: boolean;
-}
-function toGroups(ordered: TagMeta[]): AxisGroup[] {
-  const groups: AxisGroup[] = [];
-  for (const m of ordered) {
-    if (m.groupStart || groups.length === 0) {
-      groups.push({ axisIndex: m.axisIndex, axisName: m.axisName, tags: [], grouped: m.axisIndex >= 0 });
-    }
-    groups[groups.length - 1].tags.push(m.tag);
-  }
-  return groups;
-}
 const rowGroups = computed(() => toGroups(orderedRows.value));
 const colGroups = computed(() => toGroups(orderedCols.value));
-/** True when at least one column axis is grouped — then the header grows a
- *  band row (axis names) above the tag row. Flat/ungrouped cols keep one row. */
-/** A group is a "bucket" — the catch-all uncategorized run — when it has no
- *  axis (ungrouped) or a blank axis name. Buckets are labelled "uncategorized"
- *  + tinted neutral instead of rendering as a blank band/chip. */
-function isBucket(grp: AxisGroup): boolean {
-  return !grp.grouped || grp.axisName.trim().length === 0;
-}
-function groupLabel(grp: AxisGroup): string {
-  return isBucket(grp) ? "uncategorized" : grp.axisName;
-}
-/** True when at least one column / row axis is a NAMED group — then the
- *  leftover bucket is worth labelling. A fully-flat matrix (no named axis)
- *  keeps the legacy source/target tint and grows no band/chip. */
+/** True when at least one column / row axis is a NAMED group — then the header
+ *  grows a band/chip and the leftover bucket is worth labelling. A fully-flat
+ *  matrix keeps the legacy source/target tint and grows no band/chip. */
 const hasColBands = computed(() => colGroups.value.some((g) => !isBucket(g)));
 const hasRowGroups = computed(() => rowGroups.value.some((g) => !isBucket(g)));
-const UNGROUPED_HUE = "var(--wp-text-muted, #8a8a9a)";
-/** Named axes take the shared palette; the uncategorized bucket goes neutral
- *  grey when it's labelled (mixed layout), else keeps the legacy source/target
- *  tint (fully-flat matrix). */
-function tagHue(grp: AxisGroup, axis: "source" | "target", labeled: boolean): string {
-  if (!isBucket(grp)) return axisHueAt(grp.axisIndex);
-  return labeled ? UNGROUPED_HUE : `var(--wp-constraint-${axis})`;
-}
 
 // The column band row's height is measured at runtime so the tag row beneath
 // it can stick at the right `top` offset, independent of font sizing.
