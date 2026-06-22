@@ -501,7 +501,11 @@ defineExpose({ cellAt });
   max-width: 100%;
   max-height: 60vh;
 }
-.wp-mx-grid table { border-collapse: collapse; }
+/* `separate` + zero spacing (NOT `collapse`) — sticky header cells with
+ * border-collapse have a Chromium paint bug where scrolled cells bleed through
+ * the frozen row/column. The 4px inter-cell gap still comes from th/td padding,
+ * so the layout is unchanged. */
+.wp-mx-grid table { border-collapse: separate; border-spacing: 0; }
 /* 2px cell padding = the 4px inter-cell gap. Sticky headers fill with the
  * OPAQUE grid bg so scrolled cells can't bleed through them; that fill also
  * paints the padding strip, which is what reads as the gap. */
