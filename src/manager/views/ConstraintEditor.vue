@@ -126,6 +126,7 @@ interface WildcardOption { id: string; value: string; weight: number; sub_catego
 interface WildcardPayloadShape {
   options?: WildcardOption[];
   sub_categories?: string[];
+  tag_groups?: Record<string, string[]>;
 }
 
 const name = ref("");
@@ -515,6 +516,16 @@ const sourceSubCategories = computed<string[]>(() => {
   if (sourceWildcardId.value) return Object.keys(matrix.value ?? {});
   return [];
 });
+
+// Per-axis grouping (tag_groups) for the matrix headers — colors + orders
+// the row/col tags by sub-category axis. Empty when the wildcard has no
+// axes; the matrix then falls back to flat source/target-tinted headers.
+const sourceGroups = computed<Record<string, string[]>>(
+  () => (sourceWildcard.value?.payload as WildcardPayloadShape)?.tag_groups ?? {},
+);
+const targetGroups = computed<Record<string, string[]>>(
+  () => (targetWildcard.value?.payload as WildcardPayloadShape)?.tag_groups ?? {},
+);
 
 const targetSubCategories = computed<string[]>(() => {
   const wc = targetWildcard.value;
@@ -1254,6 +1265,8 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
         :model-value="matrix"
         :source-name="sourceWildcard?.name ?? (sourceWildcardName ?? '')"
         :target-name="targetWildcard?.name ?? (targetWildcardName ?? '')"
+        :source-groups="sourceGroups"
+        :target-groups="targetGroups"
         :readonly="refMissing"
         data-test="matrix-grid"
         @update:model-value="onMatrixUpdate"

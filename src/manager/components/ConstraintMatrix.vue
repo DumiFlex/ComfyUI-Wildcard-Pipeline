@@ -15,7 +15,7 @@
  * Single popover lives in a body portal so it never picks up the cell's
  * hover / clipping context — same fix the canvas grid applies.
  */
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type {
   ConstraintCell,
   ConstraintMatrix,
@@ -23,6 +23,7 @@ import type {
 } from "../api/types";
 import CellRulePopover from "../../components/context/editors/constraint/CellRulePopover.vue";
 import MatrixLegend from "../../components/context/editors/constraint/MatrixLegend.vue";
+import { axisHueAt } from "../../components/shared/axis-color";
 
 type RuleState = "neutral" | "exclude" | "boost" | "reduce";
 
@@ -32,6 +33,13 @@ interface Props {
   modelValue: ConstraintMatrix;
   sourceName?: string; // wildcard name shown in the source axis tag
   targetName?: string; // wildcard name shown in the target axis tag
+  /** Sub-category axes (tag_groups) of the source/target wildcards:
+   *  axis name → member tags. When present, the matrix orders its rows /
+   *  cols by axis and colors each group via `axisHueAt` (mirrors the
+   *  wildcard editor's per-axis chip hues). Empty → flat, source/target-
+   *  tinted headers as before. */
+  sourceGroups?: Record<string, string[]>;
+  targetGroups?: Record<string, string[]>;
   // Read-only recovery view: the source/target wildcard was deleted, so the
   // configured rules are shown for understanding only. Cells don't open the
   // rule popover; reattach a live wildcard to edit.
@@ -40,6 +48,8 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   sourceName: "",
   targetName: "",
+  sourceGroups: () => ({}),
+  targetGroups: () => ({}),
   readonly: false,
 });
 const emit = defineEmits<{ "update:modelValue": [value: ConstraintMatrix] }>();
@@ -115,6 +125,80 @@ function fmtFactor(f: number): string {
   if (f >= 10) return f.toFixed(0);
   return f.toFixed(2).replace(/\.?0+$/, "");
 }
+
+// ── Axis grouping (target = columns, source = rows) ─────────────
+interface TagMeta {
+  tag: string;
+  axisIndex: number;   // -1 = ungrouped
+  axisName: string;
+  groupStart: boolean; // first tag of its axis — drives the divider + label
+}
+/** Order `tags` by axis (grouped first, in axis order; ungrouped last) and
+ *  stamp each with its axis index + whether it opens a new group. Cell
+ *  lookups stay keyed by tag name, so reordering for display is safe. */
+function orderByGroups(tags: string[], groups: Record<string, string[]>): TagMeta[] {
+  const out: TagMeta[] = [];
+  const seen = new Set<string>();
+  Object.keys(groups).forEach((axis, ai) => {
+    let first = true;
+    for (const t of groups[axis] ?? []) {
+      if (seen.has(t) || !tags.includes(t)) continue;
+      seen.add(t);
+      out.push({ tag: t, axisIndex: ai, axisName: axis, groupStart: first });
+      first = false;
+    }
+  });
+  let firstUngrouped = true;
+  for (const t of tags) {
+    if (seen.has(t)) continue;
+    out.push({ tag: t, axisIndex: -1, axisName: "", groupStart: firstUngrouped });
+    firstUngrouped = false;
+  }
+  return out;
+}
+const orderedRows = computed(() => orderByGroups(props.rows, props.sourceGroups));
+const orderedCols = computed(() => orderByGroups(props.cols, props.targetGroups));
+
+/** A contiguous run of tags belonging to one axis (or the trailing ungrouped
+ *  run). Columns render one band per group spanning its tags; row groups with
+ *  >1 tag get a header chip, solo groups fold the name into the tag. */
+interface AxisGroup {
+  axisIndex: number;   // -1 = ungrouped
+  axisName: string;
+  tags: string[];
+  grouped: boolean;
+}
+function toGroups(ordered: TagMeta[]): AxisGroup[] {
+  const groups: AxisGroup[] = [];
+  for (const m of ordered) {
+    if (m.groupStart || groups.length === 0) {
+      groups.push({ axisIndex: m.axisIndex, axisName: m.axisName, tags: [], grouped: m.axisIndex >= 0 });
+    }
+    groups[groups.length - 1].tags.push(m.tag);
+  }
+  return groups;
+}
+const rowGroups = computed(() => toGroups(orderedRows.value));
+const colGroups = computed(() => toGroups(orderedCols.value));
+/** True when at least one column axis is grouped — then the header grows a
+ *  band row (axis names) above the tag row. Flat/ungrouped cols keep one row. */
+const hasColBands = computed(() => colGroups.value.some((g) => g.grouped));
+/** Ungrouped tags keep the legacy source/target tint; grouped tags take their
+ *  axis hue from the shared palette. */
+function tagHue(grp: AxisGroup, axis: "source" | "target"): string {
+  return grp.grouped ? axisHueAt(grp.axisIndex) : `var(--wp-constraint-${axis})`;
+}
+
+// The column band row's height is measured at runtime so the tag row beneath
+// it can stick at the right `top` offset, independent of font sizing.
+const gridEl = ref<HTMLElement | null>(null);
+function measureBands(): void {
+  const grid = gridEl.value;
+  if (!grid) return;
+  const band = grid.querySelector<HTMLElement>(".wp-mx-th-band");
+  grid.style.setProperty("--wp-mx-band-h", `${band?.offsetHeight ?? 0}px`);
+}
+watch(colGroups, () => void nextTick(measureBands));
 
 function cellAriaLabel(row: string, col: string): string {
   const c = cellAt(row, col);
@@ -228,12 +312,15 @@ onMounted(() => {
   window.addEventListener("keydown", onDocumentKeydown);
   window.addEventListener("scroll", reanchorPopover, true);
   window.addEventListener("resize", reanchorPopover);
+  window.addEventListener("resize", measureBands);
+  void nextTick(measureBands);
 });
 onBeforeUnmount(() => {
   window.removeEventListener("mousedown", onDocumentMousedown);
   window.removeEventListener("keydown", onDocumentKeydown);
   window.removeEventListener("scroll", reanchorPopover, true);
   window.removeEventListener("resize", reanchorPopover);
+  window.removeEventListener("resize", measureBands);
 });
 
 defineExpose({ cellAt });
@@ -256,50 +343,105 @@ defineExpose({ cellAt });
       </span>
     </div>
 
-    <div class="wp-mx-grid">
+    <div ref="gridEl" class="wp-mx-grid">
       <table>
         <thead>
           <tr>
-            <th class="wp-mx-corner" data-test="mx-corner">
-              <span class="row-1">↓ source</span>
-              <span class="row-2">→ target</span>
+            <th class="wp-mx-corner" :rowspan="hasColBands ? 2 : 1" data-test="mx-corner">
+              <span class="chip">
+                <span class="row-1">↓ source</span>
+                <span class="row-2">→ target</span>
+              </span>
             </th>
-            <th
-              v-for="col in cols"
-              :key="col"
-              class="wp-mx-th-col"
-            >{{ col }}</th>
+            <!-- Grouped cols: a band row names each axis, spanning its tags. -->
+            <template v-if="hasColBands">
+              <th
+                v-for="(grp, gi) in colGroups"
+                :key="`band-${gi}`"
+                class="wp-mx-th-band"
+                :class="{ 'wp-mx-th-band--none': !grp.grouped }"
+                :colspan="grp.tags.length"
+                :style="grp.grouped ? { '--ax': axisHueAt(grp.axisIndex) } : undefined"
+                :title="grp.grouped ? grp.axisName : undefined"
+              >
+                <span v-if="grp.grouped" class="chip">{{ grp.axisName }}</span>
+              </th>
+            </template>
+            <!-- Flat cols: tag headers sit directly in the single header row. -->
+            <template v-else>
+              <th
+                v-for="c in orderedCols"
+                :key="c.tag"
+                class="wp-mx-th-col"
+                :style="{ '--ax': 'var(--wp-constraint-target)' }"
+              ><span class="chip">{{ c.tag }}</span></th>
+            </template>
+          </tr>
+          <tr v-if="hasColBands">
+            <template v-for="(grp, gi) in colGroups" :key="`coltags-${gi}`">
+              <th
+                v-for="(tag, ti) in grp.tags"
+                :key="tag"
+                class="wp-mx-th-col"
+                :class="{ 'group-start': grp.grouped && ti === 0 }"
+                :style="{ '--ax': tagHue(grp, 'target') }"
+              ><span class="chip">{{ tag }}</span></th>
+            </template>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in rows" :key="row">
-            <th class="wp-mx-th-row">{{ row }}</th>
-            <td v-for="col in cols" :key="col" class="wp-mx-td">
-              <div
-                class="wp-mx-cell"
-                :class="[
-                  `s-${toState(cellAt(row, col).mode)}`,
-                  { open: isOpenAt(row, col) },
-                ]"
-                :data-mode="cellAt(row, col).mode"
-                :data-test="`cell-${row}-${col}`"
-                :aria-label="cellAriaLabel(row, col)"
-                role="button"
-                tabindex="0"
-                @click="openPopover(row, col, $event)"
-                @keydown.enter.prevent="openPopover(row, col, $event as unknown as MouseEvent)"
-                @keydown.space.prevent="openPopover(row, col, $event as unknown as MouseEvent)"
+          <template v-for="(grp, gi) in rowGroups" :key="`rowgrp-${gi}`">
+            <!-- Multi-tag row group: a header chip naming the axis, pinned left. -->
+            <tr v-if="grp.grouped && grp.tags.length > 1" class="wp-mx-grp-row">
+              <th
+                class="wp-mx-grp-head"
+                :colspan="orderedCols.length + 1"
+                :style="{ '--ax': axisHueAt(grp.axisIndex) }"
+                :title="grp.axisName"
+              ><span class="chip">{{ grp.axisName }}</span></th>
+            </tr>
+            <tr v-for="tag in grp.tags" :key="tag">
+              <th
+                class="wp-mx-th-row"
+                :class="{
+                  'group-start': grp.grouped && tag === grp.tags[0],
+                  solo: grp.grouped && grp.tags.length === 1,
+                }"
+                :style="{ '--ax': tagHue(grp, 'source') }"
               >
-                <span class="glyph">{{ MODE_ICON[cellAt(row, col).mode] }}</span>
-                <span
-                  v-if="cellAt(row, col).mode === 'boost' || cellAt(row, col).mode === 'reduce'"
-                  class="factor"
-                >×{{ fmtFactor(cellAt(row, col).factor) }}</span>
-              </div>
-            </td>
-          </tr>
-          <tr v-if="rows.length === 0">
-            <td :colspan="cols.length + 1" class="wp-mx-empty">
+                <span v-if="grp.grouped && grp.tags.length === 1" class="chip">
+                  <span class="eye">{{ grp.axisName }}</span>
+                  <span class="v">{{ tag }}</span>
+                </span>
+                <span v-else class="chip">{{ tag }}</span>
+              </th>
+              <td v-for="c in orderedCols" :key="c.tag" class="wp-mx-td">
+                <div
+                  class="wp-mx-cell"
+                  :class="[
+                    `s-${toState(cellAt(tag, c.tag).mode)}`,
+                    { open: isOpenAt(tag, c.tag) },
+                  ]"
+                  :data-mode="cellAt(tag, c.tag).mode"
+                  :data-test="`cell-${tag}-${c.tag}`"
+                  :aria-label="cellAriaLabel(tag, c.tag)"
+                  role="button"
+                  tabindex="0"
+                  @click="openPopover(tag, c.tag, $event)"
+                  @keydown.enter.prevent="openPopover(tag, c.tag, $event as unknown as MouseEvent)"
+                  @keydown.space.prevent="openPopover(tag, c.tag, $event as unknown as MouseEvent)"
+                >
+                  <span class="glyph">{{ MODE_ICON[cellAt(tag, c.tag).mode] }}</span>
+                  <span
+                    v-if="cellAt(tag, c.tag).mode === 'boost' || cellAt(tag, c.tag).mode === 'reduce'"
+                    class="factor"
+                  >×{{ fmtFactor(cellAt(tag, c.tag).factor) }}</span>
+                </div>
+              </td>
+            </tr>
+          </template>
+          <tr v-if="orderedRows.length === 0">
+            <td :colspan="orderedCols.length + 1" class="wp-mx-empty">
               No source values yet — add options to the source wildcard first.
             </td>
           </tr>
@@ -386,52 +528,162 @@ defineExpose({ cellAt });
 }
 .wp-mx-axis .arrow { font: 14px var(--wp-font-mono, monospace); line-height: 1; }
 
-/* ── Grid frame ────────────────────────────────────────────── */
+/* ── Grid frame — scrolls on BOTH axes; headers + corner freeze ── */
 .wp-mx-grid {
   display: inline-block;
   background: var(--wp-bg-deep, var(--wp-bg-1, #0e1015));
   border: 1px solid var(--wp-border);
   border-radius: 6px;
   padding: 6px;
-  overflow-x: auto;
+  overflow: auto;
   max-width: 100%;
+  max-height: 60vh;
 }
-.wp-mx-grid table { border-collapse: separate; border-spacing: 4px; }
+.wp-mx-grid table { border-collapse: collapse; }
+/* 2px cell padding = the 4px inter-cell gap. Sticky headers fill with the
+ * OPAQUE grid bg so scrolled cells can't bleed through them; that fill also
+ * paints the padding strip, which is what reads as the gap. */
 .wp-mx-grid th,
-.wp-mx-grid td { padding: 0; vertical-align: middle; }
+.wp-mx-grid td { padding: 2px; vertical-align: middle; }
+.wp-mx-grid thead th,
+.wp-mx-grid tbody th {
+  position: sticky;
+  background: var(--wp-bg-deep, var(--wp-bg-1, #0e1015));
+}
+.wp-mx-grid thead th { top: 0; z-index: 2; }
+.wp-mx-grid tbody th { left: 0; z-index: 1; }
+/* Band row pins to the very top; the tag row sticks just beneath it (offset =
+ * the measured band height). Corner outranks both so it stays in the angle. */
+.wp-mx-grid thead th.wp-mx-th-band { top: 0; z-index: 3; }
+.wp-mx-grid thead th.wp-mx-th-col { top: var(--wp-mx-band-h, 0px); z-index: 2; }
+.wp-mx-grid thead th.wp-mx-corner { top: 0; left: 0; z-index: 5; }  /* both axes */
 
-.wp-mx-corner {
+/* Inner chips carry the rounded visual + per-axis tint (--ax, set inline);
+ * the <th> itself stays an opaque grid-bg backing for the sticky fill. */
+.wp-mx-corner .chip {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   width: 96px;
-  height: 32px;
+  min-height: 36px;
+  height: 100%;
+  padding: 5px 8px;
+  border-radius: 4px;
   font-family: var(--wp-font-mono, monospace);
   font-size: 9px;
-  color: var(--wp-text-dim, var(--wp-text-muted));
-  border-radius: 4px;
+  line-height: 1.3;
   text-align: left;
-  padding: 0 8px !important;
-  background: color-mix(in srgb, var(--wp-text) 4%, transparent);
+  background: color-mix(in srgb, var(--wp-text) 4%, var(--wp-bg-1));
 }
-.wp-mx-corner .row-1 { display: block; color: var(--wp-constraint-source-text); line-height: 1.3; }
-.wp-mx-corner .row-2 { display: block; color: var(--wp-constraint-target-text); line-height: 1.3; }
+.wp-mx-corner .row-1 { color: var(--wp-constraint-source-text); }
+.wp-mx-corner .row-2 { color: var(--wp-constraint-target-text); }
 
-.wp-mx-th-col {
-  width: 64px;
-  height: 28px;
-  font: 700 10px var(--wp-font-sans, sans-serif);
-  color: var(--wp-constraint-target-text);
-  background: color-mix(in oklab, var(--wp-constraint-target) 10%, transparent);
-  border-radius: 4px;
-  text-align: center;
+/* Column band — axis name spanning its tags, sitting atop the tag row. */
+.wp-mx-th-band .chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  padding: 0 8px;
+  font: 700 9px var(--wp-font-sans, sans-serif);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-radius: 4px 4px 0 0;
+  color: color-mix(in srgb, var(--ax) 82%, var(--wp-text));
+  background: color-mix(in srgb, var(--ax) 15%, var(--wp-bg-1));
+  border-bottom: 2px solid color-mix(in srgb, var(--ax) 55%, transparent);
 }
-.wp-mx-th-row {
+.wp-mx-th-band--none { background: transparent; }
+
+/* Column tag chip — the per-tag header below the band (or the only header row
+ * when columns are ungrouped). */
+.wp-mx-th-col .chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  min-height: 28px;
+  padding: 3px 2px;
+  font: 700 10px var(--wp-font-sans, sans-serif);
+  border-radius: 0 0 4px 4px;
+  color: color-mix(in srgb, var(--ax) 72%, var(--wp-text));
+  background: color-mix(in srgb, var(--ax) 9%, var(--wp-bg-1));
+}
+.wp-mx-th-col.group-start .chip {
+  border-left: 2px solid color-mix(in srgb, var(--ax) 45%, transparent);
+}
+
+/* Row group header chip — names the axis above its tags, pinned to the left
+ * edge so it stays visible while cells scroll horizontally. The <th> spans the
+ * row but stays transparent; only the chip is visible + sticky. */
+.wp-mx-grp-row .wp-mx-grp-head {
+  position: relative;          /* override the sticky tbody th; the chip pins */
+  z-index: 1;
+  background: transparent;
+  padding: 4px 0 1px;
+  text-align: left;
+}
+.wp-mx-grp-head .chip {
+  position: sticky;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  max-width: 220px;
+  height: 22px;
+  padding: 0 11px;
+  font: 700 9px var(--wp-font-sans, sans-serif);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-radius: 0 4px 4px 0;
+  color: color-mix(in srgb, var(--ax) 80%, var(--wp-text));
+  background: color-mix(in srgb, var(--ax) 16%, var(--wp-bg-1));
+  border-left: 3px solid var(--ax);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--wp-bg) 55%, transparent);
+}
+
+/* Row tag chip — one per source sub-category, left accent in the axis hue. */
+.wp-mx-th-row .chip {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
   width: 96px;
   height: 36px;
+  padding: 0 10px;
   font: 700 10px var(--wp-font-sans, sans-serif);
-  color: var(--wp-constraint-source-text);
-  background: color-mix(in oklab, var(--wp-constraint-source) 10%, transparent);
-  border-radius: 4px;
-  text-align: right;
-  padding: 0 12px !important;
+  text-align: left;
+  border-radius: 0 4px 4px 0;
+  color: color-mix(in srgb, var(--ax) 76%, var(--wp-text));
+  background: color-mix(in srgb, var(--ax) 10%, var(--wp-bg-1));
+  border-left: 2px solid color-mix(in srgb, var(--ax) 48%, transparent);
+}
+/* Solo grouped axis — no header chip row; fold the axis name in as an eyebrow. */
+.wp-mx-th-row.solo .chip {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  border-left-width: 3px;
+  border-left-color: var(--ax);
+}
+.wp-mx-th-row.solo .eye {
+  max-width: 78px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 700 7px var(--wp-font-sans, sans-serif);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--ax) 72%, var(--wp-text-dim));
+}
+.wp-mx-th-row.solo .v {
+  font: 600 11px var(--wp-font-sans, sans-serif);
+  color: var(--wp-text);
 }
 .wp-mx-td { position: relative; }
 

@@ -204,4 +204,58 @@ describe("ConstraintMatrix.vue", () => {
     expect(ths.every((th) => th.text() !== "" && th.text().toLowerCase() !== "null")).toBe(true);
     wrap.unmount();
   });
+
+  it("orders cols into axis bands and rows into grouped sections, colored by axis", () => {
+    const wrap = mount(ConstraintMatrix, {
+      props: {
+        rows: ["tempting", "man", "woman", "clothed"], // deliberately unordered
+        cols: ["vivid", "warm", "cool"],
+        modelValue: {},
+        sourceGroups: { gender: ["man", "woman"], rating: ["clothed", "tempting"] },
+        targetGroups: { temperature: ["warm", "cool"], saturation: ["vivid"] },
+      },
+      attachTo: document.body,
+    });
+    // Column TAG cells re-ordered by axis order: temperature(warm, cool) then
+    // saturation(vivid). The axis NAME no longer lives in the tag cell.
+    const cols = wrap.findAll(".wp-mx-th-col");
+    expect(cols.map((c) => c.text())).toEqual(["warm", "cool", "vivid"]);
+    // Axis names live in a band row, each spanning its group's tags.
+    const bands = wrap.findAll(".wp-mx-th-band");
+    expect(bands.map((b) => b.text()).filter((t) => t.length > 0))
+      .toEqual(["temperature", "saturation"]);
+    const temperature = bands.find((b) => b.text() === "temperature");
+    expect(temperature?.attributes("colspan")).toBe("2");          // spans warm + cool
+    expect(temperature?.attributes("style") ?? "").toContain("--ax"); // carries the hue
+    // Rows re-ordered: gender(man, woman) then rating(clothed, tempting).
+    const rows = wrap.findAll(".wp-mx-th-row");
+    expect(rows.map((r) => r.text())).toEqual(["man", "woman", "clothed", "tempting"]);
+    // Each multi-tag row group gets a pinned header chip naming the axis.
+    const heads = wrap.findAll(".wp-mx-grp-head");
+    expect(heads.map((h) => h.text())).toEqual(["gender", "rating"]);
+    expect(heads[0].attributes("style") ?? "").toContain("--ax");
+    wrap.unmount();
+  });
+
+  it("a solo grouped row axis folds its name into the tag (no header chip row)", () => {
+    const wrap = mount(ConstraintMatrix, {
+      props: {
+        rows: ["lean", "man", "woman"],
+        cols: ["warm"],
+        modelValue: {},
+        sourceGroups: { gender: ["man", "woman"], build: ["lean"] },
+        targetGroups: {},
+      },
+      attachTo: document.body,
+    });
+    // gender (2 tags) gets a header chip; build (1 tag) does NOT.
+    const heads = wrap.findAll(".wp-mx-grp-head");
+    expect(heads.map((h) => h.text())).toEqual(["gender"]);
+    // The solo "build" axis row carries the axis name as an eyebrow over "lean".
+    const solo = wrap.find(".wp-mx-th-row.solo");
+    expect(solo.exists()).toBe(true);
+    expect(solo.text()).toContain("build");
+    expect(solo.text()).toContain("lean");
+    wrap.unmount();
+  });
 });
