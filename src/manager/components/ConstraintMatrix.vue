@@ -182,11 +182,27 @@ const rowGroups = computed(() => toGroups(orderedRows.value));
 const colGroups = computed(() => toGroups(orderedCols.value));
 /** True when at least one column axis is grouped — then the header grows a
  *  band row (axis names) above the tag row. Flat/ungrouped cols keep one row. */
-const hasColBands = computed(() => colGroups.value.some((g) => g.grouped));
-/** Ungrouped tags keep the legacy source/target tint; grouped tags take their
- *  axis hue from the shared palette. */
-function tagHue(grp: AxisGroup, axis: "source" | "target"): string {
-  return grp.grouped ? axisHueAt(grp.axisIndex) : `var(--wp-constraint-${axis})`;
+/** A group is a "bucket" — the catch-all uncategorized run — when it has no
+ *  axis (ungrouped) or a blank axis name. Buckets are labelled "uncategorized"
+ *  + tinted neutral instead of rendering as a blank band/chip. */
+function isBucket(grp: AxisGroup): boolean {
+  return !grp.grouped || grp.axisName.trim().length === 0;
+}
+function groupLabel(grp: AxisGroup): string {
+  return isBucket(grp) ? "uncategorized" : grp.axisName;
+}
+/** True when at least one column / row axis is a NAMED group — then the
+ *  leftover bucket is worth labelling. A fully-flat matrix (no named axis)
+ *  keeps the legacy source/target tint and grows no band/chip. */
+const hasColBands = computed(() => colGroups.value.some((g) => !isBucket(g)));
+const hasRowGroups = computed(() => rowGroups.value.some((g) => !isBucket(g)));
+const UNGROUPED_HUE = "var(--wp-text-muted, #8a8a9a)";
+/** Named axes take the shared palette; the uncategorized bucket goes neutral
+ *  grey when it's labelled (mixed layout), else keeps the legacy source/target
+ *  tint (fully-flat matrix). */
+function tagHue(grp: AxisGroup, axis: "source" | "target", labeled: boolean): string {
+  if (!isBucket(grp)) return axisHueAt(grp.axisIndex);
+  return labeled ? UNGROUPED_HUE : `var(--wp-constraint-${axis})`;
 }
 
 // The column band row's height is measured at runtime so the tag row beneath
@@ -359,12 +375,12 @@ defineExpose({ cellAt });
                 v-for="(grp, gi) in colGroups"
                 :key="`band-${gi}`"
                 class="wp-mx-th-band"
-                :class="{ 'wp-mx-th-band--none': !grp.grouped }"
+                :class="{ 'wp-mx-th-band--bucket': isBucket(grp) }"
                 :colspan="grp.tags.length"
-                :style="grp.grouped ? { '--ax': axisHueAt(grp.axisIndex) } : undefined"
-                :title="grp.grouped ? grp.axisName : undefined"
+                :style="{ '--ax': tagHue(grp, 'target', true) }"
+                :title="groupLabel(grp)"
               >
-                <span v-if="grp.grouped" class="chip">{{ grp.axisName }}</span>
+                <span class="chip">{{ groupLabel(grp) }}</span>
               </th>
             </template>
             <!-- Flat cols: tag headers sit directly in the single header row. -->
@@ -383,33 +399,39 @@ defineExpose({ cellAt });
                 v-for="(tag, ti) in grp.tags"
                 :key="tag"
                 class="wp-mx-th-col"
-                :class="{ 'group-start': grp.grouped && ti === 0 }"
-                :style="{ '--ax': tagHue(grp, 'target') }"
+                :class="{ 'group-start': !isBucket(grp) && ti === 0 }"
+                :style="{ '--ax': tagHue(grp, 'target', hasColBands) }"
               ><span class="chip">{{ tag }}</span></th>
             </template>
           </tr>
         </thead>
         <tbody>
           <template v-for="(grp, gi) in rowGroups" :key="`rowgrp-${gi}`">
-            <!-- Multi-tag row group: a header chip naming the axis, pinned left. -->
-            <tr v-if="grp.grouped && grp.tags.length > 1" class="wp-mx-grp-row">
+            <!-- Header chip: a named multi-tag axis, OR the labelled
+                 uncategorized bucket (when the matrix has any named axis). A
+                 named solo axis folds into an eyebrow instead (below). -->
+            <tr
+              v-if="(!isBucket(grp) && grp.tags.length > 1) || (isBucket(grp) && hasRowGroups)"
+              class="wp-mx-grp-row"
+            >
               <th
                 class="wp-mx-grp-head"
+                :class="{ 'wp-mx-grp-head--bucket': isBucket(grp) }"
                 :colspan="orderedCols.length + 1"
-                :style="{ '--ax': axisHueAt(grp.axisIndex) }"
-                :title="grp.axisName"
-              ><span class="chip">{{ grp.axisName }}</span></th>
+                :style="{ '--ax': tagHue(grp, 'source', true) }"
+                :title="groupLabel(grp)"
+              ><span class="chip">{{ groupLabel(grp) }}</span></th>
             </tr>
             <tr v-for="tag in grp.tags" :key="tag">
               <th
                 class="wp-mx-th-row"
                 :class="{
-                  'group-start': grp.grouped && tag === grp.tags[0],
-                  solo: grp.grouped && grp.tags.length === 1,
+                  'group-start': !isBucket(grp) && tag === grp.tags[0],
+                  solo: !isBucket(grp) && grp.tags.length === 1,
                 }"
-                :style="{ '--ax': tagHue(grp, 'source') }"
+                :style="{ '--ax': tagHue(grp, 'source', hasRowGroups) }"
               >
-                <span v-if="grp.grouped && grp.tags.length === 1" class="chip">
+                <span v-if="!isBucket(grp) && grp.tags.length === 1" class="chip">
                   <span class="eye">{{ grp.axisName }}</span>
                   <span class="v">{{ tag }}</span>
                 </span>
@@ -596,7 +618,10 @@ defineExpose({ cellAt });
   background: color-mix(in srgb, var(--ax) 15%, var(--wp-bg-1));
   border-bottom: 2px solid color-mix(in srgb, var(--ax) 55%, transparent);
 }
-.wp-mx-th-band--none { background: transparent; }
+/* The uncategorized bucket reads as a catch-all, not a real axis: same neutral
+ * tint (via --ax) but a dashed edge instead of the solid axis accent. */
+.wp-mx-th-band--bucket .chip { border-bottom-style: dashed; }
+.wp-mx-grp-head--bucket .chip { border-left-style: dashed; }
 
 /* Column tag chip — the per-tag header below the band (or the only header row
  * when columns are ungrouped). */

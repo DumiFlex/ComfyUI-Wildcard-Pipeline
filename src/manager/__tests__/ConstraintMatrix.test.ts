@@ -258,4 +258,35 @@ describe("ConstraintMatrix.vue", () => {
     expect(solo.text()).toContain("lean");
     wrap.unmount();
   });
+
+  it("labels the leftover ungrouped run 'uncategorized' instead of leaving it blank", () => {
+    const wrap = mount(ConstraintMatrix, {
+      props: {
+        rows: ["romantic", "elegant", "bold"], // mood axis + ungrouped "bold"
+        cols: ["vivid", "muted", "yellow"], // saturation axis + ungrouped "yellow"
+        modelValue: {},
+        sourceGroups: { mood: ["romantic", "elegant"] },
+        targetGroups: { saturation: ["vivid", "muted"] },
+      },
+      attachTo: document.body,
+    });
+    // Row groups: the real axis then a labelled "uncategorized" bucket (not blank).
+    const heads = wrap.findAll(".wp-mx-grp-head").map((h) => h.text());
+    expect(heads).toEqual(["mood", "uncategorized"]);
+    // Column bands: the real axis then a labelled "uncategorized" band.
+    const bands = wrap.findAll(".wp-mx-th-band").map((b) => b.text()).filter((t) => t.length > 0);
+    expect(bands).toEqual(["saturation", "uncategorized"]);
+    // The bucket carries a non-axis (neutral) hue, not a palette colour.
+    const bucketBand = wrap.findAll(".wp-mx-th-band").find((b) => b.text() === "uncategorized");
+    expect(bucketBand?.classes()).toContain("wp-mx-th-band--bucket");
+    wrap.unmount();
+  });
+
+  it("stays flat with no 'uncategorized' label when nothing is grouped", () => {
+    const wrap = mountGrid({}, ["red", "blue"], ["warm", "cool"]);
+    expect(wrap.findAll(".wp-mx-grp-head").length).toBe(0);
+    expect(wrap.findAll(".wp-mx-th-band").length).toBe(0);
+    expect(wrap.text().toLowerCase()).not.toContain("uncategorized");
+    wrap.unmount();
+  });
 });
