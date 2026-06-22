@@ -1,3 +1,24 @@
+## 🎉 Wildcard Pipeline 2.6.0
+
+📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
+
+<details>
+<summary><b>📋 Full changelog</b> — click to expand the per-commit list</summary>
+
+
+* fix(api): keep duplicate children when creating or updating bundles ([c1f45a3](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/c1f45a3))
+* fix(constraint): drop matrix scroll-container padding that leaked scrolled cells ([d3e25b7](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/d3e25b7))
+* fix(constraint): stop scrolled cells bleeding through the frozen matrix headers ([4098009](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/4098009))
+* fix(manager): decimal option probabilities and distinct sub-category group colors ([11d205b](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/11d205b))
+* feat(constraint): group the canvas matrix axes like the SPA ([538db06](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/538db06))
+* feat(manager): author and save bundles directly in the manager ([a77e60b](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/a77e60b))
+* feat(manager): group constraint matrix axes with header chips and column bands ([c0f354c](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/c0f354c))
+* feat(manager): label the matrix ungrouped axis run as "uncategorized" ([eac852f](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/eac852f))
+* feat(manager): show uuid + option meta in reattach pickers to tell duplicates apart ([0bbf150](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/0bbf150))
+* feat(manager): type-to-filter all dropdowns ([b3537ad](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/b3537ad))
+
+</details>
+
 ## 🎉 Wildcard Pipeline 2.5.0
 
 📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
