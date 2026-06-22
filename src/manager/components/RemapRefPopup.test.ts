@@ -48,6 +48,14 @@ describe("RemapRefPopup", () => {
     expect(rows[0].text()).toContain("texture");
   });
 
+  it("shows each candidate's uuid so same-named wildcards are distinguishable", () => {
+    const rd = refData();
+    rd.uuidToName = new Map([["beef0001", "colour"], ["beef0002", "colour"]]);
+    const w = mountPopup({ cachedName: "", refData: rd });
+    expect(w.find("[data-test-id='remap-candidate-beef0001']").text()).toContain("beef0001");
+    expect(w.find("[data-test-id='remap-candidate-beef0002']").text()).toContain("beef0002");
+  });
+
   it("after picking a wildcard, shows the dropped-token preview struck through", async () => {
     const w = mountPopup();
     await w.find("[data-test-id='remap-candidate-beef0001']").trigger("click");

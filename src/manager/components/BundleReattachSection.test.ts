@@ -44,16 +44,28 @@ describe("BundleReattachSection", () => {
     const w = mountSection();
     // Leaf (wildcard) child → module candidates.
     await w.find("[data-test='bundle-reattach-btn-aaa']").trigger("click");
-    const leafCands = w.findAll("[data-test='bundle-reattach-candidate']").map((c) => c.text());
+    const leafCands = w.findAll("[data-test='bundle-reattach-cand-name']").map((c) => c.text());
     expect(leafCands).toContain("Live module");
     expect(leafCands).toContain("Other module");
     expect(leafCands).not.toContain("Live bundle");
 
     // Bundle child → bundle candidates.
     await w.find("[data-test='bundle-reattach-btn-bbb']").trigger("click");
-    const bundleCands = w.findAll("[data-test='bundle-reattach-candidate']").map((c) => c.text());
+    const bundleCands = w.findAll("[data-test='bundle-reattach-cand-name']").map((c) => c.text());
     expect(bundleCands).toContain("Live bundle");
     expect(bundleCands).not.toContain("Live module");
+  });
+
+  it("shows each candidate's id so same-named modules are distinguishable", async () => {
+    const w = mountSection({
+      moduleCandidates: [
+        { id: "mod1", name: "color" },
+        { id: "mod2", name: "color" },
+      ],
+    });
+    await w.find("[data-test='bundle-reattach-btn-aaa']").trigger("click");
+    expect(w.find("[data-test-id='bundle-reattach-candidate-mod1']").text()).toContain("mod1");
+    expect(w.find("[data-test-id='bundle-reattach-candidate-mod2']").text()).toContain("mod2");
   });
 
   it("picking + confirming emits reattach with childId + newId + newName", async () => {

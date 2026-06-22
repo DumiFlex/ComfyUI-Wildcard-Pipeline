@@ -66,7 +66,7 @@ const openSide = ref<Side | null>(null);
 const query = ref("");
 const picked = ref<{ uuid: string; name: string } | null>(null);
 
-interface Candidate { uuid: string; name: string }
+interface Candidate { uuid: string; name: string; count: number; subCats: string[] }
 
 function candidates(): Candidate[] {
   const q = query.value.trim().toLowerCase();
@@ -78,13 +78,26 @@ function candidates(): Candidate[] {
   for (const [uuid, name] of props.refData.uuidToName) {
     if (dead.has(uuid)) continue; // can't re-pick the dangling uuid
     if (q && !name.toLowerCase().includes(q)) continue;
-    out.push({ uuid, name });
+    out.push({
+      uuid,
+      name,
+      count: props.refData.uuidToOptionsCount.get(uuid) ?? 0,
+      subCats: props.refData.uuidToSubCategories.get(uuid) ?? [],
+    });
   }
   return out.sort((a, b) => {
     const ax = a.name.toLowerCase() === cached ? 0 : 1;
     const bx = b.name.toLowerCase() === cached ? 0 : 1;
     return ax !== bx ? ax - bx : a.name.localeCompare(b.name);
   });
+}
+
+/** One-line disambiguator under the name: option count + declared
+ *  sub-categories. Same-named wildcards differ here (or, failing that, by the
+ *  always-shown uuid). */
+function candMeta(c: Candidate): string {
+  const opts = `${c.count} opt${c.count === 1 ? "" : "s"}`;
+  return c.subCats.length ? `${opts} · ${c.subCats.join(", ")}` : opts;
 }
 
 function openDropdown(side: Side): void {
@@ -153,7 +166,13 @@ function confirm(side: Side): void {
             :data-test-id="`reattach-candidate-${c.uuid}`"
             :class="{ 'rb__cand--picked': c.uuid === picked?.uuid }"
             @click="pick(c)"
-          >{{ c.name }}</li>
+          >
+            <span class="rb__cand-main">
+              <span class="rb__cand-name" data-test="reattach-cand-name">{{ c.name }}</span>
+              <code class="rb__cand-uuid">{{ c.uuid }}</code>
+            </span>
+            <span class="rb__cand-meta">{{ candMeta(c) }}</span>
+          </li>
         </ul>
         <p v-if="picked && (droppedCellCount ?? 0) > 0" class="rb__dropped" data-test="reattach-dropped-source">
           {{ droppedCellCount }} cells dropped — not on “{{ picked.name }}”.
@@ -194,7 +213,13 @@ function confirm(side: Side): void {
             :data-test-id="`reattach-candidate-${c.uuid}`"
             :class="{ 'rb__cand--picked': c.uuid === picked?.uuid }"
             @click="pick(c)"
-          >{{ c.name }}</li>
+          >
+            <span class="rb__cand-main">
+              <span class="rb__cand-name" data-test="reattach-cand-name">{{ c.name }}</span>
+              <code class="rb__cand-uuid">{{ c.uuid }}</code>
+            </span>
+            <span class="rb__cand-meta">{{ candMeta(c) }}</span>
+          </li>
         </ul>
         <p v-if="picked && (droppedCellCount ?? 0) > 0" class="rb__dropped" data-test="reattach-dropped-target">
           {{ droppedCellCount }} cells dropped — not on “{{ picked.name }}”.
@@ -273,9 +298,13 @@ function confirm(side: Side): void {
   outline: none;
 }
 .rb__list { list-style: none; margin: 6px 0; padding: 0; max-height: 150px; overflow-y: auto; }
-.rb__cand { padding: 5px 8px; border-radius: 4px; cursor: pointer; color: var(--wp-text, #e7e7ee); }
+.rb__cand { display: flex; flex-direction: column; gap: 2px; padding: 5px 8px; border-radius: 4px; cursor: pointer; color: var(--wp-text, #e7e7ee); }
 .rb__cand:hover { background: color-mix(in oklab, var(--wp-accent, #8b5cf6) 18%, transparent); }
 .rb__cand--picked { background: color-mix(in oklab, var(--wp-accent, #8b5cf6) 28%, transparent); }
+.rb__cand-main { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.rb__cand-name { font: 11px var(--wp-font-sans); }
+.rb__cand-uuid { flex-shrink: 0; font: 10px var(--wp-font-mono, monospace); color: var(--wp-text-dim, #6e6e7c); }
+.rb__cand-meta { font: 10px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text-dim, #6e6e7c)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rb__dropped { margin: 6px 0 0; font: 11px var(--wp-font-sans); color: var(--wp-warn, #f59e0b); }
 .rb__blast { margin: 6px 0 0; display: flex; align-items: center; gap: 5px; font: 11px var(--wp-font-sans); color: var(--wp-warn, #f59e0b); }
 .rb__note { margin: 6px 0 0; font: 10px var(--wp-font-sans); color: var(--wp-text-dim, #6e6e7c); }

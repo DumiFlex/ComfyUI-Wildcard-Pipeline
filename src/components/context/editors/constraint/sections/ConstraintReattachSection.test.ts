@@ -80,7 +80,28 @@ describe("ConstraintReattachSection", () => {
     const w = mountSection({ sourceCachedName: "colour", refData: rd });
     await w.find("[data-test='reattach-btn-source']").trigger("click");
     const first = w.findAll("[data-test='reattach-candidate']")[0];
-    expect(first.text()).toBe("colour");
+    expect(first.find("[data-test='reattach-cand-name']").text()).toBe("colour");
+  });
+
+  it("shows each candidate's uuid + option/sub-category meta so duplicates are distinguishable", async () => {
+    const rd = refData();
+    // Two library wildcards share the name "colour" — only the uuid + content
+    // tell them apart. Without these the picker is a coin-flip.
+    rd.uuidToName = new Map([["beef0001", "colour"], ["beef0002", "colour"]]);
+    rd.uuidToSubCategories = new Map([["beef0001", ["warm", "cold"]], ["beef0002", ["hue"]]]);
+    rd.uuidToOptionsCount = new Map([["beef0001", 2], ["beef0002", 9]]);
+    const w = mountSection({ refData: rd });
+    await w.find("[data-test='reattach-btn-source']").trigger("click");
+    const c1 = w.find("[data-test-id='reattach-candidate-beef0001']");
+    const c2 = w.find("[data-test-id='reattach-candidate-beef0002']");
+    // The 8-hex uuid is the definitive disambiguator.
+    expect(c1.text()).toContain("beef0001");
+    expect(c2.text()).toContain("beef0002");
+    // Option count + sub-categories give a human-readable tiebreaker.
+    expect(c1.text()).toContain("2 opts");
+    expect(c1.text()).toContain("warm");
+    expect(c2.text()).toContain("9 opts");
+    expect(c2.text()).toContain("hue");
   });
 
   it("renders the community-download button only on a downloadable side", () => {

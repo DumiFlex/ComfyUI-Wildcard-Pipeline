@@ -143,7 +143,10 @@ function confirm(childId: string): void {
             :data-test-id="`bundle-reattach-candidate-${c.id}`"
             :class="{ 'rb__cand--picked': c.id === picked?.id }"
             @click="pick(c)"
-          >{{ c.name }}</li>
+          >
+            <span class="rb__cand-name" data-test="bundle-reattach-cand-name">{{ c.name }}</span>
+            <code class="rb__cand-id">{{ c.id }}</code>
+          </li>
           <li v-if="candidatesFor(child).length === 0" class="rb__empty">
             No local {{ child.type === "bundle" ? "bundles" : "modules" }} to reattach.
           </li>
@@ -226,7 +229,9 @@ function confirm(childId: string): void {
   outline: none;
 }
 .rb__list { list-style: none; margin: 6px 0; padding: 0; max-height: 150px; overflow-y: auto; }
-.rb__cand { padding: 5px 8px; border-radius: 4px; cursor: pointer; color: var(--wp-text, #e7e7ee); }
+.rb__cand { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 5px 8px; border-radius: 4px; cursor: pointer; color: var(--wp-text, #e7e7ee); }
+.rb__cand-name { font: 11px var(--wp-font-sans); }
+.rb__cand-id { flex-shrink: 0; font: 10px var(--wp-font-mono, monospace); color: var(--wp-text-dim, #6e6e7c); }
 .rb__cand:hover { background: color-mix(in oklab, var(--wp-accent, #8b5cf6) 18%, transparent); }
 .rb__cand--picked { background: color-mix(in oklab, var(--wp-accent, #8b5cf6) 28%, transparent); }
 .rb__empty { padding: 5px 8px; font: 11px var(--wp-font-sans); color: var(--wp-text-dim, #6e6e7c); }

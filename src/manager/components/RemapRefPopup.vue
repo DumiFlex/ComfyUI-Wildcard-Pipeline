@@ -141,7 +141,7 @@ function doConfirm(): void {
           @click="pick(c.uuid)"
         >
           <span class="wpc-remap__cand-name">{{ c.name }}</span>
-          <span class="wpc-remap__cand-meta">{{ c.count }} opts</span>
+          <span class="wpc-remap__cand-meta"><code class="wpc-remap__cand-uuid" data-test="remap-cand-uuid">{{ c.uuid }}</code> · {{ c.count }} opts</span>
         </li>
       </ul>
 
@@ -249,6 +249,7 @@ function doConfirm(): void {
 .wpc-remap__candidate:hover { background: color-mix(in oklab, var(--wp-accent, #8b5cf6) 18%, transparent); }
 .wpc-remap__candidate--picked { background: color-mix(in oklab, var(--wp-accent, #8b5cf6) 28%, transparent); }
 .wpc-remap__cand-meta { font: 10px var(--wp-font-mono); color: var(--wp-text-dim, #8a8a93); }
+.wpc-remap__cand-uuid { font: inherit; color: var(--wp-text-muted, var(--wp-text-dim, #8a8a93)); }
 .wpc-remap__reconcile {
   border-top: 1px dashed var(--wp-border, rgba(255,255,255,0.12));
   padding-top: 8px;
