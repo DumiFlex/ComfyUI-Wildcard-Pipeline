@@ -48,10 +48,21 @@ function lockAll(): void {
   emit("update:seedLocks", next);
 }
 function unlockAll(): void { emit("update:seedLocks", {}); }
-function copyAll(): void {
-  const text = derived.value
-    .map((s, i) => `#${i + 1}: ${props.seedLocks[String(i)] ?? s}`).join("\n");
-  void navigator.clipboard?.writeText(text);
+/** Build the `#N: seed` clipboard text. lockedOnly → just the locked rows
+ *  (round-trips through Paste to re-lock exactly those); else every iteration
+ *  with locks overlaid. */
+function copyText(lockedOnly: boolean): string {
+  if (lockedOnly) {
+    return Object.keys(props.seedLocks)
+      .map(Number)
+      .sort((a, b) => a - b)
+      .map((i) => `#${i + 1}: ${props.seedLocks[String(i)]}`)
+      .join("\n");
+  }
+  return derived.value.map((s, i) => `#${i + 1}: ${props.seedLocks[String(i)] ?? s}`).join("\n");
+}
+function copyAll(ev: MouseEvent): void {
+  void navigator.clipboard?.writeText(copyText(ev.altKey)); // Alt-click → locked seeds only
   copied.value = true;
   if (copiedTimer) clearTimeout(copiedTimer);
   copiedTimer = setTimeout(() => { copied.value = false; }, 1500);
@@ -102,7 +113,8 @@ onBeforeUnmount(() => {
           <span class="sm__bar-spacer" />
           <button class="ghost" data-test="mx-seed-lockall" @click="lockAll">Lock all</button>
           <button class="ghost" data-test="mx-seed-unlockall" @click="unlockAll">Unlock all</button>
-          <button class="ghost" :class="{ 'ghost--copied': copied }" data-test="mx-seed-copy" @click="copyAll">
+          <button class="ghost" :class="{ 'ghost--copied': copied }" data-test="mx-seed-copy"
+            title="Copy all seeds · Alt-click to copy only the locked ones" @click="copyAll">
             <svg v-if="copied" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7" /></svg>
             {{ copied ? "Copied" : "Copy" }}
           </button>

@@ -3,11 +3,17 @@ import { describe, it, expect } from "vitest";
 import SeedListModal from "../SeedListModal.vue";
 
 // jsdom has no real clipboard; defineProperty so it survives a read-only getter.
-function stubClipboard(text: string) {
+// Returns the array capturing every writeText payload.
+function stubClipboard(readValue = "") {
+  const writes: string[] = [];
   Object.defineProperty(navigator, "clipboard", {
-    value: { readText: () => Promise.resolve(text), writeText: () => Promise.resolve() },
+    value: {
+      readText: () => Promise.resolve(readValue),
+      writeText: (t: string) => { writes.push(t); return Promise.resolve(); },
+    },
     configurable: true,
   });
+  return writes;
 }
 
 function modal(props = {}) {
@@ -89,5 +95,17 @@ describe("SeedListModal", () => {
     await w.find('[data-test="mx-seed-paste"]').trigger("click");
     await flushPromises();
     expect(w.emitted("update:seedLocks")).toBeUndefined();
+  });
+  it("plain-click Copy writes every seed with locks overlaid", async () => {
+    const writes = stubClipboard();
+    const w = modal({ count: 3, seedLocks: { "1": 999 } }); // sequential base 42 → 42,43,44
+    await w.find('[data-test="mx-seed-copy"]').trigger("click");
+    expect(writes[writes.length - 1]).toBe("#1: 42\n#2: 999\n#3: 44");
+  });
+  it("Alt+click Copy writes only the locked seeds", async () => {
+    const writes = stubClipboard();
+    const w = modal({ count: 4, seedLocks: { "1": 999 } });
+    await w.find('[data-test="mx-seed-copy"]').trigger("click", { altKey: true });
+    expect(writes[writes.length - 1]).toBe("#2: 999");
   });
 });
