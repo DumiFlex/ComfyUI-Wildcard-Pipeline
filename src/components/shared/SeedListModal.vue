@@ -2,7 +2,7 @@
 /** Per-iteration seed modal — shared by the Context Loop + Seed List
  *  node widgets. Computes the derived list locally (seed-derive mirror)
  *  and overlays seed_locks; edits re-emit the full merged lock map. */
-import { computed, onBeforeUnmount, onMounted } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { deriveLoopSeeds, type SeedStrategy } from "./seed-derive";
 import SeedLockRow from "./SeedLockRow.vue";
 
@@ -21,6 +21,8 @@ const emit = defineEmits<{ "update:seedLocks": [next: Record<string, number>]; c
 
 const derived = computed(() => deriveLoopSeeds(props.baseSeed, Math.max(1, props.count), props.strategy));
 const lockedCount = computed(() => Object.keys(props.seedLocks).length);
+const copied = ref(false);
+let copiedTimer: ReturnType<typeof setTimeout> | undefined;
 
 function onRow(p: { index: number; seed: number | null }): void {
   const next = { ...props.seedLocks };
@@ -38,12 +40,18 @@ function copyAll(): void {
   const text = derived.value
     .map((s, i) => `#${i + 1}: ${props.seedLocks[String(i)] ?? s}`).join("\n");
   void navigator.clipboard?.writeText(text);
+  copied.value = true;
+  if (copiedTimer) clearTimeout(copiedTimer);
+  copiedTimer = setTimeout(() => { copied.value = false; }, 1500);
 }
 function onKeydown(ev: KeyboardEvent): void {
   if (ev.key === "Escape") { ev.preventDefault(); emit("close"); }
 }
 onMounted(() => window.addEventListener("keydown", onKeydown));
-onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", onKeydown);
+  if (copiedTimer) clearTimeout(copiedTimer);
+});
 </script>
 
 <template>
@@ -68,7 +76,10 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
           <span class="sm__bar-spacer" />
           <button class="ghost" data-test="mx-seed-lockall" @click="lockAll">Lock all</button>
           <button class="ghost" data-test="mx-seed-unlockall" @click="unlockAll">Unlock all</button>
-          <button class="ghost" data-test="mx-seed-copy" @click="copyAll">Copy</button>
+          <button class="ghost" :class="{ 'ghost--copied': copied }" data-test="mx-seed-copy" @click="copyAll">
+            <svg v-if="copied" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7" /></svg>
+            {{ copied ? "Copied" : "Copy" }}
+          </button>
         </div>
 
         <div v-if="overrideHint" class="sm__hint" data-test="mx-seed-hint">
@@ -110,8 +121,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 .sm__strat { font: 600 9px var(--wp-font-mono); text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: 3px; color: var(--wp-text-muted, var(--wp-text2)); background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); }
 .sm__lockcount { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: 3px; color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,.12); border: 1px solid color-mix(in srgb, var(--wp-accent) 40%, transparent); }
 .sm__bar-spacer { flex: 1; }
-.ghost { padding: 4px 9px; border-radius: 3px; border: 1px solid var(--wp-border); background: transparent; color: var(--wp-text-muted, var(--wp-text2)); font: 11px var(--wp-font-sans); cursor: pointer; }
+.ghost { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 3px; border: 1px solid var(--wp-border); background: transparent; color: var(--wp-text-muted, var(--wp-text2)); font: 11px var(--wp-font-sans); cursor: pointer; }
 .ghost:hover { border-color: var(--wp-border-strong, var(--wp-border2)); color: var(--wp-text); }
+.ghost--copied, .ghost--copied:hover { border-color: var(--wp-green, #6bc96f); color: var(--wp-green, #6bc96f); }
 .sm__hint { display: flex; align-items: center; gap: 7px; padding: 7px 14px; flex-shrink: 0; font: 11px var(--wp-font-sans); color: color-mix(in srgb, var(--wp-amber, #fbbf24) 75%, var(--wp-text-muted)); background: color-mix(in srgb, var(--wp-amber, #fbbf24) 9%, transparent); border-bottom: 1px solid var(--wp-border); }
 .sm__hint svg { flex-shrink: 0; color: var(--wp-amber, #fbbf24); }
 .sm__list { overflow-y: auto; padding: 6px; flex: 1; min-height: 0; }

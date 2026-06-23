@@ -47,4 +47,13 @@ describe("SeedListModal", () => {
     await w.find('[data-test="mx-seed-unlockall"]').trigger("click");
     expect(lastEmit(w)).toEqual({});
   });
+  it("Copy flashes a 'Copied' indicator on click", async () => {
+    const w = modal();
+    const btn = () => w.find('[data-test="mx-seed-copy"]');
+    expect(btn().classes()).not.toContain("ghost--copied");
+    await btn().trigger("click");
+    expect(btn().classes()).toContain("ghost--copied");
+    expect(btn().text()).toContain("Copied");
+    w.unmount(); // clears the 1.5s reset timer via onBeforeUnmount
+  });
 });
