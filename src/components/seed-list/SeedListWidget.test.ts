@@ -176,4 +176,13 @@ describe("SeedListWidget seeds button", () => {
     await wr.find('[data-test="seedlist-seeds-btn"]').trigger("click");
     expect(wr.findComponent(SeedListModal).props("strategy")).toBe("hash_index");
   });
+  it("passes an override hint to the modal only when override_seed is on", async () => {
+    const on = ws({ override_seed: true });
+    await on.find('[data-test="seedlist-seeds-btn"]').trigger("click");
+    expect(on.findComponent(SeedListModal).props("overrideHint")).toBeTruthy();
+
+    const off = ws(); // override_seed false by default
+    await off.find('[data-test="seedlist-seeds-btn"]').trigger("click");
+    expect(off.findComponent(SeedListModal).props("overrideHint")).toBeFalsy();
+  });
 });

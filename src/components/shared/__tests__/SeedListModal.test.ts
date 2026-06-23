@@ -5,7 +5,7 @@ import SeedListModal from "../SeedListModal.vue";
 function modal(props = {}) {
   return mount(SeedListModal, {
     props: { nodeName: "WP Context Loop", baseSeed: 42, count: 4, strategy: "sequential",
-             seedLocks: { "1": 999 }, showOverrideHint: true, ...props },
+             seedLocks: { "1": 999 }, overrideHint: "Test hint.", ...props },
     attachTo: document.body,
     // The modal body renders inside `<Teleport to="body">`; stubbing teleport
     // renders the children in place so the wrapper's `find()` reaches them
@@ -26,9 +26,11 @@ describe("SeedListModal", () => {
   it("shows the locked-count pill", () => {
     expect(modal().find('[data-test="mx-seed-lockcount"]').text()).toMatch(/1 locked/i);
   });
-  it("shows the override hint only when showOverrideHint is true", () => {
-    expect(modal().find('[data-test="mx-seed-hint"]').exists()).toBe(true);
-    expect(modal({ showOverrideHint: false }).find('[data-test="mx-seed-hint"]').exists()).toBe(false);
+  it("shows the override hint with the provided text; hidden when empty", () => {
+    const shown = modal({ overrideHint: "Heads up: override is on." });
+    expect(shown.find('[data-test="mx-seed-hint"]').exists()).toBe(true);
+    expect(shown.find('[data-test="mx-seed-hint"]').text()).toContain("Heads up: override is on.");
+    expect(modal({ overrideHint: "" }).find('[data-test="mx-seed-hint"]').exists()).toBe(false);
   });
   it("a row update re-emits update:seedLocks with the merged map", async () => {
     const w = modal({ seedLocks: {} });

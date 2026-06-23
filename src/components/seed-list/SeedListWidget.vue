@@ -201,7 +201,7 @@ function toggleOverrideStrategy(): void {
     </div>
     <SeedListModal v-if="seedsOpen" :node-name="'WP Seed List'" :base-seed="baseSeed"
       :count="count" :strategy="previewStrategy ?? modelValue.strategy" :seed-locks="modelValue.seed_locks ?? {}"
-      :show-override-hint="false"
+      :override-hint="modelValue.override_seed ? 'Base seed comes from the wired loop while Override base seed from loop is on.' : ''"
       @update:seed-locks="onSeedLocks" @close="seedsOpen = false" />
   </div>
 </template>

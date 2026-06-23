@@ -114,4 +114,16 @@ describe("ContextLoopWidget seeds button", () => {
     await wr.find('[data-test="loop-seeds-btn"]').trigger("click");
     expect(wr.findComponent(SeedListModal).exists()).toBe(true);
   });
+  it("capitalizes the bypass row label", () => {
+    expect(ws().text()).toContain("Bypass loop");
+  });
+  it("passes the override hint to the modal only when Override Context seed is off", async () => {
+    const off = ws(); // override_seed false by default → nudge to turn it on
+    await off.find('[data-test="loop-seeds-btn"]').trigger("click");
+    expect(off.findComponent(SeedListModal).props("overrideHint")).toBeTruthy();
+
+    const on = ws({ override_seed: true });
+    await on.find('[data-test="loop-seeds-btn"]').trigger("click");
+    expect(on.findComponent(SeedListModal).props("overrideHint")).toBeFalsy();
+  });
 });

@@ -12,8 +12,10 @@ const props = defineProps<{
   count: number;
   strategy: SeedStrategy;
   seedLocks: Record<string, number>;
-  /** Context Loop passes true when "Override Context seed" is OFF. */
-  showOverrideHint: boolean;
+  /** Yellow override notice text; empty/undefined hides it. Context Loop
+   *  shows it when "Override Context seed" is OFF (a nudge); Seed List shows
+   *  it when "Override base seed from loop" is ON (base comes from the loop). */
+  overrideHint?: string;
 }>();
 const emit = defineEmits<{ "update:seedLocks": [next: Record<string, number>]; close: [] }>();
 
@@ -69,9 +71,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
           <button class="ghost" data-test="mx-seed-copy" @click="copyAll">Copy</button>
         </div>
 
-        <div v-if="showOverrideHint" class="sm__hint" data-test="mx-seed-hint">
+        <div v-if="overrideHint" class="sm__hint" data-test="mx-seed-hint">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9" /><path d="M12 11v5" stroke-linecap="round" /><circle cx="12" cy="7.5" r="1" fill="currentColor" stroke="none" /></svg>
-          <span>These seeds apply only when <b>Override Context seed</b> is on.</span>
+          <span>{{ overrideHint }}</span>
         </div>
 
         <div class="sm__list">

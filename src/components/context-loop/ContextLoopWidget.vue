@@ -189,7 +189,7 @@ function toggleTotalInternal(): void {
     </div>
 
     <div class="wp-loop__row">
-      <span class="wp-loop__row-label">bypass loop</span>
+      <span class="wp-loop__row-label">Bypass loop</span>
       <button
         type="button"
         class="wp-loop__switch"
@@ -204,7 +204,7 @@ function toggleTotalInternal(): void {
 
     <SeedListModal v-if="seedsOpen" :node-name="'WP Context Loop'" :base-seed="baseSeed"
       :count="count" :strategy="modelValue.strategy" :seed-locks="modelValue.seed_locks ?? {}"
-      :show-override-hint="!modelValue.override_seed"
+      :override-hint="!modelValue.override_seed ? 'These seeds apply only when Override Context seed is on.' : ''"
       @update:seed-locks="onSeedLocks" @close="seedsOpen = false" />
   </div>
 </template>
