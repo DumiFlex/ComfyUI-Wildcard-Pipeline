@@ -37,6 +37,19 @@ export function create(node: ContextLoopHostNode, inputName: string) {
   // on mute / bypass. Mirrors WP_VarTo* + WP_Cleaner widget patterns.
   const nodeMode = reactiveFromGraph(node, () => node.mode ?? 0, Object.is);
 
+  // Read the stock seed + count widgets reactively so the seed modal
+  // preview updates whenever the user edits those widgets.
+  const baseSeed = reactiveFromGraph(
+    node,
+    () => Number((node.widgets ?? []).find((w) => w.name === "seed")?.value ?? 0),
+    Object.is,
+  );
+  const count = reactiveFromGraph(
+    node,
+    () => Number((node.widgets ?? []).find((w) => w.name === "count")?.value ?? 1),
+    Object.is,
+  );
+
   let host: DomWidgetHost | null = null;
 
   const wrapper: Component = {
@@ -51,6 +64,8 @@ export function create(node: ContextLoopHostNode, inputName: string) {
         h(ContextLoopWidget, {
           modelValue: config.value,
           nodeMode: nodeMode.value,
+          baseSeed: baseSeed.value,
+          count: count.value,
           "onUpdate:modelValue": onUpdate,
         });
     },

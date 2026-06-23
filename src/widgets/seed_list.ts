@@ -37,6 +37,19 @@ export function create(node: SeedListHostNode, inputName: string) {
   // on mute / bypass. Mirrors WP_VarTo* + WP_ContextLoop widget patterns.
   const nodeMode = reactiveFromGraph(node, () => node.mode ?? 0, Object.is);
 
+  // Read the stock base_seed + count widgets reactively so the seed modal
+  // preview updates whenever the user edits those widgets.
+  const baseSeed = reactiveFromGraph(
+    node,
+    () => Number((node.widgets ?? []).find((w) => w.name === "base_seed")?.value ?? 0),
+    Object.is,
+  );
+  const count = reactiveFromGraph(
+    node,
+    () => Number((node.widgets ?? []).find((w) => w.name === "count")?.value ?? 1),
+    Object.is,
+  );
+
   /** Toggle the `disabled` flag on a stock litegraph widget by name.
    *  Litegraph greys the widget out + blocks input when `disabled` is
    *  true. Returns silently when the named widget isn't on the node yet
@@ -80,6 +93,8 @@ export function create(node: SeedListHostNode, inputName: string) {
         h(SeedListWidget, {
           modelValue: config.value,
           nodeMode: nodeMode.value,
+          baseSeed: baseSeed.value,
+          count: count.value,
           "onUpdate:modelValue": onUpdate,
         });
     },
