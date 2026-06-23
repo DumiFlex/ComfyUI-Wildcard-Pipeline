@@ -3,7 +3,7 @@
  *  node widgets. Computes the derived list locally (seed-derive mirror)
  *  and overlays seed_locks; edits re-emit the full merged lock map. */
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { deriveLoopSeeds, type SeedStrategy } from "./seed-derive";
+import { deriveLoopSeeds, parseSeedLocks, type SeedStrategy } from "./seed-derive";
 import SeedLockRow from "./SeedLockRow.vue";
 
 const props = defineProps<{
@@ -22,7 +22,9 @@ const emit = defineEmits<{ "update:seedLocks": [next: Record<string, number>]; c
 const derived = computed(() => deriveLoopSeeds(props.baseSeed, Math.max(1, props.count), props.strategy));
 const lockedCount = computed(() => Object.keys(props.seedLocks).length);
 const copied = ref(false);
+const pasted = ref(false);
 let copiedTimer: ReturnType<typeof setTimeout> | undefined;
+let pastedTimer: ReturnType<typeof setTimeout> | undefined;
 /** Locked indices beyond the current count — shown dimmed below the active
  *  rows so a forgotten out-of-range lock is visible (it re-applies if count
  *  grows back). */
@@ -54,6 +56,19 @@ function copyAll(): void {
   if (copiedTimer) clearTimeout(copiedTimer);
   copiedTimer = setTimeout(() => { copied.value = false; }, 1500);
 }
+/** Read the clipboard, parse the `#N: seed` format Copy produces, and REPLACE
+ *  the whole lock map with it. No-op on empty/garbage so a stray paste can't
+ *  wipe existing locks. Pasted indices beyond count land as inactive rows. */
+async function pasteAll(): Promise<void> {
+  let text = "";
+  try { text = (await navigator.clipboard?.readText()) ?? ""; } catch { text = ""; }
+  const next = parseSeedLocks(text);
+  if (Object.keys(next).length === 0) return;
+  emit("update:seedLocks", next);
+  pasted.value = true;
+  if (pastedTimer) clearTimeout(pastedTimer);
+  pastedTimer = setTimeout(() => { pasted.value = false; }, 1500);
+}
 function onKeydown(ev: KeyboardEvent): void {
   if (ev.key === "Escape") { ev.preventDefault(); emit("close"); }
 }
@@ -61,6 +76,7 @@ onMounted(() => window.addEventListener("keydown", onKeydown));
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", onKeydown);
   if (copiedTimer) clearTimeout(copiedTimer);
+  if (pastedTimer) clearTimeout(pastedTimer);
 });
 </script>
 
@@ -114,6 +130,12 @@ onBeforeUnmount(() => {
         <div class="sm__foot">
           <span class="sm__foot-hint"><kbd>Esc</kbd> to close · locks save with the node</span>
           <span class="sm__foot-spacer" />
+          <button class="ghost" :class="{ 'ghost--copied': pasted }" data-test="mx-seed-paste"
+            title="Replace all locks from copied text" @click="pasteAll">
+            <svg v-if="pasted" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7" /></svg>
+            <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2.5" width="8" height="4" rx="1" /><path d="M8 4.5H6a2 2 0 0 0-2 2V19a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6.5a2 2 0 0 0-2-2h-2" /></svg>
+            {{ pasted ? "Pasted" : "Paste" }}
+          </button>
           <button class="btn" data-test="seed-modal-done" @click="emit('close')">Done</button>
         </div>
       </div>

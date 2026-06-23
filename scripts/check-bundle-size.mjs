@@ -191,7 +191,10 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // effective base/count/strategy from wired loop). Adds preview.ts pure
 // resolver + graph-walk glue in seed_list.ts + previewStrategy prop in
 // SeedListWidget.vue. ~0.4 KB net gzip in the seed_list widget chunk.
-const TOTAL_LIMIT = 444 * 1024;     // 444 KB
+// Bumped 444 -> 445 KB on 2026-06-23 for T16 (seed modal paste-to-replace).
+// Adds parseSeedLocks in seed-derive + pasteAll/Paste button in SeedListModal.
+// Measured 454900 bytes (244 over the 444 ceiling); minimal bump.
+const TOTAL_LIMIT = 445 * 1024;     // 445 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

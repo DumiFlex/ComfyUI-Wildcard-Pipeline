@@ -32,6 +32,26 @@ export function applySeedLocks(derived: number[], locks: Record<number, number>)
   );
 }
 
+const LOCK_LINE = /^\s*#(\d+)\s*:\s*(-?\d+)\s*$/;
+
+/**
+ * Parse the `#N: seed` lines produced by the seed modal's Copy (1-based
+ * display index) back into a 0-based seed_locks map. Non-matching lines are
+ * ignored; values are masked to 50 bits like the engine (negatives normalize
+ * deterministically). UI-only — no Python mirror, so no parity corpus.
+ */
+export function parseSeedLocks(text: string): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const line of text.split(/\r?\n/)) {
+    const m = line.match(LOCK_LINE);
+    if (!m) continue;
+    const display = Number(m[1]);
+    if (display < 1) continue; // #N is 1-based; #0 / #-1 are invalid
+    out[String(display - 1)] = Number(BigInt(m[2]) & MASK);
+  }
+  return out;
+}
+
 function sha256Bytes(msg: string): Uint8Array {
   const K = [
     0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,

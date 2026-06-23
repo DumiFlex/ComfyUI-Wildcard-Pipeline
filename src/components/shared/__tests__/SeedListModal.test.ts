@@ -1,6 +1,14 @@
-import { mount } from "@vue/test-utils";
+import { mount, flushPromises } from "@vue/test-utils";
 import { describe, it, expect } from "vitest";
 import SeedListModal from "../SeedListModal.vue";
+
+// jsdom has no real clipboard; defineProperty so it survives a read-only getter.
+function stubClipboard(text: string) {
+  Object.defineProperty(navigator, "clipboard", {
+    value: { readText: () => Promise.resolve(text), writeText: () => Promise.resolve() },
+    configurable: true,
+  });
+}
 
 function modal(props = {}) {
   return mount(SeedListModal, {
@@ -66,5 +74,20 @@ describe("SeedListModal", () => {
     const w = modal({ count: 3, seedLocks: { "1": 11 } });
     expect(w.find('[data-test="mx-seed-inactive"]').exists()).toBe(false);
     expect(w.findAll('[data-test="seedrow-idx"]')).toHaveLength(3);
+  });
+  it("Paste replaces the whole lock map from the copied text", async () => {
+    stubClipboard("#2: 77\n#3: 88"); // 1-based display → indices 1 and 2
+    const w = modal({ seedLocks: { "0": 1 } }); // existing lock must be replaced, not merged
+    await w.find('[data-test="mx-seed-paste"]').trigger("click");
+    await flushPromises();
+    expect(lastEmit(w)).toEqual({ "1": 77, "2": 88 });
+    expect(w.find('[data-test="mx-seed-paste"]').text()).toContain("Pasted");
+  });
+  it("Paste with no parseable lines leaves locks untouched", async () => {
+    stubClipboard("garbage\nnot a seed line");
+    const w = modal({ seedLocks: { "0": 1 } });
+    await w.find('[data-test="mx-seed-paste"]').trigger("click");
+    await flushPromises();
+    expect(w.emitted("update:seedLocks")).toBeUndefined();
   });
 });
