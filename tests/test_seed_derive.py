@@ -1,3 +1,6 @@
+import json
+import pathlib
+
 from engine.seed_derive import MAX_SAFE_SEED, apply_seed_locks, derive_loop_seeds
 
 
@@ -22,3 +25,9 @@ def test_apply_seed_locks_ignores_out_of_range_indices():
 def test_apply_seed_locks_over_real_derivation():
     derived = derive_loop_seeds(42, 4, "sequential")  # [42, 43, 44, 45]
     assert apply_seed_locks(derived, {2: 7}) == [42, 43, 7, 45]
+
+
+def test_corpus_matches_engine():
+    corpus = json.loads(pathlib.Path("tests/fixtures/seed-derive-corpus.json").read_text())
+    for c in corpus["derive"]:
+        assert derive_loop_seeds(c["base"], c["count"], c["strategy"]) == c["derived"]
