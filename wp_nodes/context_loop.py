@@ -13,7 +13,7 @@ import json
 
 from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 
-from engine.seed_derive import derive_loop_seeds
+from engine.seed_derive import apply_seed_locks, derive_loop_seeds
 from wp_nodes.types import (
     ContextLoopConfigInput,
     ContextLoopWidgetInput,
@@ -39,6 +39,7 @@ def _parse_config(raw: str) -> dict[str, object]:
         "bypass": False,
         "iteration_internal": True,
         "total_internal": True,
+        "seed_locks": {},
     }
     if not raw or not isinstance(raw, str):
         return defaults
@@ -58,6 +59,15 @@ def _parse_config(raw: str) -> dict[str, object]:
     out["bypass"] = bool(parsed.get("bypass", False))
     out["iteration_internal"] = bool(parsed.get("iteration_internal", True))
     out["total_internal"] = bool(parsed.get("total_internal", True))
+    locks_raw = parsed.get("seed_locks", {})
+    locks: dict[int, int] = {}
+    if isinstance(locks_raw, dict):
+        for k, v in locks_raw.items():
+            try:
+                locks[int(k)] = int(v)
+            except (TypeError, ValueError):
+                continue
+    out["seed_locks"] = locks
     return out
 
 
@@ -136,6 +146,7 @@ class WPContextLoop(io.ComfyNode):
         bypass = bool(cfg["bypass"])
         iteration_internal = bool(cfg["iteration_internal"])
         total_internal = bool(cfg["total_internal"])
+        seed_locks: dict[int, int] = cfg["seed_locks"]  # type: ignore[assignment]
 
         # Resolve effective count. `bypass` collapses to single-run while
         # preserving the list-shape output contract — downstream still
@@ -143,7 +154,10 @@ class WPContextLoop(io.ComfyNode):
         effective_count = 1 if bypass else max(1, int(count))
         has_override = override_seed
         derived = (
-            derive_loop_seeds(int(seed), effective_count, strategy)
+            apply_seed_locks(
+                derive_loop_seeds(int(seed), effective_count, strategy),
+                seed_locks,
+            )
             if has_override else None
         )
         # Build the loop_config payload once so the same dict drives both
