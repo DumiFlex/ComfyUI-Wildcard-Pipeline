@@ -60,3 +60,33 @@ def test_locked_seed_wins_over_hold():
     a = _run([m], widget_seed=42, loop_index=0)["x"]
     b = _run([m], widget_seed=999, loop_index=7)["x"]
     assert a == b
+
+
+def _combine(output_var, template, *, seed_scope=None):
+    instance = {}
+    if seed_scope is not None:
+        instance["seed_scope"] = seed_scope
+    return {
+        "type": "combine",
+        "payload": {"output_var": output_var, "template": template},
+        "instance": instance,
+    }
+
+
+COMBINE_TMPL = "{alpha|bravo|charlie|delta|echo|foxtrot|golf|hotel}"
+
+
+def test_hold_combine_is_identical_across_iterations():
+    held = [
+        _run([_combine("y", COMBINE_TMPL, seed_scope="hold")], widget_seed=42, loop_index=k)["y"]
+        for k in range(4)
+    ]
+    assert len(set(held)) == 1
+
+
+def test_vary_combine_changes_across_iterations():
+    varied = [
+        _run([_combine("y", COMBINE_TMPL)], widget_seed=42, loop_index=k)["y"]
+        for k in range(6)
+    ]
+    assert len(set(varied)) > 1

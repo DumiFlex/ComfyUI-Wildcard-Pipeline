@@ -101,7 +101,10 @@ class CombineHandler(ModuleHandler):
         #   - chain seed otherwise      → re-rolls each queue
         # Both feed derive_module_rng(seed, output_var) so locking with
         # locked_seed = chain_seed reproduces the unlocked roll exactly.
-        chain_seed = int(ctx.get("__wp_node_seed__", 0) or 0)
+        if instance.get("seed_scope") == "hold":
+            chain_seed = int(ctx.get("__wp_node_seed_hold__", ctx.get("__wp_node_seed__", 0)) or 0)
+        else:
+            chain_seed = int(ctx.get("__wp_node_seed__", 0) or 0)
         locked_seed = instance.get("locked_seed")
         if isinstance(locked_seed, (int, float)):
             effective_seed = int(locked_seed)
