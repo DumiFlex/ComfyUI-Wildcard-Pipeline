@@ -244,10 +244,14 @@ class PipelineEngine:
         modules: list[Module],
         ctx: Context | None = None,
         seed: int = 0,
+        hold_seed: int | None = None,
+        loop_index: int = 0,
     ) -> Context:
         """Execute modules top-to-bottom, mutating ctx, returning ctx."""
         ctx = {} if ctx is None else ctx
         ctx["__wp_node_seed__"] = seed
+        ctx["__wp_node_seed_hold__"] = hold_seed if hold_seed is not None else seed
+        ctx["__wp_loop_index__"] = loop_index
         ctx["__wp_rng__"] = random.Random(seed)
         ctx.setdefault("__wp_warnings__", [])
         ctx.setdefault("__wp_trace__", [])

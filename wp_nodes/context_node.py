@@ -157,12 +157,24 @@ class WPContext(io.ComfyNode):
         # When ContextLoop is upstream with override_seed=true, the
         # override replaces the widget seed; loop_index>0 XORs in a
         # stable hash shift so each iteration walks a distinct seed.
+        loop_index = int(upstream_internals.get("__wp_loop_index__", 0))
         chain_seed = effective_chain_seed(
             widget_seed=int(seed),
             seed_override=upstream_internals.get("__wp_seed_override__"),
-            loop_index=int(upstream_internals.get("__wp_loop_index__", 0)),
+            loop_index=loop_index,
         )
-        ctx = PipelineEngine().run(module_list, ctx=ctx, seed=chain_seed)
+        hold_seed = effective_chain_seed(
+            widget_seed=int(seed),
+            seed_override=upstream_internals.get("__wp_seed_override__"),
+            loop_index=0,
+        )
+        ctx = PipelineEngine().run(
+            module_list,
+            ctx=ctx,
+            seed=chain_seed,
+            hold_seed=hold_seed,
+            loop_index=loop_index,
+        )
 
         payload = build_payload(ctx, upstream_debug=upstream_debug, seed=chain_seed)
         # Emit two seed-tracking values via the UI payload so the

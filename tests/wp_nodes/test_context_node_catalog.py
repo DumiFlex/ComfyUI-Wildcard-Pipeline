@@ -51,7 +51,7 @@ def _ctx_capture():
     captured: dict = {}
 
     class _FakePipeline:
-        def run(self, modules, *, ctx, seed):
+        def run(self, modules, *, ctx, seed, hold_seed=None, loop_index=0):
             captured.clear()
             captured.update(ctx)
             return ctx
