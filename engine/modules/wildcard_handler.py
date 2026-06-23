@@ -645,7 +645,10 @@ class WildcardHandler(ModuleHandler):
         # unlocked pick exactly. This is the contract the lock UX
         # relies on: the user sees a roll, locks it, captures the
         # current chain seed, future runs reproduce the same roll.
-        chain_seed = int(ctx.get("__wp_node_seed__", 0) or 0)
+        if instance.get("seed_scope") == "hold":
+            chain_seed = int(ctx.get("__wp_node_seed_hold__", ctx.get("__wp_node_seed__", 0)) or 0)
+        else:
+            chain_seed = int(ctx.get("__wp_node_seed__", 0) or 0)
         locked_seed = instance.get("locked_seed")
         if locked_seed is not None:
             try:

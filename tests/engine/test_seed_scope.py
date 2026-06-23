@@ -24,3 +24,39 @@ def test_run_exposes_hold_seed_and_loop_index_in_ctx():
     assert ctx["__wp_loop_index__"] == 3
     assert ctx["__wp_node_seed_hold__"] == expected_hold
     assert ctx["__wp_node_seed__"] != ctx["__wp_node_seed_hold__"]
+
+
+def _wildcard(binding, values, *, seed_scope=None):
+    instance = {"variable_binding": binding}
+    if seed_scope is not None:
+        instance["seed_scope"] = seed_scope
+    options = [{"id": str(i), "value": v, "weight": 1.0} for i, v in enumerate(values)]
+    return {
+        "type": "wildcard",
+        "payload": {"var_binding": binding, "options": options},
+        "instance": instance,
+    }
+
+
+VALUES = ["a", "b", "c", "d", "e", "f", "g", "h"]
+
+
+def test_hold_wildcard_is_identical_across_iterations():
+    held = [
+        _run([_wildcard("x", VALUES, seed_scope="hold")], widget_seed=42, loop_index=k)["x"]
+        for k in range(4)
+    ]
+    assert len(set(held)) == 1
+
+
+def test_vary_wildcard_changes_across_iterations():
+    varied = [_run([_wildcard("x", VALUES)], widget_seed=42, loop_index=k)["x"] for k in range(6)]
+    assert len(set(varied)) > 1
+
+
+def test_locked_seed_wins_over_hold():
+    m = _wildcard("x", VALUES, seed_scope="hold")
+    m["instance"]["locked_seed"] = 12345
+    a = _run([m], widget_seed=42, loop_index=0)["x"]
+    b = _run([m], widget_seed=999, loop_index=7)["x"]
+    assert a == b
