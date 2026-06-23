@@ -20,6 +20,9 @@ export interface ContextLoopConfig {
   iteration_internal: boolean;
   /** Same idea for `$<iteration_var_name>_total`. */
   total_internal: boolean;
+  /** 0-based iteration index (stringified) -> pinned seed. Unlocked
+   *  indices re-derive from base+strategy. Empty by default. */
+  seed_locks: Record<string, number>;
 }
 
 const STRATEGIES = new Set<LoopStrategy>(["sequential", "hash_index", "prime_stride"]);
@@ -32,6 +35,7 @@ export function emptyContextLoopConfig(): ContextLoopConfig {
     bypass: false,
     iteration_internal: true,
     total_internal: true,
+    seed_locks: {},
   };
 }
 
@@ -60,6 +64,13 @@ export function parseContextLoopConfig(raw: string | null | undefined): ContextL
   if (typeof obj.bypass === "boolean") out.bypass = obj.bypass;
   if (typeof obj.iteration_internal === "boolean") out.iteration_internal = obj.iteration_internal;
   if (typeof obj.total_internal === "boolean") out.total_internal = obj.total_internal;
+  if (obj.seed_locks && typeof obj.seed_locks === "object" && !Array.isArray(obj.seed_locks)) {
+    const locks: Record<string, number> = {};
+    for (const [k, v] of Object.entries(obj.seed_locks as Record<string, unknown>)) {
+      if (typeof v === "number" && Number.isFinite(v)) locks[k] = v;
+    }
+    out.seed_locks = locks;
+  }
   return out;
 }
 

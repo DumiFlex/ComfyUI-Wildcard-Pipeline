@@ -18,6 +18,9 @@ export interface SeedListConfig {
   override_count: boolean;
   /** Take `strategy` from the wired loop_config. */
   override_strategy: boolean;
+  /** 0-based iteration index (stringified) -> pinned seed. Unlocked
+   *  indices re-derive from base+strategy. Empty by default. */
+  seed_locks: Record<string, number>;
 }
 
 const STRATEGIES = new Set<SeedListStrategy>(["hash_index", "sequential", "prime_stride"]);
@@ -28,6 +31,7 @@ export function emptySeedListConfig(): SeedListConfig {
     override_seed: false,
     override_count: false,
     override_strategy: false,
+    seed_locks: {},
   };
 }
 
@@ -68,6 +72,13 @@ export function parseSeedListConfig(raw: string | null | undefined): SeedListCon
     const legacy = obj.override_config;
     if (!hasNewCount) out.override_count = legacy;
     if (!hasNewStrategy) out.override_strategy = legacy;
+  }
+  if (obj.seed_locks && typeof obj.seed_locks === "object" && !Array.isArray(obj.seed_locks)) {
+    const locks: Record<string, number> = {};
+    for (const [k, v] of Object.entries(obj.seed_locks as Record<string, unknown>)) {
+      if (typeof v === "number" && Number.isFinite(v)) locks[k] = v;
+    }
+    out.seed_locks = locks;
   }
   return out;
 }
