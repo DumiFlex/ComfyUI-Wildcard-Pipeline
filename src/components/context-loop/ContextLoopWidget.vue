@@ -12,8 +12,9 @@
  * host glue (`src/widgets/context_loop.ts`) serializes to JSON and
  * pushes via `host.setValue` so ComfyUI's widget value matches.
  */
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import type { ContextLoopConfig, LoopStrategy } from "./types";
+import SeedListModal from "../shared/SeedListModal.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -21,8 +22,12 @@ const props = withDefaults(
     /** Litegraph mode: 0 = ALWAYS (live), 2 = NEVER (muted), 4 = BYPASS.
      *  Drives the dim overlay so canvas-side mute/bypass reads visually. */
     nodeMode?: number;
+    /** Base seed forwarded from the host ComfyUI INT widget. */
+    baseSeed?: number;
+    /** Iteration count forwarded from the host ComfyUI INT widget. */
+    count?: number;
   }>(),
-  { nodeMode: 0 },
+  { nodeMode: 0, baseSeed: 0, count: 1 },
 );
 
 const emit = defineEmits<{ "update:modelValue": [next: ContextLoopConfig] }>();
@@ -45,6 +50,13 @@ const OVERRIDE_SEED_TOOLTIP =
 
 const isMuted = computed<boolean>(() => props.nodeMode === 2);
 const isBypassed = computed<boolean>(() => props.nodeMode === 4);
+
+const seedsOpen = ref(false);
+const lockedCount = computed(() => Object.keys(props.modelValue.seed_locks ?? {}).length);
+
+function onSeedLocks(next: Record<string, number>): void {
+  emit("update:modelValue", { ...props.modelValue, seed_locks: next });
+}
 
 function pickStrategy(s: LoopStrategy): void {
   if (props.modelValue.strategy === s) return;
@@ -107,6 +119,14 @@ function toggleTotalInternal(): void {
         </button>
       </div>
     </div>
+
+    <button type="button" class="wp-loop__seedbtn" data-test="loop-seeds-btn" @click="seedsOpen = true">
+      <span class="wp-loop__seedbtn-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10" /><circle cx="20" cy="18" r="1.4" fill="currentColor" stroke="none" /></svg></span>
+      Per-iteration seeds
+      <span class="wp-loop__seedbtn-fill" />
+      <span v-if="lockedCount" class="wp-loop__seedbtn-badge" data-test="loop-seeds-badge">{{ lockedCount }} locked</span>
+      <svg class="wp-loop__seedbtn-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6" /></svg>
+    </button>
 
     <div
       class="wp-loop__row"
@@ -181,6 +201,11 @@ function toggleTotalInternal(): void {
         <span class="wp-loop__switch-thumb" />
       </button>
     </div>
+
+    <SeedListModal v-if="seedsOpen" :node-name="'WP Context Loop'" :base-seed="baseSeed"
+      :count="count" :strategy="modelValue.strategy" :seed-locks="modelValue.seed_locks ?? {}"
+      :show-override-hint="!modelValue.override_seed"
+      @update:seed-locks="onSeedLocks" @close="seedsOpen = false" />
   </div>
 </template>
 
@@ -289,8 +314,8 @@ function toggleTotalInternal(): void {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   margin-left: 2px;
   padding: 0;
   background: transparent;
@@ -306,8 +331,15 @@ function toggleTotalInternal(): void {
   border-color: var(--wp-accent, #c4b5fd);
   color: var(--wp-accent, #c4b5fd);
 }
-.wp-loop__pi-btn .pi { font-size: 11px; }
-.wp-loop__pi-btn-label { font: 600 12px var(--wp-font-mono, monospace); line-height: 1; }
+.wp-loop__pi-btn .pi { font-size: 9px; }
+.wp-loop__pi-btn-label { font: 600 10px var(--wp-font-mono, monospace); line-height: 1; }
+
+.wp-loop__seedbtn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 9px; background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); border-radius: 3px; color: var(--wp-text-muted, var(--wp-text2)); font: 600 10.5px var(--wp-font-sans); cursor: pointer; }
+.wp-loop__seedbtn:hover { border-color: var(--wp-accent); color: var(--wp-accent-text, var(--wp-text)); }
+.wp-loop__seedbtn-ico { color: var(--wp-accent); display: flex; }
+.wp-loop__seedbtn-fill { flex: 1; }
+.wp-loop__seedbtn-badge { font: 600 8px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .05em; padding: 2px 6px; border-radius: 3px; color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,.14); border: 1px solid color-mix(in srgb, var(--wp-accent) 40%, transparent); }
+.wp-loop__seedbtn-chev { color: var(--wp-text-dim, var(--wp-text3)); }
 
 /* Bypass-on visually dims the strategy/override/var rows since the loop
  * is effectively off. The bypass row itself stays bright. */

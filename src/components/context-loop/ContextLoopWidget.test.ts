@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
 import ContextLoopWidget from "./ContextLoopWidget.vue";
+import SeedListModal from "../shared/SeedListModal.vue";
 import { emptyContextLoopConfig } from "./types";
 
 describe("ContextLoopWidget", () => {
@@ -87,5 +88,30 @@ describe("ContextLoopWidget", () => {
       props: { modelValue: { ...emptyContextLoopConfig(), iteration_internal: true } },
     });
     expect(w.find('[data-test="loop-iteration-internal"]').classes()).toContain("wp-loop__pi-btn--on");
+  });
+});
+
+function ws(extra: Partial<ReturnType<typeof emptyContextLoopConfig>> = {}) {
+  return mount(ContextLoopWidget, {
+    props: { modelValue: { ...emptyContextLoopConfig(), ...extra }, baseSeed: 42, count: 4 },
+    attachTo: document.body,
+    global: { stubs: { teleport: true } },
+  });
+}
+
+describe("ContextLoopWidget seeds button", () => {
+  it("renders the Per-iteration seeds button", () => {
+    expect(ws().find('[data-test="loop-seeds-btn"]').exists()).toBe(true);
+  });
+  it("badge shows the locked count when >0", () => {
+    expect(ws({ seed_locks: { "1": 9, "2": 8 } }).find('[data-test="loop-seeds-badge"]').text()).toMatch(/2 locked/i);
+  });
+  it("hides the badge when nothing is locked", () => {
+    expect(ws().find('[data-test="loop-seeds-badge"]').exists()).toBe(false);
+  });
+  it("clicking opens the modal", async () => {
+    const wr = ws();
+    await wr.find('[data-test="loop-seeds-btn"]').trigger("click");
+    expect(wr.findComponent(SeedListModal).exists()).toBe(true);
   });
 });

@@ -178,7 +178,12 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // plus the shared components/shared/matrix-axis module the SPA matrix now
 // imports too. ~1.1 KB net gzip in the lazy ContextWidget chunk; entry stays
 // put. Approved with the matrix-parity feature request.
-const TOTAL_LIMIT = 435 * 1024;     // 435 KB
+// Bumped 435 -> 442 KB on 2026-06-23 for per-iteration seeds modal
+// (T8+T9). ContextLoopWidget gains the SeedListModal + SeedLockRow lazy
+// body (v-if gated) — adds ~5.5 KB net gzip to the ContextLoopWidget
+// lazy chunk. SeedListWidget gains a matching button in T9. Headroom
+// covers both T8 and T9 landings without per-task bump friction.
+const TOTAL_LIMIT = 442 * 1024;     // 442 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;
