@@ -35,7 +35,7 @@ from typing import Any
 
 from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 
-from engine.seed_derive import MAX_SAFE_SEED, derive_loop_seeds
+from engine.seed_derive import MAX_SAFE_SEED, apply_seed_locks, derive_loop_seeds
 from wp_nodes.types import ContextLoopConfigInput, SeedListConfigInput
 
 _STRATEGIES = ("hash_index", "sequential", "prime_stride")
@@ -60,6 +60,7 @@ def _parse_config(raw: Any) -> dict[str, Any]:
         "override_seed": False,
         "override_count": False,
         "override_strategy": False,
+        "seed_locks": {},
     }
     if raw is None:
         return defaults
@@ -97,6 +98,16 @@ def _parse_config(raw: Any) -> dict[str, Any]:
             out["override_count"] = legacy
         if not has_new_strategy:
             out["override_strategy"] = legacy
+
+    locks_raw = parsed.get("seed_locks", {})
+    locks: dict[int, int] = {}
+    if isinstance(locks_raw, dict):
+        for k, v in locks_raw.items():
+            try:
+                locks[int(k)] = int(v)
+            except (TypeError, ValueError):
+                continue
+    out["seed_locks"] = locks
     return out
 
 
@@ -236,5 +247,8 @@ class WPSeedList(io.ComfyNode):
             override_strategy=override_strategy,
             loop_config=loop_config,
         )
-        seeds = derive_loop_seeds(resolved_base, resolved_count, resolved_strategy)
+        seeds = apply_seed_locks(
+            derive_loop_seeds(resolved_base, resolved_count, resolved_strategy),
+            cfg["seed_locks"],
+        )
         return io.NodeOutput(seeds)

@@ -28,6 +28,7 @@ _DEFAULTS = {
     "override_seed": False,
     "override_count": False,
     "override_strategy": False,
+    "seed_locks": {},
 }
 
 
@@ -89,6 +90,7 @@ def test_parse_config_full_valid_payload():
         "override_seed": True,
         "override_count": True,
         "override_strategy": True,
+        "seed_locks": {},
     }
 
 
@@ -501,3 +503,39 @@ def test_schema_seed_output_is_list_typed():
     [seed_out] = schema.outputs
     assert seed_out.is_output_list is True
     assert seed_out.type_name == "INT"
+
+
+# ---------------------------------------------------- seed_locks parsing / execute
+
+
+def test_parse_config_reads_seed_locks():
+    cfg = _parse_config(json.dumps({"seed_locks": {"0": 5, "2": 9}}))
+    assert cfg["seed_locks"] == {0: 5, 2: 9}
+
+
+def test_parse_config_defaults_seed_locks_empty():
+    assert _parse_config("{}")["seed_locks"] == {}
+
+
+def test_parse_config_drops_malformed_seed_locks():
+    cfg = _parse_config(json.dumps({"seed_locks": {"x": "no", "1": 9}}))
+    assert cfg["seed_locks"] == {1: 9}
+
+
+def test_execute_output_reflects_seed_locks():
+    # sequential base 10, count 3 -> [10, 11, 12]; lock index 1 -> 77
+    raw = json.dumps({
+        "strategy": "sequential",
+        "override_seed": False,
+        "override_count": False,
+        "override_strategy": False,
+        "seed_locks": {"1": 77},
+    })
+    out = WPSeedList.execute(
+        base_seed=10,
+        count=3,
+        wp_seed_list_config=raw,
+        loop_config=None,
+    )
+    seeds = _seeds(out)
+    assert seeds == [10, 77, 12]
