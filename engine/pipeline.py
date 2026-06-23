@@ -340,6 +340,22 @@ class PipelineEngine:
                         if hasattr(module, k)
                     }
                 snapshot = coerce_legacy_module(raw)
+                # Per-frame iteration override: patch snapshot["instance"]
+                # for the current loop index BEFORE the handler runs.
+                # iteration_overrides is a dict keyed by stringified index;
+                # the matching partial dict is shallow-merged into instance.
+                _ov = (
+                    raw.get("iteration_overrides")
+                    if isinstance(raw, dict)
+                    else getattr(module, "iteration_overrides", None)
+                )
+                if isinstance(_ov, dict):
+                    _frame_key = str(ctx.get("__wp_loop_index__", 0))
+                    _patch = _ov.get(_frame_key)
+                    if isinstance(_patch, dict) and isinstance(
+                        snapshot.get("instance"), dict
+                    ):
+                        snapshot["instance"] = {**snapshot["instance"], **_patch}
             except Exception as e:
                 logger.warning(
                     "Failed to coerce module %r at index %s: %s", module, index, e
