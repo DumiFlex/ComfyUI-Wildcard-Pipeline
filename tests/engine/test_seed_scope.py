@@ -90,3 +90,27 @@ def test_vary_combine_changes_across_iterations():
         for k in range(6)
     ]
     assert len(set(varied)) > 1
+
+
+# fixed_values: single entry with name="z" and alternation value so the resolver
+# picks one of the 8 options based on the seed — same mechanic as combine.
+FIXED_TMPL = "{a|b|c|d|e|f|g|h}"
+
+
+def _fixed(binding, *, seed_scope=None):
+    instance = {}
+    if seed_scope is not None:
+        instance["seed_scope"] = seed_scope
+    return {
+        "type": "fixed_values",
+        "payload": {"values": [{"name": binding, "value": FIXED_TMPL}]},
+        "instance": instance,
+    }
+
+
+def test_hold_fixed_values_is_identical_across_iterations():
+    held = [
+        _run([_fixed("z", seed_scope="hold")], widget_seed=42, loop_index=k)["z"]
+        for k in range(4)
+    ]
+    assert len(set(held)) == 1

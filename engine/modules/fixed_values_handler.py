@@ -150,7 +150,12 @@ class FixedValuesHandler(ModuleHandler):
             return out
 
         # Effective seed selection (mirrors WildcardHandler + CombineHandler):
-        chain_seed = int(ctx.get("__wp_node_seed__", 0) or 0)
+        if instance.get("seed_scope") == "hold":
+            chain_seed = int(
+                ctx.get("__wp_node_seed_hold__", ctx.get("__wp_node_seed__", 0)) or 0
+            )
+        else:
+            chain_seed = int(ctx.get("__wp_node_seed__", 0) or 0)
         locked_seed = instance.get("locked_seed")
         if isinstance(locked_seed, (int, float)):
             effective_seed = int(locked_seed)
