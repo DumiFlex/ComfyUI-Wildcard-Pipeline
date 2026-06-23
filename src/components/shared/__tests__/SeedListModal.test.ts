@@ -56,4 +56,15 @@ describe("SeedListModal", () => {
     expect(btn().text()).toContain("Copied");
     w.unmount(); // clears the 1.5s reset timer via onBeforeUnmount
   });
+  it("renders locks beyond count as a dimmed inactive group", () => {
+    const w = modal({ count: 3, seedLocks: { "1": 11, "5": 55 } });
+    expect(w.find('[data-test="mx-seed-inactive"]').exists()).toBe(true);
+    // 3 active rows (#1-#3) + the out-of-range lock shown as #6
+    expect(w.findAll('[data-test="seedrow-idx"]').map((n) => n.text())).toEqual(["#1", "#2", "#3", "#6"]);
+  });
+  it("no inactive group when every lock is within count", () => {
+    const w = modal({ count: 3, seedLocks: { "1": 11 } });
+    expect(w.find('[data-test="mx-seed-inactive"]').exists()).toBe(false);
+    expect(w.findAll('[data-test="seedrow-idx"]')).toHaveLength(3);
+  });
 });

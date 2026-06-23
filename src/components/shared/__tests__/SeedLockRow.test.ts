@@ -31,4 +31,10 @@ describe("SeedLockRow", () => {
   it("displays #N (1-based) from the 0-based index", () => {
     expect(row({ index: 2 }).find('[data-test="seedrow-idx"]').text()).toBe("#3");
   });
+  it("inactive dims the row but stays interactive (unlock still emits)", async () => {
+    const w = row({ locked: true, seed: 999, inactive: true });
+    expect(w.find(".srow").classes()).toContain("srow--inactive");
+    await w.find('[data-test="seedrow-lock"]').trigger("click");
+    expect(w.emitted("update")![0][0]).toEqual({ index: 0, seed: null });
+  });
 });

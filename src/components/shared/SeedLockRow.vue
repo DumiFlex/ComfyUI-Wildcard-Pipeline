@@ -7,6 +7,9 @@ const props = defineProps<{
   derived: number;     // computed seed for this index (preview when unlocked)
   locked: boolean;
   seed: number | null; // locked seed value when locked
+  /** Locked index beyond the current count — dimmed but still editable;
+   *  re-activates if count grows back. */
+  inactive?: boolean;
 }>();
 const emit = defineEmits<{ update: [payload: { index: number; seed: number | null }] }>();
 
@@ -29,7 +32,7 @@ function bump(d: 1 | -1) {
 </script>
 
 <template>
-  <div class="srow" :class="{ 'srow--locked': locked }">
+  <div class="srow" :class="{ 'srow--locked': locked, 'srow--inactive': inactive }">
     <span class="srow__idx" data-test="seedrow-idx">#{{ index + 1 }}</span>
     <button type="button" class="toggle" :class="{ 'toggle--on': locked }"
       data-test="seedrow-lock" role="switch" :aria-checked="locked" @click="onLock">
@@ -65,6 +68,9 @@ function bump(d: 1 | -1) {
 <style scoped>
 .srow { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 5px; }
 .srow--locked { background: rgba(99,102,241,0.07); box-shadow: inset 2px 0 0 var(--wp-accent, #6366f1); }
+/* out-of-range lock: dimmed ("deemed down") but still interactive — hover lifts it. */
+.srow--inactive { opacity: .5; }
+.srow--inactive:hover { opacity: .85; }
 .srow__idx { flex-shrink: 0; width: 30px; text-align: right; font: 600 11px var(--wp-font-mono, monospace); color: var(--wp-text-dim, #7a7d88); }
 .srow--locked .srow__idx { color: var(--wp-accent-text, #c4b5fd); }
 .srow__fill { flex: 1; }

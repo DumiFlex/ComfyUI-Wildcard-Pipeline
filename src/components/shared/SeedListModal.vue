@@ -23,6 +23,16 @@ const derived = computed(() => deriveLoopSeeds(props.baseSeed, Math.max(1, props
 const lockedCount = computed(() => Object.keys(props.seedLocks).length);
 const copied = ref(false);
 let copiedTimer: ReturnType<typeof setTimeout> | undefined;
+/** Locked indices beyond the current count — shown dimmed below the active
+ *  rows so a forgotten out-of-range lock is visible (it re-applies if count
+ *  grows back). */
+const inactiveLocks = computed(() => {
+  const active = derived.value.length;
+  return Object.keys(props.seedLocks)
+    .map(Number)
+    .filter((i) => Number.isInteger(i) && i >= active)
+    .sort((a, b) => a - b);
+});
 
 function onRow(p: { index: number; seed: number | null }): void {
   const next = { ...props.seedLocks };
@@ -91,6 +101,14 @@ onBeforeUnmount(() => {
           <SeedLockRow v-for="(s, i) in derived" :key="i" :index="i" :derived="s"
             :locked="Object.prototype.hasOwnProperty.call(seedLocks, String(i))"
             :seed="seedLocks[String(i)] ?? null" @update="onRow" />
+          <template v-if="inactiveLocks.length">
+            <div class="sm__inactive-label" data-test="mx-seed-inactive">
+              Inactive · won't apply at count {{ derived.length }}
+            </div>
+            <SeedLockRow v-for="i in inactiveLocks" :key="`inact-${i}`" :index="i"
+              :derived="seedLocks[String(i)]" :locked="true" :seed="seedLocks[String(i)]"
+              :inactive="true" @update="onRow" />
+          </template>
         </div>
 
         <div class="sm__foot">
@@ -127,6 +145,7 @@ onBeforeUnmount(() => {
 .sm__hint { display: flex; align-items: center; gap: 7px; padding: 7px 14px; flex-shrink: 0; font: 11px var(--wp-font-sans); color: color-mix(in srgb, var(--wp-amber, #fbbf24) 75%, var(--wp-text-muted)); background: color-mix(in srgb, var(--wp-amber, #fbbf24) 9%, transparent); border-bottom: 1px solid var(--wp-border); }
 .sm__hint svg { flex-shrink: 0; color: var(--wp-amber, #fbbf24); }
 .sm__list { overflow-y: auto; padding: 6px; flex: 1; min-height: 0; }
+.sm__inactive-label { padding: 8px 8px 4px; margin-top: 4px; border-top: 1px dashed var(--wp-border); font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .08em; color: var(--wp-text-dim, var(--wp-text3)); }
 .sm__foot { display: flex; align-items: center; gap: 12px; padding: 10px 14px; flex-shrink: 0; background: var(--wp-bg3); border-top: 1px solid var(--wp-border); }
 .sm__foot-hint { font: 10px var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); }
 .sm__foot-hint kbd { font: 9px var(--wp-font-mono); background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); padding: 1px 4px; border-radius: 2px; }
