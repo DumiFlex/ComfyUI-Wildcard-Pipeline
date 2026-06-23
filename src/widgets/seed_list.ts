@@ -17,7 +17,9 @@ import {
   serializeSeedListConfig,
   type SeedListConfig,
 } from "../components/seed-list/types";
-import type { LiteNodeLike } from "../extension/graph";
+import { resolveSeedListPreview, type SeriesParams } from "../components/seed-list/preview";
+import { parseContextLoopConfig } from "../components/context-loop/types";
+import type { LiteNodeLike, LiteGraphLike } from "../extension/graph";
 
 const SeedListWidget = defineAsyncComponent(
   () => import("../components/seed-list/SeedListWidget.vue"),
@@ -25,6 +27,7 @@ const SeedListWidget = defineAsyncComponent(
 
 interface SeedListHostNode extends MountTargetNode, LiteNodeLike {
   mode?: number;
+  graph?: LiteGraphLike;
 }
 
 export function create(node: SeedListHostNode, inputName: string) {
@@ -49,6 +52,38 @@ export function create(node: SeedListHostNode, inputName: string) {
     () => Number((node.widgets ?? []).find((w) => w.name === "count")?.value ?? 1),
     Object.is,
   );
+
+  // Walk the `loop_config` input to its upstream WP_ContextLoop node and
+  // read its stock `seed` + `count` widgets plus `wp_context_loop_config`
+  // strategy. Returns null when unwired. Reactive so the preview updates
+  // whenever the wire or upstream widgets change (same poll+event model
+  // as the baseSeed/count reads above).
+  function readLoopSeries(): SeriesParams | null {
+    const inputs = (node as { inputs?: Array<{ name?: string; link?: number | null }> }).inputs;
+    if (!inputs) return null;
+    const slot = inputs.find((i) => i.name === "loop_config");
+    if (!slot || slot.link == null) return null;
+    const graph = node.graph;
+    if (!graph) return null;
+    const link = graph.links[slot.link];
+    if (!link) return null;
+    const origin = graph.getNodeById(link.origin_id);
+    if (!origin) return null;
+    const widgets = origin.widgets ?? [];
+    const loopBase = Number(widgets.find((w) => w.name === "seed")?.value ?? 0);
+    const loopCount = Number(widgets.find((w) => w.name === "count")?.value ?? 1);
+    const rawCfg = widgets.find((w) => w.name === "wp_context_loop_config")?.value;
+    const loopCfg = parseContextLoopConfig(typeof rawCfg === "string" ? rawCfg : null);
+    return { base: loopBase, count: loopCount, strategy: loopCfg.strategy };
+  }
+
+  function loopParamsEqual(a: SeriesParams | null, b: SeriesParams | null): boolean {
+    if (a === null && b === null) return true;
+    if (a === null || b === null) return false;
+    return a.base === b.base && a.count === b.count && a.strategy === b.strategy;
+  }
+
+  const loopSeries = reactiveFromGraph(node, readLoopSeries, loopParamsEqual);
 
   /** Toggle the `disabled` flag on a stock litegraph widget by name.
    *  Litegraph greys the widget out + blocks input when `disabled` is
@@ -89,14 +124,27 @@ export function create(node: SeedListHostNode, inputName: string) {
         // Re-apply the stock-widget gates whenever a toggle flips.
         syncStockWidgetGates();
       }
-      return () =>
-        h(SeedListWidget, {
+      return () => {
+        const localSeries: SeriesParams = {
+          base: baseSeed.value,
+          count: count.value,
+          strategy: config.value.strategy,
+        };
+        const flags = {
+          override_seed: config.value.override_seed,
+          override_count: config.value.override_count,
+          override_strategy: config.value.override_strategy,
+        };
+        const effective = resolveSeedListPreview(localSeries, flags, loopSeries.value);
+        return h(SeedListWidget, {
           modelValue: config.value,
           nodeMode: nodeMode.value,
-          baseSeed: baseSeed.value,
-          count: count.value,
+          baseSeed: effective.baseSeed,
+          count: effective.count,
+          previewStrategy: effective.strategy,
           "onUpdate:modelValue": onUpdate,
         });
+      };
     },
   };
 

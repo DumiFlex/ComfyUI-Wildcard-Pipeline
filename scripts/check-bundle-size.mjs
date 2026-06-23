@@ -187,7 +187,11 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // button). The SeedListWidget chunk grew ~0.7 KB gzip adding the button
 // template + ref/computed script + seedbtn CSS; T8's headroom estimate
 // was tight. Minimal bump to the actual measured ceiling.
-const TOTAL_LIMIT = 443 * 1024;     // 443 KB
+// Bumped 443 -> 444 KB on 2026-06-23 for T12 (seed-list preview
+// effective base/count/strategy from wired loop). Adds preview.ts pure
+// resolver + graph-walk glue in seed_list.ts + previewStrategy prop in
+// SeedListWidget.vue. ~0.4 KB net gzip in the seed_list widget chunk.
+const TOTAL_LIMIT = 444 * 1024;     // 444 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

@@ -167,4 +167,13 @@ describe("SeedListWidget seeds button", () => {
     await wr.find('[data-test="seedlist-seeds-btn"]').trigger("click");
     expect(wr.findComponent(SeedListModal).exists()).toBe(true);
   });
+  it("previewStrategy is passed to modal when provided", async () => {
+    const wr = mount(SeedListWidget, {
+      props: { modelValue: emptySeedListConfig(), baseSeed: 7, count: 4, previewStrategy: "hash_index" },
+      attachTo: document.body,
+      global: { stubs: { teleport: true } },
+    });
+    await wr.find('[data-test="seedlist-seeds-btn"]').trigger("click");
+    expect(wr.findComponent(SeedListModal).props("strategy")).toBe("hash_index");
+  });
 });

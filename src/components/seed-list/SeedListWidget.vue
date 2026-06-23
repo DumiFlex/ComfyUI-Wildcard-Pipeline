@@ -22,12 +22,19 @@ const props = withDefaults(
     /** Litegraph mode: 0 = ALWAYS (live), 2 = NEVER (muted), 4 = BYPASS.
      *  Drives the dim overlay so canvas-side mute/bypass reads visually. */
     nodeMode?: number;
-    /** Base seed forwarded from the host ComfyUI INT widget. */
+    /** Effective base seed for the modal preview (already resolved by the host
+     *  glue — either local base_seed or the wired loop's seed, depending on
+     *  override_seed + whether a loop is connected). */
     baseSeed?: number;
-    /** Iteration count forwarded from the host ComfyUI INT widget. */
+    /** Effective iteration count for the modal preview (resolved by host glue). */
     count?: number;
+    /** Effective strategy for the modal preview. When supplied (loop wired +
+     *  override_strategy on), the modal uses this instead of modelValue.strategy.
+     *  The strategy CHIPS still reflect modelValue.strategy (the local config).
+     *  Undefined = use modelValue.strategy (no loop / override off). */
+    previewStrategy?: SeedListStrategy;
   }>(),
-  { nodeMode: 0, baseSeed: 0, count: 1 },
+  { nodeMode: 0, baseSeed: 0, count: 1, previewStrategy: undefined },
 );
 
 const emit = defineEmits<{ "update:modelValue": [next: SeedListConfig] }>();
@@ -193,7 +200,7 @@ function toggleOverrideStrategy(): void {
       </button>
     </div>
     <SeedListModal v-if="seedsOpen" :node-name="'WP Seed List'" :base-seed="baseSeed"
-      :count="count" :strategy="modelValue.strategy" :seed-locks="modelValue.seed_locks ?? {}"
+      :count="count" :strategy="previewStrategy ?? modelValue.strategy" :seed-locks="modelValue.seed_locks ?? {}"
       :show-override-hint="false"
       @update:seed-locks="onSeedLocks" @close="seedsOpen = false" />
   </div>
