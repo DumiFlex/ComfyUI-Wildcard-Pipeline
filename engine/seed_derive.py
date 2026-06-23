@@ -41,6 +41,19 @@ def derive_loop_seeds(base: int, count: int, strategy: str) -> list[int]:
     raise ValueError(f"unknown loop seed strategy: {strategy!r}")
 
 
+def apply_seed_locks(derived: list[int], locks: dict[int, int]) -> list[int]:
+    """Overlay per-index locked seeds on a derived series.
+
+    `locks` maps a 0-based iteration index to a pinned seed. Locked
+    indices replace the derived value (masked to MAX_SAFE_SEED);
+    out-of-range indices are ignored. Pure — no ComfyUI imports.
+    """
+    return [
+        (locks[i] & MAX_SAFE_SEED) if i in locks else seed
+        for i, seed in enumerate(derived)
+    ]
+
+
 def effective_chain_seed(
     *,
     widget_seed: int,
