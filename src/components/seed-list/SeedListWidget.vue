@@ -12,8 +12,9 @@
  * host glue (`src/widgets/seed_list.ts`) serializes to JSON and
  * pushes via `host.setValue` so ComfyUI's widget value matches.
  */
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import type { SeedListConfig, SeedListStrategy } from "./types";
+import SeedListModal from "../shared/SeedListModal.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -21,8 +22,12 @@ const props = withDefaults(
     /** Litegraph mode: 0 = ALWAYS (live), 2 = NEVER (muted), 4 = BYPASS.
      *  Drives the dim overlay so canvas-side mute/bypass reads visually. */
     nodeMode?: number;
+    /** Base seed forwarded from the host ComfyUI INT widget. */
+    baseSeed?: number;
+    /** Iteration count forwarded from the host ComfyUI INT widget. */
+    count?: number;
   }>(),
-  { nodeMode: 0 },
+  { nodeMode: 0, baseSeed: 0, count: 1 },
 );
 
 const emit = defineEmits<{ "update:modelValue": [next: SeedListConfig] }>();
@@ -54,6 +59,13 @@ const STRATEGY_LOCKED_TOOLTIP =
 
 const isMuted = computed<boolean>(() => props.nodeMode === 2);
 const isBypassed = computed<boolean>(() => props.nodeMode === 4);
+
+const seedsOpen = ref(false);
+const lockedCount = computed(() => Object.keys(props.modelValue.seed_locks ?? {}).length);
+
+function onSeedLocks(next: Record<string, number>): void {
+  emit("update:modelValue", { ...props.modelValue, seed_locks: next });
+}
 
 /** True while strategy comes from the upstream loop_config wire.
  *  Mirrors what `setStockWidgetDisabled("count", ...)` does for the count
@@ -125,6 +137,14 @@ function toggleOverrideStrategy(): void {
       </div>
     </div>
 
+    <button type="button" class="wp-seedlist__seedbtn" data-test="seedlist-seeds-btn" @click="seedsOpen = true">
+      <span class="wp-seedlist__seedbtn-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10" /><circle cx="20" cy="18" r="1.4" fill="currentColor" stroke="none" /></svg></span>
+      Per-iteration seeds
+      <span class="wp-seedlist__seedbtn-fill" />
+      <span v-if="lockedCount" class="wp-seedlist__seedbtn-badge" data-test="seedlist-seeds-badge">{{ lockedCount }} locked</span>
+      <svg class="wp-seedlist__seedbtn-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6" /></svg>
+    </button>
+
     <div class="wp-seedlist__row" :title="OVERRIDE_SEED_TOOLTIP">
       <span class="wp-seedlist__row-label">Override base seed from loop</span>
       <button
@@ -172,6 +192,10 @@ function toggleOverrideStrategy(): void {
         <span class="wp-seedlist__switch-thumb" />
       </button>
     </div>
+    <SeedListModal v-if="seedsOpen" :node-name="'WP Seed List'" :base-seed="baseSeed"
+      :count="count" :strategy="modelValue.strategy" :seed-locks="modelValue.seed_locks ?? {}"
+      :show-override-hint="false"
+      @update:seed-locks="onSeedLocks" @close="seedsOpen = false" />
   </div>
 </template>
 
@@ -263,4 +287,11 @@ function toggleOverrideStrategy(): void {
 /* Mute / bypass dim — same convention as WP_VarTo* and WP_ContextLoop. */
 .wp-seedlist--muted { opacity: 0.45; pointer-events: none; }
 .wp-seedlist--bypassed { opacity: 0.65; }
+
+.wp-seedlist__seedbtn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 9px; background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); border-radius: 3px; color: var(--wp-text-muted, var(--wp-text2)); font: 600 10.5px var(--wp-font-sans); cursor: pointer; }
+.wp-seedlist__seedbtn:hover { border-color: var(--wp-accent); color: var(--wp-accent-text, var(--wp-text)); }
+.wp-seedlist__seedbtn-ico { color: var(--wp-accent); display: flex; }
+.wp-seedlist__seedbtn-fill { flex: 1; }
+.wp-seedlist__seedbtn-badge { font: 600 8px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .05em; padding: 2px 6px; border-radius: 3px; color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,.14); border: 1px solid color-mix(in srgb, var(--wp-accent) 40%, transparent); }
+.wp-seedlist__seedbtn-chev { color: var(--wp-text-dim, var(--wp-text3)); }
 </style>

@@ -183,7 +183,11 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // body (v-if gated) — adds ~5.5 KB net gzip to the ContextLoopWidget
 // lazy chunk. SeedListWidget gains a matching button in T9. Headroom
 // covers both T8 and T9 landings without per-task bump friction.
-const TOTAL_LIMIT = 442 * 1024;     // 442 KB
+// Bumped 442 -> 443 KB on 2026-06-23 for T9 (SeedListWidget seeds
+// button). The SeedListWidget chunk grew ~0.7 KB gzip adding the button
+// template + ref/computed script + seedbtn CSS; T8's headroom estimate
+// was tight. Minimal bump to the actual measured ceiling.
+const TOTAL_LIMIT = 443 * 1024;     // 443 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

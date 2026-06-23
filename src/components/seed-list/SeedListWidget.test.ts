@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
 import SeedListWidget from "./SeedListWidget.vue";
+import SeedListModal from "../shared/SeedListModal.vue";
 import { emptySeedListConfig } from "./types";
 
 describe("SeedListWidget", () => {
@@ -140,5 +141,30 @@ describe("SeedListWidget", () => {
     });
     await w.find('[data-test="seedlist-strategy-sequential"]').trigger("click");
     expect(w.emitted("update:modelValue")).toBeUndefined();
+  });
+});
+
+function ws(extra = {}) {
+  return mount(SeedListWidget, {
+    props: { modelValue: { ...emptySeedListConfig(), ...extra }, baseSeed: 7, count: 4 },
+    attachTo: document.body,
+    global: { stubs: { teleport: true } },
+  });
+}
+
+describe("SeedListWidget seeds button", () => {
+  it("renders the Per-iteration seeds button", () => {
+    expect(ws().find('[data-test="seedlist-seeds-btn"]').exists()).toBe(true);
+  });
+  it("badge shows the locked count when >0", () => {
+    expect(ws({ seed_locks: { "0": 9, "2": 8, "3": 1 } }).find('[data-test="seedlist-seeds-badge"]').text()).toMatch(/3 locked/i);
+  });
+  it("hides the badge when nothing is locked", () => {
+    expect(ws().find('[data-test="seedlist-seeds-badge"]').exists()).toBe(false);
+  });
+  it("clicking opens the modal", async () => {
+    const wr = ws();
+    await wr.find('[data-test="seedlist-seeds-btn"]').trigger("click");
+    expect(wr.findComponent(SeedListModal).exists()).toBe(true);
   });
 });
