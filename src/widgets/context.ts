@@ -431,26 +431,15 @@ export function create(node: ContextNode, inputName: string) {
         return collectLocalResolvedForModule(rootGraph, node, moduleId);
       }
 
-      function lastUsedSeedReader(moduleId?: string, frame?: number | null): number | null {
-        const nodeAny = node as unknown as {
+      function lastUsedSeedReader(moduleId?: string): number | null {
+        const perModule = (node as unknown as {
           __wp_last_used_per_module__?: Record<string, number>;
-          __wp_last_used_per_frame__?: Record<string, Record<string, number>>;
-          __wp_last_used_seed__?: number;
-        };
-        // Frame-active lock: prefer the seed THIS module actually rolled with
-        // on frame #k (captured per loop_index during the last run). Falls
-        // through to the module-level seed when that frame wasn't run yet.
-        if (moduleId && frame != null) {
-          const perFrame = nodeAny.__wp_last_used_per_frame__?.[String(frame)];
-          if (perFrame && typeof perFrame[moduleId] === "number") {
-            return perFrame[moduleId];
-          }
-        }
-        const perModule = nodeAny.__wp_last_used_per_module__;
+        }).__wp_last_used_per_module__;
         if (moduleId && perModule && typeof perModule[moduleId] === "number") {
           return perModule[moduleId];
         }
-        const v = nodeAny.__wp_last_used_seed__;
+        const v = (node as unknown as { __wp_last_used_seed__?: number })
+          .__wp_last_used_seed__;
         return typeof v === "number" && Number.isFinite(v) ? v : null;
       }
       return () => {
@@ -570,23 +559,8 @@ export function create(node: ContextNode, inputName: string) {
         const n = typeof v === "number" ? v : Number(v);
         if (Number.isFinite(n)) perModule[mid] = Math.floor(n);
       }
-      const nodeAny = node as unknown as {
-        __wp_last_used_per_module__?: Record<string, number>;
-        __wp_last_used_per_frame__?: Record<string, Record<string, number>>;
-      };
-      nodeAny.__wp_last_used_per_module__ = perModule;
-      // Per-frame bucket: a Context Loop fans out N executions (one per
-      // loop_index). Capturing module_seeds under that index lets the
-      // per-frame seed-lock pin the seed THIS module actually rolled on
-      // frame #k, instead of whichever iteration executed last. Cleared on
-      // execution_start so a shorter/changed re-run can't leave stale frames.
-      const rawIdx = pickArrayValue(out, "loop_index");
-      const idxNum = typeof rawIdx === "number" ? rawIdx : Number(rawIdx);
-      if (Number.isInteger(idxNum) && idxNum >= 0) {
-        const map = nodeAny.__wp_last_used_per_frame__
-          ?? (nodeAny.__wp_last_used_per_frame__ = {});
-        map[String(idxNum)] = perModule;
-      }
+      (node as unknown as { __wp_last_used_per_module__?: Record<string, number> })
+        .__wp_last_used_per_module__ = perModule;
     }
     // No fallback when `module_seeds` is missing — the chain-level
     // `__wp_last_used_seed__` already updated above gives the
@@ -595,19 +569,11 @@ export function create(node: ContextNode, inputName: string) {
     // the local-widget-value heuristic that produced wrong locks
     // for link-driven seed inputs.
   }
-  // New prompt → discard the previous run's per-frame seed capture so a
-  // shorter run (or a changed seed/count) can't leave stale higher-index
-  // frames behind for the per-frame seed-lock to read.
-  function onExecutionStart() {
-    (node as unknown as { __wp_last_used_per_frame__?: Record<string, Record<string, number>> })
-      .__wp_last_used_per_frame__ = {};
-  }
   const apiObj = (app as unknown as { api?: {
     addEventListener: (n: string, fn: (e: Event) => void) => void;
     removeEventListener: (n: string, fn: (e: Event) => void) => void;
   } }).api;
   apiObj?.addEventListener("executed", onExecuted);
-  apiObj?.addEventListener("execution_start", onExecutionStart);
 
   // No widget.onRemove monkey-patch — wrapping ComfyUI's internal
   // `onRemove` callback was breaking the `this` binding their code

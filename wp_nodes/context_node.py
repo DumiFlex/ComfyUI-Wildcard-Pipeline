@@ -207,13 +207,5 @@ class WPContext(io.ComfyNode):
                 module_seeds[key] = es
         return io.NodeOutput(
             payload,
-            ui={
-                "seed": [int(seed)],
-                "module_seeds": [module_seeds],
-                # 0-based iteration index for THIS execution. A Context Loop
-                # fans out one execution per frame; the frontend buckets
-                # module_seeds by this index so the per-frame seed-lock can
-                # capture the seed each module actually rolled on frame #k.
-                "loop_index": [loop_index],
-            },
+            ui={"seed": [int(seed)], "module_seeds": [module_seeds]},
         )

@@ -152,7 +152,7 @@ const props = withDefaults(defineProps<{
    *  unused for WP_Context but accepted as default-active (run). */
   nodeMode?: number;
   /** Last-run seed reader keyed by module id. Null = user hasn't queued. */
-  lastUsedSeedReader?: (moduleId?: string, frame?: number | null) => number | null;
+  lastUsedSeedReader?: (moduleId?: string) => number | null;
   onChange: (json: string) => void;
   /** Called whenever the formula-computed minimum node width changes
    *  (a conflict appears, a state badge gets attached). Mount glue
@@ -2955,7 +2955,7 @@ function toggleLockOnCard(idx: number) {
   if (!m) return;
   const k = currentFrame.value;
   if (k != null) {
-    const lastUsed = props.lastUsedSeedReader?.(m._uid ?? m.id, k);
+    const lastUsed = props.lastUsedSeedReader?.(m._uid ?? m.id);
     const fallback = typeof lastUsed === "number" ? lastUsed
       : (typeof m.instance?._ui?.last_locked_seed === "number" ? m.instance._ui.last_locked_seed : 0);
     const list = [...value.value.modules];
