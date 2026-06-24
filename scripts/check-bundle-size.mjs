@@ -198,7 +198,11 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // Adds imports of frame-cursor / frame-overrides / INSTANCE_FIELDS_PER_KIND into
 // the ContextWidget lazy chunk + the merge-on-open / write-redirect logic.
 // Measured 455772 bytes (92 over the 445 ceiling); minimal bump.
-const TOTAL_LIMIT = 446 * 1024;     // 446 KB
+// Bumped 446 -> 447 KB on 2026-06-24 for RF2 (frame-aware row quick-lock).
+// Adds toggleFrameLock helper in frame-overrides.ts + effectiveLockedSeed +
+// frame branch in toggleLockOnCard + frame-aware isLocked. Net ~168 bytes
+// gzip in the lazy ContextWidget chunk; entry stays put.
+const TOTAL_LIMIT = 447 * 1024;     // 447 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

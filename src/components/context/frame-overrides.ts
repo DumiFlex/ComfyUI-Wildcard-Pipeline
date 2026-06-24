@@ -56,3 +56,21 @@ export function clearFrameOverride(module: ModuleEntry, frame: number): ModuleEn
   if (Object.keys(map).length === 0) delete out.iteration_overrides;
   return out;
 }
+
+/** Toggle locked_seed for ONE frame (the row quick-lock when a frame is active).
+ *  Locks with `fallback` if currently unlocked at that frame; otherwise unlocks —
+ *  writing an explicit `null` when the BASE is locked (to override it on this frame)
+ *  or dropping the frame's locked_seed when the base is already unlocked. */
+export function toggleFrameLock(module: ModuleEntry, frame: number, fallback: number): ModuleEntry {
+  const eff = withFrameInstance(module, frame).instance ?? {};
+  const baseLocked = typeof module.instance?.locked_seed === "number";
+  if (typeof eff.locked_seed === "number") {
+    if (baseLocked) return setFrameOverride(module, frame, { locked_seed: null });
+    const rest = { ...(module.iteration_overrides?.[String(frame)] ?? {}) } as Record<string, unknown>;
+    delete rest.locked_seed;
+    let next = clearFrameOverride(module, frame);
+    if (Object.keys(rest).length) next = setFrameOverride(next, frame, rest);
+    return next;
+  }
+  return setFrameOverride(module, frame, { locked_seed: fallback });
+}

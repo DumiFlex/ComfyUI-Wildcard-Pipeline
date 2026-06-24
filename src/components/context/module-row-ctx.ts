@@ -61,6 +61,9 @@ export interface ModuleRowCtx {
   isHeld: (m: ModuleEntry) => boolean;
   /** True when the module has an override entry for `currentFrame`. */
   isOverriddenOnFrame: (m: ModuleEntry) => boolean;
+  /** The effective locked_seed for this module at `currentFrame` (or base when
+   *  no frame is active). `undefined` when the effective instance is unlocked. */
+  effectiveLockedSeed: (m: ModuleEntry) => number | undefined;
 }
 
 export const ModuleRowCtxKey: InjectionKey<ModuleRowCtx> = Symbol("moduleRowCtx");

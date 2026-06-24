@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { withFrameInstance, diffInstance, setFrameOverride, clearFrameOverride } from "./frame-overrides";
+import { withFrameInstance, diffInstance, setFrameOverride, clearFrameOverride, toggleFrameLock } from "./frame-overrides";
 import type { ModuleEntry } from "../../widgets/_shared";
 
 function mod(extra: Partial<ModuleEntry> = {}): ModuleEntry {
@@ -29,5 +29,20 @@ describe("frame-overrides", () => {
     expect(a.iteration_overrides).toEqual({ "2": { pinned_option_id: "0" } });
     const b = clearFrameOverride(a, 2);
     expect(b.iteration_overrides).toBeUndefined();
+  });
+  it("toggleFrameLock: locks an unlocked frame with the fallback", () => {
+    const m = mod();
+    const r = toggleFrameLock(m, 2, 999);
+    expect(r.iteration_overrides?.["2"]).toEqual({ locked_seed: 999 });
+  });
+  it("toggleFrameLock: unlocking a frame-only lock drops the key", () => {
+    const m = mod({ iteration_overrides: { "2": { locked_seed: 999 } } });
+    const r = toggleFrameLock(m, 2, 0);
+    expect(r.iteration_overrides).toBeUndefined();
+  });
+  it("toggleFrameLock: unlocking a frame writes null when base is locked", () => {
+    const m = mod({ instance: { locked_seed: 5 } });
+    const r = toggleFrameLock(m, 2, 0);
+    expect(r.iteration_overrides?.["2"]).toEqual({ locked_seed: null });
   });
 });

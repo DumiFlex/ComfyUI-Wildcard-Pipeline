@@ -50,6 +50,7 @@ function makeCtx(over: Partial<ModuleRowCtx> = {}): ModuleRowCtx {
     currentFrame: ref<number | null>(null),
     isHeld: () => false,
     isOverriddenOnFrame: () => false,
+    effectiveLockedSeed: () => undefined,
     ...over,
   };
 }

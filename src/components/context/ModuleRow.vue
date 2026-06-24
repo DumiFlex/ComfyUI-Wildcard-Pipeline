@@ -155,7 +155,7 @@ const {
       <div class="wp-mod-actions" draggable="false">
         <button v-if="isSeedLockable(module)" type="button" class="wp-btn--icon-sm wp-btn--warn"
           :class="{ 'is-locked': isLocked(module) }" data-test="row-action-lock"
-          :title="isLocked(module) ? `Locked seed: ${module.instance?.locked_seed}. Click to unlock.` : 'Lock seed'"
+          :title="isLocked(module) ? `Locked seed: ${ctx?.effectiveLockedSeed(module)}. Click to unlock.` : 'Lock seed'"
           :aria-label="isLocked(module) ? 'Unlock seed' : 'Lock seed'"
           @click.stop="toggleLockOnCard(idx)"><i class="pi pi-lock" /></button>
         <button v-if="module.type === 'wildcard' || module.type === 'fixed_values' || module.type === 'combine' || module.type === 'derivation'"

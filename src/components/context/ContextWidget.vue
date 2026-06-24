@@ -76,7 +76,7 @@ import { pushToast } from "../shared/toast-store";
 import { kindIcon } from "../shared/kind-icons";
 import { KIND_TITLE, FRAME_OVERRIDABLE_FIELDS } from "./editors/_shell";
 import { currentFrame } from "../context-loop/frame-cursor";
-import { withFrameInstance, diffInstance, setFrameOverride, clearFrameOverride } from "./frame-overrides";
+import { withFrameInstance, diffInstance, setFrameOverride, clearFrameOverride, toggleFrameLock } from "./frame-overrides";
 import { varColorClass } from "../shared/var-color";
 import wpLogoSvg from "../shared/wp-logo.svg?raw";
 import {
@@ -2884,7 +2884,7 @@ function isInternalable(m: ModuleEntry): boolean {
 }
 
 function isLocked(m: ModuleEntry): boolean {
-  return typeof m.instance?.locked_seed === "number";
+  return typeof withFrameInstance(m, currentFrame.value).instance?.locked_seed === "number";
 }
 function isInternal(m: ModuleEntry): boolean {
   return !!m.instance?.internal;
@@ -2895,6 +2895,10 @@ function isHeld(m: ModuleEntry): boolean {
 function isOverriddenOnFrame(m: ModuleEntry): boolean {
   const k = currentFrame.value;
   return k != null && !!m.iteration_overrides?.[String(k)];
+}
+function effectiveLockedSeed(m: ModuleEntry): number | undefined {
+  const v = withFrameInstance(m, currentFrame.value).instance?.locked_seed;
+  return typeof v === "number" ? v : undefined;
 }
 
 // ── Formula-driven minWidth ────────────────────────────────────────
@@ -2949,6 +2953,16 @@ watch(
 function toggleLockOnCard(idx: number) {
   const m = value.value.modules[idx];
   if (!m) return;
+  const k = currentFrame.value;
+  if (k != null) {
+    const lastUsed = props.lastUsedSeedReader?.(m._uid ?? m.id);
+    const fallback = typeof lastUsed === "number" ? lastUsed
+      : (typeof m.instance?._ui?.last_locked_seed === "number" ? m.instance._ui.last_locked_seed : 0);
+    const list = [...value.value.modules];
+    list[idx] = toggleFrameLock(m, k, fallback);
+    commitModules(list);
+    return;
+  }
   const inst = m.instance ?? {};
   let nextInst: NonNullable<ModuleEntry["instance"]>;
   if (typeof inst.locked_seed === "number") {
@@ -4757,6 +4771,7 @@ const moduleRowCtx: ModuleRowCtx = {
   currentFrame,
   isHeld,
   isOverriddenOnFrame,
+  effectiveLockedSeed,
 };
 provide(ModuleRowCtxKey, moduleRowCtx);
 
