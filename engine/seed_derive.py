@@ -66,8 +66,10 @@ def effective_chain_seed(
       1. ``seed_override`` (from ContextLoop) replaces ``widget_seed`` as
          base when present.
       2. Otherwise ``widget_seed`` is the base.
-      3. ``loop_index`` is mixed via XOR with a stable hash. ``loop_index=0``
-         → no-op (backwards-compat for chains without ContextLoop).
+      3. ``loop_index`` is mixed via XOR with a stable hash ONLY when there is
+         no override (to vary a constant ``widget_seed`` per iteration). An
+         override is already per-iteration (the ContextLoop derived series) so
+         it is used as-is. ``loop_index=0`` → no-op.
 
     Locked-module precedence lives in the per-module handlers, NOT here.
     Locked modules read ``instance.locked_seed`` directly and ignore the
@@ -77,7 +79,12 @@ def effective_chain_seed(
     matches the visual shape of ComfyUI's frontend-randomised seeds.
     """
     base = seed_override if seed_override is not None else widget_seed
-    if loop_index == 0:
+    # An override IS the loop's already-per-iteration derived seed → use it
+    # verbatim. The loop_index XOR exists only to vary a CONSTANT widget seed
+    # (the override-OFF path); re-mixing an override that already differs per
+    # iteration is a double-shift that made the actual seed diverge from the
+    # derived series the preview + per-iteration seed-modal locks show.
+    if loop_index == 0 or seed_override is not None:
         return base & MAX_SAFE_SEED
     digest = hashlib.sha256(f"loop:{loop_index}".encode()).digest()
     shift = int.from_bytes(digest[:8], "big")

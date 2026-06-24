@@ -65,12 +65,14 @@ def test_effective_chain_seed_loop_index_mixes_when_positive():
     assert b != c
 
 
-def test_effective_chain_seed_override_path_mixes_loop_index():
-    a = effective_chain_seed(widget_seed=42, seed_override=10, loop_index=0)
-    b = effective_chain_seed(widget_seed=42, seed_override=10, loop_index=1)
-    assert a == 10
-    assert b != 10
-    assert b != 42
+def test_effective_chain_seed_override_used_as_is_ignores_loop_index():
+    # An override IS the loop's already-per-iteration derived seed, so the
+    # loop_index XOR must NOT be re-applied on top — the override is used
+    # verbatim at every index. (The XOR only exists to vary a CONSTANT widget
+    # seed when there is no override; see the override-OFF mixing test.)
+    assert effective_chain_seed(widget_seed=42, seed_override=10, loop_index=0) == 10
+    assert effective_chain_seed(widget_seed=42, seed_override=10, loop_index=1) == 10
+    assert effective_chain_seed(widget_seed=42, seed_override=10, loop_index=3) == 10
 
 
 def test_effective_chain_seed_deterministic():
