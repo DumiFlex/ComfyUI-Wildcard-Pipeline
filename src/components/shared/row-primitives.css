@@ -343,7 +343,8 @@
 .wp-mod-badge--mod,
 .wp-mod-badge--drift,
 .wp-mod-badge--missing,
-.wp-mod-badge--clash {
+.wp-mod-badge--clash,
+.wp-mod-badge--on {
   flex-shrink: 0;
 }
 .wp-mod-badge--mod {
@@ -357,6 +358,13 @@
 .wp-mod-badge--missing {
   background: color-mix(in oklab, var(--wp-danger) 18%, transparent);
   color: var(--wp-danger);
+}
+/* `--on` variant: per-frame ENABLE override — module is off on base but turned
+ * ON for this frame. Green (--wp-success) to read as "running here", the
+ * positive inverse of the `--missing` red used for the off-#k badge. */
+.wp-mod-badge--on {
+  background: color-mix(in oklab, var(--wp-success) 18%, transparent);
+  color: var(--wp-success);
 }
 /* `--clash` variant: id reused by a DIFFERENT kind (shared id-space).
  * Violet (--wp-accent) — distinct from MOD orange / DRIFT amber / MISSING

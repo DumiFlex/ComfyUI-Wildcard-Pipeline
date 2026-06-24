@@ -202,7 +202,14 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // Adds toggleFrameLock helper in frame-overrides.ts + effectiveLockedSeed +
 // frame branch in toggleLockOnCard + frame-aware isLocked. Net ~168 bytes
 // gzip in the lazy ContextWidget chunk; entry stays put.
-const TOTAL_LIMIT = 447 * 1024;     // 447 KB
+// Bumped 447 -> 448 KB on 2026-06-24 for the symmetric per-frame enable
+// redesign (a `frame_enabled` override map replaces the `disabled_frames`
+// blocklist so a base-off module can be turned ON for select frames). Adds
+// frameEnabledAt / effectiveEnabled / frameEnableOverride / toggleFrameEnabled
+// to frame-overrides.ts, the effective-enabled checkbox + bidirectional
+// on-#k / off-#k badge in ModuleRow, and the .wp-mod-badge--on CSS. Measured
+// 457868 bytes (140 over the 447 ceiling); minimal bump.
+const TOTAL_LIMIT = 448 * 1024;     // 448 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

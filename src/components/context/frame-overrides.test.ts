@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { withFrameInstance, diffInstance, setFrameOverride, clearFrameOverride, toggleFrameLock } from "./frame-overrides";
+import { withFrameInstance, diffInstance, setFrameOverride, clearFrameOverride, toggleFrameLock, toggleFrameEnabled, effectiveEnabled, frameEnableOverride } from "./frame-overrides";
 import type { ModuleEntry } from "../../widgets/_shared";
 
 function mod(extra: Partial<ModuleEntry> = {}): ModuleEntry {
@@ -44,5 +44,55 @@ describe("frame-overrides", () => {
     const m = mod({ instance: { locked_seed: 5 } });
     const r = toggleFrameLock(m, 2, 0);
     expect(r.iteration_overrides?.["2"]).toEqual({ locked_seed: null });
+  });
+
+  // ── per-frame enable override (frame_enabled) ──────────────────────────
+  it("effectiveEnabled: frame override wins, else base", () => {
+    expect(effectiveEnabled(mod({ enabled: true }), null)).toBe(true);
+    expect(effectiveEnabled(mod({ enabled: true }), 2)).toBe(true); // no override → base
+    const off = mod({ enabled: true, frame_enabled: { "2": false } });
+    expect(effectiveEnabled(off, 2)).toBe(false);
+    expect(effectiveEnabled(off, 1)).toBe(true);
+    const on = mod({ enabled: false, frame_enabled: { "2": true } });
+    expect(effectiveEnabled(on, 2)).toBe(true);    // base off, frame on
+    expect(effectiveEnabled(on, 1)).toBe(false);   // base off elsewhere
+    expect(effectiveEnabled(on, null)).toBe(false); // base view
+  });
+  it("effectiveEnabled: folds legacy disabled_frames", () => {
+    const m = mod({ enabled: true, disabled_frames: [2] });
+    expect(effectiveEnabled(m, 2)).toBe(false);
+    expect(effectiveEnabled(m, 0)).toBe(true);
+  });
+  it("frameEnableOverride: reports on / off / null vs base", () => {
+    expect(frameEnableOverride(mod({ enabled: true, frame_enabled: { "2": false } }), 2)).toBe("off");
+    expect(frameEnableOverride(mod({ enabled: false, frame_enabled: { "2": true } }), 2)).toBe("on");
+    expect(frameEnableOverride(mod({ enabled: true }), 2)).toBeNull();
+    expect(frameEnableOverride(mod({ enabled: true, frame_enabled: { "2": true } }), 2)).toBeNull(); // equals base
+    expect(frameEnableOverride(mod({ enabled: true, frame_enabled: { "2": false } }), null)).toBeNull();
+  });
+  it("toggleFrameEnabled: a base-OFF module turns ON for the frame (the bug fix)", () => {
+    const r = toggleFrameEnabled(mod({ enabled: false }), 2);
+    expect(r.frame_enabled).toEqual({ "2": true });
+    expect(r.enabled).toBe(false); // base untouched
+  });
+  it("toggleFrameEnabled: a base-ON module turns OFF for the frame", () => {
+    const r = toggleFrameEnabled(mod({ enabled: true }), 2);
+    expect(r.frame_enabled).toEqual({ "2": false });
+  });
+  it("toggleFrameEnabled: toggling back to base drops the override + the field", () => {
+    const r = toggleFrameEnabled(mod({ enabled: true, frame_enabled: { "2": false } }), 2);
+    expect(r.frame_enabled).toBeUndefined();
+  });
+  it("toggleFrameEnabled: migrates legacy disabled_frames into frame_enabled", () => {
+    const r = toggleFrameEnabled(mod({ enabled: true, disabled_frames: [1] }), 2);
+    expect(r.disabled_frames).toBeUndefined();
+    expect(r.frame_enabled).toEqual({ "1": false, "2": false });
+  });
+  it("toggleFrameEnabled: recovers the user's stuck state (base off, stray disabled_frames)", () => {
+    // Repro of the QA bug: base disabled with a leftover blocklist entry;
+    // enabling frame #2 should run ONLY #2 and clear the noise.
+    const r = toggleFrameEnabled(mod({ enabled: false, disabled_frames: [1] }), 2);
+    expect(r.disabled_frames).toBeUndefined();
+    expect(r.frame_enabled).toEqual({ "2": true });
   });
 });

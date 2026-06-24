@@ -228,3 +228,50 @@ def test_disabled_frames_multiple_frames():
         assert "w" in result, (
             f"expected 'w' bound at enabled frame {k}"
         )
+
+
+# ── frame_enabled: symmetric per-frame enable override ──────────────────────
+#
+# Model: effective_enabled(k) = frame_enabled[str(k)] ?? base `enabled`.
+#   - base ON  + frame_enabled[k]=False -> module skipped on frame k only
+#   - base OFF + frame_enabled[k]=True  -> module runs on frame k only
+# Legacy `disabled_frames` stays readable (back-compat) and means
+# frame_enabled[k]=False for each listed frame.
+
+def _wildcard_fe(binding, values, *, enabled=True, frame_enabled=None):
+    """Wildcard module with base `enabled` + optional frame_enabled map."""
+    m = {
+        "type": "wildcard",
+        "enabled": enabled,
+        "payload": {
+            "var_binding": binding,
+            "options": [{"id": str(i), "value": v, "weight": 1.0} for i, v in enumerate(values)],
+        },
+        "instance": {"variable_binding": binding},
+    }
+    if frame_enabled is not None:
+        m["frame_enabled"] = frame_enabled
+    return m
+
+
+def test_frame_enable_overrides_base_off_runs_only_on_that_frame():
+    """A base-disabled module turned ON for frame 2 runs ONLY on frame 2 —
+    frame_enabled overrides base `enabled` per frame. Impossible under the old
+    disabled_frames blocklist (base-off skipped every frame)."""
+    m = _wildcard_fe("z", ["alpha"], enabled=False, frame_enabled={"2": True})
+
+    # Frame 2: runs despite base-off.
+    assert "z" in _run([m], loop_index=2), "expected 'z' bound on the frame-enabled frame 2"
+    # Every other frame: base-off wins.
+    for k in (0, 1, 3):
+        assert "z" not in _run([m], loop_index=k), f"expected 'z' absent at frame {k} (base off)"
+
+
+def test_frame_disable_overrides_base_on_via_frame_enabled():
+    """A base-ON module turned OFF for frame 1 via frame_enabled runs on every
+    frame except 1 — the symmetric inverse of the base-off case."""
+    m = _wildcard_fe("z", ["alpha"], enabled=True, frame_enabled={"1": False})
+
+    assert "z" not in _run([m], loop_index=1), "expected 'z' absent on the frame-disabled frame 1"
+    for k in (0, 2, 3):
+        assert "z" in _run([m], loop_index=k), f"expected 'z' bound at frame {k}"

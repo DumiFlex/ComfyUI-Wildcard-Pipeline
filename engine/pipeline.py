@@ -300,52 +300,52 @@ class PipelineEngine:
                 _module_name = getattr(module, "name", "") or ""
                 _module_bundle_origin = getattr(module, "bundle_origin", "") or ""
 
-            # Per-frame skip list: read disabled_frames from both dict and
-            # object branches the same way iteration_overrides is read.
-            # Coerce to a set[int] so membership checks are O(1) and
-            # untrusted JSON floats/booleans are handled safely (booleans
-            # are excluded explicitly because bool is an int subclass).
-            _raw_frames = (
+            _k = int(ctx.get("__wp_loop_index__", 0))
+            # Per-frame enable override. `frame_enabled[str(k)]` overrides the
+            # base `enabled` flag for frame k in EITHER direction: a base-off
+            # module can be turned ON for select frames, a base-on module OFF
+            # for others. effective = frame_enabled.get(k, base_enabled).
+            # Legacy `disabled_frames` (a one-way blocklist) is still honoured —
+            # each listed frame reads as frame_enabled[k]=False.
+            _frame_enabled_map = (
+                module.get("frame_enabled")
+                if isinstance(module, dict)
+                else getattr(module, "frame_enabled", None)
+            )
+            _legacy_disabled = (
                 module.get("disabled_frames")
                 if isinstance(module, dict)
                 else getattr(module, "disabled_frames", None)
             )
-            _disabled_frames: set[int] = {
+            _frame_override: bool | None = None
+            if isinstance(_frame_enabled_map, dict) and str(_k) in _frame_enabled_map:
+                _frame_override = bool(_frame_enabled_map[str(_k)])
+            elif isinstance(_legacy_disabled, (list, tuple)) and _k in {
                 int(f)
-                for f in (_raw_frames if isinstance(_raw_frames, (list, tuple)) else [])
+                for f in _legacy_disabled
                 if isinstance(f, (int, float)) and not isinstance(f, bool)
-            }
-            _k = int(ctx.get("__wp_loop_index__", 0))
+            }:
+                _frame_override = False
+            _effective_enabled = (
+                _frame_override if _frame_override is not None else bool(_module_enabled)
+            )
 
-            if not _module_enabled:
-                # Disabled modules don't run — but the trace row still
-                # surfaces what the module would have written, so the
-                # debug viewer can label it `$varname (disabled)`
-                # instead of falling back to an opaque short-uuid.
+            if not _effective_enabled:
+                # Module is suppressed this frame. Distinguish a per-frame
+                # disable (a frame override forced it off) from a global
+                # disable (base off, no frame override) so the debug viewer
+                # can label `skipped_frame` vs `skipped_disabled`. Either way
+                # the trace row still surfaces what it WOULD have written so
+                # the debug viewer can label `$varname (disabled)` rather than
+                # falling back to an opaque short-uuid.
+                _frame_forced_off = _frame_override is False
                 meta = _extract_static_meta(module)
                 ctx["__wp_trace__"].append({
                     "id": _module_id,
                     "_uid": _module_uid,
                     "type": _module_type_raw,
-                    "enabled": False,
-                    "status": "skipped_disabled",
-                    "writes": [],
-                    "error": None,
-                    **meta,
-                })
-                continue
-
-            if _k in _disabled_frames:
-                # Module is enabled globally but suppressed on this frame.
-                # Trace as enabled=True so the debug viewer can distinguish
-                # "off on this frame" from "off entirely" (skipped_disabled).
-                meta = _extract_static_meta(module)
-                ctx["__wp_trace__"].append({
-                    "id": _module_id,
-                    "_uid": _module_uid,
-                    "type": _module_type_raw,
-                    "enabled": True,
-                    "status": "skipped_frame",
+                    "enabled": bool(_module_enabled) if _frame_forced_off else False,
+                    "status": "skipped_frame" if _frame_forced_off else "skipped_disabled",
                     "writes": [],
                     "error": None,
                     **meta,
@@ -373,7 +373,8 @@ class PipelineEngine:
                             "id", "type", "enabled", "payload", "entries",
                             "meta", "library_id", "library_snapshot_at",
                             "library_version_at_snapshot", "name", "category_id",
-                            "instance", "iteration_overrides", "disabled_frames",
+                            "instance", "iteration_overrides",
+                            "disabled_frames", "frame_enabled",
                         )
                         if hasattr(module, k)
                     }

@@ -64,10 +64,14 @@ export interface ModuleRowCtx {
   /** The effective locked_seed for this module at `currentFrame` (or base when
    *  no frame is active). `undefined` when the effective instance is unlocked. */
   effectiveLockedSeed: (m: ModuleEntry) => number | undefined;
-  /** True when a frame is active and `currentFrame` is listed in
-   *  `m.disabled_frames`. Base `enabled` is unaffected; this only reflects
-   *  the per-frame suppression set. */
-  isDisabledOnFrame: (m: ModuleEntry) => boolean;
+  /** Effective enabled state for the current view: `frame_enabled[k] ?? base
+   *  enabled` when a frame is active, base `enabled` otherwise. Drives the row
+   *  checkbox + the disabled (hatched) row styling. */
+  effectiveEnabled: (m: ModuleEntry) => boolean;
+  /** Per-frame enable override vs base at `currentFrame`: "on" (forced on while
+   *  base off), "off" (forced off while base on), or null (no frame active / no
+   *  override / equals base). Drives the on-#k / off-#k row badge. */
+  frameEnableOverride: (m: ModuleEntry) => "on" | "off" | null;
 }
 
 export const ModuleRowCtxKey: InjectionKey<ModuleRowCtx> = Symbol("moduleRowCtx");

@@ -76,7 +76,7 @@ import { pushToast } from "../shared/toast-store";
 import { kindIcon } from "../shared/kind-icons";
 import { KIND_TITLE, FRAME_OVERRIDABLE_FIELDS } from "./editors/_shell";
 import { currentFrame } from "../context-loop/frame-cursor";
-import { withFrameInstance, diffInstance, setFrameOverride, clearFrameOverride, toggleFrameLock } from "./frame-overrides";
+import { withFrameInstance, diffInstance, setFrameOverride, clearFrameOverride, toggleFrameLock, toggleFrameEnabled, effectiveEnabled as feEffectiveEnabled, frameEnableOverride as feFrameEnableOverride } from "./frame-overrides";
 import { varColorClass } from "../shared/var-color";
 import wpLogoSvg from "../shared/wp-logo.svg?raw";
 import {
@@ -3724,25 +3724,13 @@ function toggleEnabled(idx: number) {
   if (idx < 0 || idx >= value.value.modules.length) return;
   const k = currentFrame.value;
   if (k != null) {
-    // Frame-active: toggle membership of k in disabled_frames instead of
-    // flipping the base enabled flag.
+    // Frame-active: flip the module's per-frame enable override (symmetric —
+    // base-off turns ON for this frame, base-on turns OFF). Pure logic lives in
+    // frame-overrides.toggleFrameEnabled; base `enabled` is never touched here.
     const m = value.value.modules[idx];
     if (!m) return;
-    const frames = [...(m.disabled_frames ?? [])];
-    const pos = frames.indexOf(k);
-    if (pos === -1) {
-      frames.push(k);
-    } else {
-      frames.splice(pos, 1);
-    }
     const list = [...value.value.modules];
-    const updated = { ...m };
-    if (frames.length === 0) {
-      delete updated.disabled_frames;
-    } else {
-      updated.disabled_frames = frames;
-    }
-    list[idx] = updated;
+    list[idx] = toggleFrameEnabled(m, k);
     commitModules(list);
     return;
   }
@@ -3751,9 +3739,13 @@ function toggleEnabled(idx: number) {
   commitModules(list);
 }
 
-function isDisabledOnFrame(m: ModuleEntry): boolean {
-  const k = currentFrame.value;
-  return k != null && (m.disabled_frames ?? []).includes(k);
+// Thin wrappers binding the pure frame-overrides enable helpers to the reactive
+// `currentFrame` cursor — exposed to ModuleRow via moduleRowCtx.
+function effectiveEnabled(m: ModuleEntry): boolean {
+  return feEffectiveEnabled(m, currentFrame.value);
+}
+function frameEnableOverride(m: ModuleEntry): "on" | "off" | null {
+  return feFrameEnableOverride(m, currentFrame.value);
 }
 
 function toggleCollapsed(idx: number) {
@@ -4801,7 +4793,8 @@ const moduleRowCtx: ModuleRowCtx = {
   isHeld,
   isOverriddenOnFrame,
   effectiveLockedSeed,
-  isDisabledOnFrame,
+  effectiveEnabled,
+  frameEnableOverride,
 };
 provide(ModuleRowCtxKey, moduleRowCtx);
 

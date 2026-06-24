@@ -784,10 +784,16 @@ export interface ModuleEntry {
   /** Per-frame override patches: stringified 0-based iteration index ->
    *  partial instance merged onto this module's instance for that frame. */
   iteration_overrides?: Record<string, Partial<NonNullable<ModuleEntry["instance"]>>>;
-  /** 0-based loop indices on which this module is suppressed. The module's
-   *  base `enabled` flag is unaffected; this is a frame-local skip list.
-   *  Absent or empty means the module runs on every frame. */
+  /** Legacy per-frame blocklist (0-based loop indices on which the
+   *  module was suppressed). Superseded by `frame_enabled`; still read for
+   *  back-compat and folded into `frame_enabled` on the first frame toggle. */
   disabled_frames?: number[];
+  /** Per-frame enable override: stringified 0-based frame index -> enabled.
+   *  Overrides the base `enabled` flag for that frame in EITHER direction — a
+   *  base-off module can be turned ON for select frames, a base-on module OFF
+   *  for others. effective = frame_enabled[k] ?? base enabled. Only frames that
+   *  differ from base are stored. */
+  frame_enabled?: Record<string, boolean>;
 }
 
 export function parseWidgetJson<T>(raw: string, fallback: T): T {

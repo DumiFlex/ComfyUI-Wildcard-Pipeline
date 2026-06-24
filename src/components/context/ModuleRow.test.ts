@@ -51,7 +51,8 @@ function makeCtx(over: Partial<ModuleRowCtx> = {}): ModuleRowCtx {
     isHeld: () => false,
     isOverriddenOnFrame: () => false,
     effectiveLockedSeed: () => undefined,
-    isDisabledOnFrame: () => false,
+    effectiveEnabled: (m) => m.enabled !== false,
+    frameEnableOverride: () => null,
     ...over,
   };
 }
@@ -162,69 +163,51 @@ describe("ModuleRow.vue — iteration-aware badges", () => {
   });
 });
 
-describe("ModuleRow.vue — per-frame enable/disable (R4)", () => {
-  it("checkbox appears unchecked when the module is disabled on the active frame", () => {
+describe("ModuleRow.vue — per-frame enable/disable", () => {
+  it("checkbox is unchecked when effectiveEnabled is false on the active frame", () => {
     const frame = ref<number | null>(2);
-    const mod = module({ enabled: true, disabled_frames: [2] } as Partial<ModuleEntry>);
-    const ctx = makeCtx({
-      currentFrame: frame,
-      isDisabledOnFrame: (m) => {
-        const k = frame.value;
-        return k != null && (m.disabled_frames ?? []).includes(k);
-      },
-    });
-    const wrapper = mountRow(ctx, mod);
+    const ctx = makeCtx({ currentFrame: frame, effectiveEnabled: () => false });
+    const wrapper = mountRow(ctx, module({ enabled: true }));
     const checkbox = wrapper.find('input[type="checkbox"]');
     expect(checkbox.exists()).toBe(true);
-    // Effective enabled = enabled && !isDisabledOnFrame → false at frame 2.
     expect((checkbox.element as HTMLInputElement).checked).toBe(false);
   });
 
-  it("checkbox appears checked when the module is NOT in disabled_frames for the active frame", () => {
-    const frame = ref<number | null>(1);
-    const mod = module({ enabled: true, disabled_frames: [2] } as Partial<ModuleEntry>);
-    const ctx = makeCtx({
-      currentFrame: frame,
-      isDisabledOnFrame: (m) => {
-        const k = frame.value;
-        return k != null && (m.disabled_frames ?? []).includes(k);
-      },
-    });
-    const wrapper = mountRow(ctx, mod);
+  it("checkbox is checked when effectiveEnabled is true (base-off but on for this frame)", () => {
+    const frame = ref<number | null>(2);
+    const ctx = makeCtx({ currentFrame: frame, effectiveEnabled: () => true });
+    const wrapper = mountRow(ctx, module({ enabled: false }));
     const checkbox = wrapper.find('input[type="checkbox"]');
     expect((checkbox.element as HTMLInputElement).checked).toBe(true);
   });
 
-  it("shows a frame-disabled badge when active frame is in disabled_frames", () => {
+  it("shows an off-#k badge when frameEnableOverride is 'off'", () => {
     const frame = ref<number | null>(2);
-    const mod = module({ enabled: true, disabled_frames: [2] } as Partial<ModuleEntry>);
-    const ctx = makeCtx({
-      currentFrame: frame,
-      isDisabledOnFrame: (m) => {
-        const k = frame.value;
-        return k != null && (m.disabled_frames ?? []).includes(k);
-      },
-    });
-    const wrapper = mountRow(ctx, mod);
+    const ctx = makeCtx({ currentFrame: frame, frameEnableOverride: () => "off" });
+    const wrapper = mountRow(ctx, module({ enabled: true }));
     const badge = wrapper.find('[data-test="mod-frame-disabled"]');
     expect(badge.exists()).toBe(true);
-    // frame index 2 (0-based) renders as "#3" (index + 1)
+    expect(badge.text()).toContain("#3"); // frame index 2 (0-based) → "#3"
+  });
+
+  it("shows an on-#k badge when frameEnableOverride is 'on'", () => {
+    const frame = ref<number | null>(2);
+    const ctx = makeCtx({ currentFrame: frame, frameEnableOverride: () => "on" });
+    const wrapper = mountRow(ctx, module({ enabled: false }));
+    const badge = wrapper.find('[data-test="mod-frame-enabled"]');
+    expect(badge.exists()).toBe(true);
     expect(badge.text()).toContain("#3");
   });
 
   it("checkbox change calls ctx.toggleEnabled with the row index", async () => {
     const frame = ref<number | null>(2);
     const calls: number[] = [];
-    const mod = module({ enabled: true } as Partial<ModuleEntry>);
     const ctx = makeCtx({
       currentFrame: frame,
-      isDisabledOnFrame: () => false,
       toggleEnabled: (idx) => { calls.push(idx); },
     });
-    const wrapper = mountRow(ctx, mod);
-    const checkbox = wrapper.find('input[type="checkbox"]');
-    await checkbox.trigger("change");
-    // toggleEnabled must have been called once with the row index (0).
+    const wrapper = mountRow(ctx, module({ enabled: true }));
+    await wrapper.find('input[type="checkbox"]').trigger("change");
     expect(calls).toEqual([0]);
   });
 });
