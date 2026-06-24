@@ -74,7 +74,7 @@ import { dragState, queueHandoff, pendingHandoffs, takeHandoffsFor } from "./dra
 import { nextBindingSuffix } from "./duplicates/binding-suffix";
 import { pushToast } from "../shared/toast-store";
 import { kindIcon } from "../shared/kind-icons";
-import { KIND_TITLE, INSTANCE_FIELDS_PER_KIND } from "./editors/_shell";
+import { KIND_TITLE, FRAME_OVERRIDABLE_FIELDS } from "./editors/_shell";
 import { currentFrame } from "../context-loop/frame-cursor";
 import { withFrameInstance, diffInstance, setFrameOverride, clearFrameOverride } from "./frame-overrides";
 import { varColorClass } from "../shared/var-color";
@@ -3831,7 +3831,7 @@ function saveEditedModule(updated: ModuleEntry & { _originalId?: string }) {
     list[targetIdx] = cleaned;                                   // base edit — unchanged behavior
   } else {
     const baseModule = value.value.modules[targetIdx];           // base: payload + base instance intact
-    const fields = INSTANCE_FIELDS_PER_KIND[baseModule.type] ?? [];
+    const fields = FRAME_OVERRIDABLE_FIELDS[baseModule.type] ?? [];
     const delta = diffInstance(baseModule.instance, cleaned.instance, fields);
     // base payload + base instance preserved; the frame's override = the instance delta (replace, not merge)
     let next = clearFrameOverride(baseModule, k);

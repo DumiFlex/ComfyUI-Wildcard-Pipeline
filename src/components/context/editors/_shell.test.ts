@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { INSTANCE_FIELDS_PER_KIND } from "./_shell";
+import { FRAME_OVERRIDABLE_FIELDS, INSTANCE_FIELDS_PER_KIND } from "./_shell";
 
 describe("INSTANCE_FIELDS_PER_KIND registry", () => {
   it("lists exactly the fields each kind exposes per spec §5.5", () => {
@@ -55,4 +55,17 @@ describe("INSTANCE_FIELDS_PER_KIND registry", () => {
       "target_select",
     ]);
   });
+});
+
+describe("FRAME_OVERRIDABLE_FIELDS", () => {
+  const EXCLUDED = ["seed_scope", "variable_binding", "internal"] as const;
+  for (const kind of Object.keys(FRAME_OVERRIDABLE_FIELDS) as Array<keyof typeof FRAME_OVERRIDABLE_FIELDS>) {
+    it(`${kind}: excludes run-level/structural fields`, () => {
+      for (const ex of EXCLUDED) expect(FRAME_OVERRIDABLE_FIELDS[kind]).not.toContain(ex);
+    });
+    it(`${kind}: is a subset of INSTANCE_FIELDS_PER_KIND`, () => {
+      const sup = new Set(INSTANCE_FIELDS_PER_KIND[kind]);
+      for (const f of FRAME_OVERRIDABLE_FIELDS[kind]) expect(sup.has(f)).toBe(true);
+    });
+  }
 });
