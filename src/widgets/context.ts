@@ -14,10 +14,12 @@ import {
   collectUpstreamWildcardUuids,
   findRootGraph,
   hasUpstreamLoopOverridingSeed,
+  resolveUpstreamLoopSeed,
   type LiteGraphLike,
   type LiteNodeLike,
 } from "../extension/graph";
 import { collectCrossNodePairingsFull, collectFullChainModules } from "../extension/cross-node-pairings";
+import { deriveLoopSeeds, applySeedLocks, effectiveChainSeed } from "../components/shared/seed-derive";
 import type { ChainModule, PairingBadge, RowPairings, TargetSelect } from "../extension/constraint-pairs";
 import { reactiveFromGraph, stringArrayEqual } from "../extension/reactive";
 import { applyVarAccessor, type ResolvedValue } from "./richTokenize";
@@ -442,6 +444,37 @@ export function create(node: ContextNode, inputName: string) {
           .__wp_last_used_seed__;
         return typeof v === "number" && Number.isFinite(v) ? v : null;
       }
+
+      // Per-frame seed reader for the iteration-frame lock. Computes the seed
+      // THIS module rolls at frame #k WITHOUT a run, mirroring the engine:
+      // resolve the upstream Loop's derived series (base + strategy + the Loop's
+      // own per-iteration locks) and feed it through effectiveChainSeed exactly
+      // like wp_nodes/context_node.py. Null when no frame active / no Loop /
+      // frame out of range — caller then falls back to the stored seed.
+      function frameSeedReader(frame: number): number | null {
+        if (!Number.isInteger(frame) || frame < 0) return null;
+        const startGraph =
+          (node as unknown as { graph?: LiteGraphLike }).graph
+          ?? (app.graph as unknown as LiteGraphLike);
+        const rootGraph = findRootGraph(startGraph);
+        const loop = resolveUpstreamLoopSeed(rootGraph, node);
+        const seedWidget = (node as unknown as {
+          widgets?: Array<{ name?: string; value?: unknown }>;
+        }).widgets?.find((w) => w.name === "seed");
+        const nodeSeedRaw = Number(seedWidget?.value);
+        const nodeSeed = Number.isFinite(nodeSeedRaw) ? nodeSeedRaw : 0;
+        if (loop && loop.overrideSeed) {
+          if (frame >= loop.count) return null;
+          const series = applySeedLocks(
+            deriveLoopSeeds(loop.baseSeed, loop.count, loop.strategy),
+            loop.seedLocks as unknown as Record<number, number>,
+          );
+          return effectiveChainSeed(nodeSeed, series[frame], frame);
+        }
+        // No override (or no Loop): the per-node widget seed varies per
+        // iteration via the loop_index XOR — same path as a base-off override.
+        return effectiveChainSeed(nodeSeed, null, frame);
+      }
       return () => {
         // Reactive lock: read the upstream-override ref inside the
         // render thunk so Vue tracks it. `syncSeedWidgetGate` is a
@@ -462,6 +495,7 @@ export function create(node: ContextNode, inputName: string) {
           chainModules: chainModulesRef.value,
           nodeMode: nodeMode.value,
           lastUsedSeedReader,
+          frameSeedReader,
           onChange: (json: string) => host.setValue(json),
           onRequestMinWidth: (w: number) => {
             if (w === dynamicMinWidth) return;

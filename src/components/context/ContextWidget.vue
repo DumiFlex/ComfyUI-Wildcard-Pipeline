@@ -153,6 +153,10 @@ const props = withDefaults(defineProps<{
   nodeMode?: number;
   /** Last-run seed reader keyed by module id. Null = user hasn't queued. */
   lastUsedSeedReader?: (moduleId?: string) => number | null;
+  /** Per-frame seed reader — the seed THIS node rolls at iteration frame #k,
+   *  computed from the upstream Loop without a run. Drives the per-frame seed
+   *  lock so it pins the seed the module actually uses on that frame. */
+  frameSeedReader?: (frame: number) => number | null;
   onChange: (json: string) => void;
   /** Called whenever the formula-computed minimum node width changes
    *  (a conflict appears, a state badge gets attached). Mount glue
@@ -2955,8 +2959,14 @@ function toggleLockOnCard(idx: number) {
   if (!m) return;
   const k = currentFrame.value;
   if (k != null) {
+    // Prefer the seed THIS module actually rolls at frame #k (computed from the
+    // upstream Loop), so the lock pins the frame's real seed — not the single
+    // representative seed a run surfaced. Falls back to last-used / stored when
+    // no Loop drives the node.
+    const frameSeed = props.frameSeedReader?.(k);
     const lastUsed = props.lastUsedSeedReader?.(m._uid ?? m.id);
-    const fallback = typeof lastUsed === "number" ? lastUsed
+    const fallback = typeof frameSeed === "number" ? frameSeed
+      : typeof lastUsed === "number" ? lastUsed
       : (typeof m.instance?._ui?.last_locked_seed === "number" ? m.instance._ui.last_locked_seed : 0);
     const list = [...value.value.modules];
     list[idx] = toggleFrameLock(m, k, fallback);

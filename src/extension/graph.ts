@@ -13,6 +13,7 @@ import {
   type WildcardOption,
 } from "../components/context/editors/wildcard/probability";
 import { ensure as ensurePreviewLookup, lookup as previewLookup } from "./preview-resolver";
+import type { SeedStrategy } from "../components/shared/seed-derive";
 
 // ── Subgraph boundary primer ────────────────────────────────────────────
 // ComfyUI subgraphs are nested LGraph instances attached to a parent node
@@ -428,6 +429,63 @@ export function hasUpstreamLoopOverridingSeed(
     cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
   }
   return false;
+}
+
+export interface UpstreamLoopSeed {
+  overrideSeed: boolean;
+  baseSeed: number;
+  count: number;
+  strategy: SeedStrategy;
+  /** 0-based iteration index (stringified) -> pinned seed (the Loop's own
+   *  per-iteration seed-modal locks). Overlaid on the derived series. */
+  seedLocks: Record<string, number>;
+}
+
+/**
+ * Walk upstream to the first WP_ContextLoop and return its seed-deriving
+ * config — base seed + count + strategy + override flag + per-iteration locks —
+ * or null when no Loop drives this node. Lets a downstream WP_Context compute
+ * the seed each iteration actually rolls (for the per-frame seed lock). Same
+ * chain walk as `hasUpstreamLoopOverridingSeed`.
+ */
+export function resolveUpstreamLoopSeed(
+  rootGraph: LiteGraphLike,
+  node: LiteNodeLike,
+): UpstreamLoopSeed | null {
+  const parents = buildSubgraphParents(rootGraph);
+  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
+  let cur = pipelineUpstreamOf(node, graphOf(node, rootGraph), parents);
+  while (cur && !seen.has(locator(cur.graph, cur.node))) {
+    seen.add(locator(cur.graph, cur.node));
+    if (cur.node.type === "WP_ContextLoop" && !isSkippedMode(cur.node)) {
+      const cfg = parseWidgetJson<{
+        strategy?: string;
+        override_seed?: boolean;
+        seed_locks?: Record<string, number>;
+      }>(widgetValue(cur.node, "wp_context_loop_config"), {});
+      const strategy: SeedStrategy =
+        cfg.strategy === "sequential" || cfg.strategy === "prime_stride"
+          ? cfg.strategy
+          : "hash_index";
+      const rawSeed = Number(widgetValue(cur.node, "seed"));
+      const rawCount = Number(widgetValue(cur.node, "count"));
+      const seedLocks: Record<string, number> = {};
+      if (cfg.seed_locks && typeof cfg.seed_locks === "object") {
+        for (const [k, v] of Object.entries(cfg.seed_locks)) {
+          if (typeof v === "number" && Number.isFinite(v)) seedLocks[k] = v;
+        }
+      }
+      return {
+        overrideSeed: cfg.override_seed === true,
+        baseSeed: Number.isFinite(rawSeed) ? rawSeed : 0,
+        count: Number.isFinite(rawCount) && rawCount >= 1 ? Math.floor(rawCount) : 1,
+        strategy,
+        seedLocks,
+      };
+    }
+    cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
+  }
+  return null;
 }
 
 /**

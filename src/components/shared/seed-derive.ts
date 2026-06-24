@@ -32,6 +32,25 @@ export function applySeedLocks(derived: number[], locks: Record<number, number>)
   );
 }
 
+/**
+ * TS mirror of engine/seed_derive.py `effective_chain_seed` — the seed a
+ * WP_Context node rolls at iteration `loopIndex`. An override (the loop's
+ * already-per-iteration derived seed) is used verbatim; only a constant
+ * widget seed (no override) gets the loop_index XOR. Mirrors the engine's
+ * no-double-shift rule so a per-frame seed lock pins the seed the module
+ * actually rolls at that frame.
+ */
+export function effectiveChainSeed(
+  widgetSeed: number, seedOverride: number | null, loopIndex: number,
+): number {
+  const base = seedOverride != null ? BigInt(seedOverride) : BigInt(widgetSeed);
+  if (loopIndex === 0 || seedOverride != null) return Number(base & MASK);
+  const digest = sha256Bytes(`loop:${loopIndex}`);
+  let shift = 0n;
+  for (let b = 0; b < 8; b++) shift = (shift << 8n) | BigInt(digest[b]);
+  return Number((base ^ shift) & MASK);
+}
+
 const LOCK_LINE = /^\s*#(\d+)\s*:\s*(-?\d+)\s*$/;
 
 /**
