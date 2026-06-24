@@ -7,7 +7,7 @@ describe("INSTANCE_FIELDS_PER_KIND registry", () => {
       // v2 dropped `mode` + `pinned_option_id` — see
       // docs/superpowers/specs/2026-05-08-instance-overrides-v2-design.md §6.1.
       "variable_binding", "enabled_options",
-      "option_weights", "category_filter", "exclude_null", "locked_seed", "internal",
+      "option_weights", "category_filter", "exclude_null", "locked_seed", "seed_scope", "internal",
       // SP2a multi-select (2026-06-08): per-instance count range + separator.
       // SP2c: pick_independent (allow repeats / with replacement).
       "pick_min", "pick_max", "pick_separator", "pick_independent",
@@ -16,15 +16,17 @@ describe("INSTANCE_FIELDS_PER_KIND registry", () => {
       // `locked_seed` added in the combine + fixed_values syntax-parity
       // cycle (2026-05-08): fixed_values now resolves `{a|b|c}` per
       // value, so it gains seed-lock parity with wildcard + combine.
-      "values_overrides", "enabled_options", "locked_seed",
+      // `seed_scope` added for iteration-aware hold/vary control.
+      "values_overrides", "enabled_options", "locked_seed", "seed_scope",
     ]);
     expect(INSTANCE_FIELDS_PER_KIND.combine).toEqual([
       // v2 single-pane modal exposes per-instance overrides:
       //   - template_override (combine v2, this cycle)
       //   - variable_binding (matches wildcard's identity-section UX)
       //   - locked_seed (parity with wildcard + fixed_values)
+      //   - seed_scope (iteration-aware hold/vary control)
       //   - internal (existing hide-from-prompt toggle)
-      "template_override", "variable_binding", "locked_seed", "internal",
+      "template_override", "variable_binding", "locked_seed", "seed_scope", "internal",
     ]);
     expect(INSTANCE_FIELDS_PER_KIND.derivation).toEqual([
       // Tier-D modal expansion (2026-05-10): per-rule + per-branch

@@ -620,6 +620,10 @@ export interface ModuleEntry {
      * project, adapted to our `_fresh_instance` shape.
      */
     locked_seed?: number | null;
+    /** Iteration seed scope: "hold" pins this module's RNG to the run base
+     *  seed (identical across loop iterations, re-rolls per run); "vary"
+     *  (default/absent) rides the per-iteration seed. `locked_seed` wins. */
+    seed_scope?: "vary" | "hold";
     /**
      * Internal — when true, every binding this module produces is
      * marked engine-only. Downstream modules in the same chain can
@@ -777,6 +781,9 @@ export interface ModuleEntry {
       master_lock_by?: string;
     };
   };
+  /** Per-frame override patches: stringified 0-based iteration index ->
+   *  partial instance merged onto this module's instance for that frame. */
+  iteration_overrides?: Record<string, Partial<NonNullable<ModuleEntry["instance"]>>>;
 }
 
 export function parseWidgetJson<T>(raw: string, fallback: T): T {

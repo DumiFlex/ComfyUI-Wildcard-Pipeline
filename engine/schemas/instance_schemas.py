@@ -33,6 +33,10 @@ INSTANCE_SCHEMAS: dict[str, dict[str, InstanceFieldType]] = {
         "category_filter": "string",
         "exclude_null": "boolean",
         "locked_seed": "number",
+        # Iteration seed scope: "hold" pins RNG to the run base seed (same
+        # across loop iterations, re-rolls per run); "vary" (default/absent)
+        # rides the per-iteration seed. `locked_seed` takes priority when set.
+        "seed_scope": "string",
         "internal": "boolean",
         # SP2a multi-select: per-instance count range (pick_min..pick_max; a
         # range other than 1..1 resolves N options without replacement into a
@@ -59,6 +63,8 @@ INSTANCE_SCHEMAS: dict[str, dict[str, InstanceFieldType]] = {
         # resolution gives fixed_values seed-lock parity with wildcard
         # + combine. Locked seed pins the alternation outcome.
         "locked_seed": "number",
+        # Iteration seed scope: hold/vary control (parity with wildcard).
+        "seed_scope": "string",
     },
     "combine": {
         # v2 single-pane modal exposes a richer override surface:
@@ -69,6 +75,8 @@ INSTANCE_SCHEMAS: dict[str, dict[str, InstanceFieldType]] = {
         "template_override": "string",
         "variable_binding": "string",
         "locked_seed": "number",
+        # Iteration seed scope: hold/vary control (parity with wildcard).
+        "seed_scope": "string",
         "internal": "boolean",
     },
     "derivation": {

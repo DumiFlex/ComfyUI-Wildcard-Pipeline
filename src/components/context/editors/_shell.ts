@@ -14,7 +14,7 @@ export type InstanceFieldKey =
   | "variable_binding" | "enabled_options" | "option_weights" | "category_filter"
   | "exclude_null"
   | "pick_min" | "pick_max" | "pick_separator" | "pick_independent"
-  | "mode" | "pinned_option_id" | "locked_seed" | "internal" | "values_overrides"
+  | "mode" | "pinned_option_id" | "locked_seed" | "seed_scope" | "internal" | "values_overrides"
   | "template_override"
   | "disabled_rule_ids"
   // Derivation tier-D modal expansion (2026-05-10 cycle)
@@ -46,13 +46,13 @@ export const INSTANCE_FIELDS_PER_KIND: Record<ModuleEntryKind, readonly Instance
     // implicit in pool state. Engine handler still reads them on
     // legacy snapshots; UI never writes them.
     "variable_binding", "enabled_options",
-    "option_weights", "category_filter", "exclude_null", "locked_seed", "internal",
+    "option_weights", "category_filter", "exclude_null", "locked_seed", "seed_scope", "internal",
     // SP2a multi-select: count range + join separator (per-instance, local).
     // SP2c: pick_independent (allow repeats / with replacement).
     "pick_min", "pick_max", "pick_separator", "pick_independent",
   ],
-  fixed_values: ["values_overrides", "enabled_options", "locked_seed"],
-  combine: ["template_override", "variable_binding", "locked_seed", "internal"],
+  fixed_values: ["values_overrides", "enabled_options", "locked_seed", "seed_scope"],
+  combine: ["template_override", "variable_binding", "locked_seed", "seed_scope", "internal"],
   derivation: [
     // Tier-D modal expansion (2026-05-10):
     //   - rule-group overrides (cleared by Reset btn)
