@@ -74,7 +74,9 @@ import { dragState, queueHandoff, pendingHandoffs, takeHandoffsFor } from "./dra
 import { nextBindingSuffix } from "./duplicates/binding-suffix";
 import { pushToast } from "../shared/toast-store";
 import { kindIcon } from "../shared/kind-icons";
-import { KIND_TITLE } from "./editors/_shell";
+import { KIND_TITLE, INSTANCE_FIELDS_PER_KIND } from "./editors/_shell";
+import { currentFrame } from "../context-loop/frame-cursor";
+import { withFrameInstance, diffInstance, setFrameOverride, clearFrameOverride } from "./frame-overrides";
 import { varColorClass } from "../shared/var-color";
 import wpLogoSvg from "../shared/wp-logo.svg?raw";
 import {
@@ -679,9 +681,11 @@ function onBundlePushClosed(): void {
   pushBundleTargetUid.value = null;
   pushBundleCascadeScan.value = null;
 }
-const editingModule = computed<ModuleEntry | null>(() =>
-  editingIdx.value != null ? (value.value.modules[editingIdx.value] ?? null) : null,
-);
+const editingModule = computed<ModuleEntry | null>(() => {
+  if (editingIdx.value == null) return null;
+  const m = value.value.modules[editingIdx.value] ?? null;
+  return m ? withFrameInstance(m, currentFrame.value) : null;
+});
 
 /** Per-occurrence pair lookup for the currently-edited CARRIER module.
  *  Map keys are the carrier's `via.optionIds` — wildcard option ids for a
@@ -3815,7 +3819,18 @@ function saveEditedModule(updated: ModuleEntry & { _originalId?: string }) {
   const cleaned: ModuleEntry = { ...updated };
   delete (cleaned as { _originalId?: string })._originalId;
   const list = [...value.value.modules];
-  list[targetIdx] = cleaned;
+  const k = currentFrame.value;
+  if (k == null) {
+    list[targetIdx] = cleaned;                                   // base edit — unchanged behavior
+  } else {
+    const baseModule = value.value.modules[targetIdx];           // base: payload + base instance intact
+    const fields = INSTANCE_FIELDS_PER_KIND[baseModule.type] ?? [];
+    const delta = diffInstance(baseModule.instance, cleaned.instance, fields);
+    // base payload + base instance preserved; the frame's override = the instance delta (replace, not merge)
+    let next = clearFrameOverride(baseModule, k);
+    if (Object.keys(delta).length) next = setFrameOverride(next, k, delta);
+    list[targetIdx] = next;
+  }
   commitModules(list);
   if (updated._originalId && updated._originalId !== updated.id) {
     nextTick(() => {

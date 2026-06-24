@@ -194,7 +194,11 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // Bumped 444 -> 445 KB on 2026-06-23 for T16 (seed modal paste-to-replace).
 // Adds parseSeedLocks in seed-derive + pasteAll/Paste button in SeedListModal.
 // Measured 454900 bytes (244 over the 444 ceiling); minimal bump.
-const TOTAL_LIMIT = 445 * 1024;     // 445 KB
+// Bumped 445 -> 446 KB on 2026-06-24 for UI-C (wire ContextWidget frame edits).
+// Adds imports of frame-cursor / frame-overrides / INSTANCE_FIELDS_PER_KIND into
+// the ContextWidget lazy chunk + the merge-on-open / write-redirect logic.
+// Measured 455772 bytes (92 over the 445 ceiling); minimal bump.
+const TOTAL_LIMIT = 446 * 1024;     // 446 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;
