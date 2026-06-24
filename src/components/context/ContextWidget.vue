@@ -2889,6 +2889,13 @@ function isLocked(m: ModuleEntry): boolean {
 function isInternal(m: ModuleEntry): boolean {
   return !!m.instance?.internal;
 }
+function isHeld(m: ModuleEntry): boolean {
+  return m.instance?.seed_scope === "hold";
+}
+function isOverriddenOnFrame(m: ModuleEntry): boolean {
+  const k = currentFrame.value;
+  return k != null && !!m.iteration_overrides?.[String(k)];
+}
 
 // ── Formula-driven minWidth ────────────────────────────────────────
 // Pull-based pattern: createDomWidgetHost reads this through a
@@ -4735,6 +4742,9 @@ const moduleRowCtx: ModuleRowCtx = {
   pairingFor,
   viaInboundFor,
   contributorsFor,
+  currentFrame,
+  isHeld,
+  isOverriddenOnFrame,
 };
 provide(ModuleRowCtxKey, moduleRowCtx);
 

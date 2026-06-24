@@ -149,6 +149,8 @@ const {
           class="wp-conflict-badge"
           :class="`wp-conflict-badge--${severityFor(module._uid ?? module.id)}`"
           :title="conflictTooltip(module._uid ?? module.id)">{{ conflictBadgeText(module._uid ?? module.id) }}</span>
+        <span v-if="ctx?.isHeld(module)" class="wp-mod-badge wp-mod-badge--clash" data-test="mod-held" title="Held across the run">held</span>
+        <span v-if="ctx?.isOverriddenOnFrame(module)" class="wp-conflict-badge wp-conflict-badge--warning" data-test="mod-override" title="Overridden on this frame">override #{{ (ctx.currentFrame.value ?? 0) + 1 }}</span>
       </span>
       <div class="wp-mod-actions" draggable="false">
         <button v-if="isSeedLockable(module)" type="button" class="wp-btn--icon-sm wp-btn--warn"

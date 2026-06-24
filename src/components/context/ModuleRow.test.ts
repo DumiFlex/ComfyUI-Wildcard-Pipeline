@@ -47,6 +47,9 @@ function makeCtx(over: Partial<ModuleRowCtx> = {}): ModuleRowCtx {
     pairingFor: () => null,
     viaInboundFor: () => [],
     contributorsFor: () => [],
+    currentFrame: ref<number | null>(null),
+    isHeld: () => false,
+    isOverriddenOnFrame: () => false,
     ...over,
   };
 }
@@ -129,5 +132,30 @@ describe("ModuleRow.vue — contributor cluster", () => {
     const ctx = makeCtx({ contributorsFor: () => [] });
     const wrapper = mountRow(ctx, module());
     expect(wrapper.find(".wp-pair-badge").exists()).toBe(false);
+  });
+});
+
+describe("ModuleRow.vue — iteration-aware badges", () => {
+  it("shows a held badge when seed_scope is hold", () => {
+    const mod = module({ instance: { seed_scope: "hold" } as ModuleEntry["instance"] });
+    const ctx = makeCtx({ isHeld: (m) => m.instance?.seed_scope === "hold" });
+    const wrapper = mountRow(ctx, mod);
+    expect(wrapper.find('[data-test="mod-held"]').exists()).toBe(true);
+  });
+
+  it("shows an override badge labelled with the current frame", () => {
+    const frame = ref<number | null>(1);
+    const mod = module({ iteration_overrides: { "1": { weight: 2 } } as ModuleEntry["iteration_overrides"] });
+    const ctx = makeCtx({
+      currentFrame: frame,
+      isOverriddenOnFrame: (m) => {
+        const k = frame.value;
+        return k != null && !!m.iteration_overrides?.[String(k)];
+      },
+    });
+    const wrapper = mountRow(ctx, mod);
+    const badge = wrapper.find('[data-test="mod-override"]');
+    expect(badge.exists()).toBe(true);
+    expect(badge.text()).toContain("#2");
   });
 });

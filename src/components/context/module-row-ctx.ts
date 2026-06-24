@@ -53,6 +53,14 @@ export interface ModuleRowCtx {
    *  single `↥×N` chip. Empty on rows no constraint covers (every
    *  constraint / source / non-target row). */
   contributorsFor: (id: string) => PairingBadge[];
+  /** Reactive cursor: the frame currently open in the override editor,
+   *  or `null` when no frame is active (base view). */
+  currentFrame: Ref<number | null>;
+  /** True when the module's seed is held constant across all loop
+   *  iterations (`instance.seed_scope === "hold"`). */
+  isHeld: (m: ModuleEntry) => boolean;
+  /** True when the module has an override entry for `currentFrame`. */
+  isOverriddenOnFrame: (m: ModuleEntry) => boolean;
 }
 
 export const ModuleRowCtxKey: InjectionKey<ModuleRowCtx> = Symbol("moduleRowCtx");
