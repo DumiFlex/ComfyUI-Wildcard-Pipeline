@@ -9,6 +9,7 @@ import {
   findDownstreamAssemblers,
   findRootGraph,
   hasUpstreamLoopOverridingSeed,
+  resolveUpstreamLoopSeed,
   type LiteGraphLike,
   type LiteNodeLike,
 } from "./graph";
@@ -35,6 +36,55 @@ function fakeContextNode(id: number, vars: string[], upstreamLink?: number): Lit
     }],
   };
 }
+
+describe("resolveUpstreamLoopSeed", () => {
+  function loopNode(seed: number, count: number, cfg: object): LiteNodeLike {
+    return {
+      id: 1,
+      type: "WP_ContextLoop",
+      outputs: [{ name: "context", links: [100], type: "PIPELINE_CONTEXT" }],
+      widgets: [
+        { name: "seed", value: seed },
+        { name: "count", value: count },
+        { name: "wp_context_loop_config", value: JSON.stringify(cfg) },
+      ],
+    } as LiteNodeLike;
+  }
+  function mkGraph(loop: LiteNodeLike, ctx: LiteNodeLike): LiteGraphLike {
+    return {
+      _nodes: [loop, ctx],
+      links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id) => ({ 1: loop, 2: ctx } as Record<number, LiteNodeLike>)[id] ?? null,
+    };
+  }
+
+  it("reads the Loop's NUMERIC seed + count (regression: widgetValue is string-only)", () => {
+    const loop = loopNode(175588593219397, 4, { override_seed: true, strategy: "hash_index", seed_locks: {} });
+    const ctx = fakeContextNode(2, [], 100);
+    expect(resolveUpstreamLoopSeed(mkGraph(loop, ctx), ctx)).toEqual({
+      overrideSeed: true,
+      baseSeed: 175588593219397,
+      count: 4,
+      strategy: "hash_index",
+      seedLocks: {},
+    });
+  });
+
+  it("returns null when no Loop is upstream", () => {
+    const ctx = fakeContextNode(2, [], undefined);
+    const graph: LiteGraphLike = { _nodes: [ctx], links: {}, getNodeById: () => null };
+    expect(resolveUpstreamLoopSeed(graph, ctx)).toBeNull();
+  });
+
+  it("carries override_seed=false + the Loop's per-iteration seed_locks", () => {
+    const loop = loopNode(10, 3, { override_seed: false, strategy: "sequential", seed_locks: { "1": 999 } });
+    const ctx = fakeContextNode(2, [], 100);
+    const got = resolveUpstreamLoopSeed(mkGraph(loop, ctx), ctx);
+    expect(got?.overrideSeed).toBe(false);
+    expect(got?.strategy).toBe("sequential");
+    expect(got?.seedLocks).toEqual({ "1": 999 });
+  });
+});
 
 describe("collectUpstreamVariables", () => {
   it("returns the upstream chain's writes only — never the starting node's own", () => {

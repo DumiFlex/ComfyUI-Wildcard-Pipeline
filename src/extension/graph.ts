@@ -101,6 +101,14 @@ function widgetValue(node: LiteNodeLike, name: string): string {
   return typeof w?.value === "string" ? w.value : "";
 }
 
+/** Numeric widget read — `widgetValue` is string-only (returns "" for Int /
+ *  Float / combo widgets), so a numeric widget like the Loop's `seed`/`count`
+ *  must be read here. Coerces the raw value; NaN when absent/unparseable. */
+function widgetNumber(node: LiteNodeLike, name: string): number {
+  const w = node.widgets?.find((x) => x.name === name);
+  return typeof w?.value === "number" ? w.value : Number(w?.value);
+}
+
 
 function isSubgraphNode(n: LiteNodeLike): boolean {
   if (typeof n.isSubgraphNode === "function") {
@@ -467,8 +475,8 @@ export function resolveUpstreamLoopSeed(
         cfg.strategy === "sequential" || cfg.strategy === "prime_stride"
           ? cfg.strategy
           : "hash_index";
-      const rawSeed = Number(widgetValue(cur.node, "seed"));
-      const rawCount = Number(widgetValue(cur.node, "count"));
+      const rawSeed = widgetNumber(cur.node, "seed");
+      const rawCount = widgetNumber(cur.node, "count");
       const seedLocks: Record<string, number> = {};
       if (cfg.seed_locks && typeof cfg.seed_locks === "object") {
         for (const [k, v] of Object.entries(cfg.seed_locks)) {
