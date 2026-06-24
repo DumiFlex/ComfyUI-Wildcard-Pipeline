@@ -57,11 +57,11 @@ function onHoldClick(): void {
       <i class="pi pi-link" aria-hidden="true" />
       Hold across run
     </button>
-    <span
+    <p
       v-if="frameActive"
       class="runtime__frame-hint"
       data-test="runtime-frame-hint"
-    >Applies to every frame — switch to base to change.</span>
+    >Applies to every frame — switch to base to change.</p>
   </section>
 </template>
 
@@ -106,6 +106,7 @@ function onHoldClick(): void {
   cursor: not-allowed;
 }
 .runtime__frame-hint {
+  margin: 4px 0 0;
   font: 10px var(--wp-font-sans);
   color: var(--wp-text-dim, var(--wp-text3));
 }

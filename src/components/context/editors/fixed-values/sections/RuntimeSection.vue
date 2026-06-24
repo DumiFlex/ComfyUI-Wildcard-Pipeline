@@ -1,12 +1,7 @@
 <script setup lang="ts">
 /**
- * Combine RuntimeSection — composes the shared `<SeedLockControls />`
- * (default "Lock seed" label; combine pins inline `{a|b|c}`
- * alternation resolution, not an option pick) plus the
- * Hide-from-prompt toggle.
- *
- * Slimmed during the 2026-05-09 extraction — previously held a
- * verbatim copy of wildcard's lock UI.
+ * FixedValues RuntimeSection — composes the shared `<SeedLockControls />`
+ * plus the Hide-from-prompt and Hold-across-run toggles.
  */
 import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
@@ -58,11 +53,11 @@ function onHoldClick(): void {
       <i class="pi pi-link" aria-hidden="true" />
       Hold across run
     </button>
-    <span
+    <p
       v-if="frameActive"
       class="runtime__frame-hint"
       data-test="runtime-frame-hint"
-    >Applies to every frame — switch to base to change.</span>
+    >Applies to every frame — switch to base to change.</p>
   </section>
 </template>
 
@@ -107,6 +102,7 @@ function onHoldClick(): void {
   cursor: not-allowed;
 }
 .runtime__frame-hint {
+  margin: 4px 0 0;
   font: 10px var(--wp-font-sans);
   color: var(--wp-text-dim, var(--wp-text3));
 }
