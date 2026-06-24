@@ -386,6 +386,11 @@ function cancel() {
 
 <template>
   <ModalShell :visible="visible" @close="cancel">
+    <!-- Column so the frame banner stacks ABOVE the per-kind modal card
+         (each per-kind modal renders a plain card; ModalShell's wrapper is
+         a centered flex ROW, so a bare banner sibling would land beside the
+         card). align-self:stretch on the banner spans it to the card width. -->
+    <div class="wp-frame-edit-body">
     <!-- Frame-context banner — shown when the user is editing overrides
          for a specific iteration frame (#k). Sits above all per-kind
          modal bodies. Invisible on base editing (currentFrame == null). -->
@@ -482,7 +487,7 @@ function cancel() {
       @save-to-library="onSaveToLibraryClick"
       @clear-all-overrides="onClearAllOverrides"
     />
-
+    </div>
   </ModalShell>
 
   <!-- Themed confirm dialog — replaces window.confirm() for any
@@ -520,7 +525,16 @@ function cancel() {
  * `.wp-medit` chrome was the v1 tabbed shell — removed alongside
  * the v1 dispatch in the 2026-05-10 cleanup. */
 
+.wp-frame-edit-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-height: 0;
+  max-height: 100%;
+}
 .wp-modal-frame-banner {
+  align-self: stretch;
   color: var(--wp-amber);
   background: color-mix(in oklab, var(--wp-amber) 12%, transparent);
   border: 1px solid color-mix(in oklab, var(--wp-amber) 40%, transparent);
