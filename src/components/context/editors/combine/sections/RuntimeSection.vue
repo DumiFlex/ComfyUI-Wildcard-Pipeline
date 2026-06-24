@@ -21,6 +21,11 @@ const internal = computed(() => instance.value.internal === true);
 function onHideClick(): void {
   emit("update", { instance: { ...instance.value, internal: !internal.value } });
 }
+
+const held = computed(() => instance.value.seed_scope === "hold");
+function onHoldClick(): void {
+  emit("update", { instance: { ...instance.value, seed_scope: held.value ? "vary" : "hold" } });
+}
 </script>
 
 <template>
@@ -38,6 +43,18 @@ function onHideClick(): void {
     >
       <i class="pi pi-eye-slash" aria-hidden="true" />
       Hide from prompt
+    </button>
+    <button
+      type="button"
+      class="toggle"
+      :class="{ 'toggle--on': held }"
+      data-test="runtime-hold"
+      role="switch"
+      :aria-checked="held"
+      @click="onHoldClick"
+    >
+      <i class="pi pi-link" aria-hidden="true" />
+      Hold across run
     </button>
   </section>
 </template>

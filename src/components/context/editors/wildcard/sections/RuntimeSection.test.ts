@@ -176,4 +176,21 @@ describe("RuntimeSection", () => {
     expect(seed).toBeGreaterThanOrEqual(0);
     expect(seed).toBeLessThanOrEqual(Number.MAX_SAFE_INTEGER);
   });
+
+  it("seed-scope toggle is off (vary) by default", () => {
+    const w = mount(RuntimeSection, { props: { module: makeModule() } });
+    expect(w.find('[data-test="runtime-hold"]').classes()).not.toContain("toggle--on");
+  });
+
+  it("clicking seed-scope toggle emits patch with seed_scope = hold", async () => {
+    const w = mount(RuntimeSection, { props: { module: makeModule() } });
+    await w.find('[data-test="runtime-hold"]').trigger("click");
+    expect(lastPatch(w).instance?.seed_scope).toBe("hold");
+  });
+
+  it("clicking seed-scope toggle when held emits seed_scope = vary", async () => {
+    const w = mount(RuntimeSection, { props: { module: makeModule({ instance: { seed_scope: "hold" } }) } });
+    await w.find('[data-test="runtime-hold"]').trigger("click");
+    expect(lastPatch(w).instance?.seed_scope).toBe("vary");
+  });
 });

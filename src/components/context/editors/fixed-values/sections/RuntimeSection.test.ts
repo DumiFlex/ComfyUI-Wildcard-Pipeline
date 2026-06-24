@@ -16,6 +16,11 @@ function makeModule(overrides: Partial<ModuleEntry> = {}): ModuleEntry {
   };
 }
 
+function lastPatch(w: ReturnType<typeof mount>): Partial<ModuleEntry> {
+  const updates = w.emitted("update")! as unknown[][];
+  return updates[updates.length - 1][0] as Partial<ModuleEntry>;
+}
+
 describe("fixed-values RuntimeSection", () => {
   it("renders Hide-from-prompt toggle", () => {
     const w = mount(RuntimeSection, { props: { module: makeModule() } });
@@ -79,5 +84,22 @@ describe("fixed-values RuntimeSection", () => {
       props: { module: makeModule({ instance: { locked_seed: 42 } }) },
     });
     expect(on.find('[data-test="runtime-seed"]').exists()).toBe(true);
+  });
+
+  it("seed-scope toggle is off (vary) by default", () => {
+    const w = mount(RuntimeSection, { props: { module: makeModule() } });
+    expect(w.find('[data-test="runtime-hold"]').classes()).not.toContain("toggle--on");
+  });
+
+  it("clicking seed-scope toggle emits patch with seed_scope = hold", async () => {
+    const w = mount(RuntimeSection, { props: { module: makeModule() } });
+    await w.find('[data-test="runtime-hold"]').trigger("click");
+    expect(lastPatch(w).instance?.seed_scope).toBe("hold");
+  });
+
+  it("clicking seed-scope toggle when held emits seed_scope = vary", async () => {
+    const w = mount(RuntimeSection, { props: { module: makeModule({ instance: { seed_scope: "hold" } }) } });
+    await w.find('[data-test="runtime-hold"]').trigger("click");
+    expect(lastPatch(w).instance?.seed_scope).toBe("vary");
   });
 });
