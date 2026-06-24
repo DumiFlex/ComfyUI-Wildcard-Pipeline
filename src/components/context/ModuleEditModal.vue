@@ -67,8 +67,13 @@ const emit = defineEmits<{
 // via JSON round-trip (Proxy-safe at every depth, unlike structuredClone).
 const draft = ref<ModuleEntry | null>(null);
 
-watch(() => props.visible, (v) => {
-  if (v && props.module) {
+watch([() => props.visible, () => props.module], () => {
+  if (props.visible && props.module) {
+    // Re-clone on open AND whenever the source module changes under an open
+    // modal — e.g. "Revert to base" clears the frame override, so editingModule
+    // recomputes and the draft must resync to the base instance. (During normal
+    // editing the draft is mutated locally; props.module identity is stable, so
+    // this does not clobber in-progress edits.)
     draft.value = JSON.parse(JSON.stringify(props.module));
     window.addEventListener("keydown", onKeydown);
   } else {
@@ -535,16 +540,31 @@ function cancel() {
 }
 .wp-modal-frame-banner {
   align-self: stretch;
-  color: var(--wp-amber);
-  background: color-mix(in oklab, var(--wp-amber) 12%, transparent);
-  border: 1px solid color-mix(in oklab, var(--wp-amber) 40%, transparent);
-  border-radius: 5px;
-  padding: 6px 9px;
   display: flex;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
   justify-content: space-between;
-  font-size: 11px;
+  padding: 7px 11px;
+  border-radius: 6px;
+  /* solid surface (amber mixed into the modal bg, not over the canvas) so the
+   * text stays readable; amber = the override/warning accent used elsewhere. */
+  background: color-mix(in oklab, var(--wp-amber) 14%, var(--wp-bg2));
+  border: 1px solid color-mix(in oklab, var(--wp-amber) 38%, transparent);
+  color: var(--wp-amber);
+  font: 500 11px var(--wp-font-sans);
+}
+.wp-modal-frame-banner button {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid color-mix(in oklab, var(--wp-amber) 55%, transparent);
+  background: color-mix(in oklab, var(--wp-amber) 20%, transparent);
+  color: var(--wp-amber);
+  font: 600 10px var(--wp-font-sans);
+  cursor: pointer;
+}
+.wp-modal-frame-banner button:hover {
+  background: color-mix(in oklab, var(--wp-amber) 32%, transparent);
 }
 </style>
 
