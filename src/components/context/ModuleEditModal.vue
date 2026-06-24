@@ -51,7 +51,7 @@ const props = defineProps<{
    * it so re-locking restores the seed THIS wildcard used, not the
    * generic chain seed.
    */
-  lastUsedSeedReader?: (moduleId?: string) => number | null;
+  lastUsedSeedReader?: (moduleId?: string, frame?: number | null) => number | null;
   /** When a frame override context is active, the 0-based frame index.
    *  Null / undefined = editing the base (no banner shown). */
   currentFrame?: number | null;
