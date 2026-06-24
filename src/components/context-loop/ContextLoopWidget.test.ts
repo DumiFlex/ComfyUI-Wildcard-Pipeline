@@ -1,8 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { mount } from "@vue/test-utils";
 import ContextLoopWidget from "./ContextLoopWidget.vue";
 import SeedListModal from "../shared/SeedListModal.vue";
 import { emptyContextLoopConfig } from "./types";
+import { currentFrame } from "./frame-cursor";
 
 describe("ContextLoopWidget", () => {
   it("renders defaults — hash chip active, both switches off, internal toggles on", () => {
@@ -125,5 +126,25 @@ describe("ContextLoopWidget seeds button", () => {
     const on = ws({ override_seed: true });
     await on.find('[data-test="loop-seeds-btn"]').trigger("click");
     expect(on.findComponent(SeedListModal).props("overrideHint")).toBeFalsy();
+  });
+});
+
+describe("ContextLoopWidget frame selector", () => {
+  beforeEach(() => { currentFrame.value = null; });
+  function fw(count = 3) {
+    return mount(ContextLoopWidget, {
+      props: { modelValue: emptyContextLoopConfig(), count },
+      attachTo: document.body, global: { stubs: { teleport: true } },
+    });
+  }
+  it("renders base + one chip per iteration", () => {
+    expect(fw(3).findAll('[data-test^="loop-frame-"]')).toHaveLength(4);
+  });
+  it("clicking a frame chip sets the shared cursor; base clears it", async () => {
+    const wr = fw(3);
+    await wr.find('[data-test="loop-frame-2"]').trigger("click");
+    expect(currentFrame.value).toBe(1);
+    await wr.find('[data-test="loop-frame-base"]').trigger("click");
+    expect(currentFrame.value).toBe(null);
   });
 });

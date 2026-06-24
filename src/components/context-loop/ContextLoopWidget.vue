@@ -15,6 +15,7 @@
 import { computed, ref } from "vue";
 import type { ContextLoopConfig, LoopStrategy } from "./types";
 import SeedListModal from "../shared/SeedListModal.vue";
+import { currentFrame, setFrame } from "./frame-cursor";
 
 const props = withDefaults(
   defineProps<{
@@ -50,6 +51,9 @@ const OVERRIDE_SEED_TOOLTIP =
 
 const isMuted = computed<boolean>(() => props.nodeMode === 2);
 const isBypassed = computed<boolean>(() => props.nodeMode === 4);
+const frameChips = computed(() =>
+  Array.from({ length: Math.max(1, props.count ?? 1) }, (_, i) => i),
+);
 
 const seedsOpen = ref(false);
 const lockedCount = computed(() => Object.keys(props.modelValue.seed_locks ?? {}).length);
@@ -127,6 +131,17 @@ function toggleTotalInternal(): void {
       <span v-if="lockedCount" class="wp-loop__seedbtn-badge" data-test="loop-seeds-badge">{{ lockedCount }} locked</span>
       <svg class="wp-loop__seedbtn-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6" /></svg>
     </button>
+
+    <div class="wp-loop__section">
+      <div class="wp-loop__label">edit frame</div>
+      <div class="wp-loop__chips" role="radiogroup" aria-label="Edit frame">
+        <button type="button" class="wp-loop__chip" :class="{ 'wp-loop__chip--active': currentFrame === null }"
+          data-test="loop-frame-base" role="radio" :aria-checked="currentFrame === null" @click="setFrame(null)">base</button>
+        <button v-for="i in frameChips" :key="i" type="button" class="wp-loop__chip"
+          :class="{ 'wp-loop__chip--active': currentFrame === i }"
+          :data-test="`loop-frame-${i + 1}`" role="radio" :aria-checked="currentFrame === i" @click="setFrame(i)">#{{ i + 1 }}</button>
+      </div>
+    </div>
 
     <div
       class="wp-loop__row"
