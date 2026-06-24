@@ -13,6 +13,9 @@ const props = withDefaults(
     upstreamVars?: string[];
     /** Names produced by other modules in the SAME Context node. */
     siblingVars?: string[];
+    /** When true, a frame is active — the variable binding input is
+     *  structural (not per-frame) so it is disabled with a hint. */
+    frameActive?: boolean;
   }>(),
   { upstreamVars: () => [], siblingVars: () => [] },
 );
@@ -162,6 +165,7 @@ function onResetBinding(): void {
             :value="bindingValue"
             :placeholder="libraryBinding"
             aria-label="Variable binding"
+            :disabled="frameActive || undefined"
             @input="onBindingInput"
           />
         </div>
@@ -176,6 +180,11 @@ function onResetBinding(): void {
         ><i class="pi pi-replay" aria-hidden="true" /></button>
       </div>
     </div>
+    <p
+      v-if="frameActive"
+      class="id__frame-hint"
+      data-test="id-binding-frame-hint"
+    >Applies to every frame — switch to base to change.</p>
     <div
       v-if="collidesWith !== null"
       class="id__collision"
@@ -287,4 +296,9 @@ function onResetBinding(): void {
   border: 1px solid color-mix(in srgb, var(--wp-accent) 35%, transparent);
 }
 .id__collision .pi { font-size: 11px; margin-top: 1px; flex-shrink: 0; }
+.id__frame-hint {
+  margin: 4px 0 0;
+  font: 10px var(--wp-font-sans);
+  color: var(--wp-text-dim, var(--wp-text3));
+}
 </style>

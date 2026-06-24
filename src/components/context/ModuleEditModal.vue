@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount } from "vue";
+
 import ModalShell from "../shared/ModalShell.vue";
 import type { ModuleEntry, ModuleEntryKind } from "../../widgets/_shared";
 import { type ResolvedValue } from "../../widgets/richTokenize";
@@ -418,6 +419,7 @@ function cancel() {
       :upstream-vars="upstreamVars"
       :sibling-vars="siblingVars"
       :via-option-pairs="viaOptionPairs"
+      :frame-active="currentFrame != null"
       @update="onUpdate"
       @save="save"
       @cancel="cancel"
@@ -430,6 +432,7 @@ function cancel() {
       v-else-if="draft && draft.type === 'fixed_values'"
       :module="draft"
       :is-modified="instanceModified"
+      :frame-active="currentFrame != null"
       @update="onUpdate"
       @save="save"
       @cancel="cancel"
@@ -447,6 +450,7 @@ function cancel() {
       :upstream-vars="upstreamVars"
       :upstream-resolved="upstreamResolved"
       :sibling-vars="siblingVars"
+      :frame-active="currentFrame != null"
       @update="onUpdate"
       @save="save"
       @cancel="cancel"
@@ -468,6 +472,7 @@ function cancel() {
       :upstream-vars="upstreamVars"
       :sibling-vars="siblingVars"
       :via-option-pairs="viaOptionPairs"
+      :frame-active="currentFrame != null"
       @update="onUpdate"
       @save="save"
       @cancel="cancel"
@@ -486,6 +491,7 @@ function cancel() {
       :is-modified="instanceModified"
       :sibling-modules="siblingModules"
       :chain-modules="chainModules"
+      :frame-active="currentFrame != null"
       @update="onUpdate"
       @save="save"
       @cancel="cancel"

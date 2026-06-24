@@ -12,6 +12,9 @@ const props = withDefaults(
     /** True when draft has unsaved instance edits. Gates "Save to library"
      *  visibility — pushing an unmodified payload back is a no-op. */
     isModified?: boolean;
+    /** When true, a frame override context is active. Run-level controls
+     *  are disabled in frame mode. */
+    frameActive?: boolean;
   }>(),
   { isDrifted: false, isModified: false },
 );
@@ -67,7 +70,7 @@ function onSpaClick(): void {
     <IdentitySection :module="module" @update="onUpdate" />
     <ValuesSection :module="module" @update="onUpdate" />
     <div class="wp-fvm__dock">
-    <RuntimeSection :module="module" @update="onUpdate" />
+    <RuntimeSection :module="module" :frame-active="frameActive" @update="onUpdate" />
 
     <footer class="wp-fvm__foot">
       <a

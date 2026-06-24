@@ -35,6 +35,9 @@ const props = withDefaults(
     /** Sibling var names produced by other modules in this same Context
      *  node. Combined with upstreamVars to populate the dropdown. */
     siblingVars?: string[];
+    /** When true, a frame override context is active. Run-level and
+     *  structural controls are disabled in frame mode. */
+    frameActive?: boolean;
   }>(),
   {
     isDrifted: false,
@@ -100,6 +103,7 @@ function onSpaClick(): void {
       :module="module"
       :upstream-vars="upstreamVars"
       :sibling-vars="siblingVars"
+      :frame-active="frameActive"
       @update="onUpdate"
     />
     <TemplateSection
@@ -110,7 +114,7 @@ function onSpaClick(): void {
       @update="onUpdate"
     />
     <div class="wp-cbm__dock">
-    <RuntimeSection :module="module" @update="onUpdate" />
+    <RuntimeSection :module="module" :frame-active="frameActive" @update="onUpdate" />
 
     <footer class="wp-cbm__foot">
       <a

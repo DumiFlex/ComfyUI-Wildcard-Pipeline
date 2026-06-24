@@ -11,7 +11,7 @@ import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import SeedLockControls from "../../_shared/SeedLockControls.vue";
 
-const props = defineProps<{ module: ModuleEntry }>();
+const props = defineProps<{ module: ModuleEntry; frameActive?: boolean }>();
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
 
 const instance = computed(() => props.module.instance ?? {});
@@ -38,6 +38,7 @@ function onHoldClick(): void {
       data-test="runtime-hide"
       role="switch"
       :aria-checked="internal"
+      :disabled="frameActive || undefined"
       @click="onHideClick"
     >
       <i class="pi pi-eye-slash" aria-hidden="true" />
@@ -50,11 +51,17 @@ function onHoldClick(): void {
       data-test="runtime-hold"
       role="switch"
       :aria-checked="held"
+      :disabled="frameActive || undefined"
       @click="onHoldClick"
     >
       <i class="pi pi-link" aria-hidden="true" />
       Hold across run
     </button>
+    <span
+      v-if="frameActive"
+      class="runtime__frame-hint"
+      data-test="runtime-frame-hint"
+    >Applies to every frame — switch to base to change.</span>
   </section>
 </template>
 
@@ -94,4 +101,12 @@ function onHoldClick(): void {
   background: rgba(99, 102, 241, 0.10);
 }
 .toggle--on .pi { color: var(--wp-accent-text, var(--wp-text)); }
+.toggle:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.runtime__frame-hint {
+  font: 10px var(--wp-font-sans);
+  color: var(--wp-text-dim, var(--wp-text3));
+}
 </style>

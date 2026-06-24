@@ -65,6 +65,11 @@ const props = withDefaults(
      *  Optional — undefined in headless/legacy mounts falls back to
      *  `siblingModules` alone. */
     chainModules?: ChainModule[];
+    /** When true, a frame override context is active. Accepted for
+     *  interface uniformity; constraint has no RuntimeSection and its
+     *  IdentitySection carries no variable-binding input, so nothing
+     *  is forwarded to a child here. */
+    frameActive?: boolean;
   }>(),
   { isDrifted: false, isModified: false, siblingModules: () => [] },
 );

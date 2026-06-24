@@ -22,6 +22,9 @@ const props = withDefaults(
      *  (one of its options contains a nested `@{uuid}` that resolves to a
      *  downstream constraint's target). Keyed by option id. */
     viaOptionPairs?: Map<string, PairingBadge[]>;
+    /** When true, a frame override context is active. Run-level and
+     *  structural controls are disabled in frame mode. */
+    frameActive?: boolean;
   }>(),
   { isDrifted: false, isModified: false, upstreamVars: () => [], siblingVars: () => [], viaOptionPairs: () => new Map() },
 );
@@ -98,11 +101,12 @@ function onSpaClick(): void {
       :module="module"
       :upstream-vars="upstreamVars"
       :sibling-vars="siblingVars"
+      :frame-active="frameActive"
       @update="onUpdate"
     />
     <PoolSection :module="module" :via-option-pairs="viaOptionPairs" @update="onUpdate" />
     <div class="wp-wcm__dock">
-    <RuntimeSection :module="module" @update="onUpdate" />
+    <RuntimeSection :module="module" :frame-active="frameActive" @update="onUpdate" />
 
     <footer class="wp-wcm__foot">
       <a

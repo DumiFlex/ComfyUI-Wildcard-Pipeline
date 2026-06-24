@@ -42,6 +42,9 @@ const props = withDefaults(
      *  engine branch key (`${rule_id}:${bi}` / `${rule_id}:else`). Forwarded
      *  verbatim to RulesSection, which renders the inline `↪#N` badge. */
     viaOptionPairs?: Map<string, readonly PairingBadge[]>;
+    /** When true, a frame override context is active. Run-level controls
+     *  are disabled in frame mode. */
+    frameActive?: boolean;
   }>(),
   {
     isDrifted: false,
@@ -161,7 +164,7 @@ function onSpaClick(): void {
       @update="onUpdate"
     />
     <div class="wp-dvm__dock">
-    <RuntimeSection :module="module" @update="onUpdate" />
+    <RuntimeSection :module="module" :frame-active="frameActive" @update="onUpdate" />
 
     <footer class="wp-dvm__foot">
       <a
