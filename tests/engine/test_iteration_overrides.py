@@ -135,6 +135,32 @@ def test_constraint_cell_factor_override_applies_only_on_its_frame():
     )
 
 
+class _ObjModule:
+    """Minimal duck-typed module — NOT a dict and NOT a dataclass — to
+    exercise the generic-object snapshot branch in PipelineEngine.run."""
+
+    def __init__(self, **attrs):
+        for key, value in attrs.items():
+            setattr(self, key, value)
+
+
+def test_iteration_override_applies_to_generic_object_module():
+    """A module arriving as a generic object (not a dict / not a dataclass)
+    must still honor iteration_overrides. Regression: the generic-object
+    snapshot key tuple omitted iteration_overrides, so per-frame overrides
+    were silently dropped for non-dict modules."""
+    m = _ObjModule(
+        type="combine",
+        payload={"output_var": "y", "template": "base text"},
+        instance={},
+        iteration_overrides={"1": {"template_override": "frame one text"}},
+    )
+    # Frame 1 carries an override → the template is replaced.
+    assert _run([m], loop_index=1)["y"] == "frame one text"
+    # Frame 0 has no override entry → base template.
+    assert _run([m], loop_index=0)["y"] == "base text"
+
+
 # ── R4: per-frame enable/disable (disabled_frames) ──────────────────────────
 
 def _wildcard_df(binding, values, *, disabled_frames=None):

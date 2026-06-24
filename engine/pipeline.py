@@ -363,17 +363,17 @@ class PipelineEngine:
                 else:
                     # Generic object: pull known snapshot keys via getattr so
                     # class-level attributes (common in tests) are visible.
-                    # `disabled_frames` is listed so the coerced snapshot stays
-                    # honest about it — the per-frame skip gate already read it
-                    # module-direct above, so its presence here is consistency,
-                    # not load-bearing.
+                    # `iteration_overrides` is load-bearing — the per-frame
+                    # override patch below reads it back off `raw`. `disabled_frames`
+                    # is listed for snapshot honesty only (the skip gate already
+                    # read it module-direct above).
                     raw = {
                         k: getattr(module, k)
                         for k in (
                             "id", "type", "enabled", "payload", "entries",
                             "meta", "library_id", "library_snapshot_at",
                             "library_version_at_snapshot", "name", "category_id",
-                            "instance", "disabled_frames",
+                            "instance", "iteration_overrides", "disabled_frames",
                         )
                         if hasattr(module, k)
                     }
