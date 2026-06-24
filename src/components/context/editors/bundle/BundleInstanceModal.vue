@@ -186,6 +186,8 @@ const headerName = computed(() => props.bundle.name || props.libraryName || "Bun
 .wp-bdm__hint kbd { font: 9px var(--wp-font-mono); background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); padding: 1px 4px; border-radius: 2px; color: var(--wp-text-muted, var(--wp-text2)); }
 .wp-bdm__btn { padding: 5px 12px; border: 1px solid var(--wp-border); border-radius: 3px; background: transparent; color: var(--wp-text-muted, var(--wp-text2)); font: 11px var(--wp-font-sans); cursor: pointer; }
 .wp-bdm__btn--primary { border-color: var(--wp-accent); background: var(--wp-accent); color: white; }
+.wp-bdm__btn:hover { border-color: var(--wp-border-strong, var(--wp-border2)); color: var(--wp-text); }
+.wp-bdm__btn--primary:hover { border-color: var(--wp-accent2, var(--wp-accent)); background: var(--wp-accent2, var(--wp-accent)); color: white; }
 .wp-bdm__btn--quiet { border-color: transparent; color: var(--wp-text-dim, var(--wp-text3)); display: inline-flex; align-items: center; gap: 5px; font-size: 10px; }
 .wp-bdm__btn--quiet:hover { border-color: var(--wp-border); color: var(--wp-text-muted, var(--wp-text2)); }
 .wp-bdm__btn--quiet .pi { font-size: 10px; }

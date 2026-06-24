@@ -223,6 +223,15 @@ function onSpaClick(): void {
   background: var(--wp-accent);
   color: white;
 }
+.wp-wcm__btn:hover {
+  border-color: var(--wp-border-strong, var(--wp-border2));
+  color: var(--wp-text);
+}
+.wp-wcm__btn--primary:hover {
+  border-color: var(--wp-accent2, var(--wp-accent));
+  background: var(--wp-accent2, var(--wp-accent));
+  color: white;
+}
 .wp-wcm__btn--quiet {
   border-color: transparent;
   color: var(--wp-text-dim, var(--wp-text3));
