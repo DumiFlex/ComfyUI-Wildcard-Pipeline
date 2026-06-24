@@ -155,8 +155,7 @@ def _wildcard_df(binding, values, *, disabled_frames=None):
 def test_disabled_frames_skips_only_on_listed_frame():
     """A module with disabled_frames=[2] produces no binding at loop_index=2
     but produces one at every other frame."""
-    m = _wildcard_df("z", ["alpha", "beta", "gamma"])
-    m["disabled_frames"] = [2]
+    m = _wildcard_df("z", ["alpha", "beta", "gamma"], disabled_frames=[2])
 
     # Frame 2: module should be skipped — "z" must NOT appear in context.
     ctx_frame2 = _run([m], loop_index=2)
@@ -174,8 +173,7 @@ def test_disabled_frames_skips_only_on_listed_frame():
 
 def test_disabled_frames_trace_row_carries_skipped_frame_status():
     """Trace row at the disabled frame should carry status='skipped_frame'."""
-    m = _wildcard_df("z", ["alpha", "beta"])
-    m["disabled_frames"] = [2]
+    m = _wildcard_df("z", ["alpha", "beta"], disabled_frames=[2])
 
     ctx = _run([m], loop_index=2)
     trace = ctx.get("__wp_trace__", [])
@@ -191,8 +189,7 @@ def test_disabled_frames_trace_row_carries_skipped_frame_status():
 
 def test_disabled_frames_multiple_frames():
     """disabled_frames=[0, 3] skips frames 0 and 3, runs on 1 and 2."""
-    m = _wildcard_df("w", ["x", "y"])
-    m["disabled_frames"] = [0, 3]
+    m = _wildcard_df("w", ["x", "y"], disabled_frames=[0, 3])
 
     for k in (0, 3):
         result = _run([m], loop_index=k)

@@ -3727,6 +3727,7 @@ function toggleEnabled(idx: number) {
     // Frame-active: toggle membership of k in disabled_frames instead of
     // flipping the base enabled flag.
     const m = value.value.modules[idx];
+    if (!m) return;
     const frames = [...(m.disabled_frames ?? [])];
     const pos = frames.indexOf(k);
     if (pos === -1) {

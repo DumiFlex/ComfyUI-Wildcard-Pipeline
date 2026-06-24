@@ -208,11 +208,11 @@ describe("ModuleRow.vue — per-frame enable/disable (R4)", () => {
     const wrapper = mountRow(ctx, mod);
     const badge = wrapper.find('[data-test="mod-frame-disabled"]');
     expect(badge.exists()).toBe(true);
-    // Badge must reference the 1-based frame number.
+    // frame index 2 (0-based) renders as "#3" (index + 1)
     expect(badge.text()).toContain("#3");
   });
 
-  it("toggleEnabled on a frame-active row calls toggleEnabled (frame disable path)", async () => {
+  it("checkbox change calls ctx.toggleEnabled with the row index", async () => {
     const frame = ref<number | null>(2);
     const calls: number[] = [];
     const mod = module({ enabled: true } as Partial<ModuleEntry>);

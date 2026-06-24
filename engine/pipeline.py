@@ -302,11 +302,19 @@ class PipelineEngine:
 
             # Per-frame skip list: read disabled_frames from both dict and
             # object branches the same way iteration_overrides is read.
-            _disabled_frames: list[int] = (
-                module.get("disabled_frames") or []
+            # Coerce to a set[int] so membership checks are O(1) and
+            # untrusted JSON floats/booleans are handled safely (booleans
+            # are excluded explicitly because bool is an int subclass).
+            _raw_frames = (
+                module.get("disabled_frames")
                 if isinstance(module, dict)
-                else getattr(module, "disabled_frames", None) or []
+                else getattr(module, "disabled_frames", None)
             )
+            _disabled_frames: set[int] = {
+                int(f)
+                for f in (_raw_frames if isinstance(_raw_frames, (list, tuple)) else [])
+                if isinstance(f, (int, float)) and not isinstance(f, bool)
+            }
             _k = int(ctx.get("__wp_loop_index__", 0))
 
             if not _module_enabled:
