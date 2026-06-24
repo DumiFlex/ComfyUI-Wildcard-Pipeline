@@ -3853,6 +3853,18 @@ function saveEditedModule(updated: ModuleEntry & { _originalId?: string }) {
   editingIdx.value = null;
 }
 
+/** Revert the currently-edited module's frame-#k override back to the
+ *  base instance (i.e. remove the iteration_overrides[k] entry entirely).
+ *  Called from the frame banner's "Revert to base" button in ModuleEditModal. */
+function revertEditingFrame(): void {
+  const idx = editingIdx.value;
+  const k = currentFrame.value;
+  if (idx == null || k == null) return;
+  const list = [...value.value.modules];
+  list[idx] = clearFrameOverride(value.value.modules[idx], k);
+  commitModules(list);
+}
+
 /**
  * Open the BundleInstanceModal for `uid`. Snapshots the live
  * BundleInstance into `bundleDraft` so the user's typing in
@@ -5011,8 +5023,10 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
       :chain-modules="chainModules"
       :via-option-pairs="editingModuleViaOptionPairs"
       :last-used-seed-reader="lastUsedSeedReader"
+      :current-frame="currentFrame"
       @save="saveEditedModule"
       @close="editingIdx = null"
+      @revert-frame="revertEditingFrame"
     />
 
     <!-- Bundle edit modal — sibling to ModuleEditModal, dispatched

@@ -51,11 +51,15 @@ const props = defineProps<{
    * generic chain seed.
    */
   lastUsedSeedReader?: (moduleId?: string) => number | null;
+  /** When a frame override context is active, the 0-based frame index.
+   *  Null / undefined = editing the base (no banner shown). */
+  currentFrame?: number | null;
 }>();
 
 const emit = defineEmits<{
   (e: "save", value: ModuleEntry): void;
   (e: "close"): void;
+  (e: "revert-frame"): void;
 }>();
 
 // Draft state — owned by the modal. Cancel discards, Save commits via emit.
@@ -382,6 +386,18 @@ function cancel() {
 
 <template>
   <ModalShell :visible="visible" @close="cancel">
+    <!-- Frame-context banner — shown when the user is editing overrides
+         for a specific iteration frame (#k). Sits above all per-kind
+         modal bodies. Invisible on base editing (currentFrame == null). -->
+    <div
+      v-if="currentFrame != null"
+      class="wp-modal-frame-banner"
+      data-test="modal-frame-banner"
+    >
+      <span>Editing frame #{{ currentFrame + 1 }} — changes affect only this frame.</span>
+      <button type="button" data-test="modal-frame-revert" @click="emit('revert-frame')">Revert #{{ currentFrame + 1 }} to base</button>
+    </div>
+
     <!-- v2 wildcard branch — single-pane tailored modal renders its
          own header/footer/body. No v1 chrome (no .wp-medit wrapper,
          no tab strip, no LibraryRoundTripActions footer). -->
@@ -503,5 +519,18 @@ function cancel() {
  * (WildcardInstanceModal, FixedValuesInstanceModal, etc.). The
  * `.wp-medit` chrome was the v1 tabbed shell — removed alongside
  * the v1 dispatch in the 2026-05-10 cleanup. */
+
+.wp-modal-frame-banner {
+  color: var(--wp-amber);
+  background: color-mix(in oklab, var(--wp-amber) 12%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-amber) 40%, transparent);
+  border-radius: 5px;
+  padding: 6px 9px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+}
 </style>
 

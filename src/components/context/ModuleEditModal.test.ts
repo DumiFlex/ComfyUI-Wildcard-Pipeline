@@ -590,6 +590,26 @@ describe("ModuleEditModal — derivation v2 dispatcher", () => {
   });
 });
 
+// ── Frame banner + revert-to-base (Phase E.1) ───────────────────────────
+
+describe("ModuleEditModal — frame banner", () => {
+  beforeEach(() => _resetForTests());
+
+  it("shows the frame banner + emits revert-frame when a frame is active", async () => {
+    const w = mount(ModuleEditModal, { ...mountOpts, props: { visible: true, module: makeWildcard(), currentFrame: 1 } });
+    await nextTick();
+    expect(w.find('[data-test="modal-frame-banner"]').exists()).toBe(true);
+    await w.find('[data-test="modal-frame-revert"]').trigger("click");
+    expect(w.emitted("revert-frame")).toBeTruthy();
+  });
+
+  it("no frame banner on base (currentFrame null)", async () => {
+    const w = mount(ModuleEditModal, { ...mountOpts, props: { visible: true, module: makeWildcard(), currentFrame: null } });
+    await nextTick();
+    expect(w.find('[data-test="modal-frame-banner"]').exists()).toBe(false);
+  });
+});
+
 // ── Constraint v2 dispatcher branch ────────────────────────────────────
 
 describe("ModuleEditModal — constraint v2 dispatcher", () => {
