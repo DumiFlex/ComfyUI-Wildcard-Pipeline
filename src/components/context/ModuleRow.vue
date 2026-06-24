@@ -74,8 +74,12 @@ const {
         :title="isCollapsed(module) ? 'Expand' : 'Collapse'" @click="toggleCollapsed(idx)">
         <i :class="['pi', isCollapsed(module) ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true"></i>
       </button>
-      <label class="wp-toggle" draggable="false" :title="module.enabled ? 'Disable' : 'Enable'">
-        <input type="checkbox" :checked="module.enabled" :aria-label="`enable ${module.meta.name}`" @change="toggleEnabled(idx)" />
+      <label class="wp-toggle" draggable="false"
+        :title="ctx?.isDisabledOnFrame(module) ? 'Enable on this frame' : module.enabled ? 'Disable' : 'Enable'">
+        <input type="checkbox"
+          :checked="module.enabled && !ctx?.isDisabledOnFrame(module)"
+          :aria-label="`enable ${module.meta.name}`"
+          @change="toggleEnabled(idx)" />
         <span class="wp-toggle-mark"></span>
       </label>
       <span class="wp-row-type-icon" :title="module.type" aria-hidden="true">
@@ -151,6 +155,7 @@ const {
           :title="conflictTooltip(module._uid ?? module.id)">{{ conflictBadgeText(module._uid ?? module.id) }}</span>
         <span v-if="ctx?.isHeld(module)" class="wp-mod-badge wp-mod-badge--clash" data-test="mod-held" title="Held across the run">held</span>
         <span v-if="ctx?.isOverriddenOnFrame(module)" class="wp-conflict-badge wp-conflict-badge--warning" data-test="mod-override" title="Overridden on this frame">override #{{ (ctx.currentFrame.value ?? 0) + 1 }}</span>
+        <span v-if="ctx?.isDisabledOnFrame(module)" class="wp-mod-badge wp-mod-badge--missing" data-test="mod-frame-disabled" title="Disabled on this frame">off #{{ (ctx.currentFrame.value ?? 0) + 1 }}</span>
       </span>
       <div class="wp-mod-actions" draggable="false">
         <button v-if="isSeedLockable(module)" type="button" class="wp-btn--icon-sm wp-btn--warn"

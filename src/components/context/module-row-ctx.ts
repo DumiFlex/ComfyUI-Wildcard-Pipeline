@@ -64,6 +64,10 @@ export interface ModuleRowCtx {
   /** The effective locked_seed for this module at `currentFrame` (or base when
    *  no frame is active). `undefined` when the effective instance is unlocked. */
   effectiveLockedSeed: (m: ModuleEntry) => number | undefined;
+  /** True when a frame is active and `currentFrame` is listed in
+   *  `m.disabled_frames`. Base `enabled` is unaffected; this only reflects
+   *  the per-frame suppression set. */
+  isDisabledOnFrame: (m: ModuleEntry) => boolean;
 }
 
 export const ModuleRowCtxKey: InjectionKey<ModuleRowCtx> = Symbol("moduleRowCtx");

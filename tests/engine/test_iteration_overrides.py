@@ -133,3 +133,75 @@ def test_constraint_cell_factor_override_applies_only_on_its_frame():
         "expected 't2' to appear on non-override frames but only got: "
         f"{other_results!r}"
     )
+
+
+# ── R4: per-frame enable/disable (disabled_frames) ──────────────────────────
+
+def _wildcard_df(binding, values, *, disabled_frames=None):
+    """Wildcard module with optional disabled_frames list."""
+    m = {
+        "type": "wildcard",
+        "payload": {
+            "var_binding": binding,
+            "options": [{"id": str(i), "value": v, "weight": 1.0} for i, v in enumerate(values)],
+        },
+        "instance": {"variable_binding": binding},
+    }
+    if disabled_frames is not None:
+        m["disabled_frames"] = disabled_frames
+    return m
+
+
+def test_disabled_frames_skips_only_on_listed_frame():
+    """A module with disabled_frames=[2] produces no binding at loop_index=2
+    but produces one at every other frame."""
+    m = _wildcard_df("z", ["alpha", "beta", "gamma"])
+    m["disabled_frames"] = [2]
+
+    # Frame 2: module should be skipped — "z" must NOT appear in context.
+    ctx_frame2 = _run([m], loop_index=2)
+    assert "z" not in ctx_frame2, (
+        f"expected 'z' absent at frame 2 (disabled_frames=[2]), got {ctx_frame2.get('z')!r}"
+    )
+
+    # Frames 0, 1, 3: module should run — "z" must be bound.
+    for k in (0, 1, 3):
+        result = _run([m], loop_index=k)
+        assert "z" in result, (
+            f"expected 'z' bound at frame {k} but it was missing; ctx={result!r}"
+        )
+
+
+def test_disabled_frames_trace_row_carries_skipped_frame_status():
+    """Trace row at the disabled frame should carry status='skipped_frame'."""
+    m = _wildcard_df("z", ["alpha", "beta"])
+    m["disabled_frames"] = [2]
+
+    ctx = _run([m], loop_index=2)
+    trace = ctx.get("__wp_trace__", [])
+    assert len(trace) == 1, f"expected 1 trace row, got {trace!r}"
+    row = trace[0]
+    assert row["status"] == "skipped_frame", (
+        f"expected status='skipped_frame', got {row['status']!r}"
+    )
+    assert row["enabled"] is True, (
+        "frame-skip row must show enabled=True (module is not globally disabled)"
+    )
+
+
+def test_disabled_frames_multiple_frames():
+    """disabled_frames=[0, 3] skips frames 0 and 3, runs on 1 and 2."""
+    m = _wildcard_df("w", ["x", "y"])
+    m["disabled_frames"] = [0, 3]
+
+    for k in (0, 3):
+        result = _run([m], loop_index=k)
+        assert "w" not in result, (
+            f"expected 'w' absent at disabled frame {k}, got {result.get('w')!r}"
+        )
+
+    for k in (1, 2):
+        result = _run([m], loop_index=k)
+        assert "w" in result, (
+            f"expected 'w' bound at enabled frame {k}"
+        )

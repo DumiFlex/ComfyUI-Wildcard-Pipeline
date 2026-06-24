@@ -784,6 +784,10 @@ export interface ModuleEntry {
   /** Per-frame override patches: stringified 0-based iteration index ->
    *  partial instance merged onto this module's instance for that frame. */
   iteration_overrides?: Record<string, Partial<NonNullable<ModuleEntry["instance"]>>>;
+  /** 0-based loop indices on which this module is suppressed. The module's
+   *  base `enabled` flag is unaffected; this is a frame-local skip list.
+   *  Absent or empty means the module runs on every frame. */
+  disabled_frames?: number[];
 }
 
 export function parseWidgetJson<T>(raw: string, fallback: T): T {

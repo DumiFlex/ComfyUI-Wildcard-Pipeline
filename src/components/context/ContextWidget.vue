@@ -3722,9 +3722,37 @@ function moveToEdge(idx: number, edge: "top" | "bottom") {
 
 function toggleEnabled(idx: number) {
   if (idx < 0 || idx >= value.value.modules.length) return;
+  const k = currentFrame.value;
+  if (k != null) {
+    // Frame-active: toggle membership of k in disabled_frames instead of
+    // flipping the base enabled flag.
+    const m = value.value.modules[idx];
+    const frames = [...(m.disabled_frames ?? [])];
+    const pos = frames.indexOf(k);
+    if (pos === -1) {
+      frames.push(k);
+    } else {
+      frames.splice(pos, 1);
+    }
+    const list = [...value.value.modules];
+    const updated = { ...m };
+    if (frames.length === 0) {
+      delete updated.disabled_frames;
+    } else {
+      updated.disabled_frames = frames;
+    }
+    list[idx] = updated;
+    commitModules(list);
+    return;
+  }
   const list = [...value.value.modules];
   list[idx] = { ...list[idx], enabled: !list[idx].enabled };
   commitModules(list);
+}
+
+function isDisabledOnFrame(m: ModuleEntry): boolean {
+  const k = currentFrame.value;
+  return k != null && (m.disabled_frames ?? []).includes(k);
 }
 
 function toggleCollapsed(idx: number) {
@@ -4772,6 +4800,7 @@ const moduleRowCtx: ModuleRowCtx = {
   isHeld,
   isOverriddenOnFrame,
   effectiveLockedSeed,
+  isDisabledOnFrame,
 };
 provide(ModuleRowCtxKey, moduleRowCtx);
 

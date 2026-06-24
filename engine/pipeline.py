@@ -300,6 +300,15 @@ class PipelineEngine:
                 _module_name = getattr(module, "name", "") or ""
                 _module_bundle_origin = getattr(module, "bundle_origin", "") or ""
 
+            # Per-frame skip list: read disabled_frames from both dict and
+            # object branches the same way iteration_overrides is read.
+            _disabled_frames: list[int] = (
+                module.get("disabled_frames") or []
+                if isinstance(module, dict)
+                else getattr(module, "disabled_frames", None) or []
+            )
+            _k = int(ctx.get("__wp_loop_index__", 0))
+
             if not _module_enabled:
                 # Disabled modules don't run — but the trace row still
                 # surfaces what the module would have written, so the
@@ -312,6 +321,23 @@ class PipelineEngine:
                     "type": _module_type_raw,
                     "enabled": False,
                     "status": "skipped_disabled",
+                    "writes": [],
+                    "error": None,
+                    **meta,
+                })
+                continue
+
+            if _k in _disabled_frames:
+                # Module is enabled globally but suppressed on this frame.
+                # Trace as enabled=True so the debug viewer can distinguish
+                # "off on this frame" from "off entirely" (skipped_disabled).
+                meta = _extract_static_meta(module)
+                ctx["__wp_trace__"].append({
+                    "id": _module_id,
+                    "_uid": _module_uid,
+                    "type": _module_type_raw,
+                    "enabled": True,
+                    "status": "skipped_frame",
                     "writes": [],
                     "error": None,
                     **meta,
