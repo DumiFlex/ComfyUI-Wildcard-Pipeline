@@ -21,8 +21,9 @@
  * `runtime-seed-up`, `runtime-seed-down` — so the existing test
  * suites pass without modification.
  */
-import { computed } from "vue";
+import { computed, inject } from "vue";
 import type { ModuleEntry } from "../../../../widgets/_shared";
+import { LockSeedKey } from "../../lock-seed-ctx";
 
 const props = withDefaults(
   defineProps<{
@@ -35,6 +36,10 @@ const props = withDefaults(
   { label: "Lock seed" },
 );
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
+
+// The seed the module actually rolled — provided by ContextWidget. Used as the
+// default when locking so "Lock" pins what the user saw, not a fresh random.
+const lockSeedFor = inject(LockSeedKey, null);
 
 const instance = computed(() => props.module.instance ?? {});
 const locked = computed(() => typeof instance.value.locked_seed === "number");
@@ -71,7 +76,11 @@ function onLockClick(): void {
   } else {
     const ui = instance.value._ui ?? {};
     const remembered = typeof ui.last_locked_seed === "number" ? ui.last_locked_seed : null;
-    const seed = remembered ?? randomSeed();
+    // Prefer the seed the module ACTUALLY rolled (frame #k's captured seed, or
+    // the last-run seed) so locking reproduces what the user saw; then the
+    // remembered seed; a fresh random only as a last resort.
+    const resolved = lockSeedFor?.(props.module);
+    const seed = typeof resolved === "number" ? resolved : (remembered ?? randomSeed());
     emitInstance({
       locked_seed: seed,
       _ui: { ...ui, last_locked_seed: seed },

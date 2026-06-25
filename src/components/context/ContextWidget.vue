@@ -28,6 +28,7 @@ import BundleFrame from "./bundles/BundleFrame.vue";
 import { BundleFrameCtxKey, type BundleFrameCtx } from "./bundles/bundle-frame-ctx";
 import ModuleRow from "./ModuleRow.vue";
 import { ModuleRowCtxKey, type ModuleRowCtx } from "./module-row-ctx";
+import { LockSeedKey } from "./lock-seed-ctx";
 import { buildBundleInsertion, type BundleLibraryEntry } from "./bundles/insert";
 import { isEnabled, type WildcardOption, type InstanceLike } from "./editors/wildcard/probability";
 import { buildLibraryChildrenWithIntegrity, toChildSnapshot } from "./bundles/save";
@@ -4807,6 +4808,14 @@ const moduleRowCtx: ModuleRowCtx = {
   frameEnableOverride,
 };
 provide(ModuleRowCtxKey, moduleRowCtx);
+// Seed source for the edit-modal's Lock button — resolves the seed the module
+// actually rolled (frame #k's captured seed when a frame is active, else the
+// last-run seed) so locking pins what the user saw, not a random number.
+provide(LockSeedKey, (m: ModuleEntry): number | null => {
+  const k = currentFrame.value;
+  if (k != null) return props.frameSeedReader?.(k) ?? null;
+  return props.lastUsedSeedReader?.(m._uid ?? m.id) ?? null;
+});
 
 const bundleFrameCtx: BundleFrameCtx = {
   bundleChildDriftCount,
