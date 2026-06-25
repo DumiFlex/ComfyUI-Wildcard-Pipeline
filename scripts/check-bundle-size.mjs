@@ -209,7 +209,13 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // to frame-overrides.ts, the effective-enabled checkbox + bidirectional
 // on-#k / off-#k badge in ModuleRow, and the .wp-mod-badge--on CSS. Measured
 // 457868 bytes (140 over the 447 ceiling); minimal bump.
-const TOTAL_LIMIT = 448 * 1024;     // 448 KB
+// Bumped 448 -> 449 KB on 2026-06-25 for the per-frame seed-lock correctness
+// work: the Loop's derived-series capture (loop_seeds UI payload + onExecuted
+// store + frameSeedReader preference, so the lock pins the PREVIOUS run's
+// per-frame seed under control_after_generate=randomize) plus the modal
+// Lock-button resolver (lock-seed-ctx provide/inject into SeedLockControls).
+// Landed exactly at the 448 ceiling (458752/458752); bump for headroom.
+const TOTAL_LIMIT = 449 * 1024;     // 449 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

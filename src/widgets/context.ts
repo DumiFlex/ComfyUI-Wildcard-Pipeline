@@ -453,6 +453,19 @@ export function create(node: ContextNode, inputName: string) {
       // frame out of range — caller then falls back to the stored seed.
       function frameSeedReader(frame: number): number | null {
         if (!Number.isInteger(frame) || frame < 0) return null;
+        // Prefer the seed THIS frame ACTUALLY rolled last run — captured from
+        // the Loop's derived series in the run's UI payload (see onExecuted).
+        // This is the PREVIOUS run's value, which is what "lock to reproduce"
+        // needs; it survives control_after_generate=randomize rotating the
+        // live seed widget to the NEXT run's seed.
+        const captured = (node as unknown as { __wp_loop_seeds__?: number[] }).__wp_loop_seeds__;
+        if (Array.isArray(captured) && frame < captured.length
+            && typeof captured[frame] === "number") {
+          return captured[frame];
+        }
+        // No run captured yet (cold start) / Loop not driving seeds → compute
+        // from the current Loop config. Exact for fixed control; for randomize
+        // before any run there's nothing better than the about-to-run series.
         const startGraph =
           (node as unknown as { graph?: LiteGraphLike }).graph
           ?? (app.graph as unknown as LiteGraphLike);
@@ -595,6 +608,18 @@ export function create(node: ContextNode, inputName: string) {
       }
       (node as unknown as { __wp_last_used_per_module__?: Record<string, number> })
         .__wp_last_used_per_module__ = perModule;
+    }
+    // The Loop's per-iteration derived series for THIS run. Stored so the
+    // per-frame seed lock pins the seed each frame actually rolled — the
+    // captured series is the PREVIOUS run's (the live seed widget may have
+    // since rotated under control_after_generate=randomize).
+    const rawSeries = pickArrayValue(out, "loop_seeds");
+    if (Array.isArray(rawSeries)) {
+      const series = rawSeries
+        .map((v) => (typeof v === "number" ? v : Number(v)))
+        .filter((n) => Number.isFinite(n));
+      (node as unknown as { __wp_loop_seeds__?: number[] }).__wp_loop_seeds__ =
+        series.length ? series : undefined;
     }
     // No fallback when `module_seeds` is missing — the chain-level
     // `__wp_last_used_seed__` already updated above gives the

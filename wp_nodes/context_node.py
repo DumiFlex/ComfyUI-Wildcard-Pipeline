@@ -205,7 +205,18 @@ class WPContext(io.ComfyNode):
             es = entry.get("seed")
             if isinstance(key, str) and key and isinstance(es, int):
                 module_seeds[key] = es
+        # The Loop's full derived per-iteration series (present only when the
+        # Loop drives seeds via override). Captured by the frontend so the
+        # per-frame seed lock pins the seed each frame ACTUALLY rolled THIS
+        # run — robust to control_after_generate=randomize, where the live
+        # seed widget has already rotated to the NEXT run's seed.
+        _loop_seeds = upstream_internals.get("__wp_loop_seeds__")
+        loop_seeds = [int(s) for s in _loop_seeds] if isinstance(_loop_seeds, list) else []
         return io.NodeOutput(
             payload,
-            ui={"seed": [int(seed)], "module_seeds": [module_seeds]},
+            ui={
+                "seed": [int(seed)],
+                "module_seeds": [module_seeds],
+                "loop_seeds": [loop_seeds],
+            },
         )
