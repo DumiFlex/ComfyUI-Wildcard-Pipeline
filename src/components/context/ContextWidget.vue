@@ -3886,6 +3886,10 @@ function saveEditedModule(updated: ModuleEntry & { _originalId?: string }) {
     if (Object.keys(delta).length) next = setFrameOverride(next, k, delta);
     list[targetIdx] = next;
   }
+  // A base-unlock (here via the modal, or via the row toggle) makes any frame
+  // `locked_seed: null` override redundant — sweep it so the row stops showing
+  // a stale "override #k". No-op while the base stays locked.
+  list[targetIdx] = dropRedundantFrameLockNulls(list[targetIdx]);
   commitModules(list);
   if (updated._originalId && updated._originalId !== updated.id) {
     nextTick(() => {
