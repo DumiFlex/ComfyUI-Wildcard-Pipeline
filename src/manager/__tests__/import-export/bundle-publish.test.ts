@@ -227,3 +227,73 @@ describe("buildModulePublishable — constraint axis-name backfill", () => {
     expect(inner).not.toHaveProperty("target_wildcard_name");
   });
 });
+
+describe("buildModulePublishable — constraint axis-group backfill", () => {
+  // The grouping (tag_groups) lives on the WILDCARDS, not the constraint. These
+  // are the source/target wildcards as they sit in the live module catalog.
+  const moodWc = {
+    id: "mood0001", type: "wildcard", name: "mood",
+    payload: { var_binding: "mood", tag_groups: { temperament: ["bold", "serene"] } },
+  } as unknown as ModuleRow;
+  const colorWc = {
+    id: "color001", type: "wildcard", name: "color",
+    payload: {
+      var_binding: "color",
+      tag_groups: { saturation: ["vivid", "muted", "pastel"], tone: ["light", "medium", "dark"] },
+    },
+  } as unknown as ModuleRow;
+  // Single-axis wildcard: no tag_groups → nothing to snapshot.
+  const flatWc = {
+    id: "flat0001", type: "wildcard", name: "flat", payload: { var_binding: "flat" },
+  } as unknown as ModuleRow;
+  const catalog: ModuleRow[] = [moodWc, colorWc, flatWc];
+
+  function constraintRow(payload: Record<string, unknown>): ModuleRow {
+    return {
+      id: "cn000002", type: "constraint", name: "Mood x Color",
+      description: "", category_id: null, tags: [], is_favorite: false,
+      payload, payload_hash: "h".repeat(64), version: 1,
+      created_at: "2026-01-01", updated_at: "2026-01-01", content_rating: "safe" as const,
+    } as unknown as ModuleRow;
+  }
+
+  it("snapshots the source/target wildcards' tag_groups into the published constraint", () => {
+    const row = constraintRow({
+      source_wildcard_id: "mood0001", target_wildcard_id: "color001", matrix: {}, exceptions: [],
+    });
+    const inner = buildModulePublishable(row, catalog).payload.payload as Record<string, unknown>;
+    expect(inner.source_groups).toEqual({ temperament: ["bold", "serene"] });
+    expect(inner.target_groups).toEqual({
+      saturation: ["vivid", "muted", "pastel"], tone: ["light", "medium", "dark"],
+    });
+  });
+
+  it("does NOT overwrite groups already embedded on the payload", () => {
+    const row = constraintRow({
+      source_wildcard_id: "mood0001", target_wildcard_id: "color001",
+      source_groups: { custom: ["x"] }, matrix: {}, exceptions: [],
+    });
+    const inner = buildModulePublishable(row, catalog).payload.payload as Record<string, unknown>;
+    expect(inner.source_groups).toEqual({ custom: ["x"] });
+    expect(inner.target_groups).toBeDefined(); // target still backfilled
+  });
+
+  it("leaves groups absent for a single-axis wildcard or a dangling ref", () => {
+    const row = constraintRow({
+      source_wildcard_id: "flat0001", target_wildcard_id: "gone9999", matrix: {}, exceptions: [],
+    });
+    const inner = buildModulePublishable(row, catalog).payload.payload as Record<string, unknown>;
+    expect(inner).not.toHaveProperty("source_groups");
+    expect(inner).not.toHaveProperty("target_groups");
+  });
+
+  it("a constraint carrying snapshotted groups still passes strict validation", () => {
+    const row = constraintRow({
+      source_wildcard_id: "mood0001", target_wildcard_id: "color001", matrix: {}, exceptions: [],
+    });
+    const pub = buildModulePublishable(row, catalog);
+    expect(() =>
+      buildPublishBody({ payload: pub.payload, name: pub.name, description: pub.description }),
+    ).not.toThrow();
+  });
+});

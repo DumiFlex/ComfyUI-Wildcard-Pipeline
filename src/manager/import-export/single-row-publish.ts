@@ -235,6 +235,58 @@ function backfillConstraintNames(
 }
 
 /**
+ * Backfill a CONSTRAINT payload's axis GROUPINGS from the live catalog —
+ * sibling of `backfillConstraintNames`. A constraint references its source /
+ * target wildcards by id, but the per-axis grouping (`tag_groups: {axis:
+ * [sub-category, …]}`) lives on those WILDCARDS, not on the constraint. The
+ * community preview groups + colours its matrix by those axes, and a STANDALONE
+ * constraint (its wildcards not also published) has no dependency to resolve
+ * them from — so the matrix renders flat. Snapshotting each wildcard's
+ * tag_groups into the published constraint as `source_groups` / `target_groups`
+ * makes the grouping self-contained: the community needs nothing but the
+ * constraint itself.
+ *
+ * Non-mutating; fills only an ABSENT field, only when the id resolves to a
+ * wildcard carrying a non-empty `{axis: string[]}` tag_groups. A no-op for
+ * non-constraints, an empty catalog, single-axis wildcards, or dangling refs
+ * (those fall back to flat, same as a legacy constraint). These extra inner-
+ * payload keys ride the same path the cached names do — the constraint
+ * validator's inner `z.object` strips them on a consumer's install, so they're
+ * preview-only metadata that never reaches the engine.
+ */
+function backfillConstraintGroups(
+  type: string,
+  payload: Record<string, unknown>,
+  catalog: ModuleRow[],
+): Record<string, unknown> {
+  if (type !== "constraint" || catalog.length === 0) return payload;
+  const groupsById = (id: unknown): Record<string, string[]> | undefined => {
+    if (typeof id !== "string") return undefined;
+    const row = catalog.find((m) => m.id === id);
+    const tg = (row?.payload as { tag_groups?: unknown } | undefined)?.tag_groups;
+    if (!tg || typeof tg !== "object") return undefined;
+    const out: Record<string, string[]> = {};
+    for (const [axis, members] of Object.entries(tg as Record<string, unknown>)) {
+      if (Array.isArray(members)) {
+        const tags = members.filter((m): m is string => typeof m === "string");
+        if (tags.length) out[axis] = tags;
+      }
+    }
+    return Object.keys(out).length ? out : undefined;
+  };
+  const out = { ...payload };
+  if (typeof out.source_groups === "undefined") {
+    const g = groupsById(out.source_wildcard_id);
+    if (g) out.source_groups = g;
+  }
+  if (typeof out.target_groups === "undefined") {
+    const g = groupsById(out.target_wildcard_id);
+    if (g) out.target_groups = g;
+  }
+  return out;
+}
+
+/**
  * Build the engine-row payload for a module library row. Strips
  * server-stamped lifecycle fields + the local `history` sidecar —
  * community + the user's clipboard both want a fresh, history-free row
@@ -249,9 +301,13 @@ export function buildModulePublishable(
   row: ModuleRow,
   catalog: ModuleRow[] = [],
 ): PublishablePayload {
-  const inner = backfillConstraintNames(
+  const inner = backfillConstraintGroups(
     row.type,
-    stripHistory(row.payload as Record<string, unknown>),
+    backfillConstraintNames(
+      row.type,
+      stripHistory(row.payload as Record<string, unknown>),
+      catalog,
+    ),
     catalog,
   );
   const payload: Record<string, unknown> = {
