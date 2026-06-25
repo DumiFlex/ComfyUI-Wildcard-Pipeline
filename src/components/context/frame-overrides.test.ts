@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { withFrameInstance, diffInstance, setFrameOverride, clearFrameOverride, toggleFrameLock, toggleFrameEnabled, effectiveEnabled, frameEnableOverride } from "./frame-overrides";
+import { withFrameInstance, diffInstance, setFrameOverride, clearFrameOverride, toggleFrameLock, toggleFrameEnabled, dropRedundantFrameLockNulls, effectiveEnabled, frameEnableOverride } from "./frame-overrides";
 import type { ModuleEntry } from "../../widgets/_shared";
 
 function mod(extra: Partial<ModuleEntry> = {}): ModuleEntry {
@@ -94,5 +94,25 @@ describe("frame-overrides", () => {
     const r = toggleFrameEnabled(mod({ enabled: false, disabled_frames: [1] }), 2);
     expect(r.disabled_frames).toBeUndefined();
     expect(r.frame_enabled).toEqual({ "2": true });
+  });
+
+  // ── dropRedundantFrameLockNulls ────────────────────────────────────────
+  it("dropRedundantFrameLockNulls: clears a frame locked_seed:null once base is unlocked", () => {
+    // Repro of the QA bug: lock #4, lock base, unlock #4 (writes null override),
+    // unlock base → the null override is now redundant and must be swept.
+    const m = mod({ instance: {}, iteration_overrides: { "3": { locked_seed: null } } });
+    expect(dropRedundantFrameLockNulls(m).iteration_overrides).toBeUndefined();
+  });
+  it("dropRedundantFrameLockNulls: KEEPS the null override while base is locked", () => {
+    const m = mod({ instance: { locked_seed: 5 }, iteration_overrides: { "3": { locked_seed: null } } });
+    expect(dropRedundantFrameLockNulls(m).iteration_overrides).toEqual({ "3": { locked_seed: null } });
+  });
+  it("dropRedundantFrameLockNulls: keeps a frame's real lock + other override fields", () => {
+    const m = mod({
+      instance: {},
+      iteration_overrides: { "1": { locked_seed: 99 }, "2": { locked_seed: null, pinned_option_id: "0" } },
+    });
+    expect(dropRedundantFrameLockNulls(m).iteration_overrides)
+      .toEqual({ "1": { locked_seed: 99 }, "2": { pinned_option_id: "0" } });
   });
 });

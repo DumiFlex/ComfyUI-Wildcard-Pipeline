@@ -129,3 +129,30 @@ export function toggleFrameEnabled(module: ModuleEntry, frame: number): ModuleEn
   else out.frame_enabled = map;
   return out;
 }
+
+/** Drop redundant frame `locked_seed: null` overrides. A frame's
+ *  `locked_seed: null` exists ONLY to force that frame UNLOCKED over a BASE
+ *  lock; once the base is itself unlocked it's meaningless, so it's swept (and
+ *  the frame's override entry removed when nothing else remains). No-op while
+ *  the base stays locked. Without this, unlocking base after unlocking a frame
+ *  leaves a stale entry so the row keeps showing "override #k". */
+export function dropRedundantFrameLockNulls(module: ModuleEntry): ModuleEntry {
+  const ov = module.iteration_overrides;
+  if (!ov || typeof module.instance?.locked_seed === "number") return module;
+  const next: IterationOverrides = {};
+  let changed = false;
+  for (const [k, patch] of Object.entries(ov)) {
+    if (patch && (patch as Record<string, unknown>).locked_seed === null) {
+      const rest = { ...patch } as Record<string, unknown>;
+      delete rest.locked_seed;
+      changed = true;
+      if (Object.keys(rest).length) next[k] = rest as Partial<Instance>;
+    } else {
+      next[k] = patch;
+    }
+  }
+  if (!changed) return module;
+  const out: ModuleEntry = { ...module, iteration_overrides: next };
+  if (Object.keys(next).length === 0) delete out.iteration_overrides;
+  return out;
+}

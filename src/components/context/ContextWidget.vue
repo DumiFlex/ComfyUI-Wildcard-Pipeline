@@ -77,7 +77,7 @@ import { pushToast } from "../shared/toast-store";
 import { kindIcon } from "../shared/kind-icons";
 import { KIND_TITLE, FRAME_OVERRIDABLE_FIELDS } from "./editors/_shell";
 import { currentFrame } from "../context-loop/frame-cursor";
-import { withFrameInstance, diffInstance, setFrameOverride, clearFrameOverride, toggleFrameLock, toggleFrameEnabled, effectiveEnabled as feEffectiveEnabled, frameEnableOverride as feFrameEnableOverride } from "./frame-overrides";
+import { withFrameInstance, diffInstance, setFrameOverride, clearFrameOverride, toggleFrameLock, toggleFrameEnabled, dropRedundantFrameLockNulls, effectiveEnabled as feEffectiveEnabled, frameEnableOverride as feFrameEnableOverride } from "./frame-overrides";
 import { varColorClass } from "../shared/var-color";
 import wpLogoSvg from "../shared/wp-logo.svg?raw";
 import {
@@ -3016,7 +3016,9 @@ function toggleLockOnCard(idx: number) {
   // map-by-id pass would toggle every sibling at once. Indexing into
   // the array hits the specific instance the user clicked.
   const list = [...value.value.modules];
-  list[idx] = { ...m, instance: nextInst };
+  // Unlocking base makes any frame `locked_seed: null` override redundant —
+  // sweep it so the row stops showing a stale "override #k". No-op on lock.
+  list[idx] = dropRedundantFrameLockNulls({ ...m, instance: nextInst });
   commitModules(list);
 }
 
