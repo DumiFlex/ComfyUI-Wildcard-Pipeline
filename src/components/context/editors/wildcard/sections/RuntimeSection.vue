@@ -61,7 +61,7 @@ function onHoldClick(): void {
       v-if="frameActive"
       class="runtime__frame-hint"
       data-test="runtime-frame-hint"
-    >Applies to every frame — switch to base to change.</p>
+    >Hide from prompt and Hold across run apply to every frame — switch to base to change.</p>
   </section>
 </template>
 
