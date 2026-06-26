@@ -51,6 +51,20 @@ describe("SeedListModal", () => {
     await w.findAll('[data-test="seedrow-lock"]')[0].trigger("click"); // lock #1 (index 0), sequential derived = 42
     expect(lastEmit(w)).toEqual({ "0": 42 });
   });
+  it("threads previousSeeds → each row's lock-previous button (click locks the previous)", async () => {
+    const w = modal({ seedLocks: {}, previousSeeds: [111, 222, 333, 444] });
+    const prevBtns = w.findAll('[data-test="seedrow-lockprev"]');
+    expect(prevBtns).toHaveLength(4);
+    await prevBtns[2].trigger("click"); // frame #3 → its previous seed 333
+    expect(lastEmit(w)).toEqual({ "2": 333 });
+  });
+  it("greys the lock-previous button for frames with no captured previous", () => {
+    const w = modal({ seedLocks: {}, previousSeeds: [111] }); // only frame 0 has a previous
+    const prevBtns = w.findAll('[data-test="seedrow-lockprev"]');
+    expect(prevBtns[0].attributes("disabled")).toBeUndefined();
+    expect(prevBtns[1].attributes("disabled")).toBeDefined();
+    expect(prevBtns[3].attributes("disabled")).toBeDefined();
+  });
   it("Lock all locks every iteration to its derived seed", async () => {
     const w = modal({ seedLocks: {} });
     await w.find('[data-test="mx-seed-lockall"]').trigger("click");

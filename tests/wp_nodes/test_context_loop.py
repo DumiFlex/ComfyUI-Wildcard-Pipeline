@@ -32,3 +32,14 @@ def test_execute_applies_seed_locks_when_override_on():
     assert payloads[2].internals["__wp_seed_override__"] == 7
     assert payloads[0].internals["__wp_seed_override__"] == 42
     assert payloads[2].internals["__wp_loop_seeds__"] == [42, 43, 7, 45]
+    # The same series surfaces to the node UI so the frontend can offer
+    # "lock previous" in the seed modal.
+    assert out.ui == {"loop_seeds": [[42, 43, 7, 45]]}
+
+
+def test_execute_emits_empty_ui_seeds_when_override_off():
+    # Override off → the Loop doesn't drive seeds, so there's no series to
+    # offer; the empty UI list greys the "lock previous" button per frame.
+    raw = json.dumps({"strategy": "sequential", "override_seed": False})
+    out = WPContextLoop.execute(seed=42, count=4, wp_context_loop_config=raw)
+    assert out.ui == {"loop_seeds": [[]]}

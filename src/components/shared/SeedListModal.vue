@@ -16,6 +16,11 @@ const props = defineProps<{
    *  shows it when "Override Context seed" is OFF (a nudge); Seed List shows
    *  it when "Override base seed from loop" is ON (base comes from the loop). */
   overrideHint?: string;
+  /** The seed each frame used on the PREVIOUS run (captured loop series),
+   *  indexed by frame. Drives the per-row "lock previous" button; absent or
+   *  short → that frame's button greys out. Distinct from the computed
+   *  `derived` series, which is the UPCOMING seeds from the current base. */
+  previousSeeds?: number[] | null;
 }>();
 const emit = defineEmits<{ "update:seedLocks": [next: Record<string, number>]; close: [] }>();
 
@@ -128,14 +133,14 @@ onBeforeUnmount(() => {
         <div class="sm__list">
           <SeedLockRow v-for="(s, i) in derived" :key="i" :index="i" :derived="s"
             :locked="Object.prototype.hasOwnProperty.call(seedLocks, String(i))"
-            :seed="seedLocks[String(i)] ?? null" @update="onRow" />
+            :seed="seedLocks[String(i)] ?? null" :previous="previousSeeds?.[i] ?? null" @update="onRow" />
           <template v-if="inactiveLocks.length">
             <div class="sm__inactive-label" data-test="mx-seed-inactive">
               Inactive · won't apply at count {{ derived.length }}
             </div>
             <SeedLockRow v-for="i in inactiveLocks" :key="`inact-${i}`" :index="i"
               :derived="seedLocks[String(i)]" :locked="true" :seed="seedLocks[String(i)]"
-              :inactive="true" @update="onRow" />
+              :previous="previousSeeds?.[i] ?? null" :inactive="true" @update="onRow" />
           </template>
         </div>
 

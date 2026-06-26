@@ -10,6 +10,7 @@
  */
 import { defineAsyncComponent, h, ref, watch, type Component } from "vue";
 import { createDomWidgetHost, type DomWidgetHost, type MountTargetNode } from "./_shared";
+import { attachLoopSeedsCapture } from "./_seed-capture";
 import { reactiveFromGraph } from "../extension/reactive";
 import {
   emptySeedListConfig,
@@ -50,6 +51,16 @@ export function create(node: SeedListHostNode, inputName: string) {
   const count = reactiveFromGraph(
     node,
     () => Number((node.widgets ?? []).find((w) => w.name === "count")?.value ?? 1),
+    Object.is,
+  );
+
+  // The node's per-iteration seed series from the PREVIOUS run, captured in
+  // `onExecuted` below. Drives the seed modal's "lock previous" button.
+  // Reactive so an open modal refreshes the instant a run lands; `onExecuted`
+  // assigns a fresh array each run, so ref equality detects the change.
+  const previousSeeds = reactiveFromGraph(
+    node,
+    () => (node as unknown as { __wp_prev_seeds__?: number[] }).__wp_prev_seeds__ ?? null,
     Object.is,
   );
 
@@ -142,6 +153,7 @@ export function create(node: SeedListHostNode, inputName: string) {
           baseSeed: effective.baseSeed,
           count: effective.count,
           previewStrategy: effective.strategy,
+          previousSeeds: previousSeeds.value,
           "onUpdate:modelValue": onUpdate,
         });
       };
@@ -205,6 +217,10 @@ export function create(node: SeedListHostNode, inputName: string) {
     }
     prevHasLink = now;
   });
+
+  // Capture the node's executed `loop_seeds` series for the modal's "lock
+  // previous" button (see _seed-capture).
+  attachLoopSeedsCapture(node);
 
   return host;
 }

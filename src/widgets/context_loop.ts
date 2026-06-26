@@ -10,6 +10,7 @@
  */
 import { defineAsyncComponent, h, ref, type Component } from "vue";
 import { createDomWidgetHost, type DomWidgetHost, type MountTargetNode } from "./_shared";
+import { attachLoopSeedsCapture } from "./_seed-capture";
 import { reactiveFromGraph } from "../extension/reactive";
 import {
   emptyContextLoopConfig,
@@ -50,6 +51,16 @@ export function create(node: ContextLoopHostNode, inputName: string) {
     Object.is,
   );
 
+  // The Loop's per-iteration seed series from the PREVIOUS run, captured in
+  // `onExecuted` below. Drives the seed modal's "lock previous" button.
+  // Reactive so an open modal refreshes the instant a run lands; `onExecuted`
+  // assigns a fresh array each run, so ref equality detects the change.
+  const previousSeeds = reactiveFromGraph(
+    node,
+    () => (node as unknown as { __wp_prev_seeds__?: number[] }).__wp_prev_seeds__ ?? null,
+    Object.is,
+  );
+
   let host: DomWidgetHost | null = null;
 
   const wrapper: Component = {
@@ -66,6 +77,7 @@ export function create(node: ContextLoopHostNode, inputName: string) {
           nodeMode: nodeMode.value,
           baseSeed: baseSeed.value,
           count: count.value,
+          previousSeeds: previousSeeds.value,
           "onUpdate:modelValue": onUpdate,
         });
     },
@@ -81,5 +93,10 @@ export function create(node: ContextLoopHostNode, inputName: string) {
     minHeight: 140,
     minWidth: 240,
   });
+
+  // Capture the Loop's executed `loop_seeds` series for the modal's "lock
+  // previous" button (see _seed-capture).
+  attachLoopSeedsCapture(node);
+
   return host;
 }

@@ -216,4 +216,13 @@ class WPContextLoop(io.ComfyNode):
                 debug={},
                 internals=internals,
             ))
-        return io.NodeOutput(payloads, loop_config_payload)
+        # Surface the per-iteration series to the node UI so the frontend can
+        # offer "lock previous" in the seed modal (captured in context_loop.ts).
+        # Only meaningful when the Loop drives the seeds (override on); an empty
+        # list otherwise greys the button out per-frame.
+        ui_seeds = [int(s) for s in derived] if (has_override and derived) else []
+        return io.NodeOutput(
+            payloads,
+            loop_config_payload,
+            ui={"loop_seeds": [ui_seeds]},
+        )

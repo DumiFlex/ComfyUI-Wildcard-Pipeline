@@ -251,4 +251,6 @@ class WPSeedList(io.ComfyNode):
             derive_loop_seeds(resolved_base, resolved_count, resolved_strategy),
             cfg["seed_locks"],
         )
-        return io.NodeOutput(seeds)
+        # Surface the per-iteration series to the node UI so the frontend can
+        # offer "lock previous" in the seed modal (captured in seed_list.ts).
+        return io.NodeOutput(seeds, ui={"loop_seeds": [[int(s) for s in seeds]]})

@@ -33,8 +33,12 @@ const props = withDefaults(
      *  The strategy CHIPS still reflect modelValue.strategy (the local config).
      *  Undefined = use modelValue.strategy (no loop / override off). */
     previewStrategy?: SeedListStrategy;
+    /** The seed each frame used on the PREVIOUS run, captured from the node's
+     *  executed `loop_seeds` UI payload by the host glue. Drives the seed
+     *  modal's per-frame "lock previous" button. Null until a run lands. */
+    previousSeeds?: number[] | null;
   }>(),
-  { nodeMode: 0, baseSeed: 0, count: 1, previewStrategy: undefined },
+  { nodeMode: 0, baseSeed: 0, count: 1, previewStrategy: undefined, previousSeeds: null },
 );
 
 const emit = defineEmits<{ "update:modelValue": [next: SeedListConfig] }>();
@@ -201,6 +205,7 @@ function toggleOverrideStrategy(): void {
     </div>
     <SeedListModal v-if="seedsOpen" :node-name="'WP Seed List'" :base-seed="baseSeed"
       :count="count" :strategy="previewStrategy ?? modelValue.strategy" :seed-locks="modelValue.seed_locks ?? {}"
+      :previous-seeds="previousSeeds"
       :override-hint="modelValue.override_seed ? 'Base seed comes from the wired loop while Override base seed from loop is on.' : ''"
       @update:seed-locks="onSeedLocks" @close="seedsOpen = false" />
   </div>

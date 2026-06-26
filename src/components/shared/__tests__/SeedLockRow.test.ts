@@ -37,4 +37,15 @@ describe("SeedLockRow", () => {
     await w.find('[data-test="seedrow-lock"]').trigger("click");
     expect(w.emitted("update")![0][0]).toEqual({ index: 0, seed: null });
   });
+  it("lock-previous: fills + locks the captured previous seed", async () => {
+    const w = row({ previous: 777 });
+    const btn = w.find('[data-test="seedrow-lockprev"]');
+    expect(btn.attributes("disabled")).toBeUndefined();
+    await btn.trigger("click");
+    expect(w.emitted("update")![0][0]).toEqual({ index: 0, seed: 777 });
+  });
+  it("lock-previous: disabled when the frame has no previous seed", () => {
+    expect(row({ previous: null }).find('[data-test="seedrow-lockprev"]').attributes("disabled")).toBeDefined();
+    expect(row().find('[data-test="seedrow-lockprev"]').attributes("disabled")).toBeDefined(); // absent → disabled
+  });
 });

@@ -10,6 +10,11 @@ const props = defineProps<{
   /** Locked index beyond the current count — dimmed but still editable;
    *  re-activates if count grows back. */
   inactive?: boolean;
+  /** The seed this frame ACTUALLY used on the previous run (captured from the
+   *  node's loop series). null/undefined when there's no prior run for this
+   *  frame — the "lock previous" button greys out. Distinct from `derived`,
+   *  which is the UPCOMING seed computed from the current base. */
+  previous?: number | null;
 }>();
 const emit = defineEmits<{ update: [payload: { index: number; seed: number | null }] }>();
 
@@ -21,6 +26,9 @@ function randomSeed(): number {
 }
 function set(seed: number | null) { emit("update", { index: props.index, seed }); }
 function onLock() { set(props.locked ? null : props.derived); }
+/** Fill + lock the seed this frame used on the previous run. No-op (button is
+ *  disabled) when there's no captured previous for this frame. */
+function lockPrevious() { if (props.previous != null) set(props.previous); }
 function onInput(ev: Event) {
   const n = Number((ev.target as HTMLInputElement).value.trim());
   if (Number.isFinite(n) && Number.isInteger(n)) set(n);
@@ -40,6 +48,17 @@ function bump(d: 1 | -1) {
         <rect x="5" y="11" width="14" height="9" rx="1.5" /><path :d="locked ? 'M8 11V8a4 4 0 0 1 8 0v3' : 'M8 11V8a4 4 0 0 1 8 0'" />
       </svg>
       {{ locked ? "Locked" : "Lock" }}
+    </button>
+    <button type="button" class="toggle toggle--prev" data-test="seedrow-lockprev"
+      :disabled="previous == null || undefined"
+      :title="previous == null
+        ? 'No previous run captured for this frame'
+        : `Lock the seed this frame used last run (${previous})`"
+      @click="lockPrevious">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 3v5h5" /><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" /><path d="M12 7v5l3 2" />
+      </svg>
+      Prev
     </button>
     <span class="srow__fill" />
     <span v-if="!locked" class="derived">
@@ -79,6 +98,11 @@ function bump(d: 1 | -1) {
 .toggle svg { color: var(--wp-text-dim, var(--wp-text3)); }
 .toggle--on { border-color: var(--wp-accent); color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,.10); }
 .toggle--on svg { color: var(--wp-accent-text, var(--wp-text)); }
+/* "Lock previous run's seed" — secondary action; greys out when the frame has
+   no captured previous (no prior run). */
+.toggle--prev { color: var(--wp-text-dim, var(--wp-text3)); }
+.toggle:disabled { opacity: .4; cursor: not-allowed; }
+.toggle:disabled:hover { border-color: var(--wp-border); color: var(--wp-text-dim, var(--wp-text3)); }
 .derived { display: inline-flex; align-items: center; gap: 8px; }
 .derived__val { font: 11px var(--wp-font-mono, monospace); color: var(--wp-text4, #888); }
 .derived__tag { font: 600 8px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .07em; color: var(--wp-text-dim, var(--wp-text3)); border: 1px solid var(--wp-border); border-radius: 3px; padding: 1px 5px; }

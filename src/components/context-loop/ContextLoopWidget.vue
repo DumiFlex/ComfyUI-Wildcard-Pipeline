@@ -27,8 +27,12 @@ const props = withDefaults(
     baseSeed?: number;
     /** Iteration count forwarded from the host ComfyUI INT widget. */
     count?: number;
+    /** The seed each frame used on the PREVIOUS run, captured from the node's
+     *  executed `loop_seeds` UI payload by the host glue. Drives the seed
+     *  modal's per-frame "lock previous" button. Null until a run lands. */
+    previousSeeds?: number[] | null;
   }>(),
-  { nodeMode: 0, baseSeed: 0, count: 1 },
+  { nodeMode: 0, baseSeed: 0, count: 1, previousSeeds: null },
 );
 
 const emit = defineEmits<{ "update:modelValue": [next: ContextLoopConfig] }>();
@@ -219,6 +223,7 @@ function toggleTotalInternal(): void {
 
     <SeedListModal v-if="seedsOpen" :node-name="'WP Context Loop'" :base-seed="baseSeed"
       :count="count" :strategy="modelValue.strategy" :seed-locks="modelValue.seed_locks ?? {}"
+      :previous-seeds="previousSeeds"
       :override-hint="!modelValue.override_seed ? 'These seeds apply only when Override Context seed is on.' : ''"
       @update:seed-locks="onSeedLocks" @close="seedsOpen = false" />
   </div>

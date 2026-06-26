@@ -324,7 +324,11 @@ def test_execute_widget_mode_matches_derive_loop_seeds():
         wp_seed_list_config=_cfg(strategy="hash_index"),
         loop_config=None,
     )
-    assert _seeds(out) == derive_loop_seeds(42, 4, "hash_index")
+    seeds = _seeds(out)
+    assert seeds == derive_loop_seeds(42, 4, "hash_index")
+    # The series also surfaces to the node UI so the frontend can offer
+    # "lock previous" in the seed modal.
+    assert out.ui == {"loop_seeds": [[int(s) for s in seeds]]}
 
 
 def test_execute_widget_mode_ignores_wired_loop_config_when_all_off():
