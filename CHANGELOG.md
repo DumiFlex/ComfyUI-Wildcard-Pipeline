@@ -1,3 +1,52 @@
+## 🎉 Wildcard Pipeline 2.8.0
+
+📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
+
+<details>
+<summary><b>📋 Full changelog</b> — click to expand the per-commit list</summary>
+
+
+* fix(context): add hover states to the per-kind edit modal footer buttons ([b292699](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/b292699))
+* fix(context): capture the loop's per-frame seeds so the lock pins the previous roll ([b33afd8](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/b33afd8))
+* fix(context): clear redundant frame lock-null override when the base unlocks ([f38a316](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/f38a316))
+* fix(context): coerce disabled_frames to int set and guard frame toggle ([65683ae](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/65683ae))
+* fix(context): modal lock button pins the rolled seed via injected resolver ([e56fd22](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/e56fd22))
+* fix(context): name the disabled toggles in the per-frame runtime hint + wrap loop frame chips ([2fb853f](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/2fb853f))
+* fix(context): per-frame enable overrides base enabled (frame_enabled) ([6eb4b73](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/6eb4b73))
+* fix(context): per-frame seed lock captures that frame's own rolled seed ([25388b4](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/25388b4))
+* fix(context): per-frame seed lock computes the frame's real seed from the loop ([1f164df](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/1f164df))
+* fix(context): restrict per-frame overrides to an allowlist of meaningful fields ([bb5e84d](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/bb5e84d))
+* fix(context): resync editor draft on frame revert + restyle the banner for readability ([39fdb6f](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/39fdb6f))
+* fix(context): scope the wrapping grid to the frame chips only ([c48aafb](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/c48aafb))
+* fix(context): stack the frame banner above the editor card instead of beside it ([3c492f1](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/3c492f1))
+* fix(context): sweep redundant frame lock-null when base unlocks via the modal ([e1885a3](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/e1885a3))
+* fix(engine): apply iteration_overrides for generic-object modules ([942834d](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/942834d))
+* fix(engine): include disabled_frames in the generic-object snapshot keys ([03796c5](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/03796c5))
+* fix(engine): stop double-shifting the per-iteration override seed ([3527ada](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/3527ada))
+* fix(extension): read loop seed and count as numbers for per-frame seed lock ([67a09df](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/67a09df))
+* feat(context-loop): add edit-frame selector chip row ([ece6d49](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/ece6d49))
+* feat(context-loop): add session frame-cursor singleton ([6dc033d](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/6dc033d))
+* feat(context): add hold-across-run toggle to the runtime sections ([9663636](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/9663636))
+* feat(context): add lock-previous-seed to the iteration-seed modals ([c7c867e](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/c7c867e))
+* feat(context): add pure frame-override helpers ([7b416ad](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/7b416ad))
+* feat(context): disable run-level controls while editing a frame ([1822297](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/1822297))
+* feat(context): frame banner with revert-to-base in the module editor ([79cf385](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/79cf385))
+* feat(context): held and per-frame override row badges ([e93f7ba](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/e93f7ba))
+* feat(context): make the row quick-lock act on the active frame ([21f2850](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/21f2850))
+* feat(context): per-frame enable/disable via disabled_frames ([8a9dc9e](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/8a9dc9e))
+* feat(context): redirect edits into iteration_overrides when a frame is active ([4e71e04](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/4e71e04))
+* feat(engine): apply per-frame iteration_overrides onto module instance ([10dcac4](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/10dcac4))
+* feat(engine): combine honors hold seed_scope ([8871a28](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/8871a28))
+* feat(engine): fixed_values honors hold seed_scope ([15c1ade](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/15c1ade))
+* feat(engine): thread a hold seed and loop index into the pipeline run ([0f7aaab](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/0f7aaab))
+* feat(engine): wildcard honors hold seed_scope, locked_seed still wins ([072e4e7](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/072e4e7))
+* feat(manager): snapshot source/target tag_groups into published constraints ([ff4d8fa](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/ff4d8fa))
+* feat(types): add seed_scope and iteration_overrides to module config ([8910b98](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/8910b98))
+* revert(context): drop per-frame seed capture, superseded by double-shift fix ([91b5f75](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/91b5f75))
+* refactor(context): unify frame-hint markup and add false-case coverage ([8f696d6](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/8f696d6))
+
+</details>
+
 ## 🎉 Wildcard Pipeline 2.7.0
 
 📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
