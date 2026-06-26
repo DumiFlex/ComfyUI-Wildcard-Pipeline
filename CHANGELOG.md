@@ -1,3 +1,31 @@
+## 🎉 Wildcard Pipeline 2.7.0
+
+📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
+
+<details>
+<summary><b>📋 Full changelog</b> — click to expand the per-commit list</summary>
+
+
+* feat(engine): add apply_seed_locks for per-iteration seed overrides ([5da64f8](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/5da64f8))
+* feat(loop): apply per-iteration seed locks in the context loop node ([4884598](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/4884598))
+* feat(loop): per-iteration seeds button + modal; shrink iteration-var buttons ([86eb15c](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/86eb15c))
+* feat(seedlist): add paste-to-replace locks from copied text ([fa73750](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/fa73750))
+* feat(seedlist): alt-click copy to grab only the locked seeds ([589f45e](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/589f45e))
+* feat(seedlist): apply per-iteration seed locks to the output series ([fd2cdcb](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/fd2cdcb))
+* feat(seedlist): flash a copied indicator on the modal copy button ([34ec18f](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/34ec18f))
+* feat(seedlist): per-iteration seeds button + modal ([43d775e](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/43d775e))
+* feat(seedlist): preview effective base/count/strategy from the wired loop ([68910bf](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/68910bf))
+* feat(seedlist): show out-of-range locks dimmed but still editable ([b49a579](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/b49a579))
+* feat(shared): add per-iteration view/set/lock row (SeedLockRow) ([1ad7e8e](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/1ad7e8e))
+* feat(shared): ts mirror of loop seed derivation with py-ts parity corpus ([cc64ca3](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/cc64ca3))
+* feat(shared): view/set/lock per-iteration seeds modal ([0f0cd47](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/0f0cd47))
+* feat(widgets): add seed_locks field to loop + seed-list configs ([5a3e834](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/5a3e834))
+* feat(widgets): feed stock base-seed + count into the seed modal ([fb19e3c](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/fb19e3c))
+* feat(widgets): seed-list override hint + capitalize loop bypass label ([44d8ab9](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/44d8ab9))
+* test(widgets): restore parse-recovery coverage dropped alongside seed_locks tests ([b5262c2](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/b5262c2))
+
+</details>
+
 ## 🎉 Wildcard Pipeline 2.6.0
 
 📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
