@@ -138,7 +138,7 @@ function toggleTotalInternal(): void {
 
     <div class="wp-loop__section">
       <div class="wp-loop__label">edit frame</div>
-      <div class="wp-loop__chips" role="radiogroup" aria-label="Edit frame">
+      <div class="wp-loop__chips wp-loop__chips--frames" role="radiogroup" aria-label="Edit frame">
         <button type="button" class="wp-loop__chip" :class="{ 'wp-loop__chip--active': currentFrame === null }"
           data-test="loop-frame-base" role="radio" :aria-checked="currentFrame === null" @click="setFrame(null)">base</button>
         <button v-for="i in frameChips" :key="i" type="button" class="wp-loop__chip"
@@ -248,20 +248,19 @@ function toggleTotalInternal(): void {
   color: var(--wp-text-dim, var(--wp-text-muted, #8a8d99));
 }
 
-/* Grid (not flex) so the frame chips WRAP onto multiple rows instead of
-   overflowing the node at high iteration counts. auto-fill keeps a uniform
-   cell width; the last row's chips grow to 1fr to fill it. */
-.wp-loop__chips {
+.wp-loop__chips { display: flex; gap: 4px; }
+/* Frame chips ONLY (the strategy row has 3 fixed chips that must stay one
+   row + show full labels): grid so 15+ frame chips WRAP instead of
+   overflowing the node. auto-fill keeps a uniform cell width; the last row
+   grows to 1fr to fill it. */
+.wp-loop__chips--frames {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
-  gap: 4px;
 }
 .wp-loop__chip {
+  flex: 1;
   padding: 4px 6px;
   text-align: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
   border: 1px solid var(--wp-border, #353841);
   border-radius: 3px;
