@@ -96,6 +96,20 @@ const controls = [
       </p>
     </DocSection>
 
+    <DocSection title="Per-iteration seed locks">
+      <p>
+        The <b>Per-iteration seeds</b> button opens the seed list, where you can pin any iteration
+        to a fixed seed while the rest stay derived — handy for keeping a couple of results you
+        liked while the others keep exploring. <b>Lock all</b> / <b>Unlock all</b>, <b>Copy</b> /
+        <b>Paste</b> (as <code>#N: seed</code> text), and a per-row <b>Prev</b> button round it out.
+      </p>
+      <DocCallout variant="tip">
+        <b>Prev</b> locks the seed an iteration actually used on the <em>previous</em> run, not the
+        upcoming one — the right choice when control-after-generate is randomising the base. The
+        Seed List captures its series on every run, so Prev lights up after the first generate.
+      </DocCallout>
+    </DocSection>
+
     <DocSection title="Good to know">
       <DocCallout variant="tip">
         The seed list pairs with the loop by <em>list index</em>, not by any wire-based handshake.
@@ -115,6 +129,7 @@ const controls = [
         :links="[
           { id: 'seeds-and-loops', label: 'Seeds &amp; loops', icon: 'pi pi-share-alt', tone: 'neutral' },
           { id: 'wp-context-loop', label: 'WP Context Loop', icon: 'pi pi-replay', tone: 'node' },
+          { id: 'iteration-overrides', label: 'Per-iteration overrides', icon: 'pi pi-images', tone: 'neutral' },
           { id: 'wp-context', label: 'WP Context', icon: 'pi pi-sitemap', tone: 'node' },
         ]"
       />

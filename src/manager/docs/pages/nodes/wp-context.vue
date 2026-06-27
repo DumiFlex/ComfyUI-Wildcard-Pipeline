@@ -48,6 +48,25 @@ const ports = [
       <DocKeyList :items="ports" />
     </DocSection>
 
+    <DocSection title="Per-module behaviour in a loop">
+      <p>
+        When a <b>WP Context Loop</b> drives this node, each module chooses how it behaves across
+        the batch through its Runtime settings:
+      </p>
+      <ul>
+        <li>
+          <b>Hold across run</b> — the module rides the run's base seed instead of the per-iteration
+          seed, so it makes the same pick on every frame of a run, then a fresh one next run. The
+          “keep this element steady for the whole batch” switch.
+        </li>
+        <li>
+          <b>Per-frame overrides</b> — using the loop's <b>edit frame</b> selector you can give one
+          frame its own pick, seed lock, or enable/disable for any module in the stack, leaving the
+          rest of the batch on the base.
+        </li>
+      </ul>
+    </DocSection>
+
     <DocSection title="Good to know">
       <DocCallout variant="tip">
         Lock a module's seed (via the module's instance options) to freeze that pick across
@@ -68,6 +87,7 @@ const ports = [
         :links="[
           { id: 'wp-prompt-assembler', label: 'WP Prompt Assembler', icon: 'pi pi-align-left', tone: 'node' },
           { id: 'wp-context-loop', label: 'WP Context Loop', icon: 'pi pi-replay', tone: 'node' },
+          { id: 'iteration-overrides', label: 'Per-iteration overrides', icon: 'pi pi-images', tone: 'neutral' },
           { id: 'wp-context-injector', label: 'WP Context Injector', icon: 'pi pi-bolt', tone: 'node' },
           { id: 'wildcard', label: 'Wildcard', icon: 'pi pi-sparkles', tone: 'wildcard' },
           { id: 'constraint', label: 'Constraint', icon: 'pi pi-filter', tone: 'constraint' },
