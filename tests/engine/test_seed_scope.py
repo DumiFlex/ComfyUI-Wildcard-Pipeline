@@ -114,3 +114,95 @@ def test_hold_fixed_values_is_identical_across_iterations():
         for k in range(4)
     ]
     assert len(set(held)) == 1
+
+
+# ── hold the VALUE, not the seed: constrained + nested-ref cases ─────────────
+#
+# Holding the seed isn't enough. A held wildcard whose POOL moves per iteration
+# (a constraint reshapes it from a varying source) would pick a different value
+# from the same seed. And a held value that contains a nested @{} ref would let
+# the ref re-roll each frame. Hold must freeze the frame-0 RESOLVED value and
+# reuse it verbatim. The engine does this via a base pass at loop_index=0.
+
+
+def test_hold_wildcard_with_constraint_holds_value_not_seed():
+    """A held target wildcard downstream of a constraint whose SOURCE varies
+    keeps its frame-0 value across iterations — even though the constraint
+    reshapes the target pool each frame. Holding the seed alone fails (same
+    seed, different pool → different value); the base-pass value-hold is
+    correct."""
+    # Source VARIES per iteration (no seed_scope) → its pick drives the matrix row.
+    src = {
+        "type": "wildcard", "id": "src-uuid",
+        "payload": {"var_binding": "src", "options": [
+            {"id": "s0", "value": "s1", "weight": 1.0},
+            {"id": "s1", "value": "s2", "weight": 1.0},
+        ]},
+        "instance": {"variable_binding": "src"},
+    }
+    # Constraint: a huge boost ties the target's winning option to the source —
+    # s1 → t1, s2 → t2 — so the target pool genuinely depends on the source.
+    con = {
+        "type": "constraint", "id": "con-uuid",
+        "payload": {
+            "source_wildcard_id": "src-uuid", "target_wildcard_id": "tgt-uuid",
+            "matrix": {
+                "s1": {"t1": {"mode": "boost", "factor": 1000.0}},
+                "s2": {"t2": {"mode": "boost", "factor": 1000.0}},
+            },
+            "exceptions": [],
+        },
+        "instance": {},
+    }
+    tgt = {
+        "type": "wildcard", "id": "tgt-uuid",
+        "payload": {"var_binding": "tgt", "options": [
+            {"id": "0", "value": "t1", "weight": 1.0},
+            {"id": "1", "value": "t2", "weight": 1.0},
+        ]},
+        "instance": {"variable_binding": "tgt", "seed_scope": "hold"},
+    }
+    held = [_run([src, con, tgt], widget_seed=42, loop_index=k)["tgt"] for k in range(8)]
+    assert len(set(held)) == 1, f"held target must be constant across frames, got {held}"
+
+
+def test_hold_wildcard_freezes_nested_ref_value():
+    """A held wildcard whose picked option contains a nested @{uuid} ref keeps
+    the FULLY-RESOLVED frame-0 value — the nested ref can't re-roll. So if
+    "@{color} jeans" resolves to "green jeans" at frame 0, every frame is
+    "green jeans"."""
+    color_uuid = "c0100100"  # 8-hex — the ref parser only treats hex as a uuid
+    # Nested color wildcard, reachable via the catalog @{} resolves against.
+    color = {
+        "id": color_uuid, "type": "wildcard",
+        "payload": {"var_binding": "color", "options": [
+            {"id": "c0", "value": "green", "weight": 1.0},
+            {"id": "c1", "value": "red", "weight": 1.0},
+            {"id": "c2", "value": "blue", "weight": 1.0},
+        ]},
+    }
+    # Held outfit wildcard whose only option embeds the nested ref.
+    outfit = {
+        "type": "wildcard", "id": "outfit-uuid",
+        "payload": {"var_binding": "outfit", "options": [
+            {"id": "o0", "value": f"@{{{color_uuid}}} jeans", "weight": 1.0},
+        ]},
+        "instance": {"variable_binding": "outfit", "seed_scope": "hold"},
+    }
+    ctxs = [
+        PipelineEngine().run(
+            [outfit],
+            ctx={"__wp_catalog__": {color_uuid: color}},
+            seed=effective_chain_seed(widget_seed=42, seed_override=None, loop_index=k),
+            hold_seed=effective_chain_seed(widget_seed=42, seed_override=None, loop_index=0),
+            loop_index=k,
+        )
+        for k in range(8)
+    ]
+    held = [c["outfit"] for c in ctxs]
+    # The ref must actually RESOLVE (not stay literal "@{...}") — else the test
+    # would be trivially constant for the wrong reason.
+    assert held[0] in {"green jeans", "red jeans", "blue jeans"}, (
+        f"nested ref did not resolve to a colour, got {held[0]!r}"
+    )
+    assert len(set(held)) == 1, f"nested ref must be frozen across frames, got {held}"

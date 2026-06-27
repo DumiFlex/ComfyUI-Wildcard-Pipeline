@@ -646,6 +646,13 @@ class WildcardHandler(ModuleHandler):
         # relies on: the user sees a roll, locks it, captures the
         # current chain seed, future runs reproduce the same roll.
         if instance.get("seed_scope") == "hold":
+            # Held: reuse the frame-0 fully-resolved value verbatim (from the
+            # pipeline's base pass). Skips the pick AND nested-ref resolution,
+            # so a constrained or @{}-bearing wildcard stays frozen across the
+            # whole run — "green jeans" on frame 1 stays "green jeans".
+            _hb = ctx.get("__wp_hold_base_ctx__")
+            if isinstance(_hb, dict) and binding in _hb:
+                return {binding: _hb[binding]}
             chain_seed = int(ctx.get("__wp_node_seed_hold__", ctx.get("__wp_node_seed__", 0)) or 0)
         else:
             chain_seed = int(ctx.get("__wp_node_seed__", 0) or 0)

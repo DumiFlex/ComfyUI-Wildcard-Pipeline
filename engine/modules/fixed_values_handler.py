@@ -151,6 +151,14 @@ class FixedValuesHandler(ModuleHandler):
 
         # Effective seed selection (mirrors WildcardHandler + CombineHandler):
         if instance.get("seed_scope") == "hold":
+            # Held: reuse each name's frame-0 resolved value verbatim (from the
+            # pipeline's base pass) so a held fixed-values alternation stays
+            # frozen across the whole run.
+            _hb = ctx.get("__wp_hold_base_ctx__")
+            if isinstance(_hb, dict):
+                _names = [n for n in ((v.get("name") or "").strip() for v in values) if n]
+                if _names and all(n in _hb for n in _names):
+                    return {n: _hb[n] for n in _names}
             chain_seed = int(
                 ctx.get("__wp_node_seed_hold__", ctx.get("__wp_node_seed__", 0)) or 0
             )
