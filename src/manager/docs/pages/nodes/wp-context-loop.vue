@@ -45,6 +45,26 @@ const controls = [
       <DocKeyList :items="controls" />
     </DocSection>
 
+    <DocSection title="Per-iteration control">
+      <p>
+        Two more controls open finer, per-iteration tuning of the batch:
+      </p>
+      <ul>
+        <li>
+          <b>Per-iteration seeds</b> — the seed list for the run. Lock individual iterations,
+          <b>Lock all</b> / <b>Unlock all</b>, <b>Copy</b> / <b>Paste</b> the series as
+          <code>#N: seed</code> text, or <b>Prev</b> to lock the seed an iteration actually used on
+          the previous run. These locks take effect when <b>Override seed</b> is on.
+        </li>
+        <li>
+          <b>Edit frame</b> — the <code>base / #1 #2 …</code> chip row. Pick a frame and the module
+          editors switch to editing just that frame, recording a per-frame override — a pinned
+          wildcard pick, a tweaked template, a per-frame seed lock, or a per-frame enable/disable.
+          <code>base</code> edits the default every un-pinned frame uses.
+        </li>
+      </ul>
+    </DocSection>
+
     <DocSection title="Iteration variables">
       <p>
         Each run, the loop hands you two variables to drop into your prompt template or any combine:
@@ -107,6 +127,7 @@ const controls = [
       <CrossLinks
         :links="[
           { id: 'seeds-and-loops', label: 'Seeds &amp; loops', icon: 'pi pi-share-alt', tone: 'neutral' },
+          { id: 'iteration-overrides', label: 'Per-iteration overrides', icon: 'pi pi-images', tone: 'neutral' },
           { id: 'wp-seed-list', label: 'WP Seed List', icon: 'pi pi-clone', tone: 'node' },
           { id: 'wp-context', label: 'WP Context', icon: 'pi pi-sitemap', tone: 'node' },
           { id: 'wp-prompt-assembler', label: 'WP Prompt Assembler', icon: 'pi pi-align-left', tone: 'node' },

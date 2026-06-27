@@ -57,6 +57,30 @@ const strategies = [
       </DocCallout>
     </DocSection>
 
+    <DocSection title="Seed scope: vary vs hold">
+      <p>
+        Inside a loop, each module decides whether it rides the per-iteration seed or the run's
+        base seed. Every wildcard, combine and fixed-values module has a <b>Hold across run</b>
+        toggle in its Runtime settings:
+      </p>
+      <ul>
+        <li>
+          <b>Vary</b> (default) — the module re-rolls every iteration, so its pick changes across
+          the batch.
+        </li>
+        <li>
+          <b>Hold across run</b> — the module rides the run's base seed instead, so it makes the
+          <em>same</em> pick on every iteration of a run, then a fresh pick on the next run. No
+          manual seed lock needed.
+        </li>
+      </ul>
+      <p>
+        Hold answers “keep the identity or outfit steady across this batch, but let it re-roll next
+        time.” That's different from a <b>locked seed</b>, which freezes the pick for good — same
+        every run, not just within one run.
+      </p>
+    </DocSection>
+
     <DocSection title="The flow">
       <DocFlow
         :stages="[
@@ -117,6 +141,35 @@ const strategies = [
       </p>
     </DocSection>
 
+    <DocSection title="Per-iteration seed locks">
+      <p>
+        Both <b>WP Context Loop</b> and <b>WP Seed List</b> carry a <b>Per-iteration seeds</b>
+        button that opens a list of the seed each iteration will use. From there you can:
+      </p>
+      <ul>
+        <li>
+          Lock any single iteration to a fixed seed (the rest stay derived), or <b>Lock all</b> /
+          <b>Unlock all</b> at once.
+        </li>
+        <li>
+          <b>Copy</b> / <b>Paste</b> the whole list as <code>#N: seed</code> text to reproduce a
+          series elsewhere — Alt-click <b>Copy</b> grabs only the locked rows.
+        </li>
+        <li>
+          <b>Prev</b> — lock the seed an iteration <em>actually used on the previous run</em>,
+          rather than the upcoming one.
+        </li>
+      </ul>
+      <DocCallout variant="tip">
+        Reach for <b>Prev</b> after a run you liked. The list normally shows the seeds for the
+        <em>next</em> run; with control-after-generate set to <em>randomize</em>, the base seed has
+        already rotated, so those upcoming seeds won't reproduce what you just saw. Prev pins the
+        seed that iteration rolled last time — greyed out until a run has happened (and, on the
+        loop, until <b>Override seed</b> is on). So: run once, then lock the iterations worth
+        keeping.
+      </DocCallout>
+    </DocSection>
+
     <DocSection title="Iteration variables">
       <p>
         Inside each loop iteration, two variables are available for your templates:
@@ -163,6 +216,7 @@ const strategies = [
           { id: 'wp-context-loop', label: 'WP Context Loop', icon: 'pi pi-replay', tone: 'node' },
           { id: 'wp-seed-list', label: 'WP Seed List', icon: 'pi pi-clone', tone: 'node' },
           { id: 'wp-context', label: 'WP Context', icon: 'pi pi-sitemap', tone: 'node' },
+          { id: 'iteration-overrides', label: 'Per-iteration overrides', icon: 'pi pi-images', tone: 'neutral' },
         ]"
       />
     </DocSection>
