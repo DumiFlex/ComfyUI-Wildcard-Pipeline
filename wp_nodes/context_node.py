@@ -163,11 +163,22 @@ class WPContext(io.ComfyNode):
             seed_override=upstream_internals.get("__wp_seed_override__"),
             loop_index=loop_index,
         )
-        hold_seed = effective_chain_seed(
-            widget_seed=int(seed),
-            seed_override=upstream_internals.get("__wp_seed_override__"),
-            loop_index=0,
-        )
+        # Hold base seed: the CONSTANT frame-0 seed so a held module resolves
+        # the SAME base-frame value on every iteration. When the loop drives
+        # seeds the per-iteration override varies, and effective_chain_seed
+        # returns an override verbatim (ignoring loop_index), so loop_index=0
+        # alone can't make it constant — read the loop's derived series head
+        # (frame 0's seed) instead. Falls back to the widget seed when no loop
+        # drives seeds (override off).
+        _loop_seeds = upstream_internals.get("__wp_loop_seeds__")
+        if isinstance(_loop_seeds, list) and _loop_seeds:
+            hold_seed = int(_loop_seeds[0])
+        else:
+            hold_seed = effective_chain_seed(
+                widget_seed=int(seed),
+                seed_override=None,
+                loop_index=0,
+            )
         ctx = PipelineEngine().run(
             module_list,
             ctx=ctx,

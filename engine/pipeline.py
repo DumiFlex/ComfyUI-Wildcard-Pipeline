@@ -236,6 +236,18 @@ def _extract_static_meta(
     return meta
 
 
+def _module_seed_scope(module: object) -> str | None:
+    """Read a module's base ``instance.seed_scope`` ("hold"/"vary"/None).
+    Works for both dict and object module shapes. seed_scope is a base-only
+    setting (disabled in per-frame edit mode), so the base instance is
+    authoritative."""
+    inst = module.get("instance") if isinstance(module, dict) else getattr(module, "instance", None)
+    if isinstance(inst, dict):
+        s = inst.get("seed_scope")
+        return s if isinstance(s, str) else None
+    return None
+
+
 class PipelineEngine:
     """Runs an ordered list of modules against a context dict."""
 
@@ -262,6 +274,31 @@ class PipelineEngine:
         # partial_reach finalisation below. Replaces the pre-SP3
         # one-shot consumed-set.
         ctx.setdefault("__wp_constraint_hits__", {})
+
+        # "Hold the value" base pass. A module on seed_scope=hold must resolve
+        # to its frame-0 (loop_index=0) value on EVERY iteration — INCLUDING
+        # nested @{} refs, which resolve_text bakes into the stored value.
+        # Re-resolving each iteration (the old seed-swap) failed for
+        # constrained wildcards (the constraint reshapes the pool per
+        # iteration) and for nested refs. So when a loop is driving
+        # (loop_index != 0) and any module holds, resolve the chain ONCE at
+        # loop_index=0 with the constant hold seed; held handlers copy their
+        # resolved value from this base context verbatim. The deepcopy keeps
+        # the throwaway pass's warnings/trace/constraint-state off the real
+        # ctx. loop_index=0 here means the recursive run skips its own base
+        # pass — no infinite recursion.
+        if loop_index != 0 and any(_module_seed_scope(m) == "hold" for m in modules):
+            import copy as _copy
+
+            _hb = int(ctx.get("__wp_node_seed_hold__", 0) or 0)
+            base_ctx = PipelineEngine().run(
+                modules,
+                ctx=_copy.deepcopy(ctx),
+                seed=_hb,
+                hold_seed=_hb,
+                loop_index=0,
+            )
+            ctx["__wp_hold_base_ctx__"] = base_ctx
 
         for index, module in enumerate(modules):
             # Normalise id/type/enabled reads to work for both dicts and objects.

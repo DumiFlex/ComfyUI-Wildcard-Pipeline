@@ -102,6 +102,12 @@ class CombineHandler(ModuleHandler):
         # Both feed derive_module_rng(seed, output_var) so locking with
         # locked_seed = chain_seed reproduces the unlocked roll exactly.
         if instance.get("seed_scope") == "hold":
+            # Held: reuse the frame-0 resolved value verbatim (from the
+            # pipeline's base pass) so a held combine's alternation stays
+            # frozen across the whole run, nested refs included.
+            _hb = ctx.get("__wp_hold_base_ctx__")
+            if isinstance(_hb, dict) and output_var in _hb:
+                return {output_var: _hb[output_var]}
             chain_seed = int(ctx.get("__wp_node_seed_hold__", ctx.get("__wp_node_seed__", 0)) or 0)
         else:
             chain_seed = int(ctx.get("__wp_node_seed__", 0) or 0)
