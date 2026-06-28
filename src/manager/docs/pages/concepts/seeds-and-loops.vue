@@ -74,7 +74,8 @@ const strategies = [
           holds the resolved value, not just the seed: a constrained wildcard keeps its option even
           as the constraint reshapes the pool, and any nested <code>@{}</code> ref is frozen too —
           an outfit of <VarToken>@{color} jeans</VarToken> that lands on “green jeans” stays
-          “green jeans” all run. No manual seed lock needed.
+          “green jeans” all run. No manual seed lock needed. Flip it from the module's Runtime
+          settings, or right-click the row and pick <b>Hold across run</b> for a two-click toggle.
         </li>
       </ul>
       <p>
