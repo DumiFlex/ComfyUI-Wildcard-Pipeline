@@ -69,9 +69,12 @@ const strategies = [
           the batch.
         </li>
         <li>
-          <b>Hold across run</b> — the module rides the run's base seed instead, so it makes the
-          <em>same</em> pick on every iteration of a run, then a fresh pick on the next run. No
-          manual seed lock needed.
+          <b>Hold across run</b> — the module resolves once at the first iteration and reuses that
+          exact <em>value</em> on every iteration of the run, then re-rolls on the next run. It
+          holds the resolved value, not just the seed: a constrained wildcard keeps its option even
+          as the constraint reshapes the pool, and any nested <code>@{}</code> ref is frozen too —
+          an outfit of <VarToken>@{color} jeans</VarToken> that lands on “green jeans” stays
+          “green jeans” all run. No manual seed lock needed.
         </li>
       </ul>
       <p>

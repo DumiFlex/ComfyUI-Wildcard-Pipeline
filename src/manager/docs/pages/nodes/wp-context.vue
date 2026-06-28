@@ -55,8 +55,9 @@ const ports = [
       </p>
       <ul>
         <li>
-          <b>Hold across run</b> — the module rides the run's base seed instead of the per-iteration
-          seed, so it makes the same pick on every frame of a run, then a fresh one next run. The
+          <b>Hold across run</b> — the module resolves once at the first frame and reuses that exact
+          value on every frame of the run (the resolved value, not just the seed — constrained
+          picks and nested <code>@{}</code> refs stay frozen too), then re-rolls next run. The
           “keep this element steady for the whole batch” switch.
         </li>
         <li>
