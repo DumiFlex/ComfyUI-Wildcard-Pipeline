@@ -2894,6 +2894,16 @@ function isLocked(m: ModuleEntry): boolean {
 function isInternal(m: ModuleEntry): boolean {
   return !!m.instance?.internal;
 }
+/** Kinds whose handlers honor `seed_scope: hold` — wildcard, combine,
+ *  fixed_values. Derivation is seed-lockable but has no hold branch
+ *  engine-side, so it's excluded (mirrors which RuntimeSections render
+ *  the Hold toggle). Gates the row context-menu's quick Hold item. */
+const HOLD_KINDS: ReadonlySet<string> = new Set([
+  "wildcard", "combine", "fixed_values",
+]);
+function isHoldable(m: ModuleEntry): boolean {
+  return HOLD_KINDS.has(m.type);
+}
 function isHeld(m: ModuleEntry): boolean {
   return m.instance?.seed_scope === "hold";
 }
@@ -3777,6 +3787,29 @@ function toggleCollapsed(idx: number) {
   commitModules(list);
 }
 
+// Quick "Hold across run" toggle from the row context menu — flips base
+// `instance.seed_scope` between hold/vary without opening the editor
+// (the 4-click → 2-click ask). Base-level only: when a loop edit-frame
+// is active, hold applies to every frame, so we no-op here exactly as
+// the RuntimeSection disables its toggle. Caller gates on isHoldable;
+// re-checked here so a stray call can't stamp seed_scope on a kind
+// (constraint/derivation) whose handler ignores it.
+function toggleHold(idx: number): void {
+  if (currentFrame.value != null) return;
+  const target = value.value.modules[idx];
+  if (!target || !isHoldable(target)) return;
+  const held = target.instance?.seed_scope === "hold";
+  // Annotate so the literal doesn't widen to `string` in the object
+  // literal — instance.seed_scope is the "vary" | "hold" union.
+  const next: "vary" | "hold" = held ? "vary" : "hold";
+  const list = value.value.modules.map((m, i) =>
+    i === idx
+      ? { ...m, instance: { ...(m.instance ?? {}), seed_scope: next } }
+      : m,
+  );
+  commitModules(list);
+}
+
 /** Bulk collapse/expand. Used by the section-header chevron — one
  *  click flips every card to the same state. Idempotent if all
  *  cards already match the target state (the deep watcher will
@@ -4120,6 +4153,26 @@ function openContextMenu(ev: MouseEvent, m: ModuleEntry, idx: number) {
   const items: ContextMenuItem[] = [
     { label: "Edit", icon: "pi-pencil", onSelect: () => openEditModal(idx) },
   ];
+  // Quick Hold toggle — kept at the top so it's a 2-click reach
+  // (right-click → Hold) instead of opening the editor and digging into
+  // Runtime. Only for kinds that honor seed_scope. Hold is base-level;
+  // when a loop edit-frame is active it applies to every frame, so we
+  // surface it disabled with a hint rather than silently writing it.
+  if (isHoldable(m)) {
+    const held = isHeld(m);
+    const frameActive = currentFrame.value != null;
+    items.push({
+      label: held ? "Release hold" : "Hold across run",
+      icon: "pi-link",
+      disabled: frameActive,
+      subtitle: frameActive
+        ? "Applies to every frame — switch to base to change"
+        : held
+          ? undefined
+          : "Freeze this value for the whole batch",
+      onSelect: () => toggleHold(idx),
+    });
+  }
   // Refresh + Save are mutually exclusive in normal use (a module is
   // either drifted OR missing OR clean), so hiding the inactive entry
   // beats greying it — matches Save's existing conditional-push pattern

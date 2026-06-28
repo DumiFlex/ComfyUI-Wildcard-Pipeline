@@ -3,6 +3,7 @@ import { flushPromises, mount } from "@vue/test-utils";
 import ContextWidget from "./ContextWidget.vue";
 import { baseCodename } from "../../extension/node-codename";
 import { _resetForTests as resetDriftStore } from "./drift-store";
+import { currentFrame } from "../context-loop/frame-cursor";
 
 beforeEach(() => {
   // Phase 5.5.4 — the picker now fetches the library on mount. Stub
@@ -724,6 +725,124 @@ describe("ContextWidget bundle ops via ctxmenu", () => {
     expect(parsed.modules.map((m: { id: string }) => m.id)).toEqual(["lib_c1", "lib_c2"]);
     expect(parsed.bundles[0].start_idx).toBe(0);
     expect(parsed.bundles[0].end_idx).toBe(1);
+    wrapper.unmount();
+  });
+});
+
+describe("ContextWidget Hold toggle via ctxmenu", () => {
+  beforeEach(() => {
+    // Hold is base-level; pin the shared frame cursor to base so the
+    // menu item isn't disabled by a leftover edit-frame from another test.
+    currentFrame.value = null;
+  });
+  afterEach(() => {
+    currentFrame.value = null;
+  });
+
+  it("Hold across run stamps seed_scope=hold; reopening offers Release hold which flips back to vary", async () => {
+    resetDriftStore();
+    const onChange = vi.fn();
+    const initialJson = JSON.stringify({
+      version: 1,
+      modules: [
+        {
+          id: "aaaaaaaa", type: "wildcard", enabled: true,
+          meta: { name: "Hair" }, entries: [],
+          payload: { options: [], var_binding: "hair" }, payload_hash: "h-A",
+        },
+      ],
+    });
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: { nodeId: 410, initialJson, upstreamVars: [], onChange },
+    });
+    await flushPromises();
+    onChange.mockClear();
+
+    // Un-held module → item reads "Hold across run" and is enabled.
+    await wrapper.find('[data-module-id="aaaaaaaa"]').trigger("contextmenu");
+    await flushPromises();
+    let items = Array.from(document.querySelectorAll(".wp-ctxmenu__item")) as HTMLElement[];
+    const hold = items.find((el) => el.textContent?.includes("Hold across run"));
+    expect(hold, "Hold item should appear for a wildcard row").toBeTruthy();
+    expect(hold!.classList.contains("wp-ctxmenu__item--disabled")).toBe(false);
+    hold!.click();
+    await flushPromises();
+
+    const afterHold = onChange.mock.calls[onChange.mock.calls.length - 1][0] as string;
+    expect(JSON.parse(afterHold).modules[0].instance.seed_scope).toBe("hold");
+
+    // Held module → label swaps to "Release hold"; clicking it varies again.
+    await wrapper.find('[data-module-id="aaaaaaaa"]').trigger("contextmenu");
+    await flushPromises();
+    items = Array.from(document.querySelectorAll(".wp-ctxmenu__item")) as HTMLElement[];
+    const release = items.find((el) => el.textContent?.includes("Release hold"));
+    expect(release, "Held row should offer Release hold").toBeTruthy();
+    release!.click();
+    await flushPromises();
+
+    const afterRelease = onChange.mock.calls[onChange.mock.calls.length - 1][0] as string;
+    expect(JSON.parse(afterRelease).modules[0].instance.seed_scope).toBe("vary");
+    wrapper.unmount();
+  });
+
+  it("disables the Hold item when a loop edit-frame is active (hold is base-only)", async () => {
+    resetDriftStore();
+    const initialJson = JSON.stringify({
+      version: 1,
+      modules: [
+        {
+          id: "aaaaaaaa", type: "wildcard", enabled: true,
+          meta: { name: "Hair" }, entries: [],
+          payload: { options: [], var_binding: "hair" }, payload_hash: "h-A",
+        },
+      ],
+    });
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: { nodeId: 412, initialJson, upstreamVars: [], onChange: () => {} },
+    });
+    await flushPromises();
+    currentFrame.value = 0; // user is editing frame #0 of a loop
+
+    await wrapper.find('[data-module-id="aaaaaaaa"]').trigger("contextmenu");
+    await flushPromises();
+    const items = Array.from(document.querySelectorAll(".wp-ctxmenu__item")) as HTMLElement[];
+    const hold = items.find((el) => el.textContent?.includes("Hold across run"));
+    expect(hold, "Hold item still present while a frame is active").toBeTruthy();
+    expect(hold!.classList.contains("wp-ctxmenu__item--disabled")).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("omits the Hold item for a constraint row (seed_scope not honored)", async () => {
+    resetDriftStore();
+    const initialJson = JSON.stringify({
+      version: 1,
+      modules: [
+        { id: "aaaaaaaa", type: "wildcard", enabled: true, meta: { name: "Hair" }, entries: [], payload: { options: [], var_binding: "hair" } },
+        { id: "bbbbbbbb", type: "wildcard", enabled: true, meta: { name: "Outfit" }, entries: [], payload: { options: [], var_binding: "outfit" } },
+        {
+          id: "cccccccc", type: "constraint", enabled: true,
+          meta: { name: "Hair × Outfit" }, entries: [],
+          payload: {
+            source_wildcard_id: "aaaaaaaa", target_wildcard_id: "bbbbbbbb",
+            matrix: { blonde: { casual: { mode: "allow", factor: 1 } } }, exceptions: [],
+          }, payload_hash: "h",
+        },
+      ],
+    });
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: { nodeId: 411, initialJson, upstreamVars: [], onChange: () => {} },
+    });
+    await flushPromises();
+
+    await wrapper.find('[data-module-id="cccccccc"]').trigger("contextmenu");
+    await flushPromises();
+    const items = Array.from(document.querySelectorAll(".wp-ctxmenu__item")) as HTMLElement[];
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.find((el) => el.textContent?.includes("Hold across run"))).toBeUndefined();
+    expect(items.find((el) => el.textContent?.includes("Release hold"))).toBeUndefined();
     wrapper.unmount();
   });
 });

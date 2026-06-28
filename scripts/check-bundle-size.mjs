@@ -215,7 +215,13 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // per-frame seed under control_after_generate=randomize) plus the modal
 // Lock-button resolver (lock-seed-ctx provide/inject into SeedLockControls).
 // Landed exactly at the 448 ceiling (458752/458752); bump for headroom.
-const TOTAL_LIMIT = 449 * 1024;     // 449 KB
+// Bumped 449 -> 450 KB on 2026-06-28 for the row context-menu Hold toggle.
+// Adds HOLD_KINDS + isHoldable + toggleHold to ContextWidget plus the quick
+// "Hold across run" / "Release hold" menu item (2-click seed_scope toggle,
+// base-only with a frame-active disabled hint) in the lazy ContextWidget
+// chunk; entry stays put. Measured 459909 bytes (133 over the 449 ceiling);
+// minimal bump.
+const TOTAL_LIMIT = 450 * 1024;     // 450 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;
