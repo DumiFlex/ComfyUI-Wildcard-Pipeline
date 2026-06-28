@@ -58,7 +58,8 @@ const ports = [
           <b>Hold across run</b> — the module resolves once at the first frame and reuses that exact
           value on every frame of the run (the resolved value, not just the seed — constrained
           picks and nested <code>@{}</code> refs stay frozen too), then re-rolls next run. The
-          “keep this element steady for the whole batch” switch.
+          “keep this element steady for the whole batch” switch. Flip it from the module's Runtime
+          settings, or right-click the row and pick <b>Hold across run</b> for a two-click toggle.
         </li>
         <li>
           <b>Per-frame overrides</b> — using the loop's <b>edit frame</b> selector you can give one
