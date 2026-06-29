@@ -74,10 +74,12 @@ const strategies = [
           holds the resolved value, not just the seed: a constrained wildcard keeps its option even
           as the constraint reshapes the pool, and any nested <code>@{}</code> ref is frozen too —
           an outfit of <VarToken>@{color} jeans</VarToken> that lands on “green jeans” stays
-          “green jeans” all run. A held derivation freezes its derived output the same way —
-          even if the inputs it reads keep changing across the batch. No manual seed lock needed.
-          Flip it from the module's Runtime settings, or right-click the row and pick
-          <b>Hold across run</b> for a two-click toggle.
+          “green jeans” all run. A held <b>derivation</b> works a little differently: it freezes
+          each rule branch's random roll, not <em>which</em> branch fires — the conditions still
+          pick the branch from the current inputs, but a chosen branch always resolves to the same
+          value it landed on at the first iteration. No manual seed lock needed. Flip it from the
+          module's Runtime settings, or right-click the row and pick <b>Hold across run</b> for a
+          two-click toggle.
         </li>
       </ul>
       <p>
