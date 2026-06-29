@@ -216,13 +216,17 @@ function onSpaClick(): void {
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  /* Matches WildcardInstanceModal (.wp-wcm): the modal scrolls as a whole
-   * (safety net), but the RULES list inside caps at its own max-height +
-   * scrolls in place, so long rule lists get a visible scrollbar instead of
-   * being clipped. An absolute max-height on the inner list is the load-
-   * bearing part — flex:1 1 auto collapsed here because the modal's overlay
-   * parents only carry max-height:100% (no definite height to distribute). */
-  overflow-y: auto;
+  /* The MODAL does not scroll — only the RULES list inside does (it caps at
+   * an absolute max-height and scrolls in place). overflow:hidden here forces
+   * that: it's the only overflow path, so header + identity stay pinned at
+   * the top and the dock at the bottom while the rules scroll between them.
+   * (overflow-y:auto on the modal instead let the WHOLE modal scroll, sliding
+   * the bottom rules under the sticky dock — the "can't see the full rules"
+   * bug. An absolute inner max-height — not flex:1, which collapses because
+   * the overlay parents carry only max-height:100% — is the load-bearing
+   * part; RulesSection sizes it to 80vh minus this fixed chrome so nothing
+   * clips.) */
+  overflow: hidden;
   font-family: var(--wp-font-sans, sans-serif);
   font-size: 12px;
   color: var(--wp-text);
@@ -234,6 +238,7 @@ function onSpaClick(): void {
   bottom: 0;
   z-index: 2;
   background: var(--wp-bg2);
+  flex-shrink: 0;
 }
 .wp-dvm__foot {
   display: flex;
