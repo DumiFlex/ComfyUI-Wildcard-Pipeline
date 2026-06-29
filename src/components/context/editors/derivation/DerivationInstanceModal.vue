@@ -216,7 +216,12 @@ function onSpaClick(): void {
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  /* The modal itself does NOT scroll — header + identity stay pinned at the
+   * top, the dock pinned at the bottom, and the RULES region (flex:1 1 auto
+   * in RulesSection) absorbs the overflow with its OWN scrollbar. An outer
+   * scroll on top of the inner rule-list scroll produced a fragile
+   * double-scrollbar that clipped the footer + cut off long rule lists. */
+  overflow: hidden;
   font-family: var(--wp-font-sans, sans-serif);
   font-size: 12px;
   color: var(--wp-text);
@@ -228,6 +233,7 @@ function onSpaClick(): void {
   bottom: 0;
   z-index: 2;
   background: var(--wp-bg2);
+  flex-shrink: 0;
 }
 .wp-dvm__foot {
   display: flex;

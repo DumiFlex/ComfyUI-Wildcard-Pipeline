@@ -663,6 +663,14 @@ function opUsesValue(op: string | undefined): boolean {
   padding: 12px 16px;
   background: var(--wp-bg);
   border-bottom: 1px solid var(--wp-border-soft, var(--wp-border));
+  /* Fill the space between the pinned identity + dock and let the rule
+   * list inside scroll. `1 1 auto` (content basis) so a short list still
+   * sizes to its content — only a list that would push the modal past
+   * 80vh shrinks + scrolls. */
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 .rules__head {
   display: flex;
@@ -693,9 +701,27 @@ function opUsesValue(op: string | undefined): boolean {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  /* Long rule lists scroll in place so identity / footer stay visible. */
-  max-height: 44vh;
+  /* Scrolls in place so identity / runtime / footer stay visible. Fills
+   * the .rules flex parent (min-height:0 lets it shrink below content so
+   * the overflow actually engages). */
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  /* Keep the scrollbar visibly present — long rule lists weren't obviously
+   * scrollable before, so users thought rules were truncated. Matches the
+   * ModulePickerModal scrollbar convention (--wp-scrollbar-thumb token),
+   * with a slightly stronger fallback for the dark canvas. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--wp-scrollbar-thumb, rgba(255, 255, 255, 0.22)) transparent;
+}
+.rules__list::-webkit-scrollbar { width: 10px; }
+.rules__list::-webkit-scrollbar-track { background: transparent; }
+.rules__list::-webkit-scrollbar-thumb {
+  background: var(--wp-scrollbar-thumb, rgba(255, 255, 255, 0.22));
+  border-radius: 999px;
+}
+.rules__list::-webkit-scrollbar-thumb:hover {
+  background: var(--wp-scrollbar-thumb-hover, rgba(255, 255, 255, 0.34));
 }
 
 /* Rule card */
