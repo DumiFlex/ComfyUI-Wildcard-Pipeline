@@ -60,8 +60,8 @@ const strategies = [
     <DocSection title="Seed scope: vary vs hold">
       <p>
         Inside a loop, each module decides whether it rides the per-iteration seed or the run's
-        base seed. Every wildcard, combine and fixed-values module has a <b>Hold across run</b>
-        toggle in its Runtime settings:
+        base seed. Every wildcard, combine, fixed-values and derivation module has a
+        <b>Hold across run</b> toggle in its Runtime settings:
       </p>
       <ul>
         <li>
@@ -74,8 +74,10 @@ const strategies = [
           holds the resolved value, not just the seed: a constrained wildcard keeps its option even
           as the constraint reshapes the pool, and any nested <code>@{}</code> ref is frozen too —
           an outfit of <VarToken>@{color} jeans</VarToken> that lands on “green jeans” stays
-          “green jeans” all run. No manual seed lock needed. Flip it from the module's Runtime
-          settings, or right-click the row and pick <b>Hold across run</b> for a two-click toggle.
+          “green jeans” all run. A held derivation freezes its derived output the same way —
+          even if the inputs it reads keep changing across the batch. No manual seed lock needed.
+          Flip it from the module's Runtime settings, or right-click the row and pick
+          <b>Hold across run</b> for a two-click toggle.
         </li>
       </ul>
       <p>
