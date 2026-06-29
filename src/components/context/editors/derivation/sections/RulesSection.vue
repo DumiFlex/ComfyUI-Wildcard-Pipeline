@@ -697,11 +697,12 @@ function opUsesValue(op: string | undefined): boolean {
    * Absolute max-height (NOT flex:1) — same load-bearing trick as the
    * wildcard's .pool__opts — because the modal's overlay parents carry only
    * max-height:100% (no definite height), so a flex-fill child collapses or
-   * clips here. The cap is the modal budget (80vh, matching .dvm) MINUS the
-   * fixed chrome (header + identity + rules head + runtime/footer dock ≈
-   * 16rem) so the list + chrome never exceeds 80vh — that keeps the scroll
-   * to ONE bar (this list), no second outer modal scrollbar. */
-  max-height: calc(80vh - 16rem);
+   * clips here. The cap = the modal budget (80vh, matching .dvm) MINUS the
+   * fixed chrome (header + identity + rules head + runtime/footer dock,
+   * measured ≈ 15rem, padded to 20rem so the dock never clips under .dvm's
+   * overflow:hidden). list + chrome stays under 80vh, so the modal never
+   * scrolls and THIS list owns the only scrollbar. */
+  max-height: calc(80vh - 20rem);
   overflow-y: auto;
   /* Keep the scrollbar CLEARLY visible — long rule lists weren't obviously
    * scrollable before, so users thought rules were truncated. Stronger than
