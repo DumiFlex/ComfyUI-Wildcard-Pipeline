@@ -216,12 +216,13 @@ function onSpaClick(): void {
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  /* The modal itself does NOT scroll — header + identity stay pinned at the
-   * top, the dock pinned at the bottom, and the RULES region (flex:1 1 auto
-   * in RulesSection) absorbs the overflow with its OWN scrollbar. An outer
-   * scroll on top of the inner rule-list scroll produced a fragile
-   * double-scrollbar that clipped the footer + cut off long rule lists. */
-  overflow: hidden;
+  /* Matches WildcardInstanceModal (.wp-wcm): the modal scrolls as a whole
+   * (safety net), but the RULES list inside caps at its own max-height +
+   * scrolls in place, so long rule lists get a visible scrollbar instead of
+   * being clipped. An absolute max-height on the inner list is the load-
+   * bearing part — flex:1 1 auto collapsed here because the modal's overlay
+   * parents only carry max-height:100% (no definite height to distribute). */
+  overflow-y: auto;
   font-family: var(--wp-font-sans, sans-serif);
   font-size: 12px;
   color: var(--wp-text);
@@ -233,7 +234,6 @@ function onSpaClick(): void {
   bottom: 0;
   z-index: 2;
   background: var(--wp-bg2);
-  flex-shrink: 0;
 }
 .wp-dvm__foot {
   display: flex;
