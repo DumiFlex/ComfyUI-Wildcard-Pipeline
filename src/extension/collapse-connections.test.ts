@@ -300,12 +300,13 @@ describe("collapse-connections — unified label + resize side effects", () => {
     expect(slotLabelStashed.has(node.inputs[1])).toBe(false);
   });
 
-  it("reload repair: clearing a stale placeholder label before attach restores the name on expand", () => {
-    // Repro of the reload bug: an older build serialized the collapse
+  it("expandedLabel heals a reloaded node: placeholder baked into .label, empty stash → name on expand", () => {
+    // Repro of the reload bug: a node saved collapsed serialized the
     // placeholders ("inputs ×N" on the first matched pin, " " on the rest)
-    // into the workflow JSON, so a reloaded node arrives with them baked in.
-    // The injector clears them before attach (injector.ts) so the stash
-    // captures the real name-fallback original, not the placeholder.
+    // into the workflow JSON, so it reloads with them baked into .label and
+    // an EMPTY in-memory stash. The expandedLabel resolver reconstructs the
+    // name-fallback from data instead of restoring the dead/placeholder
+    // stash — no pre-attach repair needed.
     const node = makeNode({
       inputs: [
         { name: "context_in", label: "context" },
@@ -317,29 +318,52 @@ describe("collapse-connections — unified label + resize side effects", () => {
       size: [240, 80],
     });
     node.properties.collapse_connections = true;
-    // Repair (mirrors injector.ts): clear matched-input labels before attach.
-    for (const s of node.inputs) {
-      if (matchInput(s)) delete s.label;
-    }
-    attachCollapsableConnections(node, { matchInput, collapsedInputLabel: () => "inputs ×3" });
+    attachCollapsableConnections(node, {
+      matchInput,
+      collapsedInputLabel: () => "inputs ×3",
+      expandedLabel: () => undefined,
+    });
     expect(node.inputs[1].label).toBe("inputs ×3"); // unified on first matched
     expect(node.inputs[2].label).toBe(" ");          // rest blanked
     setCollapsed(node, false);
-    expect(node.inputs[1].label).toBeUndefined();    // name-fallback, NOT placeholder
+    expect(node.inputs[1].label).toBeUndefined();    // healed: name-fallback, NOT placeholder
     expect(node.inputs[2].label).toBeUndefined();
+    expect(node.inputs[3].label).toBeUndefined();
+    expect(node.inputs[0].label).toBe("context");    // non-matched fixed input untouched
   });
 
-  it("without the repair, a stale placeholder label is re-stashed + wrongly restored on expand", () => {
-    // Guards the bug: attaching with the placeholder still on the slot stashes
-    // it as the "original", so expand restores "inputs ×N" onto input_0.
+  it("expandedLabel mode never stashes, so collapse→expand reconstructs cleanly", () => {
     const node = makeNode({
-      inputs: [{ name: "input_0", label: "inputs ×3" }],
-      inputPositions: [[0, 0]],
+      inputs: [{ name: "input_0" }, { name: "input_1" }, { name: "input_2" }],
+      inputPositions: [[0, 0], [0, 20], [0, 40]],
+    });
+    attachCollapsableConnections(node, {
+      matchInput,
+      collapsedInputLabel: () => "inputs ×3",
+      expandedLabel: () => undefined,
+    });
+    setCollapsed(node, true);
+    expect(node.inputs[0].label).toBe("inputs ×3");
+    expect(slotLabelStashed.has(node.inputs[0])).toBe(false); // reconstruction owns the label
+    setCollapsed(node, false);
+    expect(node.inputs[0].label).toBeUndefined();
+    expect(node.inputs[1].label).toBeUndefined();
+  });
+
+  it("expandedLabel returning a string sets that label on expand", () => {
+    const node = makeNode({
+      inputs: [{ name: "input_0", label: " " }, { name: "input_1", label: " " }],
+      inputPositions: [[0, 0], [0, 20]],
     });
     node.properties.collapse_connections = true;
-    attachCollapsableConnections(node, { matchInput, collapsedInputLabel: () => "inputs ×1" });
+    attachCollapsableConnections(node, {
+      matchInput,
+      collapsedInputLabel: () => "inputs",
+      expandedLabel: (s) => s.name,
+    });
     setCollapsed(node, false);
-    expect(node.inputs[0].label).toBe("inputs ×3"); // placeholder wrongly restored
+    expect(node.inputs[0].label).toBe("input_0");
+    expect(node.inputs[1].label).toBe("input_1");
   });
 
   it("collapsedInputLabel undefined keeps the first slot's original label", () => {
