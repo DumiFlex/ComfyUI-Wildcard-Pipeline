@@ -64,6 +64,20 @@ export interface CollapseConfig {
   collapsedInputLabel?: string | ((node: CollapseTargetNode) => string);
   /** Mirror of collapsedInputLabel for outputs. */
   collapsedOutputLabel?: string | ((node: CollapseTargetNode) => string);
+  /** Resolver for a matched slot's EXPANDED label, reconstructed from
+   *  durable data rather than the in-memory stash. When provided, the
+   *  module skips the stash entirely: collapse shows the placeholder,
+   *  and expand calls this to recompute each matched slot's label
+   *  (return `undefined` to clear `.label` and fall back to the slot
+   *  name). This is robust across a reload — the stash is an in-memory
+   *  WeakMap that doesn't survive serialization, so a reloaded collapsed
+   *  node would otherwise restore the serialized placeholder ("inputs
+   *  ×N") instead of the real label. Use for nodes whose expanded label
+   *  is derivable from data they already persist (e.g. the injector's
+   *  `input_N` pins, whose label is just the slot name). Omit to keep
+   *  the default stash-based restore (preserves arbitrary custom labels
+   *  within a session). */
+  expandedLabel?: (slot: Slot, index: number) => string | undefined;
 }
 
 /** Internal — minimal node surface used by the patch. Kept generic
@@ -191,18 +205,42 @@ export function applyCollapsedLabels(node: CollapseTargetNode): void {
         // once has its label stashed (even if as `undefined`) —
         // re-stashing would overwrite it with our placeholder (" ")
         // and corrupt the next restore.
-        if (!slotLabelStashed.has(slot as object)) {
+        //
+        // SKIP the stash entirely when an expandedLabel resolver is
+        // configured — that mode reconstructs the expanded label from
+        // durable data, and stashing a reloaded node's live .label
+        // (which IS the serialized placeholder) would corrupt the very
+        // restore the resolver exists to prevent.
+        if (!cfg.expandedLabel && !slotLabelStashed.has(slot as object)) {
           slotOrigLabel.set(slot as object, slot.label);
           slotLabelStashed.add(slot as object);
         }
-        const stashed = slotOrigLabel.get(slot as object);
         if (i === first) {
-          // Unified label if configured; otherwise restore the
-          // original (handles cases where the caller doesn't supply
-          // a label but still wants other slots blanked).
-          slot.label = label !== undefined ? label : stashed;
+          // Unified label if configured; otherwise fall back to the
+          // stashed original (stash mode only — handles callers that
+          // blank siblings without supplying a unified label).
+          const fallback = cfg.expandedLabel ? undefined : slotOrigLabel.get(slot as object);
+          slot.label = label !== undefined ? label : fallback;
         } else {
           slot.label = " ";
+        }
+      } else if (cfg.expandedLabel) {
+        // EXPANDED, data-reconstruction mode. Recompute the label from
+        // durable data for EVERY matched slot — stashed or not — so a
+        // reloaded node (in-memory stash gone, placeholder baked into
+        // the serialized .label) heals correctly. `undefined` clears
+        // .label so litegraph's name-fallback shows the slot name.
+        const canonical = cfg.expandedLabel(slot, i);
+        if (canonical === undefined) {
+          delete slot.label;
+        } else {
+          slot.label = canonical;
+        }
+        // Drop any legacy stash (from a build before expandedLabel) so
+        // it can't shadow the reconstruction on a later collapse pass.
+        if (slotLabelStashed.has(slot as object)) {
+          slotOrigLabel.delete(slot as object);
+          slotLabelStashed.delete(slot as object);
         }
       } else if (slotLabelStashed.has(slot as object)) {
         // Restore. If the original was undefined, delete the .label

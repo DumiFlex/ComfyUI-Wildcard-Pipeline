@@ -501,20 +501,6 @@ export function create(node: InjectorNode, inputName: string) {
   // merged into the single pin without expanding.
   const matchDynamicInput = (inp: { name?: string }) =>
     injectorSlotName(inp) !== null;
-  // Reload repair: an older build serialized the collapse PLACEHOLDER labels
-  // ("inputs ×N" on the first pin, " " on the rest) into the workflow JSON.
-  // On reload these slots are fresh objects, so applyCollapsedLabels (called by
-  // attachCollapsableConnections when collapse_connections=true) would stash
-  // the PLACEHOLDER as the "original" — and a later expand restores the
-  // placeholder instead of the real name (input_0 → "inputs ×N", siblings
-  // blank). The injector's input pins are always name-derived (input_N), so
-  // clear any persisted label here BEFORE the stash so it captures the correct
-  // name-fallback original. Harmless on a fresh node (no label set yet).
-  for (const _inp of ((node as {
-    inputs?: Array<{ name?: string; label?: string } | null | undefined>;
-  }).inputs ?? [])) {
-    if (_inp && matchDynamicInput(_inp)) delete _inp.label;
-  }
   attachCollapsableConnections(node as Parameters<typeof attachCollapsableConnections>[0], {
     matchInput: matchDynamicInput as (inp: unknown, idx: number) => boolean,
     collapsedInputLabel: (n) => {
@@ -531,6 +517,16 @@ export function create(node: InjectorNode, inputName: string) {
       }
       return count > 1 ? `inputs ×${count}` : "inputs";
     },
+    // Reconstruct the EXPANDED label from data instead of the in-memory
+    // stash. The injector's pins are always name-derived (input_N) and the
+    // slot name is the only durable label we persist (slot.label is not),
+    // so the expanded label is simply the name — return undefined to clear
+    // .label and let litegraph's name-fallback show it. This fixes the
+    // reload bug: a node saved collapsed baked the placeholder ("inputs
+    // ×N" / " ") into the serialized .label, and on reload the dead WeakMap
+    // stash made expand restore that placeholder. Reconstructing ignores
+    // the corrupt label entirely, healing existing broken saves on expand.
+    expandedLabel: () => undefined,
   });
 
   // Manual socket management. The schema declares NO dynamic inputs
