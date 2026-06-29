@@ -556,17 +556,6 @@ class PipelineEngine:
                     "overwrite": before is not None and before != value,
                 })
 
-            # Hold capture: when any module in this chain holds, record each
-            # module's frame-0 output dict keyed by its per-instance uid. The
-            # hold base pass (loop_index=0) runs this same code, so
-            # base_ctx["__wp_module_outputs__"] carries the frozen writes.
-            # Handlers whose binding set is DYNAMIC (derivation — the fired
-            # rules depend on inputs) replay this dict verbatim on hold, since
-            # the flat base ctx can't tell which module wrote which var.
-            if _any_hold and bindings:
-                _outs = ctx.setdefault("__wp_module_outputs__", {})
-                _outs[_module_uid or _module_id] = dict(bindings)
-
             # `seed` on the trace entry: the effective seed THIS
             # module rolled with — `instance.locked_seed` if locked,
             # else the chain seed. Surfaces to the frontend via the

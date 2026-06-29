@@ -260,10 +260,8 @@ def test_hold_derivation_freezes_inline_choice():
     assert len(set(varied)) > 1, f"vary derivation should change across frames, got {varied}"
 
 
-def test_hold_derivation_with_varying_input_freezes_output():
-    """A held derivation whose CONDITION reads a varying input still emits its
-    frame-0 output every frame — the value freezes even as the input moves."""
-    src = {
+def _mood_src():
+    return {
         "type": "wildcard", "id": "mood-uuid",
         "payload": {"var_binding": "mood", "options": [
             {"id": "m0", "value": "happy", "weight": 1.0},
@@ -271,21 +269,71 @@ def test_hold_derivation_with_varying_input_freezes_output():
         ]},
         "instance": {"variable_binding": "mood"},
     }
-    deriv = {
+
+
+def _branchy_deriv(seed_scope=None):
+    # Two branches, each with its OWN inline roll, selected by $mood.
+    instance = {} if seed_scope is None else {"seed_scope": seed_scope}
+    return {
         "type": "derivation", "id": "deriv-tone",
         "payload": {"rules": [{
             "id": "r1",
             "branches": [
                 {"condition": {"var": "mood", "op": "equals", "value": "happy"},
-                 "action": {"target_var": "tone", "mode": "replace", "value": "bright"}},
+                 "action": {"target_var": "tone", "mode": "replace", "value": "{warm|gold|amber}"}},
                 {"condition": {"var": "mood", "op": "equals", "value": "sad"},
-                 "action": {"target_var": "tone", "mode": "replace", "value": "blue"}},
+                 "action": {"target_var": "tone", "mode": "replace", "value": "{cool|blue|navy}"}},
             ],
         }]},
-        "instance": {"seed_scope": "hold"},
+        "instance": instance,
     }
-    moods = [_run([src, deriv], widget_seed=42, loop_index=k).get("mood") for k in range(8)]
-    held = [_run([src, deriv], widget_seed=42, loop_index=k).get("tone") for k in range(8)]
-    # Sanity: the input genuinely varies — otherwise the freeze is trivial.
-    assert len(set(moods)) > 1, f"source mood must vary across frames, got {moods}"
-    assert len(set(held)) == 1, f"held derivation output must freeze at frame-0, got {held}"
+
+
+def _group_by(keys, vals):
+    out: dict[str, set[str]] = {}
+    for k, v in zip(keys, vals, strict=True):
+        out.setdefault(k, set()).add(v)
+    return out
+
+
+def test_hold_derivation_holds_per_branch_roll_not_branch_selection():
+    """Hold freezes each BRANCH's roll, NOT which branch fires. A varying
+    input still switches IF↔ELIF live; the value used is that branch's frozen
+    frame-0 roll — so all frames that land on the same branch share one value,
+    but different branches differ. This is the user's spec: don't reuse
+    frame-0's branch value when a later frame picks another branch; use what
+    THAT branch would have rolled at frame 0."""
+    N = 12
+    src = _mood_src()
+    moods = [
+        _run([src, _branchy_deriv("hold")], widget_seed=42, loop_index=k)["mood"]
+        for k in range(N)
+    ]
+    held = [
+        _run([src, _branchy_deriv("hold")], widget_seed=42, loop_index=k)["tone"]
+        for k in range(N)
+    ]
+    # Input genuinely varies (both branches exercised) — else the test is trivial.
+    assert len(set(moods)) > 1, f"sanity: mood must vary, got {moods}"
+    # Per-branch freeze: every frame on the same branch shares ONE frozen value.
+    by_branch = _group_by(moods, held)
+    for mood, tones in by_branch.items():
+        assert len(tones) == 1, f"branch for mood={mood} must be frozen, got {tones}"
+    # Live selection: the two branches resolve to DIFFERENT values, so the
+    # output changes when the input flips the branch (it's not freeze-output).
+    assert len({next(iter(t)) for t in by_branch.values()}) > 1, (
+        f"different branches must give different held values, got {by_branch}"
+    )
+
+
+def test_vary_derivation_rerolls_within_a_branch():
+    """Contrast: without hold, the SAME branch re-rolls a different value
+    across frames (proves hold's per-branch freeze is doing something)."""
+    N = 12
+    src = _mood_src()
+    moods = [_run([src, _branchy_deriv()], widget_seed=42, loop_index=k)["mood"] for k in range(N)]
+    toned = [_run([src, _branchy_deriv()], widget_seed=42, loop_index=k)["tone"] for k in range(N)]
+    by_branch = _group_by(moods, toned)
+    assert any(len(t) > 1 for t in by_branch.values()), (
+        f"vary should re-roll within a branch across frames, got {by_branch}"
+    )

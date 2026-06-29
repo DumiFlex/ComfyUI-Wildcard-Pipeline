@@ -295,32 +295,25 @@ class DerivationHandler(ModuleHandler):
         # action.value across runs; without lock the chain seed
         # propagates per-queue. Falls back to the host ctx's RNG when
         # the ctx wasn't built with `__wp_rng__` (legacy callers).
+        # seed_scope == "hold" freezes the DICE per branch, NOT which branch
+        # fires. The conditions still pick a branch live each iteration, so a
+        # varying input can switch IF→ELIF and we use THAT branch — but every
+        # branch's inline {a|b} / @{} roll is frozen to its frame-0 value via
+        # the constant hold seed, keyed PER BRANCH (see _branch_resolve_ctx).
+        # So each branch's value is identical every iteration it fires and
+        # equals the value it WOULD have had at frame 0, independent of which
+        # other branches fired. (Contrast wildcard/combine/fixed_values hold,
+        # which freeze the whole resolved VALUE because a constraint can
+        # reshape their pool; a derivation branch's pool is fixed, so a frozen
+        # seed alone is enough — and freezing the branch SELECTION would be
+        # wrong: the user wants the chosen branch to follow the inputs.)
+        _hold = False
+        effective_seed = 0
+        module_id = "derivation"
+        ctx_local: dict[str, Any] = {}
         if isinstance(ctx, dict) and "__wp_rng__" in ctx:
-            # seed_scope == "hold": freeze this derivation's frame-0 OUTPUT
-            # across a loop. A derivation writes a DYNAMIC set of vars (the
-            # fired rules depend on its inputs), so unlike wildcard / combine /
-            # fixed_values we can't read a single binding from the flat base
-            # ctx — we replay the captured frame-0 output dict verbatim. It's
-            # post-resolve, so inline {a|b} picks AND nested @{} refs stay
-            # frozen too. See pipeline.run's hold base pass + the
-            # __wp_module_outputs__ capture keyed by per-instance uid.
-            if instance.get("seed_scope") == "hold":
-                _hb = ctx.get("__wp_hold_base_ctx__")
-                if isinstance(_hb, dict):
-                    _outs = _hb.get("__wp_module_outputs__")
-                    _mid = (
-                        ctx.get("__wp_current_module_uid__")
-                        or ctx.get("__wp_current_module_id__")
-                    )
-                    if (
-                        isinstance(_outs, dict)
-                        and _mid is not None
-                        and isinstance(_outs.get(_mid), dict)
-                    ):
-                        return dict(_outs[_mid])
-                # No base capture (not under a loop, or the base pass itself)
-                # — resolve with the CONSTANT hold seed so the roll is at
-                # least stable within this pass.
+            _hold = instance.get("seed_scope") == "hold"
+            if _hold:
                 chain_seed = int(
                     ctx.get("__wp_node_seed_hold__", ctx.get("__wp_node_seed__", 0)) or 0
                 )
@@ -337,6 +330,19 @@ class DerivationHandler(ModuleHandler):
             resolve_ctx = build_resolve_ctx(ctx_local, surface="derivation")
         else:
             resolve_ctx = build_resolve_ctx(ctx, surface="derivation")
+
+        def _branch_resolve_ctx(branch_key: str) -> Any:
+            # Non-hold (or no rng): the shared rng stream — existing
+            # behaviour, branch values draw in fire order. Hold: an
+            # INDEPENDENT rng per branch (keyed by rule:branch) so its value
+            # is frozen to its frame-0 roll regardless of which other
+            # branches drew before it in the shared stream.
+            if not _hold:
+                return resolve_ctx
+            rng_b = derive_module_rng(effective_seed, f"{module_id}::{branch_key}")
+            return build_resolve_ctx(
+                {**ctx_local, "__wp_rng__": rng_b}, surface="derivation"
+            )
 
         # Tier-D instance overrides (2026-05-10 cycle).
         disabled_rule_ids = set(instance.get("disabled_rule_ids") or [])
@@ -393,7 +399,9 @@ class DerivationHandler(ModuleHandler):
                         action = {**action, "value": action_override}
 
                     pair = _apply_action(
-                        action, ctx, resolve_ctx, carrier_key=branch_carrier_key(rule_id, bi)
+                        action, ctx,
+                        _branch_resolve_ctx(branch_carrier_key(rule_id, bi)),
+                        carrier_key=branch_carrier_key(rule_id, bi),
                     )
                     if pair is not None:
                         out[pair[0]] = pair[1]
@@ -416,7 +424,9 @@ class DerivationHandler(ModuleHandler):
                     if isinstance(action_override, str):
                         action = {**action, "value": action_override}
                     pair = _apply_action(
-                        action, ctx, resolve_ctx, carrier_key=branch_carrier_key(rule_id, "else")
+                        action, ctx,
+                        _branch_resolve_ctx(branch_carrier_key(rule_id, "else")),
+                        carrier_key=branch_carrier_key(rule_id, "else"),
                     )
                     if pair is not None:
                         out[pair[0]] = pair[1]
