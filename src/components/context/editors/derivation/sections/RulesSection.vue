@@ -663,14 +663,6 @@ function opUsesValue(op: string | undefined): boolean {
   padding: 12px 16px;
   background: var(--wp-bg);
   border-bottom: 1px solid var(--wp-border-soft, var(--wp-border));
-  /* Fill the space between the pinned identity + dock and let the rule
-   * list inside scroll. `1 1 auto` (content basis) so a short list still
-   * sizes to its content — only a list that would push the modal past
-   * 80vh shrinks + scrolls. */
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
 }
 .rules__head {
   display: flex;
@@ -701,28 +693,33 @@ function opUsesValue(op: string | undefined): boolean {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  /* Scrolls in place so identity / runtime / footer stay visible. Fills
-   * the .rules flex parent (min-height:0 lets it shrink below content so
-   * the overflow actually engages). */
-  flex: 1 1 auto;
-  min-height: 0;
+  /* Long rule lists scroll IN PLACE so identity / runtime / footer stay put.
+   * Absolute max-height (NOT flex:1) — same load-bearing trick as the
+   * wildcard's .pool__opts — because the modal's overlay parents carry only
+   * max-height:100% (no definite height), so a flex-fill child collapses or
+   * clips here. The cap is the modal budget (80vh, matching .dvm) MINUS the
+   * fixed chrome (header + identity + rules head + runtime/footer dock ≈
+   * 16rem) so the list + chrome never exceeds 80vh — that keeps the scroll
+   * to ONE bar (this list), no second outer modal scrollbar. */
+  max-height: calc(80vh - 16rem);
   overflow-y: auto;
-  /* Keep the scrollbar visibly present — long rule lists weren't obviously
-   * scrollable before, so users thought rules were truncated. Matches the
-   * ModulePickerModal scrollbar convention (--wp-scrollbar-thumb token),
-   * with a slightly stronger fallback for the dark canvas. */
-  scrollbar-width: thin;
-  scrollbar-color: var(--wp-scrollbar-thumb, rgba(255, 255, 255, 0.22)) transparent;
+  /* Keep the scrollbar CLEARLY visible — long rule lists weren't obviously
+   * scrollable before, so users thought rules were truncated. Stronger than
+   * the app's subtle token default on purpose. */
+  scrollbar-width: auto;
+  scrollbar-color: rgba(255, 255, 255, 0.38) transparent;
 }
-.rules__list::-webkit-scrollbar { width: 10px; }
-.rules__list::-webkit-scrollbar-track { background: transparent; }
+.rules__list::-webkit-scrollbar { width: 12px; }
+.rules__list::-webkit-scrollbar-track {
+  background: var(--wp-bg-deep, var(--wp-bg));
+  border-radius: 6px;
+}
 .rules__list::-webkit-scrollbar-thumb {
-  background: var(--wp-scrollbar-thumb, rgba(255, 255, 255, 0.22));
-  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.38);
+  border-radius: 6px;
+  border: 2px solid var(--wp-bg-deep, var(--wp-bg));
 }
-.rules__list::-webkit-scrollbar-thumb:hover {
-  background: var(--wp-scrollbar-thumb-hover, rgba(255, 255, 255, 0.34));
-}
+.rules__list::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.55); }
 
 /* Rule card */
 .rule-card {
