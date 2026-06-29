@@ -622,7 +622,13 @@ function onKeydown(ev: KeyboardEvent): void {
   background: color-mix(in srgb, var(--wp-text3) 18%, transparent);
   color: var(--wp-text2);
   flex-shrink: 0;
+  /* Right-align the type pill even on rows WITHOUT a label (the label
+   * carries the `margin-left:auto` for labelled rows). When a label IS
+   * present it precedes the type, so reset the auto there and let the
+   * flex gap space them — keeping label + type grouped at the right. */
+  margin-left: auto;
 }
+.ibm__menu-label + .ibm__menu-type { margin-left: 0; }
 
 /* Reset button styling shared via _modal-template-ctrls.css. */
 
