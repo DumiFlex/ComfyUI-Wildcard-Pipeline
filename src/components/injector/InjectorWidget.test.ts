@@ -54,6 +54,41 @@ describe("InjectorWidget — lifecycle", () => {
   });
 });
 
+describe("InjectorWidget — durable custom slot labels", () => {
+  const labelledRow = (over: Record<string, unknown> = {}): string => JSON.stringify({
+    version: 1,
+    rows: [{ _uid: "uid_a", slot_name: "input_0", binding: "phrase", enabled: true, internal: false, ...over }],
+  });
+
+  it("renders the durable row.slot_label as the pin tag, even with an empty slotLabels prop", () => {
+    const w = mount(InjectorWidget, {
+      props: { nodeId: 7, initialJson: labelledRow({ slot_label: "test_label_1" }), connectedSlots: ["input_0"], slotLabels: {} },
+    });
+    expect(w.find('[data-test="inj-row-slot"]').text()).toBe("test_label_1");
+  });
+
+  it("durable slot_label wins over a live slotLabels entry", () => {
+    const w = mount(InjectorWidget, {
+      props: { nodeId: 7, initialJson: labelledRow({ slot_label: "durable" }), connectedSlots: ["input_0"], slotLabels: { input_0: "live" } },
+    });
+    expect(w.find('[data-test="inj-row-slot"]').text()).toBe("durable");
+  });
+
+  it("falls back to the live slotLabels entry when no durable slot_label", () => {
+    const w = mount(InjectorWidget, {
+      props: { nodeId: 7, initialJson: labelledRow(), connectedSlots: ["input_0"], slotLabels: { input_0: "live_label" } },
+    });
+    expect(w.find('[data-test="inj-row-slot"]').text()).toBe("live_label");
+  });
+
+  it("falls back to slot_name when neither durable nor live label is set", () => {
+    const w = mount(InjectorWidget, {
+      props: { nodeId: 7, initialJson: labelledRow(), connectedSlots: ["input_0"], slotLabels: {} },
+    });
+    expect(w.find('[data-test="inj-row-slot"]').text()).toBe("input_0");
+  });
+});
+
 describe("InjectorWidget — template persistence (Phase 6)", () => {
   const ONE_ROW = JSON.stringify({
     version: 1,

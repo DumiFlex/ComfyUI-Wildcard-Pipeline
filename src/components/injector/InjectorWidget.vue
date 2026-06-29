@@ -812,7 +812,7 @@ function openRowContextMenu(ev: MouseEvent, idx: number): void {
     ? `$${row.binding}`
     : isGeneral
       ? "template row"
-      : (props.slotLabels[row.slot_name] ?? row.slot_name);
+      : (row.slot_label ?? props.slotLabels[row.slot_name] ?? row.slot_name);
   ctxMenu.value = {
     visible: true,
     x: Math.max(8, x),
@@ -880,7 +880,7 @@ defineExpose({ addRow, addGeneralRow, removeRow });
         :reorderable="row.kind === 'general' ? generalRowCount > 1 : socketRowCount > 1"
         :is-connected="row.kind === 'general' ? true : isConnected(row.slot_name)"
         :value-type="row.kind === 'general' ? undefined : slotTypes[row.slot_name]"
-        :display-label="row.kind === 'general' ? undefined : slotLabels[row.slot_name]"
+        :display-label="row.kind === 'general' ? undefined : (row.slot_label ?? slotLabels[row.slot_name])"
         :conflict-severity="conflictByUid[row._uid]?.severity"
         :conflict-label="conflictByUid[row._uid]?.label"
         :drop-indicator="dropIndicatorFor(row._uid)"

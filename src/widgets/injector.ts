@@ -15,7 +15,6 @@ import {
   applyCollapsedLabels,
   attachCollapsableConnections,
   isCollapsed as readCollapsed,
-  readSlotLabel,
   relabelSlotIf,
   setCollapsed,
 } from "../extension/collapse-connections";
@@ -312,22 +311,23 @@ export function create(node: InjectorNode, inputName: string) {
         },
       );
 
-      // Per-slot display label. ComfyUI lets users rename a socket's
-      // .label via the slot context menu; surfacing it in the row tag
-      // lets users correlate `row ↔ wire` after a rename. Falls back
-      // to slot_name when no custom label. While collapsed, the live
-      // .label holds our " " placeholder — readSlotLabel transparently
-      // returns the stashed original so the row keeps showing the
-      // user's value regardless of collapse state.
+      // Per-slot LIVE display label (expanded only). ComfyUI lets users
+      // rename a socket's .label via its context menu; we surface it in
+      // the row tag while expanded so they can correlate row ↔ wire. When
+      // COLLAPSED the live .label is our placeholder ("inputs ×N" / " "),
+      // not a real label — return {} and let the DURABLE row.slot_label
+      // drive the tag (captured on collapse, see persistSlotLabelsToRows).
+      // Falls back to slot_name when there's no custom label.
       const computeSlotLabels = (): Record<string, string> => {
         const out: Record<string, string> = {};
+        if (readCollapsed(node as Parameters<typeof readCollapsed>[0])) return out;
         const inputs = node.inputs ?? [];
         for (const inp of inputs) {
           if (!inp) continue;
           const slot = injectorSlotName(inp);
           if (!slot) continue;
           if (inp.link == null) continue;
-          const resolved = readSlotLabel(inp as Parameters<typeof readSlotLabel>[0]);
+          const resolved = (inp as { label?: string }).label;
           // Skip the default mirroring case (label === name) — row
           // already shows slot_name as fallback. Only publish when
           // the label is genuinely different (= user customization).
@@ -403,6 +403,14 @@ export function create(node: InjectorNode, inputName: string) {
           nodeMode: nodeMode.value,
           connectionsCollapsed: connectionsCollapsed.value,
           onToggleConnectionsCollapse: () => {
+            // About to collapse? Snapshot the live pin labels into the
+            // durable row.slot_label FIRST — collapse overwrites
+            // slot.label with the placeholder (and serializes it), so
+            // this is the last tick the real custom labels are readable.
+            // Expanding needs no capture; expandedLabel restores them.
+            if (!readCollapsed(node as Parameters<typeof readCollapsed>[0])) {
+              persistSlotLabelsToRows();
+            }
             const next = setCollapsed(
               node as Parameters<typeof setCollapsed>[0],
             );
@@ -517,17 +525,57 @@ export function create(node: InjectorNode, inputName: string) {
       }
       return count > 1 ? `inputs ×${count}` : "inputs";
     },
-    // Reconstruct the EXPANDED label from data instead of the in-memory
-    // stash. The injector's pins are always name-derived (input_N) and the
-    // slot name is the only durable label we persist (slot.label is not),
-    // so the expanded label is simply the name — return undefined to clear
-    // .label and let litegraph's name-fallback show it. This fixes the
-    // reload bug: a node saved collapsed baked the placeholder ("inputs
-    // ×N" / " ") into the serialized .label, and on reload the dead WeakMap
-    // stash made expand restore that placeholder. Reconstructing ignores
-    // the corrupt label entirely, healing existing broken saves on expand.
-    expandedLabel: () => undefined,
+    // Reconstruct the EXPANDED label from durable data, not the in-memory
+    // stash (which dies on reload). A pin's real label lives in its row's
+    // slot_label (captured on collapse); fall back to undefined = the
+    // input_N name. This heals the reload bug — a node saved collapsed
+    // baked the placeholder ("inputs ×N" / " ") into the serialized
+    // slot.label, and the dead stash made expand restore it — AND
+    // preserves a user-renamed pin label across collapse + reload.
+    expandedLabel: (slot) => {
+      const name = injectorSlotName(slot as { name?: string });
+      if (!name) return undefined;
+      const parsed = parseWidgetJson<InjectorRowsValue>(
+        currentJson.value, emptyInjectorRowsValue(),
+      );
+      const lbl = parsed.rows.find((r) => r.slot_name === name)?.slot_label;
+      return typeof lbl === "string" && lbl.trim() !== "" ? lbl : undefined;
+    },
   });
+
+  // Snapshot the live litegraph pin labels into the durable
+  // row.slot_label. Called from the collapse toggle while the node is
+  // still EXPANDED — the last tick the real custom labels are readable
+  // before collapse overwrites slot.label with the placeholder. A pin
+  // reset to its default name clears the row's slot_label.
+  function persistSlotLabelsToRows(): void {
+    const parsed = parseWidgetJson<InjectorRowsValue>(
+      currentJson.value, emptyInjectorRowsValue(),
+    );
+    const inputs = (node.inputs ?? []) as Array<{ name?: string; label?: string } | null | undefined>;
+    let changed = false;
+    const rows = parsed.rows.map((r) => {
+      if (r.kind === "general" || !r.slot_name) return r;
+      const inp = inputs.find((i) => i != null && injectorSlotName(i) === r.slot_name);
+      const lbl = inp && typeof inp.label === "string" ? inp.label : undefined;
+      const custom = lbl && lbl.trim() !== "" && lbl !== r.slot_name ? lbl : undefined;
+      if (custom) {
+        if (custom !== r.slot_label) { changed = true; return { ...r, slot_label: custom }; }
+        return r;
+      }
+      if (r.slot_label != null) {
+        changed = true;
+        const rest = { ...r };
+        delete rest.slot_label;
+        return rest;
+      }
+      return r;
+    });
+    if (!changed) return;
+    const json = serializeWidgetJson({ ...parsed, rows });
+    host!.setValue(json);
+    if (json !== currentJson.value) currentJson.value = json;
+  }
 
   // Manual socket management. The schema declares NO dynamic inputs
   // (V3 Autogrow doesn't shrink on disconnect, so we drop it). We
