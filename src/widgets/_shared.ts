@@ -950,6 +950,14 @@ export interface InjectorRow {
    *  inline row template input manages it for general rows. Engine
    *  plumbing lives in wp_nodes/injector_node.py. */
   template?: string | null;
+  /** Durable copy of the litegraph input pin's custom display label
+   *  (the user renamed the socket via its right-click menu). Persisted
+   *  here because collapse overwrites `slot.label` with a placeholder
+   *  and serializes THAT — so the in-memory label stash dies on reload
+   *  and the rename would be lost. Captured on collapse, restored on
+   *  expand (injector.ts), and preferred by the row tag. Absent / empty
+   *  = the pin shows its default `input_N` name. Socket rows only. */
+  slot_label?: string;
 }
 
 export function emptyInjectorRowsValue(): InjectorRowsValue {
