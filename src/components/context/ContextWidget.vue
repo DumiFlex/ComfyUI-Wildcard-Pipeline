@@ -2895,11 +2895,14 @@ function isInternal(m: ModuleEntry): boolean {
   return !!m.instance?.internal;
 }
 /** Kinds whose handlers honor `seed_scope: hold` — wildcard, combine,
- *  fixed_values. Derivation is seed-lockable but has no hold branch
- *  engine-side, so it's excluded (mirrors which RuntimeSections render
- *  the Hold toggle). Gates the row context-menu's quick Hold item. */
+ *  fixed_values, and derivation (which freezes its frame-0 output across a
+ *  loop, constrained picks + nested @{} refs included). Now equal to
+ *  SEED_LOCKABLE_KINDS, but kept distinct on purpose: lock-the-seed and
+ *  hold-the-value are different concepts that could diverge again. Gates
+ *  the row context-menu's quick Hold item + which RuntimeSections render
+ *  the toggle. */
 const HOLD_KINDS: ReadonlySet<string> = new Set([
-  "wildcard", "combine", "fixed_values",
+  "wildcard", "combine", "fixed_values", "derivation",
 ]);
 function isHoldable(m: ModuleEntry): boolean {
   return HOLD_KINDS.has(m.type);

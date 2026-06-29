@@ -296,7 +296,36 @@ class DerivationHandler(ModuleHandler):
         # propagates per-queue. Falls back to the host ctx's RNG when
         # the ctx wasn't built with `__wp_rng__` (legacy callers).
         if isinstance(ctx, dict) and "__wp_rng__" in ctx:
-            chain_seed = int(ctx.get("__wp_node_seed__", 0) or 0)
+            # seed_scope == "hold": freeze this derivation's frame-0 OUTPUT
+            # across a loop. A derivation writes a DYNAMIC set of vars (the
+            # fired rules depend on its inputs), so unlike wildcard / combine /
+            # fixed_values we can't read a single binding from the flat base
+            # ctx — we replay the captured frame-0 output dict verbatim. It's
+            # post-resolve, so inline {a|b} picks AND nested @{} refs stay
+            # frozen too. See pipeline.run's hold base pass + the
+            # __wp_module_outputs__ capture keyed by per-instance uid.
+            if instance.get("seed_scope") == "hold":
+                _hb = ctx.get("__wp_hold_base_ctx__")
+                if isinstance(_hb, dict):
+                    _outs = _hb.get("__wp_module_outputs__")
+                    _mid = (
+                        ctx.get("__wp_current_module_uid__")
+                        or ctx.get("__wp_current_module_id__")
+                    )
+                    if (
+                        isinstance(_outs, dict)
+                        and _mid is not None
+                        and isinstance(_outs.get(_mid), dict)
+                    ):
+                        return dict(_outs[_mid])
+                # No base capture (not under a loop, or the base pass itself)
+                # — resolve with the CONSTANT hold seed so the roll is at
+                # least stable within this pass.
+                chain_seed = int(
+                    ctx.get("__wp_node_seed_hold__", ctx.get("__wp_node_seed__", 0)) or 0
+                )
+            else:
+                chain_seed = int(ctx.get("__wp_node_seed__", 0) or 0)
             locked_seed = instance.get("locked_seed")
             effective_seed = (
                 int(locked_seed) if isinstance(locked_seed, (int, float))

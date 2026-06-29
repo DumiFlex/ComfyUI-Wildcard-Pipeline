@@ -287,7 +287,8 @@ class PipelineEngine:
         # the throwaway pass's warnings/trace/constraint-state off the real
         # ctx. loop_index=0 here means the recursive run skips its own base
         # pass — no infinite recursion.
-        if loop_index != 0 and any(_module_seed_scope(m) == "hold" for m in modules):
+        _any_hold = any(_module_seed_scope(m) == "hold" for m in modules)
+        if loop_index != 0 and _any_hold:
             import copy as _copy
 
             _hb = int(ctx.get("__wp_node_seed_hold__", 0) or 0)
@@ -554,6 +555,17 @@ class PipelineEngine:
                     "source": module_type,
                     "overwrite": before is not None and before != value,
                 })
+
+            # Hold capture: when any module in this chain holds, record each
+            # module's frame-0 output dict keyed by its per-instance uid. The
+            # hold base pass (loop_index=0) runs this same code, so
+            # base_ctx["__wp_module_outputs__"] carries the frozen writes.
+            # Handlers whose binding set is DYNAMIC (derivation — the fired
+            # rules depend on inputs) replay this dict verbatim on hold, since
+            # the flat base ctx can't tell which module wrote which var.
+            if _any_hold and bindings:
+                _outs = ctx.setdefault("__wp_module_outputs__", {})
+                _outs[_module_uid or _module_id] = dict(bindings)
 
             # `seed` on the trace entry: the effective seed THIS
             # module rolled with — `instance.locked_seed` if locked,
