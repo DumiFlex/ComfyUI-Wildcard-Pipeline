@@ -1,10 +1,12 @@
 <script setup lang="ts">
 /**
  * Derivation RuntimeSection — composes the shared `<SeedLockControls />`
- * (default "Lock seed" label) plus the Hide-from-prompt toggle.
- * Mirrors combine's RuntimeSection 1:1 because the surface semantics
- * are the same: derivation's `action.value` resolves `{a|b|c}`
- * alternations, so locking the seed pins each pick across queues.
+ * (default "Lock seed" label) plus the Hide-from-prompt and
+ * Hold-across-run toggles. Mirrors combine's RuntimeSection 1:1 because
+ * the surface semantics are the same: derivation's `action.value`
+ * resolves `{a|b|c}` alternations (+ nested `@{}` refs), so locking the
+ * seed pins each pick across queues and Hold freezes the resolved output
+ * across a loop run.
  */
 import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
@@ -18,6 +20,11 @@ const internal = computed(() => instance.value.internal === true);
 
 function onHideClick(): void {
   emit("update", { instance: { ...instance.value, internal: !internal.value } });
+}
+
+const held = computed(() => instance.value.seed_scope === "hold");
+function onHoldClick(): void {
+  emit("update", { instance: { ...instance.value, seed_scope: held.value ? "vary" : "hold" } });
 }
 </script>
 
@@ -38,11 +45,24 @@ function onHideClick(): void {
       <i class="pi pi-eye-slash" aria-hidden="true" />
       Hide from prompt
     </button>
+    <button
+      type="button"
+      class="toggle"
+      :class="{ 'toggle--on': held }"
+      data-test="runtime-hold"
+      role="switch"
+      :aria-checked="held"
+      :disabled="frameActive || undefined"
+      @click="onHoldClick"
+    >
+      <i class="pi pi-link" aria-hidden="true" />
+      Hold across run
+    </button>
     <p
       v-if="frameActive"
       class="runtime__frame-hint"
       data-test="runtime-frame-hint"
-    >Hide from prompt applies to every frame — switch to base to change.</p>
+    >Hide from prompt and Hold across run apply to every frame — switch to base to change.</p>
   </section>
 </template>
 

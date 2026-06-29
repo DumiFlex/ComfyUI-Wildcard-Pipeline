@@ -206,3 +206,86 @@ def test_hold_wildcard_freezes_nested_ref_value():
         f"nested ref did not resolve to a colour, got {held[0]!r}"
     )
     assert len(set(held)) == 1, f"nested ref must be frozen across frames, got {held}"
+
+
+# ── derivation hold ─────────────────────────────────────────────────────────
+#
+# A derivation is a TRANSFORM (reads inputs, writes outputs) and writes a
+# DYNAMIC set of vars (whichever rules fire), so its hold can't read a single
+# flat binding — the engine captures each module's frame-0 output dict and the
+# handler replays it. Two things must freeze: the inline {a|b} roll, and the
+# output even when the derivation's INPUT varies (the same value-freeze
+# trade-off a constrained wildcard makes).
+
+# trigger var so the derivation's rule always fires.
+_DERIV_TRIGGER = {
+    "type": "fixed_values", "id": "trig-uuid",
+    "payload": {"values": [{"name": "trigger", "value": "go"}]},
+    "instance": {},
+}
+_DERIV_INLINE = "{warm|cool|bright|dark|crimson|amber}"
+
+
+def _derivation_inline(target, value, *, seed_scope=None):
+    instance = {}
+    if seed_scope is not None:
+        instance["seed_scope"] = seed_scope
+    return {
+        "type": "derivation", "id": f"deriv-{target}",
+        "payload": {"rules": [{
+            "id": "r1",
+            "branches": [{
+                "condition": {"var": "trigger", "op": "equals", "value": "go"},
+                "action": {"target_var": target, "mode": "replace", "value": value},
+            }],
+        }]},
+        "instance": instance,
+    }
+
+
+def test_hold_derivation_freezes_inline_choice():
+    """A held derivation with an inline {a|b|c} action value reuses its frame-0
+    pick across the run; without hold it re-rolls each frame."""
+    held = [
+        _run([_DERIV_TRIGGER, _derivation_inline("tone", _DERIV_INLINE, seed_scope="hold")],
+             widget_seed=42, loop_index=k)["tone"]
+        for k in range(6)
+    ]
+    assert len(set(held)) == 1, f"held derivation must be constant, got {held}"
+    varied = [
+        _run([_DERIV_TRIGGER, _derivation_inline("tone", _DERIV_INLINE)],
+             widget_seed=42, loop_index=k)["tone"]
+        for k in range(6)
+    ]
+    assert len(set(varied)) > 1, f"vary derivation should change across frames, got {varied}"
+
+
+def test_hold_derivation_with_varying_input_freezes_output():
+    """A held derivation whose CONDITION reads a varying input still emits its
+    frame-0 output every frame — the value freezes even as the input moves."""
+    src = {
+        "type": "wildcard", "id": "mood-uuid",
+        "payload": {"var_binding": "mood", "options": [
+            {"id": "m0", "value": "happy", "weight": 1.0},
+            {"id": "m1", "value": "sad", "weight": 1.0},
+        ]},
+        "instance": {"variable_binding": "mood"},
+    }
+    deriv = {
+        "type": "derivation", "id": "deriv-tone",
+        "payload": {"rules": [{
+            "id": "r1",
+            "branches": [
+                {"condition": {"var": "mood", "op": "equals", "value": "happy"},
+                 "action": {"target_var": "tone", "mode": "replace", "value": "bright"}},
+                {"condition": {"var": "mood", "op": "equals", "value": "sad"},
+                 "action": {"target_var": "tone", "mode": "replace", "value": "blue"}},
+            ],
+        }]},
+        "instance": {"seed_scope": "hold"},
+    }
+    moods = [_run([src, deriv], widget_seed=42, loop_index=k).get("mood") for k in range(8)]
+    held = [_run([src, deriv], widget_seed=42, loop_index=k).get("tone") for k in range(8)]
+    # Sanity: the input genuinely varies — otherwise the freeze is trivial.
+    assert len(set(moods)) > 1, f"source mood must vary across frames, got {moods}"
+    assert len(set(held)) == 1, f"held derivation output must freeze at frame-0, got {held}"
