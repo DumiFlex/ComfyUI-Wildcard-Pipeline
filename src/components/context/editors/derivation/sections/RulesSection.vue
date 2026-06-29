@@ -728,6 +728,13 @@ function opUsesValue(op: string | undefined): boolean {
   border: 1px solid var(--wp-border);
   border-radius: 3px;
   overflow: hidden;
+  /* THE load-bearing fix for "rules clipped, no scrollbar": the cards are
+   * flex children of the flex-column .rules__list, so by default they SHRINK
+   * to fit its max-height and `overflow:hidden` then clips their branches —
+   * the list never overflows, so it never scrolls and no scrollbar appears.
+   * Pinning flex-shrink:0 keeps each card at full height; the list then truly
+   * overflows its max-height and scrolls (with its scrollbar). */
+  flex-shrink: 0;
 }
 .rule-card--off { opacity: 0.55; }
 .rule-card--dragging { opacity: 0.5; }
