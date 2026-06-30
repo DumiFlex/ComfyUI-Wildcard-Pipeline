@@ -256,6 +256,23 @@ describe("reorderInjectorRows", () => {
     expect(next[1].internal).toBe(false);
   });
 
+  it("slot_label stays with the socket position, not the dragged row", () => {
+    // input_0 labelled "test 1", input_1 default (no label), input_2 "test 2".
+    // Swap the input_1 row up past the test-2 row: the row landing on socket
+    // input_1 must lose the custom label (input_1 has none) and the row landing
+    // on input_2 must show "test 2" — labels follow the SOCKET, not the row.
+    const rows = [
+      makeRow({ _uid: "u0", slot_name: "input_0", binding: "a", slot_label: "test 1" }),
+      makeRow({ _uid: "u1", slot_name: "input_1", binding: "b" }),
+      makeRow({ _uid: "u2", slot_name: "input_2", binding: "c", slot_label: "test 2" }),
+    ];
+    const next = reorderInjectorRows(rows, 2, 1); // drag the test-2 row to position 1
+    expect(next.map((r) => r.binding)).toEqual(["a", "c", "b"]);
+    expect(next.map((r) => r.slot_name)).toEqual(["input_0", "input_1", "input_2"]);
+    // Labels pinned to sockets: input_0="test 1", input_1=none, input_2="test 2".
+    expect(next.map((r) => r.slot_label)).toEqual(["test 1", undefined, "test 2"]);
+  });
+
   it("out-of-range indices are no-ops", () => {
     const rows = [makeRow({ slot_name: "input_0" })];
     expect(reorderInjectorRows(rows, -1, 0)).toBe(rows);
