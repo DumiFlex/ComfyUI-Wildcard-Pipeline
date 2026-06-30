@@ -179,6 +179,16 @@ export function reorderInjectorRows(
   if (fromIdx === toIdx) return rows;
   if (fromIdx < 0 || fromIdx >= rows.length) return rows;
   if (toIdx < 0 || toIdx > rows.length) return rows;
+  // A custom pin label belongs to the physical SOCKET (input_N), which stays
+  // put on reorder — only the binding/template moves. Snapshot socket→label
+  // BEFORE moving so each row picks up the label of the socket it LANDS on,
+  // instead of dragging its old socket's label along (which left a swapped
+  // pair both showing the same stale label).
+  const pattern = /^input_\d+$/;
+  const socketLabel = new Map<string, string | undefined>();
+  for (const r of rows) {
+    if (pattern.test(r.slot_name)) socketLabel.set(r.slot_name, r.slot_label);
+  }
   const moved = rows.slice();
   const [taken] = moved.splice(fromIdx, 1);
   // toIdx is the desired POST-removal insertion index. When toIdx
@@ -186,13 +196,17 @@ export function reorderInjectorRows(
   // the caller hands us the visual target so we just insert there.
   const insertAt = toIdx > fromIdx ? toIdx - 1 : toIdx;
   moved.splice(insertAt, 0, taken);
-  // Reassign slot_name sequentially so position == socket.
+  // Reassign slot_name sequentially so position == socket, and pull the
+  // slot_label from the socket that now sits at that position.
   let counter = 0;
   return moved.map((r) => {
-    const pattern = /^input_\d+$/;
     if (!pattern.test(r.slot_name)) return r;
     const newName = `input_${counter++}`;
-    return r.slot_name === newName ? r : { ...r, slot_name: newName };
+    const label = socketLabel.get(newName);
+    const next: InjectorRow = { ...r, slot_name: newName };
+    if (typeof label === "string" && label.trim() !== "") next.slot_label = label;
+    else delete next.slot_label;
+    return next;
   });
 }
 
