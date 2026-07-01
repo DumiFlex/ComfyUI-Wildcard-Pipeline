@@ -1,3 +1,31 @@
+## 🎉 Wildcard Pipeline 2.9.0
+
+📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
+
+<details>
+<summary><b>📋 Full changelog</b> — click to expand the per-commit list</summary>
+
+
+* fix(derivation-modal): absolute max-height for the rules scroll (revert flex) ([5d715fb](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/5d715fb))
+* fix(derivation-modal): pin rule cards so the rule list actually scrolls ([fc9d8a8](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/fc9d8a8))
+* fix(derivation-modal): scroll the rule LIST, not the whole modal ([6f664ce](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/6f664ce))
+* fix(derivation-modal): scroll the rules region, pin header + footer ([e98aca3](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/e98aca3))
+* fix(engine): derivation hold freezes each branch roll, not the branch choice ([df76abd](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/df76abd))
+* fix(engine): hold the resolved VALUE across iterations, not just the seed ([58c5b27](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/58c5b27))
+* fix(injector): keep custom pin labels with the socket on drag-reorder ([41fae1e](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/41fae1e))
+* fix(injector): persist custom pin labels durably across collapse + reload ([8568aa2](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/8568aa2))
+* fix(injector): reconstruct collapsed-wire labels from data, not the dead stash ([0ede205](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/0ede205))
+* fix(injector): repair collapse-wire labels corrupted across a reload ([0281b8e](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/0281b8e))
+* fix(injector): right-align the type pill on label-less ref/slot rows ([bf61f64](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/bf61f64))
+* docs(spa): describe hold as a value freeze (constrained picks + nested refs) ([1b3e4aa](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/1b3e4aa))
+* docs(spa): document per-iteration overrides, seed scope + lock-previous ([4a34c9b](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/4a34c9b))
+* docs(spa): mention the right-click Hold toggle shortcut ([a738618](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/a738618))
+* docs(spa): note derivation supports Hold across run ([aba4e8c](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/aba4e8c))
+* feat(context): quick Hold toggle in the module row context menu ([8dcebdc](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/8dcebdc))
+* feat(engine): derivation honors seed_scope=hold (freeze frame-0 output) ([ff6825c](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/ff6825c))
+
+</details>
+
 ## 🎉 Wildcard Pipeline 2.8.0
 
 📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
