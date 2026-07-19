@@ -445,7 +445,7 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
       @update:content-rating="(v) => (contentRating = v)"
     />
 
-    <Card :title="`Rules (${rules.length})`">
+    <Card :title="`Rules (${rules.length})`" sticky-header>
       <template #actions>
         <Button size="sm" variant="primary" icon="pi-plus" data-test="add-rule" @click="addRule">
           Add rule

@@ -1336,7 +1336,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
     </div>
 
     <div id="editor-section-exceptions">
-    <Card :title="`Exceptions (${exceptions.length})`" :padding="false">
+    <Card :title="`Exceptions (${exceptions.length})`" :padding="false" sticky-header>
       <template #actions>
         <!-- Editing requires a live wildcard — the value pickers are empty
              when the ref is missing, so authoring a new exception is hidden

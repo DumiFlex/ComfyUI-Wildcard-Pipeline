@@ -598,6 +598,29 @@ input, textarea, select { font: inherit; }
   font-weight: 400;
 }
 .wp-card__body { padding: 14px; }
+/* Sticky-header cards pin their toolbar to the top of the scroll region so a
+ * long list's actions (Add option, Bulk edit, …) stay reachable at the bottom.
+ * Card.vue publishes `--wp-card-header-h` so a sticky <thead> inside can offset
+ * itself right under the header. Needs an opaque bg (header is transparent). */
+.wp-card--sticky-header > .wp-card__header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--wp-bg-1);
+}
+/* Sticky column header inside a sticky-header card — pins right under the
+ * toolbar. Chromium won't scroll-anchor a table CELL here, but sticking the
+ * <thead> element does; th gets an opaque bg so rows don't bleed through.
+ * Shared by the wildcard + fixed-values option tables. */
+.wp-card--sticky-header .wp-options-table thead {
+  position: sticky;
+  top: var(--wp-card-header-h, 53px);
+  z-index: 4;
+}
+.wp-card--sticky-header .wp-options-table thead th {
+  background: var(--wp-bg-1);
+  box-shadow: inset 0 -1px 0 var(--wp-border);
+}
 
 /* ---------- Buttons ---------- */
 .wp-btn {

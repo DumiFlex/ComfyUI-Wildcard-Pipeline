@@ -402,7 +402,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
       @update:content-rating="(v) => (contentRating = v)"
     />
 
-    <Card :title="`Values (${values.length})`" :padding="false">
+    <Card :title="`Values (${values.length})`" :padding="false" sticky-header>
       <template #actions>
         <Button
           size="sm"

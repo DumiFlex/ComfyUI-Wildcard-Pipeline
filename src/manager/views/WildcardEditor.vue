@@ -1515,7 +1515,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
     </div>
 
     <div id="editor-section-options">
-    <Card :title="`Options (${options.length})`" :padding="false">
+    <Card :title="`Options (${options.length})`" :padding="false" sticky-header>
       <template #actions>
         <Button
           size="sm"
