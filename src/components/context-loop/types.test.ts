@@ -31,6 +31,7 @@ describe("parseContextLoopConfig", () => {
       iteration_internal: false,
       total_internal: false,
       seed_locks: {},
+      bypass_frames: [],
     };
     expect(parseContextLoopConfig(JSON.stringify(cfg))).toEqual(cfg);
   });
@@ -44,6 +45,7 @@ describe("parseContextLoopConfig", () => {
       iteration_internal: true,
       total_internal: true,
       seed_locks: {},
+      bypass_frames: [],
     };
     expect(parseContextLoopConfig(JSON.stringify(cfg))).toEqual(cfg);
   });
@@ -68,6 +70,7 @@ describe("parseContextLoopConfig", () => {
       iteration_internal: false,
       total_internal: true,
       seed_locks: {},
+      bypass_frames: [],
     };
     const round = parseContextLoopConfig(serializeContextLoopConfig(cfg));
     expect(round).toEqual(cfg);
@@ -87,5 +90,20 @@ describe("ContextLoopConfig seed_locks", () => {
   it("round-trips through serialize", () => {
     const cfg = { ...emptyContextLoopConfig(), seed_locks: { "0": 7 } };
     expect(parseContextLoopConfig(serializeContextLoopConfig(cfg)).seed_locks).toEqual({ "0": 7 });
+  });
+});
+
+describe("bypass_frames parse", () => {
+  it("defaults to empty", () => {
+    expect(emptyContextLoopConfig().bypass_frames).toEqual([]);
+    expect(parseContextLoopConfig("{}").bypass_frames).toEqual([]);
+  });
+  it("dedups + sorts, keeps out-of-range, drops junk + negatives", () => {
+    expect(parseContextLoopConfig('{"bypass_frames":[3,1,3,0]}').bypass_frames).toEqual([0, 1, 3]);
+    expect(parseContextLoopConfig('{"bypass_frames":[2,-1,"x",2,999]}').bypass_frames).toEqual([2, 999]);
+  });
+  it("malformed collapses to empty", () => {
+    expect(parseContextLoopConfig('{"bypass_frames":"nope"}').bypass_frames).toEqual([]);
+    expect(parseContextLoopConfig("not json").bypass_frames).toEqual([]);
   });
 });

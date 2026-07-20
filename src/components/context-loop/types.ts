@@ -23,6 +23,10 @@ export interface ContextLoopConfig {
   /** 0-based iteration index (stringified) -> pinned seed. Unlocked
    *  indices re-derive from base+strategy. Empty by default. */
   seed_locks: Record<string, number>;
+  /** 0-based iteration indices to bypass (skip generation + overrides).
+   *  Sorted, deduped, non-negative. Out-of-range (>= count) entries are
+   *  kept and re-apply if count grows. Empty by default. */
+  bypass_frames: number[];
 }
 
 const STRATEGIES = new Set<LoopStrategy>(["sequential", "hash_index", "prime_stride"]);
@@ -36,6 +40,7 @@ export function emptyContextLoopConfig(): ContextLoopConfig {
     iteration_internal: true,
     total_internal: true,
     seed_locks: {},
+    bypass_frames: [],
   };
 }
 
@@ -70,6 +75,14 @@ export function parseContextLoopConfig(raw: string | null | undefined): ContextL
       if (typeof v === "number" && Number.isFinite(v)) locks[k] = v;
     }
     out.seed_locks = locks;
+  }
+  if (Array.isArray(obj.bypass_frames)) {
+    const frames = new Set<number>();
+    for (const x of obj.bypass_frames) {
+      const n = Number(x);
+      if (Number.isInteger(n) && n >= 0) frames.add(n);
+    }
+    out.bypass_frames = [...frames].sort((a, b) => a - b);
   }
   return out;
 }
