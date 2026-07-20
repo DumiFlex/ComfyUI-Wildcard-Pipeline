@@ -1544,6 +1544,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
           Add option
         </Button>
       </template>
+      <template #subheader>
       <div v-if="bulkMode && (bulkAddOpen || selectedCount > 0 || bulkNote)" class="wpc-bulk-controls">
         <BulkAddPanel
           v-if="bulkAddOpen"
@@ -1565,6 +1566,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
         />
         <p v-if="bulkNote" class="wpc-bulk-note" role="status">{{ bulkNote }}</p>
       </div>
+      </template>
       <table class="wp-table wp-options-table">
         <thead>
           <tr>

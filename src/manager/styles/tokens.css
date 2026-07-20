@@ -598,11 +598,14 @@ input, textarea, select { font: inherit; }
   font-weight: 400;
 }
 .wp-card__body { padding: 14px; }
-/* Sticky-header cards pin their toolbar to the top of the scroll region so a
- * long list's actions (Add option, Bulk edit, …) stay reachable at the bottom.
- * Card.vue publishes `--wp-card-header-h` so a sticky <thead> inside can offset
- * itself right under the header. Needs an opaque bg (header is transparent). */
-.wp-card--sticky-header > .wp-card__header {
+/* Sticky-header cards pin their header + `subheader` slot (e.g. a bulk-edit
+ * toolbar) to the top of the scroll region so a long list's actions (Add
+ * option, Bulk edit, the selection toolbar, …) stay reachable at the bottom.
+ * The whole `.wp-card__sticky` region sticks as one so its sub-toolbar can't
+ * be left behind. Card.vue publishes `--wp-card-header-h` (the region's
+ * measured height) so a sticky <thead> below offsets right under it. Needs an
+ * opaque bg (header/subheader are transparent). */
+.wp-card--sticky-header > .wp-card__sticky {
   position: sticky;
   top: 0;
   z-index: 5;

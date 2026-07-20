@@ -415,6 +415,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
           Add value
         </Button>
       </template>
+      <template #subheader>
       <div v-if="bulkAddOpen" class="wpc-bulk-controls">
         <BulkAddPanel
           mode="values"
@@ -423,6 +424,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
           @cancel="bulkAddOpen = false"
         />
       </div>
+      </template>
       <table class="wp-table wp-options-table">
         <thead>
           <tr>
