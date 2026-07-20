@@ -480,6 +480,28 @@ function deselectAll(): void {
   selected.value = new Set();
 }
 
+// ---------- Quick-select presets (mirror of the export bar) ----------
+
+/** Select every entity in the loaded payload, across all buckets. */
+function presetSelectAll(): void {
+  const next = new Set<string>();
+  for (const b of BUCKETS) {
+    for (const e of entitiesForBucket(b.key)) {
+      if (typeof e.id === "string" && e.id.length > 0) next.add(e.id);
+    }
+  }
+  selected.value = next;
+}
+
+/** Clear everything and select only the entities of one kind. */
+function presetKindOnly(bucket: BucketKey): void {
+  const next = new Set<string>();
+  for (const e of entitiesForBucket(bucket)) {
+    if (typeof e.id === "string" && e.id.length > 0) next.add(e.id);
+  }
+  selected.value = next;
+}
+
 function emitContinue(): void {
   if (selected.value.size === 0) return;
   // Phase 10: no dep-warning confirm dialog on import. Missing-dep
@@ -532,6 +554,34 @@ function emitContinue(): void {
       {{ props.integrityWarnings.length }}
       {{ props.integrityWarnings.length === 1 ? "entity has" : "entities have" }}
       integrity warnings.
+    </div>
+
+    <!-- Quick-select presets — mirror of the Export tab bar, so the same
+         one-click "select only this kind" affordance exists after a payload
+         is loaded from file/paste (#1). -->
+    <div
+      class="wp-import-presets"
+      role="group"
+      aria-label="Quick selection presets"
+    >
+      <span class="wp-import-presets__label">Quick select</span>
+      <button
+        class="wp-preset-btn"
+        data-test="import-preset-all"
+        type="button"
+        :disabled="totalEntityCount === 0"
+        @click="presetSelectAll"
+      ><i class="pi pi-database" /> All</button>
+      <span class="wp-import-presets__sep" aria-hidden="true"></span>
+      <button
+        v-for="b in BUCKETS"
+        :key="b.key"
+        class="wp-preset-btn"
+        :data-test="`import-preset-kind-${b.key}`"
+        type="button"
+        :disabled="entitiesForBucket(b.key).length === 0"
+        @click="presetKindOnly(b.key)"
+      >{{ b.title }}</button>
     </div>
 
     <div class="wp-import-picker__sections">
@@ -620,6 +670,34 @@ function emitContinue(): void {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* Quick-select presets bar (mirror of ExportTab's). The button atom
+ * (`.wp-preset-btn`) is global in tokens.css; only the bar layout is here. */
+.wp-import-presets {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 9px 12px;
+  background: var(--wp-bg-2);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius);
+  margin-bottom: 10px;
+}
+.wp-import-presets__label {
+  font-size: var(--wp-text-xs);
+  color: var(--wp-text-dim);
+  letter-spacing: 0.06em;
+  margin-right: 6px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.wp-import-presets__sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 4px;
+  background: var(--wp-border);
 }
 
 .wp-import-picker__notice {

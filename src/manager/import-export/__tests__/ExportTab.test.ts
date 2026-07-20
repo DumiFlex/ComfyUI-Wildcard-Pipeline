@@ -170,16 +170,15 @@ describe("ExportTab.vue", () => {
     const label = wrap.get(".wp-export-presets__label");
     expect(label.text()).toBe("Quick select");
     expect(label.text()).not.toContain(":");
-    // Each preset button carries its expected pi icon.
+    // The two headline presets carry their pi icon; per-kind presets are
+    // text-only (one button per bucket).
     expect(
       wrap.get('[data-test="preset-full"]').find("i.pi.pi-database").exists(),
     ).toBe(true);
     expect(
-      wrap.get('[data-test="preset-wildcards"]').find("i.pi.pi-sparkles").exists(),
-    ).toBe(true);
-    expect(
       wrap.get('[data-test="preset-favorites"]').find("i.pi.pi-star-fill").exists(),
     ).toBe(true);
+    expect(wrap.get('[data-test="preset-kind-wildcard"]').text()).toBe("Wildcards");
   });
 
   it("renders a footer bar with all action buttons + counter", async () => {
@@ -660,7 +659,7 @@ describe("ExportTab.vue", () => {
     }
   });
 
-  it("'Wildcards only' preset clears non-wildcard buckets and selects all wildcards", async () => {
+  it("per-kind 'Wildcards' preset clears non-wildcard buckets and selects all wildcards", async () => {
     apiAny.modules.list.mockResolvedValue({
       items: [
         mkModule({ id: "w1", type: "wildcard",     name: "$one" }),
@@ -686,7 +685,7 @@ describe("ExportTab.vue", () => {
     await wrap.get('[data-test="export-tab-row-bundle-b1"] button[role="checkbox"]').trigger("click");
     await flushPromises();
 
-    await wrap.get('[data-test="preset-wildcards"]').trigger("click");
+    await wrap.get('[data-test="preset-kind-wildcard"]').trigger("click");
     await flushPromises();
 
     // Total = 2 wildcards. Bundle/fixed/combine/category all empty.

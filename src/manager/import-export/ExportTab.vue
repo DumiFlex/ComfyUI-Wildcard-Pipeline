@@ -622,41 +622,47 @@ function clearAll() {
 
 // ---------- Quick filter presets ----------
 
-/**
- * Select every entity across all 7 buckets. Equivalent to clicking the
- * select-all checkbox in each section, but in one click. Does NOT walk
- * the dep graph — the user already has everything, so closure is a
- * no-op.
- */
-function presetFullLibrary(): void {
-  selection.value = {
-    bundle:       new Set(bundles.value.map((b) => b.id)),
-    wildcard:     new Set(modulesForBucket("wildcard").map((m) => m.id)),
-    fixed_values: new Set(modulesForBucket("fixed_values").map((m) => m.id)),
-    combine:      new Set(modulesForBucket("combine").map((m) => m.id)),
-    derivation:   new Set(modulesForBucket("derivation").map((m) => m.id)),
-    constraint:   new Set(modulesForBucket("constraint").map((m) => m.id)),
-    category:     new Set(categories.value.map((c) => c.id)),
-    template:     new Set(templates.value.map((t) => t.id)),
+function emptySelection(): Record<BucketKey, Set<string>> {
+  return {
+    bundle: new Set(),
+    wildcard: new Set(),
+    fixed_values: new Set(),
+    combine: new Set(),
+    derivation: new Set(),
+    constraint: new Set(),
+    category: new Set(),
+    template: new Set(),
   };
 }
 
+/** Every id in one bucket, from whichever ref backs it. */
+function idsForBucket(b: BucketKey): string[] {
+  if (b === "bundle") return bundles.value.map((x) => x.id);
+  if (b === "category") return categories.value.map((x) => x.id);
+  if (b === "template") return templates.value.map((x) => x.id);
+  return modulesForBucket(b).map((x) => x.id);
+}
+
 /**
- * Clear everything and select only wildcard modules. Common quick path
- * when the user wants to share just their prompt vocabulary without
- * combines/derivations/constraints attached.
+ * Select every entity across all 8 buckets. Equivalent to clicking the
+ * select-all checkbox in each section, but in one click. Does NOT walk
+ * the dep graph — the user already has everything, so closure is a no-op.
  */
-function presetWildcardsOnly(): void {
-  selection.value = {
-    bundle:       new Set(),
-    wildcard:     new Set(modulesForBucket("wildcard").map((m) => m.id)),
-    fixed_values: new Set(),
-    combine:      new Set(),
-    derivation:   new Set(),
-    constraint:   new Set(),
-    category:     new Set(),
-    template:     new Set(),
-  };
+function presetFullLibrary(): void {
+  const next = emptySelection();
+  for (const b of BUCKETS) next[b.key] = new Set(idsForBucket(b.key));
+  selection.value = next;
+}
+
+/**
+ * Clear everything and select only one kind — powers the per-kind quick
+ * presets ("Wildcards", "Templates", …). Lets the user share, say, just
+ * their prompt vocabulary without combines/derivations/constraints.
+ */
+function presetKindOnly(b: BucketKey): void {
+  const next = emptySelection();
+  next[b] = new Set(idsForBucket(b));
+  selection.value = next;
 }
 
 /**
@@ -697,16 +703,22 @@ function presetFavoritesOnly(): void {
       ><i class="pi pi-database" /> Full library</button>
       <button
         class="wp-preset-btn"
-        data-test="preset-wildcards"
-        type="button"
-        @click="presetWildcardsOnly"
-      ><i class="pi pi-sparkles" /> Wildcards only</button>
-      <button
-        class="wp-preset-btn"
         data-test="preset-favorites"
         type="button"
         @click="presetFavoritesOnly"
-      ><i class="pi pi-star-fill" /> Favorites only</button>
+      ><i class="pi pi-star-fill" /> Favorites</button>
+      <span class="wp-export-presets__sep" aria-hidden="true"></span>
+      <!-- Per-kind presets: clear everything, select only this kind. Disabled
+           when the library has none of that kind. -->
+      <button
+        v-for="b in BUCKETS"
+        :key="b.key"
+        class="wp-preset-btn"
+        :data-test="`preset-kind-${b.key}`"
+        type="button"
+        :disabled="idsForBucket(b.key).length === 0"
+        @click="presetKindOnly(b.key)"
+      >{{ b.title }}</button>
     </div>
 
     <div class="wp-export-tab__sections">
@@ -814,12 +826,19 @@ function presetFavoritesOnly(): void {
 .wp-export-presets {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 9px 12px;
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius);
   margin-bottom: 10px;
+}
+.wp-export-presets__sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 4px;
+  background: var(--wp-border);
 }
 .wp-export-presets__label {
   font-size: var(--wp-text-xs);
@@ -829,32 +848,8 @@ function presetFavoritesOnly(): void {
   text-transform: uppercase;
   font-weight: 600;
 }
-.wp-preset-btn {
-  background: var(--wp-bg-3);
-  border: 1px solid var(--wp-border);
-  color: var(--wp-text);
-  font-family: var(--wp-font);
-  font-size: var(--wp-text-sm);
-  padding: 4px 11px;
-  border-radius: var(--wp-radius-sm);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 500;
-}
-.wp-preset-btn:hover {
-  background: var(--wp-bg-4);
-  border-color: var(--wp-border-strong);
-}
-.wp-preset-btn .pi {
-  font-size: 10px;
-  color: var(--wp-text-muted);
-}
-.wp-preset-btn:focus-visible {
-  outline: 2px solid var(--wp-accent-500);
-  outline-offset: 2px;
-}
+/* `.wp-preset-btn` itself is a shared atom in tokens.css — used by the
+ * export presets bar AND the import picker's mirror. */
 
 .wp-export-tab__sections {
   display: flex;

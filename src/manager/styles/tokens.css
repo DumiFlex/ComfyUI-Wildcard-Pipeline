@@ -633,6 +633,40 @@ input, textarea, select { font: inherit; }
   box-shadow: inset 0 -1px 0 var(--wp-border);
 }
 
+/* Quick-select preset chip — shared by the import/export presets bars
+ * (ExportTab + ImportPicker). Layout of the bar itself stays per-component;
+ * this is just the button atom. */
+.wp-preset-btn {
+  background: var(--wp-bg-3);
+  border: 1px solid var(--wp-border);
+  color: var(--wp-text);
+  font-family: var(--wp-font);
+  font-size: var(--wp-text-sm);
+  padding: 4px 11px;
+  border-radius: var(--wp-radius-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+.wp-preset-btn:hover:not(:disabled) {
+  background: var(--wp-bg-4);
+  border-color: var(--wp-border-strong);
+}
+.wp-preset-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.wp-preset-btn .pi {
+  font-size: 10px;
+  color: var(--wp-text-muted);
+}
+.wp-preset-btn:focus-visible {
+  outline: 2px solid var(--wp-accent-500);
+  outline-offset: 2px;
+}
+
 /* ---------- Buttons ---------- */
 .wp-btn {
   height: var(--wp-btn-h);

@@ -616,6 +616,44 @@ describe("ImportPicker.vue", () => {
     expect(mod!.variant).toBe("mod");
   });
 
+  // Quick-select presets mirrored from the export bar (#1).
+  it("per-kind preset selects only that kind from the payload (#1)", async () => {
+    const wrap = mountPicker({
+      payload: makePayload({
+        wildcards: [{ id: "w1", name: "W1" }, { id: "w2", name: "W2" }],
+        templates: [{ id: "t1", name: "T1" }],
+      }),
+    });
+    await flushPromises();
+    await wrap.get('[data-test="import-preset-kind-wildcards"]').trigger("click");
+    await flushPromises();
+    expect(wrap.get('[data-test="import-picker-selected-count"]').text()).toContain("2 of 3");
+  });
+
+  it("'All' preset selects every payload entity (#1)", async () => {
+    const wrap = mountPicker({
+      payload: makePayload({
+        wildcards: [{ id: "w1", name: "W1" }],
+        templates: [{ id: "t1", name: "T1" }],
+      }),
+    });
+    await flushPromises();
+    await wrap.get('[data-test="import-preset-all"]').trigger("click");
+    await flushPromises();
+    expect(wrap.get('[data-test="import-picker-selected-count"]').text()).toContain("2 of 2");
+  });
+
+  it("per-kind preset button is disabled for an empty bucket (#1)", async () => {
+    const wrap = mountPicker({
+      payload: makePayload({ wildcards: [{ id: "w1", name: "W1" }] }),
+    });
+    await flushPromises();
+    // No templates in the payload → the Templates preset is disabled.
+    expect(
+      wrap.get('[data-test="import-preset-kind-templates"]').attributes("disabled"),
+    ).toBeDefined();
+  });
+
   it("passes showId=true to PickerRow", async () => {
     const payload = makePayload({
       wildcards: [{ id: "abcd1234", name: "a" }],
