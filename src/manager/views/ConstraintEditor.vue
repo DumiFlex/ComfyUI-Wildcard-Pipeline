@@ -20,6 +20,9 @@ import CommunityRowActions from "../components/CommunityRowActions.vue";
 import DraftBanner from "../components/DraftBanner.vue";
 import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
+import Checkbox from "../components/ui/Checkbox.vue";
+import BulkDeleteToolbar from "../components/BulkDeleteToolbar.vue";
+import { useBulkSelection } from "../composables/useBulkSelection";
 import RichTextPreview from "../components/RichTextPreview.vue";
 import ConstraintMatrixGrid from "../components/ConstraintMatrix.vue";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
@@ -852,6 +855,46 @@ function removeException(idx: number) {
   exceptions.value.splice(idx, 1);
 }
 
+/* ── Bulk select + delete ────────────────────────────────────────────────
+ * Exceptions have no persisted id, and adding a payload field is off-limits
+ * (the engine reads this shape). So key selection by object identity via a
+ * WeakMap-backed transient uid — stable across edits/adds, never persisted,
+ * and unaffected by index shifts when a single row is removed mid-selection. */
+const exUids = new WeakMap<object, string>();
+let exUidSeq = 0;
+function exUid(ex: object): string {
+  let u = exUids.get(ex);
+  if (!u) {
+    u = `ex_${exUidSeq++}`;
+    exUids.set(ex, u);
+  }
+  return u;
+}
+const exBulk = useBulkSelection(() => exceptions.value.map((ex) => exUid(ex)));
+const {
+  active: exBulkActive,
+  count: exBulkCount,
+  allSelected: exBulkAllSelected,
+  someSelected: exBulkSomeSelected,
+  isSelected: exBulkIsSelected,
+  toggle: exBulkToggle,
+  toggleAll: exBulkToggleAll,
+  toggleMode: exBulkToggleMode,
+  clear: exBulkClear,
+} = exBulk;
+function deleteSelectedExceptions(): void {
+  const ids = new Set(exBulk.selectedIds());
+  if (ids.size === 0) return;
+  const removed = ids.size;
+  exceptions.value = exceptions.value.filter((ex) => !ids.has(exUid(ex)));
+  exBulkClear();
+  toast.push({
+    severity: "success",
+    summary: `${removed} exception${removed === 1 ? "" : "s"} deleted`,
+    life: 2500,
+  });
+}
+
 /** Resolve a value-string to its current option `id` on a wildcard.
  *
  * Returns `undefined` if no match (lets the exception keep source_id
@@ -1341,9 +1384,27 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
         <!-- Editing requires a live wildcard — the value pickers are empty
              when the ref is missing, so authoring a new exception is hidden
              in the read-only recovery view. -->
+        <Button
+          v-if="!refMissing && (exceptions.length || exBulkActive)"
+          size="sm"
+          :variant="exBulkActive ? 'secondary' : 'ghost'"
+          icon="pi-check-square"
+          data-test="cn-ex-bulk-toggle"
+          @click="exBulkToggleMode"
+        >{{ exBulkActive ? "Done" : "Bulk edit" }}</Button>
         <Button v-if="!refMissing" size="sm" variant="primary" icon="pi-plus" data-test="add-exception" @click="addException">
           Add exception
         </Button>
+      </template>
+      <template v-if="!refMissing" #subheader>
+        <div v-if="exBulkActive && exBulkCount > 0" class="cn-ex-bulkbar">
+          <BulkDeleteToolbar
+            :count="exBulkCount"
+            noun="exceptions"
+            @delete-selected="deleteSelectedExceptions"
+            @clear="exBulkClear"
+          />
+        </div>
       </template>
       <div v-if="!exceptions.length" class="wp-empty-card">
         <i class="pi pi-info-circle" />
@@ -1396,6 +1457,15 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
       <table v-else class="wp-table wp-options-table cn-ex-table">
         <thead>
           <tr>
+            <th v-if="exBulkActive" scope="col" class="cn-ex-col-check">
+              <Checkbox
+                :model-value="exBulkAllSelected"
+                :indeterminate="exBulkSomeSelected"
+                aria-label="Select all exceptions"
+                data-test="cn-ex-select-all"
+                @update:model-value="exBulkToggleAll"
+              />
+            </th>
             <th class="cn-ex-th-src">Source value</th>
             <th class="cn-ex-th-tgt">Target value</th>
             <th class="cn-col-mode">Mode</th>
@@ -1408,8 +1478,25 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
             v-for="(ex, idx) in exceptions"
             :key="idx"
             class="cn-ex-row"
+            :class="{ 'cn-ex-row--selected': exBulkActive && exBulkIsSelected(exUid(ex)) }"
             :style="{ '--cn-mode-var': `var(${modeMeta(ex.mode).cssVar})` }"
           >
+            <td v-if="exBulkActive" class="cn-ex-col-check">
+              <button
+                type="button"
+                class="wp-check"
+                role="checkbox"
+                :aria-checked="exBulkIsSelected(exUid(ex))"
+                :data-checked="exBulkIsSelected(exUid(ex)) ? 'true' : 'false'"
+                :aria-label="`Select exception ${idx + 1}`"
+                :data-test="`cn-ex-check-${idx}`"
+                @click="exBulkToggle(exUid(ex))"
+              >
+                <svg v-if="exBulkIsSelected(exUid(ex))" viewBox="0 0 12 12" fill="none" style="display:block">
+                  <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </button>
+            </td>
             <td>
               <Select
                 :model-value="ex.source"
@@ -1673,6 +1760,9 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
 .cn-ex-row {
   background: color-mix(in srgb, var(--cn-mode-var, transparent) 5%, transparent);
 }
+.cn-ex-col-check { width: 34px; text-align: center; }
+.cn-ex-row--selected > td { background: color-mix(in oklab, var(--wp-accent) 10%, transparent); }
+.cn-ex-bulkbar { padding: 12px 16px 14px; }
 
 /* Mode chip — icon glyph + label, tinted by --cn-mode-var. Editable +
  * read-only share the base; the read-only modifier mutes it to the same
