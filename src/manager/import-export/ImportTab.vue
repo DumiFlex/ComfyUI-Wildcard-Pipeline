@@ -87,20 +87,58 @@ const fileSourceLabel = computed<string>(() =>
   lastSource.value === "paste" ? "From paste" : "From file",
 );
 
-async function onFilePick(ev: Event): Promise<void> {
-  const target = ev.target as HTMLInputElement;
-  const file = target.files?.[0];
-  if (!file) return;
+/** Read a picked/dropped file and feed its text into the parse pipeline.
+ *  Shared by the file-input and the drag-and-drop path. */
+async function readAndParse(file: File): Promise<void> {
   try {
     const text = await file.text();
     handleParse(text, "file");
   } catch (err) {
     errorMsg.value = err instanceof Error ? err.message : String(err);
+  }
+}
+
+async function onFilePick(ev: Event): Promise<void> {
+  const target = ev.target as HTMLInputElement;
+  const file = target.files?.[0];
+  if (!file) return;
+  try {
+    await readAndParse(file);
   } finally {
     // Reset the input value so picking the same file twice in a row
     // still fires a `change` event.
     if (fileInput.value) fileInput.value.value = "";
   }
+}
+
+/** True while a file is being dragged over the dropzone — drives the
+ *  highlight. */
+const isDragging = ref<boolean>(false);
+
+function onDragOver(ev: DragEvent): void {
+  // preventDefault is required on BOTH dragover and drop for the browser to
+  // treat this element as a drop target (otherwise it navigates to the file).
+  ev.preventDefault();
+  if (ev.dataTransfer) ev.dataTransfer.dropEffect = "copy";
+  isDragging.value = true;
+}
+
+function onDragLeave(ev: DragEvent): void {
+  // Ignore leaves into a descendant — only clear when the pointer actually
+  // exits the dropzone, so the highlight doesn't flicker over child elements.
+  const zone = ev.currentTarget as HTMLElement;
+  const to = ev.relatedTarget as Node | null;
+  if (to && zone.contains(to)) return;
+  isDragging.value = false;
+}
+
+async function onDrop(ev: DragEvent): Promise<void> {
+  ev.preventDefault();
+  isDragging.value = false;
+  const file = ev.dataTransfer?.files?.[0];
+  // Non-JSON files fall through to parsePayload, which rejects them with a
+  // clear inline "Invalid payload" message — no need to gate on extension.
+  if (file) await readAndParse(file);
 }
 
 function openPaste(): void {
@@ -230,29 +268,44 @@ function handleParse(raw: string, source: "file" | "paste"): void {
         Import a Wildcard Pipeline export file or paste an export payload below.
       </p>
 
-      <div class="wp-import-tab__entry">
-        <button
-          type="button"
-          class="wp-import-tab__btn wp-import-tab__btn--primary"
-          data-test="import-file-btn"
-          @click="pickFile"
-        >Pick file…</button>
-        <input
-          ref="fileInput"
-          type="file"
-          accept=".json,application/json"
-          class="wp-import-tab__file-hidden"
-          aria-hidden="true"
-          tabindex="-1"
-          data-test="import-file-input"
-          @change="onFilePick"
-        />
-        <button
-          type="button"
-          class="wp-import-tab__btn"
-          data-test="import-paste-btn"
-          @click="openPaste"
-        >Paste JSON…</button>
+      <div
+        class="wp-import-tab__dropzone"
+        :class="{ 'wp-import-tab__dropzone--active': isDragging }"
+        data-test="import-dropzone"
+        @dragover="onDragOver"
+        @dragenter="onDragOver"
+        @dragleave="onDragLeave"
+        @drop="onDrop"
+      >
+        <div class="wp-import-tab__entry">
+          <button
+            type="button"
+            class="wp-import-tab__btn wp-import-tab__btn--primary"
+            data-test="import-file-btn"
+            @click="pickFile"
+          >Pick file…</button>
+          <input
+            ref="fileInput"
+            type="file"
+            accept=".json,application/json"
+            class="wp-import-tab__file-hidden"
+            aria-hidden="true"
+            tabindex="-1"
+            data-test="import-file-input"
+            @change="onFilePick"
+          />
+          <button
+            type="button"
+            class="wp-import-tab__btn"
+            data-test="import-paste-btn"
+            @click="openPaste"
+          >Paste JSON…</button>
+        </div>
+        <p class="wp-import-tab__drophint" aria-hidden="true">
+          <i class="pi pi-download" />
+          <span v-if="isDragging">Drop to import</span>
+          <span v-else>or drag &amp; drop a <code>.json</code> export file here</span>
+        </p>
       </div>
 
       <div
@@ -325,10 +378,49 @@ function handleParse(raw: string, source: "file" | "paste"): void {
   font-size: var(--wp-text-sm);
 }
 
+/* Drag-and-drop target wrapping the pick/paste buttons. The whole area
+ * accepts a dropped .json export file; the dashed frame + hint advertise it,
+ * and `--active` lights up while a file is dragged over. */
+.wp-import-tab__dropzone {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wp-space-5);
+  padding: var(--wp-space-6);
+  border: 1.5px dashed var(--wp-border);
+  border-radius: var(--wp-radius);
+  background: transparent;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+.wp-import-tab__dropzone--active {
+  border-color: var(--wp-accent);
+  background: color-mix(in oklab, var(--wp-accent) 10%, transparent);
+}
+
 .wp-import-tab__entry {
   display: flex;
   flex-wrap: wrap;
   gap: var(--wp-space-5);
+}
+
+.wp-import-tab__drophint {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-3);
+  margin: 0;
+  color: var(--wp-text-muted);
+  font-size: var(--wp-text-sm);
+  pointer-events: none;
+}
+.wp-import-tab__dropzone--active .wp-import-tab__drophint {
+  color: var(--wp-accent);
+  font-weight: 600;
+}
+.wp-import-tab__drophint code {
+  font-family: var(--wp-font-mono, monospace);
+  font-size: var(--wp-text-xs);
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--wp-bg-3);
 }
 
 .wp-import-tab__btn {

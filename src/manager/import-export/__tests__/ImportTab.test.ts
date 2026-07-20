@@ -146,6 +146,33 @@ describe("ImportTab.vue", () => {
     expect(payload.schema_version).toBe(2);
   });
 
+  it("drag-and-drop — parses a dropped File and emits payload-ready (#5)", async () => {
+    const wrap = mount(ImportTab);
+    const file = new File([makeValidPayloadJson()], "test.json", {
+      type: "application/json",
+    });
+    const zone = wrap.find("[data-test='import-dropzone']");
+    await zone.trigger("drop", { dataTransfer: { files: [file] } });
+    await flushPromises();
+
+    const emitted = wrap.emitted("payload-ready");
+    expect(emitted).toBeTruthy();
+    expect((emitted?.[0]?.[0] as RawPayload).schema_version).toBe(2);
+  });
+
+  it("drag-over lights up the dropzone, drag-leave clears it (#5)", async () => {
+    const wrap = mount(ImportTab);
+    const zone = wrap.find("[data-test='import-dropzone']");
+    const active = "wp-import-tab__dropzone--active";
+
+    await zone.trigger("dragover", { dataTransfer: {} });
+    expect(zone.classes()).toContain(active);
+
+    // relatedTarget outside the zone → highlight clears.
+    await zone.trigger("dragleave", { relatedTarget: document.body });
+    expect(zone.classes()).not.toContain(active);
+  });
+
   it("paste cancel closes the pane without emitting", async () => {
     const wrap = mount(ImportTab);
     await wrap.find("[data-test='import-paste-btn']").trigger("click");
