@@ -607,17 +607,25 @@ input, textarea, select { font: inherit; }
  * opaque bg (header/subheader are transparent). */
 .wp-card--sticky-header > .wp-card__sticky {
   position: sticky;
-  top: 0;
+  /* -1px, not 0: the scroll container's top can land on a fractional device
+   * pixel (measured e.g. 152.39 at dpr 1), so pinning exactly at top:0 leaves
+   * a sub-pixel sliver above the opaque header through which the scrolled
+   * content behind bleeds as a faint ghost line. Overlapping the scroll edge
+   * by 1px (the extra px is clipped by the container's overflow and absorbed
+   * by the header's 12px top padding) guarantees the bg covers that seam at
+   * any DPR. The sticky <thead> below tracks the same -1px. */
+  top: -1px;
   z-index: 5;
   background: var(--wp-bg-1);
 }
 /* Sticky column header inside a sticky-header card — pins right under the
  * toolbar. Chromium won't scroll-anchor a table CELL here, but sticking the
  * <thead> element does; th gets an opaque bg so rows don't bleed through.
- * Shared by the wildcard + fixed-values option tables. */
+ * Shared by the wildcard + fixed-values option tables. The -1px mirrors the
+ * header's overlap above so the two stay flush (no gap for rows to bleed). */
 .wp-card--sticky-header .wp-options-table thead {
   position: sticky;
-  top: var(--wp-card-header-h, 53px);
+  top: calc(var(--wp-card-header-h, 53px) - 1px);
   z-index: 4;
 }
 .wp-card--sticky-header .wp-options-table thead th {

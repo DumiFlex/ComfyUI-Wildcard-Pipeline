@@ -28,6 +28,26 @@ describe("Input.vue", () => {
     expect(wrap.get("input").attributes("aria-invalid")).toBeUndefined();
   });
 
+  it("emits native step=any for number inputs (no off-grid validation popup)", () => {
+    // Regression: `min="0.01" step="0.1"` made the browser reject a default
+    // weight of 1 ("nearest valid values are 0.91 and 1.01"). The native
+    // step is validation-only here (arrows/wheel/chevrons use bump()), so it
+    // must be "any" to never grid-validate. bump() still uses props.step.
+    const wrap = mount(Input, {
+      props: { modelValue: 1, type: "number", step: 0.1, min: 0.01 },
+    });
+    const el = wrap.get("input").element as HTMLInputElement;
+    expect(el.getAttribute("step")).toBe("any");
+    expect(el.validity.stepMismatch).toBe(false);
+  });
+
+  it("leaves step untouched on non-number inputs", () => {
+    const wrap = mount(Input, { props: { modelValue: "x", step: 5 } });
+    // Non-number inputs never grid-validate, and `step` is meaningless on
+    // them, so nativeStep passes props.step straight through.
+    expect(wrap.get("input").attributes("step")).toBe("5");
+  });
+
   it("numeric stepper rounds to step precision (no float fuzz)", async () => {
     // Regression: clicking the up chevron on value=1 with step=0.1
     // historically emitted 1.0000000000000002 (JS float math), which
