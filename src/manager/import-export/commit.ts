@@ -157,6 +157,32 @@ export interface CommitOk {
  * preserves identity by design — the user explicitly opted to insert
  * under the original id.
  */
+/**
+ * Server-stamped lifecycle fields. Stripping them makes the engine importer's
+ * insert paths (`_insert_module` / `_insert_bundle`) fall back to `now()` for
+ * the dates and recompute the fingerprint, instead of copying the SOURCE
+ * library's values verbatim (`entity.get("created_at", now)` etc.). The
+ * server recomputes the fingerprint on insert regardless, so stripping those
+ * is a no-op there — but stripping the dates is what makes an imported row
+ * read as freshly added.
+ */
+const LIFECYCLE_FIELDS = [
+  "created_at",
+  "updated_at",
+  "version",
+  "snapshot_fingerprint",
+  "payload_hash",
+  "template_fingerprint",
+] as const;
+
+function stripLifecycle(
+  entity: Record<string, unknown> & { id: string },
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...entity };
+  for (const f of LIFECYCLE_FIELDS) delete out[f];
+  return out;
+}
+
 function partition(
   kind: EntityKind,
   list: ReadonlyArray<{ entity: Record<string, unknown> & { id: string }; decision: Decision }>,
@@ -165,28 +191,22 @@ function partition(
   for (const r of list) {
     switch (r.decision.kind) {
       case "add":
-        out.adds.push({ kind, entity: r.entity });
+        // Strip lifecycle fields so the server stamps a fresh created_at:
+        // an imported entity must read as "just added to your library", not
+        // carry the exporter's original date (which made imports sort as
+        // weeks-old — bug #12). Identity (`id`) is preserved by design.
+        out.adds.push({ kind, entity: stripLifecycle(r.entity) });
         break;
       case "replace":
+        // Replace overwrites an EXISTING library row; the server's
+        // `_update_module` never touches `created_at` and always stamps
+        // `updated_at = now()`, so the live row keeps its own dates.
         out.replaces.push({ kind, id: r.entity.id, new_content: r.entity });
         break;
       case "rename": {
-        const newContent: Record<string, unknown> = { ...r.entity };
+        const newContent = stripLifecycle(r.entity);
         newContent.id = r.decision.new_id;
         newContent.name = r.decision.new_name;
-        // Strip lifecycle fields so the server's now() defaults +
-        // fingerprint/hash recomputation kick in. Leaving stale values
-        // would mis-sort the imported row and cache an inappropriate
-        // fingerprint against the freshly-allocated new_id.
-        delete newContent.created_at;
-        delete newContent.updated_at;
-        delete newContent.version;
-        delete newContent.snapshot_fingerprint;
-        delete newContent.payload_hash;
-        // Templates carry a computed `template_fingerprint` (not the
-        // module `snapshot_fingerprint`); strip it too so a renamed
-        // template can't smuggle a fingerprint keyed to the old id.
-        delete newContent.template_fingerprint;
         out.renames.push({
           kind,
           old_id: r.entity.id,

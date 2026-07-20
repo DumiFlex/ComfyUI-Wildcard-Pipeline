@@ -6,6 +6,8 @@ import { useToast } from "../composables/useToast";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
+import { useTemplateStore } from "../stores/templateStore";
+import { useCategoryStore } from "../stores/categoryStore";
 import { api, ApiError } from "../api/client";
 import ExportTab from "../import-export/ExportTab.vue";
 import ImportTab from "../import-export/ImportTab.vue";
@@ -52,6 +54,8 @@ type Mode = "export" | "import";
 const toast = useToast();
 const moduleStore = useModuleStore();
 const bundleStore = useBundleStore();
+const templateStore = useTemplateStore();
+const categoryStore = useCategoryStore();
 
 const mode = ref<Mode>("export");
 
@@ -670,6 +674,12 @@ async function runCommit(resolution: {
       loadLibrary(),
       moduleStore.fetchCatalog(),
       bundleStore.fetchCatalog(),
+      // Templates + categories drive their own sidebar count badges; refresh
+      // them too so the counts update live after an import/undo (#7) — an
+      // import that adds templates or categories used to leave a stale count
+      // until the next route change forced a re-fetch.
+      templateStore.fetchCatalog(),
+      categoryStore.fetchAll(),
     ]);
     const libraryIds = new Set<string>();
     for (const m of localModules.value) libraryIds.add(m.id);
@@ -723,6 +733,12 @@ async function undoImport(undoEntryId: string): Promise<void> {
       loadLibrary(),
       moduleStore.fetchCatalog(),
       bundleStore.fetchCatalog(),
+      // Templates + categories drive their own sidebar count badges; refresh
+      // them too so the counts update live after an import/undo (#7) — an
+      // import that adds templates or categories used to leave a stale count
+      // until the next route change forced a re-fetch.
+      templateStore.fetchCatalog(),
+      categoryStore.fetchAll(),
     ]);
     resolveWarningsStore.clearByType("broken_ref_on_import");
     toast.push({ severity: "info", summary: "Import undone", life: 4000 });
