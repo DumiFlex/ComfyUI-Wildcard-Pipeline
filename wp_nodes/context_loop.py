@@ -40,6 +40,7 @@ def _parse_config(raw: str) -> dict[str, object]:
         "iteration_internal": True,
         "total_internal": True,
         "seed_locks": {},
+        "bypass_frames": [],
     }
     if not raw or not isinstance(raw, str):
         return defaults
@@ -68,6 +69,21 @@ def _parse_config(raw: str) -> dict[str, object]:
             except (TypeError, ValueError):
                 continue
     out["seed_locks"] = locks
+    frames_raw = parsed.get("bypass_frames", [])
+    frames: set[int] = set()
+    if isinstance(frames_raw, list):
+        for x in frames_raw:
+            if isinstance(x, bool):  # bool is an int subclass — exclude
+                continue
+            if isinstance(x, int):
+                n = x
+            elif isinstance(x, float) and x.is_integer():
+                n = int(x)
+            else:
+                continue
+            if n >= 0:
+                frames.add(n)
+    out["bypass_frames"] = sorted(frames)
     return out
 
 

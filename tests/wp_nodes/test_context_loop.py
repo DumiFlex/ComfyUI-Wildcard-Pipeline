@@ -43,3 +43,21 @@ def test_execute_emits_empty_ui_seeds_when_override_off():
     raw = json.dumps({"strategy": "sequential", "override_seed": False})
     out = WPContextLoop.execute(seed=42, count=4, wp_context_loop_config=raw)
     assert out.ui == {"loop_seeds": [[]]}
+
+
+def test_parse_config_bypass_frames_clean():
+    cfg = _parse_config('{"bypass_frames": [3, 1, 3, 0]}')
+    # deduped + sorted, 0-based
+    assert cfg["bypass_frames"] == [0, 1, 3]
+
+
+def test_parse_config_bypass_frames_drops_junk_keeps_out_of_range():
+    # non-ints + negatives dropped; large (out-of-range at any count) KEPT
+    cfg = _parse_config('{"bypass_frames": [2, -1, "x", 2.0, 999]}')
+    assert cfg["bypass_frames"] == [2, 999]
+
+
+def test_parse_config_bypass_frames_default_and_malformed():
+    assert _parse_config("{}")["bypass_frames"] == []
+    assert _parse_config('{"bypass_frames": "nope"}')["bypass_frames"] == []
+    assert _parse_config("not json")["bypass_frames"] == []
