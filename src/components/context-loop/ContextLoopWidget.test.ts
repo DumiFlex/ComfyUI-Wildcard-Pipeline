@@ -148,3 +148,24 @@ describe("ContextLoopWidget frame selector", () => {
     expect(currentFrame.value).toBe(null);
   });
 });
+
+describe("ContextLoopWidget bypass (#13)", () => {
+  it("shows an N-bypassed badge on the seeds button", () => {
+    const cfg = { ...emptyContextLoopConfig(), bypass_frames: [1, 3] };
+    const w = mount(ContextLoopWidget, { props: { modelValue: cfg, count: 5 } });
+    expect(w.find('[data-test="loop-seeds-bypass-badge"]').text()).toMatch(/2 bypassed/i);
+  });
+  it("has no bypass badge when none are bypassed", () => {
+    const w = mount(ContextLoopWidget, { props: { modelValue: emptyContextLoopConfig(), count: 5 } });
+    expect(w.find('[data-test="loop-seeds-bypass-badge"]').exists()).toBe(false);
+  });
+  it("writes bypass changes from the modal back into the config", async () => {
+    const cfg = { ...emptyContextLoopConfig(), bypass_frames: [] };
+    const w = mount(ContextLoopWidget, { props: { modelValue: cfg, count: 4 } });
+    await w.get('[data-test="loop-seeds-btn"]').trigger("click");
+    w.findComponent(SeedListModal).vm.$emit("update:bypassFrames", [2]);
+    const calls = w.emitted("update:modelValue")!;
+    const last = calls[calls.length - 1][0] as typeof cfg;
+    expect(last.bypass_frames).toEqual([2]);
+  });
+});
