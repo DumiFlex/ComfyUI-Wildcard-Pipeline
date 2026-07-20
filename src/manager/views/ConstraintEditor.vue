@@ -5,8 +5,10 @@
  * Sections:
  *  1. Identity
  *  2. Source / Target wildcards
- *  3. Rule matrix (ConstraintMatrix)
- *  4. Exceptions table
+ *  3. Target reach (default `target_select`) — sits above the matrix so the
+ *     "how many targets" decision reads before the per-pair rule grid.
+ *  4. Rule matrix (ConstraintMatrix)
+ *  5. Exceptions table
  */
 import { computed, onMounted, ref, watch } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
@@ -1260,63 +1262,6 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
     </Card>
     </div>
 
-    <div id="editor-section-matrix">
-    <Card title="Rule matrix">
-      <template #actions>
-        <!-- Stranded ref → the grid is a read-only snapshot, so swap the
-             "click to edit" affordance for a lock pill. Reattaching a live
-             wildcard (banner above) is the only way back to editing. -->
-        <span
-          v-if="refMissing"
-          class="cn-lock-pill"
-          data-test="matrix-readonly-pill"
-        >
-          <i class="pi pi-lock" aria-hidden="true" /> Read-only
-        </span>
-        <span v-else class="wp-card__hint">Click a cell to edit rule + factor</span>
-      </template>
-      <div
-        v-if="!sourceWildcardId || !targetWildcardId"
-        class="wp-empty-card"
-        data-test="matrix-empty"
-      >
-        Pick a source and target wildcard to populate the matrix.
-      </div>
-      <div
-        v-else-if="sourceSubCategories.length === 0 || targetSubCategories.length === 0"
-        class="wp-empty-card"
-        data-test="matrix-need-subs"
-      >
-        <i class="pi pi-info-circle" />
-        <!-- With the keys-fallback filling the axes for a stranded ref, this
-             branch only fires when the reconstructed axes are ALSO empty —
-             i.e. a deleted wildcard whose constraint has no saved rules. -->
-        <template v-if="refMissing">
-          The source or target wildcard was deleted and this constraint has no
-          saved rules — reattach a live wildcard to restore the matrix.
-        </template>
-        <template v-else>
-          <span v-if="sourceSubCategories.length === 0">Source wildcard needs at least one sub-category. </span>
-          <span v-if="targetSubCategories.length === 0">Target wildcard needs at least one sub-category. </span>
-          Add them on the wildcard editor to define rules.
-        </template>
-      </div>
-      <ConstraintMatrixGrid
-        v-else
-        :rows="sourceSubCategories"
-        :cols="targetSubCategories"
-        :model-value="matrix"
-        :source-name="sourceWildcard?.name ?? (sourceWildcardName ?? '')"
-        :target-name="targetWildcard?.name ?? (targetWildcardName ?? '')"
-        :source-groups="sourceGroups"
-        :target-groups="targetGroups"
-        :readonly="refMissing"
-        data-test="matrix-grid"
-        @update:model-value="onMatrixUpdate"
-      />
-    </Card>
-    </div>
-
     <div id="editor-section-reach">
     <Card title="Target reach">
       <template #actions>
@@ -1375,6 +1320,63 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
           <template v-else>Re-weights the first {{ reachCount }} downstream target {{ reachCount === 1 ? "instance" : "instances" }}.</template>
         </span>
       </div>
+    </Card>
+    </div>
+
+    <div id="editor-section-matrix">
+    <Card title="Rule matrix">
+      <template #actions>
+        <!-- Stranded ref → the grid is a read-only snapshot, so swap the
+             "click to edit" affordance for a lock pill. Reattaching a live
+             wildcard (banner above) is the only way back to editing. -->
+        <span
+          v-if="refMissing"
+          class="cn-lock-pill"
+          data-test="matrix-readonly-pill"
+        >
+          <i class="pi pi-lock" aria-hidden="true" /> Read-only
+        </span>
+        <span v-else class="wp-card__hint">Click a cell to edit rule + factor</span>
+      </template>
+      <div
+        v-if="!sourceWildcardId || !targetWildcardId"
+        class="wp-empty-card"
+        data-test="matrix-empty"
+      >
+        Pick a source and target wildcard to populate the matrix.
+      </div>
+      <div
+        v-else-if="sourceSubCategories.length === 0 || targetSubCategories.length === 0"
+        class="wp-empty-card"
+        data-test="matrix-need-subs"
+      >
+        <i class="pi pi-info-circle" />
+        <!-- With the keys-fallback filling the axes for a stranded ref, this
+             branch only fires when the reconstructed axes are ALSO empty —
+             i.e. a deleted wildcard whose constraint has no saved rules. -->
+        <template v-if="refMissing">
+          The source or target wildcard was deleted and this constraint has no
+          saved rules — reattach a live wildcard to restore the matrix.
+        </template>
+        <template v-else>
+          <span v-if="sourceSubCategories.length === 0">Source wildcard needs at least one sub-category. </span>
+          <span v-if="targetSubCategories.length === 0">Target wildcard needs at least one sub-category. </span>
+          Add them on the wildcard editor to define rules.
+        </template>
+      </div>
+      <ConstraintMatrixGrid
+        v-else
+        :rows="sourceSubCategories"
+        :cols="targetSubCategories"
+        :model-value="matrix"
+        :source-name="sourceWildcard?.name ?? (sourceWildcardName ?? '')"
+        :target-name="targetWildcard?.name ?? (targetWildcardName ?? '')"
+        :source-groups="sourceGroups"
+        :target-groups="targetGroups"
+        :readonly="refMissing"
+        data-test="matrix-grid"
+        @update:model-value="onMatrixUpdate"
+      />
     </Card>
     </div>
 
