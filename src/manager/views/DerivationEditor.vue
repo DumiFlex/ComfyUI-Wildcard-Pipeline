@@ -296,6 +296,14 @@ function updateRule(idx: number, value: DerivationRule) {
   rules.value = rules.value.map((r, i) => (i === idx ? value : r));
 }
 
+// Collapse-all / Expand-all broadcast to every rule card. Bumping the nonce
+// makes each card adopt `collapsed`; cards can still be toggled individually
+// afterwards (#9).
+const collapseCommand = ref({ nonce: 0, collapsed: false });
+function collapseAllRules(collapsed: boolean): void {
+  collapseCommand.value = { nonce: collapseCommand.value.nonce + 1, collapsed };
+}
+
 /* ── Bulk select + delete ────────────────────────────────────────────────
  * Rules are a card list (not a table), so the checkbox rides alongside each
  * card. Rules carry a stable `id`, so selection keys off that directly. */
@@ -479,6 +487,22 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
     <Card :title="`Rules (${rules.length})`" sticky-header>
       <template #actions>
         <Button
+          v-if="rules.length > 1"
+          size="sm"
+          variant="ghost"
+          icon="pi-angle-double-up"
+          data-test="drv-collapse-all"
+          @click="collapseAllRules(true)"
+        >Collapse all</Button>
+        <Button
+          v-if="rules.length > 1"
+          size="sm"
+          variant="ghost"
+          icon="pi-angle-double-down"
+          data-test="drv-expand-all"
+          @click="collapseAllRules(false)"
+        >Expand all</Button>
+        <Button
           v-if="rules.length || ruleBulkActive"
           size="sm"
           :variant="ruleBulkActive ? 'secondary' : 'ghost'"
@@ -555,6 +579,7 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
             :uuid-to-option-tag-sets="refData.uuidToOptionTagSets"
             :uuid-to-tag-groups="refData.uuidToTagGroups"
             :default-collapsed="rules.length > 1"
+            :collapse-command="collapseCommand"
             :data-test="`rule-${idx}`"
             @update:model-value="(v) => updateRule(idx, v)"
             @remove="removeRule(idx)"

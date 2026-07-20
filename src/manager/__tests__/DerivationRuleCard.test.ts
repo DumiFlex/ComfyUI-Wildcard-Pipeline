@@ -423,4 +423,38 @@ describe("DerivationRuleCard.vue", () => {
     const wrap = mountCard(makeRule(), 0);
     expect(wrap.find("datalist").exists()).toBe(false);
   });
+
+  describe("collapse (#9)", () => {
+    // v-show toggles an inline `display: none`; assert on that directly since
+    // isVisible() is unreliable under jsdom for v-show.
+    const hidden = (w: { attributes: (n: string) => string | undefined }) =>
+      (w.attributes("style") ?? "").includes("display: none");
+
+    it("per-branch chevron hides the branch body and shows a peek", async () => {
+      const wrap = mountCard(makeRule(), 0);
+      const body = () => wrap.find('[data-test="branch-0-0"] .branch-body');
+      expect(hidden(body())).toBe(false);
+      await wrap.get('[data-test="toggle-branch-0-0"]').trigger("click");
+      expect(hidden(body())).toBe(true);
+      const peek = wrap.find('[data-test="branch-peek-0-0"]');
+      expect(peek.exists()).toBe(true);
+      expect(peek.text()).toBe("$x → $out");
+    });
+
+    it("adopts the collapseCommand broadcast (Collapse all / Expand all)", async () => {
+      const wrap = mount(DerivationRuleCard, {
+        props: {
+          modelValue: makeRule(),
+          index: 0,
+          collapseCommand: { nonce: 0, collapsed: false },
+        },
+      });
+      const branches = () => wrap.find(".branches");
+      expect(hidden(branches())).toBe(false);
+      await wrap.setProps({ collapseCommand: { nonce: 1, collapsed: true } });
+      expect(hidden(branches())).toBe(true);
+      await wrap.setProps({ collapseCommand: { nonce: 2, collapsed: false } });
+      expect(hidden(branches())).toBe(false);
+    });
+  });
 });
