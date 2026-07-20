@@ -8,16 +8,30 @@
  * `tags` is a new sub-category — emitted via apply-tag too; the host decides to
  * auto-create it (in Ungrouped).
  */
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "./ui/Button.vue";
 import Input from "./ui/Input.vue";
+import { UNGROUPED_HUE } from "../../components/shared/axis-color";
 
 interface Props {
   count: number;
   /** Existing sub-category tags, for the apply / remove menus. */
   tags: string[];
+  /** Tags already on EVERY selected row — hidden from the Apply menu since
+   *  applying one there is a no-op. Absent (undefined) = exclude nothing. */
+  commonTags?: string[];
+  /** Tags present on ≥1 selected row — the Remove menu's candidate list.
+   *  Absent (undefined) falls back to `tags`; an explicit empty array means
+   *  the selection carries no tags, so Remove is empty. */
+  presentTags?: string[];
+  /** tag → axis hue, so menu chips match the pill/chip colours elsewhere. */
+  tagHues?: Record<string, string>;
 }
 const props = defineProps<Props>();
+
+function hueOf(tag: string): string {
+  return props.tagHues?.[tag] ?? UNGROUPED_HUE;
+}
 
 const emit = defineEmits<{
   (e: "apply-tag", tag: string): void;
@@ -40,11 +54,38 @@ function toggle(menu: Exclude<Menu, null>) {
 }
 function close() { openMenu.value = null; }
 
-const filteredTags = computed(() => {
+// Close the menu when the page scrolls behind it. The toolbar lives in a
+// sticky header, so an open menu would otherwise hover in place while the
+// option list scrolls under it — the "can't scroll the page" trap. Scrolls
+// that originate INSIDE the menu's own list are ignored (that's the list
+// scrolling itself; `overscroll-behavior: contain` keeps it from chaining).
+function onDocScroll(e: Event): void {
+  const t = e.target;
+  if (t instanceof Element && t.closest(".wpc-seltoolbar__menulist")) return;
+  close();
+}
+watch(openMenu, (open) => {
+  if (open) document.addEventListener("scroll", onDocScroll, true);
+  else document.removeEventListener("scroll", onDocScroll, true);
+});
+onBeforeUnmount(() => document.removeEventListener("scroll", onDocScroll, true));
+
+// Apply menu: every tag EXCEPT those already on all selected rows, so the
+// list only offers tags that would actually change something. Then narrowed
+// by the type-to-filter box.
+const applyList = computed(() => {
+  const excluded = new Set(props.commonTags ?? []);
   const q = applyFilter.value.trim().toLowerCase();
-  const list = [...props.tags].sort((a, b) => a.localeCompare(b));
+  const list = [...props.tags]
+    .filter((t) => !excluded.has(t))
+    .sort((a, b) => a.localeCompare(b));
   return q ? list.filter((t) => t.toLowerCase().includes(q)) : list;
 });
+// Remove menu: only tags the selection actually carries. `presentTags`
+// absent (undefined) falls back to all tags; an explicit [] means none.
+const removeList = computed(() =>
+  [...(props.presentTags ?? props.tags)].sort((a, b) => a.localeCompare(b)),
+);
 // "new tag" = typed name not matching any existing tag (case-insensitive).
 const newTagIsNovel = computed(() => {
   const n = newTag.value.trim();
@@ -96,13 +137,14 @@ function applyWeight() {
           </button>
           <div class="wpc-seltoolbar__menulist">
             <button
-              v-for="t in filteredTags"
+              v-for="t in applyList"
               :key="t"
               type="button"
               class="wpc-seltoolbar__menuitem"
+              :style="{ '--chip-hue': hueOf(t) }"
               @click="applyTag(t)"
-            >{{ t }}</button>
-            <div v-if="!filteredTags.length && !newTagIsNovel" class="wpc-seltoolbar__menuempty">No sub-categories yet</div>
+            ><span class="wpc-seltoolbar__swatch" aria-hidden="true"></span>{{ t }}</button>
+            <div v-if="!applyList.length && !newTagIsNovel" class="wpc-seltoolbar__menuempty">Every selected row already has all sub-categories</div>
           </div>
         </div>
       </div>
@@ -115,13 +157,14 @@ function applyWeight() {
         <div v-if="openMenu === 'remove'" class="wpc-seltoolbar__menu" role="menu">
           <div class="wpc-seltoolbar__menulist">
             <button
-              v-for="t in filteredTags"
+              v-for="t in removeList"
               :key="t"
               type="button"
               class="wpc-seltoolbar__menuitem"
+              :style="{ '--chip-hue': hueOf(t) }"
               @click="removeTag(t)"
-            >{{ t }}</button>
-            <div v-if="!filteredTags.length" class="wpc-seltoolbar__menuempty">No sub-categories</div>
+            ><span class="wpc-seltoolbar__swatch" aria-hidden="true"></span>{{ t }}</button>
+            <div v-if="!removeList.length" class="wpc-seltoolbar__menuempty">Selection has no sub-categories</div>
           </div>
         </div>
       </div>
@@ -208,8 +251,16 @@ function applyWeight() {
   flex-direction: column;
   max-height: 220px;
   overflow-y: auto;
+  /* Keep wheel/trackpad scrolling inside the list — at the top/bottom edge
+   * it must NOT chain to the editor body behind (that "nudged the page and
+   * you couldn't recenter"). */
+  overscroll-behavior: contain;
 }
 .wpc-seltoolbar__menuitem {
+  --chip-hue: var(--wp-text-dim, var(--wp-text3));
+  display: flex;
+  align-items: center;
+  gap: 8px;
   text-align: left;
   padding: 6px 8px;
   border: none;
@@ -219,8 +270,23 @@ function applyWeight() {
   font-size: 13px;
   cursor: pointer;
 }
-.wpc-seltoolbar__menuitem:hover { background: var(--wp-bg-3); }
-.wpc-seltoolbar__menuitem--new { color: var(--wp-accent); font-weight: 600; }
+/* Colour swatch mirroring the axis hue of the pills / option-row chips so a
+ * sub-category reads with the same colour in the menu as everywhere else. */
+.wpc-seltoolbar__swatch {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  border: 1px solid color-mix(in srgb, var(--chip-hue) 55%, var(--wp-border));
+  background: color-mix(in srgb, var(--chip-hue) 40%, transparent);
+}
+.wpc-seltoolbar__menuitem:hover {
+  background: color-mix(in srgb, var(--chip-hue) 14%, var(--wp-bg-3));
+}
+.wpc-seltoolbar__menuitem--new {
+  color: var(--wp-accent);
+  font-weight: 600;
+}
 .wpc-seltoolbar__menuempty { padding: 6px 8px; font-size: 12px; color: var(--wp-text-muted); }
 .wpc-seltoolbar__backdrop {
   position: fixed;

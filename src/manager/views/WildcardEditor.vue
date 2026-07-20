@@ -950,6 +950,34 @@ const someSelected = computed(() =>
   selectableOptions.value.some((o) => selectedIds.value.has(o.id as string)),
 );
 
+/** Sub-categories present on ≥1 selected row (union), in registry order —
+ *  the Remove menu's candidate list, so it only offers tags the selection
+ *  actually carries (removing a tag no row has would be a no-op). */
+const presentSelectedTags = computed<string[]>(() => {
+  const present = new Set<string>();
+  for (const o of options.value) {
+    if (!isSelected(o.id)) continue;
+    for (const t of o.sub_categories ?? []) present.add(t);
+  }
+  return subCategories.value.filter((t) => present.has(t));
+});
+/** Sub-categories already on EVERY selected row (intersection) — excluded
+ *  from the Apply menu since applying one there changes nothing. */
+const commonSelectedTags = computed<string[]>(() => {
+  const sel = options.value.filter((o) => isSelected(o.id));
+  if (sel.length === 0) return [];
+  return subCategories.value.filter((t) =>
+    sel.every((o) => (o.sub_categories ?? []).includes(t)),
+  );
+});
+/** tag → axis hue, so the Apply/Remove menu chips read with the same colour
+ *  as the pills and option-row chips (shared `tagHue`). */
+const selectedTagHues = computed<Record<string, string>>(() => {
+  const m: Record<string, string> = {};
+  for (const t of subCategories.value) m[t] = tagHue(t);
+  return m;
+});
+
 function toggleBulkMode(): void {
   bulkMode.value = !bulkMode.value;
   if (!bulkMode.value) {
@@ -1558,6 +1586,9 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
           v-if="selectedCount > 0"
           :count="selectedCount"
           :tags="subCategories"
+          :common-tags="commonSelectedTags"
+          :present-tags="presentSelectedTags"
+          :tag-hues="selectedTagHues"
           @apply-tag="applyTagToSelected"
           @remove-tag="removeTagFromSelected"
           @set-weight="setWeightSelected"

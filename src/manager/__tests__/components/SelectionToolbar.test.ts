@@ -59,4 +59,47 @@ describe("SelectionToolbar.vue", () => {
     expect(wrap.emitted("delete-selected")).toBeTruthy();
     expect(wrap.emitted("clear")).toBeTruthy();
   });
+
+  it("Apply menu hides tags already on every selected row (commonTags)", async () => {
+    const wrap = mount(SelectionToolbar, {
+      props: { count: 2, tags: ["warm", "cool"], commonTags: ["warm"] },
+    });
+    await clickBar(wrap, "Apply sub-category");
+    const labels = wrap.findAll(".wpc-seltoolbar__menuitem").map((b) => b.text());
+    expect(labels).toContain("cool");
+    expect(labels).not.toContain("warm");
+  });
+
+  it("Remove menu lists only tags present on the selection", async () => {
+    const wrap = mount(SelectionToolbar, {
+      props: { count: 2, tags: ["warm", "cool", "neon"], presentTags: ["neon"] },
+    });
+    await clickBar(wrap, "Remove sub-category");
+    const labels = wrap.findAll(".wpc-seltoolbar__menuitem").map((b) => b.text());
+    expect(labels).toEqual(["neon"]);
+  });
+
+  it("Remove menu is empty when the selection carries no tags", async () => {
+    const wrap = mount(SelectionToolbar, {
+      props: { count: 1, tags: ["warm", "cool"], presentTags: [] },
+    });
+    await clickBar(wrap, "Remove sub-category");
+    expect(wrap.findAll(".wpc-seltoolbar__menuitem")).toHaveLength(0);
+    expect(wrap.find(".wpc-seltoolbar__menuempty").exists()).toBe(true);
+  });
+
+  it("menu chips carry their tag's axis hue as --chip-hue", async () => {
+    const wrap = mount(SelectionToolbar, {
+      props: {
+        count: 1,
+        tags: ["warm"],
+        tagHues: { warm: "hsl(1 2% 3%)" },
+      },
+    });
+    await clickBar(wrap, "Apply sub-category");
+    const item = wrap
+      .findAll(".wpc-seltoolbar__menuitem")
+      .find((b) => b.text() === "warm");
+    expect(item!.attributes("style")).toContain("--chip-hue: hsl(1 2% 3%)");
+  });
 });
