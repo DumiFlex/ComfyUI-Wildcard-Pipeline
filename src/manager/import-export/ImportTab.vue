@@ -178,7 +178,7 @@ function onReplaceFile(): void {
 }
 
 /**
- * Sum of all seven entity buckets on a freshly-parsed payload. Used to
+ * Sum of all eight entity buckets on a freshly-parsed payload. Used to
  * populate the compact-bar entity count so it agrees with the picker
  * header. `RawPayload`'s buckets all default to empty arrays after
  * migration so the iteration is safe even on minimal payloads.
@@ -192,6 +192,7 @@ function payloadEntityCount(payload: RawPayload): number {
     + payload.derivations.length
     + payload.constraints.length
     + payload.categories.length
+    + (payload.templates?.length ?? 0)
   );
 }
 

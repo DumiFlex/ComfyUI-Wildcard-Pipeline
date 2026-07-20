@@ -249,6 +249,28 @@ describe("ImportTab.vue", () => {
     expect(wrap.find("[data-test='import-tab-replace']").exists()).toBe(true);
   });
 
+  it("counts templates in the loaded-bar entity total (#7 follow-up)", async () => {
+    const payload = JSON.stringify({
+      schema_version: 2,
+      bundles: [], wildcards: [], fixed_values: [], combines: [],
+      derivations: [], constraints: [], categories: [],
+      templates: [
+        { id: "t1", name: "Hero", template_string: "$one" },
+        { id: "t2", name: "Scene", template_string: "$two" },
+      ],
+    });
+    const wrap = mount(ImportTab, { props: { payloadLoaded: false } });
+    await wrap.find("[data-test='import-paste-btn']").trigger("click");
+    await flushPromises();
+    await wrap.find("textarea").setValue(payload);
+    await wrap.find("[data-test='import-paste-confirm']").trigger("click");
+    await flushPromises();
+    await wrap.setProps({ payloadLoaded: true });
+    await flushPromises();
+    // 2 templates were previously excluded from the count → bar read "0".
+    expect(wrap.find("[data-test='import-tab-loaded']").text()).toMatch(/2\s+entities/i);
+  });
+
   it("compact bar labels source as 'From file' after a file-pick parse", async () => {
     const wrap = mount(ImportTab, { props: { payloadLoaded: false } });
     const file = new File([makeValidPayloadJson()], "test.json", {
