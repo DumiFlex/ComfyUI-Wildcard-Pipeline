@@ -270,11 +270,13 @@ const warningIds = computed<Set<string>>(() => {
  * is an empty record when `libraryRows` is absent (unit tests or
  * payloads loaded before the library finished loading).
  *
- * Bundles + categories are intentionally NOT fed to `detectCollisions`
- * — bundles have their own MOD-detection flow downstream
- * (bundle-fingerprint.ts) and categories merge by name. The picker
- * surfaces a placeholder id-presence conflict for bundles separately
- * in `badgesForEntity`; categories never get a conflict badge here.
+ * Bundles ARE fed to `detectCollisions` (they share the id→fingerprint
+ * library map with modules) so an existing bundle reads as MODIFIED /
+ * DUPLICATE / EXISTING inline, consistent with how the commit orchestrator
+ * now resolves them. (They were once excluded on the assumption of a
+ * separate `bundle-fingerprint.ts` flow that was never built, which left
+ * existing bundles as blind adds that 400'd on commit.) Categories are still
+ * excluded — they merge by name server-side, no id collision concept.
  *
  * Templates run a SEPARATE pass (`detectTemplateCollisions`) because
  * they collide on a `templateFingerprint` rather than the module
@@ -284,10 +286,10 @@ const warningIds = computed<Set<string>>(() => {
 const collisionStates = computed<Record<string, CollisionState>>(() => {
   if (!props.libraryRows) return {};
   const incoming: Array<FingerprintModuleRow & { id: string }> = [];
-  const moduleBuckets: BucketKey[] = [
-    "wildcards", "fixed_values", "combines", "derivations", "constraints",
+  const idBuckets: BucketKey[] = [
+    "bundles", "wildcards", "fixed_values", "combines", "derivations", "constraints",
   ];
-  for (const bk of moduleBuckets) {
+  for (const bk of idBuckets) {
     const arr = props.payload[bk] as unknown as Array<
       FingerprintModuleRow & { id: string }
     >;
@@ -315,19 +317,17 @@ const collisionStates = computed<Record<string, CollisionState>>(() => {
  * badge. Every other bucket runs through `verifyOne` and can carry one.
  *
  * Phase-5 collision-state → badge mapping:
- *   - Module buckets:
+ *   - Module + bundle buckets (same id→fingerprint detector):
  *     - `no-collision`   → NEW (green) — clean import, no decision needed.
  *     - `conflict`       → MODIFIED (orange) — uuid match, fingerprint diff.
  *     - `exists-unknown` → EXISTING (drift / amber) — library row present
  *                          but stored fingerprint absent (legacy row
- *                          pre-fingerprint-backfill). Distinct from
+ *                          pre-fingerprint-backfill, or a bundle whose
+ *                          server fingerprint isn't set). Distinct from
  *                          MODIFIED so users aren't misled.
- *     - `silent-skip`    → (no badge) — true duplicate, auto-excluded at
- *                          commit time; badging it would be misleading noise.
- *   - Bundles: id-presence check only — present in library →
- *     EXISTING (drift / amber). Bundle MOD detection runs separately
- *     downstream via bundle-fingerprint.ts so the inline picker badge
- *     never claims "MODIFIED" without proof.
+ *     - `silent-skip`    → DUPLICATE (dim) — true duplicate, auto-excluded
+ *                          at commit time; the badge tells the user the row
+ *                          is already in their library.
  *   - Categories: never get a collision badge (name-merge semantics on
  *     server, no id collision possible).
  *
@@ -344,16 +344,9 @@ function badgesForEntity(entity: PayloadEntity, bucket: BucketKey): StatusBadge[
       label: `MIGRATED v${entity.migrated_from}→${CURRENT_SCHEMA_VERSION}`,
     });
   }
-  if (bucket === "bundles") {
-    if (props.libraryRows?.has(entity.id) === true) {
-      // Id-presence only — we never compute bundle fingerprints in this
-      // picker, so route through the same EXISTING badge as
-      // exists-unknown rather than overclaiming MODIFIED.
-      badges.push({ variant: "drift", label: "EXISTING" });
-    }
-    // Bundles never get a NEW badge here — id-presence semantics only;
-    // the orchestrator's bundle MOD pass surfaces the actual state.
-  } else if (bucket !== "categories") {
+  if (bucket !== "categories") {
+    // Bundles + the five module buckets + templates all carry a
+    // collision state now (categories merge by name → no badge).
     const state = collisionStates.value[entity.id];
     if (state === "no-collision") {
       badges.push({ variant: "new", label: "NEW" });

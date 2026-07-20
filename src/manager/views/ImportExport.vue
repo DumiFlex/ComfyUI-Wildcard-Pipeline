@@ -264,6 +264,23 @@ function buildSelectedEntities(
   }
   const templateColl: Record<string, SelectedEntity["collision"]> =
     templateRows.length > 0 ? detectTemplateCollisions(templateRows, library) : {};
+  // Bundles were historically excluded from collision detection (deferred to
+  // a `bundle-fingerprint.ts` MOD-detection flow that was never built), so an
+  // existing bundle fell through to a blind `add` decision — the server then
+  // 400'd the whole commit with "id collision on add" and the bundles never
+  // imported. Bundles live in the same id→fingerprint library map as modules
+  // (buildLibraryMap), so route them through the SAME detector: identical →
+  // silent-skip, present-but-changed / no library fingerprint → conflict /
+  // exists-unknown, both of which surface in the conflict modal for the user
+  // to Replace / Rename / Skip, exactly like a colliding module.
+  const bundleRows: Array<FingerprintModuleRow & { id: string }> = [];
+  for (const id of selection) {
+    const hit = idIndex.get(id);
+    if (!hit || hit.kind !== "bundle") continue;
+    bundleRows.push(hit.entity as unknown as FingerprintModuleRow & { id: string });
+  }
+  const bundleColl: Record<string, SelectedEntity["collision"]> =
+    bundleRows.length > 0 ? detectCollisions(bundleRows, library) : {};
   for (const id of selection) {
     const hit = idIndex.get(id);
     if (!hit) continue;
@@ -272,7 +289,10 @@ function buildSelectedEntities(
       collision = templateColl[id] ?? "no-collision";
     } else if (MODULE_KINDS.has(hit.kind)) {
       collision = collisionByKind[hit.kind]?.[id] ?? "no-collision";
+    } else if (hit.kind === "bundle") {
+      collision = bundleColl[id] ?? "no-collision";
     } else {
+      // Categories merge by name server-side — no id collision concept.
       collision = "no-collision";
     }
     result.push({ kind: hit.kind, entity: hit.entity, collision });
