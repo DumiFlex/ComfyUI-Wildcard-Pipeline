@@ -21,8 +21,15 @@ const props = defineProps<{
    *  short → that frame's button greys out. Distinct from the computed
    *  `derived` series, which is the UPCOMING seeds from the current base. */
   previousSeeds?: number[] | null;
+  /** 0-based bypassed frame indices. When PASSED (Context Loop only), each
+   *  row shows a bypass toggle. Absent (Seed List) → no bypass column. */
+  bypassFrames?: number[];
 }>();
-const emit = defineEmits<{ "update:seedLocks": [next: Record<string, number>]; close: [] }>();
+const emit = defineEmits<{
+  "update:seedLocks": [next: Record<string, number>];
+  "update:bypassFrames": [next: number[]];
+  close: [];
+}>();
 
 const derived = computed(() => deriveLoopSeeds(props.baseSeed, Math.max(1, props.count), props.strategy));
 const lockedCount = computed(() => Object.keys(props.seedLocks).length);
@@ -41,6 +48,34 @@ const inactiveLocks = computed(() => {
     .sort((a, b) => a - b);
 });
 
+const bypassEnabled = computed(() => props.bypassFrames !== undefined);
+const bypassSet = computed(() => new Set(props.bypassFrames ?? []));
+const bypassCount = computed(() => (props.bypassFrames ?? []).length);
+/** Number of in-range frames NOT bypassed. */
+const activeFrameCount = computed(() => {
+  let n = 0;
+  for (let i = 0; i < derived.value.length; i++) if (!bypassSet.value.has(i)) n++;
+  return n;
+});
+/** Bypass toggle is disabled for an ACTIVE frame when it's the last one left. */
+function bypassDisabledFor(i: number): boolean {
+  return !bypassSet.value.has(i) && activeFrameCount.value <= 1;
+}
+/** Bypassed indices beyond the current count — dimmed, re-apply if count grows. */
+const inactiveBypass = computed(() =>
+  [...bypassSet.value].filter((i) => i >= derived.value.length).sort((a, b) => a - b),
+);
+/** Real derived seed for any index (out-of-range inactive rows compute it on
+ *  the fly since `derived` only spans the active count). */
+function seedAt(i: number): number {
+  return deriveLoopSeeds(props.baseSeed, i + 1, props.strategy)[i] ?? 0;
+}
+function onBypass(p: { index: number; bypassed: boolean }): void {
+  const next = new Set(bypassSet.value);
+  if (p.bypassed) next.add(p.index);
+  else next.delete(p.index);
+  emit("update:bypassFrames", [...next].sort((a, b) => a - b));
+}
 function onRow(p: { index: number; seed: number | null }): void {
   const next = { ...props.seedLocks };
   if (p.seed == null) delete next[String(p.index)];
@@ -115,6 +150,7 @@ onBeforeUnmount(() => {
           <span class="sm__count">{{ Math.max(1, count) }} iterations</span>
           <span class="sm__strat">{{ strategy }}</span>
           <span v-if="lockedCount" class="sm__lockcount" data-test="mx-seed-lockcount">{{ lockedCount }} locked</span>
+          <span v-if="bypassEnabled && bypassCount" class="sm__lockcount" data-test="mx-bypass-count">{{ bypassCount }} bypassed</span>
           <span class="sm__bar-spacer" />
           <button class="ghost" data-test="mx-seed-lockall" @click="lockAll">Lock all</button>
           <button class="ghost" data-test="mx-seed-unlockall" @click="unlockAll">Unlock all</button>
@@ -133,7 +169,20 @@ onBeforeUnmount(() => {
         <div class="sm__list">
           <SeedLockRow v-for="(s, i) in derived" :key="i" :index="i" :derived="s"
             :locked="Object.prototype.hasOwnProperty.call(seedLocks, String(i))"
-            :seed="seedLocks[String(i)] ?? null" :previous="previousSeeds?.[i] ?? null" @update="onRow" />
+            :seed="seedLocks[String(i)] ?? null" :previous="previousSeeds?.[i] ?? null"
+            :bypassable="bypassEnabled" :bypassed="bypassSet.has(i)"
+            :bypass-disabled="bypassDisabledFor(i)"
+            @update="onRow" @bypass="onBypass" />
+          <template v-if="inactiveBypass.length">
+            <div class="sm__inactive-label" data-test="mx-bypass-inactive">
+              Bypassed · won't apply at count {{ derived.length }}
+            </div>
+            <SeedLockRow v-for="i in inactiveBypass" :key="`inbypass-${i}`" :index="i"
+              :derived="seedAt(i)"
+              :locked="Object.prototype.hasOwnProperty.call(seedLocks, String(i))"
+              :seed="seedLocks[String(i)] ?? null" :inactive="true"
+              :bypassable="true" :bypassed="true" @update="onRow" @bypass="onBypass" />
+          </template>
           <template v-if="inactiveLocks.length">
             <div class="sm__inactive-label" data-test="mx-seed-inactive">
               Inactive · won't apply at count {{ derived.length }}
