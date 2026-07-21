@@ -186,3 +186,18 @@ describe("SeedListWidget seeds button", () => {
     expect(off.findComponent(SeedListModal).props("overrideHint")).toBeFalsy();
   });
 });
+
+describe("SeedListWidget bypass mirror (#13)", () => {
+  it("shows an N-bypassed badge from the loop's bypassedFrames", () => {
+    const w = mount(SeedListWidget, {
+      props: { modelValue: emptySeedListConfig(), bypassedFrames: [1, 3] },
+    });
+    expect(w.find('[data-test="seedlist-seeds-bypass-badge"]').text()).toMatch(/2 bypassed/i);
+  });
+  it("no bypass badge when the loop bypasses nothing", () => {
+    const w = mount(SeedListWidget, {
+      props: { modelValue: emptySeedListConfig(), bypassedFrames: [] },
+    });
+    expect(w.find('[data-test="seedlist-seeds-bypass-badge"]').exists()).toBe(false);
+  });
+});

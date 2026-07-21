@@ -149,3 +149,12 @@ describe("SeedListModal bypass column (#13)", () => {
     expect(w.find('[data-test="mx-bypass-inactive"]').exists()).toBe(true);
   });
 });
+
+describe("SeedListModal read-only bypass (#13 seed-list mirror)", () => {
+  it("dims bypassed rows without an interactive toggle + shows the badge", () => {
+    const w = modal({ seedLocks: {}, bypassFrames: [1], bypassReadonly: true });
+    expect(w.findAll('[data-test="seedrow-bypass"]').length).toBe(0); // no toggles
+    expect(w.findAll(".srow")[1].classes()).toContain("srow--bypassed");
+    expect(w.find('[data-test="mx-bypass-count"]').text()).toMatch(/1 bypassed/i);
+  });
+});

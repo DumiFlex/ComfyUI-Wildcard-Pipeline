@@ -21,9 +21,13 @@ const props = defineProps<{
    *  short → that frame's button greys out. Distinct from the computed
    *  `derived` series, which is the UPCOMING seeds from the current base. */
   previousSeeds?: number[] | null;
-  /** 0-based bypassed frame indices. When PASSED (Context Loop only), each
-   *  row shows a bypass toggle. Absent (Seed List) → no bypass column. */
+  /** 0-based bypassed frame indices. When PASSED, bypassed rows dim + strike.
+   *  Absent → no bypass display at all. */
   bypassFrames?: number[];
+  /** Read-only bypass (Seed List mirroring a loop): show bypassed rows dimmed
+   *  but WITHOUT an interactive toggle — bypass is owned by the loop node.
+   *  Default false (Context Loop = interactive toggles). */
+  bypassReadonly?: boolean;
 }>();
 const emit = defineEmits<{
   "update:seedLocks": [next: Record<string, number>];
@@ -49,6 +53,10 @@ const inactiveLocks = computed(() => {
 });
 
 const bypassEnabled = computed(() => props.bypassFrames !== undefined);
+/** Interactive toggle only when bypass is enabled AND not read-only. In
+ *  read-only mode rows still show the bypassed (dim + strike) state — that's
+ *  the `:bypassed` prop, independent of `:bypassable`. */
+const bypassInteractive = computed(() => bypassEnabled.value && !props.bypassReadonly);
 const bypassSet = computed(() => new Set(props.bypassFrames ?? []));
 const bypassCount = computed(() => (props.bypassFrames ?? []).length);
 /** Number of in-range frames NOT bypassed. */
@@ -173,7 +181,7 @@ onBeforeUnmount(() => {
           <SeedLockRow v-for="(s, i) in derived" :key="i" :index="i" :derived="s"
             :locked="Object.prototype.hasOwnProperty.call(seedLocks, String(i))"
             :seed="seedLocks[String(i)] ?? null" :previous="previousSeeds?.[i] ?? null"
-            :bypassable="bypassEnabled" :bypassed="bypassSet.has(i)"
+            :bypassable="bypassInteractive" :bypassed="bypassSet.has(i)"
             :bypass-disabled="bypassDisabledFor(i)"
             @update="onRow" @bypass="onBypass" />
           <template v-if="inactiveBypass.length">
@@ -184,7 +192,7 @@ onBeforeUnmount(() => {
               :derived="seedAt(i)"
               :locked="Object.prototype.hasOwnProperty.call(seedLocks, String(i))"
               :seed="seedLocks[String(i)] ?? null" :previous="previousSeeds?.[i] ?? null"
-              :inactive="true" :bypassable="true" :bypassed="true"
+              :inactive="true" :bypassable="bypassInteractive" :bypassed="true"
               @update="onRow" @bypass="onBypass" />
           </template>
           <template v-if="inactiveLocks.length">

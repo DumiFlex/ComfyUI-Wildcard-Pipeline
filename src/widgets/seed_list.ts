@@ -64,12 +64,17 @@ export function create(node: SeedListHostNode, inputName: string) {
     Object.is,
   );
 
+  // Loop series params + the loop's bypassed frames (for the read-only
+  // bypass mirror in the Seed List modal).
+  type LoopSeries = SeriesParams & { bypassFrames: number[] };
+
   // Walk the `loop_config` input to its upstream WP_ContextLoop node and
   // read its stock `seed` + `count` widgets plus `wp_context_loop_config`
-  // strategy. Returns null when unwired. Reactive so the preview updates
+  // strategy + bypass_frames. Returns null when unwired. Reactive so the
+  // preview updates
   // whenever the wire or upstream widgets change (same poll+event model
   // as the baseSeed/count reads above).
-  function readLoopSeries(): SeriesParams | null {
+  function readLoopSeries(): LoopSeries | null {
     const inputs = (node as { inputs?: Array<{ name?: string; link?: number | null }> }).inputs;
     if (!inputs) return null;
     const slot = inputs.find((i) => i.name === "loop_config");
@@ -85,13 +90,18 @@ export function create(node: SeedListHostNode, inputName: string) {
     const loopCount = Number(widgets.find((w) => w.name === "count")?.value ?? 1);
     const rawCfg = widgets.find((w) => w.name === "wp_context_loop_config")?.value;
     const loopCfg = parseContextLoopConfig(typeof rawCfg === "string" ? rawCfg : null);
-    return { base: loopBase, count: loopCount, strategy: loopCfg.strategy };
+    return {
+      base: loopBase, count: loopCount, strategy: loopCfg.strategy,
+      bypassFrames: loopCfg.bypass_frames,
+    };
   }
 
-  function loopParamsEqual(a: SeriesParams | null, b: SeriesParams | null): boolean {
+  function loopParamsEqual(a: LoopSeries | null, b: LoopSeries | null): boolean {
     if (a === null && b === null) return true;
     if (a === null || b === null) return false;
-    return a.base === b.base && a.count === b.count && a.strategy === b.strategy;
+    return a.base === b.base && a.count === b.count && a.strategy === b.strategy
+      && a.bypassFrames.length === b.bypassFrames.length
+      && a.bypassFrames.every((v, i) => v === b.bypassFrames[i]);
   }
 
   const loopSeries = reactiveFromGraph(node, readLoopSeries, loopParamsEqual);
@@ -147,6 +157,12 @@ export function create(node: SeedListHostNode, inputName: string) {
           override_strategy: config.value.override_strategy,
         };
         const effective = resolveSeedListPreview(localSeries, flags, loopSeries.value);
+        // Mirror the loop's bypass ONLY when the count comes from the loop —
+        // that's when this node's frames align 1:1 with the loop's.
+        const loopBypass =
+          config.value.override_count && loopSeries.value
+            ? loopSeries.value.bypassFrames
+            : [];
         return h(SeedListWidget, {
           modelValue: config.value,
           nodeMode: nodeMode.value,
@@ -154,6 +170,7 @@ export function create(node: SeedListHostNode, inputName: string) {
           count: effective.count,
           previewStrategy: effective.strategy,
           previousSeeds: previousSeeds.value,
+          bypassedFrames: loopBypass,
           "onUpdate:modelValue": onUpdate,
         });
       };
