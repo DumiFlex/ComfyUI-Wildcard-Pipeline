@@ -38,8 +38,8 @@ import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { useRecentStore } from "../stores/recentStore";
-import { toIdentifier, VALID_IDENTIFIER_RE } from "../utils/slug";
-import { validateSubcatName } from "@/manager/parsing/subcatFilter";
+import { toIdentifier } from "../utils/slug";
+import { validateSubcatName, validateRefGrammarName, isValidVariableName } from "@/manager/validation/names";
 import {
   buildWildcardRefData,
   collectLibraryWildcardRefs,
@@ -1184,7 +1184,7 @@ async function save() {
   // Update varBindingError synchronously so the rollup picks it up
   // in the same tick. The validation computed reads this ref.
   const finalBinding = varBinding.value.trim() || toIdentifier(name.value);
-  if (varBinding.value.trim() && !VALID_IDENTIFIER_RE.test(finalBinding)) {
+  if (varBinding.value.trim() && !isValidVariableName(finalBinding)) {
     varBindingError.value = "Use letters, digits, underscores; must not start with a digit.";
   } else {
     varBindingError.value = "";
@@ -1289,17 +1289,16 @@ const validationErrors = computed<EditorFieldError[]>(() => {
   if (!name.value.trim()) {
     out.push({ field: "editor-section-identity", label: "Name", message: "Required" });
   } else {
-    // Wildcard names become the `#name` segment of nested refs.
-    // Forbidding the grammar-reserved chars here mirrors
-    // `wp_api/_validators.py:REF_GRAMMAR_FORBIDDEN_CHARS` so the
-    // server never has to reject a save the editor already accepted.
-    const REF_FORBIDDEN = /[{}:#@,]/;
-    const bad = name.value.match(REF_FORBIDDEN);
-    if (bad) {
+    // Wildcard names become the `#name` segment of nested refs. The
+    // canonical rule (mirrors `wp_api/_validators.py`) lives in
+    // `validation/names` so the editor rejects exactly what the rename
+    // dialog + server reject.
+    const refErr = validateRefGrammarName(name.value);
+    if (refErr) {
       out.push({
         field: "editor-section-identity",
         label: "Name",
-        message: `Cannot contain "${bad[0]}" (reserved by the @{uuid#name:subcat} ref grammar)`,
+        message: refErr,
       });
     }
   }

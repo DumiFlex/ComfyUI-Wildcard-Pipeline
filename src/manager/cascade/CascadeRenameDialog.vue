@@ -7,6 +7,7 @@ import Checkbox from "../components/ui/Checkbox.vue";
 import Input from "../components/ui/Input.vue";
 import Modal from "../components/ui/Modal.vue";
 import { useCascadeApply, type CascadeApplyRequest } from "./useCascadeApply";
+import { validateSubcatName, validateRefGrammarName, validateVariableName } from "../validation/names";
 
 interface Props {
   open: boolean;
@@ -33,18 +34,19 @@ const affected = ref<Array<{ kind: string; id: string; name: string }>>([]);
 const loading = ref(true);
 const error = ref<string>("");
 
-/** Names that flow into the @{uuid#name:subcat} grammar must avoid
- *  the structural chars (and comma, since subcats are comma-listed).
- *  Mirrors `wp_api/_validators.py:REF_GRAMMAR_FORBIDDEN_CHARS`. */
+/** Validate the typed new name against the SAME canonical validator its
+ *  matching "add"/"create" surface uses (see `validation/names`), keyed by
+ *  what kind of thing is being renamed. Reusing the shared validators keeps
+ *  rename and create in lockstep — previously rename hand-rolled a weaker
+ *  check that let invalid sub-category names (e.g. with spaces) through
+ *  until save (issue #7), and variable renames weren't validated at all. */
 const nameError = computed<string | null>(() => {
-  if (props.kind !== "wildcard" && props.kind !== "subcategory") return null;
-  if (props.kind === "subcategory" && newName.value === "null") {
-    return "\"null\" is reserved by the @{uuid:subcat} filter";
-  }
-  const bad = newName.value.match(/[{}:#@,]/);
-  if (bad) {
-    return `Cannot contain "${bad[0]}" (reserved by the @{uuid#name:subcat} ref grammar)`;
-  }
+  // Empty is gated by `canConfirm` (Rename button stays disabled) — don't
+  // surface an error while the field is simply blank.
+  if (!newName.value) return null;
+  if (props.kind === "subcategory") return validateSubcatName(newName.value);
+  if (props.kind === "combine_output_var") return validateVariableName(newName.value);
+  if (props.kind === "wildcard") return validateRefGrammarName(newName.value);
   return null;
 });
 
