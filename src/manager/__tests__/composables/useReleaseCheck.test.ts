@@ -129,6 +129,30 @@ describe("useReleaseCheck", () => {
     wrap.unmount();
   });
 
+  it("shares state across consumers: checkNow on one lights the other's pill", async () => {
+    // Two independent consumers (like the topbar + Settings). checkOnLaunch
+    // off so only the manual check drives state.
+    setActivePinia(createPinia());
+    useUiStore().setCheckOnLaunch(false);
+    const fetchMock = vi.fn().mockResolvedValue(releaseResponse("v2.10.1"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const topbar = mount(host());
+    const topbarResult = lastResult!;
+    const settings = mount(host());
+    const settingsResult = lastResult!;
+    await settle();
+
+    expect(topbarResult.hasUpdate.value).toBe(false);
+    // Manual check from the "settings" consumer...
+    await settingsResult.checkNow();
+    // ...must reflect in the "topbar" consumer without a remount/reload.
+    expect(topbarResult.hasUpdate.value).toBe(true);
+    expect(topbarResult.latestVersion.value).toBe("2.10.1");
+
+    topbar.unmount(); settings.unmount();
+  });
+
   it("network failure leaves hasUpdate false and does not throw", async () => {
     const fetchMock = vi.fn().mockRejectedValue(new Error("offline"));
     vi.stubGlobal("fetch", fetchMock);

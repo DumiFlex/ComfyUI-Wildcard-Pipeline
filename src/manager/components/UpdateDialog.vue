@@ -55,6 +55,13 @@ const showFallback = computed(
 
 function onClose(): void { emit("close"); }
 function onModalOpen(v: boolean): void { if (!v) onClose(); }
+
+/** Kick off the update to the exact version the check found. Passing the
+ *  concrete target (not "latest") lets the composable pin it + guard against
+ *  a downgrade. */
+function onUpdateNow(): void {
+  if (latestVersion.value) runUpdate(latestVersion.value);
+}
 </script>
 
 <template>
@@ -114,7 +121,7 @@ git pull
       </template>
       <template v-else-if="phase === 'idle'">
         <Button variant="secondary" data-test="update-later" @click="onClose">Later</Button>
-        <Button variant="primary" data-test="update-now" @click="runUpdate">Update Now</Button>
+        <Button variant="primary" data-test="update-now" @click="onUpdateNow">Update Now</Button>
       </template>
       <template v-else-if="phase === 'installing'">
         <Button variant="primary" :loading="true" :disabled="true" data-test="update-installing">Updating…</Button>

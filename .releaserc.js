@@ -18,6 +18,21 @@
  * notes shrink to just the meaningful changes (typically <50 entries
  * per release).
  */
+import fs from "node:fs";
+
+// Curated, human-readable highlights for the NEXT release. A maintainer
+// writes plain-language "what changed for you" bullets here before merging a
+// release; if the file is empty/absent the release body simply falls back to
+// the auto-generated grouped changelog. The file is read at release time (in
+// CI) and cleared by the prepare step below so highlights never repeat.
+const HIGHLIGHTS_FILE = "docs/release-notes/next.md";
+let highlights = "";
+try {
+  highlights = fs.readFileSync(HIGHLIGHTS_FILE, "utf8").trim();
+} catch {
+  /* no curated highlights for this release */
+}
+
 export default {
   branches: ["main"],
   plugins: [
@@ -80,6 +95,10 @@ export default {
             "💬 [Discord](https://discord.gg/BFYR9WQdVR) · " +
             "📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · " +
             "🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)\n\n" +
+            // Curated, plain-language highlights (when provided) render FIRST
+            // — this is what most readers see. The raw per-commit changelog
+            // stays below, collapsed.
+            (highlights ? `### ✨ What's new\n\n${highlights}\n\n---\n\n` : "") +
             "<details>\n" +
             "<summary><b>📋 Full changelog</b> — click to expand the per-commit list</summary>\n\n",
           // footerPartial closes the <details> wrapper so the wall of
@@ -102,14 +121,17 @@ export default {
         //    @semantic-release/github plugin can attach it to the
         //    release. Zip is built AFTER versioning so the file lands
         //    with the right version in its name.
+        // 3. Clear the consumed highlights file so the next release starts
+        //    from a clean slate (the content already lives in this release's
+        //    notes + CHANGELOG.md).
         prepareCmd:
-          "node -e \"const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.version='${nextRelease.version}';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\\n');const t=fs.readFileSync('pyproject.toml','utf8').replace(/^version = \\\".+?\\\"/m,'version = \\\"${nextRelease.version}\\\"');fs.writeFileSync('pyproject.toml',t);\" && node scripts/pack-release.mjs ${nextRelease.version}",
+          "node -e \"const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.version='${nextRelease.version}';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\\n');const t=fs.readFileSync('pyproject.toml','utf8').replace(/^version = \\\".+?\\\"/m,'version = \\\"${nextRelease.version}\\\"');fs.writeFileSync('pyproject.toml',t);\" && node -e \"require('fs').writeFileSync('docs/release-notes/next.md','')\" && node scripts/pack-release.mjs ${nextRelease.version}",
       },
     ],
     [
       "@semantic-release/git",
       {
-        assets: ["CHANGELOG.md", "package.json", "pyproject.toml"],
+        assets: ["CHANGELOG.md", "package.json", "pyproject.toml", "docs/release-notes/next.md"],
         // Plain message — `${nextRelease.notes}` here would expand to
         // the entire changelog, which on a divergent history (where
         // semantic-release can't find the last tag in main's first-

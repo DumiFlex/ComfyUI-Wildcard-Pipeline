@@ -29,12 +29,30 @@ interface QueueStatus {
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+/** Parse a `1.2.3` version into numeric segments (prerelease ignored). */
+function parseSemver(v: string): number[] {
+  return v.split("-")[0].split(".").map((n) => Number.parseInt(n, 10) || 0);
+}
+
+/** True when `target` is a strictly newer version than `current`. Used as a
+ *  downgrade guard so a mis-resolved target can never install an older
+ *  build over a newer one. */
+function isStrictlyNewer(target: string, current: string): boolean {
+  const t = parseSemver(target);
+  const c = parseSemver(current);
+  for (let i = 0; i < 3; i++) {
+    const diff = (t[i] ?? 0) - (c[i] ?? 0);
+    if (diff !== 0) return diff > 0;
+  }
+  return false;
+}
+
 export function useComfyManagerUpdate(): {
   phase: ReturnType<typeof ref<UpdatePhase>>;
   errorKind: ReturnType<typeof ref<UpdateErrorKind>>;
   errorMessage: ReturnType<typeof ref<string | null>>;
   probe: () => Promise<ManagerAvailability>;
-  runUpdate: () => Promise<void>;
+  runUpdate: (targetVersion: string) => Promise<void>;
   reboot: () => Promise<void>;
   managerUiUrl: string;
 } {
@@ -76,10 +94,20 @@ export function useComfyManagerUpdate(): {
     return false;
   }
 
-  async function runUpdate(): Promise<void> {
+  async function runUpdate(targetVersion: string): Promise<void> {
     phase.value = "installing";
     errorKind.value = null;
     errorMessage.value = null;
+    // Downgrade guard. `targetVersion` is the exact release the update check
+    // found (e.g. "2.10.1"). Never proceed unless it is strictly newer than
+    // what's installed. This is the fix for the 2.10.0 downgrade bug, where
+    // `selected_version:"latest"` + `mode:"cache"` let ComfyUI Manager
+    // resolve "latest" against its STALE cached catalog and install an older
+    // version over a newer one.
+    if (!targetVersion || !isStrictlyNewer(targetVersion, __APP_VERSION__)) {
+      fail("failed", `Refusing to install "${targetVersion || "unknown"}" — it is not newer than the installed ${__APP_VERSION__}.`);
+      return;
+    }
     try {
       const installRes = await fetch("/manager/queue/install", {
         method: "POST",
@@ -87,9 +115,12 @@ export function useComfyManagerUpdate(): {
         body: JSON.stringify({
           id: COMFY_REGISTRY_ID,
           version: __APP_VERSION__,
-          selected_version: "latest",
+          // Pin the EXACT target version, not "latest" — we already know it.
+          selected_version: targetVersion,
           channel: "default",
-          mode: "cache",
+          // "remote" fetches fresh registry data so the pinned version
+          // resolves against the live catalog, not Manager's stale cache.
+          mode: "remote",
         }),
       });
       if (!installRes.ok) {
