@@ -10,6 +10,7 @@ export type DensityMode = "comfortable" | "compact";
 const STORAGE_KEY = "wp-theme-mode";
 const STORAGE_KEY_DENSITY = "wp-density-mode";
 const STORAGE_KEY_MAX_REF_DEPTH = "wp-wildcard-max-ref-depth";
+const STORAGE_KEY_CHECK_ON_LAUNCH = "wp-update-check-on-launch";
 const FLASH_SUPPRESS_MS = 120;
 const DEFAULT_MAX_REF_DEPTH = 8;
 const MIN_MAX_REF_DEPTH = 1;
@@ -50,6 +51,17 @@ function readStoredMaxRefDepth(): number {
   return DEFAULT_MAX_REF_DEPTH;
 }
 
+function readStoredCheckOnLaunch(): boolean {
+  try {
+    const v = localStorage.getItem(STORAGE_KEY_CHECK_ON_LAUNCH);
+    if (v === "true") return true;
+    if (v === "false") return false;
+  } catch {
+    /* localStorage unavailable */
+  }
+  return true; // default: check on launch
+}
+
 function systemPrefersDark(): boolean {
   return typeof window !== "undefined"
     && typeof window.matchMedia === "function"
@@ -61,6 +73,7 @@ export const useUiStore = defineStore("ui", () => {
   const density = ref<DensityMode>(readStoredDensity());
   const sidebarCollapsed = ref(false);
   const maxRefDepth = ref<number>(readStoredMaxRefDepth());
+  const checkOnLaunch = ref<boolean>(readStoredCheckOnLaunch());
 
   /** Resolved theme — `"auto"` collapsed to dark/light via OS preference. */
   const resolvedTheme = computed<"dark" | "light">(() =>
@@ -131,17 +144,24 @@ export const useUiStore = defineStore("ui", () => {
     sidebarCollapsed.value = !sidebarCollapsed.value;
   }
 
+  function setCheckOnLaunch(v: boolean): void {
+    checkOnLaunch.value = v;
+    try { localStorage.setItem(STORAGE_KEY_CHECK_ON_LAUNCH, String(v)); } catch { /* ignore */ }
+  }
+
   return {
     themeMode,
     resolvedTheme,
     density,
     sidebarCollapsed,
     maxRefDepth,
+    checkOnLaunch,
     cycleTheme,
     setThemeMode,
     setDensity,
     toggleDensity,
     setMaxRefDepth,
+    setCheckOnLaunch,
     initializeTheme,
     toggleSidebar,
   };
