@@ -20,6 +20,14 @@
 export const GITHUB_REPO = "https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline";
 
 /**
+ * ComfyUI Registry node id for this pack — the `id` passed to ComfyUI
+ * Manager's `/manager/queue/install` to update-in-place. Must match
+ * `pyproject.toml` `name` (publisher `dumiflex`). A wrong id silently
+ * no-ops the install.
+ */
+export const COMFY_REGISTRY_ID = "comfyui-wildcard-pipeline";
+
+/**
  * Wiki landing page. Branch-aware so a wiki-restructure that moves
  * the entry point updates here rather than at five call sites.
  */
