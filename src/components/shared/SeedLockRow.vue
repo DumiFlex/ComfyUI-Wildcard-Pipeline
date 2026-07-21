@@ -107,8 +107,21 @@ function bump(d: 1 | -1) {
 /* out-of-range lock: dimmed ("deemed down") but still interactive — hover lifts it. */
 .srow--inactive { opacity: .5; }
 .srow--inactive:hover { opacity: .85; }
-.srow--bypassed .derived__val { text-decoration: line-through; opacity: .6; }
-.srow--bypassed .srow__idx { opacity: .55; }
+/* Bypassed row — purple-dimmed wash + a dashed left accent bar so it reads
+ * clearly even when the struck-through seed alone is too faint. The dashed
+ * bar echoes the loop node's dashed bypass chips. */
+.srow--bypassed {
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      var(--wp-accent, #c4b5fd) 0 4px,
+      transparent 4px 8px
+    ) left / 3px 100% no-repeat,
+    color-mix(in srgb, var(--wp-accent, #c4b5fd) 11%, transparent);
+  border-radius: 5px;
+}
+.srow--bypassed .derived__val { text-decoration: line-through; opacity: .65; }
+.srow--bypassed .srow__idx { color: var(--wp-accent-text, #c4b5fd); opacity: .75; }
 .toggle--bypass { color: var(--wp-text-dim, var(--wp-text3)); }
 .toggle--bypass.toggle--on { border-color: var(--wp-accent); color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,.10); }
 .srow__idx { flex-shrink: 0; width: 30px; text-align: right; font: 600 11px var(--wp-font-mono, monospace); color: var(--wp-text-dim, #7a7d88); }
