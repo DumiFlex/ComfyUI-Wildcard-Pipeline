@@ -1,3 +1,16 @@
+## 🎉 Wildcard Pipeline 2.10.1
+
+📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
+
+<details>
+<summary><b>📋 Full changelog</b> — click to expand the per-commit list</summary>
+
+
+* Merge pull request #9 from DumiFlex/fix/subcat-rename-validation ([74c7331](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/74c7331)), closes [#9](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues/9) [#7](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues/7)
+* fix(manager): validate names on rename via shared validators (#7) ([00b735d](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/00b735d)), closes [#7](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues/7)
+
+</details>
+
 ## 🎉 Wildcard Pipeline 2.10.0
 
 📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
