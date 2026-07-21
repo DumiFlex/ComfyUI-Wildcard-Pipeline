@@ -578,7 +578,7 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
             :uuid-to-options-count="refData.uuidToOptionsCount"
             :uuid-to-option-tag-sets="refData.uuidToOptionTagSets"
             :uuid-to-tag-groups="refData.uuidToTagGroups"
-            :default-collapsed="rules.length > 1"
+            :default-collapsed="true"
             :collapse-command="collapseCommand"
             :data-test="`rule-${idx}`"
             @update:model-value="(v) => updateRule(idx, v)"

@@ -430,15 +430,26 @@ describe("DerivationRuleCard.vue", () => {
     const hidden = (w: { attributes: (n: string) => string | undefined }) =>
       (w.attributes("style") ?? "").includes("display: none");
 
-    it("per-branch chevron hides the branch body and shows a peek", async () => {
+    it("branches start collapsed; the chevron toggles the body + peek", async () => {
       const wrap = mountCard(makeRule(), 0);
       const body = () => wrap.find('[data-test="branch-0-0"] .branch-body');
-      expect(hidden(body())).toBe(false);
-      await wrap.get('[data-test="toggle-branch-0-0"]').trigger("click");
+      // Collapsed by default → body hidden, peek shown.
       expect(hidden(body())).toBe(true);
-      const peek = wrap.find('[data-test="branch-peek-0-0"]');
-      expect(peek.exists()).toBe(true);
-      expect(peek.text()).toBe("$x → $out");
+      expect(wrap.find('[data-test="branch-peek-0-0"]').text()).toBe("$x → $out");
+      // Expand.
+      await wrap.get('[data-test="toggle-branch-0-0"]').trigger("click");
+      expect(hidden(body())).toBe(false);
+      expect(wrap.find('[data-test="branch-peek-0-0"]').exists()).toBe(false);
+    });
+
+    it("per-rule collapse/expand-all-branches buttons toggle every branch", async () => {
+      const wrap = mountCard(makeRule(), 0);
+      const body = () => wrap.find('[data-test="branch-0-0"] .branch-body');
+      // Expand all first (default is collapsed), then collapse all again.
+      await wrap.get('[data-test="expand-branches-0"]').trigger("click");
+      expect(hidden(body())).toBe(false);
+      await wrap.get('[data-test="collapse-branches-0"]').trigger("click");
+      expect(hidden(body())).toBe(true);
     });
 
     it("adopts the collapseCommand broadcast (Collapse all / Expand all)", async () => {

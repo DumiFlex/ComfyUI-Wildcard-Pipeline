@@ -71,9 +71,19 @@ watch(
 );
 
 // Per-branch collapse. Branch index → collapsed; the ELSE clause is keyed as
-// -1. Branches are expanded by default; collapsing hides the condition/action
-// editors and shows a one-line summary in the branch head.
-const collapsedBranches = ref<Set<number>>(new Set());
+// -1. Collapsing hides the condition/action editors and shows a one-line
+// summary in the branch head.
+/** Every branch key for this rule (IF/ELIF indices + `-1` for ELSE). */
+function allBranchKeys(): number[] {
+  const r = props.modelValue;
+  const keys = r.branches.map((_, i) => i);
+  if (r.else) keys.push(-1);
+  return keys;
+}
+// Branches start COLLAPSED on open (matches the request for a compact
+// editor). Newly-added branches aren't in this set, so they open expanded
+// for immediate editing.
+const collapsedBranches = ref<Set<number>>(new Set(allBranchKeys()));
 function toggleBranch(bi: number): void {
   const next = new Set(collapsedBranches.value);
   if (next.has(bi)) next.delete(bi);
@@ -82,6 +92,13 @@ function toggleBranch(bi: number): void {
 }
 function isBranchCollapsed(bi: number): boolean {
   return collapsedBranches.value.has(bi);
+}
+/** Collapse / expand every branch in THIS rule (the inline per-rule control). */
+function collapseAllBranches(): void {
+  collapsedBranches.value = new Set(allBranchKeys());
+}
+function expandAllBranches(): void {
+  collapsedBranches.value = new Set();
 }
 /** Compact `$cond → $target` peek for a collapsed branch head. */
 function branchPeek(cvar: string, tvar: string): string {
@@ -318,6 +335,26 @@ const branchCount = computed(() => rule.value.branches.length);
         <span v-if="rule.else"> + ELSE</span>
       </span>
       <span class="spacer" />
+      <!-- Inline per-rule collapse/expand of THIS rule's conditions. Only
+           useful when the rule card itself is open. -->
+      <span v-if="!collapsed" class="rule-head__branch-ctrls">
+        <Button
+          icon="pi-angle-double-up"
+          variant="ghost"
+          size="sm"
+          :aria-label="`Collapse all conditions in rule ${ruleNumber}`"
+          :data-test="`collapse-branches-${index}`"
+          @click.stop="collapseAllBranches"
+        />
+        <Button
+          icon="pi-angle-double-down"
+          variant="ghost"
+          size="sm"
+          :aria-label="`Expand all conditions in rule ${ruleNumber}`"
+          :data-test="`expand-branches-${index}`"
+          @click.stop="expandAllBranches"
+        />
+      </span>
       <Button
         icon="pi-trash"
         variant="ghost"
@@ -665,6 +702,7 @@ const branchCount = computed(() => rule.value.branches.length);
   color: var(--wp-text-muted, #9ca3af);
 }
 .spacer { flex: 1; }
+.rule-head__branch-ctrls { display: inline-flex; gap: 2px; }
 
 .branches {
   display: flex;
