@@ -20,7 +20,7 @@
 import type { BundleRow, ModuleRow } from "../api/types";
 import { tokenizeRich, varBaseName, type RichToken } from "../../widgets/richTokenize";
 import { validateExpression } from "../parsing/subcatFilter";
-import { VALID_IDENTIFIER_RE } from "./slug";
+import { isValidVariableName } from "../validation/names";
 
 /** A produced-var NAME must be a clean `$varname` identifier
  *  (`[A-Za-z_][A-Za-z0-9_]*`). Anything else — a comma, space, or other
@@ -30,7 +30,7 @@ import { VALID_IDENTIFIER_RE } from "./slug";
  *  payload check (Python ≡ TS). Returns true when a NON-EMPTY name is
  *  invalid (the empty case is reported separately as a "missing" warn). */
 function isInvalidVarName(name: string): boolean {
-  return name.length > 0 && !VALID_IDENTIFIER_RE.test(name);
+  return name.length > 0 && !isValidVariableName(name);
 }
 
 /** Shared error message for an invalid produced-var name. */

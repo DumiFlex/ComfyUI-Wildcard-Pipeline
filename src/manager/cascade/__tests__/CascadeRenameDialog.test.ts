@@ -139,6 +139,52 @@ describe("CascadeRenameDialog", () => {
     wrap.unmount();
   });
 
+  it("blocks a subcategory rename to a name containing a space (issue #7)", async () => {
+    mockComposable.dryRun.mockResolvedValue({ ok: true, affected_count: 0, affected_entities: [] });
+    const wrap = mount(CascadeRenameDialog, {
+      props: { open: true, kind: "subcategory", id: "11111111", initialName: "warm",
+                extra: { subcat_name: "warm" } },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const input = findNameInput();
+    input!.value = "warm tone"; // contains a space — invalid subcat name
+    input!.dispatchEvent(new Event("input"));
+    await flushPromises();
+    // Validation error is surfaced.
+    const err = document.body.querySelector(".wp-cascade-rename__error");
+    expect(err?.textContent ?? "").toContain("whitespace");
+    // Confirm is disabled and clicking it does not apply the rename.
+    const btn = document.body.querySelector("[data-test='cascade-rename-confirm']") as HTMLButtonElement;
+    expect(btn.disabled || btn.getAttribute("aria-disabled") === "true").toBe(true);
+    btn.click();
+    await flushPromises();
+    expect(mockComposable.apply).not.toHaveBeenCalled();
+    wrap.unmount();
+  });
+
+  it("blocks a combine output-var rename to a non-identifier name", async () => {
+    mockComposable.dryRun.mockResolvedValue({ ok: true, affected_count: 0, affected_entities: [] });
+    const wrap = mount(CascadeRenameDialog, {
+      props: { open: true, kind: "combine_output_var", id: "22222222", initialName: "outfit",
+                extra: { old_name: "outfit" } },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const input = findNameInput();
+    input!.value = "out fit"; // space — invalid $identifier
+    input!.dispatchEvent(new Event("input"));
+    await flushPromises();
+    const err = document.body.querySelector(".wp-cascade-rename__error");
+    expect(err?.textContent ?? "").toContain("letters, digits");
+    const btn = document.body.querySelector("[data-test='cascade-rename-confirm']") as HTMLButtonElement;
+    expect(btn.disabled || btn.getAttribute("aria-disabled") === "true").toBe(true);
+    btn.click();
+    await flushPromises();
+    expect(mockComposable.apply).not.toHaveBeenCalled();
+    wrap.unmount();
+  });
+
   it("rename button disabled when name empty", async () => {
     mockComposable.dryRun.mockResolvedValue({ ok: true, affected_count: 0, affected_entities: [] });
     const wrap = mount(CascadeRenameDialog, {

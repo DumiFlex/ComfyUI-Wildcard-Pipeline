@@ -33,7 +33,7 @@ import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { useRecentStore } from "../stores/recentStore";
-import { VALID_IDENTIFIER_RE } from "../utils/slug";
+import { isValidVariableName } from "../validation/names";
 import { appendSnapshot, readHistory } from "../utils/history";
 import { useCascadeStore } from "../cascade/cascade-store";
 import { useCascadeApply } from "../cascade/useCascadeApply";
@@ -269,7 +269,7 @@ const rowErrors = computed<string[]>(() => {
   for (const v of values.value) {
     const n = v.name.trim();
     if (!n) { errs.push("Required"); continue; }
-    if (!VALID_IDENTIFIER_RE.test(n)) { errs.push("Invalid identifier"); continue; }
+    if (!isValidVariableName(n)) { errs.push("Invalid identifier"); continue; }
     if ((counts.get(n) ?? 0) > 1) { errs.push("Duplicate name"); continue; }
     errs.push("");
   }

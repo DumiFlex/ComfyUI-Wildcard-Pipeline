@@ -32,7 +32,8 @@ import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { useRecentStore } from "../stores/recentStore";
-import { toIdentifier, VALID_IDENTIFIER_RE } from "../utils/slug";
+import { toIdentifier } from "../utils/slug";
+import { validateVariableName } from "../validation/names";
 import { buildUuidToName } from "../utils/wildcardSyntax";
 import { collectLibraryVarHints, type VarHint } from "../utils/library-suggestions";
 import { appendSnapshot, readHistory } from "../utils/history";
@@ -373,8 +374,9 @@ async function save() {
     return;
   }
   const finalOutput = outputVar.value.trim() || toIdentifier(name.value);
-  if (!VALID_IDENTIFIER_RE.test(finalOutput)) {
-    outputVarError.value = "Use letters, digits, underscores; must not start with a digit.";
+  const outputVarErr = validateVariableName(finalOutput);
+  if (outputVarErr) {
+    outputVarError.value = outputVarErr;
     toast.push({ severity: "warn", summary: "Invalid output variable" });
     return;
   }
