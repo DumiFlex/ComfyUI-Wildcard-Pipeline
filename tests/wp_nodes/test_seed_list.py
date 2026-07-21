@@ -543,3 +543,47 @@ def test_execute_output_reflects_seed_locks():
     )
     seeds = _seeds(out)
     assert seeds == [10, 77, 12]
+
+
+def test_execute_override_count_respects_loop_kept_indices():
+    # Loop bypassed frames 1 + 3 of 5 -> kept_indices [0,2,4]. The seed list
+    # must emit those 3 seeds (drawn from the full 5-seed series), not 5.
+    loop_config = {
+        "count": 5, "strategy": "hash_index", "base_seed": 42,
+        "kept_indices": [0, 2, 4],
+    }
+    out = WPSeedList.execute(
+        base_seed=42, count=99,
+        wp_seed_list_config=_cfg(strategy="hash_index", override_count=True),
+        loop_config=loop_config,
+    )
+    full = derive_loop_seeds(42, 5, "hash_index")
+    assert _seeds(out) == [full[0], full[2], full[4]]
+
+
+def test_execute_kept_indices_ignored_when_override_count_off():
+    # Not mirroring the loop's count -> the loop's kept_indices don't apply.
+    loop_config = {
+        "count": 5, "strategy": "hash_index", "base_seed": 42,
+        "kept_indices": [0, 2, 4],
+    }
+    out = WPSeedList.execute(
+        base_seed=42, count=4,
+        wp_seed_list_config=_cfg(strategy="hash_index", override_count=False),
+        loop_config=loop_config,
+    )
+    assert _seeds(out) == derive_loop_seeds(42, 4, "hash_index")
+
+
+def test_execute_full_kept_indices_is_noop():
+    # A full kept list (no bypass) leaves the emit unchanged.
+    loop_config = {
+        "count": 3, "strategy": "hash_index", "base_seed": 42,
+        "kept_indices": [0, 1, 2],
+    }
+    out = WPSeedList.execute(
+        base_seed=42, count=99,
+        wp_seed_list_config=_cfg(strategy="hash_index", override_count=True),
+        loop_config=loop_config,
+    )
+    assert _seeds(out) == derive_loop_seeds(42, 3, "hash_index")

@@ -196,6 +196,7 @@ def test_execute_emits_loop_config_payload_on_second_output():
     assert loop_config == {
         "count": 3,
         "active_count": 3,
+        "kept_indices": [0, 1, 2],
         "strategy": "sequential",
         "base_seed": 42,
         "override_seed": True,

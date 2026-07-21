@@ -207,6 +207,12 @@ class WPContextLoop(io.ComfyNode):
         loop_config_payload: dict[str, object] = {
             "count": total_count,
             "active_count": len(kept),
+            # The 0-based indices this loop actually emits (== range(count)
+            # for a normal run). A wired WP_SeedList mirrors this so it emits
+            # ONE seed per kept frame — otherwise it would derive the full
+            # `count` seeds and the sampler would run more times than the
+            # loop has prompts.
+            "kept_indices": list(kept),
             "strategy": strategy,
             "base_seed": int(seed),
             "override_seed": has_override,
