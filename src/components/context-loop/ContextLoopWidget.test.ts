@@ -155,6 +155,15 @@ describe("ContextLoopWidget bypass (#13)", () => {
     const w = mount(ContextLoopWidget, { props: { modelValue: cfg, count: 5 } });
     expect(w.find('[data-test="loop-seeds-bypass-badge"]').text()).toMatch(/2 bypassed/i);
   });
+  it("marks bypassed edit-frame chips with a dashed-border class", () => {
+    const cfg = { ...emptyContextLoopConfig(), bypass_frames: [1, 3] };
+    const w = mount(ContextLoopWidget, { props: { modelValue: cfg, count: 5 } });
+    // frame index 1 -> chip #2 (data-test loop-frame-2)
+    expect(w.find('[data-test="loop-frame-2"]').classes()).toContain("wp-loop__chip--bypassed");
+    expect(w.find('[data-test="loop-frame-4"]').classes()).toContain("wp-loop__chip--bypassed");
+    expect(w.find('[data-test="loop-frame-1"]').classes()).not.toContain("wp-loop__chip--bypassed");
+  });
+
   it("has no bypass badge when none are bypassed", () => {
     const w = mount(ContextLoopWidget, { props: { modelValue: emptyContextLoopConfig(), count: 5 } });
     expect(w.find('[data-test="loop-seeds-bypass-badge"]').exists()).toBe(false);

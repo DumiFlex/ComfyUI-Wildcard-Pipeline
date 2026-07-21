@@ -67,6 +67,9 @@ function onSeedLocks(next: Record<string, number>): void {
 }
 
 const bypassedCount = computed(() => (props.modelValue.bypass_frames ?? []).length);
+/** 0-based bypassed frame indices — drives the dashed border on edit-frame
+ *  chips so bypassed frames read at a glance without opening the modal. */
+const bypassSet = computed(() => new Set(props.modelValue.bypass_frames ?? []));
 function onBypassFrames(next: number[]): void {
   emit("update:modelValue", { ...props.modelValue, bypass_frames: next });
 }
@@ -148,8 +151,9 @@ function toggleTotalInternal(): void {
         <button type="button" class="wp-loop__chip" :class="{ 'wp-loop__chip--active': currentFrame === null }"
           data-test="loop-frame-base" role="radio" :aria-checked="currentFrame === null" @click="setFrame(null)">base</button>
         <button v-for="i in frameChips" :key="i" type="button" class="wp-loop__chip"
-          :class="{ 'wp-loop__chip--active': currentFrame === i }"
-          :data-test="`loop-frame-${i + 1}`" role="radio" :aria-checked="currentFrame === i" @click="setFrame(i)">#{{ i + 1 }}</button>
+          :class="{ 'wp-loop__chip--active': currentFrame === i, 'wp-loop__chip--bypassed': bypassSet.has(i) }"
+          :data-test="`loop-frame-${i + 1}`" role="radio" :aria-checked="currentFrame === i"
+          :title="bypassSet.has(i) ? `Frame ${i + 1} is bypassed` : undefined" @click="setFrame(i)">#{{ i + 1 }}</button>
       </div>
     </div>
 
@@ -281,6 +285,14 @@ function toggleTotalInternal(): void {
   border-color: var(--wp-accent, #c4b5fd);
   color: var(--wp-accent, #c4b5fd);
 }
+/* Bypassed frame — interrupted (dashed) border + dimmed so it reads at a
+ * glance on the node. Composes with --active (dashed overrides the solid). */
+.wp-loop__chip--bypassed {
+  border-style: dashed;
+  border-color: var(--wp-border-strong, #4a4d55);
+  opacity: 0.5;
+}
+.wp-loop__chip--bypassed:hover { opacity: 0.8; }
 
 .wp-loop__row {
   display: flex;
