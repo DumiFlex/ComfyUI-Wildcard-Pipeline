@@ -32,14 +32,70 @@ interface CachedRelease {
   url?: string | null;
 }
 
-/** Module-level guard so multiple consumers (topbar + settings) mounting
- *  in one app session trigger at most one launch fetch. `checkNow` ignores
- *  it. Reset in tests via `resetReleaseCheckSession`. */
+/** Module-level singleton state so EVERY consumer (topbar pill + Settings
+ *  card) shares ONE reactive source. Without this, each `useReleaseCheck()`
+ *  call got its own refs — so a manual "Check now" in Settings updated only
+ *  Settings' copy and the topbar pill stayed dark until a page reload. */
+const latestVersion = ref<string | null>(null);
+const hasUpdate = ref<boolean>(false);
+const severity = ref<UpdateSeverity | null>(null);
+const releaseBody = ref<string | null>(null);
+const releaseUrl = ref<string | null>(null);
+const lastChecked = ref<string | null>(null);
+const checking = ref<boolean>(false);
+
+/** Guard so the once-per-session launch fetch fires at most once across all
+ *  consumers. `checkNow` ignores it. */
 let sessionFetched = false;
 
-/** Test-only: clear the session guard between mounts. */
+/** Test-only: reset the shared state + session guard between mounts. */
 export function resetReleaseCheckSession(): void {
   sessionFetched = false;
+  latestVersion.value = null;
+  hasUpdate.value = false;
+  severity.value = null;
+  releaseBody.value = null;
+  releaseUrl.value = null;
+  lastChecked.value = null;
+  checking.value = false;
+}
+
+/** Apply a candidate latest version to the shared refs. Reads
+ *  `__APP_VERSION__` lazily (not a cached const) so tests that assign it
+ *  after import see the right value. Guards a missing/malformed version so a
+ *  bad cache degrades to "no update" instead of throwing in semverCompare. */
+function applyLatest(v: string | null): void {
+  const current = __APP_VERSION__;
+  const valid = typeof v === "string" && v.length > 0 && typeof current === "string";
+  latestVersion.value = valid ? v : null;
+  const newer = valid && semverCompare(v as string, current) > 0;
+  hasUpdate.value = newer;
+  severity.value = newer ? classifyBump(current, v as string) : null;
+}
+
+/** Fetch fresh, persist, apply to the shared refs. Shared by the launch
+ *  fetch + `checkNow`. */
+async function refresh(): Promise<void> {
+  checking.value = true;
+  try {
+    const fresh = await fetchLatestRelease();
+    if (fresh) {
+      sessionFetched = true;
+      writeCache(fresh);
+      releaseBody.value = fresh.body;
+      releaseUrl.value = fresh.url;
+      lastChecked.value = new Date().toISOString();
+      applyLatest(fresh.version);
+    }
+  } finally {
+    checking.value = false;
+  }
+}
+
+/** Manual check — always refetches, ignores the session guard. Because the
+ *  refs are shared, this lights the topbar pill + Settings simultaneously. */
+async function checkNow(): Promise<void> {
+  await refresh();
 }
 
 /**
@@ -178,49 +234,7 @@ export function useReleaseCheck(): {
   checkNow: () => Promise<void>;
 } {
   const current = __APP_VERSION__;
-  const latestVersion = ref<string | null>(null);
-  const hasUpdate = ref<boolean>(false);
-  const severity = ref<UpdateSeverity | null>(null);
-  const releaseBody = ref<string | null>(null);
-  const releaseUrl = ref<string | null>(null);
-  const lastChecked = ref<string | null>(null);
-  const checking = ref<boolean>(false);
   const ui = useUiStore();
-
-  function applyLatest(v: string | null): void {
-    // Defensive: a legacy/malformed cache blob may carry a non-string
-    // (or missing) version, and `current` is undefined if the vite
-    // `define` didn't inject `__APP_VERSION__`. Guard both so a bad value
-    // degrades to "no update" instead of throwing in semverCompare.
-    const valid = typeof v === "string" && v.length > 0 && typeof current === "string";
-    latestVersion.value = valid ? v : null;
-    const newer = valid && semverCompare(v as string, current) > 0;
-    hasUpdate.value = newer;
-    severity.value = newer ? classifyBump(current, v as string) : null;
-  }
-
-  /** Fetch fresh, persist, apply. Shared by launch fetch + checkNow. */
-  async function refresh(): Promise<void> {
-    checking.value = true;
-    try {
-      const fresh = await fetchLatestRelease();
-      if (fresh) {
-        sessionFetched = true;
-        writeCache(fresh);
-        releaseBody.value = fresh.body;
-        releaseUrl.value = fresh.url;
-        lastChecked.value = new Date().toISOString();
-        applyLatest(fresh.version);
-      }
-    } finally {
-      checking.value = false;
-    }
-  }
-
-  /** Manual check — always refetches, ignores the session guard. */
-  async function checkNow(): Promise<void> {
-    await refresh();
-  }
 
   onMounted(() => {
     // Paint the cached result immediately (if any) so the pill/dialog

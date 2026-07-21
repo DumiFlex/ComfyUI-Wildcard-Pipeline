@@ -46,4 +46,29 @@ describe("renderReleaseNotes", () => {
   it("returns an empty-notes marker for blank input", () => {
     expect(renderReleaseNotes("")).toContain("No release notes");
   });
+
+  it("unwraps <details>/<summary>/<b> instead of showing literal tags", () => {
+    const md = "<details>\n<summary><b>📋 Full changelog</b> — details</summary>\n\n- one\n</details>";
+    const html = renderReleaseNotes(md);
+    expect(html).not.toContain("&lt;details&gt;");
+    expect(html).not.toContain("&lt;summary&gt;");
+    expect(html).not.toContain("<details>");
+    // Summary becomes a bold lead line; the list still renders.
+    expect(html).toContain("<strong>");
+    expect(html).toContain("Full changelog");
+    expect(html).toContain("<li>one</li>");
+  });
+
+  it("still neutralizes non-allowlisted raw HTML", () => {
+    const html = renderReleaseNotes("<img src=x onerror=alert(1)>");
+    expect(html).not.toContain("<img");
+    expect(html).toContain("&lt;img");
+  });
+
+  it("renders a · separated link header as links", () => {
+    const html = renderReleaseNotes("[Docs](https://e.com/d) · [Discord](https://e.com/x)");
+    expect(html).toContain('href="https://e.com/d"');
+    expect(html).toContain('href="https://e.com/x"');
+    expect(html).toContain("·");
+  });
 });

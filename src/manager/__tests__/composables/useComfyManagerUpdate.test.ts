@@ -50,18 +50,35 @@ describe("useComfyManagerUpdate", () => {
   });
 
   it("runUpdate happy path: idle -> installing -> staged", async () => {
-    vi.stubGlobal("fetch", mockManager());
+    const fetchMock = mockManager();
+    vi.stubGlobal("fetch", fetchMock);
     const u = useComfyManagerUpdate();
-    const p = u.runUpdate();
+    const p = u.runUpdate("2.10.0"); // newer than __APP_VERSION__ 2.9.0
     expect(u.phase.value).toBe("installing");
     await p;
     expect(u.phase.value).toBe("staged");
+    // Pins the exact target + uses the fresh (remote) catalog, never "latest"/"cache".
+    const installCall = fetchMock.mock.calls.find((c) => String(c[0]).includes("/manager/queue/install"));
+    const body = JSON.parse((installCall![1] as RequestInit).body as string);
+    expect(body.selected_version).toBe("2.10.0");
+    expect(body.mode).toBe("remote");
+  });
+
+  it("runUpdate refuses a downgrade / non-newer target (2.10.0 bug guard)", async () => {
+    const fetchMock = mockManager();
+    vi.stubGlobal("fetch", fetchMock);
+    const u = useComfyManagerUpdate();
+    await u.runUpdate("2.8.0"); // older than installed 2.9.0
+    expect(u.phase.value).toBe("error");
+    expect(u.errorKind.value).toBe("failed");
+    // Never hit the install endpoint.
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes("/manager/queue/install"))).toBe(false);
   });
 
   it("runUpdate maps install 403 to forbidden error", async () => {
     vi.stubGlobal("fetch", mockManager({ install: { ok: false, status: 403, text: "security" } }));
     const u = useComfyManagerUpdate();
-    await u.runUpdate();
+    await u.runUpdate("2.10.0");
     expect(u.phase.value).toBe("error");
     expect(u.errorKind.value).toBe("forbidden");
   });
@@ -69,7 +86,7 @@ describe("useComfyManagerUpdate", () => {
   it("runUpdate maps a non-403 install failure to failed error", async () => {
     vi.stubGlobal("fetch", mockManager({ install: { ok: false, status: 500, text: "boom" } }));
     const u = useComfyManagerUpdate();
-    await u.runUpdate();
+    await u.runUpdate("2.10.0");
     expect(u.phase.value).toBe("error");
     expect(u.errorKind.value).toBe("failed");
   });

@@ -40,11 +40,29 @@ function renderInline(escaped: string): string {
   return out;
 }
 
+/**
+ * Normalize the small set of HTML tags that GitHub release bodies use —
+ * `<details>`/`<summary>` collapsibles and `<b>` — into markdown BEFORE the
+ * escape pass, so they render instead of appearing as literal `<details>`
+ * text. Everything else still falls through to escaping (rendered inert), so
+ * this stays safe: it only recognises a fixed allow-list of formatting tags.
+ */
+function normalizeReleaseHtml(md: string): string {
+  return md
+    // <summary>…</summary> → a bold lead line (drop any inner tags).
+    .replace(/<summary>([\s\S]*?)<\/summary>/gi, (_m, s: string) =>
+      `**${s.replace(/<\/?[a-z][^>]*>/gi, "").trim()}**\n`)
+    // Drop the <details> wrapper markers — the content flows inline.
+    .replace(/<\/?details[^>]*>/gi, "")
+    // Bold.
+    .replace(/<\/?(?:b|strong)>/gi, "**");
+}
+
 export function renderReleaseNotes(md: string): string {
   if (!md || !md.trim()) {
     return '<p class="wpc-relnotes__empty">No release notes.</p>';
   }
-  const lines = md.replace(/\r\n/g, "\n").split("\n");
+  const lines = normalizeReleaseHtml(md).replace(/\r\n/g, "\n").split("\n");
   const html: string[] = [];
   let inList = false;
   let inCode = false;
