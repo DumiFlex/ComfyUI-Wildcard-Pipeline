@@ -40,6 +40,7 @@ def _parse_config(raw: str) -> dict[str, object]:
         "iteration_internal": True,
         "total_internal": True,
         "seed_locks": {},
+        "bypass_frames": [],
     }
     if not raw or not isinstance(raw, str):
         return defaults
@@ -68,6 +69,21 @@ def _parse_config(raw: str) -> dict[str, object]:
             except (TypeError, ValueError):
                 continue
     out["seed_locks"] = locks
+    frames_raw = parsed.get("bypass_frames", [])
+    frames: set[int] = set()
+    if isinstance(frames_raw, list):
+        for x in frames_raw:
+            if isinstance(x, bool):  # bool is an int subclass — exclude
+                continue
+            if isinstance(x, int):
+                n = x
+            elif isinstance(x, float) and x.is_integer():
+                n = int(x)
+            else:
+                continue
+            if n >= 0:
+                frames.add(n)
+    out["bypass_frames"] = sorted(frames)
     return out
 
 
@@ -147,27 +163,56 @@ class WPContextLoop(io.ComfyNode):
         iteration_internal = bool(cfg["iteration_internal"])
         total_internal = bool(cfg["total_internal"])
         seed_locks: dict[int, int] = cfg["seed_locks"]  # type: ignore[assignment]
+        bypass_frames: list[int] = cfg["bypass_frames"]  # type: ignore[assignment]
 
-        # Resolve effective count. `bypass` collapses to single-run while
-        # preserving the list-shape output contract — downstream still
-        # sees an `is_list=True` socket with one element.
-        effective_count = 1 if bypass else max(1, int(count))
+        # Resolve which frames to emit + the seed series they draw from.
+        #
+        #   - Whole-loop `bypass` (existing behavior) collapses to a single
+        #     run while preserving the list-shape output contract.
+        #   - Per-frame bypass (`bypass_frames`, 0-based) skips individual
+        #     iterations WITHOUT renumbering the kept ones: each kept frame
+        #     keeps its original index as `__wp_loop_index__`, so it draws
+        #     `derived[idx]` and its per-frame overrides still key correctly.
+        #     Out-of-range indices are ignored; an all-bypassed config floors
+        #     to a full run so the `is_output_list` socket is never empty.
+        # The seed series is derived for the FULL count (not the reduced
+        # one) so kept frame N always draws `derived[N]`.
         has_override = override_seed
+        configured_count = max(1, int(count))
+        if bypass:
+            total_count = 1
+            kept = [0]
+        else:
+            in_range_bypassed = {
+                i for i in bypass_frames if 0 <= i < configured_count
+            }
+            kept = [i for i in range(configured_count) if i not in in_range_bypassed]
+            if not kept:
+                kept = list(range(configured_count))
+            total_count = configured_count
         derived = (
             apply_seed_locks(
-                derive_loop_seeds(int(seed), effective_count, strategy),
+                derive_loop_seeds(int(seed), total_count, strategy),
                 seed_locks,
             )
             if has_override else None
         )
         # Build the loop_config payload once so the same dict drives both
-        # the per-iteration internals AND the side output. `count` here
-        # is the EFFECTIVE count (post-bypass) so downstream sees what
-        # the loop is actually running, not the raw widget value.
-        # `base_seed` carries the user's `seed` input verbatim so
-        # WP_SeedList can re-derive the same series locally.
+        # the per-iteration internals AND the side output. `count` is the
+        # configured/effective total (so WP_SeedList + the seed modal
+        # re-derive the identical full series); `active_count` is how many
+        # frames actually emit after per-frame bypass. `base_seed` carries
+        # the user's `seed` input verbatim so WP_SeedList can re-derive the
+        # same series locally.
         loop_config_payload: dict[str, object] = {
-            "count": effective_count,
+            "count": total_count,
+            "active_count": len(kept),
+            # The 0-based indices this loop actually emits (== range(count)
+            # for a normal run). A wired WP_SeedList mirrors this so it emits
+            # ONE seed per kept frame — otherwise it would derive the full
+            # `count` seeds and the sampler would run more times than the
+            # loop has prompts.
+            "kept_indices": list(kept),
             "strategy": strategy,
             "base_seed": int(seed),
             "override_seed": has_override,
@@ -186,16 +231,18 @@ class WPContextLoop(io.ComfyNode):
             internal_flags[total_var_name] = True
 
         payloads = []
-        for idx in range(effective_count):
-            # User-facing iteration counter is 1-based — reads naturally
-            # in PromptAssembler templates (`iteration 1 of 4`) and in
-            # the debug viewer. The internal `__wp_loop_index__` below
-            # stays 0-based because `derive_loop_seeds[idx]` indexes the
-            # derived series + `effective_chain_seed` math assumes
-            # zero-origin (loop_index=0 means "no XOR shift").
+        for idx in kept:
+            # User-facing iteration counter is the frame's ORIGINAL 1-based
+            # number (bypass keeps identity — frame 5 stays "5 of 18", not
+            # renumbered). The internal `__wp_loop_index__` below stays the
+            # 0-based original index because `derived[idx]` indexes the
+            # full series + `effective_chain_seed` math assumes zero-origin
+            # (loop_index=0 means "no XOR shift"). `total` is the configured
+            # count so bypassing a frame never rewrites the other frames'
+            # "of N" text (which would bust their downstream caches).
             context_vars = {
                 iteration_var_name: str(idx + 1),
-                total_var_name: str(effective_count),
+                total_var_name: str(total_count),
             }
             internals: dict[str, object] = {
                 "__wp_loop_index__": idx,

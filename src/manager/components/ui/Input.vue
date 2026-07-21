@@ -35,6 +35,17 @@ const inputClasses = computed(() => [
 ]);
 
 const isNumber = computed(() => props.type === "number");
+
+/** Native `step` here is ONLY used by the browser for HTML validation —
+ *  arrow keys, the wheel, and the custom chevrons all route through `bump()`
+ *  (native spin buttons are hidden via CSS), and `bump()` reads `props.step`
+ *  itself. A concrete step (e.g. `0.1`) combined with an off-grid `min` or
+ *  value makes the browser reject legitimate input: a default weight of `1`
+ *  with `min="0.01" step="0.1"` popped up "Please select a valid value. The
+ *  two nearest valid values are 0.91 and 1.01." So emit `step="any"` for
+ *  number inputs — the browser never grid-validates, while `bump()` keeps
+ *  stepping by `props.step`. */
+const nativeStep = computed(() => (isNumber.value ? "any" : props.step));
 const wrapped = computed(() => Boolean(props.icon || props.addon) || isNumber.value);
 
 function onInput(e: Event) {
@@ -122,7 +133,7 @@ function bump(direction: 1 | -1) {
       :aria-invalid="error || undefined"
       :min="min"
       :max="max"
-      :step="step"
+      :step="nativeStep"
       @input="onInput"
       @keydown="onKeydown"
       @wheel="onWheel"

@@ -23,6 +23,10 @@ export interface ContextLoopConfig {
   /** 0-based iteration index (stringified) -> pinned seed. Unlocked
    *  indices re-derive from base+strategy. Empty by default. */
   seed_locks: Record<string, number>;
+  /** 0-based iteration indices to bypass (skip generation + overrides).
+   *  Sorted, deduped, non-negative. Out-of-range (>= count) entries are
+   *  kept and re-apply if count grows. Empty by default. */
+  bypass_frames: number[];
 }
 
 const STRATEGIES = new Set<LoopStrategy>(["sequential", "hash_index", "prime_stride"]);
@@ -36,6 +40,7 @@ export function emptyContextLoopConfig(): ContextLoopConfig {
     iteration_internal: true,
     total_internal: true,
     seed_locks: {},
+    bypass_frames: [],
   };
 }
 
@@ -70,6 +75,18 @@ export function parseContextLoopConfig(raw: string | null | undefined): ContextL
       if (typeof v === "number" && Number.isFinite(v)) locks[k] = v;
     }
     out.seed_locks = locks;
+  }
+  if (Array.isArray(obj.bypass_frames)) {
+    const frames = new Set<number>();
+    for (const x of obj.bypass_frames) {
+      // Type-guard before accepting — do NOT coerce. Mirrors the Python
+      // `_parse_config` (which rejects non-int via isinstance), so both
+      // parsers degrade corrupt widget JSON identically (`true`, `"3"`,
+      // `null` are dropped on both sides, not coerced to 1/3/0).
+      if (typeof x !== "number" || !Number.isInteger(x) || x < 0) continue;
+      frames.add(x);
+    }
+    out.bypass_frames = [...frames].sort((a, b) => a - b);
   }
   return out;
 }

@@ -20,6 +20,9 @@ import CommunityRowActions from "../components/CommunityRowActions.vue";
 import DraftBanner from "../components/DraftBanner.vue";
 import RichTextInput from "../components/RichTextInput.vue";
 import BulkAddPanel from "../components/BulkAddPanel.vue";
+import BulkDeleteToolbar from "../components/BulkDeleteToolbar.vue";
+import Checkbox from "../components/ui/Checkbox.vue";
+import { useBulkSelection } from "../composables/useBulkSelection";
 import type { ParsedFixedValue } from "../utils/bulkParse";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useToast } from "../composables/useToast";
@@ -224,6 +227,34 @@ function commitBulkValues(parsed: ParsedFixedValue[]): void {
   toast.push({ severity: "success", summary: `${added} added, ${updated} updated`, life: 2500 });
 }
 
+/* ── Bulk select + delete ────────────────────────────────────────────────
+ * Multi-select value rows to delete many at once (the bulk-ADD panel above
+ * stays independent). Selection keys off each row's stable `id`. */
+const bulk = useBulkSelection(() => values.value.map((v) => v.id));
+const {
+  active: bulkActive,
+  count: bulkCount,
+  allSelected: bulkAllSelected,
+  someSelected: bulkSomeSelected,
+  isSelected: bulkIsSelected,
+  toggle: bulkToggle,
+  toggleAll: bulkToggleAll,
+  toggleMode: bulkToggleMode,
+  clear: bulkClear,
+} = bulk;
+function deleteSelectedValues(): void {
+  const ids = new Set(bulk.selectedIds());
+  if (ids.size === 0) return;
+  const removed = ids.size;
+  values.value = values.value.filter((v) => !ids.has(v.id));
+  bulkClear();
+  toast.push({
+    severity: "success",
+    summary: `${removed} value${removed === 1 ? "" : "s"} deleted`,
+    life: 2500,
+  });
+}
+
 function onVarInput(idx: number, raw: string) {
   values.value[idx].name = (raw ?? "").replace(/[^a-zA-Z0-9_]/g, "");
 }
@@ -402,8 +433,15 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
       @update:content-rating="(v) => (contentRating = v)"
     />
 
-    <Card :title="`Values (${values.length})`" :padding="false">
+    <Card :title="`Values (${values.length})`" :padding="false" sticky-header>
       <template #actions>
+        <Button
+          size="sm"
+          :variant="bulkActive ? 'secondary' : 'ghost'"
+          icon="pi-check-square"
+          data-test="fv-bulk-toggle"
+          @click="bulkToggleMode"
+        >{{ bulkActive ? "Done" : "Bulk edit" }}</Button>
         <Button
           size="sm"
           :variant="bulkAddOpen ? 'secondary' : 'ghost'"
@@ -415,17 +453,36 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
           Add value
         </Button>
       </template>
-      <div v-if="bulkAddOpen" class="wpc-bulk-controls">
+      <template #subheader>
+      <div v-if="bulkAddOpen || (bulkActive && bulkCount > 0)" class="wpc-bulk-controls">
         <BulkAddPanel
+          v-if="bulkAddOpen"
           mode="values"
           :existing-values="existingValueNames"
           @commit-values="commitBulkValues"
           @cancel="bulkAddOpen = false"
         />
+        <BulkDeleteToolbar
+          v-if="bulkActive && bulkCount > 0"
+          :count="bulkCount"
+          noun="values"
+          @delete-selected="deleteSelectedValues"
+          @clear="bulkClear"
+        />
       </div>
+      </template>
       <table class="wp-table wp-options-table">
         <thead>
           <tr>
+            <th v-if="bulkActive" scope="col" class="fv-col-check">
+              <Checkbox
+                :model-value="bulkAllSelected"
+                :indeterminate="bulkSomeSelected"
+                aria-label="Select all values"
+                data-test="fv-bulk-select-all"
+                @update:model-value="bulkToggleAll"
+              />
+            </th>
             <th class="fv-col-var">Variable</th>
             <th>Value</th>
             <th class="fv-col-trash" />
@@ -437,7 +494,24 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
             :key="v.id"
             :data-test="`fv-row-${idx}`"
             :data-invalid="rowErrors[idx] ? 'true' : 'false'"
+            :class="{ 'fv-row--selected': bulkActive && bulkIsSelected(v.id) }"
           >
+            <td v-if="bulkActive" class="fv-col-check">
+              <button
+                type="button"
+                class="wp-check"
+                role="checkbox"
+                :aria-checked="bulkIsSelected(v.id)"
+                :data-checked="bulkIsSelected(v.id) ? 'true' : 'false'"
+                :aria-label="`Select value ${idx + 1}`"
+                :data-test="`fv-check-${idx}`"
+                @click="bulkToggle(v.id)"
+              >
+                <svg v-if="bulkIsSelected(v.id)" viewBox="0 0 12 12" fill="none" style="display:block">
+                  <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </button>
+            </td>
             <td>
               <div class="wp-input-group">
                 <span class="wp-input-group__addon">$</span>
@@ -479,7 +553,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
             </td>
           </tr>
           <tr v-if="!values.length">
-            <td colspan="3" class="opt-empty">No values yet.</td>
+            <td :colspan="bulkActive ? 4 : 3" class="opt-empty">No values yet.</td>
           </tr>
         </tbody>
       </table>
@@ -518,6 +592,8 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
   color: var(--wp-text-muted);
 }
 .fv-col-var { width: 220px; }
+.fv-col-check { width: 34px; text-align: center; }
+.fv-row--selected > td { background: color-mix(in oklab, var(--wp-accent) 8%, transparent); }
 .wpc-bulk-controls {
   display: flex;
   flex-direction: column;

@@ -1,19 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, h, nextTick } from "vue";
 import { mount } from "@vue/test-utils";
+import { createPinia, setActivePinia } from "pinia";
 
-import { useReleaseCheck, type UpdateSeverity } from "../../composables/useReleaseCheck";
+import { useReleaseCheck, resetReleaseCheckSession } from "../../composables/useReleaseCheck";
+import { useUiStore } from "../../stores/uiStore";
 
-// __APP_VERSION__ is injected by vite at build time; vitest doesn't
-// apply the define plugin, so we wire it onto globalThis here.
+// __APP_VERSION__ is injected by vite at build time; vitest doesn't apply
+// the define plugin, so we wire it onto globalThis here.
 (globalThis as unknown as { __APP_VERSION__: string }).__APP_VERSION__ = "1.7.0";
 
 const STORAGE_KEY = "wp.releaseCheck";
-
-beforeEach(() => {
-  localStorage.clear();
-  vi.restoreAllMocks();
-});
 
 type CheckResult = ReturnType<typeof useReleaseCheck>;
 let lastResult: CheckResult | null = null;
@@ -24,112 +21,120 @@ function host() {
     setup() {
       const r = useReleaseCheck();
       lastResult = r;
-      return () => h("span", { "data-test": "version" }, r.current);
+      return () => h("span", r.current);
     },
   });
 }
 
+/** Flush onMounted → await fetch → applyLatest → render. */
+async function settle() {
+  await nextTick();
+  await Promise.resolve();
+  await Promise.resolve();
+  await nextTick();
+}
+
+function releaseResponse(tag: string, body = "notes", url = "https://x/releases/v") {
+  return { ok: true, json: async () => ({ tag_name: tag, body, html_url: url }) };
+}
+
+beforeEach(() => {
+  localStorage.clear();
+  vi.restoreAllMocks();
+  setActivePinia(createPinia());
+  resetReleaseCheckSession();
+});
+
 describe("useReleaseCheck", () => {
-  it("flags hasUpdate when GitHub returns a newer tag", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ tag_name: "v1.8.0" }),
-    });
+  it("fetches on launch and surfaces version, body, url, lastChecked", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(releaseResponse("v1.8.0", "## New", "https://x/r/1.8.0"));
     vi.stubGlobal("fetch", fetchMock);
     const wrap = mount(host());
-    // Two ticks: onMounted -> await fetch -> applyLatest mutation -> render.
-    await nextTick();
-    await Promise.resolve();
-    await Promise.resolve();
-    await nextTick();
-    expect(fetchMock).toHaveBeenCalled();
-    // Verify it persisted to localStorage so a re-mount uses the cache.
-    const cached = JSON.parse(localStorage.getItem(STORAGE_KEY)!) as {
-      latest_version: string;
-    };
-    expect(cached.latest_version).toBe("1.8.0");
+    await settle();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(lastResult!.hasUpdate.value).toBe(true);
+    expect(lastResult!.latestVersion.value).toBe("1.8.0");
+    expect(lastResult!.releaseBody.value).toBe("## New");
+    expect(lastResult!.releaseUrl.value).toBe("https://x/r/1.8.0");
+    expect(lastResult!.lastChecked.value).not.toBeNull();
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).latest_version).toBe("1.8.0");
     wrap.unmount();
   });
 
-  it("uses cached value within TTL — no fetch", async () => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        checked_at: new Date().toISOString(),
-        latest_version: "1.6.5",
-      }),
-    );
-    const fetchMock = vi.fn();
+  it("does NOT fetch on launch when checkOnLaunch is off", async () => {
+    setActivePinia(createPinia());
+    useUiStore().setCheckOnLaunch(false);
+    const fetchMock = vi.fn().mockResolvedValue(releaseResponse("v1.8.0"));
     vi.stubGlobal("fetch", fetchMock);
     const wrap = mount(host());
-    await nextTick();
+    await settle();
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(lastResult!.hasUpdate.value).toBe(false);
     wrap.unmount();
   });
 
-  it("refetches once cache is older than 24h", async () => {
-    const stale = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ checked_at: stale, latest_version: "1.6.5" }),
-    );
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ tag_name: "v1.7.0" }),
-    });
+  it("paints cached value immediately, then refreshes", async () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      checked_at: new Date().toISOString(),
+      latest_version: "1.6.5",
+      body: "old",
+      url: "https://x/r/1.6.5",
+    }));
+    const fetchMock = vi.fn().mockResolvedValue(releaseResponse("v1.9.0", "fresh", "https://x/r/1.9.0"));
+    vi.stubGlobal("fetch", fetchMock);
+    const wrap = mount(host());
+    await nextTick(); // cache painted before fetch resolves
+    expect(lastResult!.latestVersion.value).toBe("1.6.5");
+    await settle();
+    expect(fetchMock).toHaveBeenCalledTimes(1); // no 24h suppression
+    expect(lastResult!.latestVersion.value).toBe("1.9.0");
+    wrap.unmount();
+  });
+
+  it("session guard: a second mount does not refetch", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(releaseResponse("v1.8.0"));
+    vi.stubGlobal("fetch", fetchMock);
+    const a = mount(host());
+    await settle();
+    const b = mount(host());
+    await settle();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    a.unmount(); b.unmount();
+  });
+
+  it("checkNow() refetches even within the same session", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(releaseResponse("v1.8.0"));
+    vi.stubGlobal("fetch", fetchMock);
+    const wrap = mount(host());
+    await settle();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await lastResult!.checkNow();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(lastResult!.checking.value).toBe(false);
+    wrap.unmount();
+  });
+
+  it("a legacy/malformed cache blob (no latest_version) does not throw", async () => {
+    localStorage.setItem(STORAGE_KEY, '{"v":"1.0"}'); // pre-rework shape
+    const fetchMock = vi.fn().mockResolvedValue(releaseResponse("v1.8.0"));
     vi.stubGlobal("fetch", fetchMock);
     const wrap = mount(host());
     await nextTick();
-    await Promise.resolve();
-    expect(fetchMock).toHaveBeenCalled();
+    // Painting the bad cache must not crash; it degrades to no update.
+    expect(lastResult!.hasUpdate.value).toBe(false);
+    expect(lastResult!.latestVersion.value).toBeNull();
+    await settle();
+    // The launch refresh still recovers a real version.
+    expect(lastResult!.latestVersion.value).toBe("1.8.0");
     wrap.unmount();
   });
 
-  it("silently no-ops when GitHub is unreachable", async () => {
+  it("network failure leaves hasUpdate false and does not throw", async () => {
     const fetchMock = vi.fn().mockRejectedValue(new Error("offline"));
     vi.stubGlobal("fetch", fetchMock);
     const wrap = mount(host());
-    await nextTick();
-    await Promise.resolve();
-    // No exception bubbled; no cache written.
-    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
-    wrap.unmount();
-  });
-
-  it.each<[string, UpdateSeverity]>([
-    ["2.0.0", "major"],
-    ["1.8.0", "minor"],
-    ["1.7.1", "patch"],
-  ])("classifies %s over 1.7.0 as %s", async (latest, expectedSeverity) => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ tag_name: `v${latest}` }),
-    });
-    vi.stubGlobal("fetch", fetchMock);
-    const wrap = mount(host());
-    await nextTick();
-    await Promise.resolve();
-    await Promise.resolve();
-    await nextTick();
-    expect(lastResult).not.toBeNull();
-    expect(lastResult!.hasUpdate.value).toBe(true);
-    expect(lastResult!.severity.value).toBe(expectedSeverity);
-    wrap.unmount();
-  });
-
-  it("severity is null when no update available", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ tag_name: "v1.6.0" }),
-    });
-    vi.stubGlobal("fetch", fetchMock);
-    const wrap = mount(host());
-    await nextTick();
-    await Promise.resolve();
-    await Promise.resolve();
-    await nextTick();
+    await settle();
     expect(lastResult!.hasUpdate.value).toBe(false);
-    expect(lastResult!.severity.value).toBeNull();
     wrap.unmount();
   });
 });

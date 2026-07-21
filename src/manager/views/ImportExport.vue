@@ -6,6 +6,8 @@ import { useToast } from "../composables/useToast";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
+import { useTemplateStore } from "../stores/templateStore";
+import { useCategoryStore } from "../stores/categoryStore";
 import { api, ApiError } from "../api/client";
 import ExportTab from "../import-export/ExportTab.vue";
 import ImportTab from "../import-export/ImportTab.vue";
@@ -52,6 +54,8 @@ type Mode = "export" | "import";
 const toast = useToast();
 const moduleStore = useModuleStore();
 const bundleStore = useBundleStore();
+const templateStore = useTemplateStore();
+const categoryStore = useCategoryStore();
 
 const mode = ref<Mode>("export");
 
@@ -264,6 +268,23 @@ function buildSelectedEntities(
   }
   const templateColl: Record<string, SelectedEntity["collision"]> =
     templateRows.length > 0 ? detectTemplateCollisions(templateRows, library) : {};
+  // Bundles were historically excluded from collision detection (deferred to
+  // a `bundle-fingerprint.ts` MOD-detection flow that was never built), so an
+  // existing bundle fell through to a blind `add` decision — the server then
+  // 400'd the whole commit with "id collision on add" and the bundles never
+  // imported. Bundles live in the same id→fingerprint library map as modules
+  // (buildLibraryMap), so route them through the SAME detector: identical →
+  // silent-skip, present-but-changed / no library fingerprint → conflict /
+  // exists-unknown, both of which surface in the conflict modal for the user
+  // to Replace / Rename / Skip, exactly like a colliding module.
+  const bundleRows: Array<FingerprintModuleRow & { id: string }> = [];
+  for (const id of selection) {
+    const hit = idIndex.get(id);
+    if (!hit || hit.kind !== "bundle") continue;
+    bundleRows.push(hit.entity as unknown as FingerprintModuleRow & { id: string });
+  }
+  const bundleColl: Record<string, SelectedEntity["collision"]> =
+    bundleRows.length > 0 ? detectCollisions(bundleRows, library) : {};
   for (const id of selection) {
     const hit = idIndex.get(id);
     if (!hit) continue;
@@ -272,7 +293,10 @@ function buildSelectedEntities(
       collision = templateColl[id] ?? "no-collision";
     } else if (MODULE_KINDS.has(hit.kind)) {
       collision = collisionByKind[hit.kind]?.[id] ?? "no-collision";
+    } else if (hit.kind === "bundle") {
+      collision = bundleColl[id] ?? "no-collision";
     } else {
+      // Categories merge by name server-side — no id collision concept.
       collision = "no-collision";
     }
     result.push({ kind: hit.kind, entity: hit.entity, collision });
@@ -650,6 +674,12 @@ async function runCommit(resolution: {
       loadLibrary(),
       moduleStore.fetchCatalog(),
       bundleStore.fetchCatalog(),
+      // Templates + categories drive their own sidebar count badges; refresh
+      // them too so the counts update live after an import/undo (#7) — an
+      // import that adds templates or categories used to leave a stale count
+      // until the next route change forced a re-fetch.
+      templateStore.fetchCatalog(),
+      categoryStore.fetchAll(),
     ]);
     const libraryIds = new Set<string>();
     for (const m of localModules.value) libraryIds.add(m.id);
@@ -703,6 +733,12 @@ async function undoImport(undoEntryId: string): Promise<void> {
       loadLibrary(),
       moduleStore.fetchCatalog(),
       bundleStore.fetchCatalog(),
+      // Templates + categories drive their own sidebar count badges; refresh
+      // them too so the counts update live after an import/undo (#7) — an
+      // import that adds templates or categories used to leave a stale count
+      // until the next route change forced a re-fetch.
+      templateStore.fetchCatalog(),
+      categoryStore.fetchAll(),
     ]);
     resolveWarningsStore.clearByType("broken_ref_on_import");
     toast.push({ severity: "info", summary: "Import undone", life: 4000 });

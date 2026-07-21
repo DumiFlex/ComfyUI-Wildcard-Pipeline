@@ -247,10 +247,29 @@ class WPSeedList(io.ComfyNode):
             override_strategy=override_strategy,
             loop_config=loop_config,
         )
-        seeds = apply_seed_locks(
+        full_series = apply_seed_locks(
             derive_loop_seeds(resolved_base, resolved_count, resolved_strategy),
             cfg["seed_locks"],
         )
+        # Mirror the loop's per-frame bypass: when the count comes FROM the
+        # loop (override_count), emit only the frames the loop actually kept
+        # (its `kept_indices`), drawing each kept frame's seed from the full
+        # series. Without this the loop bypasses 15/18 frames (3 prompts) but
+        # this node still emits 18 seeds, so the sampler runs 18 times. Locks
+        # are applied over the FULL series first, so a lock on a kept frame
+        # still lands and a lock on a bypassed frame is simply dropped.
+        seeds = full_series
+        if override_count and isinstance(loop_config, dict):
+            raw_kept = loop_config.get("kept_indices")
+            if isinstance(raw_kept, list):
+                kept = [
+                    i for i in raw_kept
+                    if isinstance(i, int) and not isinstance(i, bool)
+                    and 0 <= i < len(full_series)
+                ]
+                # Only narrow — a full/empty/malformed list leaves emit as-is.
+                if kept and len(kept) < len(full_series):
+                    seeds = [full_series[i] for i in kept]
         # Surface the per-iteration series to the node UI so the frontend can
         # offer "lock previous" in the seed modal (captured in seed_list.ts).
         return io.NodeOutput(seeds, ui={"loop_seeds": [[int(s) for s in seeds]]})

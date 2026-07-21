@@ -571,6 +571,89 @@ describe("ImportPicker.vue", () => {
     expect(dup!.variant).toBe("duplicate");
   });
 
+  // Bundles now run through the same id→fingerprint collision detector as
+  // modules (they were once excluded → existing bundles imported as blind
+  // adds that 400'd on commit). These lock in the badge states.
+  it("adds a NEW badge for a bundle absent from the library", async () => {
+    const wrap = mountPicker({
+      payload: makePayload({ bundles: [{ id: "b1", name: "B1" }] }),
+      libraryRows: new Map(),
+    });
+    await flushPromises();
+    await expandSection(wrap, "bundles");
+    const row = wrap.findAllComponents(PickerRow)[0]!;
+    const badges = row.props("statusBadges") as Array<{ label: string; variant: string }>;
+    expect(badges.find((b) => b.label === "NEW")).toBeDefined();
+  });
+
+  it("adds an EXISTING badge for a bundle present with no library fingerprint", async () => {
+    const wrap = mountPicker({
+      payload: makePayload({ bundles: [{ id: "b1", name: "B1" }] }),
+      libraryRows: new Map([["b1", {}]]),
+    });
+    await flushPromises();
+    await expandSection(wrap, "bundles");
+    const row = wrap.findAllComponents(PickerRow)[0]!;
+    const badges = row.props("statusBadges") as Array<{ label: string; variant: string }>;
+    const existing = badges.find((b) => b.label === "EXISTING");
+    expect(existing).toBeDefined();
+    expect(existing!.variant).toBe("drift");
+  });
+
+  it("adds a MODIFIED badge for a bundle whose fingerprint differs from the library", async () => {
+    const wrap = mountPicker({
+      payload: makePayload({
+        bundles: [{ id: "b1", name: "B1", description: "", tags: [], payload_hash: "aaa" }],
+      }),
+      libraryRows: new Map([["b1", { snapshot_fingerprint: "a-different-fingerprint" }]]),
+    });
+    await flushPromises();
+    await expandSection(wrap, "bundles");
+    const row = wrap.findAllComponents(PickerRow)[0]!;
+    const badges = row.props("statusBadges") as Array<{ label: string; variant: string }>;
+    const mod = badges.find((b) => b.label === "MODIFIED");
+    expect(mod).toBeDefined();
+    expect(mod!.variant).toBe("mod");
+  });
+
+  // Quick-select presets mirrored from the export bar (#1).
+  it("per-kind preset selects only that kind from the payload (#1)", async () => {
+    const wrap = mountPicker({
+      payload: makePayload({
+        wildcards: [{ id: "w1", name: "W1" }, { id: "w2", name: "W2" }],
+        templates: [{ id: "t1", name: "T1" }],
+      }),
+    });
+    await flushPromises();
+    await wrap.get('[data-test="import-preset-kind-wildcards"]').trigger("click");
+    await flushPromises();
+    expect(wrap.get('[data-test="import-picker-selected-count"]').text()).toContain("2 of 3");
+  });
+
+  it("'All' preset selects every payload entity (#1)", async () => {
+    const wrap = mountPicker({
+      payload: makePayload({
+        wildcards: [{ id: "w1", name: "W1" }],
+        templates: [{ id: "t1", name: "T1" }],
+      }),
+    });
+    await flushPromises();
+    await wrap.get('[data-test="import-preset-all"]').trigger("click");
+    await flushPromises();
+    expect(wrap.get('[data-test="import-picker-selected-count"]').text()).toContain("2 of 2");
+  });
+
+  it("per-kind preset button is disabled for an empty bucket (#1)", async () => {
+    const wrap = mountPicker({
+      payload: makePayload({ wildcards: [{ id: "w1", name: "W1" }] }),
+    });
+    await flushPromises();
+    // No templates in the payload → the Templates preset is disabled.
+    expect(
+      wrap.get('[data-test="import-preset-kind-templates"]').attributes("disabled"),
+    ).toBeDefined();
+  });
+
   it("passes showId=true to PickerRow", async () => {
     const payload = makePayload({
       wildcards: [{ id: "abcd1234", name: "a" }],

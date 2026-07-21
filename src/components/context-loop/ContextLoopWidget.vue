@@ -66,6 +66,14 @@ function onSeedLocks(next: Record<string, number>): void {
   emit("update:modelValue", { ...props.modelValue, seed_locks: next });
 }
 
+const bypassedCount = computed(() => (props.modelValue.bypass_frames ?? []).length);
+/** 0-based bypassed frame indices — drives the dashed border on edit-frame
+ *  chips so bypassed frames read at a glance without opening the modal. */
+const bypassSet = computed(() => new Set(props.modelValue.bypass_frames ?? []));
+function onBypassFrames(next: number[]): void {
+  emit("update:modelValue", { ...props.modelValue, bypass_frames: next });
+}
+
 function pickStrategy(s: LoopStrategy): void {
   if (props.modelValue.strategy === s) return;
   emit("update:modelValue", { ...props.modelValue, strategy: s });
@@ -133,6 +141,7 @@ function toggleTotalInternal(): void {
       Per-iteration seeds
       <span class="wp-loop__seedbtn-fill" />
       <span v-if="lockedCount" class="wp-loop__seedbtn-badge" data-test="loop-seeds-badge">{{ lockedCount }} locked</span>
+      <span v-if="bypassedCount" class="wp-loop__seedbtn-badge" data-test="loop-seeds-bypass-badge">{{ bypassedCount }} bypassed</span>
       <svg class="wp-loop__seedbtn-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6" /></svg>
     </button>
 
@@ -142,8 +151,9 @@ function toggleTotalInternal(): void {
         <button type="button" class="wp-loop__chip" :class="{ 'wp-loop__chip--active': currentFrame === null }"
           data-test="loop-frame-base" role="radio" :aria-checked="currentFrame === null" @click="setFrame(null)">base</button>
         <button v-for="i in frameChips" :key="i" type="button" class="wp-loop__chip"
-          :class="{ 'wp-loop__chip--active': currentFrame === i }"
-          :data-test="`loop-frame-${i + 1}`" role="radio" :aria-checked="currentFrame === i" @click="setFrame(i)">#{{ i + 1 }}</button>
+          :class="{ 'wp-loop__chip--active': currentFrame === i, 'wp-loop__chip--bypassed': bypassSet.has(i) }"
+          :data-test="`loop-frame-${i + 1}`" role="radio" :aria-checked="currentFrame === i"
+          :title="bypassSet.has(i) ? `Frame ${i + 1} is bypassed` : undefined" @click="setFrame(i)">#{{ i + 1 }}</button>
       </div>
     </div>
 
@@ -224,8 +234,9 @@ function toggleTotalInternal(): void {
     <SeedListModal v-if="seedsOpen" :node-name="'WP Context Loop'" :base-seed="baseSeed"
       :count="count" :strategy="modelValue.strategy" :seed-locks="modelValue.seed_locks ?? {}"
       :previous-seeds="previousSeeds"
+      :bypass-frames="modelValue.bypass_frames ?? []"
       :override-hint="!modelValue.override_seed ? 'These seeds apply only when Override Context seed is on.' : ''"
-      @update:seed-locks="onSeedLocks" @close="seedsOpen = false" />
+      @update:seed-locks="onSeedLocks" @update:bypass-frames="onBypassFrames" @close="seedsOpen = false" />
   </div>
 </template>
 
@@ -274,6 +285,14 @@ function toggleTotalInternal(): void {
   border-color: var(--wp-accent, #c4b5fd);
   color: var(--wp-accent, #c4b5fd);
 }
+/* Bypassed frame — interrupted (dashed) border + dimmed so it reads at a
+ * glance on the node. Composes with --active (dashed overrides the solid). */
+.wp-loop__chip--bypassed {
+  border-style: dashed;
+  border-color: var(--wp-border-strong, #4a4d55);
+  opacity: 0.5;
+}
+.wp-loop__chip--bypassed:hover { opacity: 0.8; }
 
 .wp-loop__row {
   display: flex;

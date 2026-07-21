@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import random
 
-import pytest
-
 from engine.modules import FixedValueEntry, FixedValueModule
 from engine.pipeline import PipelineEngine
 
@@ -25,9 +23,6 @@ class TestPipelineRun:
         ctx = PipelineEngine().run([module], seed=0)
         assert ctx["style"] == "photoreal"
 
-    # TODO(syntax-task-15): trace writes now always include `overwrite` and
-    # `status` fields; old assertion expects legacy shape without these keys.
-    @pytest.mark.skip(reason="awaits handler migration in tasks 15-17: trace shape changed")
     def test_trace_records_new_write(self):
         module = FixedValueModule(
             id="m1",
@@ -40,8 +35,17 @@ class TestPipelineRun:
         assert entry["id"] == "m1"
         assert entry["type"] == "fixed_values"
         assert entry["enabled"] is True
+        assert entry["status"] == "ok"
+        assert entry["error"] is None
+        # Every write now carries an `overwrite` flag; a first write into a
+        # fresh variable is not an overwrite.
         assert entry["writes"] == [
-            {"variable": "style", "value": "photoreal", "source": "fixed_values"}
+            {
+                "variable": "style",
+                "value": "photoreal",
+                "source": "fixed_values",
+                "overwrite": False,
+            }
         ]
 
     def test_trace_records_overwrite_flag(self):
@@ -58,18 +62,23 @@ class TestPipelineRun:
             }
         ]
 
-    # TODO(syntax-task-15): disabled modules now emit a trace entry with
-    # status="skipped_disabled"; old test expects disabled modules absent from trace.
-    @pytest.mark.skip(reason="awaits handler migration in tasks 15-17: disabled trace entry added")
     def test_disabled_module_skipped(self):
         m1 = FixedValueModule(
             id="m1", enabled=False, entries=[FixedValueEntry("x", "1")]
         )
         m2 = FixedValueModule(id="m2", entries=[FixedValueEntry("y", "2")])
         ctx = PipelineEngine().run([m1, m2], seed=0)
+        # A disabled module still writes nothing to ctx...
         assert "x" not in ctx
         assert ctx["y"] == "2"
-        assert [e["id"] for e in ctx["__wp_trace__"]] == ["m2"]
+        # ...but now leaves a trace row so the debug viewer can show it was
+        # skipped (rather than silently vanishing).
+        trace = ctx["__wp_trace__"]
+        assert [e["id"] for e in trace] == ["m1", "m2"]
+        assert trace[0]["status"] == "skipped_disabled"
+        assert trace[0]["enabled"] is False
+        assert trace[0]["writes"] == []
+        assert trace[1]["status"] == "ok"
 
     def test_inherits_upstream_ctx(self):
         upstream = {"upstream_var": "hello"}
@@ -88,9 +97,6 @@ class TestPipelineRun:
         ids = [e["id"] for e in ctx["__wp_trace__"]]
         assert ids == ["prev", "m1"]
 
-    # TODO(syntax-task-15): unknown types now emit a skipped_unknown_type trace
-    # entry; old test expects empty trace on unknown type.
-    @pytest.mark.skip(reason="awaits handler migration in tasks 15-17: unknown types emit trace")
     def test_unknown_type_is_skipped(self, caplog):
         class Weird:
             id = "weird"
@@ -98,7 +104,14 @@ class TestPipelineRun:
             enabled = True
 
         ctx = PipelineEngine().run([Weird()], seed=0)  # type: ignore[list-item]
-        assert ctx["__wp_trace__"] == []
+        # An unknown module type is skipped but now leaves a trace row so the
+        # debug viewer surfaces the unrecognised module instead of hiding it.
+        trace = ctx["__wp_trace__"]
+        assert len(trace) == 1
+        assert trace[0]["id"] == "weird"
+        assert trace[0]["type"] == "does_not_exist"
+        assert trace[0]["status"] == "skipped_unknown_type"
+        assert trace[0]["writes"] == []
         assert any(
             "Unknown module type" in rec.message for rec in caplog.records
         )
@@ -192,21 +205,14 @@ class TestPipelineRun:
         assert trace[1]["id"] == "fv1"
         assert trace[1]["seed"] == 4242
 
-    # TODO(syntax-task-15): HANDLERS dict removed; pipeline now delegates to
-    # dispatcher.resolve_module. Stub-handler injection via HANDLERS no longer works.
-    @pytest.mark.skip(reason="awaits handler migration in tasks 15-17: HANDLERS dict removed")
     def test_seed_deterministic_rng_passed_to_handlers(self):
-        captured: list[random.Random] = []
-
-        def stub_handler(module, ctx, rng):
-            captured.append(rng)
-            return ctx
-
-        engine = PipelineEngine()
-        engine.HANDLERS = {**engine.HANDLERS, "fixed_values": stub_handler}
-        module = FixedValueModule(id="m1", entries=[])
-        engine.run([module], seed=12345)
-        assert len(captured) == 1
-        rng = captured[0]
+        # The pipeline no longer owns a HANDLERS dict; it delegates to
+        # dispatcher.resolve_module and threads randomness by seeding
+        # `ctx["__wp_rng__"]`, which handlers read off the context. Verify the
+        # pipeline seeds that rng deterministically from the `seed` arg. Run
+        # with no modules so nothing consumes the rng before we inspect it.
+        ctx = PipelineEngine().run([], seed=12345)
+        rng = ctx["__wp_rng__"]
+        assert isinstance(rng, random.Random)
         other = random.Random(12345)
         assert rng.random() == other.random()

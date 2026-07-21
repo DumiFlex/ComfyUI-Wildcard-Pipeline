@@ -1,5 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { setActivePinia, createPinia } from "pinia";
+import { ref } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Settings from "../views/Settings.vue";
@@ -13,6 +14,22 @@ vi.mock("../api/client", () => ({
     database: { info: vi.fn().mockResolvedValue(null), maintenance: vi.fn() },
   },
   ApiError: class ApiError extends Error {},
+}));
+
+// The Updates card calls useReleaseCheck, which otherwise fires a real
+// GitHub fetch on mount. Stub it — these tests cover the other cards.
+vi.mock("../composables/useReleaseCheck", () => ({
+  useReleaseCheck: () => ({
+    current: "2.9.0",
+    latestVersion: ref(null),
+    hasUpdate: ref(false),
+    severity: ref(null),
+    releaseBody: ref(null),
+    releaseUrl: ref(null),
+    lastChecked: ref(null),
+    checking: ref(false),
+    checkNow: vi.fn(),
+  }),
 }));
 
 const reloadMock = vi.fn();

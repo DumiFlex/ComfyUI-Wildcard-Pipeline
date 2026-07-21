@@ -598,6 +598,74 @@ input, textarea, select { font: inherit; }
   font-weight: 400;
 }
 .wp-card__body { padding: 14px; }
+/* Sticky-header cards pin their header + `subheader` slot (e.g. a bulk-edit
+ * toolbar) to the top of the scroll region so a long list's actions (Add
+ * option, Bulk edit, the selection toolbar, …) stay reachable at the bottom.
+ * The whole `.wp-card__sticky` region sticks as one so its sub-toolbar can't
+ * be left behind. Card.vue publishes `--wp-card-header-h` (the region's
+ * measured height) so a sticky <thead> below offsets right under it. Needs an
+ * opaque bg (header/subheader are transparent). */
+.wp-card--sticky-header > .wp-card__sticky {
+  position: sticky;
+  /* -1px, not 0: the scroll container's top can land on a fractional device
+   * pixel (measured e.g. 152.39 at dpr 1), so pinning exactly at top:0 leaves
+   * a sub-pixel sliver above the opaque header through which the scrolled
+   * content behind bleeds as a faint ghost line. Overlapping the scroll edge
+   * by 1px (the extra px is clipped by the container's overflow and absorbed
+   * by the header's 12px top padding) guarantees the bg covers that seam at
+   * any DPR. The sticky <thead> below tracks the same -1px. */
+  top: -1px;
+  z-index: 5;
+  background: var(--wp-bg-1);
+}
+/* Sticky column header inside a sticky-header card — pins right under the
+ * toolbar. Chromium won't scroll-anchor a table CELL here, but sticking the
+ * <thead> element does; th gets an opaque bg so rows don't bleed through.
+ * Shared by the wildcard + fixed-values option tables. The -1px mirrors the
+ * header's overlap above so the two stay flush (no gap for rows to bleed). */
+.wp-card--sticky-header .wp-options-table thead {
+  position: sticky;
+  top: calc(var(--wp-card-header-h, 53px) - 1px);
+  z-index: 4;
+}
+.wp-card--sticky-header .wp-options-table thead th {
+  background: var(--wp-bg-1);
+  box-shadow: inset 0 -1px 0 var(--wp-border);
+}
+
+/* Quick-select preset chip — shared by the import/export presets bars
+ * (ExportTab + ImportPicker). Layout of the bar itself stays per-component;
+ * this is just the button atom. */
+.wp-preset-btn {
+  background: var(--wp-bg-3);
+  border: 1px solid var(--wp-border);
+  color: var(--wp-text);
+  font-family: var(--wp-font);
+  font-size: var(--wp-text-sm);
+  padding: 4px 11px;
+  border-radius: var(--wp-radius-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+.wp-preset-btn:hover:not(:disabled) {
+  background: var(--wp-bg-4);
+  border-color: var(--wp-border-strong);
+}
+.wp-preset-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.wp-preset-btn .pi {
+  font-size: 10px;
+  color: var(--wp-text-muted);
+}
+.wp-preset-btn:focus-visible {
+  outline: 2px solid var(--wp-accent-500);
+  outline-offset: 2px;
+}
 
 /* ---------- Buttons ---------- */
 .wp-btn {

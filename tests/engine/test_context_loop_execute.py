@@ -19,6 +19,7 @@ _DEFAULTS = {
     "iteration_internal": True,
     "total_internal": True,
     "seed_locks": {},
+    "bypass_frames": [],
 }
 
 
@@ -35,14 +36,14 @@ _DEFAULTS = {
             {"strategy": "sequential", "override_seed": True,
              "iteration_var_name": "idx", "bypass": True,
              "iteration_internal": True, "total_internal": True,
-             "seed_locks": {}},
+             "seed_locks": {}, "bypass_frames": []},
         ),
         (
             '{"strategy": "wat", "override_seed": true}',
             {"strategy": "hash_index", "override_seed": True,
              "iteration_var_name": "iteration", "bypass": False,
              "iteration_internal": True, "total_internal": True,
-             "seed_locks": {}},
+             "seed_locks": {}, "bypass_frames": []},
         ),
         ('{"iteration_var_name": "   "}', _DEFAULTS),
         (
@@ -194,6 +195,8 @@ def test_execute_emits_loop_config_payload_on_second_output():
     loop_config = values[1]
     assert loop_config == {
         "count": 3,
+        "active_count": 3,
+        "kept_indices": [0, 1, 2],
         "strategy": "sequential",
         "base_seed": 42,
         "override_seed": True,

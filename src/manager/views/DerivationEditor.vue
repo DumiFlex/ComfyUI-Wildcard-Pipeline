@@ -17,6 +17,9 @@ import Button from "../components/ui/Button.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
 import DraftBanner from "../components/DraftBanner.vue";
 import DerivationRuleCard from "../components/DerivationRuleCard.vue";
+import Checkbox from "../components/ui/Checkbox.vue";
+import BulkDeleteToolbar from "../components/BulkDeleteToolbar.vue";
+import { useBulkSelection } from "../composables/useBulkSelection";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
@@ -293,6 +296,42 @@ function updateRule(idx: number, value: DerivationRule) {
   rules.value = rules.value.map((r, i) => (i === idx ? value : r));
 }
 
+// Collapse-all / Expand-all broadcast to every rule card. Bumping the nonce
+// makes each card adopt `collapsed`; cards can still be toggled individually
+// afterwards (#9).
+const collapseCommand = ref({ nonce: 0, collapsed: false });
+function collapseAllRules(collapsed: boolean): void {
+  collapseCommand.value = { nonce: collapseCommand.value.nonce + 1, collapsed };
+}
+
+/* ── Bulk select + delete ────────────────────────────────────────────────
+ * Rules are a card list (not a table), so the checkbox rides alongside each
+ * card. Rules carry a stable `id`, so selection keys off that directly. */
+const ruleBulk = useBulkSelection(() => rules.value.map((r) => r.id));
+const {
+  active: ruleBulkActive,
+  count: ruleBulkCount,
+  allSelected: ruleBulkAllSelected,
+  someSelected: ruleBulkSomeSelected,
+  isSelected: ruleBulkIsSelected,
+  toggle: ruleBulkToggle,
+  toggleAll: ruleBulkToggleAll,
+  toggleMode: ruleBulkToggleMode,
+  clear: ruleBulkClear,
+} = ruleBulk;
+function deleteSelectedRules(): void {
+  const ids = new Set(ruleBulk.selectedIds());
+  if (ids.size === 0) return;
+  const removed = ids.size;
+  rules.value = rules.value.filter((r) => !ids.has(r.id));
+  ruleBulkClear();
+  toast.push({
+    severity: "success",
+    summary: `${removed} rule${removed === 1 ? "" : "s"} deleted`,
+    life: 2500,
+  });
+}
+
 function applyRestore(entry: ModuleHistoryEntry): void {
   name.value = entry.name;
   description.value = entry.description ?? "";
@@ -445,11 +484,57 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
       @update:content-rating="(v) => (contentRating = v)"
     />
 
-    <Card :title="`Rules (${rules.length})`">
+    <Card :title="`Rules (${rules.length})`" sticky-header>
       <template #actions>
+        <Button
+          v-if="rules.length > 1"
+          size="sm"
+          variant="ghost"
+          icon="pi-angle-double-up"
+          data-test="drv-collapse-all"
+          @click="collapseAllRules(true)"
+        >Collapse all</Button>
+        <Button
+          v-if="rules.length > 1"
+          size="sm"
+          variant="ghost"
+          icon="pi-angle-double-down"
+          data-test="drv-expand-all"
+          @click="collapseAllRules(false)"
+        >Expand all</Button>
+        <Button
+          v-if="rules.length || ruleBulkActive"
+          size="sm"
+          :variant="ruleBulkActive ? 'secondary' : 'ghost'"
+          icon="pi-check-square"
+          data-test="drv-bulk-toggle"
+          @click="ruleBulkToggleMode"
+        >{{ ruleBulkActive ? "Done" : "Bulk edit" }}</Button>
         <Button size="sm" variant="primary" icon="pi-plus" data-test="add-rule" @click="addRule">
           Add rule
         </Button>
+      </template>
+      <template #subheader>
+        <div v-if="ruleBulkActive" class="drv-bulkbar">
+          <label class="drv-bulkbar__all">
+            <Checkbox
+              :model-value="ruleBulkAllSelected"
+              :indeterminate="ruleBulkSomeSelected"
+              aria-label="Select all rules"
+              data-test="drv-select-all"
+              @update:model-value="ruleBulkToggleAll"
+            />
+            Select all
+          </label>
+          <BulkDeleteToolbar
+            v-if="ruleBulkCount > 0"
+            class="drv-bulkbar__toolbar"
+            :count="ruleBulkCount"
+            noun="rules"
+            @delete-selected="deleteSelectedRules"
+            @clear="ruleBulkClear"
+          />
+        </div>
       </template>
       <p class="wp-card__hint">
         Each rule runs independently. Inside a rule, branches evaluate top-to-bottom — the first matching IF/ELIF wins; the optional ELSE only fires when no branch matched.
@@ -460,24 +545,46 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
       </div>
 
       <div v-else class="rules-stack" data-test="rules-stack">
-        <DerivationRuleCard
+        <div
           v-for="(rule, idx) in rules"
           :key="rule.id"
-          :model-value="rule"
-          :index="idx"
-          :var-suggestions="varSuggestions"
-          :uuid-to-name="uuidToName"
-          :ref-suggestions="refSuggestions"
-          :uuid-to-sub-categories="refData.uuidToSubCategories"
-          :uuid-to-has-null="refData.uuidToHasNull"
-          :uuid-to-options-count="refData.uuidToOptionsCount"
-          :uuid-to-option-tag-sets="refData.uuidToOptionTagSets"
-          :uuid-to-tag-groups="refData.uuidToTagGroups"
-          :default-collapsed="rules.length > 1"
-          :data-test="`rule-${idx}`"
-          @update:model-value="(v) => updateRule(idx, v)"
-          @remove="removeRule(idx)"
-        />
+          class="rule-row"
+          :class="{ 'rule-row--selected': ruleBulkActive && ruleBulkIsSelected(rule.id) }"
+        >
+          <button
+            v-if="ruleBulkActive"
+            type="button"
+            class="wp-check rule-row__check"
+            role="checkbox"
+            :aria-checked="ruleBulkIsSelected(rule.id)"
+            :data-checked="ruleBulkIsSelected(rule.id) ? 'true' : 'false'"
+            :aria-label="`Select rule ${idx + 1}`"
+            :data-test="`drv-check-${idx}`"
+            @click="ruleBulkToggle(rule.id)"
+          >
+            <svg v-if="ruleBulkIsSelected(rule.id)" viewBox="0 0 12 12" fill="none" style="display:block">
+              <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+          <DerivationRuleCard
+            class="rule-row__card"
+            :model-value="rule"
+            :index="idx"
+            :var-suggestions="varSuggestions"
+            :uuid-to-name="uuidToName"
+            :ref-suggestions="refSuggestions"
+            :uuid-to-sub-categories="refData.uuidToSubCategories"
+            :uuid-to-has-null="refData.uuidToHasNull"
+            :uuid-to-options-count="refData.uuidToOptionsCount"
+            :uuid-to-option-tag-sets="refData.uuidToOptionTagSets"
+            :uuid-to-tag-groups="refData.uuidToTagGroups"
+            :default-collapsed="true"
+            :collapse-command="collapseCommand"
+            :data-test="`rule-${idx}`"
+            @update:model-value="(v) => updateRule(idx, v)"
+            @remove="removeRule(idx)"
+          />
+        </div>
       </div>
     </Card>
     <!-- CascadeConfirmDialog: shown when entity has downstream refs. -->
@@ -518,4 +625,31 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
   flex-direction: column;
   gap: var(--wp-space-6);
 }
+/* Each rule row: an optional bulk checkbox rides to the left of the card. */
+.rule-row { display: flex; align-items: flex-start; gap: 10px; }
+.rule-row__card { flex: 1 1 auto; min-width: 0; }
+.rule-row__check { margin-top: 14px; flex: 0 0 auto; }
+.rule-row--selected .rule-row__card {
+  outline: 2px solid color-mix(in oklab, var(--wp-accent) 45%, transparent);
+  outline-offset: 2px;
+  border-radius: var(--wp-radius, 8px);
+}
+/* Bulk bar in the sticky subheader: select-all + (delete/clear when any). */
+.drv-bulkbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px 12px;
+  flex-wrap: wrap;
+}
+.drv-bulkbar__all {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--wp-text);
+  cursor: pointer;
+}
+.drv-bulkbar__toolbar { flex: 1 1 auto; }
 </style>

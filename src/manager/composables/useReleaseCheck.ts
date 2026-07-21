@@ -1,29 +1,45 @@
 /**
- * Release check - once-per-day GitHub Releases poll for "update available".
+ * Release check - GitHub Releases lookup for "update available".
  *
  * Hits `https://api.github.com/repos/<owner>/<repo>/releases/latest`
  * anonymously (unauthenticated requests get 60/hr per IP, plenty for a
- * single-user dev tool). The result + a timestamp are cached in
- * localStorage; subsequent calls return the cached value until the TTL
- * expires, so a topbar re-mount doesn't burn a request per page nav.
+ * single-user dev tool). Cadence is launch-once + manual: on mount we
+ * paint any cached result immediately, then refresh once per app session
+ * IF the user opted into launch checks (`uiStore.checkOnLaunch`). There is
+ * no timed re-poll; `checkNow()` triggers an on-demand refresh. The
+ * localStorage cache exists only to paint instantly before the network
+ * call resolves — it is not a re-check suppressor.
  *
- * The composable returns a reactive `hasUpdate` flag + `latestVersion`
- * so AppTopbar can paint an accent dot without owning the polling
- * machinery. Network failure (offline, rate limit, 404 on private repo)
- * fails silently - `hasUpdate` stays false; we never block the UI.
+ * The composable returns reactive `hasUpdate` / `latestVersion` /
+ * `severity` so AppTopbar can paint an accent pill, plus the release
+ * `body` / `html_url` / `lastChecked` for the Update dialog + Settings.
+ * Network failure (offline, rate limit, 404 on private repo) fails
+ * silently - `hasUpdate` stays false; we never block the UI.
  */
 import { onMounted, ref } from "vue";
 
 import { GITHUB_REPO } from "../config/links";
+import { useUiStore } from "../stores/uiStore";
 
 const STORAGE_KEY = "wp.releaseCheck";
-const TTL_MS = 24 * 60 * 60 * 1000;
 
 interface CachedRelease {
   /** ISO timestamp of when the check ran. */
   checked_at: string;
   /** GitHub release `tag_name` minus a leading `v`. */
   latest_version: string;
+  body?: string | null;
+  url?: string | null;
+}
+
+/** Module-level guard so multiple consumers (topbar + settings) mounting
+ *  in one app session trigger at most one launch fetch. `checkNow` ignores
+ *  it. Reset in tests via `resetReleaseCheckSession`. */
+let sessionFetched = false;
+
+/** Test-only: clear the session guard between mounts. */
+export function resetReleaseCheckSession(): void {
+  sessionFetched = false;
 }
 
 /**
@@ -84,28 +100,28 @@ function classifyBump(current: string, latest: string): UpdateSeverity | null {
 }
 
 /**
- * Parse the cached blob if it's still fresh. Returns null on cache
- * miss, parse failure, or TTL expiry - caller refetches on null.
+ * Parse the cached blob. Returns null on cache miss or parse failure.
+ * There is no TTL expiry — the cache is paint-first, never a re-check
+ * suppressor.
  */
 function readCache(): CachedRelease | null {
   if (typeof localStorage === "undefined") return null;
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw) as CachedRelease;
-    const age = Date.now() - new Date(parsed.checked_at).getTime();
-    if (Number.isNaN(age) || age > TTL_MS) return null;
-    return parsed;
+    return JSON.parse(raw) as CachedRelease;
   } catch {
     return null;
   }
 }
 
-function writeCache(latestVersion: string): void {
+function writeCache(rel: { version: string; body: string | null; url: string | null }): void {
   if (typeof localStorage === "undefined") return;
   const payload: CachedRelease = {
     checked_at: new Date().toISOString(),
-    latest_version: latestVersion,
+    latest_version: rel.version,
+    body: rel.body,
+    url: rel.url,
   };
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -124,7 +140,7 @@ function repoSlug(): string | null {
   return `${match[1]}/${match[2]}`;
 }
 
-async function fetchLatestRelease(): Promise<string | null> {
+async function fetchLatestRelease(): Promise<{ version: string; body: string | null; url: string | null } | null> {
   const slug = repoSlug();
   if (!slug) return null;
   try {
@@ -132,50 +148,99 @@ async function fetchLatestRelease(): Promise<string | null> {
       headers: { Accept: "application/vnd.github+json" },
     });
     if (!res.ok) return null;
-    const body = (await res.json()) as { tag_name?: unknown };
+    const body = (await res.json()) as { tag_name?: unknown; body?: unknown; html_url?: unknown };
     if (typeof body.tag_name !== "string") return null;
-    return normalizeTag(body.tag_name);
+    return {
+      version: normalizeTag(body.tag_name),
+      body: typeof body.body === "string" ? body.body : null,
+      url: typeof body.html_url === "string" ? body.html_url : null,
+    };
   } catch {
     return null;
   }
 }
 
 /**
- * Vue composable. Call from a setup() block - the underlying GitHub
- * fetch runs on mount, once per 24h. The returned `current` /
- * `latestVersion` / `hasUpdate` refs stay reactive across the lifetime
- * of the consumer.
+ * Vue composable. Call from a setup() block — the underlying GitHub fetch
+ * runs once on mount (when `checkOnLaunch` is on and no other consumer has
+ * fetched this session). The returned refs stay reactive across the
+ * lifetime of the consumer. Requires an active Pinia (reads uiStore).
  */
 export function useReleaseCheck(): {
   current: string;
   latestVersion: ReturnType<typeof ref<string | null>>;
   hasUpdate: ReturnType<typeof ref<boolean>>;
   severity: ReturnType<typeof ref<UpdateSeverity | null>>;
+  releaseBody: ReturnType<typeof ref<string | null>>;
+  releaseUrl: ReturnType<typeof ref<string | null>>;
+  lastChecked: ReturnType<typeof ref<string | null>>;
+  checking: ReturnType<typeof ref<boolean>>;
+  checkNow: () => Promise<void>;
 } {
   const current = __APP_VERSION__;
   const latestVersion = ref<string | null>(null);
   const hasUpdate = ref<boolean>(false);
   const severity = ref<UpdateSeverity | null>(null);
+  const releaseBody = ref<string | null>(null);
+  const releaseUrl = ref<string | null>(null);
+  const lastChecked = ref<string | null>(null);
+  const checking = ref<boolean>(false);
+  const ui = useUiStore();
 
   function applyLatest(v: string | null): void {
-    latestVersion.value = v;
-    const newer = v !== null && semverCompare(v, current) > 0;
+    // Defensive: a legacy/malformed cache blob may carry a non-string
+    // (or missing) version, and `current` is undefined if the vite
+    // `define` didn't inject `__APP_VERSION__`. Guard both so a bad value
+    // degrades to "no update" instead of throwing in semverCompare.
+    const valid = typeof v === "string" && v.length > 0 && typeof current === "string";
+    latestVersion.value = valid ? v : null;
+    const newer = valid && semverCompare(v as string, current) > 0;
     hasUpdate.value = newer;
-    severity.value = newer && v ? classifyBump(current, v) : null;
+    severity.value = newer ? classifyBump(current, v as string) : null;
   }
 
-  onMounted(async () => {
+  /** Fetch fresh, persist, apply. Shared by launch fetch + checkNow. */
+  async function refresh(): Promise<void> {
+    checking.value = true;
+    try {
+      const fresh = await fetchLatestRelease();
+      if (fresh) {
+        sessionFetched = true;
+        writeCache(fresh);
+        releaseBody.value = fresh.body;
+        releaseUrl.value = fresh.url;
+        lastChecked.value = new Date().toISOString();
+        applyLatest(fresh.version);
+      }
+    } finally {
+      checking.value = false;
+    }
+  }
+
+  /** Manual check — always refetches, ignores the session guard. */
+  async function checkNow(): Promise<void> {
+    await refresh();
+  }
+
+  onMounted(() => {
+    // Paint the cached result immediately (if any) so the pill/dialog
+    // aren't blank while the network call is in flight.
     const cached = readCache();
     if (cached) {
+      releaseBody.value = cached.body ?? null;
+      releaseUrl.value = cached.url ?? null;
+      lastChecked.value = cached.checked_at ?? null;
       applyLatest(cached.latest_version);
-      return;
     }
-    const fresh = await fetchLatestRelease();
-    if (fresh) {
-      writeCache(fresh);
-      applyLatest(fresh);
+    // Then refresh once per session, only when the user opted into launch
+    // checks. Fire-and-forget; failures are swallowed in refresh.
+    if (ui.checkOnLaunch && !sessionFetched) {
+      void refresh();
     }
   });
 
-  return { current, latestVersion, hasUpdate, severity };
+  return {
+    current, latestVersion, hasUpdate, severity,
+    releaseBody, releaseUrl, lastChecked, checking, checkNow,
+  };
 }

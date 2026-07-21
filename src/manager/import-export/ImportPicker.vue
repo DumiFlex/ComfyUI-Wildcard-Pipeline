@@ -270,11 +270,13 @@ const warningIds = computed<Set<string>>(() => {
  * is an empty record when `libraryRows` is absent (unit tests or
  * payloads loaded before the library finished loading).
  *
- * Bundles + categories are intentionally NOT fed to `detectCollisions`
- * — bundles have their own MOD-detection flow downstream
- * (bundle-fingerprint.ts) and categories merge by name. The picker
- * surfaces a placeholder id-presence conflict for bundles separately
- * in `badgesForEntity`; categories never get a conflict badge here.
+ * Bundles ARE fed to `detectCollisions` (they share the id→fingerprint
+ * library map with modules) so an existing bundle reads as MODIFIED /
+ * DUPLICATE / EXISTING inline, consistent with how the commit orchestrator
+ * now resolves them. (They were once excluded on the assumption of a
+ * separate `bundle-fingerprint.ts` flow that was never built, which left
+ * existing bundles as blind adds that 400'd on commit.) Categories are still
+ * excluded — they merge by name server-side, no id collision concept.
  *
  * Templates run a SEPARATE pass (`detectTemplateCollisions`) because
  * they collide on a `templateFingerprint` rather than the module
@@ -284,10 +286,10 @@ const warningIds = computed<Set<string>>(() => {
 const collisionStates = computed<Record<string, CollisionState>>(() => {
   if (!props.libraryRows) return {};
   const incoming: Array<FingerprintModuleRow & { id: string }> = [];
-  const moduleBuckets: BucketKey[] = [
-    "wildcards", "fixed_values", "combines", "derivations", "constraints",
+  const idBuckets: BucketKey[] = [
+    "bundles", "wildcards", "fixed_values", "combines", "derivations", "constraints",
   ];
-  for (const bk of moduleBuckets) {
+  for (const bk of idBuckets) {
     const arr = props.payload[bk] as unknown as Array<
       FingerprintModuleRow & { id: string }
     >;
@@ -315,19 +317,17 @@ const collisionStates = computed<Record<string, CollisionState>>(() => {
  * badge. Every other bucket runs through `verifyOne` and can carry one.
  *
  * Phase-5 collision-state → badge mapping:
- *   - Module buckets:
+ *   - Module + bundle buckets (same id→fingerprint detector):
  *     - `no-collision`   → NEW (green) — clean import, no decision needed.
  *     - `conflict`       → MODIFIED (orange) — uuid match, fingerprint diff.
  *     - `exists-unknown` → EXISTING (drift / amber) — library row present
  *                          but stored fingerprint absent (legacy row
- *                          pre-fingerprint-backfill). Distinct from
+ *                          pre-fingerprint-backfill, or a bundle whose
+ *                          server fingerprint isn't set). Distinct from
  *                          MODIFIED so users aren't misled.
- *     - `silent-skip`    → (no badge) — true duplicate, auto-excluded at
- *                          commit time; badging it would be misleading noise.
- *   - Bundles: id-presence check only — present in library →
- *     EXISTING (drift / amber). Bundle MOD detection runs separately
- *     downstream via bundle-fingerprint.ts so the inline picker badge
- *     never claims "MODIFIED" without proof.
+ *     - `silent-skip`    → DUPLICATE (dim) — true duplicate, auto-excluded
+ *                          at commit time; the badge tells the user the row
+ *                          is already in their library.
  *   - Categories: never get a collision badge (name-merge semantics on
  *     server, no id collision possible).
  *
@@ -344,16 +344,9 @@ function badgesForEntity(entity: PayloadEntity, bucket: BucketKey): StatusBadge[
       label: `MIGRATED v${entity.migrated_from}→${CURRENT_SCHEMA_VERSION}`,
     });
   }
-  if (bucket === "bundles") {
-    if (props.libraryRows?.has(entity.id) === true) {
-      // Id-presence only — we never compute bundle fingerprints in this
-      // picker, so route through the same EXISTING badge as
-      // exists-unknown rather than overclaiming MODIFIED.
-      badges.push({ variant: "drift", label: "EXISTING" });
-    }
-    // Bundles never get a NEW badge here — id-presence semantics only;
-    // the orchestrator's bundle MOD pass surfaces the actual state.
-  } else if (bucket !== "categories") {
+  if (bucket !== "categories") {
+    // Bundles + the five module buckets + templates all carry a
+    // collision state now (categories merge by name → no badge).
     const state = collisionStates.value[entity.id];
     if (state === "no-collision") {
       badges.push({ variant: "new", label: "NEW" });
@@ -487,6 +480,28 @@ function deselectAll(): void {
   selected.value = new Set();
 }
 
+// ---------- Quick-select presets (mirror of the export bar) ----------
+
+/** Select every entity in the loaded payload, across all buckets. */
+function presetSelectAll(): void {
+  const next = new Set<string>();
+  for (const b of BUCKETS) {
+    for (const e of entitiesForBucket(b.key)) {
+      if (typeof e.id === "string" && e.id.length > 0) next.add(e.id);
+    }
+  }
+  selected.value = next;
+}
+
+/** Clear everything and select only the entities of one kind. */
+function presetKindOnly(bucket: BucketKey): void {
+  const next = new Set<string>();
+  for (const e of entitiesForBucket(bucket)) {
+    if (typeof e.id === "string" && e.id.length > 0) next.add(e.id);
+  }
+  selected.value = next;
+}
+
 function emitContinue(): void {
   if (selected.value.size === 0) return;
   // Phase 10: no dep-warning confirm dialog on import. Missing-dep
@@ -539,6 +554,34 @@ function emitContinue(): void {
       {{ props.integrityWarnings.length }}
       {{ props.integrityWarnings.length === 1 ? "entity has" : "entities have" }}
       integrity warnings.
+    </div>
+
+    <!-- Quick-select presets — mirror of the Export tab bar, so the same
+         one-click "select only this kind" affordance exists after a payload
+         is loaded from file/paste (#1). -->
+    <div
+      class="wp-import-presets"
+      role="group"
+      aria-label="Quick selection presets"
+    >
+      <span class="wp-import-presets__label">Quick select</span>
+      <button
+        class="wp-preset-btn"
+        data-test="import-preset-all"
+        type="button"
+        :disabled="totalEntityCount === 0"
+        @click="presetSelectAll"
+      ><i class="pi pi-database" /> All</button>
+      <span class="wp-import-presets__sep" aria-hidden="true"></span>
+      <button
+        v-for="b in BUCKETS"
+        :key="b.key"
+        class="wp-preset-btn"
+        :data-test="`import-preset-kind-${b.key}`"
+        type="button"
+        :disabled="entitiesForBucket(b.key).length === 0"
+        @click="presetKindOnly(b.key)"
+      >{{ b.title }}</button>
     </div>
 
     <div class="wp-import-picker__sections">
@@ -627,6 +670,34 @@ function emitContinue(): void {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* Quick-select presets bar (mirror of ExportTab's). The button atom
+ * (`.wp-preset-btn`) is global in tokens.css; only the bar layout is here. */
+.wp-import-presets {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 9px 12px;
+  background: var(--wp-bg-2);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius);
+  margin-bottom: 10px;
+}
+.wp-import-presets__label {
+  font-size: var(--wp-text-xs);
+  color: var(--wp-text-dim);
+  letter-spacing: 0.06em;
+  margin-right: 6px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.wp-import-presets__sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 4px;
+  background: var(--wp-border);
 }
 
 .wp-import-picker__notice {

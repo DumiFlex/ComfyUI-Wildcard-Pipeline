@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import Card from "./ui/Card.vue";
 import Button from "./ui/Button.vue";
 import Select from "./ui/Select.vue";
@@ -40,6 +40,10 @@ interface Props {
   uuidToTagGroups?: Map<string, Record<string, string[]>>;
   /** Default-collapsed when many rules exist (set by editor). */
   defaultCollapsed?: boolean;
+  /** Broadcast from the editor's Collapse-all / Expand-all buttons. When
+   *  `nonce` changes, the card adopts `collapsed` — but the user can still
+   *  toggle any card individually afterwards. */
+  collapseCommand?: { nonce: number; collapsed: boolean };
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -56,6 +60,50 @@ const props = withDefaults(defineProps<Props>(), {
 
 const collapsed = ref<boolean>(props.defaultCollapsed);
 function toggleCollapsed() { collapsed.value = !collapsed.value; }
+
+// Editor-driven Collapse-all / Expand-all: adopt the broadcast state whenever
+// its nonce ticks (individual toggles still work afterwards).
+watch(
+  () => props.collapseCommand?.nonce,
+  () => {
+    if (props.collapseCommand) collapsed.value = props.collapseCommand.collapsed;
+  },
+);
+
+// Per-branch collapse. Branch index → collapsed; the ELSE clause is keyed as
+// -1. Collapsing hides the condition/action editors and shows a one-line
+// summary in the branch head.
+/** Every branch key for this rule (IF/ELIF indices + `-1` for ELSE). */
+function allBranchKeys(): number[] {
+  const r = props.modelValue;
+  const keys = r.branches.map((_, i) => i);
+  if (r.else) keys.push(-1);
+  return keys;
+}
+// Branches start COLLAPSED on open (matches the request for a compact
+// editor). Newly-added branches aren't in this set, so they open expanded
+// for immediate editing.
+const collapsedBranches = ref<Set<number>>(new Set(allBranchKeys()));
+function toggleBranch(bi: number): void {
+  const next = new Set(collapsedBranches.value);
+  if (next.has(bi)) next.delete(bi);
+  else next.add(bi);
+  collapsedBranches.value = next;
+}
+function isBranchCollapsed(bi: number): boolean {
+  return collapsedBranches.value.has(bi);
+}
+/** Collapse / expand every branch in THIS rule (the inline per-rule control). */
+function collapseAllBranches(): void {
+  collapsedBranches.value = new Set(allBranchKeys());
+}
+function expandAllBranches(): void {
+  collapsedBranches.value = new Set();
+}
+/** Compact `$cond → $target` peek for a collapsed branch head. */
+function branchPeek(cvar: string, tvar: string): string {
+  return `${cvar ? "$" + cvar : "$?"} → ${tvar ? "$" + tvar : "$?"}`;
+}
 
 const emit = defineEmits<{
   "update:modelValue": [value: DerivationRule];
@@ -287,6 +335,26 @@ const branchCount = computed(() => rule.value.branches.length);
         <span v-if="rule.else"> + ELSE</span>
       </span>
       <span class="spacer" />
+      <!-- Inline per-rule collapse/expand of THIS rule's conditions. Only
+           useful when the rule card itself is open. -->
+      <span v-if="!collapsed" class="rule-head__branch-ctrls">
+        <Button
+          icon="pi-angle-double-up"
+          variant="ghost"
+          size="sm"
+          :aria-label="`Collapse all conditions in rule ${ruleNumber}`"
+          :data-test="`collapse-branches-${index}`"
+          @click.stop="collapseAllBranches"
+        />
+        <Button
+          icon="pi-angle-double-down"
+          variant="ghost"
+          size="sm"
+          :aria-label="`Expand all conditions in rule ${ruleNumber}`"
+          :data-test="`expand-branches-${index}`"
+          @click.stop="expandAllBranches"
+        />
+      </span>
       <Button
         icon="pi-trash"
         variant="ghost"
@@ -306,9 +374,24 @@ const branchCount = computed(() => rule.value.branches.length);
         :data-test="`branch-${index}-${bi}`"
       >
         <div class="branch-head">
+          <button
+            type="button"
+            class="branch-collapse"
+            :aria-expanded="!isBranchCollapsed(bi)"
+            :aria-label="`${isBranchCollapsed(bi) ? 'Expand' : 'Collapse'} branch ${bi + 1} of rule ${ruleNumber}`"
+            :data-test="`toggle-branch-${index}-${bi}`"
+            @click="toggleBranch(bi)"
+          >
+            <i :class="isBranchCollapsed(bi) ? 'pi pi-chevron-right' : 'pi pi-chevron-down'" aria-hidden="true" />
+          </button>
           <span class="branch-tag" :data-kind="bi === 0 ? 'if' : 'elif'">
             {{ bi === 0 ? "IF" : "ELIF" }}
           </span>
+          <span
+            v-if="isBranchCollapsed(bi)"
+            class="branch-peek"
+            :data-test="`branch-peek-${index}-${bi}`"
+          >{{ branchPeek(branch.condition.var, branch.action.target_var) }}</span>
           <span class="spacer" />
           <Button
             v-if="bi > 0"
@@ -321,6 +404,7 @@ const branchCount = computed(() => rule.value.branches.length);
           />
         </div>
 
+        <div v-show="!isBranchCollapsed(bi)" class="branch-body">
         <!-- Compact grid (Proposal B, 2026-05-09 cycle):
              row 1 = WHEN var + op on a single line so the prose
              reads "When $age equals". Row 2 = condition value below
@@ -476,12 +560,28 @@ const branchCount = computed(() => rule.value.branches.length);
         <div class="dvr-hint" :data-test="`act-hint-${index}-${bi}`">
           {{ SUPPORTED_SYNTAX_HINT }}
         </div>
+        </div>
       </div>
 
       <!-- ELSE branch -->
       <div v-if="rule.else" class="branch branch--else" data-kind="else" :data-test="`branch-else-${index}`">
         <div class="branch-head">
+          <button
+            type="button"
+            class="branch-collapse"
+            :aria-expanded="!isBranchCollapsed(-1)"
+            :aria-label="`${isBranchCollapsed(-1) ? 'Expand' : 'Collapse'} ELSE branch of rule ${ruleNumber}`"
+            :data-test="`toggle-branch-else-${index}`"
+            @click="toggleBranch(-1)"
+          >
+            <i :class="isBranchCollapsed(-1) ? 'pi pi-chevron-right' : 'pi pi-chevron-down'" aria-hidden="true" />
+          </button>
           <span class="branch-tag" data-kind="else">ELSE</span>
+          <span
+            v-if="isBranchCollapsed(-1)"
+            class="branch-peek"
+            :data-test="`branch-peek-else-${index}`"
+          >→ {{ rule.else.action.target_var ? "$" + rule.else.action.target_var : "$?" }}</span>
           <span class="spacer" />
           <Button
             icon="pi-times"
@@ -492,6 +592,7 @@ const branchCount = computed(() => rule.value.branches.length);
             @click="removeElse"
           />
         </div>
+        <div v-show="!isBranchCollapsed(-1)" class="branch-body">
         <div class="dvr-grid dvr-grid--then">
           <span class="dvr-label">Then</span>
           <div class="dvr-var-wrap" :data-test="`else-var-wrap-${index}`">
@@ -540,6 +641,7 @@ const branchCount = computed(() => rule.value.branches.length);
         </div>
         <div class="dvr-hint" :data-test="`else-hint-${index}`">
           {{ SUPPORTED_SYNTAX_HINT }}
+        </div>
         </div>
       </div>
     </div>
@@ -600,6 +702,7 @@ const branchCount = computed(() => rule.value.branches.length);
   color: var(--wp-text-muted, #9ca3af);
 }
 .spacer { flex: 1; }
+.rule-head__branch-ctrls { display: inline-flex; gap: 2px; }
 
 .branches {
   display: flex;
@@ -626,6 +729,38 @@ const branchCount = computed(() => rule.value.branches.length);
   display: flex;
   align-items: center;
   gap: var(--wp-space-4);
+}
+/* Per-branch collapse chevron — mirrors the rule-card head toggle. */
+.branch-collapse {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--wp-text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+}
+.branch-collapse:hover { background: var(--wp-bg-3); color: var(--wp-text); }
+.branch-collapse:focus-visible { outline: none; box-shadow: var(--wp-focus-ring); }
+.branch-collapse i { font-size: var(--wp-text-xs); }
+/* One-line peek shown in a collapsed branch head. */
+.branch-peek {
+  font-family: var(--wp-font-mono, ui-monospace, monospace);
+  font-size: var(--wp-text-xs);
+  color: var(--wp-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.branch-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wp-space-4);
+  margin-top: var(--wp-space-4);
 }
 
 .branch-tag {

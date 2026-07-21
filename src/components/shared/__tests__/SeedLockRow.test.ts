@@ -49,3 +49,21 @@ describe("SeedLockRow", () => {
     expect(row().find('[data-test="seedrow-lockprev"]').attributes("disabled")).toBeDefined(); // absent → disabled
   });
 });
+
+describe("SeedLockRow bypass (#13)", () => {
+  it("hides the bypass toggle unless bypassable", () => {
+    expect(row().find('[data-test="seedrow-bypass"]').exists()).toBe(false);
+    expect(row({ bypassable: true }).find('[data-test="seedrow-bypass"]').exists()).toBe(true);
+  });
+  it("emits bypass with the toggled state", async () => {
+    const w = row({ bypassable: true, bypassed: false });
+    await w.get('[data-test="seedrow-bypass"]').trigger("click");
+    expect(w.emitted("bypass")![0]).toEqual([{ index: 0, bypassed: true }]);
+  });
+  it("marks the row bypassed + respects bypassDisabled", () => {
+    const on = row({ bypassable: true, bypassed: true });
+    expect(on.get(".srow").classes()).toContain("srow--bypassed");
+    const dis = row({ bypassable: true, bypassed: false, bypassDisabled: true });
+    expect(dis.get('[data-test="seedrow-bypass"]').attributes("disabled")).toBeDefined();
+  });
+});

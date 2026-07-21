@@ -221,7 +221,12 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // base-only with a frame-active disabled hint) in the lazy ContextWidget
 // chunk; entry stays put. Measured 459909 bytes (133 over the 449 ceiling);
 // minimal bump.
-const TOTAL_LIMIT = 450 * 1024;     // 450 KB
+// Bumped 450 -> 453 KB on 2026-07-21 for loop bypass frames (#13): the
+// `bypass_frames` config field + the SeedLockRow bypass toggle, the
+// SeedListModal opt-in bypass column, and the ContextLoopWidget "N bypassed"
+// badge. Config field alone landed 34 bytes over 450; the ~3 KB headroom
+// covers the UI additions in the same feature.
+const TOTAL_LIMIT = 453 * 1024;     // 453 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

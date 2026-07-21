@@ -148,3 +148,33 @@ describe("ContextLoopWidget frame selector", () => {
     expect(currentFrame.value).toBe(null);
   });
 });
+
+describe("ContextLoopWidget bypass (#13)", () => {
+  it("shows an N-bypassed badge on the seeds button", () => {
+    const cfg = { ...emptyContextLoopConfig(), bypass_frames: [1, 3] };
+    const w = mount(ContextLoopWidget, { props: { modelValue: cfg, count: 5 } });
+    expect(w.find('[data-test="loop-seeds-bypass-badge"]').text()).toMatch(/2 bypassed/i);
+  });
+  it("marks bypassed edit-frame chips with a dashed-border class", () => {
+    const cfg = { ...emptyContextLoopConfig(), bypass_frames: [1, 3] };
+    const w = mount(ContextLoopWidget, { props: { modelValue: cfg, count: 5 } });
+    // frame index 1 -> chip #2 (data-test loop-frame-2)
+    expect(w.find('[data-test="loop-frame-2"]').classes()).toContain("wp-loop__chip--bypassed");
+    expect(w.find('[data-test="loop-frame-4"]').classes()).toContain("wp-loop__chip--bypassed");
+    expect(w.find('[data-test="loop-frame-1"]').classes()).not.toContain("wp-loop__chip--bypassed");
+  });
+
+  it("has no bypass badge when none are bypassed", () => {
+    const w = mount(ContextLoopWidget, { props: { modelValue: emptyContextLoopConfig(), count: 5 } });
+    expect(w.find('[data-test="loop-seeds-bypass-badge"]').exists()).toBe(false);
+  });
+  it("writes bypass changes from the modal back into the config", async () => {
+    const cfg = { ...emptyContextLoopConfig(), bypass_frames: [] };
+    const w = mount(ContextLoopWidget, { props: { modelValue: cfg, count: 4 } });
+    await w.get('[data-test="loop-seeds-btn"]').trigger("click");
+    w.findComponent(SeedListModal).vm.$emit("update:bypassFrames", [2]);
+    const calls = w.emitted("update:modelValue")!;
+    const last = calls[calls.length - 1][0] as typeof cfg;
+    expect(last.bypass_frames).toEqual([2]);
+  });
+});

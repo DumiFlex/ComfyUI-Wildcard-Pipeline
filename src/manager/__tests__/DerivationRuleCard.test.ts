@@ -423,4 +423,49 @@ describe("DerivationRuleCard.vue", () => {
     const wrap = mountCard(makeRule(), 0);
     expect(wrap.find("datalist").exists()).toBe(false);
   });
+
+  describe("collapse (#9)", () => {
+    // v-show toggles an inline `display: none`; assert on that directly since
+    // isVisible() is unreliable under jsdom for v-show.
+    const hidden = (w: { attributes: (n: string) => string | undefined }) =>
+      (w.attributes("style") ?? "").includes("display: none");
+
+    it("branches start collapsed; the chevron toggles the body + peek", async () => {
+      const wrap = mountCard(makeRule(), 0);
+      const body = () => wrap.find('[data-test="branch-0-0"] .branch-body');
+      // Collapsed by default → body hidden, peek shown.
+      expect(hidden(body())).toBe(true);
+      expect(wrap.find('[data-test="branch-peek-0-0"]').text()).toBe("$x → $out");
+      // Expand.
+      await wrap.get('[data-test="toggle-branch-0-0"]').trigger("click");
+      expect(hidden(body())).toBe(false);
+      expect(wrap.find('[data-test="branch-peek-0-0"]').exists()).toBe(false);
+    });
+
+    it("per-rule collapse/expand-all-branches buttons toggle every branch", async () => {
+      const wrap = mountCard(makeRule(), 0);
+      const body = () => wrap.find('[data-test="branch-0-0"] .branch-body');
+      // Expand all first (default is collapsed), then collapse all again.
+      await wrap.get('[data-test="expand-branches-0"]').trigger("click");
+      expect(hidden(body())).toBe(false);
+      await wrap.get('[data-test="collapse-branches-0"]').trigger("click");
+      expect(hidden(body())).toBe(true);
+    });
+
+    it("adopts the collapseCommand broadcast (Collapse all / Expand all)", async () => {
+      const wrap = mount(DerivationRuleCard, {
+        props: {
+          modelValue: makeRule(),
+          index: 0,
+          collapseCommand: { nonce: 0, collapsed: false },
+        },
+      });
+      const branches = () => wrap.find(".branches");
+      expect(hidden(branches())).toBe(false);
+      await wrap.setProps({ collapseCommand: { nonce: 1, collapsed: true } });
+      expect(hidden(branches())).toBe(true);
+      await wrap.setProps({ collapseCommand: { nonce: 2, collapsed: false } });
+      expect(hidden(branches())).toBe(false);
+    });
+  });
 });

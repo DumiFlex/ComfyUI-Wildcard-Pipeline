@@ -15,8 +15,17 @@ const props = defineProps<{
    *  frame — the "lock previous" button greys out. Distinct from `derived`,
    *  which is the UPCOMING seed computed from the current base. */
   previous?: number | null;
+  /** When true, render a per-frame bypass toggle (Context Loop only). */
+  bypassable?: boolean;
+  /** Whether this frame is currently bypassed. */
+  bypassed?: boolean;
+  /** Disable the bypass toggle (e.g. it's the last active frame). */
+  bypassDisabled?: boolean;
 }>();
-const emit = defineEmits<{ update: [payload: { index: number; seed: number | null }] }>();
+const emit = defineEmits<{
+  update: [payload: { index: number; seed: number | null }];
+  bypass: [payload: { index: number; bypassed: boolean }];
+}>();
 
 const SEED_MAX = (2 ** 50) - 1; // MAX_SAFE_SEED (matches engine)
 function randomSeed(): number {
@@ -40,8 +49,16 @@ function bump(d: 1 | -1) {
 </script>
 
 <template>
-  <div class="srow" :class="{ 'srow--locked': locked, 'srow--inactive': inactive }">
+  <div class="srow" :class="{ 'srow--locked': locked, 'srow--inactive': inactive, 'srow--bypassed': bypassed }">
     <span class="srow__idx" data-test="seedrow-idx">#{{ index + 1 }}</span>
+    <button v-if="bypassable" type="button" class="toggle toggle--bypass"
+      :class="{ 'toggle--on': bypassed }" :disabled="bypassDisabled || undefined"
+      data-test="seedrow-bypass" role="switch" :aria-checked="bypassed"
+      :title="bypassed ? 'Frame bypassed — click to re-enable' : 'Bypass this frame (skip its generation)'"
+      @click="emit('bypass', { index, bypassed: !bypassed })">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9" /><path d="M5.6 5.6l12.8 12.8" stroke-linecap="round" /></svg>
+      {{ bypassed ? "Bypassed" : "Bypass" }}
+    </button>
     <button type="button" class="toggle" :class="{ 'toggle--on': locked }"
       data-test="seedrow-lock" role="switch" :aria-checked="locked" @click="onLock">
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -90,6 +107,23 @@ function bump(d: 1 | -1) {
 /* out-of-range lock: dimmed ("deemed down") but still interactive — hover lifts it. */
 .srow--inactive { opacity: .5; }
 .srow--inactive:hover { opacity: .85; }
+/* Bypassed row — purple-dimmed wash + a dashed left accent bar so it reads
+ * clearly even when the struck-through seed alone is too faint. The dashed
+ * bar echoes the loop node's dashed bypass chips. */
+.srow--bypassed {
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      var(--wp-accent, #c4b5fd) 0 4px,
+      transparent 4px 8px
+    ) left / 3px 100% no-repeat,
+    color-mix(in srgb, var(--wp-accent, #c4b5fd) 11%, transparent);
+  border-radius: 5px;
+}
+.srow--bypassed .derived__val { text-decoration: line-through; opacity: .65; }
+.srow--bypassed .srow__idx { color: var(--wp-accent-text, #c4b5fd); opacity: .75; }
+.toggle--bypass { color: var(--wp-text-dim, var(--wp-text3)); }
+.toggle--bypass.toggle--on { border-color: var(--wp-accent); color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,.10); }
 .srow__idx { flex-shrink: 0; width: 30px; text-align: right; font: 600 11px var(--wp-font-mono, monospace); color: var(--wp-text-dim, #7a7d88); }
 .srow--locked .srow__idx { color: var(--wp-accent-text, #c4b5fd); }
 .srow__fill { flex: 1; }

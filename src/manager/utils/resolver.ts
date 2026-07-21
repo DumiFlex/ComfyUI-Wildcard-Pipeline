@@ -72,11 +72,71 @@ function stripBranchWeight(branch: string): string {
   return branch.slice(i + 2);
 }
 
+/** Inclusive random integer in [min, max]. */
+function randInt(min: number, max: number): number {
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+
+/** One weighted pick over raw `N::branch` strings → the resolved value.
+ *  Unweighted (no `N::` on any branch) picks uniformly. */
+function pickOneWeighted(rawBranches: string[]): string {
+  const values = rawBranches.map(stripBranchWeight);
+  const hasWeights = values.some((v, i) => v !== rawBranches[i]);
+  if (!hasWeights) {
+    return values[Math.floor(Math.random() * values.length)];
+  }
+  const weights = rawBranches.map(parseBranchWeight);
+  const total = weights.reduce((a, w) => a + Math.max(0, w), 0);
+  if (total <= 0) return values[0];
+  let r = Math.random() * total;
+  for (let i = 0; i < values.length; i++) {
+    r -= Math.max(0, weights[i]);
+    if (r <= 0) return values[i];
+  }
+  return values[values.length - 1];
+}
+
+/** Pick `k` items without replacement, weighted, in pick order. Clamps `k`
+ *  to `values.length`. Mirrors the engine's `pick_k_unique`. */
+function pickKUnique(values: string[], weights: number[], k: number): string[] {
+  const n = Math.min(Math.max(0, k), values.length);
+  const idx = values.map((_, i) => i);
+  const w = weights.slice();
+  const chosen: string[] = [];
+  for (let c = 0; c < n && idx.length > 0; c++) {
+    const total = w.reduce((a, x) => a + Math.max(0, x), 0);
+    let j = 0;
+    if (total > 0) {
+      let r = Math.random() * total;
+      for (; j < w.length; j++) {
+        r -= Math.max(0, w[j]);
+        if (r <= 0) break;
+      }
+      if (j >= w.length) j = w.length - 1;
+    }
+    chosen.push(values[idx[j]]);
+    idx.splice(j, 1);
+    w.splice(j, 1);
+  }
+  return chosen;
+}
+
+// Multi-pick prefix inside a brace block: `N$$sep$$` or `N-M~$$sep$$`.
+// Group 1 = count (fixed `N` or range `N-M`), group 2 = optional `~`
+// independent flag (repeats allowed; absent = unique), group 3 = separator
+// (may be empty), group 4 = the branch source. Mirror of the engine's
+// `_MULTI_PREFIX_RE` in engine/syntax/tokenize.py (SP2b).
+const MULTI_PREFIX_RE = /^(\d+(?:-\d+)?)(~?)\$\$([\s\S]*?)\$\$([\s\S]*)$/;
+
 /**
- * Expand inline `{a|b|c}` choices in a value string. Each occurrence is
- * resolved to one of its `|`-separated branches at random (weighted when a
- * branch carries an `N::` prefix). Nested braces are resolved innermost-first
- * via a fixpoint loop.
+ * Expand inline choices in a value string:
+ *   - single-pick `{a|b|c}` → one `|`-branch at random (weighted via `N::`).
+ *   - multi-pick `{N-M$$sep$$a|b|c}` → pick N..M branches, joined by `sep`.
+ *     `~` after the count draws WITH replacement; default is unique. Mirrors
+ *     the engine's `_resolve_multi_pick` so the Test Runner preview matches
+ *     the actual pipeline (previously the `N-M$$sep$$` prefix was treated as
+ *     part of the first branch, leaking raw `1-2$$, $$smirk` into renders).
+ * Nested braces resolve innermost-first via a fixpoint loop.
  *
  * Important — this function MUST NOT touch `@{...}` refs. The previous
  * implementation delegated to `resolveTokens` which tokenized `@{8hex}`
@@ -90,7 +150,7 @@ function stripBranchWeight(branch: string): string {
 export function expandInlineChoices(text: string): string {
   if (!text) return text;
   let out = String(text);
-  // Repeatedly resolve innermost `{a|b|c}` braces — `[^{}]` rules out
+  // Repeatedly resolve innermost `{...}` braces — `[^{}]` rules out
   // nested braces, the `\|` in the alternation rules out single-branch
   // `{abc}` (which has no `|` to split on, intentionally preserved).
   // Loop until no replacement happens to handle nested choices.
@@ -98,21 +158,27 @@ export function expandInlineChoices(text: string): string {
     const next = out.replace(
       /\{([^{}]*\|[^{}]*)\}/g,
       (_, content: string) => {
-        const raw = content.split("|");
-        const values = raw.map(stripBranchWeight);
-        const hasWeights = values.some((v, i) => v !== raw[i]);
-        if (!hasWeights) {
-          return values[Math.floor(Math.random() * values.length)];
+        const mp = content.match(MULTI_PREFIX_RE);
+        if (mp) {
+          const [minStr, maxStr] = mp[1].split("-");
+          const cmin = Number(minStr);
+          const cmax = maxStr !== undefined ? Number(maxStr) : cmin;
+          const independent = mp[2] === "~";
+          const sep = mp[3];
+          const rawBranches = mp[4].split("|");
+          // A fixed count (min==max) skips the RNG draw, matching the engine.
+          const count = cmin === cmax ? cmin : randInt(cmin, cmax);
+          if (count <= 0) return "";
+          if (independent) {
+            const picks: string[] = [];
+            for (let c = 0; c < count; c++) picks.push(pickOneWeighted(rawBranches));
+            return picks.join(sep);
+          }
+          const values = rawBranches.map(stripBranchWeight);
+          const weights = rawBranches.map(parseBranchWeight);
+          return pickKUnique(values, weights, Math.min(count, rawBranches.length)).join(sep);
         }
-        const weights = raw.map(parseBranchWeight);
-        const total = weights.reduce((a, w) => a + Math.max(0, w), 0);
-        if (total <= 0) return values[0];
-        let r = Math.random() * total;
-        for (let i = 0; i < values.length; i++) {
-          r -= Math.max(0, weights[i]);
-          if (r <= 0) return values[i];
-        }
-        return values[values.length - 1];
+        return pickOneWeighted(content.split("|"));
       },
     );
     if (next === out) break;

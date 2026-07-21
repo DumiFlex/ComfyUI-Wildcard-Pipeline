@@ -37,8 +37,13 @@ const props = withDefaults(
      *  executed `loop_seeds` UI payload by the host glue. Drives the seed
      *  modal's per-frame "lock previous" button. Null until a run lands. */
     previousSeeds?: number[] | null;
+    /** 0-based frames the wired loop bypasses (resolved by the host glue —
+     *  only when Override count from loop is on). Shown READ-ONLY in the
+     *  modal (dimmed rows + "N bypassed" badge); bypass is owned by the loop.
+     *  Empty when no loop is wired or none are bypassed. */
+    bypassedFrames?: number[];
   }>(),
-  { nodeMode: 0, baseSeed: 0, count: 1, previewStrategy: undefined, previousSeeds: null },
+  { nodeMode: 0, baseSeed: 0, count: 1, previewStrategy: undefined, previousSeeds: null, bypassedFrames: () => [] },
 );
 
 const emit = defineEmits<{ "update:modelValue": [next: SeedListConfig] }>();
@@ -73,6 +78,7 @@ const isBypassed = computed<boolean>(() => props.nodeMode === 4);
 
 const seedsOpen = ref(false);
 const lockedCount = computed(() => Object.keys(props.modelValue.seed_locks ?? {}).length);
+const bypassedCount = computed(() => props.bypassedFrames.length);
 
 function onSeedLocks(next: Record<string, number>): void {
   emit("update:modelValue", { ...props.modelValue, seed_locks: next });
@@ -153,6 +159,7 @@ function toggleOverrideStrategy(): void {
       Per-iteration seeds
       <span class="wp-seedlist__seedbtn-fill" />
       <span v-if="lockedCount" class="wp-seedlist__seedbtn-badge" data-test="seedlist-seeds-badge">{{ lockedCount }} locked</span>
+      <span v-if="bypassedCount" class="wp-seedlist__seedbtn-badge" data-test="seedlist-seeds-bypass-badge">{{ bypassedCount }} bypassed</span>
       <svg class="wp-seedlist__seedbtn-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6" /></svg>
     </button>
 
@@ -206,6 +213,7 @@ function toggleOverrideStrategy(): void {
     <SeedListModal v-if="seedsOpen" :node-name="'WP Seed List'" :base-seed="baseSeed"
       :count="count" :strategy="previewStrategy ?? modelValue.strategy" :seed-locks="modelValue.seed_locks ?? {}"
       :previous-seeds="previousSeeds"
+      :bypass-frames="bypassedFrames.length ? bypassedFrames : undefined" :bypass-readonly="true"
       :override-hint="modelValue.override_seed ? 'Base seed comes from the wired loop while Override base seed from loop is on.' : ''"
       @update:seed-locks="onSeedLocks" @close="seedsOpen = false" />
   </div>

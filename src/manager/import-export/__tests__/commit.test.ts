@@ -62,6 +62,36 @@ describe("buildCommitPayload", () => {
     expect((result.renames[0]?.content as { id: string }).id).toBe("w3_new");
   });
 
+  it("strips server-stamped lifecycle fields from an add so the import reads as fresh (#12)", () => {
+    const sel = emptySelection();
+    sel.wildcards = [
+      {
+        entity: {
+          id: "w1",
+          name: "alpha",
+          payload: { options: [] },
+          tags: [],
+          created_at: "2026-04-01T00:00:00Z",
+          updated_at: "2026-04-02T00:00:00Z",
+          version: 7,
+          snapshot_fingerprint: "abc",
+          payload_hash: "def",
+        },
+        decision: { kind: "add" },
+      },
+    ];
+    const add = buildCommitPayload(sel).adds[0]!.entity as Record<string, unknown>;
+    // Identity + content survive; the server-owned lifecycle fields are gone
+    // so engine/importer.py falls back to now() + recomputes the fingerprint.
+    expect(add.id).toBe("w1");
+    expect(add.name).toBe("alpha");
+    expect(add.created_at).toBeUndefined();
+    expect(add.updated_at).toBeUndefined();
+    expect(add.version).toBeUndefined();
+    expect(add.snapshot_fingerprint).toBeUndefined();
+    expect(add.payload_hash).toBeUndefined();
+  });
+
   it("partitions all three decision kinds for templates", () => {
     const sel = emptySelection();
     sel.templates = [
