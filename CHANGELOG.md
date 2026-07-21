@@ -1,3 +1,49 @@
+## 🎉 Wildcard Pipeline 2.10.0
+
+📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
+
+<details>
+<summary><b>📋 Full changelog</b> — click to expand the per-commit list</summary>
+
+
+* Merge pull request #8 from DumiFlex/feat/manager-qol ([fe2423f](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/fe2423f)), closes [#8](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues/8)
+* feat(loop): add optional bypass toggle to seed-lock row ([d524d14](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/d524d14))
+* feat(loop): dashed border on bypassed edit-frame chips ([70283ce](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/70283ce))
+* feat(loop): emit only non-bypassed frames with pinned identity ([9d372b1](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/9d372b1))
+* feat(loop): mirror bypass_frames in the ts config type ([da2239d](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/da2239d))
+* feat(loop): mirror the loop's bypassed frames in the seed list UI ([f670c3d](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/f670c3d))
+* feat(loop): opt-in bypass column in the per-iteration modal ([651ca65](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/651ca65))
+* feat(loop): parse bypass_frames in the loop config ([7aab09d](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/7aab09d))
+* feat(loop): purple wash + dashed bar on bypassed seed rows ([ea4ed05](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/ea4ed05))
+* feat(loop): wire per-frame bypass through the loop widget ([7545ade](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/7545ade))
+* feat(manager): add checkOnLaunch update preference to uiStore ([d42b7ca](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/d42b7ca))
+* feat(manager): add ComfyUI Manager update composable ([327e7cc](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/327e7cc))
+* feat(manager): add safe markdown renderer for release notes ([830776e](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/830776e))
+* feat(manager): add UpdateDialog with changelog + Manager-driven update ([290e7a8](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/290e7a8))
+* feat(manager): add Updates settings card with check-on-launch + check now ([6c20f53](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/6c20f53))
+* feat(manager): bulk select + delete for exceptions + derivation rules (#11) ([ed10b88](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/ed10b88)), closes [#11](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues/11)
+* feat(manager): bulk select + delete for fixed-values (#11) ([cbf102b](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/cbf102b)), closes [#11](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues/11)
+* feat(manager): drag-and-drop file import (#5) ([d4e6d0c](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/d4e6d0c)), closes [#5](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues/5)
+* feat(manager): move Target reach above the constraint rule matrix (#10a) ([d039364](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/d039364)), closes [#10a](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues/10a)
+* feat(manager): open UpdateDialog from the topbar update pill ([936a139](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/936a139))
+* feat(manager): per-branch collapse + collapse-all for derivation rules (#9) ([8ea1571](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/8ea1571)), closes [#9](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues/9)
+* feat(manager): per-kind quick-select presets + import-tab mirror (#1) ([8912937](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/8912937)), closes [#1](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues/1)
+* feat(manager): per-rule branch collapse + collapse rules/branches by default ([fcde3b3](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/fcde3b3))
+* feat(manager): relevant + colour-coded bulk sub-category menus ([be70a5f](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/be70a5f)), closes [#3](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues/3) [#4](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues/4) [#3](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues/3)
+* feat(manager): rework release check to launch-once + manual, expose release notes ([bdcf85c](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/bdcf85c))
+* feat(manager): sticky list headers across editors ([6802f11](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/6802f11))
+* fix(loop): parse parity + edge coverage from final review ([bab87cd](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/bab87cd))
+* fix(loop): seed list mirrors the loop's bypassed frames ([af95f08](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/af95f08))
+* fix(manager): count templates in the import loaded-bar total ([2295ce0](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/2295ce0))
+* fix(manager): detect bundle collisions on import instead of blind-adding (#6) ([b54302d](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/b54302d)), closes [#6](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues/6)
+* fix(manager): fresh dates for imported adds (#12) + live counts after import (#7) ([696711d](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/696711d)), closes [#12](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues/12) [#7](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues/7) [#12](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues/12) [#7](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues/7)
+* fix(manager): keep bulk-edit toolbar stuck with sticky card header ([6f69304](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/6f69304))
+* fix(manager): resolve inline multi-pick {N-M$$sep$$…} in the test runner ([8dcef0f](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/8dcef0f))
+* fix(manager): sticky-header subpixel bleed + confusing weight validation ([0bd4382](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/0bd4382))
+* test(engine): un-skip pipeline trace tests after handler migration ([7d2bd63](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/7d2bd63))
+
+</details>
+
 ## 🎉 Wildcard Pipeline 2.9.0
 
 📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
