@@ -66,7 +66,10 @@ const inactiveBypass = computed(() =>
   [...bypassSet.value].filter((i) => i >= derived.value.length).sort((a, b) => a - b),
 );
 /** Real derived seed for any index (out-of-range inactive rows compute it on
- *  the fly since `derived` only spans the active count). */
+ *  the fly since `derived` only spans the active count). PRECONDITION: `i >= 1`
+ *  — only ever called for inactive rows where `i >= derived.length >= 1`. At
+ *  `i === 0` deriveLoopSeeds hits its `count <= 1` branch and returns the base
+ *  seed, NOT the series' derived[0], so do not reuse this for in-range index 0. */
 function seedAt(i: number): number {
   return deriveLoopSeeds(props.baseSeed, i + 1, props.strategy)[i] ?? 0;
 }
@@ -180,8 +183,9 @@ onBeforeUnmount(() => {
             <SeedLockRow v-for="i in inactiveBypass" :key="`inbypass-${i}`" :index="i"
               :derived="seedAt(i)"
               :locked="Object.prototype.hasOwnProperty.call(seedLocks, String(i))"
-              :seed="seedLocks[String(i)] ?? null" :inactive="true"
-              :bypassable="true" :bypassed="true" @update="onRow" @bypass="onBypass" />
+              :seed="seedLocks[String(i)] ?? null" :previous="previousSeeds?.[i] ?? null"
+              :inactive="true" :bypassable="true" :bypassed="true"
+              @update="onRow" @bypass="onBypass" />
           </template>
           <template v-if="inactiveLocks.length">
             <div class="sm__inactive-label" data-test="mx-seed-inactive">

@@ -115,3 +115,19 @@ def test_whole_loop_bypass_still_single_run():
     assert payloads[0].internals["__wp_loop_index__"] == 0
     assert loop_config["count"] == 1
     assert loop_config["active_count"] == 1
+
+
+def test_bypass_frame_zero():
+    # Frame 0 is bypassable — seed-hold's base pass runs internally regardless.
+    payloads, _ = _run(0, 3, {"bypass_frames": [0]})
+    assert [p.internals["__wp_loop_index__"] for p in payloads] == [1, 2]
+
+
+def test_out_of_range_bypass_reapplies_when_count_grows():
+    # Index 9 is inert at count 3 but takes effect once count grows past it.
+    at3, _ = _run(0, 3, {"bypass_frames": [9]})
+    assert [p.internals["__wp_loop_index__"] for p in at3] == [0, 1, 2]
+    at10, _ = _run(0, 10, {"bypass_frames": [9]})
+    idxs = [p.internals["__wp_loop_index__"] for p in at10]
+    assert 9 not in idxs
+    assert idxs == [0, 1, 2, 3, 4, 5, 6, 7, 8]

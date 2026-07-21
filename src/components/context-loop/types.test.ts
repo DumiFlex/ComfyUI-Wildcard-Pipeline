@@ -102,6 +102,10 @@ describe("bypass_frames parse", () => {
     expect(parseContextLoopConfig('{"bypass_frames":[3,1,3,0]}').bypass_frames).toEqual([0, 1, 3]);
     expect(parseContextLoopConfig('{"bypass_frames":[2,-1,"x",2,999]}').bypass_frames).toEqual([2, 999]);
   });
+  it("drops coercible non-numbers, not coerce them (Python parity)", () => {
+    // true/"3"/null would coerce to 1/3/0 under Number() — must be dropped.
+    expect(parseContextLoopConfig('{"bypass_frames":[true,"3",null,2]}').bypass_frames).toEqual([2]);
+  });
   it("malformed collapses to empty", () => {
     expect(parseContextLoopConfig('{"bypass_frames":"nope"}').bypass_frames).toEqual([]);
     expect(parseContextLoopConfig("not json").bypass_frames).toEqual([]);
