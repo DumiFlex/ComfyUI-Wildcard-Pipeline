@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import Icon from "../components/ui/Icon.vue";
+import UpdateDialog from "../components/UpdateDialog.vue";
 import { GITHUB_REPO } from "../config/links";
 import { useBrowserHistory } from "../composables/useBrowserHistory";
 import { useReleaseCheck } from "../composables/useReleaseCheck";
@@ -14,7 +15,7 @@ const tweaks = useTweaksStore();
 
 // Version is injected at build time from package.json via vite's
 // `define` config (see vite.config.mts). The release check composable
-// hits GitHub once per 24h (cached in localStorage) and surfaces a
+// looks up the latest GitHub release once per app session and surfaces a
 // `hasUpdate` flag + severity classification (major/minor/patch).
 const { current: version, latestVersion, hasUpdate, severity } = useReleaseCheck();
 
@@ -35,9 +36,13 @@ const versionTooltip = computed(() =>
     ? `v${version} — update v${latestVersion.value} available on GitHub`
     : `v${version} — open repository on GitHub`,
 );
-const releasesUrl = `${GITHUB_REPO}/releases/latest`;
 const repoUrl = GITHUB_REPO;
 const logoSrc = `${import.meta.env.BASE_URL}images/favicon.svg`;
+
+// The update pill opens the in-app Update dialog (changelog + one-click
+// update via ComfyUI Manager) rather than linking straight to GitHub.
+const updateDialogOpen = ref(false);
+function openUpdateDialog(): void { updateDialogOpen.value = true; }
 
 /** Theme button icon — mirrors prototype (current state, not next). */
 const themeIcon = computed(() => {
@@ -103,18 +108,16 @@ function openPalette(): void {
         data-test="topbar-version"
         @click.stop
       >v{{ version }}</a>
-      <a
+      <button
         v-if="hasUpdate && latestVersion"
+        type="button"
         class="wp-topbar__version wp-topbar__update-pill"
         :class="updatePillClass"
-        :href="releasesUrl"
         :title="updateTooltip"
-        target="_blank"
-        rel="noopener"
         :data-severity="severity ?? undefined"
         data-test="topbar-update-indicator"
-        @click.stop
-      ><span class="wp-topbar__update-arrow" aria-hidden="true">↑</span>v{{ latestVersion }}</a>
+        @click.stop.prevent="openUpdateDialog"
+      ><span class="wp-topbar__update-arrow" aria-hidden="true">↑</span>v{{ latestVersion }}</button>
     </RouterLink>
 
     <div class="wp-topbar__spacer" />
@@ -174,6 +177,8 @@ function openPalette(): void {
     >
       <Icon name="pi-cog" />
     </RouterLink>
+
+    <UpdateDialog :open="updateDialogOpen" @close="updateDialogOpen = false" />
   </header>
 </template>
 
@@ -248,15 +253,23 @@ a.wp-topbar__version:hover {
  *   - minor/patch → accent purple (safe to upgrade)
  * Clicking opens releases/latest in a new tab; click.stop on the
  * anchor keeps the dashboard nav (outer RouterLink) from firing first. */
-a.wp-topbar__update-pill {
+a.wp-topbar__update-pill,
+button.wp-topbar__update-pill {
   text-decoration: none;
   display: inline-flex;
   align-items: center;
   gap: 3px;
   cursor: pointer;
   transition: filter 120ms ease;
+  font: inherit;
 }
-a.wp-topbar__update-pill:hover {
+button.wp-topbar__update-pill {
+  /* Reset native button chrome; tonal border comes from the
+     --accent/--warn modifier classes below. */
+  border: 1px solid transparent;
+}
+a.wp-topbar__update-pill:hover,
+button.wp-topbar__update-pill:hover {
   filter: brightness(1.15);
 }
 .wp-topbar__update-arrow {

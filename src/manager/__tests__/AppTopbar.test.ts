@@ -1,10 +1,12 @@
 import { mount, flushPromises } from "@vue/test-utils";
 import { setActivePinia, createPinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ref } from "vue";
 import { createMemoryHistory, createRouter, type Router } from "vue-router";
 
 import AppTopbar from "../layout/AppTopbar.vue";
 import { useUiStore } from "../stores/uiStore";
+import * as releaseCheck from "../composables/useReleaseCheck";
 
 // Community status pill / sign-in / user-menu surfaces moved to the
 // `feat/community-tab` branch alongside the views that need them. Topbar
@@ -108,5 +110,36 @@ describe("AppTopbar.vue", () => {
     await btn.trigger("click");
     expect(backSpy).toHaveBeenCalledOnce();
     backSpy.mockRestore();
+  });
+
+  it("clicking the update pill opens the dialog instead of navigating", async () => {
+    // Force an available update so the pill renders, and stub the dialog
+    // to a marker that only appears while open.
+    vi.spyOn(releaseCheck, "useReleaseCheck").mockReturnValue({
+      current: "2.9.0",
+      latestVersion: ref("2.10.0"),
+      hasUpdate: ref(true),
+      severity: ref("minor"),
+      releaseBody: ref("- notes"),
+      releaseUrl: ref("https://x/r"),
+      lastChecked: ref(null),
+      checking: ref(false),
+      checkNow: vi.fn(),
+    } as ReturnType<typeof releaseCheck.useReleaseCheck>);
+
+    const router = makeRouter();
+    await router.isReady();
+    const wrap = mount(AppTopbar, {
+      global: {
+        plugins: [router],
+        stubs: { UpdateDialog: { template: '<div data-test="dlg-stub" v-if="open" />', props: ["open"] } },
+      },
+    });
+    await flushPromises();
+
+    expect(wrap.find('[data-test="dlg-stub"]').exists()).toBe(false);
+    await wrap.find('[data-test="topbar-update-indicator"]').trigger("click");
+    expect(wrap.find('[data-test="dlg-stub"]').exists()).toBe(true);
+    expect(router.currentRoute.value.path).not.toBe("/dashboard");
   });
 });
