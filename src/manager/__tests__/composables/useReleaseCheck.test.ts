@@ -114,6 +114,21 @@ describe("useReleaseCheck", () => {
     wrap.unmount();
   });
 
+  it("a legacy/malformed cache blob (no latest_version) does not throw", async () => {
+    localStorage.setItem(STORAGE_KEY, '{"v":"1.0"}'); // pre-rework shape
+    const fetchMock = vi.fn().mockResolvedValue(releaseResponse("v1.8.0"));
+    vi.stubGlobal("fetch", fetchMock);
+    const wrap = mount(host());
+    await nextTick();
+    // Painting the bad cache must not crash; it degrades to no update.
+    expect(lastResult!.hasUpdate.value).toBe(false);
+    expect(lastResult!.latestVersion.value).toBeNull();
+    await settle();
+    // The launch refresh still recovers a real version.
+    expect(lastResult!.latestVersion.value).toBe("1.8.0");
+    wrap.unmount();
+  });
+
   it("network failure leaves hasUpdate false and does not throw", async () => {
     const fetchMock = vi.fn().mockRejectedValue(new Error("offline"));
     vi.stubGlobal("fetch", fetchMock);

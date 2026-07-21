@@ -8,17 +8,40 @@
  * with dot-prefix fix) and DatabaseCard (server-side SQLite info +
  * maintenance ops).
  */
+import { computed } from "vue";
+
 import Card from "../components/ui/Card.vue";
 import Field from "../components/ui/Field.vue";
 import Icon from "../components/ui/Icon.vue";
 import Input from "../components/ui/Input.vue";
 import Toggle from "../components/ui/Toggle.vue";
+import Button from "../components/ui/Button.vue";
 import BrowserPrefsCard from "../components/settings/BrowserPrefsCard.vue";
 import DatabaseCard from "../components/settings/DatabaseCard.vue";
 import { useUiStore, type ThemeMode } from "../stores/uiStore";
+import { useReleaseCheck } from "../composables/useReleaseCheck";
 import { GITHUB_REPO } from "../config/links";
 
 const uiStore = useUiStore();
+
+const { latestVersion, hasUpdate, lastChecked, checking, checkNow } = useReleaseCheck();
+
+const updateStatus = computed(() =>
+  hasUpdate.value && latestVersion.value
+    ? `Update v${latestVersion.value} available`
+    : "Up to date",
+);
+const lastCheckedLabel = computed(() => {
+  if (!lastChecked.value) return "never checked";
+  const then = new Date(lastChecked.value).getTime();
+  if (Number.isNaN(then)) return "never checked";
+  const mins = Math.round((Date.now() - then) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs} h ago`;
+  return `${Math.round(hrs / 24)} d ago`;
+});
 
 const repoUrl = GITHUB_REPO;
 // Build-time injected via vite `define` (see vite.config.mts) — source
@@ -64,6 +87,32 @@ function setTheme(mode: ThemeMode) {
         >
           <Icon name="pi-github" /> {{ repoUrl }}
         </a>
+      </div>
+    </Card>
+
+    <Card title="Updates">
+      <Field
+        label="Check for updates on launch"
+        hint="Look for a newer release when the manager opens. Turn off to check only manually."
+      >
+        <Toggle
+          :model-value="uiStore.checkOnLaunch"
+          label="Check on launch"
+          data-test="settings-check-on-launch"
+          @update:model-value="uiStore.setCheckOnLaunch($event)"
+        />
+      </Field>
+      <div class="wp-settings__update-row">
+        <div>
+          <p class="wp-settings__update-status" data-test="settings-update-status">{{ updateStatus }}</p>
+          <p class="wp-dim wp-settings__update-sub">Last checked · {{ lastCheckedLabel }}</p>
+        </div>
+        <Button
+          variant="secondary"
+          :loading="checking"
+          data-test="settings-check-now"
+          @click="checkNow"
+        >Check now</Button>
       </div>
     </Card>
 
@@ -157,6 +206,16 @@ function setTheme(mode: ThemeMode) {
   font-size: var(--wp-text-sm);
   margin: 0 0 var(--wp-space-5);
 }
+
+.wp-settings__update-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--wp-space-4);
+  margin-top: var(--wp-space-4);
+}
+.wp-settings__update-status { margin: 0; font-size: var(--wp-text-sm); color: var(--wp-text); font-weight: 600; }
+.wp-settings__update-sub { margin: 2px 0 0; font-size: var(--wp-text-sm); }
 
 .wp-settings__radio {
   display: inline-flex;

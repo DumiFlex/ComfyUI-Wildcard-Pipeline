@@ -188,10 +188,15 @@ export function useReleaseCheck(): {
   const ui = useUiStore();
 
   function applyLatest(v: string | null): void {
-    latestVersion.value = v;
-    const newer = v !== null && semverCompare(v, current) > 0;
+    // Defensive: a legacy/malformed cache blob may carry a non-string
+    // (or missing) version, and `current` is undefined if the vite
+    // `define` didn't inject `__APP_VERSION__`. Guard both so a bad value
+    // degrades to "no update" instead of throwing in semverCompare.
+    const valid = typeof v === "string" && v.length > 0 && typeof current === "string";
+    latestVersion.value = valid ? v : null;
+    const newer = valid && semverCompare(v as string, current) > 0;
     hasUpdate.value = newer;
-    severity.value = newer && v ? classifyBump(current, v) : null;
+    severity.value = newer ? classifyBump(current, v as string) : null;
   }
 
   /** Fetch fresh, persist, apply. Shared by launch fetch + checkNow. */
