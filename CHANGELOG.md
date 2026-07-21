@@ -1,3 +1,27 @@
+## 🎉 Wildcard Pipeline 2.10.2
+
+📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
+
+### ✨ What's new
+
+A bug-fix release for the in-app updater and name validation.
+
+- **Fixed an updater downgrade.** On 2.10.0, clicking **Update Now** could install an *older* version — it asked ComfyUI Manager for "latest" against a stale cache. The updater now installs the exact new version and refuses to ever move backwards.
+- **The update badge appears right away** after **Check now** — no page refresh needed.
+- **Cleaner release notes** in the update dialog (proper formatting instead of raw `<details>` tags).
+- **Names are validated as you rename them.** Renaming a sub-category or a variable now enforces the same rules as creating one, so invalid names (spaces, reserved characters) are caught immediately instead of failing later on save.
+
+---
+
+<details>
+<summary><b>📋 Full changelog</b> — click to expand the per-commit list</summary>
+
+
+* Merge pull request #10 from DumiFlex/fix/updater-downgrade ([a2e93fe](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/a2e93fe)), closes [#10](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues/10)
+* fix(manager): prevent updater downgrade, fix pill reactivity + release notes ([1e42f9b](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/1e42f9b))
+
+</details>
+
 ## 🎉 Wildcard Pipeline 2.10.1
 
 📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
