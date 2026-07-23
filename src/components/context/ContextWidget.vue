@@ -91,6 +91,7 @@ import {
   unsubscribe as unsubscribeDrift,
 } from "./drift-store";
 import { classifyOne, type CollisionState } from "../../manager/import-export/collision";
+import { applyRelink } from "../../manager/import-export/relink-apply";
 import {
   getBundleCollapsedByDefault,
   getConfirmDestructiveBundle,
@@ -467,7 +468,7 @@ function openPushToLibrary(idx: number): void {
 }
 
 interface PushSaveResult {
-  mode: "update" | "fork" | "reattach";
+  mode: "update" | "fork" | "reattach" | "relink";
   id: string;
   payload_hash: string;
   bundles_updated: string[];
@@ -511,6 +512,21 @@ function onPushSaved(result: PushSaveResult): void {
       };
     });
     commitModules(next);
+  } else if (result.mode === "relink") {
+    // Re-link: point the detached row(s) at an EXISTING content-identical
+    // library uuid AND walk every module so sibling @{} refs + constraint
+    // source/target follow the new uuid (applyRelink swaps id + payload_hash
+    // on the matching row + remaps refs everywhere else).
+    const remapped = applyRelink(
+      value.value.modules as unknown as Record<string, unknown>[],
+      { oldId: result.origId, newId: result.id, newPayloadHash: result.payload_hash },
+    ) as unknown as ModuleEntry[];
+    const next = remapped.map((m) =>
+      m.id === result.id
+        ? { ...m, meta: { ...(m.meta ?? {}), library_name: result.name } }
+        : m,
+    );
+    commitModules(next);
   }
   const bundlesNote =
     result.bundles_updated.length > 0
@@ -519,6 +535,7 @@ function onPushSaved(result: PushSaveResult): void {
   let msg: string;
   if (result.mode === "fork") msg = `Saved as new library entry "${result.name}"`;
   else if (result.mode === "reattach") msg = `Re-attached "${result.name}" to library`;
+  else if (result.mode === "relink") msg = `Re-linked "${result.name}" to library`;
   else msg = `Saved "${result.name}" to library${bundlesNote}`;
   pushToast(msg, { severity: "success" });
   pushOpen.value = false;
@@ -3896,7 +3913,7 @@ function openEditModal(idx: number) {
   editingIdx.value = idx;
 }
 
-function saveEditedModule(updated: ModuleEntry & { _originalId?: string }) {
+function saveEditedModule(updated: ModuleEntry & { _originalId?: string; _relinkFrom?: string }) {
   // Phase B: index-based replacement — sibling rows share `m.id`, so
   // mapping `m.id === updated.id` would clobber every sibling at once.
   // We use `editingIdx` captured at modal-open to target the specific
@@ -3907,8 +3924,13 @@ function saveEditedModule(updated: ModuleEntry & { _originalId?: string }) {
     editingIdx.value = null;
     return;
   }
+  // `_relinkFrom` (the OLD id) is set only on the re-link path — after the
+  // row is committed with its new id, walk the whole list so sibling @{}
+  // refs + constraint source/target follow. Captured before we strip markers.
+  const relinkFrom = updated._relinkFrom;
   const cleaned: ModuleEntry = { ...updated };
   delete (cleaned as { _originalId?: string })._originalId;
+  delete (cleaned as { _relinkFrom?: string })._relinkFrom;
   const list = [...value.value.modules];
   const k = currentFrame.value;
   if (k == null) {
@@ -3927,6 +3949,17 @@ function saveEditedModule(updated: ModuleEntry & { _originalId?: string }) {
   // a stale "override #k". No-op while the base stays locked.
   list[targetIdx] = dropRedundantFrameLockNulls(list[targetIdx]);
   commitModules(list);
+  if (relinkFrom && relinkFrom !== updated.id) {
+    // The re-linked row already carries its new id (list[targetIdx]); walk
+    // EVERY module so sibling nested @{} refs + constraint source/target that
+    // pointed at the old uuid follow to the library uuid. applyRelink leaves
+    // the already-swapped row's id alone (its id !== relinkFrom).
+    const remapped = applyRelink(
+      value.value.modules as unknown as Record<string, unknown>[],
+      { oldId: relinkFrom, newId: updated.id, newPayloadHash: updated.payload_hash ?? "" },
+    ) as unknown as ModuleEntry[];
+    commitModules(remapped);
+  }
   if (updated._originalId && updated._originalId !== updated.id) {
     nextTick(() => {
       const el = document.querySelector<HTMLElement>(

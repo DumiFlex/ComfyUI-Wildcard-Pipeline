@@ -1066,6 +1066,64 @@ function mountWithModules(stubs: StubModule[]) {
   });
 }
 
+// ── D3a: library re-link (onPushSaved path) ──────────────────────────────────
+
+describe("ContextWidget module re-link", () => {
+  it("re-links a detached row + follows a sibling constraint's source_wildcard_id", async () => {
+    const onChange = vi.fn();
+    const wrapper = mount(ContextWidget, {
+      props: {
+        nodeId: 9100,
+        initialJson: JSON.stringify({
+          version: 1,
+          modules: [
+            {
+              id: "dead0001", type: "wildcard", enabled: true,
+              meta: { name: "hair", description: "", tags: [] }, entries: [],
+              payload: { options: [{ id: "o1", value: "red" }] }, payload_hash: "HASH_A",
+            },
+            {
+              id: "c1", type: "constraint", enabled: true,
+              meta: { name: "cn", description: "", tags: [] }, entries: [],
+              payload: { source_wildcard_id: "dead0001", target_wildcard_id: "w2", matrix: {} },
+              payload_hash: "HC",
+            },
+          ],
+        }),
+        upstreamVars: [],
+        onChange,
+      },
+    });
+    // Let the initial parse settle (its suppressWatch cycle) so the relink
+    // change below isn't coalesced into the swallowed first watcher tick.
+    await flushPromises();
+    onChange.mockClear();
+
+    // Two PushToLibraryModal instances exist: ModuleEditModal's (bound to
+    // onPushToLibrarySaved, draft=null here) and ContextWidget's own (bound to
+    // onPushSaved, the right-click path). The latter is last in DFS order.
+    const ptls = wrapper.findAllComponents({ name: "PushToLibraryModal" });
+    expect(ptls.length).toBeGreaterThan(0);
+    const ptl = ptls[ptls.length - 1];
+    ptl.vm.$emit("saved", {
+      mode: "relink", id: "live0001", origId: "dead0001",
+      payload_hash: "HASH_A", name: "hair", bundles_updated: [],
+    });
+    await flushPromises();
+
+    const calls = onChange.mock.calls;
+    const lastJson = calls[calls.length - 1]?.[0] as string;
+    const parsed = JSON.parse(lastJson) as {
+      modules: Array<{ id: string; type: string; payload: Record<string, unknown> }>;
+    };
+    const wc = parsed.modules.find((m) => m.type === "wildcard");
+    const con = parsed.modules.find((m) => m.type === "constraint");
+    expect(wc?.id).toBe("live0001");
+    expect(con?.payload.source_wildcard_id).toBe("live0001");
+    wrapper.unmount();
+  });
+});
+
 // ── Sibling badge (Phase B: lives in summary line, not header) ────────────
 //
 // Phase A shipped the badge in the header always-visible. Phase B

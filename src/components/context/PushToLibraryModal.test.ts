@@ -23,6 +23,7 @@ vi.mock("#comfyui/app", () => ({
 }));
 
 import PushToLibraryModal from "./PushToLibraryModal.vue";
+import { hashes } from "./drift-store";
 import type { ModuleEntry } from "../../widgets/_shared";
 
 const VALID_PAYLOAD = {
@@ -86,6 +87,9 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   resetBody();
+  // The re-link branch reads the drift-store live hashes; null it out so a
+  // set value can't leak into other tests and falsely trip isLibraryMissing.
+  hashes.value = null;
 });
 
 async function openModal(draft: ModuleEntry | null) {
@@ -244,6 +248,41 @@ describe("PushToLibraryModal", () => {
     await flushPromises();
     const descInput = document.querySelector<HTMLTextAreaElement>('[data-test="ptl-description"]')!;
     expect(descInput.value).toBe("USER_TYPED");
+    wrap.unmount();
+  });
+
+  it("offers re-link to a content-identical library row when the draft is detached", async () => {
+    // A DIFFERENT uuid carries the draft's payload_hash — the re-imported twin.
+    hashes.value = { live0001: { type: "wildcard", payload_hash: "HASH_A" } };
+    pushResponse({ items: [] });                                                    // fetchBundlesContaining
+    pushResponse({ description: "", tags: [] });                                    // seedFromLibrary
+    pushResponse({ items: [{ id: "live0001", name: "test_w", type: "wildcard" }] }); // fetchLibraryNames
+    const wrap = await openModal(makeDraft({ id: "dead0001", payload_hash: "HASH_A" }));
+
+    const relink = document.querySelector('[data-test="ptl-relink"]');
+    expect(relink).not.toBeNull();
+
+    document.querySelector<HTMLButtonElement>('[data-test="ptl-relink-confirm"]')!.click();
+    await flushPromises();
+
+    const saved = wrap.emitted("saved");
+    expect(saved).toBeTruthy();
+    const result = saved![0][0] as { mode: string; id: string; origId: string };
+    expect(result.mode).toBe("relink");
+    expect(result.id).toBe("live0001");
+    expect(result.origId).toBe("dead0001");
+    wrap.unmount();
+  });
+
+  it("does not offer re-link when no content match exists (detached, novel content)", async () => {
+    // Library has a different-content row only → no identical + no name match
+    // for a differently-named draft → no re-link block (Save as new is the path).
+    hashes.value = { live0009: { type: "wildcard", payload_hash: "OTHER" } };
+    pushResponse({ items: [] });                                                    // bundles
+    pushResponse({ description: "", tags: [] });                                    // seedFromLibrary
+    pushResponse({ items: [{ id: "live0009", name: "unrelated", type: "wildcard" }] }); // names
+    const wrap = await openModal(makeDraft({ id: "dead0002", payload_hash: "HASH_Z" }));
+    expect(document.querySelector('[data-test="ptl-relink"]')).toBeNull();
     wrap.unmount();
   });
 
