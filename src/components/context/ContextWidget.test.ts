@@ -718,6 +718,105 @@ describe("ContextWidget bundle ops via ctxmenu", () => {
     wrapper.unmount();
   });
 
+  it("Reset REFUSES (keeps children) when the instance isn't library-linked", async () => {
+    resetDriftStore();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
+    const bundleUid = "buidEMPTY001";
+    const initialJson = JSON.stringify({
+      version: 1,
+      modules: [
+        {
+          id: "dddddddd", type: "wildcard", enabled: true,
+          meta: { name: "LocallyEdited" }, entries: [],
+          payload: { var_binding: "v", options: [{ id: "o2", value: "y", weight: 2 }] },
+          payload_hash: "h-edited", bundle_origin: bundleUid,
+        },
+      ],
+      bundles: [
+        {
+          _uid: bundleUid, library_id: "", start_idx: 0, end_idx: 0,
+          enabled: true, collapsed: false, inserted_at_hash: "", name: "Unlinked", color: null,
+        },
+      ],
+    });
+    const onChange = vi.fn();
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: { nodeId: 305, initialJson, upstreamVars: [], onChange },
+    });
+    await flushPromises();
+    onChange.mockClear();
+
+    const header = document.querySelector(`[data-bundle-uid="${bundleUid}"][data-bundle-header]`);
+    expect(header).toBeTruthy();
+    header!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+    await flushPromises();
+    const items = Array.from(document.querySelectorAll(".wp-ctxmenu__item")) as HTMLElement[];
+    const reset = items.find((el) => el.textContent?.includes("Reset to library snapshot"));
+    expect(reset).toBeTruthy();
+    reset!.click();
+    await flushPromises();
+
+    // Refused — the live child is untouched, no destructive empty commit.
+    expect(wrapper.find('[data-module-id="dddddddd"]').exists()).toBe(true);
+    expect(onChange).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it("Reset REFUSES (keeps children) when the library snapshot comes back empty", async () => {
+    resetDriftStore();
+    const fetchSpy = vi.fn(async (url: string, init?: RequestInit) => {
+      if (typeof url === "string" && url.match(/\/wp\/api\/bundles\/bn_empty$/) && (!init || init.method === "GET")) {
+        return new Response(JSON.stringify({
+          id: "bn_empty", name: "EmptySnap", description: "", color: null,
+          category_id: null, tags: [], is_favorite: false,
+          children: [], payload_hash: "ph-empty", version: 1, created_at: "", updated_at: "",
+        }), { status: 200 });
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+    const bundleUid = "buidEMPTY002";
+    const initialJson = JSON.stringify({
+      version: 1,
+      modules: [
+        {
+          id: "dddddddd", type: "wildcard", enabled: true,
+          meta: { name: "LocallyEdited" }, entries: [],
+          payload: { var_binding: "v", options: [{ id: "o2", value: "y", weight: 2 }] },
+          payload_hash: "h-edited", bundle_origin: bundleUid,
+        },
+      ],
+      bundles: [
+        {
+          _uid: bundleUid, library_id: "bn_empty", start_idx: 0, end_idx: 0,
+          enabled: true, collapsed: false, inserted_at_hash: "ph-old", name: "EmptySnap", color: null,
+        },
+      ],
+    });
+    const onChange = vi.fn();
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: { nodeId: 306, initialJson, upstreamVars: [], onChange },
+    });
+    await flushPromises();
+    onChange.mockClear();
+
+    const header = document.querySelector(`[data-bundle-uid="${bundleUid}"][data-bundle-header]`);
+    expect(header).toBeTruthy();
+    header!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+    await flushPromises();
+    const items = Array.from(document.querySelectorAll(".wp-ctxmenu__item")) as HTMLElement[];
+    const reset = items.find((el) => el.textContent?.includes("Reset to library snapshot"));
+    expect(reset).toBeTruthy();
+    reset!.click();
+    await flushPromises();
+
+    // The empty snapshot must NOT wipe the live child.
+    expect(wrapper.find('[data-module-id="dddddddd"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
   it("Reset re-adds children removed since insert (bundle end_idx grew via reconcile)", async () => {
     resetDriftStore();
     // Library has TWO children; in-graph bundle currently has ONE

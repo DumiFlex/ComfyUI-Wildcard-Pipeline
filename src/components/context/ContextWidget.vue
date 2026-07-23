@@ -1618,6 +1618,17 @@ async function resetBundleToLibrary(uid: string): Promise<void> {
   const bundles = value.value.bundles ?? [];
   const target = bundles.find((b) => b._uid === uid);
   if (!target) return;
+  // Guard: a detached/unlinked instance (empty library_id — e.g. a bundle
+  // whose section was never linked, or whose library row was re-imported
+  // under a new uuid) has nothing to fetch. Refuse instead of fetching an
+  // empty snapshot and wiping the live children. Re-link is the recovery.
+  if (!target.library_id) {
+    pushToast(
+      `Can't reset "${target.name || "bundle"}" — it isn't linked to a library bundle. Re-link it first.`,
+      { severity: "error" },
+    );
+    return;
+  }
   // Delta-undo capture: keep the old child refs (their _uids will be
   // discarded by the reset since the new library snapshot stamps
   // fresh ones, but the BundleInstance _uid we re-find by below
@@ -1641,6 +1652,17 @@ async function resetBundleToLibrary(uid: string): Promise<void> {
   // local work.
   try {
     const entry = await api.bundles.get(target.library_id);
+    // Guard: never wipe the live children with an empty snapshot. A valid
+    // library bundle always resolves at least one child; an empty/missing
+    // `children` means the fetch resolved to the wrong shape (broken link,
+    // list wrapper, stale row). Abort the destructive replace + tell the user.
+    if (!Array.isArray(entry.children) || entry.children.length === 0) {
+      pushToast(
+        `Can't reset "${target.name || "bundle"}" — the library snapshot came back empty (its link may be broken). Re-link the bundle instead.`,
+        { severity: "error" },
+      );
+      return;
+    }
     const libEntry: BundleLibraryEntry = {
       id: entry.id,
       name: entry.name,
