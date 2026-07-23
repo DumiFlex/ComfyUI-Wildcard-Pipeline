@@ -208,6 +208,75 @@ describe("ContextWidget drift dot", () => {
     expect(wrapper.find(".wp-mod-dot--missing").exists()).toBe(false);
     wrapper.unmount();
   });
+
+  it("shows drift for an empty-hash module whose uuid IS in the live library", async () => {
+    // Repro: a workflow whose embedded module carries payload_hash "" (a
+    // malformed/legacy/builder-emitted copy) but whose uuid exists in the
+    // library. It must NOT be treated as inline/verdict-less — surface it as
+    // drift so the bulk "refresh drifted" button can relink it.
+    resetDriftStore();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
+          return new Response(JSON.stringify({ hashes: { bbbbbbbb: { type: "wildcard", payload_hash: "h-LIVE" } } }), { status: 200 });
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+    const initialJson = JSON.stringify({
+      version: 1,
+      modules: [
+        {
+          id: "bbbbbbbb", type: "wildcard", enabled: true,
+          meta: { name: "wc", description: "", tags: [] }, entries: [],
+          payload: { options: [] }, payload_hash: "",
+        },
+      ],
+    });
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: { nodeId: 98, initialJson, upstreamVars: [], onChange: () => {} },
+    });
+    await vi.waitFor(() => {
+      expect(wrapper.find(".wp-mod-dot--drift").exists()).toBe(true);
+    });
+    expect(wrapper.find(".wp-mod-dot--missing").exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("leaves a genuinely inline module (empty hash, uuid NOT in library) verdict-less", async () => {
+    resetDriftStore();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
+          return new Response(JSON.stringify({ hashes: { somethingelse: { type: "wildcard", payload_hash: "h-LIVE" } } }), { status: 200 });
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+    const initialJson = JSON.stringify({
+      version: 1,
+      modules: [
+        {
+          id: "cccccccc", type: "wildcard", enabled: true,
+          meta: { name: "inline", description: "", tags: [] }, entries: [],
+          payload: { options: [] }, payload_hash: "",
+        },
+      ],
+    });
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: { nodeId: 97, initialJson, upstreamVars: [], onChange: () => {} },
+    });
+    // Give the poll a beat to land, then assert no drift/missing badges.
+    await flushPromises();
+    await flushPromises();
+    expect(wrapper.find(".wp-mod-dot--drift").exists()).toBe(false);
+    expect(wrapper.find(".wp-mod-dot--missing").exists()).toBe(false);
+    wrapper.unmount();
+  });
 });
 
 describe("ContextWidget bulk refresh", () => {

@@ -2204,9 +2204,16 @@ function conflictTooltip(id: string): string {
  * lives in `classifyOne` (import-export/collision).
  */
 function matchStateOf(m: ModuleEntry): CollisionState | null {
-  if (!m.payload_hash) return null;
   if (libraryHashes.value === null) return null;
   const live = libraryHashes.value[m.id];
+  if (!m.payload_hash) {
+    // No local hash. Only meaningful when the uuid IS in the library — a
+    // workflow copy that lost its hash (malformed import, or a builder that
+    // wrote payload_hash: ""). Treat as drift so the bulk "refresh drifted"
+    // button relinks it. A genuinely inline module (fresh uuid, not in the
+    // library) stays verdict-less exactly as before.
+    return live ? "conflict" : null;
+  }
   return classifyOne(
     m.type,
     m.payload_hash,
