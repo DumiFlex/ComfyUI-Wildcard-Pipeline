@@ -650,7 +650,7 @@ async function pushBundleCascadeRestore(): Promise<{
 }
 
 interface BundlePushSaveResult {
-  mode: "update" | "fork" | "reattach";
+  mode: "update" | "fork" | "reattach" | "relink";
   id: string;
   payload_hash: string;
   name: string;
@@ -659,11 +659,12 @@ interface BundlePushSaveResult {
 }
 function onBundlePushSaved(result: BundlePushSaveResult): void {
   void forceRefreshHashes();
-  if (result.mode === "update" || result.mode === "reattach") {
+  if (result.mode === "update" || result.mode === "reattach" || result.mode === "relink") {
     // Update: refresh inserted_at_hash + snapshot fingerprint for every
     // BundleInstance pointing at this library entry — drift + MOD dots
     // clear instantly. Reattach: also rebind library_id from the dead
-    // uuid to the freshly-created one.
+    // uuid to the freshly-created one. Relink: same rebind, but onto an
+    // EXISTING content-identical library bundle (no write happened).
     const nextBundles = (value.value.bundles ?? []).map((b) => {
       if (b.library_id !== result.origId) return b;
       const rebound: BundleInstance = {
@@ -680,6 +681,7 @@ function onBundlePushSaved(result: BundlePushSaveResult): void {
   let msg: string;
   if (result.mode === "fork") msg = `Saved as new library bundle "${result.name}"`;
   else if (result.mode === "reattach") msg = `Re-attached "${result.name}" to library`;
+  else if (result.mode === "relink") msg = `Re-linked "${result.name}" to library`;
   else msg = `Saved "${result.name}" to library`;
   if (result.cascade) {
     const parts: string[] = [];
