@@ -1,9 +1,13 @@
 <!-- src/manager/components/RefChip.vue -->
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, onBeforeUnmount } from "vue";
 import { KIND_ICON_MAP } from "../../components/shared/kind-icons";
-import { parse, readsAs } from "@/manager/parsing/subcatFilter";
+import { parse, readsAs, matches } from "@/manager/parsing/subcatFilter";
 import { splitRefFilter } from "@/widgets/richTokenize";
+// Live library lookup — the hover card's "N of M options match" count reads
+// the referenced wildcard's CURRENT option list from here, so adding an option
+// in the library moves the count (the propagation signal issue #3 asked for).
+import { cacheVersion, ensure, lookup } from "@/extension/preview-resolver";
 
 /** Module kind for the `moduleKind` prop. Mirrors `ModuleKind` in
  *  `src/manager/cascade/resolveChip.ts` — duplicated as a local literal
@@ -189,6 +193,62 @@ function onClick(ev: MouseEvent): void {
   if (props.resolved) emit("click", ev);
   else emit("remap", ev);
 }
+
+// ── Hover card (issues #3 / #8): a small informational popover mirroring the
+// constraint-pair card. Ref chips show uuid + filter "reads as" + "N of M
+// options match" (the count is the propagation signal — it moves when library
+// options change). Var chips show the binding + resolved state.
+const HOVER_DELAY_MS = 280;
+const hoverOpen = ref(false);
+const popPos = ref<{ top: number; left: number; flip: boolean }>({ top: 0, left: 0, flip: false });
+let hoverTimer: number | undefined;
+
+/** Live option stats for a ref chip: total options + how many match the
+ *  filter. Null when not a ref, no uuid, or the library row isn't resolved
+ *  yet (card then shows "not in library"). Reactive on fetch via cacheVersion. */
+const optionStats = computed<{ total: number; matched: number } | null>(() => {
+  void cacheVersion.value;
+  if (!isRef.value || !props.uuid) return null;
+  const sets = lookup(props.uuid)?.optionTagSets;
+  if (!sets || sets.length === 0) return null;
+  const total = sets.length;
+  if (!hasExpr.value) return { total, matched: total };
+  const ast = parse(filter.value.expr);
+  return { total, matched: sets.filter((tags) => matches(ast, new Set(tags))).length };
+});
+
+function positionPop(el: HTMLElement): void {
+  const r = el.getBoundingClientRect();
+  const POP_H = 120;
+  const gap = 6;
+  const margin = 8;
+  const spaceBelow = window.innerHeight - r.bottom;
+  const flip = spaceBelow < POP_H + gap + margin && r.top > spaceBelow;
+  popPos.value = {
+    top: flip ? Math.max(margin, r.top - gap) : r.bottom + gap,
+    left: Math.max(margin, Math.min(r.left, window.innerWidth - 280 - margin)),
+    flip,
+  };
+}
+
+function onEnter(ev: MouseEvent): void {
+  const el = ev.currentTarget as HTMLElement | null;
+  if (!el) return;
+  if (hoverTimer !== undefined) window.clearTimeout(hoverTimer);
+  hoverTimer = window.setTimeout(() => {
+    if (isRef.value && props.uuid) ensure([props.uuid]); // fetch options if uncached
+    positionPop(el);
+    hoverOpen.value = true;
+  }, HOVER_DELAY_MS);
+}
+
+function onLeave(): void {
+  if (hoverTimer !== undefined) window.clearTimeout(hoverTimer);
+  hoverTimer = undefined;
+  hoverOpen.value = false;
+}
+
+onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverTimer); });
 </script>
 
 <template>
@@ -202,8 +262,11 @@ function onClick(ev: MouseEvent): void {
     }"
     :style="toneStyle"
     :title="filterTitle"
+    :data-uuid="uuid || undefined"
     contenteditable="false"
     @click.stop="onClick"
+    @mouseenter="onEnter"
+    @mouseleave="onLeave"
   >
     <i
       v-if="kindIconCls"
@@ -226,6 +289,47 @@ function onClick(ev: MouseEvent): void {
       <i v-if="hasExpr" class="pi pi-filter wp-refchip__funnel"></i>
       <i v-if="showNoNull" class="pi pi-ban wp-refchip__nonull"></i>
     </span>
+
+    <!-- Info-only hover card (issues #3 / #8). The <Teleport> lives INSIDE the
+         chip span so the component stays single-root (wrapper.classes/attributes
+         keep working); it renders only a placeholder here and moves the card to
+         <body> — fixed + pointer-events:none so it escapes overflow + never
+         steals the hover. Mirrors the constraint-pair popover. -->
+    <Teleport to="body">
+    <div
+      v-if="hoverOpen"
+      class="wp-refchip-pop"
+      :class="{ 'wp-refchip-pop--up': popPos.flip }"
+      :style="{ top: popPos.top + 'px', left: popPos.left + 'px' }"
+      data-test="refchip-hover"
+    >
+      <template v-if="kind === 'ref'">
+        <div class="wp-refchip-pop__head">
+          <span v-if="name" class="wp-refchip-pop__name">@{{ name }}</span>
+          <span class="wp-refchip-pop__kind">{{ resolved ? moduleKind : "broken" }}</span>
+        </div>
+        <div class="wp-refchip-pop__uuid">{{ uuid }}</div>
+        <div v-if="hasExpr || showNoNull" class="wp-refchip-pop__filter">
+          <span v-if="readsAsExpr">{{ readsAsExpr }}</span>
+          <span v-if="filter.excludeNull" class="wp-refchip-pop__nonull">null excluded</span>
+        </div>
+        <!-- Option count only for wildcards (a resolved constraint/derivation
+             has no options — don't mislabel it "not in library"). Show the
+             not-in-library note ONLY when the ref genuinely didn't resolve. -->
+        <div v-if="optionStats" class="wp-refchip-pop__count">
+          {{ hasExpr ? `${optionStats.matched} of ${optionStats.total} options match`
+                     : `${optionStats.total} option${optionStats.total === 1 ? "" : "s"}` }}
+        </div>
+        <div v-else-if="!resolved" class="wp-refchip-pop__count">not in library</div>
+      </template>
+      <template v-else>
+        <div class="wp-refchip-pop__head">
+          <span class="wp-refchip-pop__name">${{ name }}{{ index != null ? "." + index : "" }}</span>
+        </div>
+        <div class="wp-refchip-pop__count">{{ resolved ? "produced upstream" : "binds at runtime" }}</div>
+      </template>
+    </div>
+    </Teleport>
   </span>
 </template>
 
@@ -285,4 +389,35 @@ function onClick(ev: MouseEvent): void {
 }
 .wp-refchip__funnel { font-size: 8px; line-height: 1; }
 .wp-refchip__nonull { font-size: 8px; line-height: 1; opacity: 0.85; }
+
+/* Hover card — teleported to <body>; scoped styles still apply (the data-v
+ * attribute travels with the teleported node). z-index 9999 matches the other
+ * canvas popovers. */
+.wp-refchip-pop {
+  position: fixed;
+  z-index: 9999;
+  width: 260px;
+  padding: 7px 9px;
+  background: var(--wp-bg-1);
+  border: 1px solid var(--wp-border-strong);
+  border-radius: 7px;
+  box-shadow: var(--wp-shadow-lg);
+  font: 10px/1.5 var(--wp-font-mono, monospace);
+  color: var(--wp-text);
+  pointer-events: none;
+}
+.wp-refchip-pop--up { transform: translateY(-100%); }
+.wp-refchip-pop > div { padding: 1px 0; word-break: break-word; }
+.wp-refchip-pop__head { display: flex; gap: 6px; align-items: baseline; }
+.wp-refchip-pop__name { font-weight: 600; }
+.wp-refchip-pop__kind {
+  font-size: 8px; text-transform: uppercase;
+  color: var(--wp-text-dim);
+  border: 1px solid var(--wp-border);
+  border-radius: 3px; padding: 0 3px;
+}
+.wp-refchip-pop__uuid { color: var(--wp-text-muted); }
+.wp-refchip-pop__filter { color: var(--wp-text-dim); }
+.wp-refchip-pop__count { color: var(--wp-accent-text); font-weight: 600; }
+.wp-refchip-pop__nonull { color: var(--wp-status-modified, #fbbf24); margin-left: 4px; }
 </style>

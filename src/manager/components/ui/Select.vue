@@ -303,3 +303,118 @@ function onKeydown(e: KeyboardEvent) {
     </Teleport>
   </div>
 </template>
+
+<!--
+  Self-contained styles so <Select> works everywhere it's used — including the
+  ComfyUI CANVAS widget bundle, which does NOT load the manager-global
+  tokens.css (that's why an unstyled Select rendered behind the modal there).
+  Class names stay wp-select* (global-namespaced, no collision); the menu is
+  teleported to <body>, so these are UNSCOPED — same pattern as the
+  RichTextInput autocomplete (wp-rt-suggestions), whose z-index:9999 already
+  renders above the canvas modals. Vars fall back to literals for the few the
+  canvas theme doesn't define (--wp-input-h[-sm], --wp-focus-ring). In the SPA
+  these duplicate tokens.css with identical rules — harmless.
+-->
+<style>
+.wp-select-wrap { position: relative; display: inline-block; width: 100%; }
+
+/* Trigger button — the manager .wp-input base (height/bg/border/…) inlined
+ * here + flex layout for label · spacer · chevron. */
+.wp-select {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  height: var(--wp-input-h, 34px);
+  box-sizing: border-box;
+  padding: 0 10px;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--wp-bg-2);
+  color: var(--wp-text);
+  border: 1px solid var(--wp-border, rgba(255, 255, 255, 0.08));
+  border-radius: var(--wp-radius-sm);
+  font-size: 12.5px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
+}
+.wp-select--sm { height: var(--wp-input-h-sm, 28px); font-size: 12px; padding: 0 8px; }
+.wp-select:focus-visible,
+.wp-select:focus {
+  border-color: var(--wp-accent-500);
+  box-shadow: var(--wp-focus-ring, 0 0 0 3px color-mix(in oklab, var(--wp-accent-500) 25%, transparent));
+  background: var(--wp-bg-1);
+}
+.wp-select[aria-invalid="true"] { border-color: var(--wp-error-border, var(--wp-danger, #ef4444)); }
+.wp-select:disabled { opacity: 0.6; cursor: default; }
+
+.wp-select__label-wrap {
+  display: flex; align-items: center; gap: 6px;
+  flex: 1; min-width: 0; overflow: hidden;
+}
+.wp-select__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+.wp-select__label-text,
+.wp-select__placeholder {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.wp-select__placeholder { color: var(--wp-text-dim); }
+.wp-select__chevron { color: var(--wp-text-dim); font-size: 11px; margin-left: 6px; flex-shrink: 0; }
+.wp-spacer { flex: 1 1 auto; }
+
+/* Menu — teleported to <body>. z-index 9999 matches wp-rt-suggestions, which
+ * already renders above the canvas modals. */
+.wp-select__menu {
+  background: var(--wp-bg-3);
+  border: 1px solid var(--wp-border-strong);
+  border-radius: 7px;
+  box-shadow: var(--wp-shadow-lg);
+  z-index: 9999;
+  padding: 4px;
+  max-height: 240px;
+  overflow: auto;
+  list-style: none;
+  margin: 0;
+}
+.wp-select__option {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  color: var(--wp-text-muted);
+  cursor: pointer;
+  font-size: 12.5px;
+  user-select: none;
+}
+.wp-select__option:hover { background: var(--wp-bg-4); color: var(--wp-text); }
+.wp-select__option[data-active="true"] {
+  background: color-mix(in oklab, var(--wp-accent-500) 20%, transparent);
+  color: var(--wp-text);
+}
+.wp-select__option[data-selected="true"] {
+  background: color-mix(in oklab, var(--wp-accent-500) 18%, transparent);
+  color: var(--wp-text);
+}
+.wp-select__option-label { flex: 1; white-space: nowrap; }
+.wp-select__filter { display: flex; align-items: center; padding: 4px 12px; font-size: 11px; opacity: 0.6; }
+.wp-select__empty { padding: 6px 12px; opacity: 0.55; }
+
+/* Rich content (RichTextPreview / chips) rendered in the trigger label or an
+ * option row via the #label / #option slots defaults to pre-wrap (that's
+ * RichTextPreview's own scoped rule) and WRAPS. Force single-line so:
+ *   (a) a long picked value ellipsis-clips in the fixed-height trigger instead
+ *       of wrapping + blowing up the surrounding row, and
+ *   (b) dropdown options stay on one line, letting the menu grow to fit the
+ *       widest (min-width = trigger; max-width caps it inside the viewport).
+ * `!important` is needed to beat RichTextPreview's scoped `.wp-rtp` rule from
+ * outside the component; white-space then inherits down to the inner spans. */
+.wp-select__label-text .wp-rtp,
+.wp-select__label-text .wp-rtp__text,
+.wp-select__option-label .wp-rtp,
+.wp-select__option-label .wp-rtp__text {
+  white-space: nowrap !important;
+}
+.wp-select__menu { max-width: min(620px, 92vw); }
+</style>

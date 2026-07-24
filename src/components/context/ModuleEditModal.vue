@@ -249,7 +249,7 @@ function onSaveToLibraryClick(): void {
 }
 
 interface PushSaveResult {
-  mode: "update" | "fork" | "reattach";
+  mode: "update" | "fork" | "reattach" | "relink";
   id: string;
   payload_hash: string;
   bundles_updated: string[];
@@ -263,12 +263,17 @@ function onPushToLibrarySaved(result: PushSaveResult): void {
     return;
   }
   setLibraryHash(result.id, result.payload_hash);
-  if (result.mode === "fork" || result.mode === "reattach") {
+  if (result.mode === "fork" || result.mode === "reattach" || result.mode === "relink") {
     // Fork: the new entry replaces the draft's identity; `_originalId`
     // lets saveEditedModule swap the row by old id during the next
     // save(). Reattach: same wiring — the dead uuid gets swapped for
-    // the new one so MISSING clears.
-    (draft.value as ModuleEntry & { _originalId?: string })._originalId = draft.value.id;
+    // the new one so MISSING clears. Relink: point the detached row at an
+    // EXISTING library uuid; `_relinkFrom` (the OLD id, captured before the
+    // swap) additionally tells saveEditedModule to remap sibling @{} refs +
+    // constraint source/target so cross-references follow the new uuid.
+    const marked = draft.value as ModuleEntry & { _originalId?: string; _relinkFrom?: string };
+    marked._originalId = draft.value.id;
+    if (result.mode === "relink") marked._relinkFrom = draft.value.id;
     draft.value.id = result.id;
     draft.value.payload_hash = result.payload_hash;
     draft.value.meta = {
@@ -279,7 +284,9 @@ function onPushToLibrarySaved(result: PushSaveResult): void {
     pushToast(
       result.mode === "reattach"
         ? `Re-attached "${result.name}" to library`
-        : `Saved as new library entry "${result.name}"`,
+        : result.mode === "relink"
+          ? `Re-linked "${result.name}" to library`
+          : `Saved as new library entry "${result.name}"`,
       { severity: "success" },
     );
     save();

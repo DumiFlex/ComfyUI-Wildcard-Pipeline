@@ -75,6 +75,7 @@ import type {
   BatchConflict,
   PerItemDecision,
   PerItemIssue,
+  ContentDuplicateDetail,
 } from "./conflict-types";
 
 // Re-export types from the dedicated module so existing consumers
@@ -211,6 +212,19 @@ function resolveItem(
 }
 
 /**
+ * D3b — resolve a `content-duplicate` row as "link to the existing entry".
+ * Separate from `resolveItem` because the decision carries `target_id`
+ * (the live library row to point refs at) rather than a rename pair.
+ */
+function resolveItemLink(id: string, targetId: string): void {
+  if (!targetId) return;
+  perItemDecisions.value = {
+    ...perItemDecisions.value,
+    [id]: { kind: "link", target_id: targetId },
+  };
+}
+
+/**
  * Toggle a per-item row into rename-input mode. The button trio is
  * swapped out for the `<ImportAsNewRename>` component until the user
  * confirms (→ `onRenameApplied`) or cancels (→ `onRenameCancel`).
@@ -340,11 +354,12 @@ function includeDepsFor(issue: PerItemIssue): void {
  * the only label not parallel to the batch-action vocabulary).
  */
 function labelForKind(
-  kind: "skip" | "replace" | "rename" | "accept",
+  kind: "skip" | "replace" | "rename" | "accept" | "link",
 ): string {
   if (kind === "skip") return "Skip";
   if (kind === "replace") return "Replace";
   if (kind === "rename") return "Import as new";
+  if (kind === "link") return "Linked to existing";
   return "Import anyway";
 }
 
@@ -499,6 +514,7 @@ function issueBadgeLabel(issue: PerItemIssue): string {
   if (issue.kind === "unselected-dep")       return "REQUIRES DEP";
   if (issue.kind === "fingerprint-mismatch") return "FINGERPRINT";
   if (issue.kind === "lossy-migration")      return "LOSSY";
+  if (issue.kind === "content-duplicate")    return "IN LIBRARY";
   return "ISSUE";
 }
 
@@ -508,6 +524,9 @@ function issueBadgeLabel(issue: PerItemIssue): string {
  *  user could still fix it by selecting the dep. */
 function issueBadgeVariant(issue: PerItemIssue): string {
   if (issue.kind === "unselected-dep") return "drift";
+  // D3b: nothing is broken — the content simply already exists. Dim
+  // DUPLICATE, matching the picker's badge for the same situation.
+  if (issue.kind === "content-duplicate") return "duplicate";
   return "missing";
 }
 
@@ -589,7 +608,17 @@ function issueDetailText(issue: PerItemIssue): string {
   if (issue.kind === "lossy-migration") {
     return "Migration chain ran but dropped fields from the original payload.";
   }
+  if (issue.kind === "content-duplicate") {
+    const d = (issue.detail ?? {}) as ContentDuplicateDetail;
+    const who = d.target_name ? `“${d.target_name}” @{${d.target_id}}` : `@{${d.target_id}}`;
+    return `Identical content already exists in your library as ${who}. Importing adds a second copy and splits references between them.`;
+  }
   return "";
+}
+
+/** The existing library id a `content-duplicate` issue points at. */
+function duplicateTargetId(issue: PerItemIssue): string {
+  return ((issue.detail ?? {}) as ContentDuplicateDetail).target_id ?? "";
 }
 
 /**
@@ -1003,6 +1032,29 @@ const importItemCount = computed<number>(() => {
                  other non-tier-3 per-item kinds (broken-inner-ref,
                  fingerprint-mismatch, etc.) keep the 3-button skip /
                  import-as-new / import-anyway control. -->
+            <!-- D3b: content already in the library under another uuid.
+                 Leading action is the non-duplicating one (link); the
+                 escape hatch imports the copy anyway. Never auto-applied. -->
+            <div
+              v-else-if="issue.kind === 'content-duplicate'"
+              class="wp-action-group"
+              role="radiogroup"
+              :aria-label="`Resolution for ${issue.entity.name ?? issue.entity.id}`"
+              :data-test="`resolve-group-${issue.entity.id}`"
+            >
+              <button
+                type="button"
+                class="wp-action-group__btn"
+                :data-test="`resolve-${issue.entity.id}-link`"
+                @click="resolveItemLink(issue.entity.id, duplicateTargetId(issue))"
+              ><i class="pi pi-link" aria-hidden="true" /> Link to existing</button>
+              <button
+                type="button"
+                class="wp-action-group__btn"
+                :data-test="`resolve-${issue.entity.id}-accept`"
+                @click="resolveItem(issue.entity.id, 'accept')"
+              ><i class="pi pi-arrow-circle-down" aria-hidden="true" /> Import anyway</button>
+            </div>
             <div
               v-else-if="issue.kind === 'unselected-dep'"
               class="wp-action-group"

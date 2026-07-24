@@ -91,6 +91,7 @@ import {
   unsubscribe as unsubscribeDrift,
 } from "./drift-store";
 import { classifyOne, type CollisionState } from "../../manager/import-export/collision";
+import { applyRelink } from "../../manager/import-export/relink-apply";
 import {
   getBundleCollapsedByDefault,
   getConfirmDestructiveBundle,
@@ -467,7 +468,7 @@ function openPushToLibrary(idx: number): void {
 }
 
 interface PushSaveResult {
-  mode: "update" | "fork" | "reattach";
+  mode: "update" | "fork" | "reattach" | "relink";
   id: string;
   payload_hash: string;
   bundles_updated: string[];
@@ -511,6 +512,21 @@ function onPushSaved(result: PushSaveResult): void {
       };
     });
     commitModules(next);
+  } else if (result.mode === "relink") {
+    // Re-link: point the detached row(s) at an EXISTING content-identical
+    // library uuid AND walk every module so sibling @{} refs + constraint
+    // source/target follow the new uuid (applyRelink swaps id + payload_hash
+    // on the matching row + remaps refs everywhere else).
+    const remapped = applyRelink(
+      value.value.modules as unknown as Record<string, unknown>[],
+      { oldId: result.origId, newId: result.id, newPayloadHash: result.payload_hash },
+    ) as unknown as ModuleEntry[];
+    const next = remapped.map((m) =>
+      m.id === result.id
+        ? { ...m, meta: { ...(m.meta ?? {}), library_name: result.name } }
+        : m,
+    );
+    commitModules(next);
   }
   const bundlesNote =
     result.bundles_updated.length > 0
@@ -519,6 +535,7 @@ function onPushSaved(result: PushSaveResult): void {
   let msg: string;
   if (result.mode === "fork") msg = `Saved as new library entry "${result.name}"`;
   else if (result.mode === "reattach") msg = `Re-attached "${result.name}" to library`;
+  else if (result.mode === "relink") msg = `Re-linked "${result.name}" to library`;
   else msg = `Saved "${result.name}" to library${bundlesNote}`;
   pushToast(msg, { severity: "success" });
   pushOpen.value = false;
@@ -633,7 +650,7 @@ async function pushBundleCascadeRestore(): Promise<{
 }
 
 interface BundlePushSaveResult {
-  mode: "update" | "fork" | "reattach";
+  mode: "update" | "fork" | "reattach" | "relink";
   id: string;
   payload_hash: string;
   name: string;
@@ -642,11 +659,12 @@ interface BundlePushSaveResult {
 }
 function onBundlePushSaved(result: BundlePushSaveResult): void {
   void forceRefreshHashes();
-  if (result.mode === "update" || result.mode === "reattach") {
+  if (result.mode === "update" || result.mode === "reattach" || result.mode === "relink") {
     // Update: refresh inserted_at_hash + snapshot fingerprint for every
     // BundleInstance pointing at this library entry — drift + MOD dots
     // clear instantly. Reattach: also rebind library_id from the dead
-    // uuid to the freshly-created one.
+    // uuid to the freshly-created one. Relink: same rebind, but onto an
+    // EXISTING content-identical library bundle (no write happened).
     const nextBundles = (value.value.bundles ?? []).map((b) => {
       if (b.library_id !== result.origId) return b;
       const rebound: BundleInstance = {
@@ -663,6 +681,7 @@ function onBundlePushSaved(result: BundlePushSaveResult): void {
   let msg: string;
   if (result.mode === "fork") msg = `Saved as new library bundle "${result.name}"`;
   else if (result.mode === "reattach") msg = `Re-attached "${result.name}" to library`;
+  else if (result.mode === "relink") msg = `Re-linked "${result.name}" to library`;
   else msg = `Saved "${result.name}" to library`;
   if (result.cascade) {
     const parts: string[] = [];
@@ -1601,6 +1620,17 @@ async function resetBundleToLibrary(uid: string): Promise<void> {
   const bundles = value.value.bundles ?? [];
   const target = bundles.find((b) => b._uid === uid);
   if (!target) return;
+  // Guard: a detached/unlinked instance (empty library_id — e.g. a bundle
+  // whose section was never linked, or whose library row was re-imported
+  // under a new uuid) has nothing to fetch. Refuse instead of fetching an
+  // empty snapshot and wiping the live children. Re-link is the recovery.
+  if (!target.library_id) {
+    pushToast(
+      `Can't reset "${target.name || "bundle"}" — it isn't linked to a library bundle. Re-link it first.`,
+      { severity: "error" },
+    );
+    return;
+  }
   // Delta-undo capture: keep the old child refs (their _uids will be
   // discarded by the reset since the new library snapshot stamps
   // fresh ones, but the BundleInstance _uid we re-find by below
@@ -1624,6 +1654,17 @@ async function resetBundleToLibrary(uid: string): Promise<void> {
   // local work.
   try {
     const entry = await api.bundles.get(target.library_id);
+    // Guard: never wipe the live children with an empty snapshot. A valid
+    // library bundle always resolves at least one child; an empty/missing
+    // `children` means the fetch resolved to the wrong shape (broken link,
+    // list wrapper, stale row). Abort the destructive replace + tell the user.
+    if (!Array.isArray(entry.children) || entry.children.length === 0) {
+      pushToast(
+        `Can't reset "${target.name || "bundle"}" — the library snapshot came back empty (its link may be broken). Re-link the bundle instead.`,
+        { severity: "error" },
+      );
+      return;
+    }
     const libEntry: BundleLibraryEntry = {
       id: entry.id,
       name: entry.name,
@@ -2187,9 +2228,16 @@ function conflictTooltip(id: string): string {
  * lives in `classifyOne` (import-export/collision).
  */
 function matchStateOf(m: ModuleEntry): CollisionState | null {
-  if (!m.payload_hash) return null;
   if (libraryHashes.value === null) return null;
   const live = libraryHashes.value[m.id];
+  if (!m.payload_hash) {
+    // No local hash. Only meaningful when the uuid IS in the library — a
+    // workflow copy that lost its hash (malformed import, or a builder that
+    // wrote payload_hash: ""). Treat as drift so the bulk "refresh drifted"
+    // button relinks it. A genuinely inline module (fresh uuid, not in the
+    // library) stays verdict-less exactly as before.
+    return live ? "conflict" : null;
+  }
   return classifyOne(
     m.type,
     m.payload_hash,
@@ -3896,7 +3944,7 @@ function openEditModal(idx: number) {
   editingIdx.value = idx;
 }
 
-function saveEditedModule(updated: ModuleEntry & { _originalId?: string }) {
+function saveEditedModule(updated: ModuleEntry & { _originalId?: string; _relinkFrom?: string }) {
   // Phase B: index-based replacement — sibling rows share `m.id`, so
   // mapping `m.id === updated.id` would clobber every sibling at once.
   // We use `editingIdx` captured at modal-open to target the specific
@@ -3907,8 +3955,13 @@ function saveEditedModule(updated: ModuleEntry & { _originalId?: string }) {
     editingIdx.value = null;
     return;
   }
+  // `_relinkFrom` (the OLD id) is set only on the re-link path — after the
+  // row is committed with its new id, walk the whole list so sibling @{}
+  // refs + constraint source/target follow. Captured before we strip markers.
+  const relinkFrom = updated._relinkFrom;
   const cleaned: ModuleEntry = { ...updated };
   delete (cleaned as { _originalId?: string })._originalId;
+  delete (cleaned as { _relinkFrom?: string })._relinkFrom;
   const list = [...value.value.modules];
   const k = currentFrame.value;
   if (k == null) {
@@ -3927,6 +3980,17 @@ function saveEditedModule(updated: ModuleEntry & { _originalId?: string }) {
   // a stale "override #k". No-op while the base stays locked.
   list[targetIdx] = dropRedundantFrameLockNulls(list[targetIdx]);
   commitModules(list);
+  if (relinkFrom && relinkFrom !== updated.id) {
+    // The re-linked row already carries its new id (list[targetIdx]); walk
+    // EVERY module so sibling nested @{} refs + constraint source/target that
+    // pointed at the old uuid follow to the library uuid. applyRelink leaves
+    // the already-swapped row's id alone (its id !== relinkFrom).
+    const remapped = applyRelink(
+      value.value.modules as unknown as Record<string, unknown>[],
+      { oldId: relinkFrom, newId: updated.id, newPayloadHash: updated.payload_hash ?? "" },
+    ) as unknown as ModuleEntry[];
+    commitModules(remapped);
+  }
   if (updated._originalId && updated._originalId !== updated.id) {
     nextTick(() => {
       const el = document.querySelector<HTMLElement>(

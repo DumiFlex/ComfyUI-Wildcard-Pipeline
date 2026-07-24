@@ -301,6 +301,40 @@ class PipelineEngine:
             )
             ctx["__wp_hold_base_ctx__"] = base_ctx
 
+            # Held wildcards copy their frozen VALUE from the base pass but
+            # early-return before `_record_pick` (wildcard_handler), so their
+            # frame-0 pick never lands in the real ctx. Downstream constraints
+            # then can't find the held source — they mis-fire (spurious
+            # source_missing / never_applied warnings) and, cross-node, leave a
+            # held target UNCONSTRAINED (the held-outfit drift: kimono at
+            # frame 0, unconstrained pick on frames 2+). Carry the base pass's
+            # pick + hit state for held modules into the real ctx HERE, before
+            # the per-module loop, so the registration is present for this
+            # node's constraints AND flows downstream (via __wp_picks__ /
+            # __wp_constraints__ carry-over) into the next node's base pass.
+            # The value-freeze path in the wildcard handler is untouched.
+            _base_picks = base_ctx.get("__wp_picks__")
+            if isinstance(_base_picks, dict):
+                _real_picks = ctx.setdefault("__wp_picks__", {})
+                if isinstance(_real_picks, dict):
+                    for _m in modules:
+                        if _module_seed_scope(_m) != "hold":
+                            continue
+                        _mid = (
+                            _m.get("id", "") if isinstance(_m, dict)
+                            else getattr(_m, "id", "")
+                        )
+                        if _mid and _mid in _base_picks and _mid not in _real_picks:
+                            _real_picks[_mid] = _base_picks[_mid]
+            _base_hits = base_ctx.get("__wp_constraint_hits__")
+            if isinstance(_base_hits, dict):
+                _real_hits = ctx.setdefault("__wp_constraint_hits__", {})
+                if isinstance(_real_hits, dict):
+                    for _cid, _n in _base_hits.items():
+                        _real_hits[_cid] = max(
+                            int(_real_hits.get(_cid, 0) or 0), int(_n or 0)
+                        )
+
         for index, module in enumerate(modules):
             # Normalise id/type/enabled reads to work for both dicts and objects.
             if isinstance(module, dict):

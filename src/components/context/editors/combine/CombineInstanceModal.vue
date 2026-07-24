@@ -17,6 +17,7 @@ import type { ModuleEntry } from "../../../../widgets/_shared";
 import IdentitySection from "./sections/IdentitySection.vue";
 import TemplateSection from "./sections/TemplateSection.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
+import InstanceIdChip from "../InstanceIdChip.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -87,6 +88,7 @@ function onSpaClick(): void {
         <div class="wp-cbm__title-row">
           <span class="wp-cbm__name" data-test="cbm-name">{{ module.meta?.name ?? module.type }}</span>
           <span class="wp-cbm__chip" data-test="cbm-chip">combine</span>
+          <InstanceIdChip :id="module.id" :uid="module._uid" />
         </div>
         <div class="wp-cbm__sub">Library entry · template interpolates $vars into output binding</div>
       </div>

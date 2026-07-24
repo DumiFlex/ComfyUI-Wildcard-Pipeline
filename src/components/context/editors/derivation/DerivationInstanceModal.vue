@@ -23,6 +23,7 @@ import {
 import IdentitySection from "./sections/IdentitySection.vue";
 import RulesSection from "./sections/RulesSection.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
+import InstanceIdChip from "../InstanceIdChip.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -137,6 +138,7 @@ function onSpaClick(): void {
         <div class="wp-dvm__title-row">
           <span class="wp-dvm__name" data-test="dvm-name">{{ module.meta?.name ?? module.type }}</span>
           <span class="wp-dvm__chip" data-test="dvm-chip">derivation</span>
+          <InstanceIdChip :id="module.id" :uid="module._uid" />
         </div>
         <div class="wp-dvm__sub">Library entry · conditional rule-based variable rewrites</div>
       </div>

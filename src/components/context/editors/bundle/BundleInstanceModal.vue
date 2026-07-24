@@ -8,6 +8,7 @@ import { computed } from "vue";
 import type { BundleInstance } from "../../../../widgets/_shared";
 import IdentitySection from "./sections/IdentitySection.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
+import InstanceIdChip from "../InstanceIdChip.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -70,6 +71,7 @@ const headerName = computed(() => props.bundle.name || props.libraryName || "Bun
         <div class="wp-bdm__title-row">
           <span class="wp-bdm__name" data-test="bdm-name-display">{{ headerName }}</span>
           <span class="wp-bdm__chip" data-test="bdm-chip">bundle</span>
+          <InstanceIdChip :id="bundle.library_id" :uid="bundle._uid" />
           <span
             v-if="libraryDrifted"
             class="wp-bdm__badge wp-bdm__badge--drift"

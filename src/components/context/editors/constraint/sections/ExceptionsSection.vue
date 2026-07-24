@@ -17,8 +17,8 @@ import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import { encodeKey } from "../../instance/keys";
 import { patchInstance } from "../../instance/patch";
-import VarAutocompleteInput from "../../../../../manager/components/VarAutocompleteInput.vue";
 import RichTextPreview from "../../../../../manager/components/RichTextPreview.vue";
+import Select, { type SelectOption } from "../../../../../manager/components/ui/Select.vue";
 
 type Mode = "allow" | "exclude" | "boost" | "reduce";
 
@@ -137,6 +137,26 @@ const libraryExceptions = computed<LibraryException[]>(() => {
 });
 
 const instance = computed(() => props.module.instance ?? {});
+
+/** Exception source/target must be a CONCRETE option of the source / target
+ *  wildcard — never free text or "any". The engine keys exceptions on real
+ *  option-value strings, so a picker (not a text box) is the correct control.
+ *  Build its options from the value lists; include the null option only when
+ *  the wildcard actually has one. Mirrors the SPA ConstraintEditor's
+ *  exceptionSrcOptions / exceptionTgtOptions. The `#option` / `#label` slots
+ *  render each value through RichTextPreview so `@{uuid}` refs + `{a|b}` blocks
+ *  chip instead of showing raw hex (issue #7). */
+const NULL_OPT_LABEL = "⌀ null";
+const exceptionSrcOptions = computed<SelectOption[]>(() => {
+  const base: SelectOption[] = props.sourceValues.map((v) => ({ label: v, value: v }));
+  if (props.sourceHasNull) base.unshift({ label: NULL_OPT_LABEL, value: "" });
+  return base;
+});
+const exceptionTgtOptions = computed<SelectOption[]>(() => {
+  const base: SelectOption[] = props.targetValues.map((v) => ({ label: v, value: v }));
+  if (props.targetHasNull) base.unshift({ label: NULL_OPT_LABEL, value: "" });
+  return base;
+});
 
 const disabledKeys = computed<Set<string>>(
   () => new Set(instance.value.disabled_exception_keys ?? []),
@@ -480,23 +500,57 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
         >×{{ exc.factor }}</span>
       </template>
       <template v-else>
-      <VarAutocompleteInput
+      <Select
+        class="ex__extra-input"
+        size="sm"
         :model-value="excSrc(exc, props.sourceOptionsById)"
-        :suggestions="[...sourceValues]"
-        :data-test="`ex-extra-src-${i}`"
-        placeholder="source"
+        :options="exceptionSrcOptions"
+        placeholder="Pick value"
         aria-label="Extra exception source"
-        @update:model-value="(v) => onExtraFieldChange(i, 'source_value', v)"
-      />
+        :data-test="`ex-extra-src-${i}`"
+        @update:model-value="(v) => onExtraFieldChange(i, 'source_value', String(v ?? ''))"
+      >
+        <template #label="{ option }">
+          <RichTextPreview
+            :value="String(option.value) === '' ? option.label : String(option.value)"
+            :uuid-to-name="uuidToName"
+            surface="wildcard"
+          />
+        </template>
+        <template #option="{ option }">
+          <RichTextPreview
+            :value="String(option.value) === '' ? option.label : String(option.value)"
+            :uuid-to-name="uuidToName"
+            surface="wildcard"
+          />
+        </template>
+      </Select>
       <span class="ex__arrow">→</span>
-      <VarAutocompleteInput
+      <Select
+        class="ex__extra-input"
+        size="sm"
         :model-value="excTgt(exc, props.targetOptionsById)"
-        :suggestions="[...targetValues]"
-        :data-test="`ex-extra-tgt-${i}`"
-        placeholder="target"
+        :options="exceptionTgtOptions"
+        placeholder="Pick value"
         aria-label="Extra exception target"
-        @update:model-value="(v) => onExtraFieldChange(i, 'target_value', v)"
-      />
+        :data-test="`ex-extra-tgt-${i}`"
+        @update:model-value="(v) => onExtraFieldChange(i, 'target_value', String(v ?? ''))"
+      >
+        <template #label="{ option }">
+          <RichTextPreview
+            :value="String(option.value) === '' ? option.label : String(option.value)"
+            :uuid-to-name="uuidToName"
+            surface="wildcard"
+          />
+        </template>
+        <template #option="{ option }">
+          <RichTextPreview
+            :value="String(option.value) === '' ? option.label : String(option.value)"
+            :uuid-to-name="uuidToName"
+            surface="wildcard"
+          />
+        </template>
+      </Select>
       <button
         type="button"
         class="ex__mode-chip"
@@ -650,6 +704,14 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
   border: 1px solid color-mix(in oklab, var(--wp-constraint-target) 30%, transparent);
 }
 .ex__arrow { color: var(--wp-text-dim, var(--wp-text3)); }
+
+/* Extra-exception value pickers share the row width with the mode chip +
+ * factor + trash. flex:1 + min-width:0 lets the two Selects split the free
+ * space instead of overflowing the row. */
+.ex__extra-input {
+  flex: 1;
+  min-width: 0;
+}
 
 /* Styled checkbox — mirror of OptionRow's `.opt__check` pattern so
  * users see one consistent on/off control across wildcard / fixed-

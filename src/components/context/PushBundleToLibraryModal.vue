@@ -17,6 +17,11 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { bundleHashes } from "./drift-store";
 import { api } from "../../manager/api/client";
+import {
+  findRelinkCandidates,
+  autoRelinkTarget,
+  type RelinkCandidate,
+} from "../../manager/import-export/relink-match";
 import type { BundleInstance } from "../../widgets/_shared";
 import WpCheck from "@/components/shared/WpCheck.vue";
 
@@ -51,10 +56,12 @@ interface SaveResult {
    *  "(copy)" suffix; workflow row keeps its old library_id. `reattach`
    *  — POST when source entry was missing; no copy suffix, caller
    *  should rebind the workflow row's library_id to the new uuid so
-   *  MISSING clears. */
-  mode: "update" | "fork" | "reattach";
-  /** New library uuid when forking/reattaching; same as bundle.library_id
-   *  when updating. */
+   *  MISSING clears. `relink` — no write: point the detached instance at
+   *  an EXISTING content-identical library bundle; caller rebinds
+   *  library_id + inserted_at_hash. */
+  mode: "update" | "fork" | "reattach" | "relink";
+  /** New library uuid when forking/reattaching/re-linking; same as
+   *  bundle.library_id when updating. */
   id: string;
   /** payload_hash returned by the server. */
   payload_hash: string;
@@ -126,6 +133,80 @@ const canUpdateExisting = computed(
   () => isLibraryTracked.value && !isLibraryMissing.value,
 );
 
+/** uuid -> display name for every live library bundle, fetched once when the
+ *  instance turns out to be detached. `bundleHashes` carries the content hash
+ *  but not names, so the re-link picker needs this to label + weakly-match. */
+const relinkNames = ref<Map<string, { name: string; type: string }>>(new Map());
+
+async function fetchBundleNames(): Promise<void> {
+  try {
+    const res = await fetch("/wp/api/bundles");
+    if (!res.ok) return;
+    const data = (await res.json()) as
+      | { items?: Array<{ id?: string; name?: string }> }
+      | Array<{ id?: string; name?: string }>;
+    const items = Array.isArray(data) ? data : (data.items ?? []);
+    const next = new Map<string, { name: string; type: string }>();
+    for (const it of items) {
+      if (typeof it.id === "string" && it.id) {
+        next.set(it.id, { name: it.name ?? "", type: "bundle" });
+      }
+    }
+    relinkNames.value = next;
+  } catch {
+    /* network — leave empty; no re-link offered */
+  }
+}
+
+/** Content-aware re-link candidates for a DETACHED bundle instance. The
+ *  instance's `inserted_at_hash` IS the library bundle's payload_hash at
+ *  insert time, so an identical-content library bundle under a different uuid
+ *  matches on it exactly — the same signal the module re-link uses. */
+const relinkCandidates = computed<RelinkCandidate[]>(() => {
+  const b = props.bundle;
+  if (!b || !isLibraryMissing.value || bundleHashes.value === null) return [];
+  const live: Record<string, { type?: string; payload_hash: string }> = {};
+  for (const [uuid, h] of Object.entries(bundleHashes.value)) {
+    live[uuid] = { type: "bundle", payload_hash: h };
+  }
+  return findRelinkCandidates(
+    {
+      id: b.library_id,
+      type: "bundle",
+      payload_hash: b.inserted_at_hash,
+      name: b.name ?? "",
+    },
+    live,
+    (u) => relinkNames.value.get(u),
+  );
+});
+
+const relinkAuto = computed(() => autoRelinkTarget(relinkCandidates.value));
+const relinkPick = ref<RelinkCandidate | null>(null);
+const relinkQuery = ref<string>("");
+const relinkFiltered = computed<RelinkCandidate[]>(() => {
+  const q = relinkQuery.value.trim().toLowerCase();
+  if (!q) return relinkCandidates.value;
+  return relinkCandidates.value.filter(
+    (c) => c.name.toLowerCase().includes(q) || c.uuid.toLowerCase().includes(q),
+  );
+});
+const relinkTarget = computed<RelinkCandidate | null>(
+  () => relinkPick.value ?? relinkAuto.value,
+);
+
+function doRelink(): void {
+  const t = relinkTarget.value;
+  if (!t || !props.bundle) return;
+  emit("saved", {
+    mode: "relink",
+    id: t.uuid,
+    payload_hash: t.payloadHash,
+    name: t.name,
+    origId: props.bundle.library_id,
+  });
+}
+
 const tagsParsed = computed<string[]>(() =>
   tagsText.value
     .split(",")
@@ -144,7 +225,16 @@ function resetForm(): void {
   // into library, so we make the safer choice the default and let the
   // user opt out.
   cascadeEnabled.value = cascadeAvailable.value;
+  relinkPick.value = null;
+  relinkQuery.value = "";
 }
+
+// Re-link candidates only matter for a DETACHED instance — skip the extra
+// library-list fetch when the bundle is tracked + present. A drift poll can
+// flip it to detached after open, so also fetch the first time that happens.
+watch(isLibraryMissing, (missing) => {
+  if (props.open && missing && relinkNames.value.size === 0) void fetchBundleNames();
+});
 
 /** Seed description + tags from the live library entry when the
  *  bundle is tracked. Skips on missing — the entry is gone. Only
@@ -170,6 +260,7 @@ watch(
     if (!isOpen) return;
     resetForm();
     void seedFromLibrary();
+    if (isLibraryMissing.value) void fetchBundleNames();
   },
 );
 
@@ -438,6 +529,53 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
               </ul>
             </div>
 
+            <div
+              v-if="isLibraryMissing && relinkCandidates.length"
+              class="wp-ptl-relink"
+              data-test="pbtl-relink"
+            >
+              <div class="wp-ptl-relink__title">Re-link to an existing library bundle</div>
+              <p class="wp-ptl-relink__hint">
+                This bundle's content matches a library entry under a different id (a re-import
+                minted a new one). Re-link to reconnect drift + reset instead of adding a duplicate.
+              </p>
+              <input
+                v-if="relinkCandidates.length > 1"
+                v-model="relinkQuery"
+                type="text"
+                class="wp-ptl-input"
+                data-test="pbtl-relink-search"
+                placeholder="Search by name or id…"
+                aria-label="Search library bundles to re-link"
+                spellcheck="false"
+                autocomplete="off"
+              />
+              <ul class="wp-ptl-relink__list">
+                <li
+                  v-for="c in relinkFiltered"
+                  :key="c.uuid"
+                  class="wp-ptl-relink__cand"
+                  :class="{ 'is-picked': relinkTarget != null && relinkTarget.uuid === c.uuid }"
+                  data-test="pbtl-relink-candidate"
+                  @click="relinkPick = c"
+                >
+                  <span class="wp-ptl-relink__name">{{ c.name || "(unnamed)" }}</span>
+                  <code class="wp-ptl-relink__uuid">{{ c.uuid }}</code>
+                  <span
+                    class="wp-ptl-relink__tag"
+                    :class="c.contentIdentical ? 'is-identical' : 'is-diff'"
+                  >{{ c.contentIdentical ? "identical" : "content differs" }}</span>
+                </li>
+              </ul>
+              <button
+                type="button"
+                class="wp-ptl-btn wp-ptl-btn--primary"
+                data-test="pbtl-relink-confirm"
+                :disabled="!relinkTarget || undefined"
+                @click="doRelink"
+              >Re-link<template v-if="relinkTarget"> to “{{ relinkTarget.name || relinkTarget.uuid }}”</template></button>
+            </div>
+
             <div v-if="isLibraryMissing" class="wp-ptl-note wp-ptl-note--danger" data-test="pbtl-missing">
               The library entry for this bundle has been deleted upstream.
               "Update existing" is unavailable — use "Save as new entry" to
@@ -630,6 +768,44 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   border: 1px solid color-mix(in oklab, var(--wp-danger, #ef4444) 32%, transparent);
   color: var(--wp-danger, #ef4444);
 }
+.wp-ptl-relink {
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 8%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 30%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.wp-ptl-relink__title { font-size: 12.5px; font-weight: 600; color: var(--wp-text, #e7e7ee); }
+.wp-ptl-relink__hint { margin: 0; font-size: 11.5px; color: var(--wp-text-muted, #a1a1ad); }
+.wp-ptl-relink__list {
+  list-style: none; margin: 0; padding: 0;
+  max-height: 160px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.wp-ptl-relink__cand {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 5px 8px; border-radius: 4px; cursor: pointer;
+}
+.wp-ptl-relink__cand:hover { background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 16%, transparent); }
+.wp-ptl-relink__cand.is-picked { background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 28%, transparent); }
+.wp-ptl-relink__name { font-size: 12px; color: var(--wp-text, #e7e7ee); }
+.wp-ptl-relink__uuid { font-family: var(--wp-font-mono, monospace); font-size: 10px; color: var(--wp-text-dim, #6e6e7c); }
+.wp-ptl-relink__tag {
+  margin-left: auto; flex-shrink: 0;
+  font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 1px 6px; border-radius: 999px;
+}
+.wp-ptl-relink__tag.is-identical {
+  color: var(--wp-green, #6ad28b);
+  background: color-mix(in oklab, var(--wp-green, #6ad28b) 16%, transparent);
+}
+.wp-ptl-relink__tag.is-diff {
+  color: var(--wp-warn, #facc15);
+  background: color-mix(in oklab, var(--wp-warn, #facc15) 16%, transparent);
+}
+.wp-ptl-relink .wp-ptl-btn--primary { align-self: flex-start; }
 .wp-ptl-error {
   padding: 8px 10px;
   border-radius: 6px;

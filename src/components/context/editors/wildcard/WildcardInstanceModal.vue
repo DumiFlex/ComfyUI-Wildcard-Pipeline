@@ -5,6 +5,7 @@ import type { PairingBadge } from "../../../../extension/constraint-pairs";
 import IdentitySection from "./sections/IdentitySection.vue";
 import PoolSection from "./sections/PoolSection.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
+import InstanceIdChip from "../InstanceIdChip.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -79,6 +80,7 @@ function onSpaClick(): void {
         <div class="wp-wcm__title-row">
           <span class="wp-wcm__name" data-test="wcm-name">{{ module.meta?.name ?? module.type }}</span>
           <span class="wp-wcm__chip" data-test="wcm-chip">wildcard</span>
+          <InstanceIdChip :id="module.id" :uid="module._uid" />
         </div>
         <div class="wp-wcm__sub" data-test="wcm-sub">
           {{ isMultiPick

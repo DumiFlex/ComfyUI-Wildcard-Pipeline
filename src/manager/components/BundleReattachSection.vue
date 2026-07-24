@@ -62,7 +62,8 @@ function candidatesFor(child: DanglingChild): Candidate[] {
   const pool = child.type === "bundle" ? props.bundleCandidates : props.moduleCandidates;
   const q = query.value.trim().toLowerCase();
   const cached = child.cachedName.trim().toLowerCase();
-  const out = pool.filter((c) => !q || c.name.toLowerCase().includes(q));
+  // Match name OR uuid — reattaching by id disambiguates same-named rows.
+  const out = pool.filter((c) => !q || c.name.toLowerCase().includes(q) || c.id.toLowerCase().includes(q));
   return [...out].sort((a, b) => {
     const ax = a.name.toLowerCase() === cached ? 0 : 1;
     const bx = b.name.toLowerCase() === cached ? 0 : 1;

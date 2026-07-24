@@ -965,6 +965,80 @@ describe("ConflictModal.vue", () => {
     wrap.unmount();
   });
 
+  it("D3b: content-duplicate row shows IN LIBRARY + names the existing entry", () => {
+    const wrap = mountModal({
+      batchConflicts: [],
+      perItemIssues: [
+        {
+          kind: "content-duplicate",
+          entity: { id: "dead0001", name: "hair" },
+          detail: { target_id: "live0001", target_name: "hair" },
+        },
+      ],
+    });
+    const row = $('[data-test="conflict-modal-item-dead0001"]');
+    const badge = row.querySelector(".wp-mod-badge");
+    expect(badge?.textContent?.trim()).toBe("IN LIBRARY");
+    expect(badge?.className).toContain("wp-mod-badge--duplicate");
+    expect(row.textContent).toContain("live0001");
+    expect(row.textContent).toContain("already exists");
+    wrap.unmount();
+  });
+
+  it("D3b: Link to existing records a link decision carrying target_id", async () => {
+    const wrap = mountModal({
+      batchConflicts: [],
+      perItemIssues: [
+        {
+          kind: "content-duplicate",
+          entity: { id: "dead0001", name: "hair" },
+          detail: { target_id: "live0001", target_name: "hair" },
+        },
+      ],
+    });
+    $('[data-test="resolve-dead0001-link"]').click();
+    await flushPromises();
+    // Resolved pill replaces the action group.
+    expect(find('[data-test="resolve-dead0001-link"]')).toBeNull();
+    expect($('[data-test="resolved-dead0001"]').textContent).toContain("Linked to existing");
+
+    $('[data-test="commit-btn"]').click();
+    await flushPromises();
+    const emitted = wrap.emitted("commit-ready");
+    expect(emitted).toBeTruthy();
+    const resolution = emitted![0][0] as {
+      perItemDecisions: Record<string, { kind: string; target_id?: string }>;
+    };
+    expect(resolution.perItemDecisions.dead0001).toEqual({
+      kind: "link",
+      target_id: "live0001",
+    });
+    wrap.unmount();
+  });
+
+  it("D3b: Import anyway on a content-duplicate stays a plain accept", async () => {
+    const wrap = mountModal({
+      batchConflicts: [],
+      perItemIssues: [
+        {
+          kind: "content-duplicate",
+          entity: { id: "dead0001", name: "hair" },
+          detail: { target_id: "live0001" },
+        },
+      ],
+    });
+    $('[data-test="resolve-dead0001-accept"]').click();
+    await flushPromises();
+    $('[data-test="commit-btn"]').click();
+    await flushPromises();
+    const emitted = wrap.emitted("commit-ready");
+    const resolution = emitted![0][0] as {
+      perItemDecisions: Record<string, { kind: string }>;
+    };
+    expect(resolution.perItemDecisions.dead0001.kind).toBe("accept");
+    wrap.unmount();
+  });
+
   it("Phase 13: unselected-dep row lists every target on a single row", () => {
     const wrap = mountModal({
       batchConflicts: [],

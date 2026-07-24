@@ -32,6 +32,14 @@ import type { EntityKind } from "./commit";
  *   - fingerprint-mismatch  — payload-stamped `snapshot_fingerprint`
  *                             disagrees with the value recomputed from
  *                             the row contents.
+ *   - content-duplicate     — (D3b) the incoming row's uuid is free, but
+ *                             byte-identical content already exists in the
+ *                             library under a DIFFERENT uuid. Importing it
+ *                             would create a duplicate row and split refs
+ *                             across two identical entries. `detail` carries
+ *                             `{ target_id, target_name }`. Resolvable as
+ *                             `link` (point refs at the existing row) or
+ *                             `accept` (import the duplicate anyway).
  */
 export type PerItemKind =
   | "broken-inner-ref"
@@ -40,7 +48,14 @@ export type PerItemKind =
   | "unselected-dep"
   | "tier-3"
   | "lossy-migration"
-  | "fingerprint-mismatch";
+  | "fingerprint-mismatch"
+  | "content-duplicate";
+
+/** `detail` payload carried by a `content-duplicate` per-item issue. */
+export interface ContentDuplicateDetail {
+  target_id: string;
+  target_name?: string;
+}
 
 /**
  * One UUID collision against the live DB. `kind` is the 7-bucket
@@ -121,7 +136,11 @@ export type BatchAction = "skip" | "replace" | "rename";
  * `9cf37c7` (Task 17).
  */
 export interface PerItemDecision {
-  kind: "skip" | "replace" | "rename" | "accept";
+  kind: "skip" | "replace" | "rename" | "accept" | "link";
   new_id?: string;
   new_name?: string;
+  /** D3b `link` only — the EXISTING library id to point refs at. The
+   *  orchestrator maps this to `CollisionDecision { kind: "link", target_id }`,
+   *  which drops the incoming entity and remaps its refs onto that row. */
+  target_id?: string;
 }

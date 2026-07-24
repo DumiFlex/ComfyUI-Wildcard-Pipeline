@@ -27,6 +27,11 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { workflowSiblingCount } from "./duplicates/sibling-count";
 import { forkModule } from "./duplicates/fork";
 import { hashes as libraryHashes } from "./drift-store";
+import {
+  findRelinkCandidates,
+  autoRelinkTarget,
+  type RelinkCandidate,
+} from "../../manager/import-export/relink-match";
 import { app } from "#comfyui/app";
 import type { ModuleEntry } from "../../widgets/_shared";
 import WpCheck from "@/components/shared/WpCheck.vue";
@@ -41,8 +46,10 @@ interface SaveResult {
    *  entry with a "(copy)" suffix; workflow row keeps its old id.
    *  `reattach` — fork when the source entry was missing upstream;
    *  no copy suffix, AND the caller should rebind the workflow row to
-   *  the new uuid so MISSING clears. */
-  mode: "update" | "fork" | "reattach";
+   *  the new uuid so MISSING clears. `relink` — no write at all: point
+   *  the detached workflow row at an EXISTING content-identical library
+   *  uuid; the caller swaps the row id + remaps sibling refs. */
+  mode: "update" | "fork" | "reattach" | "relink";
   /** New library uuid when forking; same as draft.id when updating. */
   id: string;
   /** payload_hash returned by the server after the write. */
@@ -95,6 +102,81 @@ const canUpdateExisting = computed(
   () => isLibraryTracked.value && !isLibraryMissing.value,
 );
 
+/** uuid → {name, type} for every live library module, fetched once on open.
+ *  Backs the re-link candidate name lookup + the (type, name) fallback match.
+ *  drift-store hashes carry (type, payload_hash) but not names, so the picker
+ *  needs this to label + weakly-match candidates. */
+const relinkNames = ref<Map<string, { name: string; type: string }>>(new Map());
+
+async function fetchLibraryNames(): Promise<void> {
+  try {
+    const res = await fetch("/wp/api/modules");
+    if (!res.ok) return;
+    const data = (await res.json()) as
+      | { items?: Array<{ id?: string; name?: string; type?: string }> }
+      | Array<{ id?: string; name?: string; type?: string }>;
+    const items = Array.isArray(data) ? data : (data.items ?? []);
+    const next = new Map<string, { name: string; type: string }>();
+    for (const it of items) {
+      if (typeof it.id === "string" && it.id) {
+        next.set(it.id, { name: it.name ?? "", type: it.type ?? "" });
+      }
+    }
+    relinkNames.value = next;
+  } catch {
+    /* network — leave the map empty; no re-link offered */
+  }
+}
+
+/** Content-aware re-link candidates for a DETACHED draft: existing library
+ *  rows whose (type, payload_hash) match the draft's content (identical) or
+ *  whose (type, name) match (content differs). Empty unless the draft is
+ *  detached (`isLibraryMissing`). */
+const relinkCandidates = computed<RelinkCandidate[]>(() => {
+  if (!props.draft || !isLibraryMissing.value || libraryHashes.value === null) return [];
+  return findRelinkCandidates(
+    {
+      id: props.draft.id,
+      type: props.draft.type,
+      payload_hash: props.draft.payload_hash,
+      name: props.draft.meta?.name ?? "",
+    },
+    libraryHashes.value,
+    (u) => relinkNames.value.get(u),
+  );
+});
+
+/** The sole content-identical candidate, if unambiguous (else null). */
+const relinkAuto = computed(() => autoRelinkTarget(relinkCandidates.value));
+const relinkPick = ref<RelinkCandidate | null>(null);
+const relinkQuery = ref<string>("");
+const relinkFiltered = computed<RelinkCandidate[]>(() => {
+  const q = relinkQuery.value.trim().toLowerCase();
+  if (!q) return relinkCandidates.value;
+  return relinkCandidates.value.filter(
+    (c) => c.name.toLowerCase().includes(q) || c.uuid.toLowerCase().includes(q),
+  );
+});
+
+/** The active re-link target: an explicit pick wins, else the unambiguous
+ *  auto-target (single identical candidate). */
+const relinkTarget = computed<RelinkCandidate | null>(
+  () => relinkPick.value ?? relinkAuto.value,
+);
+
+function doRelink(): void {
+  const t = relinkTarget.value;
+  if (!t || !props.draft) return;
+  emit("saved", {
+    mode: "relink",
+    id: t.uuid,
+    payload_hash: t.payloadHash,
+    bundles_updated: [],
+    name: t.name,
+    origId: props.draft.id,
+  });
+}
+
 const siblings = computed<number>(() => {
   if (!props.draft) return 0;
   try {
@@ -133,6 +215,8 @@ function resetForm(): void {
   propagate.value = true;
   busy.value = false;
   errorMsg.value = "";
+  relinkPick.value = null;
+  relinkQuery.value = "";
 }
 
 /** When the row is library-tracked, fetch the live library entry and
@@ -184,8 +268,18 @@ watch(
     resetForm();
     void fetchBundlesContaining();
     void seedFromLibrary();
+    // Re-link candidates only matter for a DETACHED draft — skip the extra
+    // library-list fetch entirely when the row is tracked + present.
+    if (isLibraryMissing.value) void fetchLibraryNames();
   },
 );
+
+// A drift poll can flip the draft to detached AFTER open (hashes land late);
+// fetch the candidate name map the first time that happens so re-link appears
+// without a reopen. One-shot: only when open, detached, and not yet loaded.
+watch(isLibraryMissing, (missing) => {
+  if (props.open && missing && relinkNames.value.size === 0) void fetchLibraryNames();
+});
 
 function close(): void {
   if (busy.value) return;
@@ -411,6 +505,53 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
               changes the library entry every instance reads from.
             </div>
 
+            <div
+              v-if="isLibraryMissing && relinkCandidates.length"
+              class="wp-ptl-relink"
+              data-test="ptl-relink"
+            >
+              <div class="wp-ptl-relink__title">Re-link to an existing library entry</div>
+              <p class="wp-ptl-relink__hint">
+                This module's content matches a library entry under a different id (a re-import
+                minted a new one). Re-link to reconnect drift + refresh instead of adding a duplicate.
+              </p>
+              <input
+                v-if="relinkCandidates.length > 1"
+                v-model="relinkQuery"
+                type="text"
+                class="wp-ptl-input"
+                data-test="ptl-relink-search"
+                placeholder="Search by name or id…"
+                aria-label="Search library entries to re-link"
+                spellcheck="false"
+                autocomplete="off"
+              />
+              <ul class="wp-ptl-relink__list">
+                <li
+                  v-for="c in relinkFiltered"
+                  :key="c.uuid"
+                  class="wp-ptl-relink__cand"
+                  :class="{ 'is-picked': relinkTarget != null && relinkTarget.uuid === c.uuid }"
+                  data-test="ptl-relink-candidate"
+                  @click="relinkPick = c"
+                >
+                  <span class="wp-ptl-relink__name">{{ c.name || "(unnamed)" }}</span>
+                  <code class="wp-ptl-relink__uuid">{{ c.uuid }}</code>
+                  <span
+                    class="wp-ptl-relink__tag"
+                    :class="c.contentIdentical ? 'is-identical' : 'is-diff'"
+                  >{{ c.contentIdentical ? "identical" : "content differs" }}</span>
+                </li>
+              </ul>
+              <button
+                type="button"
+                class="wp-ptl-btn wp-ptl-btn--primary"
+                data-test="ptl-relink-confirm"
+                :disabled="!relinkTarget || undefined"
+                @click="doRelink"
+              >Re-link<template v-if="relinkTarget"> to “{{ relinkTarget.name || relinkTarget.uuid }}”</template></button>
+            </div>
+
             <div v-if="isLibraryMissing" class="wp-ptl-note wp-ptl-note--danger" data-test="ptl-missing">
               The library entry for this module has been deleted upstream. "Update existing"
               is unavailable — use "Save as new entry" to re-add it to the library as a fresh
@@ -559,6 +700,58 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   border: 1px solid color-mix(in oklab, var(--wp-danger, #ef4444) 32%, transparent);
   color: var(--wp-danger, #ef4444);
 }
+.wp-ptl-relink {
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 8%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 30%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.wp-ptl-relink__title { font-size: 12.5px; font-weight: 600; color: var(--wp-text, #e7e7ee); }
+.wp-ptl-relink__hint { margin: 0; font-size: 11.5px; color: var(--wp-text-muted, #a1a1ad); }
+.wp-ptl-relink__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 160px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.wp-ptl-relink__cand {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.wp-ptl-relink__cand:hover { background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 16%, transparent); }
+.wp-ptl-relink__cand.is-picked { background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 28%, transparent); }
+.wp-ptl-relink__name { font-size: 12px; color: var(--wp-text, #e7e7ee); }
+.wp-ptl-relink__uuid { font-family: var(--wp-font-mono, monospace); font-size: 10px; color: var(--wp-text-dim, #6e6e7c); }
+.wp-ptl-relink__tag {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+.wp-ptl-relink__tag.is-identical {
+  color: var(--wp-green, #6ad28b);
+  background: color-mix(in oklab, var(--wp-green, #6ad28b) 16%, transparent);
+}
+.wp-ptl-relink__tag.is-diff {
+  color: var(--wp-warn, #facc15);
+  background: color-mix(in oklab, var(--wp-warn, #facc15) 16%, transparent);
+}
+.wp-ptl-relink .wp-ptl-btn--primary { align-self: flex-start; }
 .wp-ptl-error {
   padding: 8px 10px;
   border-radius: 6px;

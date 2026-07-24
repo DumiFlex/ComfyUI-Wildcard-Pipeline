@@ -4,6 +4,7 @@ import type { ModuleEntry } from "../../../../widgets/_shared";
 import IdentitySection from "./sections/IdentitySection.vue";
 import ValuesSection from "./sections/ValuesSection.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
+import InstanceIdChip from "../InstanceIdChip.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -55,6 +56,7 @@ function onSpaClick(): void {
         <div class="wp-fvm__title-row">
           <span class="wp-fvm__name" data-test="fvm-name">{{ module.meta?.name ?? module.type }}</span>
           <span class="wp-fvm__chip" data-test="fvm-chip">fixed</span>
+          <InstanceIdChip :id="module.id" :uid="module._uid" />
         </div>
         <div class="wp-fvm__sub">Library entry · static $var → value pairs</div>
       </div>

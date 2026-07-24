@@ -578,6 +578,12 @@ onBeforeUnmount(() => {
   max-width: 100%;
   max-height: 52vh;
   overflow: auto;
+  /* Own stacking context: the frozen header/corner cells below use z-index up
+   * to 5, which without isolation compete in the modal's root context and
+   * paint OVER the sticky footer/reach dock (z-index 2) — the matrix's headers
+   * + scrollbar bled onto the runtime options on a tall matrix. Isolating
+   * keeps those z-indexes local so the whole grid sits under the dock. */
+  isolation: isolate;
   background: var(--wp-bg-deep, #0e1015);
   border: 1px solid var(--wp-border);
   border-radius: 6px;

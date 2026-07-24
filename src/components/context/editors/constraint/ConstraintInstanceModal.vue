@@ -23,6 +23,7 @@ import IdentitySection from "./sections/IdentitySection.vue";
 import MatrixSection from "./sections/MatrixSection.vue";
 import TargetReachSection from "./sections/TargetReachSection.vue";
 import ExceptionsSection from "./sections/ExceptionsSection.vue";
+import InstanceIdChip from "../InstanceIdChip.vue";
 // Library fallback for cross-Context constraints. When the referenced
 // source/target wildcard isn't a sibling in this WP_Context (lives in
 // another node, or library-only), pull its sub_categories + option
@@ -668,6 +669,7 @@ function onSpaClick(): void {
         <div class="wp-cnm__title-row">
           <span class="wp-cnm__name" data-test="cnm-name">{{ module.meta?.name ?? module.type }}</span>
           <span class="wp-cnm__chip" data-test="cnm-chip">constraint</span>
+          <InstanceIdChip :id="module.id" :uid="module._uid" />
         </div>
         <div class="wp-cnm__sub">Library entry · source pick → modifies target option weights</div>
       </div>

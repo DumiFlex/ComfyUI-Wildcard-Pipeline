@@ -170,6 +170,20 @@ def test_list_search_matches_name_case_insensitive(wp_db):
     assert rows[0]["name"] == "ColorPalette"
 
 
+def test_list_search_matches_uuid(wp_db):
+    repo = ModuleRepository(wp_db)
+    a = repo.create(type="wildcard", name="ColorPalette", description="",
+                    category_id=None, tags=[], payload=_new_payload())
+    repo.create(type="wildcard", name="lighting", description="",
+                category_id=None, tags=[], payload=_new_payload())
+    # Search by the row's uuid — the fast path for tracing an @{id} /
+    # constraint source/target back to its library row. NOCASE.
+    assert [r["id"] for r in repo.list(query=a["id"])] == [a["id"]]
+    assert [r["id"] for r in repo.list(query=a["id"].upper())] == [a["id"]]
+    # A prefix of the id still matches the row.
+    assert a["id"] in [r["id"] for r in repo.list(query=a["id"][:6])]
+
+
 def test_list_orders_by_updated_at_desc(wp_db):
     repo = ModuleRepository(wp_db)
     a = repo.create(type="wildcard", name="a", description="",

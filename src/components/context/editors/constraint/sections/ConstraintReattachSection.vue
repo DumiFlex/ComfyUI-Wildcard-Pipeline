@@ -77,7 +77,9 @@ function candidates(): Candidate[] {
   const dead = new Set([props.sourceUuid, props.targetUuid]);
   for (const [uuid, name] of props.refData.uuidToName) {
     if (dead.has(uuid)) continue; // can't re-pick the dangling uuid
-    if (q && !name.toLowerCase().includes(q)) continue;
+    // Match name OR uuid — re-picking a source/target by its 8-hex id is the
+    // reliable path when two wildcards share a display name.
+    if (q && !name.toLowerCase().includes(q) && !uuid.toLowerCase().includes(q)) continue;
     out.push({
       uuid,
       name,

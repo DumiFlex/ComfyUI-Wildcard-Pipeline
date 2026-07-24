@@ -226,7 +226,13 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // SeedListModal opt-in bypass column, and the ContextLoopWidget "N bypassed"
 // badge. Config field alone landed 34 bytes over 450; the ~3 KB headroom
 // covers the UI additions in the same feature.
-const TOTAL_LIMIT = 453 * 1024;     // 453 KB
+// Bumped 453 -> 461 KB on 2026-07-23 for the chip-UX + library-linkage feature
+// set (issues #1-#9). Workstream B (RefChip hover card: uuid + filter reads-as
+// + live "N of M options match" from the extended preview-resolver) landed the
+// canvas within 10 bytes of the 453 ceiling; the +8 KB gives the remaining
+// workstreams D (library re-link UI) and E (nested-ref propagation) room in the
+// same approved feature set. Explicitly approved.
+const TOTAL_LIMIT = 461 * 1024;     // 461 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;
