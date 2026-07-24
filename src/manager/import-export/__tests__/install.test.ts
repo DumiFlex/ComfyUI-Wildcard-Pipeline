@@ -215,6 +215,27 @@ describe("applyCollisionDecisions rename map", () => {
     } as unknown as Parameters<typeof applyCollisionDecisions>[0];
     expect(applyCollisionDecisions(selection, { aaaa1111: { kind: "replace" } })).toEqual({});
   });
+
+  it("link drops the incoming entity and remaps its id onto the existing row", () => {
+    // D3b: content already exists under a DIFFERENT uuid — don't install a
+    // duplicate; point every ref at the row that's already there.
+    const selection = {
+      bundles: [], wildcards: [
+        { entity: { id: "aaaa1111", name: "Sub", type: "wildcard" }, decision: { kind: "add" } },
+        { entity: { id: "bbbb2222", name: "Keep", type: "wildcard" }, decision: { kind: "add" } },
+      ],
+      fixed_values: [], combines: [], derivations: [], constraints: [],
+      categories: [], templates: [],
+    } as unknown as Parameters<typeof applyCollisionDecisions>[0];
+    const renameMap = applyCollisionDecisions(selection, {
+      aaaa1111: { kind: "link", target_id: "lib0001" },
+    });
+    // Remapped onto the existing library row...
+    expect(renameMap).toEqual({ aaaa1111: "lib0001" });
+    // ...and dropped from the commit (no duplicate row created).
+    const ids = selection.wildcards.map((r) => (r.entity as { id: string }).id);
+    expect(ids).toEqual(["bbbb2222"]);
+  });
 });
 
 describe("reattach type surface", () => {

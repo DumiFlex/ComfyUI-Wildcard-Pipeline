@@ -85,11 +85,18 @@ export interface InstallCollision {
  *     incoming payload.
  *   - `rename` mints a fresh id + user-supplied name; the original
  *     library row is untouched and the incoming entity lands beside it.
+ *   - `link` (D3b) drops the incoming entity and points every reference
+ *     at `target_id` — an EXISTING library row already holding identical
+ *     content under a different uuid. Nothing is written or overwritten;
+ *     it just avoids installing a duplicate and leaving refs split across
+ *     two identical rows. Offered only on an unambiguous content match
+ *     (see `findContentDuplicates`), never applied automatically.
  */
 export type CollisionDecision =
   | { kind: "skip" }
   | { kind: "replace" }
-  | { kind: "rename"; new_name: string };
+  | { kind: "rename"; new_name: string }
+  | { kind: "link"; target_id: string };
 
 /**
  * Tags every entity inserted in this install with the community post
@@ -335,6 +342,15 @@ export function applyCollisionDecisions(
       }
       if (d.kind === "replace") {
         next.push({ entity: row.entity, decision: { kind: "replace" } as Decision });
+        continue;
+      }
+      if (d.kind === "link") {
+        // D3b: identical content already lives at `target_id`. Drop the
+        // incoming entity (no duplicate row) and record old→target in the
+        // SAME map the rename path uses, so the downstream walkRemap pass
+        // re-points every `@{oldId}` ref + constraint source/target at the
+        // existing row instead of leaving them on a uuid that never lands.
+        renameMap[row.entity.id] = d.target_id;
         continue;
       }
       // Rename: mint a new id, rewrite the entity's id field, and
