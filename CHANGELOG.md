@@ -1,3 +1,46 @@
+## 🎉 Wildcard Pipeline 2.11.0
+
+📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
+
+### ✨ What's new
+
+A correctness fix for held modules on multi-frame runs, plus a set of tools for reconnecting workflow items to your library.
+
+- **Held modules stay held for the whole run.** On a multi-frame sequence, a module set to **Hold across run** could quietly re-roll after the first frame — a held outfit or location would change mid-sequence — and every frame after the first filled the debug panel with constraint warnings. Held picks now carry through every frame, so constraints that depend on them keep applying, cross-node holds stay put, and the warning flood is gone.
+- **Re-link items that lost their library connection.** When a re-import gives a library entry a new id, the copy in your workflow stops matching it: no drift, no **Edit library entry in SPA**, and saving creates a duplicate. **Push to library** now offers **Re-link to an existing library entry** when it finds one holding the same content — picking it automatically when there's exactly one match, or letting you choose from a list you can search by name *or* id. Works for bundles too.
+- **Disconnected items now show as drifted** instead of looking like local-only rows. That means the **refresh drifted** button reconnects them in one click, and the library link, drift dot and refresh action all start working again.
+- **"Reset to library snapshot" can no longer empty a bundle.** If the bundle wasn't linked to a library entry, or the snapshot came back empty, reset used to replace your modules with nothing. It now refuses and explains why, leaving the bundle untouched.
+- **Importing content you already have offers to link it.** When an import contains an item identical to one already in your library under a different id, it's flagged **IN LIBRARY** with the matching entry named, and you can either link to it — references follow to the existing entry — or import the copy anyway. Nothing is linked or overwritten without you choosing.
+- **Every edit modal shows the item's id.** A small chip in the header, click to copy — the same id that `@{...}` references, constraint sources and library rows all match on.
+- **Nested references and variables render as chips** in derivation rule values and constraint exceptions, instead of showing raw text inside `{a|b}` braces. Exception values also get a proper picker of real option values rather than a free-text box.
+- **Hover any reference chip** to see what it resolves to: its id, its sub-category filter in plain language, and how many options currently match — read live from your library, so the count moves when the library does.
+- **Search by id.** Pasting an 8-character id into a search box now finds the item, in the manager lists and in the remap / reattach pickers. Previously only names matched, which was useless when two entries shared one.
+- **Long values wrap** in the derivation override boxes instead of being clipped at the edge of the field.
+
+---
+
+<details>
+<summary><b>📋 Full changelog</b> — click to expand the per-commit list</summary>
+
+
+* Merge pull request #11 from DumiFlex/fix/held-constraint-registration ([fd4c501](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/fd4c501)), closes [#11](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues/11)
+* docs(release-notes): summarise held-module fix + library re-link tooling ([9fb653f](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/9fb653f))
+* chore(size): raise total bundle budget to 461 KB ([3f45b26](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/3f45b26))
+* fix(bundle): never let "Reset to library snapshot" silently empty a bundle ([78297c4](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/78297c4))
+* fix(chips): render nested refs + vars in derivation and exception surfaces ([a64e56d](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/a64e56d)), closes [label/#option](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues/option)
+* fix(engine): carry held modules' frame-0 constraint state to later frames ([1b32a8a](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/1b32a8a))
+* fix(linkage): surface drift for a library-uuid module with an empty local hash ([bb5f6b8](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/bb5f6b8))
+* fix(search): match modules, bundles and templates by id as well as name ([44d0ca2](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/44d0ca2))
+* feat(chips): hover card on nested-ref and variable chips ([699deda](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/699deda))
+* feat(editors): show module identity in edit-modal headers + wrap long values ([5a83e61](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/5a83e61))
+* feat(import): link-to-existing decision for content duplicates (D3b core) ([e63be54](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/e63be54)), closes [#2](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues/2)
+* feat(import): surface content duplicates as a resolvable conflict row (D3b) ([c268e75](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/c268e75))
+* feat(relink): content-aware library re-link for detached bundle instances ([ecebd55](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/ecebd55))
+* feat(relink): content-aware library re-link for detached module rows ([a059b48](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/a059b48))
+* feat(relink): content-aware re-link match + apply helpers (pure) ([9ef1fb6](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/9ef1fb6))
+
+</details>
+
 ## 🎉 Wildcard Pipeline 2.10.2
 
 📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
