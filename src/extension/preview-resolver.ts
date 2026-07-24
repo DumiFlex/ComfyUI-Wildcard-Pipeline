@@ -58,6 +58,12 @@ export interface PreviewLookup {
    *  Drives the pi-ban "null" chip on exception rows whose source /
    *  target string is empty. */
   hasNullOption?: boolean;
+  /** Per-option `sub_categories` tag sets, one array per option in
+   *  declaration order. Feeds the ref-chip hover's "N of M options match"
+   *  count — a `@{uuid:expr}` ref's filter is evaluated against each
+   *  option's tags, LIVE from the library, so the count reflects options
+   *  added/removed after the ref was authored (the propagation signal). */
+  optionTagSets?: string[][];
 }
 
 const cache = new Map<string, PreviewLookup>();
@@ -137,7 +143,7 @@ interface BundleSnapshot {
   name?: string;
   type?: string;
   payload?: {
-    options?: Array<{ id?: string; value?: string; is_null?: boolean }>;
+    options?: Array<{ id?: string; value?: string; is_null?: boolean; sub_categories?: string[] }>;
     var_binding?: string;
     sub_categories?: string[];
   };
@@ -187,15 +193,22 @@ async function fetchBundle(uuids: string[]): Promise<void> {
         if (Array.isArray(subs)) entry.subCategories = subs.filter((s): s is string => typeof s === "string");
         const values: string[] = [];
         const byId = new Map<string, string>();
+        const tagSets: string[][] = [];
         let hasNull = false;
         for (const o of opts) {
           if (typeof o?.value === "string") values.push(o.value);
           if (typeof o?.id === "string" && typeof o?.value === "string") byId.set(o.id, o.value);
           if (o?.is_null === true) hasNull = true;
+          tagSets.push(
+            Array.isArray(o?.sub_categories)
+              ? o.sub_categories.filter((s): s is string => typeof s === "string")
+              : [],
+          );
         }
         if (values.length) entry.optionValues = values;
         if (byId.size) entry.optionsById = byId;
         if (hasNull) entry.hasNullOption = true;
+        if (tagSets.length) entry.optionTagSets = tagSets;
       }
       cache.set(u, entry);
     }

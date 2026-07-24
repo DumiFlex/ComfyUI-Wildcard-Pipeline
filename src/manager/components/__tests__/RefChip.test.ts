@@ -1,6 +1,48 @@
 import { mount } from "@vue/test-utils";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { nextTick } from "vue";
 import RefChip from "../RefChip.vue";
+import { _setForTests } from "@/extension/preview-resolver";
+
+describe("RefChip hover card (issues #3 / #8)", () => {
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("shows uuid + live 'N of M options match' on hover", async () => {
+    // Seed the resolver so the hover reads the wildcard's LIVE options —
+    // 4 options, 2 tagged `warm`; a `:warm` ref should read "2 of 4".
+    _setForTests("beef0001", {
+      name: "colour", kind: "wildcard",
+      optionTagSets: [["warm"], ["warm"], ["cold"], []],
+    });
+    vi.useFakeTimers();
+    const w = mount(RefChip, {
+      props: { kind: "ref", name: "colour", uuid: "beef0001", resolved: true, expr: "warm" },
+      attachTo: document.body,
+    });
+    await w.find(".wp-refchip").trigger("mouseenter");
+    vi.advanceTimersByTime(300);
+    await nextTick();
+    const card = document.querySelector('[data-test="refchip-hover"]');
+    expect(card).toBeTruthy();
+    expect(card?.textContent).toContain("beef0001");
+    expect(card?.textContent).toContain("2 of 4 options match");
+    w.unmount();
+  });
+
+  it("shows a plain option count for an unfiltered ref", async () => {
+    _setForTests("beef0002", { name: "pose", kind: "wildcard", optionTagSets: [[], [], []] });
+    vi.useFakeTimers();
+    const w = mount(RefChip, {
+      props: { kind: "ref", name: "pose", uuid: "beef0002", resolved: true },
+      attachTo: document.body,
+    });
+    await w.find(".wp-refchip").trigger("mouseenter");
+    vi.advanceTimersByTime(300);
+    await nextTick();
+    expect(document.querySelector('[data-test="refchip-hover"]')?.textContent).toContain("3 options");
+    w.unmount();
+  });
+});
 
 describe("RefChip filter indicator", () => {
   it("shows a funnel + hover title with the expression, not inline text", () => {
