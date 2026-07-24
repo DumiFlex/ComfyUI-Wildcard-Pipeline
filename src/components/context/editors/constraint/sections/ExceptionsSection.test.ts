@@ -6,6 +6,7 @@
 import { describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
 import ExceptionsSection from "./ExceptionsSection.vue";
+import Select from "../../../../../manager/components/ui/Select.vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 
 function makeModule(overrides: Partial<ModuleEntry> = {}): ModuleEntry {
@@ -240,7 +241,7 @@ describe("constraint ExceptionsSection", () => {
     expect(patch.instance?.disabled_exception_keys).toEqual(['["red","black"]']);
   });
 
-  it("extra row source/target use VarAutocompleteInput", () => {
+  it("extra row source/target use the Select value picker (concrete options)", () => {
     const w = mount(ExceptionsSection, {
       props: {
         module: makeModule({
@@ -254,7 +255,12 @@ describe("constraint ExceptionsSection", () => {
         targetValues: TARGET_VALUES,
       },
     });
-    expect(w.findAllComponents({ name: "VarAutocompleteInput" }).length).toBeGreaterThan(0);
+    // Source + target must be picked from concrete options — a Select each
+    // (its dropdown renders values as chips via the #option/#label slots),
+    // never a free text box.
+    expect(w.find('[data-test="ex-extra-src-0"]').exists()).toBe(true);
+    expect(w.find('[data-test="ex-extra-tgt-0"]').exists()).toBe(true);
+    expect(w.findAllComponents(Select).length).toBe(2);
   });
 
   it("library exception with source='' renders the pi-ban chip when sourceHasNull=true", () => {
@@ -391,9 +397,9 @@ describe("constraint ExceptionsSection — stranded read-only", () => {
         stranded: true,
       },
     });
-    // The extra row still shows, but as a static snapshot.
+    // The extra row still shows, but as a static snapshot — no Select picker.
     expect(w.find('[data-test="ex-extra-0"]').exists()).toBe(true);
-    expect(w.findAllComponents({ name: "VarAutocompleteInput" }).length).toBe(0);
+    expect(w.findAllComponents(Select).length).toBe(0);
   });
 
   it("control: a healthy (non-stranded) constraint keeps the cycle button + edit controls", () => {

@@ -1744,6 +1744,18 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
  *    Each row carries a left accent + faint wash keyed to its mode
  *    (--cn-mode-var set inline from MODE_META) so boost/reduce/exclude
  *    rows are scannable; neutral falls back to the muted grey var. */
+/* Fixed layout so long (now single-line) source/target values can't blow the
+ * exceptions table wider than the edit-page container. mode/factor/trash keep
+ * their set widths; source + target split the remaining space and TRUNCATE
+ * (each cell's Select trigger ellipsis-clips) instead of overflowing the page. */
+.cn-ex-table { table-layout: fixed; width: 100%; }
+/* Read-only (stranded) value cells: clip long text to one line to match the
+ * editable Selects rather than wrapping into tall rows. */
+.cn-ex-table td.wp-mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .cn-ex-th-src {
   color: var(--wp-constraint-source-text);
   text-transform: uppercase;
