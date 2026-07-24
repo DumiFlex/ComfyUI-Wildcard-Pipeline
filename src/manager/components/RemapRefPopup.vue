@@ -45,7 +45,9 @@ const candidates = computed<Candidate[]>(() => {
   const out: Candidate[] = [];
   for (const [uuid, name] of props.refData.uuidToName) {
     if (uuid === props.oldUuid) continue; // can't pick the still-dangling uuid
-    if (q && !name.toLowerCase().includes(q)) continue;
+    // Match name OR uuid — picking a remap target by its 8-hex id is the
+    // reliable path when two wildcards share a display name.
+    if (q && !name.toLowerCase().includes(q) && !uuid.toLowerCase().includes(q)) continue;
     out.push({ uuid, name, count: props.refData.uuidToOptionsCount.get(uuid) ?? 0 });
   }
   // Exact cached-name match floats to top, then alpha.

@@ -382,7 +382,15 @@ class ModuleRepository:
                      .replace("%", "\\%")
                      .replace("_", "\\_")
             )
-            clauses.append("name LIKE ? ESCAPE '\\' COLLATE NOCASE")
+            # Match the name OR the uuid — searching by id is the fast path for
+            # debugging library linkage (finding the row a workflow's @{id} /
+            # constraint source/target points at). NOCASE so an 8-hex id typed
+            # in any case still matches.
+            clauses.append(
+                "(name LIKE ? ESCAPE '\\' COLLATE NOCASE "
+                "OR id LIKE ? ESCAPE '\\' COLLATE NOCASE)"
+            )
+            params.append(f"%{escaped}%")
             params.append(f"%{escaped}%")
         if favorites_only:
             clauses.append("is_favorite = 1")
@@ -767,7 +775,15 @@ class BundleRepository:
                      .replace("%", "\\%")
                      .replace("_", "\\_")
             )
-            clauses.append("name LIKE ? ESCAPE '\\' COLLATE NOCASE")
+            # Match the name OR the uuid — searching by id is the fast path for
+            # debugging library linkage (finding the row a workflow's @{id} /
+            # constraint source/target points at). NOCASE so an 8-hex id typed
+            # in any case still matches.
+            clauses.append(
+                "(name LIKE ? ESCAPE '\\' COLLATE NOCASE "
+                "OR id LIKE ? ESCAPE '\\' COLLATE NOCASE)"
+            )
+            params.append(f"%{escaped}%")
             params.append(f"%{escaped}%")
         if favorites_only:
             clauses.append("is_favorite = 1")
@@ -951,7 +967,15 @@ class TemplateRepository:
                      .replace("%", "\\%")
                      .replace("_", "\\_")
             )
-            clauses.append("name LIKE ? ESCAPE '\\' COLLATE NOCASE")
+            # Match the name OR the uuid — searching by id is the fast path for
+            # debugging library linkage (finding the row a workflow's @{id} /
+            # constraint source/target points at). NOCASE so an 8-hex id typed
+            # in any case still matches.
+            clauses.append(
+                "(name LIKE ? ESCAPE '\\' COLLATE NOCASE "
+                "OR id LIKE ? ESCAPE '\\' COLLATE NOCASE)"
+            )
+            params.append(f"%{escaped}%")
             params.append(f"%{escaped}%")
         if favorites_only:
             clauses.append("is_favorite = 1")
