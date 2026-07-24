@@ -551,6 +551,7 @@ function opUsesValue(op: string | undefined): boolean {
                 <RichTextInput
                   v-if="opUsesValue(branch.condition?.op)"
                   surface="derivation"
+                  wrap
                   :var-suggestions="varSuggestions"
                   :uuid-to-name="uuidToName"
                   :model-value="getOverride('condition_value_overrides', rule.id, String(bi))"
@@ -570,6 +571,7 @@ function opUsesValue(op: string | undefined): boolean {
                 <RichTextInput
                   surface="derivation"
                   allow-nested-refs
+                  wrap
                   :var-suggestions="varSuggestions"
                   :ref-suggestions="refSuggestions"
                   :uuid-to-name="uuidToName"
@@ -633,6 +635,7 @@ function opUsesValue(op: string | undefined): boolean {
                 <RichTextInput
                   surface="derivation"
                   allow-nested-refs
+                  wrap
                   :var-suggestions="varSuggestions"
                   :ref-suggestions="refSuggestions"
                   :uuid-to-name="uuidToName"

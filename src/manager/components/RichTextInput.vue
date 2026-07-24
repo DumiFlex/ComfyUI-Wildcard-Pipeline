@@ -144,6 +144,12 @@ interface Props {
   moduleId?: string;
   multiline?: boolean;
   rows?: number;
+  /** Single-line surfaces (`multiline:false`) clip long values behind a
+   *  horizontal scroll. Set `wrap` to instead WRAP the value onto multiple
+   *  lines and auto-grow the box to fit (with a max-height cap + manual
+   *  vertical resize handle). Semantics stay single-value — Enter still
+   *  commits, newlines aren't meaningful. No effect when `multiline`. */
+  wrap?: boolean;
   placeholder?: string;
   varSuggestions?: string[];
   refSuggestions?: string[];
@@ -192,6 +198,7 @@ const props = withDefaults(defineProps<Props>(), {
   moduleId: undefined,
   multiline: false,
   rows: 4,
+  wrap: false,
   placeholder: "",
   varSuggestions: () => [],
   refSuggestions: () => [],
@@ -2195,7 +2202,10 @@ function onHostKeydown(ev: KeyboardEvent): void {
     <div
       ref="hostEl"
       class="wp-rt__host"
-      :class="[multiline ? 'wp-rt__host--multi' : 'wp-rt__host--single', { 'wp-rt__host--empty': isEmpty }]"
+      :class="[
+        multiline ? 'wp-rt__host--multi' : 'wp-rt__host--single',
+        { 'wp-rt__host--wrap': wrap && !multiline, 'wp-rt__host--empty': isEmpty },
+      ]"
       :contenteditable="!disabled"
       :aria-label="ariaLabel"
       :data-placeholder="placeholder"
@@ -2391,6 +2401,29 @@ function onHostKeydown(ev: KeyboardEvent): void {
   white-space: nowrap;
   overflow-x: auto;
   overflow-y: hidden;
+}
+/* Opt-in wrap+auto-grow for single-value surfaces (prop `wrap`). Overrides
+   the single-line clip: the value WRAPS onto multiple lines and the box
+   grows to fit (min = one row, capped at 40vh then scrolls). `resize:
+   vertical` gives a manual drag handle — its grip renders inside the host
+   box, so the wrapper's `overflow:hidden` doesn't clip it. Compound
+   selector so it beats `--single` regardless of source order. */
+.wp-rt__host--single.wp-rt__host--wrap {
+  height: auto;
+  min-height: var(--wp-input-h, 34px);
+  max-height: 40vh;
+  padding: 6px var(--wp-space-5);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: hidden;
+  overflow-y: auto;
+  resize: vertical;
+}
+/* Keep the placeholder ghost aligned with wrapped text (top-left, not
+   vertically centered on the 34px single-line). */
+.wp-rt__host--single.wp-rt__host--wrap.wp-rt__host--empty::before {
+  line-height: 1.6;
 }
 .wp-rt__host--multi {
   padding: var(--wp-space-4) var(--wp-space-5);
