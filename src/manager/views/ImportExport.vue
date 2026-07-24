@@ -21,6 +21,10 @@ import {
 } from "../import-export/collision";
 import { templateFingerprint } from "../import-export/fingerprint";
 import {
+  findLinkableDuplicates,
+  type LibraryContentRow,
+} from "../import-export/content-duplicate";
+import {
   buildCommitPayload,
   type CommitPayload,
   type Decision,
@@ -65,7 +69,9 @@ const mode = ref<Mode>("export");
 // separate templateFingerprint path. Categories aren't fetched here —
 // they merge by name server-side and never produce a collision badge.
 
-interface LibraryModule { id: string; type?: string; snapshot_fingerprint?: string }
+/** `name` is optional-but-present in practice (the API returns it); D3b uses
+ *  it to say WHICH existing entry a content duplicate matches. */
+interface LibraryModule { id: string; type?: string; name?: string; snapshot_fingerprint?: string }
 interface LibraryBundle { id: string; snapshot_fingerprint?: string }
 /** Templates carry no snapshot_fingerprint; the orchestrator computes a
  *  `templateFingerprint` from these literal fields for collision detection. */
@@ -327,6 +333,39 @@ function buildPerItemIssues(
       detail: { reason: w.reason, field: w.field },
     });
   }
+  // D3b — the incoming uuid is free, but byte-identical content already sits
+  // in the library under a DIFFERENT uuid. Offer "link to existing" so the
+  // import doesn't mint a second identical row and split refs between them.
+  // Uuid collisions are excluded (findLinkableDuplicates): those are the
+  // batch-conflict path's question, not this one.
+  {
+    const libRows: LibraryContentRow[] = [];
+    const libNameById = new Map<string, string>();
+    for (const row of localModules.value) {
+      if (row.snapshot_fingerprint) {
+        libRows.push({ id: row.id, type: row.type ?? "", fingerprint: row.snapshot_fingerprint });
+        if (row.name) libNameById.set(row.id, row.name);
+      }
+    }
+    if (libRows.length > 0) {
+      const libIds = new Set(localModules.value.map((r) => r.id));
+      const incoming = selected
+        .map((s) => s.entity)
+        .filter((e): e is typeof e & { id: string } => typeof e.id === "string" && e.id.length > 0)
+        .map((e) => e as unknown as FingerprintModuleRow & { id: string });
+      for (const [id, targetId] of Object.entries(
+        findLinkableDuplicates(incoming, libRows, libIds),
+      )) {
+        const hit = selected.find((s) => s.entity.id === id);
+        const name = hit ? entityNameOf(hit.entity) : undefined;
+        out.push({
+          kind: "content-duplicate",
+          entity: name ? { id, name } : { id },
+          detail: { target_id: targetId, target_name: libNameById.get(targetId) },
+        });
+      }
+    }
+  }
   const payloadIds = new Set<string>();
   for (const k of ALL_KINDS) {
     const arr = payload[BUCKET_FOR_KIND[k]];
@@ -457,7 +496,11 @@ function partitionSelection(
     let decision: Decision | null;
     const pd = resolution.perItemDecisions[s.entity.id];
     if (pd) {
-      if (pd.kind === "skip") {
+      if (pd.kind === "skip" || pd.kind === "link") {
+        // `link` (D3b): identical content already exists under another uuid.
+        // Drop the incoming row exactly like skip — the difference is that
+        // runCommit ALSO folds old→target into the remap table so every ref
+        // follows to the existing entry instead of dangling.
         decision = null;
       } else if (pd.kind === "replace") {
         // A cross-kind id clash can never replace (would clobber a
@@ -640,9 +683,17 @@ async function runCommit(resolution: {
   // imported constraint pointing at a renamed entity (source/target or an
   // embedded @{} ref) must follow. One walkRemap pass over the committed
   // entities, keyed by the renames the user's collision resolutions produced.
-  const remapTable = buildImportRemapTable(
-    payload.renames.map((r) => ({ oldId: r.old_id, newId: r.new_id })),
-  );
+  // D3b `link` rows were dropped from the commit, but every ref that pointed
+  // at them must land on the EXISTING library row the user linked to — same
+  // follow-through as a rename, sourced from the decision's target_id.
+  const linkPairs: Array<{ oldId: string; newId: string }> = [];
+  for (const [oldId, pd] of Object.entries(resolution.perItemDecisions)) {
+    if (pd.kind === "link" && pd.target_id) linkPairs.push({ oldId, newId: pd.target_id });
+  }
+  const remapTable = buildImportRemapTable([
+    ...payload.renames.map((r) => ({ oldId: r.old_id, newId: r.new_id })),
+    ...linkPairs,
+  ]);
   if (Object.keys(remapTable).length > 0) {
     payload.adds = applyImportRemap(payload.adds.map((a) => a.entity), remapTable)
       .map((entity, i) => ({ ...payload.adds[i], entity }));

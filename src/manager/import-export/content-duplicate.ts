@@ -52,3 +52,25 @@ export function findContentDuplicates(
   }
   return out;
 }
+
+/**
+ * The subset of content duplicates worth OFFERING a link for: the incoming
+ * id must not already exist in the library. An incoming id that DOES exist
+ * is an ordinary uuid collision — the batch-conflict path already asks
+ * skip/replace/rename for it, and surfacing a second competing question
+ * about the same row would be noise.
+ *
+ * `libraryIds` is the id set of the live library (the same map the collision
+ * detector reads).
+ */
+export function findLinkableDuplicates(
+  incoming: ReadonlyArray<ModuleRow & { id: string }>,
+  library: ReadonlyArray<LibraryContentRow>,
+  libraryIds: ReadonlySet<string>,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [id, targetId] of Object.entries(findContentDuplicates(incoming, library))) {
+    if (!libraryIds.has(id)) out[id] = targetId;
+  }
+  return out;
+}

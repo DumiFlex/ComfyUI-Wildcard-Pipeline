@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findContentDuplicates } from "../content-duplicate";
+import { findContentDuplicates, findLinkableDuplicates } from "../content-duplicate";
 import { moduleFingerprint } from "../fingerprint";
 
 const rowA = {
@@ -57,5 +57,21 @@ describe("findContentDuplicates", () => {
       { id: "lib0002", type: "wildcard", fingerprint: fpB },
     ]);
     expect(got).toEqual({ incoming1: "lib0001", incoming2: "lib0002" });
+  });
+});
+
+describe("findLinkableDuplicates", () => {
+  const library = [{ id: "lib0001", type: "wildcard", fingerprint: fpA }];
+
+  it("offers a link when the incoming id does NOT already exist in the library", () => {
+    const got = findLinkableDuplicates([rowA], library, new Set(["lib0001"]));
+    expect(got).toEqual({ incoming1: "lib0001" });
+  });
+
+  it("stays silent when the incoming id IS a uuid collision (batch-conflict path owns it)", () => {
+    // incoming1 already exists in the library → that's a normal collision,
+    // resolved as skip/replace/rename, not a content-duplicate link.
+    const got = findLinkableDuplicates([rowA], library, new Set(["lib0001", "incoming1"]));
+    expect(got).toEqual({});
   });
 });
