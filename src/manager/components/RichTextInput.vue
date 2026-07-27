@@ -523,6 +523,16 @@ const atoms = ref<Atom[]>(padAtoms(parseForSurface(props.modelValue || "")));
 // new structure over a hand-mutated, out-of-sync contenteditable DOM. Folded
 // into the v-for :key. See applyAtoms() for why the typing path never bumps it.
 const renderEpoch = ref(0);
+// Bumped when the browser destroyed rendered atom nodes behind Vue's back
+// (see `hostDomIsStale`). Keyed on the HOST ELEMENT, not the atom v-for:
+// once Vue's child vnodes hold detached `el`s, ANY patch of that subtree —
+// including the full key-churn teardown `renderEpoch` triggers — derefs a
+// null `el` and throws `insertBefore: Child to insert before is not a child
+// of this node`. Replacing the host element itself is the only safe repair:
+// Vue unmounts an element vnode with a single `hostRemove(el)` on a node
+// that IS still attached, tearing children down with `doRemove: false` so
+// no stale child el is ever touched.
+const hostEpoch = ref(0);
 let lastEmittedValue = props.modelValue || "";
 
 /** Text-atom HTML: tokenises the atom's raw text and emits colored
@@ -1192,6 +1202,24 @@ function syncTextSpansToAtoms(): void {
   }
 }
 
+/** True when the live host has FEWER rendered atom nodes than `atoms.value`
+ *  expects — i.e. the browser destroyed nodes Vue still holds `el` pointers
+ *  for. Contenteditable hands the browser ownership of these children, and
+ *  it replaces them wholesale on select-all + retype, IME commit, undo, and
+ *  some paste paths; alt-tabbing mid-token then fires blur into a re-parse
+ *  that patches over the wreckage.
+ *
+ *  Deliberately a `<` and not a `!==`: EXTRA top-level nodes are the normal
+ *  typing case (browsers insert user-typed characters as raw text nodes
+ *  directly under the host — see the padAtoms docblock) and must not trigger
+ *  a remount, which would eat the caret mid-keystroke. Only destroyed nodes
+ *  make the vdom unpatchable. */
+function hostDomIsStale(): boolean {
+  const host = hostEl.value;
+  if (!host) return false;
+  return host.querySelectorAll("[data-atom-index]").length < atoms.value.length;
+}
+
 function applyAtoms(next: Atom[], opts?: { rebuild?: boolean }): void {
   // `rebuild` forces a full teardown+remount of the atom v-for (via the
   // renderEpoch key) instead of an in-place patch. Used ONLY on the
@@ -1204,7 +1232,11 @@ function applyAtoms(next: Atom[], opts?: { rebuild?: boolean }): void {
   // The raw typing / Backspace paths deliberately do NOT rebuild — they keep
   // the imperative syncTextSpansToAtoms approach for caret stability (the
   // removed global renderTick churned those paths; this scopes it to inserts).
-  if (opts?.rebuild) renderEpoch.value += 1;
+  // Stale-DOM repair takes precedence: bumping `renderEpoch` here would NOT
+  // help (verified — key churn still walks the destroyed els and throws on
+  // `nextSibling` of null). Replace the host element instead.
+  if (hostDomIsStale()) hostEpoch.value += 1;
+  else if (opts?.rebuild) renderEpoch.value += 1;
   atoms.value = padAtoms(next);
   isEmpty.value = serialiseAtomsLocal(next).length === 0;
   void nextTick(() => syncTextSpansToAtoms());
@@ -2201,6 +2233,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
          Input handling lands in Task 6. -->
     <div
       ref="hostEl"
+      :key="hostEpoch"
       class="wp-rt__host"
       :class="[
         multiline ? 'wp-rt__host--multi' : 'wp-rt__host--single',

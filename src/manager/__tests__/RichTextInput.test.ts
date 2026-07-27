@@ -260,6 +260,65 @@ describe("RichTextInput.vue", () => {
     wrap.unmount();
   });
 
+  it("survives a blur re-parse after the browser destroyed the host's children", async () => {
+    // Regression: the browser OWNS the contenteditable host's children and
+    // replaces them wholesale on select-all + retype, IME commit, undo, and
+    // some paste paths. Vue's child vnodes then hold detached `el` pointers.
+    // Alt-tabbing mid-token fires blur → re-parse → Vue patches the new atom
+    // structure over the wreckage and throws `insertBefore: Child to insert
+    // before is not a child of this node`, followed by a cascade of null
+    // derefs that leaves the whole editor dead until a page refresh.
+    //
+    // The repair is a remount of the host ELEMENT (`hostEpoch` key). Note the
+    // crash escaped as an UNHANDLED error inside Vue's patch, so this test
+    // installs a window error trap rather than wrapping in try/catch.
+    const errors: string[] = [];
+    const onErr = (e: ErrorEvent): void => { errors.push(String(e.error ?? e.message)); };
+    window.addEventListener("error", onErr);
+    const ref = "@{aabbccdd#pose}";
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: `a ${ref} b`,
+        surface: "wildcard",
+        uuidToName: new Map([["aabbccdd", "pose"]]),
+      },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host").element as HTMLElement;
+    expect(host.querySelectorAll("[data-atom-index]").length).toBeGreaterThan(0);
+    // Browser blows the rendered atom nodes away and leaves raw text behind.
+    host.innerHTML = "";
+    host.appendChild(document.createTextNode(`a ${ref} b ${ref} c`));
+    await wrap.find(".wp-rt__host").trigger("blur");
+    await flushPromises();
+    window.removeEventListener("error", onErr);
+    expect(errors).toEqual([]);
+    // Host was remounted and re-rendered from the re-parsed text, so the
+    // editor is still usable rather than a dead subtree.
+    const fresh = wrap.find(".wp-rt__host").element as HTMLElement;
+    expect(fresh.querySelectorAll("[data-atom-index]").length).toBeGreaterThan(0);
+    expect(wrap.findAll(".wp-refchip")).toHaveLength(2);
+    wrap.unmount();
+  });
+
+  it("does not remount the host for the normal typing case (orphan text node)", async () => {
+    // Guard against over-triggering the stale-DOM repair: browsers routinely
+    // insert user-typed characters as raw text nodes directly under the host.
+    // That's EXTRA nodes, not destroyed ones — remounting there would eat the
+    // caret on every keystroke.
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "hello", varSuggestions: [] },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host").element as HTMLElement;
+    host.appendChild(document.createTextNode(" world"));
+    await wrap.find(".wp-rt__host").trigger("blur");
+    await flushPromises();
+    // Same element instance — no remount happened.
+    expect(wrap.find(".wp-rt__host").element).toBe(host);
+    wrap.unmount();
+  });
+
   it("forwards aria-label + disabled onto the contenteditable host", () => {
     const wrap = mount(RichTextInput, {
       props: {
