@@ -543,16 +543,40 @@ export function publishToCommunity(
 }
 
 /**
+ * The engine-row JSON exactly as `copyPayloadToClipboard` writes it.
+ *
+ * `schema_version` leads the object because a bare engine row does not say
+ * which payload shape it is in, and the shape is what decides whether a
+ * consumer can read it at all. Publish already stamped this (see
+ * `buildPublishBody` / the `publishToCommunity` hash); copy silently did not,
+ * so a copied row and the same row published to the community carried
+ * different information.
+ *
+ * Stamped by the SAME `schemaVersionForPayload` the publish paths use, so a
+ * copied row and a published row can never disagree about their version.
+ */
+export function buildCopyableRow(
+  pub: PublishablePayload,
+): Record<string, unknown> {
+  return { schema_version: schemaVersionForPayload(pub.payload), ...pub.payload };
+}
+
+/**
  * Copy the pretty-printed engine-row JSON to the clipboard. Resolves
  * to true on success, false on failure (clipboard denied / no API).
  * Callers should surface a toast for either case.
+ *
+ * NB: this is a single engine ROW, not an import envelope — `parsePayload`
+ * wants `{schema_version, wildcards: [], bundles: [], categories: [], …}`, so
+ * the clipboard JSON is for inspection, sharing and the community publish
+ * form rather than for pasting straight into the Import tab.
  */
 export async function copyPayloadToClipboard(
   pub: PublishablePayload,
 ): Promise<boolean> {
   if (typeof navigator === "undefined" || !navigator.clipboard) return false;
   try {
-    await navigator.clipboard.writeText(JSON.stringify(pub.payload, null, 2));
+    await navigator.clipboard.writeText(JSON.stringify(buildCopyableRow(pub), null, 2));
     return true;
   } catch {
     return false;
