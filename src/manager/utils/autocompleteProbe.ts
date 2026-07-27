@@ -26,6 +26,25 @@ export interface AutocompleteProbe {
  * (`{3$$,$$$style}`) still surface the var autocomplete.
  */
 export function probeAutocomplete(str: string, caret: number): AutocompleteProbe | null {
+  // Partial brace-form ref (`@{…`) FIRST — the canonical stored form is
+  // `@{uuid#name}`, so users type the `{`, and display names carry spaces,
+  // dashes and `#` ("Pose pool — presenting"). None of those survive the
+  // bare-identifier scan below, so without this branch the popover dies the
+  // instant the user types the very syntax the field documents, and only
+  // comes back after deleting the whole run. Mirrors the cut regex in
+  // RichTextInput's `insertChipAtCursor`, which already understood the form.
+  //
+  // A `{` NOT preceded by `@` is an inline brace block (`{a|b|c}`) and is
+  // deliberately left alone. An already-closed `}` before the caret means the
+  // ref is complete, so the popover should not reopen.
+  const braceOpen = str.lastIndexOf("{", caret - 1);
+  if (
+    braceOpen > 0 &&
+    str[braceOpen - 1] === "@" &&
+    !str.slice(braceOpen, caret).includes("}")
+  ) {
+    return { start: braceOpen - 1, query: str.slice(braceOpen + 1, caret), trigger: "@" };
+  }
   let i = caret - 1;
   // SP2a: skip a trailing `.K` list accessor (digits then ONE dot, only when a
   // word char precedes the dot) so `$mood.0<caret>` still resolves back to the
