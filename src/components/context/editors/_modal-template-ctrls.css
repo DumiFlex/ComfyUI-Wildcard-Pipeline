@@ -91,10 +91,15 @@
   font-size: 10px;
 }
 
+/* Teleported to <body>, so `fixed` viewport coords rather than `absolute`
+ * inside the modal — as an absolutely-positioned child the menu was CLIPPED
+ * by the modal's scroll container and vanished below the fold whenever its
+ * trigger sat near the bottom. The owning component measures the button and
+ * writes `top` / `left` inline; `--up` flips the box above the trigger when
+ * there's no room below. z-index matches the RichTextInput autocomplete
+ * popover so both clear the modal overlay. */
 .wp-tpl__menu, .ibm__menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
+  position: fixed;
   min-width: 200px;
   max-height: 220px;
   overflow-y: auto;
@@ -102,12 +107,14 @@
   border: 1px solid var(--wp-border);
   border-radius: 3px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  z-index: 20;
+  z-index: 9999;
   padding: 3px;
   display: flex;
   flex-direction: column;
   gap: 1px;
 }
+
+.wp-tpl__menu--up, .ibm__menu--up { transform: translateY(-100%); }
 
 .wp-tpl__menu-item, .ibm__menu-item {
   display: flex;
