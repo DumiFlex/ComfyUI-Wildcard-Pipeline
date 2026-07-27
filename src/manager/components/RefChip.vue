@@ -49,6 +49,18 @@ interface Props {
    *  chip is `kind="ref"` AND `resolved` — unresolved chips stay red
    *  regardless. Var chips ignore this prop entirely. */
   moduleKind?: ChipModuleKind;
+  /** VAR chips only: is this name present in the host's suggestion pool?
+   *
+   *  `resolved` cannot answer this — for a var it is just `name.length > 0`
+   *  (see `atomIsResolved` in RichTextInput), deliberately permissive so a
+   *  legitimate runtime-bound var never renders as a broken red chip. The
+   *  hover nonetheless read `resolved ? "produced upstream" : …`, so EVERY
+   *  var claimed an upstream producer — wrong in the SPA, which has no graph
+   *  at all, and unverified on the canvas.
+   *
+   *  Defaults false so a caller that passes no pool makes no claim: the chip
+   *  falls back to "binds at runtime", which is always true. */
+  inScope?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -57,6 +69,7 @@ const props = withDefaults(defineProps<Props>(), {
   excludeNull: false,
   subCategories: () => [],
   moduleKind: "wildcard",
+  inScope: false,
 });
 
 const emit = defineEmits<{
@@ -326,7 +339,12 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
         <div class="wp-refchip-pop__head">
           <span class="wp-refchip-pop__name">${{ name }}{{ index != null ? "." + index : "" }}</span>
         </div>
-        <div class="wp-refchip-pop__count">{{ resolved ? "produced upstream" : "binds at runtime" }}</div>
+        <!-- "in scope" = the name is in the host's suggestion pool (upstream
+             + siblings on the canvas, the library catalog in the SPA). It
+             deliberately does NOT claim a producer: the old copy said
+             "produced upstream" for every var, which is meaningless in the
+             SPA and unverified on the canvas. -->
+        <div class="wp-refchip-pop__count">{{ inScope ? "in scope" : "binds at runtime" }}</div>
       </template>
     </div>
     </Teleport>

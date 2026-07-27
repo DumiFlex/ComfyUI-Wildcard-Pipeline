@@ -2283,6 +2283,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
           :expr="atom.kind === 'ref' ? chipFilterOf(atom).expr : ''"
           :exclude-null="atom.kind === 'ref' ? chipFilterOf(atom).excludeNull : false"
           :resolved="atomIsResolved(atom)"
+          :in-scope="atom.kind === 'var' && varSuggestions.includes(atom.name)"
           :index="atom.kind === 'var' ? atom.index : undefined"
           :data-atom-index="idx"
           @click="(ev: MouseEvent) => onChipClick(idx, ev)"

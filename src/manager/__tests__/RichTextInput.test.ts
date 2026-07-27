@@ -1,5 +1,6 @@
 import { mount, flushPromises } from "@vue/test-utils";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { nextTick } from "vue";
 import RichTextInput from "../components/RichTextInput.vue";
 import RichTextPreview from "../components/RichTextPreview.vue";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
@@ -317,6 +318,35 @@ describe("RichTextInput.vue", () => {
     // Same element instance — no remount happened.
     expect(wrap.find(".wp-rt__host").element).toBe(host);
     wrap.unmount();
+  });
+
+  it("a var chip hover claims scope only when the name is in the suggestion pool", async () => {
+    // The popover used to read `resolved ? "produced upstream" : …`, and for
+    // a var `resolved` is merely `name.length > 0` — so EVERY var claimed an
+    // upstream producer. Meaningless in the SPA (no graph) and unverified on
+    // the canvas.
+    // RefChip gates its popover behind a 280ms hover intent delay.
+    vi.useFakeTimers();
+    const hoverText = async (modelValue: string): Promise<string> => {
+      const w = mount(RichTextInput, {
+        props: { modelValue, varSuggestions: ["person"] },
+        attachTo: document.body,
+      });
+      await w.find(".wp-refchip").trigger("mouseenter");
+      vi.advanceTimersByTime(300);
+      await nextTick();
+      const text = document.body.querySelector('[data-test="refchip-hover"]')?.textContent ?? "";
+      w.unmount();
+      return text;
+    };
+    try {
+      expect(await hoverText("$person")).toContain("in scope");
+      const unknown = await hoverText("$mystery");
+      expect(unknown).toContain("binds at runtime");
+      expect(unknown).not.toContain("produced upstream");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("forwards aria-label + disabled onto the contenteditable host", () => {
