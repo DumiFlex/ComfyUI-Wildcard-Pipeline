@@ -153,6 +153,30 @@ describe("TargetReachSection — pick checklist", () => {
     });
   });
 
+  it("clicking anywhere on a pick row toggles it, not just the 14px checkbox", async () => {
+    const { w, updates } = mountSection({ mode: "pick", picks: [] });
+    // Click the NAME cell — previously inert, the checkbox was the only
+    // hit target.
+    await w.find('[data-test="reach-pick-1#mood-a"] .rh-pick__name').trigger("click");
+    expect(last(updates)).toEqual({
+      mode: "pick",
+      picks: [{ kind: "direct", uid: "mood-a" }],
+    });
+  });
+
+  it("a checkbox click toggles exactly once (row handler must not double-fire)", async () => {
+    // The row handler and WpCheck both see the click as it bubbles. If the
+    // row didn't bail on interactive descendants the second toggle would
+    // undo the first and ticking would appear to do nothing.
+    const { w, updates } = mountSection({ mode: "pick", picks: [] });
+    await w.find('[data-test="reach-pick-1#mood-a"] .wp-check').trigger("click");
+    expect(updates).toHaveLength(1);
+    expect(last(updates)).toEqual({
+      mode: "pick",
+      picks: [{ kind: "direct", uid: "mood-a" }],
+    });
+  });
+
   it("nested row labels the @TARGET ref (display name) hosted in the carrier (display name, no @)", () => {
     const { w } = mountSection({ mode: "pick", picks: [] }, { targetName: "test-target" });
     const nestedRow = w.find('[data-test="reach-pick-2#backdrop-b::opt_a"]');

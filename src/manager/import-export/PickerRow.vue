@@ -180,6 +180,29 @@ function depIconClass(d: DepRef): string {
   if (!d.type) return "pi pi-circle";
   return kindIcon(d.type);
 }
+
+// ---------- Whole-row toggle ----------
+
+/**
+ * The 18px checkbox used to be the ONLY hit target on a row — picking a
+ * dozen entities out of a 261-item library meant a dozen precise clicks.
+ * The whole row now toggles.
+ *
+ * Interactive descendants keep their own clicks: the checkbox itself (which
+ * would otherwise toggle twice — once natively, once here), the dep-chip
+ * disclosure buttons, the `+ select` dep action, and `.wp-id`, whose `cursor:
+ * copy` advertises a different action than "select this row".
+ *
+ * Keyboard is deliberately unchanged: the checkbox stays the single focusable
+ * control, so making the row a second tab stop would only add noise for
+ * keyboard + screen-reader users.
+ */
+function onRowClick(ev: MouseEvent): void {
+  const target = ev.target as HTMLElement | null;
+  if (!target?.closest) return;
+  if (target.closest("button, input, a, label, .wp-picker-row__check, .wp-id")) return;
+  emit("update:checked", !props.checked);
+}
 </script>
 
 <template>
@@ -188,6 +211,7 @@ function depIconClass(d: DepRef): string {
     :data-uuid="props.uuid"
     :data-checked="props.checked ? 'true' : 'false'"
     :style="{ paddingLeft: `${props.indent * 16}px` }"
+    @click="onRowClick"
   >
     <!-- chevron-spacer column (kept empty; reserves grid space matching
          the prototype's 14px leading column). -->
@@ -359,6 +383,11 @@ function depIconClass(d: DepRef): string {
   font-size: var(--wp-text-sm);
 }
 .wp-picker-row:last-child { border-bottom: none; }
+/* Whole row is the toggle target (see `onRowClick`) — advertise it. Nested
+ * interactive elements reset the cursor to their own affordance. */
+.wp-picker-row { cursor: pointer; }
+.wp-picker-row button,
+.wp-picker-row .wp-id { cursor: revert; }
 .wp-picker-row:hover {
   background: color-mix(in oklab, var(--wp-bg-3) 35%, transparent);
 }
