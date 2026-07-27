@@ -729,6 +729,15 @@ function teardownRemapObs(): void {
 // named "color". The inserted token is still the UUID — see
 // `applyAutocomplete`. Falling back to the raw UUID keeps filtering useful
 // even before `uuidToName` is hydrated.
+/** Row cap for the suggestion popover. Was 8 — with 100+ wildcards sharing
+ *  near-identical display names, a query like `pose` silently truncated to
+ *  the first 8 and the rest were UNREACHABLE: the popover's `max-height`
+ *  never overflowed, so there was nothing to scroll and the feature read as
+ *  "the scrollbar doesn't work". Raised so the list genuinely overflows and
+ *  `overflow-y: auto` earns its keep; keyboard nav scrolls the active row
+ *  into view via the `acActive` watcher below. */
+const AC_MAX_ITEMS = 50;
+
 const acItems = computed(() => {
   if (!acOpen.value) return [];
   if (acTrigger.value === "@" && !refsEnabled.value) return [];
@@ -737,7 +746,7 @@ const acItems = computed(() => {
   const labelOf = acTrigger.value === "@"
     ? (uuid: string) => (props.uuidToName.get(uuid) ?? uuid).toLowerCase()
     : (name: string) => name.toLowerCase();
-  return pool.filter((id) => labelOf(id).includes(q)).slice(0, 8);
+  return pool.filter((id) => labelOf(id).includes(q)).slice(0, AC_MAX_ITEMS);
 });
 
 // Display label for a popover row: name for `@` (UUID → name lookup),
@@ -761,6 +770,16 @@ function suggestionMeta(token: string): string {
 
 watch(acItems, (items) => {
   if (acActive.value >= items.length) acActive.value = 0;
+});
+
+// Keep the keyboard-selected row visible. Without this, ArrowDown past the
+// last VISIBLE row moved `acActive` but left the popover scrolled at the top,
+// so the highlight vanished and the list looked frozen.
+watch(acActive, (i) => {
+  void nextTick(() => {
+    const row = popoverEl.value?.querySelectorAll<HTMLElement>(".wp-rt-suggestions__item")[i];
+    row?.scrollIntoView({ block: "nearest" });
+  });
 });
 
 // Autocomplete trigger probe lives in `../utils/autocompleteProbe` (pure +
