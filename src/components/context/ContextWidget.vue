@@ -53,7 +53,7 @@ import {
   MOTION_FLIP_MS,
   MOTION_CURVE_FLIP,
 } from "./bundles/flip";
-import { api } from "../../manager/api/client";
+import { ApiError, api } from "../../manager/api/client";
 import { emptyBundleInstance, type BundleInstance } from "../../widgets/_shared";
 import ModuleEditModal from "./ModuleEditModal.vue";
 import ModalShell from "../shared/ModalShell.vue";
@@ -1612,6 +1612,17 @@ async function duplicateBundle(uid: string): Promise<void> {
   });
 }
 
+/** Human message for a failed bundle-snapshot fetch. A 404 means the
+ *  library row is gone (deleted, or re-imported under a fresh uuid), which
+ *  the raw API text doesn't say — and re-linking, not retrying, is the fix.
+ *  Anything else falls back to the raw message. */
+function bundleResetErrorMessage(e: unknown, name: string): string {
+  if (e instanceof ApiError && e.status === 404) {
+    return `Can't reset "${name || "bundle"}" — its library bundle no longer exists. Re-link it first.`;
+  }
+  return `Reset failed: ${e instanceof Error ? e.message : String(e)}`;
+}
+
 /** Reset bundle to library snapshot — re-fetch the library entry
  *  + replace current children with the frozen blob. Drops any user
  *  edits made to bundle children since insert. Confirms first since
@@ -1812,8 +1823,7 @@ async function resetBundleToLibrary(uid: string): Promise<void> {
       },
     });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    pushToast(`Reset failed: ${msg}`, { severity: "error" });
+    pushToast(bundleResetErrorMessage(e, target.name), { severity: "error" });
   }
 }
 
@@ -1832,6 +1842,18 @@ async function resetChildToBundleSnapshot(idx: number): Promise<void> {
   if (!bundle) return;
   const posInBundle = idx - bundle.start_idx;
   if (posInBundle < 0) return;
+  // Guard: mirrors resetBundleToLibrary. An unlinked/detached BundleInstance
+  // carries an empty `library_id`; fetching it builds `/wp/api/bundles/` whose
+  // trailing slash normalizes to the collection route, so aiohttp reports
+  // "No such API route: /wp/api/bundles" — a nonsense message for the user.
+  // Refuse up front and name the real recovery.
+  if (!bundle.library_id) {
+    pushToast(
+      `Can't reset "${bundle.name || "bundle"}" children — it isn't linked to a library bundle. Re-link it first.`,
+      { severity: "error" },
+    );
+    return;
+  }
   // Delta-undo capture: the original module ref keeps its `_uid` so
   // Undo can find it in live state regardless of position. Reset
   // only swaps payload/instance/payload_hash; the _uid stays put,
@@ -1871,8 +1893,7 @@ async function resetChildToBundleSnapshot(idx: number): Promise<void> {
       },
     });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    pushToast(`Reset failed: ${msg}`, { severity: "error" });
+    pushToast(bundleResetErrorMessage(e, bundle.name), { severity: "error" });
   }
 }
 
