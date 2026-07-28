@@ -156,6 +156,14 @@ function categoryOptionCount(cat: string): number {
  * while-invalid contract — so `category_filter` is never persisted broken. */
 
 const advanced = ref(false);
+
+/** Whether the tag-pill grid is showing. A richly tagged wildcard (hue +
+ *  temperature + tone + saturation + suitability, 40-odd pills) pushed the
+ *  option list — the thing the user actually came to edit — most of a screen
+ *  down. Starts open so the pool stays discoverable; collapsing is one click
+ *  and the header keeps reporting how many tags are ticked. */
+const poolOpen = ref(true);
+const tickedCount = computed(() => ticked.value.size);
 const draft = ref(filterExpr.value);
 
 // Re-seed the draft when the upstream filter changes (e.g. pills edited it
@@ -341,7 +349,18 @@ const skewedTowards = computed(() => {
 <template>
   <section class="pool">
     <div class="pool__head">
+      <button
+        type="button"
+        class="pool__collapse"
+        :aria-expanded="poolOpen"
+        data-test="pool-collapse"
+        :aria-label="poolOpen ? 'Collapse tag pool' : 'Expand tag pool'"
+        @click="poolOpen = !poolOpen"
+      >{{ poolOpen ? "▾" : "▸" }}</button>
       <div class="pool__label">Pool · what RNG can pick from</div>
+      <span v-if="!poolOpen && tickedCount > 0" class="pool__collapsed-count" data-test="pool-collapsed-count">
+        {{ tickedCount }} selected
+      </span>
       <button
         type="button"
         class="pool__adv-toggle"
@@ -353,7 +372,7 @@ const skewedTowards = computed(() => {
     </div>
 
     <!-- Quick mode — grouped pills. OR within an axis, AND across axes. -->
-    <div v-if="!advanced" class="pool__groups">
+    <div v-if="!advanced && poolOpen" class="pool__groups">
       <div
         v-for="group in pillGroups"
         :key="group.axis"
@@ -387,7 +406,7 @@ const skewedTowards = computed(() => {
     </div>
 
     <!-- Advanced mode — boolean expression editor (§4.1 grammar). -->
-    <div v-else class="pool__advanced">
+    <div v-else-if="advanced" class="pool__advanced">
       <input
         ref="exprInput"
         v-model="draft"
@@ -595,8 +614,26 @@ const skewedTowards = computed(() => {
 .pool__head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 6px;
   margin-bottom: 8px;
+}
+/* Pushes the Advanced toggle to the right now that the head has a leading
+ * chevron + an optional collapsed-count. */
+.pool__adv-toggle { margin-left: auto; }
+.pool__collapse {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: var(--wp-text-dim, var(--wp-text3));
+  font-size: 9px;
+  line-height: 1;
+}
+.pool__collapse:hover { color: var(--wp-text); }
+.pool__collapsed-count {
+  font: 600 9px var(--wp-font-sans);
+  letter-spacing: 0.06em;
+  color: var(--wp-accent, #c4b5fd);
 }
 .pool__label {
   font: 600 9px var(--wp-font-sans);

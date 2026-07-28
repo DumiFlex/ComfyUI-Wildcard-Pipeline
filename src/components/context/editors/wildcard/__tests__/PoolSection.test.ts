@@ -164,6 +164,26 @@ describe("PoolSection pick-count (SP2a)", () => {
   });
 });
 
+describe("PoolSection collapse", () => {
+  it("starts expanded, and the chevron collapses the pill grid", async () => {
+    // A richly tagged wildcard shows 40-odd pills, pushing the option list —
+    // the thing the user came to edit — most of a screen down.
+    const w = mount(PoolSection, { props: { module } });
+    expect(w.find('[data-test="cat-chip-feline"]').exists()).toBe(true);
+    await w.get('[data-test="pool-collapse"]').trigger("click");
+    expect(w.find('[data-test="cat-chip-feline"]').exists()).toBe(false);
+    await w.get('[data-test="pool-collapse"]').trigger("click");
+    expect(w.find('[data-test="cat-chip-feline"]').exists()).toBe(true);
+  });
+
+  it("collapsed header reports how many tags are ticked", async () => {
+    const w = mount(PoolSection, { props: { module } });
+    await w.get('[data-test="cat-chip-feline"]').trigger("click");
+    await w.get('[data-test="pool-collapse"]').trigger("click");
+    expect(w.get('[data-test="pool-collapsed-count"]').text()).toContain("1 selected");
+  });
+});
+
 describe("PoolSection grouped quick pills", () => {
   it("ticking family=feline + temp=warm builds 'feline and warm'", async () => {
     const w = mount(PoolSection, { props: { module } });

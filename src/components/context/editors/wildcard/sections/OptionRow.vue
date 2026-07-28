@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import {
   effectiveWeight,
   isEnabled,
@@ -11,6 +11,7 @@ import { splitRefFilter, tokenizeRich, type RichToken } from "../../../../../wid
 import { cacheVersion, ensure, lookup } from "../../../../../extension/preview-resolver";
 import type { PairingBadge } from "../../../../../extension/constraint-pairs";
 import { matches, parse, readsAs } from "@/manager/parsing/subcatFilter";
+import { formatProbability } from "@/manager/utils/percent";
 import PairBadge from "../../../PairBadge.vue";
 import { axisHueAt } from "../../../../shared/axis-color";
 
@@ -324,9 +325,34 @@ function bumpWeight(direction: 1 | -1): void {
   emitWeight(next);
 }
 
+/** Percentage label, delegated to the SPA's `formatProbability` so both
+ *  editors agree digit-for-digit. The canvas modal used to round to a whole
+ *  number, so every option below 0.5% read as a flat "0%" — with 30+ options
+ *  that's most of the pool, and a legitimately weighted entry looked
+ *  impossible. `probability` is a 0–1 fraction here; the helper takes 0–100. */
 function fmtPct(p: number): string {
-  return `${Math.round(p * 100)}%`;
+  return formatProbability(p * 100);
 }
+
+// ---------- CATEGORY chips ----------
+//
+// A well-tagged option carries 8+ sub-categories (hue + temperature + tone +
+// saturation + several suitability flags). Wrapped inside the 96px column
+// that stacked into eight lines and made ONE option row taller than the
+// modal's whole option list is worth — the pool became unreadable.
+//
+// Show the first few and collapse the rest behind a `+N` pill the user can
+// expand per row. The tags stay fully reachable; they just stop dominating.
+const CAT_CHIP_LIMIT = 3;
+const catExpanded = ref(false);
+
+const allTags = computed<string[]>(() =>
+  props.option.is_null ? [] : (props.option.sub_categories ?? []),
+);
+const visibleTags = computed<string[]>(() =>
+  catExpanded.value ? allTags.value : allTags.value.slice(0, CAT_CHIP_LIMIT),
+);
+const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.length);
 </script>
 
 <template>
@@ -481,12 +507,23 @@ function fmtPct(p: number): string {
     </span>
     <span class="opt__cat">
       <span
-        v-for="tag in (option.is_null ? [] : (option.sub_categories ?? []))"
+        v-for="tag in visibleTags"
         :key="tag"
         class="opt__cat-chip"
         :data-test="`opt-cat-${tag}`"
         :style="chipStyle(tag)"
       >{{ tag }}</span>
+      <button
+        v-if="hiddenTagCount > 0 || catExpanded"
+        type="button"
+        class="opt__cat-more"
+        :data-test="`opt-cat-more-${option.id}`"
+        :aria-expanded="catExpanded"
+        :aria-label="catExpanded
+          ? `Collapse tags for ${option.value}`
+          : `Show ${hiddenTagCount} more tags for ${option.value}`"
+        @click.stop="catExpanded = !catExpanded"
+      >{{ catExpanded ? "−" : `+${hiddenTagCount}` }}</button>
     </span>
   </div>
 </template>
@@ -810,5 +847,24 @@ function fmtPct(p: number): string {
 }
 .opt--off .opt__cat-chip {
   opacity: 0.5;
+}
+/* `+N` / `−` disclosure for the hidden tags. Styled as a neutral chip so it
+ * reads as part of the tag run rather than as a row action. */
+.opt__cat-more {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border-radius: 999px;
+  font: 8px var(--wp-font-sans);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--wp-text-dim, var(--wp-text3));
+  border: 1px dashed color-mix(in srgb, var(--wp-text3) 45%, transparent);
+  background: transparent;
+}
+.opt__cat-more:hover {
+  color: var(--wp-text);
+  border-color: var(--wp-accent);
 }
 </style>

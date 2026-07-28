@@ -29,6 +29,34 @@ describe("OptionRow", () => {
     expect(w.find('[data-test="opt-cat-warm"]').exists()).toBe(true);
   });
 
+  it("collapses a long tag run behind a +N pill", () => {
+    // A well-tagged option carries 8+ sub-categories; wrapped inside the 96px
+    // CATEGORY column they stacked into eight lines and made one row taller
+    // than the option list was worth.
+    const tags = ["red", "warm", "medium", "vivid", "hair-vivid", "eye-vivid", "fabric", "makeup-ok"];
+    const opt = { id: "m", value: "crimson", weight: 1, sub_categories: tags };
+    const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
+    expect(w.findAll(".opt__cat-chip")).toHaveLength(3);
+    expect(w.find('[data-test="opt-cat-more-m"]').text()).toBe("+5");
+  });
+
+  it("expanding the +N pill reveals every tag", async () => {
+    const tags = ["red", "warm", "medium", "vivid", "hair-vivid", "eye-vivid", "fabric", "makeup-ok"];
+    const opt = { id: "m", value: "crimson", weight: 1, sub_categories: tags };
+    const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
+    await w.find('[data-test="opt-cat-more-m"]').trigger("click");
+    expect(w.findAll(".opt__cat-chip")).toHaveLength(8);
+    expect(w.find('[data-test="opt-cat-more-m"]').text()).toBe("−");
+    await w.find('[data-test="opt-cat-more-m"]').trigger("click");
+    expect(w.findAll(".opt__cat-chip")).toHaveLength(3);
+  });
+
+  it("does NOT show a +N pill when the tags already fit", () => {
+    const opt = { id: "m", value: "lynx", weight: 1, sub_categories: ["feline", "warm"] };
+    const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
+    expect(w.find('[data-test="opt-cat-more-m"]').exists()).toBe(false);
+  });
+
   it("decomposes a {N$$…} block into scaffolding + an inner ref chip (SP2b #6)", () => {
     _setForTests("ad00acd5", { name: "mood", varBinding: "mood" });
     const opt = { id: "b1", value: "{2$$, $$@{ad00acd5}|warm}", weight: 1, sub_categories: [] };
@@ -128,6 +156,22 @@ describe("OptionRow", () => {
     });
     // 1 of 2 enabled, equal weights → 50%
     expect(w.find('[data-test="opt-prob-pct"]').text()).toBe("50%");
+  });
+
+  it("shows sub-1% probabilities with decimals, matching the SPA", () => {
+    // The canvas modal rounded to a whole number, so with 30+ options every
+    // small-but-real weight read as a flat "0%".
+    const many = [
+      { id: "rare", value: "rare", weight: 1, sub_categories: [] },
+      ...Array.from({ length: 199 }, (_, i) => ({
+        id: `o${i}`, value: `o${i}`, weight: 1, sub_categories: [],
+      })),
+    ];
+    const w = mount(OptionRow, {
+      props: { option: many[0], allOptions: many, instance: {} },
+    });
+    // 1 of 200 equal weights = 0.5%, which the old formatter collapsed to "0%".
+    expect(w.find('[data-test="opt-prob-pct"]').text()).toBe("0.5%");
   });
 
   it("disabled row shows 0% probability + line-through styling", () => {
