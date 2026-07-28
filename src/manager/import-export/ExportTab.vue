@@ -151,9 +151,27 @@ function modulesForBucket(b: BucketKey): ModuleRow[] {
   return modules.value.filter((m) => MODULE_TYPE_TO_BUCKET[m.type] === b);
 }
 
+/** Free-text filter across every bucket. A 261-item library made the picker
+ *  a scroll-hunt, and duplicate display names meant scrolling was the ONLY
+ *  way to find a specific entity. Matches name, short id, and the subtitle
+ *  (variable binding), so `$outfit`, `b855d115` and `Outfit` all work. */
+const rowQuery = ref<string>("");
+
+function rowMatchesQuery(row: RowItem): boolean {
+  const q = rowQuery.value.trim().toLowerCase();
+  if (!q) return true;
+  return (
+    row.name.toLowerCase().includes(q) ||
+    row.id.toLowerCase().includes(q) ||
+    (row.subtitle?.toLowerCase().includes(q) ?? false)
+  );
+}
+
 interface RowItem {
   id: string;
   name: string;
+  /** Disambiguating detail — `$var · N options` for modules. */
+  subtitle?: string;
   /** Entity kind, for PickerRow's tinted glyph. For modules this is the
    *  module subtype; for bundles always `"bundle"`; for categories the
    *  row IS a category so we surface `"category"` for icon consistency
@@ -221,6 +239,7 @@ function rowsForBucket(b: BucketKey): RowItem[] {
     return {
       id: x.id,
       name: x.name,
+      subtitle: moduleSubtitle(x),
       kind: x.type,
       categoryName: cat?.name,
       categoryColor: cat?.color,
@@ -229,12 +248,40 @@ function rowsForBucket(b: BucketKey): RowItem[] {
   });
 }
 
+/** "$outfit · 31 options" — the two facts that actually distinguish two
+ *  modules sharing a display name. Either half is omitted when the payload
+ *  doesn't carry it, and an entirely empty subtitle returns undefined so the
+ *  row renders as before. */
+function moduleSubtitle(row: ModuleRow): string | undefined {
+  const payload = row.payload as { variable_name?: unknown; options?: unknown[] } | undefined;
+  const parts: string[] = [];
+  if (typeof payload?.variable_name === "string" && payload.variable_name) {
+    parts.push(`$${payload.variable_name}`);
+  }
+  if (Array.isArray(payload?.options)) {
+    const n = payload.options.length;
+    parts.push(`${n} option${n === 1 ? "" : "s"}`);
+  }
+  return parts.length > 0 ? parts.join(" · ") : undefined;
+}
+
+/** Rows a bucket actually renders — `rowsForBucket` narrowed by the search
+ *  box. Section counts and select-all both read this, so "select all" acts on
+ *  exactly what the user can see rather than silently selecting hidden rows. */
+function visibleRowsForBucket(b: BucketKey): RowItem[] {
+  return rowsForBucket(b).filter(rowMatchesQuery);
+}
+
+// Both header counts read the VISIBLE rows so the section's checkbox state
+// (all / some / none) describes what the user is actually looking at. The
+// footer's `totalSelected` still reports the true export size.
 function bucketTotalCount(b: BucketKey): number {
-  return rowsForBucket(b).length;
+  return visibleRowsForBucket(b).length;
 }
 
 function bucketSelectedCount(b: BucketKey): number {
-  return selection.value[b].size;
+  const sel = selection.value[b];
+  return visibleRowsForBucket(b).reduce((n, r) => n + (sel.has(r.id) ? 1 : 0), 0);
 }
 
 function isRowSelected(b: BucketKey, id: string): boolean {
@@ -247,10 +294,15 @@ function toggleRow(b: BucketKey, id: string, on: boolean) {
   selection.value = { ...selection.value, [b]: next };
 }
 
+/** Select-all acts on the VISIBLE rows and leaves anything hidden by the
+ *  search box untouched — silently dropping a filtered-out selection on a
+ *  "deselect all" click would lose work the user can't even see. With no
+ *  query every row is visible, so this behaves exactly as before. */
 function toggleAllInBucket(b: BucketKey, on: boolean) {
-  const next = new Set<string>();
-  if (on) {
-    for (const r of rowsForBucket(b)) next.add(r.id);
+  const next = new Set(selection.value[b]);
+  for (const r of visibleRowsForBucket(b)) {
+    if (on) next.add(r.id);
+    else next.delete(r.id);
   }
   selection.value = { ...selection.value, [b]: next };
 }
@@ -721,6 +773,28 @@ function presetFavoritesOnly(): void {
       >{{ b.title }}</button>
     </div>
 
+    <div class="wp-export-search">
+      <i class="pi pi-search" aria-hidden="true" />
+      <input
+        v-model="rowQuery"
+        type="search"
+        class="wp-export-search__field"
+        placeholder="Search by name, $variable or id…"
+        aria-label="Search library entities"
+        spellcheck="false"
+        autocomplete="off"
+        data-test="export-tab-search"
+      />
+      <button
+        v-if="rowQuery"
+        type="button"
+        class="wp-export-search__clear"
+        aria-label="Clear search"
+        data-test="export-tab-search-clear"
+        @click="rowQuery = ''"
+      ><i class="pi pi-times" aria-hidden="true" /></button>
+    </div>
+
     <div class="wp-export-tab__sections">
       <PickerSection
         v-for="bucket in BUCKETS"
@@ -734,10 +808,11 @@ function presetFavoritesOnly(): void {
         @toggle-all="(v: boolean) => toggleAllInBucket(bucket.key, v)"
       >
         <PickerRow
-          v-for="row in rowsForBucket(bucket.key)"
+          v-for="row in visibleRowsForBucket(bucket.key)"
           :key="`${bucket.key}:${row.id}`"
           :uuid="row.id"
           :name="row.name"
+          :subtitle="row.subtitle"
           :kind="row.kind"
           :category-name="row.categoryName"
           :category-color="row.categoryColor"
@@ -755,7 +830,8 @@ function presetFavoritesOnly(): void {
           v-if="bucketTotalCount(bucket.key) === 0"
           class="wp-export-tab__empty"
         >
-          <em>No {{ bucket.title.toLowerCase() }} in library.</em>
+          <em v-if="rowQuery.trim()">No {{ bucket.title.toLowerCase() }} match "{{ rowQuery }}".</em>
+          <em v-else>No {{ bucket.title.toLowerCase() }} in library.</em>
         </div>
       </PickerSection>
     </div>
@@ -856,6 +932,39 @@ function presetFavoritesOnly(): void {
   flex-direction: column;
   gap: 6px;
 }
+
+/* Cross-bucket search box. */
+.wp-export-search {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-3);
+  padding: 0 var(--wp-space-4);
+  margin-bottom: 6px;
+  background: var(--wp-bg-2);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius);
+}
+.wp-export-search:focus-within { border-color: var(--wp-accent); }
+.wp-export-search .pi-search { font-size: 12px; color: var(--wp-text-dim); }
+.wp-export-search__field {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  padding: var(--wp-space-3) 0;
+  color: var(--wp-text);
+  font-size: var(--wp-text-sm);
+}
+.wp-export-search__field:focus { outline: none; }
+.wp-export-search__clear {
+  background: none;
+  border: 0;
+  padding: 2px;
+  cursor: pointer;
+  color: var(--wp-text-dim);
+  font-size: 11px;
+}
+.wp-export-search__clear:hover { color: var(--wp-text); }
 
 .wp-export-tab__empty {
   font-size: var(--wp-text-sm);

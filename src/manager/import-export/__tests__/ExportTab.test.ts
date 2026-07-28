@@ -149,6 +149,85 @@ beforeEach(() => {
 
 afterEach(() => vi.clearAllMocks());
 
+describe("ExportTab — search + row disambiguation", () => {
+  /** Two wildcards sharing a display name — the real library shape that made
+   *  the picker a guessing game. */
+  function seedDuplicateNames() {
+    apiAny.modules.list.mockResolvedValue({
+      items: [
+        mkModule({
+          id: "b855d115", type: "wildcard", name: "Outfit",
+          payload: { variable_name: "outfit", options: new Array(31).fill({}) },
+        }),
+        mkModule({
+          id: "88d84413", type: "wildcard", name: "Outfit",
+          payload: { variable_name: "legwear", options: new Array(9).fill({}) },
+        }),
+      ],
+      total: 2,
+    });
+  }
+
+  it("renders $variable + option count so same-named rows are tellable apart", async () => {
+    seedDuplicateNames();
+    const wrap = mount(ExportTab);
+    await flushPromises();
+    await expandSection(wrap, "wildcard");
+    const subs = wrap.findAll('[data-test="picker-row-subtitle"]').map((n) => n.text());
+    expect(subs).toEqual(["$outfit · 31 options", "$legwear · 9 options"]);
+  });
+
+  it("filters rows by name, $variable, and id", async () => {
+    seedDuplicateNames();
+    const wrap = mount(ExportTab);
+    await flushPromises();
+    await expandSection(wrap, "wildcard");
+    const search = wrap.get('[data-test="export-tab-search"]');
+
+    await search.setValue("legwear");        // by $variable
+    expect(wrap.findAll(".wp-picker-row")).toHaveLength(1);
+    expect(wrap.get('[data-test="picker-row-subtitle"]').text()).toContain("$legwear");
+
+    await search.setValue("b855d115");       // by id
+    expect(wrap.findAll(".wp-picker-row")).toHaveLength(1);
+    expect(wrap.get('[data-test="picker-row-subtitle"]').text()).toContain("$outfit");
+
+    await search.setValue("outfit");         // by name — matches both
+    expect(wrap.findAll(".wp-picker-row")).toHaveLength(2);
+  });
+
+  it("select-all leaves rows hidden by the search untouched", async () => {
+    // Deselecting under a filter must not silently drop a selection the user
+    // can't see.
+    seedDuplicateNames();
+    const wrap = mount(ExportTab);
+    await flushPromises();
+    await expandSection(wrap, "wildcard");
+    const section = wrap.get('[data-test="export-tab-section-wildcard"]');
+
+    // Select everything with no filter, then narrow and deselect-all.
+    await section.get('button[role="checkbox"]').trigger("click");
+    expect(wrap.get('[data-test="export-tab-counter"]').text()).toContain("2");
+    await wrap.get('[data-test="export-tab-search"]').setValue("legwear");
+    await section.get('button[role="checkbox"]').trigger("click");
+
+    // The hidden $outfit row keeps its selection.
+    await wrap.get('[data-test="export-tab-search-clear"]').trigger("click");
+    expect(wrap.get('[data-test="export-tab-counter"]').text()).toContain("1");
+  });
+
+  it("says nothing matched rather than showing the empty-library copy", async () => {
+    seedDuplicateNames();
+    const wrap = mount(ExportTab);
+    await flushPromises();
+    await expandSection(wrap, "wildcard");
+    await wrap.get('[data-test="export-tab-search"]').setValue("zzzz");
+    const section = wrap.get('[data-test="export-tab-section-wildcard"]');
+    expect(section.text()).toContain('match "zzzz"');
+    expect(section.text()).not.toContain("in library");
+  });
+});
+
 describe("ExportTab.vue", () => {
   // ---------- Phase 4: page-level chrome ----------
 

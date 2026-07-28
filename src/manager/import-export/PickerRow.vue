@@ -86,6 +86,11 @@ interface Props {
   categoryColor?: string;
   /** Show the short 8-hex id inline (mono, muted) via `.wp-id`. */
   showId?: boolean;
+  /** Optional disambiguating detail rendered after the name — e.g.
+   *  "$outfit · 31 options". A library holds many entities sharing a display
+   *  name, and the id alone is not something a user recognises; the variable
+   *  binding and option count are. Mirrors the canvas ModulePickerModal rows. */
+  subtitle?: string;
   /** Status badges — collision state / migration / etc. Multiple allowed.
    *  Rendered in order, all use the shared `.wp-mod-badge` primitive. */
   statusBadges?: StatusBadge[];
@@ -109,6 +114,7 @@ const props = withDefaults(defineProps<Props>(), {
   categoryName: undefined,
   categoryColor: undefined,
   showId: false,
+  subtitle: undefined,
   statusBadges: () => [],
   unselectedDeps: () => [],
   missingDeps: () => [],
@@ -235,6 +241,11 @@ function onRowClick(ev: MouseEvent): void {
 
     <div class="wp-row-name">
       <span class="wp-picker-row__name">{{ name }}</span>
+      <span
+        v-if="props.subtitle"
+        class="wp-picker-row__subtitle"
+        data-test="picker-row-subtitle"
+      >{{ props.subtitle }}</span>
       <span
         v-if="props.showId"
         class="wp-id"
@@ -425,6 +436,18 @@ function onRowClick(ev: MouseEvent): void {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Disambiguating detail ("$outfit · 31 options"). Shrinks before the name
+ * does, and clips rather than pushing the id column off the row. */
+.wp-picker-row__subtitle {
+  font-family: var(--wp-font-mono);
+  font-size: 10px;
+  color: var(--wp-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 /* Short id — mirrors prototype lines 171-173 (mono font, dim text, copy
