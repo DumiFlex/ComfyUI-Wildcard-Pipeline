@@ -90,6 +90,61 @@ describe("Bundles.vue", () => {
     expect(wrap.text()).toContain("3");
   });
 
+  it("caps the expanded child list and summarises kinds", async () => {
+    // A 66-child scene-composer bundle used to dump every row inline on
+    // expand and bury the rest of the list.
+    const children = Array.from({ length: 20 }, (_, i) => ({
+      id: `wc_${i}`,
+      type: i < 15 ? "wildcard" : "constraint",
+      name: `child ${i}`,
+    }));
+    apiBundles.list.mockResolvedValue({
+      items: [{
+        id: "bn_big", name: "Big", description: "", color: null, category_id: null,
+        tags: [], is_favorite: false, children,
+        payload_hash: "", version: 1, created_at: "", updated_at: "",
+      }],
+      total: 1,
+    });
+    const wrap = mountView();
+    await flushPromises();
+    await wrap.find(".wp-row-expand-btn").trigger("click");
+    await flushPromises();
+
+    // Capped at 8 of 20.
+    expect(wrap.findAll(".wp-bundle-child")).toHaveLength(8);
+    // The breakdown still says what the bundle is MADE of, dominant kind first.
+    expect(wrap.find('[data-test="bundle-kind-summary"]').text())
+      .toBe("15 wildcards · 5 constraints");
+
+    // Toggle reveals the rest, then collapses back.
+    const toggle = wrap.find('[data-test="bundle-children-toggle-bn_big"]');
+    expect(toggle.text()).toBe("Show all 20");
+    await toggle.trigger("click");
+    expect(wrap.findAll(".wp-bundle-child")).toHaveLength(20);
+    await wrap.find('[data-test="bundle-children-toggle-bn_big"]').trigger("click");
+    expect(wrap.findAll(".wp-bundle-child")).toHaveLength(8);
+  });
+
+  it("does not offer a toggle when the child list fits under the cap", async () => {
+    apiBundles.list.mockResolvedValue({
+      items: [{
+        id: "bn_small", name: "Small", description: "", color: null, category_id: null,
+        tags: [], is_favorite: false,
+        children: [{ id: "wc_1", type: "wildcard", name: "hair" }],
+        payload_hash: "", version: 1, created_at: "", updated_at: "",
+      }],
+      total: 1,
+    });
+    const wrap = mountView();
+    await flushPromises();
+    await wrap.find(".wp-row-expand-btn").trigger("click");
+    await flushPromises();
+    expect(wrap.findAll(".wp-bundle-child")).toHaveLength(1);
+    expect(wrap.find('[data-test="bundle-children-toggle-bn_small"]').exists()).toBe(false);
+    expect(wrap.find('[data-test="bundle-kind-summary"]').text()).toBe("1 wildcard");
+  });
+
   it("empty-state copy mentions creating bundles from Context", async () => {
     apiBundles.list.mockResolvedValue({ items: [], total: 0 });
     const wrap = mountView();
