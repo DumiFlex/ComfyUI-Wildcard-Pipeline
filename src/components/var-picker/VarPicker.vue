@@ -22,7 +22,7 @@
  * Emits:
  *  - `update:modelValue(next: string)` — fires when user picks a new var.
  */
-import { computed, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 
 const props = withDefaults(
   defineProps<{
@@ -42,6 +42,19 @@ const emit = defineEmits<{ "update:modelValue": [next: string] }>();
 
 const open = ref<boolean>(false);
 
+/** Type-to-filter query. A long chain produces dozens of upstream vars and
+ *  the menu was an unfiltered scroll — this mirrors the SPA `Select`'s
+ *  behaviour so both dropdowns filter the same way. */
+const query = ref<string>("");
+const searchEl = ref<HTMLInputElement | null>(null);
+
+const filteredVars = computed<readonly string[]>(() => {
+  const q = query.value.trim().toLowerCase();
+  if (!q) return props.upstreamVars;
+  // Match with and without the leading `$` so typing `see` finds `$seed`.
+  return props.upstreamVars.filter((n) => n.toLowerCase().replace(/^\$/, "").includes(q.replace(/^\$/, "")));
+});
+
 const displayValue = computed<string>(() => {
   const v = props.modelValue?.trim();
   return v && v.length > 0 ? v : "(no var selected)";
@@ -54,11 +67,29 @@ const isBypassed = computed<boolean>(() => props.nodeMode === 4);
 
 function toggleOpen(): void {
   open.value = !open.value;
+  if (open.value) {
+    query.value = "";
+    void nextTick(() => searchEl.value?.focus());
+  }
 }
 
 function pick(name: string): void {
   emit("update:modelValue", name);
   open.value = false;
+}
+
+/** Enter picks the sole remaining match — the common case after typing a few
+ *  characters. Escape closes without changing the selection. */
+function onSearchKeydown(ev: KeyboardEvent): void {
+  if (ev.key === "Escape") {
+    ev.preventDefault();
+    open.value = false;
+    return;
+  }
+  if (ev.key === "Enter" && filteredVars.value.length === 1) {
+    ev.preventDefault();
+    pick(filteredVars.value[0]);
+  }
 }
 </script>
 
@@ -83,11 +114,32 @@ function pick(name: string): void {
       class="wp-var-picker__menu"
       data-test="var-picker-menu"
     >
+      <li v-if="upstreamVars.length > 0" class="wp-var-picker__search">
+        <input
+          ref="searchEl"
+          v-model="query"
+          type="text"
+          class="wp-var-picker__search-field"
+          placeholder="Filter variables…"
+          aria-label="Filter variables"
+          spellcheck="false"
+          autocomplete="off"
+          data-test="var-picker-search"
+          @keydown="onSearchKeydown"
+        />
+      </li>
       <li v-if="upstreamVars.length === 0" class="wp-var-picker__empty">
         No upstream variables — connect a WP Context node first.
       </li>
       <li
-        v-for="name in upstreamVars"
+        v-else-if="filteredVars.length === 0"
+        class="wp-var-picker__empty"
+        data-test="var-picker-no-match"
+      >
+        No variable matches "{{ query }}".
+      </li>
+      <li
+        v-for="name in filteredVars"
         :key="name"
         role="option"
         :aria-selected="modelValue === name"
@@ -172,6 +224,31 @@ function pick(name: string): void {
   font-style: italic;
   color: var(--wp-text-dim, #7a7d88);
   font-size: 10px;
+}
+
+/* Filter field pinned above the options. `position: sticky` keeps it in view
+ * while the (scrollable) option list moves under it. */
+.wp-var-picker__search {
+  position: sticky;
+  top: -4px; /* cancels the menu's 4px top padding */
+  background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--wp-border, #353841);
+}
+.wp-var-picker__search-field {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--wp-bg, #0e1015);
+  border: 1px solid var(--wp-border, #353841);
+  border-radius: 3px;
+  padding: 3px 6px;
+  color: var(--wp-text);
+  font-family: var(--wp-font-mono, ui-monospace, monospace);
+  font-size: 10px;
+}
+.wp-var-picker__search-field:focus {
+  outline: none;
+  border-color: var(--wp-accent, #c4b5fd);
 }
 
 .wp-var-picker__preview {
