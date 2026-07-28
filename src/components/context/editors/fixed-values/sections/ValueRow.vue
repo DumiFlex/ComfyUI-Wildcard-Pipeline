@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import {
   rowOverrideKind,
   type DraftRow,
@@ -62,8 +62,37 @@ function onNameInput(ev: Event): void {
   emit("update", props.row.id, { name });
 }
 function onValueInput(ev: Event): void {
-  emit("update", props.row.id, { value: (ev.target as HTMLInputElement).value });
+  const el = ev.target as HTMLTextAreaElement;
+  emit("update", props.row.id, { value: el.value });
+  autosizeValue(el);
 }
+
+/** Grow the value field to fit its content, capped by the CSS `max-height`
+ *  (after which it scrolls). The field is a `<textarea>` purely to get this
+ *  wrapping + growth — users routinely paste an entire sentence into a fixed
+ *  value and a single-line `<input>` showed a sliver of it with no way to see
+ *  the rest. Semantics stay single-value; `onValueKeydown` blocks newlines. */
+function autosizeValue(el: HTMLTextAreaElement): void {
+  el.style.height = "auto";
+  el.style.height = `${el.scrollHeight}px`;
+}
+
+/** Enter is not a newline here — a fixed value is one string, and the engine
+ *  has no meaning for an embedded line break. Swallow it so the textarea
+ *  behaves like the `<input>` it replaced. */
+function onValueKeydown(ev: KeyboardEvent): void {
+  if (ev.key === "Enter" && !ev.shiftKey) ev.preventDefault();
+}
+
+/** Size correctly on first paint + whenever the row's value changes from
+ *  outside (reset-to-library, undo). */
+const valueEl = ref<HTMLTextAreaElement | null>(null);
+watch(
+  () => props.row.value,
+  () => void nextTick(() => { if (valueEl.value) autosizeValue(valueEl.value); }),
+  { immediate: true },
+);
+onMounted(() => { if (valueEl.value) autosizeValue(valueEl.value); });
 function onReset(): void {
   emit("reset", props.row.id);
 }
@@ -131,14 +160,17 @@ function onDelete(): void {
         :class="{ 'row__value-wrap--mod': valueOverridden }"
         data-test="row-value-wrap"
       >
-        <input
+        <textarea
+          ref="valueEl"
           class="row__value"
           data-test="row-value"
-          type="text"
+          rows="1"
+          spellcheck="false"
           :value="row.value"
           :disabled="!row.enabled"
           :aria-label="`Value for row ${row.id}`"
           @input="onValueInput"
+          @keydown="onValueKeydown"
         />
       </span>
       <span
@@ -259,6 +291,22 @@ function onDelete(): void {
   min-width: 0;
 }
 .row__name:focus, .row__value:focus { outline: none; }
+
+/* The value field is a <textarea> so a long value WRAPS and the box grows to
+ * fit (height driven by `autosizeValue`). Capped so a pasted paragraph can't
+ * push the rest of the modal off-screen; past the cap it scrolls. */
+.row__value {
+  resize: none;
+  overflow-y: auto;
+  max-height: 30vh;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--wp-font-mono);
+}
+/* The wrapper centred a single-line input; with a growing field the label
+ * column should sit at the top instead of drifting down as it grows. */
+.row__value-wrap { align-items: flex-start; }
 
 .row--off { color: var(--wp-text-dim, var(--wp-text3)); }
 .row--off .row__name-wrap, .row--off .row__value-wrap { opacity: 0.5; }

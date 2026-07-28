@@ -537,7 +537,27 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
     />
 
     <Card title="Template & Output">
+      <!-- Output variable BEFORE the template, each full-width. It used to sit
+           in a 220px column beside the template, which squeezed the template
+           (the field that actually needs room to grow) and read as a footnote
+           to it rather than as the thing this combine produces. -->
       <div class="cb-grid">
+        <Field
+          label="Output variable"
+          hint="Downstream modules read this name."
+          :error="outputVarError"
+        >
+          <div class="wp-input-group cb-output-var">
+            <span class="wp-input-group__addon">$</span>
+            <input
+              class="wp-input"
+              :value="outputVar"
+              placeholder="subject_phrase"
+              data-test="cb-output-var"
+              @input="onOutputVarInput(($event.target as HTMLInputElement).value)"
+            />
+          </div>
+        </Field>
         <Field
           label="Template"
           hint="Reference variables with $name. Use $$ for a literal $. Use {a|b|c} for inline choices."
@@ -553,22 +573,6 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
             data-test="cb-template"
             aria-label="Combine template"
           />
-        </Field>
-        <Field
-          label="Output variable"
-          hint="Downstream modules read this name."
-          :error="outputVarError"
-        >
-          <div class="wp-input-group">
-            <span class="wp-input-group__addon">$</span>
-            <input
-              class="wp-input"
-              :value="outputVar"
-              placeholder="subject_phrase"
-              data-test="cb-output-var"
-              @input="onOutputVarInput(($event.target as HTMLInputElement).value)"
-            />
-          </div>
         </Field>
       </div>
       <div class="cb-detected">
@@ -649,11 +653,16 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
   font-size: var(--wp-text-xs);
   color: var(--wp-text-muted);
 }
+/* Stacked, not side-by-side: the template grows with its content and needs
+ * the full width; the output variable is a short identifier that never did. */
 .cb-grid {
-  display: grid;
-  grid-template-columns: 1fr 220px;
+  display: flex;
+  flex-direction: column;
   gap: var(--wp-space-5);
 }
+/* The name is an identifier, not prose — cap it so it doesn't stretch to the
+ * card's full width now that it owns a whole row. */
+.cb-output-var { max-width: 320px; }
 .cb-detected {
   margin-top: var(--wp-space-5);
 }

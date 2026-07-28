@@ -2482,6 +2482,11 @@ function onHostKeydown(ev: KeyboardEvent): void {
   padding: var(--wp-space-4) var(--wp-space-5);
   line-height: 1.9;
   min-height: 72px;
+  /* Cap + scroll, matching `--wrap`. Uncapped, pasting a paragraph grew the
+     box to thousands of pixels and pushed every control below it off-screen. */
+  max-height: 40vh;
+  overflow-y: auto;
+  resize: vertical;
   white-space: pre-wrap;
   word-break: break-word;
 }

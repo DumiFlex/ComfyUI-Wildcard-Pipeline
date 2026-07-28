@@ -14,6 +14,22 @@ describe("ValueRow", () => {
     expect(w.find<HTMLInputElement>('[data-test="row-value"]').element.value).toBe("85mm");
   });
 
+  it("value field is a growing textarea, not a single-line input", async () => {
+    // Users routinely paste a whole sentence into a fixed value; a one-line
+    // <input> showed a sliver with no way to see the rest.
+    const w = mount(ValueRow, { props: { row: plainDraft, library: lib } });
+    const el = w.find('[data-test="row-value"]');
+    expect(el.element.tagName).toBe("TEXTAREA");
+  });
+
+  it("Enter does not insert a newline (a fixed value stays one string)", async () => {
+    const w = mount(ValueRow, { props: { row: plainDraft, library: lib } });
+    const el = w.find('[data-test="row-value"]');
+    const ev = new KeyboardEvent("keydown", { key: "Enter", cancelable: true, bubbles: true });
+    el.element.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(true);
+  });
+
   it("checkbox is checked when enabled", () => {
     const w = mount(ValueRow, { props: { row: plainDraft, library: lib } });
     expect(w.find('[data-test="row-check"]').classes()).toContain("row__check--on");

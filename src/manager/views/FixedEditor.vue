@@ -531,11 +531,15 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
               >{{ rowErrors[idx] }}</p>
             </td>
             <td>
+              <!-- `wrap` rather than a fixed 2-row `multiline` box: values run
+                   from one word to an entire paragraph, so the field starts at
+                   one row, grows to fit, caps at 40vh then scrolls, and offers
+                   a manual resize handle. A fixed height either wasted space or
+                   hid most of a long value. -->
               <RichTextInput
                 v-model="v.value"
                 surface="fixed_values"
-                multiline
-                :rows="2"
+                wrap
                 placeholder="value"
                 :aria-label="`Variable value for row ${idx}`"
                 :data-test="`fv-row-${idx}-value`"
