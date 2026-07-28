@@ -85,6 +85,29 @@ const failed = new Map<string, FailureRecord>();
  *  generate one fetch per 400ms reactive tick. */
 const RETRY_TTL_MS = 30_000;
 
+/** Wall-clock stamp for each SUCCESSFUL cache entry, so a snapshot can go
+ *  stale. Kept in a sibling map rather than on `PreviewLookup` so the public
+ *  shape consumers read stays free of bookkeeping fields. */
+const cachedAt = new Map<string, number>();
+
+/** How long a resolved snapshot is trusted before the next `ensure()` re-fetches
+ *  it.
+ *
+ *  Successful entries used to live for the lifetime of the page: `ensure()`
+ *  short-circuits on `cache.has(u)` and nothing but `_resetForTests` ever
+ *  cleared the map. So the canvas kept whatever a wildcard looked like the
+ *  first time it was referenced — add an 11th option in the SPA and the canvas
+ *  went on reporting 10, while the SPA (which reads the live catalog) reported
+ *  11. The SPA and the canvas are separate pages with no shared invalidation
+ *  event, so freshness has to be time-based.
+ *
+ *  The stale entry is deliberately KEPT while the refresh is in flight — and
+ *  kept even if the refresh fails — so a label never flickers back to a raw
+ *  uuid. Long enough not to matter next to the 400ms reactive tick, short
+ *  enough that a user editing in the SPA sees the canvas agree without a
+ *  reload. */
+const FRESH_TTL_MS = 60_000;
+
 /**
  * Bumped whenever a fetch settles (success or failure). Vue computeds
  * that depend on `lookup()` results should read this value once to opt
@@ -108,16 +131,22 @@ export function ensure(uuids: Iterable<string>): void {
   const now = Date.now();
   const missing: string[] = [];
   for (const u of uuids) {
-    if (cache.has(u) || inflight.has(u)) continue;
+    if (inflight.has(u)) continue;
     const fail = failed.get(u);
     if (fail) {
       // 404 stays permanent — server confirmed the uuid doesn't
       // exist, retrying won't help. Transient failures retry once
       // the TTL elapses, recovering from page-load flakes.
+      // Checked BEFORE the cache so a stale entry whose refresh 404'd
+      // can't re-enter the fetch queue on every reactive tick.
       if (fail.permanent) continue;
       if (now - fail.at < RETRY_TTL_MS) continue;
       failed.delete(u);
     }
+    // Cached AND still fresh → nothing to do. A STALE entry falls through to
+    // a refresh; `lookup` keeps serving the old value until the new one lands.
+    const at = cachedAt.get(u);
+    if (cache.has(u) && at !== undefined && now - at < FRESH_TTL_MS) continue;
     missing.push(u);
   }
   if (!missing.length) return;
@@ -130,13 +159,17 @@ export function ensure(uuids: Iterable<string>): void {
 /** Test seam — clear all caches. Not exported in production paths. */
 export function _resetForTests(): void {
   cache.clear();
+  cachedAt.clear();
   inflight.clear();
   failed.clear();
 }
 
-/** Test seam — directly seed the cache without going through fetch. */
+/** Test seam — directly seed the cache without going through fetch. Stamps
+ *  `cachedAt` too, otherwise the seeded entry reads as stale and the very
+ *  next `ensure()` would fire a real fetch. */
 export function _setForTests(uuid: string, entry: PreviewLookup): void {
   cache.set(uuid, entry);
+  cachedAt.set(uuid, Date.now());
 }
 
 interface BundleSnapshot {
@@ -211,6 +244,10 @@ async function fetchBundle(uuids: string[]): Promise<void> {
         if (tagSets.length) entry.optionTagSets = tagSets;
       }
       cache.set(u, entry);
+      cachedAt.set(u, at);
+      // A successful refresh clears any earlier failure so the entry is not
+      // held back by a stale tombstone on the next staleness check.
+      failed.delete(u);
     }
   } catch (err) {
     // Network error / JSON parse error — transient by definition. Log

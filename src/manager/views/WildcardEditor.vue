@@ -1664,10 +1664,15 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                 <i class="pi pi-ban" aria-hidden="true" />
                 <span>null</span>
               </span>
+              <!-- `wrap`: option values run from one tag to a whole paragraph.
+                   Without it the field clipped behind a horizontal scroll at a
+                   fixed 34px, so a long value was effectively invisible.
+                   Single-value semantics are unchanged — Enter still commits. -->
               <RichTextInput
                 v-else
                 v-model="o.value"
                 surface="wildcard"
+                wrap
                 :module-id="props.id"
                 :ref-suggestions="wcSuggestions"
                 :uuid-to-name="nameByUuid"
