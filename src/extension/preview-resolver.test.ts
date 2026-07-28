@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { _resetForTests, ensure, lookup } from "./preview-resolver";
+import { _resetForTests, ensure, lookup, markAllStale } from "./preview-resolver";
 
 /**
  * Snapshot freshness.
@@ -88,6 +88,36 @@ describe("preview-resolver freshness", () => {
     await settle();
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(lookup("aabbccdd")?.optionValues).toEqual(["a", "b"]);
+  });
+
+  it("refreshes immediately on markAllStale — no waiting out the timer", async () => {
+    // The real workflow: edit the wildcard in the SPA tab, switch back to the
+    // ComfyUI tab. Focus / visibilitychange call markAllStale, so the canvas
+    // agrees at once instead of after the backstop window.
+    fetchMock.mockResolvedValue(snapshotResponse([{ id: "o1", value: "a" }]));
+    ensure(["aabbccdd"]);
+    await settle();
+    expect(lookup("aabbccdd")?.optionValues).toHaveLength(1);
+
+    fetchMock.mockResolvedValue(
+      snapshotResponse([{ id: "o1", value: "a" }, { id: "o2", value: "b" }]),
+    );
+    markAllStale();
+    ensure(["aabbccdd"]);
+    await settle();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(lookup("aabbccdd")?.optionValues).toEqual(["a", "b"]);
+  });
+
+  it("markAllStale keeps serving the old value until the refresh lands", async () => {
+    fetchMock.mockResolvedValue(snapshotResponse([{ id: "o1", value: "a" }]));
+    ensure(["aabbccdd"]);
+    await settle();
+
+    markAllStale();
+    // Marked stale but nothing fetched yet — the label must not go blank.
+    expect(lookup("aabbccdd")?.name).toBe("pose");
+    expect(lookup("aabbccdd")?.optionValues).toEqual(["a"]);
   });
 
   it("keeps serving the stale value when the refresh fails", async () => {

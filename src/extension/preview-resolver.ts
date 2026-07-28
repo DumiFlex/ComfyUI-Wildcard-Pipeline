@@ -90,22 +90,24 @@ const RETRY_TTL_MS = 30_000;
  *  shape consumers read stays free of bookkeeping fields. */
 const cachedAt = new Map<string, number>();
 
-/** How long a resolved snapshot is trusted before the next `ensure()` re-fetches
- *  it.
+/** Backstop freshness window.
  *
  *  Successful entries used to live for the lifetime of the page: `ensure()`
  *  short-circuits on `cache.has(u)` and nothing but `_resetForTests` ever
  *  cleared the map. So the canvas kept whatever a wildcard looked like the
  *  first time it was referenced — add an 11th option in the SPA and the canvas
  *  went on reporting 10, while the SPA (which reads the live catalog) reported
- *  11. The SPA and the canvas are separate pages with no shared invalidation
- *  event, so freshness has to be time-based.
+ *  11.
+ *
+ *  The PRIMARY invalidation is `markAllStale` on window focus / tab
+ *  visibility (see below): editing in the SPA and switching back to the canvas
+ *  refreshes immediately, which is the actual workflow. This timer only covers
+ *  the case where focus never changes — two visible windows on one desktop,
+ *  say — so it can be generous without anyone waiting on it.
  *
  *  The stale entry is deliberately KEPT while the refresh is in flight — and
  *  kept even if the refresh fails — so a label never flickers back to a raw
- *  uuid. Long enough not to matter next to the 400ms reactive tick, short
- *  enough that a user editing in the SPA sees the canvas agree without a
- *  reload. */
+ *  uuid. */
 const FRESH_TTL_MS = 60_000;
 
 /**
@@ -119,6 +121,41 @@ export const cacheVersion = ref(0);
 /** Sync read — returns undefined if not yet fetched (or fetch failed). */
 export function lookup(uuid: string): PreviewLookup | undefined {
   return cache.get(uuid);
+}
+
+/**
+ * Mark every cached snapshot stale so the next `ensure()` refetches it.
+ *
+ * Drops only the freshness stamps, never `cache` itself: consumers keep
+ * rendering the last known values until the refresh lands, so nothing
+ * flickers back to a raw uuid. Transient failure tombstones are cleared too —
+ * a deliberate "check again now" should retry them rather than wait out
+ * `RETRY_TTL_MS`. Permanent (404) tombstones stay, since the server already
+ * confirmed those uuids don't exist.
+ */
+export function markAllStale(): void {
+  cachedAt.clear();
+  for (const [u, f] of failed) {
+    if (!f.permanent) failed.delete(u);
+  }
+}
+
+/**
+ * The canvas and the SPA are separate pages, so a library edit in one is
+ * invisible to the other — there is no shared invalidation event to subscribe
+ * to. What IS observable is the user coming back: they edit a wildcard in the
+ * SPA tab, switch to the ComfyUI tab, and expect the canvas to agree.
+ *
+ * `visibilitychange` covers the tab switch, `focus` covers clicking between
+ * two windows. Both just mark stale — the refetch itself is lazy, driven by
+ * whatever `ensure()` call the next reactive tick makes, so a focus event on a
+ * graph with no `@{}` refs costs nothing.
+ */
+if (typeof window !== "undefined" && typeof document !== "undefined") {
+  window.addEventListener("focus", markAllStale);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) markAllStale();
+  });
 }
 
 /**
