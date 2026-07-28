@@ -6,10 +6,11 @@
  * (repo rename, Discord re-invite, doc subdomain swap), update here
  * and every surface that imports from this module follows.
  *
- * Consumers: `AppSidebar.vue` (Documentation + View Source nav),
- * `Dashboard.vue` ("Open docs" button), `Settings.vue` (repo link),
- * `Community.vue` (Discord CTA on the offline fallback). New external
- * links should land here rather than be hard-coded at the call site.
+ * Consumers: `AppSidebar.vue` (Documentation, Wiki, View Source, Report an
+ * issue + Discord nav), `Dashboard.vue` ("Open docs" button),
+ * `Settings.vue` (repo link), `Community.vue` (Discord CTA on the offline
+ * fallback). New external links should land here rather than be hard-coded
+ * at the call site.
  */
 
 /**
@@ -32,6 +33,13 @@ export const COMFY_REGISTRY_ID = "comfyui-wildcard-pipeline";
  * the entry point updates here rather than at five call sites.
  */
 export const GITHUB_WIKI = `${GITHUB_REPO}/wiki`;
+
+/**
+ * New-issue page. Lands on the chooser rather than a prefilled template so
+ * the user picks bug vs feature themselves — a wrong prefill is more friction
+ * than none.
+ */
+export const GITHUB_NEW_ISSUE = `${GITHUB_REPO}/issues/new/choose`;
 
 /**
  * Build a GitHub branch tree URL. Used by the community-tab WIP

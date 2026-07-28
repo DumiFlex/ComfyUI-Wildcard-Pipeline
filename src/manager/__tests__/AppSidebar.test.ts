@@ -70,6 +70,18 @@ describe("AppSidebar.vue", () => {
     expect(labels).toContain("Dashboard");
   });
 
+  it("offers support routes — report an issue + Discord", async () => {
+    // The Discord invite used to live ONLY inside the community embed's
+    // offline fallback, so it was unreachable whenever community loaded fine.
+    const { wrap } = await mountSidebar();
+    const labels = wrap.findAll(".wp-nav__label").map((n) => n.text());
+    expect(labels).toContain("Report an issue");
+    expect(labels).toContain("Discord");
+    const issue = wrap.find('[data-nav-id="_issue"]');
+    expect(issue.attributes("href")).toContain("/issues/new");
+    expect(wrap.find('[data-nav-id="_discord"]').attributes("href")).toContain("discord");
+  });
+
   it("marks the matching item active when on its route", async () => {
     const { wrap } = await mountSidebar("/wildcards");
     const active = wrap.find('[data-nav-id="wildcards"]');

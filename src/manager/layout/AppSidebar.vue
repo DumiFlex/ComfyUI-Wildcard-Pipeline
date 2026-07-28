@@ -7,7 +7,7 @@ import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import { useTemplateStore } from "../stores/templateStore";
 import { useCategoryStore } from "../stores/categoryStore";
-import { GITHUB_REPO, GITHUB_WIKI } from "../config/links";
+import { DISCORD_INVITE, GITHUB_NEW_ISSUE, GITHUB_REPO, GITHUB_WIKI } from "../config/links";
 
 interface NavItem {
   id: string;
@@ -67,6 +67,11 @@ const SECTIONS: NavSection[] = [
       { id: "documentation", label: "Documentation", icon: "pi-book",          to: "/docs" },
       { id: "_wiki",         label: "Wiki",          icon: "pi-external-link",  url: GITHUB_WIKI },
       { id: "_source",       label: "View Source",   icon: "pi-github",         url: GITHUB_REPO },
+      // Support routes. The Discord invite previously existed ONLY inside the
+      // community embed's offline fallback, so it was unreachable whenever the
+      // community loaded normally.
+      { id: "_issue",        label: "Report an issue", icon: "pi-exclamation-circle", url: GITHUB_NEW_ISSUE },
+      { id: "_discord",      label: "Discord",       icon: "pi-discord",        url: DISCORD_INVITE },
     ],
   },
 ];
@@ -211,6 +216,7 @@ const countByKey = computed<Record<string, number>>(() => {
           target="_blank"
           rel="noopener noreferrer"
           class="wp-nav"
+          :data-nav-id="item.id"
           :title="ui.sidebarCollapsed ? item.label : undefined"
           :style="ui.sidebarCollapsed ? { justifyContent: 'center' } : undefined"
         >
