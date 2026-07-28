@@ -316,7 +316,14 @@
             :data-kind="byId.get(id)?.type"
           >
             <span class="wp-picker__sel-dot"></span>
-            {{ byId.get(id)?.name ?? id }}
+            <!-- Wrapped in its own span so it can ellipsis-clip. As a bare
+                 text node it wrapped onto a second line inside a chip fixed at
+                 22px tall, so a long name like "Accent piece (color-neutral)"
+                 spilled out of its own pill. -->
+            <span
+              class="wp-picker__sel-name"
+              :title="byId.get(id)?.name ?? id"
+            >{{ byId.get(id)?.name ?? id }}</span>
             <button
               type="button"
               class="wp-picker__sel-close"
@@ -1442,6 +1449,12 @@ onBeforeUnmount(detachCaptureListeners);
   color: var(--wp-text);
   font-weight: 500;
   max-width: 200px;
+}
+.wp-picker__sel-name {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .wp-picker__sel-dot {
   width: 7px; height: 7px;
