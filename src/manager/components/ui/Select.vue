@@ -11,6 +11,11 @@ export interface SelectOption {
    *  Used by derivation op dropdown to explain semantics — e.g.
    *  "matches" shows "Python regex via re.search". */
   title?: string;
+  /** Optional dim right-aligned detail that DISAMBIGUATES rows sharing a
+   *  label — e.g. a wildcard's option count + short uuid, when a library
+   *  holds five entries all named "Outfit". Also matched by the type-to-
+   *  filter query, so typing a uuid finds its row. */
+  meta?: string;
 }
 
 interface Props {
@@ -49,7 +54,12 @@ const selected = computed(() => props.options.find((o) => o.value === props.mode
 const filtered = computed<SelectOption[]>(() => {
   const q = query.value.trim().toLowerCase();
   if (!q) return props.options;
-  return props.options.filter((o) => o.label.toLowerCase().includes(q));
+  // Match `meta` too — when several rows share a label, the meta (option
+  // count + uuid) is the ONLY thing that tells them apart, so it has to be
+  // searchable or the duplicates stay unreachable by typing.
+  return props.options.filter((o) =>
+    o.label.toLowerCase().includes(q) || (o.meta?.toLowerCase().includes(q) ?? false),
+  );
 });
 
 const btnClasses = computed(() => [
@@ -290,6 +300,7 @@ function onKeydown(e: KeyboardEvent) {
             <slot name="option" :option="opt">{{ opt.label }}</slot>
           </span>
           <span class="wp-spacer" />
+          <span v-if="opt.meta" class="wp-select__option-meta">{{ opt.meta }}</span>
           <Icon v-if="opt.value === modelValue" name="check" :size="ICON_SM" />
         </li>
         <li
@@ -397,7 +408,25 @@ function onKeydown(e: KeyboardEvent) {
   background: color-mix(in oklab, var(--wp-accent-500) 18%, transparent);
   color: var(--wp-text);
 }
-.wp-select__option-label { flex: 1; white-space: nowrap; }
+/* `min-width: 0` + ellipsis so a long module name clips inside the row
+ * instead of forcing the menu wider than its `max-width` and pushing the
+ * meta / tick off the edge. */
+.wp-select__option-label {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Disambiguating detail (option count + uuid). Never shrinks — it is the
+ * whole point of the row when several options share a label. */
+.wp-select__option-meta {
+  flex-shrink: 0;
+  margin-left: var(--wp-space-3, 8px);
+  font-family: var(--wp-font-mono);
+  font-size: 10px;
+  color: var(--wp-text-dim);
+}
 .wp-select__filter { display: flex; align-items: center; padding: 4px 12px; font-size: 11px; opacity: 0.6; }
 .wp-select__empty { padding: 6px 12px; opacity: 0.55; }
 

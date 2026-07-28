@@ -267,10 +267,22 @@ function modeMeta(mode: ConstraintMode | string | undefined): ModeMeta {
   return MODE_META[(mode ?? "allow") as ConstraintMode] ?? MODE_META.allow;
 }
 
+/** Source / target wildcard choices.
+ *
+ *  Carries a `meta` of "N opts · <uuid>" because a library routinely holds
+ *  several wildcards under one display name (five "Outfit" entries authored
+ *  at different times), and a label-only dropdown made them indistinguishable
+ *  — you had to guess which was which. Select also matches `meta` in its
+ *  type-to-filter, so pasting a uuid jumps straight to its row. */
 const wildcardOptions = computed(() =>
   moduleStore.catalog
     .filter((m) => m.type === "wildcard")
-    .map((m) => ({ label: m.name, value: m.id })),
+    .map((m) => {
+      const options = (m.payload as { options?: unknown[] } | undefined)?.options;
+      const n = Array.isArray(options) ? options.length : null;
+      const count = n === null ? "" : `${n} opt${n === 1 ? "" : "s"} · `;
+      return { label: m.name, value: m.id, meta: `${count}${m.id.slice(0, 8)}` };
+    }),
 );
 
 function wildcardById(id: string | null): ModuleRow | undefined {

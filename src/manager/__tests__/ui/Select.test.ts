@@ -96,6 +96,42 @@ describe("Select.vue", () => {
     wrap.unmount();
   });
 
+  it("renders option meta so same-labelled rows are tellable apart", async () => {
+    // A library routinely holds five wildcards all named "Outfit"; without a
+    // meta column the dropdown offered five identical rows.
+    const dupes = [
+      { value: "b855d115", label: "Outfit", meta: "31 opts · b855d115" },
+      { value: "88d84413", label: "Outfit", meta: "12 opts · 88d84413" },
+    ];
+    const wrap = mount(Select, {
+      props: { modelValue: null, options: dupes },
+      attachTo: document.body,
+    });
+    await wrap.get("[data-test='select-trigger']").trigger("click");
+    const metas = [...document.querySelectorAll(".wp-select__option-meta")]
+      .map((n) => n.textContent);
+    expect(metas).toEqual(["31 opts · b855d115", "12 opts · 88d84413"]);
+    wrap.unmount();
+  });
+
+  it("type-to-filter matches meta, so a uuid finds its row", async () => {
+    const dupes = [
+      { value: "b855d115", label: "Outfit", meta: "31 opts · b855d115" },
+      { value: "88d84413", label: "Outfit", meta: "12 opts · 88d84413" },
+    ];
+    const wrap = mount(Select, {
+      props: { modelValue: null, options: dupes },
+      attachTo: document.body,
+    });
+    const trigger = wrap.get("[data-test='select-trigger']");
+    await trigger.trigger("click");
+    for (const key of "88d8") await trigger.trigger("keydown", { key });
+    expect(document.querySelectorAll(".wp-select__option").length).toBe(1);
+    expect(document.querySelector(".wp-select__option-meta")?.textContent)
+      .toContain("88d84413");
+    wrap.unmount();
+  });
+
   it("shows No matches when the query matches nothing", async () => {
     const wrap = mount(Select, {
       props: { modelValue: null, options: opts },
