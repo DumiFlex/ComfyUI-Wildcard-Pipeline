@@ -6,6 +6,7 @@ import EmptyState from "../components/ui/EmptyState.vue";
 import Field from "../components/ui/Field.vue";
 import Input from "../components/ui/Input.vue";
 import ColorPicker from "../components/ColorPicker.vue";
+import IconPicker from "../components/IconPicker.vue";
 import { useCategoryStore } from "../stores/categoryStore";
 import { useModuleStore } from "../stores/moduleStore";
 import { ApiError } from "../api/client";
@@ -29,9 +30,10 @@ const cascadeDialogRow = ref<CategoryRow | null>(null);
 
 const newName = ref("");
 const newColor = ref("#a78bfa");
+const newIcon = ref<string | null>(null);
 
 /** Single-row edit state — matches prototype's pencil → save/cancel flow. */
-interface EditingState { id: string; name: string; color: string }
+interface EditingState { id: string; name: string; color: string; icon: string | null }
 const editing = ref<EditingState | null>(null);
 
 const countsByCategory = computed(() => {
@@ -65,9 +67,10 @@ async function add() {
   const name = newName.value.trim();
   if (!name) return;
   try {
-    await store.create({ name, color: newColor.value });
+    await store.create({ name, color: newColor.value, icon: newIcon.value });
     newName.value = "";
     newColor.value = "#a78bfa";
+    newIcon.value = null;
     toast.push({ severity: "success", summary: "Created", life: 2000 });
   } catch (e) { reportError(e, "Failed"); }
 }
@@ -136,7 +139,12 @@ function onCatCascadeDialogConfirmed(result: { undo_entry_id: string; affected_c
 }
 
 function startEdit(row: CategoryRow) {
-  editing.value = { id: row.id, name: row.name, color: row.color || "#a78bfa" };
+  editing.value = {
+    id: row.id,
+    name: row.name,
+    color: row.color || "#a78bfa",
+    icon: row.icon,
+  };
   nextTick(() => {
     const el = document.querySelector<HTMLInputElement>(
       `[data-test="cat-name-input-${row.id}"]`,
@@ -152,11 +160,11 @@ function cancelEdit() {
 
 async function saveEdit() {
   if (!editing.value) return;
-  const { id, name, color } = editing.value;
+  const { id, name, color, icon } = editing.value;
   const trimmed = name.trim();
   if (!trimmed) { cancelEdit(); return; }
   try {
-    await store.update(id, { name: trimmed, color });
+    await store.update(id, { name: trimmed, color, icon });
     toast.push({ severity: "success", summary: "Saved", life: 1500 });
   } catch (e) {
     reportError(e, "Update failed");
@@ -208,6 +216,13 @@ async function saveEdit() {
         <Field label="Color">
           <ColorPicker v-model="newColor" aria-label="New category color" />
         </Field>
+        <Field label="Icon">
+          <IconPicker
+            v-model="newIcon"
+            aria-label="New category icon"
+            data-test="new-cat-icon"
+          />
+        </Field>
         <Button
           variant="primary"
           icon="pi-plus"
@@ -223,13 +238,14 @@ async function saveEdit() {
           <tr>
             <th>Name</th>
             <th class="wp-cat-col--color">Color</th>
+            <th class="wp-cat-col--icon">Icon</th>
             <th class="wp-cat-col--count">Modules</th>
             <th class="wp-cat-col--actions">Actions</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="store.items.length === 0">
-            <td colspan="4">
+            <td colspan="5">
               <EmptyState
                 icon="pi-bookmark"
                 headline="No categories yet"
@@ -271,6 +287,24 @@ async function saveEdit() {
               </template>
               <template v-else>
                 <span class="wp-mono wp-dim wp-cat-hex">{{ row.color || "—" }}</span>
+              </template>
+            </td>
+            <td>
+              <template v-if="editing && editing.id === row.id">
+                <IconPicker
+                  v-model="editing.icon"
+                  :aria-label="`Edit icon for ${row.name}`"
+                  :data-test="`cat-icon-picker-${row.id}`"
+                />
+              </template>
+              <template v-else>
+                <i
+                  v-if="row.icon"
+                  :class="`pi pi-${row.icon}`"
+                  :data-test="`cat-icon-${row.id}`"
+                  :aria-label="row.icon"
+                />
+                <span v-else class="wp-dim">—</span>
               </template>
             </td>
             <td>
