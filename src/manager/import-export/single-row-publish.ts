@@ -542,39 +542,84 @@ export function publishToCommunity(
     });
 }
 
+/** Module `type` → the import envelope's bucket key. Mirrors the map in
+ *  `live-library-adapter.ts`; bundles are handled separately since they carry
+ *  `children` instead of a `type`. */
+const TYPE_TO_BUCKET: Record<string, string> = {
+  wildcard:     "wildcards",
+  fixed_values: "fixed_values",
+  combine:      "combines",
+  derivation:   "derivations",
+  constraint:   "constraints",
+};
+
 /**
- * The engine-row JSON exactly as `copyPayloadToClipboard` writes it.
+ * The JSON `copyPayloadToClipboard` writes: a complete, IMPORTABLE export
+ * envelope containing exactly one entity.
  *
- * `schema_version` leads the object because a bare engine row does not say
- * which payload shape it is in, and the shape is what decides whether a
- * consumer can read it at all. Publish already stamped this (see
- * `buildPublishBody` / the `publishToCommunity` hash); copy silently did not,
- * so a copied row and the same row published to the community carried
- * different information.
+ * Copy exists so a module can be shared without walking the Export tab, which
+ * means what lands on the clipboard has to be something the receiver can paste
+ * straight into Import. A bare engine row is not — `parsePayload` requires
+ * `{schema_version, bundles, wildcards, fixed_values, combines, derivations,
+ * constraints, categories}` and rejects anything else before it ever looks at
+ * the entity. So the row is placed in its bucket and the sibling buckets ship
+ * empty.
  *
- * Stamped by the SAME `schemaVersionForPayload` the publish paths use, so a
- * copied row and a published row can never disagree about their version.
+ * `schema_version` comes from the SAME `schemaVersionForPayload` the publish
+ * paths use, so a copied entity and a published one can never disagree about
+ * their shape — including the feature bumps (SP2b range syntax, SP3
+ * non-default constraint reach).
+ *
+ * Scope note: this carries the ONE entity, not its dependency closure. A
+ * wildcard that nests `@{uuid}` refs still imports with those refs dangling,
+ * and the Import tab's missing-dependency UI reports them. Shipping the
+ * closure is the Export tab's job — it has the selection UI to show what is
+ * being dragged along.
  */
 export function buildCopyableRow(
   pub: PublishablePayload,
 ): Record<string, unknown> {
-  return { schema_version: schemaVersionForPayload(pub.payload), ...pub.payload };
+  const row = pub.payload;
+  const envelope: Record<string, unknown> = {
+    schema_version: schemaVersionForPayload(row),
+    bundles: [],
+    wildcards: [],
+    fixed_values: [],
+    combines: [],
+    derivations: [],
+    constraints: [],
+    categories: [],
+    templates: [],
+  };
+  // A bundle has `children` and no `type`; a module has `type`.
+  const bucket = typeof row.children !== "undefined"
+    ? "bundles"
+    : TYPE_TO_BUCKET[String(row.type)];
+  // An unrecognised type would silently produce an empty envelope, which
+  // reads as "copy worked" and imports nothing. Better to ship it in a
+  // bucket the importer will at least surface.
+  if (bucket) (envelope[bucket] as unknown[]).push(row);
+  return envelope;
+}
+
+/** True when this entity kind can be placed in an import bucket. Callers use
+ *  it to warn rather than hand the user an envelope that imports nothing. */
+export function isCopyableKind(pub: PublishablePayload): boolean {
+  const row = pub.payload;
+  if (typeof row.children !== "undefined") return true;
+  return Boolean(TYPE_TO_BUCKET[String(row.type)]);
 }
 
 /**
- * Copy the pretty-printed engine-row JSON to the clipboard. Resolves
- * to true on success, false on failure (clipboard denied / no API).
- * Callers should surface a toast for either case.
- *
- * NB: this is a single engine ROW, not an import envelope — `parsePayload`
- * wants `{schema_version, wildcards: [], bundles: [], categories: [], …}`, so
- * the clipboard JSON is for inspection, sharing and the community publish
- * form rather than for pasting straight into the Import tab.
+ * Copy a ready-to-import export envelope to the clipboard. Resolves to true
+ * on success, false on failure (clipboard denied / no API / unrecognised
+ * entity kind). Callers should surface a toast for either case.
  */
 export async function copyPayloadToClipboard(
   pub: PublishablePayload,
 ): Promise<boolean> {
   if (typeof navigator === "undefined" || !navigator.clipboard) return false;
+  if (!isCopyableKind(pub)) return false;
   try {
     await navigator.clipboard.writeText(JSON.stringify(buildCopyableRow(pub), null, 2));
     return true;

@@ -99,7 +99,7 @@ async function onCopy() {
     toast.push({
       severity: "success",
       summary: "Payload copied",
-      detail: "Engine-row JSON is on your clipboard.",
+      detail: "Ready to paste into Import / Export → Import.",
       life: 2500,
     });
   } else {
