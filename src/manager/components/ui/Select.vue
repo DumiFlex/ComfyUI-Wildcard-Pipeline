@@ -321,8 +321,10 @@ function onKeydown(e: KeyboardEvent) {
   tokens.css (that's why an unstyled Select rendered behind the modal there).
   Class names stay wp-select* (global-namespaced, no collision); the menu is
   teleported to <body>, so these are UNSCOPED — same pattern as the
-  RichTextInput autocomplete (wp-rt-suggestions), whose z-index:9999 already
-  renders above the canvas modals. Vars fall back to literals for the few the
+  RichTextInput autocomplete (wp-rt-suggestions), sharing its POPOVER tier
+  (10020) so the menu clears every modal overlay — those run up to 10010, so
+  the previous 9999 rendered the menu behind any modal above that. Vars fall
+  back to literals for the few the
   canvas theme doesn't define (--wp-input-h[-sm], --wp-focus-ring). In the SPA
   these duplicate tokens.css with identical rules — harmless.
 -->
@@ -383,7 +385,7 @@ function onKeydown(e: KeyboardEvent) {
   border: 1px solid var(--wp-border-strong);
   border-radius: 7px;
   box-shadow: var(--wp-shadow-lg);
-  z-index: 9999;
+  z-index: 10020;
   padding: 4px;
   max-height: 240px;
   overflow: auto;

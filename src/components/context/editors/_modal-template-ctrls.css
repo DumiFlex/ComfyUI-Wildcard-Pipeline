@@ -96,8 +96,13 @@
  * by the modal's scroll container and vanished below the fold whenever its
  * trigger sat near the bottom. The owning component measures the button and
  * writes `top` / `left` inline; `--up` flips the box above the trigger when
- * there's no room below. z-index matches the RichTextInput autocomplete
- * popover so both clear the modal overlay. */
+ * there's no room below.
+ *
+ * z-index 10020 puts this in the POPOVER tier, above every modal overlay.
+ * Modals here range from 9999 (ModalShell) to 10010 (InjectorBindingModal),
+ * so the old 9999 rendered this menu BEHIND its own modal — it worked only
+ * where the modal was also 9999 and DOM order broke the tie. Any popup that
+ * teleports out of a modal has to clear the whole modal tier. */
 .wp-tpl__menu, .ibm__menu {
   position: fixed;
   min-width: 200px;
@@ -107,7 +112,7 @@
   border: 1px solid var(--wp-border);
   border-radius: 3px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  z-index: 9999;
+  z-index: 10020;
   padding: 3px;
   display: flex;
   flex-direction: column;

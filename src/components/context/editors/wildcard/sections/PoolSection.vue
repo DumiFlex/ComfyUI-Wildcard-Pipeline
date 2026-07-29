@@ -620,16 +620,29 @@ const skewedTowards = computed(() => {
 /* Pushes the Advanced toggle to the right now that the head has a leading
  * chevron + an optional collapsed-count. */
 .pool__adv-toggle { margin-left: auto; }
+/* Deliberately larger than a bare glyph: at 9px with no hit area this read as
+ * decoration and nobody knew it was pressable. */
 .pool__collapse {
   background: none;
-  border: 0;
+  border: 1px solid transparent;
+  border-radius: 3px;
   padding: 0;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   cursor: pointer;
-  color: var(--wp-text-dim, var(--wp-text3));
-  font-size: 9px;
+  color: var(--wp-text-muted, var(--wp-text2));
+  font-size: 12px;
   line-height: 1;
 }
-.pool__collapse:hover { color: var(--wp-text); }
+.pool__collapse:hover {
+  color: var(--wp-text);
+  border-color: var(--wp-border);
+  background: color-mix(in srgb, var(--wp-text) 6%, transparent);
+}
 .pool__collapsed-count {
   font: 600 9px var(--wp-font-sans);
   letter-spacing: 0.06em;

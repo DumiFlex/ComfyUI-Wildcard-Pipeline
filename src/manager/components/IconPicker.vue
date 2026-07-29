@@ -192,7 +192,8 @@ onBeforeUnmount(close);
    component-specific (`wp-iconpick*`), so global is safe. */
 .wp-iconpick__panel {
   position: fixed;
-  z-index: 9999;
+  /* POPOVER tier, above every modal overlay (those run up to 10010). */
+  z-index: 10020;
   width: 236px;
   max-height: 300px;
   overflow-y: auto;
