@@ -39,46 +39,15 @@ describe("probeAutocomplete", () => {
     expect(probeAutocomplete("plain text", 10)).toBeNull();
   });
 
-  // --- Partial brace-form refs (`@{…`) -----------------------------------
-  // The canonical stored form is `@{uuid#name}`, so users type the `{`, and
-  // display names carry spaces + dashes. The bare-identifier scan rejected
-  // all of it, so the popover died on the documented syntax and only came
-  // back after deleting the whole run.
+  // The `@{uuid#name}` brace form is an internal serialisation the user never
+  // types, and a space commits the chip rather than extending the query — so
+  // neither is a valid query shape and the probe must not claim them.
 
-  it("keeps the popover alive the moment the user types `@{`", () => {
-    expect(probeAutocomplete("@{", 2)).toEqual({ start: 0, query: "", trigger: "@" });
-  });
-
-  it("treats a partial `@{name` as an @ query", () => {
-    expect(probeAutocomplete("@{pose", 6)).toEqual({ start: 0, query: "pose", trigger: "@" });
-  });
-
-  it("keeps matching across spaces and dashes in a display name", () => {
-    const s = "@{Pose pool — presenting";
-    expect(probeAutocomplete(s, s.length)).toEqual({
-      start: 0,
-      query: "Pose pool — presenting",
-      trigger: "@",
-    });
-  });
-
-  it("stops once the ref is closed", () => {
-    // `}` present before the caret — the ref is complete, don't reopen.
-    expect(probeAutocomplete("@{aabbccdd}", 11)).toBeNull();
-  });
-
-  it("does NOT treat an inline brace block as a ref", () => {
-    // `{a|b|c}` is multi-arm inline syntax, not a nested ref — no `@` before
-    // the brace, so the ref branch must not claim it.
+  it("does NOT treat an inline brace block as a trigger", () => {
     expect(probeAutocomplete("{a|b", 4)).toBeNull();
   });
 
-  it("probes the LAST open brace when a completed chip precedes the caret", () => {
-    const s = "@{aabbccdd#Portrait} and @{pos";
-    expect(probeAutocomplete(s, s.length)).toEqual({
-      start: s.indexOf("@{pos"),
-      query: "pos",
-      trigger: "@",
-    });
+  it("stops at a space — the settle delimiter that commits a chip", () => {
+    expect(probeAutocomplete("@pose pool", 10)).toBeNull();
   });
 });

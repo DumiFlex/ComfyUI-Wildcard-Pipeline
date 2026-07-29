@@ -1647,9 +1647,22 @@ function onDocumentMouseDown(e: MouseEvent): void {
   if (popoverEl.value?.contains(t)) return;
   acOpen.value = false;
 }
-function onWindowScroll(): void {
-  // Scrolls outside the textarea move the anchor → easier to just close.
-  acOpen.value = false;
+function onWindowScroll(e: Event): void {
+  // Scrolling INSIDE the popover is the user reading the list — wheeling over
+  // it, or dragging its scrollbar. This listener is capture-phase on window,
+  // so those scrolls used to land here and close the popover outright: the
+  // list had a scrollbar that could not be used, and a scrollbar drag left a
+  // half-typed reference behind. Ignore them.
+  const t = e.target as Node | null;
+  if (t && popoverEl.value?.contains(t)) return;
+  // The popover IS the scroll target when the wheel lands on it directly
+  // (target is the element, not a descendant).
+  if (t && t === popoverEl.value) return;
+  // A genuine outside scroll moved the anchor. Re-anchor rather than close —
+  // `positionPopup` recomputes from the host's live rect, so the popover
+  // simply follows the input instead of destroying the user's in-progress
+  // token. Matches the injector menu + VarAutocompleteInput behaviour.
+  positionPopup();
 }
 function onWindowResize(): void {
   if (acOpen.value) positionPopup();
@@ -2193,7 +2206,20 @@ function onHostKeydown(ev: KeyboardEvent): void {
     const { atoms: nextAtoms, caret } = deleteRawRange(readHostAsAtoms(), delStart, delEnd);
     applyAtoms(recolorBlocks(nextAtoms));
     emitValue(serialiseAtomsLocal(atoms.value));
-    void nextTick(() => restoreCursorAtChar(caret));
+    void nextTick(() => {
+      restoreCursorAtChar(caret);
+      // Re-probe AFTER the caret is back. `preventDefault` above suppressed the
+      // native delete, so no `input` event fires and `onHostInput` — the only
+      // other caller of this — never runs. Without it `acQuery` keeps its
+      // pre-deletion value and the suggestion list stays frozen at whatever it
+      // narrowed to: type `@act_` to two matches, delete the `_`, and `@act`
+      // still shows two instead of four.
+      // A SECOND tick: `restoreCursorAtChar` ends with `host.focus()`, and
+      // `onHostFocus` schedules its own nextTick that can reposition the
+      // caret. Probing in this tick reads the pre-settled caret (offset 0) and
+      // the probe returns null, closing the popover instead of re-filtering.
+      void nextTick(refreshAutocompleteFromHost);
+    });
     return;
   }
   if (ev.key === "Delete") {
@@ -2223,7 +2249,16 @@ function onHostKeydown(ev: KeyboardEvent): void {
     const { atoms: nextAtoms, caret } = deleteRawRange(live, delStart, delEnd);
     applyAtoms(recolorBlocks(nextAtoms));
     emitValue(serialiseAtomsLocal(atoms.value));
-    void nextTick(() => restoreCursorAtChar(caret));
+    void nextTick(() => {
+      restoreCursorAtChar(caret);
+      // Same reason as the Backspace branch — forward-delete is also
+      // `preventDefault`ed, so nothing else re-probes the query.
+      // A SECOND tick: `restoreCursorAtChar` ends with `host.focus()`, and
+      // `onHostFocus` schedules its own nextTick that can reposition the
+      // caret. Probing in this tick reads the pre-settled caret (offset 0) and
+      // the probe returns null, closing the popover instead of re-filtering.
+      void nextTick(refreshAutocompleteFromHost);
+    });
     return;
   }
   // Arrow keys: defer to native browser handling. Modern browsers skip
@@ -2533,7 +2568,10 @@ function onHostKeydown(ev: KeyboardEvent): void {
  * ------------------------------------------------------------------------ */
 .wp-rt-suggestions {
   position: fixed;
-  z-index: 9999;
+  /* POPOVER tier — above every modal overlay (9999 ModalShell … 10010
+     InjectorBindingModal). At 9999 this only cleared modals that were also
+     9999, winning on DOM order; inside a 10000+ modal it rendered behind. */
+  z-index: 10020;
   min-width: 200px;
   max-width: 360px;
   max-height: 240px;
@@ -2630,19 +2668,19 @@ function onHostKeydown(ev: KeyboardEvent): void {
 /* Z-index sits in the autocomplete-popover tier (9999), NOT the old
    1000/1001. On the canvas the derivation/wildcard instance modal renders
    on its own high-z overlay; at 1000/1001 the body-teleported picker fell
-   BEHIND that modal. The `@`-autocomplete popover already clears the modal
-   at 9999, so the picker matches that tier (backdrop 10000, anchor 10001)
-   to sit ABOVE the modal too. The SPA's own modals live well below 9999,
-   so raising is safe there — no SPA regression. */
+   BEHIND that modal. The picker tracks the autocomplete popover's tier so it
+   clears every modal: those run up to 10010 (InjectorBindingModal), so the
+   old 10000/10001 was no longer above all of them. Backdrop sits just under
+   the anchor, both above the modal tier. */
 .wp-subcat-picker__backdrop {
   position: fixed;
   inset: 0;
   background: transparent;
-  z-index: 10000;
+  z-index: 10020;
 }
 .wp-subcat-picker__anchor {
   position: fixed;
-  z-index: 10001;
+  z-index: 10021;
   /* Subtle drop-shadow so the popover reads as elevated even without
      the dimmed backdrop of the previous modal version. */
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.4));

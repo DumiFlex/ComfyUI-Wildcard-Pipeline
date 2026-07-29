@@ -349,6 +349,69 @@ describe("RichTextInput.vue", () => {
     }
   });
 
+  it("re-filters the suggestion list when characters are DELETED", async () => {
+    // The reported bug: type `@act_` to narrow to two matches, delete the `_`,
+    // and `@act` still showed two instead of four. Backspace/Delete
+    // preventDefault and do the deletion themselves, so no `input` event fires
+    // and `onHostInput` — the only other caller of refreshAutocompleteFromHost
+    // — never runs. `acQuery` kept its pre-deletion value and the list froze.
+    const refs = ["aaaa1111", "aaaa2222", "aaaa3333", "bbbb4444"];
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "",
+        surface: "wildcard",
+        refSuggestions: refs,
+        uuidToName: new Map([
+          ["aaaa1111", "act"],
+          ["aaaa2222", "act_plan"],
+          ["aaaa3333", "act_two"],
+          ["bbbb4444", "camera"],
+        ]),
+      },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host");
+    const span = (host.element as HTMLElement).querySelector(".wp-rt__text") as HTMLElement;
+
+    const caretToEnd = (): void => {
+      const tn = span.firstChild as Text | null;
+      if (!tn) return;
+      const range = document.createRange();
+      range.setStart(tn, tn.length);
+      range.collapse(true);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    };
+    const rowCount = (): number =>
+      document.body.querySelectorAll(".wp-rt-suggestions__item").length;
+
+    // Type `@act` → the three act* names match.
+    span.textContent = "@act";
+    caretToEnd();
+    await host.trigger("input", { inputType: "insertText", data: "t" });
+    await flushPromises();
+    expect(rowCount()).toBe(3);
+
+    // Narrow to `@act_` → two.
+    span.textContent = "@act_";
+    caretToEnd();
+    await host.trigger("input", { inputType: "insertText", data: "_" });
+    await flushPromises();
+    expect(rowCount()).toBe(2);
+
+    // Backspace the `_`. The component owns the deletion, so mutate the DOM
+    // the way it will and fire the keydown it intercepts.
+    await host.trigger("keydown", { key: "Backspace" });
+    await flushPromises();
+    // Back to three — the list must follow the deletion. Before the fix this
+    // was 0: the delete path never re-probed, so the popover closed outright.
+    expect(rowCount()).toBe(3);
+    expect(document.body.querySelector(".wp-rt-suggestions__query")?.textContent)
+      .toBe("@act");
+    wrap.unmount();
+  });
+
   it("forwards aria-label + disabled onto the contenteditable host", () => {
     const wrap = mount(RichTextInput, {
       props: {
