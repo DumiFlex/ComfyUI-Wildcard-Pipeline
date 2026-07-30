@@ -22,12 +22,24 @@ describe("ValueRow", () => {
     expect(el.element.tagName).toBe("TEXTAREA");
   });
 
-  it("Enter does not insert a newline (a fixed value stays one string)", async () => {
+  it("Enter inserts a newline like any textarea", async () => {
+    // Briefly swallowed for parity with the single-line <input> this replaced,
+    // which was parity for its own sake: the engine stores the value verbatim,
+    // multi-line round-trips fine, and the modal saves on Cmd/Ctrl+Enter.
     const w = mount(ValueRow, { props: { row: plainDraft, library: lib } });
     const el = w.find('[data-test="row-value"]');
     const ev = new KeyboardEvent("keydown", { key: "Enter", cancelable: true, bubbles: true });
     el.element.dispatchEvent(ev);
-    expect(ev.defaultPrevented).toBe(true);
+    expect(ev.defaultPrevented).toBe(false);
+  });
+
+  it("keeps a multi-line value intact on input", async () => {
+    const w = mount(ValueRow, { props: { row: plainDraft, library: lib } });
+    const el = w.find<HTMLTextAreaElement>('[data-test="row-value"]');
+    el.element.value = "line one\nline two";
+    await el.trigger("input");
+    const updates = w.emitted("update") ?? [];
+    expect(updates[updates.length - 1]).toEqual(["v1", { value: "line one\nline two" }]);
   });
 
   it("checkbox is checked when enabled", () => {

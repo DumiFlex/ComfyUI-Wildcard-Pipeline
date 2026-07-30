@@ -414,16 +414,25 @@ function onKeydown(e: KeyboardEvent) {
   background: color-mix(in oklab, var(--wp-accent-500) 18%, transparent);
   color: var(--wp-text);
 }
-/* `min-width: 0` + ellipsis so a long module name clips inside the row
- * instead of forcing the menu wider than its `max-width` and pushing the
- * meta / tick off the edge. */
+/* Option rows WRAP (to two lines) rather than ellipsis-clipping at the first.
+ * The menu is up to 620px wide and these values run long — a constraint
+ * exception source is a whole phrase plus a nested `@ref` — so clipping them
+ * to one line hid the part that distinguishes one option from another. The
+ * trigger still clips to a single line (it has a fixed height); the menu is
+ * where the user is actually reading. `min-width: 0` keeps the meta + tick on
+ * screen either way. */
 .wp-select__option-label {
   flex: 1;
   min-width: 0;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
+.wp-select__option { align-items: flex-start; }
 /* Disambiguating detail (option count + uuid). Never shrinks — it is the
  * whole point of the row when several options share a label. */
 .wp-select__option-meta {
@@ -436,20 +445,25 @@ function onKeydown(e: KeyboardEvent) {
 .wp-select__filter { display: flex; align-items: center; padding: 4px 12px; font-size: 11px; opacity: 0.6; }
 .wp-select__empty { padding: 6px 12px; opacity: 0.55; }
 
-/* Rich content (RichTextPreview / chips) rendered in the trigger label or an
- * option row via the #label / #option slots defaults to pre-wrap (that's
- * RichTextPreview's own scoped rule) and WRAPS. Force single-line so:
- *   (a) a long picked value ellipsis-clips in the fixed-height trigger instead
- *       of wrapping + blowing up the surrounding row, and
- *   (b) dropdown options stay on one line, letting the menu grow to fit the
- *       widest (min-width = trigger; max-width caps it inside the viewport).
- * `!important` is needed to beat RichTextPreview's scoped `.wp-rtp` rule from
- * outside the component; white-space then inherits down to the inner spans. */
+/* Rich content (RichTextPreview / chips) rendered via the #label / #option
+ * slots defaults to pre-wrap (RichTextPreview's own scoped rule).
+ *
+ * The TRIGGER stays forced to one line: it has a fixed height, so wrapping
+ * blows up the surrounding row. `!important` beats RichTextPreview's scoped
+ * `.wp-rtp` rule from outside the component.
+ *
+ * OPTION rows deliberately do NOT get that treatment any more. Forcing them
+ * to one line was what truncated constraint-exception values — a phrase plus a
+ * nested `@ref` — at the point where they stop being distinguishable. They now
+ * wrap within the two-line clamp above, inside the menu's 620px max-width. */
 .wp-select__label-text .wp-rtp,
-.wp-select__label-text .wp-rtp__text,
+.wp-select__label-text .wp-rtp__text {
+  white-space: nowrap !important;
+}
 .wp-select__option-label .wp-rtp,
 .wp-select__option-label .wp-rtp__text {
-  white-space: nowrap !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere;
 }
 .wp-select__menu { max-width: min(620px, 92vw); }
 </style>

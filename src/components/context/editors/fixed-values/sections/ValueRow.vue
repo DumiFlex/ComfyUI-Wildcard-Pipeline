@@ -78,12 +78,14 @@ function autosizeValue(el: HTMLTextAreaElement): void {
   el.style.height = `${el.scrollHeight}px`;
 }
 
-/** Enter is not a newline here — a fixed value is one string, and the engine
- *  has no meaning for an embedded line break. Swallow it so the textarea
- *  behaves like the `<input>` it replaced. */
-function onValueKeydown(ev: KeyboardEvent): void {
-  if (ev.key === "Enter" && !ev.shiftKey) ev.preventDefault();
-}
+/* Enter inserts a newline, like any other textarea.
+ *
+ * It was briefly swallowed to preserve the behaviour of the single-line
+ * `<input>` this replaced, but that was parity for its own sake: a fixed value
+ * is an arbitrary string, the engine stores and emits it verbatim, and a
+ * multi-line value round-trips fine. The modal saves on Cmd/Ctrl+Enter, so
+ * plain Enter is free — and users writing paragraph-length values want their
+ * line breaks. */
 
 const valueEl = ref<HTMLTextAreaElement | null>(null);
 
@@ -214,7 +216,6 @@ function onDelete(): void {
           :disabled="!row.enabled"
           :aria-label="`Value for row ${row.id}`"
           @input="onValueInput"
-          @keydown="onValueKeydown"
           @scroll="updateOverflowHint"
         />
       </span>

@@ -409,11 +409,15 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
 .wp-refchip__nonull { font-size: 8px; line-height: 1; opacity: 0.85; }
 
 /* Hover card — teleported to <body>; scoped styles still apply (the data-v
- * attribute travels with the teleported node). z-index 9999 matches the other
- * canvas popovers. */
+ * attribute travels with the teleported node).
+ *
+ * Sits ABOVE the popover tier (10020), not level with it: a chip can live
+ * INSIDE a popover — a constraint exception's `@ref` chip renders in a Select
+ * option row — so its hover card has to clear the menu it is drawn on top of.
+ * At 9999 it rendered underneath and was unreadable. */
 .wp-refchip-pop {
   position: fixed;
-  z-index: 9999;
+  z-index: 10030;
   width: 260px;
   padding: 7px 9px;
   background: var(--wp-bg-1);

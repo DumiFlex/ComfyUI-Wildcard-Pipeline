@@ -433,7 +433,10 @@ const multiEntryTitle = computed<string>(() =>
 
 .wp-pair-pop {
   position: fixed;
-  z-index: 9999;
+  /* Hover-card tier — above the popover tier (10020), since a pair badge can
+     be rendered inside a popover and its card must clear it. Matches
+     RefChip's hover card. */
+  z-index: 10030;
   width: 280px;
   padding: 8px 10px;
   background: var(--wp-bg-1, var(--wp-bg2, #1a1d24));

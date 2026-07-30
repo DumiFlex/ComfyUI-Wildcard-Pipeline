@@ -363,6 +363,33 @@ function modeLabel(mode: string | undefined): string {
 function opUsesValue(op: string | undefined): boolean {
   return op !== "exists" && op !== "not_exists" && op !== "is_set" && op !== "is_unset";
 }
+
+/** Plain-text rendering of a branch, for the `title` on the truncated preview
+ *  rows. The visible summary is a chip stream clipped to one line, so without
+ *  this a long value would be unreadable with no way to see the rest. */
+function branchSummaryText(
+  branch: { condition?: { var?: string; op?: string; value?: string };
+            action?: { target_var?: string; mode?: string; value?: string } } | undefined,
+): string {
+  if (!branch) return "";
+  const parts: string[] = [];
+  const c = branch.condition;
+  if (c?.var) {
+    parts.push(`$${c.var} ${opSymbol(c.op)}`);
+    if (opUsesValue(c.op) && c.value) parts.push(c.value);
+  }
+  const a = branch.action;
+  if (a?.target_var) parts.push(`→ $${a.target_var} ${modeLabel(a.mode)} ${a.value ?? ""}`);
+  return parts.join(" ").trim();
+}
+
+/** Same, for the collapsed rule head — which previews its FIRST branch. */
+function ruleSummaryText(rule: DerivationRule): string {
+  const first = rule.branches?.[0];
+  const head = branchSummaryText(first);
+  const n = rule.branches?.length ?? 0;
+  return n > 1 ? `${head}  (+${n - 1} more branch${n - 1 === 1 ? "" : "es"})` : head;
+}
 </script>
 
 <template>
@@ -422,7 +449,11 @@ function opUsesValue(op: string | undefined): boolean {
 
           <span class="rule-head__num" :title="`Rule id ${rule.id}`">Rule {{ ruleIdx + 1 }}</span>
 
-          <span class="rule-head__summary" :data-test="`rule-summary-${rule.id}`">
+          <span
+            class="rule-head__summary"
+            :title="ruleSummaryText(rule)"
+            :data-test="`rule-summary-${rule.id}`"
+          >
             <template v-if="rule.branches && rule.branches.length > 0">
               <span
                 v-if="rule.branches[0].condition?.var"
@@ -518,7 +549,7 @@ function opUsesValue(op: string | undefined): boolean {
               <span class="branch-cell branch-cell--tag" :data-kind="bi === 0 ? 'if' : 'elif'">
                 {{ bi === 0 ? "IF" : "ELIF" }}
               </span>
-              <span class="branch-cell branch-cell--summary">
+              <span class="branch-cell branch-cell--summary" :title="branchSummaryText(branch)">
                 <span
                   v-if="branch.condition?.var"
                   :class="['rule-tok-var', varColorClass(branch.condition.var)]"
@@ -612,7 +643,10 @@ function opUsesValue(op: string | undefined): boolean {
                 </span>
               </span>
               <span class="branch-cell branch-cell--tag" data-kind="else">ELSE</span>
-              <span class="branch-cell branch-cell--summary">
+              <span
+                class="branch-cell branch-cell--summary"
+                :title="branchSummaryText({ action: rule.else.action })"
+              >
                 <span class="rule-tok-arrow">→</span>
                 <span
                   v-if="rule.else.action?.target_var"
@@ -801,13 +835,18 @@ function opUsesValue(op: string | undefined): boolean {
   flex: 1;
   min-width: 0;
   font: 11px var(--wp-font-mono);
-  flex-wrap: wrap;
-  /* A rule head is a PREVIEW. Unclamped, a paragraph-length action value wrapped
-     to hundreds of lines and pushed the rest of the modal — every other rule,
-     the runtime row, the footer buttons — off screen. Two lines is enough to
-     recognise the rule; the expanded body shows the value in full. */
-  max-height: 2.8em;
+  /* A rule head is a PREVIEW, kept to ONE line. Wrapping let a
+     paragraph-length action value run to hundreds of lines and push the rest of
+     the modal off screen; a max-height clamp fixed that but sliced the last
+     line in half, which looked broken. Truncating instead keeps the row a
+     clean single line, and `title` (see `ruleSummaryText`) gives the full text
+     on hover. */
+  flex-wrap: nowrap;
   overflow: hidden;
+  white-space: nowrap;
+  /* Flex containers ignore `text-overflow`, so fade the trailing edge to signal
+     "cut off" rather than ending on a hard chop. */
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
 }
 .rule-card--off .rule-head__summary { text-decoration: line-through; }
 .rule-head__chip {
@@ -871,14 +910,15 @@ function opUsesValue(op: string | undefined): boolean {
   align-items: center;
   gap: 4px;
 }
-/* Same clamp as the rule head, for the same reason: this is a per-branch
+/* Same treatment as the rule head, for the same reason: this is a per-branch
    PREVIEW column, and one long action value stretched its row until the branch
-   table stopped being a table. The override inputs beside it hold the full
-   value and scroll. */
+   table stopped being a table. Single line + trailing fade + `title` on hover;
+   the override inputs beside it hold the full value and scroll. */
 .branch-cell--summary {
-  flex-wrap: wrap;
-  max-height: 4.2em;
+  flex-wrap: nowrap;
   overflow: hidden;
+  white-space: nowrap;
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
 }
 .branch-cell--head {
   color: var(--wp-text-dim, var(--wp-text3));
