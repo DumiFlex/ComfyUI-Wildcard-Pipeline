@@ -2481,21 +2481,23 @@ function onHostKeydown(ev: KeyboardEvent): void {
 .wp-rt--more::after {
   content: "";
   position: absolute;
-  left: 1px;
-  right: 1px;
-  bottom: 1px;
-  height: 22px;
+  /* Full-bleed inset — 1px side insets left a visible seam down the left edge
+     where the band stopped short of the border. The wrapper's own
+     `overflow: hidden` + radius clip this cleanly instead. */
+  inset: auto 0 0 0;
+  height: 16px;
   pointer-events: none;
-  border-radius: 0 0 var(--wp-radius) var(--wp-radius);
+  /* Gradient to a TRANSPARENT accent, not to a blend with the background: the
+     text keeps showing through instead of being washed out, while the tint
+     stays chromatic enough to notice. The 1px inset line at the very bottom is
+     what actually catches the eye. */
   background: linear-gradient(
     to bottom,
     transparent,
-    color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 7%, var(--wp-bg-2, #15151f)) 65%,
-    color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 13%, var(--wp-bg-2, #15151f))
+    color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 26%, transparent)
   );
+  box-shadow: inset 0 -1px 0 color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 60%, transparent);
 }
-/* Don't fade over the resize grip — it lives in the bottom-right corner. */
-.wp-rt--more.wp-rt--single::after { right: 14px; }
 
 .wp-rt--focused {
   border-color: var(--wp-accent-500, #8b5cf6);

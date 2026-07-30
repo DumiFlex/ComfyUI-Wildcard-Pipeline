@@ -93,6 +93,15 @@ function toggleBranch(bi: number): void {
 function isBranchCollapsed(bi: number): boolean {
   return collapsedBranches.value.has(bi);
 }
+/** Click anywhere on a branch header toggles it. Clicks that originated inside
+ *  an interactive descendant are left alone: the chevron button already calls
+ *  `toggleBranch` (handling it here too would cancel it out), and the enable
+ *  checkbox / delete action must not collapse the branch as a side effect. */
+function onBranchHeadClick(ev: MouseEvent, bi: number): void {
+  const t = ev.target as HTMLElement | null;
+  if (t?.closest?.("button, input, select, textarea, a, label, [role='checkbox']")) return;
+  toggleBranch(bi);
+}
 /** Collapse / expand every branch in THIS rule (the inline per-rule control). */
 function collapseAllBranches(): void {
   collapsedBranches.value = new Set(allBranchKeys());
@@ -373,7 +382,12 @@ const branchCount = computed(() => rule.value.branches.length);
         :data-kind="bi === 0 ? 'if' : 'elif'"
         :data-test="`branch-${index}-${bi}`"
       >
-        <div class="branch-head">
+        <!-- Whole header toggles — the chevron alone was a ~14px target on a
+             full-width bar that already looked pressable. `onBranchHeadClick`
+             ignores clicks that came from a control inside the header (the
+             chevron button, the enable checkbox, the delete action) so those
+             keep their own behaviour and don't double-toggle. -->
+        <div class="branch-head" @click="onBranchHeadClick($event, bi)">
           <button
             type="button"
             class="branch-collapse"
@@ -567,7 +581,7 @@ const branchCount = computed(() => rule.value.branches.length);
 
       <!-- ELSE branch -->
       <div v-if="rule.else" class="branch branch--else" data-kind="else" :data-test="`branch-else-${index}`">
-        <div class="branch-head">
+        <div class="branch-head" @click="onBranchHeadClick($event, -1)">
           <button
             type="button"
             class="branch-collapse"
@@ -732,7 +746,13 @@ const branchCount = computed(() => rule.value.branches.length);
   display: flex;
   align-items: center;
   gap: var(--wp-space-4);
+  /* Whole bar toggles (see `onBranchHeadClick`) — advertise it, and reset the
+     cursor on the controls that own their own clicks. */
+  cursor: pointer;
 }
+.branch-head button,
+.branch-head input,
+.branch-head label { cursor: revert; }
 /* Per-branch collapse chevron — mirrors the rule-card head toggle. */
 .branch-collapse {
   display: inline-flex;
