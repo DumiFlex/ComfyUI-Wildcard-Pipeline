@@ -37,12 +37,19 @@ const router = createRouter({
 describe("Templates.vue", () => {
   beforeEach(() => setActivePinia(createPinia()));
 
-  it("lists saved templates with their string preview", async () => {
+  it("lists saved templates with a scannable length + $var summary", async () => {
+    // The Template column is gone: a template string is a whole prompt
+    // skeleton, so a table cell only ever showed a truncated fragment while
+    // stealing the width the name needed. The full string lives in the row
+    // expansion; the column now carries size + slot count.
     router.push("/templates");
     await router.isReady();
     const w = mount(Templates, { global: { plugins: [router] } });
     await flushPromises();
     expect(w.text()).toContain("portrait");
-    expect(w.text()).toContain("$subject $style");
+    const meta = w.find('[data-test="tpl-meta"]');
+    expect(meta.exists()).toBe(true);
+    // "$subject $style" → 15 chars, 2 distinct vars.
+    expect(meta.text()).toBe("15 ch · 2 $var");
   });
 });

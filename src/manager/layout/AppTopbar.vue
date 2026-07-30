@@ -3,7 +3,7 @@ import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import Icon from "../components/ui/Icon.vue";
 import UpdateDialog from "../components/UpdateDialog.vue";
-import { GITHUB_REPO } from "../config/links";
+import { DISCORD_INVITE, GITHUB_REPO } from "../config/links";
 import { useBrowserHistory } from "../composables/useBrowserHistory";
 import { useReleaseCheck } from "../composables/useReleaseCheck";
 import { useUiStore } from "../stores/uiStore";
@@ -168,6 +168,20 @@ function openPalette(): void {
       <Icon name="pi-sliders-h" />
     </button>
 
+    <!-- Discord gets a permanent home here: it's the fastest route to a human,
+         and it used to be buried in the community tab's offline fallback. -->
+    <a
+      :href="DISCORD_INVITE"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="wp-topbar__icon-btn wp-topbar__discord"
+      aria-label="Join the Discord"
+      title="Join the Discord"
+      data-test="topbar-discord"
+    >
+      <Icon name="pi-discord" />
+    </a>
+
     <RouterLink
       to="/settings"
       class="wp-topbar__icon-btn"
@@ -187,6 +201,10 @@ function openPalette(): void {
    .wp-topbar__spacer, .wp-topbar__icon-btn — are all defined globally in
    tokens.css. Community status pill + user menu styles moved to the
    feat/community-tab branch alongside the views that use them. */
+
+/* Discord brand tint on hover so it reads as the social route, not another
+   settings control. */
+.wp-topbar__discord:hover { color: #5865f2; }
 
 /* Wordmark gradient text — brand identity anchor #1.
  * Base color ensures legibility in browsers without background-clip: text. */

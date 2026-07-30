@@ -296,9 +296,12 @@ function onDelete(): void {
  * fit (height driven by `autosizeValue`). Capped so a pasted paragraph can't
  * push the rest of the modal off-screen; past the cap it scrolls. */
 .row__value {
-  resize: none;
+  /* Manual drag handle as well as the auto-grow, matching the derivation and
+     combine template inputs — auto-sizing picks a sensible height, the handle
+     lets the user override it. */
+  resize: vertical;
   overflow-y: auto;
-  max-height: 30vh;
+  max-height: 12rem;
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;

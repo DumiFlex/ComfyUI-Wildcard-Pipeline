@@ -47,15 +47,25 @@ interface Props {
   /** Module kind for the section header type-icon. Optional — when
    *  absent, no icon renders. Same kind strings as PickerRow. */
   kind?: string;
+  /** Force the body open regardless of the user's collapse state — set while a
+   *  search is active and this section HAS matches. Without it a filtered
+   *  section stayed collapsed and the user couldn't tell whether the query had
+   *  found anything: every header just read "0 items" or a count they had to
+   *  expand to see. */
+  forceOpen?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   defaultOpen: true,
   kind: undefined,
+  forceOpen: false,
 });
 const emit = defineEmits<{ (e: "toggle-all", v: boolean): void }>();
 
-const open = ref<boolean>(props.defaultOpen);
+const userOpen = ref<boolean>(props.defaultOpen);
+/** `forceOpen` wins while it's set; collapsing state is remembered underneath
+ *  so clearing the search restores whatever the user had. */
+const open = computed<boolean>(() => props.forceOpen || userOpen.value);
 const allSelected = computed<boolean>(
   () => props.totalCount > 0 && props.selectedCount === props.totalCount,
 );
@@ -86,7 +96,13 @@ const kindClass = computed<string | null>(() => {
 function onHeaderClick(evt: MouseEvent): void {
   const target = evt.target as HTMLElement | null;
   if (target && target.closest('[data-test="picker-section-checkbox"]')) return;
-  open.value = !open.value;
+  toggleOpen();
+}
+
+/** Writes the remembered state. While `forceOpen` holds the section open, a
+ *  click still records the user's intent so it applies once the search clears. */
+function toggleOpen(): void {
+  userOpen.value = !open.value;
 }
 </script>
 
@@ -98,8 +114,8 @@ function onHeaderClick(evt: MouseEvent): void {
       role="button"
       tabindex="0"
       @click="onHeaderClick"
-      @keydown.enter.prevent="open = !open"
-      @keydown.space.prevent="open = !open"
+      @keydown.enter.prevent="toggleOpen"
+      @keydown.space.prevent="toggleOpen"
     >
       <button
         type="button"

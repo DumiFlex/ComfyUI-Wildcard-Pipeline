@@ -7,6 +7,7 @@ import StaleBanner from "../components/StaleBanner.vue";
 import ErrorBoundary from "../components/ErrorBoundary.vue";
 import ToastHost from "../components/ui/ToastHost.vue";
 import TweaksPanel from "../components/TweaksPanel.vue";
+import FeedbackModal from "../components/FeedbackModal.vue";
 import CommandPalette from "../components/CommandPalette.vue";
 import ShortcutsHelp from "../components/ShortcutsHelp.vue";
 import UnmetDepsDialog from "../components/UnmetDepsDialog.vue";
@@ -46,6 +47,13 @@ const guidedPublish = useGuidedPublishStore();
 
 const paletteOpen = ref(false);
 const shortcutsOpen = ref(false);
+const feedbackOpen = ref(false);
+
+/** Nav items that open something in-app rather than navigating. The sidebar
+ *  and topbar both emit this so neither needs to own modal state. */
+function onNavAction(name: "feedback"): void {
+  if (name === "feedback") feedbackOpen.value = true;
+}
 
 /** Predicate: target is a typing surface where global single-modifier
  *  shortcuts should defer to the input. Cmd+K and Cmd+/ still fire —
@@ -277,7 +285,7 @@ onBeforeUnmount(() => {
     <StaleBanner />
     <AppTopbar />
     <div class="wp-body" :data-collapsed="ui.sidebarCollapsed || undefined">
-      <AppSidebar />
+      <AppSidebar @action="onNavAction" />
       <main id="wp-main" class="wp-content" tabindex="-1">
         <ErrorBoundary>
           <RouterView v-slot="{ Component, route }">
@@ -299,6 +307,7 @@ onBeforeUnmount(() => {
     <TweaksPanel />
     <CommandPalette v-model:open="paletteOpen" :items="commandIndex" :recent-ids="recent.recentIds" />
     <ShortcutsHelp v-model:open="shortcutsOpen" />
+    <FeedbackModal v-model:open="feedbackOpen" />
     <!-- Single host for the guided-publish gate (B3). Both publish entry
          points (CommunityRowActions, ExportTab) route through the
          guided-publish store; this lone dialog renders whenever it opens. -->

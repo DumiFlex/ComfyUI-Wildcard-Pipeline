@@ -216,6 +216,58 @@ describe("ExportTab — search + row disambiguation", () => {
     expect(wrap.get('[data-test="export-tab-counter"]').text()).toContain("1");
   });
 
+  it("auto-expands a section that has matches while searching", async () => {
+    // Sections default collapsed. With a filter active but the body still
+    // collapsed, the user couldn't tell whether the query had found anything.
+    seedDuplicateNames();
+    const wrap = mount(ExportTab);
+    await flushPromises();
+    // Collapsed to begin with — no rows rendered.
+    expect(wrap.findAll(".wp-picker-row")).toHaveLength(0);
+    await wrap.get('[data-test="export-tab-search"]').setValue("legwear");
+    expect(wrap.findAll(".wp-picker-row")).toHaveLength(1);
+    // Clearing the search returns to the user's collapsed state.
+    await wrap.get('[data-test="export-tab-search-clear"]').trigger("click");
+    expect(wrap.findAll(".wp-picker-row")).toHaveLength(0);
+  });
+
+  it("gives every entity kind a subtitle, not just wildcards", async () => {
+    apiAny.modules.list.mockResolvedValue({
+      items: [
+        mkModule({
+          id: "fv1", type: "fixed_values", name: "Quality",
+          payload: { values: [{}, {}, {}] },
+        }),
+        mkModule({
+          id: "dr1", type: "derivation", name: "Pose select",
+          payload: { rules: [{}, {}] },
+        }),
+        mkModule({
+          id: "cn1", type: "constraint", name: "Outfit to Color",
+          payload: { matrix: { a: { x: 1, y: 1 }, b: { x: 1, y: 1 } }, exceptions: [{}] },
+        }),
+      ],
+      total: 3,
+    });
+    apiAny.bundles.list.mockResolvedValue({
+      items: [mkBundle({
+        id: "b1", name: "Scene Composer",
+        children: [{ type: "wildcard" }, { type: "bundle" }] as unknown as BundleRow["children"],
+      })],
+      total: 1,
+    });
+    const wrap = mount(ExportTab);
+    await flushPromises();
+    for (const key of ["fixed_values", "derivation", "constraint", "bundle"]) {
+      await expandSection(wrap, key);
+    }
+    const subs = wrap.findAll('[data-test="picker-row-subtitle"]').map((n) => n.text());
+    expect(subs).toContain("3 values");
+    expect(subs).toContain("2 rules");
+    expect(subs).toContain("2×2 matrix · 1 exception");
+    expect(subs).toContain("2 modules · 1 nested");
+  });
+
   it("says nothing matched rather than showing the empty-library copy", async () => {
     seedDuplicateNames();
     const wrap = mount(ExportTab);

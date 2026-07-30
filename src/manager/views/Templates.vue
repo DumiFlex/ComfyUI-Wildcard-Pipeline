@@ -78,6 +78,20 @@ function edit(row: TemplateRow) {
   });
 }
 
+/** Scannable stand-in for the dropped Template column: character count plus
+ *  how many distinct `$var` slots the template references. `$$` is the literal
+ *  escape, so an odd-length `$` run is what starts a real reference — same
+ *  parity rule the tokenizer uses. */
+function templateMeta(row: TemplateRow): string {
+  const s = row.template_string ?? "";
+  if (!s) return "empty";
+  const vars = new Set(
+    [...s.matchAll(/(?<!\$)(?:\$\$)*\$([A-Za-z_][A-Za-z0-9_]*)/g)].map((m) => m[1]),
+  );
+  const chars = `${s.length} ch`;
+  return vars.size > 0 ? `${chars} · ${vars.size} $var` : chars;
+}
+
 async function copyId(id: string) {
   try {
     await navigator.clipboard.writeText(id);
@@ -227,9 +241,14 @@ function toggleTag(t: string, currentTags: string[] | undefined): string[] {
       </div>
     </template>
 
+    <!-- No Template column. A template string is a whole prompt skeleton, so
+         squeezing it into a table cell only ever showed a truncated fragment
+         while stealing the width the NAME column needed — long names wrapped
+         to three lines next to an unreadable snippet. The row expansion
+         already shows the string in full. -->
     <template #columns-head>
       <th style="width: 130px">Category</th>
-      <th>Template</th>
+      <th style="width: 90px">Length</th>
     </template>
 
     <template #columns="{ row }">
@@ -243,9 +262,11 @@ function toggleTag(t: string, currentTags: string[] | undefined): string[] {
         </span>
         <span v-else class="wp-dim">—</span>
       </td>
+      <!-- Something scannable in the freed column: how big the template is,
+           plus how many `$var` slots it references. -->
       <td>
-        <span class="wp-tpl-preview" :title="row.template_string">
-          {{ row.template_string || "(empty)" }}
+        <span class="wp-mono wp-dim wp-tpl-meta" data-test="tpl-meta">
+          {{ templateMeta(row) }}
         </span>
       </td>
     </template>
@@ -282,16 +303,9 @@ function toggleTag(t: string, currentTags: string[] | undefined): string[] {
   border-color: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
   color: var(--wp-accent-text);
 }
-.wp-tpl-preview {
-  display: inline-block;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.wp-tpl-meta {
+  font-size: var(--wp-text-xs);
   white-space: nowrap;
-  vertical-align: middle;
-  font-family: var(--wp-font-mono, monospace);
-  font-size: var(--wp-text-sm);
-  color: var(--wp-text-muted);
 }
 .wp-tpl-full {
   margin: 0;

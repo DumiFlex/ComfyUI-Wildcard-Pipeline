@@ -7,7 +7,7 @@ import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import { useTemplateStore } from "../stores/templateStore";
 import { useCategoryStore } from "../stores/categoryStore";
-import { DISCORD_INVITE, GITHUB_NEW_ISSUE, GITHUB_REPO, GITHUB_WIKI } from "../config/links";
+import { GITHUB_REPO } from "../config/links";
 
 interface NavItem {
   id: string;
@@ -15,6 +15,10 @@ interface NavItem {
   icon: string;
   to?: string;
   url?: string;
+  /** In-app action instead of navigation — the item emits `action` and the
+   *  layout decides what to open. Used by "Feedback & support", which opens a
+   *  modal rather than leaving the app for a tracker. */
+  action?: "feedback";
   /** Nested children — when present, the item renders as a
    *  collapsible parent (chevron + click toggles). Sakai-vue style. */
   children?: NavItem[];
@@ -23,6 +27,8 @@ interface NavSection {
   label: string;
   items: NavItem[];
 }
+
+const emit = defineEmits<{ action: [name: "feedback"] }>();
 
 const ui = useUiStore();
 const router = useRouter();
@@ -65,13 +71,15 @@ const SECTIONS: NavSection[] = [
     items: [
       { id: "community",     label: "Community",     icon: "pi-globe",         to: "/community" },
       { id: "documentation", label: "Documentation", icon: "pi-book",          to: "/docs" },
-      { id: "_wiki",         label: "Wiki",          icon: "pi-external-link",  url: GITHUB_WIKI },
+      // No separate Wiki entry: it covers the same ground as Documentation but
+      // on GitHub, and View Source sits right below it — the wiki link lives
+      // in the Documentation view's header instead.
       { id: "_source",       label: "View Source",   icon: "pi-github",         url: GITHUB_REPO },
-      // Support routes. The Discord invite previously existed ONLY inside the
-      // community embed's offline fallback, so it was unreachable whenever the
-      // community loaded normally.
-      { id: "_issue",        label: "Report an issue", icon: "pi-exclamation-circle", url: GITHUB_NEW_ISSUE },
-      { id: "_discord",      label: "Discord",       icon: "pi-discord",        url: DISCORD_INVITE },
+      // Opens the FeedbackModal rather than jumping straight to a tracker:
+      // "issue" alone under-sells it — most feedback is a feature request, and
+      // the modal lets the user pick Discord (faster) vs GitHub (tracked).
+      // Discord also has a dedicated topbar icon, see AppTopbar.
+      { id: "_feedback",     label: "Feedback & support", icon: "pi-comments", action: "feedback" },
     ],
   },
 ];
@@ -143,6 +151,10 @@ function toggleParent(item: NavItem) {
 
 function onItemClick(item: NavItem) {
   if (item.url) return; // anchor handles external nav
+  if (item.action) {
+    emit("action", item.action);
+    return;
+  }
   if (item.children?.length) {
     // Parent click: navigate to the parent route if it has one AND
     // also toggle the expand state so the child list reveals.

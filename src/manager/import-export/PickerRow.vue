@@ -241,9 +241,14 @@ function onRowClick(ev: MouseEvent): void {
 
     <div class="wp-row-name">
       <span class="wp-picker-row__name">{{ name }}</span>
+      <!-- Right-aligned within the name column: sitting immediately after the
+           name it competed with it for the eye, and the column of detail was
+           impossible to scan down. `margin-left: auto` pushes it to the
+           column's trailing edge so all rows line up. -->
       <span
         v-if="props.subtitle"
         class="wp-picker-row__subtitle"
+        :title="props.subtitle"
         data-test="picker-row-subtitle"
       >{{ props.subtitle }}</span>
       <span
@@ -441,13 +446,18 @@ function onRowClick(ev: MouseEvent): void {
 /* Disambiguating detail ("$outfit · 31 options"). Shrinks before the name
  * does, and clips rather than pushing the id column off the row. */
 .wp-picker-row__subtitle {
+  /* Trailing edge of the name column so the detail forms one scannable
+     right-aligned run instead of trailing each name at a different x. */
+  margin-left: auto;
+  padding-left: var(--wp-space-4);
   font-family: var(--wp-font-mono);
   font-size: 10px;
   color: var(--wp-text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  min-width: 0;
+  flex-shrink: 0;
+  max-width: 45%;
 }
 
 /* Short id — mirrors prototype lines 171-173 (mono font, dim text, copy

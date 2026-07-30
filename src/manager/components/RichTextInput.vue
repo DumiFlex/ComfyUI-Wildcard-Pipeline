@@ -1221,6 +1221,19 @@ function syncTextSpansToAtoms(): void {
   }
 }
 
+/** True when the host is scrolled and there is still content below the fold.
+ *  Drives the bottom fade — a capped box gives no other clue that it is
+ *  hiding text, and users pasting paragraph-length values had no way to tell
+ *  a full value from a truncated one. */
+const hasMoreBelow = ref(false);
+
+function updateOverflowHint(): void {
+  const host = hostEl.value;
+  if (!host) return;
+  // 2px slack absorbs sub-pixel rounding at the exact bottom.
+  hasMoreBelow.value = host.scrollHeight - host.scrollTop - host.clientHeight > 2;
+}
+
 /** True when the live host has FEWER rendered atom nodes than `atoms.value`
  *  expects — i.e. the browser destroyed nodes Vue still holds `el` pointers
  *  for. Contenteditable hands the browser ownership of these children, and
@@ -1258,7 +1271,10 @@ function applyAtoms(next: Atom[], opts?: { rebuild?: boolean }): void {
   else if (opts?.rebuild) renderEpoch.value += 1;
   atoms.value = padAtoms(next);
   isEmpty.value = serialiseAtomsLocal(next).length === 0;
-  void nextTick(() => syncTextSpansToAtoms());
+  void nextTick(() => {
+    syncTextSpansToAtoms();
+    updateOverflowHint();
+  });
 }
 
 /** Live structure-aware read of the host as an `Atom[]` — the deletion-path
@@ -2277,6 +2293,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
       multiline ? 'wp-rt--multi' : 'wp-rt--single',
       focused ? 'wp-rt--focused' : 'wp-rt--rest',
       disabled ? 'wp-rt--disabled' : null,
+      hasMoreBelow ? 'wp-rt--more' : null,
     ]"
     :data-focused="focused ? '' : null"
   >
@@ -2294,6 +2311,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
         { 'wp-rt__host--wrap': wrap && !multiline, 'wp-rt__host--empty': isEmpty },
       ]"
       :contenteditable="!disabled"
+      @scroll="updateOverflowHint"
       :aria-label="ariaLabel"
       :data-placeholder="placeholder"
       :data-multiline="multiline"
@@ -2454,6 +2472,31 @@ function onHostKeydown(ev: KeyboardEvent): void {
   font-family: var(--wp-font-mono, ui-monospace, monospace);
   font-size: var(--wp-text-sm);
 }
+/* "More below" hint — a capped box otherwise looks identical whether it holds
+   its whole value or a third of it. Deliberately restrained: a short fade to
+   the field's own background, lifted with a touch of accent so the eye catches
+   it, and `pointer-events: none` so it never intercepts a click or a caret
+   placement near the bottom edge. Clears the moment the user scrolls to the
+   end. */
+.wp-rt--more::after {
+  content: "";
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  bottom: 1px;
+  height: 22px;
+  pointer-events: none;
+  border-radius: 0 0 var(--wp-radius) var(--wp-radius);
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 7%, var(--wp-bg-2, #15151f)) 65%,
+    color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 13%, var(--wp-bg-2, #15151f))
+  );
+}
+/* Don't fade over the resize grip — it lives in the bottom-right corner. */
+.wp-rt--more.wp-rt--single::after { right: 14px; }
+
 .wp-rt--focused {
   border-color: var(--wp-accent-500, #8b5cf6);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 25%, transparent);
@@ -2499,7 +2542,11 @@ function onHostKeydown(ev: KeyboardEvent): void {
 .wp-rt__host--single.wp-rt__host--wrap {
   height: auto;
   min-height: var(--wp-input-h, 34px);
-  max-height: 40vh;
+  /* 40vh let one field eat half the viewport before it ever scrolled, which
+     pushed every control below it off-screen. 12rem (~7 lines) is enough to
+     read a long value at a glance; past that the box scrolls AND keeps its
+     `resize: vertical` handle, so anyone who wants more just drags it. */
+  max-height: 12rem;
   padding: 6px var(--wp-space-5);
   line-height: 1.6;
   white-space: pre-wrap;
@@ -2519,7 +2566,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
   min-height: 72px;
   /* Cap + scroll, matching `--wrap`. Uncapped, pasting a paragraph grew the
      box to thousands of pixels and pushed every control below it off-screen. */
-  max-height: 40vh;
+  max-height: 14rem;
   overflow-y: auto;
   resize: vertical;
   white-space: pre-wrap;

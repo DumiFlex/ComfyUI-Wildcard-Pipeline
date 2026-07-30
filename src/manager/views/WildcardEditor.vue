@@ -272,6 +272,20 @@ interface SubcatGroup {
   isOther: boolean;
 }
 
+/** Sub-Categories section disclosure. Open by default so the axes stay
+ *  discoverable on a wildcard that has few of them. */
+const subcatOpen = ref(true);
+
+/** What the collapsed section reports, so shutting it doesn't hide whether the
+ *  wildcard is tagged at all. */
+const subcatSummary = computed<string>(() => {
+  const tags = subCategories.value.length;
+  if (tags === 0) return "No sub-categories yet.";
+  const axes = Object.keys(tagGroups.value).length;
+  const t = `${tags} tag${tags === 1 ? "" : "s"}`;
+  return axes > 0 ? `${t} across ${axes} ax${axes === 1 ? "is" : "es"}` : t;
+});
+
 const subcatGroups = computed<SubcatGroup[]>(() => {
   const groups: SubcatGroup[] = [];
   const claimed = new Set<string>();
@@ -529,6 +543,29 @@ function toggleOptTagPicker(optionId: string, ev?: MouseEvent): void {
 
 function optionHasTag(o: WildcardOption, tag: string): boolean {
   return (o.sub_categories ?? []).includes(tag);
+}
+
+/** How many assigned tags a row shows before collapsing the rest behind `+N`.
+ *  A fully tagged option carries 8+ (hue + temperature + tone + saturation +
+ *  suitability flags); rendering them all made one row taller than the whole
+ *  rest of the table. Matches the canvas OptionRow's cap. */
+const OPT_TAG_LIMIT = 4;
+const expandedOptTags = ref<Set<string>>(new Set());
+
+function toggleOptTagsExpanded(optionId: string): void {
+  const next = new Set(expandedOptTags.value);
+  if (next.has(optionId)) next.delete(optionId);
+  else next.add(optionId);
+  expandedOptTags.value = next;
+}
+
+function visibleOptionTags(o: WildcardOption): string[] {
+  const all = o.sub_categories ?? [];
+  return expandedOptTags.value.has(o.id) ? all : all.slice(0, OPT_TAG_LIMIT);
+}
+
+function hiddenOptionTagCount(o: WildcardOption): number {
+  return (o.sub_categories ?? []).length - visibleOptionTags(o).length;
 }
 
 /** Toggle a tag's membership on an option. Preserves registry order so
@@ -1388,11 +1425,29 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
       <Card title="Sub-Categories">
         <template #actions>
           <span class="wp-card__hint">Group tags into axes — used to filter the pool</span>
+          <!-- A fully tagged wildcard shows every axis and every pill at once,
+               which pushed the options table — the thing being edited — off
+               screen. `+` expands, `×` collapses; the count keeps the section
+               informative while shut. -->
+          <button
+            type="button"
+            class="subcat-collapse"
+            :aria-expanded="subcatOpen"
+            :aria-label="subcatOpen ? 'Collapse sub-categories' : 'Expand sub-categories'"
+            :title="subcatOpen ? 'Collapse sub-categories' : 'Expand sub-categories'"
+            data-test="subcat-collapse"
+            @click="subcatOpen = !subcatOpen"
+          >
+            <i :class="subcatOpen ? 'pi pi-times' : 'pi pi-plus'" aria-hidden="true" />
+          </button>
         </template>
+        <div v-if="!subcatOpen" class="subcat-collapsed" data-test="subcat-collapsed">
+          {{ subcatSummary }}
+        </div>
         <!-- Group boxes: one per tag_groups axis + a trailing ungrouped
              box. Each box owns its pills (⠿ name (count) ⋯) + an inline
              "+ tag". Adding is contextual per group — no global add bar. -->
-        <div class="subcat-groups" @click="closeMenus">
+        <div v-else class="subcat-groups" @click="closeMenus">
           <section
             v-for="group in subcatGroups"
             :key="group.axis"
@@ -1692,9 +1747,13 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                    chevron opens a grouped checkbox picker. Membership only
                    — no boolean expression here. -->
               <div v-else class="opt-tags" @click.stop>
+                <!-- Capped chip run, mirroring the canvas OptionRow: a fully
+                     tagged option carries 8+ tags and showing them all made a
+                     single row taller than the rest of the table. `+N` expands
+                     that row on demand. -->
                 <div class="opt-tags__control">
                   <span
-                    v-for="tag in (o.sub_categories ?? [])"
+                    v-for="tag in visibleOptionTags(o)"
                     :key="tag"
                     class="opt-tags__chip"
                     :style="chipStyle(tag)"
@@ -1707,6 +1766,17 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                       @click.stop="toggleOptionTag(o, tag)"
                     >×</button>
                   </span>
+                  <button
+                    v-if="hiddenOptionTagCount(o) > 0 || expandedOptTags.has(o.id)"
+                    type="button"
+                    class="opt-tags__more"
+                    :aria-expanded="expandedOptTags.has(o.id)"
+                    :aria-label="expandedOptTags.has(o.id)
+                      ? 'Show fewer tags'
+                      : `Show ${hiddenOptionTagCount(o)} more tags`"
+                    :data-test="`opt-tags-more-${o.id}`"
+                    @click.stop="toggleOptTagsExpanded(o.id)"
+                  >{{ expandedOptTags.has(o.id) ? "−" : `+${hiddenOptionTagCount(o)}` }}</button>
                   <span v-if="!(o.sub_categories ?? []).length" class="opt-tags__placeholder">(none)</span>
                   <button
                     type="button"
@@ -1938,6 +2008,41 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
   flex-direction: column;
   gap: var(--wp-space-4);
 }
+/* Sub-Categories disclosure — `+` / `×` in the card header. */
+.subcat-collapse {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: var(--wp-space-3);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius-sm);
+  background: transparent;
+  color: var(--wp-text-muted);
+  cursor: pointer;
+  font-size: 11px;
+}
+.subcat-collapse:hover { color: var(--wp-text); border-color: var(--wp-accent); }
+.subcat-collapsed {
+  font-size: var(--wp-text-sm);
+  color: var(--wp-text-muted);
+}
+/* `+N` / `−` disclosure inside an option's tag cell. Dashed so it reads as
+   part of the chip run rather than as another removable tag. */
+.opt-tags__more {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border: 1px dashed color-mix(in srgb, var(--wp-text-dim) 55%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--wp-text-dim);
+  font-size: var(--wp-text-xs);
+  line-height: 1.4;
+  cursor: pointer;
+}
+.opt-tags__more:hover { color: var(--wp-text); border-color: var(--wp-accent); }
 .subcat-group {
   border: 1px solid var(--wp-border);
   /* Coloured left accent keyed to the axis hue so each group reads as a

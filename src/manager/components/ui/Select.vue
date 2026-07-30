@@ -245,7 +245,11 @@ function onKeydown(e: KeyboardEvent) {
       <!-- Selected label — optional color dot prefix. Consumers can
            override the label text rendering via the `#label` scoped
            slot (e.g. to render `@{uuid}` ref chips instead of raw text). -->
-      <span class="wp-select__label-wrap">
+      <!-- `title` on the label so a value clipped by the trigger's fixed width
+           is still readable on hover. Values here run long — a constraint
+           exception source can be a phrase plus a nested `@ref` — and the
+           ellipsis alone left no way to see the rest. -->
+      <span class="wp-select__label-wrap" :title="selected?.label || undefined">
         <span v-if="selected?.dot" class="wp-select__dot" :style="{ background: selected.dot }" />
         <span v-if="selected" class="wp-select__label-text">
           <slot name="label" :option="selected">{{ selected.label }}</slot>
@@ -290,7 +294,7 @@ function onKeydown(e: KeyboardEvent) {
           :aria-selected="opt.value === modelValue"
           :data-active="i === active ? 'true' : 'false'"
           :data-selected="opt.value === modelValue ? 'true' : 'false'"
-          :title="opt.title"
+          :title="opt.title ?? (opt.meta ? `${opt.label} — ${opt.meta}` : opt.label)"
           @mousedown.prevent="pick(opt)"
           @mouseenter="active = i"
           @focusin="active = i"

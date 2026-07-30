@@ -482,6 +482,7 @@ const branchCount = computed(() => rule.value.branches.length);
             <RichTextInput
               :model-value="branch.condition.value"
               surface="derivation"
+              wrap
               :var-suggestions="varSuggestions"
               :uuid-to-name="uuidToName"
               :placeholder="placeholderFor(branch.condition.op)"
@@ -541,6 +542,7 @@ const branchCount = computed(() => rule.value.branches.length);
           <RichTextInput
             :model-value="branch.action.value"
             surface="derivation"
+            wrap
             allow-nested-refs
             :var-suggestions="varSuggestions"
             :uuid-to-name="uuidToName"
@@ -623,6 +625,7 @@ const branchCount = computed(() => rule.value.branches.length);
           <RichTextInput
             :model-value="rule.else.action.value"
             surface="derivation"
+            wrap
             allow-nested-refs
             :var-suggestions="varSuggestions"
             :uuid-to-name="uuidToName"

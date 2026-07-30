@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, shallowRef, watch, type Component } from "vue";
 import { RouterLink } from "vue-router";
 import { DOC_GROUPS, pagesByGroup, findPage, searchPages, toneVar, type DocGroupId } from "../docs/registry";
+import { GITHUB_WIKI } from "../config/links";
 
 const props = defineProps<{ page?: string }>();
 
@@ -66,6 +67,20 @@ watch(
           {{ p.title }}
         </RouterLink>
       </template>
+
+      <!-- The wiki covers the same ground as these pages but on GitHub, so it
+           belongs at the foot of this nav rather than as its own sidebar tab
+           sitting directly above View Source. -->
+      <a
+        :href="GITHUB_WIKI"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="wp-doc__link wp-doc__link--external"
+        data-test="doc-wiki-link"
+      >
+        <i class="pi pi-external-link wp-doc__link-icon" aria-hidden="true" />
+        Wiki on GitHub
+      </a>
     </aside>
     <main ref="contentEl" class="wp-doc__content">
       <component :is="resolvedComponent" v-if="resolvedComponent" />
@@ -128,6 +143,15 @@ watch(
 .wp-doc__link:hover {
   background: var(--wp-bg-3);
   color: var(--wp-text);
+}
+/* Off-app destination — separated from the in-app page list so it doesn't read
+   as another doc page. */
+.wp-doc__link--external {
+  margin-top: 14px;
+  padding-top: 11px;
+  border-top: 1px solid var(--wp-border);
+  border-radius: 0;
+  color: var(--wp-text-dim);
 }
 .wp-doc__link.is-active {
   background: color-mix(in oklab, var(--wp-accent-500) 16%, transparent);
