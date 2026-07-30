@@ -16,6 +16,7 @@ import { computed, onMounted, ref } from "vue";
 import type { ModuleEntry } from "../../../../widgets/_shared";
 import type { PairingBadge } from "../../../../extension/constraint-pairs";
 import type { ModuleRow } from "../../../../manager/api/types";
+import type { VarProducerLike } from "../../../../manager/components/RefChip.vue";
 import {
   buildWildcardRefData,
   collectLibraryWildcardRefs,
@@ -35,6 +36,8 @@ const props = withDefaults(
     /** Vars produced upstream of this Context node — forwarded as the
      *  `$var` autocomplete list for the rule override fields. */
     upstreamVars?: string[];
+    /** `$var` → its producing module + node, for the chip hover cards. */
+    upstreamProducers?: Record<string, VarProducerLike>;
     /** Vars produced by other modules in the SAME Context node. */
     siblingVars?: string[];
     /** Via-nested constraint-pair badges for this derivation when it acts
@@ -86,6 +89,12 @@ const varSuggestions = computed<string[]>(() => {
   for (const n of props.siblingVars) if (n) set.add(n);
   return [...set].sort();
 });
+
+/** Producer lookup for the chip hover cards. A Map because RefChip reads it
+ *  per-chip and `Map.get` beats rebuilding an object lookup on every render. */
+const varProducerMap = computed<Map<string, VarProducerLike>>(
+  () => new Map(Object.entries(props.upstreamProducers ?? {})),
+);
 
 onMounted(async () => {
   // Fire-and-forget: until this resolves the ref-data maps stay empty, so
@@ -155,6 +164,7 @@ function onSpaClick(): void {
     <RulesSection
       :module="module"
       :var-suggestions="varSuggestions"
+      :var-producers="varProducerMap"
       :ref-suggestions="refSuggestions"
       :uuid-to-name="uuidToName"
       :uuid-to-sub-categories="refData.uuidToSubCategories"

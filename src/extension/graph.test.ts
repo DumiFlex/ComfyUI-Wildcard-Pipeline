@@ -3,6 +3,7 @@ import {
   collectDownstreamNestedReachUuids,
   collectDownstreamWildcardUuids,
   collectLocalResolvedForModule,
+  collectUpstreamProducers,
   collectUpstreamResolved,
   collectUpstreamVariables,
   collectUpstreamWildcardUuids,
@@ -36,6 +37,136 @@ function fakeContextNode(id: number, vars: string[], upstreamLink?: number): Lit
     }],
   };
 }
+
+describe("collectUpstreamProducers", () => {
+  /** Context node whose single module writes `$name`. */
+  function ctxWriting(
+    id: number,
+    moduleName: string,
+    varName: string,
+    upstreamLink?: number,
+  ): LiteNodeLike {
+    return {
+      id,
+      type: "WP_Context",
+      inputs: [{ name: "upstream", link: upstreamLink ?? null }],
+      outputs: [{ name: "context", links: [], type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "wp_modules",
+        value: JSON.stringify({
+          version: 1,
+          modules: [{
+            id: "mod00001",
+            type: "wildcard",
+            enabled: true,
+            meta: { name: moduleName },
+            payload: { var_binding: varName, options: [] },
+          }],
+        }),
+      }],
+    };
+  }
+
+  function chain(nodes: LiteNodeLike[], links: Record<number, {
+    origin_id: number; target_id: number;
+  }>): LiteGraphLike {
+    const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+    return {
+      _nodes: nodes,
+      links: Object.fromEntries(Object.entries(links).map(([k, v]) => [
+        k, { id: Number(k), origin_id: v.origin_id, origin_slot: 0, target_id: v.target_id, target_slot: 0 },
+      ])),
+      getNodeById: (id) => byId[id] ?? null,
+    } as LiteGraphLike;
+  }
+
+  it("names the module AND its node for a Context producer", () => {
+    const up = ctxWriting(1, "Outfit", "outfit");
+    const pov = ctxWriting(2, "Other", "unused", 100);
+    const g = chain([up, pov], { 100: { origin_id: 1, target_id: 2 } });
+    const out = collectUpstreamProducers(g, pov);
+    expect(out.outfit.kind).toBe("wildcard");
+    expect(out.outfit.moduleName).toBe("Outfit");
+    expect(out.outfit.moduleId).toBe("mod00001");
+    // WP_Context nodes identify by codename — the same one their header shows.
+    expect(out.outfit.nodeLabel).toMatch(/^[a-z]+-[a-z]+$/);
+    expect(out.outfit.shadowed).toBe(0);
+  });
+
+  it("attributes an injector row to its node, with no module", () => {
+    const inj: LiteNodeLike = {
+      id: 1,
+      type: "WP_ContextInjector",
+      outputs: [{ name: "context", links: [100], type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "wp_rows",
+        value: JSON.stringify({ version: 1, rows: [{ binding: "test", enabled: true }] }),
+      }],
+    };
+    const pov = ctxWriting(2, "Other", "unused", 100);
+    const out = collectUpstreamProducers(chain([inj, pov], { 100: { origin_id: 1, target_id: 2 } }), pov);
+    expect(out.test.kind).toBe("injector");
+    expect(out.test.moduleName).toBeUndefined();
+    // No codename scheme for the injector — falls back to a plain kind label.
+    expect(out.test.nodeLabel).toBe("Context Injector");
+  });
+
+  it("prefers a user-set title over the fallback label", () => {
+    const inj: LiteNodeLike = {
+      id: 1,
+      type: "WP_ContextInjector",
+      title: "Scene inputs",
+      outputs: [{ name: "context", links: [100], type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "wp_rows",
+        value: JSON.stringify({ version: 1, rows: [{ binding: "test", enabled: true }] }),
+      }],
+    };
+    const pov = ctxWriting(2, "Other", "unused", 100);
+    const out = collectUpstreamProducers(chain([inj, pov], { 100: { origin_id: 1, target_id: 2 } }), pov);
+    expect(out.test.nodeLabel).toBe("Scene inputs");
+  });
+
+  it("attributes the loop's iteration vars, including the _total pair", () => {
+    const loop: LiteNodeLike = {
+      id: 1,
+      type: "WP_ContextLoop",
+      outputs: [{ name: "context", links: [100], type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "wp_context_loop_config",
+        value: JSON.stringify({ iteration_var_name: "frame", iteration_internal: true }),
+      }],
+    };
+    const pov = ctxWriting(2, "Other", "unused", 100);
+    const out = collectUpstreamProducers(chain([loop, pov], { 100: { origin_id: 1, target_id: 2 } }), pov);
+    expect(out.frame.kind).toBe("loop");
+    expect(out.frame.internal).toBe(true);
+    expect(out.frame_total.kind).toBe("loop");
+    expect(out.frame_total.internal).toBe(false);
+  });
+
+  it("reports the LAST writer and counts the writes it shadowed", () => {
+    // Runtime is last-write-wins, so the card must name the winner.
+    const first = ctxWriting(1, "Early outfit", "outfit");
+    const second = ctxWriting(2, "Late outfit", "outfit", 100);
+    const pov = ctxWriting(3, "Other", "unused", 200);
+    const g = chain([first, second, pov], {
+      100: { origin_id: 1, target_id: 2 },
+      200: { origin_id: 2, target_id: 3 },
+    });
+    const out = collectUpstreamProducers(g, pov);
+    expect(out.outfit.moduleName).toBe("Late outfit");
+    expect(out.outfit.shadowed).toBe(1);
+  });
+
+  it("ignores muted / bypassed nodes, matching runtime", () => {
+    const up = ctxWriting(1, "Outfit", "outfit");
+    up.mode = 4; // BYPASS
+    const pov = ctxWriting(2, "Other", "unused", 100);
+    const out = collectUpstreamProducers(chain([up, pov], { 100: { origin_id: 1, target_id: 2 } }), pov);
+    expect(out.outfit).toBeUndefined();
+  });
+});
 
 describe("resolveUpstreamLoopSeed", () => {
   function loopNode(seed: number, count: number, cfg: object): LiteNodeLike {

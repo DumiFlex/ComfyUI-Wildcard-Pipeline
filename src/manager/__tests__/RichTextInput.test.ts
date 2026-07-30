@@ -412,6 +412,107 @@ describe("RichTextInput.vue", () => {
     wrap.unmount();
   });
 
+  it("a var chip hover names its producing module and node", async () => {
+    // "in scope" told the user a name existed, not where its value comes from —
+    // useless when several near-identical modules bind the same var.
+    vi.useFakeTimers();
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "$outfit",
+        varSuggestions: ["outfit"],
+        graphAware: true,
+        varProducers: new Map([["outfit", {
+          kind: "wildcard",
+          nodeLabel: "dusk-marten",
+          moduleName: "Outfit",
+          moduleId: "b855d115",
+          shadowed: 2,
+        }]]),
+      },
+      attachTo: document.body,
+    });
+    try {
+      await wrap.find(".wp-refchip").trigger("mouseenter");
+      vi.advanceTimersByTime(300);
+      await nextTick();
+      const card = document.body.querySelector('[data-test="refchip-hover"]');
+      const text = card?.textContent ?? "";
+      expect(text).toContain("wildcard");
+      expect(text).toContain("Outfit");
+      expect(text).toContain("dusk-marten");
+      expect(text).toContain("b855d115");
+      // Last-write-wins: name the winner, mention the rest.
+      expect(text).toContain("overrides 2 earlier writes");
+    } finally {
+      vi.useRealTimers();
+      wrap.unmount();
+    }
+  });
+
+  it("says so when a graph-aware host finds no producer", async () => {
+    vi.useFakeTimers();
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "$mystery", varSuggestions: [], graphAware: true },
+      attachTo: document.body,
+    });
+    try {
+      await wrap.find(".wp-refchip").trigger("mouseenter");
+      vi.advanceTimersByTime(300);
+      await nextTick();
+      expect(document.body.querySelector('[data-test="refchip-hover"]')?.textContent)
+        .toContain("no upstream producer");
+    } finally {
+      vi.useRealTimers();
+      wrap.unmount();
+    }
+  });
+
+  it("does NOT claim a missing producer on a graphless surface (the SPA)", async () => {
+    // The SPA has no chain to walk, so "no upstream producer" would be a
+    // statement it cannot support.
+    vi.useFakeTimers();
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "$mystery", varSuggestions: [] },
+      attachTo: document.body,
+    });
+    try {
+      await wrap.find(".wp-refchip").trigger("mouseenter");
+      vi.advanceTimersByTime(300);
+      await nextTick();
+      const text = document.body.querySelector('[data-test="refchip-hover"]')?.textContent ?? "";
+      expect(text).toContain("binds at runtime");
+      expect(text).not.toContain("no upstream producer");
+    } finally {
+      vi.useRealTimers();
+      wrap.unmount();
+    }
+  });
+
+  it("flags an internal producer as stripped from the prompt", async () => {
+    vi.useFakeTimers();
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "$frame",
+        graphAware: true,
+        varProducers: new Map([["frame", {
+          kind: "loop", nodeLabel: "Context Loop", internal: true, shadowed: 0,
+        }]]),
+      },
+      attachTo: document.body,
+    });
+    try {
+      await wrap.find(".wp-refchip").trigger("mouseenter");
+      vi.advanceTimersByTime(300);
+      await nextTick();
+      const text = document.body.querySelector('[data-test="refchip-hover"]')?.textContent ?? "";
+      expect(text).toContain("loop variable");
+      expect(text).toContain("internal");
+    } finally {
+      vi.useRealTimers();
+      wrap.unmount();
+    }
+  });
+
   it("forwards aria-label + disabled onto the contenteditable host", () => {
     const wrap = mount(RichTextInput, {
       props: {

@@ -9,6 +9,7 @@ import {
   collectDownstreamNestedReachUuids,
   collectDownstreamWildcardUuids,
   collectLocalResolvedForModule,
+  collectUpstreamProducers,
   collectUpstreamResolved,
   collectUpstreamVariables,
   collectUpstreamWildcardUuids,
@@ -267,6 +268,24 @@ export function create(node: ContextNode, inputName: string) {
         stringArrayEqual,
       );
 
+      // WHO writes each upstream `$var` — module + owning node, last-write-wins.
+      // Feeds the var-chip hover card, which previously could only say a var
+      // existed, not where its value comes from. Same walker cadence as the
+      // vars/uuids readers above.
+      const upstreamProducers = reactiveFromGraph(
+        node as unknown as Parameters<typeof reactiveFromGraph>[0],
+        () => {
+          const startGraph =
+            (node as unknown as { graph?: LiteGraphLike }).graph
+            ?? (app.graph as unknown as LiteGraphLike);
+          const rootGraph = findRootGraph(startGraph);
+          return collectUpstreamProducers(rootGraph, node);
+        },
+        // Cheap structural compare — the walker rebuilds the object each poll,
+        // so identity comparison would re-render on every tick.
+        (a, b) => JSON.stringify(a) === JSON.stringify(b),
+      );
+
       // Same idea, downstream — lets the scanner distinguish
       // target-in-downstream (good) from target-missing (bad), and
       // emit `constraint_source_in_downstream` instead of the
@@ -499,6 +518,7 @@ export function create(node: ContextNode, inputName: string) {
           nodeId: node.id,
           initialJson: currentJson.value,
           upstreamVars: upstreamVars.value,
+          upstreamProducers: upstreamProducers.value,
           upstreamResolved: upstreamResolved.value,
           localResolvedReader,
           upstreamWildcardUuids: upstreamUuids.value,

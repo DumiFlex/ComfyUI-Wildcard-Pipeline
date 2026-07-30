@@ -54,6 +54,7 @@ import {
   MOTION_CURVE_FLIP,
 } from "./bundles/flip";
 import { ApiError, api } from "../../manager/api/client";
+import type { VarProducerLike } from "../../manager/components/RefChip.vue";
 import { emptyBundleInstance, type BundleInstance } from "../../widgets/_shared";
 import ModuleEditModal from "./ModuleEditModal.vue";
 import ModalShell from "../shared/ModalShell.vue";
@@ -102,6 +103,11 @@ const props = withDefaults(defineProps<{
   nodeId: number;
   initialJson: string;
   upstreamVars: string[];
+  /** `$var` → which module in which node writes it (last-write-wins).
+   *  Threaded to the edit modals so a var chip's hover card can name its
+   *  producer instead of only confirming the name exists. Optional for
+   *  headless mounts. */
+  upstreamProducers?: Record<string, VarProducerLike>;
   /** Resolved upstream-var snapshot — `$name → resolved string` map.
    *  Drives the combine modal's live-preview pane so users see the
    *  template with vars substituted (e.g. `red portrait` instead of
@@ -5221,6 +5227,7 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
       :visible="editingModule !== null"
       :module="editingModule"
       :upstream-vars="upstreamVars"
+      :upstream-producers="upstreamProducers"
       :upstream-resolved="resolvedForEditing"
       :sibling-vars="siblingNodeVars"
       :sibling-modules="value.modules"

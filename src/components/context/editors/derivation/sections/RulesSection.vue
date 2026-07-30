@@ -27,6 +27,7 @@
 import { computed, defineAsyncComponent, ref } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import type { PairingBadge } from "../../../../../extension/constraint-pairs";
+import type { VarProducerLike } from "../../../../../manager/components/RefChip.vue";
 import { patchInstance } from "../../instance/patch";
 import { varColorClass } from "../../../../shared/var-color";
 import RuleValueChips from "./RuleValueChips.vue";
@@ -57,6 +58,9 @@ const props = withDefaults(
     /** `$var` autocomplete list for the override RichTextInputs —
      *  upstream + sibling producer vars, forwarded by the modal. */
     varSuggestions?: string[];
+    /** `$var` → producing module + node, forwarded to the override fields'
+     *  RichTextInputs so their var chips can name the producer on hover. */
+    varProducers?: Map<string, VarProducerLike>;
     /** Library WILDCARD uuids for the `@{}` autocomplete (ACTION /
      *  ELSE-action inputs only — `condition.value` is compared raw). */
     refSuggestions?: string[];
@@ -81,6 +85,7 @@ const props = withDefaults(
   }>(),
   {
     varSuggestions: () => [],
+    varProducers: () => new Map(),
     refSuggestions: () => [],
     uuidToName: () => new Map(),
     uuidToSubCategories: () => new Map(),
@@ -583,7 +588,7 @@ function ruleSummaryText(rule: DerivationRule): string {
                   v-if="opUsesValue(branch.condition?.op)"
                   surface="derivation"
                   wrap
-                  :var-suggestions="varSuggestions"
+                  :var-suggestions="varSuggestions"                  :var-producers="varProducers"                  graph-aware
                   :uuid-to-name="uuidToName"
                   :model-value="getOverride('condition_value_overrides', rule.id, String(bi))"
                   :placeholder="branch.condition?.value || ''"
@@ -603,7 +608,7 @@ function ruleSummaryText(rule: DerivationRule): string {
                   surface="derivation"
                   allow-nested-refs
                   wrap
-                  :var-suggestions="varSuggestions"
+                  :var-suggestions="varSuggestions"                  :var-producers="varProducers"                  graph-aware
                   :ref-suggestions="refSuggestions"
                   :uuid-to-name="uuidToName"
                   :uuid-to-sub-categories="uuidToSubCategories"
@@ -670,7 +675,7 @@ function ruleSummaryText(rule: DerivationRule): string {
                   surface="derivation"
                   allow-nested-refs
                   wrap
-                  :var-suggestions="varSuggestions"
+                  :var-suggestions="varSuggestions"                  :var-producers="varProducers"                  graph-aware
                   :ref-suggestions="refSuggestions"
                   :uuid-to-name="uuidToName"
                   :uuid-to-sub-categories="uuidToSubCategories"

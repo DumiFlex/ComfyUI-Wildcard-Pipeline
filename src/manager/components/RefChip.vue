@@ -61,6 +61,32 @@ interface Props {
    *  Defaults false so a caller that passes no pool makes no claim: the chip
    *  falls back to "binds at runtime", which is always true. */
   inScope?: boolean;
+  /** VAR chips only: WHO writes this name.
+   *
+   *  Canvas hosts pass the entry from `collectUpstreamProducers` — the winning
+   *  writer plus its node and module. Absent means the host has no graph (the
+   *  SPA) or nothing upstream writes the name; the card then says so instead
+   *  of implying a producer exists. `kind` alone was never enough to act on
+   *  when several near-identical modules bind the same var. */
+  producer?: VarProducerLike;
+  /** Set by hosts that actually walked a graph (the canvas). Lets the card
+   *  distinguish "nothing upstream writes this" — actionable, the user may
+   *  have a missing link — from "this surface has no graph to walk" (the SPA
+   *  library editor), which must never be reported as a missing producer.
+   *  Cannot be inferred from `producer`: a graph-aware host legitimately finds
+   *  no writer. */
+  graphAware?: boolean;
+}
+
+/** Structural mirror of `extension/graph.ts:VarProducer`, declared locally so
+ *  the SPA build never pulls the canvas graph walker in just for a type. */
+export interface VarProducerLike {
+  kind: string;
+  nodeLabel: string;
+  moduleName?: string;
+  moduleId?: string;
+  internal?: boolean;
+  shadowed: number;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -70,6 +96,8 @@ const props = withDefaults(defineProps<Props>(), {
   subCategories: () => [],
   moduleKind: "wildcard",
   inScope: false,
+  producer: undefined,
+  graphAware: false,
 });
 
 const emit = defineEmits<{
@@ -127,6 +155,20 @@ const isFiltered = computed(
  *  NOT shown inline (it can be long), only on hover via "reads as".
  *  Falls back to the raw expression if it doesn't parse (shouldn't
  *  happen for serialized refs, but keeps a broken token legible). */
+/** Human label for the producer's kind. `injector` / `loop` describe a NODE
+ *  rather than a module, so they read differently from the module kinds. */
+const PRODUCER_KIND_LABEL: Record<string, string> = {
+  wildcard: "wildcard",
+  fixed_values: "fixed value",
+  combine: "combine",
+  derivation: "derivation",
+  injector: "injector row",
+  loop: "loop variable",
+};
+const producerKindLabel = computed<string>(() =>
+  PRODUCER_KIND_LABEL[props.producer?.kind ?? ""] ?? (props.producer?.kind ?? ""),
+);
+
 const readsAsExpr = computed(() => {
   if (!hasExpr.value) return "";
   try {
@@ -339,12 +381,38 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
         <div class="wp-refchip-pop__head">
           <span class="wp-refchip-pop__name">${{ name }}{{ index != null ? "." + index : "" }}</span>
         </div>
-        <!-- "in scope" = the name is in the host's suggestion pool (upstream
-             + siblings on the canvas, the library catalog in the SPA). It
-             deliberately does NOT claim a producer: the old copy said
-             "produced upstream" for every var, which is meaningless in the
-             SPA and unverified on the canvas. -->
-        <div class="wp-refchip-pop__count">{{ inScope ? "in scope" : "binds at runtime" }}</div>
+        <!-- Producer attribution. `kind` alone ("came from a wildcard") isn't
+             actionable when several near-identical modules bind the same name,
+             so the card names the WRITER: its module and the node it sits in.
+             Injector rows and loop iteration vars have no module, just a node.
+             With no producer info at all the card states that plainly rather
+             than implying one exists. -->
+        <template v-if="producer">
+          <div class="wp-refchip-pop__producer" data-test="refchip-producer">
+            <span class="wp-refchip-pop__kind">{{ producerKindLabel }}</span>
+            <span v-if="producer.moduleName" class="wp-refchip-pop__producer-name">
+              {{ producer.moduleName }}
+            </span>
+            <span class="wp-refchip-pop__producer-node">in {{ producer.nodeLabel }}</span>
+          </div>
+          <div v-if="producer.moduleId" class="wp-refchip-pop__uuid">{{ producer.moduleId }}</div>
+          <!-- Runtime is last-write-wins, so the card names the winner and
+               only mentions that earlier writes exist. -->
+          <div v-if="producer.shadowed > 0" class="wp-refchip-pop__count">
+            overrides {{ producer.shadowed }} earlier
+            {{ producer.shadowed === 1 ? "write" : "writes" }}
+          </div>
+          <!-- An internal var resolves downstream but the assembler strips it
+               from the rendered prompt — the single most confusing state a var
+               can be in, so it is called out. -->
+          <div v-if="producer.internal" class="wp-refchip-pop__internal">
+            internal — stripped from the final prompt
+          </div>
+        </template>
+        <div v-else-if="inScope" class="wp-refchip-pop__count">in scope</div>
+        <div v-else class="wp-refchip-pop__count">
+          {{ graphAware ? "no upstream producer — binds at runtime" : "binds at runtime" }}
+        </div>
       </template>
     </div>
     </Teleport>
@@ -442,4 +510,26 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
 .wp-refchip-pop__filter { color: var(--wp-text-dim); }
 .wp-refchip-pop__count { color: var(--wp-accent-text); font-weight: 600; }
 .wp-refchip-pop__nonull { color: var(--wp-status-modified, #fbbf24); margin-left: 4px; }
+
+/* Producer attribution row — "wildcard · Outfit · in dusk-marten". */
+.wp-refchip-pop__producer {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.wp-refchip-pop__producer-name {
+  color: var(--wp-text);
+  font-weight: 600;
+}
+.wp-refchip-pop__producer-node {
+  color: var(--wp-text-muted, var(--wp-text2));
+  font-family: var(--wp-font-mono);
+}
+/* Same warning tone the internal/globe toggle uses elsewhere — this is the
+   state where a var resolves but contributes nothing to the prompt. */
+.wp-refchip-pop__internal {
+  color: var(--wp-status-modified, #fbbf24);
+  font-weight: 600;
+}
 </style>

@@ -18,6 +18,7 @@ import CombineInstanceModal from "./editors/combine/CombineInstanceModal.vue";
 import DerivationInstanceModal from "./editors/derivation/DerivationInstanceModal.vue";
 import ConstraintInstanceModal from "./editors/constraint/ConstraintInstanceModal.vue";
 import type { ChainModule, PairingBadge } from "../../extension/constraint-pairs";
+import type { VarProducerLike } from "../../manager/components/RefChip.vue";
 
 
 const props = defineProps<{
@@ -25,6 +26,9 @@ const props = defineProps<{
   module: ModuleEntry | null;
   /** Variable names defined upstream — used for autocomplete + validity checks. */
   upstreamVars?: string[];
+  /** `$var` → its producing module + node. Forwarded to the per-kind modals so
+   *  var chips can name where a value comes from. */
+  upstreamProducers?: Record<string, VarProducerLike>;
   /** Resolved upstream `$name → value` map. Combine modal uses this
    *  to render a live preview pane with vars substituted. */
   upstreamResolved?: Record<string, ResolvedValue>;
@@ -477,6 +481,7 @@ function cancel() {
       :module="draft"
       :is-modified="instanceModified"
       :upstream-vars="upstreamVars"
+      :upstream-producers="upstreamProducers"
       :sibling-vars="siblingVars"
       :via-option-pairs="viaOptionPairs"
       :frame-active="currentFrame != null"

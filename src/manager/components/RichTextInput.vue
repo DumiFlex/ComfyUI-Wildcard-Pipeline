@@ -30,7 +30,7 @@ import {
   type TextAtom,
 } from "./atomicEditorModel";
 import { escapeHtml, inlineTokenHtml, splitRefFilter, tokenizeRich } from "../../widgets/richTokenize";
-import RefChip from "./RefChip.vue";
+import RefChip, { type VarProducerLike } from "./RefChip.vue";
 import SubcategoryFilterPicker from "./SubcategoryFilterPicker.vue";
 import RemapRefPopup from "./RemapRefPopup.vue";
 import { rewriteBrokenRef } from "../cascade/remap-ref-rewrite";
@@ -184,6 +184,13 @@ interface Props {
   uuidToTagGroups?: Map<string, Record<string, string[]>>;
   ariaLabel?: string;
   disabled?: boolean;
+  /** `$var` → who writes it, from `collectUpstreamProducers`. Canvas hosts
+   *  pass this so a var chip's hover card can name the module and node that
+   *  produce the value; the SPA has no graph and passes nothing. */
+  varProducers?: Map<string, VarProducerLike>;
+  /** True when the host walked a graph. Lets the chip say "no upstream
+   *  producer" (canvas, actionable) rather than staying silent (SPA). */
+  graphAware?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -211,6 +218,8 @@ const props = withDefaults(defineProps<Props>(), {
   uuidToTagGroups: () => new Map(),
   ariaLabel: undefined,
   disabled: false,
+  varProducers: undefined,
+  graphAware: false,
 });
 
 // Lazy-pull store on first prop access — singleton so doesn't matter
@@ -2365,6 +2374,8 @@ function onHostKeydown(ev: KeyboardEvent): void {
           :exclude-null="atom.kind === 'ref' ? chipFilterOf(atom).excludeNull : false"
           :resolved="atomIsResolved(atom)"
           :in-scope="atom.kind === 'var' && varSuggestions.includes(atom.name)"
+          :producer="atom.kind === 'var' ? varProducers?.get(atom.name) : undefined"
+          :graph-aware="graphAware"
           :index="atom.kind === 'var' ? atom.index : undefined"
           :data-atom-index="idx"
           @click="(ev: MouseEvent) => onChipClick(idx, ev)"

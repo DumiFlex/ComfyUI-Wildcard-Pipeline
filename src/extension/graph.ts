@@ -13,6 +13,7 @@ import {
   type WildcardOption,
 } from "../components/context/editors/wildcard/probability";
 import { ensure as ensurePreviewLookup, lookup as previewLookup } from "./preview-resolver";
+import { assignCodenames, baseCodename } from "./node-codename";
 import type { SeedStrategy } from "../components/shared/seed-derive";
 
 // ── Subgraph boundary primer ────────────────────────────────────────────
@@ -70,6 +71,10 @@ export interface LiteNodeLike {
    *  the node at runtime; the walker mirrors that by ignoring their
    *  module contributions when building the upstream-vars set. */
   mode?: number;
+  /** User-set node title. Litegraph sets this on every node; WP_Context
+   *  identifies itself by codename instead, but the Injector and Loop have no
+   *  codename scheme, so their title is the only human name available. */
+  title?: string;
 }
 
 /** Modes that mean "this node does not contribute its module bindings
@@ -808,6 +813,184 @@ export function collectUpstreamKinds(
     kinds["__wp_internal_flags__"] = JSON.stringify(flags);
   }
   return kinds;
+}
+
+/**
+ * Who actually writes a `$var`, for the chip hover card.
+ *
+ * `kind` alone ("this came from a wildcard") isn't enough to act on — with
+ * near-duplicate modules across several nodes the user needs to know WHICH
+ * one. This carries the owning node and module through instead of discarding
+ * them.
+ */
+export interface VarProducer {
+  /** "wildcard" | "fixed_values" | "combine" | "derivation" | "injector" | "loop" */
+  kind: string;
+  /** Litegraph node id of the winning writer. */
+  nodeId: string;
+  /** How to name that node in UI. WP_Context nodes get their stable
+   *  `adjective-noun` codename (the same one their header shows); the Injector
+   *  and Loop have no codename scheme, so they fall back to a user-set title
+   *  and then to a plain kind label. */
+  nodeLabel: string;
+  /** Display name of the writing module. Absent for injector / loop, which
+   *  write from node config rather than a library module. */
+  moduleName?: string;
+  /** 8-hex module id, when a module wrote it. */
+  moduleId?: string;
+  /** Flagged internal — resolves downstream but the assembler strips it from
+   *  the rendered prompt. Worth surfacing: a var that produces nothing visible
+   *  is exactly the confusion the card exists to kill. */
+  internal?: boolean;
+  /** How many EARLIER writes this one overrode. Runtime is last-write-wins, so
+   *  the card names the winner and mentions that others exist. */
+  shadowed: number;
+}
+
+/**
+ * Producer map for every `$var` visible upstream of `node`.
+ *
+ * Same chain walk + last-write-wins ordering as {@link collectUpstreamKinds} —
+ * this is that function widened to keep identity. Covers all three producer
+ * sources: WP_Context modules, WP_ContextInjector rows, and the WP_ContextLoop
+ * iteration vars.
+ */
+export function collectUpstreamProducers(
+  rootGraph: LiteGraphLike,
+  node: LiteNodeLike,
+): Record<string, VarProducer> {
+  const parents = buildSubgraphParents(rootGraph);
+  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
+  const chain: LiteNodeLike[] = [];
+  let cur = pipelineUpstreamOf(node, graphOf(node, rootGraph), parents);
+  while (cur && !seen.has(locator(cur.graph, cur.node))) {
+    seen.add(locator(cur.graph, cur.node));
+    chain.push(cur.node);
+    cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
+  }
+
+  // Codenames are a WP_Context concept only — assign across the Context nodes
+  // in the chain plus the POV node so a name reads the same from anywhere.
+  const codenames = assignCodenames([
+    ...chain.filter((n) => n.type === "WP_Context").map((n) => n.id),
+    node.id,
+  ]);
+  const labelOf = (n: LiteNodeLike): string => {
+    if (n.type === "WP_Context") {
+      return codenames.get(String(n.id)) ?? baseCodename(n.id);
+    }
+    const title = typeof n.title === "string" ? n.title.trim() : "";
+    if (title) return title;
+    return n.type === "WP_ContextInjector" ? "Context Injector" : "Context Loop";
+  };
+
+  const out: Record<string, VarProducer> = {};
+  const write = (name: string, info: Omit<VarProducer, "shadowed">): void => {
+    if (!name) return;
+    const prev = out[name];
+    out[name] = { ...info, shadowed: prev ? prev.shadowed + 1 : 0 };
+  };
+
+  // Furthest-upstream → closest, so later writes override earlier ones.
+  for (let i = chain.length - 1; i >= 0; i--) {
+    const n = chain[i];
+    if (isSkippedMode(n)) continue;
+    const nodeId = String(n.id);
+    const nodeLabel = labelOf(n);
+
+    if (n.type === "WP_ContextInjector") {
+      const inj = parseWidgetJson<{
+        version: 1;
+        rows?: Array<{ binding?: string; enabled?: boolean; internal?: boolean }>;
+      }>(widgetValue(n, "wp_rows"), { version: 1, rows: [] });
+      for (const row of inj.rows ?? []) {
+        if (row.enabled !== true) continue;
+        write((row.binding ?? "").trim(), {
+          kind: "injector", nodeId, nodeLabel, internal: row.internal === true,
+        });
+      }
+      continue;
+    }
+
+    if (n.type === "WP_ContextLoop") {
+      const raw = widgetValue(n, "wp_context_loop_config");
+      const cfg = parseWidgetJson<{
+        iteration_var_name?: string;
+        iteration_internal?: boolean;
+        total_internal?: boolean;
+      }>(typeof raw === "string" ? raw : "", {});
+      const baseName = (cfg.iteration_var_name ?? "iteration").trim() || "iteration";
+      write(baseName, {
+        kind: "loop", nodeId, nodeLabel, internal: cfg.iteration_internal === true,
+      });
+      write(`${baseName}_total`, {
+        kind: "loop", nodeId, nodeLabel, internal: cfg.total_internal === true,
+      });
+      continue;
+    }
+
+    if (n.type !== "WP_Context") continue;
+    const v = parseWidgetJson<ContextWidgetValue>(
+      widgetValue(n, "wp_modules"),
+      { version: 1, modules: [] },
+    );
+    const bundleEnabled = buildBundleEnabledMap(v.bundles);
+    for (const m of v.modules) {
+      if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
+      const moduleName = (m.meta?.name ?? "").trim() || m.type;
+      const base = {
+        kind: m.type, nodeId, nodeLabel, moduleName, moduleId: m.id,
+        internal: m.instance?.internal === true,
+      };
+
+      if (m.type === "fixed_values") {
+        // Fans out one binding per row.
+        const inst = (m.instance ?? {}) as {
+          values_overrides?: Array<{ id?: string; name?: string }>;
+          enabled_options?: string[] | null;
+        };
+        const enabledFilter = Array.isArray(inst.enabled_options)
+          ? new Set(inst.enabled_options)
+          : null;
+        const passes = (id: string | undefined): boolean =>
+          enabledFilter === null || (typeof id === "string" && enabledFilter.has(id));
+        const overrides = Array.isArray(inst.values_overrides) ? inst.values_overrides : null;
+        const rows = overrides && overrides.length > 0
+          ? overrides
+          : ((m.payload ?? {}) as { values?: Array<{ id?: string; name?: string }> }).values ?? [];
+        for (const val of rows) {
+          if (!passes(val.id)) continue;
+          write((val.name ?? "").replace(/^\$/, "").trim(), base);
+        }
+        for (const e of m.entries ?? []) {
+          write((e.variable_name ?? "").replace(/^\$/, "").trim(), base);
+        }
+        continue;
+      }
+
+      if (m.type === "derivation") {
+        // Which branch fires isn't knowable statically, so every reachable
+        // target_var counts as a possible write.
+        const dp = (m.payload ?? {}) as { rules?: Array<{
+          branches?: Array<{ action?: { target_var?: string } }>;
+          else?: { action?: { target_var?: string } };
+        }> };
+        for (const rule of dp.rules ?? []) {
+          for (const branch of rule.branches ?? []) {
+            write((branch.action?.target_var ?? "").replace(/^\$/, "").trim(), base);
+          }
+          write((rule.else?.action?.target_var ?? "").replace(/^\$/, "").trim(), base);
+        }
+        continue;
+      }
+
+      const inst = (m.instance ?? {}) as { variable_binding?: string | null };
+      const payload = (m.payload ?? {}) as { var_binding?: string; output_var?: string };
+      const raw = inst.variable_binding ?? payload.var_binding ?? payload.output_var ?? "";
+      write(raw.replace(/^\$/, "").trim(), base);
+    }
+  }
+  return out;
 }
 
 /* -------------------------------------------------------------------- *
