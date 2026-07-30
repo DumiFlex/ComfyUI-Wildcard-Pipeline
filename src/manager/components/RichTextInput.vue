@@ -21,7 +21,7 @@
  * rewires those handlers against the contenteditable host + selection
  * API.
  */
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   parse,
   replaceAtom,
@@ -1234,6 +1234,34 @@ function updateOverflowHint(): void {
   hasMoreBelow.value = host.scrollHeight - host.scrollTop - host.clientHeight > 2;
 }
 
+/** Measure AFTER the browser has laid the box out.
+ *
+ *  A plain mount-time measure read `scrollHeight === clientHeight` (styles and
+ *  the max-height cap not applied yet) and reported "no overflow". The hint
+ *  then only appeared once typing re-measured — which read as "the fade only
+ *  shows on boxes you focus", and never appeared at all on a field the user
+ *  can scroll but not edit. */
+function scheduleOverflowHint(): void {
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(updateOverflowHint);
+  else updateOverflowHint();
+}
+
+/** Keep the hint honest when the box is resized — the manual drag handle, a
+ *  container reflow, or content re-wrapping all change what fits. */
+let overflowObs: ResizeObserver | null = null;
+
+onMounted(() => {
+  scheduleOverflowHint();
+  if (typeof ResizeObserver === "undefined" || !hostEl.value) return;
+  overflowObs = new ResizeObserver(updateOverflowHint);
+  overflowObs.observe(hostEl.value);
+});
+
+onBeforeUnmount(() => {
+  overflowObs?.disconnect();
+  overflowObs = null;
+});
+
 /** True when the live host has FEWER rendered atom nodes than `atoms.value`
  *  expects — i.e. the browser destroyed nodes Vue still holds `el` pointers
  *  for. Contenteditable hands the browser ownership of these children, and
@@ -1273,7 +1301,7 @@ function applyAtoms(next: Atom[], opts?: { rebuild?: boolean }): void {
   isEmpty.value = serialiseAtomsLocal(next).length === 0;
   void nextTick(() => {
     syncTextSpansToAtoms();
-    updateOverflowHint();
+    scheduleOverflowHint();
   });
 }
 

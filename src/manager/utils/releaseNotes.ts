@@ -47,6 +47,30 @@ function renderInline(escaped: string): string {
  * text. Everything else still falls through to escaping (rendered inert), so
  * this stays safe: it only recognises a fixed allow-list of formatting tags.
  */
+/**
+ * Release bodies end with a `<details>` block holding the raw per-commit list.
+ * On GitHub that's collapsed behind a click; here it was unwrapped inline by
+ * `normalizeReleaseHtml` and dumped every commit message into the dialog,
+ * burying the human-written "What's new" section that the preview exists to
+ * show. The dialog already links out to the full changelog, so cut the block.
+ *
+ * Deliberately matched on the summary text rather than stripping every
+ * `<details>`: another collapsible in a future release body probably IS worth
+ * showing, and unwrapping stays the default for those.
+ *
+ * The trailing `---` rule that preceded the block goes too, otherwise the notes
+ * end on a stray divider.
+ */
+function stripFullChangelog(md: string): string {
+  return md
+    .replace(
+      /<details[^>]*>\s*<summary>(?:(?!<\/summary>)[\s\S])*?full\s+changelog[\s\S]*?<\/details>/gi,
+      "",
+    )
+    .replace(/\n\s*-{3,}\s*$/, "")
+    .trimEnd();
+}
+
 function normalizeReleaseHtml(md: string): string {
   return md
     // <summary>…</summary> → a bold lead line (drop any inner tags).
@@ -62,7 +86,11 @@ export function renderReleaseNotes(md: string): string {
   if (!md || !md.trim()) {
     return '<p class="wpc-relnotes__empty">No release notes.</p>';
   }
-  const lines = normalizeReleaseHtml(md).replace(/\r\n/g, "\n").split("\n");
+  const trimmed = stripFullChangelog(md);
+  if (!trimmed.trim()) {
+    return '<p class="wpc-relnotes__empty">No release notes.</p>';
+  }
+  const lines = normalizeReleaseHtml(trimmed).replace(/\r\n/g, "\n").split("\n");
   const html: string[] = [];
   let inList = false;
   let inCode = false;

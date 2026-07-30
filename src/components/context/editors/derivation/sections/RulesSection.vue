@@ -802,6 +802,12 @@ function opUsesValue(op: string | undefined): boolean {
   min-width: 0;
   font: 11px var(--wp-font-mono);
   flex-wrap: wrap;
+  /* A rule head is a PREVIEW. Unclamped, a paragraph-length action value wrapped
+     to hundreds of lines and pushed the rest of the modal — every other rule,
+     the runtime row, the footer buttons — off screen. Two lines is enough to
+     recognise the rule; the expanded body shows the value in full. */
+  max-height: 2.8em;
+  overflow: hidden;
 }
 .rule-card--off .rule-head__summary { text-decoration: line-through; }
 .rule-head__chip {
@@ -865,8 +871,14 @@ function opUsesValue(op: string | undefined): boolean {
   align-items: center;
   gap: 4px;
 }
+/* Same clamp as the rule head, for the same reason: this is a per-branch
+   PREVIEW column, and one long action value stretched its row until the branch
+   table stopped being a table. The override inputs beside it hold the full
+   value and scroll. */
 .branch-cell--summary {
   flex-wrap: wrap;
+  max-height: 4.2em;
+  overflow: hidden;
 }
 .branch-cell--head {
   color: var(--wp-text-dim, var(--wp-text3));

@@ -25,8 +25,12 @@ const props = withDefaults(
     /** Per-option pair badges for via-nested constraint carriers.
      *  Keyed by option id. Empty when this wildcard is not a carrier. */
     viaOptionPairs?: Map<string, PairingBadge[]>;
+    /** Initial state of the tag-pill grid. Defaults to COLLAPSED — see
+     *  `poolOpen`. Exposed so tests (and any host that wants the pool open on
+     *  arrival) don't have to drive a click first. */
+    defaultOpen?: boolean;
   }>(),
-  { viaOptionPairs: () => new Map() },
+  { viaOptionPairs: () => new Map(), defaultOpen: false },
 );
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
 
@@ -160,9 +164,10 @@ const advanced = ref(false);
 /** Whether the tag-pill grid is showing. A richly tagged wildcard (hue +
  *  temperature + tone + saturation + suitability, 40-odd pills) pushed the
  *  option list — the thing the user actually came to edit — most of a screen
- *  down. Starts open so the pool stays discoverable; collapsing is one click
- *  and the header keeps reporting how many tags are ticked. */
-const poolOpen = ref(true);
+ *  down, so this starts COLLAPSED. The header keeps reporting how many tags are
+ *  ticked, and the chevron is accented while shut so it still reads as
+ *  something to press. */
+const poolOpen = ref(props.defaultOpen);
 const tickedCount = computed(() => ticked.value.size);
 const draft = ref(filterExpr.value);
 
@@ -352,6 +357,7 @@ const skewedTowards = computed(() => {
       <button
         type="button"
         class="pool__collapse"
+        :class="{ 'pool__collapse--nudge': !poolOpen }"
         :aria-expanded="poolOpen"
         data-test="pool-collapse"
         :aria-label="poolOpen ? 'Collapse tag pool' : 'Expand tag pool'"
@@ -642,6 +648,14 @@ const skewedTowards = computed(() => {
   color: var(--wp-text);
   border-color: var(--wp-border);
   background: color-mix(in srgb, var(--wp-text) 6%, transparent);
+}
+/* Accented while collapsed so a first-time user reads it as "there is more
+   here" rather than as dim decoration. Static tint, not an animation — this
+   sits on screen for the whole editing session. */
+.pool__collapse--nudge {
+  color: var(--wp-accent-text, var(--wp-accent, #c4b5fd));
+  border-color: color-mix(in srgb, var(--wp-accent, #6366f1) 55%, transparent);
+  background: color-mix(in srgb, var(--wp-accent, #6366f1) 16%, transparent);
 }
 .pool__collapsed-count {
   font: 600 9px var(--wp-font-sans);

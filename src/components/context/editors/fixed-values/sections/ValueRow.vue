@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   rowOverrideKind,
   type DraftRow,
@@ -65,6 +65,7 @@ function onValueInput(ev: Event): void {
   const el = ev.target as HTMLTextAreaElement;
   emit("update", props.row.id, { value: el.value });
   autosizeValue(el);
+  updateOverflowHint();
 }
 
 /** Grow the value field to fit its content, capped by the CSS `max-height`
@@ -84,15 +85,55 @@ function onValueKeydown(ev: KeyboardEvent): void {
   if (ev.key === "Enter" && !ev.shiftKey) ev.preventDefault();
 }
 
-/** Size correctly on first paint + whenever the row's value changes from
- *  outside (reset-to-library, undo). */
 const valueEl = ref<HTMLTextAreaElement | null>(null);
+
+/** True when the field is capped and still hiding content below the fold.
+ *  Mirrors RichTextInput's hint — a capped box otherwise looks identical
+ *  whether it holds its whole value or a third of it. A `<textarea>` can't
+ *  carry a reliable `::after`, so the fade lives on `.row__value-wrap`. */
+const hasMoreBelow = ref(false);
+
+function updateOverflowHint(): void {
+  const el = valueEl.value;
+  if (!el) return;
+  hasMoreBelow.value = el.scrollHeight - el.scrollTop - el.clientHeight > 2;
+}
+
+/** Measure AFTER layout. A mount-time measure runs before the max-height cap
+ *  applies, reads `scrollHeight === clientHeight`, and reports no overflow —
+ *  so the fade only appeared once typing re-measured, and never at all on a
+ *  row the user can scroll but not edit. */
+function scheduleOverflowHint(): void {
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(updateOverflowHint);
+  else updateOverflowHint();
+}
+
+/* Size correctly on first paint + whenever the row's value changes from
+   outside (reset-to-library, undo). */
 watch(
   () => props.row.value,
-  () => void nextTick(() => { if (valueEl.value) autosizeValue(valueEl.value); }),
+  () => void nextTick(() => {
+    if (valueEl.value) autosizeValue(valueEl.value);
+    scheduleOverflowHint();
+  }),
   { immediate: true },
 );
-onMounted(() => { if (valueEl.value) autosizeValue(valueEl.value); });
+
+/** Keep the hint honest across manual resizes and container reflows. */
+let overflowObs: ResizeObserver | null = null;
+
+onMounted(() => {
+  if (valueEl.value) autosizeValue(valueEl.value);
+  scheduleOverflowHint();
+  if (typeof ResizeObserver === "undefined" || !valueEl.value) return;
+  overflowObs = new ResizeObserver(updateOverflowHint);
+  overflowObs.observe(valueEl.value);
+});
+
+onBeforeUnmount(() => {
+  overflowObs?.disconnect();
+  overflowObs = null;
+});
 function onReset(): void {
   emit("reset", props.row.id);
 }
@@ -157,7 +198,10 @@ function onDelete(): void {
     >
       <span
         class="row__value-wrap"
-        :class="{ 'row__value-wrap--mod': valueOverridden }"
+        :class="{
+          'row__value-wrap--mod': valueOverridden,
+          'row__value-wrap--more': hasMoreBelow,
+        }"
         data-test="row-value-wrap"
       >
         <textarea
@@ -171,6 +215,7 @@ function onDelete(): void {
           :aria-label="`Value for row ${row.id}`"
           @input="onValueInput"
           @keydown="onValueKeydown"
+          @scroll="updateOverflowHint"
         />
       </span>
       <span
@@ -309,7 +354,25 @@ function onDelete(): void {
 }
 /* The wrapper centred a single-line input; with a growing field the label
  * column should sit at the top instead of drifting down as it grows. */
-.row__value-wrap { align-items: flex-start; }
+.row__value-wrap { align-items: flex-start; position: relative; }
+
+/* "More below" hint, matching RichTextInput. A <textarea> can't carry a
+ * dependable `::after`, so it hangs off the wrapper. Gradient runs to a
+ * TRANSPARENT accent so the text underneath still reads; the 1px accent line
+ * at the bottom is what catches the eye. */
+.row__value-wrap--more::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 14px;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in srgb, var(--wp-accent, #6366f1) 26%, transparent)
+  );
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--wp-accent, #6366f1) 60%, transparent);
+}
 
 .row--off { color: var(--wp-text-dim, var(--wp-text3)); }
 .row--off .row__name-wrap, .row--off .row__value-wrap { opacity: 0.5; }

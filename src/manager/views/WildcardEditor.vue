@@ -272,9 +272,12 @@ interface SubcatGroup {
   isOther: boolean;
 }
 
-/** Sub-Categories section disclosure. Open by default so the axes stay
- *  discoverable on a wildcard that has few of them. */
-const subcatOpen = ref(true);
+/** Sub-Categories section disclosure. Starts COLLAPSED: on a well-tagged
+ *  wildcard the axes and their pills fill the screen and push the options
+ *  table — the thing being edited — out of view. The collapsed header carries a
+ *  tag/axis count plus an accented `+`, so it still advertises that there is
+ *  something in there to open. */
+const subcatOpen = ref(false);
 
 /** What the collapsed section reports, so shutting it doesn't hide whether the
  *  wildcard is tagged at all. */
@@ -1432,6 +1435,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
           <button
             type="button"
             class="subcat-collapse"
+            :class="{ 'subcat-collapse--nudge': !subcatOpen }"
             :aria-expanded="subcatOpen"
             :aria-label="subcatOpen ? 'Collapse sub-categories' : 'Expand sub-categories'"
             :title="subcatOpen ? 'Collapse sub-categories' : 'Expand sub-categories'"
@@ -2024,6 +2028,14 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
   font-size: 11px;
 }
 .subcat-collapse:hover { color: var(--wp-text); border-color: var(--wp-accent); }
+/* Accented while collapsed so a first-time user reads it as "there is more
+   here, press me" rather than as a dim decoration. Deliberately a static tint,
+   not an animation — this sits on screen for the whole editing session. */
+.subcat-collapse--nudge {
+  color: var(--wp-accent-text, var(--wp-accent));
+  border-color: color-mix(in oklab, var(--wp-accent) 55%, transparent);
+  background: color-mix(in oklab, var(--wp-accent) 14%, transparent);
+}
 .subcat-collapsed {
   font-size: var(--wp-text-sm);
   color: var(--wp-text-muted);

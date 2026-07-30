@@ -77,6 +77,11 @@ async function mountSeeded() {
     global: { plugins: [makeRouter()] },
   });
   await flushPromises();
+  // The Sub-Categories card ships COLLAPSED — a well-tagged wildcard's axes
+  // and pills pushed the options table off screen. Every test in this file is
+  // about those pills, so open it once here.
+  await wrap.get('[data-test="subcat-collapse"]').trigger("click");
+  await flushPromises();
   return wrap;
 }
 

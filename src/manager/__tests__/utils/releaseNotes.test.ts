@@ -47,15 +47,38 @@ describe("renderReleaseNotes", () => {
     expect(renderReleaseNotes("")).toContain("No release notes");
   });
 
-  it("unwraps <details>/<summary>/<b> instead of showing literal tags", () => {
-    const md = "<details>\n<summary><b>📋 Full changelog</b> — details</summary>\n\n- one\n</details>";
+  it("cuts the full-changelog <details> block out of the preview", () => {
+    // GitHub collapses it behind a click; unwrapped inline it dumped every
+    // commit message into the dialog and buried the "What's new" section the
+    // preview exists to show. The dialog links out to the full changelog.
+    const md = [
+      "## What's new",
+      "Real notes here.",
+      "",
+      "---",
+      "<details>",
+      "<summary><b>📋 Full changelog</b> — click to expand the per-commit list</summary>",
+      "",
+      "- fix(engine): something (abc1234)",
+      "</details>",
+    ].join("\n");
+    const html = renderReleaseNotes(md);
+    expect(html).toContain("Real notes here.");
+    expect(html).not.toContain("Full changelog");
+    expect(html).not.toContain("abc1234");
+    // The divider that introduced the block goes with it.
+    expect(html).not.toContain("<hr");
+  });
+
+  it("still unwraps a NON-changelog <details>/<summary>/<b> block", () => {
+    // Unwrapping stays the default — another collapsible in a future release
+    // body is probably worth showing.
+    const md = "<details>\n<summary><b>Upgrade notes</b></summary>\n\n- one\n</details>";
     const html = renderReleaseNotes(md);
     expect(html).not.toContain("&lt;details&gt;");
-    expect(html).not.toContain("&lt;summary&gt;");
     expect(html).not.toContain("<details>");
-    // Summary becomes a bold lead line; the list still renders.
     expect(html).toContain("<strong>");
-    expect(html).toContain("Full changelog");
+    expect(html).toContain("Upgrade notes");
     expect(html).toContain("<li>one</li>");
   });
 

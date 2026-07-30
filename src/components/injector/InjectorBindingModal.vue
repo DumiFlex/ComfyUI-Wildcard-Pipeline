@@ -427,12 +427,12 @@ function onKeydown(ev: KeyboardEvent): void {
           <span class="ibm__section-label">Template</span>
           <span class="ibm__section-hint">{{ isGeneral ? "$ref names · $$ for literal $ · composed after socket rows" : "$slot_name refs · $$ for literal $ · empty = pass-through" }}</span>
           <div class="ibm__head-actions">
-            <div class="ibm__menu-wrap">
+            <div class="wp-ibm__menu-wrap">
               <button
                 v-if="insertOptions.length > 0"
                 ref="menuBtnEl"
                 type="button"
-                class="ibm__menu-btn"
+                class="wp-ibm__menu-btn"
                 data-test="ibm-insert-slot"
                 :title="`Insert a reference (${insertOptions.length} available)`"
                 aria-label="Insert reference"
@@ -443,8 +443,8 @@ function onKeydown(ev: KeyboardEvent): void {
                 <div
                   v-if="showInsertMenu"
                   ref="menuEl"
-                  class="ibm__menu"
-                  :class="[menuThemeClass(), { 'ibm__menu--up': menuPos.flipped }]"
+                  class="wp-ibm__menu"
+                  :class="[menuThemeClass(), { 'wp-ibm__menu--up': menuPos.flipped }]"
                   :style="{ top: menuPos.top + 'px', left: menuPos.left + 'px' }"
                   data-test="ibm-slot-menu"
                   role="listbox"
@@ -453,7 +453,7 @@ function onKeydown(ev: KeyboardEvent): void {
                     v-for="opt in insertOptions"
                     :key="opt.slotName"
                     type="button"
-                    class="ibm__menu-item"
+                    class="wp-ibm__menu-item"
                     :data-test="`ibm-slot-item-${opt.slotName}`"
                     role="option"
                     :aria-selected="false"

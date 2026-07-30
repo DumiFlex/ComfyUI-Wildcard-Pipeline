@@ -1,6 +1,26 @@
-import { mount } from "@vue/test-utils";
+import { mount as vtuMount } from "@vue/test-utils";
 import { describe, it, expect } from "vitest";
 import PoolSection from "../sections/PoolSection.vue";
+
+/**
+ * The tag-pill grid ships COLLAPSED (a well-tagged wildcard's 40-odd pills
+ * pushed the option list off screen). Every test below is about the pills
+ * themselves, so this local `mount` opens the pool via the component's
+ * `defaultOpen` prop rather than making each case drive a click first.
+ *
+ * The collapse behaviour itself is covered in "PoolSection collapse", which
+ * mounts through `vtuMount` to see the real default.
+ */
+const mount = ((component: unknown, options: Record<string, unknown> = {}) => {
+  const opts = {
+    ...options,
+    props: { ...((options.props as Record<string, unknown>) ?? {}), defaultOpen: true },
+  };
+  return (vtuMount as unknown as (c: unknown, o: unknown) => ReturnType<typeof vtuMount>)(
+    component,
+    opts,
+  );
+}) as unknown as typeof vtuMount;
 import type { ModuleEntry } from "@/widgets/_shared";
 
 const module = {
@@ -165,15 +185,27 @@ describe("PoolSection pick-count (SP2a)", () => {
 });
 
 describe("PoolSection collapse", () => {
-  it("starts expanded, and the chevron collapses the pill grid", async () => {
+  it("starts COLLAPSED, and the chevron opens the pill grid", async () => {
     // A richly tagged wildcard shows 40-odd pills, pushing the option list —
-    // the thing the user came to edit — most of a screen down.
-    const w = mount(PoolSection, { props: { module } });
-    expect(w.find('[data-test="cat-chip-feline"]').exists()).toBe(true);
-    await w.get('[data-test="pool-collapse"]').trigger("click");
+    // the thing the user came to edit — most of a screen down. Uses the real
+    // default, so mounts through vtuMount rather than the local helper.
+    const w = vtuMount(PoolSection, { props: { module } });
     expect(w.find('[data-test="cat-chip-feline"]').exists()).toBe(false);
     await w.get('[data-test="pool-collapse"]').trigger("click");
     expect(w.find('[data-test="cat-chip-feline"]').exists()).toBe(true);
+    await w.get('[data-test="pool-collapse"]').trigger("click");
+    expect(w.find('[data-test="cat-chip-feline"]').exists()).toBe(false);
+  });
+
+  it("accents the collapse control while shut so it reads as pressable", () => {
+    const w = vtuMount(PoolSection, { props: { module } });
+    expect(w.get('[data-test="pool-collapse"]').classes()).toContain("pool__collapse--nudge");
+  });
+
+  it("drops the accent once expanded", async () => {
+    const w = vtuMount(PoolSection, { props: { module } });
+    await w.get('[data-test="pool-collapse"]').trigger("click");
+    expect(w.get('[data-test="pool-collapse"]').classes()).not.toContain("pool__collapse--nudge");
   });
 
   it("collapsed header reports how many tags are ticked", async () => {
