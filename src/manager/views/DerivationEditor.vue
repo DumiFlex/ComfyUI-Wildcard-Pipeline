@@ -31,10 +31,12 @@ import { useRecentStore } from "../stores/recentStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { appendSnapshot, readHistory } from "../utils/history";
 import {
+  buildLibraryVarProducers,
   buildWildcardRefData,
   collectLibraryVarHints,
   collectLibraryWildcardRefs,
 } from "../utils/library-suggestions";
+import type { VarProducerLike } from "../components/RefChip.vue";
 import { useCascadeStore } from "../cascade/cascade-store";
 import { useCascadeApply } from "../cascade/useCascadeApply";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
@@ -176,6 +178,24 @@ function applyDraft(): void {
 const varSuggestions = computed<string[]>(
   () => collectLibraryVarHints(moduleStore, props.id).map((h) => h.label),
 );
+
+/** `$var` → the library modules that bind it, for the chip hover cards.
+ *  The library has no execution order, so this NAMES the first producer and
+ *  reports how many others share the name — it can't say which one wins. */
+const varProducers = computed<Map<string, VarProducerLike>>(() => {
+  const out = new Map<string, VarProducerLike>();
+  for (const [name, refs] of buildLibraryVarProducers(moduleStore, props.id)) {
+    const first = refs[0];
+    out.set(name, {
+      kind: first.kind,
+      moduleName: first.name,
+      moduleId: first.id,
+      shadowed: refs.length - 1,
+      siblingLabel: "library module",
+    });
+  }
+  return out;
+});
 
 // Wildcard-ref data (display names + the sub-cat picker maps) built ONCE from
 // the catalog by the shared `buildWildcardRefData` walker — the SAME source
@@ -571,6 +591,7 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
             :model-value="rule"
             :index="idx"
             :var-suggestions="varSuggestions"
+            :var-producers="varProducers"
             :uuid-to-name="uuidToName"
             :ref-suggestions="refSuggestions"
             :uuid-to-sub-categories="refData.uuidToSubCategories"

@@ -82,11 +82,20 @@ interface Props {
  *  the SPA build never pulls the canvas graph walker in just for a type. */
 export interface VarProducerLike {
   kind: string;
-  nodeLabel: string;
+  /** Where the writer lives. Canvas passes a node codename / title; the SPA
+   *  has no graph, so it passes nothing and the card omits the "in …" clause. */
+  nodeLabel?: string;
   moduleName?: string;
   moduleId?: string;
   internal?: boolean;
+  /** Canvas: how many earlier writes this one overrode (last-write-wins).
+   *  SPA: how many OTHER library modules bind the same name — no execution
+   *  order exists there, so it reads as "N others bind this" rather than as an
+   *  override. `siblingLabel` distinguishes the two. */
   shadowed: number;
+  /** Wording for the `shadowed` count. Defaults to the canvas override
+   *  phrasing; the SPA passes its own since nothing is overridden there. */
+  siblingLabel?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -168,6 +177,17 @@ const PRODUCER_KIND_LABEL: Record<string, string> = {
 const producerKindLabel = computed<string>(() =>
   PRODUCER_KIND_LABEL[props.producer?.kind ?? ""] ?? (props.producer?.kind ?? ""),
 );
+
+/** Wording for the sibling/override count. The canvas has an execution order
+ *  so it can say the winner overrode the rest; the library has none, so it can
+ *  only report that other modules bind the same name. */
+const siblingText = computed<string>(() => {
+  const p = props.producer;
+  if (!p || p.shadowed <= 0) return "";
+  const n = p.shadowed;
+  if (p.siblingLabel) return `${n} other ${p.siblingLabel}${n === 1 ? "" : "s"} bind this name`;
+  return `overrides ${n} earlier ${n === 1 ? "write" : "writes"}`;
+});
 
 const readsAsExpr = computed(() => {
   if (!hasExpr.value) return "";
@@ -393,14 +413,16 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
             <span v-if="producer.moduleName" class="wp-refchip-pop__producer-name">
               {{ producer.moduleName }}
             </span>
-            <span class="wp-refchip-pop__producer-node">in {{ producer.nodeLabel }}</span>
+            <span v-if="producer.nodeLabel" class="wp-refchip-pop__producer-node">
+              in {{ producer.nodeLabel }}
+            </span>
           </div>
           <div v-if="producer.moduleId" class="wp-refchip-pop__uuid">{{ producer.moduleId }}</div>
-          <!-- Runtime is last-write-wins, so the card names the winner and
-               only mentions that earlier writes exist. -->
+          <!-- Canvas: runtime is last-write-wins, so name the winner and note
+               that earlier writes exist. SPA: no execution order, so the same
+               count reads as "N others also bind this" via `siblingLabel`. -->
           <div v-if="producer.shadowed > 0" class="wp-refchip-pop__count">
-            overrides {{ producer.shadowed }} earlier
-            {{ producer.shadowed === 1 ? "write" : "writes" }}
+            {{ siblingText }}
           </div>
           <!-- An internal var resolves downstream but the assembler strips it
                from the rendered prompt — the single most confusing state a var

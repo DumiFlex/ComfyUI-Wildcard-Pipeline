@@ -5,6 +5,7 @@ import Button from "./ui/Button.vue";
 import Select from "./ui/Select.vue";
 import Chip from "./ui/Chip.vue";
 import RichTextInput from "./RichTextInput.vue";
+import type { VarProducerLike } from "./RefChip.vue";
 import VarAutocompleteInput from "./VarAutocompleteInput.vue";
 import type {
   DerivationAction,
@@ -25,6 +26,8 @@ interface Props {
   modelValue: DerivationRule;
   index: number;
   varSuggestions?: string[];
+  /** `$var` → the library module that binds it, for the chip hover cards. */
+  varProducers?: Map<string, VarProducerLike>;
   /** UUID → display-name map forwarded to every nested RichTextInput so
    *  `@{uuid}` chips read as `@name` instead of raw hex. */
   uuidToName?: Map<string, string>;
@@ -48,6 +51,7 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   varSuggestions: () => [],
+  varProducers: () => new Map(),
   uuidToName: () => new Map(),
   refSuggestions: () => [],
   uuidToSubCategories: () => new Map(),
@@ -495,7 +499,7 @@ const branchCount = computed(() => rule.value.branches.length);
           <div class="dvr-value-cell">
             <RichTextInput
               :model-value="branch.condition.value"
-              surface="derivation"
+              surface="derivation"              :var-producers="varProducers"
               wrap
               :var-suggestions="varSuggestions"
               :uuid-to-name="uuidToName"
@@ -555,7 +559,7 @@ const branchCount = computed(() => rule.value.branches.length);
           <!-- no module-id here: derivation warnings clear at the editor level -->
           <RichTextInput
             :model-value="branch.action.value"
-            surface="derivation"
+            surface="derivation"            :var-producers="varProducers"
             wrap
             allow-nested-refs
             :var-suggestions="varSuggestions"
@@ -638,7 +642,7 @@ const branchCount = computed(() => rule.value.branches.length);
           <!-- no module-id here: derivation warnings clear at the editor level -->
           <RichTextInput
             :model-value="rule.else.action.value"
-            surface="derivation"
+            surface="derivation"            :var-producers="varProducers"
             wrap
             allow-nested-refs
             :var-suggestions="varSuggestions"

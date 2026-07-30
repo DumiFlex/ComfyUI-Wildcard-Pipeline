@@ -513,6 +513,41 @@ describe("RichTextInput.vue", () => {
     }
   });
 
+  it("uses library wording in the SPA — no node, no override claim", async () => {
+    // The library is a bag of modules with no execution order, so the same
+    // count must NOT read as "overrides N earlier writes" the way it does on
+    // the canvas — nothing is overridden until they're arranged in a Context.
+    vi.useFakeTimers();
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "$outfit",
+        varProducers: new Map([["outfit", {
+          kind: "wildcard",
+          moduleName: "Outfit",
+          moduleId: "b855d115",
+          shadowed: 2,
+          siblingLabel: "library module",
+        }]]),
+      },
+      attachTo: document.body,
+    });
+    try {
+      await wrap.find(".wp-refchip").trigger("mouseenter");
+      vi.advanceTimersByTime(300);
+      await nextTick();
+      const text = document.body.querySelector('[data-test="refchip-hover"]')?.textContent ?? "";
+      expect(text).toContain("Outfit");
+      expect(text).toContain("b855d115");
+      expect(text).toContain("2 other library modules bind this name");
+      expect(text).not.toContain("overrides");
+      // No graph → no "in <node>" clause.
+      expect(text).not.toContain(" in ");
+    } finally {
+      vi.useRealTimers();
+      wrap.unmount();
+    }
+  });
+
   it("forwards aria-label + disabled onto the contenteditable host", () => {
     const wrap = mount(RichTextInput, {
       props: {
