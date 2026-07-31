@@ -1,4 +1,43 @@
 import { describe, it, expect } from "vitest";
+import { bundleContentKey } from "./bundle-fingerprint";
+
+describe("bundleContentKey", () => {
+  it("agrees across two copies of the same library bundle", () => {
+    // This is the point: `computeBundleFingerprint` folds in per-instance
+    // `_uid` / meta / instance, so a fresh insert never matches the library
+    // row it came from. This key keeps only what survives an insert.
+    const libraryChildren = [
+      { type: "wildcard", payload_hash: "H1", id: "aaa" },
+      { type: "constraint", payload_hash: "H2", id: "bbb" },
+    ];
+    const workflowChildren = [
+      { type: "wildcard", payload_hash: "H1", id: "zzz", _uid: "u1", meta: { name: "renamed" } },
+      { type: "constraint", payload_hash: "H2", id: "yyy", _uid: "u2" },
+    ];
+    expect(bundleContentKey(workflowChildren)).toBe(bundleContentKey(libraryChildren));
+  });
+
+  it("separates different children", () => {
+    expect(bundleContentKey([{ type: "wildcard", payload_hash: "H1" }]))
+      .not.toBe(bundleContentKey([{ type: "wildcard", payload_hash: "H2" }]));
+  });
+
+  it("respects child ORDER — a bundle is an ordered range", () => {
+    const a = [{ type: "wildcard", payload_hash: "H1" }, { type: "combine", payload_hash: "H2" }];
+    const b = [{ type: "combine", payload_hash: "H2" }, { type: "wildcard", payload_hash: "H1" }];
+    expect(bundleContentKey(a)).not.toBe(bundleContentKey(b));
+  });
+
+  it("keeps a hash-less child in the shape rather than skipping it", () => {
+    const withChild = [{ type: "wildcard", payload_hash: "H1" }, { type: "combine" }];
+    const without = [{ type: "wildcard", payload_hash: "H1" }];
+    expect(bundleContentKey(withChild)).not.toBe(bundleContentKey(without));
+  });
+
+  it("distinguishes an empty bundle from a one-child bundle", () => {
+    expect(bundleContentKey([])).not.toBe(bundleContentKey([{ type: "wildcard" }]));
+  });
+});
 import type { BundleInstance, ModuleEntry } from "../../../widgets/_shared";
 import {
   computeBundleFingerprint,
