@@ -2002,7 +2002,7 @@ function openBundleContextMenu(ev: MouseEvent, uid: string): void {
         label: "Push to library…",
         icon: "pi-cloud-upload",
         subtitle: bundleMissing
-          ? "Library entry deleted — re-add to library"
+          ? "Not linked to a library entry — re-link or add"
           : "Rename, retag, overwrite library entry",
         accent: bundleMissing,
         onSelect: () => openPushBundleToLibrary(uid),
@@ -2464,15 +2464,30 @@ function isBundleLibraryDrifted(bundle: BundleInstance): boolean {
   return live !== bundle.inserted_at_hash;
 }
 
-/** True when the bundle's library entry has been deleted upstream —
- *  the polled `bundleHashes` map no longer contains its uuid. Pairs
- *  with `isMissingFromLibrary` for modules. Returns false until first
- *  poll lands so we don't flash MISSING before the truth is known. */
+/** True when the bundle has NO live library entry behind it. Covers both
+ *  shapes of that: it carries a `library_id` the polled map no longer knows,
+ *  OR it carries no `library_id` at all.
+ *
+ *  The second case used to early-return false, so an unlinked bundle could
+ *  never show MISSING — leaving MODIFIED as its only badge, which then
+ *  compared its children against a snapshot baseline from a library entry that
+ *  isn't there. "Modified against what?" was a fair question with no answer.
+ *
+ *  Returns false until the first poll lands so we don't flash MISSING before
+ *  the truth is known. */
 function isBundleMissingFromLibrary(bundle: BundleInstance): boolean {
   const map = bundleHashes.value;
   if (map === null) return false;
-  if (!bundle.library_id) return false;
+  if (!bundle.library_id) return true;
   return !(bundle.library_id in map);
+}
+
+/** True when the bundle never had a library entry to diverge FROM — no
+ *  `library_id` at all. MODIFIED is meaningless in that state: there is no
+ *  insert to be modified since. Distinct from "the entry was deleted", where
+ *  the local snapshot IS a real baseline and MOD still reads correctly. */
+function isBundleUnlinked(bundle: BundleInstance): boolean {
+  return bundleHashes.value !== null && !bundle.library_id;
 }
 
 // Pending confirm-dialog state. Single slot — only one destructive op
@@ -4978,7 +4993,10 @@ const bundleFrameCtx: BundleFrameCtx = {
   bundleLockState,
   bundleHeaderGap,
   isBundleDropTarget,
-  isBundleSnapshotModified: (b: BundleInstance) => bundleSnapshotModified(b, value.value.modules),
+  // Suppressed for an unlinked bundle — there is no insert for its children to
+  // have diverged from, so MOD would be diffing against a ghost.
+  isBundleSnapshotModified: (b: BundleInstance) =>
+    !isBundleUnlinked(b) && bundleSnapshotModified(b, value.value.modules),
   recentDropUids,
   pulseDelayFor,
   toggleBundleCollapsed,
