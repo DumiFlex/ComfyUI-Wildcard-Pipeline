@@ -46,6 +46,43 @@ export function moduleFingerprint(m: ModuleRow): string {
 }
 
 /**
+ * Content fingerprint computed from a module's PAYLOAD, with no server hash
+ * involved.
+ *
+ * `moduleFingerprint` above takes `payload_hash` as an INPUT, so it cannot say
+ * anything about a row that is missing one — which is exactly the row we need
+ * to identify. A workflow module can arrive hash-less for several ordinary
+ * reasons: it was authored in the widget and never pushed, it came in a shared
+ * workflow, or its stored hash was lost. In the last two cases the module very
+ * likely corresponds to a library entry, and the re-link picker should be able
+ * to find it.
+ *
+ * Crucially this does NOT need to match the engine's `payload_hash` algorithm:
+ * both sides of the comparison are computed here, from live payloads, so the
+ * only requirement is self-consistency. That sidesteps the cross-language
+ * canonicalisation problem entirely.
+ *
+ * Key order is normalised recursively so two structurally equal payloads that
+ * serialise with different key order still agree — JSON object order is not
+ * meaningful, and payloads routinely round-trip through APIs that reorder keys.
+ *
+ * Pure function — no DOM, no Vue, no I/O.
+ */
+export function localPayloadFingerprint(payload: unknown): string {
+  return djb2(canonicalise(payload));
+}
+
+/** Stable stringify: objects emit their keys sorted, arrays keep order (array
+ *  order IS meaningful — wildcard options, derivation rules). */
+function canonicalise(v: unknown): string {
+  if (v === null || typeof v !== "object") return JSON.stringify(v) ?? "null";
+  if (Array.isArray(v)) return `[${v.map(canonicalise).join(",")}]`;
+  const obj = v as Record<string, unknown>;
+  const keys = Object.keys(obj).sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalise(obj[k])}`).join(",")}}`;
+}
+
+/**
  * Template content fingerprint. Templates carry NO server-computed
  * `payload_hash` / `snapshot_fingerprint` (they're the simplest entity —
  * a `template_string` plus library metadata), so collision detection
