@@ -28,7 +28,11 @@ import BundleFrame from "./bundles/BundleFrame.vue";
 import { BundleFrameCtxKey, type BundleFrameCtx } from "./bundles/bundle-frame-ctx";
 import ModuleRow from "./ModuleRow.vue";
 import { ModuleRowCtxKey, type ModuleRowCtx } from "./module-row-ctx";
-import { CONTEXT_POOLS_KEY, buildContextPools } from "../../extension/context-pools";
+import {
+  CONTEXT_POOLS_KEY,
+  FOREIGN_POOL_LOOKUP_KEY,
+  buildContextPools,
+} from "../../extension/context-pools";
 import { LockSeedKey } from "./lock-seed-ctx";
 import { buildBundleInsertion, type BundleLibraryEntry } from "./bundles/insert";
 import { isEnabled, type WildcardOption, type InstanceLike } from "./editors/wildcard/probability";
@@ -109,6 +113,11 @@ const props = withDefaults(defineProps<{
    *  producer instead of only confirming the name exists. Optional for
    *  headless mounts. */
   upstreamProducers?: Record<string, VarProducerLike>;
+  /** uuid → labels of OTHER Context nodes that hold it as a wildcard. Lets a
+   *  nested-ref hover card explain WHY it fell back to the library: the pool
+   *  exists on the canvas, just not in this node, and a catalog never crosses
+   *  a node boundary. Absent in headless mounts (no graph to walk). */
+  wildcardHomesReader?: (uuid: string) => string[];
   /** Resolved upstream-var snapshot — `$name → resolved string` map.
    *  Drives the combine modal's live-preview pane so users see the
    *  template with vars substituted (e.g. `red portrait` instead of
@@ -5011,6 +5020,11 @@ provide(ModuleRowCtxKey, moduleRowCtx);
 // business knowing about option pools. Recomputes with the module list, so
 // picking or removing a wildcard moves the card's numbers immediately.
 provide(CONTEXT_POOLS_KEY, computed(() => buildContextPools(value.value.modules)));
+// Companion lookup for the same card: when the ref falls back to the library,
+// this names any OTHER node holding the pool, so "why isn't it using the one
+// I can see right there" has an answer on the card instead of being a puzzle.
+provide(FOREIGN_POOL_LOOKUP_KEY, (uuid: string): string[] =>
+  props.wildcardHomesReader?.(uuid) ?? []);
 // Seed source for the edit-modal's Lock button — resolves the seed the module
 // actually rolled (frame #k's captured seed when a frame is active, else the
 // last-run seed) so locking pins what the user saw, not a random number.

@@ -14,6 +14,7 @@ import { cacheVersion, ensure, lookup } from "@/extension/preview-resolver";
 // reports numbers the graph will not use.
 import {
   CONTEXT_POOLS_KEY,
+  FOREIGN_POOL_LOOKUP_KEY,
   resolvePoolFor,
   type ContextPoolMap,
 } from "@/extension/context-pools";
@@ -339,6 +340,29 @@ const poolDriftNote = computed<string | null>(() => {
   return `library has ${p.otherTotal} — refresh to use it`;
 });
 
+/** Canvas-only: which OTHER nodes hold this uuid. Resolved on hover rather
+ *  than in a computed — it walks the whole graph, and only an open card ever
+ *  reads it. */
+const foreignLookup = inject(FOREIGN_POOL_LOOKUP_KEY, undefined);
+const foreignHomes = ref<string[]>([]);
+
+/**
+ * Note for the case that reads as a bug but isn't: the pool is right there on
+ * the canvas, in another node, and the ref used the library anyway.
+ *
+ * It does, because a `@{}` ref only sees its own node's modules plus the
+ * library — a catalog is rebuilt per node and never crosses the socket. That
+ * is not obvious from anywhere else in the UI, and it is the opposite of how
+ * `$vars` behave, so the card states it outright.
+ */
+const foreignPoolNote = computed<string | null>(() => {
+  if (pool.value?.source !== "library") return null;
+  const homes = foreignHomes.value;
+  if (homes.length === 0) return null;
+  const where = homes.length === 1 ? homes[0] : `${homes.length} other nodes`;
+  return `also in ${where} — other nodes don't share pools`;
+});
+
 function positionPop(el: HTMLElement): void {
   const r = el.getBoundingClientRect();
   const POP_H = 120;
@@ -358,7 +382,12 @@ function onEnter(ev: MouseEvent): void {
   if (!el) return;
   if (hoverTimer !== undefined) window.clearTimeout(hoverTimer);
   hoverTimer = window.setTimeout(() => {
-    if (isRef.value && props.uuid) ensure([props.uuid]); // fetch options if uncached
+    if (isRef.value && props.uuid) {
+      ensure([props.uuid]); // fetch options if uncached
+      // Graph walk, so it runs here — once per card open — rather than in a
+      // computed that every render would re-evaluate.
+      foreignHomes.value = foreignLookup?.(props.uuid) ?? [];
+    }
     positionPop(el);
     hoverOpen.value = true;
   }, HOVER_DELAY_MS);
@@ -454,6 +483,11 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
           class="wp-refchip-pop__pool wp-refchip-pop__pool--drift"
           data-test="refchip-pool-drift"
         >{{ poolDriftNote }}</div>
+        <div
+          v-if="foreignPoolNote"
+          class="wp-refchip-pop__pool wp-refchip-pop__pool--foreign"
+          data-test="refchip-pool-foreign"
+        >{{ foreignPoolNote }}</div>
       </template>
       <template v-else>
         <div class="wp-refchip-pop__head">
@@ -599,6 +633,9 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
 /* The node's snapshot and the library disagree — same amber the drift dot and
    the context-menu "Refresh from library" accent use. */
 .wp-refchip-pop__pool--drift { color: var(--wp-status-modified, #fbbf24); }
+/* Informational, not a problem — the ref is behaving correctly, the user just
+   cannot see why from anywhere else. Info blue rather than the drift amber. */
+.wp-refchip-pop__pool--foreign { color: var(--wp-info, #60a5fa); }
 
 /* Producer attribution row — "wildcard · Outfit · in dusk-marten". */
 .wp-refchip-pop__producer {

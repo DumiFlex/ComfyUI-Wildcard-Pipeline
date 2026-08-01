@@ -7,6 +7,7 @@ import {
   collectUpstreamResolved,
   collectUpstreamVariables,
   collectUpstreamWildcardUuids,
+  findWildcardHomesElsewhere,
   findDownstreamAssemblers,
   findRootGraph,
   hasUpstreamLoopOverridingSeed,
@@ -1185,5 +1186,67 @@ describe("collectDownstreamNestedReachUuids — derivation carrier", () => {
       getNodeById: (id) => ({ 1: root, 2: downstream } as Record<number, LiteNodeLike>)[id] ?? null,
     };
     expect(collectDownstreamNestedReachUuids(graph, root)).toContain(TARGET);
+  });
+});
+
+describe("findWildcardHomesElsewhere", () => {
+  // A `@{}` ref only sees its OWN node's modules plus the library — a catalog
+  // is rebuilt per node and never crosses the socket. So a pool moved one node
+  // away silently stops being used, which reads as a bug unless the UI says
+  // so. This walker finds the node the user is probably looking at.
+  function ctxWith(id: number, uuids: string[]): LiteNodeLike {
+    return {
+      id,
+      type: "WP_Context",
+      inputs: [{ name: "upstream", link: null }],
+      outputs: [{ name: "context", links: [], type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "wp_modules",
+        value: JSON.stringify({
+          version: 1,
+          modules: uuids.map((u) => ({
+            id: u, type: "wildcard", enabled: true, meta: { name: "" },
+            entries: [], payload: { var_binding: "x", options: [] },
+          })),
+        }),
+      }],
+    };
+  }
+  const graphOf = (nodes: LiteNodeLike[]): LiteGraphLike => ({
+    _nodes: nodes,
+    links: {},
+    getNodeById: (id) => nodes.find((n) => n.id === id) ?? null,
+  });
+
+  it("finds a node holding the uuid, and labels it", () => {
+    const self = ctxWith(1, []);
+    const other = ctxWith(2, ["aaaa1111"]);
+    const homes = findWildcardHomesElsewhere(graphOf([self, other]), self, "aaaa1111");
+    expect(homes).toHaveLength(1);
+    expect(homes[0]).toMatch(/^[a-z]+-[a-z]+$/); // codename shape
+  });
+
+  it("EXCLUDES the node asking, whose own modules ARE the ref pool", () => {
+    const self = ctxWith(1, ["aaaa1111"]);
+    expect(findWildcardHomesElsewhere(graphOf([self]), self, "aaaa1111")).toEqual([]);
+  });
+
+  it("reports every holder when several nodes carry the same uuid", () => {
+    const self = ctxWith(1, []);
+    const a = ctxWith(2, ["aaaa1111"]);
+    const b = ctxWith(3, ["aaaa1111"]);
+    expect(findWildcardHomesElsewhere(graphOf([self, a, b]), self, "aaaa1111")).toHaveLength(2);
+  });
+
+  it("returns nothing when no other node holds it", () => {
+    const self = ctxWith(1, []);
+    const other = ctxWith(2, ["bbbb2222"]);
+    expect(findWildcardHomesElsewhere(graphOf([self, other]), self, "aaaa1111")).toEqual([]);
+  });
+
+  it("ignores non-Context nodes and an empty uuid", () => {
+    const self = ctxWith(1, []);
+    const asm: LiteNodeLike = { id: 2, type: "WP_PromptAssembler", inputs: [], outputs: [] };
+    expect(findWildcardHomesElsewhere(graphOf([self, asm]), self, "")).toEqual([]);
   });
 });

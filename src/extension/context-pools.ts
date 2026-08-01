@@ -43,6 +43,19 @@ export const CONTEXT_POOLS_KEY = Symbol("wp-context-pools") as InjectionKey<
   Ref<ContextPoolMap>
 >;
 
+/**
+ * Injection key for "which OTHER nodes hold this uuid".
+ *
+ * A function rather than a map because answering it means walking the whole
+ * graph, and the answer is only ever read while a hover card is open — doing
+ * that eagerly, on every render of every chip, would be pure waste.
+ *
+ * Provided only on the canvas; the SPA has no graph to walk.
+ */
+export const FOREIGN_POOL_LOOKUP_KEY = Symbol(
+  "wp-foreign-pool-lookup",
+) as InjectionKey<(uuid: string) => string[]>;
+
 /** Minimal shape of a node module this builder reads. */
 interface ModuleLike {
   id?: unknown;

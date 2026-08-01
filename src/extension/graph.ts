@@ -1751,3 +1751,50 @@ export function* walkAllNodes(
     }
   }
 }
+
+/**
+ * Other `WP_Context` nodes in the graph that hold `uuid` as a wildcard module.
+ *
+ * A `@{uuid}` ref resolves against its OWN node's modules, then the live
+ * library — a catalog never crosses a node boundary (`__wp_catalog__` is
+ * rebuilt per node and is not among the cross-node internals). So a wildcard
+ * sitting one node upstream is invisible to the ref, even though `$vars` from
+ * that node flow downstream perfectly well.
+ *
+ * That asymmetry is easy to trip over: move a pool into an upstream node and
+ * the ref silently switches to the library. This lookup lets the hover card
+ * say WHY it fell back, naming the node the user is probably looking at.
+ *
+ * Walks the whole graph (subgraphs included) rather than just the chain: a
+ * node holding the uuid off to one side is exactly as irrelevant to the ref,
+ * and just as confusing to look at.
+ *
+ * Returns node labels — codenames for Context nodes, matching what the rest of
+ * the UI calls them. Excludes `selfNode`, whose modules ARE the ref's pool.
+ */
+export function findWildcardHomesElsewhere(
+  rootGraph: LiteGraphLike,
+  selfNode: LiteNodeLike,
+  uuid: string,
+): string[] {
+  if (!uuid) return [];
+  const contextIds: string[] = [];
+  const holders: LiteNodeLike[] = [];
+  for (const { node: n } of walkAllNodes(rootGraph)) {
+    if (n.type !== "WP_Context") continue;
+    contextIds.push(String(n.id));
+    if (String(n.id) === String(selfNode.id)) continue;
+    const v = parseWidgetJson<ContextWidgetValue>(
+      widgetValue(n, "wp_modules"),
+      { version: 1, modules: [] },
+    );
+    // Disabled modules count: the engine still catalogs them, so a user
+    // looking at a greyed-out row is looking at a real pool.
+    if (v.modules.some((m) => m.type === "wildcard" && m.id === uuid)) {
+      holders.push(n);
+    }
+  }
+  if (holders.length === 0) return [];
+  const codenames = assignCodenames(contextIds);
+  return holders.map((n) => codenames.get(String(n.id)) ?? baseCodename(n.id));
+}

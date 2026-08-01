@@ -3,7 +3,11 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { computed, nextTick } from "vue";
 import RefChip from "../RefChip.vue";
 import { _setForTests } from "@/extension/preview-resolver";
-import { CONTEXT_POOLS_KEY, buildContextPools } from "@/extension/context-pools";
+import {
+  CONTEXT_POOLS_KEY,
+  FOREIGN_POOL_LOOKUP_KEY,
+  buildContextPools,
+} from "@/extension/context-pools";
 
 describe("RefChip hover card (issues #3 / #8)", () => {
   afterEach(() => { vi.useRealTimers(); });
@@ -373,5 +377,57 @@ describe("RefChip native tooltip", () => {
     });
     expect(w.find(".wp-refchip").attributes("title")).toBe("");
     w.unmount();
+  });
+});
+
+describe("RefChip hover card — pool held by ANOTHER node", () => {
+  afterEach(() => { vi.useRealTimers(); });
+
+  async function cardWithLookup(homes: string[], modules?: unknown[]) {
+    vi.useFakeTimers();
+    const w = mount(RefChip, {
+      props: { kind: "ref", name: "pose", uuid: "beef0030", resolved: true },
+      attachTo: document.body,
+      global: {
+        provide: {
+          [FOREIGN_POOL_LOOKUP_KEY as symbol]: () => homes,
+          ...(modules
+            ? { [CONTEXT_POOLS_KEY as symbol]: computed(() => buildContextPools(modules)) }
+            : {}),
+        },
+      },
+    });
+    await w.find(".wp-refchip").trigger("mouseenter");
+    vi.advanceTimersByTime(300);
+    await nextTick();
+    const text = document.querySelector('[data-test="refchip-hover"]')?.textContent ?? "";
+    w.unmount();
+    return text;
+  }
+
+  it("names the other node holding the pool, and says pools are not shared", async () => {
+    _setForTests("beef0030", { name: "pose", kind: "wildcard", optionTagSets: [[], []] });
+    const text = await cardWithLookup(["dusk-marten"]);
+    expect(text).toContain("also in dusk-marten");
+    expect(text).toContain("other nodes don't share pools");
+  });
+
+  it("counts them when several nodes hold it, rather than listing every one", async () => {
+    _setForTests("beef0030", { name: "pose", kind: "wildcard", optionTagSets: [[], []] });
+    expect(await cardWithLookup(["dusk-marten", "dawn-marten"])).toContain("2 other nodes");
+  });
+
+  it("stays silent when no other node holds it", async () => {
+    _setForTests("beef0030", { name: "pose", kind: "wildcard", optionTagSets: [[], []] });
+    expect(await cardWithLookup([])).not.toContain("also in");
+  });
+
+  it("stays silent when THIS node supplies the pool — nothing to explain", async () => {
+    _setForTests("beef0030", { name: "pose", kind: "wildcard", optionTagSets: [[], []] });
+    const mine = [{
+      id: "beef0030", type: "wildcard", meta: { name: "Pose pool" },
+      payload: { options: [{ id: "o0", sub_categories: [] }] },
+    }];
+    expect(await cardWithLookup(["dusk-marten"], mine)).not.toContain("also in");
   });
 });
