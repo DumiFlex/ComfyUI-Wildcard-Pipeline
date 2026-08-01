@@ -1,6 +1,6 @@
 <!-- src/manager/components/RefChip.vue -->
 <script setup lang="ts">
-import { computed, ref, onBeforeUnmount } from "vue";
+import { computed, inject, ref, onBeforeUnmount } from "vue";
 import { KIND_ICON_MAP } from "../../components/shared/kind-icons";
 import { parse, readsAs, matches } from "@/manager/parsing/subcatFilter";
 import { splitRefFilter } from "@/widgets/richTokenize";
@@ -8,6 +8,15 @@ import { splitRefFilter } from "@/widgets/richTokenize";
 // the referenced wildcard's CURRENT option list from here, so adding an option
 // in the library moves the count (the propagation signal issue #3 asked for).
 import { cacheVersion, ensure, lookup } from "@/extension/preview-resolver";
+// Context-node pools. The engine resolves a nested ref against the node's own
+// frozen snapshot when the uuid is picked there, and only falls back to the
+// library otherwise — so the card has to apply the same precedence or it
+// reports numbers the graph will not use.
+import {
+  CONTEXT_POOLS_KEY,
+  resolvePoolFor,
+  type ContextPoolMap,
+} from "@/extension/context-pools";
 
 /** Module kind for the `moduleKind` prop. Mirrors `ModuleKind` in
  *  `src/manager/cascade/resolveChip.ts` — duplicated as a local literal
@@ -278,18 +287,52 @@ const hoverOpen = ref(false);
 const popPos = ref<{ top: number; left: number; flip: boolean }>({ top: 0, left: 0, flip: false });
 let hoverTimer: number | undefined;
 
-/** Live option stats for a ref chip: total options + how many match the
- *  filter. Null when not a ref, no uuid, or the library row isn't resolved
- *  yet (card then shows "not in library"). Reactive on fetch via cacheVersion. */
-const optionStats = computed<{ total: number; matched: number } | null>(() => {
+/** Pools this Context node holds, when a Context node is an ancestor. Absent
+ *  in the SPA library views, where every ref necessarily reads the library. */
+const contextPools = inject<{ value: ContextPoolMap } | undefined>(
+  CONTEXT_POOLS_KEY,
+  undefined,
+);
+
+/** The pool a ref will ACTUALLY resolve against, plus where it came from.
+ *  Null when neither the node nor the library has the row (card then shows
+ *  "not in library"). Reactive on fetch via cacheVersion. */
+const pool = computed(() => {
   void cacheVersion.value;
   if (!isRef.value || !props.uuid) return null;
-  const sets = lookup(props.uuid)?.optionTagSets;
-  if (!sets || sets.length === 0) return null;
-  const total = sets.length;
+  return resolvePoolFor(
+    props.uuid,
+    contextPools?.value,
+    lookup(props.uuid)?.optionTagSets,
+  );
+});
+
+/** Total options + how many survive the filter, computed over whichever pool
+ *  won above — so the count always describes what the graph will do. */
+const optionStats = computed<{ total: number; matched: number } | null>(() => {
+  const p = pool.value;
+  if (!p || p.tagSets.length === 0) return null;
+  const total = p.tagSets.length;
   if (!hasExpr.value) return { total, matched: total };
   const ast = parse(filter.value.expr);
-  return { total, matched: sets.filter((tags) => matches(ast, new Set(tags))).length };
+  return { total, matched: p.tagSets.filter((tags) => matches(ast, new Set(tags))).length };
+});
+
+/** Human label for the winning pool. Names the module when the node supplies
+ *  it, because a node can hold a renamed copy of a library row. */
+const poolLabel = computed<string | null>(() => {
+  const p = pool.value;
+  if (!p) return null;
+  if (p.source === "library") return "pool: library";
+  return p.name ? `pool: this node · ${p.name}` : "pool: this node";
+});
+
+/** Set only when the losing pool disagrees — the card explains the
+ *  discrepancy rather than leaving two different numbers unexplained. */
+const poolDriftNote = computed<string | null>(() => {
+  const p = pool.value;
+  if (!p || p.otherTotal === undefined) return null;
+  return `library has ${p.otherTotal} — refresh to use it`;
 });
 
 function positionPop(el: HTMLElement): void {
@@ -391,11 +434,22 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
         <!-- Option count only for wildcards (a resolved constraint/derivation
              has no options — don't mislabel it "not in library"). Show the
              not-in-library note ONLY when the ref genuinely didn't resolve. -->
-        <div v-if="optionStats" class="wp-refchip-pop__count">
+        <div v-if="optionStats" class="wp-refchip-pop__count" data-test="refchip-count">
           {{ hasExpr ? `${optionStats.matched} of ${optionStats.total} options match`
                      : `${optionStats.total} option${optionStats.total === 1 ? "" : "s"}` }}
         </div>
         <div v-else-if="!resolved" class="wp-refchip-pop__count">not in library</div>
+        <!-- Which pool produced that count. Without it the number is
+             unfalsifiable: a node holding a drifted snapshot and the library
+             give different answers and both look authoritative. -->
+        <div v-if="poolLabel" class="wp-refchip-pop__pool" data-test="refchip-pool">
+          {{ poolLabel }}
+        </div>
+        <div
+          v-if="poolDriftNote"
+          class="wp-refchip-pop__pool wp-refchip-pop__pool--drift"
+          data-test="refchip-pool-drift"
+        >{{ poolDriftNote }}</div>
       </template>
       <template v-else>
         <div class="wp-refchip-pop__head">
@@ -532,6 +586,15 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
 .wp-refchip-pop__filter { color: var(--wp-text-dim); }
 .wp-refchip-pop__count { color: var(--wp-accent-text); font-weight: 600; }
 .wp-refchip-pop__nonull { color: var(--wp-status-modified, #fbbf24); margin-left: 4px; }
+/* Pool provenance — dimmer than the count it qualifies, since it is context
+   for that number rather than a second fact competing with it. */
+.wp-refchip-pop__pool {
+  color: var(--wp-text-dim);
+  font-size: 10.5px;
+}
+/* The node's snapshot and the library disagree — same amber the drift dot and
+   the context-menu "Refresh from library" accent use. */
+.wp-refchip-pop__pool--drift { color: var(--wp-status-modified, #fbbf24); }
 
 /* Producer attribution row — "wildcard · Outfit · in dusk-marten". */
 .wp-refchip-pop__producer {

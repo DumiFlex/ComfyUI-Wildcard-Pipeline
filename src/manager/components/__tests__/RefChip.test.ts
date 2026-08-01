@@ -1,8 +1,9 @@
 import { mount } from "@vue/test-utils";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { nextTick } from "vue";
+import { computed, nextTick } from "vue";
 import RefChip from "../RefChip.vue";
 import { _setForTests } from "@/extension/preview-resolver";
+import { CONTEXT_POOLS_KEY, buildContextPools } from "@/extension/context-pools";
 
 describe("RefChip hover card (issues #3 / #8)", () => {
   afterEach(() => { vi.useRealTimers(); });
@@ -238,5 +239,93 @@ describe("RefChip moduleKind", () => {
     expect(wrap.classes()).toContain("wp-refchip--var");
     expect(wrap.find(".wp-refchip").attributes("style") ?? "").not.toContain("--wp-refchip-tone");
     expect(wrap.find(".wp-refchip__icon--pi").exists()).toBe(false);
+  });
+});
+
+describe("RefChip hover card — which pool the count came from", () => {
+  afterEach(() => { vi.useRealTimers(); });
+
+  /** Mount with an optional Context-node pool map provided, mirroring what
+   *  ContextWidget does for every chip beneath it. */
+  async function hoverCard(opts: {
+    uuid: string;
+    expr?: string;
+    modules?: unknown[];
+  }) {
+    vi.useFakeTimers();
+    const w = mount(RefChip, {
+      props: {
+        kind: "ref", name: "pose", uuid: opts.uuid, resolved: true,
+        ...(opts.expr ? { expr: opts.expr } : {}),
+      },
+      attachTo: document.body,
+      global: opts.modules
+        ? { provide: { [CONTEXT_POOLS_KEY as symbol]: computed(() => buildContextPools(opts.modules)) } }
+        : {},
+    });
+    await w.find(".wp-refchip").trigger("mouseenter");
+    vi.advanceTimersByTime(300);
+    await nextTick();
+    const card = document.querySelector('[data-test="refchip-hover"]');
+    const text = card?.textContent ?? "";
+    w.unmount();
+    return text;
+  }
+
+  const nodeModule = (uuid: string, tagSets: string[][], name: string) => ({
+    id: uuid, type: "wildcard", meta: { name },
+    payload: { options: tagSets.map((sub_categories, i) => ({ id: `o${i}`, sub_categories })) },
+  });
+
+  it("says 'library' when the ref's target is not in the node", async () => {
+    _setForTests("beef0010", { name: "pose", kind: "wildcard", optionTagSets: [[], []] });
+    expect(await hoverCard({ uuid: "beef0010" })).toContain("pool: library");
+  });
+
+  it("names the node and its module when the node holds the pool", async () => {
+    _setForTests("beef0011", { name: "pose", kind: "wildcard", optionTagSets: [[], []] });
+    const text = await hoverCard({
+      uuid: "beef0011",
+      modules: [nodeModule("beef0011", [[], []], "Pose pool")],
+    });
+    expect(text).toContain("pool: this node");
+    expect(text).toContain("Pose pool");
+  });
+
+  it("counts against the NODE's pool, not the library's — that split is the bug", async () => {
+    // Library has the `test`-tagged option; the node's snapshot predates it.
+    _setForTests("beef0012", {
+      name: "pose", kind: "wildcard",
+      optionTagSets: [["test"], [], []],
+    });
+    const text = await hoverCard({
+      uuid: "beef0012",
+      expr: "test",
+      modules: [nodeModule("beef0012", [[], []], "Pose pool")],
+    });
+    // 0 of 2 (the node), NOT 1 of 3 (the library).
+    expect(text).toContain("0 of 2 options match");
+    expect(text).not.toContain("1 of 3");
+  });
+
+  it("flags the drift so the differing library number is explained, not hidden", async () => {
+    _setForTests("beef0013", {
+      name: "pose", kind: "wildcard",
+      optionTagSets: [["test"], [], []],
+    });
+    const text = await hoverCard({
+      uuid: "beef0013",
+      modules: [nodeModule("beef0013", [[], []], "Pose pool")],
+    });
+    expect(text).toContain("library has 3");
+  });
+
+  it("says nothing about the library when the two pools agree", async () => {
+    _setForTests("beef0014", { name: "pose", kind: "wildcard", optionTagSets: [[], []] });
+    const text = await hoverCard({
+      uuid: "beef0014",
+      modules: [nodeModule("beef0014", [[], []], "Pose pool")],
+    });
+    expect(text).not.toContain("library has");
   });
 });

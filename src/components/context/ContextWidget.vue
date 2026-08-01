@@ -28,6 +28,7 @@ import BundleFrame from "./bundles/BundleFrame.vue";
 import { BundleFrameCtxKey, type BundleFrameCtx } from "./bundles/bundle-frame-ctx";
 import ModuleRow from "./ModuleRow.vue";
 import { ModuleRowCtxKey, type ModuleRowCtx } from "./module-row-ctx";
+import { CONTEXT_POOLS_KEY, buildContextPools } from "../../extension/context-pools";
 import { LockSeedKey } from "./lock-seed-ctx";
 import { buildBundleInsertion, type BundleLibraryEntry } from "./bundles/insert";
 import { isEnabled, type WildcardOption, type InstanceLike } from "./editors/wildcard/probability";
@@ -5004,6 +5005,12 @@ const moduleRowCtx: ModuleRowCtx = {
   frameEnableOverride,
 };
 provide(ModuleRowCtxKey, moduleRowCtx);
+// Pools this node holds, for the nested-ref hover card. Provided rather than
+// threaded: `RefChip` sits six components below here (row → edit modal →
+// section → value chips → preview → chip) and not one layer in between has any
+// business knowing about option pools. Recomputes with the module list, so
+// picking or removing a wildcard moves the card's numbers immediately.
+provide(CONTEXT_POOLS_KEY, computed(() => buildContextPools(value.value.modules)));
 // Seed source for the edit-modal's Lock button — resolves the seed the module
 // actually rolled (frame #k's captured seed when a frame is active, else the
 // last-run seed) so locking pins what the user saw, not a random number.
