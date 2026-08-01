@@ -45,31 +45,51 @@ describe("RefChip hover card (issues #3 / #8)", () => {
   });
 });
 
+/** Open a chip's hover card and return its text. The filter's "reads as" used
+ *  to live in the native `title`; it moved into the card so the chip could
+ *  carry an empty title and stop an ancestor's tooltip overlaying it. */
+async function cardTextFor(props: Record<string, unknown>): Promise<string> {
+  vi.useFakeTimers();
+  const w = mount(RefChip, { props: props as never, attachTo: document.body });
+  await w.find(".wp-refchip").trigger("mouseenter");
+  vi.advanceTimersByTime(300);
+  await nextTick();
+  const text = document.querySelector('[data-test="refchip-hover"]')?.textContent ?? "";
+  w.unmount();
+  vi.useRealTimers();
+  return text;
+}
+
 describe("RefChip filter indicator", () => {
-  it("shows a funnel + hover title with the expression, not inline text", () => {
-    const w = mount(RefChip, { props: { kind: "ref", name: "colors", uuid: "aabbccdd", resolved: true, expr: "warm or cold", excludeNull: true } });
+  it("shows a funnel + the expression on the hover card, not inline", async () => {
+    const props = { kind: "ref", name: "colors", uuid: "aabbccdd", resolved: true, expr: "warm or cold", excludeNull: true };
+    const w = mount(RefChip, { props: props as never });
     expect(w.find('[data-test="refchip-filter"]').exists()).toBe(true);
-    expect(w.text()).not.toContain("warm or cold");          // not inline
-    expect(w.attributes("title")).toContain("warm or cold");  // on hover
-    expect(w.attributes("title")).toMatch(/null/);
+    expect(w.text()).not.toContain("warm or cold");  // not inline
+    w.unmount();
+    const card = await cardTextFor(props);
+    expect(card).toContain("warm or cold");
+    expect(card).toMatch(/null/);
   });
 
-  it("normalizes the expression in the hover title (reads-as)", () => {
+  it("normalizes the expression on the hover card (reads-as)", async () => {
     // `warm,cold` (comma shorthand) reads as `warm or cold`.
     const w = mount(RefChip, {
       props: { kind: "ref", name: "c", uuid: "aabbccdd", resolved: true, expr: "warm,cold" },
     });
-    expect(w.attributes("title")).toContain("warm or cold");
     expect(w.find('[data-test="refchip-filter"]').exists()).toBe(true);
     expect(w.classes()).toContain("wp-refchip--filtered");
+    w.unmount();
+    expect(await cardTextFor({ kind: "ref", name: "c", uuid: "aabbccdd", resolved: true, expr: "warm,cold" }))
+      .toContain("warm or cold");
   });
 
-  it("renders a funnel for exclude-null only (no expression)", () => {
-    const w = mount(RefChip, {
-      props: { kind: "ref", name: "c", uuid: "aabbccdd", resolved: true, excludeNull: true },
-    });
+  it("renders a funnel for exclude-null only (no expression)", async () => {
+    const props = { kind: "ref", name: "c", uuid: "aabbccdd", resolved: true, excludeNull: true };
+    const w = mount(RefChip, { props: props as never });
     expect(w.find('[data-test="refchip-filter"]').exists()).toBe(true);
-    expect(w.attributes("title")).toMatch(/null excluded/);
+    w.unmount();
+    expect(await cardTextFor(props)).toMatch(/null excluded/);
   });
 
   it("shows no filter indicator for an unfiltered ref", () => {
@@ -77,42 +97,45 @@ describe("RefChip filter indicator", () => {
       props: { kind: "ref", name: "c", uuid: "aabbccdd", resolved: true },
     });
     expect(w.find('[data-test="refchip-filter"]').exists()).toBe(false);
-    expect(w.attributes("title")).toBeUndefined();
+    // Empty, never absent — an absent title lets the container's tooltip through.
+    expect(w.attributes("title")).toBe("");
     expect(w.classes()).not.toContain("wp-refchip--filtered");
   });
 
-  it("derives the funnel + title from the deprecated subCategories fallback", () => {
+  it("derives the funnel + card text from the deprecated subCategories fallback", async () => {
     // Pre-SP1 callers pass a flat list (comma = OR); a trailing `null`
     // token maps to exclude-null. Kept compiling + non-regressed until
     // those callers migrate to `expr` / `excludeNull`.
-    const w = mount(RefChip, {
-      props: {
-        kind: "ref", name: "color", uuid: "aabbccdd", resolved: true,
-        subCategories: ["warm", "cool", "null"],
-      },
-    });
+    const props = {
+      kind: "ref", name: "color", uuid: "aabbccdd", resolved: true,
+      subCategories: ["warm", "cool", "null"],
+    };
+    const w = mount(RefChip, { props: props as never });
     expect(w.find('[data-test="refchip-filter"]').exists()).toBe(true);
-    expect(w.text()).not.toContain("warm");                  // not inline
-    expect(w.attributes("title")).toContain("warm or cool");  // reads-as
-    expect(w.attributes("title")).toMatch(/null excluded/);
+    expect(w.text()).not.toContain("warm");  // not inline
+    w.unmount();
+    const card = await cardTextFor(props);
+    expect(card).toContain("warm or cool");   // reads-as
+    expect(card).toMatch(/null excluded/);
   });
 
-  it("peels a glued !null marker out of the subCategories fallback", () => {
+  it("peels a glued !null marker out of the subCategories fallback", async () => {
     // The widget lexer comma-splits a v2 ref body WITHOUT peeling, so a
     // single-element list like ["warm or intense!null"] reaches this legacy
     // prop glued. RefChip must peel it — never show `!null` as text, surface
-    // the exclude-null ban, and normalize the expression in the title.
-    const w = mount(RefChip, {
-      props: {
-        kind: "ref", name: "mood", uuid: "aabbccdd", resolved: true,
-        subCategories: ["warm or intense!null"],
-      },
-    });
+    // the exclude-null ban, and normalize the expression on the card.
+    const props = {
+      kind: "ref", name: "mood", uuid: "aabbccdd", resolved: true,
+      subCategories: ["warm or intense!null"],
+    };
+    const w = mount(RefChip, { props: props as never });
     expect(w.find('[data-test="refchip-filter"]').exists()).toBe(true);
-    expect(w.text()).not.toContain("!null");                    // never inline
-    expect(w.attributes("title")).toContain("warm or intense");  // reads-as
-    expect(w.attributes("title")).not.toContain("!null");        // peeled in title too
-    expect(w.attributes("title")).toMatch(/null excluded/);      // ban semantics
+    expect(w.text()).not.toContain("!null");  // never inline
+    w.unmount();
+    const card = await cardTextFor(props);
+    expect(card).toContain("warm or intense");  // reads-as
+    expect(card).not.toContain("!null");        // peeled on the card too
+    expect(card).toMatch(/null excluded/);      // ban semantics
   });
 });
 
@@ -327,5 +350,28 @@ describe("RefChip hover card — which pool the count came from", () => {
       modules: [nodeModule("beef0014", [[], []], "Pose pool")],
     });
     expect(text).not.toContain("library has");
+  });
+});
+
+describe("RefChip native tooltip", () => {
+  it("carries an EMPTY title so an ancestor's tooltip can't overlay the card", () => {
+    // Chips live inside the derivation rule/branch summaries, which put the
+    // full row text on their own `title`. An omitted title lets that ancestor
+    // tooltip through, so hovering a chip raised the native tooltip on top of
+    // the chip's hover card. An empty title means "no advisory information"
+    // and stops the lookup — omitting the attribute does not.
+    const w = mount(RefChip, {
+      props: { kind: "ref", name: "pose", uuid: "beef0020", resolved: true },
+    });
+    expect(w.find(".wp-refchip").attributes("title")).toBe("");
+    w.unmount();
+  });
+
+  it("keeps the empty title on a FILTERED chip too — the reads-as lives in the card", () => {
+    const w = mount(RefChip, {
+      props: { kind: "ref", name: "pose", uuid: "beef0021", resolved: true, expr: "warm" },
+    });
+    expect(w.find(".wp-refchip").attributes("title")).toBe("");
+    w.unmount();
   });
 });

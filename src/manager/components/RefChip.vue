@@ -207,16 +207,20 @@ const readsAsExpr = computed(() => {
   }
 });
 
-/** Hover title summarising the filter — `<reads-as>` plus a
- *  " · null excluded" tail when the null option is dropped. Undefined
- *  when there's nothing to describe (so no empty `title` attr renders). */
-const filterTitle = computed<string | undefined>(() => {
-  if (!isFiltered.value) return undefined;
-  const parts: string[] = [];
-  if (readsAsExpr.value) parts.push(readsAsExpr.value);
-  if (filter.value.excludeNull) parts.push("null excluded");
-  return parts.join(" · ");
-});
+/**
+ * Always the empty string, which is not the same as omitting the attribute.
+ *
+ * Per HTML, an empty `title` means "this element has no advisory information"
+ * and STOPS the lookup walking to an ancestor. That matters because chips sit
+ * inside containers that carry their own `title` (the derivation rule/branch
+ * summaries put the full row text there), so hovering a chip used to raise the
+ * container's native tooltip on top of the chip's own hover card — two
+ * overlapping popups describing different things.
+ *
+ * Nothing is lost: the filter's "reads as" and the excluded-null note both
+ * render inside the hover card, so the native tooltip was duplicating it.
+ */
+const filterTitle = "";
 
 /** Whether the exclude-null mark should render (effective flag). */
 const showNoNull = computed(() => isRef.value && filter.value.excludeNull);

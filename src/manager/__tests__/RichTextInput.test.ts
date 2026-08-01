@@ -1291,10 +1291,13 @@ describe("RichTextPreview.vue", () => {
     expect(chips[0].text()).toContain("$person");
     expect(chips[1].text()).toContain("@color");
     // The filter expression is NOT shown inline (§4.1) — a funnel marks
-    // "filtered" and the expression lives in the hover title.
+    // "filtered" and the expression lives in the chip's hover card
+    // (covered in RefChip.test.ts / RichTextPreview.test.ts). The native
+    // title is deliberately EMPTY so a container's own tooltip cannot
+    // overlay that card.
     expect(chips[1].text()).not.toContain("warm");
     expect(chips[1].find('[data-test="refchip-filter"]').exists()).toBe(true);
-    expect(chips[1].attributes("title")).toContain("warm");
+    expect(chips[1].attributes("title")).toBe("");
   });
 });
 
