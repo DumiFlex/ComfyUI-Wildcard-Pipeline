@@ -412,6 +412,46 @@ describe("RichTextInput.vue", () => {
     wrap.unmount();
   });
 
+  it("does NOT reopen the popover when the caret lands flush after a chip", async () => {
+    // Reported: put a space after the `$style_fx` chip, delete the space, and
+    // the caret settles right behind the chip — which reopened the picker even
+    // though nothing is being filtered; the chip already exists. A committed
+    // chip serialises back to raw text as `$style_fx`, exactly what the user
+    // would have typed to make it, so the probe cannot tell the two apart from
+    // the string alone. Only the DOM can, which is what `triggerIsInsideChip`
+    // consults.
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "$style_fx ",
+        surface: "combine",
+        varSuggestions: ["style_fx", "style_fx_alt"],
+      },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const host = wrap.find(".wp-rt__host");
+    const hostEl = host.element as HTMLElement;
+    // Sanity: the chip rendered, so the caret really can sit behind an atom.
+    expect(hostEl.querySelectorAll(".wp-refchip--var").length).toBe(1);
+
+    // Caret AFTER the trailing space, so Backspace removes the space and
+    // leaves the caret flush against the chip — the exact reported sequence.
+    const trailing = Array.from(hostEl.querySelectorAll(".wp-rt__text")).pop() as HTMLElement;
+    const tn = trailing.firstChild as Text;
+    expect(tn.textContent).toBe(" ");
+    const range = document.createRange();
+    range.setStart(tn, tn.length);
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+
+    await host.trigger("keydown", { key: "Backspace" });
+    await flushPromises();
+    expect(document.body.querySelectorAll(".wp-rt-suggestions__item").length).toBe(0);
+    wrap.unmount();
+  });
+
   it("a var chip hover names its producing module and node", async () => {
     // "in scope" told the user a name existed, not where its value comes from —
     // useless when several near-identical modules bind the same var.

@@ -855,6 +855,16 @@ function refreshAutocompleteFromHost(): void {
     acOpen.value = false;
     return;
   }
+  // The trigger belongs to a chip that already exists — the user is not
+  // filtering anything, so there is nothing to suggest. This fires whenever
+  // the caret ends up flush against a chip's trailing edge: type a space after
+  // `$style_fx`, delete it, and the caret lands there with the chip's own
+  // serialised `$style_fx` sitting behind it in raw text. The probe cannot see
+  // the difference; `triggerIsInsideChip` asks the DOM instead.
+  if (triggerIsInsideChip(hit.start)) {
+    acOpen.value = false;
+    return;
+  }
   // Gate `@` autocomplete — the wildcard surface always allows nested refs;
   // other surfaces opt in via `allowNestedRefs` (derivation action values,
   // which the engine resolves `@{}` on post-Layer-A).
@@ -1058,29 +1068,66 @@ function restoreCursorAtChar(targetChar: number): void {
  *  text (the same coordinate space `readHostAsText()` produces).
  *  Counts chars across host children, skipping ZWSPs in pad spans
  *  and adding full serialised chip length for non-text atoms. */
+/** Length contribution of a single host child to the raw-text space.
+ *  Hoisted out of `rangeOffsetToRaw` so `chipRawSpans` measures chips the
+ *  same way the caret mapping does — two copies of this would drift. */
+function childRawLen(child: ChildNode): number {
+  if (child.nodeType === Node.TEXT_NODE) {
+    return (child.textContent ?? "").replace(ZWSP_RE, "").length;
+  }
+  if (child.nodeType !== Node.ELEMENT_NODE) return 0;
+  const el = child as HTMLElement;
+  if (el.classList.contains("wp-refchip")) {
+    const idx = Number(el.getAttribute("data-atom-index"));
+    const atom = atoms.value[idx];
+    if (atom && atom.kind !== "text") return serialiseAtomsLocal([atom]).length;
+    return 0;
+  }
+  if (el.classList.contains("wp-rt__text")) {
+    return (el.textContent ?? "").replace(ZWSP_RE, "").length;
+  }
+  return 0;
+}
+
+/**
+ * Raw-text `[start, end)` span of every rendered chip.
+ *
+ * A committed chip serialises back into raw text as the very thing the user
+ * would have typed to create it (`$style_fx`), so the raw string alone cannot
+ * tell "a finished chip" from "a token being typed". Only the DOM knows — a
+ * chip is an atom element, in-progress text is not. These spans carry that
+ * distinction into the raw coordinate space the probe works in.
+ */
+function chipRawSpans(): Array<[number, number]> {
+  const host = hostEl.value;
+  if (!host) return [];
+  const spans: Array<[number, number]> = [];
+  let offset = 0;
+  for (const child of Array.from(host.childNodes)) {
+    const len = childRawLen(child);
+    if (
+      child.nodeType === Node.ELEMENT_NODE
+      && (child as HTMLElement).classList.contains("wp-refchip")
+      && len > 0
+    ) {
+      spans.push([offset, offset + len]);
+    }
+    offset += len;
+  }
+  return spans;
+}
+
+/** True when the `$` / `@` the probe latched onto is part of an existing chip
+ *  rather than something the user is typing. */
+function triggerIsInsideChip(rawIndex: number): boolean {
+  return chipRawSpans().some(([start, end]) => rawIndex >= start && rawIndex < end);
+}
+
 function rangeOffsetToRaw(targetNode: Node, targetOffset: number): number {
   const host = hostEl.value;
   if (!host || !host.contains(targetNode)) return readHostAsText().length;
   const charsBefore = (s: string, n: number): number =>
     s.slice(0, n).replace(ZWSP_RE, "").length;
-  // Length contribution of a single host child to the raw-text space.
-  const childRawLen = (child: ChildNode): number => {
-    if (child.nodeType === Node.TEXT_NODE) {
-      return (child.textContent ?? "").replace(ZWSP_RE, "").length;
-    }
-    if (child.nodeType !== Node.ELEMENT_NODE) return 0;
-    const el = child as HTMLElement;
-    if (el.classList.contains("wp-refchip")) {
-      const idx = Number(el.getAttribute("data-atom-index"));
-      const atom = atoms.value[idx];
-      if (atom && atom.kind !== "text") return serialiseAtomsLocal([atom]).length;
-      return 0;
-    }
-    if (el.classList.contains("wp-rt__text")) {
-      return (el.textContent ?? "").replace(ZWSP_RE, "").length;
-    }
-    return 0;
-  };
   // Special case: selection anchored ON the host itself (e.g. after
   // `range.selectNodeContents(host)` → startContainer=host,
   // startOffset=0, endContainer=host, endOffset=childCount). offset is
