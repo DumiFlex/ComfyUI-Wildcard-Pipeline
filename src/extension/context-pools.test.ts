@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildContextPools, resolvePoolFor } from "./context-pools";
+import { buildContextPools, overlayContextPools, resolvePoolFor } from "./context-pools";
 
 const wildcard = (id: string, opts: Array<string[]>, name = "") => ({
   id,
@@ -13,7 +13,7 @@ const wildcard = (id: string, opts: Array<string[]>, name = "") => ({
 describe("buildContextPools", () => {
   it("indexes wildcard modules by uuid with their per-option tags", () => {
     const pools = buildContextPools([wildcard("aaaa1111", [["test"], []], "Pose pool")]);
-    expect(pools.get("aaaa1111")).toEqual({
+    expect(pools.get("aaaa1111")).toMatchObject({
       uuid: "aaaa1111",
       name: "Pose pool",
       tagSets: [["test"], []],
@@ -47,7 +47,9 @@ describe("buildContextPools", () => {
     const pools = buildContextPools([
       null, "nonsense", {}, { type: "wildcard" }, { id: "x", type: "wildcard" },
     ] as unknown[]);
-    expect(pools.get("x")).toEqual({ uuid: "x", name: "", tagSets: [] });
+    expect(pools.get("x")).toEqual({
+      uuid: "x", name: "", tagSets: [], subCategories: [], tagGroups: {}, hasNull: false,
+    });
   });
 });
 
@@ -91,5 +93,85 @@ describe("resolvePoolFor", () => {
     const got = resolvePoolFor("aaaa1111", pools, undefined);
     expect(got?.source).toBe("context");
     expect(got?.otherTotal).toBeUndefined();
+  });
+});
+
+describe("overlayContextPools", () => {
+  /** Library ref-data shape, as `buildWildcardRefData` returns it. */
+  const libraryData = () => ({
+    uuidToName: new Map([["aaaa1111", "pose_pool"]]),
+    uuidToSubCategories: new Map([["aaaa1111", ["test", "warm"]]]),
+    uuidToTagGroups: new Map([["aaaa1111", { mood: ["warm"] }]]),
+    uuidToHasNull: new Map([["aaaa1111", true]]),
+    uuidToOptionTagSets: new Map([["aaaa1111", [["test"], ["warm"], []]]]),
+    uuidToOptionsCount: new Map([["aaaa1111", 3]]),
+  });
+
+  const nodeModule = (uuid: string, over: Record<string, unknown> = {}) => ({
+    id: uuid, type: "wildcard", meta: { name: "Pose pool" },
+    payload: {
+      sub_categories: ["stale"],
+      tag_groups: { axis: ["stale"] },
+      options: [{ id: "o0", sub_categories: [] }, { id: "o1", sub_categories: [] }],
+      ...over,
+    },
+  });
+
+  it("replaces the picker's tag vocabulary with the NODE's when it holds the pool", () => {
+    // The drift case: the library declares `test`, the node's snapshot does
+    // not. Offering `test` would let a user filter on a tag no option in the
+    // running pool carries — the ref then resolves to nothing.
+    const merged = overlayContextPools(
+      libraryData(),
+      buildContextPools([nodeModule("aaaa1111")]),
+    );
+    expect(merged.uuidToSubCategories.get("aaaa1111")).toEqual(["stale"]);
+    expect(merged.uuidToTagGroups.get("aaaa1111")).toEqual({ axis: ["stale"] });
+    expect(merged.uuidToOptionTagSets.get("aaaa1111")).toEqual([[], []]);
+    expect(merged.uuidToOptionsCount.get("aaaa1111")).toBe(2);
+  });
+
+  it("takes the null flag from the node too — it drives the exclude-null toggle", () => {
+    const merged = overlayContextPools(
+      libraryData(),
+      buildContextPools([nodeModule("aaaa1111")]),
+    );
+    expect(merged.uuidToHasNull.get("aaaa1111")).toBe(false);
+    const withNull = overlayContextPools(
+      libraryData(),
+      buildContextPools([nodeModule("aaaa1111", {
+        options: [{ id: "o0", is_null: true, sub_categories: [] }],
+      })]),
+    );
+    expect(withNull.uuidToHasNull.get("aaaa1111")).toBe(true);
+  });
+
+  it("leaves uuids the node does NOT hold on their library data", () => {
+    const merged = overlayContextPools(
+      libraryData(),
+      buildContextPools([nodeModule("zzzz9999")]),
+    );
+    expect(merged.uuidToSubCategories.get("aaaa1111")).toEqual(["test", "warm"]);
+    expect(merged.uuidToOptionsCount.get("aaaa1111")).toBe(3);
+  });
+
+  it("never overlays uuidToName — that holds the VARIABLE binding, not a display name", () => {
+    const merged = overlayContextPools(
+      libraryData(),
+      buildContextPools([nodeModule("aaaa1111")]),
+    );
+    expect(merged.uuidToName.get("aaaa1111")).toBe("pose_pool");
+  });
+
+  it("returns the input untouched when there are no pools (the SPA)", () => {
+    const lib = libraryData();
+    expect(overlayContextPools(lib, undefined)).toBe(lib);
+    expect(overlayContextPools(lib, buildContextPools([]))).toBe(lib);
+  });
+
+  it("does not mutate the library maps it was handed", () => {
+    const lib = libraryData();
+    overlayContextPools(lib, buildContextPools([nodeModule("aaaa1111")]));
+    expect(lib.uuidToSubCategories.get("aaaa1111")).toEqual(["test", "warm"]);
   });
 });

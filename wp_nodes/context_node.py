@@ -74,7 +74,55 @@ def _expand_catalog_via_live_db(catalog: dict, modules: list | None = None) -> d
     # already snapshotted, so the overlap between the two is harmless.
     roots = list(catalog.keys()) + [u for u in sorted(seeds) if u not in catalog]
     walk = walk_transitive_refs(roots, fetch_module=_fetch)
+    _stamp_pool_provenance(walk.snapshots, catalog, repo)
     return walk.snapshots
+
+
+def _stamp_pool_provenance(
+    snapshots: dict, embedded: dict, repo: ModuleRepository,
+) -> None:
+    """Record, per catalog entry, WHERE its option pool came from.
+
+    Runtime-only bookkeeping consumed by ``ref_option_pool`` when a filtered
+    nested ref matches nothing. Without it that warning can only say "matched
+    no options", which is true and useless: the user cannot tell whether the
+    filter is wrong, or whether it is right but this node is holding a stale
+    copy of a pool the library has since changed. That ambiguity is what made
+    the nested-ref bug so hard to read from the Debug panel.
+
+    Two fields:
+      * ``pool_origin`` — ``"node"`` when the entry came from THIS node's
+        embedded snapshot (which shadows the library), ``"library"`` when it
+        was fetched because no module here holds that uuid.
+      * ``library_option_count`` — only for ``node`` entries whose live
+        library row now has a DIFFERENT number of options. Absent when they
+        agree, so its presence alone means "this node's copy has drifted".
+
+    Mutates in place. Never raises: this is diagnostic garnish, and a DB
+    hiccup here must not take a graph run down with it. The extra reads are
+    one per embedded wildcard, at graph-run time, on a connection already open.
+
+    The keys ride on the runtime catalog only — `__wp_catalog__` is stripped at
+    the socket boundary and the workflow-embedded snapshot is built elsewhere,
+    so neither reaches saved JSON.
+    """
+    for uuid, entry in snapshots.items():
+        if not isinstance(entry, dict):
+            continue
+        from_node = uuid in embedded
+        entry["pool_origin"] = "node" if from_node else "library"
+        if not from_node:
+            continue
+        try:
+            live = repo.get(uuid)
+        except Exception:
+            continue
+        live_options = (live.get("payload") or {}).get("options")
+        own_options = (entry.get("payload") or {}).get("options")
+        if not isinstance(live_options, list) or not isinstance(own_options, list):
+            continue
+        if len(live_options) != len(own_options):
+            entry["library_option_count"] = len(live_options)
 
 
 class WPContext(io.ComfyNode):

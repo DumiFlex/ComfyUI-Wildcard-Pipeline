@@ -32,6 +32,16 @@ export interface ContextPool {
    *  Same shape `preview-resolver` exposes for library rows, so the card's
    *  filter-match maths is identical whichever pool wins. */
   tagSets: string[][];
+  /** The pool's DECLARED sub-category vocabulary — what the filter picker
+   *  offers as checkboxes. Distinct from `tagSets`, which is what each option
+   *  actually carries: a declared tag with no option using it is offerable but
+   *  matches nothing. */
+  subCategories: string[];
+  /** Declared tag groups (axis → tags), for the picker's grouped layout. */
+  tagGroups: Record<string, string[]>;
+  /** Whether the pool declares a null option, which drives the picker's
+   *  exclude-null toggle. */
+  hasNull: boolean;
 }
 
 export type ContextPoolMap = ReadonlyMap<string, ContextPool>;
@@ -64,13 +74,32 @@ interface ModuleLike {
   payload?: unknown;
 }
 
+const onlyStrings = (xs: unknown): string[] =>
+  Array.isArray(xs) ? xs.filter((s): s is string => typeof s === "string") : [];
+
 function optionTagSets(payload: unknown): string[][] {
   const options = (payload as { options?: unknown } | null)?.options;
   if (!Array.isArray(options)) return [];
-  return options.map((o) => {
-    const tags = (o as { sub_categories?: unknown } | null)?.sub_categories;
-    return Array.isArray(tags) ? tags.filter((t): t is string => typeof t === "string") : [];
-  });
+  return options.map((o) => onlyStrings((o as { sub_categories?: unknown } | null)?.sub_categories));
+}
+
+/** Declared tag groups, narrowed to `axis → string[]`. Mirrors
+ *  `buildWildcardRefData`'s handling so the picker renders a node pool and a
+ *  library row identically. */
+function tagGroupsOf(payload: unknown): Record<string, string[]> {
+  const raw = (payload as { tag_groups?: unknown } | null)?.tag_groups;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, string[]> = {};
+  for (const [axis, tags] of Object.entries(raw as Record<string, unknown>)) {
+    out[axis] = onlyStrings(tags);
+  }
+  return out;
+}
+
+function hasNullOption(payload: unknown): boolean {
+  const options = (payload as { options?: unknown } | null)?.options;
+  if (!Array.isArray(options)) return false;
+  return options.some((o) => Boolean((o as { is_null?: unknown } | null)?.is_null));
 }
 
 /**
@@ -100,6 +129,11 @@ export function buildContextPools(modules: readonly unknown[] | undefined): Cont
       uuid: m.id,
       name: typeof meta.name === "string" ? meta.name : "",
       tagSets: optionTagSets(m.payload),
+      subCategories: onlyStrings(
+        (m.payload as { sub_categories?: unknown } | null)?.sub_categories,
+      ),
+      tagGroups: tagGroupsOf(m.payload),
+      hasNull: hasNullOption(m.payload),
     });
   }
   return map;
@@ -146,4 +180,60 @@ export function resolvePoolFor(
     return { source: "library", tagSets: libraryTagSets };
   }
   return null;
+}
+
+/**
+ * The per-wildcard maps the `@{}` autocomplete and its step-2 sub-category
+ * picker read. Structural mirror of `buildWildcardRefData`'s result, declared
+ * here so this module stays free of manager-layer imports.
+ *
+ * `uuidToName` is deliberately absent: it holds each wildcard's VARIABLE
+ * binding, which is what the chip labels itself with. A node-local rename
+ * changes the module's display name, not its binding, so overlaying it would
+ * relabel chips with the wrong thing.
+ */
+export interface RefPickerData {
+  uuidToSubCategories: Map<string, string[]>;
+  uuidToTagGroups: Map<string, Record<string, string[]>>;
+  uuidToHasNull: Map<string, boolean>;
+  uuidToOptionTagSets: Map<string, string[][]>;
+  uuidToOptionsCount: Map<string, number>;
+}
+
+/**
+ * Overlay the node's own pools on top of library-derived picker data.
+ *
+ * The picker's tag checkboxes were built purely from the library, but the
+ * engine filters a nested ref against the NODE's pool whenever that uuid is
+ * also a module in the node. On a drifted snapshot the two disagree, and the
+ * picker would offer a tag no option in the running pool carries — pick it and
+ * the ref resolves to nothing, which is precisely the dead end that made the
+ * original bug so hard to read.
+ *
+ * Same precedence `resolvePoolFor` applies to the hover card, so the card, the
+ * picker and the engine now agree on one pool.
+ *
+ * Returns new Maps; the inputs are left alone (they are `computed` results
+ * shared with other consumers).
+ */
+export function overlayContextPools<T extends RefPickerData>(
+  library: T,
+  pools: ContextPoolMap | undefined,
+): T {
+  if (!pools || pools.size === 0) return library;
+  const merged: RefPickerData = {
+    uuidToSubCategories: new Map(library.uuidToSubCategories),
+    uuidToTagGroups: new Map(library.uuidToTagGroups),
+    uuidToHasNull: new Map(library.uuidToHasNull),
+    uuidToOptionTagSets: new Map(library.uuidToOptionTagSets),
+    uuidToOptionsCount: new Map(library.uuidToOptionsCount),
+  };
+  for (const [uuid, pool] of pools) {
+    merged.uuidToSubCategories.set(uuid, pool.subCategories);
+    merged.uuidToTagGroups.set(uuid, pool.tagGroups);
+    merged.uuidToHasNull.set(uuid, pool.hasNull);
+    merged.uuidToOptionTagSets.set(uuid, pool.tagSets);
+    merged.uuidToOptionsCount.set(uuid, pool.tagSets.length);
+  }
+  return { ...library, ...merged };
 }

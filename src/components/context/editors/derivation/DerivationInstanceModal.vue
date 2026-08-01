@@ -12,7 +12,7 @@
  * Section order matches all shipped v2 modals: Header → Identity →
  * Rules (kind-specific) → Runtime → Footer.
  */
-import { computed, onMounted, ref } from "vue";
+import { computed, inject, onMounted, ref } from "vue";
 import type { ModuleEntry } from "../../../../widgets/_shared";
 import type { PairingBadge } from "../../../../extension/constraint-pairs";
 import type { ModuleRow } from "../../../../manager/api/types";
@@ -25,6 +25,7 @@ import IdentitySection from "./sections/IdentitySection.vue";
 import RulesSection from "./sections/RulesSection.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
 import InstanceIdChip from "../InstanceIdChip.vue";
+import { CONTEXT_POOLS_KEY, overlayContextPools } from "../../../../extension/context-pools";
 
 const props = withDefaults(
   defineProps<{
@@ -68,11 +69,25 @@ const props = withDefaults(
 // `moduleStore.catalog`. The canvas has no Pinia store, so we fetch the
 // library ONCE when the modal mounts (same `/wp/api/modules` source the
 // ModulePickerModal reads) and build the SAME maps via the shared
-// `buildWildcardRefData`. The `@{}` source is the LIBRARY (by identity),
-// NOT this Context node's chain — a chain sibling would be a `$var`.
+// `buildWildcardRefData`.
+//
+// A `@{}` addresses a wildcard BY IDENTITY, so the candidate list is the
+// library — a chain sibling would be a `$var`. What the ref then RESOLVES
+// against is a separate question, answered by the overlay below.
 const catalog = ref<ModuleRow[]>([]);
 
-const refData = computed(() => buildWildcardRefData(catalog.value));
+// Library-derived picker data, then the node's OWN pools overlaid on top.
+//
+// The engine resolves a nested `@{}` ref against this node's snapshot whenever
+// the uuid is also a module here, falling back to the library otherwise. The
+// picker used to offer the library's tags unconditionally, so on a drifted
+// snapshot it listed a tag no option in the RUNNING pool carries — pick it and
+// the ref resolves to nothing, with the checkbox list itself being the thing
+// that misled you. Same precedence the hover card applies, so card, picker and
+// engine now describe one pool.
+const contextPools = inject(CONTEXT_POOLS_KEY, undefined);
+const refData = computed(() =>
+  overlayContextPools(buildWildcardRefData(catalog.value), contextPools?.value));
 const uuidToName = computed(() => refData.value.uuidToName);
 // Library wildcard uuids for `@{}` autocomplete, excluding this module's own
 // id (a wildcard never nests itself) — sorted by display name to mirror the
