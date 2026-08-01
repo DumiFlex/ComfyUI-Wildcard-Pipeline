@@ -1176,6 +1176,21 @@ describe("ImportPicker — search (#13b, mirror of the export tab)", () => {
     ).toContain("4");
   });
 
+  it("gives every quick-select preset a kind icon, matching the export bar", async () => {
+    const wrap = mountPicker({ payload: SEARCHABLE });
+    await flushPromises();
+    const presets = wrap.findAll('[data-test^="import-preset-"]');
+    expect(presets.length).toBeGreaterThan(0);
+    for (const btn of presets) {
+      const icon = btn.find("i");
+      expect(icon.exists()).toBe(true);
+      // A kind with no row in KIND_ICON_MAP silently falls back to pi-circle;
+      // that fallback is what "Categories" rendered before it got a row.
+      expect(icon.classes()).toContain("pi");
+      expect(icon.classes().join(" ")).not.toContain("pi-circle");
+    }
+  });
+
   it("carries a subtitle on rows, matching the export picker", async () => {
     const wrap = mountPicker({ payload: SEARCHABLE });
     await flushPromises();

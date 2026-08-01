@@ -383,12 +383,20 @@ function onKeydown(e: KeyboardEvent) {
   flex: 1; min-width: 0; overflow: hidden;
 }
 .wp-select__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
-/* Same 8px footprint as the dot it replaces, so swapping one for the other
- * never reflows the label. Falls back to the dim text colour when the
- * category carries an icon but no colour. */
+/* Fixed square, centred: an icon font's glyphs have varying advance widths and
+ * a line box taller than the mark itself, so a bare `<i>` sat off-centre next
+ * to the label and shifted horizontally between categories. Sizing the BOX and
+ * centring the glyph inside it fixes both, and keeps a constant offset to the
+ * label whether the option shows an icon or the dot it replaces.
+ * Falls back to the dim text colour when a category has an icon but no colour. */
 .wp-select__icon {
-  font-size: 11px;
-  width: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  font-size: 12px;
+  line-height: 1;
   flex-shrink: 0;
   color: var(--wp-text-dim);
 }
@@ -404,6 +412,12 @@ function onKeydown(e: KeyboardEvent) {
 /* Menu — teleported to <body>. z-index 9999 matches wp-rt-suggestions, which
  * already renders above the canvas modals. */
 .wp-select__menu {
+  /* One line box for an option label, in px so a leading dot/icon can be
+   * centred against it without the em-resolves-against-its-own-font-size trap
+   * (the icon runs at 12px, the label at 12.5px, so `1.5em` means two
+   * different heights depending on which element it is declared on).
+   * The menu teleports to <body>, so it carries its own copy. */
+  --wp-select-line-h: 18.75px;
   background: var(--wp-bg-3);
   border: 1px solid var(--wp-border-strong);
   border-radius: 7px;
@@ -443,6 +457,9 @@ function onKeydown(e: KeyboardEvent) {
 .wp-select__option-label {
   flex: 1;
   min-width: 0;
+  /* Explicit rather than `normal` so the leading dot/icon can be centred
+   * against exactly this height — and so `line-clamp` measures a known line. */
+  line-height: var(--wp-select-line-h);
   white-space: normal;
   overflow-wrap: anywhere;
   display: -webkit-box;
@@ -452,6 +469,14 @@ function onKeydown(e: KeyboardEvent) {
   overflow: hidden;
 }
 .wp-select__option { align-items: flex-start; }
+/* Because the row aligns to flex-start, a leading dot or icon lines up with the
+ * TOP of the label rather than its first line, and reads as sitting too high.
+ * Both are re-centred against one line box here — scoped to the option, since
+ * the trigger row is `align-items: center` and would be thrown off by it. */
+.wp-select__option > .wp-select__icon { height: var(--wp-select-line-h); }
+.wp-select__option > .wp-select__dot {
+  margin-top: calc((var(--wp-select-line-h) - 8px) / 2);
+}
 /* Disambiguating detail (option count + uuid). Never shrinks — it is the
  * whole point of the row when several options share a label. */
 .wp-select__option-meta {

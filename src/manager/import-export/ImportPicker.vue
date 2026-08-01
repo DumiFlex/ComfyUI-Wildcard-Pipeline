@@ -40,6 +40,7 @@ import Button from "../components/ui/Button.vue";
 import PickerSection from "./PickerSection.vue";
 import PickerRow from "./PickerRow.vue";
 import PickerSearch from "./PickerSearch.vue";
+import { kindIcon } from "../../components/shared/kind-icons";
 import { entitySubtitle } from "./picker-subtitle";
 import type { StatusBadge, DepRef } from "./PickerRow.vue";
 import { CURRENT_SCHEMA_VERSION, type RawPayload } from "./migrations";
@@ -644,7 +645,7 @@ function emitContinue(): void {
         type="button"
         :disabled="entitiesForBucket(b.key).length === 0"
         @click="presetKindOnly(b.key)"
-      >{{ b.title }}</button>
+      ><i :class="kindIcon(b.kindFallback)" aria-hidden="true" /> {{ b.title }}</button>
     </div>
 
     <PickerSearch

@@ -20,6 +20,11 @@ export const KIND_ICON_MAP = {
   // Templates are reusable assembler strings (a `template_string` plus
   // metadata). `pi-file-edit` reads as "editable text document".
   template:     "pi pi-file-edit",
+  // Not a module kind either — categories are library metadata — but the
+  // import/export pickers render them as a bucket alongside the real kinds,
+  // and without a row here they fell through to the generic `pi-circle`.
+  // `pi-bookmark` matches the Categories page's own empty-state glyph.
+  category:     "pi pi-bookmark",
   // WP_ContextLoop iteration vars (`$iteration` / `$<name>_total`).
   // Not a library module kind — synthesised by the loop head — but it
   // flows through the same kind→icon path so the assembler chip reads

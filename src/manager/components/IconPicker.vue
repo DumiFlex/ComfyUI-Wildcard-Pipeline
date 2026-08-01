@@ -6,16 +6,15 @@
  * `wp_api/categories.py` `_UPDATABLE_FIELDS`, `CategoryRow.icon`) with no UI
  * to set it, so every category rendered with the same generic bookmark.
  *
- * PrimeIcons ships ~300 glyphs; this offers a CURATED subset. The full set
- * would need its own search UI and most of it (chevrons, spinners, media
- * transport) is chrome that means nothing as a library label. The list below
- * is grouped by the kinds of things people actually categorise prompt modules
- * by — subjects, clothing, scenery, light, mood, technical.
+ * The offered glyphs live in `./icon-catalog`, which is verified against the
+ * installed `primeicons.css` by a test — an unknown name renders as an empty
+ * cell rather than failing, so nothing else would catch a typo.
  *
  * The glyph name is stored WITHOUT the `pi pi-` prefix (e.g. `"user"`), which
  * is what the engine column already holds and what `Icon.vue` expects.
  */
 import { computed, nextTick, onBeforeUnmount, ref } from "vue";
+import { ICON_GROUPS } from "./icon-catalog";
 
 const props = withDefaults(
   defineProps<{
@@ -28,31 +27,6 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{ "update:modelValue": [v: string | null] }>();
-
-/** Curated glyphs, grouped for scanning. Names are PrimeIcons ids minus the
- *  `pi-` prefix. Keep additions meaningful as a category label. */
-const ICON_GROUPS: { label: string; icons: string[] }[] = [
-  {
-    label: "Subject",
-    icons: ["user", "users", "heart", "star", "eye", "face-smile", "crown", "id-card"],
-  },
-  {
-    label: "Style & look",
-    icons: ["palette", "pencil", "brush", "camera", "image", "sparkles", "sun", "moon"],
-  },
-  {
-    label: "Scene",
-    icons: ["home", "building", "map", "map-marker", "globe", "compass", "car", "cloud"],
-  },
-  {
-    label: "Structure",
-    icons: ["box", "folder", "book", "tag", "tags", "list", "sitemap", "objects-column"],
-  },
-  {
-    label: "Signals",
-    icons: ["bolt", "flag", "bell", "shield", "lock", "wrench", "filter", "info-circle"],
-  },
-];
 
 const open = ref(false);
 const triggerEl = ref<HTMLButtonElement | null>(null);
@@ -126,8 +100,13 @@ onBeforeUnmount(close);
     :data-test="dataTest"
     @click="toggle"
   >
-    <i v-if="current" :class="`pi pi-${current}`" aria-hidden="true" />
-    <span v-else class="wp-iconpick__none" aria-hidden="true">—</span>
+    <!-- Both states share one fixed-size slot: an em-dash and a glyph have
+         different intrinsic widths and baselines, so without it the trigger
+         resized and the mark shifted the moment an icon was picked. -->
+    <span class="wp-iconpick__slot" aria-hidden="true">
+      <i v-if="current" :class="`pi pi-${current}`" />
+      <span v-else class="wp-iconpick__none">—</span>
+    </span>
     <i class="pi pi-chevron-down wp-iconpick__caret" aria-hidden="true" />
   </button>
 
@@ -182,8 +161,19 @@ onBeforeUnmount(close);
   cursor: pointer;
 }
 .wp-iconpick__trigger:hover { border-color: var(--wp-accent); }
-.wp-iconpick__none { color: var(--wp-text-dim); }
-.wp-iconpick__caret { font-size: 9px; color: var(--wp-text-dim); }
+/* Fixed square so the glyph is centred in it regardless of the glyph's own
+ * advance width, and so swapping "no icon" for an icon doesn't reflow. */
+.wp-iconpick__slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 14px;
+  line-height: 1;
+}
+.wp-iconpick__none { color: var(--wp-text-dim); line-height: 1; }
+.wp-iconpick__caret { font-size: 9px; color: var(--wp-text-dim); line-height: 1; }
 </style>
 
 <style>
@@ -239,8 +229,11 @@ onBeforeUnmount(close);
   border-radius: var(--wp-radius-sm);
   color: var(--wp-text-muted);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
 }
+/* Kill the icon font's own line box — it otherwise pushes the glyph off the
+ * cell's vertical centre even though the cell is a centred flex container. */
+.wp-iconpick__cell i { line-height: 1; }
 .wp-iconpick__cell:hover {
   background: color-mix(in oklab, var(--wp-accent) 18%, transparent);
   color: var(--wp-text);

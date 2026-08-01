@@ -44,8 +44,13 @@ const style = computed(() => catChipStyle(props.color ?? undefined));
 
 <style scoped>
 /* Sized against the chip's own font rather than a fixed px so it scales with
- * the pill; colour is inherited from the chip's tinted `color`. */
+ * the pill; colour is inherited from the chip's tinted `color`. `line-height:
+ * 1` and the flex box matter — the icon font's own line box is taller than the
+ * mark, which pushes the glyph off the label's optical centre. */
 .wp-cat-chip__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 0.92em;
   line-height: 1;
 }
