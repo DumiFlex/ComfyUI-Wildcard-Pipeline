@@ -1990,21 +1990,39 @@ function openBundleContextMenu(ev: MouseEvent, uid: string): void {
       onSelect: () => toggleBundleEnabled(uid, !target.enabled),
       divider: true,
     },
-    {
-      label: "Reset to library snapshot",
-      icon: "pi-refresh",
-      subtitle: "Replace children with frozen library state",
-      onSelect: () => { void resetBundleToLibrary(uid); },
-    },
+    // The two library actions accent themselves to match the bundle's CURRENT
+    // state, so the menu points at the recovery for the badge the user just
+    // saw. Only one lights up: the states are ranked, since a bundle can be
+    // several at once and two competing accents would say nothing.
+    //   missing  → Push (re-link or add) — nothing to reset FROM
+    //   drifted  → Reset (pull the library's newer version)
+    //   modified → Push (save your local edits up)
+    (() => {
+      const drifted = !isBundleMissingFromLibrary(target)
+        && isBundleLibraryDrifted(target);
+      return {
+        label: "Reset to library snapshot",
+        icon: "pi-refresh",
+        subtitle: drifted
+          ? "Library changed since insert — pull the newer version"
+          : "Replace children with frozen library state",
+        accent: drifted,
+        onSelect: () => { void resetBundleToLibrary(uid); },
+      };
+    })(),
     (() => {
       const bundleMissing = isBundleMissingFromLibrary(target);
+      const modified = !bundleMissing
+        && !isBundleLibraryDrifted(target)
+        && bundleSnapshotModified(target, value.value.modules);
+      let subtitle = "Rename, retag, overwrite library entry";
+      if (bundleMissing) subtitle = "Not linked to a library entry — re-link or add";
+      else if (modified) subtitle = "Local edits since insert — save them to the library";
       return {
         label: "Push to library…",
         icon: "pi-cloud-upload",
-        subtitle: bundleMissing
-          ? "Not linked to a library entry — re-link or add"
-          : "Rename, retag, overwrite library entry",
-        accent: bundleMissing,
+        subtitle,
+        accent: bundleMissing || modified,
         onSelect: () => openPushBundleToLibrary(uid),
         divider: true,
       };
@@ -4290,6 +4308,10 @@ function openContextMenu(ev: MouseEvent, m: ModuleEntry, idx: number) {
     items.push({
       label: "Refresh from library",
       icon: "pi-refresh",
+      // Accented + explained: drift is the state where the menu HAS the fix
+      // for the badge the user just saw, so it should say so.
+      subtitle: "Library changed since insert — pull the newer version",
+      accent: true,
       onSelect: () => { void refreshOne(idx); },
       divider: true,
     });
@@ -4302,11 +4324,17 @@ function openContextMenu(ev: MouseEvent, m: ModuleEntry, idx: number) {
   // greys out the "Update existing" button when payload_hash is empty.
   if (!!m.payload) {
     const missing = isMissingFromLibrary(m);
+    // Local overrides with no drift → pushing is what the user probably wants.
+    // Ranked below `missing` so only one library action ever accents.
+    const modified = !missing && !isDrifted(m) && isModified(m);
+    let subtitle: string | undefined;
+    if (missing) subtitle = "Not linked to a library entry — re-link or add";
+    else if (modified) subtitle = "Local edits since insert — save them to the library";
     items.push({
       label: "Push to library…",
       icon: "pi-cloud-upload",
-      subtitle: missing ? "Library entry deleted — re-add as new entry" : undefined,
-      accent: missing,
+      subtitle,
+      accent: missing || modified,
       onSelect: () => openPushToLibrary(idx),
       divider: true,
     });

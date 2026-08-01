@@ -853,6 +853,20 @@ function ruleSummaryText(rule: DerivationRule): string {
      "cut off" rather than ending on a hard chop. */
   mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
 }
+
+/* The value chips render through RichTextPreview, which declares
+   `white-space: pre-wrap` on `.wp-rtp` / `.wp-rtp__text` ITSELF. A direct
+   declaration beats the `nowrap` those elements would otherwise inherit from
+   the summary above, so the paragraph kept wrapping to hundreds of lines even
+   with the container set to nowrap. Force it back down the tree — same fix
+   `ui/Select.vue` already carries for its trigger label, and `!important` is
+   needed to beat RichTextPreview's own scoped rule from outside. */
+.rule-head__summary :deep(.wp-rtp),
+.rule-head__summary :deep(.wp-rtp__text),
+.branch-cell--summary :deep(.wp-rtp),
+.branch-cell--summary :deep(.wp-rtp__text) {
+  white-space: nowrap !important;
+}
 .rule-card--off .rule-head__summary { text-decoration: line-through; }
 .rule-head__chip {
   font: 600 9px var(--wp-font-sans);
