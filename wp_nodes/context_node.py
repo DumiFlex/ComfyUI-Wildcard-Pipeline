@@ -5,7 +5,7 @@ from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 from engine.db.connection import get_connection
 from engine.db.migrations import migrate
 from engine.db.repositories import ModuleNotFound, ModuleRepository
-from engine.modules.snapshot import walk_transitive_refs
+from engine.modules.snapshot import ref_seed_uuids, walk_transitive_refs
 from engine.pipeline import PipelineEngine
 from engine.seed_derive import effective_chain_seed
 from wp_nodes.types import (
@@ -16,13 +16,14 @@ from wp_nodes.types import (
 )
 
 
-def _expand_catalog_via_live_db(catalog: dict) -> dict:
+def _expand_catalog_via_live_db(catalog: dict, modules: list | None = None) -> dict:
     """Per-issue-#2: the embed-bundle endpoint no longer walks
     transitive ``@{}`` refs — workflow JSON only carries what the
     user explicitly picked. At graph-run time we fill in any nested
     wildcards by querying the live library on the executing machine.
 
-    Strategy: feed the picked wildcards' uuids into
+    Strategy: feed the picked wildcards' uuids — PLUS every uuid referenced by
+    any module on any surface (see ``_ref_seed_uuids``) — into
     ``walk_transitive_refs`` with a fetch callback that returns the
     embedded snapshot when available (so picked entries keep their
     saved payload — drift detection still works) and falls back to
@@ -35,7 +36,8 @@ def _expand_catalog_via_live_db(catalog: dict) -> dict:
       - Referenced uuid not in DB → walker records ``missing_target``;
         resolver still emits the warning at run time.
     """
-    if not catalog:
+    seeds = ref_seed_uuids(modules)
+    if not catalog and not seeds:
         return catalog
 
     try:
@@ -67,7 +69,11 @@ def _expand_catalog_via_live_db(catalog: dict) -> dict:
         except Exception:
             return None
 
-    walk = walk_transitive_refs(list(catalog.keys()), fetch_module=_fetch)
+    # Picked wildcards first so they keep `source: user`; ref-only targets
+    # follow and land as deps. `walk_transitive_refs` skips a uuid it has
+    # already snapshotted, so the overlap between the two is harmless.
+    roots = list(catalog.keys()) + [u for u in sorted(seeds) if u not in catalog]
+    walk = walk_transitive_refs(roots, fetch_module=_fetch)
     return walk.snapshots
 
 
@@ -123,7 +129,10 @@ class WPContext(io.ComfyNode):
         # any transitive nested wildcards by hitting the live library
         # — picker no longer auto-walks at pick time (issue #2).
         module_list, catalog, _pick_order = deserialize_node_input(wp_modules)
-        catalog = _expand_catalog_via_live_db(catalog)
+        # `module_list` (not just the wildcard catalog) so a `@{}` ref written
+        # on a derivation action — or in its per-instance override — pulls its
+        # target in too. See `ref_seed_uuids`.
+        catalog = _expand_catalog_via_live_db(catalog, module_list)
 
         ctx: dict = dict(upstream_ctx)
         # Inject catalog ONCE at the top of execute, before pipeline

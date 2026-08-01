@@ -211,7 +211,7 @@ class WalkResult:
     walk_overflow: list[WalkOverflow] = field(default_factory=list)
 
 
-def _extract_at_uuid_refs(payload: dict[str, Any]) -> set[str]:
+def extract_at_uuid_refs(payload: dict[str, Any]) -> set[str]:
     """Collect all ``@{8hex}`` refs referenced inside a payload's
     string-typed leaves.  Uses ``tokenize_text`` exclusively — only
     canonical 8-hex-char refs (spec §2.4) are followed.
@@ -258,6 +258,41 @@ def _row_to_snapshot_entry(
         "payload_hash": row.get("payload_hash") or payload_hash(row["payload"]),
         "source": source,
     }
+
+
+def ref_seed_uuids(modules: Iterable[Any] | None) -> set[str]:
+    """Every ``@{uuid}`` target referenced by ANY module in a node's list.
+
+    A catalog is synthesised from wildcard modules only, and
+    ``walk_transitive_refs`` follows refs found in wildcard payloads only. That
+    covers a ref authored inside a wildcard option, but ``@{uuid}`` is legal on
+    other surfaces too — most notably a derivation rule's action value, and the
+    per-instance ``action_value_overrides`` / ``condition_value_overrides`` the
+    edit modal writes when a user retargets a branch on the canvas.
+
+    Refs on those surfaces were never discovered, so their target reached the
+    catalog only by coincidence — when the user happened to ALSO have that
+    wildcard picked in the same node. Removing the wildcard from the node (a
+    reasonable thing to do once a derivation references it by uuid) dropped it
+    with nothing to put it back, and every such ref resolved to ``unknown_ref``
+    → empty string no matter what the live library held.
+
+    Seeds therefore come from each module's ``payload`` AND its ``instance``:
+    the instance is where a canvas-side retarget lives, and it is not part of
+    the library payload the walker would otherwise see.
+
+    Tolerant of malformed rows — a corrupt widget value must never break a
+    graph run.
+    """
+    seeds: set[str] = set()
+    for module in modules or []:
+        if not isinstance(module, dict):
+            continue
+        for key in ("payload", "instance"):
+            value = module.get(key)
+            if isinstance(value, dict):
+                seeds |= extract_at_uuid_refs(value)
+    return seeds
 
 
 def walk_transitive_refs(
@@ -347,7 +382,7 @@ def walk_transitive_refs(
             continue
 
         new_ancestors = ancestors | {uuid}
-        for child_uuid in _extract_at_uuid_refs(row["payload"]):
+        for child_uuid in extract_at_uuid_refs(row["payload"]):
             queue.append((child_uuid, depth + 1, uuid, new_ancestors))
 
     # After walk: re-stamp every dep's parent list (BFS may have accumulated
