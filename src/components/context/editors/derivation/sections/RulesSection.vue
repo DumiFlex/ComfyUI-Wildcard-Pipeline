@@ -369,9 +369,44 @@ function opUsesValue(op: string | undefined): boolean {
   return op !== "exists" && op !== "not_exists" && op !== "is_set" && op !== "is_unset";
 }
 
-/** Plain-text rendering of a branch, for the `title` on the truncated preview
- *  rows. The visible summary is a chip stream clipped to one line, so without
- *  this a long value would be unreadable with no way to see the rest. */
+/**
+ * Longest value a preview row will render before it gets cut.
+ *
+ * The summary wraps, which is what makes a multi-chip value readable — but a
+ * paragraph-length override then ran to dozens of lines and pushed the rest of
+ * the modal off screen. Capping the VALUE rather than the layout keeps every
+ * normal row exactly as it was (chips, wrapping, all of it visible) and only
+ * touches the outliers. `title` still carries the full text on hover.
+ */
+const SUMMARY_MAX_CHARS = 120;
+
+/**
+ * Cut `value` to `SUMMARY_MAX_CHARS` and append an ellipsis, never splitting a
+ * `@{...}` token — half a token would render as literal text instead of a
+ * chip, which looks like corruption rather than truncation. A token that would
+ * straddle the limit is dropped whole.
+ */
+function clampPreviewValue(value: unknown): string {
+  const s = typeof value === "string" ? value : "";
+  if (s.length <= SUMMARY_MAX_CHARS) return s;
+  // Capturing split keeps the `@{...}` tokens as their own segments.
+  const segments = s.split(/(@\{[^}]*\})/g);
+  let out = "";
+  for (const seg of segments) {
+    if (out.length >= SUMMARY_MAX_CHARS) break;
+    if (seg.startsWith("@{")) {
+      if (out.length > 0 && out.length + seg.length > SUMMARY_MAX_CHARS) break;
+      out += seg;
+    } else {
+      out += seg.slice(0, SUMMARY_MAX_CHARS - out.length);
+    }
+  }
+  return out.length < s.length ? `${out.trimEnd()}…` : out;
+}
+
+/** Plain-text rendering of a branch, for the `title` on the preview rows —
+ *  the visible summary caps long values, so this is how the user reads the
+ *  rest. */
 function branchSummaryText(
   branch: { condition?: { var?: string; op?: string; value?: string };
             action?: { target_var?: string; mode?: string; value?: string } } | undefined,
@@ -468,14 +503,14 @@ function ruleSummaryText(rule: DerivationRule): string {
               <span
                 v-if="opUsesValue(rule.branches[0].condition?.op)"
                 class="rule-tok-val"
-              ><RuleValueChips :value="rule.branches[0].condition?.value" :uuid-to-name="uuidToName" /></span>
+              ><RuleValueChips :value="clampPreviewValue(rule.branches[0].condition?.value)" :uuid-to-name="uuidToName" /></span>
               <span class="rule-tok-arrow">→</span>
               <span
                 v-if="rule.branches[0].action?.target_var"
                 :class="['rule-tok-var', varColorClass(rule.branches[0].action.target_var)]"
               >${{ rule.branches[0].action.target_var }}</span>
               <span class="rule-tok-op">{{ modeLabel(rule.branches[0].action?.mode) }}</span>
-              <span class="rule-tok-val"><RuleValueChips :value="rule.branches[0].action?.value" :uuid-to-name="uuidToName" /></span>
+              <span class="rule-tok-val"><RuleValueChips :value="clampPreviewValue(rule.branches[0].action?.value)" :uuid-to-name="uuidToName" /></span>
               <!-- Inline ↪#N constraint-pair badge — rendered when this
                    derivation is a constraint carrier through the IF branch's
                    nested `@{uuid}` ref. Mirrors OptionRow's per-option badge
@@ -563,14 +598,14 @@ function ruleSummaryText(rule: DerivationRule): string {
                 <span
                   v-if="opUsesValue(branch.condition?.op)"
                   class="rule-tok-val"
-                ><RuleValueChips :value="branch.condition?.value" :uuid-to-name="uuidToName" /></span>
+                ><RuleValueChips :value="clampPreviewValue(branch.condition?.value)" :uuid-to-name="uuidToName" /></span>
                 <span class="rule-tok-arrow">→</span>
                 <span
                   v-if="branch.action?.target_var"
                   :class="['rule-tok-var', varColorClass(branch.action.target_var)]"
                 >${{ branch.action.target_var }}</span>
                 <span class="rule-tok-op">{{ modeLabel(branch.action?.mode) }}</span>
-                <span class="rule-tok-val"><RuleValueChips :value="branch.action?.value" :uuid-to-name="uuidToName" /></span>
+                <span class="rule-tok-val"><RuleValueChips :value="clampPreviewValue(branch.action?.value)" :uuid-to-name="uuidToName" /></span>
                 <PairBadge
                   v-for="p in pairBadgesFor(rule.id, bi)"
                   :key="`${p.number}-${p.targetUuid}`"
@@ -658,7 +693,7 @@ function ruleSummaryText(rule: DerivationRule): string {
                   :class="['rule-tok-var', varColorClass(rule.else.action.target_var)]"
                 >${{ rule.else.action.target_var }}</span>
                 <span class="rule-tok-op">{{ modeLabel(rule.else.action?.mode) }}</span>
-                <span class="rule-tok-val"><RuleValueChips :value="rule.else.action?.value" :uuid-to-name="uuidToName" /></span>
+                <span class="rule-tok-val"><RuleValueChips :value="clampPreviewValue(rule.else.action?.value)" :uuid-to-name="uuidToName" /></span>
                 <PairBadge
                   v-for="p in pairBadgesFor(rule.id, 'else')"
                   :key="`${p.number}-${p.targetUuid}`"
@@ -845,37 +880,15 @@ function ruleSummaryText(rule: DerivationRule): string {
    inline formatting context the browser draws a real `…` at the clip point
    and leaves everything before it at full opacity. */
 .rule-head__summary {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   flex: 1;
   min-width: 0;
   font: 11px var(--wp-font-mono);
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-/* Children flow inline so they sit on that one line; the margin replaces the
-   `gap` that came with the flex container. */
-.rule-head__summary > *,
-.branch-cell--summary > * {
-  display: inline-flex;
-  align-items: center;
-  vertical-align: middle;
-  margin-right: 4px;
+  flex-wrap: wrap;
 }
 
-/* The value chips render through RichTextPreview, which declares
-   `white-space: pre-wrap` on `.wp-rtp` / `.wp-rtp__text` ITSELF. A direct
-   declaration beats the `nowrap` those elements would otherwise inherit from
-   the summary above, so the paragraph kept wrapping to hundreds of lines even
-   with the container set to nowrap. Force it back down the tree — same fix
-   `ui/Select.vue` already carries for its trigger label, and `!important` is
-   needed to beat RichTextPreview's own scoped rule from outside. */
-.rule-head__summary :deep(.wp-rtp),
-.rule-head__summary :deep(.wp-rtp__text),
-.branch-cell--summary :deep(.wp-rtp),
-.branch-cell--summary :deep(.wp-rtp__text) {
-  white-space: nowrap !important;
-}
 .rule-card--off .rule-head__summary { text-decoration: line-through; }
 .rule-head__chip {
   font: 600 9px var(--wp-font-sans);
@@ -931,7 +944,9 @@ function ruleSummaryText(rule: DerivationRule): string {
 .branch-row--off {
   opacity: 0.5;
 }
-.branch-row--off .branch-cell--summary { text-decoration: line-through; }
+.branch-row--off .branch-cell--summary {
+  flex-wrap: wrap;
+}
 .branch-cell {
   min-width: 0;
   display: flex;
@@ -943,10 +958,7 @@ function ruleSummaryText(rule: DerivationRule): string {
    table stopped being a table. Single line + real ellipsis + `title` on hover;
    the override inputs beside it hold the full value and scroll. */
 .branch-cell--summary {
-  display: block;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  flex-wrap: wrap;
 }
 .branch-cell--head {
   color: var(--wp-text-dim, var(--wp-text3));
