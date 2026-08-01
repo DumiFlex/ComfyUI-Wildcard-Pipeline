@@ -11,8 +11,9 @@ import Button from "../components/ui/Button.vue";
 import Select from "../components/ui/Select.vue";
 import EmptyState from "../components/ui/EmptyState.vue";
 import { useTemplateStore } from "../stores/templateStore";
-import { catChipStyle } from "../utils/catChip";
 import { useCategoryStore } from "../stores/categoryStore";
+import CategoryChip from "../components/CategoryChip.vue";
+import { categoryFilterOptions } from "../utils/category-options";
 import type { CategoryRow, TemplateRow } from "../api/types";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useDeleteConfirm } from "../composables/useDeleteConfirm";
@@ -49,10 +50,7 @@ const allTags = computed(() => {
   return Array.from(set).sort();
 });
 
-const categoryOptions = computed(() => [
-  { value: null, label: "All categories" },
-  ...categoryStore.items.map((c) => ({ value: c.id, label: c.name, dot: c.color || undefined })),
-]);
+const categoryOptions = computed(() => categoryFilterOptions(categoryStore.items));
 
 onMounted(async () => {
   await Promise.all([fetch(), categoryStore.fetchAll()]);
@@ -253,13 +251,12 @@ function toggleTag(t: string, currentTags: string[] | undefined): string[] {
 
     <template #columns="{ row }">
       <td>
-        <span
+        <CategoryChip
           v-if="row.category_id && categoryById.get(row.category_id)"
-          class="wp-cat-chip"
-          :style="catChipStyle(categoryById.get(row.category_id)!.color)"
-        >
-          {{ categoryById.get(row.category_id)!.name }}
-        </span>
+          :name="categoryById.get(row.category_id)!.name"
+          :color="categoryById.get(row.category_id)!.color"
+          :icon="categoryById.get(row.category_id)!.icon"
+        />
         <span v-else class="wp-dim">—</span>
       </td>
       <!-- Something scannable in the freed column: how big the template is,

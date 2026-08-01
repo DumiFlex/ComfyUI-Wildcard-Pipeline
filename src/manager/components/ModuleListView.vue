@@ -23,6 +23,7 @@ import Checkbox from "./ui/Checkbox.vue";
 import Chip from "./ui/Chip.vue";
 import Modal from "./ui/Modal.vue";
 import Select from "./ui/Select.vue";
+import type { SelectOption } from "./ui/select-types";
 import RelativeDate from "./RelativeDate.vue";
 import EmptyState from "./ui/EmptyState.vue";
 import { useCommunityUpdateStore } from "../stores/communityUpdateStore";
@@ -129,8 +130,10 @@ interface Props {
   extraActive?: Record<string, boolean>;
   /** Tag list available in the bulk-tag-add picker. Surfaced from parent so the picker can autocomplete. */
   availableTags?: string[];
-  /** Category options for bulk-set-category. Mirror existing per-view Select option shape. */
-  categoryOptions?: { value: string | null; label: string; dot?: string }[];
+  /** Category options for bulk-set-category. `SelectOption` itself rather than
+   *  a hand-mirrored copy of its shape — the copy went stale the moment
+   *  options grew an `icon`, and it forwards straight to a Select anyway. */
+  categoryOptions?: SelectOption[];
   /** Hide the bulk Set-category action — for kinds without a category field (bundles). */
   hideBulkSetCategory?: boolean;
   /** Hide the bulk Duplicate action — for kinds without library duplicate support (bundles). */

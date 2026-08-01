@@ -182,6 +182,7 @@ interface RowItem {
   kind: string;
   categoryName?: string;
   categoryColor?: string;
+  categoryIcon?: string;
   /** Surface the favorite-star indicator. Modules + bundles carry it;
    *  categories don't (always false). */
   isFavorite: boolean;
@@ -189,17 +190,18 @@ interface RowItem {
 
 /**
  * Resolve a `category_id` against the loaded categories list and return
- * `{name, color}` (color may be undefined if the user never picked one).
+ * `{name, color, icon}` (color/icon may be undefined if the user never
+ * picked one — icon is absent for every category predating the column).
  * Returns `undefined` when the id is null or unmatched — caller treats
  * that as "no category chip on this row".
  */
 function lookupCategory(
   categoryId: string | null | undefined,
-): { name: string; color?: string } | undefined {
+): { name: string; color?: string; icon?: string } | undefined {
   if (!categoryId) return undefined;
   const cat = categories.value.find((c) => c.id === categoryId);
   if (!cat) return undefined;
-  return { name: cat.name, color: cat.color ?? undefined };
+  return { name: cat.name, color: cat.color ?? undefined, icon: cat.icon ?? undefined };
 }
 
 function rowsForBucket(b: BucketKey): RowItem[] {
@@ -213,6 +215,7 @@ function rowsForBucket(b: BucketKey): RowItem[] {
         kind: "bundle",
         categoryName: cat?.name,
         categoryColor: cat?.color,
+        categoryIcon: cat?.icon,
         isFavorite: x.is_favorite,
       };
     });
@@ -235,6 +238,7 @@ function rowsForBucket(b: BucketKey): RowItem[] {
         kind: "template",
         categoryName: cat?.name,
         categoryColor: cat?.color,
+        categoryIcon: cat?.icon,
         isFavorite: x.is_favorite,
       };
     });
@@ -248,6 +252,7 @@ function rowsForBucket(b: BucketKey): RowItem[] {
       kind: x.type,
       categoryName: cat?.name,
       categoryColor: cat?.color,
+      categoryIcon: cat?.icon,
       isFavorite: x.is_favorite,
     };
   });
@@ -791,6 +796,7 @@ function presetFavoritesOnly(): void {
           :kind="row.kind"
           :category-name="row.categoryName"
           :category-color="row.categoryColor"
+          :category-icon="row.categoryIcon"
           :show-id="true"
           :checked="isRowSelected(bucket.key, row.id)"
           :status-badges="[]"

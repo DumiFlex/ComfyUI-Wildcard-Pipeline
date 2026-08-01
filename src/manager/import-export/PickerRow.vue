@@ -29,7 +29,7 @@
 import { computed, ref, useId } from "vue";
 import Checkbox from "../components/ui/Checkbox.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
-import { catChipStyle } from "../utils/catChip";
+import CategoryChip from "../components/CategoryChip.vue";
 
 /**
  * Status-badge taxonomy — six variants paired 1:1 with
@@ -84,6 +84,9 @@ interface Props {
   /** Optional category metadata for the `.wp-cat-chip` primitive. */
   categoryName?: string;
   categoryColor?: string;
+  /** PrimeIcons slug for the category, rendered inside the chip. Absent for
+   *  categories created before the icon column existed. */
+  categoryIcon?: string;
   /** Show the short 8-hex id inline (mono, muted) via `.wp-id`. */
   showId?: boolean;
   /** Optional disambiguating detail rendered after the name — e.g.
@@ -113,6 +116,7 @@ const props = withDefaults(defineProps<Props>(), {
   kind: undefined,
   categoryName: undefined,
   categoryColor: undefined,
+  categoryIcon: undefined,
   showId: false,
   subtitle: undefined,
   statusBadges: () => [],
@@ -152,12 +156,6 @@ const kindClass = computed<string | null>(() => {
  * the canonical 8-hex short id.
  */
 const shortId = computed<string>(() => props.uuid.slice(0, 8));
-
-// ---------- Category chip style ----------
-
-const catChipInlineStyle = computed<Record<string, string>>(() =>
-  catChipStyle(props.categoryColor),
-);
 
 // ---------- Dep chip disclosure ----------
 
@@ -258,12 +256,13 @@ function onRowClick(ev: MouseEvent): void {
       >{{ shortId }}</span>
     </div>
 
-    <span
+    <CategoryChip
       v-if="props.categoryName"
-      class="wp-cat-chip"
-      :style="catChipInlineStyle"
+      :name="props.categoryName"
+      :color="props.categoryColor"
+      :icon="props.categoryIcon"
       data-test="picker-row-cat-chip"
-    >{{ props.categoryName }}</span>
+    />
     <span v-else class="wp-picker-row__col-spacer" aria-hidden="true" />
 
     <span

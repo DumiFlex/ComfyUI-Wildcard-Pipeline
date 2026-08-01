@@ -8,10 +8,10 @@ import Input from "../components/ui/Input.vue";
 import ColorPicker from "../components/ColorPicker.vue";
 import IconPicker from "../components/IconPicker.vue";
 import { useCategoryStore } from "../stores/categoryStore";
+import CategoryChip from "../components/CategoryChip.vue";
 import { useModuleStore } from "../stores/moduleStore";
 import { ApiError } from "../api/client";
 import { useToast } from "../composables/useToast";
-import { catChipStyle } from "../utils/catChip";
 import { useCascadeStore } from "../cascade/cascade-store";
 import { useCascadeApply } from "../cascade/useCascadeApply";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
@@ -203,7 +203,20 @@ async function saveEdit() {
     </div>
 
     <Card title="New category">
+      <!-- Icon and colour lead, name follows. They compose the chip the user
+           is building, and reading left-to-right now matches what the chip
+           will look like — the icon sits before the label there too. -->
       <div class="wp-cat-newrow">
+        <Field label="Icon">
+          <IconPicker
+            v-model="newIcon"
+            aria-label="New category icon"
+            data-test="new-cat-icon"
+          />
+        </Field>
+        <Field label="Color">
+          <ColorPicker v-model="newColor" aria-label="New category color" />
+        </Field>
         <Field label="Name" class="wp-cat-newrow__name">
           <Input
             v-model="newName"
@@ -211,16 +224,6 @@ async function saveEdit() {
             aria-label="New category name"
             data-test="new-cat-name"
             @keydown.enter="add"
-          />
-        </Field>
-        <Field label="Color">
-          <ColorPicker v-model="newColor" aria-label="New category color" />
-        </Field>
-        <Field label="Icon">
-          <IconPicker
-            v-model="newIcon"
-            aria-label="New category icon"
-            data-test="new-cat-icon"
           />
         </Field>
         <Button
@@ -236,9 +239,9 @@ async function saveEdit() {
       <table class="wp-table wp-table--sticky-head">
         <thead>
           <tr>
-            <th>Name</th>
-            <th class="wp-cat-col--color">Color</th>
             <th class="wp-cat-col--icon">Icon</th>
+            <th class="wp-cat-col--color">Color</th>
+            <th>Name</th>
             <th class="wp-cat-col--count">Modules</th>
             <th class="wp-cat-col--actions">Actions</th>
           </tr>
@@ -262,20 +265,20 @@ async function saveEdit() {
           >
             <td>
               <template v-if="editing && editing.id === row.id">
-                <Input
-                  v-model="editing.name"
-                  :data-test="`cat-name-input-${row.id}`"
-                  aria-label="Edit category name"
-                  @keydown.enter="saveEdit"
-                  @keydown.esc="cancelEdit"
+                <IconPicker
+                  v-model="editing.icon"
+                  :aria-label="`Edit icon for ${row.name}`"
+                  :data-test="`cat-icon-picker-${row.id}`"
                 />
               </template>
               <template v-else>
-                <span
-                  class="wp-cat-chip"
-                  :data-test="`cat-name-${row.id}`"
-                  :style="catChipStyle(row.color)"
-                >{{ row.name }}</span>
+                <i
+                  v-if="row.icon"
+                  :class="`pi pi-${row.icon}`"
+                  :data-test="`cat-icon-${row.id}`"
+                  :aria-label="row.icon"
+                />
+                <span v-else class="wp-dim">—</span>
               </template>
             </td>
             <td>
@@ -291,20 +294,21 @@ async function saveEdit() {
             </td>
             <td>
               <template v-if="editing && editing.id === row.id">
-                <IconPicker
-                  v-model="editing.icon"
-                  :aria-label="`Edit icon for ${row.name}`"
-                  :data-test="`cat-icon-picker-${row.id}`"
+                <Input
+                  v-model="editing.name"
+                  :data-test="`cat-name-input-${row.id}`"
+                  aria-label="Edit category name"
+                  @keydown.enter="saveEdit"
+                  @keydown.esc="cancelEdit"
                 />
               </template>
               <template v-else>
-                <i
-                  v-if="row.icon"
-                  :class="`pi pi-${row.icon}`"
-                  :data-test="`cat-icon-${row.id}`"
-                  :aria-label="row.icon"
+                <CategoryChip
+                  :name="row.name"
+                  :color="row.color"
+                  :icon="row.icon"
+                  :data-test="`cat-name-${row.id}`"
                 />
-                <span v-else class="wp-dim">—</span>
               </template>
             </td>
             <td>

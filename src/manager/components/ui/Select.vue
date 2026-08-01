@@ -2,21 +2,11 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import Icon, { ICON_SM } from "./Icon.vue";
 
-export interface SelectOption {
-  value: string | number | null;
-  label: string;
-  /** Optional color dot shown before the label (e.g. category color). */
-  dot?: string;
-  /** Optional native tooltip surfaced via `title` on the option row.
-   *  Used by derivation op dropdown to explain semantics — e.g.
-   *  "matches" shows "Python regex via re.search". */
-  title?: string;
-  /** Optional dim right-aligned detail that DISAMBIGUATES rows sharing a
-   *  label — e.g. a wildcard's option count + short uuid, when a library
-   *  holds five entries all named "Outfit". Also matched by the type-to-
-   *  filter query, so typing a uuid finds its row. */
-  meta?: string;
-}
+// Declared in `./select-types` so plain `.ts` helpers can build option lists
+// (a `.ts` importer only sees the `*.vue` ambient shim). Re-exported here so
+// existing `from "./Select.vue"` imports keep resolving.
+import type { SelectOption } from "./select-types";
+export type { SelectOption };
 
 interface Props {
   modelValue: string | number | null;
@@ -250,7 +240,17 @@ function onKeydown(e: KeyboardEvent) {
            exception source can be a phrase plus a nested `@ref` — and the
            ellipsis alone left no way to see the rest. -->
       <span class="wp-select__label-wrap" :title="selected?.label || undefined">
-        <span v-if="selected?.dot" class="wp-select__dot" :style="{ background: selected.dot }" />
+        <i
+          v-if="selected?.icon"
+          :class="`pi pi-${selected.icon} wp-select__icon`"
+          :style="selected.dot ? { color: selected.dot } : undefined"
+          aria-hidden="true"
+        />
+        <span
+          v-else-if="selected?.dot"
+          class="wp-select__dot"
+          :style="{ background: selected.dot }"
+        />
         <span v-if="selected" class="wp-select__label-text">
           <slot name="label" :option="selected">{{ selected.label }}</slot>
         </span>
@@ -299,7 +299,17 @@ function onKeydown(e: KeyboardEvent) {
           @mouseenter="active = i"
           @focusin="active = i"
         >
-          <span v-if="opt.dot" class="wp-select__dot" :style="{ background: opt.dot }" />
+          <i
+            v-if="opt.icon"
+            :class="`pi pi-${opt.icon} wp-select__icon`"
+            :style="opt.dot ? { color: opt.dot } : undefined"
+            aria-hidden="true"
+          />
+          <span
+            v-else-if="opt.dot"
+            class="wp-select__dot"
+            :style="{ background: opt.dot }"
+          />
           <span class="wp-select__option-label">
             <slot name="option" :option="opt">{{ opt.label }}</slot>
           </span>
@@ -373,6 +383,15 @@ function onKeydown(e: KeyboardEvent) {
   flex: 1; min-width: 0; overflow: hidden;
 }
 .wp-select__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+/* Same 8px footprint as the dot it replaces, so swapping one for the other
+ * never reflows the label. Falls back to the dim text colour when the
+ * category carries an icon but no colour. */
+.wp-select__icon {
+  font-size: 11px;
+  width: 11px;
+  flex-shrink: 0;
+  color: var(--wp-text-dim);
+}
 .wp-select__label-text,
 .wp-select__placeholder {
   flex: 1; min-width: 0;

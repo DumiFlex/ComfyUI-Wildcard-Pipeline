@@ -93,6 +93,7 @@ interface PayloadCategory {
   id: string;
   name?: string;
   color?: string | null;
+  icon?: string | null;
 }
 
 interface Props {
@@ -177,7 +178,7 @@ function entitiesForBucket(bucket: BucketKey): PayloadEntity[] {
  */
 function lookupCategoryFromPayload(
   categoryId: string | null | undefined,
-): { name: string; color?: string } | undefined {
+): { name: string; color?: string; icon?: string } | undefined {
   if (!categoryId) return undefined;
   const cats = props.payload.categories as unknown as PayloadCategory[];
   const hit = cats.find((c) => c.id === categoryId);
@@ -185,6 +186,7 @@ function lookupCategoryFromPayload(
   return {
     name: hit.name ?? hit.id,
     color: typeof hit.color === "string" ? hit.color : undefined,
+    icon: typeof hit.icon === "string" ? hit.icon : undefined,
   };
 }
 
@@ -680,6 +682,7 @@ function emitContinue(): void {
           :kind="kindForEntity(entity, bucket)"
           :category-name="lookupCategoryFromPayload(entity.category_id)?.name"
           :category-color="lookupCategoryFromPayload(entity.category_id)?.color"
+          :category-icon="lookupCategoryFromPayload(entity.category_id)?.icon"
           :show-id="true"
           :checked="isSelected(entity.id)"
           :status-badges="badgesForEntity(entity, bucket.key)"
