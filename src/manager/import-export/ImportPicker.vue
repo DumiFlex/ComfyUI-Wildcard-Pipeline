@@ -39,6 +39,8 @@ import { computed, ref, watchEffect } from "vue";
 import Button from "../components/ui/Button.vue";
 import PickerSection from "./PickerSection.vue";
 import PickerRow from "./PickerRow.vue";
+import PickerSearch from "./PickerSearch.vue";
+import { entitySubtitle } from "./picker-subtitle";
 import type { StatusBadge, DepRef } from "./PickerRow.vue";
 import { CURRENT_SCHEMA_VERSION, type RawPayload } from "./migrations";
 import type { IntegrityWarning } from "./parse";
@@ -73,6 +75,13 @@ interface PayloadEntity {
   /** Favorite flag — modules + bundles carry it. Surface a star in the
    *  picker's badges column when true. Categories never carry favorites. */
   is_favorite?: boolean;
+  /** Module payload / bundle children / template body. Read only by
+   *  `entitySubtitle` to build the row's disambiguating detail line — the
+   *  picker never interprets them itself, and passes them downstream
+   *  verbatim. */
+  payload?: unknown;
+  children?: unknown[] | null;
+  template_string?: string | null;
 }
 
 /**
@@ -200,6 +209,53 @@ const totalEntityCount = computed<number>(() =>
   BUCKETS.reduce((n, b) => n + entitiesForBucket(b.key).length, 0),
 );
 
+/**
+ * Disambiguating detail line for a row (`$outfit · 12 options`), shared
+ * verbatim with the Export picker so the same entity reads the same on both
+ * sides of a round-trip.
+ */
+function subtitleFor(entity: PayloadEntity, bucket: BucketMeta): string | undefined {
+  return entitySubtitle(kindForEntity(entity, bucket), entity);
+}
+
+// ---------- Free-text filter ----------
+//
+// Mirror of the Export tab's search. A large payload (a whole-library export
+// re-imported elsewhere) put the same scroll-hunt problem on the import side:
+// duplicate display names, and no way to jump to a known id. Matching the
+// subtitle too means `$outfit` finds the wildcard that binds it, not just rows
+// that happen to be NAMED outfit.
+
+const rowQuery = ref<string>("");
+
+function entityMatchesQuery(entity: PayloadEntity, bucket: BucketMeta): boolean {
+  const q = rowQuery.value.trim().toLowerCase();
+  if (!q) return true;
+  const name = entity.name ?? entity.id;
+  return (
+    name.toLowerCase().includes(q) ||
+    entity.id.toLowerCase().includes(q) ||
+    (subtitleFor(entity, bucket)?.toLowerCase().includes(q) ?? false)
+  );
+}
+
+/**
+ * Rows a bucket actually renders. Section counts, select-all and the empty
+ * state all read THIS rather than `entitiesForBucket`, so a section header
+ * never advertises rows the search has hidden and "select all" cannot reach
+ * beyond what the user can see. With an empty query it is the full bucket.
+ */
+function visibleEntitiesForBucket(bucket: BucketMeta): PayloadEntity[] {
+  const arr = entitiesForBucket(bucket.key);
+  if (!rowQuery.value.trim()) return arr;
+  return arr.filter((e) => entityMatchesQuery(e, bucket));
+}
+
+/** Total rows surviving the filter — drives the "no matches anywhere" hint. */
+const visibleEntityCount = computed<number>(() =>
+  BUCKETS.reduce((n, b) => n + visibleEntitiesForBucket(b).length, 0),
+);
+
 // ---------- Selection state ----------
 
 const selected = ref<Set<string>>(new Set());
@@ -235,18 +291,23 @@ function toggleRow(id: string, on: boolean): void {
   selected.value = next;
 }
 
-function toggleAllInBucket(bucket: BucketKey, on: boolean): void {
+/**
+ * Section select-all acts on the VISIBLE rows only. Deselecting a filtered
+ * section must not silently drop picks the user can't see to re-make; with no
+ * query every row is visible, so this behaves exactly as it always did.
+ */
+function toggleAllInBucket(bucket: BucketMeta, on: boolean): void {
   const next = new Set(selected.value);
-  for (const e of entitiesForBucket(bucket)) {
+  for (const e of visibleEntitiesForBucket(bucket)) {
     if (typeof e.id !== "string" || e.id.length === 0) continue;
     if (on) next.add(e.id); else next.delete(e.id);
   }
   selected.value = next;
 }
 
-function selectedInBucket(bucket: BucketKey): number {
+function selectedInBucket(bucket: BucketMeta): number {
   let n = 0;
-  for (const e of entitiesForBucket(bucket)) {
+  for (const e of visibleEntitiesForBucket(bucket)) {
     if (typeof e.id === "string" && selected.value.has(e.id)) n += 1;
   }
   return n;
@@ -584,23 +645,38 @@ function emitContinue(): void {
       >{{ b.title }}</button>
     </div>
 
+    <PickerSearch
+      v-model="rowQuery"
+      aria-label="Search payload entities"
+      data-test="import-picker-search"
+    />
+    <div
+      v-if="rowQuery.trim() && visibleEntityCount === 0"
+      class="wp-import-picker__empty"
+      data-test="import-picker-no-matches"
+    >
+      <em>No entities match “{{ rowQuery.trim() }}”.</em>
+    </div>
+
     <div class="wp-import-picker__sections">
       <PickerSection
         v-for="bucket in BUCKETS"
         :key="bucket.key"
         :title="bucket.title"
-        :total-count="entitiesForBucket(bucket.key).length"
-        :selected-count="selectedInBucket(bucket.key)"
+        :total-count="visibleEntitiesForBucket(bucket).length"
+        :selected-count="selectedInBucket(bucket)"
         :default-open="false"
+        :force-open="rowQuery.trim().length > 0 && visibleEntitiesForBucket(bucket).length > 0"
         :kind="bucket.kindFallback"
         :data-test="`import-picker-section-${bucket.key}`"
-        @toggle-all="(v: boolean) => toggleAllInBucket(bucket.key, v)"
+        @toggle-all="(v: boolean) => toggleAllInBucket(bucket, v)"
       >
         <PickerRow
-          v-for="entity in entitiesForBucket(bucket.key)"
+          v-for="entity in visibleEntitiesForBucket(bucket)"
           :key="`${bucket.key}:${entity.id}`"
           :uuid="entity.id"
           :name="entity.name ?? entity.id"
+          :subtitle="subtitleFor(entity, bucket)"
           :kind="kindForEntity(entity, bucket)"
           :category-name="lookupCategoryFromPayload(entity.category_id)?.name"
           :category-color="lookupCategoryFromPayload(entity.category_id)?.color"
@@ -615,10 +691,13 @@ function emitContinue(): void {
           @select-dep="(id: string) => toggleRow(id, true)"
         />
         <div
-          v-if="entitiesForBucket(bucket.key).length === 0"
+          v-if="visibleEntitiesForBucket(bucket).length === 0"
           class="wp-import-picker__empty"
         >
-          <em>No {{ bucket.title.toLowerCase() }} in payload.</em>
+          <em v-if="rowQuery.trim() && entitiesForBucket(bucket.key).length > 0">
+            No {{ bucket.title.toLowerCase() }} match the search.
+          </em>
+          <em v-else>No {{ bucket.title.toLowerCase() }} in payload.</em>
         </div>
       </PickerSection>
     </div>

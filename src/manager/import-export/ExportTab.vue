@@ -22,6 +22,8 @@ import { api, ApiError, type ExportBuildRequest } from "../api/client";
 import type { BundleRow, CategoryRow, ModuleRow, ModuleType, TemplateRow } from "../api/types";
 import PickerSection from "./PickerSection.vue";
 import PickerRow from "./PickerRow.vue";
+import PickerSearch from "./PickerSearch.vue";
+import { bundleSubtitle, moduleSubtitle, templateSubtitle } from "./picker-subtitle";
 import { kindIcon } from "../../components/shared/kind-icons";
 import type { DepRef } from "./PickerRow.vue";
 import ExportDepWarningModal from "./ExportDepWarningModal.vue";
@@ -249,89 +251,6 @@ function rowsForBucket(b: BucketKey): RowItem[] {
       isFavorite: x.is_favorite,
     };
   });
-}
-
-/** Disambiguating detail per KIND — the facts that actually tell two entities
- *  with the same display name apart. Every kind gets something, not just
- *  wildcards: a bundle's usefulness is its child count, a constraint's is its
- *  matrix size, a derivation's is its rule count.
- *
- *  Returns undefined when the payload carries nothing worth showing, so the
- *  row renders without a subtitle rather than with an empty one. */
-function moduleSubtitle(row: ModuleRow): string | undefined {
-  const p = (row.payload ?? {}) as Record<string, unknown>;
-  const parts: string[] = [];
-  const count = (v: unknown): number | null => (Array.isArray(v) ? v.length : null);
-  const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? "" : "s"}`;
-
-  if (typeof p.variable_name === "string" && p.variable_name) parts.push(`$${p.variable_name}`);
-  else if (typeof p.var_binding === "string" && p.var_binding) parts.push(`$${p.var_binding}`);
-
-  switch (row.type) {
-    case "wildcard": {
-      const n = count(p.options);
-      if (n !== null) parts.push(plural(n, "option"));
-      const axes = p.tag_groups && typeof p.tag_groups === "object"
-        ? Object.keys(p.tag_groups as Record<string, unknown>).length
-        : 0;
-      const tags = count(p.sub_categories);
-      if (tags) parts.push(axes > 0 ? `${tags} tags / ${axes} axes` : plural(tags, "tag"));
-      break;
-    }
-    case "fixed_values": {
-      const n = count(p.values);
-      if (n !== null) parts.push(plural(n, "value"));
-      break;
-    }
-    case "derivation": {
-      const n = count(p.rules);
-      if (n !== null) parts.push(plural(n, "rule"));
-      break;
-    }
-    case "combine": {
-      // `output_var` / `input_vars` — see `CombinePayload` in api/types.ts. An
-      // earlier guess of `output_variable` matched nothing, so combine rows
-      // showed no detail at all.
-      if (typeof p.output_var === "string" && p.output_var) parts.push(`→ $${p.output_var}`);
-      const ins = count(p.input_vars);
-      if (ins) parts.push(plural(ins, "input"));
-      else if (typeof p.template === "string" && p.template) parts.push(`${p.template.length} ch`);
-      break;
-    }
-    case "constraint": {
-      // Matrix is `{sourceTag: {targetTag: rule}}` — report it as rows×cols,
-      // which is what the user recognises from the editor grid.
-      const m = (p.matrix ?? {}) as Record<string, unknown>;
-      const rows = Object.keys(m).length;
-      const cols = rows > 0
-        ? Object.keys((Object.values(m)[0] ?? {}) as Record<string, unknown>).length
-        : 0;
-      if (rows > 0) parts.push(`${rows}×${cols} matrix`);
-      const ex = count(p.exceptions);
-      if (ex) parts.push(plural(ex, "exception"));
-      break;
-    }
-  }
-  return parts.length > 0 ? parts.join(" · ") : undefined;
-}
-
-/** Bundles carry `children`, not a module payload. */
-function bundleSubtitle(row: BundleRow): string | undefined {
-  const kids = row.children ?? [];
-  if (kids.length === 0) return "empty";
-  const nested = kids.filter((c) => (c as { type?: string }).type === "bundle").length;
-  const label = `${kids.length} module${kids.length === 1 ? "" : "s"}`;
-  return nested > 0 ? `${label} · ${nested} nested` : label;
-}
-
-/** Templates: length + how many `$var` slots the string references. */
-function templateSubtitle(row: TemplateRow): string | undefined {
-  const s = row.template_string ?? "";
-  if (!s) return "empty";
-  const vars = new Set(
-    [...s.matchAll(/(?<!\$)(?:\$\$)*\$([A-Za-z_][A-Za-z0-9_]*)/g)].map((m) => m[1]),
-  );
-  return vars.size > 0 ? `${s.length} ch · ${vars.size} $var` : `${s.length} ch`;
 }
 
 /** Rows a bucket actually renders — `rowsForBucket` narrowed by the search
@@ -844,27 +763,11 @@ function presetFavoritesOnly(): void {
       ><i :class="kindIcon(b.key)" aria-hidden="true" /> {{ b.title }}</button>
     </div>
 
-    <div class="wp-export-search">
-      <i class="pi pi-search" aria-hidden="true" />
-      <input
-        v-model="rowQuery"
-        type="search"
-        class="wp-export-search__field"
-        placeholder="Search by name, $variable or id…"
-        aria-label="Search library entities"
-        spellcheck="false"
-        autocomplete="off"
-        data-test="export-tab-search"
-      />
-      <button
-        v-if="rowQuery"
-        type="button"
-        class="wp-export-search__clear"
-        aria-label="Clear search"
-        data-test="export-tab-search-clear"
-        @click="rowQuery = ''"
-      ><i class="pi pi-times" aria-hidden="true" /></button>
-    </div>
+    <PickerSearch
+      v-model="rowQuery"
+      aria-label="Search library entities"
+      data-test="export-tab-search"
+    />
 
     <div class="wp-export-tab__sections">
       <PickerSection
@@ -1005,38 +908,7 @@ function presetFavoritesOnly(): void {
   gap: 6px;
 }
 
-/* Cross-bucket search box. */
-.wp-export-search {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-3);
-  padding: 0 var(--wp-space-4);
-  margin-bottom: 6px;
-  background: var(--wp-bg-2);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius);
-}
-.wp-export-search:focus-within { border-color: var(--wp-accent); }
-.wp-export-search .pi-search { font-size: 12px; color: var(--wp-text-dim); }
-.wp-export-search__field {
-  flex: 1;
-  min-width: 0;
-  background: transparent;
-  border: 0;
-  padding: var(--wp-space-3) 0;
-  color: var(--wp-text);
-  font-size: var(--wp-text-sm);
-}
-.wp-export-search__field:focus { outline: none; }
-.wp-export-search__clear {
-  background: none;
-  border: 0;
-  padding: 2px;
-  cursor: pointer;
-  color: var(--wp-text-dim);
-  font-size: 11px;
-}
-.wp-export-search__clear:hover { color: var(--wp-text); }
+/* Cross-bucket search box now lives in PickerSearch.vue (shared with Import). */
 
 .wp-export-tab__empty {
   font-size: var(--wp-text-sm);

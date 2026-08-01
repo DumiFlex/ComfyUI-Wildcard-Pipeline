@@ -2,6 +2,7 @@ import { mount, flushPromises } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
 import ImportPicker from "../ImportPicker.vue";
 import PickerRow from "../PickerRow.vue";
+import PickerSection from "../PickerSection.vue";
 import type { RawPayload } from "../migrations";
 import type { IntegrityWarning } from "../parse";
 import type { LibraryRow } from "../collision";
@@ -1053,5 +1054,135 @@ describe("ImportPicker.vue", () => {
     );
     expect(row).toBeDefined();
     expect(row!.props("missingDeps")).toEqual([]);
+  });
+});
+
+describe("ImportPicker — search (#13b, mirror of the export tab)", () => {
+  /** Three wildcards that a name-only search could not tell apart: two share
+   *  a display name, and the third is only findable by its bound variable.
+   *
+   *  `variable_name` / `options` live under `payload`, matching what the
+   *  server actually exports (`engine/db/repositories.py:_row_to_module`
+   *  nests them, and every migrator preserves that nesting). */
+  const SEARCHABLE = makePayload({
+    wildcards: [
+      {
+        id: "aaa11111", name: "Outfit", type: "wildcard", tags: [],
+        payload: { variable_name: "outfit_a", options: [{ value: "x", weight: 1 }] },
+      },
+      {
+        id: "bbb22222", name: "Outfit", type: "wildcard", tags: [],
+        payload: { variable_name: "outfit_b", options: [] },
+      },
+      {
+        id: "ccc33333", name: "Palette", type: "wildcard", tags: [],
+        payload: { variable_name: "hue", options: [] },
+      },
+    ],
+    templates: [
+      { id: "ttt44444", name: "Base", template_string: "a $hue prompt" },
+    ],
+  });
+
+  function visibleUuids(wrap: ReturnType<typeof mount>): string[] {
+    return wrap.findAllComponents(PickerRow).map((r) => r.props("uuid") as string);
+  }
+
+  async function search(wrap: ReturnType<typeof mount>, q: string): Promise<void> {
+    await wrap.get('[data-test="import-picker-search"]').setValue(q);
+    await flushPromises();
+  }
+
+  it("filters rows by name", async () => {
+    const wrap = mountPicker({ payload: SEARCHABLE });
+    await flushPromises();
+    await search(wrap, "palette");
+    expect(visibleUuids(wrap)).toEqual(["ccc33333"]);
+  });
+
+  it("filters by short id — the only way to tell same-named rows apart", async () => {
+    const wrap = mountPicker({ payload: SEARCHABLE });
+    await flushPromises();
+    await search(wrap, "bbb2");
+    expect(visibleUuids(wrap)).toEqual(["bbb22222"]);
+  });
+
+  it("matches the subtitle, so a $variable finds the row that binds it", async () => {
+    const wrap = mountPicker({ payload: SEARCHABLE });
+    await flushPromises();
+    // `$hue` appears in the wildcard's subtitle and in the template's body
+    // summary — neither row is NAMED hue.
+    await search(wrap, "$hue");
+    expect(visibleUuids(wrap)).toContain("ccc33333");
+  });
+
+  it("force-opens matching sections — a collapsed hit reads as no hit", async () => {
+    const wrap = mountPicker({ payload: SEARCHABLE });
+    await flushPromises();
+    // No expandSection() call: sections default collapsed, and the search
+    // alone must reveal the match.
+    await search(wrap, "palette");
+    expect(visibleUuids(wrap)).toEqual(["ccc33333"]);
+  });
+
+  it("select-all in a filtered section touches only the visible rows", async () => {
+    const wrap = mountPicker({ payload: SEARCHABLE });
+    await flushPromises();
+    await search(wrap, "outfit");
+    const section = wrap.findAllComponents(PickerSection).find(
+      (s) => s.props("title") === "Wildcards",
+    );
+    section!.vm.$emit("toggle-all", true);
+    await flushPromises();
+    expect(
+      wrap.get('[data-test="import-picker-selected-count"]').text(),
+    ).toContain("2");
+  });
+
+  it("keeps a hidden selection rather than dropping it on filter change", async () => {
+    const wrap = mountPicker({ payload: SEARCHABLE });
+    await flushPromises();
+    await expandSection(wrap, "wildcards");
+    const row = wrap.findAllComponents(PickerRow).find(
+      (r) => r.props("uuid") === "ccc33333",
+    );
+    row!.vm.$emit("update:checked", true);
+    await flushPromises();
+    // Filter it out of view — the pick must survive, since the user can no
+    // longer see it to re-make it.
+    await search(wrap, "outfit");
+    expect(
+      wrap.get('[data-test="import-picker-selected-count"]').text(),
+    ).toContain("1");
+  });
+
+  it("says so when nothing matches anywhere", async () => {
+    const wrap = mountPicker({ payload: SEARCHABLE });
+    await flushPromises();
+    await search(wrap, "zzzzz");
+    expect(visibleUuids(wrap)).toEqual([]);
+    expect(wrap.find('[data-test="import-picker-no-matches"]').exists()).toBe(true);
+  });
+
+  it("restores every row when the query is cleared", async () => {
+    const wrap = mountPicker({ payload: SEARCHABLE });
+    await flushPromises();
+    await search(wrap, "palette");
+    await search(wrap, "");
+    // Sections collapse back to their remembered state once forceOpen drops,
+    // so assert on the payload-wide counter rather than rendered rows.
+    expect(
+      wrap.get('[data-test="import-picker-selected-count"]').text(),
+    ).toContain("4");
+  });
+
+  it("carries a subtitle on rows, matching the export picker", async () => {
+    const wrap = mountPicker({ payload: SEARCHABLE });
+    await flushPromises();
+    await expandSection(wrap, "wildcards");
+    const row = wrap.findAllComponents(PickerRow).find(
+      (r) => r.props("uuid") === "ccc33333",
+    );
+    expect(row!.props("subtitle")).toBe("$hue · 0 options");
   });
 });
