@@ -833,25 +833,34 @@ function ruleSummaryText(rule: DerivationRule): string {
   border-radius: 999px;
   white-space: nowrap;
 }
+/* A rule head is a PREVIEW, kept to ONE line. Wrapping let a paragraph-length
+   action value run to hundreds of lines and push the rest of the modal off
+   screen. Truncating keeps the row a clean single line, and `title` (see
+   `ruleSummaryText`) gives the full text on hover.
+
+   `display: block`, not flex: `text-overflow: ellipsis` is ignored on a flex
+   container, which is why an earlier attempt reached for a gradient mask
+   instead — but a mask fades EVERY pixel under it, including the ref chips,
+   so the tail of the summary went unreadable rather than merely cut. As an
+   inline formatting context the browser draws a real `…` at the clip point
+   and leaves everything before it at full opacity. */
 .rule-head__summary {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  display: block;
   flex: 1;
   min-width: 0;
   font: 11px var(--wp-font-mono);
-  /* A rule head is a PREVIEW, kept to ONE line. Wrapping let a
-     paragraph-length action value run to hundreds of lines and push the rest of
-     the modal off screen; a max-height clamp fixed that but sliced the last
-     line in half, which looked broken. Truncating instead keeps the row a
-     clean single line, and `title` (see `ruleSummaryText`) gives the full text
-     on hover. */
-  flex-wrap: nowrap;
   overflow: hidden;
   white-space: nowrap;
-  /* Flex containers ignore `text-overflow`, so fade the trailing edge to signal
-     "cut off" rather than ending on a hard chop. */
-  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  text-overflow: ellipsis;
+}
+/* Children flow inline so they sit on that one line; the margin replaces the
+   `gap` that came with the flex container. */
+.rule-head__summary > *,
+.branch-cell--summary > * {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  margin-right: 4px;
 }
 
 /* The value chips render through RichTextPreview, which declares
@@ -931,13 +940,13 @@ function ruleSummaryText(rule: DerivationRule): string {
 }
 /* Same treatment as the rule head, for the same reason: this is a per-branch
    PREVIEW column, and one long action value stretched its row until the branch
-   table stopped being a table. Single line + trailing fade + `title` on hover;
+   table stopped being a table. Single line + real ellipsis + `title` on hover;
    the override inputs beside it hold the full value and scroll. */
 .branch-cell--summary {
-  flex-wrap: nowrap;
+  display: block;
   overflow: hidden;
   white-space: nowrap;
-  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  text-overflow: ellipsis;
 }
 .branch-cell--head {
   color: var(--wp-text-dim, var(--wp-text3));
