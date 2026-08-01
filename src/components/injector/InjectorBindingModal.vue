@@ -733,7 +733,7 @@ function onKeydown(ev: KeyboardEvent): void {
   font: 11px/1.5 var(--wp-font-mono);
   color: var(--wp-text);
   min-height: 56px;
-  resize: vertical;
+  resize: vertical; overscroll-behavior: contain;
 }
 .ibm__template:focus { outline: none; border-color: var(--wp-accent); }
 .ibm__template--set {

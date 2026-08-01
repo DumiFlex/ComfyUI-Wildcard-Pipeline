@@ -555,7 +555,7 @@ function handleParse(raw: string, source: "file" | "paste"): void {
   font-family: var(--wp-font-mono);
   font-size: var(--wp-text-sm);
   line-height: var(--wp-line-sm);
-  resize: vertical;
+  resize: vertical; overscroll-behavior: contain;
   outline: none;
   transition: border-color .12s, box-shadow .12s;
 }

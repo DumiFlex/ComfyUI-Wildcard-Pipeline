@@ -2641,6 +2641,12 @@ function onHostKeydown(ev: KeyboardEvent): void {
   word-break: break-word;
   overflow-x: hidden;
   overflow-y: auto;
+  /* Stop the scroll chaining to the page. Without this, scrolling a capped
+     field and reaching either end hands the remaining delta to the ancestor —
+     so the modal (or the whole editor) lurches while the user is still
+     pointing at the field. Most noticeable at the TOP edge, where a small
+     upward flick past the first line jumps the page. */
+  overscroll-behavior: contain;
   resize: vertical;
 }
 /* Keep the placeholder ghost aligned with wrapped text (top-left, not
@@ -2656,6 +2662,8 @@ function onHostKeydown(ev: KeyboardEvent): void {
      box to thousands of pixels and pushed every control below it off-screen. */
   max-height: 14rem;
   overflow-y: auto;
+  /* Same containment as `--wrap` — see the note there. */
+  overscroll-behavior: contain;
   resize: vertical;
   white-space: pre-wrap;
   word-break: break-word;

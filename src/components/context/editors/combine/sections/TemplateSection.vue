@@ -386,7 +386,7 @@ function onResetTemplate(): void {
   font: 11px/1.5 var(--wp-font-mono);
   color: var(--wp-text);
   min-height: 56px;
-  resize: vertical;
+  resize: vertical; overscroll-behavior: contain;
 }
 .wp-tpl__input:focus { outline: none; border-color: var(--wp-accent); }
 .wp-tpl__input--mod {

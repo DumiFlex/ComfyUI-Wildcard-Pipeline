@@ -720,7 +720,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   font-family: inherit;
 }
 .wp-ptl-input:focus { outline: 1px solid var(--wp-accent-500, #8b5cf6); }
-.wp-ptl-input--multi { resize: vertical; min-height: 48px; }
+.wp-ptl-input--multi { resize: vertical; overscroll-behavior: contain; min-height: 48px; }
 .wp-ptl-payload {
   margin: 0;
   padding: 8px 10px;

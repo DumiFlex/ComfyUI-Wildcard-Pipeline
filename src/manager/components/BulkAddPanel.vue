@@ -149,7 +149,7 @@ function cancel() {
 }
 .wpc-bulk-panel__input {
   width: 100%;
-  resize: vertical;
+  resize: vertical; overscroll-behavior: contain;
   font-family: var(--wp-font-mono, monospace);
   font-size: 12px;
 }

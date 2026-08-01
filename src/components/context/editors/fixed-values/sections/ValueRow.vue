@@ -345,7 +345,7 @@ function onDelete(): void {
   /* Manual drag handle as well as the auto-grow, matching the derivation and
      combine template inputs — auto-sizing picks a sensible height, the handle
      lets the user override it. */
-  resize: vertical;
+  resize: vertical; overscroll-behavior: contain;
   overflow-y: auto;
   max-height: 12rem;
   line-height: 1.5;
