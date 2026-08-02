@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { useGrowableField } from "../../../../shared/useGrowableField";
 import {
   rowOverrideKind,
   type DraftRow,
@@ -64,7 +65,7 @@ function onNameInput(ev: Event): void {
 function onValueInput(ev: Event): void {
   const el = ev.target as HTMLTextAreaElement;
   emit("update", props.row.id, { value: el.value });
-  autosizeValue(el);
+  autosize();
   updateOverflowHint();
 }
 
@@ -73,10 +74,11 @@ function onValueInput(ev: Event): void {
  *  wrapping + growth — users routinely paste an entire sentence into a fixed
  *  value and a single-line `<input>` showed a sliver of it with no way to see
  *  the rest. Semantics stay single-value; `onValueKeydown` blocks newlines. */
-function autosizeValue(el: HTMLTextAreaElement): void {
-  el.style.height = "auto";
-  el.style.height = `${el.scrollHeight}px`;
-}
+/* Auto-grow now lives in `useGrowableField` so it can YIELD to the drag
+ * handle. The old local version wrote `height = scrollHeight` on every input
+ * and every external value change, which stomped whatever height the user had
+ * dragged to — collapse the box, type one character, and it sprang back open.
+ * That is the "the drag sticks, then starts working" report. */
 
 /* Enter inserts a newline, like any other textarea.
  *
@@ -89,53 +91,45 @@ function autosizeValue(el: HTMLTextAreaElement): void {
 
 const valueEl = ref<HTMLTextAreaElement | null>(null);
 
+/* Shared auto-grow + overflow-hint + grip-follow. See `useGrowableField` for
+ * why the three belong together — chiefly that auto-grow has to yield to the
+ * drag handle, which the local copy did not. */
+const {
+  hasMoreBelow,
+  updateOverflowHint,
+  scheduleOverflowHint,
+  autosize,
+  attach,
+} = useGrowableField(() => valueEl.value);
+
 /** True when the field is capped and still hiding content below the fold.
  *  Mirrors RichTextInput's hint — a capped box otherwise looks identical
  *  whether it holds its whole value or a third of it. A `<textarea>` can't
  *  carry a reliable `::after`, so the fade lives on `.row__value-wrap`. */
-const hasMoreBelow = ref(false);
 
-function updateOverflowHint(): void {
-  const el = valueEl.value;
-  if (!el) return;
-  hasMoreBelow.value = el.scrollHeight - el.scrollTop - el.clientHeight > 2;
-}
 
-/** Measure AFTER layout. A mount-time measure runs before the max-height cap
- *  applies, reads `scrollHeight === clientHeight`, and reports no overflow —
- *  so the fade only appeared once typing re-measured, and never at all on a
- *  row the user can scroll but not edit. */
-function scheduleOverflowHint(): void {
-  if (typeof requestAnimationFrame === "function") requestAnimationFrame(updateOverflowHint);
-  else updateOverflowHint();
-}
+
+
 
 /* Size correctly on first paint + whenever the row's value changes from
    outside (reset-to-library, undo). */
 watch(
   () => props.row.value,
   () => void nextTick(() => {
-    if (valueEl.value) autosizeValue(valueEl.value);
+    autosize();
     scheduleOverflowHint();
   }),
   { immediate: true },
 );
 
-/** Keep the hint honest across manual resizes and container reflows. */
-let overflowObs: ResizeObserver | null = null;
 
 onMounted(() => {
-  if (valueEl.value) autosizeValue(valueEl.value);
+  autosize();
   scheduleOverflowHint();
-  if (typeof ResizeObserver === "undefined" || !valueEl.value) return;
-  overflowObs = new ResizeObserver(updateOverflowHint);
-  overflowObs.observe(valueEl.value);
+  attach();
 });
 
-onBeforeUnmount(() => {
-  overflowObs?.disconnect();
-  overflowObs = null;
-});
+
 function onReset(): void {
   emit("reset", props.row.id);
 }
@@ -364,7 +358,10 @@ function onDelete(): void {
 .row__value-wrap--more::after {
   content: "";
   position: absolute;
-  inset: auto 0 0 0;
+  /* Right edge stops short of the resize grip. The band is as tall as the
+     handle and sat straight on top of it, so a resizable field's grip was
+     invisible — users aimed, missed, re-grabbed. */
+  inset: auto 16px 0 0;
   height: 14px;
   pointer-events: none;
   background: linear-gradient(

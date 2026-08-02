@@ -33,6 +33,7 @@ import { escapeHtml, inlineTokenHtml, splitRefFilter, tokenizeRich } from "../..
 import RefChip, { type VarProducerLike } from "./RefChip.vue";
 import SubcategoryFilterPicker from "./SubcategoryFilterPicker.vue";
 import RemapRefPopup from "./RemapRefPopup.vue";
+import { useGrowableField } from "../../components/shared/useGrowableField";
 import { rewriteBrokenRef } from "../cascade/remap-ref-rewrite";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
@@ -1277,45 +1278,25 @@ function syncTextSpansToAtoms(): void {
   }
 }
 
-/** True when the host is scrolled and there is still content below the fold.
- *  Drives the bottom fade — a capped box gives no other clue that it is
- *  hiding text, and users pasting paragraph-length values had no way to tell
- *  a full value from a truncated one. */
-const hasMoreBelow = ref(false);
+/** Bottom-fade + grip-follow state. `hasMoreBelow` drives the fade — a capped
+ *  box gives no other clue that it is hiding text. */
+const {
+  hasMoreBelow,
+  updateOverflowHint,
+  scheduleOverflowHint,
+  attach,
+} = useGrowableField(() => hostEl.value);
 
-function updateOverflowHint(): void {
-  const host = hostEl.value;
-  if (!host) return;
-  // 2px slack absorbs sub-pixel rounding at the exact bottom.
-  hasMoreBelow.value = host.scrollHeight - host.scrollTop - host.clientHeight > 2;
-}
-
-/** Measure AFTER the browser has laid the box out.
+/* Overflow hint + grip-follow now come from the shared `useGrowableField`.
+ * The fixed-values ValueRow had grown its own copy of the same three
+ * behaviours, and the copies had already diverged — only this one cleared the
+ * grip, only this one followed it off-screen. One implementation instead.
  *
- *  A plain mount-time measure read `scrollHeight === clientHeight` (styles and
- *  the max-height cap not applied yet) and reported "no overflow". The hint
- *  then only appeared once typing re-measured — which read as "the fade only
- *  shows on boxes you focus", and never appeared at all on a field the user
- *  can scroll but not edit. */
-function scheduleOverflowHint(): void {
-  if (typeof requestAnimationFrame === "function") requestAnimationFrame(updateOverflowHint);
-  else updateOverflowHint();
-}
-
-/** Keep the hint honest when the box is resized — the manual drag handle, a
- *  container reflow, or content re-wrapping all change what fits. */
-let overflowObs: ResizeObserver | null = null;
-
+ * No auto-grow here: this host sizes itself with `height: auto` + a CSS
+ * `max-height`, so there is nothing for the composable's autosize to drive. */
 onMounted(() => {
   scheduleOverflowHint();
-  if (typeof ResizeObserver === "undefined" || !hostEl.value) return;
-  overflowObs = new ResizeObserver(updateOverflowHint);
-  overflowObs.observe(hostEl.value);
-});
-
-onBeforeUnmount(() => {
-  overflowObs?.disconnect();
-  overflowObs = null;
+  attach();
 });
 
 /** True when the live host has FEWER rendered atom nodes than `atoms.value`
@@ -2567,10 +2548,15 @@ function onHostKeydown(ev: KeyboardEvent): void {
 .wp-rt--more::after {
   content: "";
   position: absolute;
-  /* Full-bleed inset — 1px side insets left a visible seam down the left edge
-     where the band stopped short of the border. The wrapper's own
-     `overflow: hidden` + radius clip this cleanly instead. */
-  inset: auto 0 0 0;
+  /* Left edge is full-bleed — a 1px inset left a visible seam where the band
+     stopped short of the border; the wrapper's `overflow: hidden` + radius
+     clip that side cleanly instead.
+     The RIGHT edge stops short of the resize grip. The band is exactly as tall
+     as the grip and sat right on top of it, so a resizable field's handle was
+     invisible: users aimed, missed, re-grabbed, and read it as "the drag
+     sticks then starts working". `pointer-events: none` meant it never
+     actually blocked the drag — it just hid the target. */
+  inset: auto 16px 0 0;
   height: 16px;
   pointer-events: none;
   /* Gradient to a TRANSPARENT accent, not to a blend with the background: the
