@@ -122,28 +122,75 @@ export function useGrowableField(
   /** Set while `autosize` is writing, so its own change is not mistaken for a
    *  drag. Without it the first auto-fit would lock the field immediately. */
   let autoDriven = false;
+  /** True between pointerdown on the field and the matching pointerup —
+   *  i.e. while the user may be holding the resize handle. */
+  let dragging = false;
+  let pending = false;
+
+  /**
+   * Everything the observer wants to do, moved OUT of the observer.
+   *
+   * A ResizeObserver callback that reads layout and writes reactive state runs
+   * before paint, so doing it synchronously on every frame of a resize drag
+   * dirties layout inside the very callback the browser is using to report
+   * layout. Chrome throttles that (the "ResizeObserver loop" case) and stops
+   * delivering for a frame, which the user feels as the drag seizing up until
+   * they release and re-grab. Deferring to rAF leaves the callback trivial.
+   */
+  function flush(): void {
+    pending = false;
+    const el = getEl();
+    if (!el) return;
+    const h = el.getBoundingClientRect().height;
+    updateOverflowHint();
+    // A height change we did not author is the user on the drag handle.
+    if (!autoDriven && Math.abs(h - lastHeight) > 1) userResized.value = true;
+    // NEVER scroll mid-drag. Moving the container slides the element out from
+    // under the pointer, and the browser's resize tracking is anchored to the
+    // pointer — so the drag stalls exactly like the loop above. The catch-up
+    // runs on release instead, which still leaves the field on screen.
+    if (h > lastHeight && !dragging) followGrip();
+    lastHeight = h;
+  }
+
+  function schedule(): void {
+    if (pending) return;
+    pending = true;
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(flush);
+    else flush();
+  }
+
+  function onPointerDown(): void { dragging = true; }
+  function onPointerUp(): void {
+    if (!dragging) return;
+    dragging = false;
+    // Catch up once the handle is released: if the drag pushed the field past
+    // the fold, bring its bottom edge back on screen now that moving it can no
+    // longer disturb anything.
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(followGrip);
+    else followGrip();
+  }
 
   function attach(): void {
     const el = getEl();
     if (!el) return;
     lastHeight = el.getBoundingClientRect().height;
+    el.addEventListener("pointerdown", onPointerDown);
+    // On window, not the element: a resize drag routinely ends with the
+    // pointer outside the field it started in.
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
     if (typeof ResizeObserver === "undefined") return;
-    obs = new ResizeObserver(() => {
-      const cur = getEl();
-      if (!cur) return;
-      const h = cur.getBoundingClientRect().height;
-      updateOverflowHint();
-      // A height change we did not author is the user on the drag handle.
-      if (!autoDriven && Math.abs(h - lastHeight) > 1) userResized.value = true;
-      if (h > lastHeight) followGrip();
-      lastHeight = h;
-    });
+    obs = new ResizeObserver(schedule);
     obs.observe(el);
   }
 
   onBeforeUnmount(() => {
     obs?.disconnect();
     obs = null;
+    getEl()?.removeEventListener("pointerdown", onPointerDown);
+    window.removeEventListener("pointerup", onPointerUp);
+    window.removeEventListener("pointercancel", onPointerUp);
   });
 
   return {
