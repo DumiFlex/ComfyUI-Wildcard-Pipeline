@@ -619,6 +619,14 @@ function onDragEnd(): void {
 .wp-inj-summary__template {
   color: var(--wp-accent);
   font-family: var(--wp-font-mono, monospace);
+  /* A collapsed row summary. One line is the whole contract — a long template
+     otherwise stretched the row and broke the list rhythm. */
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: bottom;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Template-active badge — small pill at the trailing edge of the

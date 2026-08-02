@@ -314,5 +314,11 @@ function toggleTag(t: string, currentTags: string[] | undefined): string[] {
   white-space: pre-wrap;
   word-break: break-word;
   max-width: 640px;
+  /* This pane is opened deliberately to READ the template, so it scrolls
+     rather than clamping — hiding the tail would defeat the expand. The cap
+     stops one long template from pushing every row below it off screen. */
+  max-height: 16rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 </style>

@@ -572,7 +572,7 @@ function pickKind(k: SelectorKind) {
       </div>
       <div class="wp-hist">
         <div v-for="entry in result.entries" :key="entry.template" class="wp-hist__row">
-          <div class="wp-hist__template">
+          <div class="wp-hist__template" :title="entry.template || undefined">
             <span v-if="entry.template === ''" class="wp-tr-null-chip">
               <i class="pi pi-ban" aria-hidden="true" />
               <span>null</span>
@@ -808,7 +808,10 @@ function pickKind(k: SelectorKind) {
       <Card :title="`Output distribution — ${result.samples} run(s) · ${result.finalCounts.length} unique`">
         <div class="wp-hist wp-hist--bundle">
           <div v-for="entry in result.finalCounts" :key="entry.value" class="wp-hist__row">
-            <div class="wp-hist__template wp-mono">{{ entry.value || '(empty)' }}</div>
+            <div
+              class="wp-hist__template wp-mono"
+              :title="entry.value || undefined"
+            >{{ entry.value || '(empty)' }}</div>
             <div class="wp-bar">
               <div
                 class="wp-bar__fill"
@@ -888,7 +891,21 @@ function pickKind(k: SelectorKind) {
   gap: var(--wp-space-5);
   align-items: center;
 }
-.wp-hist__template { min-width: 0; font-size: var(--wp-text-sm); }
+/* A histogram label is a PREVIEW next to its bar, so it gets a line budget
+   rather than a hard single line — two lines tell near-identical option values
+   apart, which one line often cannot. Past that it clamps, and `title` carries
+   the rest. Without this a paragraph-length option value rendered forty lines
+   tall and pushed every other bar off the screen. */
+.wp-hist__template {
+  min-width: 0;
+  font-size: var(--wp-text-sm);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
 .wp-hist__resolved { font-size: var(--wp-text-xs); line-height: 1.45; margin-top: 2px; }
 .wp-hist__resolved-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wp-hist__count {
@@ -1086,7 +1103,16 @@ function pickKind(k: SelectorKind) {
 .wp-hist--bundle .wp-hist__template {
   white-space: normal;
   word-break: break-word;
-  overflow: visible;
+  /* Deliberately NOT `overflow: visible` any more. This rule exists to undo a
+     one-line ellipsis so a bundle's longer labels can wrap, but the base rule
+     now clamps with `-webkit-line-clamp`, which silently does nothing unless
+     overflow stays hidden — so restoring visibility here re-broke the very
+     thing the clamp is for. Wrapping is preserved by `white-space: normal`;
+     the clamp just bounds how far it wraps. */
   text-overflow: clip;
+  /* Bundle rows show several modules at once, so they get one more line than
+     the single-module histograms before clamping. */
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
 }
 </style>
