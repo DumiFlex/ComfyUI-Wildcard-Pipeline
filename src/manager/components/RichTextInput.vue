@@ -2602,6 +2602,10 @@ function onHostKeydown(ev: KeyboardEvent): void {
     transparent 0 2px,
     var(--wp-text-dim, #8a8a9a) 2px 3px
   );
+  /* Clipped to a bottom-right triangle so the hatching runs parallel to the
+     hypotenuse — the shape the browser's own resizer draws, which is what
+     users already read as "drag me". A filled square read as a button. */
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
   opacity: 0.55;
 }
 .wp-rt__grip:hover { opacity: 0.9; }

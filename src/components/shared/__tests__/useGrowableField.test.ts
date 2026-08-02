@@ -208,6 +208,24 @@ describe("useGrowableField — the drag itself", () => {
     wrap.unmount();
   });
 
+  it("falls back to a hard floor when CSS declares none", () => {
+    // `min-height: auto` is the default and parses to NaN. Treating that as 0
+    // let a field be dragged away to a sliver — which is exactly what the
+    // canvas fixed-values rows did, since they never declared one.
+    const h = 40;
+    const { wrap, api, node } = mountField(40);
+    node.getBoundingClientRect = () => ({
+      height: h, bottom: h, top: 0, left: 0, right: 0, width: 100, x: 0, y: 0,
+      toJSON: () => ({}),
+    }) as DOMRect;
+    api.startResize(gripDown(500));
+    window.dispatchEvent(
+      Object.assign(new MouseEvent("pointermove", { clientY: 100 }), { pointerId: 1 }),
+    );
+    expect(Number.parseFloat(node.style.height)).toBeGreaterThanOrEqual(28);
+    wrap.unmount();
+  });
+
   it("never shrinks past the CSS floor", () => {
     const h = 40;
     const { wrap, api, node } = mountField(40);

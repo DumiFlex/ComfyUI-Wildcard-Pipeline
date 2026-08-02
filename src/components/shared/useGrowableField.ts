@@ -60,6 +60,10 @@ function scrollableAncestor(el: HTMLElement): HTMLElement | null {
   return null;
 }
 
+/** Backstop floor for a field whose CSS declares no `min-height`. Enough to
+ *  keep one line and its padding visible, so a drag can always be undone. */
+const ABSOLUTE_MIN = 28;
+
 export function useGrowableField(
   getEl: () => HTMLElement | null,
   opts: { minHeight?: number } = {},
@@ -206,7 +210,12 @@ export function useGrowableField(
     // CSS stays the source of truth for the floor; the ceiling is deliberately
     // released, because a deliberate drag is the user overriding a cap that
     // exists only to bound AUTO-grow.
-    minPx = Number.parseFloat(cs.minHeight) || 0;
+    // `min-height: auto` (the default) parses to NaN, so a field that never
+    // declared one would get a floor of 0 and could be dragged away to a
+    // sliver. CSS stays authoritative when it says anything; ABSOLUTE_MIN is
+    // only the backstop for when it does not.
+    const declared = Number.parseFloat(cs.minHeight);
+    minPx = Number.isFinite(declared) && declared > 0 ? declared : ABSOLUTE_MIN;
     if (!capLifted) {
       el.style.height = `${el.getBoundingClientRect().height}px`;
       el.style.maxHeight = "none";

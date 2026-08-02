@@ -353,6 +353,10 @@ function onDelete(): void {
      lets the user override it. */
   overscroll-behavior: contain;
   overflow-y: auto;
+  /* Floor for the drag handle. Without it the computed `min-height` is `auto`,
+     which reads as 0 — so the field could be dragged away to a sliver with no
+     way to see what you were editing. One line plus its padding. */
+  min-height: 28px;
   max-height: 12rem;
   line-height: 1.5;
   white-space: pre-wrap;
@@ -381,6 +385,10 @@ function onDelete(): void {
     transparent 0 2px,
     var(--wp-text3, #8a8a9a) 2px 3px
   );
+  /* Clipped to a bottom-right triangle so the hatching runs parallel to the
+     hypotenuse — the shape the browser's own resizer draws, which is what
+     users already read as "drag me". A filled square read as a button. */
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
   opacity: 0.55;
 }
 .row__grip:hover { opacity: 0.9; }
