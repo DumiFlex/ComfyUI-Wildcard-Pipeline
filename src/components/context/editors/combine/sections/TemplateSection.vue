@@ -20,6 +20,7 @@ import { applyVarAccessor, type ResolvedValue } from "../../../../../widgets/ric
 // Async-import the rich-text editor so the chunk is split into its own
 // asset and only pulled in when the combine instance modal opens. Bundle
 // budget is tight — eager import pushes total over.
+import type { VarProducerLike } from "../../../../../manager/components/RefChip.vue";
 const RichTextInput = defineAsyncComponent(
   () => import("../../../../../manager/components/RichTextInput.vue"),
 );
@@ -30,6 +31,9 @@ const props = withDefaults(
     /** Vars produced upstream of this Context node — surfaced in the
      *  insert-var dropdown so users don't have to remember names. */
     upstreamVars?: string[];
+    /** `$var` → its producing module + node, so the `$` autocomplete can
+     *  attribute each name instead of listing it bare. */
+    upstreamProducers?: Record<string, VarProducerLike>;
     /** Resolved upstream `$name → value` map. Drives the live-preview
      *  pane below the syntax preview: when set, the template renders
      *  with `$var` substitutions visible at edit time so users see the
@@ -46,6 +50,11 @@ const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
 /** Combined upstream + sibling vars, deduped, alpha-sorted. Drives
  *  both the validity-coloring on detected pills and the
  *  RichTextInput's `$`-trigger autocomplete suggestion list. */
+/** A Map because the row builder does one `get` per suggestion. */
+const varProducerMap = computed<Map<string, VarProducerLike>>(
+  () => new Map(Object.entries(props.upstreamProducers ?? {})),
+);
+
 const availableVars = computed<string[]>(() => {
   const set = new Set<string>();
   for (const n of props.upstreamVars) if (n) set.add(n);
@@ -257,6 +266,8 @@ function onResetTemplate(): void {
     <RichTextInput
       :model-value="templateValue"
       :var-suggestions="availableVars"
+      :var-producers="varProducerMap"
+      graph-aware
       :multiline="true"
       :rows="3"
       surface="combine"

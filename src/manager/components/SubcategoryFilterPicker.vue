@@ -41,6 +41,11 @@ interface Props {
   hasNullOption?: boolean;
   /** Display name of the wildcard being filtered, for the panel header. */
   wildcardName?: string;
+  /** Where the pool being filtered came from. `"node"` means this Context
+   *  node's own snapshot of the wildcard, which can differ from the library
+   *  row of the same uuid — so the counts below describe the node's copy, and
+   *  the header says so. `undefined` in the SPA, which only ever has one. */
+  poolOrigin?: "node" | "library";
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -51,6 +56,7 @@ const props = withDefaults(defineProps<Props>(), {
   mode: "insert",
   hasNullOption: false,
   wildcardName: "",
+  poolOrigin: undefined,
 });
 
 const emit = defineEmits<{
@@ -360,6 +366,14 @@ function onApply(): void {
       </template>
       <i v-else class="pi pi-filter" aria-hidden="true" />
       <span class="wp-subcat-picker__title" data-test="picker-title">@{{ wildcardName }}</span>
+      <!-- Matches the chip's own marker, so "this pool is the node's copy"
+           reads the same in both places. -->
+      <span
+        v-if="poolOrigin === 'node'"
+        class="wp-subcat-picker__origin"
+        data-test="picker-origin-node"
+        title="Filtering this node's copy of the wildcard, not the library row"
+      ><i class="pi pi-database" aria-hidden="true" /> this node</span>
       <span class="wp-spacer" />
       <span class="wp-subcat-picker__keys">
         Esc {{ mode === "insert" ? "back" : "cancel" }}
@@ -906,6 +920,17 @@ function onApply(): void {
   font-family: var(--wp-font-mono);
   color: var(--wp-accent-text, var(--wp-accent-300));
 }
+.wp-subcat-picker__origin {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px; /* audit-exempt: glyph-to-word gap */
+  padding: 0 4px; /* audit-exempt: micro tile padding */
+  border-radius: 3px; /* audit-exempt: tile below the radius scale */
+  background: color-mix(in oklab, var(--wp-info) 15%, transparent);
+  color: var(--wp-info);
+  font-size: 10px; /* audit-exempt: micro annotation */
+}
+.wp-subcat-picker__origin .pi { font-size: 9px; }
 .wp-subcat-picker__keys { opacity: 0.55; }
 .wp-subcat-picker__no-tags {
   margin: 4px 0 0;

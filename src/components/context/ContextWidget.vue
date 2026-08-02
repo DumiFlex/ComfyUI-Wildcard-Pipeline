@@ -781,11 +781,44 @@ const resolvedForEditing = computed<Record<string, ResolvedValue>>(() => {
 // Combine + wildcard have no entries; without this kind-aware fallback the
 // modal's insert-var dropdown would render empty for chains where the only
 // vars come from binding-producer modules.
-const siblingNodeVars = computed<string[]>(() => {
+/**
+ * Vars written by the OTHER modules in this same Context node, together with
+ * who writes each one.
+ *
+ * `collectUpstreamProducers` walks the node chain and deliberately excludes
+ * the point-of-view node, so it can only attribute vars produced further
+ * upstream. In a graph where one Context node carries most of the modules —
+ * which is the normal shape — that left nearly every `$var` in the
+ * autocomplete with no writer at all, and the rows rendered bare while the
+ * SPA's equivalent showed a full attribution line for the same names.
+ *
+ * Built in the same pass as the name list so the two cannot disagree about
+ * which module owns a name.
+ */
+const siblingVarInfo = computed<{
+  names: string[];
+  producers: Record<string, VarProducerLike>;
+}>(() => {
   const names = new Set<string>();
+  const producers: Record<string, VarProducerLike> = {};
+  let owner: { kind: string; moduleName: string; moduleId: string } | null = null;
   function add(name: string | undefined | null): void {
     const trimmed = (name ?? "").replace(/^\$+/, "").trim();
-    if (trimmed) names.add(trimmed);
+    if (!trimmed) return;
+    names.add(trimmed);
+    if (!owner) return;
+    // Later modules win, matching the engine's last-write-wins resolution,
+    // and each overwrite bumps the count the row reports as "overrides N".
+    const prev = producers[trimmed];
+    producers[trimmed] = {
+      kind: owner.kind,
+      moduleName: owner.moduleName,
+      moduleId: owner.moduleId,
+      // Same node, so there is no other node to name — saying which one it is
+      // would be noise when every sibling gives the same answer.
+      nodeLabel: "this node",
+      shadowed: prev ? prev.shadowed + 1 : 0,
+    };
   }
   const editingM = editingModule.value;
   const bundleEnabled = buildBundleEnabledMap(value.value.bundles);
@@ -796,6 +829,11 @@ const siblingNodeVars = computed<string[]>(() => {
     // Defensive: also skip if same object (shouldn't happen but Vue
     // proxies can confuse identity equals).
     void editingM;
+    owner = {
+      kind: m.type,
+      moduleName: m.meta?.name ?? m.type,
+      moduleId: m.id,
+    };
     for (const e of m.entries) add(e.variable_name);
     const inst = (m.instance ?? {}) as {
       variable_binding?: string | null;
@@ -828,8 +866,24 @@ const siblingNodeVars = computed<string[]>(() => {
       }
     }
   }
-  return [...names];
+  owner = null;
+  return { names: [...names], producers };
 });
+
+const siblingNodeVars = computed<string[]>(() => siblingVarInfo.value.names);
+
+/**
+ * Every `$var` writer the editors can name: upstream nodes first, then this
+ * node's own modules on top.
+ *
+ * Siblings override because they run later in the same chain position, which
+ * is what the engine does too — so the row names the module whose value
+ * actually survives.
+ */
+const allVarProducers = computed<Record<string, VarProducerLike>>(() => ({
+  ...(props.upstreamProducers ?? {}),
+  ...siblingVarInfo.value.producers,
+}));
 
 function clearDragHover() {
   if (dragOver.value === null) return;
@@ -5294,7 +5348,7 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
       :visible="editingModule !== null"
       :module="editingModule"
       :upstream-vars="upstreamVars"
-      :upstream-producers="upstreamProducers"
+      :upstream-producers="allVarProducers"
       :upstream-resolved="resolvedForEditing"
       :sibling-vars="siblingNodeVars"
       :sibling-modules="value.modules"

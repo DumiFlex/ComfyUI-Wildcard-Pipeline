@@ -21,7 +21,7 @@
  * rewires those handlers against the contenteditable host + selection
  * API.
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   parse,
   replaceAtom,
@@ -39,6 +39,7 @@ import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
 import { probeAutocomplete } from "../utils/autocompleteProbe";
 import { refRows, varRows, type SuggestionRow } from "../utils/suggestion-rows";
+import { CONTEXT_POOLS_KEY, type ContextPoolMap } from "../../extension/context-pools";
 
 // --- 4-segment nested-ref serialization (SP1, §3.2) -----------------------
 //
@@ -288,6 +289,17 @@ const popupPos = ref<{ top: number; left: number; width: number; flipped: boolea
 // picker — `pickerMode` distinguishes them.
 const pickerOpen = ref(false);
 const pickerWildcardName = ref("");
+/** `"node"` when this Context node carries its own snapshot of the wildcard
+ *  being filtered. Absent in the SPA, which only ever reads the library. */
+const pickerPoolOrigin = ref<"node" | "library" | undefined>(undefined);
+
+/** Pools this Context node holds, when a Context node is an ancestor. Same
+ *  injection RefChip uses, so the chip marker and the panel header agree about
+ *  which pool is in play. */
+const contextPools = inject<{ value: ContextPoolMap } | undefined>(
+  CONTEXT_POOLS_KEY,
+  undefined,
+);
 const pickerSubCats = ref<string[]>([]);
 // 4-segment filter seed for the boolean-expression picker (§4.1):
 // initial expression text + exclude-null flag, replacing the legacy
@@ -622,6 +634,13 @@ function loadPickerContext(uuid: string): void {
   // insert flow drops you into an unlabelled form one step after choosing from
   // a list of near-identical names.
   pickerWildcardName.value = props.uuidToName.get(uuid) ?? uuid;
+  // Node snapshot wins over the library, exactly as `resolvePoolFor` decides
+  // it for the hover card — so presence in the node map IS the origin.
+  pickerPoolOrigin.value = contextPools?.value?.has(uuid)
+    ? "node"
+    : contextPools
+      ? "library"
+      : undefined;
   pickerSubCats.value = props.uuidToSubCategories.get(uuid) ?? [];
   pickerOptionTagSets.value = props.uuidToOptionTagSets.get(uuid) ?? [];
   pickerTagGroups.value = props.uuidToTagGroups.get(uuid) ?? {};
@@ -2649,6 +2668,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
       >
         <SubcategoryFilterPicker
           :wildcard-name="pickerWildcardName"
+          :pool-origin="pickerPoolOrigin"
           :sub-categories="pickerSubCats"
           :tag-groups="pickerTagGroups"
           :option-tag-sets="pickerOptionTagSets"

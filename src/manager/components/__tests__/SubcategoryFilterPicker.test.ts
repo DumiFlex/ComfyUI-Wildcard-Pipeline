@@ -325,3 +325,29 @@ describe("SubcategoryFilterPicker — the null row is one big target", () => {
     expect(w.emitted("apply")![0]).toEqual([{ expr: "", excludeNull: true }]);
   });
 });
+
+describe("SubcategoryFilterPicker — which pool is being filtered", () => {
+  const base = {
+    subCategories: ["warm"], tagGroups: { t: ["warm"] }, optionTagSets: [["warm"]],
+    initialExpr: "", initialExcludeNull: false,
+    mode: "edit" as const, hasNullOption: false, wildcardName: "Hair Color",
+  };
+
+  it("says so when the pool is this node's own copy", () => {
+    // A node snapshot can hold different options from the library row of the
+    // same uuid, so the counts below describe the node's copy — the header has
+    // to say which one it is measuring.
+    const w = mount(SubcategoryFilterPicker, { props: { ...base, poolOrigin: "node" as const } });
+    expect(w.find('[data-test="picker-origin-node"]').exists()).toBe(true);
+  });
+
+  it("stays unmarked for the library, which is the default case", () => {
+    const w = mount(SubcategoryFilterPicker, { props: { ...base, poolOrigin: "library" as const } });
+    expect(w.find('[data-test="picker-origin-node"]').exists()).toBe(false);
+  });
+
+  it("stays unmarked where there is no node at all — the SPA", () => {
+    const w = mount(SubcategoryFilterPicker, { props: base });
+    expect(w.find('[data-test="picker-origin-node"]').exists()).toBe(false);
+  });
+});

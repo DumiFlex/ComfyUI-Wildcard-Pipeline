@@ -16,6 +16,7 @@ import { type ResolvedValue } from "../../../../widgets/richTokenize";
 import type { ModuleEntry } from "../../../../widgets/_shared";
 import IdentitySection from "./sections/IdentitySection.vue";
 import TemplateSection from "./sections/TemplateSection.vue";
+import type { VarProducerLike } from "../../../../manager/components/RefChip.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
 import InstanceIdChip from "../InstanceIdChip.vue";
 
@@ -30,6 +31,10 @@ const props = withDefaults(
      *  insert-var dropdown so users don't have to remember which
      *  bindings they can reach from this module. */
     upstreamVars?: string[];
+    /** `$var` → who writes it. Feeds the template editor's `$` autocomplete
+     *  so each suggestion names its producing module rather than listing a
+     *  bare name the user has to recognise from memory. */
+    upstreamProducers?: Record<string, VarProducerLike>;
     /** Resolved upstream-var snapshot — drives the TemplateSection's
      *  live preview pane with substituted values. */
     upstreamResolved?: Record<string, ResolvedValue>;
@@ -109,6 +114,7 @@ function onSpaClick(): void {
       @update="onUpdate"
     />
     <TemplateSection
+      :upstream-producers="upstreamProducers"
       :module="module"
       :upstream-vars="upstreamVars"
       :upstream-resolved="upstreamResolved"

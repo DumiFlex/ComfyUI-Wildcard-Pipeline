@@ -323,6 +323,9 @@ const optionStats = computed<{ total: number; matched: number } | null>(() => {
   return { total, matched: p.tagSets.filter((tags) => matches(ast, new Set(tags))).length };
 });
 
+/** True when this node supplies the pool, so the chip can say so. */
+const poolFromNode = computed(() => pool.value?.source === "context");
+
 /** Human label for the winning pool. Names the module when the node supplies
  *  it, because a node can hold a renamed copy of a library row. */
 const poolLabel = computed<string | null>(() => {
@@ -427,6 +430,18 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
     ></i>
     <span v-else class="wp-refchip__icon" aria-hidden="true">{{ icon }}</span>
     <span class="wp-refchip__label">{{ label }}</span>
+    <!-- The pool this ref resolves against came from THIS node's own module
+         snapshot, not the library. That changes what the ref will actually
+         produce — a node copy can hold different options from the library row
+         it was taken from — and until now the only way to find out was to
+         open the hover card. The library case is left unmarked: it is the
+         default, and marking both turns a signal into decoration. -->
+    <i
+      v-if="poolFromNode"
+      class="pi pi-database wp-refchip__origin"
+      data-test="refchip-origin-node"
+      aria-hidden="true"
+    ></i>
     <!-- Compact filter indicator. The funnel marks "an expression is
          set" (the expression itself stays in the hover title — it can
          be long). A separate ban mark calls out exclude-null so the
@@ -586,6 +601,15 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
   margin-left: 1px;
   color: var(--wp-status-modified, #fbbf24);
   cursor: help;
+}
+/* Node-supplied pool. Deliberately the same hue as the funnel rather than a
+   warning colour: this is a fact about where the options come from, not a
+   problem. */
+.wp-refchip__origin {
+  font-size: 8px;
+  line-height: 1;
+  opacity: 0.8;
+  margin-left: 2px; /* audit-exempt: hairline gap after the label */
 }
 .wp-refchip__funnel { font-size: 8px; line-height: 1; }
 .wp-refchip__nonull { font-size: 8px; line-height: 1; opacity: 0.85; }

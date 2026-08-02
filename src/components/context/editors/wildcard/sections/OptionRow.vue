@@ -393,7 +393,7 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
       </svg>
     </span>
     <span class="opt__name" data-test="opt-name" :class="{ 'opt__name--null': option.is_null }">
-      <span class="opt__name-main">
+      <span class="opt__name-main" :title="option.value || undefined">
       <span
         v-if="option.is_null"
         class="opt__null-chip"
@@ -590,10 +590,21 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
   color: var(--wp-text);
   line-height: 1.55;
 }
+/* An option's value is a PREVIEW here, not the editor for it — the row is a
+   list entry with a checkbox, a weight and a probability beside it. Left
+   unbounded, one paragraph-long option grew taller than the rest of the pool
+   put together and pushed every other option off the panel.
+   `-webkit-line-clamp` needs `overflow: hidden` to do anything at all, so the
+   two must stay together; `title` carries the full value on hover. */
 .opt__name-main {
   flex: 1;
   min-width: 0;
   word-break: break-word;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
 }
 .opt__pair-badges {
   flex: 0 0 auto;
