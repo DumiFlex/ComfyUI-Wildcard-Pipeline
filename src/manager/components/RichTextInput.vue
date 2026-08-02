@@ -287,6 +287,7 @@ const popupPos = ref<{ top: number; left: number; width: number; flipped: boolea
 // insert flow (Task 7) and the click-to-edit flow (Task 8) drive the same
 // picker — `pickerMode` distinguishes them.
 const pickerOpen = ref(false);
+const pickerWildcardName = ref("");
 const pickerSubCats = ref<string[]>([]);
 // 4-segment filter seed for the boolean-expression picker (§4.1):
 // initial expression text + exclude-null flag, replacing the legacy
@@ -617,6 +618,10 @@ function atomIsResolved(atom: Atom): boolean {
  *  null-option flag) from a target uuid. Shared by the insert + edit
  *  entry points so both surfaces see the same data. */
 function loadPickerContext(uuid: string): void {
+  // The panel titles itself with the wildcard it is filtering — without it the
+  // insert flow drops you into an unlabelled form one step after choosing from
+  // a list of near-identical names.
+  pickerWildcardName.value = props.uuidToName.get(uuid) ?? uuid;
   pickerSubCats.value = props.uuidToSubCategories.get(uuid) ?? [];
   pickerOptionTagSets.value = props.uuidToOptionTagSets.get(uuid) ?? [];
   pickerTagGroups.value = props.uuidToTagGroups.get(uuid) ?? {};
@@ -777,6 +782,23 @@ const acItems = computed(() => acMatches.value.slice(0, AC_MAX_ITEMS));
  * its axes, its tags — because the rows that send people here are the ones
  * whose NAMES are identical. A `$` row is identified by who writes it.
  */
+/**
+ * Inline colour for a row's icon box, keyed on the module kind.
+ *
+ * Inline rather than a class per kind because the kind set is open — the map
+ * in `kind-icons.ts` already grew a `loop` and a `category` — and a missing
+ * class would silently fall back to an uncoloured box. A missing TOKEN falls
+ * back to the accent instead, which still looks deliberate.
+ */
+function kindTint(kind: string): Record<string, string> {
+  const token = `--wp-kind-${kind === "fixed_values" ? "fixed" : kind}`;
+  const colour = `var(${token}, var(--wp-accent-text, #c4b5fd))`;
+  return {
+    color: colour,
+    background: `color-mix(in oklab, ${colour} 16%, transparent)`,
+  };
+}
+
 const acRows = computed<SuggestionRow[]>(() =>
   acTrigger.value === "@"
     ? refRows(acItems.value, {
@@ -1640,6 +1662,30 @@ function onPickerDelete(): void {
   pickerOpen.value = false;
 }
 
+/**
+ * Insert flow only: step back to the suggestion list.
+ *
+ * The typed `@query` is still sitting in the value — nothing is inserted until
+ * apply or skip — so the popover can simply be reopened over it. Focus and the
+ * caret have to be restored first: the picker took focus when it opened, and
+ * without putting it back the popover reopens under a caret the browser has
+ * moved to offset 0.
+ */
+function onPickerBack(): void {
+  const restore = pendingInsertCaret.value?.caret ?? null;
+  pendingInsert.value = null;
+  pickerOpen.value = false;
+  void nextTick(() => {
+    hostEl.value?.focus();
+    if (restore !== null) restoreCursorAtChar(restore);
+    // `acStart` / `acQuery` / `acTrigger` were never cleared, so the list comes
+    // back showing exactly what it showed before.
+    acOpen.value = true;
+    acActive.value = 0;
+    positionPopup();
+  });
+}
+
 function cancelPicker(): void {
   // Backdrop dismiss is a clean cancel — drop pending state, do NOT
   // insert anything. Use Skip inside the picker to insert without
@@ -1698,7 +1744,12 @@ function __confirmRemapForTest(
 }
 
 function onPickerEscape(ev: KeyboardEvent): void {
-  if (ev.key === "Escape") cancelPicker();
+  if (ev.key !== "Escape") return;
+  // The header says "Esc back" on the insert flow and "Esc cancel" on the
+  // chip-edit flow, because there IS somewhere to go back to only in the first
+  // case. Escape has to match what the header promises.
+  if (pickerMode.value === "insert" && pendingInsert.value) onPickerBack();
+  else cancelPicker();
 }
 
 watch(pickerOpen, (open) => {
@@ -2495,7 +2546,10 @@ function onHostKeydown(ev: KeyboardEvent): void {
             </template>
           </span>
           <span class="wp-spacer" />
-          <span class="wp-rt-suggestions__hint">↑↓ · {{ acTrigger === "@" ? "Tab filter" : "Enter" }} · Esc</span>
+          <!-- Says what the keys actually do. Choosing an `@` row goes on to
+               the filter panel rather than inserting a bare ref, so Enter is
+               labelled for where it leads. -->
+          <span class="wp-rt-suggestions__hint">↑↓ · {{ acTrigger === "@" ? "Enter filter" : "Enter" }} · Esc</span>
         </div>
         <button
           v-for="(row, i) in acRows"
@@ -2508,7 +2562,15 @@ function onHostKeydown(ev: KeyboardEvent): void {
           @mousedown="(e) => onSuggestionMouseDown(e, row.token)"
           @mouseenter="acActive = i"
         >
-          <i :class="[row.icon, 'wp-rt-suggestions__icon']" aria-hidden="true" />
+          <!-- The glyph sits in a tinted box in its OWN kind's colour. A `$var`
+               can be written by a fixed_values or a combine as easily as by a
+               wildcard, and painting every row accent-violet throws away the
+               one cue that says which. -->
+          <span
+            class="wp-rt-suggestions__icon-box"
+            :style="kindTint(row.kind)"
+            aria-hidden="true"
+          ><i :class="row.icon" /></span>
           <span class="wp-rt-suggestions__body">
             <span class="wp-rt-suggestions__label">
               <span class="wp-rt-suggestions__trigger">{{ acTrigger }}</span>{{ row.label }}
@@ -2519,7 +2581,16 @@ function onHostKeydown(ev: KeyboardEvent): void {
                  without the user having to insert it and find out. -->
             <span v-if="row.uuid || row.facts.length || row.producer" class="wp-rt-suggestions__sub">
               <span v-if="row.uuid" class="wp-rt-suggestions__uuid">{{ row.uuid }}</span>
-              <span v-if="row.producer" class="wp-rt-suggestions__producer">{{ row.producer }}</span>
+              <template v-if="row.producer">
+                <span v-if="row.producer.verb">{{ row.producer.verb }}</span>
+                <!-- The module name is the identifying half of the sentence,
+                     so it is the part that gets picked out. -->
+                <span v-if="row.producer.moduleName" class="wp-rt-suggestions__by">
+                  {{ row.producer.moduleName }}
+                </span>
+                <span v-if="row.producer.moduleName && row.producer.tail" class="wp-rt-suggestions__sep">·</span>
+                <span v-if="row.producer.tail" class="wp-rt-suggestions__node">{{ row.producer.tail }}</span>
+              </template>
               <span
                 v-for="fact in row.facts"
                 :key="fact"
@@ -2529,9 +2600,10 @@ function onHostKeydown(ev: KeyboardEvent): void {
               <span v-if="row.internal" class="wp-rt-suggestions__internal">internal</span>
             </span>
           </span>
-          <!-- Funnel marks the rows where Tab opens a filter. Shown only on
-               the active row: on every row it becomes a column of noise, and
-               the affordance is only reachable for the row you are on. -->
+          <!-- Funnel marks the rows that lead to a filter — i.e. the ones
+               whose wildcard declares tags to filter by. Shown on the active
+               row only: on every row it becomes a column of noise, and the
+               next step applies to the row you are on. -->
           <i
             v-if="row.filterable && i === acActive"
             class="pi pi-filter wp-rt-suggestions__funnel"
@@ -2559,6 +2631,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
         @click.stop
       >
         <SubcategoryFilterPicker
+          :wildcard-name="pickerWildcardName"
           :sub-categories="pickerSubCats"
           :tag-groups="pickerTagGroups"
           :option-tag-sets="pickerOptionTagSets"
@@ -2567,6 +2640,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
           :mode="pickerMode"
           :has-null-option="pickerHasNull"
           @apply="onPickerApply"
+          @back="onPickerBack"
           @skip="onPickerSkip"
           @delete="onPickerDelete"
         />
@@ -2858,12 +2932,18 @@ function onHostKeydown(ev: KeyboardEvent): void {
 .wp-rt-suggestions__item[data-active] {
   background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 22%, transparent);
 }
-.wp-rt-suggestions__icon {
+/* A rounded, tinted tile rather than a bare glyph: it gives the kind colour
+   enough area to actually register, and keeps the label column aligned whether
+   or not a glyph has been resolved. */
+.wp-rt-suggestions__icon-box {
   flex-shrink: 0;
-  width: 14px;
-  margin-top: 2px; /* audit-exempt: optical centring on the label's first line box */
-  font-size: 12px;
-  color: var(--wp-accent-text, #c4b5fd);
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px; /* audit-exempt: optical centring on the label's first line box */
+  border-radius: var(--wp-radius-sm);
+  font-size: 10px;
 }
 .wp-rt-suggestions__body {
   display: flex;
@@ -2896,18 +2976,36 @@ function onHostKeydown(ev: KeyboardEvent): void {
   font-family: var(--wp-font-mono, ui-monospace, monospace);
   opacity: 0.8;
 }
-.wp-rt-suggestions__producer,
+/* Facts are discrete measurements, so each gets its own tile — as a run of
+   bare words they read as one sentence and the eye cannot pick out the number
+   it wants. */
 .wp-rt-suggestions__fact {
+  padding: 1px 4px; /* audit-exempt: micro tile padding */
+  border-radius: 3px; /* audit-exempt: tile smaller than the radius scale */
+  background: var(--wp-bg-4);
+  color: var(--wp-text-muted, #8a8a93);
   font-family: var(--wp-font, system-ui, sans-serif);
 }
+/* The writer's name — the identifying half of the producer line. */
+.wp-rt-suggestions__by {
+  color: var(--wp-accent-text, #c4b5fd);
+  font-family: var(--wp-font-mono, ui-monospace, monospace);
+}
+.wp-rt-suggestions__node {
+  font-family: var(--wp-font-mono, ui-monospace, monospace);
+  opacity: 0.85;
+}
+.wp-rt-suggestions__sep { opacity: 0.4; }
 /* A count of what else touches this name — a thing to look at, so it is
    tinted like a soft warning rather than left as body text. */
 .wp-rt-suggestions__badge {
   font-family: var(--wp-font, system-ui, sans-serif);
   padding: 0 4px; /* audit-exempt: badge inline padding */
   border-radius: var(--wp-radius-sm);
-  background: color-mix(in oklab, var(--wp-warn, #f59e0b) 20%, transparent);
-  color: var(--wp-warn-text, #fcd34d);
+  padding: 1px 4px; /* audit-exempt: micro tile padding, matches __fact */
+  border-radius: 3px; /* audit-exempt: tile smaller than the radius scale */
+  background: color-mix(in oklab, var(--wp-warn) 20%, transparent);
+  color: var(--wp-warn);
 }
 .wp-rt-suggestions__internal {
   font-family: var(--wp-font, system-ui, sans-serif);

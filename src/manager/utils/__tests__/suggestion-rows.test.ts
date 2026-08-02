@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   producerBadge,
-  producerLine,
+  producerParts,
   refRows,
   varRows,
   type ProducerLike,
@@ -43,6 +43,11 @@ describe("refRows", () => {
     expect(row.facts).toEqual(["1 option", "1 axis", "1 tag"]);
   });
 
+  it("carries the kind, so the icon can take that kind's colour", () => {
+    const [row] = refRows(["aabbccdd"], src);
+    expect(row.kind).toBe("wildcard");
+  });
+
   it("marks a wildcard filterable only when it declares tags", () => {
     expect(refRows(["aabbccdd"], src)[0].filterable).toBe(true);
     expect(refRows(["zz"], { uuidToOptionsCount: new Map([["zz", 4]]) })[0].filterable).toBe(false);
@@ -55,31 +60,40 @@ describe("refRows", () => {
   });
 });
 
-describe("producerLine", () => {
+describe("producerParts", () => {
   const base: ProducerLike = { kind: "wildcard", shadowed: 0 };
 
   it("names the module and its node on a graph-aware host", () => {
-    expect(producerLine({ ...base, moduleName: "Style FX", nodeLabel: "ember-marten" }, true))
-      .toBe("written by Style FX · ember-marten");
+    expect(producerParts({ ...base, moduleName: "Style FX", nodeLabel: "ember-marten" }, true))
+      .toEqual({ verb: "written by", moduleName: "Style FX", tail: "ember-marten" });
   });
 
   it("names the module and its kind where there is no graph", () => {
-    expect(producerLine({ ...base, moduleName: "Style FX", nodeLabel: "ember-marten" }, false))
-      .toBe("bound by Style FX · wildcard");
+    expect(producerParts({ ...base, moduleName: "Style FX", nodeLabel: "ember-marten" }, false))
+      .toEqual({ verb: "bound by", moduleName: "Style FX", tail: "wildcard" });
   });
 
-  it("degrades to the node alone when no module owns the write", () => {
-    // Injector rows and loop iteration vars have a node but no module.
-    expect(producerLine({ kind: "loop", shadowed: 0, nodeLabel: "loop-head" }, true))
-      .toBe("written by loop-head");
+  it("keeps the module name SEPARATE so it can be highlighted", () => {
+    // Pre-joining it into one sentence is what made the identifying half of
+    // the line impossible to pick out.
+    const parts = producerParts({ ...base, moduleName: "Style FX" }, true);
+    expect(parts?.moduleName).toBe("Style FX");
+  });
+
+  it("promotes the node to the highlighted slot when no module owns the write", () => {
+    // Injector rows and loop iteration vars have a node but no module, and the
+    // node is then the identifying half.
+    expect(producerParts({ kind: "loop", shadowed: 0, nodeLabel: "loop-head" }, true))
+      .toEqual({ verb: "written by", moduleName: "loop-head" });
   });
 
   it("degrades to the bare kind rather than a dangling verb", () => {
-    expect(producerLine({ kind: "combine", shadowed: 0 }, false)).toBe("combine");
+    expect(producerParts({ kind: "combine", shadowed: 0 }, false))
+      .toEqual({ verb: "", tail: "combine" });
   });
 
   it("returns undefined when there is genuinely nothing to say", () => {
-    expect(producerLine({ kind: "", shadowed: 0 }, true)).toBeUndefined();
+    expect(producerParts({ kind: "", shadowed: 0 }, true)).toBeUndefined();
   });
 });
 
@@ -104,7 +118,9 @@ describe("varRows", () => {
       ["style_fx", { kind: "wildcard", moduleName: "Style FX", nodeLabel: "ember-marten", shadowed: 2 }],
     ]);
     const [row] = varRows(["style_fx"], producers, true);
-    expect(row.producer).toBe("written by Style FX · ember-marten");
+    expect(row.producer).toEqual({
+      verb: "written by", moduleName: "Style FX", tail: "ember-marten",
+    });
     expect(row.badge).toBe("overrides 2");
   });
 
@@ -114,6 +130,14 @@ describe("varRows", () => {
     expect(row.label).toBe("mystery");
     expect(row.icon).toContain("pi-");
     expect(row.producer).toBeUndefined();
+  });
+
+  it("takes its kind from the PRODUCER, not from a fixed wildcard default", () => {
+    // A `$var` written by a fixed_values must not be painted wildcard-violet.
+    const producers = new Map<string, ProducerLike>([
+      ["ref", { kind: "fixed_values", shadowed: 0 }],
+    ]);
+    expect(varRows(["ref"], producers, true)[0].kind).toBe("fixed_values");
   });
 
   it("flags an internal var, which resolves but is stripped from the prompt", () => {

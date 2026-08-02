@@ -39,14 +39,20 @@ export interface SuggestionRow {
   label: string;
   /** PrimeIcons class, e.g. `pi pi-sparkles`. */
   icon: string;
+  /** Module kind behind the row, so the icon can take that kind's colour. A
+   *  `$var` can be written by a fixed_values or a combine just as easily as by
+   *  a wildcard, and colouring every row accent-violet throws that away. */
+  kind: string;
   /** `@` only: the uuid, rendered small beneath the name. Two wildcards can
    *  share every other fact, so this is the last resort tiebreaker. */
   uuid?: string;
   /** Short factual chips — "132 options", "5 axes", "30 tags". Ordered
    *  most- to least-distinguishing. */
   facts: string[];
-  /** `$` only: one line naming the writer. */
-  producer?: string;
+  /** `$` only: who writes it, in parts rather than one sentence — the module
+   *  name is the identifying half and gets highlighted, so it cannot be
+   *  pre-joined into a string. */
+  producer?: ProducerParts;
   /** `$` only: the override / sibling count, which is a warning-ish fact and
    *  so is rendered as a badge rather than folded into `producer`. */
   badge?: string;
@@ -63,6 +69,15 @@ function plural(n: number, word: string): string {
 
 /** Maps threaded through as props. Every one is optional because the surfaces
  *  differ in what they know — a derivation editor has no tag groups. */
+export interface ProducerParts {
+  /** "written by" on a graph-aware host, "bound by" otherwise. */
+  verb: string;
+  /** The module that writes the value. Highlighted where it appears. */
+  moduleName?: string;
+  /** The node (canvas) or the module kind (library) — context for the name. */
+  tail?: string;
+}
+
 export interface RefRowSources {
   uuidToName?: ReadonlyMap<string, string>;
   uuidToOptionsCount?: ReadonlyMap<string, number>;
@@ -92,6 +107,7 @@ export function refRows(uuids: readonly string[], src: RefRowSources): Suggestio
       token: uuid,
       label: src.uuidToName?.get(uuid) ?? uuid,
       icon: kindIcon("wildcard"),
+      kind: "wildcard",
       uuid,
       facts,
       filterable: tags > 0,
@@ -112,12 +128,15 @@ export function refRows(uuids: readonly string[], src: RefRowSources): Suggestio
  * neither a module nor a node (injector rows, loop iteration vars) degrade to
  * the kind alone rather than emitting a dangling "written by".
  */
-export function producerLine(p: ProducerLike, graphAware: boolean): string | undefined {
+export function producerParts(p: ProducerLike, graphAware: boolean): ProducerParts | undefined {
   const verb = graphAware ? "written by" : "bound by";
   const tail = graphAware ? p.nodeLabel : p.kind;
-  if (p.moduleName) return tail ? `${verb} ${p.moduleName} · ${tail}` : `${verb} ${p.moduleName}`;
-  // No module: the node (canvas) or the bare kind is all there is to report.
-  return p.nodeLabel ? `${verb} ${p.nodeLabel}` : p.kind || undefined;
+  if (p.moduleName) return { verb, moduleName: p.moduleName, tail: tail || undefined };
+  // No module: the node (canvas) is the only writer worth naming, and it takes
+  // the highlight since it is the identifying half here.
+  if (p.nodeLabel) return { verb, moduleName: p.nodeLabel };
+  // Nothing but a kind — reported plainly rather than as a dangling verb.
+  return p.kind ? { verb: "", tail: p.kind } : undefined;
 }
 
 /**
@@ -146,8 +165,9 @@ export function varRows(
       label: name,
       // Unknown producer still gets a glyph, so the column never goes ragged.
       icon: kindIcon(p?.kind ?? ""),
+      kind: p?.kind ?? "",
       facts: [],
-      producer: p ? producerLine(p, graphAware) : undefined,
+      producer: p ? producerParts(p, graphAware) : undefined,
       badge: p ? producerBadge(p) : undefined,
       internal: p?.internal === true,
     };
