@@ -133,8 +133,23 @@ function snapshot(): string {
   });
 }
 
+/**
+ * Bulk-add has un-added text sitting in its box.
+ *
+ * Reported repeatedly: users hit the PAGE's Save or Cancel instead of the
+ * panel's own "Add options" / Cancel, because the page pair is larger and in
+ * the familiar place — and the typed batch was silently thrown away. Two
+ * guards, no new dialog for the common case:
+ *   - Save is greyed while the panel is open, with a tooltip saying why, so
+ *     the only Save-shaped thing that responds is the panel's own commit.
+ *   - The un-added text counts as unsaved work, so the existing route guard
+ *     already covers Cancel, the back link and any other navigation. Only the
+ *     wording changes.
+ */
+const bulkPending = ref(false);
+
 const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
-  () => snapshot() !== baseline.value,
+  () => bulkPending.value || snapshot() !== baseline.value,
 );
 
 const draft = useEditorDraft({
@@ -379,6 +394,8 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
 
 <template>
   <EditorFrame
+    :save-disabled="bulkAddOpen"
+    save-disabled-reason="Finish or cancel the bulk add first — use its own Add / Cancel buttons"
     :title="isEdit ? 'Edit fixed values' : 'New fixed values'"
     back-route="/fixed-values"
     back-label="Fixed Values"
@@ -461,6 +478,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
           :existing-values="existingValueNames"
           @commit-values="commitBulkValues"
           @cancel="bulkAddOpen = false"
+          @update:pending="(v: boolean) => (bulkPending = v)"
         />
         <BulkDeleteToolbar
           v-if="bulkActive && bulkCount > 0"
@@ -576,8 +594,10 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
          see WildcardEditor for the multi-root Transition explanation. -->
     <ConfirmDialog
       :visible="showConfirm"
-      title="Discard unsaved changes?"
-      body="You have unsaved edits. Leaving this page will discard them."
+      :title="bulkPending ? 'Discard un-added values?' : 'Discard unsaved changes?'"
+      :body="bulkPending
+        ? 'The bulk add box still holds values you have not added. Leaving discards them.'
+        : 'You have unsaved edits. Leaving this page will discard them.'"
       confirm-label="Discard & leave"
       cancel-label="Stay"
       variant="danger"

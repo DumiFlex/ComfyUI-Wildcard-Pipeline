@@ -90,6 +90,20 @@ function setTheme(mode: ThemeMode) {
       </div>
     </Card>
 
+    <Card title="Editing">
+      <Field
+        label="Keep empty tag groups"
+        hint="A group with no tags in it normally disappears when you save the wildcard. Turn this on to keep the empty box so you can fill it later."
+      >
+        <Toggle
+          :model-value="uiStore.keepEmptyTagGroups"
+          label="Keep empty groups"
+          data-test="settings-keep-empty-groups"
+          @update:model-value="uiStore.setKeepEmptyTagGroups($event)"
+        />
+      </Field>
+    </Card>
+
     <Card title="Updates">
       <Field
         label="Check for updates on launch"

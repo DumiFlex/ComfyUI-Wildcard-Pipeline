@@ -37,6 +37,7 @@ import DraftBanner from "../components/DraftBanner.vue";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
+import { useUiStore } from "../stores/uiStore";
 import { useRecentStore } from "../stores/recentStore";
 import { toIdentifier } from "../utils/slug";
 import { validateSubcatName, validateRefGrammarName, isValidVariableName } from "@/manager/validation/names";
@@ -64,6 +65,7 @@ const router = useRouter();
 const route = useRoute();
 const moduleStore = useModuleStore();
 const categoryStore = useCategoryStore();
+const ui = useUiStore();
 const toast = useToast();
 const recent = useRecentStore();
 const { resolveReturnTo } = useReturnTo();
@@ -187,8 +189,23 @@ function snapshot(): string {
   });
 }
 
+/**
+ * Bulk-add has un-added text sitting in its box.
+ *
+ * Reported repeatedly: users hit the PAGE's Save or Cancel instead of the
+ * panel's own "Add options" / Cancel, because the page pair is larger and in
+ * the familiar place — and the typed batch was silently thrown away. Two
+ * guards, no new dialog for the common case:
+ *   - Save is greyed while the panel is open, with a tooltip saying why, so
+ *     the only Save-shaped thing that responds is the panel's own commit.
+ *   - The un-added text counts as unsaved work, so the existing route guard
+ *     already covers Cancel, the back link and any other navigation. Only the
+ *     wording changes.
+ */
+const bulkPending = ref(false);
+
 const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
-  () => snapshot() !== baseline.value,
+  () => bulkPending.value || snapshot() !== baseline.value,
 );
 
 const draft = useEditorDraft({
@@ -712,15 +729,23 @@ function normalizeTagGroups(
   return out;
 }
 
-/** Build the `payload.tag_groups` to persist: keep only members still in
- *  the registry, drop axes that end up empty, and return `null` when
- *  nothing is grouped so the payload omits the key entirely. */
+/** Build the `payload.tag_groups` to persist: keep only members still in the
+ *  registry, and return `null` when nothing is left so the payload omits the
+ *  key entirely.
+ *
+ *  An axis that ends up empty is dropped unless the user has asked to keep
+ *  empties — see `uiStore.keepEmptyTagGroups`. Dropping was unconditional,
+ *  which meant a group created and not yet filled vanished on save; that is
+ *  right for a box made by accident and wrong for one made on purpose, and
+ *  only the user knows which it was. An empty axis persists as `{axis: []}`,
+ *  a shape the engine's validator already accepts. */
 function serializeTagGroups(): Record<string, string[]> | null {
   const reg = new Set(subCategories.value);
+  const keepEmpty = ui.keepEmptyTagGroups;
   const out: Record<string, string[]> = {};
   for (const [axis, members] of Object.entries(tagGroups.value)) {
     const kept = members.filter((m) => reg.has(m));
-    if (kept.length > 0) out[axis] = kept;
+    if (kept.length > 0 || keepEmpty) out[axis] = kept;
   }
   return Object.keys(out).length > 0 ? out : null;
 }
@@ -1475,6 +1500,8 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
 
 <template>
   <EditorFrame
+    :save-disabled="bulkAddOpen"
+    save-disabled-reason="Finish or cancel the bulk add first — use its own Add / Cancel buttons"
     :title="isEdit ? 'Edit wildcard' : 'New wildcard'"
     back-route="/wildcards"
     back-label="Wildcards"
@@ -1766,6 +1793,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
           :existing-tags="subCategories"
           @commit-options="commitBulkAddOptions"
           @cancel="bulkAddOpen = false"
+          @update:pending="(v: boolean) => (bulkPending = v)"
         />
         <SelectionToolbar
           v-if="selectedCount > 0"
@@ -2047,8 +2075,10 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
          source placement here only affects vnode tracking. -->
     <ConfirmDialog
       :visible="showConfirm"
-      title="Discard unsaved changes?"
-      body="You have unsaved edits. Leaving this page will discard them."
+      :title="bulkPending ? 'Discard un-added options?' : 'Discard unsaved changes?'"
+      :body="bulkPending
+        ? 'The bulk add box still holds options you have not added. Leaving discards them.'
+        : 'You have unsaved edits. Leaving this page will discard them.'"
       confirm-label="Discard & leave"
       cancel-label="Stay"
       variant="danger"

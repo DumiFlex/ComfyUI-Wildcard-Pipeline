@@ -33,6 +33,10 @@ interface Props {
   backLabel: string;
   saving?: boolean;
   saveDisabled?: boolean;
+  /** Why Save is unavailable, surfaced as its tooltip. A greyed control with
+   *  no stated reason reads as a broken one, and the reason is exactly what
+   *  the user needs in order to clear it. */
+  saveDisabledReason?: string;
   historyEntries?: ModuleHistoryEntry[];
   /** Optional. When provided, renders a multi-segment Breadcrumb at
    *  the top instead of the single back link. */
@@ -55,6 +59,7 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   saving: false,
   saveDisabled: false,
+  saveDisabledReason: "",
   historyEntries: () => [],
   dirty: false,
   saveState: "idle",
@@ -188,7 +193,9 @@ function scrollToField(id: string): void {
           :disabled="saveDisabled || effectiveSaveState === 'saving'"
           :data-dirty="dirty || undefined"
           :data-save-state="effectiveSaveState"
-          :title="effectiveSaveState === 'error' ? saveError : undefined"
+          :title="effectiveSaveState === 'error'
+            ? saveError
+            : (saveDisabled && saveDisabledReason) || undefined"
           data-test="save-btn"
           @click="onSave"
         >{{ saveLabel }}</Button>
