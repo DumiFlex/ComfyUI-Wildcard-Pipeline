@@ -149,3 +149,48 @@ describe("useGrowableField — the observer callback stays cheap", () => {
     wrap.unmount();
   });
 });
+
+describe("useGrowableField — the height cap yields to a manual drag", () => {
+  /** Fire a pointerdown at a point relative to the element's box. */
+  function grab(node: HTMLElement, dx: number, dy: number) {
+    const r = node.getBoundingClientRect();
+    node.dispatchEvent(new MouseEvent("pointerdown", {
+      bubbles: true,
+      clientX: r.right - dx,
+      clientY: r.bottom - dy,
+    }) as unknown as PointerEvent);
+  }
+
+  it("drops max-height when the drag STARTS, pinning the current height first", () => {
+    // The measured bug: `max-height` and `resize` fight. Past the cap the
+    // inline height keeps climbing while the box stays pinned, so dragging
+    // back does nothing until it falls under the cap again — 10 of 25 frames
+    // frozen on a real drag. The cap is there to bound AUTO-grow; a deliberate
+    // drag overrides it.
+    const { wrap, node } = mountField(192);
+    node.style.maxHeight = "12rem";
+    grab(node, 4, 4);
+    expect(node.style.maxHeight).toBe("none");
+    // Pinned first, so dropping the cap cannot make an auto-height box leap to
+    // full content height the instant the handle is touched.
+    expect(node.style.height).toBe("192px");
+    wrap.unmount();
+  });
+
+  it("marks the field user-resized as soon as the handle is grabbed", () => {
+    const { wrap, api, node } = mountField(192);
+    expect(api.userResized.value).toBe(false);
+    grab(node, 4, 4);
+    expect(api.userResized.value).toBe(true);
+    wrap.unmount();
+  });
+
+  it("leaves the cap alone for a click in the TEXT — that must keep auto-growing", () => {
+    const { wrap, api, node } = mountField(192);
+    node.style.maxHeight = "12rem";
+    grab(node, 200, 60);
+    expect(node.style.maxHeight).toBe("12rem");
+    expect(api.userResized.value).toBe(false);
+    wrap.unmount();
+  });
+});

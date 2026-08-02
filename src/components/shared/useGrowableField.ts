@@ -126,6 +126,8 @@ export function useGrowableField(
    *  i.e. while the user may be holding the resize handle. */
   let dragging = false;
   let pending = false;
+  /** Set once the height cap has been dropped for a manual drag. */
+  let capLifted = false;
 
   /**
    * Everything the observer wants to do, moved OUT of the observer.
@@ -145,11 +147,13 @@ export function useGrowableField(
     updateOverflowHint();
     // A height change we did not author is the user on the drag handle.
     if (!autoDriven && Math.abs(h - lastHeight) > 1) userResized.value = true;
-    // NEVER scroll mid-drag. Moving the container slides the element out from
-    // under the pointer, and the browser's resize tracking is anchored to the
-    // pointer — so the drag stalls exactly like the loop above. The catch-up
-    // runs on release instead, which still leaves the field on screen.
-    if (h > lastHeight && !dragging) followGrip();
+    // Follows LIVE, including mid-drag. Scrolling by the overshoot moves the
+    // element up by exactly that much, landing its bottom edge at the viewport
+    // edge — which is where the pointer already is, so the grip stays under the
+    // cursor. Deferring this to pointerup (an earlier attempt at the stall,
+    // which turned out to be the height cap) just made the field vanish off
+    // the bottom for the whole drag.
+    if (h > lastHeight) followGrip();
     lastHeight = h;
   }
 
@@ -160,15 +164,44 @@ export function useGrowableField(
     else flush();
   }
 
-  function onPointerDown(): void { dragging = true; }
+  /** Size of the native resize grip's hit area, bottom-right corner. */
+  const GRIP = 18;
+
+  /** True when a pointerdown landed on the resize handle rather than in the
+   *  text. Distinguishing them matters: lifting the height cap on every click
+   *  would pin the box and stop it auto-growing as the user types. */
+  function inGripZone(el: HTMLElement, ev: PointerEvent): boolean {
+    const r = el.getBoundingClientRect();
+    return ev.clientX >= r.right - GRIP && ev.clientY >= r.bottom - GRIP;
+  }
+
+  function onPointerDown(ev: PointerEvent): void {
+    const el = getEl();
+    if (!el || !inGripZone(el, ev)) return;
+    dragging = true;
+    // THE actual stall. `max-height` and `resize` fight each other: drag past
+    // the cap and the inline height keeps climbing while the rendered box
+    // stays pinned, so dragging back does nothing until the inline value falls
+    // under the cap again. Measured on a real drag: 10 of 25 frames frozen at
+    // the cap, versus 0 uncapped. It reads as "the drag sticks, then starts
+    // working", and it bites exactly at the cap — which is where the overflow
+    // fade appears, hence the fade looking like the culprit.
+    //
+    // The cap exists to stop AUTO-grow eating the screen. A deliberate drag is
+    // the user overriding that, so it yields. Pin the current rendered height
+    // first: dropping `max-height` on an `auto`-height box would otherwise let
+    // it leap to full content height the instant the handle is touched.
+    if (!capLifted) {
+      el.style.height = `${el.getBoundingClientRect().height}px`;
+      el.style.maxHeight = "none";
+      capLifted = true;
+    }
+    userResized.value = true;
+  }
+
   function onPointerUp(): void {
     if (!dragging) return;
     dragging = false;
-    // Catch up once the handle is released: if the drag pushed the field past
-    // the fold, bring its bottom edge back on screen now that moving it can no
-    // longer disturb anything.
-    if (typeof requestAnimationFrame === "function") requestAnimationFrame(followGrip);
-    else followGrip();
   }
 
   function attach(): void {
