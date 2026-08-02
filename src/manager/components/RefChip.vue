@@ -558,9 +558,23 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
   border-radius: 3px;
   border: 1px solid;
   font: 10px/1.4 var(--wp-font-mono);
-  user-select: none;
+  /* Selectable, so a selection that spans the chip actually PAINTS over it.
+     With `user-select: none` the browser excluded chips from selection
+     rendering: Ctrl+A, or dragging across a value, highlighted the text either
+     side and left the chip looking untouched — so the selection appeared to
+     stop at the chip even though it included it. Atomicity for EDITING comes
+     from `contenteditable="false"` on the element, not from this. */
+  user-select: text;
   cursor: default;
   vertical-align: baseline;
+}
+/* The chip carries its own tint, so the default selection colour can wash it
+   out. Painting the highlight explicitly keeps the chip readable while it is
+   clearly marked as part of the selection. */
+.wp-refchip ::selection,
+.wp-refchip::selection {
+  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 45%, transparent);
+  color: var(--wp-text, #e7e7ee);
 }
 .wp-refchip--var {
   background: color-mix(in srgb, var(--wp-success, #22c55e) 15%, transparent);

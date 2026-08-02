@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { mount } from "@vue/test-utils";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { computed, nextTick } from "vue";
@@ -429,5 +430,36 @@ describe("RefChip hover card — pool held by ANOTHER node", () => {
       payload: { options: [{ id: "o0", sub_categories: [] }] },
     }];
     expect(await cardWithLookup(["dusk-marten"], mine)).not.toContain("also in");
+  });
+});
+
+describe("RefChip — selection", () => {
+  it("stays selectable so a selection spanning it actually paints", () => {
+    // `user-select: none` excluded chips from selection RENDERING: Ctrl+A, or
+    // dragging across a value, highlighted the text either side and left the
+    // chip looking untouched, so the selection appeared to stop at it even
+    // though it included it. Verified in Firefox 153 — `containsNode` reported
+    // the chip inside the selection the whole time; only the paint was absent.
+    //
+    // Asserted against the stylesheet SOURCE: the rule lives in a scoped
+    // <style> block, which jsdom does not apply, so a computed-style check
+    // here would pass no matter what the rule said.
+    // Path from the repo root: Vitest does not give this module a file: URL.
+    const src = readFileSync("src/manager/components/RefChip.vue", "utf8");
+    const chipRule = src.slice(src.indexOf(".wp-refchip {"));
+    // Comments out first: the declaration below is documented by a comment
+    // that names the old value, which a naive substring check would match.
+    const body = chipRule.slice(0, chipRule.indexOf("}")).replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(body).toContain("user-select: text");
+    expect(body).not.toContain("user-select: none");
+  });
+
+  it("stays atomic for EDITING via contenteditable, not via user-select", () => {
+    const w = mount(RefChip, {
+      props: { kind: "ref", name: "accessories", uuid: "955bb6fa", resolved: true },
+      attachTo: document.body,
+    });
+    expect(w.attributes("contenteditable")).toBe("false");
+    w.unmount();
   });
 });
