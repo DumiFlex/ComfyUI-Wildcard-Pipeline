@@ -15,6 +15,10 @@ import { UNGROUPED_HUE } from "../../components/shared/axis-color";
 
 interface Props {
   count: number;
+  /** Show the reorder group. Off for surfaces where order is not meaningful. */
+  reorderable?: boolean;
+  /** True while the host is waiting for a landing point to be picked. */
+  moveArmed?: boolean;
   /** Existing sub-category tags, for the apply / remove menus. */
   tags: string[];
   /** Tags already on EVERY selected row — hidden from the Apply menu since
@@ -27,7 +31,7 @@ interface Props {
   /** tag → axis hue, so menu chips match the pill/chip colours elsewhere. */
   tagHues?: Record<string, string>;
 }
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), { reorderable: false, moveArmed: false });
 
 function hueOf(tag: string): string {
   return props.tagHues?.[tag] ?? UNGROUPED_HUE;
@@ -37,6 +41,12 @@ const emit = defineEmits<{
   (e: "apply-tag", tag: string): void;
   (e: "remove-tag", tag: string): void;
   (e: "set-weight", weight: number): void;
+  /** Reordering. Separate from the tag/weight actions because they change
+   *  ORDER, not content — and separate from Delete because they are not
+   *  destructive. `move-here` arms a placement; the host owns that mode. */
+  (e: "move-top"): void;
+  (e: "move-bottom"): void;
+  (e: "move-here"): void;
   (e: "delete-selected"): void;
   (e: "clear"): void;
 }>();
@@ -188,6 +198,30 @@ function applyWeight() {
           <Button variant="primary" size="sm" @click="applyWeight">Apply</Button>
         </div>
       </div>
+    </div>
+
+    <!-- Reordering. Its own group after the tag/weight actions and before the
+         destructive one: these change ORDER, not content, so they neither
+         belong with the editing actions nor next to Delete. -->
+    <div v-if="reorderable" class="wpc-seltoolbar__group">
+      <Button
+        variant="ghost" size="sm" icon="pi-angle-double-up"
+        data-test="sel-move-top"
+        title="Move the selected options to the top of the list"
+        @click="emit('move-top')"
+      >Top</Button>
+      <Button
+        variant="ghost" size="sm" icon="pi-angle-double-down"
+        data-test="sel-move-bottom"
+        title="Move the selected options to the bottom of the list"
+        @click="emit('move-bottom')"
+      >Bottom</Button>
+      <Button
+        :variant="moveArmed ? 'secondary' : 'ghost'" size="sm" icon="pi-arrow-right"
+        data-test="sel-move-here"
+        title="Pick a landing point in the list"
+        @click="emit('move-here')"
+      >{{ moveArmed ? "Pick a spot…" : "Move here…" }}</Button>
     </div>
 
     <div class="wpc-seltoolbar__spacer"></div>

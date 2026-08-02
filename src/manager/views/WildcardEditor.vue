@@ -38,6 +38,14 @@ import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { useUiStore } from "../stores/uiStore";
+import {
+  filterIsActive,
+  moveSelected,
+  nudge,
+  optionMatches,
+  visibleTagsFor,
+  type MoveTarget,
+} from "../utils/option-list-ops";
 import { useRecentStore } from "../stores/recentStore";
 import { toIdentifier } from "../utils/slug";
 import { validateSubcatName, validateRefGrammarName, isValidVariableName } from "@/manager/validation/names";
@@ -676,13 +684,36 @@ function toggleOptTagsExpanded(optionId: string): void {
   expandedOptTags.value = next;
 }
 
+/**
+ * Which tags a row shows, and what the `+N` pill has to admit.
+ *
+ * Filtering by a tag that happens to sit in the folded remainder produced a row
+ * with no visible reason for being there — the evidence was behind the very
+ * pill saying "there is more". Matched tags are promoted into the visible slots
+ * instead. Tags are a set, so their order carries no meaning and promoting one
+ * costs nothing; auto-expanding the row would reflow every match at once,
+ * which is a lot of movement for a small clarification.
+ */
+function optionTagView(o: WildcardOption) {
+  return visibleTagsFor(
+    o.sub_categories ?? [],
+    matchedTagSet.value,
+    OPT_TAG_LIMIT,
+    expandedOptTags.value.has(o.id),
+  );
+}
+
 function visibleOptionTags(o: WildcardOption): string[] {
-  const all = o.sub_categories ?? [];
-  return expandedOptTags.value.has(o.id) ? all : all.slice(0, OPT_TAG_LIMIT);
+  return optionTagView(o).visible;
 }
 
 function hiddenOptionTagCount(o: WildcardOption): number {
-  return (o.sub_categories ?? []).length - visibleOptionTags(o).length;
+  return optionTagView(o).hiddenCount;
+}
+
+/** True when a FOLDED tag satisfies the filter, so the pill can say so. */
+function hiddenTagsMatch(o: WildcardOption): boolean {
+  return optionTagView(o).hiddenHasMatch;
 }
 
 /** Toggle a tag's membership on an option. Preserves registry order so
@@ -1099,6 +1130,120 @@ function addOption() {
  * All mutations go through the same `options` / `subCategories` refs so
  * snapshot()/dirty tracking stays correct. */
 const bulkMode = ref(false);
+/* ── Reordering ─────────────────────────────────────────────────────── */
+
+/**
+ * Armed state for "Move here": the selection is chosen, the landing point is
+ * not. While armed, the boundary between any two unselected rows is clickable
+ * and nothing else on the row responds, so a stray click cannot edit a weight
+ * instead of placing the block.
+ */
+const moveArmed = ref(false);
+
+/** Index of the row being dragged, or null. */
+const dragFrom = ref<number | null>(null);
+/** Index whose top edge the drop line is currently showing on. */
+const dragOver = ref<number | null>(null);
+
+function onOptDragStart(i: number, ev: DragEvent): void {
+  // Never while filtered: a drop between two visible rows says nothing about
+  // the hidden rows between them, so there is no honest position to compute.
+  if (optionFilterActive.value) { ev.preventDefault(); return; }
+  dragFrom.value = i;
+  ev.dataTransfer?.setData("text/plain", String(i));
+  if (ev.dataTransfer) ev.dataTransfer.effectAllowed = "move";
+}
+
+function onOptDragEnd(): void {
+  dragFrom.value = null;
+  dragOver.value = null;
+}
+
+function onOptDragOver(i: number, ev: DragEvent): void {
+  if (dragFrom.value === null) return;
+  ev.preventDefault();
+  dragOver.value = i;
+}
+
+function onOptDrop(i: number): void {
+  const from = dragFrom.value;
+  onOptDragEnd();
+  if (from === null || from === i) return;
+  const row = options.value[from];
+  if (!row || row.is_null) return;
+  const target = options.value[i];
+  options.value = target
+    ? moveSelected(options.value, new Set([row.id]), { to: "before", id: target.id })
+    : moveSelected(options.value, new Set([row.id]), { to: "bottom" });
+}
+
+function moveSelectedTo(target: MoveTarget): void {
+  const ids = new Set(selectedIds.value);
+  const before = options.value;
+  const next = moveSelected(before, ids, target);
+  moveArmed.value = false;
+  if (next.length === before.length && next.every((o, i) => o === before[i])) return;
+  options.value = next;
+  // A scattered selection collapses into one contiguous block, which is the
+  // only coherent answer but still a surprise the first time — so it is
+  // stated rather than left to be discovered.
+  const n = [...ids].filter((id) => !options.value.find((o) => o.id === id)?.is_null).length;
+  const where = target.to === "top" ? "to the top"
+    : target.to === "bottom" ? "to the bottom"
+      : "into place";
+  bulkNote.value = `Moved ${n} option${n === 1 ? "" : "s"} ${where}.`;
+}
+
+/** One-step keyboard move. The only reordering that stays usable at 130 rows,
+ *  where a drag turns into an auto-scroll fight. */
+function nudgeOption(id: string, dir: -1 | 1): void {
+  options.value = nudge(options.value, id, dir);
+}
+
+/* ── Options search ────────────────────────────────────────────────── */
+
+/**
+ * Text + tag filter over the options list.
+ *
+ * A wildcard here carries 130+ options; before this the only way to reach one
+ * was to scroll and read. The filter narrows the VIEW only — nothing is
+ * removed, and the empty state says so, because an empty table in a list you
+ * can also delete rows from is an alarming thing to be shown.
+ */
+const optQuery = ref("");
+const optTagFilter = ref<string[]>([]);
+const optTagMenuOpen = ref(false);
+
+const optionFilter = computed(() => ({
+  query: optQuery.value,
+  tags: optTagFilter.value,
+}));
+const optionFilterActive = computed(() => filterIsActive(optionFilter.value));
+
+/** Rows to render, each keeping its ORIGINAL index. Every row action —
+ *  `removeOption(i)`, the `wc-opt-row-${i}` hooks — addresses the option by its
+ *  position in `options`, so filtering must not renumber them. */
+const visibleOptionRows = computed<{ o: WildcardOption; i: number }[]>(() => {
+  const pairs = options.value.map((o, i) => ({ o, i }));
+  if (!optionFilterActive.value) return pairs;
+  return pairs.filter(({ o }) => optionMatches(o, optionFilter.value));
+});
+
+/** Tags the filter is asking for, as a set — drives chip promotion below. */
+const matchedTagSet = computed(() => new Set(optTagFilter.value));
+
+function toggleOptTagFilter(tag: string): void {
+  const next = new Set(optTagFilter.value);
+  if (next.has(tag)) next.delete(tag);
+  else next.add(tag);
+  optTagFilter.value = subCategories.value.filter((t) => next.has(t));
+}
+
+function clearOptionFilter(): void {
+  optQuery.value = "";
+  optTagFilter.value = [];
+}
+
 const bulkAddOpen = ref(false);
 const selectedIds = ref<Set<string>>(new Set());
 const bulkNote = ref("");
@@ -1785,6 +1930,77 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
         </Button>
       </template>
       <template #subheader>
+      <!-- Pinned filter. Lives in the sticky subheader so it stays reachable
+           while the list scrolls — the whole point at 130+ rows. -->
+      <div v-if="options.length > 8" class="wc-optfilter">
+        <label class="wc-optfilter__search" :class="{ 'wc-optfilter__search--on': optQuery.length > 0 }">
+          <i class="pi pi-search" aria-hidden="true" />
+          <input
+            v-model="optQuery"
+            type="text"
+            :placeholder="`Filter ${options.length} options…`"
+            aria-label="Filter options"
+            spellcheck="false"
+            autocomplete="off"
+            data-test="wc-opt-search"
+          />
+          <button
+            v-if="optQuery"
+            type="button"
+            class="wc-optfilter__clearx"
+            aria-label="Clear text filter"
+            @click="optQuery = ''"
+          ><i class="pi pi-times" aria-hidden="true" /></button>
+        </label>
+
+        <div v-if="subCategories.length > 0" class="wc-optfilter__tagwrap">
+          <button
+            type="button"
+            class="wc-optfilter__tagbtn"
+            :data-on="optTagFilter.length > 0 ? '' : null"
+            :aria-expanded="optTagMenuOpen"
+            data-test="wc-opt-tagfilter"
+            @click.stop="optTagMenuOpen = !optTagMenuOpen"
+          >
+            <i class="pi pi-tag" aria-hidden="true" />
+            tags<template v-if="optTagFilter.length"> · {{ optTagFilter.length }}</template>
+            <i class="pi pi-chevron-down" aria-hidden="true" />
+          </button>
+          <div v-if="optTagMenuOpen" class="wc-optfilter__menu" role="menu" @click.stop>
+            <button
+              v-for="t in subCategories"
+              :key="t"
+              type="button"
+              class="wc-optfilter__menuitem"
+              :data-on="optTagFilter.includes(t) ? '' : null"
+              role="menuitemcheckbox"
+              :aria-checked="optTagFilter.includes(t)"
+              :data-test="`wc-opt-tagopt-${t}`"
+              @click="toggleOptTagFilter(t)"
+            >
+              <span class="wc-optfilter__box"><i v-if="optTagFilter.includes(t)" class="pi pi-check" /></span>
+              {{ t }}
+            </button>
+          </div>
+        </div>
+
+        <span class="wp-spacer" />
+        <!-- Same count grammar as the sub-category filter panel: a bar for the
+             proportion, tabular numerals for the precision. Idle until a filter
+             is on — "133 of 133" would be reporting a success nobody asked for. -->
+        <span class="wc-optfilter__count" data-test="wc-opt-count">
+          <template v-if="optionFilterActive">
+            <span class="wc-optfilter__bar" :data-zero="visibleOptionRows.length === 0 ? '' : null">
+              <i :style="{ width: Math.round((visibleOptionRows.length / Math.max(1, options.length)) * 100) + '%' }" />
+            </span>
+            <span class="wc-optfilter__n" :data-zero="visibleOptionRows.length === 0 ? '' : null">
+              {{ visibleOptionRows.length }} of {{ options.length }}
+            </span>
+            <button type="button" class="wc-optfilter__clear" data-test="wc-opt-clear" @click="clearOptionFilter">Clear</button>
+          </template>
+          <span v-else class="wc-optfilter__idle">{{ options.length }} options</span>
+        </span>
+      </div>
       <div v-if="bulkMode && (bulkAddOpen || selectedCount > 0 || bulkNote)" class="wpc-bulk-controls">
         <BulkAddPanel
           v-if="bulkAddOpen"
@@ -1802,9 +2018,14 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
           :common-tags="commonSelectedTags"
           :present-tags="presentSelectedTags"
           :tag-hues="selectedTagHues"
+          reorderable
+          :move-armed="moveArmed"
           @apply-tag="applyTagToSelected"
           @remove-tag="removeTagFromSelected"
           @set-weight="setWeightSelected"
+          @move-top="moveSelectedTo({ to: 'top' })"
+          @move-bottom="moveSelectedTo({ to: 'bottom' })"
+          @move-here="moveArmed = !moveArmed"
           @delete-selected="deleteSelected"
           @clear="clearSelection"
         />
@@ -1823,6 +2044,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                 @update:model-value="toggleSelectAll"
               />
             </th>
+            <th scope="col" class="opt-col-grip"><span class="wp-sr-only">Reorder</span></th>
             <th scope="col" class="opt-col-weight">Weight</th>
             <th scope="col">Value</th>
             <th scope="col" class="opt-col-sub">Sub-category</th>
@@ -1832,11 +2054,26 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
         </thead>
         <tbody>
           <tr
-            v-for="(o, i) in options"
+            v-for="{ o, i } in visibleOptionRows"
             :key="o.id"
             :data-test="o.is_null ? 'wc-opt-row-null' : `wc-opt-row-${i}`"
-            :class="{ 'wc-opt-row--null': o.is_null, 'wc-opt-row--selected': bulkMode && isSelected(o.id) }"
+            :class="{
+              'wc-opt-row--null': o.is_null,
+              'wc-opt-row--selected': bulkMode && isSelected(o.id),
+              'wc-opt-row--dragging': dragFrom === i,
+              'wc-opt-row--dropbefore': dragOver === i && dragFrom !== null && dragFrom !== i,
+              'wc-opt-row--cargo': moveArmed && isSelected(o.id),
+              'wc-opt-row--landing': moveArmed && !isSelected(o.id) && !o.is_null,
+            }"
+            @dragover="onOptDragOver(i, $event)"
+            @drop.prevent="onOptDrop(i)"
+            @click="moveArmed && !isSelected(o.id) && !o.is_null
+              ? moveSelectedTo({ to: 'before', id: o.id })
+              : undefined"
           >
+            <!-- Landing point for an armed "Move here". A zero-height row
+                 would be unclickable, so the strip lives inside the first cell
+                 of the row it lands ABOVE. -->
             <td v-if="bulkMode" class="opt-col-check">
               <button
                 v-if="!o.is_null"
@@ -1853,6 +2090,31 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                   <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
               </button>
+            </td>
+            <td class="opt-col-grip">
+              <!-- The only pointer affordance the value cell's contenteditable
+                   does not poison: a press here is unambiguous, because it is
+                   not a text surface. Hidden until row hover so the resting
+                   table looks unchanged; disabled while a filter is active,
+                   since dropping between two visible rows says nothing about
+                   the hidden ones between them. The bulk moves above stay
+                   available there — their destination is absolute. -->
+              <button
+                v-if="!o.is_null"
+                type="button"
+                class="opt-grip"
+                :disabled="optionFilterActive || undefined"
+                :title="optionFilterActive
+                  ? 'Dragging is off while a filter is active — use Bulk edit ▸ Top / Bottom / Move here'
+                  : 'Drag to reorder · Alt+↑/↓ to move one step'"
+                :aria-label="`Reorder ${o.value || 'option'}`"
+                :data-test="`wc-opt-grip-${i}`"
+                draggable="true"
+                @dragstart="onOptDragStart(i, $event)"
+                @dragend="onOptDragEnd"
+                @keydown.alt.up.prevent="nudgeOption(o.id, -1)"
+                @keydown.alt.down.prevent="nudgeOption(o.id, 1)"
+              ><i class="pi pi-bars" aria-hidden="true" /></button>
             </td>
             <td>
               <Input
@@ -1935,6 +2197,8 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                       : `Show ${hiddenOptionTagCount(o)} more tags`"
                     :data-test="`opt-tags-more-${o.id}`"
                     @click.stop="toggleOptTagsExpanded(o.id)"
+                    :data-match="!expandedOptTags.has(o.id) && hiddenTagsMatch(o) ? '' : null"
+                    :title="hiddenTagsMatch(o) ? 'More matching tags are folded in here' : undefined"
                   >{{ expandedOptTags.has(o.id) ? "−" : `+${hiddenOptionTagCount(o)}` }}</button>
                   <span v-if="!(o.sub_categories ?? []).length" class="opt-tags__placeholder">(none)</span>
                   <button
@@ -2038,6 +2302,13 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
           </tr>
           <tr v-if="!options.length">
             <td :colspan="bulkMode ? 6 : 5" class="opt-empty">No options yet.</td>
+          </tr>
+          <tr v-if="optionFilterActive && visibleOptionRows.length === 0">
+            <td :colspan="bulkMode ? 6 : 5" class="wc-optfilter__empty" data-test="wc-opt-noresults">
+              <b>No option matches this filter</b>
+              All {{ options.length }} are still here — only the view is filtered.
+              <button type="button" class="wc-optfilter__clear" @click="clearOptionFilter">Clear filter</button>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -2558,6 +2829,170 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
 
 /* Teleported to <body>, so coordinates are viewport-relative and no ancestor
    can clip it. z-index sits above the editor chrome but below modals. */
+/* ── Reordering ─────────────────────────────────────────────────────── */
+.opt-col-grip { width: 26px; }
+/* The only pointer affordance the value cell's contenteditable does not
+   poison. Hidden until row hover so the resting table is unchanged. */
+.opt-grip {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 22px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--wp-radius-sm);
+  color: var(--wp-text-dim);
+  font-size: 11px;
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+tr:hover .opt-grip { opacity: 0.7; }
+.opt-grip:hover { opacity: 1; background: var(--wp-bg-3); }
+.opt-grip:focus-visible { opacity: 1; outline: 2px solid var(--wp-accent-500); outline-offset: 1px; }
+.opt-grip:disabled { cursor: not-allowed; }
+tr:hover .opt-grip:disabled { opacity: 0.2; }
+
+/* The dragged row stays put, dimmed — pulling it out of the table reflows
+   every row below and the drop target moves out from under the cursor. */
+.wc-opt-row--dragging > td { opacity: 0.45; background: var(--wp-bg-3); }
+.wc-opt-row--dropbefore > td { box-shadow: inset 0 2px 0 var(--wp-accent-500); }
+
+/* "Move here" armed: the selection is the cargo, so it dims; every other row
+   becomes a landing point. */
+.wc-opt-row--cargo > td { opacity: 0.4; }
+.wc-opt-row--landing { cursor: pointer; }
+.wc-opt-row--landing:hover > td {
+  box-shadow: inset 0 2px 0 var(--wp-accent-500);
+  background: color-mix(in oklab, var(--wp-accent-500) 8%, transparent);
+}
+
+/* ── Options filter bar ─────────────────────────────────────────────── */
+.wc-optfilter {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-4);
+  padding: var(--wp-space-4) var(--wp-space-5);
+  border-bottom: 1px solid var(--wp-border);
+  background: var(--wp-bg-2);
+}
+.wc-optfilter__search {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-3);
+  flex: 1;
+  min-width: 0;
+  padding: 3px var(--wp-space-4); /* audit-exempt: compact inline search */
+  background: var(--wp-bg-1);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius-sm);
+  color: var(--wp-text-dim);
+}
+.wc-optfilter__search--on {
+  border-color: var(--wp-accent-500);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-500) 20%, transparent);
+}
+.wc-optfilter__search .pi { font-size: 11px; }
+.wc-optfilter__search input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--wp-text);
+  font: 12px var(--wp-font-mono);
+}
+.wc-optfilter__clearx {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--wp-text-dim); font-size: 10px;
+}
+.wc-optfilter__tagwrap { position: relative; }
+.wc-optfilter__tagbtn {
+  display: inline-flex; align-items: center; gap: 5px; /* audit-exempt: icon gap */
+  padding: 4px var(--wp-space-4);
+  background: var(--wp-bg-3);
+  border: 1px solid var(--wp-border-strong);
+  border-radius: var(--wp-radius-sm);
+  color: var(--wp-text-muted);
+  font: 11px var(--wp-font-sans);
+  cursor: pointer;
+}
+.wc-optfilter__tagbtn[data-on] {
+  background: color-mix(in oklab, var(--wp-accent-500) 24%, transparent);
+  border-color: var(--wp-accent-500);
+  color: var(--wp-accent-300);
+}
+.wc-optfilter__tagbtn .pi { font-size: 9px; }
+.wc-optfilter__menu {
+  position: absolute; top: calc(100% + 4px); right: 0; z-index: 30;
+  min-width: 170px; max-height: 240px; overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex; flex-direction: column;
+  padding: var(--wp-space-3);
+  background: var(--wp-bg-1);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius);
+  box-shadow: var(--wp-shadow-lg);
+}
+.wc-optfilter__menuitem {
+  display: flex; align-items: center; gap: var(--wp-space-3);
+  padding: 4px var(--wp-space-3);
+  background: none; border: none; border-radius: var(--wp-radius-sm);
+  color: var(--wp-text-muted);
+  font: 11px var(--wp-font-mono);
+  text-align: left; cursor: pointer;
+}
+.wc-optfilter__menuitem:hover { background: var(--wp-bg-3); color: var(--wp-text); }
+.wc-optfilter__menuitem[data-on] { color: var(--wp-accent-300); }
+.wc-optfilter__box {
+  width: 12px; height: 12px; flex-shrink: 0;
+  display: grid; place-items: center;
+  border: 1px solid var(--wp-border-strong);
+  border-radius: 3px; /* audit-exempt: below the radius scale */
+  font-size: 7px;
+}
+.wc-optfilter__menuitem[data-on] .wc-optfilter__box {
+  background: var(--wp-accent-600); border-color: var(--wp-accent-600); color: #fff;
+}
+.wc-optfilter__count {
+  display: flex; align-items: center; gap: var(--wp-space-3);
+  font-size: 11px; white-space: nowrap;
+}
+.wc-optfilter__bar {
+  width: 44px; height: 3px; border-radius: 2px; /* audit-exempt: hairline meter */
+  background: var(--wp-bg-4); overflow: hidden;
+}
+.wc-optfilter__bar i { display: block; height: 100%; background: var(--wp-success); }
+.wc-optfilter__bar[data-zero] { background: color-mix(in oklab, var(--wp-danger) 35%, transparent); }
+.wc-optfilter__n {
+  font-family: var(--wp-font-mono); font-variant-numeric: tabular-nums;
+  font-weight: 600; color: var(--wp-success);
+}
+.wc-optfilter__n[data-zero] { color: var(--wp-danger); }
+.wc-optfilter__idle { color: var(--wp-text-dim); font-family: var(--wp-font-mono); }
+.wc-optfilter__clear {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--wp-text-muted); font: 11px var(--wp-font-sans);
+  text-decoration: underline;
+}
+.wc-optfilter__empty {
+  padding: var(--wp-space-6) var(--wp-space-5);
+  text-align: center; color: var(--wp-text-dim); font-size: 12px;
+}
+.wc-optfilter__empty b {
+  display: block; color: var(--wp-text-muted); font-weight: 600;
+  margin-bottom: var(--wp-space-2);
+}
+.wc-optfilter__empty .wc-optfilter__clear { margin-left: var(--wp-space-3); }
+/* The pill admits that a matching tag is folded inside it, so a row never
+   looks like it matched for no reason. */
+.opt-tags__more[data-match] {
+  background: color-mix(in oklab, var(--wp-accent-500) 26%, transparent);
+  border-color: var(--wp-accent-500);
+  color: var(--wp-accent-300);
+}
+
 .opt-tags__picker {
   position: fixed;
   z-index: 3000;
