@@ -2090,6 +2090,12 @@ function onHostBeforeInput(ev: InputEvent): void {
   const sel = window.getSelection();
   if (!sel || sel.rangeCount === 0) return;
   const range = sel.getRangeAt(0);
+  // A RANGE, not a caret: the browser is about to replace it, and that is
+  // correct. Redirecting here would collapse it, so the replacement never
+  // happened and the typed character was merely inserted — select-all then
+  // type one letter over `yellow` left `yellowy` instead of `y`. This rescue
+  // exists only for a collapsed caret stranded outside a text span.
+  if (!range.collapsed) return;
   const target = range.startContainer;
   // If selection is already inside a wp-rt__text span (directly OR
   // nested in a colored sub-span like wp-rt-dp-brace), nothing to do —
@@ -2109,30 +2115,12 @@ function onHostBeforeInput(ev: InputEvent): void {
   // of the input.
   const newRange = document.createRange();
   const positioned = positionAfterTarget(target, range.startOffset, newRange);
-  if (!positioned) {
-    // Fall back to the last span if no adjacent pad was found (e.g.
-    // selection is on the host root with no nearby chip).
+  if (!positioned && !positionFromHostIndex(target, range.startOffset, newRange)) {
+    // Nothing adjacent and nothing positional — land at the end of the last
+    // span, which is where an unanchored caret most plausibly belongs.
     const spans = host.querySelectorAll(".wp-rt__text");
     if (spans.length === 0) return;
-    const span = spans[spans.length - 1] as HTMLElement;
-    // Walk to the LAST text-node descendant. With colored sub-spans
-    // (`<span class="wp-rt-dp-multi">…</span>`), `firstChild` is no
-    // longer guaranteed to be a text node, so the legacy fast path
-    // would land the caret at element offset 0 — the START of the
-    // span — and any text the user then typed appeared in front of
-    // the brace block instead of after it.
-    const walker = document.createTreeWalker(span, NodeFilter.SHOW_TEXT);
-    let last: Text | null = null;
-    let n: Node | null = walker.nextNode();
-    while (n) {
-      last = n as Text;
-      n = walker.nextNode();
-    }
-    if (last) {
-      newRange.setStart(last, (last.textContent ?? "").length);
-    } else {
-      newRange.setStart(span, 0);
-    }
+    setCaretAtSpanEdge(spans[spans.length - 1] as HTMLElement, "end", newRange);
   }
   newRange.collapse(true);
   sel.removeAllRanges();
@@ -2145,6 +2133,85 @@ function onHostBeforeInput(ev: InputEvent): void {
  *  chip or on the host root between chips, the user wanted to type
  *  ADJACENT to that anchor — not somewhere else in the input. Returns
  *  true if a position was set. */
+/**
+ * Put `range` at one edge of `span`, walking to a real text node.
+ *
+ * With coloured sub-spans inside `wp-rt__text` (`<span class="wp-rt-dp-brace">`
+ * and friends), `firstChild` / `lastChild` are not guaranteed to be text
+ * nodes, and placing the caret on the span ELEMENT at offset 0 drops typing in
+ * front of the whole brace block instead of inside it.
+ */
+function setCaretAtSpanEdge(span: HTMLElement, edge: "start" | "end", range: Range): void {
+  const walker = document.createTreeWalker(span, NodeFilter.SHOW_TEXT);
+  if (edge === "start") {
+    const first = walker.nextNode() as Text | null;
+    if (first) range.setStart(first, 0);
+    else range.setStart(span, 0);
+    return;
+  }
+  let last: Text | null = null;
+  let n: Node | null = walker.nextNode();
+  while (n) {
+    last = n as Text;
+    n = walker.nextNode();
+  }
+  if (last) range.setStart(last, (last.textContent ?? "").length);
+  else range.setStart(span, 0);
+}
+
+/**
+ * Redirect a caret that is sitting on the host root into the span it is
+ * actually next to.
+ *
+ * Pressing Home, or clicking at the very start of the field, leaves the
+ * selection on the host itself rather than inside a `wp-rt__text` span —
+ * Firefox in particular parks it there, between the empty text nodes Vue
+ * leaves around fragment markers. The old fallback then sent the caret to the
+ * END of the LAST span, so a character typed at position 0 was inserted at the
+ * end of the value: typing `{` in front of `skirt` produced `skirt{`.
+ *
+ * On the host root the offset is a CHILD INDEX, so it says exactly where the
+ * caret is. Scan forward from it for a span and land at that span's start;
+ * only when there is nothing after it does the end of the preceding span
+ * become the right answer.
+ */
+function positionFromHostIndex(target: Node, offset: number, range: Range): boolean {
+  const host = hostEl.value;
+  if (!host) return false;
+  // Either the caret is on the host, or in one of the empty text nodes that
+  // sit directly under it — in which case its own index is what matters, not
+  // the offset inside a node with no content.
+  let index: number;
+  if (target === host) {
+    index = offset;
+  } else if (target.parentNode === host) {
+    index = Array.prototype.indexOf.call(host.childNodes, target);
+    // A caret PAST the content of a non-empty node belongs after it.
+    if (offset > 0) index += 1;
+  } else {
+    return false;
+  }
+  if (index < 0) return false;
+
+  const isTextSpan = (n: Node | null): n is HTMLElement =>
+    !!n && n.nodeType === Node.ELEMENT_NODE
+    && (n as HTMLElement).classList.contains("wp-rt__text");
+
+  for (let i = index; i < host.childNodes.length; i++) {
+    if (isTextSpan(host.childNodes[i])) {
+      setCaretAtSpanEdge(host.childNodes[i] as HTMLElement, "start", range);
+      return true;
+    }
+  }
+  for (let i = Math.min(index, host.childNodes.length) - 1; i >= 0; i--) {
+    if (isTextSpan(host.childNodes[i])) {
+      setCaretAtSpanEdge(host.childNodes[i] as HTMLElement, "end", range);
+      return true;
+    }
+  }
+  return false;
+}
+
 function positionAfterTarget(
   target: Node,
   offset: number,

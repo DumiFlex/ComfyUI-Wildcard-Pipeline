@@ -1656,3 +1656,79 @@ describe("allowNestedRefs — derivation action-value @{} reuse", () => {
     wrap.unmount();
   });
 });
+
+/**
+ * Caret rescue in `beforeinput`.
+ *
+ * The host parks the selection on ITSELF rather than inside a `wp-rt__text`
+ * span in two common situations — pressing Home, and clicking at the very
+ * start of the field. Firefox does it most readily, which is why both user
+ * reports came from there. The component redirects such a stranded caret into
+ * a span before the browser inserts, and both bugs below were that redirect
+ * going to the wrong place.
+ *
+ * Driven through real DOM Selection APIs rather than the component internals,
+ * because the bugs live in the interaction between the browser's own insertion
+ * and our redirect.
+ */
+describe("RichTextInput — stranded-caret rescue", () => {
+  /** Put the selection on the host element itself at `childIndex`. */
+  function selectOnHost(host: HTMLElement, startIndex: number, endIndex?: number): void {
+    const range = document.createRange();
+    range.setStart(host, startIndex);
+    range.setEnd(host, endIndex ?? startIndex);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+  }
+
+  function fire(host: HTMLElement): void {
+    host.dispatchEvent(new InputEvent("beforeinput", {
+      inputType: "insertText", data: "x", bubbles: true, cancelable: true,
+    }));
+  }
+
+  it("sends a caret at the START of the field to the FIRST span, not the last", async () => {
+    // The shipped behaviour picked the LAST span and its END, so typing `{` in
+    // front of `skirt` produced `skirt{`. Reproduced in Firefox 153.
+    const w = mount(RichTextInput, {
+      props: { modelValue: "skirt" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const host = w.get('[contenteditable="true"]').element as HTMLElement;
+    selectOnHost(host, 0);
+    fire(host);
+    const sel = window.getSelection();
+    const container = sel?.getRangeAt(0).startContainer;
+    const span = (container?.nodeType === Node.TEXT_NODE
+      ? container.parentElement
+      : container as HTMLElement | null)?.closest(".wp-rt__text");
+    expect(span).not.toBeNull();
+    // First span, at its start — anything else inserts at the wrong end.
+    expect(host.querySelectorAll(".wp-rt__text")[0]).toBe(span);
+    expect(sel?.getRangeAt(0).startOffset).toBe(0);
+    w.unmount();
+  });
+
+  it("leaves a NON-COLLAPSED selection alone so the browser can replace it", async () => {
+    // The rescue collapsed the selection unconditionally, so select-all then
+    // typing one letter over `yellow` left `yellowy` instead of `y` — the
+    // browser never got to delete what was selected.
+    const w = mount(RichTextInput, {
+      props: { modelValue: "yellow" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const host = w.get('[contenteditable="true"]').element as HTMLElement;
+    selectOnHost(host, 0, host.childNodes.length);
+    const before = window.getSelection()?.getRangeAt(0);
+    const beforeCollapsed = before?.collapsed;
+    fire(host);
+    const after = window.getSelection()?.getRangeAt(0);
+    expect(beforeCollapsed).toBe(false);
+    // Still a range, still spanning the content — untouched.
+    expect(after?.collapsed).toBe(false);
+    w.unmount();
+  });
+});
