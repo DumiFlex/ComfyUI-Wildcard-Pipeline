@@ -832,6 +832,9 @@ function onApply(): void {
   max-height: 32vh;
   overflow-y: auto;
   overflow-x: hidden;
+  /* Without this, hitting either end hands the leftover wheel delta to the
+     page and the editor behind the popover lurches. */
+  overscroll-behavior: contain;
   scrollbar-width: thin;
   /* Room for the scrollbar so it never lands on top of a chip. */
   padding-right: 2px; /* audit-exempt: gutter for the scrollbar */

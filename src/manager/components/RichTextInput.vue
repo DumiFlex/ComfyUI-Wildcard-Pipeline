@@ -1743,8 +1743,25 @@ function __confirmRemapForTest(
   applyRemap(next);
 }
 
+/**
+ * Escape closes the picker — and stops there.
+ *
+ * The editor pages run a window-level Escape shortcut that cancels the whole
+ * edit and routes back to the list. It opts out when focus sits in an
+ * `input, textarea, [contenteditable]`, which covers the expression field but
+ * NOT the picker's tag buttons — so pressing Escape after clicking a tag threw
+ * away the edit and navigated away from the page. That is why it only happened
+ * sometimes.
+ *
+ * Registered in the CAPTURE phase and stopping immediate propagation, so while
+ * the picker is open it consumes the key before any bubble-phase window
+ * listener sees it, whatever order they were registered in.
+ */
 function onPickerEscape(ev: KeyboardEvent): void {
   if (ev.key !== "Escape") return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  ev.stopImmediatePropagation();
   // The header says "Esc back" on the insert flow and "Esc cancel" on the
   // chip-edit flow, because there IS somewhere to go back to only in the first
   // case. Escape has to match what the header promises.
@@ -1754,9 +1771,9 @@ function onPickerEscape(ev: KeyboardEvent): void {
 
 watch(pickerOpen, (open) => {
   if (open) {
-    window.addEventListener("keydown", onPickerEscape);
+    window.addEventListener("keydown", onPickerEscape, true);
   } else {
-    window.removeEventListener("keydown", onPickerEscape);
+    window.removeEventListener("keydown", onPickerEscape, true);
   }
 });
 
@@ -1828,7 +1845,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("mousedown", onDocumentMouseDown, true);
   window.removeEventListener("scroll", onWindowScroll, true);
   window.removeEventListener("resize", onWindowResize);
-  window.removeEventListener("keydown", onPickerEscape);
+  window.removeEventListener("keydown", onPickerEscape, true);
 });
 
 // --- Host DOM → raw text serialisation ---

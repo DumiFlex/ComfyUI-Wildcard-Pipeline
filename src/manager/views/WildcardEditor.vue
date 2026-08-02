@@ -384,7 +384,10 @@ function onDocPointerDown(e: MouseEvent): void {
   const t = e.target as HTMLElement | null;
   if (
     t?.closest(
-      ".subcat-pill, .subcat-menu, .subcat-addtag, .subcat-addtag__open, .opt-tags",
+      // `.opt-tags__picker` is listed separately: the menu is teleported to
+      // <body>, so it is no longer inside `.opt-tags` and would otherwise be
+      // dismissed by its own clicks.
+      ".subcat-pill, .subcat-menu, .subcat-addtag, .subcat-addtag__open, .opt-tags, .opt-tags__picker",
     )
   ) {
     return;
@@ -538,10 +541,104 @@ function onGroupDrop(axis: string): void {
  *  registry boxes but used to render the grouped checkbox sections. */
 const optionTagGroups = computed<SubcatGroup[]>(() => subcatGroups.value);
 
+/**
+ * Axes the user has folded shut in the sub-categories editor, by axis name.
+ *
+ * A wildcard with five axes and thirty tags fills the whole panel, and while
+ * you are working on one axis the other four are just distance between you and
+ * the options table. Per-axis rather than one global toggle so folding is a
+ * way to focus, not an all-or-nothing switch.
+ *
+ * Session state, deliberately not persisted: it describes what you are doing
+ * right now, and a fold remembered from last week would hide tags from
+ * someone who has never seen them.
+ */
+const collapsedAxes = ref<Set<string>>(new Set());
+
+function toggleAxisCollapsed(axis: string): void {
+  const next = new Set(collapsedAxes.value);
+  if (next.has(axis)) next.delete(axis);
+  else next.add(axis);
+  collapsedAxes.value = next;
+}
+
+/** Type-to-filter for the per-option tag picker. A wildcard with five axes
+ *  puts 30+ checkboxes in this menu, and hunting for `hair-natural` by eye is
+ *  slower than typing three letters. Cleared on each open so the menu never
+ *  comes up pre-filtered by something you typed minutes ago. */
+const optTagQuery = ref("");
+
+/** Groups narrowed by `optTagQuery`. An axis left with nothing is dropped
+ *  rather than rendered as an empty heading. */
+const filteredOptionTagGroups = computed<SubcatGroup[]>(() => {
+  const q = optTagQuery.value.trim().toLowerCase();
+  if (!q) return optionTagGroups.value;
+  return optionTagGroups.value
+    .map((g) => ({ ...g, tags: g.tags.filter((t) => t.toLowerCase().includes(q)) }))
+    .filter((g) => g.tags.length > 0);
+});
+
+/**
+ * Viewport coordinates for the teleported tag menu.
+ *
+ * The menu used to be `position: absolute` inside the table cell, which put it
+ * inside `.wp-editor__body` — an `overflow: auto` scroller. Anything extending
+ * past that container's edge was simply cut off, which is why the menu lost its
+ * bottom rows near the foot of the page. Teleporting to <body> and positioning
+ * from the trigger's rect is what every other popover here already does.
+ */
+const optTagAnchor = ref({ top: 0, left: 0, width: 0 });
+/** Height reserved when deciding whether to flip above the trigger. Matches
+ *  the menu's own cap (240px list + search + padding). */
+const OPT_TAG_MENU_PX = 300;
+
 function toggleOptTagPicker(optionId: string, ev?: MouseEvent): void {
   const opening = openOptTagPicker.value !== optionId;
   openOptTagPicker.value = opening ? optionId : null;
-  if (opening) pickerDropUp.value = shouldDropUp(ev, 280);
+  optTagQuery.value = "";
+  if (!opening) return;
+  pickerDropUp.value = shouldDropUp(ev, OPT_TAG_MENU_PX);
+  optTagTriggerEl = (ev?.currentTarget as HTMLElement | null) ?? null;
+  const r = optTagTriggerEl?.getBoundingClientRect();
+  if (!r) return;
+  // Fixed coordinates, so no scroll offset is added — and the menu is
+  // re-anchored on every open rather than tracked, since the editor body
+  // scrolls underneath it and a stale anchor is worse than a closed menu.
+  optTagAnchor.value = {
+    top: pickerDropUp.value ? r.top - 4 : r.bottom + 4,
+    left: r.left,
+    width: r.width,
+  };
+}
+
+/** The button the open menu belongs to, so it can be re-measured on scroll. */
+let optTagTriggerEl: HTMLElement | null = null;
+
+/**
+ * Keep the menu attached to its trigger while the editor scrolls under it.
+ *
+ * A fixed-position popover does not move with the page, so without this it
+ * would sit stranded beside unrelated rows. Closing instead was the first
+ * attempt and is wrong: the browser scrolls a partly-visible button into view
+ * as part of clicking it, so opening a menu near either edge closed it in the
+ * same gesture.
+ *
+ * Once the trigger has left the viewport entirely there is nothing to anchor
+ * to, and closing IS right.
+ */
+function reanchorOptTagPicker(): void {
+  if (openOptTagPicker.value === null || !optTagTriggerEl) return;
+  const r = optTagTriggerEl.getBoundingClientRect();
+  if (r.bottom < 0 || r.top > window.innerHeight) {
+    openOptTagPicker.value = null;
+    return;
+  }
+  pickerDropUp.value = window.innerHeight - r.bottom < OPT_TAG_MENU_PX;
+  optTagAnchor.value = {
+    top: pickerDropUp.value ? r.top - 4 : r.bottom + 4,
+    left: r.left,
+    width: r.width,
+  };
 }
 
 function optionHasTag(o: WildcardOption, tag: string): boolean {
@@ -631,12 +728,18 @@ function serializeTagGroups(): Record<string, string[]> | null {
 onUnmounted(() => {
   document.removeEventListener("click", onDocPointerDown);
   document.removeEventListener("keydown", onDocKeydown);
+  window.removeEventListener("scroll", reanchorOptTagPicker, true);
+  window.removeEventListener("resize", reanchorOptTagPicker);
 });
 
 onMounted(async () => {
   // Outside-click + Escape dismissal for all transient menus (bug #3).
   document.addEventListener("click", onDocPointerDown);
   document.addEventListener("keydown", onDocKeydown);
+  // Capture, so a scroll in ANY nested scroller reaches this — scroll events
+  // do not bubble, and the editor body is the one that actually moves.
+  window.addEventListener("scroll", reanchorOptTagPicker, true);
+  window.addEventListener("resize", reanchorOptTagPicker);
   await Promise.all([categoryStore.fetchAll(), moduleStore.fetchCatalog()]);
   if (props.id) {
     try {
@@ -1464,6 +1567,23 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
             @drop.prevent="onGroupDrop(group.axis)"
           >
             <header class="subcat-group__head">
+              <!-- The caret is its own button rather than the whole header:
+                   the header also holds a rename input, and making the row
+                   itself the toggle would fold the group every time you
+                   clicked into the name to edit it. -->
+              <button
+                type="button"
+                class="subcat-group__fold"
+                :aria-expanded="!collapsedAxes.has(group.axis)"
+                :aria-label="collapsedAxes.has(group.axis)
+                  ? `Expand ${group.isOther ? 'ungrouped' : group.axis}`
+                  : `Collapse ${group.isOther ? 'ungrouped' : group.axis}`"
+                :data-test="`subcat-fold-${group.axis}`"
+                @click.stop="toggleAxisCollapsed(group.axis)"
+              ><i
+                :class="collapsedAxes.has(group.axis) ? 'pi pi-chevron-right' : 'pi pi-chevron-down'"
+                aria-hidden="true"
+              /></button>
               <input
                 v-if="!group.isOther"
                 class="subcat-group__name"
@@ -1474,6 +1594,13 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                 @keydown.enter.prevent="(e) => (e.target as HTMLInputElement).blur()"
               />
               <span v-else class="subcat-group__name subcat-group__name--other">ungrouped</span>
+              <!-- A folded axis still reports how many tags are inside, so
+                   folding never hides the fact that there is something there. -->
+              <span
+                v-if="collapsedAxes.has(group.axis)"
+                class="subcat-group__count"
+                :data-test="`subcat-count-${group.axis}`"
+              >{{ group.tags.length }}</span>
               <button
                 v-if="!group.isOther"
                 type="button"
@@ -1485,7 +1612,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
               ><i class="pi pi-link" aria-hidden="true" /></button>
             </header>
 
-            <div class="subcat-group__pills">
+            <div v-if="!collapsedAxes.has(group.axis)" class="subcat-group__pills">
               <span
                 v-for="tag in group.tags"
                 :key="tag"
@@ -1795,18 +1922,39 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
 
                 <!-- Grouped checkbox picker: one section per axis +
                      ungrouped. Each toggle gets is-on when selected. -->
+                <Teleport to="body">
                 <div
                   v-if="openOptTagPicker === o.id"
                   class="opt-tags__picker"
                   :class="{ 'opt-tags__picker--up': pickerDropUp }"
+                  :style="{
+                    top: optTagAnchor.top + 'px',
+                    left: optTagAnchor.left + 'px',
+                  }"
                   role="menu"
                   @click.stop
                 >
                   <p v-if="!subCategories.length" class="opt-tags__empty">
                     No sub-categories yet — add some above.
                   </p>
+                  <!-- Pinned above the scroller, so it stays visible while the
+                       list it filters scrolls under it. -->
+                  <label v-if="subCategories.length > 8" class="opt-tags__search">
+                    <i class="pi pi-search" aria-hidden="true" />
+                    <input
+                      v-model="optTagQuery"
+                      type="text"
+                      :placeholder="`Filter ${subCategories.length} tags…`"
+                      :aria-label="`Filter ${subCategories.length} tags`"
+                      spellcheck="false"
+                      autocomplete="off"
+                      :data-test="`opt-tag-search-${o.id}`"
+                      @click.stop
+                    />
+                  </label>
+                  <div class="opt-tags__scroll">
                   <div
-                    v-for="grp in optionTagGroups"
+                    v-for="grp in filteredOptionTagGroups"
                     :key="grp.axis"
                     class="opt-tags__section"
                   >
@@ -1832,7 +1980,13 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                       {{ tag }}
                     </button>
                   </div>
+                  <p
+                    v-if="subCategories.length && !filteredOptionTagGroups.length"
+                    class="opt-tags__empty"
+                  >No tag matches this search.</p>
+                  </div>
                 </div>
+                </Teleport>
               </div>
             </td>
             <td>
@@ -2070,6 +2224,27 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
 .subcat-group--drop {
   border-color: var(--wp-accent-500);
   background: color-mix(in srgb, var(--wp-accent-500) 8%, var(--wp-bg-2));
+}
+.subcat-group__fold {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--wp-radius-sm);
+  color: var(--wp-text-dim);
+  cursor: pointer;
+}
+.subcat-group__fold:hover { color: var(--wp-text); background: var(--wp-bg-3); }
+.subcat-group__fold .pi { font-size: 9px; }
+.subcat-group__count {
+  font-family: var(--wp-font-mono);
+  font-size: 10px; /* audit-exempt: micro count badge */
+  color: var(--wp-text-dim);
+  opacity: 0.7;
 }
 .subcat-group__head {
   display: flex;
@@ -2351,14 +2526,12 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
   border-color: var(--wp-accent-500);
 }
 
+/* Teleported to <body>, so coordinates are viewport-relative and no ancestor
+   can clip it. z-index sits above the editor chrome but below modals. */
 .opt-tags__picker {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 30;
+  position: fixed;
+  z-index: 3000;
   min-width: 210px;
-  max-height: 260px;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: var(--wp-space-3);
@@ -2368,10 +2541,47 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
   border-radius: var(--wp-radius);
   box-shadow: var(--wp-shadow-lg);
 }
+/* The cap and the scrolling moved OFF the menu and onto the list inside it, so
+   the search box stays pinned while the tags scroll under it.
+   `overscroll-behavior: contain` is the fix for the scroll escaping: without
+   it, reaching either end of this list hands the remaining wheel delta to the
+   page, and the whole editor lurches. */
+.opt-tags__scroll {
+  max-height: 240px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: var(--wp-space-3);
+}
+.opt-tags__search {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-2);
+  padding: 3px var(--wp-space-3); /* audit-exempt: compact inline search */
+  background: var(--wp-bg-2);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius-sm);
+  color: var(--wp-text-dim);
+}
+.opt-tags__search .pi { font-size: 10px; }
+.opt-tags__search input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--wp-text);
+  font: 11px var(--wp-font-sans);
+}
 /* Flip the option tag picker above its trigger near the page bottom (#4). */
+/* Flipped above the trigger. `bottom: calc(100% + 4px)` used to do this
+   against the absolutely-positioned parent; with `position: fixed` that would
+   resolve against the viewport and land nowhere useful. The inline `top` is
+   set to the trigger's TOP edge in this case, so shifting up by the menu's own
+   height puts its bottom edge exactly there — no height measurement needed. */
 .opt-tags__picker--up {
-  top: auto;
-  bottom: calc(100% + 4px);
+  transform: translateY(-100%);
 }
 .opt-tags__empty {
   margin: 0;
