@@ -150,47 +150,77 @@ describe("useGrowableField — the observer callback stays cheap", () => {
   });
 });
 
-describe("useGrowableField — the height cap yields to a manual drag", () => {
-  /** Fire a pointerdown at a point relative to the element's box. */
-  function grab(node: HTMLElement, dx: number, dy: number) {
-    const r = node.getBoundingClientRect();
-    node.dispatchEvent(new MouseEvent("pointerdown", {
-      bubbles: true,
-      clientX: r.right - dx,
-      clientY: r.bottom - dy,
-    }) as unknown as PointerEvent);
+describe("useGrowableField — the drag itself", () => {
+  /** A pointerdown as the grip element would deliver it. */
+  function gripDown(clientY: number): PointerEvent {
+    // `currentTarget` is getter-only on a real Event, so build a plain object
+    // carrying just what `startResize` reads.
+    return {
+      clientY,
+      pointerId: 1,
+      currentTarget: null,
+      preventDefault: () => {},
+    } as unknown as PointerEvent;
   }
 
-  it("drops max-height when the drag STARTS, pinning the current height first", () => {
-    // The measured bug: `max-height` and `resize` fight. Past the cap the
-    // inline height keeps climbing while the box stays pinned, so dragging
-    // back does nothing until it falls under the cap again — 10 of 25 frames
-    // frozen on a real drag. The cap is there to bound AUTO-grow; a deliberate
-    // drag overrides it.
-    const { wrap, node } = mountField(192);
+  it("releases max-height on grab, pinning the current height first", () => {
+    // `max-height` bounds AUTO-grow; a deliberate drag overrides it. Pinning
+    // first stops an `auto`-height box leaping to full content height the
+    // instant the handle is touched.
+    const { wrap, api, node } = mountField(192);
     node.style.maxHeight = "12rem";
-    grab(node, 4, 4);
+    api.startResize(gripDown(500));
     expect(node.style.maxHeight).toBe("none");
-    // Pinned first, so dropping the cap cannot make an auto-height box leap to
-    // full content height the instant the handle is touched.
     expect(node.style.height).toBe("192px");
     wrap.unmount();
   });
 
-  it("marks the field user-resized as soon as the handle is grabbed", () => {
+  it("marks the field user-resized on grab, so auto-grow stops fighting it", () => {
     const { wrap, api, node } = mountField(192);
     expect(api.userResized.value).toBe(false);
-    grab(node, 4, 4);
+    api.startResize(gripDown(500));
+    expect(node.style.maxHeight).toBe("none");
     expect(api.userResized.value).toBe(true);
     wrap.unmount();
   });
 
-  it("leaves the cap alone for a click in the TEXT — that must keep auto-growing", () => {
-    const { wrap, api, node } = mountField(192);
-    node.style.maxHeight = "12rem";
-    grab(node, 200, 60);
-    expect(node.style.maxHeight).toBe("12rem");
-    expect(api.userResized.value).toBe(false);
+  it("applies each move's DELTA rather than a captured origin", () => {
+    // The whole reason the native resizer had to go. It computes
+    // `startHeight + (pointerY - startY)`, so dragging past a limit banks
+    // invisible travel the user must walk all the way back — 13 of 23 dead
+    // frames, measured. An incremental delta keeps no history: the first pixel
+    // back off a limit moves the box.
+    let h = 100;
+    const { wrap, api, node } = mountField(100);
+    node.getBoundingClientRect = () => ({
+      height: h, bottom: h, top: 0, left: 0, right: 0, width: 100, x: 0, y: 0,
+      toJSON: () => ({}),
+    }) as DOMRect;
+    api.startResize(gripDown(500));
+    const move = (y: number) => window.dispatchEvent(
+      Object.assign(new MouseEvent("pointermove", { clientY: y }), { pointerId: 1 }),
+    );
+    move(520);
+    expect(node.style.height).toBe("120px");
+    h = 120;
+    move(510);   // back up 10 — must respond immediately
+    expect(node.style.height).toBe("110px");
+    wrap.unmount();
+  });
+
+  it("never shrinks past the CSS floor", () => {
+    const h = 40;
+    const { wrap, api, node } = mountField(40);
+    node.style.minHeight = "34px";
+    node.getBoundingClientRect = () => ({
+      height: h, bottom: h, top: 0, left: 0, right: 0, width: 100, x: 0, y: 0,
+      toJSON: () => ({}),
+    }) as DOMRect;
+    api.startResize(gripDown(500));
+    window.dispatchEvent(
+      Object.assign(new MouseEvent("pointermove", { clientY: 400 }), { pointerId: 1 }),
+    );
+    expect(node.style.height).toBe("34px");
     wrap.unmount();
   });
 });

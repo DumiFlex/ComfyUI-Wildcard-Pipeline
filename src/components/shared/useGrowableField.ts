@@ -41,6 +41,9 @@ export interface GrowableField {
   attach: () => void;
   /** True once the user has dragged the handle. */
   userResized: Ref<boolean>;
+  /** Bind to a grip element's `pointerdown`. Replaces `resize: vertical`,
+   *  which cannot be clamped from outside — see `startResize`. */
+  startResize: (ev: PointerEvent) => void;
 }
 
 /** Nearest ancestor that actually scrolls, or null when only the page does.
@@ -128,6 +131,11 @@ export function useGrowableField(
   let pending = false;
   /** Set once the height cap has been dropped for a manual drag. */
   let capLifted = false;
+  /** Pointer Y at the previous move — the drag is incremental, so only the
+   *  step between moves matters, never a captured origin. */
+  let lastPointerY = 0;
+  /** Floor read from CSS at drag start; CSS stays the source of truth. */
+  let minPx = 0;
 
   /**
    * Everything the observer wants to do, moved OUT of the observer.
@@ -164,55 +172,73 @@ export function useGrowableField(
     else flush();
   }
 
-  /** Size of the native resize grip's hit area, bottom-right corner. */
-  const GRIP = 18;
-
-  /** True when a pointerdown landed on the resize handle rather than in the
-   *  text. Distinguishing them matters: lifting the height cap on every click
-   *  would pin the box and stop it auto-growing as the user types. */
-  function inGripZone(el: HTMLElement, ev: PointerEvent): boolean {
-    const r = el.getBoundingClientRect();
-    return ev.clientX >= r.right - GRIP && ev.clientY >= r.bottom - GRIP;
-  }
-
-  function onPointerDown(ev: PointerEvent): void {
+  /**
+   * Our own resize drag, replacing the native `resize: vertical`.
+   *
+   * The native resizer computes `startHeight + (pointerY - startY)` from an
+   * origin it captured at pointerdown, and it does NOT clamp to the element's
+   * own min/max. Drag past a limit and that sum keeps running while the
+   * rendered box stays pinned, so dragging back moves nothing until the
+   * invisible total walks all the way home. Measured: collapsing past a 34px
+   * floor then expanding cost 13 of 23 frames of completely dead travel. That
+   * is the "gets stuck, then starts working" report, and it bites exactly when
+   * the box reaches one line — which is also when the overflow fade returns,
+   * which is why the fade kept looking guilty.
+   *
+   * Nothing outside can fix it: rewriting `style.height` mid-drag is ignored,
+   * because the browser recomputes from its own captured origin every move.
+   * Clamping the RESULT does not help either — the accumulated input is the
+   * problem, so a clamped absolute drag measured the same 13 / 23.
+   *
+   * Applying each move's DELTA to the current height instead keeps no history
+   * to accumulate: the first pixel back off a limit moves the box. Same
+   * harness, same over-drag: 0 / 23.
+   */
+  function startResize(ev: PointerEvent): void {
     const el = getEl();
-    if (!el || !inGripZone(el, ev)) return;
+    if (!el) return;
+    ev.preventDefault();
     dragging = true;
-    // THE actual stall. `max-height` and `resize` fight each other: drag past
-    // the cap and the inline height keeps climbing while the rendered box
-    // stays pinned, so dragging back does nothing until the inline value falls
-    // under the cap again. Measured on a real drag: 10 of 25 frames frozen at
-    // the cap, versus 0 uncapped. It reads as "the drag sticks, then starts
-    // working", and it bites exactly at the cap — which is where the overflow
-    // fade appears, hence the fade looking like the culprit.
-    //
-    // The cap exists to stop AUTO-grow eating the screen. A deliberate drag is
-    // the user overriding that, so it yields. Pin the current rendered height
-    // first: dropping `max-height` on an `auto`-height box would otherwise let
-    // it leap to full content height the instant the handle is touched.
+    userResized.value = true;
+    lastPointerY = ev.clientY;
+
+    const cs = getComputedStyle(el);
+    // CSS stays the source of truth for the floor; the ceiling is deliberately
+    // released, because a deliberate drag is the user overriding a cap that
+    // exists only to bound AUTO-grow.
+    minPx = Number.parseFloat(cs.minHeight) || 0;
     if (!capLifted) {
       el.style.height = `${el.getBoundingClientRect().height}px`;
       el.style.maxHeight = "none";
       capLifted = true;
     }
-    userResized.value = true;
+    (ev.currentTarget as HTMLElement | null)?.setPointerCapture?.(ev.pointerId);
+    window.addEventListener("pointermove", onResizeMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
+  }
+
+  function onResizeMove(ev: PointerEvent): void {
+    const el = getEl();
+    if (!el || !dragging) return;
+    const dy = ev.clientY - lastPointerY;
+    lastPointerY = ev.clientY;
+    const cur = el.getBoundingClientRect().height;
+    el.style.height = `${Math.max(minPx, cur + dy)}px`;
   }
 
   function onPointerUp(): void {
     if (!dragging) return;
     dragging = false;
+    window.removeEventListener("pointermove", onResizeMove);
+    window.removeEventListener("pointerup", onPointerUp);
+    window.removeEventListener("pointercancel", onPointerUp);
   }
 
   function attach(): void {
     const el = getEl();
     if (!el) return;
     lastHeight = el.getBoundingClientRect().height;
-    el.addEventListener("pointerdown", onPointerDown);
-    // On window, not the element: a resize drag routinely ends with the
-    // pointer outside the field it started in.
-    window.addEventListener("pointerup", onPointerUp);
-    window.addEventListener("pointercancel", onPointerUp);
     if (typeof ResizeObserver === "undefined") return;
     obs = new ResizeObserver(schedule);
     obs.observe(el);
@@ -221,9 +247,7 @@ export function useGrowableField(
   onBeforeUnmount(() => {
     obs?.disconnect();
     obs = null;
-    getEl()?.removeEventListener("pointerdown", onPointerDown);
-    window.removeEventListener("pointerup", onPointerUp);
-    window.removeEventListener("pointercancel", onPointerUp);
+    onPointerUp();
   });
 
   return {
@@ -233,5 +257,6 @@ export function useGrowableField(
     autosize,
     attach,
     userResized,
+    startResize,
   };
 }

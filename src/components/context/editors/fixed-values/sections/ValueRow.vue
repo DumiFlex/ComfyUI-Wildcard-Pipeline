@@ -100,6 +100,7 @@ const {
   scheduleOverflowHint,
   autosize,
   attach,
+  startResize,
 } = useGrowableField(() => valueEl.value);
 
 /** True when the field is capped and still hiding content below the fold.
@@ -212,6 +213,17 @@ function onDelete(): void {
           @input="onValueInput"
           @scroll="updateOverflowHint"
         />
+        <!-- Resize grip, replacing `resize: vertical`. The native resizer
+             recomputes from an origin captured at pointerdown and never clamps
+             to min/max, so over-dragging banks invisible travel the user has to
+             walk back — measured at 13 of 23 dead frames. Ours applies each
+             move's delta to the current height. -->
+        <span
+          class="row__grip"
+          data-test="row-grip"
+          aria-hidden="true"
+          @pointerdown="startResize"
+        ></span>
       </span>
       <span
         v-if="hasNonTextToken"
@@ -339,7 +351,7 @@ function onDelete(): void {
   /* Manual drag handle as well as the auto-grow, matching the derivation and
      combine template inputs — auto-sizing picks a sensible height, the handle
      lets the user override it. */
-  resize: vertical; overscroll-behavior: contain;
+  overscroll-behavior: contain;
   overflow-y: auto;
   max-height: 12rem;
   line-height: 1.5;
@@ -355,6 +367,24 @@ function onDelete(): void {
  * dependable `::after`, so it hangs off the wrapper. Gradient runs to a
  * TRANSPARENT accent so the text underneath still reads; the 1px accent line
  * at the bottom is what catches the eye. */
+/* Sits in the corner the overflow fade deliberately leaves clear. */
+.row__grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: ns-resize;
+  z-index: 2;
+  background: repeating-linear-gradient(
+    135deg,
+    transparent 0 2px,
+    var(--wp-text3, #8a8a9a) 2px 3px
+  );
+  opacity: 0.55;
+}
+.row__grip:hover { opacity: 0.9; }
+
 .row__value-wrap--more::after {
   content: "";
   position: absolute;

@@ -1285,6 +1285,7 @@ const {
   updateOverflowHint,
   scheduleOverflowHint,
   attach,
+  startResize,
 } = useGrowableField(() => hostEl.value);
 
 /* Overflow hint + grip-follow now come from the shared `useGrowableField`.
@@ -2421,6 +2422,21 @@ function onHostKeydown(ev: KeyboardEvent): void {
       </template>
     </div>
 
+    <!-- Resize grip, replacing `resize: vertical`.
+         The native resizer recomputes height from an origin it captured at
+         pointerdown and never clamps to the element's own min/max, so dragging
+         past a limit banks invisible travel the user then has to walk all the
+         way back before anything moves — measured at 13 of 23 dead frames.
+         Ours applies each move's DELTA to the current height, so the first
+         pixel back off a limit moves the box. -->
+    <div
+      v-if="wrap || multiline"
+      class="wp-rt__grip"
+      data-test="rt-grip"
+      aria-hidden="true"
+      @pointerdown="startResize"
+    ></div>
+
     <!-- Warning markers overlay. Each marker is a zero-width inline element
          anchored at the UTF-16 offset corresponding to the warning position.
          `data-warning-position` records the original code-point index for tests. -->
@@ -2571,6 +2587,25 @@ function onHostKeydown(ev: KeyboardEvent): void {
   box-shadow: inset 0 -1px 0 color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 60%, transparent);
 }
 
+/* Sits in the bottom-right corner the overflow fade leaves clear. Drawn like
+   the native grip so it reads as the same affordance it replaces. */
+.wp-rt__grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: ns-resize;
+  z-index: 2;
+  background: repeating-linear-gradient(
+    135deg,
+    transparent 0 2px,
+    var(--wp-text-dim, #8a8a9a) 2px 3px
+  );
+  opacity: 0.55;
+}
+.wp-rt__grip:hover { opacity: 0.9; }
+
 .wp-rt--focused {
   border-color: var(--wp-accent-500, #8b5cf6);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 25%, transparent);
@@ -2633,7 +2668,6 @@ function onHostKeydown(ev: KeyboardEvent): void {
      pointing at the field. Most noticeable at the TOP edge, where a small
      upward flick past the first line jumps the page. */
   overscroll-behavior: contain;
-  resize: vertical;
 }
 /* Keep the placeholder ghost aligned with wrapped text (top-left, not
    vertically centered on the 34px single-line). */
@@ -2650,7 +2684,6 @@ function onHostKeydown(ev: KeyboardEvent): void {
   overflow-y: auto;
   /* Same containment as `--wrap` — see the note there. */
   overscroll-behavior: contain;
-  resize: vertical;
   white-space: pre-wrap;
   word-break: break-word;
 }
