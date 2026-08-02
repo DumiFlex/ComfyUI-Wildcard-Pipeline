@@ -818,10 +818,18 @@ function kindTint(kind: string): Record<string, string> {
   };
 }
 
+/** Uuids this node supplies a pool for. `undefined` in the SPA, where the
+ *  injection is absent and every ref necessarily reads the library. */
+const nodePoolUuids = computed<ReadonlySet<string> | undefined>(() => {
+  const pools = contextPools?.value;
+  return pools ? new Set(pools.keys()) : undefined;
+});
+
 const acRows = computed<SuggestionRow[]>(() =>
   acTrigger.value === "@"
     ? refRows(acItems.value, {
         uuidToName: props.uuidToName,
+        nodePoolUuids: nodePoolUuids.value,
         uuidToOptionsCount: props.uuidToOptionsCount,
         uuidToSubCategories: props.uuidToSubCategories,
         uuidToTagGroups: props.uuidToTagGroups,
@@ -2632,6 +2640,13 @@ function onHostKeydown(ev: KeyboardEvent): void {
                 :key="fact"
                 class="wp-rt-suggestions__fact"
               >{{ fact }}</span>
+              <!-- Same mark the chip and the filter header carry, so "this is
+                   the node's copy" reads identically wherever it appears. -->
+              <span
+                v-if="row.fromNode"
+                class="wp-rt-suggestions__origin"
+                data-test="suggestion-origin-node"
+              ><i class="pi pi-database" aria-hidden="true" /> this node</span>
               <span v-if="row.badge" class="wp-rt-suggestions__badge">{{ row.badge }}</span>
               <span v-if="row.internal" class="wp-rt-suggestions__internal">internal</span>
             </span>
@@ -3044,6 +3059,17 @@ function onHostKeydown(ev: KeyboardEvent): void {
   background: color-mix(in oklab, var(--wp-warn) 20%, transparent);
   color: var(--wp-warn);
 }
+.wp-rt-suggestions__origin {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px; /* audit-exempt: glyph-to-word gap */
+  padding: 0 4px; /* audit-exempt: micro tile padding, matches __fact */
+  border-radius: 3px; /* audit-exempt: tile below the radius scale */
+  background: color-mix(in oklab, var(--wp-info) 15%, transparent);
+  color: var(--wp-info);
+  font-family: var(--wp-font, system-ui, sans-serif);
+}
+.wp-rt-suggestions__origin .pi { font-size: 9px; }
 .wp-rt-suggestions__internal {
   font-family: var(--wp-font, system-ui, sans-serif);
   font-style: italic;

@@ -61,6 +61,11 @@ export interface SuggestionRow {
   /** `@` only: the wildcard declares sub-categories, so a filter can be
    *  applied. Drives the funnel affordance on the row. */
   filterable?: boolean;
+  /** `@` only: this Context node carries its own snapshot of the wildcard, so
+   *  the ref will resolve against that rather than the library row of the same
+   *  uuid — and the two can hold different options. Marked on the row so the
+   *  fact is visible while CHOOSING, not only after inserting. */
+  fromNode?: boolean;
 }
 
 function plural(n: number, word: string): string {
@@ -80,6 +85,9 @@ export interface ProducerParts {
 
 export interface RefRowSources {
   uuidToName?: ReadonlyMap<string, string>;
+  /** Uuids this Context node supplies a pool for. Absent in the SPA, which
+   *  only ever reads the library. */
+  nodePoolUuids?: ReadonlySet<string>;
   uuidToOptionsCount?: ReadonlyMap<string, number>;
   uuidToSubCategories?: ReadonlyMap<string, string[]>;
   uuidToTagGroups?: ReadonlyMap<string, Record<string, string[]>>;
@@ -111,6 +119,7 @@ export function refRows(uuids: readonly string[], src: RefRowSources): Suggestio
       uuid,
       facts,
       filterable: tags > 0,
+      fromNode: src.nodePoolUuids?.has(uuid) === true,
     };
   });
 }

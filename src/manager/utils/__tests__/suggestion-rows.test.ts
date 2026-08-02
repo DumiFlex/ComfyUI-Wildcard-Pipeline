@@ -48,6 +48,23 @@ describe("refRows", () => {
     expect(row.kind).toBe("wildcard");
   });
 
+  it("marks a ref whose pool this node supplies", () => {
+    // The node's snapshot can hold different options from the library row of
+    // the same uuid, so which one you are about to reference is worth knowing
+    // while CHOOSING, not only after inserting.
+    const [row] = refRows(["aabbccdd"], { ...src, nodePoolUuids: new Set(["aabbccdd"]) });
+    expect(row.fromNode).toBe(true);
+  });
+
+  it("leaves library-backed refs unmarked — that is the default", () => {
+    expect(refRows(["aabbccdd"], { ...src, nodePoolUuids: new Set(["other"]) })[0].fromNode)
+      .toBe(false);
+  });
+
+  it("marks nothing where there is no node at all — the SPA", () => {
+    expect(refRows(["aabbccdd"], src)[0].fromNode).toBe(false);
+  });
+
   it("marks a wildcard filterable only when it declares tags", () => {
     expect(refRows(["aabbccdd"], src)[0].filterable).toBe(true);
     expect(refRows(["zz"], { uuidToOptionsCount: new Map([["zz", 4]]) })[0].filterable).toBe(false);

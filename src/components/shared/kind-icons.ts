@@ -25,6 +25,13 @@ export const KIND_ICON_MAP = {
   // and without a row here they fell through to the generic `pi-circle`.
   // `pi-bookmark` matches the Categories page's own empty-state glyph.
   category:     "pi pi-bookmark",
+  // WP_ContextInjector rows. Not a library module kind — the injector writes
+  // `$var`s straight into the context without a module behind them — but its
+  // producers flow through the same kind→icon path, and without a row here
+  // every injected var fell through to the generic `pi-circle` and rendered
+  // as an empty ring. `pi-sign-in` is the arrow-into-a-door mark, matching
+  // "inject a value into the context".
+  injector:     "pi pi-sign-in",
   // WP_ContextLoop iteration vars (`$iteration` / `$<name>_total`).
   // Not a library module kind — synthesised by the loop head — but it
   // flows through the same kind→icon path so the assembler chip reads
