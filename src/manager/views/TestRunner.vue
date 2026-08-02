@@ -884,12 +884,36 @@ function pickKind(k: SelectorKind) {
   margin: 0 0 var(--wp-space-5);
 }
 
-.wp-hist { display: flex; flex-direction: column; gap: var(--wp-space-4); }
+/* No gap between rows — this is what makes the banding read as banding. With
+   a gap, tinted rows cannot touch their neighbours, so each one floats as a
+   discrete filled block and the eye reads "these rows are selected" rather
+   than "this is a striped table". The breathing room the gap provided now
+   lives INSIDE each row as padding, so the stripes are contiguous. */
+.wp-hist { display: flex; flex-direction: column; }
 .wp-hist__row {
   display: grid;
   grid-template-columns: minmax(180px, 280px) 1fr 50px;
   gap: var(--wp-space-5);
   align-items: center;
+  /* Vertical padding replaces the container gap. The horizontal padding plus
+     its matching negative margin bleeds each stripe out to the card's inner
+     edge; `.wp-card__body` is a flat 14px, so the bleed is too. */
+  padding: var(--wp-space-3) 14px;
+  margin-inline: -14px;
+}
+/* Every histogram renders its rows as a bare `v-for` directly inside
+   `.wp-hist`, so the rows are its only children and positional banding is
+   simply nth-child. (`:nth-of-type` behaves identically here — it counts by
+   tag and every child is a div — so it buys nothing.)
+
+   Deliberately NO border-radius: rounding turns a stripe into a pill, and a
+   pill sitting on a row is the universal shape of "selected". Square,
+   edge-to-edge and contiguous is what separates banding from a highlight. */
+.wp-hist__row:nth-child(odd) {
+  /* Strong enough to track one row across three columns at a glance, weak
+     enough to stay substrate and never compete with the bars, which are the
+     actual data. */
+  background: color-mix(in oklab, var(--wp-text) 7%, transparent);
 }
 /* A histogram label is a PREVIEW next to its bar, so it gets a line budget
    rather than a hard single line — two lines tell near-identical option values
