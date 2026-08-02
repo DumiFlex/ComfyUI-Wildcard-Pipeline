@@ -238,7 +238,16 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // and finally `collectUpstreamProducers` + the var-chip producer card, which
 // tipped it 180 bytes over. Explicitly approved by the maintainer, who asked
 // for the budget to be raised as needed rather than features trimmed to fit.
-const TOTAL_LIMIT = 468 * 1024;     // 468 KB
+// Bumped 468 -> 490 KB on 2026-08-02 for the `@`/`$` autocomplete + sub-category
+// filter redesign. The popover rows carry structure now (icon, uuid, option /
+// axis / tag facts, and for `$` the producer line and override badge) instead
+// of one line of text, and the shared filter panel that follows adds the
+// axis-grouped palette with collapse + search, the live match count and the
+// zero-match / unknown-term states. Sized with headroom deliberately: the
+// previous bump left 179 bytes free, which meant every subsequent change had
+// to argue with the gate. Explicitly approved by the maintainer, who asked for
+// the budget to be raised as needed rather than features trimmed to fit.
+const TOTAL_LIMIT = 490 * 1024;     // 490 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

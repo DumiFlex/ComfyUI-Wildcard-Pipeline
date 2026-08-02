@@ -38,6 +38,7 @@ import { rewriteBrokenRef } from "../cascade/remap-ref-rewrite";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
 import { probeAutocomplete } from "../utils/autocompleteProbe";
+import { refRows, varRows, type SuggestionRow } from "../utils/suggestion-rows";
 
 // --- 4-segment nested-ref serialization (SP1, §3.2) -----------------------
 //
@@ -748,7 +749,11 @@ function teardownRemapObs(): void {
  *  into view via the `acActive` watcher below. */
 const AC_MAX_ITEMS = 50;
 
-const acItems = computed(() => {
+/** Every hit, uncapped. Split out from `acItems` so the header can report how
+ *  many entries actually matched rather than how many survived the cap — with
+ *  a 50-row cap and a broad query the two differ, and "50 matches" for a query
+ *  that hit 300 is simply false. */
+const acMatches = computed(() => {
   if (!acOpen.value) return [];
   if (acTrigger.value === "@" && !refsEnabled.value) return [];
   const pool = acTrigger.value === "@" ? props.refSuggestions : props.varSuggestions;
@@ -756,27 +761,32 @@ const acItems = computed(() => {
   const labelOf = acTrigger.value === "@"
     ? (uuid: string) => (props.uuidToName.get(uuid) ?? uuid).toLowerCase()
     : (name: string) => name.toLowerCase();
-  return pool.filter((id) => labelOf(id).includes(q)).slice(0, AC_MAX_ITEMS);
+  return pool.filter((id) => labelOf(id).includes(q));
 });
 
-// Display label for a popover row: name for `@` (UUID → name lookup),
-// raw token for `$`. Used by the template binding below so the popover
-// stays consistent with the textarea even when refSuggestions are UUIDs.
-function suggestionLabel(token: string): string {
-  if (acTrigger.value === "@") return props.uuidToName.get(token) ?? token;
-  return token;
-}
+const acItems = computed(() => acMatches.value.slice(0, AC_MAX_ITEMS));
 
-/** Right-side meta string for a `@` popover row — disambiguates rows
- *  with identical display names (e.g. two wildcards both named "test")
- *  by surfacing the option count and the uuid. Empty for `$` rows
- *  since var names are already unique. */
-function suggestionMeta(token: string): string {
-  if (acTrigger.value !== "@") return "";
-  const count = props.uuidToOptionsCount.get(token);
-  const countPart = typeof count === "number" ? `${count} opt${count === 1 ? "" : "s"}` : "";
-  return countPart ? `${countPart} · ${token}` : token;
-}
+/**
+ * Render models for the popover, one per entry in `acItems`.
+ *
+ * Kept parallel to `acItems` rather than replacing it: every keyboard path
+ * (`applyAutocomplete(acItems[acActive])`, the Tab/Enter handlers) indexes the
+ * token list, and giving those a richer element to unwrap buys nothing.
+ *
+ * A `@` row is identified by what a wildcard actually is — its option count,
+ * its axes, its tags — because the rows that send people here are the ones
+ * whose NAMES are identical. A `$` row is identified by who writes it.
+ */
+const acRows = computed<SuggestionRow[]>(() =>
+  acTrigger.value === "@"
+    ? refRows(acItems.value, {
+        uuidToName: props.uuidToName,
+        uuidToOptionsCount: props.uuidToOptionsCount,
+        uuidToSubCategories: props.uuidToSubCategories,
+        uuidToTagGroups: props.uuidToTagGroups,
+      })
+    : varRows(acItems.value, props.varProducers, props.graphAware),
+);
 
 watch(acItems, (items) => {
   if (acActive.value >= items.length) acActive.value = 0;
@@ -2472,25 +2482,61 @@ function onHostKeydown(ev: KeyboardEvent): void {
       >
         <div class="wp-rt-suggestions__head">
           <span class="wp-rt-suggestions__query">{{ acTrigger }}{{ acQuery }}</span>
-          <span class="wp-rt-suggestions__hint">↑↓ Enter · Esc</span>
+          <!-- The match count belongs in the header, not implied by the list
+               length: the list is capped and scrolls, so "how many did I
+               actually match" is otherwise unanswerable without scrolling.
+               Counts MATCHES, not rendered rows — and says so when the cap
+               hid some, since a silent truncation is how you conclude the
+               wildcard you are looking for does not exist. -->
+          <span class="wp-rt-suggestions__count">
+            {{ acMatches.length }} match{{ acMatches.length === 1 ? "" : "es" }}
+            <template v-if="acMatches.length > acRows.length">
+              · showing {{ acRows.length }}
+            </template>
+          </span>
+          <span class="wp-spacer" />
+          <span class="wp-rt-suggestions__hint">↑↓ · {{ acTrigger === "@" ? "Tab filter" : "Enter" }} · Esc</span>
         </div>
         <button
-          v-for="(label, i) in acItems"
-          :key="label"
+          v-for="(row, i) in acRows"
+          :key="row.token"
           type="button"
           class="wp-rt-suggestions__item"
           :data-active="i === acActive ? '' : null"
           role="option"
           :aria-selected="i === acActive"
-          @mousedown="(e) => onSuggestionMouseDown(e, label)"
+          @mousedown="(e) => onSuggestionMouseDown(e, row.token)"
           @mouseenter="acActive = i"
         >
-          <span class="wp-rt-suggestions__label">
-            <span class="wp-rt-suggestions__trigger">{{ acTrigger }}</span>{{ suggestionLabel(label) }}
+          <i :class="[row.icon, 'wp-rt-suggestions__icon']" aria-hidden="true" />
+          <span class="wp-rt-suggestions__body">
+            <span class="wp-rt-suggestions__label">
+              <span class="wp-rt-suggestions__trigger">{{ acTrigger }}</span>{{ row.label }}
+            </span>
+            <!-- Second line: the facts that separate same-named entries. For
+                 `@` these are structural (options/axes/tags); for `$` it is
+                 the writer. Either way the row answers "which one is this?"
+                 without the user having to insert it and find out. -->
+            <span v-if="row.uuid || row.facts.length || row.producer" class="wp-rt-suggestions__sub">
+              <span v-if="row.uuid" class="wp-rt-suggestions__uuid">{{ row.uuid }}</span>
+              <span v-if="row.producer" class="wp-rt-suggestions__producer">{{ row.producer }}</span>
+              <span
+                v-for="fact in row.facts"
+                :key="fact"
+                class="wp-rt-suggestions__fact"
+              >{{ fact }}</span>
+              <span v-if="row.badge" class="wp-rt-suggestions__badge">{{ row.badge }}</span>
+              <span v-if="row.internal" class="wp-rt-suggestions__internal">internal</span>
+            </span>
           </span>
-          <span v-if="suggestionMeta(label)" class="wp-rt-suggestions__meta">
-            {{ suggestionMeta(label) }}
-          </span>
+          <!-- Funnel marks the rows where Tab opens a filter. Shown only on
+               the active row: on every row it becomes a column of noise, and
+               the affordance is only reachable for the row you are on. -->
+          <i
+            v-if="row.filterable && i === acActive"
+            class="pi pi-filter wp-rt-suggestions__funnel"
+            aria-hidden="true"
+          />
         </button>
       </div>
     </Teleport>
@@ -2787,15 +2833,23 @@ function onHostKeydown(ev: KeyboardEvent): void {
   opacity: 0.6;
   font-family: var(--wp-font, system-ui, sans-serif);
 }
+.wp-rt-suggestions__count {
+  font-family: var(--wp-font, system-ui, sans-serif);
+  opacity: 0.75;
+}
+/* Two lines per row now, so `align-items: center` would float the icon
+   against the name rather than the row. `flex-start` plus a top offset on the
+   icon lines it up with the FIRST line's text, which is where the eye is. */
 .wp-rt-suggestions__item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  gap: var(--wp-space-4);
   width: 100%;
   text-align: left;
   background: transparent;
   border: none;
   border-radius: var(--wp-radius-sm);
-  padding: 7px var(--wp-space-5); /* audit-exempt: 7px vertical hairline keeps items compact */
+  padding: 6px var(--wp-space-5); /* audit-exempt: 6px vertical keeps two-line rows compact */
   font-family: var(--wp-font-mono, ui-monospace, monospace);
   font-size: var(--wp-text-sm);
   color: var(--wp-text, #e7e7ee);
@@ -2804,8 +2858,21 @@ function onHostKeydown(ev: KeyboardEvent): void {
 .wp-rt-suggestions__item[data-active] {
   background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 22%, transparent);
 }
-.wp-rt-suggestions__label {
+.wp-rt-suggestions__icon {
+  flex-shrink: 0;
+  width: 14px;
+  margin-top: 2px; /* audit-exempt: optical centring on the label's first line box */
+  font-size: 12px;
+  color: var(--wp-accent-text, #c4b5fd);
+}
+.wp-rt-suggestions__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px; /* audit-exempt: hairline between a name and its own subtitle */
   flex: 1;
+  min-width: 0;
+}
+.wp-rt-suggestions__label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2814,14 +2881,46 @@ function onHostKeydown(ev: KeyboardEvent): void {
 .wp-rt-suggestions__trigger {
   color: var(--wp-accent-text, #c4b5fd);
 }
-.wp-rt-suggestions__meta {
-  margin-left: var(--wp-space-4);
+/* The detail line. Wraps rather than clips: these are short independent
+   facts, and dropping one silently would defeat the point of showing them.
+   The popover has a max-width, so wrapping is bounded. */
+.wp-rt-suggestions__sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--wp-space-3);
+  font-size: 11px; /* audit-exempt: micro disambiguator line — below scale floor */
   color: var(--wp-text-dim, #8a8a93);
-  font-family: var(--wp-font-mono, ui-monospace, monospace);
-  font-size: 11px; /* audit-exempt: micro disambiguator suffix — below scale floor */
-  flex-shrink: 0;
 }
-.wp-rt-suggestions__item[data-active] .wp-rt-suggestions__meta {
+.wp-rt-suggestions__uuid {
+  font-family: var(--wp-font-mono, ui-monospace, monospace);
+  opacity: 0.8;
+}
+.wp-rt-suggestions__producer,
+.wp-rt-suggestions__fact {
+  font-family: var(--wp-font, system-ui, sans-serif);
+}
+/* A count of what else touches this name — a thing to look at, so it is
+   tinted like a soft warning rather than left as body text. */
+.wp-rt-suggestions__badge {
+  font-family: var(--wp-font, system-ui, sans-serif);
+  padding: 0 4px; /* audit-exempt: badge inline padding */
+  border-radius: var(--wp-radius-sm);
+  background: color-mix(in oklab, var(--wp-warn, #f59e0b) 20%, transparent);
+  color: var(--wp-warn-text, #fcd34d);
+}
+.wp-rt-suggestions__internal {
+  font-family: var(--wp-font, system-ui, sans-serif);
+  font-style: italic;
+  opacity: 0.8;
+}
+.wp-rt-suggestions__funnel {
+  flex-shrink: 0;
+  margin-top: 2px; /* audit-exempt: matches the leading icon's optical offset */
+  font-size: 11px;
+  color: var(--wp-accent-text, #c4b5fd);
+}
+.wp-rt-suggestions__item[data-active] .wp-rt-suggestions__sub {
   color: var(--wp-text, #e7e7ee);
 }
 
