@@ -801,15 +801,22 @@ const siblingVarInfo = computed<{
 }>(() => {
   const names = new Set<string>();
   const producers: Record<string, VarProducerLike> = {};
+  /** Last module to write each name, so repeat writes from one module (a
+   *  derivation's branches) do not inflate the override count. */
+  const lastWriter = new Map<string, string>();
   let owner: { kind: string; moduleName: string; moduleId: string } | null = null;
   function add(name: string | undefined | null): void {
     const trimmed = (name ?? "").replace(/^\$+/, "").trim();
     if (!trimmed) return;
     names.add(trimmed);
     if (!owner) return;
-    // Later modules win, matching the engine's last-write-wins resolution,
-    // and each overwrite bumps the count the row reports as "overrides N".
+    // Later modules win, matching the engine's last-write-wins resolution.
+    // The count tracks distinct MODULES, not write statements: a derivation
+    // calls this once per branch and a fixed_values once per row, but at most
+    // one branch fires and the module is a single writer either way.
     const prev = producers[trimmed];
+    const sameWriter = lastWriter.get(trimmed) === owner.moduleId;
+    lastWriter.set(trimmed, owner.moduleId);
     producers[trimmed] = {
       kind: owner.kind,
       moduleName: owner.moduleName,
@@ -817,7 +824,7 @@ const siblingVarInfo = computed<{
       // Same node, so there is no other node to name — saying which one it is
       // would be noise when every sibling gives the same answer.
       nodeLabel: "this node",
-      shadowed: prev ? prev.shadowed + 1 : 0,
+      shadowed: prev ? (sameWriter ? prev.shadowed : prev.shadowed + 1) : 0,
     };
   }
   const editingM = editingModule.value;
@@ -879,11 +886,26 @@ const siblingNodeVars = computed<string[]>(() => siblingVarInfo.value.names);
  * Siblings override because they run later in the same chain position, which
  * is what the engine does too — so the row names the module whose value
  * actually survives.
+ *
+ * The override COUNT has to be carried across the seam. A plain spread
+ * replaces the upstream entry outright, taking its `shadowed` with it: with
+ * `$outfit` written by an upstream wildcard, rewritten by an upstream
+ * derivation, then rewritten again by a module in this node, the row reported
+ * "0" — no badge at all — because the sibling map only ever counted siblings
+ * and started from zero. A sibling that displaces an upstream writer has
+ * overridden that writer PLUS everything it had already overridden.
  */
-const allVarProducers = computed<Record<string, VarProducerLike>>(() => ({
-  ...(props.upstreamProducers ?? {}),
-  ...siblingVarInfo.value.producers,
-}));
+const allVarProducers = computed<Record<string, VarProducerLike>>(() => {
+  const upstream = props.upstreamProducers ?? {};
+  const merged: Record<string, VarProducerLike> = { ...upstream };
+  for (const [name, sib] of Object.entries(siblingVarInfo.value.producers)) {
+    const up = upstream[name];
+    merged[name] = up
+      ? { ...sib, shadowed: sib.shadowed + up.shadowed + 1 }
+      : sib;
+  }
+  return merged;
+});
 
 function clearDragHover() {
   if (dragOver.value === null) return;

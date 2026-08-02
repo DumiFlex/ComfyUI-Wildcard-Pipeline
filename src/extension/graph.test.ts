@@ -81,6 +81,103 @@ describe("collectUpstreamProducers", () => {
     } as LiteGraphLike;
   }
 
+  /** Context node holding one derivation whose branches all target `varName`. */
+  function ctxDerivation(
+    id: number,
+    moduleName: string,
+    varName: string,
+    branchCount: number,
+    upstreamLink?: number,
+  ): LiteNodeLike {
+    return {
+      id,
+      type: "WP_Context",
+      inputs: [{ name: "upstream", link: upstreamLink ?? null }],
+      outputs: [{ name: "context", links: [], type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "wp_modules",
+        value: JSON.stringify({
+          version: 1,
+          modules: [{
+            id: "der00001",
+            type: "derivation",
+            enabled: true,
+            meta: { name: moduleName },
+            payload: {
+              rules: [{
+                branches: Array.from({ length: branchCount }, () => ({
+                  action: { target_var: varName },
+                })),
+              }],
+            },
+          }],
+        }),
+      }],
+    };
+  }
+
+  it("counts PRODUCERS, not write statements — a rule's branches are one writer", () => {
+    // A derivation with twelve branches all targeting `$env_fx` reported
+    // "overrides 11". At most one branch fires, and nothing upstream writes
+    // the name at all, so the module that CREATES the variable was described
+    // as overriding eleven writes that never existed.
+    const der = ctxDerivation(1, "Environment fx", "env_fx", 12);
+    const pov = ctxWriting(2, "Other", "unused", 100);
+    const out = collectUpstreamProducers(
+      chain([der, pov], { 100: { origin_id: 1, target_id: 2 } }),
+      pov,
+    );
+    expect(out.env_fx.moduleName).toBe("Environment fx");
+    expect(out.env_fx.shadowed).toBe(0);
+  });
+
+  it("still counts a genuine override — two different modules, same name", () => {
+    const up = ctxWriting(1, "Outfit", "shared");
+    const mid = ctxDerivation(2, "Rewrite", "shared", 4, 100);
+    const pov = ctxWriting(3, "Other", "unused", 101);
+    const out = collectUpstreamProducers(
+      chain([up, mid, pov], {
+        100: { origin_id: 1, target_id: 2 },
+        101: { origin_id: 2, target_id: 3 },
+      }),
+      pov,
+    );
+    // The derivation is closest, so it wins; its four branches still count
+    // once, and the wildcard upstream is the single thing it overrode.
+    expect(out.shared.moduleName).toBe("Rewrite");
+    expect(out.shared.shadowed).toBe(1);
+  });
+
+  it("counts two DIFFERENT modules in one node as two writers", () => {
+    // They share `nodeId` and `kind`, so keying on those alone would collapse
+    // a real last-write-wins conflict into a single silent writer.
+    const node: LiteNodeLike = {
+      id: 1,
+      type: "WP_Context",
+      inputs: [{ name: "upstream", link: null }],
+      outputs: [{ name: "context", links: [], type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "wp_modules",
+        value: JSON.stringify({
+          version: 1,
+          modules: [
+            { id: "aaa", _uid: "u1", type: "wildcard", enabled: true,
+              meta: { name: "First" }, payload: { var_binding: "shared", options: [] } },
+            { id: "bbb", _uid: "u2", type: "wildcard", enabled: true,
+              meta: { name: "Second" }, payload: { var_binding: "shared", options: [] } },
+          ],
+        }),
+      }],
+    };
+    const pov = ctxWriting(2, "Other", "unused", 100);
+    const out = collectUpstreamProducers(
+      chain([node, pov], { 100: { origin_id: 1, target_id: 2 } }),
+      pov,
+    );
+    expect(out.shared.moduleName).toBe("Second");
+    expect(out.shared.shadowed).toBe(1);
+  });
+
   it("names the module AND its node for a Context producer", () => {
     const up = ctxWriting(1, "Outfit", "outfit");
     const pov = ctxWriting(2, "Other", "unused", 100);

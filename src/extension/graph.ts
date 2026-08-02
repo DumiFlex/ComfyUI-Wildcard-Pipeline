@@ -842,8 +842,10 @@ export interface VarProducer {
    *  the rendered prompt. Worth surfacing: a var that produces nothing visible
    *  is exactly the confusion the card exists to kill. */
   internal?: boolean;
-  /** How many EARLIER writes this one overrode. Runtime is last-write-wins, so
-   *  the card names the winner and mentions that others exist. */
+  /** How many earlier PRODUCERS this one overrode — distinct modules / nodes,
+   *  not write statements. Runtime is last-write-wins, so the card names the
+   *  winner and mentions that others exist. Zero when this producer creates
+   *  the variable, which is the common case and carries no badge. */
   shadowed: number;
 }
 
@@ -885,10 +887,45 @@ export function collectUpstreamProducers(
   };
 
   const out: Record<string, VarProducer> = {};
-  const write = (name: string, info: Omit<VarProducer, "shadowed">): void => {
+  /** Which producer last wrote each name, so repeat writes from the SAME one
+   *  do not inflate the count. See `write` below. */
+  const lastWriter = new Map<string, string>();
+
+  /**
+   * Record a write, counting PRODUCERS rather than write statements.
+   *
+   * Several call sites fan out — a derivation writes once per branch, a
+   * fixed_values once per row — because which branch fires is not knowable
+   * statically and every reachable `target_var` has to appear in the var list.
+   * Counting each of those as an override was wrong twice over: a rule with
+   * twelve branches all targeting `$env_fx` reported "overrides 11" when at
+   * most ONE branch fires, and it reported it even when nothing upstream wrote
+   * `$env_fx` at all — so the module that CREATES a variable was described as
+   * overriding eleven writes that never existed.
+   *
+   * Identity is passed in by the caller as `writerKey`, because it cannot be
+   * derived from `info` alone: `moduleId` is the LIBRARY uuid, so the same
+   * module dropped into two Context nodes shares it while being two genuinely
+   * competing writers. Callers key on the node plus the module's per-instance
+   * `_uid`. Injector rows and loop vars have no module and fall back to the
+   * node plus kind, so two rows of one injector binding the same name read as
+   * a single writer — the honest summary, since the injector as a whole is
+   * what binds the name.
+   */
+  const write = (
+    name: string,
+    info: Omit<VarProducer, "shadowed">,
+    writerKey?: string,
+  ): void => {
     if (!name) return;
+    const who = writerKey ?? `${info.nodeId}:${info.kind}`;
     const prev = out[name];
-    out[name] = { ...info, shadowed: prev ? prev.shadowed + 1 : 0 };
+    const sameWriter = lastWriter.get(name) === who;
+    lastWriter.set(name, who);
+    out[name] = {
+      ...info,
+      shadowed: prev ? (sameWriter ? prev.shadowed : prev.shadowed + 1) : 0,
+    };
   };
 
   // Furthest-upstream → closest, so later writes override earlier ones.
@@ -942,6 +979,10 @@ export function collectUpstreamProducers(
         kind: m.type, nodeId, nodeLabel, moduleName, moduleId: m.id,
         internal: m.instance?.internal === true,
       };
+      // `_uid` is stamped per module INSTANCE and survives reorders; `m.id` is
+      // the shared library uuid, so two copies of one library module in the
+      // same node would otherwise look like a single writer.
+      const writerKey = `${nodeId}:${(m as { _uid?: string })._uid ?? m.id}`;
 
       if (m.type === "fixed_values") {
         // Fans out one binding per row.
@@ -960,10 +1001,10 @@ export function collectUpstreamProducers(
           : ((m.payload ?? {}) as { values?: Array<{ id?: string; name?: string }> }).values ?? [];
         for (const val of rows) {
           if (!passes(val.id)) continue;
-          write((val.name ?? "").replace(/^\$/, "").trim(), base);
+          write((val.name ?? "").replace(/^\$/, "").trim(), base, writerKey);
         }
         for (const e of m.entries ?? []) {
-          write((e.variable_name ?? "").replace(/^\$/, "").trim(), base);
+          write((e.variable_name ?? "").replace(/^\$/, "").trim(), base, writerKey);
         }
         continue;
       }
@@ -977,9 +1018,9 @@ export function collectUpstreamProducers(
         }> };
         for (const rule of dp.rules ?? []) {
           for (const branch of rule.branches ?? []) {
-            write((branch.action?.target_var ?? "").replace(/^\$/, "").trim(), base);
+            write((branch.action?.target_var ?? "").replace(/^\$/, "").trim(), base, writerKey);
           }
-          write((rule.else?.action?.target_var ?? "").replace(/^\$/, "").trim(), base);
+          write((rule.else?.action?.target_var ?? "").replace(/^\$/, "").trim(), base, writerKey);
         }
         continue;
       }
@@ -987,7 +1028,7 @@ export function collectUpstreamProducers(
       const inst = (m.instance ?? {}) as { variable_binding?: string | null };
       const payload = (m.payload ?? {}) as { var_binding?: string; output_var?: string };
       const raw = inst.variable_binding ?? payload.var_binding ?? payload.output_var ?? "";
-      write(raw.replace(/^\$/, "").trim(), base);
+      write(raw.replace(/^\$/, "").trim(), base, writerKey);
     }
   }
   return out;
