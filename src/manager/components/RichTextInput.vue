@@ -1943,6 +1943,24 @@ function onHostInput(ev?: Event): void {
   reconcileOrphanTextNodes();
   const next = readHostAsText();
   isEmpty.value = next.length === 0;
+  // The browser can delete the atom spans outright, not just their text: any
+  // edit against a selection anchored on the HOST (Ctrl+A then type, and
+  // anything else that replaces the whole field) takes the `wp-rt__text`
+  // elements with it. What is left still accepts typing, but no atom span
+  // exists to hold it, so nothing chips, nothing colours, and Vue's vnodes
+  // point at detached nodes until some later patch throws on them.
+  //
+  // `applyAtoms` already knows how to repair that — it swaps the host element
+  // when the DOM has gone stale — but nothing reached it from here, because
+  // typing deliberately does not re-apply atoms (that is what keeps the caret
+  // stable). Re-apply only when the structure is actually gone.
+  if (hostDomIsStale()) {
+    const caret = currentCursorCharOffset();
+    applyAtoms(parseForSurface(next));
+    if (next !== props.modelValue) emitValue(next);
+    void nextTick(() => restoreCursorAtChar(caret));
+    return;
+  }
   if (next !== props.modelValue) emitValue(next);
   // After every input we re-probe the caret for autocomplete trigger
   // — covers the user typing `@` mid-text, deleting back across a
@@ -2283,6 +2301,63 @@ function positionAfterTarget(
  *  than inside a wp-rt__text span), and a pasted `@{uuid}` literal
  *  stays as plain text instead of chip-ifying. Intercept, parse the
  *  pasted text, splice into atoms, restore caret after the paste. */
+/**
+ * The raw source text currently selected — `@{uuid}` and `$name` in their
+ * serialised form, not the chip's rendered label.
+ *
+ * `readHostAsText()` is the source of truth for the value, and the selection
+ * offsets are already expressed against it, so slicing it keeps copy, cut and
+ * paste all speaking the same language.
+ */
+function selectedRawText(): { text: string; start: number; end: number } {
+  const all = readHostAsText();
+  const { start, end } = currentSelectionRangeRaw();
+  return { text: all.slice(start, end), start, end };
+}
+
+/**
+ * Copy the SOURCE of the selection, not what the chips happen to render.
+ *
+ * A ref chip's DOM text is its display label — for an unresolved ref, nothing
+ * at all — so the browser's own copy turned `red @{955bb6fa} tail` into
+ * `red  tail` and the ref was silently dropped on paste. Measured: copying a
+ * value with one chip and pasting it back lost the chip every time.
+ */
+function onHostCopy(ev: ClipboardEvent): void {
+  if (props.disabled) return;
+  const { text } = selectedRawText();
+  if (!text) return;
+  ev.clipboardData?.setData("text/plain", text);
+  ev.preventDefault();
+}
+
+/**
+ * Cut, done through the atom model instead of by the browser.
+ *
+ * Left to the browser this was the single most destructive interaction in the
+ * editor. A Ctrl+A selection is anchored on the HOST element, so the deletion
+ * removed the `wp-rt__text` spans themselves — the elements Vue's vnodes point
+ * at. The field was left with zero spans: still typeable, but nothing chipped,
+ * nothing coloured, and the vdom referencing detached nodes, which is what
+ * produced `insertBefore: Child to insert before is not a child of this node`
+ * on a later patch and left the page unable to respond to anything.
+ *
+ * Routing it through `applyAtoms` keeps the structure Vue's, exactly as paste
+ * already did.
+ */
+function onHostCut(ev: ClipboardEvent): void {
+  if (props.disabled) return;
+  const all = readHostAsText();
+  const { text, start, end } = selectedRawText();
+  if (!text) return;
+  ev.clipboardData?.setData("text/plain", text);
+  ev.preventDefault();
+  const remainder = all.slice(0, start) + all.slice(end);
+  applyAtoms(parseForSurface(remainder));
+  emitValue(remainder);
+  void nextTick(() => restoreCursorAtChar(start));
+}
+
 function onHostPaste(ev: ClipboardEvent): void {
   if (props.disabled) return;
   const data = ev.clipboardData?.getData("text/plain");
@@ -2562,6 +2637,8 @@ function onHostKeydown(ev: KeyboardEvent): void {
       @keydown="onHostKeydown"
       @beforeinput="onHostBeforeInput"
       @paste="onHostPaste"
+      @copy="onHostCopy"
+      @cut="onHostCut"
     >
       <template v-for="(atom, idx) in atoms" :key="renderEpoch + ':' + idx">
         <RefChip

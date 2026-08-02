@@ -1732,3 +1732,121 @@ describe("RichTextInput — stranded-caret rescue", () => {
     w.unmount();
   });
 });
+
+/**
+ * Cut and copy go through the atom model, not the browser.
+ *
+ * Left to the browser, a Ctrl+A selection is anchored on the HOST element, so
+ * the deletion removed the `wp-rt__text` spans themselves — the elements Vue's
+ * vnodes point at. Measured in Firefox 153: the field was left with zero atom
+ * spans, still typeable but with nothing chipping or colouring, and the vdom
+ * referencing detached nodes.
+ */
+describe("RichTextInput — cut and copy", () => {
+  /** A clipboard event carrying a stub DataTransfer we can read back. */
+  function clipEvent(type: "cut" | "copy") {
+    const store: Record<string, string> = {};
+    const ev = new Event(type, { bubbles: true, cancelable: true }) as ClipboardEvent & {
+      __data: Record<string, string>;
+    };
+    Object.defineProperty(ev, "clipboardData", {
+      value: {
+        setData: (fmt: string, val: string) => { store[fmt] = val; },
+        getData: (fmt: string) => store[fmt] ?? "",
+      },
+    });
+    ev.__data = store;
+    return ev;
+  }
+
+  /** Select the whole field the way Ctrl+A does — anchored on the host. */
+  function selectAll(host: HTMLElement): void {
+    const range = document.createRange();
+    range.setStart(host, 0);
+    range.setEnd(host, host.childNodes.length);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+  }
+
+  it("cut removes the selection through the model and emits the remainder", async () => {
+    const w = mount(RichTextInput, {
+      props: { modelValue: "alpha one" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const host = w.get('[contenteditable="true"]').element as HTMLElement;
+    selectAll(host);
+    const ev = clipEvent("cut");
+    host.dispatchEvent(ev);
+    await flushPromises();
+    expect(ev.defaultPrevented).toBe(true);
+    expect(ev.__data["text/plain"]).toBe("alpha one");
+    const emitted = w.emitted("update:modelValue");
+    expect(emitted?.[emitted.length - 1]).toEqual([""]);
+    w.unmount();
+  });
+
+  it("cut leaves the atom spans intact — the whole point", async () => {
+    // The browser's own cut took the spans with it, which is what broke the
+    // field for every subsequent edit.
+    const w = mount(RichTextInput, {
+      props: { modelValue: "alpha one" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const host = w.get('[contenteditable="true"]').element as HTMLElement;
+    selectAll(host);
+    host.dispatchEvent(clipEvent("cut"));
+    await flushPromises();
+    expect(host.querySelectorAll(".wp-rt__text").length).toBeGreaterThan(0);
+    w.unmount();
+  });
+
+  it("copy puts the SOURCE on the clipboard, so refs survive a round trip", async () => {
+    // A chip renders its display label, so the browser's own copy turned
+    // `red @{955bb6fa} tail` into `red  tail` and dropped the ref.
+    const w = mount(RichTextInput, {
+      props: { modelValue: "red @{955bb6fa} tail", surface: "wildcard" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const host = w.get('[contenteditable="true"]').element as HTMLElement;
+    selectAll(host);
+    const ev = clipEvent("copy");
+    host.dispatchEvent(ev);
+    await flushPromises();
+    expect(ev.__data["text/plain"]).toContain("@{955bb6fa}");
+    w.unmount();
+  });
+
+  it("copy leaves the value alone", async () => {
+    const w = mount(RichTextInput, {
+      props: { modelValue: "alpha one" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const host = w.get('[contenteditable="true"]').element as HTMLElement;
+    selectAll(host);
+    host.dispatchEvent(clipEvent("copy"));
+    await flushPromises();
+    expect(w.emitted("update:modelValue")).toBeUndefined();
+    w.unmount();
+  });
+
+  it("ignores a cut with nothing selected", async () => {
+    const w = mount(RichTextInput, {
+      props: { modelValue: "alpha one" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const host = w.get('[contenteditable="true"]').element as HTMLElement;
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    const ev = clipEvent("cut");
+    host.dispatchEvent(ev);
+    await flushPromises();
+    expect(ev.defaultPrevented).toBe(false);
+    w.unmount();
+  });
+});
