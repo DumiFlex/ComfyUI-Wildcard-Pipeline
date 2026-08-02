@@ -39,6 +39,27 @@ const menuStyle = ref<Record<string, string>>({});
 
 const selected = computed(() => props.options.find((o) => o.value === props.modelValue) ?? null);
 
+/**
+ * Width to reserve for the icon/dot gutter, or null when no option has one.
+ *
+ * Markers are per-option, so a list where only SOME options carry one used to
+ * render a ragged left edge — a categorised row sat 20px right of an
+ * uncategorised one, and the eye reads that indent as hierarchy that isn't
+ * there. Reserving the gutter for every row in a list where any row has a
+ * marker keeps the labels in one column.
+ *
+ * Measured off the widest marker actually present: icons are a 14px box, dots
+ * 8px, so a dots-only list does not pay for icon width it never uses.
+ */
+const markerWidth = computed<string | null>(() => {
+  let hasDot = false;
+  for (const o of props.options) {
+    if (o.icon) return "14px";
+    if (o.dot) hasDot = true;
+  }
+  return hasDot ? "8px" : null;
+});
+
 /** Options narrowed by `query` (case-insensitive substring on the label).
  *  Empty query → all options, so every dropdown is type-to-filter. */
 const filtered = computed<SelectOption[]>(() => {
@@ -239,7 +260,10 @@ function onKeydown(e: KeyboardEvent) {
            is still readable on hover. Values here run long — a constraint
            exception source can be a phrase plus a nested `@ref` — and the
            ellipsis alone left no way to see the rest. -->
-      <span class="wp-select__label-wrap" :title="selected?.label || undefined">
+      <span
+        class="wp-select__label-wrap"
+        :title="selected ? (selected.meta ? `${selected.label} — ${selected.meta}` : selected.label) : undefined"
+      >
         <i
           v-if="selected?.icon"
           :class="`pi pi-${selected.icon} wp-select__icon`"
@@ -251,10 +275,24 @@ function onKeydown(e: KeyboardEvent) {
           class="wp-select__dot"
           :style="{ background: selected.dot }"
         />
+        <span
+          v-else-if="selected && markerWidth"
+          class="wp-select__marker-gap"
+          :style="{ width: markerWidth }"
+          aria-hidden="true"
+        />
         <span v-if="selected" class="wp-select__label-text">
           <slot name="label" :option="selected">{{ selected.label }}</slot>
         </span>
-        <span v-else class="wp-select__placeholder">{{ placeholder }}</span>
+        <!-- The meta repeats in the CLOSED trigger, not just in the open menu.
+             Disambiguating rows only while the menu is open solves half the
+             problem: pick one of five identical "Outfit" rows and the trigger
+             collapses straight back to "Outfit", so the thing you just took
+             care to choose becomes unverifiable again. Shown only when the
+             option carries meta, so every dropdown that sets none is
+             untouched. -->
+        <span v-if="selected?.meta" class="wp-select__label-meta">{{ selected.meta }}</span>
+        <span v-if="!selected" class="wp-select__placeholder">{{ placeholder }}</span>
       </span>
       <button
         v-if="clearable && selected"
@@ -309,6 +347,12 @@ function onKeydown(e: KeyboardEvent) {
             v-else-if="opt.dot"
             class="wp-select__dot"
             :style="{ background: opt.dot }"
+          />
+          <span
+            v-else-if="markerWidth"
+            class="wp-select__marker-gap"
+            :style="{ width: markerWidth }"
+            aria-hidden="true"
           />
           <span class="wp-select__option-label">
             <slot name="option" :option="opt">{{ opt.label }}</slot>
@@ -383,6 +427,10 @@ function onKeydown(e: KeyboardEvent) {
   flex: 1; min-width: 0; overflow: hidden;
 }
 .wp-select__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+/* Empty stand-in that holds the icon/dot column open for options without one.
+ * Width is set inline from `markerWidth`, since it depends on what the list
+ * actually contains. */
+.wp-select__marker-gap { flex-shrink: 0; display: inline-block; }
 /* Fixed square, centred: an icon font's glyphs have varying advance widths and
  * a line box taller than the mark itself, so a bare `<i>` sat off-centre next
  * to the label and shifted horizontally between categories. Sizing the BOX and
@@ -406,6 +454,23 @@ function onKeydown(e: KeyboardEvent) {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .wp-select__placeholder { color: var(--wp-text-dim); }
+/* Trigger-side twin of `.wp-select__option-meta`, same mono/dim treatment so
+ * the detail you picked in the menu is recognisably the same string once the
+ * menu closes.
+ *
+ * `flex: 0 1 auto` against the label's `flex: 1`: spare width goes to the
+ * NAME, which is what the user reads first, while both stay shrinkable so a
+ * long meta clips itself rather than pushing the name out of the trigger. */
+.wp-select__label-meta {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--wp-font-mono);
+  font-size: 10px;
+  color: var(--wp-text-dim);
+}
 .wp-select__chevron { color: var(--wp-text-dim); font-size: 11px; margin-left: 6px; flex-shrink: 0; }
 .wp-spacer { flex: 1 1 auto; }
 

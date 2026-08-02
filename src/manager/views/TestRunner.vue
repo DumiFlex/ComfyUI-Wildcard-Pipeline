@@ -15,6 +15,9 @@ import Icon, { ICON_SM } from "../components/ui/Icon.vue";
 import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
 import { useToast } from "../composables/useToast";
+import { useCategoryStore } from "../stores/categoryStore";
+import { entitySelectOptions } from "../utils/entity-select-options";
+import type { SelectOption } from "../components/ui/select-types";
 import { api } from "../api/client";
 import RichTextPreview from "../components/RichTextPreview.vue";
 import {
@@ -85,6 +88,7 @@ const samples = ref<number>(KIND_DEFAULT_SAMPLES.wildcard);
 const running = ref(false);
 const allModules = ref<ModuleRow[]>([]);
 const allBundles = ref<BundleRow[]>([]);
+const categoryStore = useCategoryStore();
 
 // 8-hex UUID → human var-name. Drives `@{uuid}` chip labels in every
 // RichTextPreview below (histogram templates, combine renderings).
@@ -132,18 +136,31 @@ const traceIndex = ref(0);
 /* ------------------------- derived helpers ------------------------- */
 
 /** Items available in the picker — modules filtered by kind, or all
- *  bundles when the bundle pseudo-kind is selected. */
-const filteredItems = computed<{ id: string; name: string }[]>(() => {
-  if (kind.value === "bundle") {
-    return allBundles.value.map((b) => ({ id: b.id, name: b.name }));
-  }
-  return allModules.value
-    .filter((m) => m.type === kind.value)
-    .map((m) => ({ id: m.id, name: m.name }));
+ *  bundles when the bundle pseudo-kind is selected.
+ *
+ *  Kept as WHOLE rows. This used to project down to `{ id, name }`, which is
+ *  what made the dropdown useless against duplicates: a library with five
+ *  wildcards called "Outfit" rendered five identical lines, and the fields
+ *  that tell them apart — payload, category, uuid — had already been thrown
+ *  away one computed earlier. */
+const filteredItems = computed<(ModuleRow | BundleRow)[]>(() =>
+  kind.value === "bundle"
+    ? allBundles.value
+    : allModules.value.filter((m) => m.type === kind.value),
+);
+
+const categoryById = computed(() => {
+  const map = new Map<string, { name: string; color: string | null; icon: string | null }>();
+  for (const c of categoryStore.items) map.set(c.id, c);
+  return map;
 });
 
-const moduleOptions = computed(() =>
-  filteredItems.value.map((m) => ({ value: m.id, label: m.name })),
+const moduleOptions = computed<SelectOption[]>(() =>
+  entitySelectOptions(
+    filteredItems.value,
+    kind.value === "bundle" ? "bundle" : kind.value,
+    categoryById.value,
+  ),
 );
 
 const selectedModule = computed(() =>
@@ -181,6 +198,13 @@ const refreshing = ref(false);
 async function refresh() {
   refreshing.value = true;
   try {
+    // Categories only supply the dropdown's icon + colour, so this is
+    // deliberately NOT awaited alongside the two fetches below: joining it
+    // into that `Promise.all` would let a category failure reject the whole
+    // batch and leave the runner with an empty module list — a cosmetic
+    // dependency taking down the feature. It settles on its own and the
+    // options recompute when it lands.
+    void categoryStore.fetchAll().catch(() => { /* icons stay unset */ });
     const [modRes, bundleRes] = await Promise.all([
       api.modules.list({}),
       api.bundles.list({}),
