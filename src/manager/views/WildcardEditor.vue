@@ -642,7 +642,12 @@ let optTagTriggerEl: HTMLElement | null = null;
  * Once the trigger has left the viewport entirely there is nothing to anchor
  * to, and closing IS right.
  */
-function reanchorOptTagPicker(): void {
+function reanchorOptTagPicker(ev?: Event): void {
+  // A scroll that happens INSIDE a teleported menu is the user reading its own
+  // list — with the wheel or by dragging its scrollbar — and must not dismiss
+  // it. Only movement of the surface UNDER the menu is a reason to react.
+  const from = ev?.target as HTMLElement | null;
+  if (from?.closest?.(".opt-tags__picker")) return;
   if (optTagMenuOpen.value) optTagMenuOpen.value = false;
   if (openOptTagPicker.value === null || !optTagTriggerEl) return;
   const r = optTagTriggerEl.getBoundingClientRect();
@@ -1335,6 +1340,23 @@ function ensureSubcat(name: string): boolean {
   return true;
 }
 
+/**
+ * Bulk tag actions skip the null option.
+ *
+ * The engine refuses a null option that carries any: "null option must have no
+ * sub_categories" (wildcard_handler.py). Its participation in the pool is
+ * governed solely by `exclude_null`, so a tag on it could not change anything
+ * even if it were allowed. Bulk edit was writing them anyway — invisibly,
+ * since the row renders a dash instead of chips — and the save would have been
+ * rejected server-side.
+ *
+ * The row stays selectable, because selection also drives moves and delete,
+ * which it can take part in.
+ */
+function taggableSelection(): WildcardOption[] {
+  return options.value.filter((o) => selectedIds.value.has(o.id) && !o.is_null);
+}
+
 function applyTagToSelected(tag: string): void {
   bulkNote.value = "";
   if (!ensureSubcat(tag)) {
@@ -1342,7 +1364,7 @@ function applyTagToSelected(tag: string): void {
     return;
   }
   const t = tag.trim();
-  for (const o of selectedOptionList()) {
+  for (const o of taggableSelection()) {
     const current = new Set(o.sub_categories ?? []);
     current.add(t);
     // Re-derive in registry order so chips stay stably sorted (mirrors toggleOptionTag).
@@ -1351,7 +1373,7 @@ function applyTagToSelected(tag: string): void {
 }
 function removeTagFromSelected(tag: string): void {
   bulkNote.value = "";
-  for (const o of selectedOptionList()) {
+  for (const o of taggableSelection()) {
     o.sub_categories = (o.sub_categories ?? []).filter((s) => s !== tag);
   }
 }
@@ -1942,7 +1964,6 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
           />
         </div>
 
-        <span class="wp-spacer" />
         <!-- Same count grammar as the sub-category filter panel: a bar for the
              proportion, tabular numerals for the precision. Idle until a filter
              is on — "133 of 133" would be reporting a success nobody asked for. -->
@@ -2807,13 +2828,20 @@ tr:hover .opt-grip:disabled { opacity: 0.2; }
   display: flex;
   align-items: center;
   gap: var(--wp-space-4);
-  flex: 1;
+  /* Card's header puts a `.wp-spacer` (flex: 1) between the title and this
+     slot. With a grow factor of 1 the two split the free space evenly and the
+     search box ended up half the width it should be. A far larger factor takes
+     effectively all of the slack while leaving the spacer in place, which is
+     what still separates the title from the controls. */
+  flex: 1000 1 auto;
   min-width: 0;
   margin-right: var(--wp-space-4);
 }
-/* The search itself yields before the count and the tag button do — those are
-   fixed-size and meaningful, the input can shrink and still be usable. */
-.wc-optfilter__search { flex: 1 1 auto; min-width: 90px; }
+/* The search takes whatever the fixed-size tag button and count leave. There
+   is deliberately no spacer in this block: one used to right-align the count,
+   and it competed with the search for the same free space and took half of
+   it. */
+.wc-optfilter__search { min-width: 90px; }
 .wc-optfilter__search {
   display: flex;
   align-items: center;

@@ -787,7 +787,12 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
   display: flex;
   align-items: center;
   gap: var(--wp-space-4);
-  flex: 1;
+  /* Card's header puts a `.wp-spacer` (flex: 1) between the title and this
+     slot. With a grow factor of 1 the two split the free space evenly and the
+     search box ended up half the width it should be. A far larger factor takes
+     effectively all of the slack while leaving the spacer in place, which is
+     what still separates the title from the controls. */
+  flex: 1000 1 auto;
   min-width: 0;
   margin-right: var(--wp-space-4);
 }
