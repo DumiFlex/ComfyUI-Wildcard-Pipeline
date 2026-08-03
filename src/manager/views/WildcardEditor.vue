@@ -1217,6 +1217,8 @@ const optTagFilter = ref<string[]>([]);
 const optTagMenuOpen = ref(false);
 /** Viewport coordinates for the teleported filter menu. */
 const optFilterAnchor = ref({ top: 0, left: 0 });
+/** True when the filter menu should grow upward instead. */
+const optFilterDropUp = ref(false);
 
 /** The filter button, kept so the menu can be re-measured against it. */
 let optFilterTriggerEl: HTMLElement | null = null;
@@ -1224,7 +1226,16 @@ let optFilterTriggerEl: HTMLElement | null = null;
 function positionFilterMenu(): void {
   const r = optFilterTriggerEl?.getBoundingClientRect();
   if (!r) return;
-  optFilterAnchor.value = { top: r.bottom + 4, left: r.left };
+  // Prefer below, but flip when there is meaningfully more room above — near
+  // the foot of the page a downward menu has nowhere to go, and capping its
+  // height there would leave a 140px sliver.
+  const below = window.innerHeight - r.bottom;
+  const above = r.top;
+  optFilterDropUp.value = below < 260 && above > below;
+  optFilterAnchor.value = {
+    top: optFilterDropUp.value ? r.top - 4 : r.bottom + 4,
+    left: r.left,
+  };
 }
 
 function toggleOptTagMenu(ev: MouseEvent): void {
@@ -1999,6 +2010,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
           <TagPickerMenu
             :open="optTagMenuOpen"
             :anchor="optFilterAnchor"
+            :drop-up="optFilterDropUp"
             :groups="subcatGroups"
             :all-tags="subCategories"
             :selected="optTagFilter"

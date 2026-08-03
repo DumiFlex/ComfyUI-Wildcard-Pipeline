@@ -66,6 +66,38 @@ const visibleGroups = computed<TagGroup[]>(() => {
 function styleFor(tag: string): Record<string, string> | undefined {
   return props.tagStyle ? props.tagStyle(tag) : undefined;
 }
+
+/**
+ * Position, plus a height bounded by the room actually available.
+ *
+ * A flat cap on the menu's own height does not stop it running off the bottom:
+ * the height that fits depends entirely on where the top edge lands. Opened low
+ * on the page, a 400px menu at y=700 overflows however small its `max-height`
+ * is, unless that height is measured from y=700 to the bottom of the window.
+ *
+ * Recomputed on every open and on each re-anchor, because both the trigger's
+ * position and the window's height change under it.
+ */
+const VIEWPORT_MARGIN = 12;
+/** Comfortable height for a tag list — roughly a dozen rows plus the search.
+ *  The viewport is the LIMIT, not the target: filling a tall window with one
+ *  menu makes it harder to read, not easier, and buries the page behind it. */
+const PREFERRED_MAX = 340;
+/** Below this a menu is more frustrating than useful, so it scrolls instead. */
+const MIN_USABLE = 140;
+
+const menuStyle = computed<Record<string, string>>(() => {
+  const vh = typeof window === "undefined" ? 0 : window.innerHeight;
+  const room = props.dropUp
+    // Flipped: the menu grows upward from the trigger's top edge.
+    ? props.anchor.top - VIEWPORT_MARGIN
+    : vh - props.anchor.top - VIEWPORT_MARGIN;
+  return {
+    top: `${props.anchor.top}px`,
+    left: `${props.anchor.left}px`,
+    maxHeight: `${Math.max(MIN_USABLE, Math.min(PREFERRED_MAX, room))}px`,
+  };
+});
 </script>
 
 <template>
@@ -74,7 +106,7 @@ function styleFor(tag: string): Record<string, string> | undefined {
       v-if="open"
       class="opt-tags__picker"
       :class="{ 'opt-tags__picker--up': dropUp }"
-      :style="{ top: anchor.top + 'px', left: anchor.left + 'px' }"
+      :style="menuStyle"
       role="menu"
       :data-test="`${testPrefix}-menu`"
       @click.stop
@@ -140,10 +172,8 @@ function styleFor(tag: string): Record<string, string> | undefined {
   position: fixed;
   z-index: 3000;
   min-width: 210px;
-  /* Never taller than the space below the trigger. Without this the menu ran
-     past the bottom of the window whenever the list behind it was short — an
-     empty filter result leaves almost no page to sit on. */
-  max-height: calc(100vh - 24px);
+  /* `max-height` is set inline from the room below (or above) the trigger —
+     a static cap cannot know where the top edge landed. See `menuStyle`. */
   display: flex;
   flex-direction: column;
   gap: var(--wp-space-3);
@@ -166,7 +196,11 @@ function styleFor(tag: string): Record<string, string> | undefined {
      without it the list keeps its content height and pushes the menu past the
      viewport instead of scrolling. */
   min-height: 0;
-  max-height: 240px;
+  /* No cap of its own: the menu's inline `max-height` bounds the whole thing,
+     and this is the part that gives. A fixed 240px here fought that cap and
+     won, which is how the list kept overflowing a menu that was itself the
+     right height. */
+  flex: 1 1 auto;
   overflow-y: auto;
   overscroll-behavior: contain;
   display: flex;
