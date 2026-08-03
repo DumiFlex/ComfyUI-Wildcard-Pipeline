@@ -148,10 +148,13 @@ describe("createDomWidgetHost — fillHost under the Vue renderer", () => {
     await new Promise((r) => requestAnimationFrame(() => r(null)));
     // 372 snapped to the 10px node grid.
     expect(nodeEl.style.minWidth).toBe("370px");
-    // And we opt out of the parent's `*:flex-1`, or the pinned height is
-    // ignored in the main axis.
-    expect(host.widget.element.style.flexGrow).toBe("0");
-    expect(host.widget.element.style.flexBasis).toBe("auto");
+    // A flex item defaults to `min-height: auto` and refuses to shrink below
+    // its content, which is what let the payload inflate the node.
+    expect(host.widget.element.style.minHeight).toBe("80px");
+    // Content goes out of flow so it cannot push the host's own chain, whose
+    // every level is also `min-height: auto`.
+    expect(host.widget.element.style.position).toBe("relative");
+    expect(host.element.style.position).toBe("absolute");
     host.unmount();
   });
 
@@ -167,7 +170,8 @@ describe("createDomWidgetHost — fillHost under the Vue renderer", () => {
 
     await new Promise((r) => requestAnimationFrame(() => r(null)));
     expect(nodeEl.style.minWidth).toBe("");
-    expect(host.widget.element.style.flexGrow).toBe("");
+    expect(host.widget.element.style.minHeight).toBe("");
+    expect(host.widget.element.style.position).toBe("");
     // Legacy gives the host a definite box, so the percentage still resolves.
     expect(host.widget.element.style.height).toBe("100%");
     host.unmount();
