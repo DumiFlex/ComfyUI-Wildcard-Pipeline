@@ -1,6 +1,7 @@
 import { createApp, type App, type Component } from "vue";
 
 import { nodeCollapseAnimating } from "../extension/_stashes";
+import { isVueNodes } from "../extension/renderer";
 import { installClipboardShield } from "./clipboard-shield";
 
 export interface DomWidget {
@@ -244,6 +245,139 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
       });
   if (resizeObserver) queueMicrotask(() => resizeObserver.observe(inner));
 
+  /* ── fillHost under the Vue renderer ──────────────────────────────────
+   *
+   * `fillHost` means the user owns the node's height and the widget fills it,
+   * scrolling any overflow. That relies on `height: 100%` above resolving to a
+   * definite length — and a percentage height against an INDEFINITE container
+   * computes to `auto`. The legacy renderer gives our host a definite box, so
+   * it resolves; Nodes 2.0 lays nodes out from their content, so it does not.
+   *
+   * The consequence is not subtle. With `height: auto` the flex column sizes
+   * to content, so `.wp-dbg-pre` (`flex: 1 1 0%; min-height: 0`) is handed its
+   * full content height instead of being compressed, `overflow: auto` never
+   * engages, and the node inflates to fit the whole payload — overwriting
+   * `node.size[1]`. Measured with `node.size[1]` pinned at 400:
+   *
+   *     payload    legacy host / pre           Nodes 2.0 host / pre
+   *      3 vars    354u  305/305               338u  289/289
+   *     20 vars    354u  305/429  scrolls      477u  429/429  never scrolls
+   *     60 vars    354u  305/1089 scrolls     1138u 1089/1089 never scrolls
+   *
+   * That one mechanism is the dead scrollbar, the node that cannot be dragged
+   * shorter, and the absurdly tall node — all three.
+   *
+   * So under Vue, pin a real pixel height taken from `node.size[1]`, which is
+   * authoritative in both renderers. The chrome (header, slots, padding) is
+   * measured rather than assumed: it differs per node type and per host
+   * version. Also pin `min-width`, because Nodes 2.0 ignores `computeSize` and
+   * would otherwise let the node be squeezed far below the width the widget
+   * says it needs (measured floor 225u against a declared 494u).
+   */
+  let fillObserver: ResizeObserver | null = null;
+  let fillDisposed = false;
+  if (options.fillHost) {
+    const sized = node as unknown as { id?: string | number; size?: [number, number] | number[] };
+    const syncFill = (): void => {
+      if (!isVueNodes()) {
+        // Legacy sizes us itself. Undo any pin, in case the renderer was
+        // switched under a live widget.
+        if (host.style.height !== "100%") host.style.height = "100%";
+        host.style.removeProperty("flex-grow");
+        host.style.removeProperty("flex-shrink");
+        host.style.removeProperty("flex-basis");
+        return;
+      }
+      const nodeH = sized.size?.[1];
+      if (typeof nodeH !== "number" || nodeH <= 0) return;
+      const nodeEl = typeof document === "undefined" || sized.id == null
+        ? null
+        : document.querySelector<HTMLElement>(`[data-node-id="${String(sized.id)}"]`);
+      if (!nodeEl) return;
+      // Width floor. Legacy gets this free: litegraph asks `computeSize`, which
+      // folds in the widget's `computeLayoutSize().minWidth`, and refuses to
+      // drag narrower. Nodes 2.0 never calls `computeSize`, so the node could
+      // be squeezed to its global floor — `MIN_NODE_WIDTH = 225` — against a
+      // widget declaring it needs 494, turning the content into an unreadable
+      // column.
+      //
+      // Its resize interaction reads the floor off the NODE element's inline
+      // style and only falls back to the global default:
+      //
+      //     const minWidth = parseFloat(
+      //       nodeElement.style.getPropertyValue('min-width') || '0'
+      //     ) || MIN_NODE_WIDTH
+      //
+      // so publishing our minimum there is the sanctioned hook, and it gets
+      // the west-corner position compensation for free. Writing `node.size[0]`
+      // instead does NOT work: the layout store owns the rendered size and
+      // syncs one-way into litegraph, so the model and the view disagree.
+      const wantMinW = minWidthGetter ? snapToGrid(minWidthGetter()) : 0;
+      const minPx = wantMinW > 0 ? `${wantMinW}px` : "";
+      if (nodeEl.style.minWidth !== minPx) nodeEl.style.minWidth = minPx;
+      // Opt out of the parent's `*:flex-1`. Written as longhands because the
+      // `flex` shorthand is not implemented by every CSSOM.
+      if (host.style.flexGrow !== "0") host.style.flexGrow = "0";
+      if (host.style.flexShrink !== "0") host.style.flexShrink = "0";
+      if (host.style.flexBasis !== "auto") host.style.flexBasis = "auto";
+
+      // Error-correcting step rather than a chrome constant: nudge our height
+      // by however far the node's RENDERED height is from the height the model
+      // asked for. `offsetHeight` is layout pixels — the same unit as
+      // `node.size` — so no zoom maths is involved, and the loop settles in a
+      // frame or two without needing to model the header, slots and padding.
+      const nodeLayoutH = nodeEl.offsetHeight;
+      const hostLayoutH = host.offsetHeight;
+      if (nodeLayoutH <= 0 || hostLayoutH <= 0) return;
+      // `node.size[1]` is the body height EXCLUDING the title — the host's own
+      // sync comments say so ("layout.size.height is the content height
+      // without title"). The DOM element includes the header, so compare
+      // against `size[1] + header`, or the correction would chase the header
+      // height downward on every pass.
+      const headerEl = nodeEl.querySelector<HTMLElement>(".lg-node-header");
+      const headerH = headerEl?.offsetHeight ?? 0;
+      const error = (nodeH + headerH) - nodeLayoutH;
+
+
+      if (Math.abs(error) <= 1 && host.style.height.endsWith("px")) return;
+      const target = Math.max(minHeight, Math.round(hostLayoutH + error));
+      const px = `${target}px`;
+      if (host.style.height !== px) host.style.height = px;
+      // The Nodes 2.0 parent is `.flex.flex-col.*:flex-1`, and that `*:flex-1`
+      // hits every child including us. `flex: 1 1 0%` makes flex-basis and
+      // flex-grow decide the main-axis size, so an explicit `height` is
+      // ignored — measured: host pinned to 308px still rendered 1024px, and
+      // the layout store then synced that back into `node.size`. The flex
+      // opt-out above is what makes the pinned height actually govern.
+    };
+    // The node's height changes with no DOM event we can hear — a drag writes
+    // `node.size` directly — but the Vue node element resizes when it does, so
+    // observe that. The target is computed from the MODEL, never from the
+    // element, so our own write cannot drive a feedback loop.
+    //
+    // The element does not exist yet at widget-construction time (a restored
+    // workflow mounts its nodes later), so wait for it rather than giving up
+    // on a single lookup — that was the bug that left the wire merge unapplied
+    // after a renderer switch.
+    const attachFillObserver = (framesLeft: number): void => {
+      if (fillDisposed) return;
+      if (typeof ResizeObserver === "undefined" || typeof document === "undefined") return;
+      const nodeEl = sized.id == null
+        ? null
+        : document.querySelector<HTMLElement>(`[data-node-id="${String(sized.id)}"]`);
+      if (!nodeEl) {
+        if (framesLeft > 0) requestAnimationFrame(() => attachFillObserver(framesLeft - 1));
+        return;
+      }
+      syncFill();
+      fillObserver = new ResizeObserver(() => syncFill());
+      fillObserver.observe(nodeEl);
+    };
+    // ~10s of frames. Only runs while the element is missing, one selector
+    // lookup per frame, and stops for good once found.
+    queueMicrotask(() => attachFillObserver(600));
+  }
+
   // Pull-based relayout. Reentrancy flag short-circuits if litegraph's
   // response to our setSize triggers (via some plugin or observer) a
   // synchronous re-entry. 32ms release matches rgthree's _tempWidth
@@ -323,6 +457,8 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     app,
     unmount: () => {
       resizeObserver?.disconnect();
+      fillDisposed = true;
+      fillObserver?.disconnect();
       app.unmount();
     },
     getValue: () => state,

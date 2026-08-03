@@ -23,6 +23,7 @@
  * other extensions can't read or collide with our internals.
  */
 
+import { isVueNodes } from "./renderer";
 import {
   nodeCollapseAnimating,
   nodeCollapseAnimToken,
@@ -141,11 +142,6 @@ const VUE_SLOT_MERGED_TAIL_CLASS = "wp-slot-merged-tail";
 /** Any row whose label we print ourselves instead of letting Vue render its
  *  stale snapshot of the slot name. */
 const VUE_SLOT_LABEL_CLASS = "wp-slot-label";
-
-function isVueNodes(): boolean {
-  return (globalThis as { LiteGraph?: { vueNodesMode?: boolean } })
-    .LiteGraph?.vueNodesMode === true;
-}
 
 /** The node's Vue-rendered element, or null (legacy renderer, node not
  *  mounted yet, or no id). */
