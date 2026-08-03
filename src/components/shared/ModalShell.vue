@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <Transition name="wp-modal" appear>
-      <div v-if="visible" class="wp-modal-overlay" @click="$emit('close')">
+      <div v-if="visible" ref="overlayEl" class="wp-modal-overlay" @click="$emit('close')">
         <div class="wp-modal-wrapper" role="dialog" aria-modal="true" @click.stop>
           <slot></slot>
         </div>
@@ -11,16 +11,40 @@
 </template>
 
 <script setup lang="ts">
-import { watch, onBeforeUnmount } from "vue";
+import { ref, watch, onBeforeUnmount } from "vue";
+import { useModalKeyShield } from "./useModalKeyShield";
 
 const props = defineProps<{ visible: boolean }>();
-const emit = defineEmits<{ (e: "close"): void }>();
+const emit = defineEmits<{
+  (e: "close"): void;
+  /** Every keydown inside the modal. Consumers MUST use this instead of a
+   *  window listener: the shield stops inside-modal keys at the overlay, so a
+   *  window listener would never see them. */
+  (e: "keydown", ev: KeyboardEvent): void;
+}>();
 
+const overlayEl = ref<HTMLElement | null>(null);
+
+function closeOnEscape(event: KeyboardEvent): void {
+  if (!props.visible || event.key !== "Escape") return;
+  event.preventDefault();
+  emit("close");
+}
+
+// Keys pressed INSIDE the modal are handled here and stop at the overlay, so
+// they never reach ComfyUI's global shortcuts (see useModalKeyShield).
+useModalKeyShield(overlayEl, {
+  onKey: (ev) => {
+    emit("keydown", ev);
+    closeOnEscape(ev);
+  },
+});
+
+// The window listener still covers the case where focus is OUTSIDE the modal
+// — clicking the canvas leaves the modal open but unfocused, and Escape should
+// still close it. Events from inside never get here; the shield stops them.
 function onKeydown(event: KeyboardEvent) {
-  if (props.visible && event.key === "Escape") {
-    event.preventDefault();
-    emit("close");
-  }
+  closeOnEscape(event);
 }
 
 watch(

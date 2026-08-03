@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import ModalShell from "../shared/ModalShell.vue";
 import ConfirmDialog from "../shared/ConfirmDialog.vue";
 import { api } from "../../manager/api/client";
@@ -165,14 +165,15 @@ function onKeydown(ev: KeyboardEvent) {
   }
 }
 
-onMounted(() => window.addEventListener("keydown", onKeydown));
-onUnmounted(() => window.removeEventListener("keydown", onKeydown));
+// Keys arrive from ModalShell (@keydown below) rather than window: the modal
+// shield stops inside-modal keys at the overlay so they cannot reach ComfyUI's
+// global shortcuts, so a window listener here would never fire.
 
 const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
 </script>
 
 <template>
-  <ModalShell :visible="visible" @close="emit('close')">
+  <ModalShell :visible="visible" @close="emit('close')" @keydown="onKeydown">
     <div class="wp-bp" role="dialog">
       <header class="wp-bp__head">
         <div class="wp-bp__head-text">
