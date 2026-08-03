@@ -158,7 +158,7 @@ describe("createDomWidgetHost — fillHost under the Vue renderer", () => {
     host.unmount();
   });
 
-  it("leaves the legacy renderer completely alone", async () => {
+  it("keeps the out-of-flow layout under legacy too, so a live toggle is safe", async () => {
     (globalThis as { LiteGraph?: Record<string, unknown> }).LiteGraph = { vueNodesMode: false };
     const node = makeHostNode("42");
     const nodeEl = mountNodeEl("42");
@@ -169,11 +169,18 @@ describe("createDomWidgetHost — fillHost under the Vue renderer", () => {
     nodeEl.appendChild(host.widget.element);
 
     await new Promise((r) => requestAnimationFrame(() => r(null)));
-    expect(nodeEl.style.minWidth).toBe("");
-    expect(host.widget.element.style.minHeight).toBe("");
-    expect(host.widget.element.style.position).toBe("");
-    // Legacy gives the host a definite box, so the percentage still resolves.
+    // The renderer is togglable at RUNTIME from the menu, so a widget built
+    // under legacy must already be in the shape Nodes 2.0 needs — stripping it
+    // here leaves a window where content is briefly in flow and pushes the
+    // node (measured: a live toggle jumped it from 380 to 1200). Legacy is
+    // indifferent: it gives the host a definite box either way.
+    expect(host.widget.element.style.minHeight).toBe("80px");
+    expect(host.widget.element.style.position).toBe("relative");
+    expect(host.element.style.position).toBe("absolute");
     expect(host.widget.element.style.height).toBe("100%");
+    // What IS renderer-specific: the node-element width floor, which only
+    // Nodes 2.0 needs because it never calls computeSize.
+    expect(nodeEl.style.minWidth).toBe("");
     host.unmount();
   });
 });

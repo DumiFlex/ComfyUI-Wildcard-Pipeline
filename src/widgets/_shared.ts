@@ -73,6 +73,47 @@ function snapToGrid(n: number): number {
   return Math.round(n / NODE_SIZE_GRID) * NODE_SIZE_GRID;
 }
 
+/* ── fillHost upkeep registry ──────────────────────────────────────────
+ *
+ * One document-level observer drives every `fillHost` widget's `syncFill`.
+ * Per-widget observation does not work: the widget is built before its node
+ * element exists, and the renderer is togglable at runtime, so the element can
+ * appear arbitrarily later. `childList` only — the syncs write class and style
+ * attributes, which this never sees, so there is no feedback loop.
+ */
+const fillSyncs = new Set<() => void>();
+let fillSyncObserver: MutationObserver | null = null;
+let fillSyncQueued = false;
+
+function flushFillSyncs(): void {
+  fillSyncQueued = false;
+  for (const sync of [...fillSyncs]) sync();
+}
+
+function queueFillSync(): void {
+  if (fillSyncQueued) return;
+  fillSyncQueued = true;
+  requestAnimationFrame(flushFillSyncs);
+}
+
+function registerFillSync(sync: () => void): void {
+  fillSyncs.add(sync);
+  if (
+    !fillSyncObserver
+    && typeof MutationObserver !== "undefined"
+    && typeof document !== "undefined"
+    && document.body
+  ) {
+    fillSyncObserver = new MutationObserver(queueFillSync);
+    fillSyncObserver.observe(document.body, { childList: true, subtree: true });
+  }
+  queueFillSync();
+}
+
+function unregisterFillSync(sync: () => void): void {
+  fillSyncs.delete(sync);
+}
+
 interface ResizableNode {
   size?: number[];
   computeSize?: () => [number, number] | number[];
@@ -105,19 +146,27 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     // available space.
     inner.style.height = "100%";
     host.style.height = "100%";
-    if (isVueNodes()) {
-      // Apply the Vue-renderer layout NOW, not on the deferred sync below.
-      // Vue mounts and paints content before any observer of ours runs, and a
-      // single frame of in-flow content is enough to push the chain and have
-      // the layout store record an inflated `node.size` — which then sticks.
-      host.style.position = "relative";
-      host.style.minHeight = `${snapToGrid(options.minHeight ?? 80)}px`;
-      inner.style.position = "absolute";
-      inner.style.top = "0";
-      inner.style.left = "0";
-      inner.style.right = "0";
-      inner.style.bottom = "0";
-    }
+    // Take the content out of flow immediately, and in BOTH renderers.
+    //
+    // Under Nodes 2.0 in-flow content pushes the node to fit the payload (see
+    // the block comment on syncFill). Doing it here rather than from the
+    // observer matters because the push needs only one frame, and gating it on
+    // `isVueNodes()` does not work either: the renderer is togglable at
+    // runtime from the menu, so a widget built under legacy would never have
+    // run the branch. Measured — toggling live with content on screen jumped
+    // the node from 380 to 1200.
+    //
+    // Legacy is unaffected by construction: it gives the host a definite box
+    // and the content filled it already; filling it absolutely is the same
+    // picture, and its numbers are unchanged (host 354u, scroller engaged,
+    // 500x240 floor).
+    host.style.position = "relative";
+    host.style.minHeight = `${snapToGrid(options.minHeight ?? 80)}px`;
+    inner.style.position = "absolute";
+    inner.style.top = "0";
+    inner.style.left = "0";
+    inner.style.right = "0";
+    inner.style.bottom = "0";
   }
   host.appendChild(inner);
 
@@ -285,17 +334,17 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
    *
    * See `syncFill` for the three parts of the fix and why each is needed.
    */
-  let fillObserver: ResizeObserver | null = null;
-  let fillDisposed = false;
+  let fillDispose: (() => void) | null = null;
   if (options.fillHost) {
     const sized = node as unknown as { id?: string | number; size?: [number, number] | number[] };
     const syncFill = (): void => {
       if (!isVueNodes()) {
-        // Legacy sizes us itself; leave it exactly as it was.
+        // Legacy sizes us itself. The out-of-flow layout set at construction
+        // STAYS: stripping it here would leave a window on a live renderer
+        // toggle where content is briefly in flow and can push the node, and
+        // legacy is indifferent to it — it gives the host a definite box
+        // either way (verified: host 354u, scroller engaged, 500x240 floor).
         if (host.style.height !== "100%") host.style.height = "100%";
-        host.style.removeProperty("min-height");
-        host.style.removeProperty("position");
-        inner.style.removeProperty("position");
         return;
       }
       const nodeEl = typeof document === "undefined" || sized.id == null
@@ -371,32 +420,15 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
       const minPx = wantMinW > 0 ? `${wantMinW}px` : "";
       if (nodeEl.style.minWidth !== minPx) nodeEl.style.minWidth = minPx;
     };
-    // The node's height changes with no DOM event we can hear — a drag writes
-    // `node.size` directly — but the Vue node element resizes when it does, so
-    // observe that. The target is computed from the MODEL, never from the
-    // element, so our own write cannot drive a feedback loop.
-    //
-    // The element does not exist yet at widget-construction time (a restored
-    // workflow mounts its nodes later), so wait for it rather than giving up
-    // on a single lookup — that was the bug that left the wire merge unapplied
-    // after a renderer switch.
-    const attachFillObserver = (framesLeft: number): void => {
-      if (fillDisposed) return;
-      if (typeof ResizeObserver === "undefined" || typeof document === "undefined") return;
-      const nodeEl = sized.id == null
-        ? null
-        : document.querySelector<HTMLElement>(`[data-node-id="${String(sized.id)}"]`);
-      if (!nodeEl) {
-        if (framesLeft > 0) requestAnimationFrame(() => attachFillObserver(framesLeft - 1));
-        return;
-      }
-      syncFill();
-      fillObserver = new ResizeObserver(() => syncFill());
-      fillObserver.observe(nodeEl);
-    };
-    // ~10s of frames. Only runs while the element is missing, one selector
-    // lookup per frame, and stops for good once found.
-    queueMicrotask(() => attachFillObserver(600));
+    // Keep it applied. A bounded retry is not enough: the renderer is
+    // togglable at runtime, so the node element can appear minutes after the
+    // widget was built, long after any frame budget would have expired — which
+    // is exactly how the live-toggle jump got through. Register instead, and
+    // let one document-level observer re-run every registered widget whenever
+    // the node layer changes.
+    registerFillSync(syncFill);
+    fillDispose = () => unregisterFillSync(syncFill);
+    syncFill();
   }
 
   // Pull-based relayout. Reentrancy flag short-circuits if litegraph's
@@ -478,8 +510,7 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     app,
     unmount: () => {
       resizeObserver?.disconnect();
-      fillDisposed = true;
-      fillObserver?.disconnect();
+      fillDispose?.();
       removeWheelShield();
       app.unmount();
     },
