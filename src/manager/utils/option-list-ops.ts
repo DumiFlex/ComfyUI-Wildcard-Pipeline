@@ -37,8 +37,7 @@ export function filterIsActive(f: OptionFilter): boolean {
  * result as you add constraints, which reads as the control being broken.
  *
  * The null option carries no value and no tags, so any active filter excludes
- * it. That is correct — it cannot match — and it is also why moves have to
- * treat it separately (see `moveSelected`).
+ * it. That is correct: it cannot match.
  */
 export function optionMatches(o: OptionLike, f: OptionFilter): boolean {
   const q = f.query.trim().toLowerCase();
@@ -120,9 +119,11 @@ export type MoveTarget =
  * no other coherent answer, but it does surprise the first time, so callers
  * should report what happened rather than let it be discovered.
  *
- * The null option never moves. `hoistNullFirst` re-pins it to index 0 on every
- * save, so any move it took part in would silently undo itself; it is filtered
- * out of the cargo and left where it is, and it is never a valid landing point.
+ * The null option moves like any other. It used to be pinned to index 0 —
+ * `hoistNullFirst` re-imposed that on every save — but the engine finds it by
+ * the `is_null` FLAG and never by position ("the flag is the source of truth",
+ * wildcard_handler.py), so the pin bought nothing and cost the user a row they
+ * could not sort.
  *
  * Returns a NEW array; the input is untouched.
  */
@@ -131,17 +132,12 @@ export function moveSelected<T extends OptionLike>(
   selectedIds: ReadonlySet<string>,
   target: MoveTarget,
 ): T[] {
-  const movable = list.filter((o) => selectedIds.has(o.id) && !o.is_null);
+  const movable = list.filter((o) => selectedIds.has(o.id));
   if (movable.length === 0) return [...list];
   const moving = new Set(movable.map((o) => o.id));
   const rest = list.filter((o) => !moving.has(o.id));
 
-  if (target.to === "top") {
-    // Anything pinned (the null option) stays ahead of the arriving block.
-    const pinned = rest.filter((o) => o.is_null);
-    const others = rest.filter((o) => !o.is_null);
-    return [...pinned, ...movable, ...others];
-  }
+  if (target.to === "top") return [...movable, ...rest];
   if (target.to === "bottom") return [...rest, ...movable];
 
   // Land before a specific row. If that row is itself part of the cargo the
@@ -156,8 +152,7 @@ export function moveSelected<T extends OptionLike>(
  * Nudge a single row one step up or down.
  *
  * The keyboard path, and the only reordering that stays usable in a list of a
- * hundred-plus rows where dragging means an auto-scroll fight. Steps over the
- * pinned null option rather than swapping with it.
+ * hundred-plus rows where dragging means an auto-scroll fight.
  */
 export function nudge<T extends OptionLike>(
   list: readonly T[],
@@ -165,9 +160,8 @@ export function nudge<T extends OptionLike>(
   dir: -1 | 1,
 ): T[] {
   const from = list.findIndex((o) => o.id === id);
-  if (from < 0 || list[from].is_null) return [...list];
-  let to = from + dir;
-  while (to >= 0 && to < list.length && list[to].is_null) to += dir;
+  if (from < 0) return [...list];
+  const to = from + dir;
   if (to < 0 || to >= list.length) return [...list];
   const out = [...list];
   const [row] = out.splice(from, 1);

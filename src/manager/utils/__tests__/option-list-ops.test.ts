@@ -110,12 +110,13 @@ describe("moveSelected", () => {
     expect(ids(moveSelected(list, new Set(), { to: "top" }))).toBe("abcd");
   });
 
-  it("never moves the null option, and keeps it pinned ahead of a top move", () => {
-    // `hoistNullFirst` re-pins it on every save, so a move it joined would
-    // silently undo itself.
+  it("moves the null option like any other row", () => {
+    // It used to be pinned to index 0. The engine locates it by the `is_null`
+    // flag and never by position, so the pin only cost the user a row they
+    // could not sort.
     const withNull = [{ id: "n", is_null: true } as OptionLike, ...list];
-    expect(ids(moveSelected(withNull, new Set(["n", "c"]), { to: "top" }))).toBe("ncabd");
-    expect(ids(moveSelected(withNull, new Set(["n"]), { to: "bottom" }))).toBe("nabcd");
+    expect(ids(moveSelected(withNull, new Set(["n"]), { to: "bottom" }))).toBe("abcdn");
+    expect(ids(moveSelected(withNull, new Set(["c"]), { to: "top" }))).toBe("cnabd");
   });
 
   it("returns a new array and leaves the input alone", () => {
@@ -139,14 +140,9 @@ describe("nudge", () => {
     expect(ids(nudge(list, "c", 1))).toBe("abc");
   });
 
-  it("steps OVER the pinned null option rather than swapping with it", () => {
+  it("swaps with the null option like any other neighbour", () => {
     const withNull = [{ id: "n", is_null: true } as OptionLike, ...list];
-    // `a` moving up would land on the null slot; it stays put instead.
-    expect(ids(nudge(withNull, "a", -1))).toBe("nabc");
-  });
-
-  it("refuses to move the null option itself", () => {
-    const withNull = [{ id: "n", is_null: true } as OptionLike, ...list];
-    expect(ids(nudge(withNull, "n", 1))).toBe("nabc");
+    expect(ids(nudge(withNull, "a", -1))).toBe("anbc");
+    expect(ids(nudge(withNull, "n", 1))).toBe("anbc");
   });
 });

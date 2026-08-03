@@ -108,25 +108,25 @@ describe("option multi-tag select", () => {
   it("shows the currently-assigned tag and marks it on in the picker", async () => {
     const w = await mountSeeded();
     await w.get('[data-test="opt-tags-o1"]').trigger("click"); // open picker
-    expect(menuEl('[data-test="opt-tag-toggle-o1-feline"]').className).toContain("is-on");
+    expect(menuEl('[data-test="opt-tag-o1-toggle-feline"]').className).toContain("is-on");
     // warm is a known registry tag but not assigned → not on.
-    expect(menuEl('[data-test="opt-tag-toggle-o1-warm"]').className).not.toContain("is-on");
+    expect(menuEl('[data-test="opt-tag-o1-toggle-warm"]').className).not.toContain("is-on");
   });
 
   it("toggles membership for an option", async () => {
     const w = await mountSeeded();
     await w.get('[data-test="opt-tags-o1"]').trigger("click"); // open picker
-    await clickMenu('[data-test="opt-tag-toggle-o1-warm"]'); // add warm
+    await clickMenu('[data-test="opt-tag-o1-toggle-warm"]'); // add warm
     // Model now carries both tags.
     expect(optionsOf(w)[0].sub_categories).toEqual(["feline", "warm"]);
     // And the toggle reflects the on state.
-    expect(menuEl('[data-test="opt-tag-toggle-o1-warm"]').className).toContain("is-on");
+    expect(menuEl('[data-test="opt-tag-o1-toggle-warm"]').className).toContain("is-on");
   });
 
   it("removing an assigned tag updates the option model", async () => {
     const w = await mountSeeded();
     await w.get('[data-test="opt-tags-o1"]').trigger("click");
-    await clickMenu('[data-test="opt-tag-toggle-o1-feline"]'); // remove feline
+    await clickMenu('[data-test="opt-tag-o1-toggle-feline"]'); // remove feline
     expect(optionsOf(w)[0].sub_categories).toEqual([]);
   });
 
