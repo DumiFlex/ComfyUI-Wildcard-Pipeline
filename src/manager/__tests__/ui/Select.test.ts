@@ -1,4 +1,5 @@
 import { mount } from "@vue/test-utils";
+import { nextTick } from "vue";
 import { afterEach, describe, expect, it } from "vitest";
 import Select from "../../components/ui/Select.vue";
 
@@ -218,6 +219,31 @@ describe("Select.vue", () => {
     });
     await wrap.get("[data-test='select-trigger']").trigger("click");
     expect(document.querySelector(".wp-select__marker-gap")).toBeNull();
+    wrap.unmount();
+  });
+
+  it("stays open when the press lands on its own teleported menu", async () => {
+    // The menu is teleported to <body>, so it is not inside the trigger's
+    // wrapper. Checking only the wrapper meant a mousedown on the menu's own
+    // scrollbar counted as an outside click and dismissed it — the wheel
+    // worked, the scrollbar did not.
+    const wrap = mount(Select, {
+      props: { modelValue: null, options: opts },
+      attachTo: document.body,
+    });
+    await wrap.get("[data-test='select-trigger']").trigger("click");
+    const menu = document.querySelector(".wp-select__menu") as HTMLElement;
+    expect(menu).not.toBeNull();
+    document.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    await nextTick();
+    // Sanity: a press with no relation to the component still closes it.
+    expect(document.querySelector(".wp-select__menu")).toBeNull();
+
+    await wrap.get("[data-test='select-trigger']").trigger("click");
+    const menu2 = document.querySelector(".wp-select__menu") as HTMLElement;
+    menu2.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    await nextTick();
+    expect(document.querySelector(".wp-select__menu")).not.toBeNull();
     wrap.unmount();
   });
 });

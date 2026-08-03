@@ -297,9 +297,21 @@ const bulkAddOpen = ref(false);
 const existingValueNames = computed(() =>
   values.value.map((v) => v.name).filter((n) => n.trim().length > 0),
 );
+/** A row the user has not written anything into yet — see the note on the
+ *  wildcard editor's equivalent. Both halves empty means scaffolding. */
+function isUntouchedBlankValue(v: NamedValue): boolean {
+  return v.name.trim() === "" && v.value.trim() === "";
+}
+
 function commitBulkValues(parsed: ParsedFixedValue[]): void {
   let updated = 0;
   let added = 0;
+  // A new fixed-values module opens with blank rows so the table is not empty.
+  // Appending past them left those blanks above the batch, and they fail
+  // validation on save.
+  if (parsed.length > 0 && values.value.some(isUntouchedBlankValue)) {
+    values.value = values.value.filter((v) => !isUntouchedBlankValue(v));
+  }
   for (const p of parsed) {
     const cleanName = p.name.replace(/[^a-zA-Z0-9_]/g, "");
     if (!cleanName) continue;
@@ -633,6 +645,22 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
             @dragover="onFvDragOver(idx, $event)"
             @drop.prevent="onFvDrop(idx)"
           >
+            <td v-if="bulkActive" class="fv-col-check">
+              <button
+                type="button"
+                class="wp-check"
+                role="checkbox"
+                :aria-checked="bulkIsSelected(v.id)"
+                :data-checked="bulkIsSelected(v.id) ? 'true' : 'false'"
+                :aria-label="`Select value ${idx + 1}`"
+                :data-test="`fv-check-${idx}`"
+                @click="bulkToggle(v.id)"
+              >
+                <svg v-if="bulkIsSelected(v.id)" viewBox="0 0 12 12" fill="none" style="display:block">
+                  <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </button>
+            </td>
             <td class="fv-col-grip">
               <!-- Same affordance as the wildcard options list: its own cell,
                    because the value beside it is a contenteditable and a
@@ -652,22 +680,6 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
                 @keydown.alt.up.prevent="nudgeValue(v.id, -1)"
                 @keydown.alt.down.prevent="nudgeValue(v.id, 1)"
               ><i class="pi pi-bars" aria-hidden="true" /></button>
-            </td>
-            <td v-if="bulkActive" class="fv-col-check">
-              <button
-                type="button"
-                class="wp-check"
-                role="checkbox"
-                :aria-checked="bulkIsSelected(v.id)"
-                :data-checked="bulkIsSelected(v.id) ? 'true' : 'false'"
-                :aria-label="`Select value ${idx + 1}`"
-                :data-test="`fv-check-${idx}`"
-                @click="bulkToggle(v.id)"
-              >
-                <svg v-if="bulkIsSelected(v.id)" viewBox="0 0 12 12" fill="none" style="display:block">
-                  <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-              </button>
             </td>
             <td>
               <div class="wp-input-group">

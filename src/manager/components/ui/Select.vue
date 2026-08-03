@@ -33,6 +33,8 @@ const active = ref(0);
 /** Type-to-filter query, built from printable keystrokes while the menu
  *  is open. Reset every time the menu opens or closes. */
 const query = ref("");
+/** The teleported menu, so the outside-click guard can exclude it. */
+const menuRef = ref<HTMLElement | null>(null);
 
 /** Fixed-position coordinates for the teleported menu. */
 const menuStyle = ref<Record<string, string>>({});
@@ -91,8 +93,12 @@ const composedAriaLabel = computed<string | undefined>(() => {
 function onDocClick(e: MouseEvent) {
   const t = e.target as Node | null;
   if (!t) return;
-  // Close when click is outside the trigger button AND outside the menu.
+  // Close when the press is outside the trigger AND outside the menu. The menu
+  // is teleported to <body>, so it is NOT inside `wrapRef` — checking only the
+  // trigger meant a mousedown on the menu's own scrollbar counted as "outside"
+  // and dismissed it. The wheel worked, the scrollbar did not.
   if (wrapRef.value?.contains(t)) return;
+  if (menuRef.value?.contains(t)) return;
   open.value = false;
 }
 
@@ -311,6 +317,7 @@ function onKeydown(e: KeyboardEvent) {
     <Teleport to="body">
       <ul
         v-if="open"
+        ref="menuRef"
         class="wp-select__menu"
         role="listbox"
         :style="menuStyle"

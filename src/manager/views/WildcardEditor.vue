@@ -648,7 +648,15 @@ function reanchorOptTagPicker(ev?: Event): void {
   // it. Only movement of the surface UNDER the menu is a reason to react.
   const from = ev?.target as HTMLElement | null;
   if (from?.closest?.(".opt-tags__picker")) return;
-  if (optTagMenuOpen.value) optTagMenuOpen.value = false;
+  // Re-measure rather than dismiss. Closing on any layout change meant the
+  // menu vanished the moment the list behind it changed height — filtering to
+  // zero results shortens the page, which fires a scroll, which closed the
+  // very menu you were using to filter.
+  if (optTagMenuOpen.value) {
+    const r = optFilterTriggerEl?.getBoundingClientRect();
+    if (!r || r.bottom < 0 || r.top > window.innerHeight) optTagMenuOpen.value = false;
+    else positionFilterMenu();
+  }
   if (openOptTagPicker.value === null || !optTagTriggerEl) return;
   const r = optTagTriggerEl.getBoundingClientRect();
   if (r.bottom < 0 || r.top > window.innerHeight) {
@@ -1210,12 +1218,21 @@ const optTagMenuOpen = ref(false);
 /** Viewport coordinates for the teleported filter menu. */
 const optFilterAnchor = ref({ top: 0, left: 0 });
 
+/** The filter button, kept so the menu can be re-measured against it. */
+let optFilterTriggerEl: HTMLElement | null = null;
+
+function positionFilterMenu(): void {
+  const r = optFilterTriggerEl?.getBoundingClientRect();
+  if (!r) return;
+  optFilterAnchor.value = { top: r.bottom + 4, left: r.left };
+}
+
 function toggleOptTagMenu(ev: MouseEvent): void {
   const opening = !optTagMenuOpen.value;
   optTagMenuOpen.value = opening;
   if (!opening) return;
-  const r = (ev.currentTarget as HTMLElement | null)?.getBoundingClientRect();
-  if (r) optFilterAnchor.value = { top: r.bottom + 4, left: r.left };
+  optFilterTriggerEl = (ev.currentTarget as HTMLElement | null) ?? null;
+  positionFilterMenu();
 }
 
 const optionFilter = computed(() => ({
@@ -1254,7 +1271,10 @@ const bulkNote = ref("");
 
 /** Options eligible for bulk selection — the null option is excluded since
  *  its weight + sub-categories are meaningless. */
-const selectableOptions = computed(() => options.value.filter((o) => !o.is_null));
+/** Every row can be selected, the null option included: selection drives
+ *  moves, weight and delete, all of which it takes part in. Tag actions skip
+ *  it separately — see `taggableSelection`. */
+const selectableOptions = computed(() => options.value);
 const selectedCount = computed(() => selectedIds.value.size);
 const allSelected = computed(
   () =>
@@ -1409,9 +1429,33 @@ function deleteSelected(): void {
 /** Commit bulk-added options from the paste panel: register any new tags
  *  (auto-created in Ungrouped), then append one option per parsed line with
  *  its tags in registry order. */
+/**
+ * A row the user has not written anything into yet.
+ *
+ * A new wildcard opens with two blank options so the table is not an empty
+ * void. Bulk add appended past them, so a first batch left two blanks sitting
+ * above everything that was just added — which then fail validation on save
+ * (an option's value must be a non-empty string). Untouched blanks are
+ * consumed by the incoming batch instead: they were scaffolding, not content.
+ *
+ * A blank the user tagged or re-weighted is NOT untouched — they were working
+ * on it — so only the fully default row qualifies.
+ */
+function isUntouchedBlank(o: WildcardOption): boolean {
+  return !o.is_null
+    && (o.value ?? "").trim() === ""
+    && (o.sub_categories ?? []).length === 0
+    && (o.weight === 1 || o.weight === undefined);
+}
+
 function commitBulkAddOptions(parsed: ParsedBulkOption[]): void {
   bulkNote.value = "";
   let skippedTags = 0;
+  // Drop the scaffolding rows first; anything the user actually touched stays.
+  const blanks = options.value.filter(isUntouchedBlank).length;
+  if (blanks > 0 && parsed.length > 0) {
+    options.value = options.value.filter((o) => !isUntouchedBlank(o));
+  }
   for (const p of parsed) {
     const tagSet = new Set<string>();
     for (const tag of p.tags) {

@@ -140,6 +140,10 @@ function styleFor(tag: string): Record<string, string> | undefined {
   position: fixed;
   z-index: 3000;
   min-width: 210px;
+  /* Never taller than the space below the trigger. Without this the menu ran
+     past the bottom of the window whenever the list behind it was short — an
+     empty filter result leaves almost no page to sit on. */
+  max-height: calc(100vh - 24px);
   display: flex;
   flex-direction: column;
   gap: var(--wp-space-3);
@@ -158,6 +162,10 @@ function styleFor(tag: string): Record<string, string> | undefined {
    `overscroll-behavior: contain` stops the page lurching when either end is
    reached. */
 .opt-tags__scroll {
+  /* `min-height: 0` lets this shrink inside the capped flex column above;
+     without it the list keeps its content height and pushes the menu past the
+     viewport instead of scrolling. */
+  min-height: 0;
   max-height: 240px;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -193,36 +201,47 @@ function styleFor(tag: string): Record<string, string> | undefined {
   color: var(--wp-text-dim);
   padding: 0 var(--wp-space-2);
 }
+/* Each row is tinted by its axis hue, passed in as `--chip-hue`. This is what
+   makes the menu read as the same colour clusters as the pills and chips
+   elsewhere; a flat grey list loses the one cue that says which axis a tag
+   belongs to. Ported from the picker's original rules — rewriting them from
+   scratch is how the colour went missing in the first place. */
 .opt-tags__toggle {
   display: flex;
   align-items: center;
   gap: var(--wp-space-3);
-  padding: 3px var(--wp-space-3);
+  padding: 4px var(--wp-space-4);
   background: none;
   border: none;
   border-radius: var(--wp-radius-sm);
-  color: var(--wp-text-muted);
+  color: var(--wp-text);
   font: 11px var(--wp-font-mono);
   text-align: left;
   cursor: pointer;
 }
-.opt-tags__toggle:hover { background: var(--wp-bg-3); color: var(--wp-text); }
-.opt-tags__toggle.is-on { color: var(--wp-text); }
+.opt-tags__toggle:hover { background: var(--wp-bg-3); }
 .opt-tags__toggle-box {
-  width: 13px;
-  height: 13px;
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--wp-border-strong);
-  border-radius: 3px; /* audit-exempt: below the radius scale */
-  background: var(--wp-bg-3);
-  color: transparent;
+  width: 15px;
+  height: 15px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid color-mix(in srgb, var(--chip-hue) 55%, var(--wp-border-strong));
+  border-radius: 4px; /* audit-exempt: below the radius scale */
+  color: var(--chip-hue);
+}
+/* Selected: tint the whole row and fill the box, so the "on" state reads
+   regardless of how grey that axis's hue happens to be. */
+.opt-tags__toggle.is-on {
+  background: color-mix(in srgb, var(--chip-hue) 18%, var(--wp-bg-2));
+  color: var(--wp-text);
+  font-weight: 600;
 }
 .opt-tags__toggle.is-on .opt-tags__toggle-box {
-  background: var(--wp-accent-600);
-  border-color: var(--wp-accent-600);
-  color: #fff;
+  background: var(--chip-hue);
+  border-color: var(--chip-hue);
+  color: var(--wp-bg-1);
 }
 .opt-tags__empty {
   margin: 0;
