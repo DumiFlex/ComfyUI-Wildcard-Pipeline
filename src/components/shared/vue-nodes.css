@@ -53,21 +53,45 @@
   display: none !important;
 }
 
-/* The kept pin's label. Mutating `slot.label` is enough for the legacy
- * renderer, which reads the slot objects at paint time, but Vue renders from
- * its own VueNodeData snapshot and never sees the write — measured: model
- * "inputs ×4", rendered "input_0". Rather than fight the snapshot, hide the
- * stale text and print the collapsed label from a custom property that
- * `collapse-connections.ts` sets alongside the classes. */
-.wp-wires-merged .lg-slot--input.wp-slot-kept > :not(:first-child) {
+/* Clearance under the merged pin. Zeroing the merged rows reclaims all their
+ * vertical space, which leaves the incoming wires running straight into the
+ * top edge of the widget body below. Reserve a little room back. Carried by
+ * the LAST merged row: they all sit at the same y, so only its bottom margin
+ * moves the content that follows. */
+.wp-wires-merged .lg-slot--input.wp-slot-merged-tail {
+  margin-bottom: var(--wp-merge-gap, 10px) !important;
+}
+
+/* Slot labels we print ourselves.
+ *
+ * Mutating `slot.label` is enough for the legacy renderer, which reads the
+ * slot objects at paint time, but Vue renders from its own VueNodeData
+ * snapshot and never sees the write — measured: model "inputs ×4", rendered
+ * "input_0". That breaks both directions, so the override is NOT scoped to
+ * `.wp-wires-merged`: collapsed, the unified label would never appear;
+ * expanded, the real names would never come back. The expand case is the one
+ * users hit across a renderer switch, where a legacy collapse serialized the
+ * placeholder labels into the workflow.
+ *
+ * `collapse-connections.ts` sets `--wp-slot-label` per row to whatever the
+ * model says, so this renders exactly what the host would if it could see it. */
+.wp-slot-label > :not(:first-child) {
   display: none !important;
 }
 
-.wp-wires-merged .lg-slot--input.wp-slot-kept::after {
-  content: var(--wp-merge-label, "inputs");
+.wp-slot-label::after {
+  content: var(--wp-slot-label, "");
   font-size: inherit;
   color: inherit;
   opacity: 0.85;
   white-space: nowrap;
   pointer-events: none;
+}
+
+/* ...but never for a row that has been merged away. Merged rows keep the label
+ * override so their real names are ready the moment they expand, and they are
+ * zero-height and stacked on the kept row — so printing them too would pile
+ * "input_1", "input_2", "input_3" on top of the unified "inputs ×N". */
+.wp-slot-merged::after {
+  content: none !important;
 }

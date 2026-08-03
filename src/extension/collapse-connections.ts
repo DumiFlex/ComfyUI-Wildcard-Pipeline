@@ -135,8 +135,12 @@ const VUE_NODE_MERGED_CLASS = "wp-wires-merged";
 const VUE_SLOT_MERGED_CLASS = "wp-slot-merged";
 /** First merged row — carries the half-row upward shift, see vue-nodes.css. */
 const VUE_SLOT_MERGED_LEAD_CLASS = "wp-slot-merged-lead";
-/** The row the merged wires land on — renders the unified label. */
-const VUE_SLOT_KEPT_CLASS = "wp-slot-kept";
+/** Last merged row — carries the clearance below the merged pin, so the
+ *  incoming wires do not run into the widget body underneath. */
+const VUE_SLOT_MERGED_TAIL_CLASS = "wp-slot-merged-tail";
+/** Any row whose label we print ourselves instead of letting Vue render its
+ *  stale snapshot of the slot name. */
+const VUE_SLOT_LABEL_CLASS = "wp-slot-label";
 
 function isVueNodes(): boolean {
   return (globalThis as { LiteGraph?: { vueNodesMode?: boolean } })
@@ -184,34 +188,46 @@ function syncVueSlotMerge(node: CollapseTargetNode, propertyKey: string): void {
   const collapsed = readCollapsed(node, propertyKey);
   el.classList.toggle(VUE_NODE_MERGED_CLASS, collapsed);
 
-  const { kept, merged } = collapsed
-    ? mergeGroups(node)
-    : { kept: -1, merged: [] as number[] };
-  const mergedSet = new Set(merged);
-  const lead = merged.length ? merged[0] : -1;
+  // Matched rows are resolved in BOTH states: the merge classes only apply
+  // while collapsed, but the label override applies always (see below).
+  const { kept, merged } = mergeGroups(node);
+  const mergedSet = collapsed ? new Set(merged) : new Set<number>();
+  const lead = collapsed && merged.length ? merged[0] : -1;
+  const tail = collapsed && merged.length ? merged[merged.length - 1] : -1;
+
   // Row order mirrors `node.inputs` order: the host filters out slots bound to
   // a widget, and none of ours are.
   const rows = el.querySelectorAll<HTMLElement>(".lg-slot--input");
   rows.forEach((row, i) => {
     row.classList.toggle(VUE_SLOT_MERGED_CLASS, mergedSet.has(i));
     row.classList.toggle(VUE_SLOT_MERGED_LEAD_CLASS, i === lead);
-    // Only label the kept row when something actually merged onto it — a lone
-    // matched pin should keep its own name.
-    row.classList.toggle(VUE_SLOT_KEPT_CLASS, i === kept && merged.length > 0);
-  });
+    row.classList.toggle(VUE_SLOT_MERGED_TAIL_CLASS, i === tail);
 
-  // The unified label, as a quoted CSS string for `content:`. Vue renders slot
-  // names from its own snapshot and never sees our `slot.label` write, so the
-  // text has to reach the DOM this way.
-  const cfg = readConfig(node);
-  const label = merged.length > 0
-    ? resolveLabel(cfg?.collapsedInputLabel, node)
-    : undefined;
-  if (label !== undefined) {
-    el.style.setProperty("--wp-merge-label", JSON.stringify(label));
-  } else {
-    el.style.removeProperty("--wp-merge-label");
-  }
+    // Take over the label text for every matched row, collapsed or not.
+    //
+    // Vue renders slot names from its own VueNodeData snapshot and never sees
+    // a `slot.label` write, so BOTH directions are broken without this: while
+    // collapsed the unified "inputs ×N" never appears, and on expand the real
+    // names never come back. The expand case bites hardest across a renderer
+    // switch — a legacy collapse serializes the placeholder labels into the
+    // workflow, so after reloading under Vue the snapshot holds "inputs ×N"
+    // and " ", and expanding repairs the model while the screen keeps showing
+    // the placeholders.
+    //
+    // Printing `label || name` is exactly what the host would render if it
+    // could see the model, so this stays correct for renamed pins too.
+    const matched = i === kept || merged.includes(i);
+    row.classList.toggle(VUE_SLOT_LABEL_CLASS, matched);
+    if (matched) {
+      const slot = node.inputs?.[i];
+      const label = typeof slot?.label === "string" && slot.label.trim() !== ""
+        ? slot.label
+        : (slot?.name ?? "");
+      row.style.setProperty("--wp-slot-label", JSON.stringify(label));
+    } else {
+      row.style.removeProperty("--wp-slot-label");
+    }
+  });
 
   // Half the KEPT row's height — the distance from a zeroed row's stacking
   // position back up to the kept row's centre line. Measured live because the
@@ -225,29 +241,61 @@ function syncVueSlotMerge(node: CollapseTargetNode, propertyKey: string): void {
   }
 }
 
-/** Vue re-renders the node's slot rows on any graph edit, which drops our
- *  classes. Re-apply on subtree mutations while the node is mounted. One
- *  observer per node, created on first use. */
-const vueMergeObservers = new WeakMap<object, MutationObserver>();
+/* Keeping the merge applied.
+ *
+ * Binding an observer to the node's own element is not enough, and both
+ * failures were user-visible:
+ *
+ *  - At attach time the element often does not exist yet — the workflow is
+ *    restored before Vue mounts the nodes. A one-shot lookup bails, and with
+ *    nothing watching, the merge never lands. Symptom: switching renderers
+ *    while collapsed came back with the wires fanned out.
+ *  - Vue REPLACES the node element on re-render (focusing a node does it), so
+ *    an observer bound to the old element is watching a detached tree.
+ *    Symptom: focusing a collapsed node expanded its wires while the button
+ *    still read "collapsed".
+ *
+ * So watch one stable root instead, and re-apply for every registered node
+ * whenever the node layer changes. `childList` only: our own writes are class
+ * and style attributes, which this never sees, so there is no feedback loop.
+ */
+const vueMergeRegistry = new Map<CollapseTargetNode, string>();
+let vueMergeObserver: MutationObserver | null = null;
+let vueMergeQueued = false;
 
+function flushVueMerge(): void {
+  vueMergeQueued = false;
+  for (const [node, propertyKey] of [...vueMergeRegistry]) {
+    // litegraph nulls `graph` when a node is removed — drop it rather than
+    // keep re-syncing a node that is gone.
+    if (node.graph === null) {
+      vueMergeRegistry.delete(node);
+      continue;
+    }
+    syncVueSlotMerge(node, propertyKey);
+  }
+}
+
+function queueVueMerge(): void {
+  if (vueMergeQueued) return;
+  vueMergeQueued = true;
+  requestAnimationFrame(flushVueMerge);
+}
+
+/** Register a node for continuous merge upkeep. Idempotent. */
 function watchVueSlotMerge(node: CollapseTargetNode, propertyKey: string): void {
   if (!isVueNodes()) return;
-  const el = vueNodeEl(node);
-  if (!el) return;
-  if (vueMergeObservers.has(node as object)) return;
-  let queued = false;
-  const observer = new MutationObserver(() => {
-    // Our own classList writes re-enter the observer; coalesce to one pass
-    // per frame so a re-render storm can't recurse.
-    if (queued) return;
-    queued = true;
-    requestAnimationFrame(() => {
-      queued = false;
-      syncVueSlotMerge(node, propertyKey);
-    });
-  });
-  observer.observe(el, { childList: true, subtree: true });
-  vueMergeObservers.set(node as object, observer);
+  vueMergeRegistry.set(node, propertyKey);
+  if (
+    !vueMergeObserver
+    && typeof MutationObserver !== "undefined"
+    && typeof document !== "undefined"
+    && document.body
+  ) {
+    vueMergeObserver = new MutationObserver(queueVueMerge);
+    vueMergeObserver.observe(document.body, { childList: true, subtree: true });
+  }
+  queueVueMerge();
 }
 
 function resolveLabel(
@@ -582,15 +630,10 @@ export function attachCollapsableConnections(
     applyCollapsedLabels(node);
     forceResize(node, { animate: false });
   }
-  // Under the Vue renderer the merge is a DOM concern, and the node's element
-  // does not exist yet at attach time — defer one frame, then keep it applied
-  // across re-renders.
-  if (isVueNodes()) {
-    requestAnimationFrame(() => {
-      syncVueSlotMerge(node, propertyKey);
-      watchVueSlotMerge(node, propertyKey);
-    });
-  }
+  // Under the Vue renderer the merge is a DOM concern. Registering is enough —
+  // the node's element usually does not exist yet at attach time, and the
+  // registry re-applies as soon as it appears.
+  watchVueSlotMerge(node, propertyKey);
 }
 
 /** Rename a slot's display label IF the current label matches a
