@@ -365,22 +365,46 @@ function mountFlashOverlay(node: FocusableNode, canvas: AppCanvas) {
   // Pan/zoom likewise pick up via the live `ds.offset`/`ds.scale`
   // reads, so dragging the canvas during the flash also stays
   // anchored.
+  //
+  // Under Nodes 2.0 the node is a real DOM element, laid out from its own
+  // content rather than clamped to `node.size` — a node declaring 400 wide
+  // measured 490 graph units, so the transform maths below draws a box 81px
+  // too narrow at 0.9 zoom. Where that element exists its rect IS the node's
+  // box, title bar included, so measure it rather than recomputing (which
+  // also drops the TITLE_PAD estimate). The legacy renderer paints nodes on
+  // the canvas and has no such element; there the maths is the only option,
+  // and it is correct — the two agreed on position to the pixel.
+  const nodeSelector = `[data-node-id="${node.id}"]`;
+  let nodeEl = document.querySelector<HTMLElement>(nodeSelector);
   const start = performance.now();
   let raf = 0;
   function tick() {
-    const r = lc.getBoundingClientRect();
-    const scale = ds.scale ?? 1;
-    const offset = ds.offset ?? [0, 0];
-    const pos = node.pos ?? [0, 0];
-    const size = node.size ?? [200, 80];
-    const sx = (pos[0] + offset[0]) * scale;
-    const sy = (pos[1] - TITLE_PAD + offset[1]) * scale;
-    const sw = size[0] * scale;
-    const sh = (size[1] + TITLE_PAD) * scale;
-    overlay.style.left = `${r.left + sx}px`;
-    overlay.style.top = `${r.top + sy}px`;
-    overlay.style.width = `${sw}px`;
-    overlay.style.height = `${sh}px`;
+    // The Vue renderer may recreate the element mid-flash; re-resolve when
+    // the one we hold falls out of the document.
+    if (nodeEl && !nodeEl.isConnected) {
+      nodeEl = document.querySelector<HTMLElement>(nodeSelector);
+    }
+    const box = nodeEl?.getBoundingClientRect();
+    if (box) {
+      overlay.style.left = `${box.left}px`;
+      overlay.style.top = `${box.top}px`;
+      overlay.style.width = `${box.width}px`;
+      overlay.style.height = `${box.height}px`;
+    } else {
+      const r = lc.getBoundingClientRect();
+      const scale = ds.scale ?? 1;
+      const offset = ds.offset ?? [0, 0];
+      const pos = node.pos ?? [0, 0];
+      const size = node.size ?? [200, 80];
+      const sx = (pos[0] + offset[0]) * scale;
+      const sy = (pos[1] - TITLE_PAD + offset[1]) * scale;
+      const sw = size[0] * scale;
+      const sh = (size[1] + TITLE_PAD) * scale;
+      overlay.style.left = `${r.left + sx}px`;
+      overlay.style.top = `${r.top + sy}px`;
+      overlay.style.width = `${sw}px`;
+      overlay.style.height = `${sh}px`;
+    }
     if (performance.now() - start < FLASH_DURATION_MS) {
       raf = requestAnimationFrame(tick);
     }
