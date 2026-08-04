@@ -4,6 +4,7 @@ import ContextLoopWidget from "./ContextLoopWidget.vue";
 import SeedListModal from "../shared/SeedListModal.vue";
 import { emptyContextLoopConfig } from "./types";
 import { currentFrame } from "./frame-cursor";
+import { deriveLoopSeeds } from "../shared/seed-derive";
 
 describe("ContextLoopWidget", () => {
   it("renders defaults — hash chip active, both switches off, internal toggles on", () => {
@@ -176,5 +177,130 @@ describe("ContextLoopWidget bypass (#13)", () => {
     const calls = w.emitted("update:modelValue")!;
     const last = calls[calls.length - 1][0] as typeof cfg;
     expect(last.bypass_frames).toEqual([2]);
+  });
+});
+
+/**
+ * Modifier-click on the frame chips. Both states were already visible here but
+ * only changeable inside the modal, two clicks away and covering the node you
+ * were reading.
+ */
+describe("ContextLoopWidget frame chip modifier-clicks", () => {
+  beforeEach(() => { currentFrame.value = null; });
+
+  function fw(cfgPatch: Partial<ReturnType<typeof emptyContextLoopConfig>> = {}, count = 4) {
+    return mount(ContextLoopWidget, {
+      props: { modelValue: { ...emptyContextLoopConfig(), ...cfgPatch }, count, baseSeed: 42 },
+    });
+  }
+  const lastEmit = (w: ReturnType<typeof fw>) => {
+    const calls = w.emitted("update:modelValue");
+    return calls?.[calls.length - 1]?.[0] as ReturnType<typeof emptyContextLoopConfig>;
+  };
+
+  it("shift-click locks the frame to the seed it would have used", async () => {
+    const w = fw();
+    await w.find('[data-test="loop-frame-3"]').trigger("click", { shiftKey: true });
+    const next = lastEmit(w);
+    // Frame index 2, and the value must be a real derived seed — not a
+    // placeholder, or the lock would silently change the output it froze.
+    expect(Object.keys(next.seed_locks!)).toEqual(["2"]);
+    expect(Number.isInteger(next.seed_locks!["2"])).toBe(true);
+  });
+
+  it("shift-click on a locked frame unlocks it", async () => {
+    const w = fw({ seed_locks: { "2": 777 } });
+    await w.find('[data-test="loop-frame-3"]').trigger("click", { shiftKey: true });
+    expect(lastEmit(w).seed_locks).toEqual({});
+  });
+
+  it("the chip-lock value matches what the modal's Lock all would write", async () => {
+    const w = fw();
+    await w.find('[data-test="loop-frame-2"]').trigger("click", { shiftKey: true });
+    const chipValue = lastEmit(w).seed_locks!["1"];
+    expect(chipValue).toBe(deriveLoopSeeds(42, 4, "hash_index")[1]);
+  });
+
+  it("alt-click bypasses a frame, and again re-enables it", async () => {
+    const w = fw();
+    await w.find('[data-test="loop-frame-2"]').trigger("click", { altKey: true });
+    expect(lastEmit(w).bypass_frames).toEqual([1]);
+
+    const w2 = fw({ bypass_frames: [1] });
+    await w2.find('[data-test="loop-frame-2"]').trigger("click", { altKey: true });
+    expect(lastEmit(w2).bypass_frames).toEqual([]);
+  });
+
+  it("keeps bypassed indices sorted so the config does not churn", async () => {
+    const w = fw({ bypass_frames: [3] });
+    await w.find('[data-test="loop-frame-2"]').trigger("click", { altKey: true });
+    expect(lastEmit(w).bypass_frames).toEqual([1, 3]);
+  });
+
+  it("refuses to bypass the last running frame — a loop needs one", async () => {
+    const w = fw({ bypass_frames: [0, 1, 2] }, 4);
+    await w.find('[data-test="loop-frame-4"]').trigger("click", { altKey: true });
+    expect(w.emitted("update:modelValue")).toBeUndefined();
+  });
+
+  it("still lets the last running frame be re-enabled and locked", async () => {
+    const w = fw({ bypass_frames: [0, 1, 2] }, 4);
+    await w.find('[data-test="loop-frame-1"]').trigger("click", { altKey: true });
+    expect(lastEmit(w).bypass_frames).toEqual([1, 2]);
+  });
+
+  // Moving the editor to another frame as a side effect of locking one is the
+  // kind of surprise that makes people stop trusting a shortcut.
+  it("a modifier click never also moves the edit cursor", async () => {
+    const w = fw();
+    await w.find('[data-test="loop-frame-3"]').trigger("click", { shiftKey: true });
+    expect(currentFrame.value).toBe(null);
+    await w.find('[data-test="loop-frame-2"]').trigger("click", { altKey: true });
+    expect(currentFrame.value).toBe(null);
+  });
+
+  it("a plain click still just selects the frame", async () => {
+    const w = fw();
+    await w.find('[data-test="loop-frame-3"]').trigger("click");
+    expect(currentFrame.value).toBe(2);
+    expect(w.emitted("update:modelValue")).toBeUndefined();
+  });
+
+  it("base takes no modifiers — it has no seed and nothing to bypass", async () => {
+    const w = fw();
+    await w.find('[data-test="loop-frame-base"]').trigger("click", { shiftKey: true });
+    await w.find('[data-test="loop-frame-base"]').trigger("click", { altKey: true });
+    expect(w.emitted("update:modelValue")).toBeUndefined();
+  });
+
+  it("marks locked chips so the state is readable without the modal", () => {
+    const w = fw({ seed_locks: { "1": 123 } });
+    expect(w.find('[data-test="loop-frame-2"]').classes()).toContain("wp-loop__chip--locked");
+    expect(w.find('[data-test="loop-frame-1"]').classes()).not.toContain("wp-loop__chip--locked");
+  });
+
+  it("a frame can be both locked and bypassed", () => {
+    const w = fw({ seed_locks: { "1": 123 }, bypass_frames: [1] });
+    const chip = w.find('[data-test="loop-frame-2"]');
+    expect(chip.classes()).toContain("wp-loop__chip--locked");
+    expect(chip.classes()).toContain("wp-loop__chip--bypassed");
+  });
+
+  it("ignores non-numeric lock keys rather than rendering a NaN state", () => {
+    const w = fw({ seed_locks: { junk: 1, "1": 123 } as Record<string, number> });
+    expect(w.find('[data-test="loop-frame-2"]').classes()).toContain("wp-loop__chip--locked");
+  });
+
+  it("advertises the combos in the widget, not just in tooltips", () => {
+    const w = fw();
+    expect(w.find('[data-test="loop-chip-modifier-hint"]').text()).toMatch(/shift/i);
+    expect(w.find('[data-test="loop-chip-modifier-hint"]').text()).toMatch(/alt|option/i);
+  });
+
+  it("the tooltip names the action the next click will take", () => {
+    const w = fw({ seed_locks: { "1": 123 }, bypass_frames: [1] });
+    const t = w.find('[data-test="loop-frame-2"]').attributes("title")!;
+    expect(t).toMatch(/unlock/i);
+    expect(t).toMatch(/re-enable/i);
   });
 });

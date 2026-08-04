@@ -15,6 +15,8 @@
 import { computed, ref } from "vue";
 import type { ContextLoopConfig, LoopStrategy } from "./types";
 import SeedListModal from "../shared/SeedListModal.vue";
+import { deriveLoopSeeds } from "../shared/seed-derive";
+import { pushToast } from "../shared/toast-store";
 import { currentFrame, setFrame } from "./frame-cursor";
 
 const props = withDefaults(
@@ -72,6 +74,96 @@ const bypassedCount = computed(() => (props.modelValue.bypass_frames ?? []).leng
 const bypassSet = computed(() => new Set(props.modelValue.bypass_frames ?? []));
 function onBypassFrames(next: number[]): void {
   emit("update:modelValue", { ...props.modelValue, bypass_frames: next });
+}
+
+/* ---------------------------------------------------------------------------
+ * Modifier-click on a frame chip — lock / bypass without the modal.
+ *
+ * Both states were already VISIBLE on the chips but only CHANGEABLE two clicks
+ * away, inside a modal that covers the node you are reading. Toggling a couple
+ * of frames is the common case; the modal earns its place for the bulk
+ * operations (lock all, paste a series, out-of-range locks) and keeps them.
+ *
+ * Modifier choice: Alt and Shift both survive the trip. Ctrl is out because on
+ * macOS Ctrl-click IS a right-click, so the combo would open a context menu
+ * instead. Alt for bypass follows the seed modal's existing Alt-click-for-a-
+ * variant idiom on its Copy button.
+ * ------------------------------------------------------------------------- */
+
+/** 0-based locked frame indices. Keys are strings in the config; anything
+ *  non-numeric is ignored rather than becoming `NaN` in the set. */
+const lockSet = computed(() => {
+  const out = new Set<number>();
+  for (const k of Object.keys(props.modelValue.seed_locks ?? {})) {
+    const n = Number(k);
+    if (Number.isInteger(n)) out.add(n);
+  }
+  return out;
+});
+
+/** The seed series this loop WOULD produce — the same values "Lock all" in
+ *  the modal writes, so a chip-lock and a modal-lock agree. */
+const derivedSeeds = computed(() =>
+  deriveLoopSeeds(props.baseSeed, Math.max(1, props.count ?? 1), props.modelValue.strategy),
+);
+
+/** In-range frames that are still running. Bypassing the last one would leave
+ *  the loop with nothing to execute, so the modal forbids it and so do we. */
+const activeFrameCount = computed(() => {
+  let n = 0;
+  for (let i = 0; i < Math.max(1, props.count ?? 1); i++) if (!bypassSet.value.has(i)) n++;
+  return n;
+});
+
+function toggleFrameLock(i: number): void {
+  const next = { ...(props.modelValue.seed_locks ?? {}) };
+  if (lockSet.value.has(i)) delete next[String(i)];
+  else next[String(i)] = derivedSeeds.value[i] ?? props.baseSeed;
+  emit("update:modelValue", { ...props.modelValue, seed_locks: next });
+}
+
+function toggleFrameBypass(i: number): void {
+  const on = bypassSet.value.has(i);
+  if (!on && activeFrameCount.value <= 1) {
+    // Silence here would read as a broken click, and the reason is not
+    // guessable from the chip.
+    pushToast("A loop needs at least one running frame.", { severity: "warning" });
+    return;
+  }
+  const next = new Set(bypassSet.value);
+  if (on) next.delete(i);
+  else next.add(i);
+  onBypassFrames([...next].sort((a, b) => a - b));
+}
+
+/**
+ * Frame chip click. A modifier NEVER also moves the edit cursor — jumping the
+ * editor to a different frame as a side effect of locking one is the kind of
+ * surprise that makes people distrust shortcuts.
+ */
+function onFrameClick(i: number, ev: MouseEvent): void {
+  if (ev.altKey) { toggleFrameBypass(i); return; }
+  if (ev.shiftKey) { toggleFrameLock(i); return; }
+  setFrame(i);
+}
+
+/** Option on a Mac keyboard, Alt everywhere else — same physical key, and
+ *  `altKey` covers both, but the label has to match what is printed on it. */
+const ALT_LABEL = typeof navigator !== "undefined" && /Mac|iP(hone|ad|od)/i.test(navigator.userAgent)
+  ? "⌥ Option"
+  : "Alt";
+
+function frameTitle(i: number): string {
+  const state = [
+    lockSet.value.has(i) ? `seed locked to ${props.modelValue.seed_locks?.[String(i)]}` : null,
+    bypassSet.value.has(i) ? "bypassed" : null,
+  ].filter(Boolean).join(", ");
+  return [
+    `Frame ${i + 1}${state ? ` — ${state}` : ""}`,
+    "Click to edit this frame",
+    `Shift-click to ${lockSet.value.has(i) ? "unlock" : "lock"} its seed`,
+    `${ALT_LABEL}-click to ${bypassSet.value.has(i) ? "re-enable" : "bypass"} it`,
+  ].join("\n");
 }
 
 function pickStrategy(s: LoopStrategy): void {
@@ -148,13 +240,25 @@ function toggleTotalInternal(): void {
     <div class="wp-loop__section">
       <div class="wp-loop__label">edit frame</div>
       <div class="wp-loop__chips wp-loop__chips--frames" role="radiogroup" aria-label="Edit frame">
+        <!-- `base` is not a frame: it has no seed to lock and nothing to
+             bypass, so it takes no modifiers. -->
         <button type="button" class="wp-loop__chip" :class="{ 'wp-loop__chip--active': currentFrame === null }"
-          data-test="loop-frame-base" role="radio" :aria-checked="currentFrame === null" @click="setFrame(null)">base</button>
+          data-test="loop-frame-base" role="radio" :aria-checked="currentFrame === null"
+          title="Edit the values every frame inherits" @click="setFrame(null)">base</button>
         <button v-for="i in frameChips" :key="i" type="button" class="wp-loop__chip"
-          :class="{ 'wp-loop__chip--active': currentFrame === i, 'wp-loop__chip--bypassed': bypassSet.has(i) }"
+          :class="{
+            'wp-loop__chip--active': currentFrame === i,
+            'wp-loop__chip--bypassed': bypassSet.has(i),
+            'wp-loop__chip--locked': lockSet.has(i),
+          }"
           :data-test="`loop-frame-${i + 1}`" role="radio" :aria-checked="currentFrame === i"
-          :title="bypassSet.has(i) ? `Frame ${i + 1} is bypassed` : undefined" @click="setFrame(i)">#{{ i + 1 }}</button>
+          :data-locked="lockSet.has(i) ? 'true' : undefined"
+          :data-bypassed="bypassSet.has(i) ? 'true' : undefined"
+          :title="frameTitle(i)" @click="onFrameClick(i, $event)">#{{ i + 1 }}</button>
       </div>
+      <p class="wp-loop__hint" data-test="loop-chip-modifier-hint">
+        <b>Shift</b>-click locks a seed · <b>{{ ALT_LABEL }}</b>-click bypasses
+      </p>
     </div>
 
     <div
@@ -293,6 +397,36 @@ function toggleTotalInternal(): void {
   opacity: 0.5;
 }
 .wp-loop__chip--bypassed:hover { opacity: 0.8; }
+
+/* Locked seed — a dot in the chip's top-right corner. The chips are ~20px
+ * tall, so a padlock glyph would be mud; a dot only has to say "something is
+ * pinned here" and the tooltip carries the seed value. Position:relative on
+ * every chip (not just locked ones) keeps the box model identical, so
+ * toggling a lock never reflows the grid. */
+.wp-loop__chip { position: relative; }
+.wp-loop__chip--locked::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--wp-accent, #c4b5fd);
+}
+/* A bypassed frame keeps its lock, and both stay legible: the dot dims with
+ * the chip but must not vanish, or an unlock later looks like it did nothing. */
+.wp-loop__chip--bypassed.wp-loop__chip--locked::after { opacity: 0.9; }
+
+/* Modifier hint under the frame grid. Deliberately present rather than
+ * tooltip-only: an undiscoverable shortcut is the same as no shortcut, and
+ * this row is the one place a reader is already looking at the chips. */
+.wp-loop__hint {
+  margin: 5px 0 0;
+  font: 400 9px var(--wp-font-sans, sans-serif);
+  color: var(--wp-text-dim, var(--wp-text-muted, #8a8d99));
+}
+.wp-loop__hint b { font-weight: 700; color: var(--wp-text-muted, #aeb1bb); }
 
 .wp-loop__row {
   display: flex;
