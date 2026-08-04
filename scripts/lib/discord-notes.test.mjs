@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  DISPATCH_URL,
   splitBody,
   toDiscordMarkdown,
   buildDescription,
@@ -208,6 +209,28 @@ describe("buildPayload", () => {
     expect(p.avatar_url).toBe("https://x/a.png");
   });
 
+  /**
+   * Two channels, deliberately asymmetric. The staff copy is the review step,
+   * so it carries the button that publishes it onward; the public copy is the
+   * announcement itself and must not tell readers how to re-send it.
+   */
+  it("gives the staff copy a publish link, so review and button are one thing", () => {
+    const p = buildPayload({ version: "v1", body: "x", channel: "staff" });
+    const field = p.embeds[0].fields[0];
+    expect(field.value).toContain(DISPATCH_URL);
+    expect(field.value).toMatch(/channel.*public/i);
+  });
+
+  it("defaults to the staff copy — the safe one to send by accident", () => {
+    expect(buildPayload({ version: "v1", body: "x" }).embeds[0].fields).toBeTruthy();
+  });
+
+  it("leaves the public copy without the publish link", () => {
+    const p = buildPayload({ version: "v1", body: "x", channel: "public" });
+    // `undefined`, not `[]` — an empty field block renders as dead space.
+    expect(p.embeds[0].fields).toBeUndefined();
+  });
+
   it("stays inside the embed description cap", () => {
     const huge = Array.from({ length: 900 }, (_, i) => `- change ${i}`).join("\n");
     const p = buildPayload({ version: "v1", body: huge });
@@ -229,6 +252,17 @@ describe("buildRollupPayload", () => {
     expect(p.embeds[0].title).toBe("Wildcard Pipeline v2.12.0 — everything since v2.10.2");
     expect(p.embeds[0].description).toContain("**v2.12.0**");
     expect(p.embeds[0].description).toContain("**v2.11.0**");
+  });
+
+  it("carries the channel through a roll-up", () => {
+    const staff = buildRollupPayload({
+      releases: [{ version: "v2.12.0", body: "- x" }], sinceVersion: "v2.11.0", channel: "staff",
+    });
+    const pub = buildRollupPayload({
+      releases: [{ version: "v2.12.0", body: "- x" }], sinceVersion: "v2.11.0", channel: "public",
+    });
+    expect(staff.embeds[0].fields).toBeTruthy();
+    expect(pub.embeds[0].fields).toBeUndefined();
   });
 
   it("keeps the identity on a roll-up too", () => {

@@ -1,7 +1,12 @@
 name: Discord announce
 
-# Fires when semantic-release publishes a GitHub release, and can be run by
-# hand for the catch-up case (announcements skipped for a few versions).
+# Two channels, deliberately asymmetric.
+#
+#   staff   — posts AUTOMATICALLY when semantic-release publishes a release.
+#             The post carries a link back to this workflow, so the review and
+#             the publish button are the same artefact.
+#   public  — only ever from a manual run. A release can never announce itself
+#             to everyone without someone having read it first.
 #
 # Deliberately a SEPARATE workflow from release.yml: a Discord outage, a
 # rotated webhook or a rate limit must never fail a release that already
@@ -11,6 +16,12 @@ on:
     types: [published]
   workflow_dispatch:
     inputs:
+      channel:
+        description: "Where to post."
+        required: true
+        type: choice
+        default: staff
+        options: [staff, public]
       since:
         description: "Roll up every release after this tag (e.g. v2.10.2). Blank = latest release only."
         required: false
@@ -39,21 +50,33 @@ jobs:
           # nothing to cache.
           package-manager-cache: false
 
-      # `release` events always post. `workflow_dispatch` honours the dry_run
-      # box, which defaults to true so a manual run cannot surprise anyone.
+      # A `release` event always posts, and always to staff. A dispatch honours
+      # both inputs, with dry_run defaulting to true so a manual run cannot
+      # surprise anyone.
       - name: Announce
         env:
+          DISCORD_WEBHOOK_STAFF: ${{ secrets.DISCORD_WEBHOOK_STAFF }}
+          DISCORD_WEBHOOK_PUBLIC: ${{ secrets.DISCORD_WEBHOOK_PUBLIC }}
+          # Kept so an existing single-webhook setup keeps working as staff.
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           DISCORD_ROLE_ID: ${{ secrets.DISCORD_ROLE_ID }}
           GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
         run: |
+          set -euo pipefail
           ARGS=""
-          if [ -n "${{ inputs.since }}" ]; then
-            ARGS="--since ${{ inputs.since }}"
-          elif [ -n "${{ github.event.release.tag_name }}" ]; then
-            ARGS="--version ${{ github.event.release.tag_name }}"
+
+          if [ "${{ github.event_name }}" = "release" ]; then
+            ARGS="--version ${{ github.event.release.tag_name }} --channel staff --post"
+          else
+            ARGS="--channel ${{ inputs.channel }}"
+            if [ -n "${{ inputs.since }}" ]; then
+              ARGS="$ARGS --since ${{ inputs.since }}"
+            fi
+            if [ "${{ inputs.dry_run }}" = "false" ]; then
+              ARGS="$ARGS --post"
+            fi
           fi
-          if [ "${{ github.event_name }}" = "release" ] || [ "${{ inputs.dry_run }}" = "false" ]; then
-            ARGS="$ARGS --post"
-          fi
+
+          echo "Running: discord-announce.mjs $ARGS"
           node scripts/discord-announce.mjs $ARGS

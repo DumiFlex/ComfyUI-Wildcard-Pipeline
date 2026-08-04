@@ -46,6 +46,10 @@ export const WEBHOOK_USERNAME = "Wildcard Pipeline";
 export const WEBHOOK_AVATAR_URL =
   "https://raw.githubusercontent.com/DumiFlex/ComfyUI-Wildcard-Pipeline/main/public/images/web-app-manifest-512x512.png";
 
+/** Where the manual "publish to the public channel" run is started. */
+export const DISPATCH_URL =
+  "https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/actions/workflows/discord-announce.yml";
+
 /**
  * Split a release body into the part worth announcing and what is left behind.
  *
@@ -185,6 +189,7 @@ export function buildPayload({
   roleId,
   username = WEBHOOK_USERNAME,
   avatarUrl = WEBHOOK_AVATAR_URL,
+  channel = "staff",
   installHint = 'ComfyUI Manager → search "Wildcard Pipeline" → Update → restart ComfyUI',
 }) {
   const description = buildDescription(body, { compareUrl });
@@ -199,10 +204,35 @@ export function buildPayload({
         url: releaseUrl || undefined,
         description,
         color: BRAND_COLOR,
+        fields: reviewFields(channel),
         footer: { text: installHint },
       },
     ],
   };
+}
+
+/**
+ * The staff copy carries its own publish button; the public copy does not.
+ *
+ * This is what makes the staff channel a review step rather than a duplicate
+ * feed: the post you are reading is the post that will go out, and the link to
+ * send it is attached to it. Without that, "go and publish it" is a separate
+ * instruction living in someone's head.
+ *
+ * Returned as `undefined` for the public channel rather than an empty array —
+ * Discord rejects `fields: []` on some client versions, and an empty field
+ * block would render as dead space in the announcement everyone sees.
+ */
+function reviewFields(channel) {
+  if (channel !== "staff") return undefined;
+  return [
+    {
+      name: "Ready to go public?",
+      value:
+        `[Run the workflow](${DISPATCH_URL}) with **channel: public** and ` +
+        "**dry_run: false** to post this to the announcement channel.",
+    },
+  ];
 }
 
 /**
@@ -217,6 +247,7 @@ export function buildPayload({
  */
 export function buildRollupPayload({
   releases, sinceVersion, releaseUrl, roleId, installHint, username, avatarUrl,
+  channel = "staff",
 }) {
   const latest = releases[0];
   const sections = releases.map((r) => {
@@ -233,6 +264,7 @@ export function buildRollupPayload({
     installHint,
     username,
     avatarUrl,
+    channel,
   });
   base.embeds[0].title = sinceVersion
     ? `Wildcard Pipeline ${latest?.version ?? ""} — everything since ${sinceVersion}`
