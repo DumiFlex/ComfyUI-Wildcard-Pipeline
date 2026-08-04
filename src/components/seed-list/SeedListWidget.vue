@@ -15,6 +15,8 @@
 import { computed, ref } from "vue";
 import type { SeedListConfig, SeedListStrategy } from "./types";
 import SeedListModal from "../shared/SeedListModal.vue";
+import FrameChips from "../shared/FrameChips.vue";
+import { deriveLoopSeeds } from "../shared/seed-derive";
 
 const props = withDefaults(
   defineProps<{
@@ -81,6 +83,48 @@ const lockedCount = computed(() => Object.keys(props.modelValue.seed_locks ?? {}
 const bypassedCount = computed(() => props.bypassedFrames.length);
 
 function onSeedLocks(next: Record<string, number>): void {
+  emit("update:modelValue", { ...props.modelValue, seed_locks: next });
+}
+
+/* ---------------------------------------------------------------------------
+ * Frame chips — lock a seed without opening the modal.
+ *
+ * Unlike the Loop's chips these take a PLAIN click, because this node has no
+ * edit cursor: there is nothing else a chip could do, and making people hold
+ * Shift for the only available action would be ceremony.
+ *
+ * Bypass is shown but not editable. It belongs to the WP Context Loop wired
+ * into `loop_config` (and only surfaces when "Override count from loop" is
+ * on) — changing it here would mean writing to a different node.
+ * ------------------------------------------------------------------------ */
+
+const BYPASS_READONLY_HINT = "Bypassed by the wired Context Loop — change it there.";
+
+/** 0-based locked frame indices. Config keys are strings; a non-numeric key
+ *  is ignored rather than becoming `NaN` in the set. */
+const lockSet = computed(() => {
+  const out = new Set<number>();
+  for (const k of Object.keys(props.modelValue.seed_locks ?? {})) {
+    const n = Number(k);
+    if (Number.isInteger(n)) out.add(n);
+  }
+  return out;
+});
+
+/** The seed series this node WOULD produce, using the same effective values
+ *  the modal previews with — so a chip-lock and a modal-lock agree. */
+const derivedSeeds = computed(() =>
+  deriveLoopSeeds(
+    props.baseSeed,
+    Math.max(1, props.count ?? 1),
+    props.previewStrategy ?? props.modelValue.strategy,
+  ),
+);
+
+function toggleFrameLock(i: number): void {
+  const next = { ...(props.modelValue.seed_locks ?? {}) };
+  if (lockSet.value.has(i)) delete next[String(i)];
+  else next[String(i)] = derivedSeeds.value[i] ?? props.baseSeed;
   emit("update:modelValue", { ...props.modelValue, seed_locks: next });
 }
 
@@ -153,6 +197,16 @@ function toggleOverrideStrategy(): void {
         </button>
       </div>
     </div>
+
+    <FrameChips
+      label="seeds"
+      test-id="seedlist-frame"
+      :count="Math.max(1, count ?? 1)"
+      :locked="[...lockSet]"
+      :bypassed="bypassedFrames"
+      :bypass-readonly-hint="BYPASS_READONLY_HINT"
+      @toggle-lock="toggleFrameLock"
+    />
 
     <button type="button" class="wp-seedlist__seedbtn" data-test="seedlist-seeds-btn" @click="seedsOpen = true">
       <span class="wp-seedlist__seedbtn-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10" /><circle cx="20" cy="18" r="1.4" fill="currentColor" stroke="none" /></svg></span>

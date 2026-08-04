@@ -160,9 +160,9 @@ describe("ContextLoopWidget bypass (#13)", () => {
     const cfg = { ...emptyContextLoopConfig(), bypass_frames: [1, 3] };
     const w = mount(ContextLoopWidget, { props: { modelValue: cfg, count: 5 } });
     // frame index 1 -> chip #2 (data-test loop-frame-2)
-    expect(w.find('[data-test="loop-frame-2"]').classes()).toContain("wp-loop__chip--bypassed");
-    expect(w.find('[data-test="loop-frame-4"]').classes()).toContain("wp-loop__chip--bypassed");
-    expect(w.find('[data-test="loop-frame-1"]').classes()).not.toContain("wp-loop__chip--bypassed");
+    expect(w.find('[data-test="loop-frame-2"]').classes()).toContain("wp-fchips__chip--bypassed");
+    expect(w.find('[data-test="loop-frame-4"]').classes()).toContain("wp-fchips__chip--bypassed");
+    expect(w.find('[data-test="loop-frame-1"]').classes()).not.toContain("wp-fchips__chip--bypassed");
   });
 
   it("has no bypass badge when none are bypassed", () => {
@@ -275,26 +275,26 @@ describe("ContextLoopWidget frame chip modifier-clicks", () => {
 
   it("marks locked chips so the state is readable without the modal", () => {
     const w = fw({ seed_locks: { "1": 123 } });
-    expect(w.find('[data-test="loop-frame-2"]').classes()).toContain("wp-loop__chip--locked");
-    expect(w.find('[data-test="loop-frame-1"]').classes()).not.toContain("wp-loop__chip--locked");
+    expect(w.find('[data-test="loop-frame-2"]').classes()).toContain("wp-fchips__chip--locked");
+    expect(w.find('[data-test="loop-frame-1"]').classes()).not.toContain("wp-fchips__chip--locked");
   });
 
   it("a frame can be both locked and bypassed", () => {
     const w = fw({ seed_locks: { "1": 123 }, bypass_frames: [1] });
     const chip = w.find('[data-test="loop-frame-2"]');
-    expect(chip.classes()).toContain("wp-loop__chip--locked");
-    expect(chip.classes()).toContain("wp-loop__chip--bypassed");
+    expect(chip.classes()).toContain("wp-fchips__chip--locked");
+    expect(chip.classes()).toContain("wp-fchips__chip--bypassed");
   });
 
   it("ignores non-numeric lock keys rather than rendering a NaN state", () => {
     const w = fw({ seed_locks: { junk: 1, "1": 123 } as Record<string, number> });
-    expect(w.find('[data-test="loop-frame-2"]').classes()).toContain("wp-loop__chip--locked");
+    expect(w.find('[data-test="loop-frame-2"]').classes()).toContain("wp-fchips__chip--locked");
   });
 
   it("advertises the combos in the widget, not just in tooltips", () => {
     const w = fw();
-    expect(w.find('[data-test="loop-chip-modifier-hint"]').text()).toMatch(/shift/i);
-    expect(w.find('[data-test="loop-chip-modifier-hint"]').text()).toMatch(/alt|option/i);
+    expect(w.find('[data-test="loop-frames-hint"]').text()).toMatch(/shift/i);
+    expect(w.find('[data-test="loop-frames-hint"]').text()).toMatch(/alt|option/i);
   });
 
   it("the tooltip names the action the next click will take", () => {

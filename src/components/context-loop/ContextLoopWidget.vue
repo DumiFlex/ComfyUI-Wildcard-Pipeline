@@ -18,6 +18,7 @@ import SeedListModal from "../shared/SeedListModal.vue";
 import { deriveLoopSeeds } from "../shared/seed-derive";
 import { pushToast } from "../shared/toast-store";
 import { currentFrame, setFrame } from "./frame-cursor";
+import FrameChips from "../shared/FrameChips.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -57,9 +58,6 @@ const OVERRIDE_SEED_TOOLTIP =
 
 const isMuted = computed<boolean>(() => props.nodeMode === 2);
 const isBypassed = computed<boolean>(() => props.nodeMode === 4);
-const frameChips = computed(() =>
-  Array.from({ length: Math.max(1, props.count ?? 1) }, (_, i) => i),
-);
 
 const seedsOpen = ref(false);
 const lockedCount = computed(() => Object.keys(props.modelValue.seed_locks ?? {}).length);
@@ -136,36 +134,6 @@ function toggleFrameBypass(i: number): void {
   onBypassFrames([...next].sort((a, b) => a - b));
 }
 
-/**
- * Frame chip click. A modifier NEVER also moves the edit cursor — jumping the
- * editor to a different frame as a side effect of locking one is the kind of
- * surprise that makes people distrust shortcuts.
- */
-function onFrameClick(i: number, ev: MouseEvent): void {
-  if (ev.altKey) { toggleFrameBypass(i); return; }
-  if (ev.shiftKey) { toggleFrameLock(i); return; }
-  setFrame(i);
-}
-
-/** Option on a Mac keyboard, Alt everywhere else — same physical key, and
- *  `altKey` covers both, but the label has to match what is printed on it. */
-const ALT_LABEL = typeof navigator !== "undefined" && /Mac|iP(hone|ad|od)/i.test(navigator.userAgent)
-  ? "⌥ Option"
-  : "Alt";
-
-function frameTitle(i: number): string {
-  const state = [
-    lockSet.value.has(i) ? `seed locked to ${props.modelValue.seed_locks?.[String(i)]}` : null,
-    bypassSet.value.has(i) ? "bypassed" : null,
-  ].filter(Boolean).join(", ");
-  return [
-    `Frame ${i + 1}${state ? ` — ${state}` : ""}`,
-    "Click to edit this frame",
-    `Shift-click to ${lockSet.value.has(i) ? "unlock" : "lock"} its seed`,
-    `${ALT_LABEL}-click to ${bypassSet.value.has(i) ? "re-enable" : "bypass"} it`,
-  ].join("\n");
-}
-
 function pickStrategy(s: LoopStrategy): void {
   if (props.modelValue.strategy === s) return;
   emit("update:modelValue", { ...props.modelValue, strategy: s });
@@ -237,29 +205,21 @@ function toggleTotalInternal(): void {
       <svg class="wp-loop__seedbtn-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6" /></svg>
     </button>
 
-    <div class="wp-loop__section">
-      <div class="wp-loop__label">edit frame</div>
-      <div class="wp-loop__chips wp-loop__chips--frames" role="radiogroup" aria-label="Edit frame">
-        <!-- `base` is not a frame: it has no seed to lock and nothing to
-             bypass, so it takes no modifiers. -->
-        <button type="button" class="wp-loop__chip" :class="{ 'wp-loop__chip--active': currentFrame === null }"
-          data-test="loop-frame-base" role="radio" :aria-checked="currentFrame === null"
-          title="Edit the values every frame inherits" @click="setFrame(null)">base</button>
-        <button v-for="i in frameChips" :key="i" type="button" class="wp-loop__chip"
-          :class="{
-            'wp-loop__chip--active': currentFrame === i,
-            'wp-loop__chip--bypassed': bypassSet.has(i),
-            'wp-loop__chip--locked': lockSet.has(i),
-          }"
-          :data-test="`loop-frame-${i + 1}`" role="radio" :aria-checked="currentFrame === i"
-          :data-locked="lockSet.has(i) ? 'true' : undefined"
-          :data-bypassed="bypassSet.has(i) ? 'true' : undefined"
-          :title="frameTitle(i)" @click="onFrameClick(i, $event)">#{{ i + 1 }}</button>
-      </div>
-      <p class="wp-loop__hint" data-test="loop-chip-modifier-hint">
-        <b>Shift</b>-click locks a seed · <b>{{ ALT_LABEL }}</b>-click bypasses
-      </p>
-    </div>
+    <!-- `base` is not a frame: it has no seed to lock and nothing to bypass,
+         so it takes no modifiers. -->
+    <FrameChips
+      label="edit frame"
+      :count="Math.max(1, count ?? 1)"
+      :locked="[...lockSet]"
+      :bypassed="[...bypassSet]"
+      :current="currentFrame"
+      selectable
+      show-base
+      bypass-interactive
+      @select="setFrame"
+      @toggle-lock="toggleFrameLock"
+      @toggle-bypass="toggleFrameBypass"
+    />
 
     <div
       class="wp-loop__row"
@@ -364,14 +324,7 @@ function toggleTotalInternal(): void {
 }
 
 .wp-loop__chips { display: flex; gap: 4px; }
-/* Frame chips ONLY (the strategy row has 3 fixed chips that must stay one
-   row + show full labels): grid so 15+ frame chips WRAP instead of
-   overflowing the node. auto-fill keeps a uniform cell width; the last row
-   grows to 1fr to fill it. */
-.wp-loop__chips--frames {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
-}
+/* Strategy chips only — the per-frame grid now lives in FrameChips.vue. */
 .wp-loop__chip {
   flex: 1;
   padding: 4px 6px;
@@ -389,44 +342,6 @@ function toggleTotalInternal(): void {
   border-color: var(--wp-accent, #c4b5fd);
   color: var(--wp-accent, #c4b5fd);
 }
-/* Bypassed frame — interrupted (dashed) border + dimmed so it reads at a
- * glance on the node. Composes with --active (dashed overrides the solid). */
-.wp-loop__chip--bypassed {
-  border-style: dashed;
-  border-color: var(--wp-border-strong, #4a4d55);
-  opacity: 0.5;
-}
-.wp-loop__chip--bypassed:hover { opacity: 0.8; }
-
-/* Locked seed — a dot in the chip's top-right corner. The chips are ~20px
- * tall, so a padlock glyph would be mud; a dot only has to say "something is
- * pinned here" and the tooltip carries the seed value. Position:relative on
- * every chip (not just locked ones) keeps the box model identical, so
- * toggling a lock never reflows the grid. */
-.wp-loop__chip { position: relative; }
-.wp-loop__chip--locked::after {
-  content: "";
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--wp-accent, #c4b5fd);
-}
-/* A bypassed frame keeps its lock, and both stay legible: the dot dims with
- * the chip but must not vanish, or an unlock later looks like it did nothing. */
-.wp-loop__chip--bypassed.wp-loop__chip--locked::after { opacity: 0.9; }
-
-/* Modifier hint under the frame grid. Deliberately present rather than
- * tooltip-only: an undiscoverable shortcut is the same as no shortcut, and
- * this row is the one place a reader is already looking at the chips. */
-.wp-loop__hint {
-  margin: 5px 0 0;
-  font: 400 9px var(--wp-font-sans, sans-serif);
-  color: var(--wp-text-dim, var(--wp-text-muted, #8a8d99));
-}
-.wp-loop__hint b { font-weight: 700; color: var(--wp-text-muted, #aeb1bb); }
 
 .wp-loop__row {
   display: flex;

@@ -3,6 +3,8 @@ import { mount } from "@vue/test-utils";
 import SeedListWidget from "./SeedListWidget.vue";
 import SeedListModal from "../shared/SeedListModal.vue";
 import { emptySeedListConfig } from "./types";
+import type { SeedListConfig } from "./types";
+import { deriveLoopSeeds } from "../shared/seed-derive";
 
 describe("SeedListWidget", () => {
   it("renders defaults — hash chip active, all three override switches off", () => {
@@ -199,5 +201,81 @@ describe("SeedListWidget bypass mirror (#13)", () => {
       props: { modelValue: emptySeedListConfig(), bypassedFrames: [] },
     });
     expect(w.find('[data-test="seedlist-seeds-bypass-badge"]').exists()).toBe(false);
+  });
+});
+
+/**
+ * Frame chips on the Seed List. Unlike the Loop's, these take a PLAIN click:
+ * this node has no edit cursor, so there is nothing else a chip could do and
+ * requiring a modifier for the only available action would be ceremony.
+ */
+describe("SeedListWidget frame chips", () => {
+  function fw(cfgPatch: Partial<SeedListConfig> = {}, extra: Record<string, unknown> = {}) {
+    return mount(SeedListWidget, {
+      props: { modelValue: { ...emptySeedListConfig(), ...cfgPatch }, baseSeed: 42, count: 4, ...extra },
+    });
+  }
+  const lastEmit = (w: ReturnType<typeof fw>) => {
+    const calls = w.emitted("update:modelValue");
+    return calls?.[calls.length - 1]?.[0] as SeedListConfig;
+  };
+
+  it("renders one chip per frame and NO base chip — there is nothing to inherit", () => {
+    const w = fw();
+    expect(w.findAll('[data-test^="seedlist-frame-"]')).toHaveLength(4);
+    expect(w.find('[data-test="seedlist-frame-base"]').exists()).toBe(false);
+  });
+
+  it("a plain click locks the frame to the seed it would have used", async () => {
+    const w = fw();
+    await w.find('[data-test="seedlist-frame-3"]').trigger("click");
+    const locks = lastEmit(w).seed_locks!;
+    expect(Object.keys(locks)).toEqual(["2"]);
+    expect(locks["2"]).toBe(deriveLoopSeeds(42, 4, "hash_index")[2]);
+  });
+
+  it("a plain click on a locked frame unlocks it", async () => {
+    const w = fw({ seed_locks: { "2": 999 } });
+    await w.find('[data-test="seedlist-frame-3"]').trigger("click");
+    expect(lastEmit(w).seed_locks).toEqual({});
+  });
+
+  it("locks against the EFFECTIVE strategy when the loop overrides it", async () => {
+    const w = fw({}, { previewStrategy: "sequential" });
+    await w.find('[data-test="seedlist-frame-2"]').trigger("click");
+    expect(lastEmit(w).seed_locks!["1"]).toBe(deriveLoopSeeds(42, 4, "sequential")[1]);
+  });
+
+  it("marks locked chips", () => {
+    const w = fw({ seed_locks: { "1": 5 } });
+    expect(w.find('[data-test="seedlist-frame-2"]').classes()).toContain("wp-fchips__chip--locked");
+    expect(w.find('[data-test="seedlist-frame-1"]').classes()).not.toContain("wp-fchips__chip--locked");
+  });
+
+  it("shows frames the wired loop bypasses", () => {
+    const w = fw({}, { bypassedFrames: [1, 3] });
+    expect(w.find('[data-test="seedlist-frame-2"]').classes()).toContain("wp-fchips__chip--bypassed");
+    expect(w.find('[data-test="seedlist-frame-4"]').classes()).toContain("wp-fchips__chip--bypassed");
+    expect(w.find('[data-test="seedlist-frame-1"]').classes()).not.toContain("wp-fchips__chip--bypassed");
+  });
+
+  // Bypass belongs to the wired Context Loop. Editing it from here would mean
+  // writing to a different node.
+  it("refuses to change bypass — it is owned by the loop", async () => {
+    const w = fw({}, { bypassedFrames: [1] });
+    await w.find('[data-test="seedlist-frame-2"]').trigger("click", { altKey: true });
+    expect(w.emitted("update:modelValue")).toBeUndefined();
+  });
+
+  it("says where bypass is owned rather than looking broken", () => {
+    const w = fw({}, { bypassedFrames: [1] });
+    expect(w.find('[data-test="seedlist-frame-2"]').attributes("title")).toMatch(/Context Loop/i);
+  });
+
+  it("a locked frame can also be bypassed by the loop", () => {
+    const w = fw({ seed_locks: { "1": 5 } }, { bypassedFrames: [1] });
+    const chip = w.find('[data-test="seedlist-frame-2"]');
+    expect(chip.classes()).toContain("wp-fchips__chip--locked");
+    expect(chip.classes()).toContain("wp-fchips__chip--bypassed");
   });
 });
