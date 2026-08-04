@@ -110,6 +110,27 @@ const tokens = computed<RichToken[]>(() => {
   return out;
 });
 
+/**
+ * Hover text for a nested-ref chip.
+ *
+ * Previously a ref chip only carried a `title` when it was unresolved or
+ * filtered, so an ordinary resolved ref — the common case — had no hover at
+ * all, and neither did `$var` chips. The chip label is itself abbreviated
+ * (`@name`, no uuid), so with nothing on hover there was no way to see which
+ * library entry a ref actually points at.
+ */
+function refTitle(tok: RichToken): string | undefined {
+  const uuid = tok.meta?.uuid;
+  if (refIsUnresolved(uuid)) return `Reference ${uuid} not in library`;
+  const parts: string[] = [];
+  const label = refDisplay(uuid, tok.meta?.name, tok.raw);
+  parts.push(label.startsWith("@") ? label.slice(1) : label);
+  if (uuid) parts.push(uuid);
+  const filter = refFilter(tok).title;
+  if (filter) parts.push(filter);
+  return parts.join(" · ") || undefined;
+}
+
 function refDisplay(
   uuid: string | undefined,
   cachedName: string | undefined,
@@ -411,9 +432,7 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
             'opt__tok--unresolved': refIsUnresolved(tok.meta?.uuid),
           }"
           :data-uuid="tok.meta?.uuid"
-          :title="refIsUnresolved(tok.meta?.uuid)
-            ? `Reference ${tok.meta?.uuid} not in library`
-            : (refFilter(tok).title || undefined)"
+          :title="refTitle(tok)"
         >
           <span class="opt__tok-icon" aria-hidden="true">{{ refIsUnresolved(tok.meta?.uuid) ? '?' : '✦' }}</span>
           <span class="opt__tok-label">{{ refDisplay(tok.meta?.uuid, tok.meta?.name, tok.raw) }}</span>
@@ -432,6 +451,7 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
         <span
           v-else-if="tok.kind === 'var'"
           class="opt__tok opt__tok--var"
+          :title="`${tok.raw} — variable, resolved from upstream when the graph runs`"
         >
           <span class="opt__tok-icon" aria-hidden="true">⌘</span>
           <span class="opt__tok-label">{{ tok.raw }}</span>

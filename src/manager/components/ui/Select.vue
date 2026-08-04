@@ -62,6 +62,11 @@ const markerWidth = computed<string | null>(() => {
   return hasDot ? "8px" : null;
 });
 
+/** Whether to advertise type-to-filter. Below this many options the list is
+ *  scannable at a glance and the hint is just noise. */
+const FILTER_HINT_MIN_OPTIONS = 6;
+const showFilterHint = computed(() => props.options.length >= FILTER_HINT_MIN_OPTIONS);
+
 /** Options narrowed by `query` (case-insensitive substring on the label).
  *  Empty query → all options, so every dropdown is type-to-filter. */
 const filtered = computed<SelectOption[]>(() => {
@@ -330,6 +335,17 @@ function onKeydown(e: KeyboardEvent) {
           data-test="select-filter"
           style="display:flex;align-items:center;padding:4px 12px;font-size:11px;opacity:0.6;"
         >Filtering: {{ query }}</li>
+        <!-- Every one of these menus is type-to-filter, but the only sign of it
+             was the "Filtering:" line, which appears AFTER you have already
+             guessed. Users asked for it to be telegraphed. Shown only once the
+             list is long enough for filtering to be worth reaching for. -->
+        <li
+          v-else-if="showFilterHint"
+          class="wp-select__hint"
+          aria-hidden="true"
+          data-test="select-filter-hint"
+          style="display:flex;align-items:center;padding:4px 12px;font-size:11px;opacity:0.45;"
+        >Type to filter</li>
         <li
           v-for="(opt, i) in filtered"
           :key="String(opt.value)"

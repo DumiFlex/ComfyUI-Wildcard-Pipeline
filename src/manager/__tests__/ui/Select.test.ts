@@ -247,3 +247,46 @@ describe("Select.vue", () => {
     wrap.unmount();
   });
 });
+
+describe("Select.vue — type-to-filter discoverability", () => {
+  // Every one of these menus filters as you type, but the only sign of it was
+  // the "Filtering:" line, which only appears once you have already guessed.
+  const many = Array.from({ length: 8 }, (_, i) => ({ value: `v${i}`, label: `Option ${i}` }));
+
+  afterEach(() => { document.body.replaceChildren(); });
+
+  it("advertises the hint on a list long enough to need filtering", async () => {
+    const wrap = mount(Select, {
+      props: { modelValue: null, options: many },
+      attachTo: document.body,
+    });
+    await wrap.get("[data-test='select-trigger']").trigger("click");
+    const hint = document.querySelector("[data-test='select-filter-hint']");
+    expect(hint).not.toBeNull();
+    expect(hint?.textContent).toContain("Type to filter");
+    wrap.unmount();
+  });
+
+  it("stays quiet on a short list, where the hint is just noise", async () => {
+    const wrap = mount(Select, {
+      props: { modelValue: null, options: opts },
+      attachTo: document.body,
+    });
+    await wrap.get("[data-test='select-trigger']").trigger("click");
+    expect(document.querySelector("[data-test='select-filter-hint']")).toBeNull();
+    wrap.unmount();
+  });
+
+  it("gives way to the live filter once the user types", async () => {
+    const wrap = mount(Select, {
+      props: { modelValue: null, options: many },
+      attachTo: document.body,
+    });
+    await wrap.get("[data-test='select-trigger']").trigger("click");
+    await wrap.get("[data-test='select-trigger']").trigger("keydown", { key: "O" });
+    await nextTick();
+    expect(document.querySelector("[data-test='select-filter-hint']")).toBeNull();
+    expect(document.querySelector("[data-test='select-filter']")).not.toBeNull();
+    wrap.unmount();
+  });
+});
