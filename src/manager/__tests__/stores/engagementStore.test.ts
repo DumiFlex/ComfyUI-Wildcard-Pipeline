@@ -171,6 +171,44 @@ describe("engagementStore — what's new", () => {
     expect(s.hasUnseenRelease("2.12.0")).toBe(false);
   });
 
+  /**
+   * The bug these pin: `markReleaseSeen` was the ONLY writer of seenVersion,
+   * and it is called only by the card's dismiss button — which needs the card
+   * visible, which needs seenVersion set. A closed loop with no entry point,
+   * so the card could never appear for anyone. Tests that seeded the state by
+   * hand never touched the path the app actually takes.
+   */
+  it("bootstraps the running version so a later upgrade has a baseline", () => {
+    const s = useEngagementStore();
+    s.bootstrapVersion("2.11.0");
+    expect(s.hasUnseenRelease("2.11.0")).toBe(false); // same version, nothing new
+    expect(s.hasUnseenRelease("2.12.0")).toBe(true); // upgraded since
+  });
+
+  it("bootstrapping does not announce the version already being run", () => {
+    const s = useEngagementStore();
+    s.bootstrapVersion("2.12.0");
+    expect(s.hasUnseenRelease("2.12.0")).toBe(false);
+  });
+
+  it("bootstrap never overwrites a real recorded version", () => {
+    const s = useEngagementStore();
+    s.markReleaseSeen("2.10.0");
+    s.bootstrapVersion("2.12.0");
+    expect(s.hasUnseenRelease("2.12.0")).toBe(true);
+  });
+
+  it("a full upgrade cycle: bootstrap, upgrade, show, dismiss, stay quiet", () => {
+    const s = useEngagementStore();
+    s.bootstrapVersion("2.11.0");
+    expect(s.hasUnseenRelease("2.12.0")).toBe(true);
+    s.markReleaseSeen("2.12.0");
+    expect(s.hasUnseenRelease("2.12.0")).toBe(false);
+    // ...and bootstrap on the next load must not resurrect it.
+    s.bootstrapVersion("2.12.0");
+    expect(s.hasUnseenRelease("2.12.0")).toBe(false);
+  });
+
   it("reports a change once a version has been recorded", () => {
     const s = useEngagementStore();
     s.markReleaseSeen("2.11.0");

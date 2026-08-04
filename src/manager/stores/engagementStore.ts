@@ -221,6 +221,27 @@ export const useEngagementStore = defineStore("engagement", () => {
     save(state.value);
   }
 
+  /**
+   * Record the running version the first time we ever see this user, so a
+   * LATER upgrade has something to differ from.
+   *
+   * Without this the feature cannot fire at all: `hasUnseenRelease` needs a
+   * previous version to compare against, and the only other writer is the
+   * card's own dismiss button — which never renders until the card shows.
+   * That is a closed loop with no entry point.
+   *
+   * Bootstrapping to the CURRENT version (rather than showing the card
+   * immediately) is deliberate: at first run we have no idea which version
+   * they were on before, and announcing "what's new" for a version they have
+   * already been running is noise.
+   */
+  function bootstrapVersion(version: string | null): void {
+    if (!version) return;
+    if (state.value.seenVersion !== null) return;
+    state.value = { ...state.value, seenVersion: version };
+    save(state.value);
+  }
+
   /** True when this version's what's-new has not been shown yet. Suppressed on
    *  a fresh install: a first-run user has no "new" to hear about. */
   function hasUnseenRelease(version: string | null): boolean {
@@ -248,6 +269,7 @@ export const useEngagementStore = defineStore("engagement", () => {
     noteVisit,
     shouldAskForStar,
     setStarState,
+    bootstrapVersion,
     hasUnseenRelease,
     markReleaseSeen,
     _reset,

@@ -3,7 +3,7 @@ import { defineComponent, h, nextTick } from "vue";
 import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 
-import { useReleaseCheck, resetReleaseCheckSession } from "../../composables/useReleaseCheck";
+import { useReleaseCheck, resetReleaseCheckSession, LAUNCH_TTL_MS } from "../../composables/useReleaseCheck";
 import { useUiStore } from "../../stores/uiStore";
 
 // __APP_VERSION__ is injected by vite at build time; vitest doesn't apply
@@ -73,9 +73,9 @@ describe("useReleaseCheck", () => {
     wrap.unmount();
   });
 
-  it("paints cached value immediately, then refreshes", async () => {
+  it("paints a STALE cached value immediately, then refreshes", async () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      checked_at: new Date().toISOString(),
+      checked_at: new Date(Date.now() - LAUNCH_TTL_MS - 1000).toISOString(),
       latest_version: "1.6.5",
       body: "old",
       url: "https://x/r/1.6.5",
@@ -86,7 +86,122 @@ describe("useReleaseCheck", () => {
     await nextTick(); // cache painted before fetch resolves
     expect(lastResult!.latestVersion.value).toBe("1.6.5");
     await settle();
-    expect(fetchMock).toHaveBeenCalledTimes(1); // no 24h suppression
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(lastResult!.latestVersion.value).toBe("1.9.0");
+    wrap.unmount();
+  });
+
+  // The in-memory session guard dies with the page, so before this the real
+  // cadence was one GitHub request per RELOAD — and anonymous callers get 60
+  // an hour per IP. A reload-heavy afternoon exhausted the quota.
+  it("does NOT hit the network when the persisted check is still fresh", async () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      checked_at: new Date().toISOString(),
+      latest_version: "1.8.0",
+      body: "cached",
+      url: "https://x/r/1.8.0",
+    }));
+    const fetchMock = vi.fn().mockResolvedValue(releaseResponse("v1.9.0"));
+    vi.stubGlobal("fetch", fetchMock);
+    const wrap = mount(host());
+    await settle();
+    expect(fetchMock).not.toHaveBeenCalled();
+    // ...and the cached answer is still fully painted.
+    expect(lastResult!.latestVersion.value).toBe("1.8.0");
+    expect(lastResult!.hasUpdate.value).toBe(true);
+    expect(lastResult!.releaseBody.value).toBe("cached");
+    wrap.unmount();
+  });
+
+  it("a fresh cache does not block an explicit checkNow()", async () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      checked_at: new Date().toISOString(),
+      latest_version: "1.8.0",
+    }));
+    const fetchMock = vi.fn().mockResolvedValue(releaseResponse("v1.9.0"));
+    vi.stubGlobal("fetch", fetchMock);
+    const wrap = mount(host());
+    await settle();
+    expect(fetchMock).not.toHaveBeenCalled();
+    await lastResult!.checkNow();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(lastResult!.latestVersion.value).toBe("1.9.0");
+    wrap.unmount();
+  });
+});
+
+describe("useReleaseCheck — rate limiting", () => {
+  function limitedResponse(resetEpochSec: number) {
+    return {
+      ok: false,
+      status: 403,
+      headers: {
+        get: (h: string) =>
+          h === "X-RateLimit-Remaining" ? "0"
+            : h === "X-RateLimit-Reset" ? String(resetEpochSec)
+            : null,
+      },
+      json: async () => ({ message: "API rate limit exceeded" }),
+    };
+  }
+
+  it("records the reset window GitHub hands back and stops retrying inside it", async () => {
+    const resetAt = Math.floor((Date.now() + 30 * 60 * 1000) / 1000);
+    const fetchMock = vi.fn().mockResolvedValue(limitedResponse(resetAt));
+    vi.stubGlobal("fetch", fetchMock);
+    const wrap = mount(host());
+    await settle();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(lastResult!.rateLimitedUntil.value).toBe(resetAt * 1000);
+    // Even an explicit check must not spend a request we know will be refused.
+    await lastResult!.checkNow();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    wrap.unmount();
+  });
+
+  it("keeps the previously cached release when a check is rate limited", async () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      checked_at: new Date(Date.now() - LAUNCH_TTL_MS - 1000).toISOString(),
+      latest_version: "1.8.0",
+      body: "known",
+      url: "https://x/r/1.8.0",
+    }));
+    const fetchMock = vi.fn().mockResolvedValue(limitedResponse(Math.floor(Date.now() / 1000) + 600));
+    vi.stubGlobal("fetch", fetchMock);
+    const wrap = mount(host());
+    await settle();
+    expect(lastResult!.latestVersion.value).toBe("1.8.0");
+    expect(lastResult!.releaseBody.value).toBe("known");
+    // The lockout is persisted alongside it, so the next reload knows.
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).rate_limited_until).toBeGreaterThan(Date.now());
+    wrap.unmount();
+  });
+
+  it("restores a lockout across a reload, so the next page does not spend a request", async () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      checked_at: new Date(Date.now() - LAUNCH_TTL_MS - 1000).toISOString(),
+      latest_version: "1.8.0",
+      rate_limited_until: Date.now() + 20 * 60 * 1000,
+    }));
+    const fetchMock = vi.fn().mockResolvedValue(releaseResponse("v1.9.0"));
+    vi.stubGlobal("fetch", fetchMock);
+    const wrap = mount(host());
+    await settle();
+    expect(fetchMock).not.toHaveBeenCalled();
+    wrap.unmount();
+  });
+
+  it("resumes checking once the window has passed", async () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      checked_at: new Date(Date.now() - LAUNCH_TTL_MS - 1000).toISOString(),
+      latest_version: "1.8.0",
+      rate_limited_until: Date.now() - 1000, // expired
+    }));
+    const fetchMock = vi.fn().mockResolvedValue(releaseResponse("v1.9.0"));
+    vi.stubGlobal("fetch", fetchMock);
+    const wrap = mount(host());
+    await settle();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(lastResult!.latestVersion.value).toBe("1.9.0");
     wrap.unmount();
   });
@@ -100,6 +215,33 @@ describe("useReleaseCheck", () => {
     await settle();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     a.unmount(); b.unmount();
+  });
+
+  // The topbar pill, the Dashboard and Settings all mount together. The guard
+  // used to be set only once a response LANDED, so all three read it as false
+  // and each opened its own request — one page load, three quota units.
+  it("consumers mounting in the same tick share ONE request", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(releaseResponse("v1.8.0"));
+    vi.stubGlobal("fetch", fetchMock);
+    const a = mount(host());
+    const b = mount(host());
+    const c = mount(host());
+    await settle();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(lastResult!.latestVersion.value).toBe("1.8.0");
+    a.unmount(); b.unmount(); c.unmount();
+  });
+
+  it("a failed launch attempt does not free every other consumer to retry", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error("offline"));
+    vi.stubGlobal("fetch", fetchMock);
+    const a = mount(host());
+    const b = mount(host());
+    await settle();
+    const c = mount(host());
+    await settle();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    a.unmount(); b.unmount(); c.unmount();
   });
 
   it("checkNow() refetches even within the same session", async () => {

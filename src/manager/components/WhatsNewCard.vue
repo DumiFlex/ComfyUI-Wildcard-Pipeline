@@ -67,23 +67,40 @@ const notesHtml = computed(() => renderReleaseNotes(props.body ?? ""));
 </template>
 
 <style scoped>
+/* Accent-tinted hairline rather than a plain panel: this is transient news,
+ * and it should read as distinct from the permanent furniture around it. The
+ * accent is the manager's purple — NOT `--wp-node`, which is the canvas
+ * palette and belongs to the graph. */
 .wp-whatsnew {
   padding: var(--wp-space-4) var(--wp-space-5);
   margin-bottom: var(--wp-space-4);
-  background: var(--wp-bg-2);
-  border: 1px solid var(--wp-border);
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in oklab, var(--wp-accent-500) 8%, transparent),
+      transparent 55%
+    ),
+    var(--wp-bg-1);
+  border: 1px solid color-mix(in oklab, var(--wp-accent-500) 28%, transparent);
   border-radius: var(--wp-radius-lg);
 }
 .wp-whatsnew__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--wp-space-2); }
 .wp-whatsnew__title { display: inline-flex; align-items: center; gap: var(--wp-space-2); font-size: var(--wp-text-sm); font-weight: 600; color: var(--wp-text); }
-.wp-whatsnew__icon { color: var(--wp-node); font-size: 14px; }
+.wp-whatsnew__icon { color: var(--wp-accent-text); font-size: 14px; }
 .wp-whatsnew__close { background: none; border: 0; color: var(--wp-text-dim); cursor: pointer; padding: 2px 4px; font-size: 12px; }
 .wp-whatsnew__close:hover { color: var(--wp-text); }
 .wp-whatsnew__body { font-size: var(--wp-text-xs); line-height: 1.6; color: var(--wp-text-muted); }
 .wp-whatsnew__body :deep(h2),
 .wp-whatsnew__body :deep(h3) { font-size: var(--wp-text-xs); font-weight: 600; color: var(--wp-text); margin: var(--wp-space-3) 0 var(--wp-space-2); }
-.wp-whatsnew__body :deep(ul) { margin: var(--wp-space-2) 0; padding-left: var(--wp-space-5); }
+/* `list-style` is explicit because the app's reset clears it globally —
+ * without this the entries run together as unmarked paragraphs. */
+.wp-whatsnew__body :deep(ul) {
+  margin: var(--wp-space-2) 0;
+  padding-left: var(--wp-space-5);
+  list-style: disc outside;
+}
 .wp-whatsnew__body :deep(li) { margin: 3px 0; }
+.wp-whatsnew__body :deep(li)::marker { color: var(--wp-text-dim); }
 .wp-whatsnew__body :deep(strong) { color: var(--wp-text); }
 .wp-whatsnew__body :deep(code) { font-family: var(--wp-font-mono); background: var(--wp-bg-1); padding: 1px 4px; border-radius: 3px; }
 .wp-whatsnew__more { display: inline-block; margin-top: var(--wp-space-2); font-size: var(--wp-text-xs); color: var(--wp-accent-text); }

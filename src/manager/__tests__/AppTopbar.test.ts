@@ -124,6 +124,7 @@ describe("AppTopbar.vue", () => {
       releaseUrl: ref("https://x/r"),
       lastChecked: ref(null),
       checking: ref(false),
+      rateLimitedUntil: ref(null),
       checkNow: vi.fn(),
     } as ReturnType<typeof releaseCheck.useReleaseCheck>);
 

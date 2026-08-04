@@ -8,15 +8,25 @@
  * `engagementStore` for why that is the trigger rather than "created N
  * modules" or "ran the starter".
  *
- * Deliberately NOT a modal. The eligibility rule already selects a returning
- * user, so an inline card on the landing view will be seen without hijacking
- * the moment they opened the app to do something else. Because it fires once,
- * it can afford the accent border a permanent card could not.
+ * PLACEMENT AND WEIGHT
+ *
+ * It renders at the BOTTOM of the dashboard, below the content someone opened
+ * the app to use. Above the hero it was the first thing on the page — louder
+ * than the product's own welcome, which is the layout of an ad rather than of
+ * an aside. The eligibility rule already selects a returning user, so it will
+ * be found without being put in the way.
+ *
+ * It is built from the same `Card` / `Button` / `Icon` primitives as the rest
+ * of the manager, in the manager's accent, so it reads as part of the app.
+ * The earlier version styled itself from scratch in `--wp-node` — the CANVAS
+ * node palette, teal — which is the graph's colour language, not the SPA's.
  *
  * The star count is deliberately not shown. Social proof cuts both ways, and
  * at a low number it argues against starring.
  */
 import { computed } from "vue";
+import Button from "./ui/Button.vue";
+import Icon from "./ui/Icon.vue";
 import { GITHUB_REPO } from "../config/links";
 import { useEngagementStore, measureSubstance } from "../stores/engagementStore";
 import { useModuleStore } from "../stores/moduleStore";
@@ -36,74 +46,86 @@ function star(): void {
 </script>
 
 <template>
-  <div v-if="visible" class="wp-star" data-test="star-prompt">
-    <i class="pi pi-star wp-star__icon" aria-hidden="true" />
+  <aside v-if="visible" class="wp-star" data-test="star-prompt">
+    <span class="wp-star__icon"><Icon name="pi-star" /></span>
     <div class="wp-star__body">
-      <p class="wp-star__title">Still using this after a few sessions?</p>
+      <p class="wp-star__title">Enjoying Wildcard Pipeline?</p>
       <p class="wp-star__sub">
-        A star on GitHub is the one thing that helps other people find it.
-        It takes a second and costs nothing.
+        A star on GitHub is the main way other people find it — it takes a
+        second and costs nothing.
       </p>
     </div>
     <div class="wp-star__actions">
-      <button type="button" class="wp-star__go" data-test="star-prompt-go" @click="star">
+      <Button variant="outline" size="sm" icon="pi-star" data-test="star-prompt-go" @click="star">
         Star on GitHub
-      </button>
-      <button
-        type="button"
-        class="wp-star__quiet"
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
         data-test="star-prompt-later"
         @click="engagement.setStarState('later')"
-      >Maybe later</button>
-      <button
-        type="button"
-        class="wp-star__quiet"
+      >Maybe later</Button>
+      <Button
+        variant="ghost"
+        size="sm"
         data-test="star-prompt-never"
         @click="engagement.setStarState('never')"
-      >Don't ask again</button>
+      >Don't ask again</Button>
     </div>
-  </div>
+  </aside>
 </template>
 
 <style scoped>
+/* Mirrors the quick-create bar's shell (bg-1 + hairline + radius-lg) so it
+ * sits in the dashboard's existing rhythm rather than introducing a new
+ * surface. The only departure is a faint accent wash, which is what marks it
+ * as an aside rather than another tool strip. */
 .wp-star {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--wp-space-4);
   padding: var(--wp-space-4) var(--wp-space-5);
-  margin-bottom: var(--wp-space-4);
-  background: var(--wp-bg-2);
-  /* Accent border rather than a filled panel: it should read as a note from
-   * the author, not as a promotion. */
-  border: 1px solid color-mix(in oklab, var(--wp-node) 45%, transparent);
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in oklab, var(--wp-accent-500) 7%, transparent),
+      transparent 60%
+    ),
+    var(--wp-bg-1);
+  border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius-lg);
 }
-.wp-star__icon { color: var(--wp-node); font-size: 16px; margin-top: 2px; }
+.wp-star__icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: var(--wp-radius-sm);
+  color: var(--wp-accent-text);
+  background: color-mix(in oklab, var(--wp-accent-500) 16%, transparent);
+}
 .wp-star__body { flex: 1 1 auto; min-width: 0; }
-.wp-star__title { margin: 0 0 2px; font-size: var(--wp-text-sm); font-weight: 600; color: var(--wp-text); }
-.wp-star__sub { margin: 0; font-size: var(--wp-text-xs); line-height: 1.55; color: var(--wp-text-muted); }
-.wp-star__actions { display: flex; align-items: center; gap: var(--wp-space-2); flex-shrink: 0; }
-.wp-star__go {
-  font-size: var(--wp-text-xs);
+.wp-star__title {
+  margin: 0;
+  font-size: var(--wp-text-sm);
   font-weight: 600;
-  color: var(--wp-bg-1);
-  background: var(--wp-node);
-  border: 0;
-  border-radius: var(--wp-radius);
-  padding: 6px 13px;
-  cursor: pointer;
+  line-height: 1.4;
+  color: var(--wp-text);
 }
-.wp-star__go:hover { filter: brightness(1.08); }
-.wp-star__quiet {
+.wp-star__sub {
+  margin: 1px 0 0;
   font-size: var(--wp-text-xs);
-  color: var(--wp-text-dim);
-  background: none;
-  border: 0;
-  padding: 6px 8px;
-  cursor: pointer;
+  line-height: 1.5;
+  color: var(--wp-text-muted);
 }
-.wp-star__quiet:hover { color: var(--wp-text-muted); }
-@media (max-width: 720px) {
+.wp-star__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-2);
+  flex: none;
+}
+@media (max-width: 760px) {
   .wp-star { flex-wrap: wrap; }
   .wp-star__actions { width: 100%; justify-content: flex-end; }
 }

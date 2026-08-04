@@ -26,6 +26,7 @@ beforeEach(() => {
     releaseUrl: ref(null),
     lastChecked: ref("2026-07-21T10:00:00.000Z"),
     checking: ref(false),
+    rateLimitedUntil: ref(null),
     checkNow,
   } as ReturnType<typeof releaseCheck.useReleaseCheck>);
 });

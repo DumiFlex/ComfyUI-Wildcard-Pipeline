@@ -2,13 +2,23 @@
  * Release check - GitHub Releases lookup for "update available".
  *
  * Hits `https://api.github.com/repos/<owner>/<repo>/releases/latest`
- * anonymously (unauthenticated requests get 60/hr per IP, plenty for a
- * single-user dev tool). Cadence is launch-once + manual: on mount we
- * paint any cached result immediately, then refresh once per app session
- * IF the user opted into launch checks (`uiStore.checkOnLaunch`). There is
- * no timed re-poll; `checkNow()` triggers an on-demand refresh. The
- * localStorage cache exists only to paint instantly before the network
- * call resolves — it is not a re-check suppressor.
+ * anonymously. Cadence is launch-throttled + manual: on mount we paint any
+ * cached result immediately, then refresh IF the user opted into launch
+ * checks (`uiStore.checkOnLaunch`) AND the cache has gone stale.
+ * `checkNow()` is the on-demand escape hatch and ignores the throttle.
+ *
+ * WHY THE CACHE THROTTLES RATHER THAN JUST PAINTING
+ *
+ * The in-memory `sessionFetched` guard only covers one page lifetime — it is
+ * a module-level binding, so a browser reload starts over. That made the real
+ * cadence "once per page load", and anonymous GitHub allows 60 requests per
+ * hour per IP. Sixty reloads while working on the SPA is an afternoon, and
+ * once the quota is gone every OTHER anonymous GitHub call from that IP dies
+ * too. So freshness is now judged from the persisted `checked_at`, which does
+ * survive reloads; the in-memory guard remains as the cheap first gate.
+ *
+ * A release check is not time-critical — it exists to eventually notice a new
+ * version, and being up to `LAUNCH_TTL_MS` behind costs nothing.
  *
  * The composable returns reactive `hasUpdate` / `latestVersion` /
  * `severity` so AppTopbar can paint an accent pill, plus the release
@@ -23,6 +33,15 @@ import { useUiStore } from "../stores/uiStore";
 
 const STORAGE_KEY = "wp.releaseCheck";
 
+/**
+ * How stale the cache must be before a launch check goes back to the network.
+ *
+ * Six hours: long enough that a day of reloads costs ~4 requests instead of
+ * one per reload, short enough that a release published this morning is
+ * noticed today.
+ */
+export const LAUNCH_TTL_MS = 6 * 60 * 60 * 1000;
+
 interface CachedRelease {
   /** ISO timestamp of when the check ran. */
   checked_at: string;
@@ -30,6 +49,12 @@ interface CachedRelease {
   latest_version: string;
   body?: string | null;
   url?: string | null;
+  /**
+   * Epoch ms until which GitHub has said the quota is spent, from the
+   * `X-RateLimit-Reset` header. Persisted because the whole point is to
+   * survive the reloads that caused the exhaustion.
+   */
+  rate_limited_until?: number | null;
 }
 
 /** Module-level singleton state so EVERY consumer (topbar pill + Settings
@@ -43,14 +68,27 @@ const releaseBody = ref<string | null>(null);
 const releaseUrl = ref<string | null>(null);
 const lastChecked = ref<string | null>(null);
 const checking = ref<boolean>(false);
+/** Epoch ms until which GitHub has refused us, or null when we are clear. */
+const rateLimitedUntil = ref<number | null>(null);
 
 /** Guard so the once-per-session launch fetch fires at most once across all
  *  consumers. `checkNow` ignores it. */
 let sessionFetched = false;
 
+/**
+ * The request currently in flight, shared by every caller.
+ *
+ * Consumers mount in the same tick (topbar pill, Dashboard, Settings) and each
+ * used to read `sessionFetched` as false — which is only set once a response
+ * lands — so a single page load fired one request PER CONSUMER. Coalescing
+ * here makes concurrent callers await the same response.
+ */
+let inflight: Promise<void> | null = null;
+
 /** Test-only: reset the shared state + session guard between mounts. */
 export function resetReleaseCheckSession(): void {
   sessionFetched = false;
+  inflight = null;
   latestVersion.value = null;
   hasUpdate.value = false;
   severity.value = null;
@@ -58,6 +96,20 @@ export function resetReleaseCheckSession(): void {
   releaseUrl.value = null;
   lastChecked.value = null;
   checking.value = false;
+  rateLimitedUntil.value = null;
+}
+
+/** Is the persisted check recent enough to skip the network? */
+function isFresh(cached: CachedRelease | null, now = Date.now()): boolean {
+  if (!cached?.checked_at) return false;
+  const at = Date.parse(cached.checked_at);
+  if (Number.isNaN(at)) return false;
+  return now - at < LAUNCH_TTL_MS;
+}
+
+/** Are we inside a window GitHub told us to wait out? */
+function isRateLimited(now = Date.now()): boolean {
+  return rateLimitedUntil.value !== null && rateLimitedUntil.value > now;
 }
 
 /** Apply a candidate latest version to the shared refs. Reads
@@ -74,26 +126,34 @@ function applyLatest(v: string | null): void {
 }
 
 /** Fetch fresh, persist, apply to the shared refs. Shared by the launch
- *  fetch + `checkNow`. */
+ *  fetch + `checkNow`. No-op while GitHub has us locked out — retrying inside
+ *  the penalty window only deepens it. */
 async function refresh(): Promise<void> {
+  if (isRateLimited()) return;
+  // Join a request already on the wire rather than opening a second one.
+  if (inflight) return inflight;
   checking.value = true;
-  try {
-    const fresh = await fetchLatestRelease();
-    if (fresh) {
-      sessionFetched = true;
-      writeCache(fresh);
-      releaseBody.value = fresh.body;
-      releaseUrl.value = fresh.url;
-      lastChecked.value = new Date().toISOString();
-      applyLatest(fresh.version);
+  inflight = (async () => {
+    try {
+      const fresh = await fetchLatestRelease();
+      if (fresh) {
+        writeCache(fresh);
+        releaseBody.value = fresh.body;
+        releaseUrl.value = fresh.url;
+        lastChecked.value = new Date().toISOString();
+        applyLatest(fresh.version);
+      }
+    } finally {
+      checking.value = false;
+      inflight = null;
     }
-  } finally {
-    checking.value = false;
-  }
+  })();
+  return inflight;
 }
 
-/** Manual check — always refetches, ignores the session guard. Because the
- *  refs are shared, this lights the topbar pill + Settings simultaneously. */
+/** Manual check — refetches even when the cache is fresh, because the user
+ *  asked. Because the refs are shared, this lights the topbar pill +
+ *  Settings simultaneously. */
 async function checkNow(): Promise<void> {
   await refresh();
 }
@@ -178,11 +238,34 @@ function writeCache(rel: { version: string; body: string | null; url: string | n
     latest_version: rel.version,
     body: rel.body,
     url: rel.url,
+    rate_limited_until: rateLimitedUntil.value,
   };
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   } catch {
     // Quota / disabled storage - ignore.
+  }
+}
+
+/**
+ * Persist a rate-limit lockout without disturbing the cached release.
+ *
+ * Written separately from `writeCache` because a 403 carries no release to
+ * cache — and the previous good answer must survive, or the UI would forget
+ * the version it already knows every time the quota runs out.
+ */
+function writeRateLimit(until: number | null): void {
+  rateLimitedUntil.value = until;
+  if (typeof localStorage === "undefined") return;
+  const prev = readCache();
+  if (!prev) return;
+  try {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ ...prev, rate_limited_until: until } satisfies CachedRelease),
+    );
+  } catch {
+    // Quota / disabled storage - the in-memory ref still guards this session.
   }
 }
 
@@ -203,7 +286,22 @@ async function fetchLatestRelease(): Promise<{ version: string; body: string | n
     const res = await fetch(`https://api.github.com/repos/${slug}/releases/latest`, {
       headers: { Accept: "application/vnd.github+json" },
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      // 403 (classic) / 429 (secondary limits) with no quota left means every
+      // further request until the reset is refused anyway. Honour the reset
+      // GitHub hands back rather than guessing a backoff.
+      if (res.status === 403 || res.status === 429) {
+        const remaining = res.headers?.get?.("X-RateLimit-Remaining");
+        const reset = Number.parseInt(res.headers?.get?.("X-RateLimit-Reset") ?? "", 10);
+        if (remaining === "0" || Number.isFinite(reset)) {
+          // Header is epoch SECONDS. Fall back to an hour when it is absent
+          // or nonsense, which is the standard window length.
+          const until = Number.isFinite(reset) ? reset * 1000 : Date.now() + 60 * 60 * 1000;
+          writeRateLimit(until);
+        }
+      }
+      return null;
+    }
     const body = (await res.json()) as { tag_name?: unknown; body?: unknown; html_url?: unknown };
     if (typeof body.tag_name !== "string") return null;
     return {
@@ -231,6 +329,7 @@ export function useReleaseCheck(): {
   releaseUrl: ReturnType<typeof ref<string | null>>;
   lastChecked: ReturnType<typeof ref<string | null>>;
   checking: ReturnType<typeof ref<boolean>>;
+  rateLimitedUntil: ReturnType<typeof ref<number | null>>;
   checkNow: () => Promise<void>;
 } {
   const current = __APP_VERSION__;
@@ -245,16 +344,28 @@ export function useReleaseCheck(): {
       releaseUrl.value = cached.url ?? null;
       lastChecked.value = cached.checked_at ?? null;
       applyLatest(cached.latest_version);
+      // Restore a lockout recorded before the last reload. Without this the
+      // reload that follows a 403 immediately spends another request.
+      if (typeof cached.rate_limited_until === "number") {
+        rateLimitedUntil.value = cached.rate_limited_until;
+      }
     }
-    // Then refresh once per session, only when the user opted into launch
-    // checks. Fire-and-forget; failures are swallowed in refresh.
-    if (ui.checkOnLaunch && !sessionFetched) {
+    // Then refresh, subject to three gates: the user opted into launch
+    // checks, nothing has fetched yet this page, and the persisted answer has
+    // actually aged out. The last one is what keeps a reload-heavy session
+    // from burning the 60/hr anonymous quota.
+    if (ui.checkOnLaunch && !sessionFetched && !isFresh(cached)) {
+      // Marked on ATTEMPT, not on success. Setting it after the response
+      // landed left a window in which every other consumer mounting this tick
+      // also saw `false` and opened its own request. A failed attempt not
+      // retrying until the next page is fine — the whole check is best-effort.
+      sessionFetched = true;
       void refresh();
     }
   });
 
   return {
     current, latestVersion, hasUpdate, severity,
-    releaseBody, releaseUrl, lastChecked, checking, checkNow,
+    releaseBody, releaseUrl, lastChecked, checking, rateLimitedUntil, checkNow,
   };
 }

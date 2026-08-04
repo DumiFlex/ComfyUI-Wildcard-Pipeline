@@ -53,6 +53,10 @@ const engagement = useEngagementStore();
 engagement.noteVisit();
 
 const release = useReleaseCheck();
+// Remember which version this user has already been running, so the NEXT
+// upgrade has something to compare against. Without it `hasUnseenRelease`
+// has no baseline and the what's-new card can never fire at all.
+engagement.bootstrapVersion(release.current);
 // The fetched body describes the LATEST release, which is not the installed
 // one while an update is pending — presenting it as "what's new in <your
 // version>" would describe changes the user does not have yet. Only pass it
@@ -431,7 +435,6 @@ onMounted(async () => {
       :body="whatsNewBody"
       :url="release.releaseUrl.value ?? null"
     />
-    <StarPrompt />
 
     <!-- Hero -->
     <div class="wp-hero">
@@ -651,6 +654,10 @@ onMounted(async () => {
         }}
       </p>
     </Card>
+
+    <!-- Below everything the user actually came here for. See StarPrompt for
+         why it is last rather than first. -->
+    <StarPrompt />
   </div>
 </template>
 
