@@ -412,10 +412,19 @@ const summary = computed(() => {
   color: var(--wp-warn);
   background: color-mix(in srgb, var(--wp-warn) 7%, transparent);
 }
+/* Child-count / drift summary. Was 10px in --wp-text-dim (#666 on the dark
+ * theme), which sat right at the edge of legibility against the bundle frame
+ * tint — the one piece of information telling you how big a collapsed bundle
+ * is. Bumped to the muted token at 11px and given a faint pill so it reads as
+ * a value rather than a watermark. */
 .wp-bundle-summary {
-  font: 500 10px/1.3 var(--wp-font-sans);
-  color: var(--wp-text-dim, var(--wp-text3));
+  font: 600 11px/1.3 var(--wp-font-sans);
+  color: var(--wp-text-muted, var(--wp-text2));
   flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--wp-text-muted, var(--wp-text2)) 12%, transparent);
+  white-space: nowrap;
 }
 /* Bundle action button — base size + shape from shared
  * .wp-btn--icon-sm. Bundle-specific tweak: bg + border tinted with

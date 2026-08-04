@@ -12,6 +12,7 @@
  * override, locked seed, hide-from-prompt.
  */
 import { computed } from "vue";
+import { saveChordLabel } from "../../../shared/platform-keys";
 import { type ResolvedValue } from "../../../../widgets/richTokenize";
 import type { ModuleEntry } from "../../../../widgets/_shared";
 import IdentitySection from "./sections/IdentitySection.vue";
@@ -20,6 +21,9 @@ import type { VarProducerLike } from "../../../../manager/components/RefChip.vue
 import RuntimeSection from "./sections/RuntimeSection.vue";
 import InstanceIdChip from "../InstanceIdChip.vue";
 
+
+/** Platform-correct save chord for the footer hint. */
+const saveChord = saveChordLabel();
 const props = withDefaults(
   defineProps<{
     module: ModuleEntry;
@@ -148,7 +152,7 @@ function onSpaClick(): void {
         Reset overrides
       </button>
       <span class="wp-cbm__hint">
-        <kbd>Esc</kbd> cancel · <kbd>⌘↵</kbd> save
+        <kbd>Esc</kbd> cancel · <kbd>{{ saveChord }}</kbd> save
       </span>
       <button
         v-if="canSaveToLibrary"

@@ -13,6 +13,7 @@
  * Rules (kind-specific) → Runtime → Footer.
  */
 import { computed, inject, onMounted, ref } from "vue";
+import { saveChordLabel } from "../../../shared/platform-keys";
 import type { ModuleEntry } from "../../../../widgets/_shared";
 import type { PairingBadge } from "../../../../extension/constraint-pairs";
 import type { ModuleRow } from "../../../../manager/api/types";
@@ -27,6 +28,9 @@ import RuntimeSection from "./sections/RuntimeSection.vue";
 import InstanceIdChip from "../InstanceIdChip.vue";
 import { CONTEXT_POOLS_KEY, overlayContextPools } from "../../../../extension/context-pools";
 
+
+/** Platform-correct save chord for the footer hint. */
+const saveChord = saveChordLabel();
 const props = withDefaults(
   defineProps<{
     module: ModuleEntry;
@@ -217,7 +221,7 @@ function onSpaClick(): void {
         Reset overrides
       </button>
       <span class="wp-dvm__hint">
-        <kbd>Esc</kbd> cancel · <kbd>⌘↵</kbd> save
+        <kbd>Esc</kbd> cancel · <kbd>{{ saveChord }}</kbd> save
       </span>
       <button
         v-if="canSaveToLibrary"

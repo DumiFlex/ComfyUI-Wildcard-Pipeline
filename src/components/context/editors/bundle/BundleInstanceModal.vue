@@ -5,11 +5,15 @@
  *  ModuleEditModal. Master Lock/Hide route to the live cascade
  *  handlers (same ones BundleHeader buttons call). */
 import { computed } from "vue";
+import { saveChordLabel } from "../../../shared/platform-keys";
 import type { BundleInstance } from "../../../../widgets/_shared";
 import IdentitySection from "./sections/IdentitySection.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
 import InstanceIdChip from "../InstanceIdChip.vue";
 
+
+/** Platform-correct save chord for the footer hint. */
+const saveChord = saveChordLabel();
 const props = withDefaults(
   defineProps<{
     bundle: BundleInstance;
@@ -137,7 +141,7 @@ const headerName = computed(() => props.bundle.name || props.libraryName || "Bun
         Reset to library
       </button>
       <span class="wp-bdm__hint">
-        <kbd>Esc</kbd> cancel · <kbd>⌘↵</kbd> save
+        <kbd>Esc</kbd> cancel · <kbd>{{ saveChord }}</kbd> save
       </span>
       <button
         v-if="canSaveToLibrary"

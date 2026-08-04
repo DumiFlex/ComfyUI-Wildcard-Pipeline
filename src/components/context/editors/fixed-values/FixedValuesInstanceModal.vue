@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { saveChordLabel } from "../../../shared/platform-keys";
 import type { ModuleEntry } from "../../../../widgets/_shared";
 import IdentitySection from "./sections/IdentitySection.vue";
 import ValuesSection from "./sections/ValuesSection.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
 import InstanceIdChip from "../InstanceIdChip.vue";
 
+
+/** Platform-correct save chord for the footer hint. */
+const saveChord = saveChordLabel();
 const props = withDefaults(
   defineProps<{
     module: ModuleEntry;
@@ -99,7 +103,7 @@ function onSpaClick(): void {
         Reset overrides
       </button>
       <span class="wp-fvm__hint">
-        <kbd>Esc</kbd> cancel · <kbd>⌘↵</kbd> save
+        <kbd>Esc</kbd> cancel · <kbd>{{ saveChord }}</kbd> save
       </span>
       <button
         v-if="canSaveToLibrary"
