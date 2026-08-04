@@ -23,6 +23,8 @@
     .nm { fill: #dddddd; }
     .id, .lbl, .cap, .varcap { fill: #666666; }
     .ln { stroke: #4a4a4a; }
+    .wash { stop-color: #2dd4bf; }
+    .flow0 { stop-color: #4a4a4a; }
     .head { fill: #4a4a4a; }
     .chip { fill: #232323; }
     .chip--a { stroke: #8b5cf6; stroke-opacity: .4; }
@@ -47,6 +49,8 @@
       .nm { fill: #1a1a1a; }
       .id,   .lbl,   .cap,   .varcap { fill: #888888; }
       .ln { stroke: #999999; }
+      .wash { stop-color: #0f766e; }
+      .flow0 { stop-color: #999999; }
       .head { fill: #999999; }
       .chip { fill: #ffffff; }
       .chip--a { stroke: #8b5cf6; stroke-opacity: .4; }
@@ -57,7 +61,29 @@
       .chipt--c { fill: #065f46; }
     }
   ]]></style>
+  <defs>
+    <!-- Mirrors the SPA frame wash: a radial gradient of the node colour at
+         6 percent from the top-left, gone by 60 percent, over bg-1. Without
+         it the panel reads as a flat slab. -->
+    <radialGradient id="wash" cx="0" cy="0" r="1.2" gradientTransform="scale(1 0.325)">
+      <stop class="wash" offset="0" stop-opacity="0.06"/>
+      <stop class="wash" offset="0.6" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="flowv" x1="0" y1="0" x2="0" y2="1">
+      <stop class="flow0" offset="0" stop-opacity="0"/>
+      <stop class="flow0" offset="0.25" stop-opacity="1"/>
+      <stop class="flow0" offset="0.8" stop-opacity="1"/>
+      <stop class="flow0" offset="1" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="flow" x1="0" y1="0" x2="1" y2="0">
+      <stop class="flow0" offset="0" stop-opacity="0"/>
+      <stop class="flow0" offset="0.2" stop-opacity="1"/>
+      <stop class="flow0" offset="0.8" stop-opacity="1"/>
+      <stop class="flow0" offset="1" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
   <rect class="frame" x="0.5" y="0.5" width="879" height="285" rx="12"/>
+  <rect x="0.5" y="0.5" width="879" height="285" rx="12" fill="url(#wash)"/>
   <text class="cap" x="440" y="30" text-anchor="middle">BOTH LISTS FAN OUT IN LOCKSTEP — ITERATION N MEETS SEED N</text>
   <rect class="card card--wp" x="48.199999999999996" y="54" width="127.60000000000001" height="66" rx="10"/>
   <g class="ico ico--wp"><g fill="currentColor" transform="translate(104 65) scale(0.6666666666666666)"><g id="refresh"><path d="M12,20.75a7.25,7.25,0,0,1,0-14.5h2.5a.75.75,0,0,1,0,1.5H12a5.75,5.75,0,1,0,5.75,5.75.75.75,0,0,1,1.5,0A7.26,7.26,0,0,1,12,20.75Z"/><path d="M12,10.75a.74.74,0,0,1-.53-.22.75.75,0,0,1,0-1.06L13.94,7,11.47,4.53a.75.75,0,1,1,1.06-1.06l3,3a.75.75,0,0,1,0,1.06l-3,3A.74.74,0,0,1,12,10.75Z"/></g></g></g>
@@ -84,17 +110,20 @@
   <text class="nm" x="772" y="201" text-anchor="middle">KSampler</text>
   <text class="id" x="772" y="215" text-anchor="middle">N images</text>
   <text class="lbl" x="226.9" y="78" text-anchor="middle">CONTEXT</text>
-  <line class="ln" x1="183.8" y1="87" x2="264" y2="87"/>
-  <path class="head" d="M264 83 L270 87 L264 91 Z"/>
+  <rect fill="url(#flow)" x="183.8" y="86.2" width="80.19999999999999" height="1.6"/>
+  <path class="head" d="M264 82.5 L270 87 L264 91.5 Z"/>
+  <text class="lbl" x="122" y="143">LOOP_CONFIG</text>
+  <rect fill="url(#flowv)" x="111.2" y="120" width="1.6" height="32"/>
+  <path class="head" d="M108 152 L112 158 L116 152 Z"/>
   <text class="lbl" x="450.53999999999996" y="78" text-anchor="middle">$VARS</text>
-  <line class="ln" x1="410" y1="87" x2="485.08" y2="87"/>
-  <path class="head" d="M485.08 83 L491.08 87 L485.08 91 Z"/>
+  <rect fill="url(#flow)" x="410" y="86.2" width="75.07999999999998" height="1.6"/>
+  <path class="head" d="M485.08 82.5 L491.08 87 L485.08 91.5 Z"/>
   <text class="lbl" x="576" y="141">PROMPT</text>
-  <line class="ln" x1="566" y1="120" x2="566" y2="152"/>
+  <rect fill="url(#flowv)" x="565.2" y="120" width="1.6" height="32"/>
   <path class="head" d="M562 152 L566 158 L570 152 Z"/>
   <text class="lbl" x="669" y="182" text-anchor="middle">COND</text>
-  <line class="ln" x1="636" y1="191" x2="696" y2="191"/>
-  <path class="head" d="M696 187 L702 191 L696 195 Z"/>
+  <rect fill="url(#flow)" x="636" y="190.2" width="60" height="1.6"/>
+  <path class="head" d="M696 186.5 L702 191 L696 195.5 Z"/>
   <path class="ln" fill="none" d="M112 224 V 252 H 772 V 230"/>
   <path class="head" d="M768 230 L772 224 L776 230 Z"/>
   <text class="lbl" x="420" y="244" text-anchor="middle">SEED[]</text>

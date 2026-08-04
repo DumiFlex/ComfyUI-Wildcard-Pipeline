@@ -112,8 +112,13 @@ function connector(x1, x2, y, label) {
   const mid = (x1 + x2) / 2;
   return [
     label ? `<text class="lbl" x="${mid}" y="${y - 9}" text-anchor="middle">${label}</text>` : "",
-    `<line class="ln" x1="${x1}" y1="${y}" x2="${x2 - 6}" y2="${y}"/>`,
-    `<path class="head" d="M${x2 - 6} ${y - 4} L${x2} ${y} L${x2 - 6} ${y + 4} Z"/>`,
+    // Gradient fill, not a stroke: the SPA's `.wp-doc-diagram__arrow-ln` fades
+    // in and out at both ends so a connector reads as a flow rather than a
+    // drawn border. It has to be a RECT — a horizontal <line> has a zero-height
+    // bounding box, so an objectBoundingBox gradient on it collapses and the
+    // line disappears entirely, leaving a floating arrowhead.
+    `<rect fill="url(#flow)" x="${x1}" y="${y - 0.8}" width="${x2 - 6 - x1}" height="1.6"/>`,
+    `<path class="head" d="M${x2 - 6} ${y - 4.5} L${x2} ${y} L${x2 - 6} ${y + 4.5} Z"/>`,
   ].join("\n  ");
 }
 
@@ -189,6 +194,8 @@ function themeBlock(t, prefix = "") {
     ${prefix}.nm { fill: ${t.text}; }
     ${prefix}.id, ${prefix}.lbl, ${prefix}.cap, ${prefix}.varcap { fill: ${t.dim}; }
     ${prefix}.ln { stroke: ${t.cardBd}; }
+    ${prefix}.wash { stop-color: ${t.node}; }
+    ${prefix}.flow0 { stop-color: ${t.cardBd}; }
     ${prefix}.head { fill: ${t.cardBd}; }
     ${prefix}.chip { fill: ${t.cardBg}; }
     ${prefix}.chip--a { stroke: ${t.chipAb}; stroke-opacity: .4; }
@@ -213,7 +220,29 @@ ${themeBlock(DARK)}
     @media (prefers-color-scheme: light) {${themeBlock(LIGHT, "  ")}
     }
   ]]></style>
+  <defs>
+    <!-- Mirrors the SPA frame wash: a radial gradient of the node colour at
+         6 percent from the top-left, gone by 60 percent, over bg-1. Without
+         it the panel reads as a flat slab. -->
+    <radialGradient id="wash" cx="0" cy="0" r="1.2" gradientTransform="scale(1 ${h / w})">
+      <stop class="wash" offset="0" stop-opacity="0.06"/>
+      <stop class="wash" offset="0.6" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="flowv" x1="0" y1="0" x2="0" y2="1">
+      <stop class="flow0" offset="0" stop-opacity="0"/>
+      <stop class="flow0" offset="0.25" stop-opacity="1"/>
+      <stop class="flow0" offset="0.8" stop-opacity="1"/>
+      <stop class="flow0" offset="1" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="flow" x1="0" y1="0" x2="1" y2="0">
+      <stop class="flow0" offset="0" stop-opacity="0"/>
+      <stop class="flow0" offset="0.2" stop-opacity="1"/>
+      <stop class="flow0" offset="0.8" stop-opacity="1"/>
+      <stop class="flow0" offset="1" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
   <rect class="frame" x="0.5" y="0.5" width="${w - 1}" height="${h - 1}" rx="12"/>
+  <rect x="0.5" y="0.5" width="${w - 1}" height="${h - 1}" rx="12" fill="url(#wash)"/>
   ${body}
 </svg>
 `;
@@ -279,10 +308,17 @@ function buildLoop() {
     `<text class="cap" x="${cx}" y="30" text-anchor="middle">BOTH LISTS FAN OUT IN LOCKSTEP — ITERATION N MEETS SEED N</text>`,
     loop.svg, seeds.svg, ctx.svg, asm.svg, clip.svg, ks.svg,
     connector(112 + loop.w / 2 + 8, 340 - ctx.w / 2 - 8, mid1, "CONTEXT"),
+    // WP_ContextLoop has a `loop_config` side-output and WP_SeedList takes it
+    // as an optional input, so the seed list mirrors the loop's count,
+    // strategy and base seed. That link is what makes the caption's "lockstep"
+    // true; without it the two read as unrelated sources.
+    `<text class="lbl" x="122" y="${(r1 + 66 + r2) / 2 + 4}">LOOP_CONFIG</text>`,
+    `<rect fill="url(#flowv)" x="111.2" y="${r1 + 66}" width="1.6" height="${r2 - 6 - (r1 + 66)}"/>`,
+    `<path class="head" d="M108 ${r2 - 6} L112 ${r2} L116 ${r2 - 6} Z"/>`,
     connector(340 + ctx.w / 2 + 8, 566 - asm.w / 2 - 8, mid1, "$VARS"),
     // assembler drops straight down into the encoder
     `<text class="lbl" x="576" y="141">PROMPT</text>`,
-    `<line class="ln" x1="566" y1="${r1 + 66}" x2="566" y2="${r2 - 6}"/>`,
+    `<rect fill="url(#flowv)" x="565.2" y="${r1 + 66}" width="1.6" height="${r2 - 6 - (r1 + 66)}"/>`,
     `<path class="head" d="M562 ${r2 - 6} L566 ${r2} L570 ${r2 - 6} Z"/>`,
     connector(566 + clip.w / 2 + 8, 772 - ks.w / 2 - 8, mid2, "COND"),
     // seeds take their own lane under the text path and rise into the sampler
