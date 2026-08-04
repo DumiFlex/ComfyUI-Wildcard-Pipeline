@@ -101,6 +101,73 @@ export interface LiteGraphLike {
   outputNode?: SubgraphIONode;
 }
 
+/* ── parsed-widget cache ────────────────────────────────────────────────
+ *
+ * The walkers below are called from `reactiveFromGraph`'s 400ms poll, and a
+ * single WP_Context node installs TEN of those polls. Each walk re-reads the
+ * node's `wp_modules` widget and re-parses it from scratch — and on a real
+ * workflow that string is ~294 KB, so the parse costs MORE than the traversal
+ * it feeds (measured: `JSON.parse` 4.64 ms/call against 4.02 ms for the whole
+ * of `collectUpstreamProducers`). Ten pollers on one node parse the identical
+ * string ten times every cycle; five nodes made that ~21% of a core.
+ *
+ * Keyed on the raw string, so it self-invalidates: edit the widget and the key
+ * changes. Bounded, because every keystroke in an editor mints a new string
+ * and an unbounded map would retain every intermediate state of a 294 KB
+ * document.
+ *
+ * SAFETY: callers must treat the result as read-only — they now share one
+ * object instead of each getting a private copy. Every consumer here is a
+ * read-only walker, and `graph.parse-cache.test.ts` proves it by freezing what
+ * the cache hands out and running each walker against it. That is also why the
+ * cache is module-private rather than folded into `parseWidgetJson`, whose
+ * other callers (ContextWidget) DO mutate what they get back.
+ */
+const PARSE_CACHE_MAX = 24;
+const parseCache = new Map<string, unknown>();
+
+/** Deep-freeze, used only to enforce the read-only contract in tests. */
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const v of Object.values(value as Record<string, unknown>)) deepFreeze(v);
+  }
+  return value;
+}
+
+/** Set by the test suite to assert the walkers never write to parsed data. */
+let freezeParsed = false;
+/** @internal test hook */
+export function _setParseCacheFreezeForTests(on: boolean): void {
+  freezeParsed = on;
+  parseCache.clear();
+}
+
+/** @internal test hook */
+export function _clearParseCacheForTests(): void {
+  parseCache.clear();
+}
+
+/**
+ * `parseWidgetJson`, memoised on the raw string. Read-only callers only.
+ */
+function parseCached<T>(raw: string, fallback: T): T {
+  if (!raw) return fallback;
+  const hit = parseCache.get(raw);
+  if (hit !== undefined) return hit as T;
+  const parsed = parseWidgetJson<T>(raw, fallback);
+  // Never cache the fallback: it is a caller-owned object, and a miss is cheap.
+  if (parsed === fallback) return parsed;
+  const stored = freezeParsed ? deepFreeze(parsed) : parsed;
+  // Cheap FIFO bound — insertion order is Map's iteration order.
+  if (parseCache.size >= PARSE_CACHE_MAX) {
+    const oldest = parseCache.keys().next().value;
+    if (oldest !== undefined) parseCache.delete(oldest);
+  }
+  parseCache.set(raw, stored);
+  return stored as T;
+}
+
 function widgetValue(node: LiteNodeLike, name: string): string {
   const w = node.widgets?.find((x) => x.name === name);
   return typeof w?.value === "string" ? w.value : "";
@@ -374,7 +441,7 @@ export function collectLocalResolvedForModule(
   // about-to-be-emitted binding would surface stale state.
   if (isSkippedMode(node)) return ctx;
 
-  const v = parseWidgetJson<ContextWidgetValue>(
+  const v = parseCached<ContextWidgetValue>(
     widgetValue(node, "wp_modules"),
     { version: 1, modules: [] },
   );
@@ -436,7 +503,7 @@ export function hasUpstreamLoopOverridingSeed(
       // Loop's widget config carries the override toggle. Mute / bypass
       // skips the Loop entirely so its override shouldn't apply.
       const raw = widgetValue(cur.node, "wp_context_loop_config");
-      const cfg = parseWidgetJson<{ override_seed?: boolean }>(raw, {});
+      const cfg = parseCached<{ override_seed?: boolean }>(raw, {});
       return cfg.override_seed === true;
     }
     cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
@@ -471,7 +538,7 @@ export function resolveUpstreamLoopSeed(
   while (cur && !seen.has(locator(cur.graph, cur.node))) {
     seen.add(locator(cur.graph, cur.node));
     if (cur.node.type === "WP_ContextLoop" && !isSkippedMode(cur.node)) {
-      const cfg = parseWidgetJson<{
+      const cfg = parseCached<{
         strategy?: string;
         override_seed?: boolean;
         seed_locks?: Record<string, number>;
@@ -525,7 +592,7 @@ export function collectUpstreamInjectorBindings(
   for (const n of chain) {
     if (n.type !== "WP_ContextInjector") continue;
     if (isSkippedMode(n)) continue;
-    const inj = parseWidgetJson<{
+    const inj = parseCached<{
       version: 1;
       rows?: Array<{ binding?: string; enabled?: boolean }>;
     }>(widgetValue(n, "wp_rows"), { version: 1, rows: [] });
@@ -570,7 +637,7 @@ export function collectUpstreamWildcardUuids(
   for (const n of chain) {
     if (n.type !== "WP_Context") continue;
     if (isSkippedMode(n)) continue;
-    const v = parseWidgetJson<ContextWidgetValue>(
+    const v = parseCached<ContextWidgetValue>(
       widgetValue(n, "wp_modules"),
       { version: 1, modules: [] },
     );
@@ -619,7 +686,7 @@ export function collectUpstreamChain(
   for (const n of upstreamFirst) {
     if (n.type !== "WP_Context") continue;
     if (isSkippedMode(n)) continue;
-    const v = parseWidgetJson<ContextWidgetValue>(
+    const v = parseCached<ContextWidgetValue>(
       widgetValue(n, "wp_modules"),
       { version: 1, modules: [] },
     );
@@ -692,7 +759,7 @@ export function collectUpstreamKinds(
     const n = chain[i];
     if (isSkippedMode(n)) continue;
     if (n.type === "WP_ContextInjector") {
-      const inj = parseWidgetJson<{
+      const inj = parseCached<{
         version: 1;
         rows?: Array<{ binding?: string; enabled?: boolean; internal?: boolean }>;
       }>(widgetValue(n, "wp_rows"), { version: 1, rows: [] });
@@ -712,7 +779,7 @@ export function collectUpstreamKinds(
       // stamps their placeholder values. Per-key internal-ness comes
       // from the widget config (same globe toggles as a module).
       const raw = widgetValue(n, "wp_context_loop_config");
-      const cfg = parseWidgetJson<{
+      const cfg = parseCached<{
         iteration_var_name?: string;
         iteration_internal?: boolean;
         total_internal?: boolean;
@@ -726,7 +793,7 @@ export function collectUpstreamKinds(
       continue;
     }
     if (n.type !== "WP_Context") continue;
-    const v = parseWidgetJson<ContextWidgetValue>(
+    const v = parseCached<ContextWidgetValue>(
       widgetValue(n, "wp_modules"),
       { version: 1, modules: [] },
     );
@@ -936,7 +1003,7 @@ export function collectUpstreamProducers(
     const nodeLabel = labelOf(n);
 
     if (n.type === "WP_ContextInjector") {
-      const inj = parseWidgetJson<{
+      const inj = parseCached<{
         version: 1;
         rows?: Array<{ binding?: string; enabled?: boolean; internal?: boolean }>;
       }>(widgetValue(n, "wp_rows"), { version: 1, rows: [] });
@@ -951,7 +1018,7 @@ export function collectUpstreamProducers(
 
     if (n.type === "WP_ContextLoop") {
       const raw = widgetValue(n, "wp_context_loop_config");
-      const cfg = parseWidgetJson<{
+      const cfg = parseCached<{
         iteration_var_name?: string;
         iteration_internal?: boolean;
         total_internal?: boolean;
@@ -967,7 +1034,7 @@ export function collectUpstreamProducers(
     }
 
     if (n.type !== "WP_Context") continue;
-    const v = parseWidgetJson<ContextWidgetValue>(
+    const v = parseCached<ContextWidgetValue>(
       widgetValue(n, "wp_modules"),
       { version: 1, modules: [] },
     );
@@ -1077,7 +1144,7 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, ResolvedValue
   const catalog = new Map<string, MinimalWildcard>();
   for (const n of chain) {
     if (n.type !== "WP_Context") continue;
-    const v = parseWidgetJson<ContextWidgetValue>(
+    const v = parseCached<ContextWidgetValue>(
       widgetValue(n, "wp_modules"),
       { version: 1, modules: [] },
     );
@@ -1137,7 +1204,7 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, ResolvedValue
       // (it's in ctx for downstream consumers) but get stripped from
       // the public map below — same path WP_Context modules use.
       const raw = widgetValue(n, "wp_rows");
-      const inj = parseWidgetJson<{
+      const inj = parseCached<{
         version: 1;
         rows?: Array<{
           binding?: string;
@@ -1168,7 +1235,7 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, ResolvedValue
       // static placeholder aligned avoids the assembler's live-preview
       // showing "0" then a queue-time "1" jump.
       const raw = widgetValue(n, "wp_context_loop_config");
-      const cfg = parseWidgetJson<{
+      const cfg = parseCached<{
         iteration_var_name?: string;
         iteration_internal?: boolean;
         total_internal?: boolean;
@@ -1182,7 +1249,7 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, ResolvedValue
       continue;
     }
     if (n.type !== "WP_Context") continue;
-    const v = parseWidgetJson<ContextWidgetValue>(
+    const v = parseCached<ContextWidgetValue>(
       widgetValue(n, "wp_modules"),
       { version: 1, modules: [] },
     );
@@ -1542,7 +1609,7 @@ export function collectDownstreamWildcardUuids(
         // Harvest wildcard uuids when the downstream node is a
         // WP_Context and not muted/bypassed.
         if (stepped.node.type === "WP_Context" && !isSkippedMode(stepped.node)) {
-          const v = parseWidgetJson<ContextWidgetValue>(
+          const v = parseCached<ContextWidgetValue>(
             widgetValue(stepped.node, "wp_modules"),
             { version: 1, modules: [] },
           );
@@ -1601,7 +1668,7 @@ export function collectDownstreamNestedReachUuids(
         if (seen.has(key)) continue;
         seen.add(key);
         if (stepped.node.type === "WP_Context" && !isSkippedMode(stepped.node)) {
-          const v = parseWidgetJson<ContextWidgetValue>(
+          const v = parseCached<ContextWidgetValue>(
             widgetValue(stepped.node, "wp_modules"),
             { version: 1, modules: [] },
           );
@@ -1825,7 +1892,7 @@ export function findWildcardHomesElsewhere(
     if (n.type !== "WP_Context") continue;
     contextIds.push(String(n.id));
     if (String(n.id) === String(selfNode.id)) continue;
-    const v = parseWidgetJson<ContextWidgetValue>(
+    const v = parseCached<ContextWidgetValue>(
       widgetValue(n, "wp_modules"),
       { version: 1, modules: [] },
     );
