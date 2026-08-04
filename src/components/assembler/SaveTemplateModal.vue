@@ -260,7 +260,7 @@ async function submit(mode: "update" | "new") {
   font-family: inherit;
 }
 .wp-stm-input:focus { outline: 1px solid var(--wp-accent-500, var(--wp-accent)); }
-.wp-stm-input--multi { resize: vertical; min-height: 46px; }
+.wp-stm-input--multi { resize: vertical; overscroll-behavior: contain; min-height: 46px; }
 .wp-stm-select { cursor: pointer; }
 .wp-stm-preview {
   margin: 0;

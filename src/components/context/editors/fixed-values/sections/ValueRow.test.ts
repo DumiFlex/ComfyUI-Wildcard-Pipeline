@@ -14,6 +14,34 @@ describe("ValueRow", () => {
     expect(w.find<HTMLInputElement>('[data-test="row-value"]').element.value).toBe("85mm");
   });
 
+  it("value field is a growing textarea, not a single-line input", async () => {
+    // Users routinely paste a whole sentence into a fixed value; a one-line
+    // <input> showed a sliver with no way to see the rest.
+    const w = mount(ValueRow, { props: { row: plainDraft, library: lib } });
+    const el = w.find('[data-test="row-value"]');
+    expect(el.element.tagName).toBe("TEXTAREA");
+  });
+
+  it("Enter inserts a newline like any textarea", async () => {
+    // Briefly swallowed for parity with the single-line <input> this replaced,
+    // which was parity for its own sake: the engine stores the value verbatim,
+    // multi-line round-trips fine, and the modal saves on Cmd/Ctrl+Enter.
+    const w = mount(ValueRow, { props: { row: plainDraft, library: lib } });
+    const el = w.find('[data-test="row-value"]');
+    const ev = new KeyboardEvent("keydown", { key: "Enter", cancelable: true, bubbles: true });
+    el.element.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(false);
+  });
+
+  it("keeps a multi-line value intact on input", async () => {
+    const w = mount(ValueRow, { props: { row: plainDraft, library: lib } });
+    const el = w.find<HTMLTextAreaElement>('[data-test="row-value"]');
+    el.element.value = "line one\nline two";
+    await el.trigger("input");
+    const updates = w.emitted("update") ?? [];
+    expect(updates[updates.length - 1]).toEqual(["v1", { value: "line one\nline two" }]);
+  });
+
   it("checkbox is checked when enabled", () => {
     const w = mount(ValueRow, { props: { row: plainDraft, library: lib } });
     expect(w.find('[data-test="row-check"]').classes()).toContain("row__check--on");

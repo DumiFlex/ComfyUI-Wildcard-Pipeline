@@ -1,7 +1,7 @@
-/* Shared template-section controls — insert-var/insert-slot dropdown
- * button + reset button + dropdown panel + dropdown item. Used by:
- *   - Combine's TemplateSection (`.wp-tpl__*`)
- *   - InjectorBindingModal     (`.ibm__*`)
+/* Shared template-section controls — insert-slot dropdown button + reset
+ * button + dropdown panel + dropdown item. Used by:
+ *   - InjectorBindingModal      (`.ibm__*`) — the insert-ref menu
+ *   - Combine's TemplateSection (`.wp-tpl__reset` only)
  *
  * Both modals previously declared their own copies of these rules with
  * tiny differences in padding/height — visible in the UI as a slight
@@ -9,6 +9,10 @@
  * sibling reset button. Single source of truth here keeps both modals
  * locked to the same dimensions (22px tall, explicit height + box-
  * sizing).
+ *
+ * NB: the `.wp-tpl__menu*` half of these pairs was dropped — Combine's
+ * TemplateSection no longer has an insert menu, so those selectors matched
+ * nothing. `.wp-tpl__reset` below IS still live.
  *
  * Imported globally from ContextWidget's unscoped `<style>` block.
  * Class names are namespaced (`.wp-tpl__*`, `.ibm__*`) so no leakage
@@ -20,18 +24,14 @@
  * line-height. Block-level wrapper + inline-flex child can leave
  * 1-2px of descender space below the button, shifting it down vs
  * the sibling reset button (which is a direct flex child with no
- * wrapping line-box). Empirically: this is the exact gap the
- * injector modal showed but the combine modal didn't, since the
- * combine modal's `.tpl` section uses a different base line-height
- * inheritance chain. Switching the wrapper to inline-flex pins
- * cross-axis size to the button itself, killing the offset. */
-.wp-tpl__menu-wrap, .ibm__menu-wrap {
+ * wrapping line-box). */
+.wp-ibm__menu-wrap {
   position: relative;
   display: inline-flex;
   align-items: center;
 }
 
-.wp-tpl__menu-btn, .ibm__menu-btn {
+.wp-ibm__menu-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -46,11 +46,11 @@
   cursor: pointer;
   line-height: 1;
 }
-.wp-tpl__menu-btn:hover, .ibm__menu-btn:hover {
+.wp-ibm__menu-btn:hover {
   border-color: var(--wp-accent);
   color: var(--wp-text);
 }
-.wp-tpl__menu-btn .pi, .ibm__menu-btn .pi { font-size: 9px; }
+.wp-ibm__menu-btn .pi { font-size: 9px; }
 
 /* Reset button — used by section-level modal headers:
  *   - .wp-tpl__reset      Combine TemplateSection reset
@@ -91,10 +91,20 @@
   font-size: 10px;
 }
 
-.wp-tpl__menu, .ibm__menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
+/* Teleported to <body>, so `fixed` viewport coords rather than `absolute`
+ * inside the modal — as an absolutely-positioned child the menu was CLIPPED
+ * by the modal's scroll container and vanished below the fold whenever its
+ * trigger sat near the bottom. The owning component measures the button and
+ * writes `top` / `left` inline; `--up` flips the box above the trigger when
+ * there's no room below.
+ *
+ * z-index 10020 puts this in the POPOVER tier, above every modal overlay.
+ * Modals here range from 9999 (ModalShell) to 10010 (InjectorBindingModal),
+ * so the old 9999 rendered this menu BEHIND its own modal — it worked only
+ * where the modal was also 9999 and DOM order broke the tie. Any popup that
+ * teleports out of a modal has to clear the whole modal tier. */
+.wp-ibm__menu {
+  position: fixed;
   min-width: 200px;
   max-height: 220px;
   overflow-y: auto;
@@ -102,14 +112,16 @@
   border: 1px solid var(--wp-border);
   border-radius: 3px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  z-index: 20;
+  z-index: 10020;
   padding: 3px;
   display: flex;
   flex-direction: column;
   gap: 1px;
 }
 
-.wp-tpl__menu-item, .ibm__menu-item {
+.wp-ibm__menu--up { transform: translateY(-100%); }
+
+.wp-ibm__menu-item {
   display: flex;
   align-items: baseline;
   gap: 6px;
@@ -121,6 +133,6 @@
   cursor: pointer;
   color: var(--wp-text);
 }
-.wp-tpl__menu-item:hover, .ibm__menu-item:hover {
+.wp-ibm__menu-item:hover {
   background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
 }

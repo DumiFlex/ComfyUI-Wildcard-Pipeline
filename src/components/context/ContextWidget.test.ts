@@ -1495,6 +1495,56 @@ describe("ContextWidget status badges", () => {
     wrapper.unmount();
   });
 
+  it("an UNLINKED bundle reads as missing, not modified", async () => {
+    // A bundle with no `library_id` could never be MISSING (that check
+    // early-returned false without one), so its only badge was MODIFIED —
+    // diffing its children against a snapshot baseline from a library entry
+    // that isn't there. "Modified against what?" had no answer.
+    resetDriftStore();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (typeof url === "string" && url.includes("/hashes")) {
+          return new Response(JSON.stringify({ hashes: {} }), { status: 200 });
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: {
+        nodeId: 815,
+        initialJson: JSON.stringify({
+          version: 1,
+          modules: [
+            { id: "bbbbbbbb", type: "wildcard", enabled: true, meta: { name: "child" }, entries: [], payload: {} },
+          ],
+          bundles: [{
+            _uid: "bu1",
+            // No library_id — the unlinked shape.
+            library_id: "",
+            name: "Pose Library",
+            start_idx: 0,
+            end_idx: 0,
+            enabled: true,
+            // A stale baseline that would otherwise light up MOD.
+            snapshot_fingerprint: "v2:deadbeef",
+          }],
+        }),
+        upstreamVars: [],
+        onChange: () => {},
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(wrapper.find(".wp-mod-badge--missing").exists()).toBe(true);
+    });
+    // MOD is meaningless with no insert to have diverged from.
+    expect(wrapper.find(".wp-mod-badge--modified").exists()).toBe(false);
+    wrapper.unmount();
+  });
+
   it("renders 'missing' text badge when uuid is not in library", async () => {
     resetDriftStore();
     vi.stubGlobal(

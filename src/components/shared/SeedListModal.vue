@@ -224,7 +224,11 @@ onBeforeUnmount(() => {
 <style scoped>
 @import "./theme.css";
 .sm-overlay { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(0,0,0,.62); font-family: var(--wp-font-sans, sans-serif); }
-.sm { width: 486px; max-width: 100%; max-height: 86vh; display: flex; flex-direction: column; background: var(--wp-bg2); border: 1px solid var(--wp-border); border-radius: 6px; overflow: hidden; color: var(--wp-text); font-size: 12px; box-shadow: 0 18px 50px rgba(0,0,0,.55); }
+/* 560px, up from 486px: the toolbar (iterations · strategy · N locked · N
+ * bypassed · Lock all · Unlock all · Copy) and each row's three toggles were
+ * being squeezed into near-square boxes to fit. Widening is the cheaper fix
+ * than re-organising the toolbar. */
+.sm { width: 560px; max-width: 100%; max-height: 86vh; display: flex; flex-direction: column; background: var(--wp-bg2); border: 1px solid var(--wp-border); border-radius: 6px; overflow: hidden; color: var(--wp-text); font-size: 12px; box-shadow: 0 18px 50px rgba(0,0,0,.55); }
 .sm__head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; flex-shrink: 0; border-bottom: 1px solid var(--wp-border); background: linear-gradient(180deg, color-mix(in srgb, var(--wp-accent) 18%, var(--wp-bg2)) 0%, var(--wp-bg2) 100%); }
 .sm__head-icon { color: var(--wp-accent); width: 24px; display: flex; justify-content: center; }
 .sm__title-block { flex: 1; min-width: 0; }

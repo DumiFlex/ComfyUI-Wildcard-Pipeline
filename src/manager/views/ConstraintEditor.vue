@@ -267,10 +267,37 @@ function modeMeta(mode: ConstraintMode | string | undefined): ModeMeta {
   return MODE_META[(mode ?? "allow") as ConstraintMode] ?? MODE_META.allow;
 }
 
+/** Source / target wildcard choices.
+ *
+ *  Carries a `meta` of "N opts · <uuid>" because a library routinely holds
+ *  several wildcards under one display name (five "Outfit" entries authored
+ *  at different times), and a label-only dropdown made them indistinguishable
+ *  — you had to guess which was which. Select also matches `meta` in its
+ *  type-to-filter, so pasting a uuid jumps straight to its row. */
 const wildcardOptions = computed(() =>
   moduleStore.catalog
     .filter((m) => m.type === "wildcard")
-    .map((m) => ({ label: m.name, value: m.id })),
+    .map((m) => {
+      const p = (m.payload ?? {}) as {
+        options?: unknown[];
+        sub_categories?: unknown[];
+        tag_groups?: Record<string, unknown>;
+      };
+      const parts: string[] = [];
+      if (Array.isArray(p.options)) {
+        parts.push(`${p.options.length} opt${p.options.length === 1 ? "" : "s"}`);
+      }
+      // Tag + axis counts matter here specifically: they ARE the matrix this
+      // constraint is about to build, so knowing "12 tags / 3 axes" before
+      // picking tells you the grid size you're signing up for.
+      const tags = Array.isArray(p.sub_categories) ? p.sub_categories.length : 0;
+      const axes = p.tag_groups && typeof p.tag_groups === "object"
+        ? Object.keys(p.tag_groups).length
+        : 0;
+      if (tags > 0) parts.push(axes > 0 ? `${tags} tags / ${axes} axes` : `${tags} tags`);
+      parts.push(m.id.slice(0, 8));
+      return { label: m.name, value: m.id, meta: parts.join(" · ") };
+    }),
 );
 
 function wildcardById(id: string | null): ModuleRow | undefined {

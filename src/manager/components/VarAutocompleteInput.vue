@@ -18,7 +18,7 @@
  *   - Empty input still shows the full suggestion list when focused
  *     so a brand-new field discloses what's available.
  */
-import { computed, nextTick, onBeforeUnmount, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 
 defineOptions({ name: "VarAutocompleteInput" });
 
@@ -61,14 +61,27 @@ const popupPos = ref<{ top: number; left: number; width: number; flipped: boolea
  *  Empty input shows the full list (capped to 8 — same as
  *  RichTextInput) so users discover available vars when they focus a
  *  blank field. */
+/** Row cap. Matches RichTextInput's `AC_MAX_ITEMS` — an 8-row cap made the
+ *  popover never overflow its `max-height`, so extra matches were simply
+ *  unreachable and the scrollbar appeared broken. */
+const MAX_ITEMS = 50;
+
 const filtered = computed<string[]>(() => {
   // SP2a: strip a trailing `.K` (and a lone trailing `.`) so typing
   // `$colors.0` still matches the base `colors` suggestion.
   const q = props.modelValue.trim().toLowerCase().replace(/\.\d*$/, "");
-  if (!q) return props.suggestions.slice(0, 8);
+  if (!q) return props.suggestions.slice(0, MAX_ITEMS);
   return props.suggestions
     .filter((s) => s.toLowerCase().includes(q))
-    .slice(0, 8);
+    .slice(0, MAX_ITEMS);
+});
+
+// Keep the keyboard-selected row visible when the list overflows.
+watch(active, (i) => {
+  void nextTick(() => {
+    const row = popoverEl.value?.querySelectorAll<HTMLElement>(".wp-rt-suggestions__item")[i];
+    row?.scrollIntoView({ block: "nearest" });
+  });
 });
 
 function positionPopup(): void {

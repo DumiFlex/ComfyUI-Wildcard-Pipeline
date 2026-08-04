@@ -31,7 +31,25 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.clearAllMocks();
+  // Teleported menus outlive their wrapper unless the body is cleared.
+  document.body.innerHTML = "";
 });
+
+/**
+ * The tag picker is teleported to <body> so no `overflow` ancestor can clip
+ * it, which puts it outside the wrapper's element tree — `w.get()` cannot
+ * reach it. Query the document instead, as the Select tests do.
+ */
+function menuEl(sel: string): HTMLElement {
+  const el = document.querySelector<HTMLElement>(sel);
+  if (!el) throw new Error(`teleported node not found: ${sel}`);
+  return el;
+}
+
+async function clickMenu(sel: string): Promise<void> {
+  menuEl(sel).click();
+  await flushPromises();
+}
 
 function makeRouter() {
   return createRouter({
@@ -90,27 +108,25 @@ describe("option multi-tag select", () => {
   it("shows the currently-assigned tag and marks it on in the picker", async () => {
     const w = await mountSeeded();
     await w.get('[data-test="opt-tags-o1"]').trigger("click"); // open picker
-    expect(w.get('[data-test="opt-tag-toggle-o1-feline"]').classes()).toContain("is-on");
+    expect(menuEl('[data-test="opt-tag-o1-toggle-feline"]').className).toContain("is-on");
     // warm is a known registry tag but not assigned → not on.
-    expect(w.get('[data-test="opt-tag-toggle-o1-warm"]').classes()).not.toContain("is-on");
+    expect(menuEl('[data-test="opt-tag-o1-toggle-warm"]').className).not.toContain("is-on");
   });
 
   it("toggles membership for an option", async () => {
     const w = await mountSeeded();
     await w.get('[data-test="opt-tags-o1"]').trigger("click"); // open picker
-    await w.get('[data-test="opt-tag-toggle-o1-warm"]').trigger("click"); // add warm
-    await flushPromises();
+    await clickMenu('[data-test="opt-tag-o1-toggle-warm"]'); // add warm
     // Model now carries both tags.
     expect(optionsOf(w)[0].sub_categories).toEqual(["feline", "warm"]);
     // And the toggle reflects the on state.
-    expect(w.get('[data-test="opt-tag-toggle-o1-warm"]').classes()).toContain("is-on");
+    expect(menuEl('[data-test="opt-tag-o1-toggle-warm"]').className).toContain("is-on");
   });
 
   it("removing an assigned tag updates the option model", async () => {
     const w = await mountSeeded();
     await w.get('[data-test="opt-tags-o1"]').trigger("click");
-    await w.get('[data-test="opt-tag-toggle-o1-feline"]').trigger("click"); // remove feline
-    await flushPromises();
+    await clickMenu('[data-test="opt-tag-o1-toggle-feline"]'); // remove feline
     expect(optionsOf(w)[0].sub_categories).toEqual([]);
   });
 

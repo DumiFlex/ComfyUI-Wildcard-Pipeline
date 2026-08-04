@@ -1,5 +1,6 @@
 import { mount, flushPromises } from "@vue/test-utils";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { nextTick } from "vue";
 import RichTextInput from "../components/RichTextInput.vue";
 import RichTextPreview from "../components/RichTextPreview.vue";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
@@ -258,6 +259,333 @@ describe("RichTextInput.vue", () => {
     expect(root.classes()).not.toContain("wp-rt--focused");
     expect(root.classes()).toContain("wp-rt--rest");
     wrap.unmount();
+  });
+
+  it("survives a blur re-parse after the browser destroyed the host's children", async () => {
+    // Regression: the browser OWNS the contenteditable host's children and
+    // replaces them wholesale on select-all + retype, IME commit, undo, and
+    // some paste paths. Vue's child vnodes then hold detached `el` pointers.
+    // Alt-tabbing mid-token fires blur → re-parse → Vue patches the new atom
+    // structure over the wreckage and throws `insertBefore: Child to insert
+    // before is not a child of this node`, followed by a cascade of null
+    // derefs that leaves the whole editor dead until a page refresh.
+    //
+    // The repair is a remount of the host ELEMENT (`hostEpoch` key). Note the
+    // crash escaped as an UNHANDLED error inside Vue's patch, so this test
+    // installs a window error trap rather than wrapping in try/catch.
+    const errors: string[] = [];
+    const onErr = (e: ErrorEvent): void => { errors.push(String(e.error ?? e.message)); };
+    window.addEventListener("error", onErr);
+    const ref = "@{aabbccdd#pose}";
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: `a ${ref} b`,
+        surface: "wildcard",
+        uuidToName: new Map([["aabbccdd", "pose"]]),
+      },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host").element as HTMLElement;
+    expect(host.querySelectorAll("[data-atom-index]").length).toBeGreaterThan(0);
+    // Browser blows the rendered atom nodes away and leaves raw text behind.
+    host.innerHTML = "";
+    host.appendChild(document.createTextNode(`a ${ref} b ${ref} c`));
+    await wrap.find(".wp-rt__host").trigger("blur");
+    await flushPromises();
+    window.removeEventListener("error", onErr);
+    expect(errors).toEqual([]);
+    // Host was remounted and re-rendered from the re-parsed text, so the
+    // editor is still usable rather than a dead subtree.
+    const fresh = wrap.find(".wp-rt__host").element as HTMLElement;
+    expect(fresh.querySelectorAll("[data-atom-index]").length).toBeGreaterThan(0);
+    expect(wrap.findAll(".wp-refchip")).toHaveLength(2);
+    wrap.unmount();
+  });
+
+  it("does not remount the host for the normal typing case (orphan text node)", async () => {
+    // Guard against over-triggering the stale-DOM repair: browsers routinely
+    // insert user-typed characters as raw text nodes directly under the host.
+    // That's EXTRA nodes, not destroyed ones — remounting there would eat the
+    // caret on every keystroke.
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "hello", varSuggestions: [] },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host").element as HTMLElement;
+    host.appendChild(document.createTextNode(" world"));
+    await wrap.find(".wp-rt__host").trigger("blur");
+    await flushPromises();
+    // Same element instance — no remount happened.
+    expect(wrap.find(".wp-rt__host").element).toBe(host);
+    wrap.unmount();
+  });
+
+  it("a var chip hover claims scope only when the name is in the suggestion pool", async () => {
+    // The popover used to read `resolved ? "produced upstream" : …`, and for
+    // a var `resolved` is merely `name.length > 0` — so EVERY var claimed an
+    // upstream producer. Meaningless in the SPA (no graph) and unverified on
+    // the canvas.
+    // RefChip gates its popover behind a 280ms hover intent delay.
+    vi.useFakeTimers();
+    const hoverText = async (modelValue: string): Promise<string> => {
+      const w = mount(RichTextInput, {
+        props: { modelValue, varSuggestions: ["person"] },
+        attachTo: document.body,
+      });
+      await w.find(".wp-refchip").trigger("mouseenter");
+      vi.advanceTimersByTime(300);
+      await nextTick();
+      const text = document.body.querySelector('[data-test="refchip-hover"]')?.textContent ?? "";
+      w.unmount();
+      return text;
+    };
+    try {
+      expect(await hoverText("$person")).toContain("in scope");
+      const unknown = await hoverText("$mystery");
+      expect(unknown).toContain("binds at runtime");
+      expect(unknown).not.toContain("produced upstream");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("re-filters the suggestion list when characters are DELETED", async () => {
+    // The reported bug: type `@act_` to narrow to two matches, delete the `_`,
+    // and `@act` still showed two instead of four. Backspace/Delete
+    // preventDefault and do the deletion themselves, so no `input` event fires
+    // and `onHostInput` — the only other caller of refreshAutocompleteFromHost
+    // — never runs. `acQuery` kept its pre-deletion value and the list froze.
+    const refs = ["aaaa1111", "aaaa2222", "aaaa3333", "bbbb4444"];
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "",
+        surface: "wildcard",
+        refSuggestions: refs,
+        uuidToName: new Map([
+          ["aaaa1111", "act"],
+          ["aaaa2222", "act_plan"],
+          ["aaaa3333", "act_two"],
+          ["bbbb4444", "camera"],
+        ]),
+      },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host");
+    const span = (host.element as HTMLElement).querySelector(".wp-rt__text") as HTMLElement;
+
+    const caretToEnd = (): void => {
+      const tn = span.firstChild as Text | null;
+      if (!tn) return;
+      const range = document.createRange();
+      range.setStart(tn, tn.length);
+      range.collapse(true);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    };
+    const rowCount = (): number =>
+      document.body.querySelectorAll(".wp-rt-suggestions__item").length;
+
+    // Type `@act` → the three act* names match.
+    span.textContent = "@act";
+    caretToEnd();
+    await host.trigger("input", { inputType: "insertText", data: "t" });
+    await flushPromises();
+    expect(rowCount()).toBe(3);
+
+    // Narrow to `@act_` → two.
+    span.textContent = "@act_";
+    caretToEnd();
+    await host.trigger("input", { inputType: "insertText", data: "_" });
+    await flushPromises();
+    expect(rowCount()).toBe(2);
+
+    // Backspace the `_`. The component owns the deletion, so mutate the DOM
+    // the way it will and fire the keydown it intercepts.
+    await host.trigger("keydown", { key: "Backspace" });
+    await flushPromises();
+    // Back to three — the list must follow the deletion. Before the fix this
+    // was 0: the delete path never re-probed, so the popover closed outright.
+    expect(rowCount()).toBe(3);
+    expect(document.body.querySelector(".wp-rt-suggestions__query")?.textContent)
+      .toBe("@act");
+    wrap.unmount();
+  });
+
+  it("does NOT reopen the popover when the caret lands flush after a chip", async () => {
+    // Reported: put a space after the `$style_fx` chip, delete the space, and
+    // the caret settles right behind the chip — which reopened the picker even
+    // though nothing is being filtered; the chip already exists. A committed
+    // chip serialises back to raw text as `$style_fx`, exactly what the user
+    // would have typed to make it, so the probe cannot tell the two apart from
+    // the string alone. Only the DOM can, which is what `triggerIsInsideChip`
+    // consults.
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "$style_fx ",
+        surface: "combine",
+        varSuggestions: ["style_fx", "style_fx_alt"],
+      },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const host = wrap.find(".wp-rt__host");
+    const hostEl = host.element as HTMLElement;
+    // Sanity: the chip rendered, so the caret really can sit behind an atom.
+    expect(hostEl.querySelectorAll(".wp-refchip--var").length).toBe(1);
+
+    // Caret AFTER the trailing space, so Backspace removes the space and
+    // leaves the caret flush against the chip — the exact reported sequence.
+    const trailing = Array.from(hostEl.querySelectorAll(".wp-rt__text")).pop() as HTMLElement;
+    const tn = trailing.firstChild as Text;
+    expect(tn.textContent).toBe(" ");
+    const range = document.createRange();
+    range.setStart(tn, tn.length);
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+
+    await host.trigger("keydown", { key: "Backspace" });
+    await flushPromises();
+    expect(document.body.querySelectorAll(".wp-rt-suggestions__item").length).toBe(0);
+    wrap.unmount();
+  });
+
+  it("a var chip hover names its producing module and node", async () => {
+    // "in scope" told the user a name existed, not where its value comes from —
+    // useless when several near-identical modules bind the same var.
+    vi.useFakeTimers();
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "$outfit",
+        varSuggestions: ["outfit"],
+        graphAware: true,
+        varProducers: new Map([["outfit", {
+          kind: "wildcard",
+          nodeLabel: "dusk-marten",
+          moduleName: "Outfit",
+          moduleId: "b855d115",
+          shadowed: 2,
+        }]]),
+      },
+      attachTo: document.body,
+    });
+    try {
+      await wrap.find(".wp-refchip").trigger("mouseenter");
+      vi.advanceTimersByTime(300);
+      await nextTick();
+      const card = document.body.querySelector('[data-test="refchip-hover"]');
+      const text = card?.textContent ?? "";
+      expect(text).toContain("wildcard");
+      expect(text).toContain("Outfit");
+      expect(text).toContain("dusk-marten");
+      expect(text).toContain("b855d115");
+      // Last-write-wins: name the winner, mention the rest.
+      expect(text).toContain("overrides 2 earlier writes");
+    } finally {
+      vi.useRealTimers();
+      wrap.unmount();
+    }
+  });
+
+  it("says so when a graph-aware host finds no producer", async () => {
+    vi.useFakeTimers();
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "$mystery", varSuggestions: [], graphAware: true },
+      attachTo: document.body,
+    });
+    try {
+      await wrap.find(".wp-refchip").trigger("mouseenter");
+      vi.advanceTimersByTime(300);
+      await nextTick();
+      expect(document.body.querySelector('[data-test="refchip-hover"]')?.textContent)
+        .toContain("no upstream producer");
+    } finally {
+      vi.useRealTimers();
+      wrap.unmount();
+    }
+  });
+
+  it("does NOT claim a missing producer on a graphless surface (the SPA)", async () => {
+    // The SPA has no chain to walk, so "no upstream producer" would be a
+    // statement it cannot support.
+    vi.useFakeTimers();
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "$mystery", varSuggestions: [] },
+      attachTo: document.body,
+    });
+    try {
+      await wrap.find(".wp-refchip").trigger("mouseenter");
+      vi.advanceTimersByTime(300);
+      await nextTick();
+      const text = document.body.querySelector('[data-test="refchip-hover"]')?.textContent ?? "";
+      expect(text).toContain("binds at runtime");
+      expect(text).not.toContain("no upstream producer");
+    } finally {
+      vi.useRealTimers();
+      wrap.unmount();
+    }
+  });
+
+  it("flags an internal producer as stripped from the prompt", async () => {
+    vi.useFakeTimers();
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "$frame",
+        graphAware: true,
+        varProducers: new Map([["frame", {
+          kind: "loop", nodeLabel: "Context Loop", internal: true, shadowed: 0,
+        }]]),
+      },
+      attachTo: document.body,
+    });
+    try {
+      await wrap.find(".wp-refchip").trigger("mouseenter");
+      vi.advanceTimersByTime(300);
+      await nextTick();
+      const text = document.body.querySelector('[data-test="refchip-hover"]')?.textContent ?? "";
+      expect(text).toContain("loop variable");
+      expect(text).toContain("internal");
+    } finally {
+      vi.useRealTimers();
+      wrap.unmount();
+    }
+  });
+
+  it("uses library wording in the SPA — no node, no override claim", async () => {
+    // The library is a bag of modules with no execution order, so the same
+    // count must NOT read as "overrides N earlier writes" the way it does on
+    // the canvas — nothing is overridden until they're arranged in a Context.
+    vi.useFakeTimers();
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "$outfit",
+        varProducers: new Map([["outfit", {
+          kind: "wildcard",
+          moduleName: "Outfit",
+          moduleId: "b855d115",
+          shadowed: 2,
+          siblingLabel: "library module",
+        }]]),
+      },
+      attachTo: document.body,
+    });
+    try {
+      await wrap.find(".wp-refchip").trigger("mouseenter");
+      vi.advanceTimersByTime(300);
+      await nextTick();
+      const text = document.body.querySelector('[data-test="refchip-hover"]')?.textContent ?? "";
+      expect(text).toContain("Outfit");
+      expect(text).toContain("b855d115");
+      expect(text).toContain("2 other library modules bind this name");
+      expect(text).not.toContain("overrides");
+      // No graph → no "in <node>" clause.
+      expect(text).not.toContain(" in ");
+    } finally {
+      vi.useRealTimers();
+      wrap.unmount();
+    }
   });
 
   it("forwards aria-label + disabled onto the contenteditable host", () => {
@@ -963,10 +1291,13 @@ describe("RichTextPreview.vue", () => {
     expect(chips[0].text()).toContain("$person");
     expect(chips[1].text()).toContain("@color");
     // The filter expression is NOT shown inline (§4.1) — a funnel marks
-    // "filtered" and the expression lives in the hover title.
+    // "filtered" and the expression lives in the chip's hover card
+    // (covered in RefChip.test.ts / RichTextPreview.test.ts). The native
+    // title is deliberately EMPTY so a container's own tooltip cannot
+    // overlay that card.
     expect(chips[1].text()).not.toContain("warm");
     expect(chips[1].find('[data-test="refchip-filter"]').exists()).toBe(true);
-    expect(chips[1].attributes("title")).toContain("warm");
+    expect(chips[1].attributes("title")).toBe("");
   });
 });
 
@@ -1323,5 +1654,199 @@ describe("allowNestedRefs — derivation action-value @{} reuse", () => {
     expect(pop!.classList.contains("wp-theme-light")).toBe(false);
     expect(pop!.classList.contains("wp-theme-dark")).toBe(false);
     wrap.unmount();
+  });
+});
+
+/**
+ * Caret rescue in `beforeinput`.
+ *
+ * The host parks the selection on ITSELF rather than inside a `wp-rt__text`
+ * span in two common situations — pressing Home, and clicking at the very
+ * start of the field. Firefox does it most readily, which is why both user
+ * reports came from there. The component redirects such a stranded caret into
+ * a span before the browser inserts, and both bugs below were that redirect
+ * going to the wrong place.
+ *
+ * Driven through real DOM Selection APIs rather than the component internals,
+ * because the bugs live in the interaction between the browser's own insertion
+ * and our redirect.
+ */
+describe("RichTextInput — stranded-caret rescue", () => {
+  /** Put the selection on the host element itself at `childIndex`. */
+  function selectOnHost(host: HTMLElement, startIndex: number, endIndex?: number): void {
+    const range = document.createRange();
+    range.setStart(host, startIndex);
+    range.setEnd(host, endIndex ?? startIndex);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+  }
+
+  function fire(host: HTMLElement): void {
+    host.dispatchEvent(new InputEvent("beforeinput", {
+      inputType: "insertText", data: "x", bubbles: true, cancelable: true,
+    }));
+  }
+
+  it("sends a caret at the START of the field to the FIRST span, not the last", async () => {
+    // The shipped behaviour picked the LAST span and its END, so typing `{` in
+    // front of `skirt` produced `skirt{`. Reproduced in Firefox 153.
+    const w = mount(RichTextInput, {
+      props: { modelValue: "skirt" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const host = w.get('[contenteditable="true"]').element as HTMLElement;
+    selectOnHost(host, 0);
+    fire(host);
+    const sel = window.getSelection();
+    const container = sel?.getRangeAt(0).startContainer;
+    const span = (container?.nodeType === Node.TEXT_NODE
+      ? container.parentElement
+      : container as HTMLElement | null)?.closest(".wp-rt__text");
+    expect(span).not.toBeNull();
+    // First span, at its start — anything else inserts at the wrong end.
+    expect(host.querySelectorAll(".wp-rt__text")[0]).toBe(span);
+    expect(sel?.getRangeAt(0).startOffset).toBe(0);
+    w.unmount();
+  });
+
+  it("leaves a NON-COLLAPSED selection alone so the browser can replace it", async () => {
+    // The rescue collapsed the selection unconditionally, so select-all then
+    // typing one letter over `yellow` left `yellowy` instead of `y` — the
+    // browser never got to delete what was selected.
+    const w = mount(RichTextInput, {
+      props: { modelValue: "yellow" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const host = w.get('[contenteditable="true"]').element as HTMLElement;
+    selectOnHost(host, 0, host.childNodes.length);
+    const before = window.getSelection()?.getRangeAt(0);
+    const beforeCollapsed = before?.collapsed;
+    fire(host);
+    const after = window.getSelection()?.getRangeAt(0);
+    expect(beforeCollapsed).toBe(false);
+    // Still a range, still spanning the content — untouched.
+    expect(after?.collapsed).toBe(false);
+    w.unmount();
+  });
+});
+
+/**
+ * Cut and copy go through the atom model, not the browser.
+ *
+ * Left to the browser, a Ctrl+A selection is anchored on the HOST element, so
+ * the deletion removed the `wp-rt__text` spans themselves — the elements Vue's
+ * vnodes point at. Measured in Firefox 153: the field was left with zero atom
+ * spans, still typeable but with nothing chipping or colouring, and the vdom
+ * referencing detached nodes.
+ */
+describe("RichTextInput — cut and copy", () => {
+  /** A clipboard event carrying a stub DataTransfer we can read back. */
+  function clipEvent(type: "cut" | "copy") {
+    const store: Record<string, string> = {};
+    const ev = new Event(type, { bubbles: true, cancelable: true }) as ClipboardEvent & {
+      __data: Record<string, string>;
+    };
+    Object.defineProperty(ev, "clipboardData", {
+      value: {
+        setData: (fmt: string, val: string) => { store[fmt] = val; },
+        getData: (fmt: string) => store[fmt] ?? "",
+      },
+    });
+    ev.__data = store;
+    return ev;
+  }
+
+  /** Select the whole field the way Ctrl+A does — anchored on the host. */
+  function selectAll(host: HTMLElement): void {
+    const range = document.createRange();
+    range.setStart(host, 0);
+    range.setEnd(host, host.childNodes.length);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+  }
+
+  it("cut removes the selection through the model and emits the remainder", async () => {
+    const w = mount(RichTextInput, {
+      props: { modelValue: "alpha one" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const host = w.get('[contenteditable="true"]').element as HTMLElement;
+    selectAll(host);
+    const ev = clipEvent("cut");
+    host.dispatchEvent(ev);
+    await flushPromises();
+    expect(ev.defaultPrevented).toBe(true);
+    expect(ev.__data["text/plain"]).toBe("alpha one");
+    const emitted = w.emitted("update:modelValue");
+    expect(emitted?.[emitted.length - 1]).toEqual([""]);
+    w.unmount();
+  });
+
+  it("cut leaves the atom spans intact — the whole point", async () => {
+    // The browser's own cut took the spans with it, which is what broke the
+    // field for every subsequent edit.
+    const w = mount(RichTextInput, {
+      props: { modelValue: "alpha one" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const host = w.get('[contenteditable="true"]').element as HTMLElement;
+    selectAll(host);
+    host.dispatchEvent(clipEvent("cut"));
+    await flushPromises();
+    expect(host.querySelectorAll(".wp-rt__text").length).toBeGreaterThan(0);
+    w.unmount();
+  });
+
+  it("copy puts the SOURCE on the clipboard, so refs survive a round trip", async () => {
+    // A chip renders its display label, so the browser's own copy turned
+    // `red @{955bb6fa} tail` into `red  tail` and dropped the ref.
+    const w = mount(RichTextInput, {
+      props: { modelValue: "red @{955bb6fa} tail", surface: "wildcard" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const host = w.get('[contenteditable="true"]').element as HTMLElement;
+    selectAll(host);
+    const ev = clipEvent("copy");
+    host.dispatchEvent(ev);
+    await flushPromises();
+    expect(ev.__data["text/plain"]).toContain("@{955bb6fa}");
+    w.unmount();
+  });
+
+  it("copy leaves the value alone", async () => {
+    const w = mount(RichTextInput, {
+      props: { modelValue: "alpha one" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const host = w.get('[contenteditable="true"]').element as HTMLElement;
+    selectAll(host);
+    host.dispatchEvent(clipEvent("copy"));
+    await flushPromises();
+    expect(w.emitted("update:modelValue")).toBeUndefined();
+    w.unmount();
+  });
+
+  it("ignores a cut with nothing selected", async () => {
+    const w = mount(RichTextInput, {
+      props: { modelValue: "alpha one" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const host = w.get('[contenteditable="true"]').element as HTMLElement;
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    const ev = clipEvent("cut");
+    host.dispatchEvent(ev);
+    await flushPromises();
+    expect(ev.defaultPrevented).toBe(false);
+    w.unmount();
   });
 });

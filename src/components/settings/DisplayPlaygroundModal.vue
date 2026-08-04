@@ -472,12 +472,23 @@ onBeforeUnmount(() => {
   background: var(--wp-brand-gradient);
   position: relative;
 }
+/* Scrim that knocks the brand gradient back so the title stays readable on
+ * top of it. It was hardcoded to a near-black rgba, so under the light theme
+ * the banner stayed dark while `--wp-text` flipped to a DARK ink — dark text
+ * on a dark band. The scrim now follows the theme: near-black under dark,
+ * near-white under light, each keeping the same 0.85 knock-back. */
 .wp-pg__head::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: rgba(35, 35, 35, 0.85);
+  background: var(--wp-pg-head-scrim, rgba(35, 35, 35, 0.85));
   pointer-events: none;
+}
+.wp-theme-light .wp-pg__head {
+  --wp-pg-head-scrim: rgba(248, 248, 250, 0.85);
+}
+.wp-theme-dark .wp-pg__head {
+  --wp-pg-head-scrim: rgba(35, 35, 35, 0.85);
 }
 .wp-pg__head > * { position: relative; z-index: 1; }
 .wp-pg__head-inner { display: flex; gap: 10px; align-items: flex-start; }

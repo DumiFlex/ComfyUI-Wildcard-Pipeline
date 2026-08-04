@@ -32,7 +32,7 @@ from engine.context import strip_internals
 from engine.db.connection import get_connection
 from engine.db.migrations import migrate
 from engine.db.repositories import ModuleNotFound, ModuleRepository
-from engine.modules.snapshot import walk_transitive_refs
+from engine.modules.snapshot import ref_seed_uuids, walk_transitive_refs
 from engine.pipeline import PipelineEngine
 from engine.syntax.types import ListVar
 from wp_api._helpers import json_error, json_ok
@@ -69,15 +69,25 @@ def _build_catalog(modules: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return catalog
 
 
-def _expand_with_db(catalog: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+def _expand_with_db(
+    catalog: dict[str, dict[str, Any]],
+    modules: list[dict[str, Any]] | None = None,
+) -> dict[str, dict[str, Any]]:
     """Pull in nested `@{uuid}` refs from the live DB so preview can
     resolve them — mirrors `wp_nodes/context_node.py:_expand_catalog_via_live_db`.
+
+    `modules` matters for the same reason it does there: a `@{uuid}` written on
+    a derivation action (or its per-instance override) is invisible to a walk
+    seeded from wildcard uuids alone. Preview has to seed identically or it
+    reports a pool the engine will not use — which is exactly how the
+    "SPA says 1 of 11, the graph says 0 of 10" split arose.
 
     Failure-tolerant: any DB hiccup returns the embedded catalog
     unchanged and the resolver falls back to the standard
     "unknown ref" warning at expand time.
     """
-    if not catalog:
+    seeds = ref_seed_uuids(modules)
+    if not catalog and not seeds:
         return catalog
     try:
         conn = get_connection()
@@ -103,7 +113,8 @@ def _expand_with_db(catalog: dict[str, dict[str, Any]]) -> dict[str, dict[str, A
         except Exception:
             return None
 
-    walk = walk_transitive_refs(list(catalog.keys()), fetch_module=_fetch)
+    roots = list(catalog.keys()) + [u for u in sorted(seeds) if u not in catalog]
+    walk = walk_transitive_refs(roots, fetch_module=_fetch)
     return walk.snapshots
 
 
@@ -149,7 +160,7 @@ async def resolve_preview(request: web.Request) -> web.Response:
         accum_catalog.update(_build_catalog(modules))
         # Re-expand each step so newly-introduced wildcards pull their
         # nested deps too. walk_transitive_refs is idempotent.
-        accum_catalog = _expand_with_db(accum_catalog)
+        accum_catalog = _expand_with_db(accum_catalog, modules)
         ctx["__wp_catalog__"] = accum_catalog
         try:
             ctx = PipelineEngine().run(modules, ctx=ctx, seed=seed)

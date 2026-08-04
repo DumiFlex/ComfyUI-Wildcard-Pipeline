@@ -15,6 +15,8 @@
 import { computed, ref } from "vue";
 import type { SeedListConfig, SeedListStrategy } from "./types";
 import SeedListModal from "../shared/SeedListModal.vue";
+import FrameChips from "../shared/FrameChips.vue";
+import { deriveLoopSeeds } from "../shared/seed-derive";
 
 const props = withDefaults(
   defineProps<{
@@ -47,6 +49,10 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{ "update:modelValue": [next: SeedListConfig] }>();
+
+/** Frame-grid collapse. Owned by the widget glue so it can persist to
+ *  `node.properties` and survive a workflow save. */
+const chipsCollapsed = defineModel<boolean>("chipsCollapsed", { default: false });
 
 const STRATEGIES: { id: SeedListStrategy; label: string; hint: string }[] = [
   { id: "hash_index", label: "hash", hint: "Independent per-iteration; recommended for varied results." },
@@ -81,6 +87,48 @@ const lockedCount = computed(() => Object.keys(props.modelValue.seed_locks ?? {}
 const bypassedCount = computed(() => props.bypassedFrames.length);
 
 function onSeedLocks(next: Record<string, number>): void {
+  emit("update:modelValue", { ...props.modelValue, seed_locks: next });
+}
+
+/* ---------------------------------------------------------------------------
+ * Frame chips — lock a seed without opening the modal.
+ *
+ * Unlike the Loop's chips these take a PLAIN click, because this node has no
+ * edit cursor: there is nothing else a chip could do, and making people hold
+ * Shift for the only available action would be ceremony.
+ *
+ * Bypass is shown but not editable. It belongs to the WP Context Loop wired
+ * into `loop_config` (and only surfaces when "Override count from loop" is
+ * on) — changing it here would mean writing to a different node.
+ * ------------------------------------------------------------------------ */
+
+const BYPASS_READONLY_HINT = "Bypassed by the wired Context Loop — change it there.";
+
+/** 0-based locked frame indices. Config keys are strings; a non-numeric key
+ *  is ignored rather than becoming `NaN` in the set. */
+const lockSet = computed(() => {
+  const out = new Set<number>();
+  for (const k of Object.keys(props.modelValue.seed_locks ?? {})) {
+    const n = Number(k);
+    if (Number.isInteger(n)) out.add(n);
+  }
+  return out;
+});
+
+/** The seed series this node WOULD produce, using the same effective values
+ *  the modal previews with — so a chip-lock and a modal-lock agree. */
+const derivedSeeds = computed(() =>
+  deriveLoopSeeds(
+    props.baseSeed,
+    Math.max(1, props.count ?? 1),
+    props.previewStrategy ?? props.modelValue.strategy,
+  ),
+);
+
+function toggleFrameLock(i: number): void {
+  const next = { ...(props.modelValue.seed_locks ?? {}) };
+  if (lockSet.value.has(i)) delete next[String(i)];
+  else next[String(i)] = derivedSeeds.value[i] ?? props.baseSeed;
   emit("update:modelValue", { ...props.modelValue, seed_locks: next });
 }
 
@@ -162,6 +210,20 @@ function toggleOverrideStrategy(): void {
       <span v-if="bypassedCount" class="wp-seedlist__seedbtn-badge" data-test="seedlist-seeds-bypass-badge">{{ bypassedCount }} bypassed</span>
       <svg class="wp-seedlist__seedbtn-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6" /></svg>
     </button>
+
+    <!-- Directly under the seeds button it belongs to: the chips are the
+         inline view of what that modal lists, so they read as its expansion
+         rather than as another unrelated section. -->
+    <FrameChips
+      label="seeds"
+      test-id="seedlist-frame"
+      v-model:collapsed="chipsCollapsed"
+      :count="Math.max(1, count ?? 1)"
+      :locked="[...lockSet]"
+      :bypassed="bypassedFrames"
+      :bypass-readonly-hint="BYPASS_READONLY_HINT"
+      @toggle-lock="toggleFrameLock"
+    />
 
     <div class="wp-seedlist__row" :title="OVERRIDE_SEED_TOOLTIP">
       <span class="wp-seedlist__row-label">Override base seed from loop</span>

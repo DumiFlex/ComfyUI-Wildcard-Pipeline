@@ -17,6 +17,7 @@
  * dimmed dead UI would lie.
  */
 import { computed, ref, watch } from "vue";
+import { saveChordLabel } from "../../../shared/platform-keys";
 import type { ModuleEntry } from "../../../../widgets/_shared";
 import type { ChainModule, TargetSelect } from "../../../../extension/constraint-pairs";
 import IdentitySection from "./sections/IdentitySection.vue";
@@ -46,6 +47,9 @@ import { collectTransitiveDeps } from "../../../../manager/community/transitive-
 import { downloadDepsForDangling } from "../../../../manager/community/download-and-reattach";
 import { installEnvelope } from "../../../../manager/import-export/install";
 
+
+/** Platform-correct save chord for the footer hint. */
+const saveChord = saveChordLabel();
 const props = withDefaults(
   defineProps<{
     module: ModuleEntry;
@@ -760,7 +764,7 @@ function onSpaClick(): void {
         Reset overrides
       </button>
       <span class="wp-cnm__hint">
-        <kbd>Esc</kbd> cancel · <kbd>⌘↵</kbd> save
+        <kbd>Esc</kbd> cancel · <kbd>{{ saveChord }}</kbd> save
       </span>
       <button
         v-if="canSaveToLibrary"

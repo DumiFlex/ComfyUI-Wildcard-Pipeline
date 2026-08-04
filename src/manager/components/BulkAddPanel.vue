@@ -12,7 +12,7 @@
  * commit. The host editor owns the actual mutation (addOption / addValue) so
  * snapshot/dirty tracking stays in one place.
  */
-import { computed, ref } from "vue";
+import { computed, ref, watch, onBeforeUnmount } from "vue";
 import Button from "./ui/Button.vue";
 import {
   parseBulkOptions,
@@ -35,9 +35,17 @@ const emit = defineEmits<{
   (e: "commit-options", payload: ParsedBulkOption[]): void;
   (e: "commit-values", payload: ParsedFixedValue[]): void;
   (e: "cancel"): void;
+  /** True while the box holds text that has not been added yet. The host uses
+   *  it to keep the page's own Save out of the way and to warn before a
+   *  navigation throws the draft away — users reach for the page's Save and
+   *  Cancel by mistake, because they are the larger, more familiar pair. */
+  (e: "update:pending", pending: boolean): void;
 }>();
 
 const text = ref("");
+
+watch(text, (v) => emit("update:pending", v.trim().length > 0), { immediate: true });
+onBeforeUnmount(() => emit("update:pending", false));
 
 const lowerValues = computed(() => new Set(props.existingValues.map((v) => v.toLowerCase())));
 const lowerTags = computed(() => new Set(props.existingTags.map((t) => t.toLowerCase())));
@@ -149,7 +157,7 @@ function cancel() {
 }
 .wpc-bulk-panel__input {
   width: 100%;
-  resize: vertical;
+  resize: vertical; overscroll-behavior: contain;
   font-family: var(--wp-font-mono, monospace);
   font-size: 12px;
 }

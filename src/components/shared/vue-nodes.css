@@ -1,0 +1,97 @@
+/* Wire-merge support for ComfyUI's Nodes 2.0 (Vue) renderer.
+ *
+ * The legacy renderer paints slots on the canvas, so merging wires is a
+ * paint-time trick: override `getInputPos` and every matched pin reports the
+ * first pin's position. Nodes 2.0 paints nothing — it renders ONE DOM row per
+ * `node.inputs` entry (`.lg-slot--input`, each holding a `.slot-dot`) and
+ * feeds those elements' measured rects to the layout store, which is what the
+ * link renderer draws to. `getInputPos` is never consulted for link
+ * endpoints, so the override is inert there: labels merge (they live on the
+ * data model Vue reads) while the dots stay fanned out.
+ *
+ * The host has exactly this feature internally — `NodeSlots.vue` takes a
+ * `unified` prop that grid-stacks every dot into one cell — but it is wired
+ * only to whole-node collapse, with no per-node opt-in. So we reproduce the
+ * effect on the rows we own.
+ *
+ * Mechanism: zero the merged rows' height. All merged rows then share one
+ * center line, their dots (which overflow the zero-height box) land on the
+ * same point, and the node body reclaims the vertical space — matching what
+ * the legacy `computeSize` patch does. Collapsing height rather than hiding
+ * the row matters: `useSlotElementTracking.getSlotElementRect` discards any
+ * slot whose measured rect is zero-area, so `display: none` would drop the
+ * link endpoint entirely instead of moving it.
+ *
+ * NOT wrapped in @layer wp-extension: these rules deliberately override host
+ * Tailwind utilities (`h-5` on the slot row), and layered author rules lose
+ * to unlayered ones regardless of specificity. `!important` is doing the same
+ * job for the same reason. Both selectors are still `.wp-`-prefixed at the
+ * top level, and the class is only ever applied to nodes we own. */
+
+.wp-wires-merged .lg-slot--input.wp-slot-merged {
+  height: 0 !important;
+  min-height: 0 !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  overflow: visible !important;
+}
+
+/* A zero-height row centers its dot on its own top edge, which is the BOTTOM
+ * edge of the row that was kept — half a row below that row's dot. Pull the
+ * first merged row up by half a row height so the whole stack lands on the
+ * kept row's centre line. Only the first: the rest have no height, so they
+ * inherit the corrected position by stacking on it. `--wp-merge-shift` is
+ * measured from the live row in `collapse-connections.ts` rather than
+ * hard-coded, since the host owns the row height. */
+.wp-wires-merged .lg-slot--input.wp-slot-merged-lead {
+  margin-top: calc(-1 * var(--wp-merge-shift, 9px)) !important;
+}
+
+/* The merged rows carry a blank placeholder label already, but a zero-height
+ * row would still let a stray descender paint over the row above. */
+.wp-wires-merged .lg-slot--input.wp-slot-merged > :not(:first-child) {
+  display: none !important;
+}
+
+/* Clearance under the merged pin. Zeroing the merged rows reclaims all their
+ * vertical space, which leaves the incoming wires running straight into the
+ * top edge of the widget body below. Reserve a little room back. Carried by
+ * the LAST merged row: they all sit at the same y, so only its bottom margin
+ * moves the content that follows. */
+.wp-wires-merged .lg-slot--input.wp-slot-merged-tail {
+  margin-bottom: var(--wp-merge-gap, 10px) !important;
+}
+
+/* Slot labels we print ourselves.
+ *
+ * Mutating `slot.label` is enough for the legacy renderer, which reads the
+ * slot objects at paint time, but Vue renders from its own VueNodeData
+ * snapshot and never sees the write — measured: model "inputs ×4", rendered
+ * "input_0". That breaks both directions, so the override is NOT scoped to
+ * `.wp-wires-merged`: collapsed, the unified label would never appear;
+ * expanded, the real names would never come back. The expand case is the one
+ * users hit across a renderer switch, where a legacy collapse serialized the
+ * placeholder labels into the workflow.
+ *
+ * `collapse-connections.ts` sets `--wp-slot-label` per row to whatever the
+ * model says, so this renders exactly what the host would if it could see it. */
+.wp-slot-label > :not(:first-child) {
+  display: none !important;
+}
+
+.wp-slot-label::after {
+  content: var(--wp-slot-label, "");
+  font-size: inherit;
+  color: inherit;
+  opacity: 0.85;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ...but never for a row that has been merged away. Merged rows keep the label
+ * override so their real names are ready the moment they expand, and they are
+ * zero-height and stacked on the kept row — so printing them too would pile
+ * "input_1", "input_2", "input_3" on top of the unified "inputs ×N". */
+.wp-slot-merged::after {
+  content: none !important;
+}

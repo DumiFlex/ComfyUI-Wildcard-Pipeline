@@ -232,7 +232,22 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // canvas within 10 bytes of the 453 ceiling; the +8 KB gives the remaining
 // workstreams D (library re-link UI) and E (nested-ref propagation) room in the
 // same approved feature set. Explicitly approved.
-const TOTAL_LIMIT = 461 * 1024;     // 461 KB
+// Bumped 461 -> 468 KB on 2026-07-30 for the QoL sweep (P0+P1). The bulk is UI
+// that had to grow: export/import row detail per entity kind, the category
+// IconPicker, the feedback modal, cross-bucket search, collapsible tag pools,
+// and finally `collectUpstreamProducers` + the var-chip producer card, which
+// tipped it 180 bytes over. Explicitly approved by the maintainer, who asked
+// for the budget to be raised as needed rather than features trimmed to fit.
+// Bumped 468 -> 490 KB on 2026-08-02 for the `@`/`$` autocomplete + sub-category
+// filter redesign. The popover rows carry structure now (icon, uuid, option /
+// axis / tag facts, and for `$` the producer line and override badge) instead
+// of one line of text, and the shared filter panel that follows adds the
+// axis-grouped palette with collapse + search, the live match count and the
+// zero-match / unknown-term states. Sized with headroom deliberately: the
+// previous bump left 179 bytes free, which meant every subsequent change had
+// to argue with the gate. Explicitly approved by the maintainer, who asked for
+// the budget to be raised as needed rather than features trimmed to fit.
+const TOTAL_LIMIT = 490 * 1024;     // 490 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

@@ -6,11 +6,14 @@ import Card from "../components/ui/Card.vue";
 import Icon, { ICON_SM } from "../components/ui/Icon.vue";
 import RelativeDate from "../components/RelativeDate.vue";
 import { api } from "../api/client";
-import type { BundleRow, ModuleRow, ModuleType } from "../api/types";
-import { catChipStyle } from "../utils/catChip";
+import type { BundleRow, CategoryRow, ModuleRow, ModuleType } from "../api/types";
 import { useCategoryStore } from "../stores/categoryStore";
+import CategoryChip from "../components/CategoryChip.vue";
 import { useRecentStore } from "../stores/recentStore";
 import { useModuleStore } from "../stores/moduleStore";
+import { useEngagementStore, measureSubstance } from "../stores/engagementStore";
+import { useReleaseCheck } from "../composables/useReleaseCheck";
+import StarPrompt from "../components/StarPrompt.vue";
 import { useBundleStore } from "../stores/bundleStore";
 
 /** Stat-tile + recent-row metadata. `type` is the ModuleType for module
@@ -43,6 +46,19 @@ const router = useRouter();
 const categoryStore = useCategoryStore();
 const recentStore = useRecentStore();
 const moduleStore = useModuleStore();
+const engagement = useEngagementStore();
+// Landing view, so this is where "they came back" gets recorded. Idempotent
+// within a calendar day.
+engagement.noteVisit();
+
+const release = useReleaseCheck();
+// Remember which version this user has already been running, so the NEXT
+// upgrade has something to compare against. Without a baseline
+// `hasUnseenRelease` is always false and the topbar's unread dot can never
+// light. Seeded here rather than in the topbar because the dashboard is the
+// landing view — the topbar also mounts on first paint, but this keeps the
+// one-time write next to `noteVisit`, which has the same lifecycle.
+engagement.bootstrapVersion(release.current);
 const bundleStore = useBundleStore();
 
 /** Max rows rendered per tab. The Dashboard list section has more vertical
@@ -216,13 +232,16 @@ function editRow(row: DashboardRow) {
   router.push(`/${meta.slug}/${row.id}/edit`);
 }
 
+/** Whole rows rather than a `{name, color}` projection — the projection had
+ *  to be widened the moment the chip learned about icons, and it saves
+ *  nothing over holding the row the store already has in memory. */
 const categoryById = computed(() => {
-  const map = new Map<string, { name: string; color: string | null }>();
-  for (const c of categoryStore.items) map.set(c.id, { name: c.name, color: c.color });
+  const map = new Map<string, CategoryRow>();
+  for (const c of categoryStore.items) map.set(c.id, c);
   return map;
 });
 
-function categoryFor(row: DashboardRow): { name: string; color: string | null } | undefined {
+function categoryFor(row: DashboardRow): CategoryRow | undefined {
   if (!row.category_id) return undefined;
   return categoryById.value.get(row.category_id);
 }
@@ -392,7 +411,14 @@ async function refresh() {
     refreshing.value = false;
   }
 }
-onMounted(refresh);
+onMounted(async () => {
+  await refresh();
+  // Only meaningful once the catalog is loaded: an existing user is recognised
+  // by already HAVING a real library the first time this store runs. Runs
+  // before noteVisit's day is counted against the threshold, and no-ops on
+  // every subsequent load.
+  engagement.creditIfEstablished(measureSubstance(moduleStore.catalog));
+});
 </script>
 
 <template>
@@ -597,11 +623,12 @@ onMounted(refresh);
             <Icon :name="row.icon" />
           </span>
           <span class="dashboard__row-name">{{ row.name }}</span>
-          <span
+          <CategoryChip
             v-if="categoryFor(row)"
-            class="wp-cat-chip"
-            :style="catChipStyle(categoryFor(row)!.color)"
-          >{{ categoryFor(row)!.name }}</span>
+            :name="categoryFor(row)!.name"
+            :color="categoryFor(row)!.color"
+            :icon="categoryFor(row)!.icon"
+          />
           <span class="wp-id">{{ row.id }}</span>
           <RelativeDate :value="row.updated_at" />
         </div>
@@ -614,6 +641,10 @@ onMounted(refresh);
         }}
       </p>
     </Card>
+
+    <!-- Below everything the user actually came here for. See StarPrompt for
+         why it is last rather than first. -->
+    <StarPrompt />
   </div>
 </template>
 

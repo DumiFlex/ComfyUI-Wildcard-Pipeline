@@ -21,6 +21,7 @@ function makeRouter(start = "/wildcards"): Router {
       { path: "/dashboard", name: "dashboard", component: { template: "<div/>" } },
       { path: "/wildcards", name: "wildcards", component: { template: "<div/>" } },
       { path: "/settings", name: "settings", component: { template: "<div/>" } },
+      { path: "/whats-new", name: "whats-new", component: { template: "<div/>" } },
     ],
   });
   r.push(start);
@@ -39,6 +40,12 @@ async function mountTopbar(start = "/wildcards") {
 
 beforeEach(() => {
   setActivePinia(createPinia());
+  // The update-pill test spies on `useReleaseCheck` and pins `current` to a
+  // fixed version. Module spies outlive the test that made them, so without
+  // this every later test silently runs against that stub — which is exactly
+  // how the what's-new dot appeared to misbehave when it was fine.
+  vi.restoreAllMocks();
+  localStorage.clear();
 });
 
 describe("AppTopbar.vue", () => {
@@ -124,6 +131,7 @@ describe("AppTopbar.vue", () => {
       releaseUrl: ref("https://x/r"),
       lastChecked: ref(null),
       checking: ref(false),
+      rateLimitedUntil: ref(null),
       checkNow: vi.fn(),
     } as ReturnType<typeof releaseCheck.useReleaseCheck>);
 
@@ -141,5 +149,45 @@ describe("AppTopbar.vue", () => {
     await wrap.find('[data-test="topbar-update-indicator"]').trigger("click");
     expect(wrap.find('[data-test="dlg-stub"]').exists()).toBe(true);
     expect(router.currentRoute.value.path).not.toBe("/dashboard");
+  });
+});
+
+/**
+ * The unread dot is the ONLY signal that a release happened — the card that
+ * used to say so is gone. If it fails to light, the notes are unreachable in
+ * practice; if it fails to clear, the button nags forever.
+ */
+describe("AppTopbar.vue — what's new", () => {
+  const version = (globalThis as unknown as { __APP_VERSION__: string }).__APP_VERSION__;
+
+  it("links to the what's new page", async () => {
+    const { wrap } = await mountTopbar();
+    const btn = wrap.find('[data-test="topbar-whats-new"]');
+    expect(btn.exists()).toBe(true);
+    expect(btn.attributes("href")).toContain("/whats-new");
+  });
+
+  it("shows no dot on a fresh install — nothing has changed yet", async () => {
+    localStorage.clear();
+    const { wrap } = await mountTopbar();
+    expect(wrap.find('[data-test="topbar-whats-new-dot"]').exists()).toBe(false);
+  });
+
+  it("lights the dot when the running version differs from the last one read", async () => {
+    localStorage.setItem(
+      "wp-engagement-v1",
+      JSON.stringify({ days: [], star: "pending", laterOn: null, seenVersion: "0.0.1" }),
+    );
+    const { wrap } = await mountTopbar();
+    expect(wrap.find('[data-test="topbar-whats-new-dot"]').exists()).toBe(true);
+  });
+
+  it("hides the dot once this version's notes have been read", async () => {
+    localStorage.setItem(
+      "wp-engagement-v1",
+      JSON.stringify({ days: [], star: "pending", laterOn: null, seenVersion: version }),
+    );
+    const { wrap } = await mountTopbar();
+    expect(wrap.find('[data-test="topbar-whats-new-dot"]').exists()).toBe(false);
   });
 });

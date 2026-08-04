@@ -180,6 +180,14 @@ interface WarningEntry {
  *  finalisation warnings (`constraint_never_applied` /
  *  `constraint_partial_reach`). */
 const WARNING_LABELS: Record<string, string> = {
+  // Nested-ref diagnostics. Both were emitted all along but had no label, so
+  // the panel showed the raw slug and the user was left to guess — which is
+  // how "my filtered nested ref is always empty" became a hunt rather than a
+  // read. The engine now packs the pool it searched, that pool's size and its
+  // available tags into `detail`, so the row explains itself.
+  ref_subcategory_empty_pool: "Filter matched no options",
+  unknown_ref: "Nested reference not found",
+  ref_out_of_surface: "Nested reference not allowed here",
   constraint_never_applied: "Constraint never applied",
   constraint_partial_reach: "Constraint partial reach",
   constraint_source_missing: "Constraint source missing",

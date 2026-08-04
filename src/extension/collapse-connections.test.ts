@@ -587,3 +587,193 @@ describe("collapse-connections — uses LiteGraph.NODE_SLOT_HEIGHT when present"
     expect(node.computeSize!()[1]).toBe(64 - 32);
   });
 });
+
+describe("collapse-connections — Nodes 2.0 (Vue renderer) wire merge", () => {
+  // Under the Vue renderer the getInputPos override is inert: slots are DOM
+  // rows and the link renderer draws to their measured rects, not to the
+  // reported pin position. Measured against ComfyUI 0.28.0: four merged wires
+  // all reported the same getInputPos while the DOM dots stayed 18px apart.
+  // Vue also renders slot names from its own snapshot, so `slot.label` writes
+  // never reach the screen in either direction. These tests pin both.
+  const match = (s: MockSlot) => /^input_/.test(s.name ?? "");
+
+  function mountNodeEl(id: string, slotCount: number): HTMLElement {
+    const el = document.createElement("div");
+    el.setAttribute("data-node-id", id);
+    for (let i = 0; i < slotCount; i++) {
+      const row = document.createElement("div");
+      row.className = "lg-slot lg-slot--input";
+      // The dot, then the label wrapper — mirrors InputSlot.vue's child order.
+      row.appendChild(document.createElement("span"));
+      row.appendChild(document.createElement("div"));
+      el.appendChild(row);
+    }
+    document.body.appendChild(el);
+    return el;
+  }
+
+  function labelOf(el: HTMLElement, rowIdx: number): string {
+    const rows = el.querySelectorAll<HTMLElement>(".lg-slot--input");
+    return rows[rowIdx]?.style.getPropertyValue("--wp-slot-label") ?? "";
+  }
+
+  beforeEach(() => {
+    (globalThis as { LiteGraph?: Record<string, unknown> }).LiteGraph = {
+      ...((globalThis as { LiteGraph?: Record<string, unknown> }).LiteGraph ?? {}),
+      vueNodesMode: true,
+    };
+  });
+
+  afterEach(() => {
+    const lg = (globalThis as { LiteGraph?: Record<string, unknown> }).LiteGraph;
+    if (lg) delete lg.vueNodesMode;
+    document.body.innerHTML = "";
+  });
+
+  it("tags the merged rows and keeps the first matched row as the landing pin", () => {
+    const node = makeNode({
+      inputs: [{ name: "upstream" }, { name: "input_0" }, { name: "input_1" }, { name: "input_2" }],
+    });
+    (node as unknown as { id: string }).id = "7";
+    const el = mountNodeEl("7", 4);
+    attachCollapsableConnections(node as never, { matchInput: match as never });
+
+    setCollapsed(node as never, true);
+    const rows = [...el.querySelectorAll(".lg-slot--input")];
+    // upstream is unmatched and keeps its own pin and its own label.
+    expect(rows[0].classList.contains("wp-slot-merged")).toBe(false);
+    expect(rows[0].classList.contains("wp-slot-label")).toBe(false);
+    // input_0 is the landing pin: labelled by us, but not merged away.
+    expect(rows[1].classList.contains("wp-slot-merged")).toBe(false);
+    expect(rows[1].classList.contains("wp-slot-label")).toBe(true);
+    // input_1/input_2 collapse onto it. Only the first carries the upward
+    // shift; only the last carries the clearance below.
+    expect(rows[2].classList.contains("wp-slot-merged")).toBe(true);
+    expect(rows[2].classList.contains("wp-slot-merged-lead")).toBe(true);
+    expect(rows[2].classList.contains("wp-slot-merged-tail")).toBe(false);
+    expect(rows[3].classList.contains("wp-slot-merged")).toBe(true);
+    expect(rows[3].classList.contains("wp-slot-merged-lead")).toBe(false);
+    expect(rows[3].classList.contains("wp-slot-merged-tail")).toBe(true);
+    expect(el.classList.contains("wp-wires-merged")).toBe(true);
+  });
+
+  it("clears the merge markers on expand", () => {
+    const node = makeNode({
+      inputs: [{ name: "upstream" }, { name: "input_0" }, { name: "input_1" }],
+    });
+    (node as unknown as { id: string }).id = "8";
+    const el = mountNodeEl("8", 3);
+    attachCollapsableConnections(node as never, { matchInput: match as never });
+
+    setCollapsed(node as never, true);
+    setCollapsed(node as never, false);
+    expect(el.classList.contains("wp-wires-merged")).toBe(false);
+    expect(el.querySelectorAll(".wp-slot-merged").length).toBe(0);
+    expect(el.querySelectorAll(".wp-slot-merged-lead").length).toBe(0);
+    expect(el.querySelectorAll(".wp-slot-merged-tail").length).toBe(0);
+  });
+
+  it("publishes the unified label per row — Vue never sees the slot.label write", () => {
+    const node = makeNode({
+      inputs: [{ name: "upstream" }, { name: "input_0" }, { name: "input_1" }],
+    });
+    (node as unknown as { id: string }).id = "9";
+    const el = mountNodeEl("9", 3);
+    attachCollapsableConnections(node as never, {
+      matchInput: match as never,
+      collapsedInputLabel: () => "inputs ×2",
+    });
+
+    setCollapsed(node as never, true);
+    expect(labelOf(el, 1)).toBe('"inputs ×2"');
+    // upstream is untouched — it never gets a label override.
+    expect(labelOf(el, 0)).toBe("");
+  });
+
+  it("restores the real names on expand, not the serialized placeholder", () => {
+    // The renderer-switch case: a collapse under the legacy renderer bakes the
+    // placeholder labels into the workflow, so after reloading under Vue the
+    // snapshot holds "inputs ×2" / " ". Expanding repairs the model, and the
+    // published labels must follow — otherwise the screen keeps the
+    // placeholders forever.
+    const node = makeNode({
+      inputs: [
+        { name: "upstream" },
+        { name: "input_0", label: "inputs ×2" },
+        { name: "input_1", label: " " },
+      ],
+    });
+    (node as unknown as { id: string }).id = "12";
+    node.properties.collapse_connections = true;
+    const el = mountNodeEl("12", 3);
+    attachCollapsableConnections(node as never, {
+      matchInput: match as never,
+      collapsedInputLabel: () => "inputs ×2",
+      // The injector resolves expanded labels from durable data rather than
+      // the in-memory stash, which is dead after a reload.
+      expandedLabel: () => undefined,
+    });
+
+    setCollapsed(node as never, false);
+    expect(labelOf(el, 1)).toBe('"input_0"');
+    expect(labelOf(el, 2)).toBe('"input_1"');
+  });
+
+  it("keeps a lone matched pin's own name — nothing merges onto it", () => {
+    const node = makeNode({ inputs: [{ name: "upstream" }, { name: "input_0" }] });
+    (node as unknown as { id: string }).id = "10";
+    const el = mountNodeEl("10", 2);
+    attachCollapsableConnections(node as never, {
+      matchInput: match as never,
+      collapsedInputLabel: () => "inputs",
+    });
+
+    setCollapsed(node as never, true);
+    expect(el.querySelectorAll(".wp-slot-merged").length).toBe(0);
+    expect(labelOf(el, 1)).toBe('"inputs"');
+  });
+
+  it("re-applies after Vue replaces the node element", async () => {
+    // Vue swaps the node's element on re-render — focusing a node does it. An
+    // observer bound to the old element is then watching a detached tree, and
+    // the wires silently fanned back out while the button still read
+    // "collapsed". A registry keyed on the node, driven by one observer on a
+    // stable root, survives the swap.
+    const node = makeNode({
+      inputs: [{ name: "upstream" }, { name: "input_0" }, { name: "input_1" }],
+    });
+    (node as unknown as { id: string }).id = "13";
+    const first = mountNodeEl("13", 3);
+    attachCollapsableConnections(node as never, { matchInput: match as never });
+    setCollapsed(node as never, true);
+    expect(first.classList.contains("wp-wires-merged")).toBe(true);
+
+    // Swap in a pristine element carrying none of our markers.
+    first.remove();
+    const second = mountNodeEl("13", 3);
+    expect(second.classList.contains("wp-wires-merged")).toBe(false);
+
+    // The observer is childList-driven; give it a mutation and a frame.
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+
+    expect(second.classList.contains("wp-wires-merged")).toBe(true);
+    expect(second.querySelectorAll(".wp-slot-merged").length).toBe(1);
+  });
+
+  it("does not touch the DOM under the legacy renderer", () => {
+    const lg = (globalThis as { LiteGraph?: Record<string, unknown> }).LiteGraph;
+    if (lg) lg.vueNodesMode = false;
+    const node = makeNode({
+      inputs: [{ name: "upstream" }, { name: "input_0" }, { name: "input_1" }],
+    });
+    (node as unknown as { id: string }).id = "11";
+    const el = mountNodeEl("11", 3);
+    attachCollapsableConnections(node as never, { matchInput: match as never });
+
+    setCollapsed(node as never, true);
+    expect(el.classList.contains("wp-wires-merged")).toBe(false);
+    expect(el.querySelectorAll(".wp-slot-merged").length).toBe(0);
+    expect(el.querySelectorAll(".wp-slot-label").length).toBe(0);
+  });
+});

@@ -35,7 +35,12 @@ import { useRecentStore } from "../stores/recentStore";
 import { toIdentifier } from "../utils/slug";
 import { validateVariableName } from "../validation/names";
 import { buildUuidToName } from "../utils/wildcardSyntax";
-import { collectLibraryVarHints, type VarHint } from "../utils/library-suggestions";
+import {
+  buildLibraryVarProducers,
+  collectLibraryVarHints,
+  type VarHint,
+} from "../utils/library-suggestions";
+import type { VarProducerLike } from "../components/RefChip.vue";
 import { appendSnapshot, readHistory } from "../utils/history";
 import { useCascadeStore } from "../cascade/cascade-store";
 import { useCascadeApply } from "../cascade/useCascadeApply";
@@ -293,6 +298,24 @@ const varHints = computed<VarHint[]>(
 );
 
 const varSuggestions = computed<string[]>(() => varHints.value.map((h) => h.label));
+
+/** `$var` → the library modules that bind it, for the template's chip hover
+ *  cards. Names the first and reports how many others share the name; the
+ *  library has no execution order, so it can't say which one would win. */
+const varProducers = computed<Map<string, VarProducerLike>>(() => {
+  const out = new Map<string, VarProducerLike>();
+  for (const [name, refs] of buildLibraryVarProducers(moduleStore, props.id)) {
+    const first = refs[0];
+    out.set(name, {
+      kind: first.kind,
+      moduleName: first.name,
+      moduleId: first.id,
+      shadowed: refs.length - 1,
+      siblingLabel: "library module",
+    });
+  }
+  return out;
+});
 // Surfaces `@{uuid}` chips with human var-names in template + preview.
 // Combine surface ignores `@` refs at resolve time, but stray UUIDs
 // pasted in still benefit from the labelled chip.
@@ -537,29 +560,17 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
     />
 
     <Card title="Template & Output">
+      <!-- Output variable BEFORE the template, each full-width. It used to sit
+           in a 220px column beside the template, which squeezed the template
+           (the field that actually needs room to grow) and read as a footnote
+           to it rather than as the thing this combine produces. -->
       <div class="cb-grid">
-        <Field
-          label="Template"
-          hint="Reference variables with $name. Use $$ for a literal $. Use {a|b|c} for inline choices."
-        >
-          <RichTextInput
-            v-model="template"
-            :module-id="props.id"
-            :var-suggestions="varSuggestions"
-            :uuid-to-name="uuidToName"
-            :multiline="true"
-            :rows="3"
-            :placeholder="PLACEHOLDER"
-            data-test="cb-template"
-            aria-label="Combine template"
-          />
-        </Field>
         <Field
           label="Output variable"
           hint="Downstream modules read this name."
           :error="outputVarError"
         >
-          <div class="wp-input-group">
+          <div class="wp-input-group cb-output-var">
             <span class="wp-input-group__addon">$</span>
             <input
               class="wp-input"
@@ -569,6 +580,23 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
               @input="onOutputVarInput(($event.target as HTMLInputElement).value)"
             />
           </div>
+        </Field>
+        <Field
+          label="Template"
+          hint="Reference variables with $name. Use $$ for a literal $. Use {a|b|c} for inline choices."
+        >
+          <RichTextInput
+            v-model="template"
+            :module-id="props.id"
+            :var-suggestions="varSuggestions"
+            :var-producers="varProducers"
+            :uuid-to-name="uuidToName"
+            :multiline="true"
+            :rows="3"
+            :placeholder="PLACEHOLDER"
+            data-test="cb-template"
+            aria-label="Combine template"
+          />
         </Field>
       </div>
       <div class="cb-detected">
@@ -649,11 +677,16 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
   font-size: var(--wp-text-xs);
   color: var(--wp-text-muted);
 }
+/* Stacked, not side-by-side: the template grows with its content and needs
+ * the full width; the output variable is a short identifier that never did. */
 .cb-grid {
-  display: grid;
-  grid-template-columns: 1fr 220px;
+  display: flex;
+  flex-direction: column;
   gap: var(--wp-space-5);
 }
+/* The name is an identifier, not prose — cap it so it doesn't stretch to the
+ * card's full width now that it owns a whole row. */
+.cb-output-var { max-width: 320px; }
 .cb-detected {
   margin-top: var(--wp-space-5);
 }

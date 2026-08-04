@@ -20,7 +20,7 @@
  * there is no draft buffer, mirroring the lightweight per-row UX of
  * the inline row controls. Save = close.
  */
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import type { InjectorRow } from "../../widgets/_shared";
 
 const props = withDefaults(
@@ -200,7 +200,7 @@ function insertSlotRef(slotName: string): void {
   } else {
     next = current + insertion;
   }
-  showInsertMenu.value = false;
+  closeInsertMenu();
   draftTemplate.value = next;
 }
 
@@ -270,8 +270,87 @@ const previewTokens = computed<PreviewToken[]>(() => {
 const refCount = computed(() => previewTokens.value.filter((t) => t.kind === "ref").length);
 const unknownRefCount = computed(() => previewTokens.value.filter((t) => t.kind === "ref-unknown").length);
 
+// --- Insert menu placement + dismissal ---------------------------------
+//
+// The menu used to be `position: absolute` inside the modal, so it was
+// CLIPPED by the modal's scroll container — a menu opened near the bottom
+// simply disappeared below the fold. It's now teleported to <body> with
+// `position: fixed` viewport coords (the same strategy RichTextInput's
+// autocomplete popover uses) and flips above the button when there's no
+// room below.
+const menuBtnEl = ref<HTMLButtonElement | null>(null);
+const menuEl = ref<HTMLDivElement | null>(null);
+const menuPos = ref<{ top: number; left: number; flipped: boolean }>({
+  top: 0, left: 0, flipped: false,
+});
+const MENU_MAX_H = 220; // keep in sync with `max-height` in _modal-template-ctrls.css
+const MENU_MIN_W = 200;
+
+function positionInsertMenu(): void {
+  const btn = menuBtnEl.value;
+  if (!btn) return;
+  const rect = btn.getBoundingClientRect();
+  const margin = 8;
+  const spaceBelow = window.innerHeight - rect.bottom - margin;
+  const flipped = spaceBelow < MENU_MAX_H && rect.top > spaceBelow;
+  // Right-align to the button (the menu is wider than it), then clamp so a
+  // button near the left edge can't push the menu off-screen.
+  const left = Math.max(margin, Math.min(rect.right - MENU_MIN_W, window.innerWidth - MENU_MIN_W - margin));
+  menuPos.value = {
+    top: flipped ? rect.top - 4 : rect.bottom + 4,
+    left,
+    flipped,
+  };
+}
+
+/** Close when the click lands outside BOTH the menu and its trigger button.
+ *  Bound on `mousedown` (not `click`) so it fires before the menu item's own
+ *  click handler can be lost to a re-render, and excludes the button so the
+ *  toggle doesn't immediately re-open what it just closed. */
+function onDocMouseDown(ev: MouseEvent): void {
+  const target = ev.target as Node | null;
+  if (!target) return;
+  if (menuEl.value?.contains(target)) return;
+  if (menuBtnEl.value?.contains(target)) return;
+  closeInsertMenu();
+}
+
+function openInsertMenu(): void {
+  showInsertMenu.value = true;
+  void nextTick(() => {
+    positionInsertMenu();
+    document.addEventListener("mousedown", onDocMouseDown, true);
+    window.addEventListener("scroll", positionInsertMenu, true);
+    window.addEventListener("resize", positionInsertMenu);
+  });
+}
+
+function closeInsertMenu(): void {
+  if (!showInsertMenu.value) return;
+  showInsertMenu.value = false;
+  document.removeEventListener("mousedown", onDocMouseDown, true);
+  window.removeEventListener("scroll", positionInsertMenu, true);
+  window.removeEventListener("resize", positionInsertMenu);
+}
+
 function toggleInsertMenu(): void {
-  showInsertMenu.value = !showInsertMenu.value;
+  if (showInsertMenu.value) closeInsertMenu();
+  else openInsertMenu();
+}
+
+onBeforeUnmount(closeInsertMenu);
+
+/** Mirror the host's resolved theme onto the body-teleported menu. The
+ *  `--wp-*` light/dark variants hang off `.wp-theme-light` / `.wp-theme-dark`,
+ *  which the teleported node escapes — without this the menu paints with the
+ *  default dark palette inside a light-themed canvas. Same helper shape as
+ *  RichTextInput's `teleportThemeClass`. */
+function menuThemeClass(): string {
+  const el = menuBtnEl.value;
+  if (!el || typeof el.closest !== "function") return "";
+  const themed = el.closest(".wp-theme-light, .wp-theme-dark");
+  if (!themed) return "";
+  return themed.classList.contains("wp-theme-light") ? "wp-theme-light" : "wp-theme-dark";
 }
 
 // Esc cancels (drops draft), Cmd/Ctrl+Enter saves. Mirrors the
@@ -281,6 +360,12 @@ function toggleInsertMenu(): void {
 function onKeydown(ev: KeyboardEvent): void {
   if (ev.key === "Escape") {
     ev.preventDefault();
+    // Escape dismisses the insert menu first — losing the whole draft
+    // because a dropdown happened to be open is a nasty surprise.
+    if (showInsertMenu.value) {
+      closeInsertMenu();
+      return;
+    }
     onCancel();
     return;
   }
@@ -342,38 +427,44 @@ function onKeydown(ev: KeyboardEvent): void {
           <span class="ibm__section-label">Template</span>
           <span class="ibm__section-hint">{{ isGeneral ? "$ref names · $$ for literal $ · composed after socket rows" : "$slot_name refs · $$ for literal $ · empty = pass-through" }}</span>
           <div class="ibm__head-actions">
-            <div class="ibm__menu-wrap">
+            <div class="wp-ibm__menu-wrap">
               <button
                 v-if="insertOptions.length > 0"
+                ref="menuBtnEl"
                 type="button"
-                class="ibm__menu-btn"
+                class="wp-ibm__menu-btn"
                 data-test="ibm-insert-slot"
                 :title="`Insert a reference (${insertOptions.length} available)`"
                 aria-label="Insert reference"
                 :aria-expanded="showInsertMenu"
                 @click="toggleInsertMenu"
               ><i class="pi pi-plus" aria-hidden="true" /> {{ isGeneral ? "$ref" : "$slot" }}</button>
-              <div
-                v-if="showInsertMenu"
-                class="ibm__menu"
-                data-test="ibm-slot-menu"
-                role="listbox"
-              >
-                <button
-                  v-for="opt in insertOptions"
-                  :key="opt.slotName"
-                  type="button"
-                  class="ibm__menu-item"
-                  :data-test="`ibm-slot-item-${opt.slotName}`"
-                  role="option"
-                  :aria-selected="false"
-                  @click="insertSlotRef(opt.slotName)"
+              <Teleport to="body">
+                <div
+                  v-if="showInsertMenu"
+                  ref="menuEl"
+                  class="wp-ibm__menu"
+                  :class="[menuThemeClass(), { 'wp-ibm__menu--up': menuPos.flipped }]"
+                  :style="{ top: menuPos.top + 'px', left: menuPos.left + 'px' }"
+                  data-test="ibm-slot-menu"
+                  role="listbox"
                 >
-                  <span class="ibm__menu-name">${{ opt.slotName }}</span>
-                  <span v-if="opt.label !== opt.slotName" class="ibm__menu-label">{{ opt.label }}</span>
-                  <span v-if="opt.typeKey" class="ibm__menu-type">{{ opt.typeKey }}</span>
-                </button>
-              </div>
+                  <button
+                    v-for="opt in insertOptions"
+                    :key="opt.slotName"
+                    type="button"
+                    class="wp-ibm__menu-item"
+                    :data-test="`ibm-slot-item-${opt.slotName}`"
+                    role="option"
+                    :aria-selected="false"
+                    @click="insertSlotRef(opt.slotName)"
+                  >
+                    <span class="ibm__menu-name">${{ opt.slotName }}</span>
+                    <span v-if="opt.label !== opt.slotName" class="ibm__menu-label">{{ opt.label }}</span>
+                    <span v-if="opt.typeKey" class="ibm__menu-type">{{ opt.typeKey }}</span>
+                  </button>
+                </div>
+              </Teleport>
             </div>
             <button
               v-if="templateValue"
@@ -642,7 +733,7 @@ function onKeydown(ev: KeyboardEvent): void {
   font: 11px/1.5 var(--wp-font-mono);
   color: var(--wp-text);
   min-height: 56px;
-  resize: vertical;
+  resize: vertical; overscroll-behavior: contain;
 }
 .ibm__template:focus { outline: none; border-color: var(--wp-accent); }
 .ibm__template--set {

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import type { VarProducerLike } from "@/manager/components/RefChip.vue";
+import { saveChordLabel } from "../../../shared/platform-keys";
 import type { ModuleEntry } from "../../../../widgets/_shared";
 import type { PairingBadge } from "../../../../extension/constraint-pairs";
 import IdentitySection from "./sections/IdentitySection.vue";
@@ -7,6 +9,9 @@ import PoolSection from "./sections/PoolSection.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
 import InstanceIdChip from "../InstanceIdChip.vue";
 
+
+/** Platform-correct save chord for the footer hint. */
+const saveChord = saveChordLabel();
 const props = withDefaults(
   defineProps<{
     module: ModuleEntry;
@@ -17,6 +22,9 @@ const props = withDefaults(
     /** Names produced upstream of this Context node. Drives the
      *  IdentitySection collision warning. */
     upstreamVars?: string[];
+    /** `$var` → who writes it upstream. Feeds the option chips' hover cards
+     *  so a var names its producer rather than "binds at runtime". */
+    upstreamProducers?: Record<string, VarProducerLike>;
     /** Names produced by other modules in the SAME Context node. */
     siblingVars?: string[];
     /** Per-option pair badges when this wildcard is a constraint carrier
@@ -27,7 +35,15 @@ const props = withDefaults(
      *  structural controls are disabled in frame mode. */
     frameActive?: boolean;
   }>(),
-  { isDrifted: false, isModified: false, upstreamVars: () => [], siblingVars: () => [], viaOptionPairs: () => new Map() },
+  {
+    isDrifted: false, isModified: false, upstreamVars: () => [],
+    upstreamProducers: () => ({}), siblingVars: () => [],
+    viaOptionPairs: () => new Map(),
+  },
+);
+
+const varProducerMap = computed(
+  () => new Map(Object.entries(props.upstreamProducers ?? {})),
 );
 
 const emit = defineEmits<{
@@ -106,7 +122,12 @@ function onSpaClick(): void {
       :frame-active="frameActive"
       @update="onUpdate"
     />
-    <PoolSection :module="module" :via-option-pairs="viaOptionPairs" @update="onUpdate" />
+    <PoolSection
+      :module="module"
+      :via-option-pairs="viaOptionPairs"
+      :var-producers="varProducerMap"
+      @update="onUpdate"
+    />
     <div class="wp-wcm__dock">
     <RuntimeSection :module="module" :frame-active="frameActive" @update="onUpdate" />
 
@@ -134,7 +155,7 @@ function onSpaClick(): void {
         Reset overrides
       </button>
       <span class="wp-wcm__hint">
-        <kbd>Esc</kbd> cancel · <kbd>⌘↵</kbd> save
+        <kbd>Esc</kbd> cancel · <kbd>{{ saveChord }}</kbd> save
       </span>
       <button
         v-if="canSaveToLibrary"

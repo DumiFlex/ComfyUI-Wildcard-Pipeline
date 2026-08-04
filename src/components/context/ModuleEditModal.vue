@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount } from "vue";
+import { ref, computed, watch } from "vue";
 
 import ModalShell from "../shared/ModalShell.vue";
 import type { ModuleEntry, ModuleEntryKind } from "../../widgets/_shared";
@@ -18,6 +18,7 @@ import CombineInstanceModal from "./editors/combine/CombineInstanceModal.vue";
 import DerivationInstanceModal from "./editors/derivation/DerivationInstanceModal.vue";
 import ConstraintInstanceModal from "./editors/constraint/ConstraintInstanceModal.vue";
 import type { ChainModule, PairingBadge } from "../../extension/constraint-pairs";
+import type { VarProducerLike } from "../../manager/components/RefChip.vue";
 
 
 const props = defineProps<{
@@ -25,6 +26,9 @@ const props = defineProps<{
   module: ModuleEntry | null;
   /** Variable names defined upstream — used for autocomplete + validity checks. */
   upstreamVars?: string[];
+  /** `$var` → its producing module + node. Forwarded to the per-kind modals so
+   *  var chips can name where a value comes from. */
+  upstreamProducers?: Record<string, VarProducerLike>;
   /** Resolved upstream `$name → value` map. Combine modal uses this
    *  to render a live preview pane with vars substituted. */
   upstreamResolved?: Record<string, ResolvedValue>;
@@ -76,15 +80,14 @@ watch([() => props.visible, () => props.module], () => {
     // editing the draft is mutated locally; props.module identity is stable, so
     // this does not clobber in-progress edits.)
     draft.value = JSON.parse(JSON.stringify(props.module));
-    window.addEventListener("keydown", onKeydown);
   } else {
-    window.removeEventListener("keydown", onKeydown);
     draft.value = null;
   }
 }, { immediate: true });
 
-onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
-
+// Keys arrive from ModalShell, not from window: the modal shield stops
+// inside-modal keys at the overlay so they cannot reach ComfyUI's global
+// shortcuts, which means a window listener here would never fire.
 function onKeydown(ev: KeyboardEvent) {
   if (!props.visible) return;
   if ((ev.ctrlKey || ev.metaKey) && ev.key === "Enter") {
@@ -398,7 +401,7 @@ function cancel() {
 </script>
 
 <template>
-  <ModalShell :visible="visible" @close="cancel">
+  <ModalShell :visible="visible" @close="cancel" @keydown="onKeydown">
     <!-- Column so the frame banner stacks ABOVE the per-kind modal card
          (each per-kind modal renders a plain card; ModalShell's wrapper is
          a centered flex ROW, so a bare banner sibling would land beside the
@@ -424,6 +427,7 @@ function cancel() {
       :module="draft"
       :is-modified="instanceModified"
       :upstream-vars="upstreamVars"
+      :upstream-producers="upstreamProducers"
       :sibling-vars="siblingVars"
       :via-option-pairs="viaOptionPairs"
       :frame-active="currentFrame != null"
@@ -455,6 +459,7 @@ function cancel() {
       :module="draft"
       :is-modified="instanceModified"
       :upstream-vars="upstreamVars"
+      :upstream-producers="upstreamProducers"
       :upstream-resolved="upstreamResolved"
       :sibling-vars="siblingVars"
       :frame-active="currentFrame != null"
@@ -477,6 +482,7 @@ function cancel() {
       :module="draft"
       :is-modified="instanceModified"
       :upstream-vars="upstreamVars"
+      :upstream-producers="upstreamProducers"
       :sibling-vars="siblingVars"
       :via-option-pairs="viaOptionPairs"
       :frame-active="currentFrame != null"

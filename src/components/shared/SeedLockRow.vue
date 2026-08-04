@@ -137,11 +137,20 @@ function bump(d: 1 | -1) {
 .toggle--prev { color: var(--wp-text-dim, var(--wp-text3)); }
 .toggle:disabled { opacity: .4; cursor: not-allowed; }
 .toggle:disabled:hover { border-color: var(--wp-border); color: var(--wp-text-dim, var(--wp-text3)); }
-.derived { display: inline-flex; align-items: center; gap: 8px; }
-.derived__val { font: 11px var(--wp-font-mono, monospace); color: var(--wp-text4, #888); }
+/* Same shrink rule as the locked column, so a 15-digit derived seed clips
+ * instead of shoving the DERIVED tag past the panel edge. */
+.derived { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.derived__val { font: 11px var(--wp-font-mono, monospace); color: var(--wp-text4, #888); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.derived__tag { flex-shrink: 0; }
 .derived__tag { font: 600 8px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .07em; color: var(--wp-text-dim, var(--wp-text3)); border: 1px solid var(--wp-border); border-radius: 3px; padding: 1px 5px; }
-.seed-controls { display: inline-flex; align-items: center; gap: 6px; }
-.seed-input-wrap { display: inline-flex; align-items: stretch; background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); border-radius: 3px; height: 24px; width: 178px; overflow: hidden; }
+/* The value column has to SHRINK. A locked row carries three fixed-width
+ * toggles plus a 178px input and a roll button; on the 486px modal that
+ * overran the panel, clipping the input at the right edge and pushing the
+ * roll button out of view entirely. `min-width: 0` lets the flex item shrink
+ * below its content, and the input wrap now treats 178px as a max rather than
+ * a fixed size. */
+.seed-controls { display: inline-flex; align-items: center; gap: 6px; min-width: 0; flex: 0 1 auto; }
+.seed-input-wrap { display: inline-flex; align-items: stretch; background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); border-radius: 3px; height: 24px; flex: 1 1 auto; min-width: 88px; max-width: 178px; overflow: hidden; }
 .seed-input-wrap:focus-within { border-color: var(--wp-accent); }
 .seed-input { flex: 1; background: transparent; border: 0; padding: 0 7px; font: 11px var(--wp-font-mono, monospace); color: var(--wp-text); text-align: right; min-width: 0; -moz-appearance: textfield; }
 .seed-input::-webkit-outer-spin-button, .seed-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
@@ -150,6 +159,6 @@ function bump(d: 1 | -1) {
 .seed-spin-btn { flex: 1; display: flex; align-items: center; justify-content: center; background: transparent; border: 0; padding: 0; color: var(--wp-text-dim, var(--wp-text3)); cursor: pointer; line-height: 0; }
 .seed-spin-btn + .seed-spin-btn { border-top: 1px solid var(--wp-border); }
 .seed-spin-btn:hover { color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,.12); }
-.seed-roll { background: transparent; border: 0; color: var(--wp-text-dim, var(--wp-text3)); cursor: pointer; padding: 2px 4px; display: flex; }
+.seed-roll { background: transparent; border: 0; color: var(--wp-text-dim, var(--wp-text3)); cursor: pointer; padding: 2px 4px; display: flex; flex-shrink: 0; }
 .seed-roll:hover { color: var(--wp-accent-text, var(--wp-text)); }
 </style>

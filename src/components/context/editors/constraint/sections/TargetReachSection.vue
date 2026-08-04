@@ -260,6 +260,16 @@ function togglePick(entry: PickEntry): void {
   emit("update:modelValue", { mode: "pick", picks: next });
 }
 
+/** Pointer clicks anywhere on a pick row toggle it. Clicks that started
+ *  inside the WpCheck (or any future interactive descendant) are ignored —
+ *  the control already emitted its own toggle, and handling it twice would
+ *  cancel the change out. */
+function onPickRowClick(ev: MouseEvent, entry: PickEntry): void {
+  const target = ev.target as HTMLElement | null;
+  if (target?.closest?.("button, input, a, label, .wp-check")) return;
+  togglePick(entry);
+}
+
 // ── Consequence hint ────────────────────────────────────────────
 const reachCount = computed(() => pickRows.value.length);
 const hint = computed<string>(() => {
@@ -338,14 +348,18 @@ const hint = computed<string>(() => {
         class="rh-pick__empty"
         data-test="reach-pick-empty"
       >No reachable target instances — use first / next / all.</div>
-      <!-- WpCheck is the interactive control (own role/keyboard + aria-
-           label); the row is presentational so the checkbox is the single
-           focus/click target — no redundant row-level handler. -->
+      <!-- WpCheck remains the single FOCUS target (it owns role + keyboard
+           + aria-label), so keyboard and screen-reader users get exactly one
+           stop per row. The row additionally takes POINTER clicks: hitting a
+           14px checkbox for every pick was needless precision work. The two
+           don't double-toggle because `onPickRowClick` bails on any click
+           that originated inside an interactive descendant. -->
       <div
         v-for="row in pickRows"
         :key="row.key"
         class="rh-pick__row"
         :data-test="`reach-pick-${row.key}`"
+        @click="onPickRowClick($event, row.entry)"
       >
         <WpCheck
           :model-value="isPicked(row.entry)"

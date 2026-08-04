@@ -391,6 +391,7 @@ def ref_option_pool(tok: Token, ctx: ResolveContext) -> list[dict]:
     filter_expr = tok.meta.get("filter_expr")
     exclude_null = bool(tok.meta.get("exclude_null"))
     if (isinstance(filter_expr, str) and filter_expr.strip()) or exclude_null:
+        pool_total = len(options)
         ast = _parse_subcat(filter_expr) if isinstance(filter_expr, str) else None
         options = [
             o for o in options
@@ -404,6 +405,41 @@ def ref_option_pool(tok: Token, ctx: ResolveContext) -> list[dict]:
             )
         ]
         if not options:
+            # "Matched no options" on its own is true and useless — it cannot
+            # tell a wrong filter from a right filter aimed at a stale pool.
+            # Report WHICH pool was searched, how big it was, and what tags it
+            # actually offers, so the panel answers the question instead of
+            # restating the symptom.
+            available = sorted({
+                t
+                for o in (payload_dict.get("options", []) if isinstance(payload_dict, dict)
+                          else module.get("options", []))
+                if isinstance(o, dict)
+                for t in (o.get("sub_categories") or [])
+                if isinstance(t, str)
+            })
+            pool_origin = module.get("pool_origin")
+            library_count = module.get("library_option_count")
+            detail = {
+                "uuid": uuid,
+                "filter_expr": filter_expr,
+                "exclude_null": exclude_null,
+                "pool_total": pool_total,
+                "available_sub_categories": available,
+            }
+            if pool_origin:
+                detail["pool_origin"] = pool_origin
+            if isinstance(library_count, int):
+                detail["library_option_count"] = library_count
+            where = (
+                "this node's copy" if pool_origin == "node"
+                else "the library" if pool_origin == "library"
+                else "the pool"
+            )
+            drift = (
+                f"; the library now has {library_count}"
+                if isinstance(library_count, int) else ""
+            )
             _push_warning(
                 ctx,
                 type="ref_subcategory_empty_pool",
@@ -412,14 +448,12 @@ def ref_option_pool(tok: Token, ctx: ResolveContext) -> list[dict]:
                 source_field="",
                 position=tok.start,
                 token_index=None,
-                detail={
-                    "uuid": uuid,
-                    "filter_expr": filter_expr,
-                    "exclude_null": exclude_null,
-                },
+                detail=detail,
                 message=(
                     f"@{{{uuid}:{filter_expr or ''}"
-                    f"{'!null' if exclude_null else ''}}} matched no options"
+                    f"{'!null' if exclude_null else ''}}} matched no options — "
+                    f"searched {where} ({pool_total} option"
+                    f"{'' if pool_total == 1 else 's'}){drift}"
                 ),
             )
             return []

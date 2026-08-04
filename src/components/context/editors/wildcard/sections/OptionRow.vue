@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import {
   effectiveWeight,
   isEnabled,
@@ -11,7 +11,9 @@ import { splitRefFilter, tokenizeRich, type RichToken } from "../../../../../wid
 import { cacheVersion, ensure, lookup } from "../../../../../extension/preview-resolver";
 import type { PairingBadge } from "../../../../../extension/constraint-pairs";
 import { matches, parse, readsAs } from "@/manager/parsing/subcatFilter";
+import { formatProbability } from "@/manager/utils/percent";
 import PairBadge from "../../../PairBadge.vue";
+import RefChip, { type VarProducerLike } from "@/manager/components/RefChip.vue";
 import { axisHueAt } from "../../../../shared/axis-color";
 
 interface OptionFull extends WildcardOption {
@@ -37,8 +39,14 @@ const props = withDefaults(
      *  true the null option is excluded from the pool, so its row renders
      *  disabled/greyed + non-toggleable. Real option rows are unaffected. */
     multiActive?: boolean;
+    /** `$var` → who writes it upstream, so a var chip's hover card names the
+     *  producer instead of falling back to "binds at runtime". */
+    varProducers?: ReadonlyMap<string, VarProducerLike>;
   }>(),
-  { pairBadges: () => [], tagGroups: () => ({}), multiActive: false },
+  {
+    pairBadges: () => [], tagGroups: () => ({}), multiActive: false,
+    varProducers: () => new Map(),
+  },
 );
 
 const emit = defineEmits<{
@@ -109,6 +117,12 @@ const tokens = computed<RichToken[]>(() => {
   return out;
 });
 
+/** RefChip renders its own `@` prefix, so hand it the bare label. */
+function refChipName(tok: RichToken): string {
+  const label = refDisplay(tok.meta?.uuid, tok.meta?.name, tok.raw);
+  return label.startsWith("@") ? label.slice(1) : label;
+}
+
 function refDisplay(
   uuid: string | undefined,
   cachedName: string | undefined,
@@ -152,7 +166,7 @@ function refIsUnresolved(uuid: string | undefined): boolean {
  *  peeling `!null`, so rejoin + `splitRefFilter` here rather than printing
  *  the glued `sub_categories` inline. Memoized per token object so the
  *  several template bindings don't each re-parse. */
-interface RefFilterInfo { hasExpr: boolean; excludeNull: boolean; isFiltered: boolean; title: string }
+interface RefFilterInfo { hasExpr: boolean; excludeNull: boolean; isFiltered: boolean; title: string; expr: string }
 const _refFilterMemo = new WeakMap<RichToken, RefFilterInfo>();
 function refFilter(tok: RichToken): RefFilterInfo {
   const cached = _refFilterMemo.get(tok);
@@ -179,6 +193,7 @@ function refFilter(tok: RichToken): RefFilterInfo {
   if (reads) parts.push(reads);
   if (excludeNull) parts.push("null excluded");
   const info: RefFilterInfo = {
+    expr,
     hasExpr: expr.length > 0,
     excludeNull,
     isFiltered: expr.length > 0 || excludeNull,
@@ -324,9 +339,34 @@ function bumpWeight(direction: 1 | -1): void {
   emitWeight(next);
 }
 
+/** Percentage label, delegated to the SPA's `formatProbability` so both
+ *  editors agree digit-for-digit. The canvas modal used to round to a whole
+ *  number, so every option below 0.5% read as a flat "0%" — with 30+ options
+ *  that's most of the pool, and a legitimately weighted entry looked
+ *  impossible. `probability` is a 0–1 fraction here; the helper takes 0–100. */
 function fmtPct(p: number): string {
-  return `${Math.round(p * 100)}%`;
+  return formatProbability(p * 100);
 }
+
+// ---------- CATEGORY chips ----------
+//
+// A well-tagged option carries 8+ sub-categories (hue + temperature + tone +
+// saturation + several suitability flags). Wrapped inside the 96px column
+// that stacked into eight lines and made ONE option row taller than the
+// modal's whole option list is worth — the pool became unreadable.
+//
+// Show the first few and collapse the rest behind a `+N` pill the user can
+// expand per row. The tags stay fully reachable; they just stop dominating.
+const CAT_CHIP_LIMIT = 3;
+const catExpanded = ref(false);
+
+const allTags = computed<string[]>(() =>
+  props.option.is_null ? [] : (props.option.sub_categories ?? []),
+);
+const visibleTags = computed<string[]>(() =>
+  catExpanded.value ? allTags.value : allTags.value.slice(0, CAT_CHIP_LIMIT),
+);
+const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.length);
 </script>
 
 <template>
@@ -367,7 +407,7 @@ function fmtPct(p: number): string {
       </svg>
     </span>
     <span class="opt__name" data-test="opt-name" :class="{ 'opt__name--null': option.is_null }">
-      <span class="opt__name-main">
+      <span class="opt__name-main" :title="option.value || undefined">
       <span
         v-if="option.is_null"
         class="opt__null-chip"
@@ -377,39 +417,32 @@ function fmtPct(p: number): string {
         <span>null</span>
       </span>
       <template v-for="(tok, idx) in tokens" v-else :key="idx">
-        <span
+        <!-- The real RefChip, not a look-alike. These chips used to be
+             hand-rolled spans that only MIRRORED RefChip's styling, so they
+             were the one place in the editor with no hover card — you could
+             not see which library entry a ref pointed at, or who writes a
+             `$var`. Using the component gets the same card as everywhere
+             else, for free. -->
+        <RefChip
           v-if="tok.kind === 'ref'"
-          class="opt__tok opt__tok--ref"
-          :class="{
-            'opt__tok--filtered': refFilter(tok).isFiltered,
-            'opt__tok--unresolved': refIsUnresolved(tok.meta?.uuid),
-          }"
+          :kind="'ref'"
+          :name="refChipName(tok)"
+          :uuid="tok.meta?.uuid ?? ''"
+          :resolved="!refIsUnresolved(tok.meta?.uuid)"
+          :expr="refFilter(tok).expr"
+          :exclude-null="refFilter(tok).excludeNull"
           :data-uuid="tok.meta?.uuid"
-          :title="refIsUnresolved(tok.meta?.uuid)
-            ? `Reference ${tok.meta?.uuid} not in library`
-            : (refFilter(tok).title || undefined)"
-        >
-          <span class="opt__tok-icon" aria-hidden="true">{{ refIsUnresolved(tok.meta?.uuid) ? '?' : '✦' }}</span>
-          <span class="opt__tok-label">{{ refDisplay(tok.meta?.uuid, tok.meta?.name, tok.raw) }}</span>
-          <!-- Compact filter mark, matching SPA RefChip: funnel = expression
-               set (full expr in hover title), ban = null option excluded.
-               The expression is never printed inline (it can be long). -->
-          <span
-            v-if="refFilter(tok).isFiltered"
-            class="opt__tok-filter"
-            aria-hidden="true"
-          >
-            <i v-if="refFilter(tok).hasExpr" class="pi pi-filter opt__tok-funnel"></i>
-            <i v-if="refFilter(tok).excludeNull" class="pi pi-ban opt__tok-nonull"></i>
-          </span>
-        </span>
-        <span
+          class="opt__tok opt__tok--chip"
+        />
+        <RefChip
           v-else-if="tok.kind === 'var'"
-          class="opt__tok opt__tok--var"
-        >
-          <span class="opt__tok-icon" aria-hidden="true">⌘</span>
-          <span class="opt__tok-label">{{ tok.raw }}</span>
-        </span>
+          :kind="'var'"
+          :name="tok.raw.replace(/^\$/, '')"
+          :resolved="true"
+          :producer="varProducers?.get(tok.raw.replace(/^\$/, ''))"
+          graph-aware
+          class="opt__tok opt__tok--chip"
+        />
         <span
           v-else-if="tok.kind === 'dp-brace'"
           class="opt__tok opt__tok--brace"
@@ -481,12 +514,23 @@ function fmtPct(p: number): string {
     </span>
     <span class="opt__cat">
       <span
-        v-for="tag in (option.is_null ? [] : (option.sub_categories ?? []))"
+        v-for="tag in visibleTags"
         :key="tag"
         class="opt__cat-chip"
         :data-test="`opt-cat-${tag}`"
         :style="chipStyle(tag)"
       >{{ tag }}</span>
+      <button
+        v-if="hiddenTagCount > 0 || catExpanded"
+        type="button"
+        class="opt__cat-more"
+        :data-test="`opt-cat-more-${option.id}`"
+        :aria-expanded="catExpanded"
+        :aria-label="catExpanded
+          ? `Collapse tags for ${option.value}`
+          : `Show ${hiddenTagCount} more tags for ${option.value}`"
+        @click.stop="catExpanded = !catExpanded"
+      >{{ catExpanded ? "−" : `+${hiddenTagCount}` }}</button>
     </span>
   </div>
 </template>
@@ -553,10 +597,21 @@ function fmtPct(p: number): string {
   color: var(--wp-text);
   line-height: 1.55;
 }
+/* An option's value is a PREVIEW here, not the editor for it — the row is a
+   list entry with a checkbox, a weight and a probability beside it. Left
+   unbounded, one paragraph-long option grew taller than the rest of the pool
+   put together and pushed every other option off the panel.
+   `-webkit-line-clamp` needs `overflow: hidden` to do anything at all, so the
+   two must stay together; `title` carries the full value on hover. */
 .opt__name-main {
   flex: 1;
   min-width: 0;
   word-break: break-word;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
 }
 .opt__pair-badges {
   flex: 0 0 auto;
@@ -810,5 +865,24 @@ function fmtPct(p: number): string {
 }
 .opt--off .opt__cat-chip {
   opacity: 0.5;
+}
+/* `+N` / `−` disclosure for the hidden tags. Styled as a neutral chip so it
+ * reads as part of the tag run rather than as a row action. */
+.opt__cat-more {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border-radius: 999px;
+  font: 8px var(--wp-font-sans);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--wp-text-dim, var(--wp-text3));
+  border: 1px dashed color-mix(in srgb, var(--wp-text3) 45%, transparent);
+  background: transparent;
+}
+.opt__cat-more:hover {
+  color: var(--wp-text);
+  border-color: var(--wp-accent);
 }
 </style>

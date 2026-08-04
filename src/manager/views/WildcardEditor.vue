@@ -24,6 +24,7 @@ import CommunityRowActions from "../components/CommunityRowActions.vue";
 import Input from "../components/ui/Input.vue";
 import RichTextInput from "../components/RichTextInput.vue";
 import BulkAddPanel from "../components/BulkAddPanel.vue";
+import TagPickerMenu from "../components/TagPickerMenu.vue";
 import SelectionToolbar from "../components/SelectionToolbar.vue";
 import Checkbox from "../components/ui/Checkbox.vue";
 import type { ParsedBulkOption } from "../utils/bulkParse";
@@ -37,6 +38,15 @@ import DraftBanner from "../components/DraftBanner.vue";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
+import { useUiStore } from "../stores/uiStore";
+import {
+  filterIsActive,
+  moveSelected,
+  nudge,
+  optionMatches,
+  visibleTagsFor,
+  type MoveTarget,
+} from "../utils/option-list-ops";
 import { useRecentStore } from "../stores/recentStore";
 import { toIdentifier } from "../utils/slug";
 import { validateSubcatName, validateRefGrammarName, isValidVariableName } from "@/manager/validation/names";
@@ -64,6 +74,7 @@ const router = useRouter();
 const route = useRoute();
 const moduleStore = useModuleStore();
 const categoryStore = useCategoryStore();
+const ui = useUiStore();
 const toast = useToast();
 const recent = useRecentStore();
 const { resolveReturnTo } = useReturnTo();
@@ -187,8 +198,23 @@ function snapshot(): string {
   });
 }
 
+/**
+ * Bulk-add has un-added text sitting in its box.
+ *
+ * Reported repeatedly: users hit the PAGE's Save or Cancel instead of the
+ * panel's own "Add options" / Cancel, because the page pair is larger and in
+ * the familiar place — and the typed batch was silently thrown away. Two
+ * guards, no new dialog for the common case:
+ *   - Save is greyed while the panel is open, with a tooltip saying why, so
+ *     the only Save-shaped thing that responds is the panel's own commit.
+ *   - The un-added text counts as unsaved work, so the existing route guard
+ *     already covers Cancel, the back link and any other navigation. Only the
+ *     wording changes.
+ */
+const bulkPending = ref(false);
+
 const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
-  () => snapshot() !== baseline.value,
+  () => bulkPending.value || snapshot() !== baseline.value,
 );
 
 const draft = useEditorDraft({
@@ -271,6 +297,23 @@ interface SubcatGroup {
   /** True for the synthetic ungrouped box (no rename/move-target). */
   isOther: boolean;
 }
+
+/** Sub-Categories section disclosure. Starts COLLAPSED: on a well-tagged
+ *  wildcard the axes and their pills fill the screen and push the options
+ *  table — the thing being edited — out of view. The collapsed header carries a
+ *  tag/axis count plus an accented `+`, so it still advertises that there is
+ *  something in there to open. */
+const subcatOpen = ref(false);
+
+/** What the collapsed section reports, so shutting it doesn't hide whether the
+ *  wildcard is tagged at all. */
+const subcatSummary = computed<string>(() => {
+  const tags = subCategories.value.length;
+  if (tags === 0) return "No sub-categories yet.";
+  const axes = Object.keys(tagGroups.value).length;
+  const t = `${tags} tag${tags === 1 ? "" : "s"}`;
+  return axes > 0 ? `${t} across ${axes} ax${axes === 1 ? "is" : "es"}` : t;
+});
 
 const subcatGroups = computed<SubcatGroup[]>(() => {
   const groups: SubcatGroup[] = [];
@@ -358,6 +401,10 @@ function closeAllMenus(): void {
   closeMenus();
   cancelAddTag();
   openOptTagPicker.value = null;
+  // The options filter's tag menu is teleported like the per-option one, so it
+  // needs the same dismissal — without this it stayed open until its own
+  // button was clicked again.
+  optTagMenuOpen.value = false;
 }
 
 /** Outside-click: any pointer landing outside an open menu / its trigger
@@ -367,7 +414,11 @@ function onDocPointerDown(e: MouseEvent): void {
   const t = e.target as HTMLElement | null;
   if (
     t?.closest(
-      ".subcat-pill, .subcat-menu, .subcat-addtag, .subcat-addtag__open, .opt-tags",
+      // `.opt-tags__picker` is listed separately: the menu is teleported to
+      // <body>, so it is no longer inside `.opt-tags` and would otherwise be
+      // dismissed by its own clicks.
+      ".subcat-pill, .subcat-menu, .subcat-addtag, .subcat-addtag__open, .opt-tags,"
+      + " .opt-tags__picker, .wc-optfilter__tagbtn",
     )
   ) {
     return;
@@ -521,14 +572,150 @@ function onGroupDrop(axis: string): void {
  *  registry boxes but used to render the grouped checkbox sections. */
 const optionTagGroups = computed<SubcatGroup[]>(() => subcatGroups.value);
 
+/**
+ * Axes the user has folded shut in the sub-categories editor, by axis name.
+ *
+ * A wildcard with five axes and thirty tags fills the whole panel, and while
+ * you are working on one axis the other four are just distance between you and
+ * the options table. Per-axis rather than one global toggle so folding is a
+ * way to focus, not an all-or-nothing switch.
+ *
+ * Session state, deliberately not persisted: it describes what you are doing
+ * right now, and a fold remembered from last week would hide tags from
+ * someone who has never seen them.
+ */
+const collapsedAxes = ref<Set<string>>(new Set());
+
+function toggleAxisCollapsed(axis: string): void {
+  const next = new Set(collapsedAxes.value);
+  if (next.has(axis)) next.delete(axis);
+  else next.add(axis);
+  collapsedAxes.value = next;
+}
+
+
+
+/**
+ * Viewport coordinates for the teleported tag menu.
+ *
+ * The menu used to be `position: absolute` inside the table cell, which put it
+ * inside `.wp-editor__body` — an `overflow: auto` scroller. Anything extending
+ * past that container's edge was simply cut off, which is why the menu lost its
+ * bottom rows near the foot of the page. Teleporting to <body> and positioning
+ * from the trigger's rect is what every other popover here already does.
+ */
+const optTagAnchor = ref({ top: 0, left: 0, width: 0 });
+/** Height reserved when deciding whether to flip above the trigger. Matches
+ *  the menu's own cap (240px list + search + padding). */
+const OPT_TAG_MENU_PX = 300;
+
 function toggleOptTagPicker(optionId: string, ev?: MouseEvent): void {
   const opening = openOptTagPicker.value !== optionId;
   openOptTagPicker.value = opening ? optionId : null;
-  if (opening) pickerDropUp.value = shouldDropUp(ev, 280);
+  if (!opening) return;
+  pickerDropUp.value = shouldDropUp(ev, OPT_TAG_MENU_PX);
+  optTagTriggerEl = (ev?.currentTarget as HTMLElement | null) ?? null;
+  const r = optTagTriggerEl?.getBoundingClientRect();
+  if (!r) return;
+  // Fixed coordinates, so no scroll offset is added — and the menu is
+  // re-anchored on every open rather than tracked, since the editor body
+  // scrolls underneath it and a stale anchor is worse than a closed menu.
+  optTagAnchor.value = {
+    top: pickerDropUp.value ? r.top - 4 : r.bottom + 4,
+    left: r.left,
+    width: r.width,
+  };
 }
 
-function optionHasTag(o: WildcardOption, tag: string): boolean {
-  return (o.sub_categories ?? []).includes(tag);
+/** The button the open menu belongs to, so it can be re-measured on scroll. */
+let optTagTriggerEl: HTMLElement | null = null;
+
+/**
+ * Keep the menu attached to its trigger while the editor scrolls under it.
+ *
+ * A fixed-position popover does not move with the page, so without this it
+ * would sit stranded beside unrelated rows. Closing instead was the first
+ * attempt and is wrong: the browser scrolls a partly-visible button into view
+ * as part of clicking it, so opening a menu near either edge closed it in the
+ * same gesture.
+ *
+ * Once the trigger has left the viewport entirely there is nothing to anchor
+ * to, and closing IS right.
+ */
+function reanchorOptTagPicker(ev?: Event): void {
+  // A scroll that happens INSIDE a teleported menu is the user reading its own
+  // list — with the wheel or by dragging its scrollbar — and must not dismiss
+  // it. Only movement of the surface UNDER the menu is a reason to react.
+  const from = ev?.target as HTMLElement | null;
+  if (from?.closest?.(".opt-tags__picker")) return;
+  // Re-measure rather than dismiss. Closing on any layout change meant the
+  // menu vanished the moment the list behind it changed height — filtering to
+  // zero results shortens the page, which fires a scroll, which closed the
+  // very menu you were using to filter.
+  if (optTagMenuOpen.value) {
+    const r = optFilterTriggerEl?.getBoundingClientRect();
+    if (!r || r.bottom < 0 || r.top > window.innerHeight) optTagMenuOpen.value = false;
+    else positionFilterMenu();
+  }
+  if (openOptTagPicker.value === null || !optTagTriggerEl) return;
+  const r = optTagTriggerEl.getBoundingClientRect();
+  if (r.bottom < 0 || r.top > window.innerHeight) {
+    openOptTagPicker.value = null;
+    return;
+  }
+  pickerDropUp.value = window.innerHeight - r.bottom < OPT_TAG_MENU_PX;
+  optTagAnchor.value = {
+    top: pickerDropUp.value ? r.top - 4 : r.bottom + 4,
+    left: r.left,
+    width: r.width,
+  };
+}
+
+
+/** How many assigned tags a row shows before collapsing the rest behind `+N`.
+ *  A fully tagged option carries 8+ (hue + temperature + tone + saturation +
+ *  suitability flags); rendering them all made one row taller than the whole
+ *  rest of the table. Matches the canvas OptionRow's cap. */
+const OPT_TAG_LIMIT = 4;
+const expandedOptTags = ref<Set<string>>(new Set());
+
+function toggleOptTagsExpanded(optionId: string): void {
+  const next = new Set(expandedOptTags.value);
+  if (next.has(optionId)) next.delete(optionId);
+  else next.add(optionId);
+  expandedOptTags.value = next;
+}
+
+/**
+ * Which tags a row shows, and what the `+N` pill has to admit.
+ *
+ * Filtering by a tag that happens to sit in the folded remainder produced a row
+ * with no visible reason for being there — the evidence was behind the very
+ * pill saying "there is more". Matched tags are promoted into the visible slots
+ * instead. Tags are a set, so their order carries no meaning and promoting one
+ * costs nothing; auto-expanding the row would reflow every match at once,
+ * which is a lot of movement for a small clarification.
+ */
+function optionTagView(o: WildcardOption) {
+  return visibleTagsFor(
+    o.sub_categories ?? [],
+    matchedTagSet.value,
+    OPT_TAG_LIMIT,
+    expandedOptTags.value.has(o.id),
+  );
+}
+
+function visibleOptionTags(o: WildcardOption): string[] {
+  return optionTagView(o).visible;
+}
+
+function hiddenOptionTagCount(o: WildcardOption): number {
+  return optionTagView(o).hiddenCount;
+}
+
+/** True when a FOLDED tag satisfies the filter, so the pill can say so. */
+function hiddenTagsMatch(o: WildcardOption): boolean {
+  return optionTagView(o).hiddenHasMatch;
 }
 
 /** Toggle a tag's membership on an option. Preserves registry order so
@@ -575,15 +762,23 @@ function normalizeTagGroups(
   return out;
 }
 
-/** Build the `payload.tag_groups` to persist: keep only members still in
- *  the registry, drop axes that end up empty, and return `null` when
- *  nothing is grouped so the payload omits the key entirely. */
+/** Build the `payload.tag_groups` to persist: keep only members still in the
+ *  registry, and return `null` when nothing is left so the payload omits the
+ *  key entirely.
+ *
+ *  An axis that ends up empty is dropped unless the user has asked to keep
+ *  empties — see `uiStore.keepEmptyTagGroups`. Dropping was unconditional,
+ *  which meant a group created and not yet filled vanished on save; that is
+ *  right for a box made by accident and wrong for one made on purpose, and
+ *  only the user knows which it was. An empty axis persists as `{axis: []}`,
+ *  a shape the engine's validator already accepts. */
 function serializeTagGroups(): Record<string, string[]> | null {
   const reg = new Set(subCategories.value);
+  const keepEmpty = ui.keepEmptyTagGroups;
   const out: Record<string, string[]> = {};
   for (const [axis, members] of Object.entries(tagGroups.value)) {
     const kept = members.filter((m) => reg.has(m));
-    if (kept.length > 0) out[axis] = kept;
+    if (kept.length > 0 || keepEmpty) out[axis] = kept;
   }
   return Object.keys(out).length > 0 ? out : null;
 }
@@ -591,12 +786,18 @@ function serializeTagGroups(): Record<string, string[]> | null {
 onUnmounted(() => {
   document.removeEventListener("click", onDocPointerDown);
   document.removeEventListener("keydown", onDocKeydown);
+  window.removeEventListener("scroll", reanchorOptTagPicker, true);
+  window.removeEventListener("resize", reanchorOptTagPicker);
 });
 
 onMounted(async () => {
   // Outside-click + Escape dismissal for all transient menus (bug #3).
   document.addEventListener("click", onDocPointerDown);
   document.addEventListener("keydown", onDocKeydown);
+  // Capture, so a scroll in ANY nested scroller reaches this — scroll events
+  // do not bubble, and the editor body is the one that actually moves.
+  window.addEventListener("scroll", reanchorOptTagPicker, true);
+  window.addEventListener("resize", reanchorOptTagPicker);
   await Promise.all([categoryStore.fetchAll(), moduleStore.fetchCatalog()]);
   if (props.id) {
     try {
@@ -931,13 +1132,160 @@ function addOption() {
  * All mutations go through the same `options` / `subCategories` refs so
  * snapshot()/dirty tracking stays correct. */
 const bulkMode = ref(false);
+/* ── Reordering ─────────────────────────────────────────────────────── */
+
+/**
+ * Armed state for "Move here": the selection is chosen, the landing point is
+ * not. While armed, the boundary between any two unselected rows is clickable
+ * and nothing else on the row responds, so a stray click cannot edit a weight
+ * instead of placing the block.
+ */
+const moveArmed = ref(false);
+
+/** Index of the row being dragged, or null. */
+const dragFrom = ref<number | null>(null);
+/** Index whose top edge the drop line is currently showing on. */
+const dragOver = ref<number | null>(null);
+
+function onOptDragStart(i: number, ev: DragEvent): void {
+  // Never while filtered: a drop between two visible rows says nothing about
+  // the hidden rows between them, so there is no honest position to compute.
+  if (optionFilterActive.value) { ev.preventDefault(); return; }
+  dragFrom.value = i;
+  ev.dataTransfer?.setData("text/plain", String(i));
+  if (ev.dataTransfer) ev.dataTransfer.effectAllowed = "move";
+}
+
+function onOptDragEnd(): void {
+  dragFrom.value = null;
+  dragOver.value = null;
+}
+
+function onOptDragOver(i: number, ev: DragEvent): void {
+  if (dragFrom.value === null) return;
+  ev.preventDefault();
+  dragOver.value = i;
+}
+
+function onOptDrop(i: number): void {
+  const from = dragFrom.value;
+  onOptDragEnd();
+  if (from === null || from === i) return;
+  const row = options.value[from];
+  if (!row) return;
+  const target = options.value[i];
+  options.value = target
+    ? moveSelected(options.value, new Set([row.id]), { to: "before", id: target.id })
+    : moveSelected(options.value, new Set([row.id]), { to: "bottom" });
+}
+
+function moveSelectedTo(target: MoveTarget): void {
+  const ids = new Set(selectedIds.value);
+  const before = options.value;
+  const next = moveSelected(before, ids, target);
+  moveArmed.value = false;
+  if (next.length === before.length && next.every((o, i) => o === before[i])) return;
+  options.value = next;
+  // A scattered selection collapses into one contiguous block, which is the
+  // only coherent answer but still a surprise the first time — so it is
+  // stated rather than left to be discovered.
+  const n = ids.size;
+  const where = target.to === "top" ? "to the top"
+    : target.to === "bottom" ? "to the bottom"
+      : "into place";
+  bulkNote.value = `Moved ${n} option${n === 1 ? "" : "s"} ${where}.`;
+}
+
+/** One-step keyboard move. The only reordering that stays usable at 130 rows,
+ *  where a drag turns into an auto-scroll fight. */
+function nudgeOption(id: string, dir: -1 | 1): void {
+  options.value = nudge(options.value, id, dir);
+}
+
+/* ── Options search ────────────────────────────────────────────────── */
+
+/**
+ * Text + tag filter over the options list.
+ *
+ * A wildcard here carries 130+ options; before this the only way to reach one
+ * was to scroll and read. The filter narrows the VIEW only — nothing is
+ * removed, and the empty state says so, because an empty table in a list you
+ * can also delete rows from is an alarming thing to be shown.
+ */
+const optQuery = ref("");
+const optTagFilter = ref<string[]>([]);
+const optTagMenuOpen = ref(false);
+/** Viewport coordinates for the teleported filter menu. */
+const optFilterAnchor = ref({ top: 0, left: 0 });
+/** True when the filter menu should grow upward instead. */
+const optFilterDropUp = ref(false);
+
+/** The filter button, kept so the menu can be re-measured against it. */
+let optFilterTriggerEl: HTMLElement | null = null;
+
+function positionFilterMenu(): void {
+  const r = optFilterTriggerEl?.getBoundingClientRect();
+  if (!r) return;
+  // Prefer below, but flip when there is meaningfully more room above — near
+  // the foot of the page a downward menu has nowhere to go, and capping its
+  // height there would leave a 140px sliver.
+  const below = window.innerHeight - r.bottom;
+  const above = r.top;
+  optFilterDropUp.value = below < 260 && above > below;
+  optFilterAnchor.value = {
+    top: optFilterDropUp.value ? r.top - 4 : r.bottom + 4,
+    left: r.left,
+  };
+}
+
+function toggleOptTagMenu(ev: MouseEvent): void {
+  const opening = !optTagMenuOpen.value;
+  optTagMenuOpen.value = opening;
+  if (!opening) return;
+  optFilterTriggerEl = (ev.currentTarget as HTMLElement | null) ?? null;
+  positionFilterMenu();
+}
+
+const optionFilter = computed(() => ({
+  query: optQuery.value,
+  tags: optTagFilter.value,
+}));
+const optionFilterActive = computed(() => filterIsActive(optionFilter.value));
+
+/** Rows to render, each keeping its ORIGINAL index. Every row action —
+ *  `removeOption(i)`, the `wc-opt-row-${i}` hooks — addresses the option by its
+ *  position in `options`, so filtering must not renumber them. */
+const visibleOptionRows = computed<{ o: WildcardOption; i: number }[]>(() => {
+  const pairs = options.value.map((o, i) => ({ o, i }));
+  if (!optionFilterActive.value) return pairs;
+  return pairs.filter(({ o }) => optionMatches(o, optionFilter.value));
+});
+
+/** Tags the filter is asking for, as a set — drives chip promotion below. */
+const matchedTagSet = computed(() => new Set(optTagFilter.value));
+
+function toggleOptTagFilter(tag: string): void {
+  const next = new Set(optTagFilter.value);
+  if (next.has(tag)) next.delete(tag);
+  else next.add(tag);
+  optTagFilter.value = subCategories.value.filter((t) => next.has(t));
+}
+
+function clearOptionFilter(): void {
+  optQuery.value = "";
+  optTagFilter.value = [];
+}
+
 const bulkAddOpen = ref(false);
 const selectedIds = ref<Set<string>>(new Set());
 const bulkNote = ref("");
 
 /** Options eligible for bulk selection — the null option is excluded since
  *  its weight + sub-categories are meaningless. */
-const selectableOptions = computed(() => options.value.filter((o) => !o.is_null));
+/** Every row can be selected, the null option included: selection drives
+ *  moves, weight and delete, all of which it takes part in. Tag actions skip
+ *  it separately — see `taggableSelection`. */
+const selectableOptions = computed(() => options.value);
 const selectedCount = computed(() => selectedIds.value.size);
 const allSelected = computed(
   () =>
@@ -1023,6 +1371,23 @@ function ensureSubcat(name: string): boolean {
   return true;
 }
 
+/**
+ * Bulk tag actions skip the null option.
+ *
+ * The engine refuses a null option that carries any: "null option must have no
+ * sub_categories" (wildcard_handler.py). Its participation in the pool is
+ * governed solely by `exclude_null`, so a tag on it could not change anything
+ * even if it were allowed. Bulk edit was writing them anyway — invisibly,
+ * since the row renders a dash instead of chips — and the save would have been
+ * rejected server-side.
+ *
+ * The row stays selectable, because selection also drives moves and delete,
+ * which it can take part in.
+ */
+function taggableSelection(): WildcardOption[] {
+  return options.value.filter((o) => selectedIds.value.has(o.id) && !o.is_null);
+}
+
 function applyTagToSelected(tag: string): void {
   bulkNote.value = "";
   if (!ensureSubcat(tag)) {
@@ -1030,7 +1395,7 @@ function applyTagToSelected(tag: string): void {
     return;
   }
   const t = tag.trim();
-  for (const o of selectedOptionList()) {
+  for (const o of taggableSelection()) {
     const current = new Set(o.sub_categories ?? []);
     current.add(t);
     // Re-derive in registry order so chips stay stably sorted (mirrors toggleOptionTag).
@@ -1039,7 +1404,7 @@ function applyTagToSelected(tag: string): void {
 }
 function removeTagFromSelected(tag: string): void {
   bulkNote.value = "";
-  for (const o of selectedOptionList()) {
+  for (const o of taggableSelection()) {
     o.sub_categories = (o.sub_categories ?? []).filter((s) => s !== tag);
   }
 }
@@ -1075,9 +1440,33 @@ function deleteSelected(): void {
 /** Commit bulk-added options from the paste panel: register any new tags
  *  (auto-created in Ungrouped), then append one option per parsed line with
  *  its tags in registry order. */
+/**
+ * A row the user has not written anything into yet.
+ *
+ * A new wildcard opens with two blank options so the table is not an empty
+ * void. Bulk add appended past them, so a first batch left two blanks sitting
+ * above everything that was just added — which then fail validation on save
+ * (an option's value must be a non-empty string). Untouched blanks are
+ * consumed by the incoming batch instead: they were scaffolding, not content.
+ *
+ * A blank the user tagged or re-weighted is NOT untouched — they were working
+ * on it — so only the fully default row qualifies.
+ */
+function isUntouchedBlank(o: WildcardOption): boolean {
+  return !o.is_null
+    && (o.value ?? "").trim() === ""
+    && (o.sub_categories ?? []).length === 0
+    && (o.weight === 1 || o.weight === undefined);
+}
+
 function commitBulkAddOptions(parsed: ParsedBulkOption[]): void {
   bulkNote.value = "";
   let skippedTags = 0;
+  // Drop the scaffolding rows first; anything the user actually touched stays.
+  const blanks = options.value.filter(isUntouchedBlank).length;
+  if (blanks > 0 && parsed.length > 0) {
+    options.value = options.value.filter((o) => !isUntouchedBlank(o));
+  }
   for (const p of parsed) {
     const tagSet = new Set<string>();
     for (const tag of p.tags) {
@@ -1126,14 +1515,6 @@ function addNullOption(): void {
 /** Move the null option (if any) to index 0. Called from the save
  *  path so serialised payloads always have null first regardless of
  *  whatever drag-sort the user did mid-edit. */
-function hoistNullFirst<T extends { is_null?: boolean }>(list: T[]): T[] {
-  const idx = list.findIndex((o) => o.is_null === true);
-  if (idx <= 0) return list;
-  const out = [...list];
-  const [n] = out.splice(idx, 1);
-  out.unshift(n);
-  return out;
-}
 
 async function removeOption(idx: number): Promise<void> {
   const opt = options.value[idx];
@@ -1197,11 +1578,10 @@ async function save() {
   setSaveState("saving");
   saving.value = true;
   try {
-    // Re-hoist any null option to index 0 before persisting. Drag-sort
-    // is allowed to land it anywhere during editing; the serialised
-    // payload always pins the null option first.
-    const sortedOptions = hoistNullFirst(options.value);
-    if (sortedOptions !== options.value) options.value = sortedOptions;
+    // The null option keeps whatever position the user gave it. The engine
+    // locates it by the `is_null` flag, never by index, so pinning it to 0 on
+    // save only served to undo a reorder the user had just performed.
+    const sortedOptions = options.value;
     // Serialise tag_groups, dropping empty axes (a "+ Group" box the user
     // created but never filled) + members no longer in the registry. Omit
     // the key entirely when nothing is grouped, keeping legacy payloads
@@ -1332,6 +1712,8 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
 
 <template>
   <EditorFrame
+    :save-disabled="bulkAddOpen"
+    save-disabled-reason="Finish or cancel the bulk add first — use its own Add / Cancel buttons"
     :title="isEdit ? 'Edit wildcard' : 'New wildcard'"
     back-route="/wildcards"
     back-label="Wildcards"
@@ -1388,11 +1770,30 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
       <Card title="Sub-Categories">
         <template #actions>
           <span class="wp-card__hint">Group tags into axes — used to filter the pool</span>
+          <!-- A fully tagged wildcard shows every axis and every pill at once,
+               which pushed the options table — the thing being edited — off
+               screen. `+` expands, `×` collapses; the count keeps the section
+               informative while shut. -->
+          <button
+            type="button"
+            class="subcat-collapse"
+            :class="{ 'subcat-collapse--nudge': !subcatOpen }"
+            :aria-expanded="subcatOpen"
+            :aria-label="subcatOpen ? 'Collapse sub-categories' : 'Expand sub-categories'"
+            :title="subcatOpen ? 'Collapse sub-categories' : 'Expand sub-categories'"
+            data-test="subcat-collapse"
+            @click="subcatOpen = !subcatOpen"
+          >
+            <i :class="subcatOpen ? 'pi pi-times' : 'pi pi-plus'" aria-hidden="true" />
+          </button>
         </template>
+        <div v-if="!subcatOpen" class="subcat-collapsed" data-test="subcat-collapsed">
+          {{ subcatSummary }}
+        </div>
         <!-- Group boxes: one per tag_groups axis + a trailing ungrouped
              box. Each box owns its pills (⠿ name (count) ⋯) + an inline
              "+ tag". Adding is contextual per group — no global add bar. -->
-        <div class="subcat-groups" @click="closeMenus">
+        <div v-else class="subcat-groups" @click="closeMenus">
           <section
             v-for="group in subcatGroups"
             :key="group.axis"
@@ -1405,6 +1806,23 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
             @drop.prevent="onGroupDrop(group.axis)"
           >
             <header class="subcat-group__head">
+              <!-- The caret is its own button rather than the whole header:
+                   the header also holds a rename input, and making the row
+                   itself the toggle would fold the group every time you
+                   clicked into the name to edit it. -->
+              <button
+                type="button"
+                class="subcat-group__fold"
+                :aria-expanded="!collapsedAxes.has(group.axis)"
+                :aria-label="collapsedAxes.has(group.axis)
+                  ? `Expand ${group.isOther ? 'ungrouped' : group.axis}`
+                  : `Collapse ${group.isOther ? 'ungrouped' : group.axis}`"
+                :data-test="`subcat-fold-${group.axis}`"
+                @click.stop="toggleAxisCollapsed(group.axis)"
+              ><i
+                :class="collapsedAxes.has(group.axis) ? 'pi pi-chevron-right' : 'pi pi-chevron-down'"
+                aria-hidden="true"
+              /></button>
               <input
                 v-if="!group.isOther"
                 class="subcat-group__name"
@@ -1415,6 +1833,13 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                 @keydown.enter.prevent="(e) => (e.target as HTMLInputElement).blur()"
               />
               <span v-else class="subcat-group__name subcat-group__name--other">ungrouped</span>
+              <!-- A folded axis still reports how many tags are inside, so
+                   folding never hides the fact that there is something there. -->
+              <span
+                v-if="collapsedAxes.has(group.axis)"
+                class="subcat-group__count"
+                :data-test="`subcat-count-${group.axis}`"
+              >{{ group.tags.length }}</span>
               <button
                 v-if="!group.isOther"
                 type="button"
@@ -1426,7 +1851,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
               ><i class="pi pi-link" aria-hidden="true" /></button>
             </header>
 
-            <div class="subcat-group__pills">
+            <div v-if="!collapsedAxes.has(group.axis)" class="subcat-group__pills">
               <span
                 v-for="tag in group.tags"
                 :key="tag"
@@ -1544,6 +1969,73 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
     <div id="editor-section-options">
     <Card :title="`Options (${options.length})`" :padding="false" sticky-header>
       <template #actions>
+        <!-- One row. The filter and the row-count belong with Bulk edit / Add
+             option: they all act on the same list, and splitting them over two
+             bars made the header taller than the first option. The filter takes
+             the flexible width; the buttons keep their intrinsic size. -->
+        <div v-if="options.length > 8" class="wc-optfilter">
+        <label class="wc-optfilter__search" :class="{ 'wc-optfilter__search--on': optQuery.length > 0 }">
+          <i class="pi pi-search" aria-hidden="true" />
+          <input
+            v-model="optQuery"
+            type="text"
+            :placeholder="`Filter ${options.length} options…`"
+            aria-label="Filter options"
+            spellcheck="false"
+            autocomplete="off"
+            data-test="wc-opt-search"
+          />
+          <button
+            v-if="optQuery"
+            type="button"
+            class="wc-optfilter__clearx"
+            aria-label="Clear text filter"
+            @click="optQuery = ''"
+          ><i class="pi pi-times" aria-hidden="true" /></button>
+        </label>
+
+        <div v-if="subCategories.length > 0" class="wc-optfilter__tagwrap">
+          <button
+            type="button"
+            class="wc-optfilter__tagbtn"
+            :data-on="optTagFilter.length > 0 ? '' : null"
+            :aria-expanded="optTagMenuOpen"
+            data-test="wc-opt-tagfilter"
+            @click.stop="toggleOptTagMenu($event)"
+          >
+            <i class="pi pi-tag" aria-hidden="true" />
+            tags<template v-if="optTagFilter.length"> · {{ optTagFilter.length }}</template>
+            <i class="pi pi-chevron-down" aria-hidden="true" />
+          </button>
+          <TagPickerMenu
+            :open="optTagMenuOpen"
+            :anchor="optFilterAnchor"
+            :drop-up="optFilterDropUp"
+            :groups="subcatGroups"
+            :all-tags="subCategories"
+            :selected="optTagFilter"
+            :tag-style="chipStyle"
+            test-prefix="wc-opt-tagfilter"
+            @toggle="toggleOptTagFilter"
+          />
+        </div>
+
+        <!-- Same count grammar as the sub-category filter panel: a bar for the
+             proportion, tabular numerals for the precision. Idle until a filter
+             is on — "133 of 133" would be reporting a success nobody asked for. -->
+        <span class="wc-optfilter__count" data-test="wc-opt-count">
+          <template v-if="optionFilterActive">
+            <span class="wc-optfilter__bar" :data-zero="visibleOptionRows.length === 0 ? '' : null">
+              <i :style="{ width: Math.round((visibleOptionRows.length / Math.max(1, options.length)) * 100) + '%' }" />
+            </span>
+            <span class="wc-optfilter__n" :data-zero="visibleOptionRows.length === 0 ? '' : null">
+              {{ visibleOptionRows.length }} of {{ options.length }}
+            </span>
+            <button type="button" class="wc-optfilter__clear" data-test="wc-opt-clear" @click="clearOptionFilter">Clear</button>
+          </template>
+          <span v-else class="wc-optfilter__idle">{{ options.length }} options</span>
+        </span>
+        </div>
         <Button
           size="sm"
           :variant="bulkMode ? 'secondary' : 'ghost'"
@@ -1580,6 +2072,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
           :existing-tags="subCategories"
           @commit-options="commitBulkAddOptions"
           @cancel="bulkAddOpen = false"
+          @update:pending="(v: boolean) => (bulkPending = v)"
         />
         <SelectionToolbar
           v-if="selectedCount > 0"
@@ -1588,9 +2081,14 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
           :common-tags="commonSelectedTags"
           :present-tags="presentSelectedTags"
           :tag-hues="selectedTagHues"
+          reorderable
+          :move-armed="moveArmed"
           @apply-tag="applyTagToSelected"
           @remove-tag="removeTagFromSelected"
           @set-weight="setWeightSelected"
+          @move-top="moveSelectedTo({ to: 'top' })"
+          @move-bottom="moveSelectedTo({ to: 'bottom' })"
+          @move-here="moveArmed = !moveArmed"
           @delete-selected="deleteSelected"
           @clear="clearSelection"
         />
@@ -1609,6 +2107,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                 @update:model-value="toggleSelectAll"
               />
             </th>
+            <th scope="col" class="opt-col-grip"><span class="wp-sr-only">Reorder</span></th>
             <th scope="col" class="opt-col-weight">Weight</th>
             <th scope="col">Value</th>
             <th scope="col" class="opt-col-sub">Sub-category</th>
@@ -1618,14 +2117,28 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
         </thead>
         <tbody>
           <tr
-            v-for="(o, i) in options"
+            v-for="{ o, i } in visibleOptionRows"
             :key="o.id"
             :data-test="o.is_null ? 'wc-opt-row-null' : `wc-opt-row-${i}`"
-            :class="{ 'wc-opt-row--null': o.is_null, 'wc-opt-row--selected': bulkMode && isSelected(o.id) }"
+            :class="{
+              'wc-opt-row--null': o.is_null,
+              'wc-opt-row--selected': bulkMode && isSelected(o.id),
+              'wc-opt-row--dragging': dragFrom === i,
+              'wc-opt-row--dropbefore': dragOver === i && dragFrom !== null && dragFrom !== i,
+              'wc-opt-row--cargo': moveArmed && isSelected(o.id),
+              'wc-opt-row--landing': moveArmed && !isSelected(o.id),
+            }"
+            @dragover="onOptDragOver(i, $event)"
+            @drop.prevent="onOptDrop(i)"
+            @click="moveArmed && !isSelected(o.id)
+              ? moveSelectedTo({ to: 'before', id: o.id })
+              : undefined"
           >
+            <!-- Landing point for an armed "Move here". A zero-height row
+                 would be unclickable, so the strip lives inside the first cell
+                 of the row it lands ABOVE. -->
             <td v-if="bulkMode" class="opt-col-check">
               <button
-                v-if="!o.is_null"
                 type="button"
                 class="wp-check"
                 role="checkbox"
@@ -1639,6 +2152,30 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                   <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
               </button>
+            </td>
+            <td class="opt-col-grip">
+              <!-- The only pointer affordance the value cell's contenteditable
+                   does not poison: a press here is unambiguous, because it is
+                   not a text surface. Hidden until row hover so the resting
+                   table looks unchanged; disabled while a filter is active,
+                   since dropping between two visible rows says nothing about
+                   the hidden ones between them. The bulk moves above stay
+                   available there — their destination is absolute. -->
+              <button
+                type="button"
+                class="opt-grip"
+                :disabled="optionFilterActive || undefined"
+                :title="optionFilterActive
+                  ? 'Dragging is off while a filter is active — use Bulk edit ▸ Top / Bottom / Move here'
+                  : 'Drag to reorder · Alt+↑/↓ to move one step'"
+                :aria-label="`Reorder ${o.value || 'option'}`"
+                :data-test="`wc-opt-grip-${i}`"
+                draggable="true"
+                @dragstart="onOptDragStart(i, $event)"
+                @dragend="onOptDragEnd"
+                @keydown.alt.up.prevent="nudgeOption(o.id, -1)"
+                @keydown.alt.down.prevent="nudgeOption(o.id, 1)"
+              ><i class="pi pi-bars" aria-hidden="true" /></button>
             </td>
             <td>
               <Input
@@ -1664,10 +2201,15 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                 <i class="pi pi-ban" aria-hidden="true" />
                 <span>null</span>
               </span>
+              <!-- `wrap`: option values run from one tag to a whole paragraph.
+                   Without it the field clipped behind a horizontal scroll at a
+                   fixed 34px, so a long value was effectively invisible.
+                   Single-value semantics are unchanged — Enter still commits. -->
               <RichTextInput
                 v-else
                 v-model="o.value"
                 surface="wildcard"
+                wrap
                 :module-id="props.id"
                 :ref-suggestions="wcSuggestions"
                 :uuid-to-name="nameByUuid"
@@ -1687,9 +2229,13 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                    chevron opens a grouped checkbox picker. Membership only
                    — no boolean expression here. -->
               <div v-else class="opt-tags" @click.stop>
+                <!-- Capped chip run, mirroring the canvas OptionRow: a fully
+                     tagged option carries 8+ tags and showing them all made a
+                     single row taller than the rest of the table. `+N` expands
+                     that row on demand. -->
                 <div class="opt-tags__control">
                   <span
-                    v-for="tag in (o.sub_categories ?? [])"
+                    v-for="tag in visibleOptionTags(o)"
                     :key="tag"
                     class="opt-tags__chip"
                     :style="chipStyle(tag)"
@@ -1702,6 +2248,19 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                       @click.stop="toggleOptionTag(o, tag)"
                     >×</button>
                   </span>
+                  <button
+                    v-if="hiddenOptionTagCount(o) > 0 || expandedOptTags.has(o.id)"
+                    type="button"
+                    class="opt-tags__more"
+                    :aria-expanded="expandedOptTags.has(o.id)"
+                    :aria-label="expandedOptTags.has(o.id)
+                      ? 'Show fewer tags'
+                      : `Show ${hiddenOptionTagCount(o)} more tags`"
+                    :data-test="`opt-tags-more-${o.id}`"
+                    @click.stop="toggleOptTagsExpanded(o.id)"
+                    :data-match="!expandedOptTags.has(o.id) && hiddenTagsMatch(o) ? '' : null"
+                    :title="hiddenTagsMatch(o) ? 'More matching tags are folded in here' : undefined"
+                  >{{ expandedOptTags.has(o.id) ? "−" : `+${hiddenOptionTagCount(o)}` }}</button>
                   <span v-if="!(o.sub_categories ?? []).length" class="opt-tags__placeholder">(none)</span>
                   <button
                     type="button"
@@ -1716,44 +2275,18 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
 
                 <!-- Grouped checkbox picker: one section per axis +
                      ungrouped. Each toggle gets is-on when selected. -->
-                <div
-                  v-if="openOptTagPicker === o.id"
-                  class="opt-tags__picker"
-                  :class="{ 'opt-tags__picker--up': pickerDropUp }"
-                  role="menu"
-                  @click.stop
-                >
-                  <p v-if="!subCategories.length" class="opt-tags__empty">
-                    No sub-categories yet — add some above.
-                  </p>
-                  <div
-                    v-for="grp in optionTagGroups"
-                    :key="grp.axis"
-                    class="opt-tags__section"
-                  >
-                    <span class="opt-tags__section-name">{{ grp.isOther ? "ungrouped" : grp.axis }}</span>
-                    <button
-                      v-for="tag in grp.tags"
-                      :key="tag"
-                      type="button"
-                      class="opt-tags__toggle"
-                      :class="{ 'is-on': optionHasTag(o, tag) }"
-                      :style="chipStyle(tag)"
-                      role="menuitemcheckbox"
-                      :aria-checked="optionHasTag(o, tag)"
-                      :data-test="`opt-tag-toggle-${o.id}-${tag}`"
-                      @click.stop="toggleOptionTag(o, tag)"
-                    >
-                      <span class="opt-tags__toggle-box" aria-hidden="true">
-                        <svg v-if="optionHasTag(o, tag)" width="8" height="8" viewBox="0 0 12 12">
-                          <path d="M2.5 6.5 L5 9 L9.5 3.5" fill="none" stroke="currentColor"
-                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                        </svg>
-                      </span>
-                      {{ tag }}
-                    </button>
-                  </div>
-                </div>
+                <TagPickerMenu
+                  :open="openOptTagPicker === o.id"
+                  :anchor="optTagAnchor"
+                  :drop-up="pickerDropUp"
+                  :groups="optionTagGroups"
+                  :all-tags="subCategories"
+                  :selected="o.sub_categories ?? []"
+                  :tag-style="chipStyle"
+                  :test-prefix="`opt-tag-${o.id}`"
+                  empty-text="No sub-categories yet — add some above."
+                  @toggle="(t: string) => toggleOptionTag(o, t)"
+                />
               </div>
             </td>
             <td>
@@ -1777,6 +2310,13 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
           </tr>
           <tr v-if="!options.length">
             <td :colspan="bulkMode ? 6 : 5" class="opt-empty">No options yet.</td>
+          </tr>
+          <tr v-if="optionFilterActive && visibleOptionRows.length === 0">
+            <td :colspan="bulkMode ? 6 : 5" class="wc-optfilter__empty" data-test="wc-opt-noresults">
+              <b>No option matches this filter</b>
+              All {{ options.length }} are still here — only the view is filtered.
+              <button type="button" class="wc-optfilter__clear" @click="clearOptionFilter">Clear filter</button>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -1814,8 +2354,10 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
          source placement here only affects vnode tracking. -->
     <ConfirmDialog
       :visible="showConfirm"
-      title="Discard unsaved changes?"
-      body="You have unsaved edits. Leaving this page will discard them."
+      :title="bulkPending ? 'Discard un-added options?' : 'Discard unsaved changes?'"
+      :body="bulkPending
+        ? 'The bulk add box still holds options you have not added. Leaving discards them.'
+        : 'You have unsaved edits. Leaving this page will discard them.'"
       confirm-label="Discard & leave"
       cancel-label="Stay"
       variant="danger"
@@ -1933,6 +2475,49 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
   flex-direction: column;
   gap: var(--wp-space-4);
 }
+/* Sub-Categories disclosure — `+` / `×` in the card header. */
+.subcat-collapse {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: var(--wp-space-3);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius-sm);
+  background: transparent;
+  color: var(--wp-text-muted);
+  cursor: pointer;
+  font-size: 11px;
+}
+.subcat-collapse:hover { color: var(--wp-text); border-color: var(--wp-accent); }
+/* Accented while collapsed so a first-time user reads it as "there is more
+   here, press me" rather than as a dim decoration. Deliberately a static tint,
+   not an animation — this sits on screen for the whole editing session. */
+.subcat-collapse--nudge {
+  color: var(--wp-accent-text, var(--wp-accent));
+  border-color: color-mix(in oklab, var(--wp-accent) 55%, transparent);
+  background: color-mix(in oklab, var(--wp-accent) 14%, transparent);
+}
+.subcat-collapsed {
+  font-size: var(--wp-text-sm);
+  color: var(--wp-text-muted);
+}
+/* `+N` / `−` disclosure inside an option's tag cell. Dashed so it reads as
+   part of the chip run rather than as another removable tag. */
+.opt-tags__more {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border: 1px dashed color-mix(in srgb, var(--wp-text-dim) 55%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--wp-text-dim);
+  font-size: var(--wp-text-xs);
+  line-height: 1.4;
+  cursor: pointer;
+}
+.opt-tags__more:hover { color: var(--wp-text); border-color: var(--wp-accent); }
 .subcat-group {
   border: 1px solid var(--wp-border);
   /* Coloured left accent keyed to the axis hue so each group reads as a
@@ -1948,6 +2533,27 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
 .subcat-group--drop {
   border-color: var(--wp-accent-500);
   background: color-mix(in srgb, var(--wp-accent-500) 8%, var(--wp-bg-2));
+}
+.subcat-group__fold {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--wp-radius-sm);
+  color: var(--wp-text-dim);
+  cursor: pointer;
+}
+.subcat-group__fold:hover { color: var(--wp-text); background: var(--wp-bg-3); }
+.subcat-group__fold .pi { font-size: 9px; }
+.subcat-group__count {
+  font-family: var(--wp-font-mono);
+  font-size: 10px; /* audit-exempt: micro count badge */
+  color: var(--wp-text-dim);
+  opacity: 0.7;
 }
 .subcat-group__head {
   display: flex;
@@ -2229,14 +2835,189 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
   border-color: var(--wp-accent-500);
 }
 
+/* Teleported to <body>, so coordinates are viewport-relative and no ancestor
+   can clip it. z-index sits above the editor chrome but below modals. */
+/* ── Reordering ─────────────────────────────────────────────────────── */
+.opt-col-grip { width: 26px; }
+/* The only pointer affordance the value cell's contenteditable does not
+   poison. Hidden until row hover so the resting table is unchanged. */
+.opt-grip {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 22px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--wp-radius-sm);
+  color: var(--wp-text-dim);
+  font-size: 11px;
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+tr:hover .opt-grip { opacity: 0.7; }
+.opt-grip:hover { opacity: 1; background: var(--wp-bg-3); }
+.opt-grip:focus-visible { opacity: 1; outline: 2px solid var(--wp-accent-500); outline-offset: 1px; }
+.opt-grip:disabled { cursor: not-allowed; }
+tr:hover .opt-grip:disabled { opacity: 0.2; }
+
+/* The dragged row stays put, dimmed — pulling it out of the table reflows
+   every row below and the drop target moves out from under the cursor. */
+.wc-opt-row--dragging > td { opacity: 0.45; background: var(--wp-bg-3); }
+.wc-opt-row--dropbefore > td { box-shadow: inset 0 2px 0 var(--wp-accent-500); }
+
+/* "Move here" armed: the selection is the cargo, so it dims; every other row
+   becomes a landing point. */
+.wc-opt-row--cargo > td { opacity: 0.4; }
+.wc-opt-row--landing { cursor: pointer; }
+.wc-opt-row--landing:hover > td {
+  box-shadow: inset 0 2px 0 var(--wp-accent-500);
+  background: color-mix(in oklab, var(--wp-accent-500) 8%, transparent);
+}
+
+/* ── Options filter bar ─────────────────────────────────────────────── */
+/* Sits inside the Card's actions row, so no padding or rule of its own —
+   the header supplies both. `flex: 1` lets the search take the slack while
+   the buttons beside it keep their intrinsic width. */
+.wc-optfilter {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-4);
+  /* Card's header puts a `.wp-spacer` (flex: 1) between the title and this
+     slot. With a grow factor of 1 the two split the free space evenly and the
+     search box ended up half the width it should be. A far larger factor takes
+     effectively all of the slack while leaving the spacer in place, which is
+     what still separates the title from the controls. */
+  flex: 1000 1 auto;
+  min-width: 0;
+  margin-right: var(--wp-space-4);
+}
+/* The search takes whatever the fixed-size tag button and count leave. There
+   is deliberately no spacer in this block: one used to right-align the count,
+   and it competed with the search for the same free space and took half of
+   it. */
+.wc-optfilter__search { min-width: 90px; }
+.wc-optfilter__search {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-3);
+  flex: 1;
+  min-width: 0;
+  padding: 3px var(--wp-space-4); /* audit-exempt: compact inline search */
+  background: var(--wp-bg-1);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius-sm);
+  color: var(--wp-text-dim);
+}
+.wc-optfilter__search--on {
+  border-color: var(--wp-accent-500);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-500) 20%, transparent);
+}
+.wc-optfilter__search .pi { font-size: 11px; }
+.wc-optfilter__search input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--wp-text);
+  font: 12px var(--wp-font-mono);
+}
+.wc-optfilter__clearx {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--wp-text-dim); font-size: 10px;
+}
+.wc-optfilter__tagwrap { position: relative; }
+.wc-optfilter__tagbtn {
+  display: inline-flex; align-items: center; gap: 5px; /* audit-exempt: icon gap */
+  padding: 4px var(--wp-space-4);
+  background: var(--wp-bg-3);
+  border: 1px solid var(--wp-border-strong);
+  border-radius: var(--wp-radius-sm);
+  color: var(--wp-text-muted);
+  font: 11px var(--wp-font-sans);
+  cursor: pointer;
+}
+.wc-optfilter__tagbtn[data-on] {
+  background: color-mix(in oklab, var(--wp-accent-500) 24%, transparent);
+  border-color: var(--wp-accent-500);
+  color: var(--wp-accent-300);
+}
+.wc-optfilter__tagbtn .pi { font-size: 9px; }
+.wc-optfilter__menu {
+  position: absolute; top: calc(100% + 4px); right: 0; z-index: 30;
+  min-width: 170px; max-height: 240px; overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex; flex-direction: column;
+  padding: var(--wp-space-3);
+  background: var(--wp-bg-1);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius);
+  box-shadow: var(--wp-shadow-lg);
+}
+.wc-optfilter__menuitem {
+  display: flex; align-items: center; gap: var(--wp-space-3);
+  padding: 4px var(--wp-space-3);
+  background: none; border: none; border-radius: var(--wp-radius-sm);
+  color: var(--wp-text-muted);
+  font: 11px var(--wp-font-mono);
+  text-align: left; cursor: pointer;
+}
+.wc-optfilter__menuitem:hover { background: var(--wp-bg-3); color: var(--wp-text); }
+.wc-optfilter__menuitem[data-on] { color: var(--wp-accent-300); }
+.wc-optfilter__box {
+  width: 12px; height: 12px; flex-shrink: 0;
+  display: grid; place-items: center;
+  border: 1px solid var(--wp-border-strong);
+  border-radius: 3px; /* audit-exempt: below the radius scale */
+  font-size: 7px;
+}
+.wc-optfilter__menuitem[data-on] .wc-optfilter__box {
+  background: var(--wp-accent-600); border-color: var(--wp-accent-600); color: #fff;
+}
+.wc-optfilter__count {
+  display: flex; align-items: center; gap: var(--wp-space-3);
+  font-size: 11px; white-space: nowrap;
+}
+.wc-optfilter__bar {
+  width: 44px; height: 3px; border-radius: 2px; /* audit-exempt: hairline meter */
+  background: var(--wp-bg-4); overflow: hidden;
+}
+.wc-optfilter__bar i { display: block; height: 100%; background: var(--wp-success); }
+.wc-optfilter__bar[data-zero] { background: color-mix(in oklab, var(--wp-danger) 35%, transparent); }
+.wc-optfilter__n {
+  font-family: var(--wp-font-mono); font-variant-numeric: tabular-nums;
+  font-weight: 600; color: var(--wp-success);
+}
+.wc-optfilter__n[data-zero] { color: var(--wp-danger); }
+.wc-optfilter__idle { color: var(--wp-text-dim); font-family: var(--wp-font-mono); }
+.wc-optfilter__clear {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--wp-text-muted); font: 11px var(--wp-font-sans);
+  text-decoration: underline;
+}
+.wc-optfilter__empty {
+  padding: var(--wp-space-6) var(--wp-space-5);
+  text-align: center; color: var(--wp-text-dim); font-size: 12px;
+}
+.wc-optfilter__empty b {
+  display: block; color: var(--wp-text-muted); font-weight: 600;
+  margin-bottom: var(--wp-space-2);
+}
+.wc-optfilter__empty .wc-optfilter__clear { margin-left: var(--wp-space-3); }
+/* The pill admits that a matching tag is folded inside it, so a row never
+   looks like it matched for no reason. */
+.opt-tags__more[data-match] {
+  background: color-mix(in oklab, var(--wp-accent-500) 26%, transparent);
+  border-color: var(--wp-accent-500);
+  color: var(--wp-accent-300);
+}
+
 .opt-tags__picker {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 30;
+  position: fixed;
+  z-index: 3000;
   min-width: 210px;
-  max-height: 260px;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: var(--wp-space-3);
@@ -2246,10 +3027,47 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
   border-radius: var(--wp-radius);
   box-shadow: var(--wp-shadow-lg);
 }
+/* The cap and the scrolling moved OFF the menu and onto the list inside it, so
+   the search box stays pinned while the tags scroll under it.
+   `overscroll-behavior: contain` is the fix for the scroll escaping: without
+   it, reaching either end of this list hands the remaining wheel delta to the
+   page, and the whole editor lurches. */
+.opt-tags__scroll {
+  max-height: 240px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: var(--wp-space-3);
+}
+.opt-tags__search {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-2);
+  padding: 3px var(--wp-space-3); /* audit-exempt: compact inline search */
+  background: var(--wp-bg-2);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius-sm);
+  color: var(--wp-text-dim);
+}
+.opt-tags__search .pi { font-size: 10px; }
+.opt-tags__search input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--wp-text);
+  font: 11px var(--wp-font-sans);
+}
 /* Flip the option tag picker above its trigger near the page bottom (#4). */
+/* Flipped above the trigger. `bottom: calc(100% + 4px)` used to do this
+   against the absolutely-positioned parent; with `position: fixed` that would
+   resolve against the viewport and land nowhere useful. The inline `top` is
+   set to the trigger's TOP edge in this case, so shifting up by the menu's own
+   height puts its bottom edge exactly there — no height measurement needed. */
 .opt-tags__picker--up {
-  top: auto;
-  bottom: calc(100% + 4px);
+  transform: translateY(-100%);
 }
 .opt-tags__empty {
   margin: 0;

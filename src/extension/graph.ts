@@ -13,6 +13,7 @@ import {
   type WildcardOption,
 } from "../components/context/editors/wildcard/probability";
 import { ensure as ensurePreviewLookup, lookup as previewLookup } from "./preview-resolver";
+import { assignCodenames, baseCodename } from "./node-codename";
 import type { SeedStrategy } from "../components/shared/seed-derive";
 
 // ── Subgraph boundary primer ────────────────────────────────────────────
@@ -70,6 +71,10 @@ export interface LiteNodeLike {
    *  the node at runtime; the walker mirrors that by ignoring their
    *  module contributions when building the upstream-vars set. */
   mode?: number;
+  /** User-set node title. Litegraph sets this on every node; WP_Context
+   *  identifies itself by codename instead, but the Injector and Loop have no
+   *  codename scheme, so their title is the only human name available. */
+  title?: string;
 }
 
 /** Modes that mean "this node does not contribute its module bindings
@@ -94,6 +99,73 @@ export interface LiteGraphLike {
   /** Boundary IO nodes — only populated on subgraph LGraphs. */
   inputNode?: SubgraphIONode;
   outputNode?: SubgraphIONode;
+}
+
+/* ── parsed-widget cache ────────────────────────────────────────────────
+ *
+ * The walkers below are called from `reactiveFromGraph`'s 400ms poll, and a
+ * single WP_Context node installs TEN of those polls. Each walk re-reads the
+ * node's `wp_modules` widget and re-parses it from scratch — and on a real
+ * workflow that string is ~294 KB, so the parse costs MORE than the traversal
+ * it feeds (measured: `JSON.parse` 4.64 ms/call against 4.02 ms for the whole
+ * of `collectUpstreamProducers`). Ten pollers on one node parse the identical
+ * string ten times every cycle; five nodes made that ~21% of a core.
+ *
+ * Keyed on the raw string, so it self-invalidates: edit the widget and the key
+ * changes. Bounded, because every keystroke in an editor mints a new string
+ * and an unbounded map would retain every intermediate state of a 294 KB
+ * document.
+ *
+ * SAFETY: callers must treat the result as read-only — they now share one
+ * object instead of each getting a private copy. Every consumer here is a
+ * read-only walker, and `graph.parse-cache.test.ts` proves it by freezing what
+ * the cache hands out and running each walker against it. That is also why the
+ * cache is module-private rather than folded into `parseWidgetJson`, whose
+ * other callers (ContextWidget) DO mutate what they get back.
+ */
+const PARSE_CACHE_MAX = 24;
+const parseCache = new Map<string, unknown>();
+
+/** Deep-freeze, used only to enforce the read-only contract in tests. */
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const v of Object.values(value as Record<string, unknown>)) deepFreeze(v);
+  }
+  return value;
+}
+
+/** Set by the test suite to assert the walkers never write to parsed data. */
+let freezeParsed = false;
+/** @internal test hook */
+export function _setParseCacheFreezeForTests(on: boolean): void {
+  freezeParsed = on;
+  parseCache.clear();
+}
+
+/** @internal test hook */
+export function _clearParseCacheForTests(): void {
+  parseCache.clear();
+}
+
+/**
+ * `parseWidgetJson`, memoised on the raw string. Read-only callers only.
+ */
+function parseCached<T>(raw: string, fallback: T): T {
+  if (!raw) return fallback;
+  const hit = parseCache.get(raw);
+  if (hit !== undefined) return hit as T;
+  const parsed = parseWidgetJson<T>(raw, fallback);
+  // Never cache the fallback: it is a caller-owned object, and a miss is cheap.
+  if (parsed === fallback) return parsed;
+  const stored = freezeParsed ? deepFreeze(parsed) : parsed;
+  // Cheap FIFO bound — insertion order is Map's iteration order.
+  if (parseCache.size >= PARSE_CACHE_MAX) {
+    const oldest = parseCache.keys().next().value;
+    if (oldest !== undefined) parseCache.delete(oldest);
+  }
+  parseCache.set(raw, stored);
+  return stored as T;
 }
 
 function widgetValue(node: LiteNodeLike, name: string): string {
@@ -369,7 +441,7 @@ export function collectLocalResolvedForModule(
   // about-to-be-emitted binding would surface stale state.
   if (isSkippedMode(node)) return ctx;
 
-  const v = parseWidgetJson<ContextWidgetValue>(
+  const v = parseCached<ContextWidgetValue>(
     widgetValue(node, "wp_modules"),
     { version: 1, modules: [] },
   );
@@ -431,7 +503,7 @@ export function hasUpstreamLoopOverridingSeed(
       // Loop's widget config carries the override toggle. Mute / bypass
       // skips the Loop entirely so its override shouldn't apply.
       const raw = widgetValue(cur.node, "wp_context_loop_config");
-      const cfg = parseWidgetJson<{ override_seed?: boolean }>(raw, {});
+      const cfg = parseCached<{ override_seed?: boolean }>(raw, {});
       return cfg.override_seed === true;
     }
     cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
@@ -466,7 +538,7 @@ export function resolveUpstreamLoopSeed(
   while (cur && !seen.has(locator(cur.graph, cur.node))) {
     seen.add(locator(cur.graph, cur.node));
     if (cur.node.type === "WP_ContextLoop" && !isSkippedMode(cur.node)) {
-      const cfg = parseWidgetJson<{
+      const cfg = parseCached<{
         strategy?: string;
         override_seed?: boolean;
         seed_locks?: Record<string, number>;
@@ -520,7 +592,7 @@ export function collectUpstreamInjectorBindings(
   for (const n of chain) {
     if (n.type !== "WP_ContextInjector") continue;
     if (isSkippedMode(n)) continue;
-    const inj = parseWidgetJson<{
+    const inj = parseCached<{
       version: 1;
       rows?: Array<{ binding?: string; enabled?: boolean }>;
     }>(widgetValue(n, "wp_rows"), { version: 1, rows: [] });
@@ -565,7 +637,7 @@ export function collectUpstreamWildcardUuids(
   for (const n of chain) {
     if (n.type !== "WP_Context") continue;
     if (isSkippedMode(n)) continue;
-    const v = parseWidgetJson<ContextWidgetValue>(
+    const v = parseCached<ContextWidgetValue>(
       widgetValue(n, "wp_modules"),
       { version: 1, modules: [] },
     );
@@ -614,7 +686,7 @@ export function collectUpstreamChain(
   for (const n of upstreamFirst) {
     if (n.type !== "WP_Context") continue;
     if (isSkippedMode(n)) continue;
-    const v = parseWidgetJson<ContextWidgetValue>(
+    const v = parseCached<ContextWidgetValue>(
       widgetValue(n, "wp_modules"),
       { version: 1, modules: [] },
     );
@@ -687,7 +759,7 @@ export function collectUpstreamKinds(
     const n = chain[i];
     if (isSkippedMode(n)) continue;
     if (n.type === "WP_ContextInjector") {
-      const inj = parseWidgetJson<{
+      const inj = parseCached<{
         version: 1;
         rows?: Array<{ binding?: string; enabled?: boolean; internal?: boolean }>;
       }>(widgetValue(n, "wp_rows"), { version: 1, rows: [] });
@@ -707,7 +779,7 @@ export function collectUpstreamKinds(
       // stamps their placeholder values. Per-key internal-ness comes
       // from the widget config (same globe toggles as a module).
       const raw = widgetValue(n, "wp_context_loop_config");
-      const cfg = parseWidgetJson<{
+      const cfg = parseCached<{
         iteration_var_name?: string;
         iteration_internal?: boolean;
         total_internal?: boolean;
@@ -721,7 +793,7 @@ export function collectUpstreamKinds(
       continue;
     }
     if (n.type !== "WP_Context") continue;
-    const v = parseWidgetJson<ContextWidgetValue>(
+    const v = parseCached<ContextWidgetValue>(
       widgetValue(n, "wp_modules"),
       { version: 1, modules: [] },
     );
@@ -810,6 +882,225 @@ export function collectUpstreamKinds(
   return kinds;
 }
 
+/**
+ * Who actually writes a `$var`, for the chip hover card.
+ *
+ * `kind` alone ("this came from a wildcard") isn't enough to act on — with
+ * near-duplicate modules across several nodes the user needs to know WHICH
+ * one. This carries the owning node and module through instead of discarding
+ * them.
+ */
+export interface VarProducer {
+  /** "wildcard" | "fixed_values" | "combine" | "derivation" | "injector" | "loop" */
+  kind: string;
+  /** Litegraph node id of the winning writer. */
+  nodeId: string;
+  /** How to name that node in UI. WP_Context nodes get their stable
+   *  `adjective-noun` codename (the same one their header shows); the Injector
+   *  and Loop have no codename scheme, so they fall back to a user-set title
+   *  and then to a plain kind label. */
+  nodeLabel: string;
+  /** Display name of the writing module. Absent for injector / loop, which
+   *  write from node config rather than a library module. */
+  moduleName?: string;
+  /** 8-hex module id, when a module wrote it. */
+  moduleId?: string;
+  /** Flagged internal — resolves downstream but the assembler strips it from
+   *  the rendered prompt. Worth surfacing: a var that produces nothing visible
+   *  is exactly the confusion the card exists to kill. */
+  internal?: boolean;
+  /** How many earlier PRODUCERS this one overrode — distinct modules / nodes,
+   *  not write statements. Runtime is last-write-wins, so the card names the
+   *  winner and mentions that others exist. Zero when this producer creates
+   *  the variable, which is the common case and carries no badge. */
+  shadowed: number;
+}
+
+/**
+ * Producer map for every `$var` visible upstream of `node`.
+ *
+ * Same chain walk + last-write-wins ordering as {@link collectUpstreamKinds} —
+ * this is that function widened to keep identity. Covers all three producer
+ * sources: WP_Context modules, WP_ContextInjector rows, and the WP_ContextLoop
+ * iteration vars.
+ */
+export function collectUpstreamProducers(
+  rootGraph: LiteGraphLike,
+  node: LiteNodeLike,
+): Record<string, VarProducer> {
+  const parents = buildSubgraphParents(rootGraph);
+  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
+  const chain: LiteNodeLike[] = [];
+  let cur = pipelineUpstreamOf(node, graphOf(node, rootGraph), parents);
+  while (cur && !seen.has(locator(cur.graph, cur.node))) {
+    seen.add(locator(cur.graph, cur.node));
+    chain.push(cur.node);
+    cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
+  }
+
+  // Codenames are a WP_Context concept only — assign across the Context nodes
+  // in the chain plus the POV node so a name reads the same from anywhere.
+  const codenames = assignCodenames([
+    ...chain.filter((n) => n.type === "WP_Context").map((n) => n.id),
+    node.id,
+  ]);
+  const labelOf = (n: LiteNodeLike): string => {
+    if (n.type === "WP_Context") {
+      return codenames.get(String(n.id)) ?? baseCodename(n.id);
+    }
+    const title = typeof n.title === "string" ? n.title.trim() : "";
+    if (title) return title;
+    return n.type === "WP_ContextInjector" ? "Context Injector" : "Context Loop";
+  };
+
+  const out: Record<string, VarProducer> = {};
+  /** Which producer last wrote each name, so repeat writes from the SAME one
+   *  do not inflate the count. See `write` below. */
+  const lastWriter = new Map<string, string>();
+
+  /**
+   * Record a write, counting PRODUCERS rather than write statements.
+   *
+   * Several call sites fan out — a derivation writes once per branch, a
+   * fixed_values once per row — because which branch fires is not knowable
+   * statically and every reachable `target_var` has to appear in the var list.
+   * Counting each of those as an override was wrong twice over: a rule with
+   * twelve branches all targeting `$env_fx` reported "overrides 11" when at
+   * most ONE branch fires, and it reported it even when nothing upstream wrote
+   * `$env_fx` at all — so the module that CREATES a variable was described as
+   * overriding eleven writes that never existed.
+   *
+   * Identity is passed in by the caller as `writerKey`, because it cannot be
+   * derived from `info` alone: `moduleId` is the LIBRARY uuid, so the same
+   * module dropped into two Context nodes shares it while being two genuinely
+   * competing writers. Callers key on the node plus the module's per-instance
+   * `_uid`. Injector rows and loop vars have no module and fall back to the
+   * node plus kind, so two rows of one injector binding the same name read as
+   * a single writer — the honest summary, since the injector as a whole is
+   * what binds the name.
+   */
+  const write = (
+    name: string,
+    info: Omit<VarProducer, "shadowed">,
+    writerKey?: string,
+  ): void => {
+    if (!name) return;
+    const who = writerKey ?? `${info.nodeId}:${info.kind}`;
+    const prev = out[name];
+    const sameWriter = lastWriter.get(name) === who;
+    lastWriter.set(name, who);
+    out[name] = {
+      ...info,
+      shadowed: prev ? (sameWriter ? prev.shadowed : prev.shadowed + 1) : 0,
+    };
+  };
+
+  // Furthest-upstream → closest, so later writes override earlier ones.
+  for (let i = chain.length - 1; i >= 0; i--) {
+    const n = chain[i];
+    if (isSkippedMode(n)) continue;
+    const nodeId = String(n.id);
+    const nodeLabel = labelOf(n);
+
+    if (n.type === "WP_ContextInjector") {
+      const inj = parseCached<{
+        version: 1;
+        rows?: Array<{ binding?: string; enabled?: boolean; internal?: boolean }>;
+      }>(widgetValue(n, "wp_rows"), { version: 1, rows: [] });
+      for (const row of inj.rows ?? []) {
+        if (row.enabled !== true) continue;
+        write((row.binding ?? "").trim(), {
+          kind: "injector", nodeId, nodeLabel, internal: row.internal === true,
+        });
+      }
+      continue;
+    }
+
+    if (n.type === "WP_ContextLoop") {
+      const raw = widgetValue(n, "wp_context_loop_config");
+      const cfg = parseCached<{
+        iteration_var_name?: string;
+        iteration_internal?: boolean;
+        total_internal?: boolean;
+      }>(typeof raw === "string" ? raw : "", {});
+      const baseName = (cfg.iteration_var_name ?? "iteration").trim() || "iteration";
+      write(baseName, {
+        kind: "loop", nodeId, nodeLabel, internal: cfg.iteration_internal === true,
+      });
+      write(`${baseName}_total`, {
+        kind: "loop", nodeId, nodeLabel, internal: cfg.total_internal === true,
+      });
+      continue;
+    }
+
+    if (n.type !== "WP_Context") continue;
+    const v = parseCached<ContextWidgetValue>(
+      widgetValue(n, "wp_modules"),
+      { version: 1, modules: [] },
+    );
+    const bundleEnabled = buildBundleEnabledMap(v.bundles);
+    for (const m of v.modules) {
+      if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
+      const moduleName = (m.meta?.name ?? "").trim() || m.type;
+      const base = {
+        kind: m.type, nodeId, nodeLabel, moduleName, moduleId: m.id,
+        internal: m.instance?.internal === true,
+      };
+      // `_uid` is stamped per module INSTANCE and survives reorders; `m.id` is
+      // the shared library uuid, so two copies of one library module in the
+      // same node would otherwise look like a single writer.
+      const writerKey = `${nodeId}:${(m as { _uid?: string })._uid ?? m.id}`;
+
+      if (m.type === "fixed_values") {
+        // Fans out one binding per row.
+        const inst = (m.instance ?? {}) as {
+          values_overrides?: Array<{ id?: string; name?: string }>;
+          enabled_options?: string[] | null;
+        };
+        const enabledFilter = Array.isArray(inst.enabled_options)
+          ? new Set(inst.enabled_options)
+          : null;
+        const passes = (id: string | undefined): boolean =>
+          enabledFilter === null || (typeof id === "string" && enabledFilter.has(id));
+        const overrides = Array.isArray(inst.values_overrides) ? inst.values_overrides : null;
+        const rows = overrides && overrides.length > 0
+          ? overrides
+          : ((m.payload ?? {}) as { values?: Array<{ id?: string; name?: string }> }).values ?? [];
+        for (const val of rows) {
+          if (!passes(val.id)) continue;
+          write((val.name ?? "").replace(/^\$/, "").trim(), base, writerKey);
+        }
+        for (const e of m.entries ?? []) {
+          write((e.variable_name ?? "").replace(/^\$/, "").trim(), base, writerKey);
+        }
+        continue;
+      }
+
+      if (m.type === "derivation") {
+        // Which branch fires isn't knowable statically, so every reachable
+        // target_var counts as a possible write.
+        const dp = (m.payload ?? {}) as { rules?: Array<{
+          branches?: Array<{ action?: { target_var?: string } }>;
+          else?: { action?: { target_var?: string } };
+        }> };
+        for (const rule of dp.rules ?? []) {
+          for (const branch of rule.branches ?? []) {
+            write((branch.action?.target_var ?? "").replace(/^\$/, "").trim(), base, writerKey);
+          }
+          write((rule.else?.action?.target_var ?? "").replace(/^\$/, "").trim(), base, writerKey);
+        }
+        continue;
+      }
+
+      const inst = (m.instance ?? {}) as { variable_binding?: string | null };
+      const payload = (m.payload ?? {}) as { var_binding?: string; output_var?: string };
+      const raw = inst.variable_binding ?? payload.var_binding ?? payload.output_var ?? "";
+      write(raw.replace(/^\$/, "").trim(), base, writerKey);
+    }
+  }
+  return out;
+}
+
 /* -------------------------------------------------------------------- *
  * Static chain resolution — builds the unified upstream-vars map
  * consumed by `collectUpstreamResolved`. Per-kind handling:
@@ -853,7 +1144,7 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, ResolvedValue
   const catalog = new Map<string, MinimalWildcard>();
   for (const n of chain) {
     if (n.type !== "WP_Context") continue;
-    const v = parseWidgetJson<ContextWidgetValue>(
+    const v = parseCached<ContextWidgetValue>(
       widgetValue(n, "wp_modules"),
       { version: 1, modules: [] },
     );
@@ -913,7 +1204,7 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, ResolvedValue
       // (it's in ctx for downstream consumers) but get stripped from
       // the public map below — same path WP_Context modules use.
       const raw = widgetValue(n, "wp_rows");
-      const inj = parseWidgetJson<{
+      const inj = parseCached<{
         version: 1;
         rows?: Array<{
           binding?: string;
@@ -944,7 +1235,7 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, ResolvedValue
       // static placeholder aligned avoids the assembler's live-preview
       // showing "0" then a queue-time "1" jump.
       const raw = widgetValue(n, "wp_context_loop_config");
-      const cfg = parseWidgetJson<{
+      const cfg = parseCached<{
         iteration_var_name?: string;
         iteration_internal?: boolean;
         total_internal?: boolean;
@@ -958,7 +1249,7 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, ResolvedValue
       continue;
     }
     if (n.type !== "WP_Context") continue;
-    const v = parseWidgetJson<ContextWidgetValue>(
+    const v = parseCached<ContextWidgetValue>(
       widgetValue(n, "wp_modules"),
       { version: 1, modules: [] },
     );
@@ -1318,7 +1609,7 @@ export function collectDownstreamWildcardUuids(
         // Harvest wildcard uuids when the downstream node is a
         // WP_Context and not muted/bypassed.
         if (stepped.node.type === "WP_Context" && !isSkippedMode(stepped.node)) {
-          const v = parseWidgetJson<ContextWidgetValue>(
+          const v = parseCached<ContextWidgetValue>(
             widgetValue(stepped.node, "wp_modules"),
             { version: 1, modules: [] },
           );
@@ -1377,7 +1668,7 @@ export function collectDownstreamNestedReachUuids(
         if (seen.has(key)) continue;
         seen.add(key);
         if (stepped.node.type === "WP_Context" && !isSkippedMode(stepped.node)) {
-          const v = parseWidgetJson<ContextWidgetValue>(
+          const v = parseCached<ContextWidgetValue>(
             widgetValue(stepped.node, "wp_modules"),
             { version: 1, modules: [] },
           );
@@ -1567,4 +1858,51 @@ export function* walkAllNodes(
       if (n.subgraph) stack.push(n.subgraph);
     }
   }
+}
+
+/**
+ * Other `WP_Context` nodes in the graph that hold `uuid` as a wildcard module.
+ *
+ * A `@{uuid}` ref resolves against its OWN node's modules, then the live
+ * library — a catalog never crosses a node boundary (`__wp_catalog__` is
+ * rebuilt per node and is not among the cross-node internals). So a wildcard
+ * sitting one node upstream is invisible to the ref, even though `$vars` from
+ * that node flow downstream perfectly well.
+ *
+ * That asymmetry is easy to trip over: move a pool into an upstream node and
+ * the ref silently switches to the library. This lookup lets the hover card
+ * say WHY it fell back, naming the node the user is probably looking at.
+ *
+ * Walks the whole graph (subgraphs included) rather than just the chain: a
+ * node holding the uuid off to one side is exactly as irrelevant to the ref,
+ * and just as confusing to look at.
+ *
+ * Returns node labels — codenames for Context nodes, matching what the rest of
+ * the UI calls them. Excludes `selfNode`, whose modules ARE the ref's pool.
+ */
+export function findWildcardHomesElsewhere(
+  rootGraph: LiteGraphLike,
+  selfNode: LiteNodeLike,
+  uuid: string,
+): string[] {
+  if (!uuid) return [];
+  const contextIds: string[] = [];
+  const holders: LiteNodeLike[] = [];
+  for (const { node: n } of walkAllNodes(rootGraph)) {
+    if (n.type !== "WP_Context") continue;
+    contextIds.push(String(n.id));
+    if (String(n.id) === String(selfNode.id)) continue;
+    const v = parseCached<ContextWidgetValue>(
+      widgetValue(n, "wp_modules"),
+      { version: 1, modules: [] },
+    );
+    // Disabled modules count: the engine still catalogs them, so a user
+    // looking at a greyed-out row is looking at a real pool.
+    if (v.modules.some((m) => m.type === "wildcard" && m.id === uuid)) {
+      holders.push(n);
+    }
+  }
+  if (holders.length === 0) return [];
+  const codenames = assignCodenames(contextIds);
+  return holders.map((n) => codenames.get(String(n.id)) ?? baseCodename(n.id));
 }

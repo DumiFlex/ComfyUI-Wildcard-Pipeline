@@ -79,7 +79,15 @@ export default defineConfig(({ mode }) => {
           },
         },
         minify: "esbuild",
-        sourcemap: "hidden",
+        // `hidden` emits the .map files but writes no `sourceMappingURL`
+        // comment, so browsers never load them and every canvas stack trace
+        // arrives minified — frame after frame of `_e`/`rt` inside the Vue
+        // runtime, naming no component of ours. Set WP_DEBUG_MAPS=1 to link
+        // them and get a readable trace out of a user-reported crash.
+        //   WP_DEBUG_MAPS=1 pnpm build:extension
+        // Left off by default: the comment ships to every install and the
+        // maps are large.
+        sourcemap: process.env.WP_DEBUG_MAPS === "1" ? true : "hidden",
         cssCodeSplit: true,
         reportCompressedSize: true,
         emptyOutDir: true,

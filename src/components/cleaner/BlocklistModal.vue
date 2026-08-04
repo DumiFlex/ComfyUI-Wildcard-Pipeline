@@ -174,7 +174,7 @@ function onCancel(): void {
   padding: 8px 10px;
   font-family: var(--wp-font-mono, ui-monospace, "JetBrains Mono", monospace);
   font-size: 12px;
-  resize: vertical;
+  resize: vertical; overscroll-behavior: contain;
   box-sizing: border-box;
   outline: none;
 }

@@ -1,0 +1,53 @@
+name: Discord announce
+
+# Fires when semantic-release publishes a GitHub release, and can be run by
+# hand for the catch-up case (announcements skipped for a few versions).
+#
+# Deliberately a SEPARATE workflow from release.yml: a Discord outage, a
+# rotated webhook or a rate limit must never fail a release that already
+# shipped. Re-run this job instead.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      since:
+        description: "Roll up every release after this tag (e.g. v2.10.2). Blank = latest release only."
+        required: false
+        type: string
+      dry_run:
+        description: "Print the message instead of posting it."
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  announce:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      # `release` events always post. `workflow_dispatch` honours the dry_run
+      # box, which defaults to true so a manual run cannot surprise anyone.
+      - name: Announce
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_ROLE_ID: ${{ secrets.DISCORD_ROLE_ID }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.since }}" ]; then
+            ARGS="--since ${{ inputs.since }}"
+          elif [ -n "${{ github.event.release.tag_name }}" ]; then
+            ARGS="--version ${{ github.event.release.tag_name }}"
+          fi
+          if [ "${{ github.event_name }}" = "release" ] || [ "${{ inputs.dry_run }}" = "false" ]; then
+            ARGS="$ARGS --post"
+          fi
+          node scripts/discord-announce.mjs $ARGS

@@ -15,6 +15,9 @@ import Icon, { ICON_SM } from "../components/ui/Icon.vue";
 import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
 import { useToast } from "../composables/useToast";
+import { useCategoryStore } from "../stores/categoryStore";
+import { entitySelectOptions } from "../utils/entity-select-options";
+import type { SelectOption } from "../components/ui/select-types";
 import { api } from "../api/client";
 import RichTextPreview from "../components/RichTextPreview.vue";
 import {
@@ -85,6 +88,7 @@ const samples = ref<number>(KIND_DEFAULT_SAMPLES.wildcard);
 const running = ref(false);
 const allModules = ref<ModuleRow[]>([]);
 const allBundles = ref<BundleRow[]>([]);
+const categoryStore = useCategoryStore();
 
 // 8-hex UUID → human var-name. Drives `@{uuid}` chip labels in every
 // RichTextPreview below (histogram templates, combine renderings).
@@ -132,18 +136,31 @@ const traceIndex = ref(0);
 /* ------------------------- derived helpers ------------------------- */
 
 /** Items available in the picker — modules filtered by kind, or all
- *  bundles when the bundle pseudo-kind is selected. */
-const filteredItems = computed<{ id: string; name: string }[]>(() => {
-  if (kind.value === "bundle") {
-    return allBundles.value.map((b) => ({ id: b.id, name: b.name }));
-  }
-  return allModules.value
-    .filter((m) => m.type === kind.value)
-    .map((m) => ({ id: m.id, name: m.name }));
+ *  bundles when the bundle pseudo-kind is selected.
+ *
+ *  Kept as WHOLE rows. This used to project down to `{ id, name }`, which is
+ *  what made the dropdown useless against duplicates: a library with five
+ *  wildcards called "Outfit" rendered five identical lines, and the fields
+ *  that tell them apart — payload, category, uuid — had already been thrown
+ *  away one computed earlier. */
+const filteredItems = computed<(ModuleRow | BundleRow)[]>(() =>
+  kind.value === "bundle"
+    ? allBundles.value
+    : allModules.value.filter((m) => m.type === kind.value),
+);
+
+const categoryById = computed(() => {
+  const map = new Map<string, { name: string; color: string | null; icon: string | null }>();
+  for (const c of categoryStore.items) map.set(c.id, c);
+  return map;
 });
 
-const moduleOptions = computed(() =>
-  filteredItems.value.map((m) => ({ value: m.id, label: m.name })),
+const moduleOptions = computed<SelectOption[]>(() =>
+  entitySelectOptions(
+    filteredItems.value,
+    kind.value === "bundle" ? "bundle" : kind.value,
+    categoryById.value,
+  ),
 );
 
 const selectedModule = computed(() =>
@@ -181,6 +198,13 @@ const refreshing = ref(false);
 async function refresh() {
   refreshing.value = true;
   try {
+    // Categories only supply the dropdown's icon + colour, so this is
+    // deliberately NOT awaited alongside the two fetches below: joining it
+    // into that `Promise.all` would let a category failure reject the whole
+    // batch and leave the runner with an empty module list — a cosmetic
+    // dependency taking down the feature. It settles on its own and the
+    // options recompute when it lands.
+    void categoryStore.fetchAll().catch(() => { /* icons stay unset */ });
     const [modRes, bundleRes] = await Promise.all([
       api.modules.list({}),
       api.bundles.list({}),
@@ -572,7 +596,7 @@ function pickKind(k: SelectorKind) {
       </div>
       <div class="wp-hist">
         <div v-for="entry in result.entries" :key="entry.template" class="wp-hist__row">
-          <div class="wp-hist__template">
+          <div class="wp-hist__template" :title="entry.template || undefined">
             <span v-if="entry.template === ''" class="wp-tr-null-chip">
               <i class="pi pi-ban" aria-hidden="true" />
               <span>null</span>
@@ -808,7 +832,10 @@ function pickKind(k: SelectorKind) {
       <Card :title="`Output distribution — ${result.samples} run(s) · ${result.finalCounts.length} unique`">
         <div class="wp-hist wp-hist--bundle">
           <div v-for="entry in result.finalCounts" :key="entry.value" class="wp-hist__row">
-            <div class="wp-hist__template wp-mono">{{ entry.value || '(empty)' }}</div>
+            <div
+              class="wp-hist__template wp-mono"
+              :title="entry.value || undefined"
+            >{{ entry.value || '(empty)' }}</div>
             <div class="wp-bar">
               <div
                 class="wp-bar__fill"
@@ -881,14 +908,52 @@ function pickKind(k: SelectorKind) {
   margin: 0 0 var(--wp-space-5);
 }
 
-.wp-hist { display: flex; flex-direction: column; gap: var(--wp-space-4); }
+/* No gap between rows — this is what makes the banding read as banding. With
+   a gap, tinted rows cannot touch their neighbours, so each one floats as a
+   discrete filled block and the eye reads "these rows are selected" rather
+   than "this is a striped table". The breathing room the gap provided now
+   lives INSIDE each row as padding, so the stripes are contiguous. */
+.wp-hist { display: flex; flex-direction: column; }
 .wp-hist__row {
   display: grid;
   grid-template-columns: minmax(180px, 280px) 1fr 50px;
   gap: var(--wp-space-5);
   align-items: center;
+  /* Vertical padding replaces the container gap. The horizontal padding plus
+     its matching negative margin bleeds each stripe out to the card's inner
+     edge; `.wp-card__body` is a flat 14px, so the bleed is too. */
+  padding: var(--wp-space-3) 14px;
+  margin-inline: -14px;
 }
-.wp-hist__template { min-width: 0; font-size: var(--wp-text-sm); }
+/* Every histogram renders its rows as a bare `v-for` directly inside
+   `.wp-hist`, so the rows are its only children and positional banding is
+   simply nth-child. (`:nth-of-type` behaves identically here — it counts by
+   tag and every child is a div — so it buys nothing.)
+
+   Deliberately NO border-radius: rounding turns a stripe into a pill, and a
+   pill sitting on a row is the universal shape of "selected". Square,
+   edge-to-edge and contiguous is what separates banding from a highlight. */
+.wp-hist__row:nth-child(odd) {
+  /* Strong enough to track one row across three columns at a glance, weak
+     enough to stay substrate and never compete with the bars, which are the
+     actual data. */
+  background: color-mix(in oklab, var(--wp-text) 7%, transparent);
+}
+/* A histogram label is a PREVIEW next to its bar, so it gets a line budget
+   rather than a hard single line — two lines tell near-identical option values
+   apart, which one line often cannot. Past that it clamps, and `title` carries
+   the rest. Without this a paragraph-length option value rendered forty lines
+   tall and pushed every other bar off the screen. */
+.wp-hist__template {
+  min-width: 0;
+  font-size: var(--wp-text-sm);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
 .wp-hist__resolved { font-size: var(--wp-text-xs); line-height: 1.45; margin-top: 2px; }
 .wp-hist__resolved-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wp-hist__count {
@@ -1086,7 +1151,16 @@ function pickKind(k: SelectorKind) {
 .wp-hist--bundle .wp-hist__template {
   white-space: normal;
   word-break: break-word;
-  overflow: visible;
+  /* Deliberately NOT `overflow: visible` any more. This rule exists to undo a
+     one-line ellipsis so a bundle's longer labels can wrap, but the base rule
+     now clamps with `-webkit-line-clamp`, which silently does nothing unless
+     overflow stays hidden — so restoring visibility here re-broke the very
+     thing the clamp is for. Wrapping is preserved by `white-space: normal`;
+     the clamp just bounds how far it wraps. */
   text-overflow: clip;
+  /* Bundle rows show several modules at once, so they get one more line than
+     the single-module histograms before clamping. */
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
 }
 </style>

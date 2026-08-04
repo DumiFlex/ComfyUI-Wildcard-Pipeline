@@ -28,6 +28,11 @@ import BundleFrame from "./bundles/BundleFrame.vue";
 import { BundleFrameCtxKey, type BundleFrameCtx } from "./bundles/bundle-frame-ctx";
 import ModuleRow from "./ModuleRow.vue";
 import { ModuleRowCtxKey, type ModuleRowCtx } from "./module-row-ctx";
+import {
+  CONTEXT_POOLS_KEY,
+  FOREIGN_POOL_LOOKUP_KEY,
+  buildContextPools,
+} from "../../extension/context-pools";
 import { LockSeedKey } from "./lock-seed-ctx";
 import { buildBundleInsertion, type BundleLibraryEntry } from "./bundles/insert";
 import { isEnabled, type WildcardOption, type InstanceLike } from "./editors/wildcard/probability";
@@ -53,7 +58,8 @@ import {
   MOTION_FLIP_MS,
   MOTION_CURVE_FLIP,
 } from "./bundles/flip";
-import { api } from "../../manager/api/client";
+import { ApiError, api } from "../../manager/api/client";
+import type { VarProducerLike } from "../../manager/components/RefChip.vue";
 import { emptyBundleInstance, type BundleInstance } from "../../widgets/_shared";
 import ModuleEditModal from "./ModuleEditModal.vue";
 import ModalShell from "../shared/ModalShell.vue";
@@ -102,6 +108,16 @@ const props = withDefaults(defineProps<{
   nodeId: number;
   initialJson: string;
   upstreamVars: string[];
+  /** `$var` → which module in which node writes it (last-write-wins).
+   *  Threaded to the edit modals so a var chip's hover card can name its
+   *  producer instead of only confirming the name exists. Optional for
+   *  headless mounts. */
+  upstreamProducers?: Record<string, VarProducerLike>;
+  /** uuid → labels of OTHER Context nodes that hold it as a wildcard. Lets a
+   *  nested-ref hover card explain WHY it fell back to the library: the pool
+   *  exists on the canvas, just not in this node, and a catalog never crosses
+   *  a node boundary. Absent in headless mounts (no graph to walk). */
+  wildcardHomesReader?: (uuid: string) => string[];
   /** Resolved upstream-var snapshot — `$name → resolved string` map.
    *  Drives the combine modal's live-preview pane so users see the
    *  template with vars substituted (e.g. `red portrait` instead of
@@ -765,11 +781,51 @@ const resolvedForEditing = computed<Record<string, ResolvedValue>>(() => {
 // Combine + wildcard have no entries; without this kind-aware fallback the
 // modal's insert-var dropdown would render empty for chains where the only
 // vars come from binding-producer modules.
-const siblingNodeVars = computed<string[]>(() => {
+/**
+ * Vars written by the OTHER modules in this same Context node, together with
+ * who writes each one.
+ *
+ * `collectUpstreamProducers` walks the node chain and deliberately excludes
+ * the point-of-view node, so it can only attribute vars produced further
+ * upstream. In a graph where one Context node carries most of the modules —
+ * which is the normal shape — that left nearly every `$var` in the
+ * autocomplete with no writer at all, and the rows rendered bare while the
+ * SPA's equivalent showed a full attribution line for the same names.
+ *
+ * Built in the same pass as the name list so the two cannot disagree about
+ * which module owns a name.
+ */
+const siblingVarInfo = computed<{
+  names: string[];
+  producers: Record<string, VarProducerLike>;
+}>(() => {
   const names = new Set<string>();
+  const producers: Record<string, VarProducerLike> = {};
+  /** Last module to write each name, so repeat writes from one module (a
+   *  derivation's branches) do not inflate the override count. */
+  const lastWriter = new Map<string, string>();
+  let owner: { kind: string; moduleName: string; moduleId: string } | null = null;
   function add(name: string | undefined | null): void {
     const trimmed = (name ?? "").replace(/^\$+/, "").trim();
-    if (trimmed) names.add(trimmed);
+    if (!trimmed) return;
+    names.add(trimmed);
+    if (!owner) return;
+    // Later modules win, matching the engine's last-write-wins resolution.
+    // The count tracks distinct MODULES, not write statements: a derivation
+    // calls this once per branch and a fixed_values once per row, but at most
+    // one branch fires and the module is a single writer either way.
+    const prev = producers[trimmed];
+    const sameWriter = lastWriter.get(trimmed) === owner.moduleId;
+    lastWriter.set(trimmed, owner.moduleId);
+    producers[trimmed] = {
+      kind: owner.kind,
+      moduleName: owner.moduleName,
+      moduleId: owner.moduleId,
+      // Same node, so there is no other node to name — saying which one it is
+      // would be noise when every sibling gives the same answer.
+      nodeLabel: "this node",
+      shadowed: prev ? (sameWriter ? prev.shadowed : prev.shadowed + 1) : 0,
+    };
   }
   const editingM = editingModule.value;
   const bundleEnabled = buildBundleEnabledMap(value.value.bundles);
@@ -780,6 +836,11 @@ const siblingNodeVars = computed<string[]>(() => {
     // Defensive: also skip if same object (shouldn't happen but Vue
     // proxies can confuse identity equals).
     void editingM;
+    owner = {
+      kind: m.type,
+      moduleName: m.meta?.name ?? m.type,
+      moduleId: m.id,
+    };
     for (const e of m.entries) add(e.variable_name);
     const inst = (m.instance ?? {}) as {
       variable_binding?: string | null;
@@ -812,7 +873,38 @@ const siblingNodeVars = computed<string[]>(() => {
       }
     }
   }
-  return [...names];
+  owner = null;
+  return { names: [...names], producers };
+});
+
+const siblingNodeVars = computed<string[]>(() => siblingVarInfo.value.names);
+
+/**
+ * Every `$var` writer the editors can name: upstream nodes first, then this
+ * node's own modules on top.
+ *
+ * Siblings override because they run later in the same chain position, which
+ * is what the engine does too — so the row names the module whose value
+ * actually survives.
+ *
+ * The override COUNT has to be carried across the seam. A plain spread
+ * replaces the upstream entry outright, taking its `shadowed` with it: with
+ * `$outfit` written by an upstream wildcard, rewritten by an upstream
+ * derivation, then rewritten again by a module in this node, the row reported
+ * "0" — no badge at all — because the sibling map only ever counted siblings
+ * and started from zero. A sibling that displaces an upstream writer has
+ * overridden that writer PLUS everything it had already overridden.
+ */
+const allVarProducers = computed<Record<string, VarProducerLike>>(() => {
+  const upstream = props.upstreamProducers ?? {};
+  const merged: Record<string, VarProducerLike> = { ...upstream };
+  for (const [name, sib] of Object.entries(siblingVarInfo.value.producers)) {
+    const up = upstream[name];
+    merged[name] = up
+      ? { ...sib, shadowed: sib.shadowed + up.shadowed + 1 }
+      : sib;
+  }
+  return merged;
 });
 
 function clearDragHover() {
@@ -1612,6 +1704,17 @@ async function duplicateBundle(uid: string): Promise<void> {
   });
 }
 
+/** Human message for a failed bundle-snapshot fetch. A 404 means the
+ *  library row is gone (deleted, or re-imported under a fresh uuid), which
+ *  the raw API text doesn't say — and re-linking, not retrying, is the fix.
+ *  Anything else falls back to the raw message. */
+function bundleResetErrorMessage(e: unknown, name: string): string {
+  if (e instanceof ApiError && e.status === 404) {
+    return `Can't reset "${name || "bundle"}" — its library bundle no longer exists. Re-link it first.`;
+  }
+  return `Reset failed: ${e instanceof Error ? e.message : String(e)}`;
+}
+
 /** Reset bundle to library snapshot — re-fetch the library entry
  *  + replace current children with the frozen blob. Drops any user
  *  edits made to bundle children since insert. Confirms first since
@@ -1812,8 +1915,7 @@ async function resetBundleToLibrary(uid: string): Promise<void> {
       },
     });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    pushToast(`Reset failed: ${msg}`, { severity: "error" });
+    pushToast(bundleResetErrorMessage(e, target.name), { severity: "error" });
   }
 }
 
@@ -1832,6 +1934,18 @@ async function resetChildToBundleSnapshot(idx: number): Promise<void> {
   if (!bundle) return;
   const posInBundle = idx - bundle.start_idx;
   if (posInBundle < 0) return;
+  // Guard: mirrors resetBundleToLibrary. An unlinked/detached BundleInstance
+  // carries an empty `library_id`; fetching it builds `/wp/api/bundles/` whose
+  // trailing slash normalizes to the collection route, so aiohttp reports
+  // "No such API route: /wp/api/bundles" — a nonsense message for the user.
+  // Refuse up front and name the real recovery.
+  if (!bundle.library_id) {
+    pushToast(
+      `Can't reset "${bundle.name || "bundle"}" children — it isn't linked to a library bundle. Re-link it first.`,
+      { severity: "error" },
+    );
+    return;
+  }
   // Delta-undo capture: the original module ref keeps its `_uid` so
   // Undo can find it in live state regardless of position. Reset
   // only swaps payload/instance/payload_hash; the _uid stays put,
@@ -1871,8 +1985,7 @@ async function resetChildToBundleSnapshot(idx: number): Promise<void> {
       },
     });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    pushToast(`Reset failed: ${msg}`, { severity: "error" });
+    pushToast(bundleResetErrorMessage(e, bundle.name), { severity: "error" });
   }
 }
 
@@ -1963,21 +2076,39 @@ function openBundleContextMenu(ev: MouseEvent, uid: string): void {
       onSelect: () => toggleBundleEnabled(uid, !target.enabled),
       divider: true,
     },
-    {
-      label: "Reset to library snapshot",
-      icon: "pi-refresh",
-      subtitle: "Replace children with frozen library state",
-      onSelect: () => { void resetBundleToLibrary(uid); },
-    },
+    // The two library actions accent themselves to match the bundle's CURRENT
+    // state, so the menu points at the recovery for the badge the user just
+    // saw. Only one lights up: the states are ranked, since a bundle can be
+    // several at once and two competing accents would say nothing.
+    //   missing  → Push (re-link or add) — nothing to reset FROM
+    //   drifted  → Reset (pull the library's newer version)
+    //   modified → Push (save your local edits up)
+    (() => {
+      const drifted = !isBundleMissingFromLibrary(target)
+        && isBundleLibraryDrifted(target);
+      return {
+        label: "Reset to library snapshot",
+        icon: "pi-refresh",
+        subtitle: drifted
+          ? "Library changed since insert — pull the newer version"
+          : "Replace children with frozen library state",
+        accent: drifted,
+        onSelect: () => { void resetBundleToLibrary(uid); },
+      };
+    })(),
     (() => {
       const bundleMissing = isBundleMissingFromLibrary(target);
+      const modified = !bundleMissing
+        && !isBundleLibraryDrifted(target)
+        && bundleSnapshotModified(target, value.value.modules);
+      let subtitle = "Rename, retag, overwrite library entry";
+      if (bundleMissing) subtitle = "Not linked to a library entry — re-link or add";
+      else if (modified) subtitle = "Local edits since insert — save them to the library";
       return {
         label: "Push to library…",
         icon: "pi-cloud-upload",
-        subtitle: bundleMissing
-          ? "Library entry deleted — re-add to library"
-          : "Rename, retag, overwrite library entry",
-        accent: bundleMissing,
+        subtitle,
+        accent: bundleMissing || modified,
         onSelect: () => openPushBundleToLibrary(uid),
         divider: true,
       };
@@ -2437,15 +2568,30 @@ function isBundleLibraryDrifted(bundle: BundleInstance): boolean {
   return live !== bundle.inserted_at_hash;
 }
 
-/** True when the bundle's library entry has been deleted upstream —
- *  the polled `bundleHashes` map no longer contains its uuid. Pairs
- *  with `isMissingFromLibrary` for modules. Returns false until first
- *  poll lands so we don't flash MISSING before the truth is known. */
+/** True when the bundle has NO live library entry behind it. Covers both
+ *  shapes of that: it carries a `library_id` the polled map no longer knows,
+ *  OR it carries no `library_id` at all.
+ *
+ *  The second case used to early-return false, so an unlinked bundle could
+ *  never show MISSING — leaving MODIFIED as its only badge, which then
+ *  compared its children against a snapshot baseline from a library entry that
+ *  isn't there. "Modified against what?" was a fair question with no answer.
+ *
+ *  Returns false until the first poll lands so we don't flash MISSING before
+ *  the truth is known. */
 function isBundleMissingFromLibrary(bundle: BundleInstance): boolean {
   const map = bundleHashes.value;
   if (map === null) return false;
-  if (!bundle.library_id) return false;
+  if (!bundle.library_id) return true;
   return !(bundle.library_id in map);
+}
+
+/** True when the bundle never had a library entry to diverge FROM — no
+ *  `library_id` at all. MODIFIED is meaningless in that state: there is no
+ *  insert to be modified since. Distinct from "the entry was deleted", where
+ *  the local snapshot IS a real baseline and MOD still reads correctly. */
+function isBundleUnlinked(bundle: BundleInstance): boolean {
+  return bundleHashes.value !== null && !bundle.library_id;
 }
 
 // Pending confirm-dialog state. Single slot — only one destructive op
@@ -4248,6 +4394,10 @@ function openContextMenu(ev: MouseEvent, m: ModuleEntry, idx: number) {
     items.push({
       label: "Refresh from library",
       icon: "pi-refresh",
+      // Accented + explained: drift is the state where the menu HAS the fix
+      // for the badge the user just saw, so it should say so.
+      subtitle: "Library changed since insert — pull the newer version",
+      accent: true,
       onSelect: () => { void refreshOne(idx); },
       divider: true,
     });
@@ -4260,11 +4410,17 @@ function openContextMenu(ev: MouseEvent, m: ModuleEntry, idx: number) {
   // greys out the "Update existing" button when payload_hash is empty.
   if (!!m.payload) {
     const missing = isMissingFromLibrary(m);
+    // Local overrides with no drift → pushing is what the user probably wants.
+    // Ranked below `missing` so only one library action ever accents.
+    const modified = !missing && !isDrifted(m) && isModified(m);
+    let subtitle: string | undefined;
+    if (missing) subtitle = "Not linked to a library entry — re-link or add";
+    else if (modified) subtitle = "Local edits since insert — save them to the library";
     items.push({
       label: "Push to library…",
       icon: "pi-cloud-upload",
-      subtitle: missing ? "Library entry deleted — re-add as new entry" : undefined,
-      accent: missing,
+      subtitle,
+      accent: missing || modified,
       onSelect: () => openPushToLibrary(idx),
       divider: true,
     });
@@ -4934,6 +5090,17 @@ const moduleRowCtx: ModuleRowCtx = {
   frameEnableOverride,
 };
 provide(ModuleRowCtxKey, moduleRowCtx);
+// Pools this node holds, for the nested-ref hover card. Provided rather than
+// threaded: `RefChip` sits six components below here (row → edit modal →
+// section → value chips → preview → chip) and not one layer in between has any
+// business knowing about option pools. Recomputes with the module list, so
+// picking or removing a wildcard moves the card's numbers immediately.
+provide(CONTEXT_POOLS_KEY, computed(() => buildContextPools(value.value.modules)));
+// Companion lookup for the same card: when the ref falls back to the library,
+// this names any OTHER node holding the pool, so "why isn't it using the one
+// I can see right there" has an answer on the card instead of being a puzzle.
+provide(FOREIGN_POOL_LOOKUP_KEY, (uuid: string): string[] =>
+  props.wildcardHomesReader?.(uuid) ?? []);
 // Seed source for the edit-modal's Lock button — resolves the seed the module
 // actually rolled (frame #k's captured seed when a frame is active, else the
 // last-run seed) so locking pins what the user saw, not a random number.
@@ -4951,7 +5118,10 @@ const bundleFrameCtx: BundleFrameCtx = {
   bundleLockState,
   bundleHeaderGap,
   isBundleDropTarget,
-  isBundleSnapshotModified: (b: BundleInstance) => bundleSnapshotModified(b, value.value.modules),
+  // Suppressed for an unlinked bundle — there is no insert for its children to
+  // have diverged from, so MOD would be diffing against a ghost.
+  isBundleSnapshotModified: (b: BundleInstance) =>
+    !isBundleUnlinked(b) && bundleSnapshotModified(b, value.value.modules),
   recentDropUids,
   pulseDelayFor,
   toggleBundleCollapsed,
@@ -5200,6 +5370,7 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
       :visible="editingModule !== null"
       :module="editingModule"
       :upstream-vars="upstreamVars"
+      :upstream-producers="allVarProducers"
       :upstream-resolved="resolvedForEditing"
       :sibling-vars="siblingNodeVars"
       :sibling-modules="value.modules"

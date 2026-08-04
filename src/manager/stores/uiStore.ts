@@ -11,6 +11,7 @@ const STORAGE_KEY = "wp-theme-mode";
 const STORAGE_KEY_DENSITY = "wp-density-mode";
 const STORAGE_KEY_MAX_REF_DEPTH = "wp-wildcard-max-ref-depth";
 const STORAGE_KEY_CHECK_ON_LAUNCH = "wp-update-check-on-launch";
+const STORAGE_KEY_KEEP_EMPTY_GROUPS = "wp-keep-empty-tag-groups";
 const FLASH_SUPPRESS_MS = 120;
 const DEFAULT_MAX_REF_DEPTH = 8;
 const MIN_MAX_REF_DEPTH = 1;
@@ -34,6 +35,29 @@ function readStoredDensity(): DensityMode {
     /* localStorage unavailable */
   }
   return "comfortable";
+}
+
+/**
+ * Whether an axis with no tags in it survives a save.
+ *
+ * A "+ Group" box the user created and had not filled yet was dropped on
+ * save, which reads as the editor deleting their work — they had made the
+ * group deliberately and intended to fill it later. Dropping is still the
+ * default, because it is also what clears up boxes made by accident, but the
+ * choice is now theirs.
+ *
+ * A preference rather than payload state: an empty axis is already
+ * representable as `{axis: []}`, which the engine's validator accepts, so
+ * keeping one needs no new field and no schema bump. The DECISION is what
+ * varies per user; the RESULT is recorded in the payload like any other edit.
+ */
+function readStoredKeepEmptyGroups(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_KEY_KEEP_EMPTY_GROUPS) === "1";
+  } catch {
+    /* localStorage unavailable */
+  }
+  return false;
 }
 
 function readStoredMaxRefDepth(): number {
@@ -74,6 +98,16 @@ export const useUiStore = defineStore("ui", () => {
   const sidebarCollapsed = ref(false);
   const maxRefDepth = ref<number>(readStoredMaxRefDepth());
   const checkOnLaunch = ref<boolean>(readStoredCheckOnLaunch());
+  const keepEmptyTagGroups = ref<boolean>(readStoredKeepEmptyGroups());
+
+  function setKeepEmptyTagGroups(v: boolean): void {
+    keepEmptyTagGroups.value = v;
+    try {
+      localStorage.setItem(STORAGE_KEY_KEEP_EMPTY_GROUPS, v ? "1" : "0");
+    } catch {
+      /* localStorage unavailable */
+    }
+  }
 
   /** Resolved theme — `"auto"` collapsed to dark/light via OS preference. */
   const resolvedTheme = computed<"dark" | "light">(() =>
@@ -156,6 +190,8 @@ export const useUiStore = defineStore("ui", () => {
     sidebarCollapsed,
     maxRefDepth,
     checkOnLaunch,
+    keepEmptyTagGroups,
+    setKeepEmptyTagGroups,
     cycleTheme,
     setThemeMode,
     setDensity,

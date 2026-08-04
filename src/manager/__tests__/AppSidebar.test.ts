@@ -70,6 +70,20 @@ describe("AppSidebar.vue", () => {
     expect(labels).toContain("Dashboard");
   });
 
+  it("offers a Feedback & support entry that emits an action instead of navigating", async () => {
+    // "Report an issue" under-sold it — most feedback is a feature request —
+    // and jumping straight to a tracker skipped the faster Discord route. The
+    // item opens a modal, so it emits rather than carrying an href.
+    const { wrap } = await mountSidebar();
+    const labels = wrap.findAll(".wp-nav__label").map((n) => n.text());
+    expect(labels).toContain("Feedback & support");
+    const item = wrap.find('[data-nav-id="_feedback"]');
+    expect(item.exists()).toBe(true);
+    expect(item.attributes("href")).toBeUndefined();
+    await item.trigger("click");
+    expect(wrap.emitted("action")?.[0]).toEqual(["feedback"]);
+  });
+
   it("marks the matching item active when on its route", async () => {
     const { wrap } = await mountSidebar("/wildcards");
     const active = wrap.find('[data-nav-id="wildcards"]');
@@ -88,14 +102,17 @@ describe("AppSidebar.vue", () => {
 
   it("renders external links as anchors with target=_blank", async () => {
     const { wrap } = await mountSidebar();
-    // Documentation is now an in-app route (button); Wiki is the external anchor.
-    const wiki = wrap
+    // Documentation is an in-app route (button); View Source is the external
+    // anchor. Wiki moved into the Documentation view's own nav — it duplicated
+    // Documentation's content and sat right above View Source.
+    const source = wrap
       .findAll("a.wp-nav")
-      .find((a) => a.text().includes("Wiki"));
-    if (!wiki) throw new Error("Wiki link not found");
-    expect(wiki.attributes("target")).toBe("_blank");
-    expect(wiki.attributes("rel")).toContain("noopener");
-    expect(wiki.attributes("href")).toMatch(/^https?:\/\//);
+      .find((a) => a.text().includes("View Source"));
+    if (!source) throw new Error("View Source link not found");
+    expect(source.attributes("target")).toBe("_blank");
+    expect(source.attributes("rel")).toContain("noopener");
+    expect(source.attributes("href")).toMatch(/^https?:\/\//);
+    expect(wrap.findAll(".wp-nav__label").map((n) => n.text())).not.toContain("Wiki");
   });
 
   it("hides section labels when sidebar is collapsed", async () => {

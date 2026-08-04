@@ -38,4 +38,16 @@ describe("probeAutocomplete", () => {
   it("returns null when there is no trigger before the caret", () => {
     expect(probeAutocomplete("plain text", 10)).toBeNull();
   });
+
+  // The `@{uuid#name}` brace form is an internal serialisation the user never
+  // types, and a space commits the chip rather than extending the query — so
+  // neither is a valid query shape and the probe must not claim them.
+
+  it("does NOT treat an inline brace block as a trigger", () => {
+    expect(probeAutocomplete("{a|b", 4)).toBeNull();
+  });
+
+  it("stops at a space — the settle delimiter that commits a chip", () => {
+    expect(probeAutocomplete("@pose pool", 10)).toBeNull();
+  });
 });

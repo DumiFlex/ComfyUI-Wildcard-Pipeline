@@ -113,6 +113,34 @@
    * without clashing with any module kind. */
   --wp-kind-injector:    #60a5fa;
 
+  /* Type + spacing scale, mirrored from the SPA's tokens.css.
+   *
+   * These were the LAST gap in the alias block: colors, borders, radius and
+   * shadow all had graph-side equivalents, but a component written against
+   * `var(--wp-text-sm)` or `var(--wp-space-3)` resolved to NOTHING here —
+   * font-size fell back to inherited, padding collapsed to 0. That is the
+   * same failure mode `Select.vue` hit when its styles lived only in the SPA
+   * bundle, and it is invisible in the SPA where the tokens exist.
+   *
+   * Values are the SPA's `--wp-density: 1` resolution, flattened: the graph
+   * side has no density control, so there is nothing to multiply by.
+   * Anything shared between the two targets can now use one set of names. */
+  --wp-space-0: 0;
+  --wp-space-1: 2px;
+  --wp-space-2: 4px;
+  --wp-space-3: 6px;
+  --wp-space-4: 8px;
+  --wp-space-5: 12px;
+  --wp-space-6: 16px;
+  --wp-space-7: 24px;
+  --wp-space-8: 32px;
+
+  --wp-text-xs:   11px;  --wp-line-xs:   16px;
+  --wp-text-sm:   12px;  --wp-line-sm:   16px;
+  --wp-text-base: 13px;  --wp-line-base: 20px;
+  --wp-text-md:   14px;  --wp-line-md:   20px;
+  --wp-text-lg:   16px;  --wp-line-lg:   22px;
+
   /* Bundle frame default color — used when a bundle library entry
    * has no user-picked color set. Indigo-500 chosen for visibility:
    * distinct from accent purple and injector blue, high enough chroma

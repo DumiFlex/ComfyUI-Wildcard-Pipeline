@@ -1,7 +1,9 @@
 import { createApp, type App, type Component } from "vue";
 
 import { nodeCollapseAnimating } from "../extension/_stashes";
+import { isVueNodes } from "../extension/renderer";
 import { installClipboardShield } from "./clipboard-shield";
+import { installWheelShield } from "./wheel-shield";
 
 export interface DomWidget {
   element: HTMLElement;
@@ -71,6 +73,47 @@ function snapToGrid(n: number): number {
   return Math.round(n / NODE_SIZE_GRID) * NODE_SIZE_GRID;
 }
 
+/* ── fillHost upkeep registry ──────────────────────────────────────────
+ *
+ * One document-level observer drives every `fillHost` widget's `syncFill`.
+ * Per-widget observation does not work: the widget is built before its node
+ * element exists, and the renderer is togglable at runtime, so the element can
+ * appear arbitrarily later. `childList` only — the syncs write class and style
+ * attributes, which this never sees, so there is no feedback loop.
+ */
+const fillSyncs = new Set<() => void>();
+let fillSyncObserver: MutationObserver | null = null;
+let fillSyncQueued = false;
+
+function flushFillSyncs(): void {
+  fillSyncQueued = false;
+  for (const sync of [...fillSyncs]) sync();
+}
+
+function queueFillSync(): void {
+  if (fillSyncQueued) return;
+  fillSyncQueued = true;
+  requestAnimationFrame(flushFillSyncs);
+}
+
+function registerFillSync(sync: () => void): void {
+  fillSyncs.add(sync);
+  if (
+    !fillSyncObserver
+    && typeof MutationObserver !== "undefined"
+    && typeof document !== "undefined"
+    && document.body
+  ) {
+    fillSyncObserver = new MutationObserver(queueFillSync);
+    fillSyncObserver.observe(document.body, { childList: true, subtree: true });
+  }
+  queueFillSync();
+}
+
+function unregisterFillSync(sync: () => void): void {
+  fillSyncs.delete(sync);
+}
+
 interface ResizableNode {
   size?: number[];
   computeSize?: () => [number, number] | number[];
@@ -103,6 +146,27 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     // available space.
     inner.style.height = "100%";
     host.style.height = "100%";
+    // Take the content out of flow immediately, and in BOTH renderers.
+    //
+    // Under Nodes 2.0 in-flow content pushes the node to fit the payload (see
+    // the block comment on syncFill). Doing it here rather than from the
+    // observer matters because the push needs only one frame, and gating it on
+    // `isVueNodes()` does not work either: the renderer is togglable at
+    // runtime from the menu, so a widget built under legacy would never have
+    // run the branch. Measured — toggling live with content on screen jumped
+    // the node from 380 to 1200.
+    //
+    // Legacy is unaffected by construction: it gives the host a definite box
+    // and the content filled it already; filling it absolutely is the same
+    // picture, and its numbers are unchanged (host 354u, scroller engaged,
+    // 500x240 floor).
+    host.style.position = "relative";
+    host.style.minHeight = `${snapToGrid(options.minHeight ?? 80)}px`;
+    inner.style.position = "absolute";
+    inner.style.top = "0";
+    inner.style.left = "0";
+    inner.style.right = "0";
+    inner.style.bottom = "0";
   }
   host.appendChild(inner);
 
@@ -114,6 +178,10 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   // body-level shield (main.ts) that covers Teleported modals (Injector
   // binding field, instance-edit modals, etc.). See widgets/clipboard-shield.ts.
   installClipboardShield(inner);
+  // Keep the wheel scrolling our content rather than zooming the canvas — see
+  // wheel-shield.ts. Installed on the host so it covers every widget, not just
+  // the fillHost ones.
+  const removeWheelShield = installWheelShield(host);
 
   let state = options.initialValue ?? "";
   // baseMin pre-snapped so the initial `getMinHeight` answer + every
@@ -244,6 +312,125 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
       });
   if (resizeObserver) queueMicrotask(() => resizeObserver.observe(inner));
 
+  /* ── fillHost under the Vue renderer ──────────────────────────────────
+   *
+   * `fillHost` means the user owns the node's height and the widget fills it,
+   * scrolling any overflow. Under Nodes 2.0 it did the opposite: the node
+   * inflated to fit its whole payload, the scroller never engaged, and the
+   * node could not be dragged shorter. Measured with `node.size[1]` pinned at
+   * 400:
+   *
+   *     payload    legacy host / pre           Nodes 2.0 host / pre
+   *      3 vars    354u  305/305               338u  289/289
+   *     20 vars    354u  305/429  scrolls      477u  429/429  never scrolls
+   *     60 vars    354u  305/1089 scrolls     1138u 1089/1089 never scrolls
+   *
+   * The cause is not the percentage height — every ancestor between us and the
+   * node does have a definite height that tracks `node.size` (measured 238 /
+   * 638 / 838 as the node went 330 / 730 / 930). It is that we are a flex item
+   * defaulting to `min-height: auto`, which refuses to shrink below content.
+   * Our box grew to the payload, pushed the chain, and the layout store wrote
+   * the result back into `node.size`.
+   *
+   * See `syncFill` for the three parts of the fix and why each is needed.
+   */
+  let fillDispose: (() => void) | null = null;
+  if (options.fillHost) {
+    const sized = node as unknown as { id?: string | number; size?: [number, number] | number[] };
+    const syncFill = (): void => {
+      if (!isVueNodes()) {
+        // Legacy sizes us itself. The out-of-flow layout set at construction
+        // STAYS: stripping it here would leave a window on a live renderer
+        // toggle where content is briefly in flow and can push the node, and
+        // legacy is indifferent to it — it gives the host a definite box
+        // either way (verified: host 354u, scroller engaged, 500x240 floor).
+        if (host.style.height !== "100%") host.style.height = "100%";
+        return;
+      }
+      const nodeEl = typeof document === "undefined" || sized.id == null
+        ? null
+        : document.querySelector<HTMLElement>(`[data-node-id="${String(sized.id)}"]`);
+      if (!nodeEl) return;
+
+      // Let the host shrink below its content.
+      //
+      // Every ancestor between us and the node already has a definite height
+      // that tracks `node.size` — measured 238 / 638 / 838 as the node went
+      // 330 / 730 / 930 — so `height: 100%` resolves fine and we do NOT need
+      // to pin pixels. What broke is subtler: the parent is
+      // `.flex.flex-col.*:flex-1`, so we are a flex item, and a flex item
+      // defaults to `min-height: auto`, which REFUSES to shrink below its
+      // content. The debug payload therefore pushed our box, which pushed the
+      // whole chain, which the layout store then wrote back into
+      // `node.size` — the node inflating to fit its payload, the scroller
+      // never engaging, and no way to drag the node shorter.
+      //
+      // `min-height: 0` restores the intent: fill the height the node gives
+      // us, and let `.wp-dbg-pre` (`flex: 1 1 0%; min-height: 0`) compress and
+      // scroll the overflow, exactly as it does under the legacy renderer.
+      // A fixed floor, not a content-derived one.
+      //
+      // The host clamps a resize with `measureMinContentHeight()` — it
+      // MEASURES the node's content. Out-of-flow content (below) measures
+      // zero, which would take the floor with it: the node dragged down to
+      // 62u where legacy stops at 240. Declaring our own minimum restores a
+      // floor without reintroducing a payload-sized one.
+      const minPxH = `${minHeight}px`;
+      if (host.style.minHeight !== minPxH) host.style.minHeight = minPxH;
+      if (host.style.height !== "100%") host.style.height = "100%";
+
+      // ...and take our content out of flow so it cannot push anything.
+      //
+      // Our own `min-height` alone is not sufficient: EVERY ancestor up to
+      // the node is also a flex item defaulting to `min-height: auto`, so the
+      // push simply propagates past us (measured: node still inflated from 300
+      // to 870). Rather than reach up and restyle the host's own chain, make
+      // our subtree contribute nothing to content height — absolutely
+      // positioned content fills the host without participating in its
+      // parent's intrinsic sizing, so the node's height is decided purely by
+      // `node.size`, which is what the legacy renderer effectively does.
+      if (host.style.position !== "relative") host.style.position = "relative";
+      if (inner.style.position !== "absolute") {
+        inner.style.position = "absolute";
+        inner.style.top = "0";
+        inner.style.left = "0";
+        inner.style.right = "0";
+        inner.style.bottom = "0";
+      }
+
+      // Width floor. Legacy gets this free: litegraph asks `computeSize`, which
+      // folds in the widget's `computeLayoutSize().minWidth`, and refuses to
+      // drag narrower. Nodes 2.0 never calls `computeSize`, so the node could
+      // be squeezed to its global floor — `MIN_NODE_WIDTH = 225` — against a
+      // widget declaring it needs 494, turning the content into an unreadable
+      // column.
+      //
+      // Its resize interaction reads the floor off the NODE element's inline
+      // style and only falls back to the global default:
+      //
+      //     const minWidth = parseFloat(
+      //       nodeElement.style.getPropertyValue('min-width') || '0'
+      //     ) || MIN_NODE_WIDTH
+      //
+      // so publishing our minimum there is the sanctioned hook, and it gets
+      // the west-corner position compensation for free. Writing `node.size[0]`
+      // instead does NOT work: the layout store owns the rendered size and
+      // syncs one-way into litegraph, so the model and the view disagree.
+      const wantMinW = minWidthGetter ? snapToGrid(minWidthGetter()) : 0;
+      const minPx = wantMinW > 0 ? `${wantMinW}px` : "";
+      if (nodeEl.style.minWidth !== minPx) nodeEl.style.minWidth = minPx;
+    };
+    // Keep it applied. A bounded retry is not enough: the renderer is
+    // togglable at runtime, so the node element can appear minutes after the
+    // widget was built, long after any frame budget would have expired — which
+    // is exactly how the live-toggle jump got through. Register instead, and
+    // let one document-level observer re-run every registered widget whenever
+    // the node layer changes.
+    registerFillSync(syncFill);
+    fillDispose = () => unregisterFillSync(syncFill);
+    syncFill();
+  }
+
   // Pull-based relayout. Reentrancy flag short-circuits if litegraph's
   // response to our setSize triggers (via some plugin or observer) a
   // synchronous re-entry. 32ms release matches rgthree's _tempWidth
@@ -323,6 +510,8 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     app,
     unmount: () => {
       resizeObserver?.disconnect();
+      fillDispose?.();
+      removeWheelShield();
       app.unmount();
     },
     getValue: () => state,

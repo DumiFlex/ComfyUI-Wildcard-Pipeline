@@ -2,16 +2,11 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import Icon, { ICON_SM } from "./Icon.vue";
 
-export interface SelectOption {
-  value: string | number | null;
-  label: string;
-  /** Optional color dot shown before the label (e.g. category color). */
-  dot?: string;
-  /** Optional native tooltip surfaced via `title` on the option row.
-   *  Used by derivation op dropdown to explain semantics — e.g.
-   *  "matches" shows "Python regex via re.search". */
-  title?: string;
-}
+// Declared in `./select-types` so plain `.ts` helpers can build option lists
+// (a `.ts` importer only sees the `*.vue` ambient shim). Re-exported here so
+// existing `from "./Select.vue"` imports keep resolving.
+import type { SelectOption } from "./select-types";
+export type { SelectOption };
 
 interface Props {
   modelValue: string | number | null;
@@ -38,18 +33,53 @@ const active = ref(0);
 /** Type-to-filter query, built from printable keystrokes while the menu
  *  is open. Reset every time the menu opens or closes. */
 const query = ref("");
+/** The teleported menu, so the outside-click guard can exclude it. */
+const menuRef = ref<HTMLElement | null>(null);
 
 /** Fixed-position coordinates for the teleported menu. */
 const menuStyle = ref<Record<string, string>>({});
 
 const selected = computed(() => props.options.find((o) => o.value === props.modelValue) ?? null);
 
+/**
+ * Width to reserve for the icon/dot gutter, or null when no option has one.
+ *
+ * Markers are per-option, so a list where only SOME options carry one used to
+ * render a ragged left edge — a categorised row sat 20px right of an
+ * uncategorised one, and the eye reads that indent as hierarchy that isn't
+ * there. Reserving the gutter for every row in a list where any row has a
+ * marker keeps the labels in one column.
+ *
+ * Measured off the widest marker actually present: icons are a 14px box, dots
+ * 8px, so a dots-only list does not pay for icon width it never uses.
+ */
+const markerWidth = computed<string | null>(() => {
+  let hasDot = false;
+  for (const o of props.options) {
+    if (o.icon) return "14px";
+    if (o.dot) hasDot = true;
+  }
+  return hasDot ? "8px" : null;
+});
+
+/** Whether to advertise type-to-filter. Only a single-option menu has nothing
+ *  to filter; anything above that benefits, and the capability was invisible
+ *  until you already knew about it. An earlier threshold of six hid the hint on
+ *  exactly the menus users were checking. */
+const FILTER_HINT_MIN_OPTIONS = 2;
+const showFilterHint = computed(() => props.options.length >= FILTER_HINT_MIN_OPTIONS);
+
 /** Options narrowed by `query` (case-insensitive substring on the label).
  *  Empty query → all options, so every dropdown is type-to-filter. */
 const filtered = computed<SelectOption[]>(() => {
   const q = query.value.trim().toLowerCase();
   if (!q) return props.options;
-  return props.options.filter((o) => o.label.toLowerCase().includes(q));
+  // Match `meta` too — when several rows share a label, the meta (option
+  // count + uuid) is the ONLY thing that tells them apart, so it has to be
+  // searchable or the duplicates stay unreachable by typing.
+  return props.options.filter((o) =>
+    o.label.toLowerCase().includes(q) || (o.meta?.toLowerCase().includes(q) ?? false),
+  );
 });
 
 const btnClasses = computed(() => [
@@ -70,8 +100,12 @@ const composedAriaLabel = computed<string | undefined>(() => {
 function onDocClick(e: MouseEvent) {
   const t = e.target as Node | null;
   if (!t) return;
-  // Close when click is outside the trigger button AND outside the menu.
+  // Close when the press is outside the trigger AND outside the menu. The menu
+  // is teleported to <body>, so it is NOT inside `wrapRef` — checking only the
+  // trigger meant a mousedown on the menu's own scrollbar counted as "outside"
+  // and dismissed it. The wheel worked, the scrollbar did not.
   if (wrapRef.value?.contains(t)) return;
+  if (menuRef.value?.contains(t)) return;
   open.value = false;
 }
 
@@ -235,12 +269,43 @@ function onKeydown(e: KeyboardEvent) {
       <!-- Selected label — optional color dot prefix. Consumers can
            override the label text rendering via the `#label` scoped
            slot (e.g. to render `@{uuid}` ref chips instead of raw text). -->
-      <span class="wp-select__label-wrap">
-        <span v-if="selected?.dot" class="wp-select__dot" :style="{ background: selected.dot }" />
+      <!-- `title` on the label so a value clipped by the trigger's fixed width
+           is still readable on hover. Values here run long — a constraint
+           exception source can be a phrase plus a nested `@ref` — and the
+           ellipsis alone left no way to see the rest. -->
+      <span
+        class="wp-select__label-wrap"
+        :title="selected ? (selected.meta ? `${selected.label} — ${selected.meta}` : selected.label) : undefined"
+      >
+        <i
+          v-if="selected?.icon"
+          :class="`pi pi-${selected.icon} wp-select__icon`"
+          :style="selected.dot ? { color: selected.dot } : undefined"
+          aria-hidden="true"
+        />
+        <span
+          v-else-if="selected?.dot"
+          class="wp-select__dot"
+          :style="{ background: selected.dot }"
+        />
+        <span
+          v-else-if="selected && markerWidth"
+          class="wp-select__marker-gap"
+          :style="{ width: markerWidth }"
+          aria-hidden="true"
+        />
         <span v-if="selected" class="wp-select__label-text">
           <slot name="label" :option="selected">{{ selected.label }}</slot>
         </span>
-        <span v-else class="wp-select__placeholder">{{ placeholder }}</span>
+        <!-- The meta repeats in the CLOSED trigger, not just in the open menu.
+             Disambiguating rows only while the menu is open solves half the
+             problem: pick one of five identical "Outfit" rows and the trigger
+             collapses straight back to "Outfit", so the thing you just took
+             care to choose becomes unverifiable again. Shown only when the
+             option carries meta, so every dropdown that sets none is
+             untouched. -->
+        <span v-if="selected?.meta" class="wp-select__label-meta">{{ selected.meta }}</span>
+        <span v-if="!selected" class="wp-select__placeholder">{{ placeholder }}</span>
       </span>
       <button
         v-if="clearable && selected"
@@ -259,6 +324,7 @@ function onKeydown(e: KeyboardEvent) {
     <Teleport to="body">
       <ul
         v-if="open"
+        ref="menuRef"
         class="wp-select__menu"
         role="listbox"
         :style="menuStyle"
@@ -271,6 +337,17 @@ function onKeydown(e: KeyboardEvent) {
           data-test="select-filter"
           style="display:flex;align-items:center;padding:4px 12px;font-size:11px;opacity:0.6;"
         >Filtering: {{ query }}</li>
+        <!-- Every one of these menus is type-to-filter, but the only sign of it
+             was the "Filtering:" line, which appears AFTER you have already
+             guessed. Users asked for it to be telegraphed. Shown only once the
+             list is long enough for filtering to be worth reaching for. -->
+        <li
+          v-else-if="showFilterHint"
+          class="wp-select__hint"
+          aria-hidden="true"
+          data-test="select-filter-hint"
+          style="display:flex;align-items:center;padding:4px 12px;font-size:11px;opacity:0.45;"
+        >Type to filter</li>
         <li
           v-for="(opt, i) in filtered"
           :key="String(opt.value)"
@@ -280,16 +357,33 @@ function onKeydown(e: KeyboardEvent) {
           :aria-selected="opt.value === modelValue"
           :data-active="i === active ? 'true' : 'false'"
           :data-selected="opt.value === modelValue ? 'true' : 'false'"
-          :title="opt.title"
+          :title="opt.title ?? (opt.meta ? `${opt.label} — ${opt.meta}` : opt.label)"
           @mousedown.prevent="pick(opt)"
           @mouseenter="active = i"
           @focusin="active = i"
         >
-          <span v-if="opt.dot" class="wp-select__dot" :style="{ background: opt.dot }" />
+          <i
+            v-if="opt.icon"
+            :class="`pi pi-${opt.icon} wp-select__icon`"
+            :style="opt.dot ? { color: opt.dot } : undefined"
+            aria-hidden="true"
+          />
+          <span
+            v-else-if="opt.dot"
+            class="wp-select__dot"
+            :style="{ background: opt.dot }"
+          />
+          <span
+            v-else-if="markerWidth"
+            class="wp-select__marker-gap"
+            :style="{ width: markerWidth }"
+            aria-hidden="true"
+          />
           <span class="wp-select__option-label">
             <slot name="option" :option="opt">{{ opt.label }}</slot>
           </span>
           <span class="wp-spacer" />
+          <span v-if="opt.meta" class="wp-select__option-meta">{{ opt.meta }}</span>
           <Icon v-if="opt.value === modelValue" name="check" :size="ICON_SM" />
         </li>
         <li
@@ -310,8 +404,10 @@ function onKeydown(e: KeyboardEvent) {
   tokens.css (that's why an unstyled Select rendered behind the modal there).
   Class names stay wp-select* (global-namespaced, no collision); the menu is
   teleported to <body>, so these are UNSCOPED — same pattern as the
-  RichTextInput autocomplete (wp-rt-suggestions), whose z-index:9999 already
-  renders above the canvas modals. Vars fall back to literals for the few the
+  RichTextInput autocomplete (wp-rt-suggestions), sharing its POPOVER tier
+  (10020) so the menu clears every modal overlay — those run up to 10010, so
+  the previous 9999 rendered the menu behind any modal above that. Vars fall
+  back to literals for the few the
   canvas theme doesn't define (--wp-input-h[-sm], --wp-focus-ring). In the SPA
   these duplicate tokens.css with identical rules — harmless.
 -->
@@ -356,23 +452,67 @@ function onKeydown(e: KeyboardEvent) {
   flex: 1; min-width: 0; overflow: hidden;
 }
 .wp-select__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+/* Empty stand-in that holds the icon/dot column open for options without one.
+ * Width is set inline from `markerWidth`, since it depends on what the list
+ * actually contains. */
+.wp-select__marker-gap { flex-shrink: 0; display: inline-block; }
+/* Fixed square, centred: an icon font's glyphs have varying advance widths and
+ * a line box taller than the mark itself, so a bare `<i>` sat off-centre next
+ * to the label and shifted horizontally between categories. Sizing the BOX and
+ * centring the glyph inside it fixes both, and keeps a constant offset to the
+ * label whether the option shows an icon or the dot it replaces.
+ * Falls back to the dim text colour when a category has an icon but no colour. */
+.wp-select__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  font-size: 12px;
+  line-height: 1;
+  flex-shrink: 0;
+  color: var(--wp-text-dim);
+}
 .wp-select__label-text,
 .wp-select__placeholder {
   flex: 1; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .wp-select__placeholder { color: var(--wp-text-dim); }
+/* Trigger-side twin of `.wp-select__option-meta`, same mono/dim treatment so
+ * the detail you picked in the menu is recognisably the same string once the
+ * menu closes.
+ *
+ * `flex: 0 1 auto` against the label's `flex: 1`: spare width goes to the
+ * NAME, which is what the user reads first, while both stay shrinkable so a
+ * long meta clips itself rather than pushing the name out of the trigger. */
+.wp-select__label-meta {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--wp-font-mono);
+  font-size: 10px;
+  color: var(--wp-text-dim);
+}
 .wp-select__chevron { color: var(--wp-text-dim); font-size: 11px; margin-left: 6px; flex-shrink: 0; }
 .wp-spacer { flex: 1 1 auto; }
 
 /* Menu — teleported to <body>. z-index 9999 matches wp-rt-suggestions, which
  * already renders above the canvas modals. */
 .wp-select__menu {
+  /* One line box for an option label, in px so a leading dot/icon can be
+   * centred against it without the em-resolves-against-its-own-font-size trap
+   * (the icon runs at 12px, the label at 12.5px, so `1.5em` means two
+   * different heights depending on which element it is declared on).
+   * The menu teleports to <body>, so it carries its own copy. */
+  --wp-select-line-h: 18.75px;
   background: var(--wp-bg-3);
   border: 1px solid var(--wp-border-strong);
   border-radius: 7px;
   box-shadow: var(--wp-shadow-lg);
-  z-index: 9999;
+  z-index: 10020;
   padding: 4px;
   max-height: 240px;
   overflow: auto;
@@ -397,24 +537,67 @@ function onKeydown(e: KeyboardEvent) {
   background: color-mix(in oklab, var(--wp-accent-500) 18%, transparent);
   color: var(--wp-text);
 }
-.wp-select__option-label { flex: 1; white-space: nowrap; }
+/* Option rows WRAP (to two lines) rather than ellipsis-clipping at the first.
+ * The menu is up to 620px wide and these values run long — a constraint
+ * exception source is a whole phrase plus a nested `@ref` — so clipping them
+ * to one line hid the part that distinguishes one option from another. The
+ * trigger still clips to a single line (it has a fixed height); the menu is
+ * where the user is actually reading. `min-width: 0` keeps the meta + tick on
+ * screen either way. */
+.wp-select__option-label {
+  flex: 1;
+  min-width: 0;
+  /* Explicit rather than `normal` so the leading dot/icon can be centred
+   * against exactly this height — and so `line-clamp` measures a known line. */
+  line-height: var(--wp-select-line-h);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.wp-select__option { align-items: flex-start; }
+/* Because the row aligns to flex-start, a leading dot or icon lines up with the
+ * TOP of the label rather than its first line, and reads as sitting too high.
+ * Both are re-centred against one line box here — scoped to the option, since
+ * the trigger row is `align-items: center` and would be thrown off by it. */
+.wp-select__option > .wp-select__icon { height: var(--wp-select-line-h); }
+.wp-select__option > .wp-select__dot {
+  margin-top: calc((var(--wp-select-line-h) - 8px) / 2);
+}
+/* Disambiguating detail (option count + uuid). Never shrinks — it is the
+ * whole point of the row when several options share a label. */
+.wp-select__option-meta {
+  flex-shrink: 0;
+  margin-left: var(--wp-space-3, 8px);
+  font-family: var(--wp-font-mono);
+  font-size: 10px;
+  color: var(--wp-text-dim);
+}
 .wp-select__filter { display: flex; align-items: center; padding: 4px 12px; font-size: 11px; opacity: 0.6; }
 .wp-select__empty { padding: 6px 12px; opacity: 0.55; }
 
-/* Rich content (RichTextPreview / chips) rendered in the trigger label or an
- * option row via the #label / #option slots defaults to pre-wrap (that's
- * RichTextPreview's own scoped rule) and WRAPS. Force single-line so:
- *   (a) a long picked value ellipsis-clips in the fixed-height trigger instead
- *       of wrapping + blowing up the surrounding row, and
- *   (b) dropdown options stay on one line, letting the menu grow to fit the
- *       widest (min-width = trigger; max-width caps it inside the viewport).
- * `!important` is needed to beat RichTextPreview's scoped `.wp-rtp` rule from
- * outside the component; white-space then inherits down to the inner spans. */
+/* Rich content (RichTextPreview / chips) rendered via the #label / #option
+ * slots defaults to pre-wrap (RichTextPreview's own scoped rule).
+ *
+ * The TRIGGER stays forced to one line: it has a fixed height, so wrapping
+ * blows up the surrounding row. `!important` beats RichTextPreview's scoped
+ * `.wp-rtp` rule from outside the component.
+ *
+ * OPTION rows deliberately do NOT get that treatment any more. Forcing them
+ * to one line was what truncated constraint-exception values — a phrase plus a
+ * nested `@ref` — at the point where they stop being distinguishable. They now
+ * wrap within the two-line clamp above, inside the menu's 620px max-width. */
 .wp-select__label-text .wp-rtp,
-.wp-select__label-text .wp-rtp__text,
+.wp-select__label-text .wp-rtp__text {
+  white-space: nowrap !important;
+}
 .wp-select__option-label .wp-rtp,
 .wp-select__option-label .wp-rtp__text {
-  white-space: nowrap !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere;
 }
 .wp-select__menu { max-width: min(620px, 92vw); }
 </style>

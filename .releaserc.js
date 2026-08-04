@@ -84,28 +84,30 @@ export default {
           ],
         },
         writerOpts: {
-          // headerPartial puts a fixed "TL;DR + useful links" block at
-          // the very top of every release body, so the first ~600
-          // chars GitHub renders above the "Read more" fold on the
-          // releases list view stay useful no matter how long the
-          // changelog gets. {{version}} expands to the new tag.
+          // The body IS the curated notes. See docs/release-notes/next.md for
+          // the structure and the rules that keep it short.
+          //
+          // The per-commit list used to be inlined here inside a <details>.
+          // It was dropped: with the hidden-type filter already applied it
+          // said the same things as the curated notes, only worse, and it grew
+          // linearly with the release (81 entries for this one). A compare
+          // link is strictly more useful -- diffable, searchable, one line.
           headerPartial:
             "## 🎉 Wildcard Pipeline {{version}}\n\n" +
             "📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · " +
             "💬 [Discord](https://discord.gg/BFYR9WQdVR) · " +
             "📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · " +
             "🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)\n\n" +
-            // Curated, plain-language highlights (when provided) render FIRST
-            // — this is what most readers see. The raw per-commit changelog
-            // stays below, collapsed.
-            (highlights ? `### ✨ What's new\n\n${highlights}\n\n---\n\n` : "") +
-            "<details>\n" +
-            "<summary><b>📋 Full changelog</b> — click to expand the per-commit list</summary>\n\n",
-          // footerPartial closes the <details> wrapper so the wall of
-          // commits stays collapsed by default. GitHub renders
-          // <details> natively in markdown — readers click to expand
-          // when they actually need the per-commit log.
-          footerPartial: "\n</details>",
+            (highlights ? `${highlights}\n\n` : ""),
+          // Compare link instead of the commit dump.
+          footerPartial:
+            "\n---\n\n**Full changelog:** " +
+            "[{{previousTag}}…{{currentTag}}]" +
+            "(https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/compare/{{previousTag}}...{{currentTag}})\n",
+          // Render no commit sections. The curated notes above ARE the release
+          // notes; commits still drive the version bump (see commit-analyzer)
+          // and still live in git -- they are simply not restated here.
+          transform: () => false,
         },
       },
     ],

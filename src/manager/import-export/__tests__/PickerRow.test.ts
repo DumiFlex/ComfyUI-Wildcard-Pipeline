@@ -21,6 +21,49 @@ describe("PickerRow", () => {
     expect(wrap.emitted("update:checked")?.[0]).toEqual([true]);
   });
 
+  it("emits update:checked when the row body is clicked, not just the checkbox", async () => {
+    // Picking a dozen entities out of a 261-item library meant a dozen
+    // precise 18px clicks. The whole row is the hit target now.
+    const wrap = mount(PickerRow, {
+      props: { uuid: "u", name: "x", checked: false },
+    });
+    await wrap.get(".wp-picker-row__name").trigger("click");
+    expect(wrap.emitted("update:checked")?.[0]).toEqual([true]);
+  });
+
+  it("row click reflects current state (checked row emits false)", async () => {
+    const wrap = mount(PickerRow, {
+      props: { uuid: "u", name: "x", checked: true },
+    });
+    await wrap.get(".wp-picker-row__name").trigger("click");
+    expect(wrap.emitted("update:checked")?.[0]).toEqual([false]);
+  });
+
+  it("a checkbox click toggles exactly once (row handler must not double-fire)", async () => {
+    // Both the checkbox and the row see the click as it bubbles. Handling it
+    // twice would cancel the toggle out and ticking would appear inert.
+    const wrap = mount(PickerRow, {
+      props: { uuid: "u", name: "x", checked: false },
+    });
+    await wrap.get('button[role="checkbox"]').trigger("click");
+    expect(wrap.emitted("update:checked")).toHaveLength(1);
+  });
+
+  it("dep-chip disclosure does NOT toggle the row", async () => {
+    // The chip expands an inline dep list — it is its own affordance.
+    const wrap = mount(PickerRow, {
+      props: {
+        uuid: "u",
+        name: "x",
+        checked: false,
+        unselectedDeps: [{ id: "dead1234", name: "$other" }],
+      },
+    });
+    await wrap.get('[data-test="dep-warn-chip"]').trigger("click");
+    expect(wrap.emitted("update:checked")).toBeUndefined();
+    expect(wrap.find('[data-test="dep-warn-list"]').exists()).toBe(true);
+  });
+
   it("applies left padding from the indent prop (16px per level)", () => {
     const wrap = mount(PickerRow, {
       props: { uuid: "u", name: "x", checked: false, indent: 2 },

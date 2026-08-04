@@ -29,7 +29,7 @@
 import { computed, ref, useId } from "vue";
 import Checkbox from "../components/ui/Checkbox.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
-import { catChipStyle } from "../utils/catChip";
+import CategoryChip from "../components/CategoryChip.vue";
 
 /**
  * Status-badge taxonomy — six variants paired 1:1 with
@@ -84,8 +84,16 @@ interface Props {
   /** Optional category metadata for the `.wp-cat-chip` primitive. */
   categoryName?: string;
   categoryColor?: string;
+  /** PrimeIcons slug for the category, rendered inside the chip. Absent for
+   *  categories created before the icon column existed. */
+  categoryIcon?: string;
   /** Show the short 8-hex id inline (mono, muted) via `.wp-id`. */
   showId?: boolean;
+  /** Optional disambiguating detail rendered after the name — e.g.
+   *  "$outfit · 31 options". A library holds many entities sharing a display
+   *  name, and the id alone is not something a user recognises; the variable
+   *  binding and option count are. Mirrors the canvas ModulePickerModal rows. */
+  subtitle?: string;
   /** Status badges — collision state / migration / etc. Multiple allowed.
    *  Rendered in order, all use the shared `.wp-mod-badge` primitive. */
   statusBadges?: StatusBadge[];
@@ -108,7 +116,9 @@ const props = withDefaults(defineProps<Props>(), {
   kind: undefined,
   categoryName: undefined,
   categoryColor: undefined,
+  categoryIcon: undefined,
   showId: false,
+  subtitle: undefined,
   statusBadges: () => [],
   unselectedDeps: () => [],
   missingDeps: () => [],
@@ -147,12 +157,6 @@ const kindClass = computed<string | null>(() => {
  */
 const shortId = computed<string>(() => props.uuid.slice(0, 8));
 
-// ---------- Category chip style ----------
-
-const catChipInlineStyle = computed<Record<string, string>>(() =>
-  catChipStyle(props.categoryColor),
-);
-
 // ---------- Dep chip disclosure ----------
 
 const unselectedExpanded = ref<boolean>(false);
@@ -180,6 +184,29 @@ function depIconClass(d: DepRef): string {
   if (!d.type) return "pi pi-circle";
   return kindIcon(d.type);
 }
+
+// ---------- Whole-row toggle ----------
+
+/**
+ * The 18px checkbox used to be the ONLY hit target on a row — picking a
+ * dozen entities out of a 261-item library meant a dozen precise clicks.
+ * The whole row now toggles.
+ *
+ * Interactive descendants keep their own clicks: the checkbox itself (which
+ * would otherwise toggle twice — once natively, once here), the dep-chip
+ * disclosure buttons, the `+ select` dep action, and `.wp-id`, whose `cursor:
+ * copy` advertises a different action than "select this row".
+ *
+ * Keyboard is deliberately unchanged: the checkbox stays the single focusable
+ * control, so making the row a second tab stop would only add noise for
+ * keyboard + screen-reader users.
+ */
+function onRowClick(ev: MouseEvent): void {
+  const target = ev.target as HTMLElement | null;
+  if (!target?.closest) return;
+  if (target.closest("button, input, a, label, .wp-picker-row__check, .wp-id")) return;
+  emit("update:checked", !props.checked);
+}
 </script>
 
 <template>
@@ -188,6 +215,7 @@ function depIconClass(d: DepRef): string {
     :data-uuid="props.uuid"
     :data-checked="props.checked ? 'true' : 'false'"
     :style="{ paddingLeft: `${props.indent * 16}px` }"
+    @click="onRowClick"
   >
     <!-- chevron-spacer column (kept empty; reserves grid space matching
          the prototype's 14px leading column). -->
@@ -211,6 +239,16 @@ function depIconClass(d: DepRef): string {
 
     <div class="wp-row-name">
       <span class="wp-picker-row__name">{{ name }}</span>
+      <!-- Right-aligned within the name column: sitting immediately after the
+           name it competed with it for the eye, and the column of detail was
+           impossible to scan down. `margin-left: auto` pushes it to the
+           column's trailing edge so all rows line up. -->
+      <span
+        v-if="props.subtitle"
+        class="wp-picker-row__subtitle"
+        :title="props.subtitle"
+        data-test="picker-row-subtitle"
+      >{{ props.subtitle }}</span>
       <span
         v-if="props.showId"
         class="wp-id"
@@ -218,12 +256,13 @@ function depIconClass(d: DepRef): string {
       >{{ shortId }}</span>
     </div>
 
-    <span
+    <CategoryChip
       v-if="props.categoryName"
-      class="wp-cat-chip"
-      :style="catChipInlineStyle"
+      :name="props.categoryName"
+      :color="props.categoryColor"
+      :icon="props.categoryIcon"
       data-test="picker-row-cat-chip"
-    >{{ props.categoryName }}</span>
+    />
     <span v-else class="wp-picker-row__col-spacer" aria-hidden="true" />
 
     <span
@@ -359,6 +398,11 @@ function depIconClass(d: DepRef): string {
   font-size: var(--wp-text-sm);
 }
 .wp-picker-row:last-child { border-bottom: none; }
+/* Whole row is the toggle target (see `onRowClick`) — advertise it. Nested
+ * interactive elements reset the cursor to their own affordance. */
+.wp-picker-row { cursor: pointer; }
+.wp-picker-row button,
+.wp-picker-row .wp-id { cursor: revert; }
 .wp-picker-row:hover {
   background: color-mix(in oklab, var(--wp-bg-3) 35%, transparent);
 }
@@ -396,6 +440,23 @@ function depIconClass(d: DepRef): string {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Disambiguating detail ("$outfit · 31 options"). Shrinks before the name
+ * does, and clips rather than pushing the id column off the row. */
+.wp-picker-row__subtitle {
+  /* Trailing edge of the name column so the detail forms one scannable
+     right-aligned run instead of trailing each name at a different x. */
+  margin-left: auto;
+  padding-left: var(--wp-space-4);
+  font-family: var(--wp-font-mono);
+  font-size: 10px;
+  color: var(--wp-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+  max-width: 45%;
 }
 
 /* Short id — mirrors prototype lines 171-173 (mono font, dim text, copy

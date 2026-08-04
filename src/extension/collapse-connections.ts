@@ -23,6 +23,7 @@
  * other extensions can't read or collide with our internals.
  */
 
+import { isVueNodes } from "./renderer";
 import {
   nodeCollapseAnimating,
   nodeCollapseAnimToken,
@@ -84,6 +85,9 @@ export interface CollapseConfig {
  *  so it can absorb LGraphNode without forcing a hard dep on the
  *  litegraph type. */
 interface CollapseTargetNode {
+  /** Needed to find the node's DOM element under the Vue renderer, which
+   *  keys nodes by `data-node-id`. Absent on bare test doubles. */
+  id?: string | number;
   inputs?: Array<Slot | null | undefined>;
   outputs?: Array<Slot | null | undefined>;
   properties?: Record<string, unknown>;
@@ -112,6 +116,182 @@ function readConfig(node: CollapseTargetNode): CollapseConfig | undefined {
 function nodeSlotHeight(): number {
   const lg = (globalThis as { LiteGraph?: { NODE_SLOT_HEIGHT?: number } }).LiteGraph;
   return lg?.NODE_SLOT_HEIGHT ?? FALLBACK_SLOT_HEIGHT;
+}
+
+/* ── Nodes 2.0 (Vue renderer) wire merge ────────────────────────────────
+ *
+ * The getInputPos override above is a canvas paint-time trick and the Vue
+ * renderer has no canvas paint for slots. It renders one `.lg-slot--input`
+ * row per `node.inputs` entry and hands those elements' measured rects to the
+ * layout store, which is what the link renderer draws to — so overriding the
+ * reported position moves nothing there. Measured: with four wires merged,
+ * every pin reported the same `getInputPos` while the DOM dots stayed 18px
+ * apart, which is exactly the "labels merged, wires still fanned" symptom.
+ *
+ * So under Vue we move the ROWS instead, by tagging the merged ones for the
+ * CSS in `components/shared/vue-nodes.css`. See that file for why height is
+ * zeroed rather than the row hidden.
+ */
+const VUE_NODE_MERGED_CLASS = "wp-wires-merged";
+const VUE_SLOT_MERGED_CLASS = "wp-slot-merged";
+/** First merged row — carries the half-row upward shift, see vue-nodes.css. */
+const VUE_SLOT_MERGED_LEAD_CLASS = "wp-slot-merged-lead";
+/** Last merged row — carries the clearance below the merged pin, so the
+ *  incoming wires do not run into the widget body underneath. */
+const VUE_SLOT_MERGED_TAIL_CLASS = "wp-slot-merged-tail";
+/** Any row whose label we print ourselves instead of letting Vue render its
+ *  stale snapshot of the slot name. */
+const VUE_SLOT_LABEL_CLASS = "wp-slot-label";
+
+/** The node's Vue-rendered element, or null (legacy renderer, node not
+ *  mounted yet, or no id). */
+function vueNodeEl(node: CollapseTargetNode): HTMLElement | null {
+  if (typeof document === "undefined") return null;
+  if (node.id === undefined || node.id === null) return null;
+  const raw = String(node.id);
+  // Node ids are numeric in practice, but the selector still has to be safe
+  // for an arbitrary string. `CSS.escape` is absent in some environments
+  // (jsdom among them), so fall back to escaping the two characters that can
+  // terminate a double-quoted attribute value.
+  const escaped = typeof CSS !== "undefined" && typeof CSS.escape === "function"
+    ? CSS.escape(raw)
+    : raw.replace(/["\\]/g, "\\$&");
+  return document.querySelector<HTMLElement>(`[data-node-id="${escaped}"]`);
+}
+
+/** Split the matched inputs into the one whose row is KEPT (the merge target)
+ *  and the rest, whose rows collapse onto it. Indices are into `node.inputs`,
+ *  which is also the host's slot-row order. */
+function mergeGroups(node: CollapseTargetNode): { kept: number; merged: number[] } {
+  const cfg = readConfig(node);
+  if (!cfg?.matchInput) return { kept: -1, merged: [] };
+  const kept = firstMatchingIndex(node.inputs, cfg.matchInput);
+  if (kept < 0) return { kept: -1, merged: [] };
+  const merged: number[] = [];
+  (node.inputs ?? []).forEach((slot, i) => {
+    if (i === kept || !slot) return;
+    if (cfg.matchInput?.(slot, i)) merged.push(i);
+  });
+  return { kept, merged };
+}
+
+/** Apply (or clear) the merge classes on the node's Vue DOM. No-op under the
+ *  legacy renderer, where the getInputPos override already does the job. */
+function syncVueSlotMerge(node: CollapseTargetNode, propertyKey: string): void {
+  if (!isVueNodes()) return;
+  const el = vueNodeEl(node);
+  if (!el) return;
+  const collapsed = readCollapsed(node, propertyKey);
+  el.classList.toggle(VUE_NODE_MERGED_CLASS, collapsed);
+
+  // Matched rows are resolved in BOTH states: the merge classes only apply
+  // while collapsed, but the label override applies always (see below).
+  const { kept, merged } = mergeGroups(node);
+  const mergedSet = collapsed ? new Set(merged) : new Set<number>();
+  const lead = collapsed && merged.length ? merged[0] : -1;
+  const tail = collapsed && merged.length ? merged[merged.length - 1] : -1;
+
+  // Row order mirrors `node.inputs` order: the host filters out slots bound to
+  // a widget, and none of ours are.
+  const rows = el.querySelectorAll<HTMLElement>(".lg-slot--input");
+  rows.forEach((row, i) => {
+    row.classList.toggle(VUE_SLOT_MERGED_CLASS, mergedSet.has(i));
+    row.classList.toggle(VUE_SLOT_MERGED_LEAD_CLASS, i === lead);
+    row.classList.toggle(VUE_SLOT_MERGED_TAIL_CLASS, i === tail);
+
+    // Take over the label text for every matched row, collapsed or not.
+    //
+    // Vue renders slot names from its own VueNodeData snapshot and never sees
+    // a `slot.label` write, so BOTH directions are broken without this: while
+    // collapsed the unified "inputs ×N" never appears, and on expand the real
+    // names never come back. The expand case bites hardest across a renderer
+    // switch — a legacy collapse serializes the placeholder labels into the
+    // workflow, so after reloading under Vue the snapshot holds "inputs ×N"
+    // and " ", and expanding repairs the model while the screen keeps showing
+    // the placeholders.
+    //
+    // Printing `label || name` is exactly what the host would render if it
+    // could see the model, so this stays correct for renamed pins too.
+    const matched = i === kept || merged.includes(i);
+    row.classList.toggle(VUE_SLOT_LABEL_CLASS, matched);
+    if (matched) {
+      const slot = node.inputs?.[i];
+      const label = typeof slot?.label === "string" && slot.label.trim() !== ""
+        ? slot.label
+        : (slot?.name ?? "");
+      row.style.setProperty("--wp-slot-label", JSON.stringify(label));
+    } else {
+      row.style.removeProperty("--wp-slot-label");
+    }
+  });
+
+  // Half the KEPT row's height — the distance from a zeroed row's stacking
+  // position back up to the kept row's centre line. Measured live because the
+  // host owns the row height; skipped when the rows aren't laid out yet.
+  const keptRow = kept >= 0 ? rows[kept] : undefined;
+  const keptH = keptRow?.offsetHeight ?? 0;
+  if (lead >= 0 && keptH > 0) {
+    el.style.setProperty("--wp-merge-shift", `${keptH / 2}px`);
+  } else {
+    el.style.removeProperty("--wp-merge-shift");
+  }
+}
+
+/* Keeping the merge applied.
+ *
+ * Binding an observer to the node's own element is not enough, and both
+ * failures were user-visible:
+ *
+ *  - At attach time the element often does not exist yet — the workflow is
+ *    restored before Vue mounts the nodes. A one-shot lookup bails, and with
+ *    nothing watching, the merge never lands. Symptom: switching renderers
+ *    while collapsed came back with the wires fanned out.
+ *  - Vue REPLACES the node element on re-render (focusing a node does it), so
+ *    an observer bound to the old element is watching a detached tree.
+ *    Symptom: focusing a collapsed node expanded its wires while the button
+ *    still read "collapsed".
+ *
+ * So watch one stable root instead, and re-apply for every registered node
+ * whenever the node layer changes. `childList` only: our own writes are class
+ * and style attributes, which this never sees, so there is no feedback loop.
+ */
+const vueMergeRegistry = new Map<CollapseTargetNode, string>();
+let vueMergeObserver: MutationObserver | null = null;
+let vueMergeQueued = false;
+
+function flushVueMerge(): void {
+  vueMergeQueued = false;
+  for (const [node, propertyKey] of [...vueMergeRegistry]) {
+    // litegraph nulls `graph` when a node is removed — drop it rather than
+    // keep re-syncing a node that is gone.
+    if (node.graph === null) {
+      vueMergeRegistry.delete(node);
+      continue;
+    }
+    syncVueSlotMerge(node, propertyKey);
+  }
+}
+
+function queueVueMerge(): void {
+  if (vueMergeQueued) return;
+  vueMergeQueued = true;
+  requestAnimationFrame(flushVueMerge);
+}
+
+/** Register a node for continuous merge upkeep. Idempotent. */
+function watchVueSlotMerge(node: CollapseTargetNode, propertyKey: string): void {
+  if (!isVueNodes()) return;
+  vueMergeRegistry.set(node, propertyKey);
+  if (
+    !vueMergeObserver
+    && typeof MutationObserver !== "undefined"
+    && typeof document !== "undefined"
+    && document.body
+  ) {
+    vueMergeObserver = new MutationObserver(queueVueMerge);
+    vueMergeObserver.observe(document.body, { childList: true, subtree: true });
+  }
+  queueVueMerge();
 }
 
 function resolveLabel(
@@ -446,6 +626,10 @@ export function attachCollapsableConnections(
     applyCollapsedLabels(node);
     forceResize(node, { animate: false });
   }
+  // Under the Vue renderer the merge is a DOM concern. Registering is enough —
+  // the node's element usually does not exist yet at attach time, and the
+  // registry re-applies as soon as it appears.
+  watchVueSlotMerge(node, propertyKey);
 }
 
 /** Rename a slot's display label IF the current label matches a
@@ -526,6 +710,11 @@ export function setCollapsed(
     // here too keeps the wire side instantaneous.
     forceResize(node, { animate: false });
   }
+
+  // Vue renderer: the wires follow the slot ROWS, not the reported pin
+  // position, so the merge has to be re-applied to the DOM on every toggle.
+  syncVueSlotMerge(node, propertyKey);
+  watchVueSlotMerge(node, propertyKey);
 
   // Prefer the graph-level repaint (covers wires + node body in one
   // call). Fall back to node-local if no graph hook is reachable.

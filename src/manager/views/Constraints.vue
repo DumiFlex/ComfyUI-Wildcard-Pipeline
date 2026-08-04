@@ -13,8 +13,9 @@ import Button from "../components/ui/Button.vue";
 import Select from "../components/ui/Select.vue";
 import EmptyState from "../components/ui/EmptyState.vue";
 import { useModuleStore } from "../stores/moduleStore";
-import { catChipStyle } from "../utils/catChip";
 import { useCategoryStore } from "../stores/categoryStore";
+import CategoryChip from "../components/CategoryChip.vue";
+import { categoryAssignOptions, categoryFilterOptions } from "../utils/category-options";
 import { validateModule } from "../utils/validateModule";
 import type {
   CategoryRow,
@@ -68,17 +69,11 @@ const allTags = computed(() => {
   return Array.from(set).sort();
 });
 
-const categoryOptions = computed(() => [
-  { value: null, label: "All categories" },
-  ...categoryStore.items.map((c) => ({ value: c.id, label: c.name, dot: c.color || undefined })),
-]);
+const categoryOptions = computed(() => categoryFilterOptions(categoryStore.items));
 
 /** Bulk-set-category modal options — uses "(none)" for the null choice
  *  since the user is explicitly setting category (not filtering). */
-const bulkCategoryOptions = computed(() => [
-  { value: null, label: "(none)" },
-  ...categoryStore.items.map((c) => ({ value: c.id, label: c.name, dot: c.color || undefined })),
-]);
+const bulkCategoryOptions = computed(() => categoryAssignOptions(categoryStore.items));
 
 onMounted(async () => {
   store.filter.type = "constraint";
@@ -328,13 +323,12 @@ function formatFactor(f: number): string {
 
     <template #columns="{ row }">
       <td>
-        <span
+        <CategoryChip
           v-if="row.category_id && categoryById.get(row.category_id)"
-          class="wp-cat-chip"
-          :style="catChipStyle(categoryById.get(row.category_id)!.color)"
-        >
-          {{ categoryById.get(row.category_id)!.name }}
-        </span>
+          :name="categoryById.get(row.category_id)!.name"
+          :color="categoryById.get(row.category_id)!.color"
+          :icon="categoryById.get(row.category_id)!.icon"
+        />
         <span v-else class="wp-dim">—</span>
       </td>
       <td><span class="wp-cn-name">{{ lookupName(payloadOf(row).source_wildcard_id) }}</span></td>

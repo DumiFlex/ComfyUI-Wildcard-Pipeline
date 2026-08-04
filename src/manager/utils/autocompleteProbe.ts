@@ -26,6 +26,14 @@ export interface AutocompleteProbe {
  * (`{3$$,$$$style}`) still surface the var autocomplete.
  */
 export function probeAutocomplete(str: string, caret: number): AutocompleteProbe | null {
+  // NB: the `@{uuid#name}` brace form is an INTERNAL serialisation, never
+  // something the user types — they type `@name` and pick from the popover,
+  // which inserts the chip. Wildcards are addressed by variable binding, not
+  // display name, so a query never contains spaces either: a space is the
+  // settle delimiter that commits the chip. The bare-identifier scan below is
+  // therefore the whole story; an earlier attempt to also accept partial
+  // `@{…` runs and spaces was fixing a misdiagnosis (the real bug was that
+  // deletion never re-probed — see `onHostKeydown`'s Backspace branch).
   let i = caret - 1;
   // SP2a: skip a trailing `.K` list accessor (digits then ONE dot, only when a
   // word char precedes the dot) so `$mood.0<caret>` still resolves back to the

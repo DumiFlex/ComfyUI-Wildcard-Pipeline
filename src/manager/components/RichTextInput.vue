@@ -21,7 +21,7 @@
  * rewires those handlers against the contenteditable host + selection
  * API.
  */
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   parse,
   replaceAtom,
@@ -30,13 +30,16 @@ import {
   type TextAtom,
 } from "./atomicEditorModel";
 import { escapeHtml, inlineTokenHtml, splitRefFilter, tokenizeRich } from "../../widgets/richTokenize";
-import RefChip from "./RefChip.vue";
+import RefChip, { type VarProducerLike } from "./RefChip.vue";
 import SubcategoryFilterPicker from "./SubcategoryFilterPicker.vue";
 import RemapRefPopup from "./RemapRefPopup.vue";
+import { useGrowableField } from "../../components/shared/useGrowableField";
 import { rewriteBrokenRef } from "../cascade/remap-ref-rewrite";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
 import { probeAutocomplete } from "../utils/autocompleteProbe";
+import { refRows, varRows, type SuggestionRow } from "../utils/suggestion-rows";
+import { CONTEXT_POOLS_KEY, type ContextPoolMap } from "../../extension/context-pools";
 
 // --- 4-segment nested-ref serialization (SP1, §3.2) -----------------------
 //
@@ -184,6 +187,13 @@ interface Props {
   uuidToTagGroups?: Map<string, Record<string, string[]>>;
   ariaLabel?: string;
   disabled?: boolean;
+  /** `$var` → who writes it, from `collectUpstreamProducers`. Canvas hosts
+   *  pass this so a var chip's hover card can name the module and node that
+   *  produce the value; the SPA has no graph and passes nothing. */
+  varProducers?: Map<string, VarProducerLike>;
+  /** True when the host walked a graph. Lets the chip say "no upstream
+   *  producer" (canvas, actionable) rather than staying silent (SPA). */
+  graphAware?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -211,6 +221,8 @@ const props = withDefaults(defineProps<Props>(), {
   uuidToTagGroups: () => new Map(),
   ariaLabel: undefined,
   disabled: false,
+  varProducers: undefined,
+  graphAware: false,
 });
 
 // Lazy-pull store on first prop access — singleton so doesn't matter
@@ -276,6 +288,18 @@ const popupPos = ref<{ top: number; left: number; width: number; flipped: boolea
 // insert flow (Task 7) and the click-to-edit flow (Task 8) drive the same
 // picker — `pickerMode` distinguishes them.
 const pickerOpen = ref(false);
+const pickerWildcardName = ref("");
+/** `"node"` when this Context node carries its own snapshot of the wildcard
+ *  being filtered. Absent in the SPA, which only ever reads the library. */
+const pickerPoolOrigin = ref<"node" | "library" | undefined>(undefined);
+
+/** Pools this Context node holds, when a Context node is an ancestor. Same
+ *  injection RefChip uses, so the chip marker and the panel header agree about
+ *  which pool is in play. */
+const contextPools = inject<{ value: ContextPoolMap } | undefined>(
+  CONTEXT_POOLS_KEY,
+  undefined,
+);
 const pickerSubCats = ref<string[]>([]);
 // 4-segment filter seed for the boolean-expression picker (§4.1):
 // initial expression text + exclude-null flag, replacing the legacy
@@ -523,6 +547,16 @@ const atoms = ref<Atom[]>(padAtoms(parseForSurface(props.modelValue || "")));
 // new structure over a hand-mutated, out-of-sync contenteditable DOM. Folded
 // into the v-for :key. See applyAtoms() for why the typing path never bumps it.
 const renderEpoch = ref(0);
+// Bumped when the browser destroyed rendered atom nodes behind Vue's back
+// (see `hostDomIsStale`). Keyed on the HOST ELEMENT, not the atom v-for:
+// once Vue's child vnodes hold detached `el`s, ANY patch of that subtree —
+// including the full key-churn teardown `renderEpoch` triggers — derefs a
+// null `el` and throws `insertBefore: Child to insert before is not a child
+// of this node`. Replacing the host element itself is the only safe repair:
+// Vue unmounts an element vnode with a single `hostRemove(el)` on a node
+// that IS still attached, tearing children down with `doRemove: false` so
+// no stale child el is ever touched.
+const hostEpoch = ref(0);
 let lastEmittedValue = props.modelValue || "";
 
 /** Text-atom HTML: tokenises the atom's raw text and emits colored
@@ -596,6 +630,17 @@ function atomIsResolved(atom: Atom): boolean {
  *  null-option flag) from a target uuid. Shared by the insert + edit
  *  entry points so both surfaces see the same data. */
 function loadPickerContext(uuid: string): void {
+  // The panel titles itself with the wildcard it is filtering — without it the
+  // insert flow drops you into an unlabelled form one step after choosing from
+  // a list of near-identical names.
+  pickerWildcardName.value = props.uuidToName.get(uuid) ?? uuid;
+  // Node snapshot wins over the library, exactly as `resolvePoolFor` decides
+  // it for the hover card — so presence in the node map IS the origin.
+  pickerPoolOrigin.value = contextPools?.value?.has(uuid)
+    ? "node"
+    : contextPools
+      ? "library"
+      : undefined;
   pickerSubCats.value = props.uuidToSubCategories.get(uuid) ?? [];
   pickerOptionTagSets.value = props.uuidToOptionTagSets.get(uuid) ?? [];
   pickerTagGroups.value = props.uuidToTagGroups.get(uuid) ?? {};
@@ -719,7 +764,20 @@ function teardownRemapObs(): void {
 // named "color". The inserted token is still the UUID — see
 // `applyAutocomplete`. Falling back to the raw UUID keeps filtering useful
 // even before `uuidToName` is hydrated.
-const acItems = computed(() => {
+/** Row cap for the suggestion popover. Was 8 — with 100+ wildcards sharing
+ *  near-identical display names, a query like `pose` silently truncated to
+ *  the first 8 and the rest were UNREACHABLE: the popover's `max-height`
+ *  never overflowed, so there was nothing to scroll and the feature read as
+ *  "the scrollbar doesn't work". Raised so the list genuinely overflows and
+ *  `overflow-y: auto` earns its keep; keyboard nav scrolls the active row
+ *  into view via the `acActive` watcher below. */
+const AC_MAX_ITEMS = 50;
+
+/** Every hit, uncapped. Split out from `acItems` so the header can report how
+ *  many entries actually matched rather than how many survived the cap — with
+ *  a 50-row cap and a broad query the two differ, and "50 matches" for a query
+ *  that hit 300 is simply false. */
+const acMatches = computed(() => {
   if (!acOpen.value) return [];
   if (acTrigger.value === "@" && !refsEnabled.value) return [];
   const pool = acTrigger.value === "@" ? props.refSuggestions : props.varSuggestions;
@@ -727,30 +785,70 @@ const acItems = computed(() => {
   const labelOf = acTrigger.value === "@"
     ? (uuid: string) => (props.uuidToName.get(uuid) ?? uuid).toLowerCase()
     : (name: string) => name.toLowerCase();
-  return pool.filter((id) => labelOf(id).includes(q)).slice(0, 8);
+  return pool.filter((id) => labelOf(id).includes(q));
 });
 
-// Display label for a popover row: name for `@` (UUID → name lookup),
-// raw token for `$`. Used by the template binding below so the popover
-// stays consistent with the textarea even when refSuggestions are UUIDs.
-function suggestionLabel(token: string): string {
-  if (acTrigger.value === "@") return props.uuidToName.get(token) ?? token;
-  return token;
+const acItems = computed(() => acMatches.value.slice(0, AC_MAX_ITEMS));
+
+/**
+ * Render models for the popover, one per entry in `acItems`.
+ *
+ * Kept parallel to `acItems` rather than replacing it: every keyboard path
+ * (`applyAutocomplete(acItems[acActive])`, the Tab/Enter handlers) indexes the
+ * token list, and giving those a richer element to unwrap buys nothing.
+ *
+ * A `@` row is identified by what a wildcard actually is — its option count,
+ * its axes, its tags — because the rows that send people here are the ones
+ * whose NAMES are identical. A `$` row is identified by who writes it.
+ */
+/**
+ * Inline colour for a row's icon box, keyed on the module kind.
+ *
+ * Inline rather than a class per kind because the kind set is open — the map
+ * in `kind-icons.ts` already grew a `loop` and a `category` — and a missing
+ * class would silently fall back to an uncoloured box. A missing TOKEN falls
+ * back to the accent instead, which still looks deliberate.
+ */
+function kindTint(kind: string): Record<string, string> {
+  const token = `--wp-kind-${kind === "fixed_values" ? "fixed" : kind}`;
+  const colour = `var(${token}, var(--wp-accent-text, #c4b5fd))`;
+  return {
+    color: colour,
+    background: `color-mix(in oklab, ${colour} 16%, transparent)`,
+  };
 }
 
-/** Right-side meta string for a `@` popover row — disambiguates rows
- *  with identical display names (e.g. two wildcards both named "test")
- *  by surfacing the option count and the uuid. Empty for `$` rows
- *  since var names are already unique. */
-function suggestionMeta(token: string): string {
-  if (acTrigger.value !== "@") return "";
-  const count = props.uuidToOptionsCount.get(token);
-  const countPart = typeof count === "number" ? `${count} opt${count === 1 ? "" : "s"}` : "";
-  return countPart ? `${countPart} · ${token}` : token;
-}
+/** Uuids this node supplies a pool for. `undefined` in the SPA, where the
+ *  injection is absent and every ref necessarily reads the library. */
+const nodePoolUuids = computed<ReadonlySet<string> | undefined>(() => {
+  const pools = contextPools?.value;
+  return pools ? new Set(pools.keys()) : undefined;
+});
+
+const acRows = computed<SuggestionRow[]>(() =>
+  acTrigger.value === "@"
+    ? refRows(acItems.value, {
+        uuidToName: props.uuidToName,
+        nodePoolUuids: nodePoolUuids.value,
+        uuidToOptionsCount: props.uuidToOptionsCount,
+        uuidToSubCategories: props.uuidToSubCategories,
+        uuidToTagGroups: props.uuidToTagGroups,
+      })
+    : varRows(acItems.value, props.varProducers, props.graphAware),
+);
 
 watch(acItems, (items) => {
   if (acActive.value >= items.length) acActive.value = 0;
+});
+
+// Keep the keyboard-selected row visible. Without this, ArrowDown past the
+// last VISIBLE row moved `acActive` but left the popover scrolled at the top,
+// so the highlight vanished and the list looked frozen.
+watch(acActive, (i) => {
+  void nextTick(() => {
+    const row = popoverEl.value?.querySelectorAll<HTMLElement>(".wp-rt-suggestions__item")[i];
+    row?.scrollIntoView({ block: "nearest" });
+  });
 });
 
 // Autocomplete trigger probe lives in `../utils/autocompleteProbe` (pure +
@@ -814,6 +912,16 @@ function refreshAutocompleteFromHost(): void {
   const rawCaret = currentCursorCharOffset();
   const hit = probeAutocomplete(rawText, rawCaret);
   if (!hit) {
+    acOpen.value = false;
+    return;
+  }
+  // The trigger belongs to a chip that already exists — the user is not
+  // filtering anything, so there is nothing to suggest. This fires whenever
+  // the caret ends up flush against a chip's trailing edge: type a space after
+  // `$style_fx`, delete it, and the caret lands there with the chip's own
+  // serialised `$style_fx` sitting behind it in raw text. The probe cannot see
+  // the difference; `triggerIsInsideChip` asks the DOM instead.
+  if (triggerIsInsideChip(hit.start)) {
     acOpen.value = false;
     return;
   }
@@ -1020,29 +1128,66 @@ function restoreCursorAtChar(targetChar: number): void {
  *  text (the same coordinate space `readHostAsText()` produces).
  *  Counts chars across host children, skipping ZWSPs in pad spans
  *  and adding full serialised chip length for non-text atoms. */
+/** Length contribution of a single host child to the raw-text space.
+ *  Hoisted out of `rangeOffsetToRaw` so `chipRawSpans` measures chips the
+ *  same way the caret mapping does — two copies of this would drift. */
+function childRawLen(child: ChildNode): number {
+  if (child.nodeType === Node.TEXT_NODE) {
+    return (child.textContent ?? "").replace(ZWSP_RE, "").length;
+  }
+  if (child.nodeType !== Node.ELEMENT_NODE) return 0;
+  const el = child as HTMLElement;
+  if (el.classList.contains("wp-refchip")) {
+    const idx = Number(el.getAttribute("data-atom-index"));
+    const atom = atoms.value[idx];
+    if (atom && atom.kind !== "text") return serialiseAtomsLocal([atom]).length;
+    return 0;
+  }
+  if (el.classList.contains("wp-rt__text")) {
+    return (el.textContent ?? "").replace(ZWSP_RE, "").length;
+  }
+  return 0;
+}
+
+/**
+ * Raw-text `[start, end)` span of every rendered chip.
+ *
+ * A committed chip serialises back into raw text as the very thing the user
+ * would have typed to create it (`$style_fx`), so the raw string alone cannot
+ * tell "a finished chip" from "a token being typed". Only the DOM knows — a
+ * chip is an atom element, in-progress text is not. These spans carry that
+ * distinction into the raw coordinate space the probe works in.
+ */
+function chipRawSpans(): Array<[number, number]> {
+  const host = hostEl.value;
+  if (!host) return [];
+  const spans: Array<[number, number]> = [];
+  let offset = 0;
+  for (const child of Array.from(host.childNodes)) {
+    const len = childRawLen(child);
+    if (
+      child.nodeType === Node.ELEMENT_NODE
+      && (child as HTMLElement).classList.contains("wp-refchip")
+      && len > 0
+    ) {
+      spans.push([offset, offset + len]);
+    }
+    offset += len;
+  }
+  return spans;
+}
+
+/** True when the `$` / `@` the probe latched onto is part of an existing chip
+ *  rather than something the user is typing. */
+function triggerIsInsideChip(rawIndex: number): boolean {
+  return chipRawSpans().some(([start, end]) => rawIndex >= start && rawIndex < end);
+}
+
 function rangeOffsetToRaw(targetNode: Node, targetOffset: number): number {
   const host = hostEl.value;
   if (!host || !host.contains(targetNode)) return readHostAsText().length;
   const charsBefore = (s: string, n: number): number =>
     s.slice(0, n).replace(ZWSP_RE, "").length;
-  // Length contribution of a single host child to the raw-text space.
-  const childRawLen = (child: ChildNode): number => {
-    if (child.nodeType === Node.TEXT_NODE) {
-      return (child.textContent ?? "").replace(ZWSP_RE, "").length;
-    }
-    if (child.nodeType !== Node.ELEMENT_NODE) return 0;
-    const el = child as HTMLElement;
-    if (el.classList.contains("wp-refchip")) {
-      const idx = Number(el.getAttribute("data-atom-index"));
-      const atom = atoms.value[idx];
-      if (atom && atom.kind !== "text") return serialiseAtomsLocal([atom]).length;
-      return 0;
-    }
-    if (el.classList.contains("wp-rt__text")) {
-      return (el.textContent ?? "").replace(ZWSP_RE, "").length;
-    }
-    return 0;
-  };
   // Special case: selection anchored ON the host itself (e.g. after
   // `range.selectNodeContents(host)` → startContainer=host,
   // startOffset=0, endContainer=host, endOffset=childCount). offset is
@@ -1192,6 +1337,46 @@ function syncTextSpansToAtoms(): void {
   }
 }
 
+/** Bottom-fade + grip-follow state. `hasMoreBelow` drives the fade — a capped
+ *  box gives no other clue that it is hiding text. */
+const {
+  hasMoreBelow,
+  updateOverflowHint,
+  scheduleOverflowHint,
+  attach,
+  startResize,
+} = useGrowableField(() => hostEl.value);
+
+/* Overflow hint + grip-follow now come from the shared `useGrowableField`.
+ * The fixed-values ValueRow had grown its own copy of the same three
+ * behaviours, and the copies had already diverged — only this one cleared the
+ * grip, only this one followed it off-screen. One implementation instead.
+ *
+ * No auto-grow here: this host sizes itself with `height: auto` + a CSS
+ * `max-height`, so there is nothing for the composable's autosize to drive. */
+onMounted(() => {
+  scheduleOverflowHint();
+  attach();
+});
+
+/** True when the live host has FEWER rendered atom nodes than `atoms.value`
+ *  expects — i.e. the browser destroyed nodes Vue still holds `el` pointers
+ *  for. Contenteditable hands the browser ownership of these children, and
+ *  it replaces them wholesale on select-all + retype, IME commit, undo, and
+ *  some paste paths; alt-tabbing mid-token then fires blur into a re-parse
+ *  that patches over the wreckage.
+ *
+ *  Deliberately a `<` and not a `!==`: EXTRA top-level nodes are the normal
+ *  typing case (browsers insert user-typed characters as raw text nodes
+ *  directly under the host — see the padAtoms docblock) and must not trigger
+ *  a remount, which would eat the caret mid-keystroke. Only destroyed nodes
+ *  make the vdom unpatchable. */
+function hostDomIsStale(): boolean {
+  const host = hostEl.value;
+  if (!host) return false;
+  return host.querySelectorAll("[data-atom-index]").length < atoms.value.length;
+}
+
 function applyAtoms(next: Atom[], opts?: { rebuild?: boolean }): void {
   // `rebuild` forces a full teardown+remount of the atom v-for (via the
   // renderEpoch key) instead of an in-place patch. Used ONLY on the
@@ -1204,10 +1389,17 @@ function applyAtoms(next: Atom[], opts?: { rebuild?: boolean }): void {
   // The raw typing / Backspace paths deliberately do NOT rebuild — they keep
   // the imperative syncTextSpansToAtoms approach for caret stability (the
   // removed global renderTick churned those paths; this scopes it to inserts).
-  if (opts?.rebuild) renderEpoch.value += 1;
+  // Stale-DOM repair takes precedence: bumping `renderEpoch` here would NOT
+  // help (verified — key churn still walks the destroyed els and throws on
+  // `nextSibling` of null). Replace the host element instead.
+  if (hostDomIsStale()) hostEpoch.value += 1;
+  else if (opts?.rebuild) renderEpoch.value += 1;
   atoms.value = padAtoms(next);
   isEmpty.value = serialiseAtomsLocal(next).length === 0;
-  void nextTick(() => syncTextSpansToAtoms());
+  void nextTick(() => {
+    syncTextSpansToAtoms();
+    scheduleOverflowHint();
+  });
 }
 
 /** Live structure-aware read of the host as an `Atom[]` — the deletion-path
@@ -1497,6 +1689,30 @@ function onPickerDelete(): void {
   pickerOpen.value = false;
 }
 
+/**
+ * Insert flow only: step back to the suggestion list.
+ *
+ * The typed `@query` is still sitting in the value — nothing is inserted until
+ * apply or skip — so the popover can simply be reopened over it. Focus and the
+ * caret have to be restored first: the picker took focus when it opened, and
+ * without putting it back the popover reopens under a caret the browser has
+ * moved to offset 0.
+ */
+function onPickerBack(): void {
+  const restore = pendingInsertCaret.value?.caret ?? null;
+  pendingInsert.value = null;
+  pickerOpen.value = false;
+  void nextTick(() => {
+    hostEl.value?.focus();
+    if (restore !== null) restoreCursorAtChar(restore);
+    // `acStart` / `acQuery` / `acTrigger` were never cleared, so the list comes
+    // back showing exactly what it showed before.
+    acOpen.value = true;
+    acActive.value = 0;
+    positionPopup();
+  });
+}
+
 function cancelPicker(): void {
   // Backdrop dismiss is a clean cancel — drop pending state, do NOT
   // insert anything. Use Skip inside the picker to insert without
@@ -1554,15 +1770,37 @@ function __confirmRemapForTest(
   applyRemap(next);
 }
 
+/**
+ * Escape closes the picker — and stops there.
+ *
+ * The editor pages run a window-level Escape shortcut that cancels the whole
+ * edit and routes back to the list. It opts out when focus sits in an
+ * `input, textarea, [contenteditable]`, which covers the expression field but
+ * NOT the picker's tag buttons — so pressing Escape after clicking a tag threw
+ * away the edit and navigated away from the page. That is why it only happened
+ * sometimes.
+ *
+ * Registered in the CAPTURE phase and stopping immediate propagation, so while
+ * the picker is open it consumes the key before any bubble-phase window
+ * listener sees it, whatever order they were registered in.
+ */
 function onPickerEscape(ev: KeyboardEvent): void {
-  if (ev.key === "Escape") cancelPicker();
+  if (ev.key !== "Escape") return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  ev.stopImmediatePropagation();
+  // The header says "Esc back" on the insert flow and "Esc cancel" on the
+  // chip-edit flow, because there IS somewhere to go back to only in the first
+  // case. Escape has to match what the header promises.
+  if (pickerMode.value === "insert" && pendingInsert.value) onPickerBack();
+  else cancelPicker();
 }
 
 watch(pickerOpen, (open) => {
   if (open) {
-    window.addEventListener("keydown", onPickerEscape);
+    window.addEventListener("keydown", onPickerEscape, true);
   } else {
-    window.removeEventListener("keydown", onPickerEscape);
+    window.removeEventListener("keydown", onPickerEscape, true);
   }
 });
 
@@ -1596,9 +1834,22 @@ function onDocumentMouseDown(e: MouseEvent): void {
   if (popoverEl.value?.contains(t)) return;
   acOpen.value = false;
 }
-function onWindowScroll(): void {
-  // Scrolls outside the textarea move the anchor → easier to just close.
-  acOpen.value = false;
+function onWindowScroll(e: Event): void {
+  // Scrolling INSIDE the popover is the user reading the list — wheeling over
+  // it, or dragging its scrollbar. This listener is capture-phase on window,
+  // so those scrolls used to land here and close the popover outright: the
+  // list had a scrollbar that could not be used, and a scrollbar drag left a
+  // half-typed reference behind. Ignore them.
+  const t = e.target as Node | null;
+  if (t && popoverEl.value?.contains(t)) return;
+  // The popover IS the scroll target when the wheel lands on it directly
+  // (target is the element, not a descendant).
+  if (t && t === popoverEl.value) return;
+  // A genuine outside scroll moved the anchor. Re-anchor rather than close —
+  // `positionPopup` recomputes from the host's live rect, so the popover
+  // simply follows the input instead of destroying the user's in-progress
+  // token. Matches the injector menu + VarAutocompleteInput behaviour.
+  positionPopup();
 }
 function onWindowResize(): void {
   if (acOpen.value) positionPopup();
@@ -1621,7 +1872,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("mousedown", onDocumentMouseDown, true);
   window.removeEventListener("scroll", onWindowScroll, true);
   window.removeEventListener("resize", onWindowResize);
-  window.removeEventListener("keydown", onPickerEscape);
+  window.removeEventListener("keydown", onPickerEscape, true);
 });
 
 // --- Host DOM → raw text serialisation ---
@@ -1692,6 +1943,24 @@ function onHostInput(ev?: Event): void {
   reconcileOrphanTextNodes();
   const next = readHostAsText();
   isEmpty.value = next.length === 0;
+  // The browser can delete the atom spans outright, not just their text: any
+  // edit against a selection anchored on the HOST (Ctrl+A then type, and
+  // anything else that replaces the whole field) takes the `wp-rt__text`
+  // elements with it. What is left still accepts typing, but no atom span
+  // exists to hold it, so nothing chips, nothing colours, and Vue's vnodes
+  // point at detached nodes until some later patch throws on them.
+  //
+  // `applyAtoms` already knows how to repair that — it swaps the host element
+  // when the DOM has gone stale — but nothing reached it from here, because
+  // typing deliberately does not re-apply atoms (that is what keeps the caret
+  // stable). Re-apply only when the structure is actually gone.
+  if (hostDomIsStale()) {
+    const caret = currentCursorCharOffset();
+    applyAtoms(parseForSurface(next));
+    if (next !== props.modelValue) emitValue(next);
+    void nextTick(() => restoreCursorAtChar(caret));
+    return;
+  }
   if (next !== props.modelValue) emitValue(next);
   // After every input we re-probe the caret for autocomplete trigger
   // — covers the user typing `@` mid-text, deleting back across a
@@ -1839,6 +2108,12 @@ function onHostBeforeInput(ev: InputEvent): void {
   const sel = window.getSelection();
   if (!sel || sel.rangeCount === 0) return;
   const range = sel.getRangeAt(0);
+  // A RANGE, not a caret: the browser is about to replace it, and that is
+  // correct. Redirecting here would collapse it, so the replacement never
+  // happened and the typed character was merely inserted — select-all then
+  // type one letter over `yellow` left `yellowy` instead of `y`. This rescue
+  // exists only for a collapsed caret stranded outside a text span.
+  if (!range.collapsed) return;
   const target = range.startContainer;
   // If selection is already inside a wp-rt__text span (directly OR
   // nested in a colored sub-span like wp-rt-dp-brace), nothing to do —
@@ -1858,30 +2133,12 @@ function onHostBeforeInput(ev: InputEvent): void {
   // of the input.
   const newRange = document.createRange();
   const positioned = positionAfterTarget(target, range.startOffset, newRange);
-  if (!positioned) {
-    // Fall back to the last span if no adjacent pad was found (e.g.
-    // selection is on the host root with no nearby chip).
+  if (!positioned && !positionFromHostIndex(target, range.startOffset, newRange)) {
+    // Nothing adjacent and nothing positional — land at the end of the last
+    // span, which is where an unanchored caret most plausibly belongs.
     const spans = host.querySelectorAll(".wp-rt__text");
     if (spans.length === 0) return;
-    const span = spans[spans.length - 1] as HTMLElement;
-    // Walk to the LAST text-node descendant. With colored sub-spans
-    // (`<span class="wp-rt-dp-multi">…</span>`), `firstChild` is no
-    // longer guaranteed to be a text node, so the legacy fast path
-    // would land the caret at element offset 0 — the START of the
-    // span — and any text the user then typed appeared in front of
-    // the brace block instead of after it.
-    const walker = document.createTreeWalker(span, NodeFilter.SHOW_TEXT);
-    let last: Text | null = null;
-    let n: Node | null = walker.nextNode();
-    while (n) {
-      last = n as Text;
-      n = walker.nextNode();
-    }
-    if (last) {
-      newRange.setStart(last, (last.textContent ?? "").length);
-    } else {
-      newRange.setStart(span, 0);
-    }
+    setCaretAtSpanEdge(spans[spans.length - 1] as HTMLElement, "end", newRange);
   }
   newRange.collapse(true);
   sel.removeAllRanges();
@@ -1894,6 +2151,85 @@ function onHostBeforeInput(ev: InputEvent): void {
  *  chip or on the host root between chips, the user wanted to type
  *  ADJACENT to that anchor — not somewhere else in the input. Returns
  *  true if a position was set. */
+/**
+ * Put `range` at one edge of `span`, walking to a real text node.
+ *
+ * With coloured sub-spans inside `wp-rt__text` (`<span class="wp-rt-dp-brace">`
+ * and friends), `firstChild` / `lastChild` are not guaranteed to be text
+ * nodes, and placing the caret on the span ELEMENT at offset 0 drops typing in
+ * front of the whole brace block instead of inside it.
+ */
+function setCaretAtSpanEdge(span: HTMLElement, edge: "start" | "end", range: Range): void {
+  const walker = document.createTreeWalker(span, NodeFilter.SHOW_TEXT);
+  if (edge === "start") {
+    const first = walker.nextNode() as Text | null;
+    if (first) range.setStart(first, 0);
+    else range.setStart(span, 0);
+    return;
+  }
+  let last: Text | null = null;
+  let n: Node | null = walker.nextNode();
+  while (n) {
+    last = n as Text;
+    n = walker.nextNode();
+  }
+  if (last) range.setStart(last, (last.textContent ?? "").length);
+  else range.setStart(span, 0);
+}
+
+/**
+ * Redirect a caret that is sitting on the host root into the span it is
+ * actually next to.
+ *
+ * Pressing Home, or clicking at the very start of the field, leaves the
+ * selection on the host itself rather than inside a `wp-rt__text` span —
+ * Firefox in particular parks it there, between the empty text nodes Vue
+ * leaves around fragment markers. The old fallback then sent the caret to the
+ * END of the LAST span, so a character typed at position 0 was inserted at the
+ * end of the value: typing `{` in front of `skirt` produced `skirt{`.
+ *
+ * On the host root the offset is a CHILD INDEX, so it says exactly where the
+ * caret is. Scan forward from it for a span and land at that span's start;
+ * only when there is nothing after it does the end of the preceding span
+ * become the right answer.
+ */
+function positionFromHostIndex(target: Node, offset: number, range: Range): boolean {
+  const host = hostEl.value;
+  if (!host) return false;
+  // Either the caret is on the host, or in one of the empty text nodes that
+  // sit directly under it — in which case its own index is what matters, not
+  // the offset inside a node with no content.
+  let index: number;
+  if (target === host) {
+    index = offset;
+  } else if (target.parentNode === host) {
+    index = Array.prototype.indexOf.call(host.childNodes, target);
+    // A caret PAST the content of a non-empty node belongs after it.
+    if (offset > 0) index += 1;
+  } else {
+    return false;
+  }
+  if (index < 0) return false;
+
+  const isTextSpan = (n: Node | null): n is HTMLElement =>
+    !!n && n.nodeType === Node.ELEMENT_NODE
+    && (n as HTMLElement).classList.contains("wp-rt__text");
+
+  for (let i = index; i < host.childNodes.length; i++) {
+    if (isTextSpan(host.childNodes[i])) {
+      setCaretAtSpanEdge(host.childNodes[i] as HTMLElement, "start", range);
+      return true;
+    }
+  }
+  for (let i = Math.min(index, host.childNodes.length) - 1; i >= 0; i--) {
+    if (isTextSpan(host.childNodes[i])) {
+      setCaretAtSpanEdge(host.childNodes[i] as HTMLElement, "end", range);
+      return true;
+    }
+  }
+  return false;
+}
+
 function positionAfterTarget(
   target: Node,
   offset: number,
@@ -1965,6 +2301,63 @@ function positionAfterTarget(
  *  than inside a wp-rt__text span), and a pasted `@{uuid}` literal
  *  stays as plain text instead of chip-ifying. Intercept, parse the
  *  pasted text, splice into atoms, restore caret after the paste. */
+/**
+ * The raw source text currently selected — `@{uuid}` and `$name` in their
+ * serialised form, not the chip's rendered label.
+ *
+ * `readHostAsText()` is the source of truth for the value, and the selection
+ * offsets are already expressed against it, so slicing it keeps copy, cut and
+ * paste all speaking the same language.
+ */
+function selectedRawText(): { text: string; start: number; end: number } {
+  const all = readHostAsText();
+  const { start, end } = currentSelectionRangeRaw();
+  return { text: all.slice(start, end), start, end };
+}
+
+/**
+ * Copy the SOURCE of the selection, not what the chips happen to render.
+ *
+ * A ref chip's DOM text is its display label — for an unresolved ref, nothing
+ * at all — so the browser's own copy turned `red @{955bb6fa} tail` into
+ * `red  tail` and the ref was silently dropped on paste. Measured: copying a
+ * value with one chip and pasting it back lost the chip every time.
+ */
+function onHostCopy(ev: ClipboardEvent): void {
+  if (props.disabled) return;
+  const { text } = selectedRawText();
+  if (!text) return;
+  ev.clipboardData?.setData("text/plain", text);
+  ev.preventDefault();
+}
+
+/**
+ * Cut, done through the atom model instead of by the browser.
+ *
+ * Left to the browser this was the single most destructive interaction in the
+ * editor. A Ctrl+A selection is anchored on the HOST element, so the deletion
+ * removed the `wp-rt__text` spans themselves — the elements Vue's vnodes point
+ * at. The field was left with zero spans: still typeable, but nothing chipped,
+ * nothing coloured, and the vdom referencing detached nodes, which is what
+ * produced `insertBefore: Child to insert before is not a child of this node`
+ * on a later patch and left the page unable to respond to anything.
+ *
+ * Routing it through `applyAtoms` keeps the structure Vue's, exactly as paste
+ * already did.
+ */
+function onHostCut(ev: ClipboardEvent): void {
+  if (props.disabled) return;
+  const all = readHostAsText();
+  const { text, start, end } = selectedRawText();
+  if (!text) return;
+  ev.clipboardData?.setData("text/plain", text);
+  ev.preventDefault();
+  const remainder = all.slice(0, start) + all.slice(end);
+  applyAtoms(parseForSurface(remainder));
+  emitValue(remainder);
+  void nextTick(() => restoreCursorAtChar(start));
+}
+
 function onHostPaste(ev: ClipboardEvent): void {
   if (props.disabled) return;
   const data = ev.clipboardData?.getData("text/plain");
@@ -2142,7 +2535,20 @@ function onHostKeydown(ev: KeyboardEvent): void {
     const { atoms: nextAtoms, caret } = deleteRawRange(readHostAsAtoms(), delStart, delEnd);
     applyAtoms(recolorBlocks(nextAtoms));
     emitValue(serialiseAtomsLocal(atoms.value));
-    void nextTick(() => restoreCursorAtChar(caret));
+    void nextTick(() => {
+      restoreCursorAtChar(caret);
+      // Re-probe AFTER the caret is back. `preventDefault` above suppressed the
+      // native delete, so no `input` event fires and `onHostInput` — the only
+      // other caller of this — never runs. Without it `acQuery` keeps its
+      // pre-deletion value and the suggestion list stays frozen at whatever it
+      // narrowed to: type `@act_` to two matches, delete the `_`, and `@act`
+      // still shows two instead of four.
+      // A SECOND tick: `restoreCursorAtChar` ends with `host.focus()`, and
+      // `onHostFocus` schedules its own nextTick that can reposition the
+      // caret. Probing in this tick reads the pre-settled caret (offset 0) and
+      // the probe returns null, closing the popover instead of re-filtering.
+      void nextTick(refreshAutocompleteFromHost);
+    });
     return;
   }
   if (ev.key === "Delete") {
@@ -2172,7 +2578,16 @@ function onHostKeydown(ev: KeyboardEvent): void {
     const { atoms: nextAtoms, caret } = deleteRawRange(live, delStart, delEnd);
     applyAtoms(recolorBlocks(nextAtoms));
     emitValue(serialiseAtomsLocal(atoms.value));
-    void nextTick(() => restoreCursorAtChar(caret));
+    void nextTick(() => {
+      restoreCursorAtChar(caret);
+      // Same reason as the Backspace branch — forward-delete is also
+      // `preventDefault`ed, so nothing else re-probes the query.
+      // A SECOND tick: `restoreCursorAtChar` ends with `host.focus()`, and
+      // `onHostFocus` schedules its own nextTick that can reposition the
+      // caret. Probing in this tick reads the pre-settled caret (offset 0) and
+      // the probe returns null, closing the popover instead of re-filtering.
+      void nextTick(refreshAutocompleteFromHost);
+    });
     return;
   }
   // Arrow keys: defer to native browser handling. Modern browsers skip
@@ -2191,6 +2606,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
       multiline ? 'wp-rt--multi' : 'wp-rt--single',
       focused ? 'wp-rt--focused' : 'wp-rt--rest',
       disabled ? 'wp-rt--disabled' : null,
+      hasMoreBelow ? 'wp-rt--more' : null,
     ]"
     :data-focused="focused ? '' : null"
   >
@@ -2201,12 +2617,14 @@ function onHostKeydown(ev: KeyboardEvent): void {
          Input handling lands in Task 6. -->
     <div
       ref="hostEl"
+      :key="hostEpoch"
       class="wp-rt__host"
       :class="[
         multiline ? 'wp-rt__host--multi' : 'wp-rt__host--single',
         { 'wp-rt__host--wrap': wrap && !multiline, 'wp-rt__host--empty': isEmpty },
       ]"
       :contenteditable="!disabled"
+      @scroll="updateOverflowHint"
       :aria-label="ariaLabel"
       :data-placeholder="placeholder"
       :data-multiline="multiline"
@@ -2219,6 +2637,8 @@ function onHostKeydown(ev: KeyboardEvent): void {
       @keydown="onHostKeydown"
       @beforeinput="onHostBeforeInput"
       @paste="onHostPaste"
+      @copy="onHostCopy"
+      @cut="onHostCut"
     >
       <template v-for="(atom, idx) in atoms" :key="renderEpoch + ':' + idx">
         <RefChip
@@ -2231,8 +2651,12 @@ function onHostKeydown(ev: KeyboardEvent): void {
           :expr="atom.kind === 'ref' ? chipFilterOf(atom).expr : ''"
           :exclude-null="atom.kind === 'ref' ? chipFilterOf(atom).excludeNull : false"
           :resolved="atomIsResolved(atom)"
+          :in-scope="atom.kind === 'var' && varSuggestions.includes(atom.name)"
+          :producer="atom.kind === 'var' ? varProducers?.get(atom.name) : undefined"
+          :graph-aware="graphAware"
           :index="atom.kind === 'var' ? atom.index : undefined"
           :data-atom-index="idx"
+          remappable
           @click="(ev: MouseEvent) => onChipClick(idx, ev)"
           @remap="(ev: MouseEvent) => onChipRemap(idx, ev)"
         />
@@ -2247,6 +2671,21 @@ function onHostKeydown(ev: KeyboardEvent): void {
         ></span>
       </template>
     </div>
+
+    <!-- Resize grip, replacing `resize: vertical`.
+         The native resizer recomputes height from an origin it captured at
+         pointerdown and never clamps to the element's own min/max, so dragging
+         past a limit banks invisible travel the user then has to walk all the
+         way back before anything moves — measured at 13 of 23 dead frames.
+         Ours applies each move's DELTA to the current height, so the first
+         pixel back off a limit moves the box. -->
+    <div
+      v-if="wrap || multiline"
+      class="wp-rt__grip"
+      data-test="rt-grip"
+      aria-hidden="true"
+      @pointerdown="startResize"
+    ></div>
 
     <!-- Warning markers overlay. Each marker is a zero-width inline element
          anchored at the UTF-16 offset corresponding to the warning position.
@@ -2283,25 +2722,89 @@ function onHostKeydown(ev: KeyboardEvent): void {
       >
         <div class="wp-rt-suggestions__head">
           <span class="wp-rt-suggestions__query">{{ acTrigger }}{{ acQuery }}</span>
-          <span class="wp-rt-suggestions__hint">↑↓ Enter · Esc</span>
+          <!-- The match count belongs in the header, not implied by the list
+               length: the list is capped and scrolls, so "how many did I
+               actually match" is otherwise unanswerable without scrolling.
+               Counts MATCHES, not rendered rows — and says so when the cap
+               hid some, since a silent truncation is how you conclude the
+               wildcard you are looking for does not exist. -->
+          <span class="wp-rt-suggestions__count">
+            {{ acMatches.length }} match{{ acMatches.length === 1 ? "" : "es" }}
+            <template v-if="acMatches.length > acRows.length">
+              · showing {{ acRows.length }}
+            </template>
+          </span>
+          <span class="wp-spacer" />
+          <!-- Says what the keys actually do. Choosing an `@` row goes on to
+               the filter panel rather than inserting a bare ref, so Enter is
+               labelled for where it leads. -->
+          <span class="wp-rt-suggestions__hint">↑↓ · {{ acTrigger === "@" ? "Enter filter" : "Enter" }} · Esc</span>
         </div>
         <button
-          v-for="(label, i) in acItems"
-          :key="label"
+          v-for="(row, i) in acRows"
+          :key="row.token"
           type="button"
           class="wp-rt-suggestions__item"
           :data-active="i === acActive ? '' : null"
           role="option"
           :aria-selected="i === acActive"
-          @mousedown="(e) => onSuggestionMouseDown(e, label)"
+          @mousedown="(e) => onSuggestionMouseDown(e, row.token)"
           @mouseenter="acActive = i"
         >
-          <span class="wp-rt-suggestions__label">
-            <span class="wp-rt-suggestions__trigger">{{ acTrigger }}</span>{{ suggestionLabel(label) }}
+          <!-- The glyph sits in a tinted box in its OWN kind's colour. A `$var`
+               can be written by a fixed_values or a combine as easily as by a
+               wildcard, and painting every row accent-violet throws away the
+               one cue that says which. -->
+          <span
+            class="wp-rt-suggestions__icon-box"
+            :style="kindTint(row.kind)"
+            aria-hidden="true"
+          ><i :class="row.icon" /></span>
+          <span class="wp-rt-suggestions__body">
+            <span class="wp-rt-suggestions__label">
+              <span class="wp-rt-suggestions__trigger">{{ acTrigger }}</span>{{ row.label }}
+            </span>
+            <!-- Second line: the facts that separate same-named entries. For
+                 `@` these are structural (options/axes/tags); for `$` it is
+                 the writer. Either way the row answers "which one is this?"
+                 without the user having to insert it and find out. -->
+            <span v-if="row.uuid || row.facts.length || row.producer" class="wp-rt-suggestions__sub">
+              <span v-if="row.uuid" class="wp-rt-suggestions__uuid">{{ row.uuid }}</span>
+              <template v-if="row.producer">
+                <span v-if="row.producer.verb">{{ row.producer.verb }}</span>
+                <!-- The module name is the identifying half of the sentence,
+                     so it is the part that gets picked out. -->
+                <span v-if="row.producer.moduleName" class="wp-rt-suggestions__by">
+                  {{ row.producer.moduleName }}
+                </span>
+                <span v-if="row.producer.moduleName && row.producer.tail" class="wp-rt-suggestions__sep">·</span>
+                <span v-if="row.producer.tail" class="wp-rt-suggestions__node">{{ row.producer.tail }}</span>
+              </template>
+              <span
+                v-for="fact in row.facts"
+                :key="fact"
+                class="wp-rt-suggestions__fact"
+              >{{ fact }}</span>
+              <!-- Same mark the chip and the filter header carry, so "this is
+                   the node's copy" reads identically wherever it appears. -->
+              <span
+                v-if="row.fromNode"
+                class="wp-rt-suggestions__origin"
+                data-test="suggestion-origin-node"
+              ><i class="pi pi-database" aria-hidden="true" /> this node</span>
+              <span v-if="row.badge" class="wp-rt-suggestions__badge">{{ row.badge }}</span>
+              <span v-if="row.internal" class="wp-rt-suggestions__internal">internal</span>
+            </span>
           </span>
-          <span v-if="suggestionMeta(label)" class="wp-rt-suggestions__meta">
-            {{ suggestionMeta(label) }}
-          </span>
+          <!-- Funnel marks the rows that lead to a filter — i.e. the ones
+               whose wildcard declares tags to filter by. Shown on the active
+               row only: on every row it becomes a column of noise, and the
+               next step applies to the row you are on. -->
+          <i
+            v-if="row.filterable && i === acActive"
+            class="pi pi-filter wp-rt-suggestions__funnel"
+            aria-hidden="true"
+          />
         </button>
       </div>
     </Teleport>
@@ -2324,6 +2827,8 @@ function onHostKeydown(ev: KeyboardEvent): void {
         @click.stop
       >
         <SubcategoryFilterPicker
+          :wildcard-name="pickerWildcardName"
+          :pool-origin="pickerPoolOrigin"
           :sub-categories="pickerSubCats"
           :tag-groups="pickerTagGroups"
           :option-tag-sets="pickerOptionTagSets"
@@ -2332,6 +2837,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
           :mode="pickerMode"
           :has-null-option="pickerHasNull"
           @apply="onPickerApply"
+          @back="onPickerBack"
           @skip="onPickerSkip"
           @delete="onPickerDelete"
         />
@@ -2366,6 +2872,61 @@ function onHostKeydown(ev: KeyboardEvent): void {
   font-family: var(--wp-font-mono, ui-monospace, monospace);
   font-size: var(--wp-text-sm);
 }
+/* "More below" hint — a capped box otherwise looks identical whether it holds
+   its whole value or a third of it. Deliberately restrained: a short fade to
+   the field's own background, lifted with a touch of accent so the eye catches
+   it, and `pointer-events: none` so it never intercepts a click or a caret
+   placement near the bottom edge. Clears the moment the user scrolls to the
+   end. */
+.wp-rt--more::after {
+  content: "";
+  position: absolute;
+  /* Left edge is full-bleed — a 1px inset left a visible seam where the band
+     stopped short of the border; the wrapper's `overflow: hidden` + radius
+     clip that side cleanly instead.
+     The RIGHT edge stops short of the resize grip. The band is exactly as tall
+     as the grip and sat right on top of it, so a resizable field's handle was
+     invisible: users aimed, missed, re-grabbed, and read it as "the drag
+     sticks then starts working". `pointer-events: none` meant it never
+     actually blocked the drag — it just hid the target. */
+  inset: auto 16px 0 0;
+  height: 16px;
+  pointer-events: none;
+  /* Gradient to a TRANSPARENT accent, not to a blend with the background: the
+     text keeps showing through instead of being washed out, while the tint
+     stays chromatic enough to notice. The 1px inset line at the very bottom is
+     what actually catches the eye. */
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 26%, transparent)
+  );
+  box-shadow: inset 0 -1px 0 color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 60%, transparent);
+}
+
+/* Sits in the bottom-right corner the overflow fade leaves clear. Drawn like
+   the native grip so it reads as the same affordance it replaces. */
+.wp-rt__grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: ns-resize;
+  z-index: 2;
+  background: repeating-linear-gradient(
+    135deg,
+    transparent 0 2px,
+    var(--wp-text-dim, #8a8a9a) 2px 3px
+  );
+  /* Clipped to a bottom-right triangle so the hatching runs parallel to the
+     hypotenuse — the shape the browser's own resizer draws, which is what
+     users already read as "drag me". A filled square read as a button. */
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+  opacity: 0.55;
+}
+.wp-rt__grip:hover { opacity: 0.9; }
+
 .wp-rt--focused {
   border-color: var(--wp-accent-500, #8b5cf6);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 25%, transparent);
@@ -2411,14 +2972,23 @@ function onHostKeydown(ev: KeyboardEvent): void {
 .wp-rt__host--single.wp-rt__host--wrap {
   height: auto;
   min-height: var(--wp-input-h, 34px);
-  max-height: 40vh;
+  /* 40vh let one field eat half the viewport before it ever scrolled, which
+     pushed every control below it off-screen. 12rem (~7 lines) is enough to
+     read a long value at a glance; past that the box scrolls AND keeps its
+     `resize: vertical` handle, so anyone who wants more just drags it. */
+  max-height: 12rem;
   padding: 6px var(--wp-space-5);
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
   overflow-x: hidden;
   overflow-y: auto;
-  resize: vertical;
+  /* Stop the scroll chaining to the page. Without this, scrolling a capped
+     field and reaching either end hands the remaining delta to the ancestor —
+     so the modal (or the whole editor) lurches while the user is still
+     pointing at the field. Most noticeable at the TOP edge, where a small
+     upward flick past the first line jumps the page. */
+  overscroll-behavior: contain;
 }
 /* Keep the placeholder ghost aligned with wrapped text (top-left, not
    vertically centered on the 34px single-line). */
@@ -2429,6 +2999,12 @@ function onHostKeydown(ev: KeyboardEvent): void {
   padding: var(--wp-space-4) var(--wp-space-5);
   line-height: 1.9;
   min-height: 72px;
+  /* Cap + scroll, matching `--wrap`. Uncapped, pasting a paragraph grew the
+     box to thousands of pixels and pushed every control below it off-screen. */
+  max-height: 14rem;
+  overflow-y: auto;
+  /* Same containment as `--wrap` — see the note there. */
+  overscroll-behavior: contain;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -2475,7 +3051,10 @@ function onHostKeydown(ev: KeyboardEvent): void {
  * ------------------------------------------------------------------------ */
 .wp-rt-suggestions {
   position: fixed;
-  z-index: 9999;
+  /* POPOVER tier — above every modal overlay (9999 ModalShell … 10010
+     InjectorBindingModal). At 9999 this only cleared modals that were also
+     9999, winning on DOM order; inside a 10000+ modal it rendered behind. */
+  z-index: 10020;
   min-width: 200px;
   max-width: 360px;
   max-height: 240px;
@@ -2525,15 +3104,23 @@ function onHostKeydown(ev: KeyboardEvent): void {
   opacity: 0.6;
   font-family: var(--wp-font, system-ui, sans-serif);
 }
+.wp-rt-suggestions__count {
+  font-family: var(--wp-font, system-ui, sans-serif);
+  opacity: 0.75;
+}
+/* Two lines per row now, so `align-items: center` would float the icon
+   against the name rather than the row. `flex-start` plus a top offset on the
+   icon lines it up with the FIRST line's text, which is where the eye is. */
 .wp-rt-suggestions__item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  gap: var(--wp-space-4);
   width: 100%;
   text-align: left;
   background: transparent;
   border: none;
   border-radius: var(--wp-radius-sm);
-  padding: 7px var(--wp-space-5); /* audit-exempt: 7px vertical hairline keeps items compact */
+  padding: 6px var(--wp-space-5); /* audit-exempt: 6px vertical keeps two-line rows compact */
   font-family: var(--wp-font-mono, ui-monospace, monospace);
   font-size: var(--wp-text-sm);
   color: var(--wp-text, #e7e7ee);
@@ -2542,8 +3129,27 @@ function onHostKeydown(ev: KeyboardEvent): void {
 .wp-rt-suggestions__item[data-active] {
   background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 22%, transparent);
 }
-.wp-rt-suggestions__label {
+/* A rounded, tinted tile rather than a bare glyph: it gives the kind colour
+   enough area to actually register, and keeps the label column aligned whether
+   or not a glyph has been resolved. */
+.wp-rt-suggestions__icon-box {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px; /* audit-exempt: optical centring on the label's first line box */
+  border-radius: var(--wp-radius-sm);
+  font-size: 10px;
+}
+.wp-rt-suggestions__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px; /* audit-exempt: hairline between a name and its own subtitle */
   flex: 1;
+  min-width: 0;
+}
+.wp-rt-suggestions__label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2552,14 +3158,75 @@ function onHostKeydown(ev: KeyboardEvent): void {
 .wp-rt-suggestions__trigger {
   color: var(--wp-accent-text, #c4b5fd);
 }
-.wp-rt-suggestions__meta {
-  margin-left: var(--wp-space-4);
+/* The detail line. Wraps rather than clips: these are short independent
+   facts, and dropping one silently would defeat the point of showing them.
+   The popover has a max-width, so wrapping is bounded. */
+.wp-rt-suggestions__sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--wp-space-3);
+  font-size: 11px; /* audit-exempt: micro disambiguator line — below scale floor */
   color: var(--wp-text-dim, #8a8a93);
-  font-family: var(--wp-font-mono, ui-monospace, monospace);
-  font-size: 11px; /* audit-exempt: micro disambiguator suffix — below scale floor */
-  flex-shrink: 0;
 }
-.wp-rt-suggestions__item[data-active] .wp-rt-suggestions__meta {
+.wp-rt-suggestions__uuid {
+  font-family: var(--wp-font-mono, ui-monospace, monospace);
+  opacity: 0.8;
+}
+/* Facts are discrete measurements, so each gets its own tile — as a run of
+   bare words they read as one sentence and the eye cannot pick out the number
+   it wants. */
+.wp-rt-suggestions__fact {
+  padding: 1px 4px; /* audit-exempt: micro tile padding */
+  border-radius: 3px; /* audit-exempt: tile smaller than the radius scale */
+  background: var(--wp-bg-4);
+  color: var(--wp-text-muted, #8a8a93);
+  font-family: var(--wp-font, system-ui, sans-serif);
+}
+/* The writer's name — the identifying half of the producer line. */
+.wp-rt-suggestions__by {
+  color: var(--wp-accent-text, #c4b5fd);
+  font-family: var(--wp-font-mono, ui-monospace, monospace);
+}
+.wp-rt-suggestions__node {
+  font-family: var(--wp-font-mono, ui-monospace, monospace);
+  opacity: 0.85;
+}
+.wp-rt-suggestions__sep { opacity: 0.4; }
+/* A count of what else touches this name — a thing to look at, so it is
+   tinted like a soft warning rather than left as body text. */
+.wp-rt-suggestions__badge {
+  font-family: var(--wp-font, system-ui, sans-serif);
+  padding: 0 4px; /* audit-exempt: badge inline padding */
+  border-radius: var(--wp-radius-sm);
+  padding: 1px 4px; /* audit-exempt: micro tile padding, matches __fact */
+  border-radius: 3px; /* audit-exempt: tile smaller than the radius scale */
+  background: color-mix(in oklab, var(--wp-warn) 20%, transparent);
+  color: var(--wp-warn);
+}
+.wp-rt-suggestions__origin {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px; /* audit-exempt: glyph-to-word gap */
+  padding: 0 4px; /* audit-exempt: micro tile padding, matches __fact */
+  border-radius: 3px; /* audit-exempt: tile below the radius scale */
+  background: color-mix(in oklab, var(--wp-info) 15%, transparent);
+  color: var(--wp-info);
+  font-family: var(--wp-font, system-ui, sans-serif);
+}
+.wp-rt-suggestions__origin .pi { font-size: 9px; }
+.wp-rt-suggestions__internal {
+  font-family: var(--wp-font, system-ui, sans-serif);
+  font-style: italic;
+  opacity: 0.8;
+}
+.wp-rt-suggestions__funnel {
+  flex-shrink: 0;
+  margin-top: 2px; /* audit-exempt: matches the leading icon's optical offset */
+  font-size: 11px;
+  color: var(--wp-accent-text, #c4b5fd);
+}
+.wp-rt-suggestions__item[data-active] .wp-rt-suggestions__sub {
   color: var(--wp-text, #e7e7ee);
 }
 
@@ -2572,19 +3239,19 @@ function onHostKeydown(ev: KeyboardEvent): void {
 /* Z-index sits in the autocomplete-popover tier (9999), NOT the old
    1000/1001. On the canvas the derivation/wildcard instance modal renders
    on its own high-z overlay; at 1000/1001 the body-teleported picker fell
-   BEHIND that modal. The `@`-autocomplete popover already clears the modal
-   at 9999, so the picker matches that tier (backdrop 10000, anchor 10001)
-   to sit ABOVE the modal too. The SPA's own modals live well below 9999,
-   so raising is safe there — no SPA regression. */
+   BEHIND that modal. The picker tracks the autocomplete popover's tier so it
+   clears every modal: those run up to 10010 (InjectorBindingModal), so the
+   old 10000/10001 was no longer above all of them. Backdrop sits just under
+   the anchor, both above the modal tier. */
 .wp-subcat-picker__backdrop {
   position: fixed;
   inset: 0;
   background: transparent;
-  z-index: 10000;
+  z-index: 10020;
 }
 .wp-subcat-picker__anchor {
   position: fixed;
-  z-index: 10001;
+  z-index: 10021;
   /* Subtle drop-shadow so the popover reads as elevated even without
      the dimmed backdrop of the previous modal version. */
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.4));

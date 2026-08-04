@@ -13,6 +13,7 @@
     "build:manager": "vite build --mode manager",
     "build": "pnpm build:extension && pnpm build:manager",
     "docs:copy": "node scripts/copy-help-docs.mjs",
+    "docs:figures": "node scripts/build-flow-figures.mjs",
     "typecheck": "vue-tsc --noEmit",
     "lint": "eslint \"src/**/*.{ts,vue}\"",
     "size": "node scripts/check-bundle-size.mjs",
@@ -24,7 +25,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage --passWithNoTests",
     "test:py": "pytest",
-    "prepare": "husky"
+    "prepare": "husky",
+    "announce": "node scripts/discord-announce.mjs"
   },
   "dependencies": {
     "pinia": "^2.2.6",

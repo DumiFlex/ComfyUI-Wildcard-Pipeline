@@ -1,18 +1,68 @@
-# Lint + typecheck + frontend tests
-pnpm lint || exit 1
-pnpm typecheck || exit 1
-pnpm test || exit 1
+# Pre-commit gate, scoped to what actually changed.
+#
+# This used to run the whole CI suite on every commit — lint, typecheck, the
+# full 4000-test vitest run, a build, the size gate, ruff and the full pytest
+# suite — about 4.5 minutes regardless of whether the commit touched one Vue
+# file or one markdown file. CI (.github/workflows/ci.yml) now runs on every
+# push, not just main, so the local hook's job is to catch mistakes fast rather
+# than re-prove the whole tree.
+#
+# Measured on this machine:
+#   lint 11s · typecheck 18s · full vitest 150s · build 10s · size 2s
+#   ruff 0s · full pytest 76s · vitest scoped to changed files ~30s
+#
+# So a frontend-only commit drops from ~4.5min to ~70s, a Python-only commit
+# skips the JS half, and a docs-only commit exits immediately.
+#
+# Escape hatch: `WP_FULL=1 git commit …` runs everything, unscoped.
 
-# Bundle size budget — build the extension chunk and run the size check so
-# regressions get caught locally before the CI flags them on PR. Skips when
-# js/ output already matches the source by mtime to keep repeat commits fast.
-pnpm build:extension || exit 1
-pnpm size || exit 1
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+[ -z "$staged" ] && exit 0
 
-# Python checks — only if ruff/pytest reachable on PATH
-if command -v ruff >/dev/null 2>&1; then
-  ruff check . || exit 1
+has() { echo "$staged" | grep -qE "$1"; }
+
+FRONT=0
+PY=0
+# Anything that can change the bundle or its types.
+has '^(src/|scripts/|package\.json|pnpm-lock\.yaml|vite\.|tsconfig|eslint)' && FRONT=1
+# Anything the Python suites cover.
+has '(\.py$|^(engine/|wp_nodes/|wp_api/|tests/|pyproject\.toml))' && PY=1
+
+if [ "$WP_FULL" = "1" ]; then
+  FRONT=1
+  PY=1
 fi
-if command -v pytest >/dev/null 2>&1; then
-  pytest -q || exit 1
+
+if [ "$FRONT" = "1" ]; then
+  pnpm lint || exit 1
+  pnpm typecheck || exit 1
+
+  # Only the tests reachable from the staged sources. `vitest related` walks
+  # the import graph, so a change to a shared module still pulls in every
+  # dependent suite — narrower than the full run, not weaker for the code
+  # being committed. CI still runs the whole suite with coverage.
+  if [ "$WP_FULL" = "1" ]; then
+    pnpm test || exit 1
+  else
+    changed_src=$(echo "$staged" | grep -E '^src/.*\.(ts|vue)$' | tr '\n' ' ')
+    if [ -n "$changed_src" ]; then
+      # shellcheck disable=SC2086
+      pnpm exec vitest related --run $changed_src || exit 1
+    fi
+  fi
+
+  # Bundle budget — cheap, and a regression here stays invisible until release.
+  pnpm build:extension || exit 1
+  pnpm size || exit 1
 fi
+
+if [ "$PY" = "1" ]; then
+  if command -v ruff >/dev/null 2>&1; then
+    ruff check . || exit 1
+  fi
+  if command -v pytest >/dev/null 2>&1; then
+    pytest -q || exit 1
+  fi
+fi
+
+exit 0

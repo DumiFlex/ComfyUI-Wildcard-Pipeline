@@ -12,13 +12,18 @@
  * override, locked seed, hide-from-prompt.
  */
 import { computed } from "vue";
+import { saveChordLabel } from "../../../shared/platform-keys";
 import { type ResolvedValue } from "../../../../widgets/richTokenize";
 import type { ModuleEntry } from "../../../../widgets/_shared";
 import IdentitySection from "./sections/IdentitySection.vue";
 import TemplateSection from "./sections/TemplateSection.vue";
+import type { VarProducerLike } from "../../../../manager/components/RefChip.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
 import InstanceIdChip from "../InstanceIdChip.vue";
 
+
+/** Platform-correct save chord for the footer hint. */
+const saveChord = saveChordLabel();
 const props = withDefaults(
   defineProps<{
     module: ModuleEntry;
@@ -30,6 +35,10 @@ const props = withDefaults(
      *  insert-var dropdown so users don't have to remember which
      *  bindings they can reach from this module. */
     upstreamVars?: string[];
+    /** `$var` → who writes it. Feeds the template editor's `$` autocomplete
+     *  so each suggestion names its producing module rather than listing a
+     *  bare name the user has to recognise from memory. */
+    upstreamProducers?: Record<string, VarProducerLike>;
     /** Resolved upstream-var snapshot — drives the TemplateSection's
      *  live preview pane with substituted values. */
     upstreamResolved?: Record<string, ResolvedValue>;
@@ -109,6 +118,7 @@ function onSpaClick(): void {
       @update="onUpdate"
     />
     <TemplateSection
+      :upstream-producers="upstreamProducers"
       :module="module"
       :upstream-vars="upstreamVars"
       :upstream-resolved="upstreamResolved"
@@ -142,7 +152,7 @@ function onSpaClick(): void {
         Reset overrides
       </button>
       <span class="wp-cbm__hint">
-        <kbd>Esc</kbd> cancel · <kbd>⌘↵</kbd> save
+        <kbd>Esc</kbd> cancel · <kbd>{{ saveChord }}</kbd> save
       </span>
       <button
         v-if="canSaveToLibrary"

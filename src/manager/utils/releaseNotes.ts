@@ -47,6 +47,70 @@ function renderInline(escaped: string): string {
  * text. Everything else still falls through to escaping (rendered inert), so
  * this stays safe: it only recognises a fixed allow-list of formatting tags.
  */
+/**
+ * Release bodies end with a `<details>` block holding the raw per-commit list.
+ * On GitHub that's collapsed behind a click; here it was unwrapped inline by
+ * `normalizeReleaseHtml` and dumped every commit message into the dialog,
+ * burying the human-written "What's new" section that the preview exists to
+ * show. The dialog already links out to the full changelog, so cut the block.
+ *
+ * Deliberately matched on the summary text rather than stripping every
+ * `<details>`: another collapsible in a future release body probably IS worth
+ * showing, and unwrapping stays the default for those.
+ *
+ * The trailing `---` rule that preceded the block goes too, otherwise the notes
+ * end on a stray divider.
+ */
+/**
+ * Everything the modal should show, and no more.
+ *
+ * The release body is written for the release PAGE, where the reader has room
+ * to browse. The modal has a 320px scroll box and one job: answer "is this
+ * worth clicking Update now". Release notes therefore carry a
+ * `<!-- /modal -->` marker after the highlights; the dialog stops there.
+ *
+ * Bodies without the marker (every release before it existed) are unaffected —
+ * they render whole, exactly as before.
+ */
+const MODAL_CUT = /<!--\s*\/modal\s*-->/i;
+
+function cutAtModalMarker(md: string): string {
+  const at = md.search(MODAL_CUT);
+  return at === -1 ? md : md.slice(0, at);
+}
+
+/** HTML comments are invisible on GitHub but would render as escaped text
+ *  here, so drop them regardless of whether the cut marker was found. */
+/**
+ * How many bullet points sit BELOW the modal cut.
+ *
+ * The dialog shows only the highlights, which would otherwise end with no sign
+ * that the release contains anything else — the reader cannot tell a
+ * five-change release from an eighty-change one. Returns 0 when there is no
+ * cut marker (every release before it existed) so nothing is claimed.
+ */
+export function tailChangeCount(md: string): number {
+  if (!md) return 0;
+  const at = md.search(MODAL_CUT);
+  if (at === -1) return 0;
+  const tail = stripComments(md.slice(at));
+  return (tail.match(/^\s*[-*]\s+\S/gm) ?? []).length;
+}
+
+function stripComments(md: string): string {
+  return md.replace(/<!--[\s\S]*?-->/g, "");
+}
+
+function stripFullChangelog(md: string): string {
+  return md
+    .replace(
+      /<details[^>]*>\s*<summary>(?:(?!<\/summary>)[\s\S])*?full\s+changelog[\s\S]*?<\/details>/gi,
+      "",
+    )
+    .replace(/\n\s*-{3,}\s*$/, "")
+    .trimEnd();
+}
+
 function normalizeReleaseHtml(md: string): string {
   return md
     // <summary>…</summary> → a bold lead line (drop any inner tags).
@@ -58,11 +122,24 @@ function normalizeReleaseHtml(md: string): string {
     .replace(/<\/?(?:b|strong)>/gi, "**");
 }
 
-export function renderReleaseNotes(md: string): string {
+/**
+ * @param opts.full Keep everything below the `<!-- /modal -->` marker — the
+ *   "Also in this release" tail. The dialog cuts there because it is an
+ *   interruption and should stay short; the dedicated What's new PAGE is
+ *   somewhere the reader chose to go, so withholding half the notes there
+ *   would just send them to GitHub. The per-commit `<details>` dump is still
+ *   stripped in both modes: it is for people reading git, not release notes.
+ */
+export function renderReleaseNotes(md: string, opts?: { full?: boolean }): string {
   if (!md || !md.trim()) {
     return '<p class="wpc-relnotes__empty">No release notes.</p>';
   }
-  const lines = normalizeReleaseHtml(md).replace(/\r\n/g, "\n").split("\n");
+  const scoped = opts?.full ? md : cutAtModalMarker(md);
+  const trimmed = stripComments(stripFullChangelog(scoped));
+  if (!trimmed.trim()) {
+    return '<p class="wpc-relnotes__empty">No release notes.</p>';
+  }
+  const lines = normalizeReleaseHtml(trimmed).replace(/\r\n/g, "\n").split("\n");
   const html: string[] = [];
   let inList = false;
   let inCode = false;

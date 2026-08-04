@@ -12,10 +12,12 @@
  * Section order matches all shipped v2 modals: Header → Identity →
  * Rules (kind-specific) → Runtime → Footer.
  */
-import { computed, onMounted, ref } from "vue";
+import { computed, inject, onMounted, ref } from "vue";
+import { saveChordLabel } from "../../../shared/platform-keys";
 import type { ModuleEntry } from "../../../../widgets/_shared";
 import type { PairingBadge } from "../../../../extension/constraint-pairs";
 import type { ModuleRow } from "../../../../manager/api/types";
+import type { VarProducerLike } from "../../../../manager/components/RefChip.vue";
 import {
   buildWildcardRefData,
   collectLibraryWildcardRefs,
@@ -24,7 +26,11 @@ import IdentitySection from "./sections/IdentitySection.vue";
 import RulesSection from "./sections/RulesSection.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
 import InstanceIdChip from "../InstanceIdChip.vue";
+import { CONTEXT_POOLS_KEY, overlayContextPools } from "../../../../extension/context-pools";
 
+
+/** Platform-correct save chord for the footer hint. */
+const saveChord = saveChordLabel();
 const props = withDefaults(
   defineProps<{
     module: ModuleEntry;
@@ -35,6 +41,8 @@ const props = withDefaults(
     /** Vars produced upstream of this Context node — forwarded as the
      *  `$var` autocomplete list for the rule override fields. */
     upstreamVars?: string[];
+    /** `$var` → its producing module + node, for the chip hover cards. */
+    upstreamProducers?: Record<string, VarProducerLike>;
     /** Vars produced by other modules in the SAME Context node. */
     siblingVars?: string[];
     /** Via-nested constraint-pair badges for this derivation when it acts
@@ -65,11 +73,25 @@ const props = withDefaults(
 // `moduleStore.catalog`. The canvas has no Pinia store, so we fetch the
 // library ONCE when the modal mounts (same `/wp/api/modules` source the
 // ModulePickerModal reads) and build the SAME maps via the shared
-// `buildWildcardRefData`. The `@{}` source is the LIBRARY (by identity),
-// NOT this Context node's chain — a chain sibling would be a `$var`.
+// `buildWildcardRefData`.
+//
+// A `@{}` addresses a wildcard BY IDENTITY, so the candidate list is the
+// library — a chain sibling would be a `$var`. What the ref then RESOLVES
+// against is a separate question, answered by the overlay below.
 const catalog = ref<ModuleRow[]>([]);
 
-const refData = computed(() => buildWildcardRefData(catalog.value));
+// Library-derived picker data, then the node's OWN pools overlaid on top.
+//
+// The engine resolves a nested `@{}` ref against this node's snapshot whenever
+// the uuid is also a module here, falling back to the library otherwise. The
+// picker used to offer the library's tags unconditionally, so on a drifted
+// snapshot it listed a tag no option in the RUNNING pool carries — pick it and
+// the ref resolves to nothing, with the checkbox list itself being the thing
+// that misled you. Same precedence the hover card applies, so card, picker and
+// engine now describe one pool.
+const contextPools = inject(CONTEXT_POOLS_KEY, undefined);
+const refData = computed(() =>
+  overlayContextPools(buildWildcardRefData(catalog.value), contextPools?.value));
 const uuidToName = computed(() => refData.value.uuidToName);
 // Library wildcard uuids for `@{}` autocomplete, excluding this module's own
 // id (a wildcard never nests itself) — sorted by display name to mirror the
@@ -86,6 +108,12 @@ const varSuggestions = computed<string[]>(() => {
   for (const n of props.siblingVars) if (n) set.add(n);
   return [...set].sort();
 });
+
+/** Producer lookup for the chip hover cards. A Map because RefChip reads it
+ *  per-chip and `Map.get` beats rebuilding an object lookup on every render. */
+const varProducerMap = computed<Map<string, VarProducerLike>>(
+  () => new Map(Object.entries(props.upstreamProducers ?? {})),
+);
 
 onMounted(async () => {
   // Fire-and-forget: until this resolves the ref-data maps stay empty, so
@@ -155,6 +183,7 @@ function onSpaClick(): void {
     <RulesSection
       :module="module"
       :var-suggestions="varSuggestions"
+      :var-producers="varProducerMap"
       :ref-suggestions="refSuggestions"
       :uuid-to-name="uuidToName"
       :uuid-to-sub-categories="refData.uuidToSubCategories"
@@ -192,7 +221,7 @@ function onSpaClick(): void {
         Reset overrides
       </button>
       <span class="wp-dvm__hint">
-        <kbd>Esc</kbd> cancel · <kbd>⌘↵</kbd> save
+        <kbd>Esc</kbd> cancel · <kbd>{{ saveChord }}</kbd> save
       </span>
       <button
         v-if="canSaveToLibrary"

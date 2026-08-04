@@ -30,6 +30,64 @@ describe("VarPicker", () => {
     expect(w.emitted("update:modelValue")?.[0]).toEqual(["$mood"]);
   });
 
+  it("filters the option list as you type", async () => {
+    // A long chain produces dozens of upstream vars; the menu was an
+    // unfiltered scroll.
+    const w = mount(VarPicker, {
+      props: {
+        modelValue: "",
+        upstreamVars: ["$seed", "$mood", "$outfit_color"],
+        previewSource: "", previewParsed: null, previewDefault: "0",
+      },
+    });
+    await w.find('[data-test="var-picker-trigger"]').trigger("click");
+    await w.find('[data-test="var-picker-search"]').setValue("moo");
+    expect(w.find('[data-test="var-picker-opt-$mood"]').exists()).toBe(true);
+    expect(w.find('[data-test="var-picker-opt-$seed"]').exists()).toBe(false);
+  });
+
+  it("matches with or without the leading $", async () => {
+    const w = mount(VarPicker, {
+      props: {
+        modelValue: "",
+        upstreamVars: ["$seed"],
+        previewSource: "", previewParsed: null, previewDefault: "0",
+      },
+    });
+    await w.find('[data-test="var-picker-trigger"]').trigger("click");
+    await w.find('[data-test="var-picker-search"]').setValue("see");
+    expect(w.find('[data-test="var-picker-opt-$seed"]').exists()).toBe(true);
+    await w.find('[data-test="var-picker-search"]').setValue("$see");
+    expect(w.find('[data-test="var-picker-opt-$seed"]').exists()).toBe(true);
+  });
+
+  it("says so when nothing matches, instead of rendering an empty menu", async () => {
+    const w = mount(VarPicker, {
+      props: {
+        modelValue: "",
+        upstreamVars: ["$seed"],
+        previewSource: "", previewParsed: null, previewDefault: "0",
+      },
+    });
+    await w.find('[data-test="var-picker-trigger"]').trigger("click");
+    await w.find('[data-test="var-picker-search"]').setValue("zzz");
+    expect(w.find('[data-test="var-picker-no-match"]').exists()).toBe(true);
+  });
+
+  it("Enter picks the sole remaining match", async () => {
+    const w = mount(VarPicker, {
+      props: {
+        modelValue: "",
+        upstreamVars: ["$seed", "$mood"],
+        previewSource: "", previewParsed: null, previewDefault: "0",
+      },
+    });
+    await w.find('[data-test="var-picker-trigger"]').trigger("click");
+    await w.find('[data-test="var-picker-search"]').setValue("moo");
+    await w.find('[data-test="var-picker-search"]').trigger("keydown", { key: "Enter" });
+    expect(w.emitted("update:modelValue")?.[0]).toEqual(["$mood"]);
+  });
+
   it("shows the parsed preview in teal", () => {
     const w = mount(VarPicker, {
       props: { modelValue: "$seed", upstreamVars: ["$seed"], previewSource: "1920x1080", previewParsed: "1920", previewDefault: "0" },

@@ -5,7 +5,7 @@ from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 from engine.db.connection import get_connection
 from engine.db.migrations import migrate
 from engine.db.repositories import ModuleNotFound, ModuleRepository
-from engine.modules.snapshot import walk_transitive_refs
+from engine.modules.snapshot import ref_seed_uuids, walk_transitive_refs
 from engine.pipeline import PipelineEngine
 from engine.seed_derive import effective_chain_seed
 from wp_nodes.types import (
@@ -16,13 +16,14 @@ from wp_nodes.types import (
 )
 
 
-def _expand_catalog_via_live_db(catalog: dict) -> dict:
+def _expand_catalog_via_live_db(catalog: dict, modules: list | None = None) -> dict:
     """Per-issue-#2: the embed-bundle endpoint no longer walks
     transitive ``@{}`` refs — workflow JSON only carries what the
     user explicitly picked. At graph-run time we fill in any nested
     wildcards by querying the live library on the executing machine.
 
-    Strategy: feed the picked wildcards' uuids into
+    Strategy: feed the picked wildcards' uuids — PLUS every uuid referenced by
+    any module on any surface (see ``_ref_seed_uuids``) — into
     ``walk_transitive_refs`` with a fetch callback that returns the
     embedded snapshot when available (so picked entries keep their
     saved payload — drift detection still works) and falls back to
@@ -35,7 +36,8 @@ def _expand_catalog_via_live_db(catalog: dict) -> dict:
       - Referenced uuid not in DB → walker records ``missing_target``;
         resolver still emits the warning at run time.
     """
-    if not catalog:
+    seeds = ref_seed_uuids(modules)
+    if not catalog and not seeds:
         return catalog
 
     try:
@@ -67,8 +69,60 @@ def _expand_catalog_via_live_db(catalog: dict) -> dict:
         except Exception:
             return None
 
-    walk = walk_transitive_refs(list(catalog.keys()), fetch_module=_fetch)
+    # Picked wildcards first so they keep `source: user`; ref-only targets
+    # follow and land as deps. `walk_transitive_refs` skips a uuid it has
+    # already snapshotted, so the overlap between the two is harmless.
+    roots = list(catalog.keys()) + [u for u in sorted(seeds) if u not in catalog]
+    walk = walk_transitive_refs(roots, fetch_module=_fetch)
+    _stamp_pool_provenance(walk.snapshots, catalog, repo)
     return walk.snapshots
+
+
+def _stamp_pool_provenance(
+    snapshots: dict, embedded: dict, repo: ModuleRepository,
+) -> None:
+    """Record, per catalog entry, WHERE its option pool came from.
+
+    Runtime-only bookkeeping consumed by ``ref_option_pool`` when a filtered
+    nested ref matches nothing. Without it that warning can only say "matched
+    no options", which is true and useless: the user cannot tell whether the
+    filter is wrong, or whether it is right but this node is holding a stale
+    copy of a pool the library has since changed. That ambiguity is what made
+    the nested-ref bug so hard to read from the Debug panel.
+
+    Two fields:
+      * ``pool_origin`` — ``"node"`` when the entry came from THIS node's
+        embedded snapshot (which shadows the library), ``"library"`` when it
+        was fetched because no module here holds that uuid.
+      * ``library_option_count`` — only for ``node`` entries whose live
+        library row now has a DIFFERENT number of options. Absent when they
+        agree, so its presence alone means "this node's copy has drifted".
+
+    Mutates in place. Never raises: this is diagnostic garnish, and a DB
+    hiccup here must not take a graph run down with it. The extra reads are
+    one per embedded wildcard, at graph-run time, on a connection already open.
+
+    The keys ride on the runtime catalog only — `__wp_catalog__` is stripped at
+    the socket boundary and the workflow-embedded snapshot is built elsewhere,
+    so neither reaches saved JSON.
+    """
+    for uuid, entry in snapshots.items():
+        if not isinstance(entry, dict):
+            continue
+        from_node = uuid in embedded
+        entry["pool_origin"] = "node" if from_node else "library"
+        if not from_node:
+            continue
+        try:
+            live = repo.get(uuid)
+        except Exception:
+            continue
+        live_options = (live.get("payload") or {}).get("options")
+        own_options = (entry.get("payload") or {}).get("options")
+        if not isinstance(live_options, list) or not isinstance(own_options, list):
+            continue
+        if len(live_options) != len(own_options):
+            entry["library_option_count"] = len(live_options)
 
 
 class WPContext(io.ComfyNode):
@@ -123,7 +177,10 @@ class WPContext(io.ComfyNode):
         # any transitive nested wildcards by hitting the live library
         # — picker no longer auto-walks at pick time (issue #2).
         module_list, catalog, _pick_order = deserialize_node_input(wp_modules)
-        catalog = _expand_catalog_via_live_db(catalog)
+        # `module_list` (not just the wildcard catalog) so a `@{}` ref written
+        # on a derivation action — or in its per-instance override — pulls its
+        # target in too. See `ref_seed_uuids`.
+        catalog = _expand_catalog_via_live_db(catalog, module_list)
 
         ctx: dict = dict(upstream_ctx)
         # Inject catalog ONCE at the top of execute, before pipeline

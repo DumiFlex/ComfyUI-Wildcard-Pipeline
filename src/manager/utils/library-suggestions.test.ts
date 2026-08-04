@@ -6,6 +6,7 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  buildLibraryVarProducers,
   collectLibraryVarHints,
   collectLibraryWildcardRefs,
   type ModuleStoreLike,
@@ -31,6 +32,63 @@ function row(over: Partial<ModuleRow>): ModuleRow {
 function store(catalog: ModuleRow[]): ModuleStoreLike {
   return { catalog };
 }
+
+describe("buildLibraryVarProducers", () => {
+  it("keeps EVERY module that binds a name, in catalog order", () => {
+    // `collectLibraryVarHints` dedups on first occurrence — fine for an
+    // autocomplete list, useless for a hover card that has to say which of
+    // several near-identical modules a name comes from.
+    const idx = buildLibraryVarProducers(store([
+      row({ id: "wc111111", name: "Outfit", payload: { var_binding: "outfit" } }),
+      row({ id: "wc222222", name: "Outfit (nsfw)", payload: { var_binding: "outfit" } }),
+    ]));
+    expect(idx.get("outfit")).toEqual([
+      { id: "wc111111", name: "Outfit", kind: "wildcard" },
+      { id: "wc222222", name: "Outfit (nsfw)", kind: "wildcard" },
+    ]);
+  });
+
+  it("counts a module ONCE even when it binds the same var repeatedly", () => {
+    // A derivation with three branches writing $pose is one producer, not
+    // three — otherwise the card claims three modules bind a name only one does.
+    const idx = buildLibraryVarProducers(store([
+      row({
+        id: "dr111111", type: "derivation", name: "Pose select",
+        payload: {
+          rules: [{
+            id: "r1",
+            branches: [
+              { action: { target_var: "pose" } },
+              { action: { target_var: "pose" } },
+            ],
+            else: { action: { target_var: "pose" } },
+          }],
+        },
+      }),
+    ]));
+    expect(idx.get("pose")).toHaveLength(1);
+    expect(idx.get("pose")?.[0].kind).toBe("derivation");
+  });
+
+  it("fans a fixed_values sheet out per row and strips the $ prefix", () => {
+    const idx = buildLibraryVarProducers(store([
+      row({
+        id: "fv111111", type: "fixed_values", name: "Quality",
+        payload: { values: [{ name: "$quality" }, { name: "steps" }] },
+      }),
+    ]));
+    expect(idx.get("quality")?.[0].name).toBe("Quality");
+    expect(idx.get("steps")?.[0].id).toBe("fv111111");
+  });
+
+  it("honours excludeId so the edited module isn't its own producer", () => {
+    const idx = buildLibraryVarProducers(
+      store([row({ id: "wc111111", name: "Outfit", payload: { var_binding: "outfit" } })]),
+      "wc111111",
+    );
+    expect(idx.get("outfit")).toBeUndefined();
+  });
+});
 
 describe("collectLibraryVarHints", () => {
   it("extracts wildcard var_binding from payload", () => {

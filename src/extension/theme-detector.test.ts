@@ -11,7 +11,10 @@ describe("theme-detector", () => {
 
   afterEach(() => {
     host.remove();
+    // The marker can sit on either element depending on frontend era — clear
+    // both so a test that sets one can't leak into the next.
     document.body.classList.remove("dark-theme");
+    document.documentElement.classList.remove("dark-theme");
     document.documentElement.classList.remove("wp-theme-dark", "wp-theme-light");
   });
 
@@ -90,6 +93,46 @@ describe("theme-detector", () => {
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
       expect(host.classList.contains("wp-theme-dark")).toBe(true);
       expect(host.classList.contains("wp-theme-light")).toBe(false);
+      cleanup();
+    });
+
+    // --- Frontend-era compatibility --------------------------------------
+    //
+    // ComfyUI moved the marker between releases. Verified against two live
+    // builds: 1.45.21 puts `dark-theme` on <body>, 1.47.10 puts it on <html>.
+    // Reading only <body> reported LIGHT on every modern build, so the
+    // extension painted its light tokens onto a dark ComfyUI.
+
+    it("returns 'dark' when the class is on <html> (ComfyUI ≥ 1.47)", () => {
+      document.body.classList.remove("dark-theme");
+      document.documentElement.classList.add("dark-theme");
+      expect(detectInitialTheme()).toBe("dark");
+    });
+
+    it("still returns 'dark' when the class is on <body> (ComfyUI ≤ 1.45)", () => {
+      document.documentElement.classList.remove("dark-theme");
+      document.body.classList.add("dark-theme");
+      expect(detectInitialTheme()).toBe("dark");
+    });
+
+    it("returns 'light' only when NEITHER element carries the class", () => {
+      document.documentElement.classList.remove("dark-theme");
+      document.body.classList.remove("dark-theme");
+      expect(detectInitialTheme()).toBe("light");
+    });
+
+    it("follows a theme switch made on <html>", async () => {
+      document.documentElement.classList.add("dark-theme");
+      const cleanup = attachThemeDetector(host);
+      expect(host.classList.contains("wp-theme-dark")).toBe(true);
+
+      document.documentElement.classList.remove("dark-theme");
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      expect(host.classList.contains("wp-theme-light")).toBe(true);
+
+      document.documentElement.classList.add("dark-theme");
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      expect(host.classList.contains("wp-theme-dark")).toBe(true);
       cleanup();
     });
 

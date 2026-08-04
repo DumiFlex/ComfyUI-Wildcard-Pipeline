@@ -132,6 +132,31 @@ export function computeBundleFingerprint(
   return `${FINGERPRINT_VERSION}:${djb2(parts.join("\n"))}`;
 }
 
+/**
+ * Cross-library content key for a bundle: the ordered list of its children's
+ * `(type, payload_hash)` pairs.
+ *
+ * Distinct from `computeBundleFingerprint`, which answers "have MY children
+ * been edited since insert" and therefore folds in per-instance state — `_uid`,
+ * `meta`, `instance`. That makes it useless for comparing a workflow bundle
+ * against a LIBRARY bundle: a fresh insert mints new uids, so two copies of the
+ * same library bundle never agree.
+ *
+ * This one deliberately keeps only what survives an insert, so a workflow
+ * bundle and the library row it came from produce the same key. Order matters
+ * (a bundle IS an ordered range) and children with no `payload_hash` contribute
+ * an empty slot rather than being skipped, so a hash-less child still affects
+ * the shape.
+ *
+ * Used by the re-link picker when a bundle carries no `inserted_at_hash`.
+ */
+export function bundleContentKey(
+  children: ReadonlyArray<{ type?: string; payload_hash?: string }>,
+): string {
+  const parts = children.map((c) => `${c.type ?? ""}|${c.payload_hash ?? ""}`);
+  return `bk1:${djb2(parts.join("\n"))}`;
+}
+
 /** True when the bundle's current children diverge from the snapshot
  *  fingerprint stored on the instance. Returns FALSE when:
  *   - no fingerprint stored (workflow predates MOD detection), OR

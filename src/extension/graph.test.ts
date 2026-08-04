@@ -3,9 +3,11 @@ import {
   collectDownstreamNestedReachUuids,
   collectDownstreamWildcardUuids,
   collectLocalResolvedForModule,
+  collectUpstreamProducers,
   collectUpstreamResolved,
   collectUpstreamVariables,
   collectUpstreamWildcardUuids,
+  findWildcardHomesElsewhere,
   findDownstreamAssemblers,
   findRootGraph,
   hasUpstreamLoopOverridingSeed,
@@ -36,6 +38,233 @@ function fakeContextNode(id: number, vars: string[], upstreamLink?: number): Lit
     }],
   };
 }
+
+describe("collectUpstreamProducers", () => {
+  /** Context node whose single module writes `$name`. */
+  function ctxWriting(
+    id: number,
+    moduleName: string,
+    varName: string,
+    upstreamLink?: number,
+  ): LiteNodeLike {
+    return {
+      id,
+      type: "WP_Context",
+      inputs: [{ name: "upstream", link: upstreamLink ?? null }],
+      outputs: [{ name: "context", links: [], type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "wp_modules",
+        value: JSON.stringify({
+          version: 1,
+          modules: [{
+            id: "mod00001",
+            type: "wildcard",
+            enabled: true,
+            meta: { name: moduleName },
+            payload: { var_binding: varName, options: [] },
+          }],
+        }),
+      }],
+    };
+  }
+
+  function chain(nodes: LiteNodeLike[], links: Record<number, {
+    origin_id: number; target_id: number;
+  }>): LiteGraphLike {
+    const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+    return {
+      _nodes: nodes,
+      links: Object.fromEntries(Object.entries(links).map(([k, v]) => [
+        k, { id: Number(k), origin_id: v.origin_id, origin_slot: 0, target_id: v.target_id, target_slot: 0 },
+      ])),
+      getNodeById: (id) => byId[id] ?? null,
+    } as LiteGraphLike;
+  }
+
+  /** Context node holding one derivation whose branches all target `varName`. */
+  function ctxDerivation(
+    id: number,
+    moduleName: string,
+    varName: string,
+    branchCount: number,
+    upstreamLink?: number,
+  ): LiteNodeLike {
+    return {
+      id,
+      type: "WP_Context",
+      inputs: [{ name: "upstream", link: upstreamLink ?? null }],
+      outputs: [{ name: "context", links: [], type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "wp_modules",
+        value: JSON.stringify({
+          version: 1,
+          modules: [{
+            id: "der00001",
+            type: "derivation",
+            enabled: true,
+            meta: { name: moduleName },
+            payload: {
+              rules: [{
+                branches: Array.from({ length: branchCount }, () => ({
+                  action: { target_var: varName },
+                })),
+              }],
+            },
+          }],
+        }),
+      }],
+    };
+  }
+
+  it("counts PRODUCERS, not write statements — a rule's branches are one writer", () => {
+    // A derivation with twelve branches all targeting `$env_fx` reported
+    // "overrides 11". At most one branch fires, and nothing upstream writes
+    // the name at all, so the module that CREATES the variable was described
+    // as overriding eleven writes that never existed.
+    const der = ctxDerivation(1, "Environment fx", "env_fx", 12);
+    const pov = ctxWriting(2, "Other", "unused", 100);
+    const out = collectUpstreamProducers(
+      chain([der, pov], { 100: { origin_id: 1, target_id: 2 } }),
+      pov,
+    );
+    expect(out.env_fx.moduleName).toBe("Environment fx");
+    expect(out.env_fx.shadowed).toBe(0);
+  });
+
+  it("still counts a genuine override — two different modules, same name", () => {
+    const up = ctxWriting(1, "Outfit", "shared");
+    const mid = ctxDerivation(2, "Rewrite", "shared", 4, 100);
+    const pov = ctxWriting(3, "Other", "unused", 101);
+    const out = collectUpstreamProducers(
+      chain([up, mid, pov], {
+        100: { origin_id: 1, target_id: 2 },
+        101: { origin_id: 2, target_id: 3 },
+      }),
+      pov,
+    );
+    // The derivation is closest, so it wins; its four branches still count
+    // once, and the wildcard upstream is the single thing it overrode.
+    expect(out.shared.moduleName).toBe("Rewrite");
+    expect(out.shared.shadowed).toBe(1);
+  });
+
+  it("counts two DIFFERENT modules in one node as two writers", () => {
+    // They share `nodeId` and `kind`, so keying on those alone would collapse
+    // a real last-write-wins conflict into a single silent writer.
+    const node: LiteNodeLike = {
+      id: 1,
+      type: "WP_Context",
+      inputs: [{ name: "upstream", link: null }],
+      outputs: [{ name: "context", links: [], type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "wp_modules",
+        value: JSON.stringify({
+          version: 1,
+          modules: [
+            { id: "aaa", _uid: "u1", type: "wildcard", enabled: true,
+              meta: { name: "First" }, payload: { var_binding: "shared", options: [] } },
+            { id: "bbb", _uid: "u2", type: "wildcard", enabled: true,
+              meta: { name: "Second" }, payload: { var_binding: "shared", options: [] } },
+          ],
+        }),
+      }],
+    };
+    const pov = ctxWriting(2, "Other", "unused", 100);
+    const out = collectUpstreamProducers(
+      chain([node, pov], { 100: { origin_id: 1, target_id: 2 } }),
+      pov,
+    );
+    expect(out.shared.moduleName).toBe("Second");
+    expect(out.shared.shadowed).toBe(1);
+  });
+
+  it("names the module AND its node for a Context producer", () => {
+    const up = ctxWriting(1, "Outfit", "outfit");
+    const pov = ctxWriting(2, "Other", "unused", 100);
+    const g = chain([up, pov], { 100: { origin_id: 1, target_id: 2 } });
+    const out = collectUpstreamProducers(g, pov);
+    expect(out.outfit.kind).toBe("wildcard");
+    expect(out.outfit.moduleName).toBe("Outfit");
+    expect(out.outfit.moduleId).toBe("mod00001");
+    // WP_Context nodes identify by codename — the same one their header shows.
+    expect(out.outfit.nodeLabel).toMatch(/^[a-z]+-[a-z]+$/);
+    expect(out.outfit.shadowed).toBe(0);
+  });
+
+  it("attributes an injector row to its node, with no module", () => {
+    const inj: LiteNodeLike = {
+      id: 1,
+      type: "WP_ContextInjector",
+      outputs: [{ name: "context", links: [100], type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "wp_rows",
+        value: JSON.stringify({ version: 1, rows: [{ binding: "test", enabled: true }] }),
+      }],
+    };
+    const pov = ctxWriting(2, "Other", "unused", 100);
+    const out = collectUpstreamProducers(chain([inj, pov], { 100: { origin_id: 1, target_id: 2 } }), pov);
+    expect(out.test.kind).toBe("injector");
+    expect(out.test.moduleName).toBeUndefined();
+    // No codename scheme for the injector — falls back to a plain kind label.
+    expect(out.test.nodeLabel).toBe("Context Injector");
+  });
+
+  it("prefers a user-set title over the fallback label", () => {
+    const inj: LiteNodeLike = {
+      id: 1,
+      type: "WP_ContextInjector",
+      title: "Scene inputs",
+      outputs: [{ name: "context", links: [100], type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "wp_rows",
+        value: JSON.stringify({ version: 1, rows: [{ binding: "test", enabled: true }] }),
+      }],
+    };
+    const pov = ctxWriting(2, "Other", "unused", 100);
+    const out = collectUpstreamProducers(chain([inj, pov], { 100: { origin_id: 1, target_id: 2 } }), pov);
+    expect(out.test.nodeLabel).toBe("Scene inputs");
+  });
+
+  it("attributes the loop's iteration vars, including the _total pair", () => {
+    const loop: LiteNodeLike = {
+      id: 1,
+      type: "WP_ContextLoop",
+      outputs: [{ name: "context", links: [100], type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "wp_context_loop_config",
+        value: JSON.stringify({ iteration_var_name: "frame", iteration_internal: true }),
+      }],
+    };
+    const pov = ctxWriting(2, "Other", "unused", 100);
+    const out = collectUpstreamProducers(chain([loop, pov], { 100: { origin_id: 1, target_id: 2 } }), pov);
+    expect(out.frame.kind).toBe("loop");
+    expect(out.frame.internal).toBe(true);
+    expect(out.frame_total.kind).toBe("loop");
+    expect(out.frame_total.internal).toBe(false);
+  });
+
+  it("reports the LAST writer and counts the writes it shadowed", () => {
+    // Runtime is last-write-wins, so the card must name the winner.
+    const first = ctxWriting(1, "Early outfit", "outfit");
+    const second = ctxWriting(2, "Late outfit", "outfit", 100);
+    const pov = ctxWriting(3, "Other", "unused", 200);
+    const g = chain([first, second, pov], {
+      100: { origin_id: 1, target_id: 2 },
+      200: { origin_id: 2, target_id: 3 },
+    });
+    const out = collectUpstreamProducers(g, pov);
+    expect(out.outfit.moduleName).toBe("Late outfit");
+    expect(out.outfit.shadowed).toBe(1);
+  });
+
+  it("ignores muted / bypassed nodes, matching runtime", () => {
+    const up = ctxWriting(1, "Outfit", "outfit");
+    up.mode = 4; // BYPASS
+    const pov = ctxWriting(2, "Other", "unused", 100);
+    const out = collectUpstreamProducers(chain([up, pov], { 100: { origin_id: 1, target_id: 2 } }), pov);
+    expect(out.outfit).toBeUndefined();
+  });
+});
 
 describe("resolveUpstreamLoopSeed", () => {
   function loopNode(seed: number, count: number, cfg: object): LiteNodeLike {
@@ -1054,5 +1283,67 @@ describe("collectDownstreamNestedReachUuids — derivation carrier", () => {
       getNodeById: (id) => ({ 1: root, 2: downstream } as Record<number, LiteNodeLike>)[id] ?? null,
     };
     expect(collectDownstreamNestedReachUuids(graph, root)).toContain(TARGET);
+  });
+});
+
+describe("findWildcardHomesElsewhere", () => {
+  // A `@{}` ref only sees its OWN node's modules plus the library — a catalog
+  // is rebuilt per node and never crosses the socket. So a pool moved one node
+  // away silently stops being used, which reads as a bug unless the UI says
+  // so. This walker finds the node the user is probably looking at.
+  function ctxWith(id: number, uuids: string[]): LiteNodeLike {
+    return {
+      id,
+      type: "WP_Context",
+      inputs: [{ name: "upstream", link: null }],
+      outputs: [{ name: "context", links: [], type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "wp_modules",
+        value: JSON.stringify({
+          version: 1,
+          modules: uuids.map((u) => ({
+            id: u, type: "wildcard", enabled: true, meta: { name: "" },
+            entries: [], payload: { var_binding: "x", options: [] },
+          })),
+        }),
+      }],
+    };
+  }
+  const graphOf = (nodes: LiteNodeLike[]): LiteGraphLike => ({
+    _nodes: nodes,
+    links: {},
+    getNodeById: (id) => nodes.find((n) => n.id === id) ?? null,
+  });
+
+  it("finds a node holding the uuid, and labels it", () => {
+    const self = ctxWith(1, []);
+    const other = ctxWith(2, ["aaaa1111"]);
+    const homes = findWildcardHomesElsewhere(graphOf([self, other]), self, "aaaa1111");
+    expect(homes).toHaveLength(1);
+    expect(homes[0]).toMatch(/^[a-z]+-[a-z]+$/); // codename shape
+  });
+
+  it("EXCLUDES the node asking, whose own modules ARE the ref pool", () => {
+    const self = ctxWith(1, ["aaaa1111"]);
+    expect(findWildcardHomesElsewhere(graphOf([self]), self, "aaaa1111")).toEqual([]);
+  });
+
+  it("reports every holder when several nodes carry the same uuid", () => {
+    const self = ctxWith(1, []);
+    const a = ctxWith(2, ["aaaa1111"]);
+    const b = ctxWith(3, ["aaaa1111"]);
+    expect(findWildcardHomesElsewhere(graphOf([self, a, b]), self, "aaaa1111")).toHaveLength(2);
+  });
+
+  it("returns nothing when no other node holds it", () => {
+    const self = ctxWith(1, []);
+    const other = ctxWith(2, ["bbbb2222"]);
+    expect(findWildcardHomesElsewhere(graphOf([self, other]), self, "aaaa1111")).toEqual([]);
+  });
+
+  it("ignores non-Context nodes and an empty uuid", () => {
+    const self = ctxWith(1, []);
+    const asm: LiteNodeLike = { id: 2, type: "WP_PromptAssembler", inputs: [], outputs: [] };
+    expect(findWildcardHomesElsewhere(graphOf([self, asm]), self, "")).toEqual([]);
   });
 });

@@ -22,6 +22,7 @@ import {
   autoRelinkTarget,
   type RelinkCandidate,
 } from "../../manager/import-export/relink-match";
+import { bundleContentKey } from "./bundles/bundle-fingerprint";
 import type { BundleInstance } from "../../widgets/_shared";
 import WpCheck from "@/components/shared/WpCheck.vue";
 
@@ -129,6 +130,18 @@ const isLibraryMissing = computed(() => {
   return !(props.bundle.library_id in bundleHashes.value);
 });
 
+/** Whether to OFFER the re-link picker — the bundle-side mirror of the module
+ *  modal's `needsRelink`. Wider than `isLibraryMissing`, which additionally
+ *  requires a `library_id`: a bundle that lost its link (shared workflow,
+ *  stale cache) still corresponds to a library entry, and matching it on child
+ *  content is what `bundleContentKey` is for. Costs nothing when there is no
+ *  match — the picker only renders once candidates come back. */
+const needsRelink = computed(() => {
+  const b = props.bundle;
+  if (!b || bundleHashes.value === null) return false;
+  return !b.library_id || !(b.library_id in bundleHashes.value);
+});
+
 const canUpdateExisting = computed(
   () => isLibraryTracked.value && !isLibraryMissing.value,
 );
@@ -138,21 +151,32 @@ const canUpdateExisting = computed(
  *  but not names, so the re-link picker needs this to label + weakly-match. */
 const relinkNames = ref<Map<string, { name: string; type: string }>>(new Map());
 
+/** uuid → child-content key for every live library bundle. Only consulted when
+ *  the instance carries no `inserted_at_hash`. */
+const relinkContentKeys = ref<Map<string, string>>(new Map());
+
 async function fetchBundleNames(): Promise<void> {
   try {
     const res = await fetch("/wp/api/bundles");
     if (!res.ok) return;
     const data = (await res.json()) as
-      | { items?: Array<{ id?: string; name?: string }> }
-      | Array<{ id?: string; name?: string }>;
+      | { items?: Array<{ id?: string; name?: string; children?: unknown }> }
+      | Array<{ id?: string; name?: string; children?: unknown }>;
     const items = Array.isArray(data) ? data : (data.items ?? []);
     const next = new Map<string, { name: string; type: string }>();
+    const keys = new Map<string, string>();
     for (const it of items) {
       if (typeof it.id === "string" && it.id) {
         next.set(it.id, { name: it.name ?? "", type: "bundle" });
+        if (Array.isArray(it.children)) {
+          keys.set(it.id, bundleContentKey(
+            it.children as Array<{ type?: string; payload_hash?: string }>,
+          ));
+        }
       }
     }
     relinkNames.value = next;
+    relinkContentKeys.value = keys;
   } catch {
     /* network — leave empty; no re-link offered */
   }
@@ -164,16 +188,23 @@ async function fetchBundleNames(): Promise<void> {
  *  matches on it exactly — the same signal the module re-link uses. */
 const relinkCandidates = computed<RelinkCandidate[]>(() => {
   const b = props.bundle;
-  if (!b || !isLibraryMissing.value || bundleHashes.value === null) return [];
-  const live: Record<string, { type?: string; payload_hash: string }> = {};
+  if (!b || !needsRelink.value || bundleHashes.value === null) return [];
+  const live: Record<string, { type?: string; payload_hash: string; contentKey?: string }> = {};
   for (const [uuid, h] of Object.entries(bundleHashes.value)) {
-    live[uuid] = { type: "bundle", payload_hash: h };
+    live[uuid] = { type: "bundle", payload_hash: h, contentKey: relinkContentKeys.value.get(uuid) };
   }
   return findRelinkCandidates(
     {
       id: b.library_id,
       type: "bundle",
       payload_hash: b.inserted_at_hash,
+      // Only when there's no stored hash to compare — the server hash stays
+      // authoritative whenever it exists.
+      contentKey: b.inserted_at_hash
+        ? undefined
+        : bundleContentKey(
+          props.childrenForLibrary as Array<{ type?: string; payload_hash?: string }>,
+        ),
       name: b.name ?? "",
     },
     live,
@@ -193,6 +224,12 @@ const relinkFiltered = computed<RelinkCandidate[]>(() => {
 });
 const relinkTarget = computed<RelinkCandidate | null>(
   () => relinkPick.value ?? relinkAuto.value,
+);
+
+/** Danger tone only when nothing can be reconnected — a re-linkable bundle is
+ *  a routine state, and red steered users toward the duplicate-making path. */
+const relinkNoteClass = computed(() =>
+  relinkCandidates.value.length > 0 ? "wp-ptl-note--info" : "wp-ptl-note--danger",
 );
 
 function doRelink(): void {
@@ -232,7 +269,7 @@ function resetForm(): void {
 // Re-link candidates only matter for a DETACHED instance — skip the extra
 // library-list fetch when the bundle is tracked + present. A drift poll can
 // flip it to detached after open, so also fetch the first time that happens.
-watch(isLibraryMissing, (missing) => {
+watch(needsRelink, (missing) => {
   if (props.open && missing && relinkNames.value.size === 0) void fetchBundleNames();
 });
 
@@ -260,7 +297,7 @@ watch(
     if (!isOpen) return;
     resetForm();
     void seedFromLibrary();
-    if (isLibraryMissing.value) void fetchBundleNames();
+    if (needsRelink.value) void fetchBundleNames();
   },
 );
 
@@ -530,7 +567,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
             </div>
 
             <div
-              v-if="isLibraryMissing && relinkCandidates.length"
+              v-if="needsRelink && relinkCandidates.length"
               class="wp-ptl-relink"
               data-test="pbtl-relink"
             >
@@ -576,10 +613,21 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
               >Re-link<template v-if="relinkTarget"> to “{{ relinkTarget.name || relinkTarget.uuid }}”</template></button>
             </div>
 
-            <div v-if="isLibraryMissing" class="wp-ptl-note wp-ptl-note--danger" data-test="pbtl-missing">
-              The library entry for this bundle has been deleted upstream.
-              "Update existing" is unavailable — use "Save as new entry" to
-              re-add it to the library.
+            <!-- States the observable fact, not a guessed cause — see the
+                 matching note in PushToLibraryModal. Danger tone only when
+                 there is genuinely nothing to reconnect to. -->
+            <div v-if="needsRelink" class="wp-ptl-note" :class="relinkNoteClass" data-test="pbtl-missing">
+              <template v-if="relinkCandidates.length > 0">
+                This bundle isn’t linked to any library entry under its recorded id.
+                {{ relinkTarget?.contentIdentical
+                  ? "A library bundle with identical children is selected above — re-linking reconnects them."
+                  : "Pick a match above to re-link, or save it as a new entry." }}
+              </template>
+              <template v-else>
+                This bundle isn’t linked to any library entry under its recorded id, and
+                nothing in the library matches its children or name. “Update existing” is
+                unavailable — “Save as new entry” adds it to the library.
+              </template>
             </div>
 
             <div v-if="errorMsg" class="wp-ptl-error" data-test="pbtl-error">
@@ -676,7 +724,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   font-family: inherit;
 }
 .wp-ptl-input:focus { outline: 1px solid var(--wp-accent-500, #8b5cf6); }
-.wp-ptl-input--multi { resize: vertical; min-height: 48px; }
+.wp-ptl-input--multi { resize: vertical; overscroll-behavior: contain; min-height: 48px; }
 .wp-ptl-children {
   margin: 0;
   padding: 6px 8px;
@@ -767,6 +815,12 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   background: color-mix(in oklab, var(--wp-danger, #ef4444) 12%, transparent);
   border: 1px solid color-mix(in oklab, var(--wp-danger, #ef4444) 32%, transparent);
   color: var(--wp-danger, #ef4444);
+}
+/* Informational tone for the "pick a match" case — mirrors PushToLibraryModal. */
+.wp-ptl-note--info {
+  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 10%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 30%, transparent);
+  color: var(--wp-text, #e7e7ee);
 }
 .wp-ptl-relink {
   padding: 10px 12px;

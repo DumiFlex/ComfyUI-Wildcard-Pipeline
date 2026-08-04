@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <img src="public/images/docs/flow-intro.svg" alt="Modules resolve inside WP Context → named $variables → WP Prompt Assembler → CLIP" />
+  <img src="public/images/docs/flow-intro.svg" alt="Wildcard, Fixed Values, Combine, Derivation and Constraint modules resolve inside WP Context, which emits named $variables that fill the WP Prompt Assembler template, which CLIP Encode turns into conditioning" />
 </p>
 
 ## What it does
@@ -33,6 +33,7 @@ Stock ComfyUI prompt nodes either take a single literal string or pick from a fl
 - **Persistent library** — a manager SPA backed by SQLite stores reusable modules, frozen bundles, prompt templates, and a category tree. Browse / edit / fork / push from the canvas.
 - **Inspector** — `WP Debug` shows the post-run snapshot, per-module trace, per-wildcard picks, and the conflict-scanner warnings.
 - **Type-coercion helpers** — `WP Var → Int / Float / Bool` parse typed values out of any `$variable` so wildcards can drive image width, step count, sampler cfg, conditional switches.
+- **Works on both renderers** — the legacy canvas and ComfyUI's Nodes 2.0 Vue renderer, including switching between them with a workflow already open.
 
 ## Installation
 
@@ -105,7 +106,7 @@ Full module reference: [Modules wiki page](https://github.com/DumiFlex/ComfyUI-W
 ## Looping a chain — one click, N coherent prompts
 
 <p align="center">
-  <img src="public/images/docs/flow-loop.svg" alt="WP Context Loop + WP Seed List → KSampler — both lists fan out in lockstep" />
+  <img src="public/images/docs/flow-loop.svg" alt="WP Context Loop drives WP Context and the Prompt Assembler; CLIP Encode turns each prompt into conditioning for KSampler, while WP Seed List supplies the matching seed directly" />
 </p>
 
 Drop `WP Context Loop` before your `WP Context` and pair it with `WP Seed List` for distinct sampler seeds. Both lists fan out in lockstep so iteration N's prompt always pairs with seed N. Each iteration carries its own `$iteration` / `$iteration_total` for in-template labelling (`frame 1 of 4 — a fox`). See [Concepts → Seeds and loops](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Concepts#seeds-and-loops).
@@ -145,7 +146,7 @@ See [Nodes → WP Debug](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/w
 
 ## Status
 
-Active development. Versioned releases with [semantic-release](https://github.com/semantic-release/semantic-release) — every merged commit on `main` either ships a release or stays as `next` until the next breaking / feature change rolls one. Bundle-size + test gates run on every PR.
+Active development. Versioned releases with [semantic-release](https://github.com/semantic-release/semantic-release) — every merged commit on `main` either ships a release or stays as `next` until the next breaking / feature change rolls one. Bundle-size + test gates run on every branch push and PR.
 
 ## Contributing
 

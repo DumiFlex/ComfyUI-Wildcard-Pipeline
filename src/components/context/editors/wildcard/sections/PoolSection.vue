@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import type { VarProducerLike } from "@/manager/components/RefChip.vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import type { PairingBadge } from "../../../../../extension/constraint-pairs";
 import { patchInstance, patchInstanceMapEntry } from "../../instance/patch";
@@ -25,8 +26,14 @@ const props = withDefaults(
     /** Per-option pair badges for via-nested constraint carriers.
      *  Keyed by option id. Empty when this wildcard is not a carrier. */
     viaOptionPairs?: Map<string, PairingBadge[]>;
+    /** Initial state of the tag-pill grid. Defaults to COLLAPSED — see
+     *  `poolOpen`. Exposed so tests (and any host that wants the pool open on
+     *  arrival) don't have to drive a click first. */
+    defaultOpen?: boolean;
+    /** `$var` → producer, forwarded to each OptionRow's chips. */
+    varProducers?: ReadonlyMap<string, VarProducerLike>;
   }>(),
-  { viaOptionPairs: () => new Map() },
+  { viaOptionPairs: () => new Map(), defaultOpen: false, varProducers: () => new Map() },
 );
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
 
@@ -156,6 +163,15 @@ function categoryOptionCount(cat: string): number {
  * while-invalid contract — so `category_filter` is never persisted broken. */
 
 const advanced = ref(false);
+
+/** Whether the tag-pill grid is showing. A richly tagged wildcard (hue +
+ *  temperature + tone + saturation + suitability, 40-odd pills) pushed the
+ *  option list — the thing the user actually came to edit — most of a screen
+ *  down, so this starts COLLAPSED. The header keeps reporting how many tags are
+ *  ticked, and the chevron is accented while shut so it still reads as
+ *  something to press. */
+const poolOpen = ref(props.defaultOpen);
+const tickedCount = computed(() => ticked.value.size);
 const draft = ref(filterExpr.value);
 
 // Re-seed the draft when the upstream filter changes (e.g. pills edited it
@@ -341,7 +357,19 @@ const skewedTowards = computed(() => {
 <template>
   <section class="pool">
     <div class="pool__head">
+      <button
+        type="button"
+        class="pool__collapse"
+        :class="{ 'pool__collapse--nudge': !poolOpen }"
+        :aria-expanded="poolOpen"
+        data-test="pool-collapse"
+        :aria-label="poolOpen ? 'Collapse tag pool' : 'Expand tag pool'"
+        @click="poolOpen = !poolOpen"
+      >{{ poolOpen ? "▾" : "▸" }}</button>
       <div class="pool__label">Pool · what RNG can pick from</div>
+      <span v-if="!poolOpen && tickedCount > 0" class="pool__collapsed-count" data-test="pool-collapsed-count">
+        {{ tickedCount }} selected
+      </span>
       <button
         type="button"
         class="pool__adv-toggle"
@@ -353,7 +381,7 @@ const skewedTowards = computed(() => {
     </div>
 
     <!-- Quick mode — grouped pills. OR within an axis, AND across axes. -->
-    <div v-if="!advanced" class="pool__groups">
+    <div v-if="!advanced && poolOpen" class="pool__groups">
       <div
         v-for="group in pillGroups"
         :key="group.axis"
@@ -387,7 +415,7 @@ const skewedTowards = computed(() => {
     </div>
 
     <!-- Advanced mode — boolean expression editor (§4.1 grammar). -->
-    <div v-else class="pool__advanced">
+    <div v-else-if="advanced" class="pool__advanced">
       <input
         ref="exprInput"
         v-model="draft"
@@ -557,6 +585,7 @@ const skewedTowards = computed(() => {
         <span class="pool__opt-head-cell pool__opt-head-cell--right">Category</span>
       </div>
       <OptionRow
+        :var-producers="varProducers"
         v-for="option in allOptions"
         :key="option.id"
         :option="option"
@@ -595,8 +624,47 @@ const skewedTowards = computed(() => {
 .pool__head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 6px;
   margin-bottom: 8px;
+}
+/* Pushes the Advanced toggle to the right now that the head has a leading
+ * chevron + an optional collapsed-count. */
+.pool__adv-toggle { margin-left: auto; }
+/* Deliberately larger than a bare glyph: at 9px with no hit area this read as
+ * decoration and nobody knew it was pressable. */
+.pool__collapse {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 0;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  color: var(--wp-text-muted, var(--wp-text2));
+  font-size: 12px;
+  line-height: 1;
+}
+.pool__collapse:hover {
+  color: var(--wp-text);
+  border-color: var(--wp-border);
+  background: color-mix(in srgb, var(--wp-text) 6%, transparent);
+}
+/* Accented while collapsed so a first-time user reads it as "there is more
+   here" rather than as dim decoration. Static tint, not an animation — this
+   sits on screen for the whole editing session. */
+.pool__collapse--nudge {
+  color: var(--wp-accent-text, var(--wp-accent, #c4b5fd));
+  border-color: color-mix(in srgb, var(--wp-accent, #6366f1) 55%, transparent);
+  background: color-mix(in srgb, var(--wp-accent, #6366f1) 16%, transparent);
+}
+.pool__collapsed-count {
+  font: 600 9px var(--wp-font-sans);
+  letter-spacing: 0.06em;
+  color: var(--wp-accent, #c4b5fd);
 }
 .pool__label {
   font: 600 9px var(--wp-font-sans);

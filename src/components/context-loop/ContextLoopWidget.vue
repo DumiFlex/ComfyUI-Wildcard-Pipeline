@@ -15,7 +15,10 @@
 import { computed, ref } from "vue";
 import type { ContextLoopConfig, LoopStrategy } from "./types";
 import SeedListModal from "../shared/SeedListModal.vue";
+import { deriveLoopSeeds } from "../shared/seed-derive";
+import { pushToast } from "../shared/toast-store";
 import { currentFrame, setFrame } from "./frame-cursor";
+import FrameChips from "../shared/FrameChips.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -37,6 +40,10 @@ const props = withDefaults(
 
 const emit = defineEmits<{ "update:modelValue": [next: ContextLoopConfig] }>();
 
+/** Frame-grid collapse. Owned by the widget glue so it can persist to
+ *  `node.properties` and survive a workflow save. */
+const chipsCollapsed = defineModel<boolean>("chipsCollapsed", { default: false });
+
 const STRATEGIES: { id: LoopStrategy; label: string; hint: string }[] = [
   { id: "hash_index", label: "hash", hint: "Independent per-iteration; recommended for varied results." },
   { id: "sequential", label: "sequential", hint: "base, base+1, base+2, … Predictable diffs." },
@@ -55,9 +62,6 @@ const OVERRIDE_SEED_TOOLTIP =
 
 const isMuted = computed<boolean>(() => props.nodeMode === 2);
 const isBypassed = computed<boolean>(() => props.nodeMode === 4);
-const frameChips = computed(() =>
-  Array.from({ length: Math.max(1, props.count ?? 1) }, (_, i) => i),
-);
 
 const seedsOpen = ref(false);
 const lockedCount = computed(() => Object.keys(props.modelValue.seed_locks ?? {}).length);
@@ -72,6 +76,66 @@ const bypassedCount = computed(() => (props.modelValue.bypass_frames ?? []).leng
 const bypassSet = computed(() => new Set(props.modelValue.bypass_frames ?? []));
 function onBypassFrames(next: number[]): void {
   emit("update:modelValue", { ...props.modelValue, bypass_frames: next });
+}
+
+/* ---------------------------------------------------------------------------
+ * Modifier-click on a frame chip — lock / bypass without the modal.
+ *
+ * Both states were already VISIBLE on the chips but only CHANGEABLE two clicks
+ * away, inside a modal that covers the node you are reading. Toggling a couple
+ * of frames is the common case; the modal earns its place for the bulk
+ * operations (lock all, paste a series, out-of-range locks) and keeps them.
+ *
+ * Modifier choice: Alt and Shift both survive the trip. Ctrl is out because on
+ * macOS Ctrl-click IS a right-click, so the combo would open a context menu
+ * instead. Alt for bypass follows the seed modal's existing Alt-click-for-a-
+ * variant idiom on its Copy button.
+ * ------------------------------------------------------------------------- */
+
+/** 0-based locked frame indices. Keys are strings in the config; anything
+ *  non-numeric is ignored rather than becoming `NaN` in the set. */
+const lockSet = computed(() => {
+  const out = new Set<number>();
+  for (const k of Object.keys(props.modelValue.seed_locks ?? {})) {
+    const n = Number(k);
+    if (Number.isInteger(n)) out.add(n);
+  }
+  return out;
+});
+
+/** The seed series this loop WOULD produce — the same values "Lock all" in
+ *  the modal writes, so a chip-lock and a modal-lock agree. */
+const derivedSeeds = computed(() =>
+  deriveLoopSeeds(props.baseSeed, Math.max(1, props.count ?? 1), props.modelValue.strategy),
+);
+
+/** In-range frames that are still running. Bypassing the last one would leave
+ *  the loop with nothing to execute, so the modal forbids it and so do we. */
+const activeFrameCount = computed(() => {
+  let n = 0;
+  for (let i = 0; i < Math.max(1, props.count ?? 1); i++) if (!bypassSet.value.has(i)) n++;
+  return n;
+});
+
+function toggleFrameLock(i: number): void {
+  const next = { ...(props.modelValue.seed_locks ?? {}) };
+  if (lockSet.value.has(i)) delete next[String(i)];
+  else next[String(i)] = derivedSeeds.value[i] ?? props.baseSeed;
+  emit("update:modelValue", { ...props.modelValue, seed_locks: next });
+}
+
+function toggleFrameBypass(i: number): void {
+  const on = bypassSet.value.has(i);
+  if (!on && activeFrameCount.value <= 1) {
+    // Silence here would read as a broken click, and the reason is not
+    // guessable from the chip.
+    pushToast("A loop needs at least one running frame.", { severity: "warning" });
+    return;
+  }
+  const next = new Set(bypassSet.value);
+  if (on) next.delete(i);
+  else next.add(i);
+  onBypassFrames([...next].sort((a, b) => a - b));
 }
 
 function pickStrategy(s: LoopStrategy): void {
@@ -145,17 +209,22 @@ function toggleTotalInternal(): void {
       <svg class="wp-loop__seedbtn-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6" /></svg>
     </button>
 
-    <div class="wp-loop__section">
-      <div class="wp-loop__label">edit frame</div>
-      <div class="wp-loop__chips wp-loop__chips--frames" role="radiogroup" aria-label="Edit frame">
-        <button type="button" class="wp-loop__chip" :class="{ 'wp-loop__chip--active': currentFrame === null }"
-          data-test="loop-frame-base" role="radio" :aria-checked="currentFrame === null" @click="setFrame(null)">base</button>
-        <button v-for="i in frameChips" :key="i" type="button" class="wp-loop__chip"
-          :class="{ 'wp-loop__chip--active': currentFrame === i, 'wp-loop__chip--bypassed': bypassSet.has(i) }"
-          :data-test="`loop-frame-${i + 1}`" role="radio" :aria-checked="currentFrame === i"
-          :title="bypassSet.has(i) ? `Frame ${i + 1} is bypassed` : undefined" @click="setFrame(i)">#{{ i + 1 }}</button>
-      </div>
-    </div>
+    <!-- `base` is not a frame: it has no seed to lock and nothing to bypass,
+         so it takes no modifiers. -->
+    <FrameChips
+      label="edit frame"
+      :count="Math.max(1, count ?? 1)"
+      :locked="[...lockSet]"
+      :bypassed="[...bypassSet]"
+      v-model:collapsed="chipsCollapsed"
+      :current="currentFrame"
+      selectable
+      show-base
+      bypass-interactive
+      @select="setFrame"
+      @toggle-lock="toggleFrameLock"
+      @toggle-bypass="toggleFrameBypass"
+    />
 
     <div
       class="wp-loop__row"
@@ -260,14 +329,7 @@ function toggleTotalInternal(): void {
 }
 
 .wp-loop__chips { display: flex; gap: 4px; }
-/* Frame chips ONLY (the strategy row has 3 fixed chips that must stay one
-   row + show full labels): grid so 15+ frame chips WRAP instead of
-   overflowing the node. auto-fill keeps a uniform cell width; the last row
-   grows to 1fr to fill it. */
-.wp-loop__chips--frames {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
-}
+/* Strategy chips only — the per-frame grid now lives in FrameChips.vue. */
 .wp-loop__chip {
   flex: 1;
   padding: 4px 6px;
@@ -285,14 +347,6 @@ function toggleTotalInternal(): void {
   border-color: var(--wp-accent, #c4b5fd);
   color: var(--wp-accent, #c4b5fd);
 }
-/* Bypassed frame — interrupted (dashed) border + dimmed so it reads at a
- * glance on the node. Composes with --active (dashed overrides the solid). */
-.wp-loop__chip--bypassed {
-  border-style: dashed;
-  border-color: var(--wp-border-strong, #4a4d55);
-  opacity: 0.5;
-}
-.wp-loop__chip--bypassed:hover { opacity: 0.8; }
 
 .wp-loop__row {
   display: flex;

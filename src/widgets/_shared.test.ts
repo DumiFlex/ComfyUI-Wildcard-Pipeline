@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import {
+  createDomWidgetHost,
   emptyBundleInstance,
   emptyContextValue,
   emptyInjectorRowsValue,
@@ -95,5 +96,91 @@ describe("parseWidgetJsonWithRecovery for ContextWidgetValue.bundles", () => {
     const bundles = parsed.value.bundles ?? [];
     expect(bundles).toHaveLength(1);
     expect(bundles[0]).toEqual(bundleEntry);
+  });
+});
+
+describe("createDomWidgetHost — fillHost under the Vue renderer", () => {
+  // `fillHost` relies on `height: 100%` resolving. Under Nodes 2.0 the host's
+  // ancestor chain is content-sized, so it resolves to `auto` and the widget
+  // grows to its payload instead of scrolling it — measured: with node.size[1]
+  // pinned at 400, a 60-entry snapshot inflated the node to 1200 and the
+  // scroller never engaged. These pin the renderer branch.
+  function makeHostNode(id: string) {
+    const widgets: Record<string, unknown>[] = [];
+    return {
+      id,
+      size: [500, 400] as [number, number],
+      addDOMWidget(name: string, type: string, el: HTMLElement, opts?: Record<string, unknown>) {
+        const w = { element: el, options: opts, name, type };
+        widgets.push(w);
+        return w;
+      },
+    };
+  }
+
+  function mountNodeEl(id: string): HTMLElement {
+    const el = document.createElement("div");
+    el.setAttribute("data-node-id", id);
+    document.body.appendChild(el);
+    return el;
+  }
+
+  const Stub = { render: () => null };
+
+  afterEach(() => {
+    const lg = (globalThis as { LiteGraph?: Record<string, unknown> }).LiteGraph;
+    if (lg) delete lg.vueNodesMode;
+    document.body.innerHTML = "";
+  });
+
+  it("publishes our min-width on the node element — the host's own resize hook", async () => {
+    // useNodeResize reads the floor from the node element's inline min-width
+    // and only falls back to MIN_NODE_WIDTH (225) when it is absent.
+    (globalThis as { LiteGraph?: Record<string, unknown> }).LiteGraph = { vueNodesMode: true };
+    const node = makeHostNode("41");
+    const nodeEl = mountNodeEl("41");
+    const host = createDomWidgetHost(node as never, "w", Stub as never, {
+      fillHost: true,
+      minWidth: () => 372,
+    });
+    nodeEl.appendChild(host.widget.element);
+
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+    // 372 snapped to the 10px node grid.
+    expect(nodeEl.style.minWidth).toBe("370px");
+    // A flex item defaults to `min-height: auto` and refuses to shrink below
+    // its content, which is what let the payload inflate the node.
+    expect(host.widget.element.style.minHeight).toBe("80px");
+    // Content goes out of flow so it cannot push the host's own chain, whose
+    // every level is also `min-height: auto`.
+    expect(host.widget.element.style.position).toBe("relative");
+    expect(host.element.style.position).toBe("absolute");
+    host.unmount();
+  });
+
+  it("keeps the out-of-flow layout under legacy too, so a live toggle is safe", async () => {
+    (globalThis as { LiteGraph?: Record<string, unknown> }).LiteGraph = { vueNodesMode: false };
+    const node = makeHostNode("42");
+    const nodeEl = mountNodeEl("42");
+    const host = createDomWidgetHost(node as never, "w", Stub as never, {
+      fillHost: true,
+      minWidth: () => 372,
+    });
+    nodeEl.appendChild(host.widget.element);
+
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+    // The renderer is togglable at RUNTIME from the menu, so a widget built
+    // under legacy must already be in the shape Nodes 2.0 needs — stripping it
+    // here leaves a window where content is briefly in flow and pushes the
+    // node (measured: a live toggle jumped it from 380 to 1200). Legacy is
+    // indifferent: it gives the host a definite box either way.
+    expect(host.widget.element.style.minHeight).toBe("80px");
+    expect(host.widget.element.style.position).toBe("relative");
+    expect(host.element.style.position).toBe("absolute");
+    expect(host.widget.element.style.height).toBe("100%");
+    // What IS renderer-specific: the node-element width floor, which only
+    // Nodes 2.0 needs because it never calls computeSize.
+    expect(nodeEl.style.minWidth).toBe("");
+    host.unmount();
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  localPayloadFingerprint,
   moduleFingerprint,
   templateFingerprint,
   type ModuleRow,
@@ -101,6 +102,37 @@ describe("null-safety", () => {
     const a = { type: "wildcard", name: "x", description: "", tags: [], payload_hash: "deadbeef" };
     const b = { type: "wildcard", name: "x", description: "", tags: null as unknown as string[], payload_hash: "deadbeef" };
     expect(moduleFingerprint(a)).toBe(moduleFingerprint(b));
+  });
+});
+
+describe("localPayloadFingerprint", () => {
+  it("ignores object key ORDER — JSON key order isn't meaningful", () => {
+    // This is the property the hash-less re-link path rests on: payloads
+    // round-trip through APIs that reorder keys, so two structurally equal
+    // payloads must fingerprint the same.
+    const a = { var_binding: "hair", options: [{ id: "o1", value: "red" }] };
+    const b = { options: [{ value: "red", id: "o1" }], var_binding: "hair" };
+    expect(localPayloadFingerprint(a)).toBe(localPayloadFingerprint(b));
+  });
+
+  it("respects ARRAY order — option / rule order IS meaningful", () => {
+    const a = { options: [{ value: "red" }, { value: "blue" }] };
+    const b = { options: [{ value: "blue" }, { value: "red" }] };
+    expect(localPayloadFingerprint(a)).not.toBe(localPayloadFingerprint(b));
+  });
+
+  it("separates differing content", () => {
+    expect(localPayloadFingerprint({ v: "a" })).not.toBe(localPayloadFingerprint({ v: "b" }));
+  });
+
+  it("distinguishes a missing key from an explicit null", () => {
+    expect(localPayloadFingerprint({ a: 1 })).not.toBe(localPayloadFingerprint({ a: 1, b: null }));
+  });
+
+  it("handles primitives, null, and undefined without throwing", () => {
+    expect(() => localPayloadFingerprint(null)).not.toThrow();
+    expect(() => localPayloadFingerprint(undefined)).not.toThrow();
+    expect(localPayloadFingerprint(null)).not.toBe(localPayloadFingerprint({}));
   });
 });
 

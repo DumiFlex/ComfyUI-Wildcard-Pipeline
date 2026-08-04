@@ -4,23 +4,40 @@
 //   1. Nested-ref tokens written as `@{uuid:expr}` MUST surface their
 //      filter. Per SP1 §4.1 the expression is NOT inline (it can be
 //      long) — a funnel indicator (`refchip-filter`) marks "filtered"
-//      and the normalized "reads as" expression lives in the hover
-//      title. Dropping the indicator would silently hide that the chip
-//      is narrowed even though the value string still carries it.
+//      and the normalized "reads as" expression lives in the chip's
+//      HOVER CARD. (It used to live in the native `title`; that moved so
+//      the chip could carry an empty title and stop the container's own
+//      tooltip overlaying the card.) Dropping the indicator would silently
+//      hide that the chip is narrowed even though the value still carries it.
 //   2. Refs whose name isn't in the caller-supplied `uuidToName` map
 //      fall through to the preview-resolver cache. Refs known to
 //      neither source render as the red "unresolved" chip; resolved
 //      ones render as the purple ref chip with the chosen name.
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mount } from "@vue/test-utils";
+import { nextTick } from "vue";
 import RichTextPreview from "../components/RichTextPreview.vue";
-import { _resetForTests, _setForTests } from "../../extension/preview-resolver";
+import { _resetForTests, _setForTests, _tombstoneForTests } from "../../extension/preview-resolver";
 
 describe("RichTextPreview", () => {
   beforeEach(() => _resetForTests());
+  afterEach(() => vi.useRealTimers());
 
-  it("renders a nested-ref chip with the funnel filter indicator when the value carries `:expr` (not inline)", () => {
+  /** Hover the first chip and read its card — where the "reads as" now lives. */
+  async function chipCardText(props: Record<string, unknown>): Promise<string> {
+    vi.useFakeTimers();
+    const w = mount(RichTextPreview, { props: props as never, attachTo: document.body });
+    await w.find(".wp-refchip").trigger("mouseenter");
+    vi.advanceTimersByTime(300);
+    await nextTick();
+    const text = document.querySelector('[data-test="refchip-hover"]')?.textContent ?? "";
+    w.unmount();
+    vi.useRealTimers();
+    return text;
+  }
+
+  it("renders a nested-ref chip with the funnel filter indicator when the value carries `:expr` (not inline)", async () => {
     // SP1 (§4.1): the filter expression is NOT shown inline (it can be
     // long) — a funnel indicator marks "filtered" and the expression
     // lives in the hover title via "reads as".
@@ -35,21 +52,26 @@ describe("RichTextPreview", () => {
     expect(label.text()).toBe("@test2");
     expect(w.find('[data-test="refchip-filter"]').exists()).toBe(true);
     expect(w.find(".wp-refchip").text()).not.toContain("test8");
-    expect(w.find(".wp-refchip").attributes("title")).toContain("test8");
+    // Empty, never absent — an absent title lets an ancestor's tooltip through.
+    expect(w.find(".wp-refchip").attributes("title")).toBe("");
+    expect(await chipCardText({
+      value: "i love @{c0f09840:test8}",
+      uuidToName: new Map([["c0f09840", "test2"]]),
+    })).toContain("test8");
   });
 
-  it("surfaces a multi-term expression in the hover title (reads-as)", () => {
-    const w = mount(RichTextPreview, {
-      props: {
-        value: "@{c0f09840:warm,bright}",
-        uuidToName: new Map([["c0f09840", "color"]]),
-      },
-    });
-    // `warm,bright` (comma shorthand) reads as `warm or bright`.
-    const title = w.find(".wp-refchip").attributes("title") ?? "";
-    expect(title).toContain("warm");
-    expect(title).toContain("bright");
+  it("surfaces a multi-term expression on the hover card (reads-as)", async () => {
+    const props = {
+      value: "@{c0f09840:warm,bright}",
+      uuidToName: new Map([["c0f09840", "color"]]),
+    };
+    const w = mount(RichTextPreview, { props: props as never });
     expect(w.find('[data-test="refchip-filter"]').exists()).toBe(true);
+    w.unmount();
+    // `warm,bright` (comma shorthand) reads as `warm or bright`.
+    const card = await chipCardText(props);
+    expect(card).toContain("warm");
+    expect(card).toContain("bright");
   });
 
   it("omits the filter indicator when the ref has no sub-category filter", () => {
@@ -79,6 +101,45 @@ describe("RichTextPreview", () => {
     expect(chip.exists()).toBe(true);
     expect(chip.classes()).not.toContain("wp-refchip--unresolved");
     expect(w.find(".wp-refchip__label").text()).toBe("@lib_var");
+  });
+
+  /**
+   * Deleting a module from the library used to leave its refs looking healthy:
+   * the tombstone was recorded but the snapshot was not evicted, so the chip
+   * kept the module's name, its colour, and a hover card quoting the option
+   * count it had before deletion. The node badge said BROKEN REF while the
+   * chip inside the modal said otherwise.
+   */
+  it("goes red once the module is deleted, even with a snapshot still cached", () => {
+    _setForTests("22945cab", {
+      name: "test", kind: "wildcard", varBinding: "test",
+      optionValues: ["a", "b"],
+    });
+    _tombstoneForTests("22945cab");
+    const w = mount(RichTextPreview, {
+      props: { value: "@{22945cab}", uuidToName: new Map() },
+    });
+    expect(w.find(".wp-refchip").classes()).toContain("wp-refchip--unresolved");
+  });
+
+  it("a deleted module's ref is not clickable — there is nothing to open", () => {
+    _setForTests("22945cab", { name: "test", kind: "wildcard" });
+    _tombstoneForTests("22945cab");
+    const w = mount(RichTextPreview, {
+      props: { value: "@{22945cab}", uuidToName: new Map(), clickableRefs: true },
+    });
+    w.find(".wp-refchip").trigger("click");
+    expect(w.emitted("ref-click")).toBeUndefined();
+  });
+
+  // A LOCAL name still wins: the module exists in this chain, so the library
+  // saying otherwise is not the authority on it.
+  it("still resolves when the live chain knows the uuid", () => {
+    _tombstoneForTests("22945cab");
+    const w = mount(RichTextPreview, {
+      props: { value: "@{22945cab}", uuidToName: new Map([["22945cab", "local"]]) },
+    });
+    expect(w.find(".wp-refchip").classes()).not.toContain("wp-refchip--unresolved");
   });
 
   it("renders the red unresolved chip when neither uuidToName nor the cache knows the uuid", () => {

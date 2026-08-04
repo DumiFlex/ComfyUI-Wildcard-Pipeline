@@ -75,6 +75,14 @@ const frameColor = computed(() =>
   props.color && props.color.length ? props.color : "var(--wp-bundle-default)",
 );
 
+/** Tooltip for the MISSING badge. Names the two recoveries in the order the
+ *  user should try them — Re-link reconnects to an existing entry, saving a
+ *  new one is the fallback. The old copy only offered the fallback, which is
+ *  what produced duplicate library entries. */
+const missingTitle =
+  "No live library entry for this bundle under its recorded id. "
+  + "Right-click → Push to library: re-link it to a matching entry, or save it as a new one.";
+
 const summary = computed(() => {
   const word = props.childCount === 1 ? "mod" : "mods";
   const parts = [`${props.childCount} ${word}`];
@@ -165,16 +173,21 @@ const summary = computed(() => {
          its own dot — re-stacking them at the bundle level would be
          visual noise. -->
     <span v-if="libraryMissing || libraryDrifted || snapshotModified" class="wp-mod-dots">
-      <!-- Visual hierarchy: MISSING (library deleted) is the most severe
+      <!-- Visual hierarchy: MISSING (no live library entry) is the most severe
            and shows first; LIBRARY UPDATED (drift) dominates next; MOD
            sits to its right. Multiple can show simultaneously — they
-           represent independent axes. -->
+           represent independent axes.
+           Copy states the observable fact rather than asserting the entry was
+           DELETED: an id absent from the library reads identically whether it
+           was deleted, re-imported under a new id, or arrived in a shared
+           workflow — and Push to library now offers Re-link for the last two,
+           which "deleted" steered users away from. -->
       <template v-if="libraryMissing">
         <span class="wp-mod-dot wp-mod-dot--missing"
-          title="The bundle's library entry has been deleted. Right-click → Push to library to re-add as a new entry."
+          :title="missingTitle"
           aria-hidden="true"></span>
         <span class="wp-mod-badge wp-mod-badge--missing"
-          title="The bundle's library entry has been deleted. Right-click → Push to library to re-add as a new entry.">missing</span>
+          :title="missingTitle">missing</span>
       </template>
       <template v-if="libraryDrifted">
         <span class="wp-mod-dot wp-mod-dot--drift"
@@ -399,10 +412,19 @@ const summary = computed(() => {
   color: var(--wp-warn);
   background: color-mix(in srgb, var(--wp-warn) 7%, transparent);
 }
+/* Child-count / drift summary. Was 10px in --wp-text-dim (#666 on the dark
+ * theme), which sat right at the edge of legibility against the bundle frame
+ * tint — the one piece of information telling you how big a collapsed bundle
+ * is. Bumped to the muted token at 11px and given a faint pill so it reads as
+ * a value rather than a watermark. */
 .wp-bundle-summary {
-  font: 500 10px/1.3 var(--wp-font-sans);
-  color: var(--wp-text-dim, var(--wp-text3));
+  font: 600 11px/1.3 var(--wp-font-sans);
+  color: var(--wp-text-muted, var(--wp-text2));
   flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--wp-text-muted, var(--wp-text2)) 12%, transparent);
+  white-space: nowrap;
 }
 /* Bundle action button — base size + shape from shared
  * .wp-btn--icon-sm. Bundle-specific tweak: bg + border tinted with

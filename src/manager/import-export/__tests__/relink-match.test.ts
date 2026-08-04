@@ -34,9 +34,73 @@ describe("findRelinkCandidates", () => {
     expect(got.find((c) => c.uuid === "live0002")?.payloadHash).toBe("HASH_B");
   });
 
-  it("a draft with no payload_hash yields no content-identical candidates", () => {
+  it("a hash-less draft with no contentKey still yields no content-identical candidates", () => {
+    // Nothing to compare on — name matches only.
     const got = findRelinkCandidates({ ...draft, payload_hash: undefined }, live, nameLookup);
     expect(got.every((c) => !c.contentIdentical)).toBe(true);
+  });
+
+  // --- Hash-less rows: match on locally computed payload content ----------
+  // A shared workflow or a row whose stored hash was lost still corresponds to
+  // a library entry. Previously it was treated as "never tracked, nothing to
+  // re-link", which is only true for a module authored in the widget.
+
+  it("matches a hash-less draft against a library row by payload content", () => {
+    const liveWithKeys = {
+      ...live,
+      live0001: { type: "wildcard", payload_hash: "HASH_A", contentKey: "CK_1" },
+      live0002: { type: "wildcard", payload_hash: "HASH_B", contentKey: "CK_2" },
+    };
+    const got = findRelinkCandidates(
+      { ...draft, payload_hash: undefined, contentKey: "CK_1" },
+      liveWithKeys,
+      nameLookup,
+    );
+    const hit = got.find((c) => c.uuid === "live0001");
+    expect(hit?.contentIdentical).toBe(true);
+    // Flagged so the UI can say the match came from content, not the server hash.
+    expect(hit?.matchedByContent).toBe(true);
+  });
+
+  it("auto-links a hash-less draft when exactly one content match exists", () => {
+    const liveWithKeys = {
+      live0001: { type: "wildcard", payload_hash: "HASH_A", contentKey: "CK_1" },
+      live0003: { type: "wildcard", payload_hash: "HASH_C", contentKey: "CK_9" },
+    };
+    const got = findRelinkCandidates(
+      { ...draft, payload_hash: undefined, contentKey: "CK_1" },
+      liveWithKeys,
+      nameLookup,
+    );
+    expect(autoRelinkTarget(got)?.uuid).toBe("live0001");
+  });
+
+  it("a PRESENT-but-different hash still reads as 'content differs'", () => {
+    // The server hash is authoritative when both sides have one — a stale
+    // contentKey must not upgrade a genuine difference to 'identical'.
+    const liveWithKeys = {
+      live0002: { type: "wildcard", payload_hash: "HASH_B", contentKey: "CK_1" },
+    };
+    const got = findRelinkCandidates(
+      { ...draft, payload_hash: "HASH_A", contentKey: "CK_1" },
+      liveWithKeys,
+      nameLookup,
+    );
+    expect(got[0]).toMatchObject({ contentIdentical: false, nameMatch: true });
+    expect(got[0].matchedByContent).toBeUndefined();
+  });
+
+  it("keeps the cross-kind gate for content matches", () => {
+    // Same payload shape across kinds must never link a wildcard to a combine.
+    const liveWithKeys = {
+      live0004: { type: "combine", payload_hash: "HASH_D", contentKey: "CK_1" },
+    };
+    const got = findRelinkCandidates(
+      { ...draft, payload_hash: undefined, contentKey: "CK_1" },
+      liveWithKeys,
+      nameLookup,
+    );
+    expect(got).toEqual([]);
   });
 });
 

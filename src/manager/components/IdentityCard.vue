@@ -20,6 +20,7 @@ import Chip from "./ui/Chip.vue";
 import Button from "./ui/Button.vue";
 import Toggle from "./ui/Toggle.vue";
 import { useCategoryStore } from "../stores/categoryStore";
+import { categorySelectOptions } from "../utils/category-options";
 import { toIdentifier } from "../utils/slug";
 
 interface Props {
@@ -75,10 +76,7 @@ function onNsfwToggle(next: boolean) {
 
 const categoryStore = useCategoryStore();
 
-const categoryOptions = computed<SelectOption[]>(() => [
-  { value: null, label: "None" },
-  ...categoryStore.items.map((c) => ({ value: c.id, label: c.name, dot: c.color || undefined })),
-]);
+const categoryOptions = computed<SelectOption[]>(() => categorySelectOptions(categoryStore.items, "None"));
 
 // `varBinding` auto-tracks slugified name until the user touches it.
 const varTouched = ref(false);

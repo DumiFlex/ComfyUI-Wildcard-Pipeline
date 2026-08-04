@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { useGrowableField } from "../../../../shared/useGrowableField";
 import {
   rowOverrideKind,
   type DraftRow,
@@ -62,8 +63,74 @@ function onNameInput(ev: Event): void {
   emit("update", props.row.id, { name });
 }
 function onValueInput(ev: Event): void {
-  emit("update", props.row.id, { value: (ev.target as HTMLInputElement).value });
+  const el = ev.target as HTMLTextAreaElement;
+  emit("update", props.row.id, { value: el.value });
+  autosize();
+  updateOverflowHint();
 }
+
+/** Grow the value field to fit its content, capped by the CSS `max-height`
+ *  (after which it scrolls). The field is a `<textarea>` purely to get this
+ *  wrapping + growth — users routinely paste an entire sentence into a fixed
+ *  value and a single-line `<input>` showed a sliver of it with no way to see
+ *  the rest. Semantics stay single-value; `onValueKeydown` blocks newlines. */
+/* Auto-grow now lives in `useGrowableField` so it can YIELD to the drag
+ * handle. The old local version wrote `height = scrollHeight` on every input
+ * and every external value change, which stomped whatever height the user had
+ * dragged to — collapse the box, type one character, and it sprang back open.
+ * That is the "the drag sticks, then starts working" report. */
+
+/* Enter inserts a newline, like any other textarea.
+ *
+ * It was briefly swallowed to preserve the behaviour of the single-line
+ * `<input>` this replaced, but that was parity for its own sake: a fixed value
+ * is an arbitrary string, the engine stores and emits it verbatim, and a
+ * multi-line value round-trips fine. The modal saves on Cmd/Ctrl+Enter, so
+ * plain Enter is free — and users writing paragraph-length values want their
+ * line breaks. */
+
+const valueEl = ref<HTMLTextAreaElement | null>(null);
+
+/* Shared auto-grow + overflow-hint + grip-follow. See `useGrowableField` for
+ * why the three belong together — chiefly that auto-grow has to yield to the
+ * drag handle, which the local copy did not. */
+const {
+  hasMoreBelow,
+  updateOverflowHint,
+  scheduleOverflowHint,
+  autosize,
+  attach,
+  startResize,
+} = useGrowableField(() => valueEl.value);
+
+/** True when the field is capped and still hiding content below the fold.
+ *  Mirrors RichTextInput's hint — a capped box otherwise looks identical
+ *  whether it holds its whole value or a third of it. A `<textarea>` can't
+ *  carry a reliable `::after`, so the fade lives on `.row__value-wrap`. */
+
+
+
+
+
+/* Size correctly on first paint + whenever the row's value changes from
+   outside (reset-to-library, undo). */
+watch(
+  () => props.row.value,
+  () => void nextTick(() => {
+    autosize();
+    scheduleOverflowHint();
+  }),
+  { immediate: true },
+);
+
+
+onMounted(() => {
+  autosize();
+  scheduleOverflowHint();
+  attach();
+});
+
+
 function onReset(): void {
   emit("reset", props.row.id);
 }
@@ -128,18 +195,35 @@ function onDelete(): void {
     >
       <span
         class="row__value-wrap"
-        :class="{ 'row__value-wrap--mod': valueOverridden }"
+        :class="{
+          'row__value-wrap--mod': valueOverridden,
+          'row__value-wrap--more': hasMoreBelow,
+        }"
         data-test="row-value-wrap"
       >
-        <input
+        <textarea
+          ref="valueEl"
           class="row__value"
           data-test="row-value"
-          type="text"
+          rows="1"
+          spellcheck="false"
           :value="row.value"
           :disabled="!row.enabled"
           :aria-label="`Value for row ${row.id}`"
           @input="onValueInput"
+          @scroll="updateOverflowHint"
         />
+        <!-- Resize grip, replacing `resize: vertical`. The native resizer
+             recomputes from an origin captured at pointerdown and never clamps
+             to min/max, so over-dragging banks invisible travel the user has to
+             walk back — measured at 13 of 23 dead frames. Ours applies each
+             move's delta to the current height. -->
+        <span
+          class="row__grip"
+          data-test="row-grip"
+          aria-hidden="true"
+          @pointerdown="startResize"
+        ></span>
       </span>
       <span
         v-if="hasNonTextToken"
@@ -259,6 +343,72 @@ function onDelete(): void {
   min-width: 0;
 }
 .row__name:focus, .row__value:focus { outline: none; }
+
+/* The value field is a <textarea> so a long value WRAPS and the box grows to
+ * fit (height driven by `autosizeValue`). Capped so a pasted paragraph can't
+ * push the rest of the modal off-screen; past the cap it scrolls. */
+.row__value {
+  /* Manual drag handle as well as the auto-grow, matching the derivation and
+     combine template inputs — auto-sizing picks a sensible height, the handle
+     lets the user override it. */
+  overscroll-behavior: contain;
+  overflow-y: auto;
+  /* Floor for the drag handle. Without it the computed `min-height` is `auto`,
+     which reads as 0 — so the field could be dragged away to a sliver with no
+     way to see what you were editing. One line plus its padding. */
+  min-height: 28px;
+  max-height: 12rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--wp-font-mono);
+}
+/* The wrapper centred a single-line input; with a growing field the label
+ * column should sit at the top instead of drifting down as it grows. */
+.row__value-wrap { align-items: flex-start; position: relative; }
+
+/* "More below" hint, matching RichTextInput. A <textarea> can't carry a
+ * dependable `::after`, so it hangs off the wrapper. Gradient runs to a
+ * TRANSPARENT accent so the text underneath still reads; the 1px accent line
+ * at the bottom is what catches the eye. */
+/* Sits in the corner the overflow fade deliberately leaves clear. */
+.row__grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: ns-resize;
+  z-index: 2;
+  background: repeating-linear-gradient(
+    135deg,
+    transparent 0 2px,
+    var(--wp-text3, #8a8a9a) 2px 3px
+  );
+  /* Clipped to a bottom-right triangle so the hatching runs parallel to the
+     hypotenuse — the shape the browser's own resizer draws, which is what
+     users already read as "drag me". A filled square read as a button. */
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+  opacity: 0.55;
+}
+.row__grip:hover { opacity: 0.9; }
+
+.row__value-wrap--more::after {
+  content: "";
+  position: absolute;
+  /* Right edge stops short of the resize grip. The band is as tall as the
+     handle and sat straight on top of it, so a resizable field's grip was
+     invisible — users aimed, missed, re-grabbed. */
+  inset: auto 16px 0 0;
+  height: 14px;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in srgb, var(--wp-accent, #6366f1) 26%, transparent)
+  );
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--wp-accent, #6366f1) 60%, transparent);
+}
 
 .row--off { color: var(--wp-text-dim, var(--wp-text3)); }
 .row--off .row__name-wrap, .row--off .row__value-wrap { opacity: 0.5; }

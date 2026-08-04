@@ -14,8 +14,9 @@ import Select from "../components/ui/Select.vue";
 import EmptyState from "../components/ui/EmptyState.vue";
 import { useBundleStore } from "../stores/bundleStore";
 import { useModuleStore } from "../stores/moduleStore";
-import { catChipStyle } from "../utils/catChip";
 import { useCategoryStore } from "../stores/categoryStore";
+import CategoryChip from "../components/CategoryChip.vue";
+import { categoryFilterOptions } from "../utils/category-options";
 import { validateBundle } from "../utils/validateModule";
 import type { BundleRow, CategoryRow } from "../api/types";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
@@ -64,10 +65,7 @@ const allTags = computed(() => {
   return Array.from(set).sort();
 });
 
-const categoryOptions = computed(() => [
-  { value: null, label: "All categories" },
-  ...categoryStore.items.map((c) => ({ value: c.id, label: c.name, dot: c.color || undefined })),
-]);
+const categoryOptions = computed(() => categoryFilterOptions(categoryStore.items));
 
 onMounted(async () => {
   // moduleStore.catalog feeds the per-row validity check (broken child refs).
@@ -182,6 +180,44 @@ function children(row: BundleRow): BundleChildPreview[] {
     });
   }
   return out;
+}
+
+/** How many children an expanded bundle row lists before collapsing behind a
+ *  "Show all" toggle. A 66-child bundle (a full scene composer) previously
+ *  dumped every row inline and buried the rest of the list. */
+const CHILD_PREVIEW_LIMIT = 8;
+
+/** Bundle ids the user explicitly expanded to the full child list. Keyed by
+ *  id rather than a per-row flag so it survives re-sorting + re-filtering. */
+const fullChildList = ref<Set<string>>(new Set());
+
+function showingAll(row: BundleRow): boolean {
+  return fullChildList.value.has(row.id);
+}
+
+function toggleFullChildList(row: BundleRow): void {
+  const next = new Set(fullChildList.value);
+  if (next.has(row.id)) next.delete(row.id);
+  else next.add(row.id);
+  fullChildList.value = next;
+}
+
+/** The children actually rendered — capped unless the user asked for all. */
+function visibleChildren(row: BundleRow): BundleChildPreview[] {
+  const all = children(row);
+  return showingAll(row) ? all : all.slice(0, CHILD_PREVIEW_LIMIT);
+}
+
+/** Kind breakdown ("12 wildcards · 3 constraints"), so a collapsed list still
+ *  says what the bundle is MADE of rather than just how many rows it has.
+ *  Ordered by count descending so the dominant kind reads first. */
+function childKindSummary(row: BundleRow): string {
+  const counts = new Map<string, number>();
+  for (const c of children(row)) counts.set(c.type, (counts.get(c.type) ?? 0) + 1);
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([type, n]) => `${n} ${type}${n === 1 ? "" : "s"}`)
+    .join(" · ");
 }
 
 const KIND_ICON: Record<string, string> = {
@@ -333,13 +369,12 @@ function frameColor(row: BundleRow): string {
 
     <template #columns="{ row }">
       <td>
-        <span
+        <CategoryChip
           v-if="row.category_id && categoryById.get(row.category_id)"
-          class="wp-cat-chip"
-          :style="catChipStyle(categoryById.get(row.category_id)!.color)"
-        >
-          {{ categoryById.get(row.category_id)!.name }}
-        </span>
+          :name="categoryById.get(row.category_id)!.name"
+          :color="categoryById.get(row.category_id)!.color"
+          :icon="categoryById.get(row.category_id)!.icon"
+        />
         <span v-else class="wp-dim">—</span>
       </td>
       <td>
@@ -368,16 +403,32 @@ function frameColor(row: BundleRow): string {
         </span>
       </div>
       <div v-if="!childCount(row)" class="wp-dim">Empty bundle.</div>
-      <ul v-else class="wp-bundle-children">
-        <li
-          v-for="(c, i) in children(row)" :key="i"
-          class="wp-bundle-child"
+      <template v-else>
+        <div class="wp-dim wp-bundle-kinds" data-test="bundle-kind-summary">
+          {{ childKindSummary(row) }}
+        </div>
+        <ul class="wp-bundle-children">
+          <li
+            v-for="(c, i) in visibleChildren(row)" :key="i"
+            class="wp-bundle-child"
+          >
+            <i :class="KIND_ICON[c.type] ?? 'pi pi-box'" />
+            <span class="wp-bundle-child__name">{{ c.name }}</span>
+            <span class="wp-dim wp-bundle-child__kind">{{ c.type }}</span>
+          </li>
+        </ul>
+        <button
+          v-if="childCount(row) > CHILD_PREVIEW_LIMIT"
+          type="button"
+          class="wp-bundle-children__more"
+          :data-test="`bundle-children-toggle-${row.id}`"
+          @click="toggleFullChildList(row)"
         >
-          <i :class="KIND_ICON[c.type] ?? 'pi pi-box'" />
-          <span class="wp-bundle-child__name">{{ c.name }}</span>
-          <span class="wp-dim wp-bundle-child__kind">{{ c.type }}</span>
-        </li>
-      </ul>
+          {{ showingAll(row)
+            ? "Show fewer"
+            : `Show all ${childCount(row)}` }}
+        </button>
+      </template>
     </template>
   </ModuleListView>
 
@@ -439,4 +490,23 @@ function frameColor(row: BundleRow): string {
 .wp-bundle-child .pi { font-size: var(--wp-text-sm); color: var(--wp-text-muted); }
 .wp-bundle-child__name { font-weight: 500; }
 .wp-bundle-child__kind { font-size: var(--wp-text-xs); }
+
+/* Kind breakdown above the capped child list. */
+.wp-bundle-kinds {
+  font-size: var(--wp-text-xs);
+  margin-bottom: var(--wp-space-2);
+}
+/* "Show all N" / "Show fewer" toggle — text affordance, not a Button, so it
+ * reads as list scaffolding rather than a row action. */
+.wp-bundle-children__more {
+  margin-top: var(--wp-space-2);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font-size: var(--wp-text-xs);
+  font-weight: 600;
+  color: var(--wp-accent-text, var(--wp-accent));
+}
+.wp-bundle-children__more:hover { text-decoration: underline; }
 </style>

@@ -1,4 +1,5 @@
 import { mount } from "@vue/test-utils";
+import { nextTick } from "vue";
 import { afterEach, describe, expect, it } from "vitest";
 import Select from "../../components/ui/Select.vue";
 
@@ -96,6 +97,42 @@ describe("Select.vue", () => {
     wrap.unmount();
   });
 
+  it("renders option meta so same-labelled rows are tellable apart", async () => {
+    // A library routinely holds five wildcards all named "Outfit"; without a
+    // meta column the dropdown offered five identical rows.
+    const dupes = [
+      { value: "b855d115", label: "Outfit", meta: "31 opts · b855d115" },
+      { value: "88d84413", label: "Outfit", meta: "12 opts · 88d84413" },
+    ];
+    const wrap = mount(Select, {
+      props: { modelValue: null, options: dupes },
+      attachTo: document.body,
+    });
+    await wrap.get("[data-test='select-trigger']").trigger("click");
+    const metas = [...document.querySelectorAll(".wp-select__option-meta")]
+      .map((n) => n.textContent);
+    expect(metas).toEqual(["31 opts · b855d115", "12 opts · 88d84413"]);
+    wrap.unmount();
+  });
+
+  it("type-to-filter matches meta, so a uuid finds its row", async () => {
+    const dupes = [
+      { value: "b855d115", label: "Outfit", meta: "31 opts · b855d115" },
+      { value: "88d84413", label: "Outfit", meta: "12 opts · 88d84413" },
+    ];
+    const wrap = mount(Select, {
+      props: { modelValue: null, options: dupes },
+      attachTo: document.body,
+    });
+    const trigger = wrap.get("[data-test='select-trigger']");
+    await trigger.trigger("click");
+    for (const key of "88d8") await trigger.trigger("keydown", { key });
+    expect(document.querySelectorAll(".wp-select__option").length).toBe(1);
+    expect(document.querySelector(".wp-select__option-meta")?.textContent)
+      .toContain("88d84413");
+    wrap.unmount();
+  });
+
   it("shows No matches when the query matches nothing", async () => {
     const wrap = mount(Select, {
       props: { modelValue: null, options: opts },
@@ -106,6 +143,160 @@ describe("Select.vue", () => {
     await trigger.trigger("keydown", { key: "z" });
     expect(document.querySelectorAll(".wp-select__option").length).toBe(0);
     expect(document.querySelector("[data-test='select-empty']")).not.toBeNull();
+    wrap.unmount();
+  });
+  it("repeats the selected option's meta in the CLOSED trigger", async () => {
+    // Disambiguating rows only inside the open menu solves half the problem:
+    // picking one of several same-named rows and then seeing the trigger
+    // collapse to the bare name makes the choice unverifiable again.
+    const dupes = [
+      { value: "a", label: "Outfit", meta: "12 options · #aaaaaaaa" },
+      { value: "b", label: "Outfit", meta: "3 options · #bbbbbbbb" },
+    ];
+    const wrap = mount(Select, {
+      props: { modelValue: "b", options: dupes },
+      attachTo: document.body,
+    });
+    expect(wrap.get(".wp-select__label-meta").text()).toContain("#bbbbbbbb");
+    // And the hover title carries both halves, since either can be clipped.
+    expect(wrap.get(".wp-select__label-wrap").attributes("title"))
+      .toBe("Outfit — 3 options · #bbbbbbbb");
+    wrap.unmount();
+  });
+
+  it("renders no trigger meta for options that carry none", async () => {
+    // Every dropdown in the app shares this component; ones that set no meta
+    // must look exactly as they did.
+    const wrap = mount(Select, {
+      props: { modelValue: "a", options: opts },
+      attachTo: document.body,
+    });
+    expect(wrap.find(".wp-select__label-meta").exists()).toBe(false);
+    wrap.unmount();
+  });
+
+  it("reserves the marker gutter so mixed icon/iconless lists stay aligned", async () => {
+    // A list where only some options have a category icon rendered a ragged
+    // left edge, and an indent the user reads as hierarchy that isn't there.
+    const mixed = [
+      { value: "a", label: "Categorised", icon: "user", dot: "#f00" },
+      { value: "b", label: "Uncategorised" },
+    ];
+    const wrap = mount(Select, {
+      props: { modelValue: null, options: mixed },
+      attachTo: document.body,
+    });
+    await wrap.get("[data-test='select-trigger']").trigger("click");
+    const rows = document.querySelectorAll(".wp-select__option");
+    expect(rows[0].querySelector(".wp-select__icon")).not.toBeNull();
+    const gap = rows[1].querySelector<HTMLElement>(".wp-select__marker-gap");
+    expect(gap).not.toBeNull();
+    // Icons are a 14px box, so that is what the gutter has to hold open.
+    expect(gap?.style.width).toBe("14px");
+    wrap.unmount();
+  });
+
+  it("reserves only dot width when no option has an icon", async () => {
+    const dotted = [
+      { value: "a", label: "Dotted", dot: "#0f0" },
+      { value: "b", label: "Plain" },
+    ];
+    const wrap = mount(Select, {
+      props: { modelValue: null, options: dotted },
+      attachTo: document.body,
+    });
+    await wrap.get("[data-test='select-trigger']").trigger("click");
+    const gap = document.querySelectorAll(".wp-select__option")[1]
+      .querySelector<HTMLElement>(".wp-select__marker-gap");
+    expect(gap?.style.width).toBe("8px");
+    wrap.unmount();
+  });
+
+  it("adds no gutter at all when nothing in the list has a marker", async () => {
+    const wrap = mount(Select, {
+      props: { modelValue: null, options: opts },
+      attachTo: document.body,
+    });
+    await wrap.get("[data-test='select-trigger']").trigger("click");
+    expect(document.querySelector(".wp-select__marker-gap")).toBeNull();
+    wrap.unmount();
+  });
+
+  it("stays open when the press lands on its own teleported menu", async () => {
+    // The menu is teleported to <body>, so it is not inside the trigger's
+    // wrapper. Checking only the wrapper meant a mousedown on the menu's own
+    // scrollbar counted as an outside click and dismissed it — the wheel
+    // worked, the scrollbar did not.
+    const wrap = mount(Select, {
+      props: { modelValue: null, options: opts },
+      attachTo: document.body,
+    });
+    await wrap.get("[data-test='select-trigger']").trigger("click");
+    const menu = document.querySelector(".wp-select__menu") as HTMLElement;
+    expect(menu).not.toBeNull();
+    document.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    await nextTick();
+    // Sanity: a press with no relation to the component still closes it.
+    expect(document.querySelector(".wp-select__menu")).toBeNull();
+
+    await wrap.get("[data-test='select-trigger']").trigger("click");
+    const menu2 = document.querySelector(".wp-select__menu") as HTMLElement;
+    menu2.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    await nextTick();
+    expect(document.querySelector(".wp-select__menu")).not.toBeNull();
+    wrap.unmount();
+  });
+});
+
+describe("Select.vue — type-to-filter discoverability", () => {
+  // Every one of these menus filters as you type, but the only sign of it was
+  // the "Filtering:" line, which only appears once you have already guessed.
+  const many = Array.from({ length: 8 }, (_, i) => ({ value: `v${i}`, label: `Option ${i}` }));
+
+  afterEach(() => { document.body.replaceChildren(); });
+
+  it("advertises the hint on a list long enough to need filtering", async () => {
+    const wrap = mount(Select, {
+      props: { modelValue: null, options: many },
+      attachTo: document.body,
+    });
+    await wrap.get("[data-test='select-trigger']").trigger("click");
+    const hint = document.querySelector("[data-test='select-filter-hint']");
+    expect(hint).not.toBeNull();
+    expect(hint?.textContent).toContain("Type to filter");
+    wrap.unmount();
+  });
+
+  it("shows on a short list too — three options is where users looked", async () => {
+    const wrap = mount(Select, {
+      props: { modelValue: null, options: opts },
+      attachTo: document.body,
+    });
+    await wrap.get("[data-test='select-trigger']").trigger("click");
+    expect(document.querySelector("[data-test='select-filter-hint']")).not.toBeNull();
+    wrap.unmount();
+  });
+
+  it("stays quiet when there is nothing to filter", async () => {
+    const wrap = mount(Select, {
+      props: { modelValue: null, options: [{ value: "a", label: "Alpha" }] },
+      attachTo: document.body,
+    });
+    await wrap.get("[data-test='select-trigger']").trigger("click");
+    expect(document.querySelector("[data-test='select-filter-hint']")).toBeNull();
+    wrap.unmount();
+  });
+
+  it("gives way to the live filter once the user types", async () => {
+    const wrap = mount(Select, {
+      props: { modelValue: null, options: many },
+      attachTo: document.body,
+    });
+    await wrap.get("[data-test='select-trigger']").trigger("click");
+    await wrap.get("[data-test='select-trigger']").trigger("keydown", { key: "O" });
+    await nextTick();
+    expect(document.querySelector("[data-test='select-filter-hint']")).toBeNull();
+    expect(document.querySelector("[data-test='select-filter']")).not.toBeNull();
     wrap.unmount();
   });
 });

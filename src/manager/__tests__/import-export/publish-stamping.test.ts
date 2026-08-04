@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { buildPublishBody, schemaVersionForPayload } from "@/manager/import-export/single-row-publish";
+import {
+  buildCopyableRow,
+  buildPublishBody,
+  isCopyableKind,
+  schemaVersionForPayload,
+} from "@/manager/import-export/single-row-publish";
+import { parsePayload } from "@/manager/import-export/parse";
 import {
   CURRENT_SCHEMA_VERSION,
   SP2B_SCHEMA_VERSION,
@@ -34,6 +40,76 @@ function constraintRow(targetSelect?: unknown): Record<string, unknown> {
 // Re-import the version constant from package.json so this test
 // stays in sync if the version is bumped.
 import { version as PKG_VERSION } from "../../../../package.json";
+
+describe("copied row stamping", () => {
+  /** `copyPayloadToClipboard` writes exactly this — a bare engine row says
+   *  nothing about which payload shape it is in, so copy used to hand the
+   *  user JSON that publish would have stamped. */
+  const pub = (payload: Record<string, unknown>) => ({
+    payload,
+    name: "demo",
+    description: "",
+    content_rating: "safe" as const,
+    tags: [],
+    community_post_slug: null,
+  });
+
+  it("stamps schema_version on the copied envelope", () => {
+    const row = buildCopyableRow(pub(wildcardFixture as Record<string, unknown>));
+    expect(row.schema_version).toBe(CURRENT_SCHEMA_VERSION);
+  });
+
+  it("produces an envelope the real import parser accepts", () => {
+    // Copy exists so a module can be shared WITHOUT walking the Export tab,
+    // so what lands on the clipboard has to be paste-able into Import. A bare
+    // engine row is rejected before the parser ever looks at the entity.
+    const copied = buildCopyableRow(pub(wildcardFixture as Record<string, unknown>));
+    const result = parsePayload(JSON.stringify(copied));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.payload.wildcards).toHaveLength(1);
+    expect(result.payload.bundles).toEqual([]);
+  });
+
+  it("files each module type in its own bucket", () => {
+    const constraint = buildCopyableRow(pub(constraintRow()));
+    expect(constraint.constraints).toHaveLength(1);
+    expect(constraint.wildcards).toEqual([]);
+    expect(parsePayload(JSON.stringify(constraint)).ok).toBe(true);
+  });
+
+  it("files a bundle (children, no type) in the bundles bucket", () => {
+    const bundle = { id: "bn-001abc", name: "pack", description: "", children: [] };
+    const copied = buildCopyableRow(pub(bundle));
+    expect(copied.bundles).toHaveLength(1);
+    expect(parsePayload(JSON.stringify(copied)).ok).toBe(true);
+  });
+
+  it("refuses an unrecognised entity kind rather than copying an empty envelope", () => {
+    // An envelope with every bucket empty reads as "copy worked" and then
+    // imports nothing — worse than a visible failure.
+    expect(isCopyableKind(pub({ id: "x", type: "not_a_module", name: "x" }))).toBe(false);
+    expect(isCopyableKind(pub(wildcardFixture as Record<string, unknown>))).toBe(true);
+  });
+
+  it("agrees with the publish path on the version, feature-bumps included", () => {
+    // A non-default reach selector bumps to v4 on publish; copy must not
+    // report a different number for the very same payload.
+    const payload = constraintRow({ mode: "first" });
+    const copied = buildCopyableRow(pub(payload));
+    expect(copied.schema_version).toBe(SP3_REACH_SCHEMA_VERSION);
+    expect(copied.schema_version).toBe(schemaVersionForPayload(payload));
+  });
+
+  it("carries the engine row through its bucket untouched", () => {
+    const payload = constraintRow();
+    const row = buildCopyableRow(pub(payload));
+    expect(row.schema_version).toBeTypeOf("number");
+    // The entity itself must survive byte-for-byte — the envelope is
+    // packaging, not a transform.
+    expect(row.constraints).toEqual([payload]);
+  });
+});
 
 describe("publish body stamping", () => {
   it("stamps schema_version = CURRENT_SCHEMA_VERSION", () => {

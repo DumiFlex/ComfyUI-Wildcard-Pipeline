@@ -22,6 +22,9 @@ import { api, ApiError, type ExportBuildRequest } from "../api/client";
 import type { BundleRow, CategoryRow, ModuleRow, ModuleType, TemplateRow } from "../api/types";
 import PickerSection from "./PickerSection.vue";
 import PickerRow from "./PickerRow.vue";
+import PickerSearch from "./PickerSearch.vue";
+import { bundleSubtitle, moduleSubtitle, templateSubtitle } from "./picker-subtitle";
+import { kindIcon } from "../../components/shared/kind-icons";
 import type { DepRef } from "./PickerRow.vue";
 import ExportDepWarningModal from "./ExportDepWarningModal.vue";
 import type { ExportDepWarningRow } from "./ExportDepWarningModal.vue";
@@ -151,9 +154,27 @@ function modulesForBucket(b: BucketKey): ModuleRow[] {
   return modules.value.filter((m) => MODULE_TYPE_TO_BUCKET[m.type] === b);
 }
 
+/** Free-text filter across every bucket. A 261-item library made the picker
+ *  a scroll-hunt, and duplicate display names meant scrolling was the ONLY
+ *  way to find a specific entity. Matches name, short id, and the subtitle
+ *  (variable binding), so `$outfit`, `b855d115` and `Outfit` all work. */
+const rowQuery = ref<string>("");
+
+function rowMatchesQuery(row: RowItem): boolean {
+  const q = rowQuery.value.trim().toLowerCase();
+  if (!q) return true;
+  return (
+    row.name.toLowerCase().includes(q) ||
+    row.id.toLowerCase().includes(q) ||
+    (row.subtitle?.toLowerCase().includes(q) ?? false)
+  );
+}
+
 interface RowItem {
   id: string;
   name: string;
+  /** Disambiguating detail — `$var · N options` for modules. */
+  subtitle?: string;
   /** Entity kind, for PickerRow's tinted glyph. For modules this is the
    *  module subtype; for bundles always `"bundle"`; for categories the
    *  row IS a category so we surface `"category"` for icon consistency
@@ -161,6 +182,7 @@ interface RowItem {
   kind: string;
   categoryName?: string;
   categoryColor?: string;
+  categoryIcon?: string;
   /** Surface the favorite-star indicator. Modules + bundles carry it;
    *  categories don't (always false). */
   isFavorite: boolean;
@@ -168,17 +190,18 @@ interface RowItem {
 
 /**
  * Resolve a `category_id` against the loaded categories list and return
- * `{name, color}` (color may be undefined if the user never picked one).
+ * `{name, color, icon}` (color/icon may be undefined if the user never
+ * picked one — icon is absent for every category predating the column).
  * Returns `undefined` when the id is null or unmatched — caller treats
  * that as "no category chip on this row".
  */
 function lookupCategory(
   categoryId: string | null | undefined,
-): { name: string; color?: string } | undefined {
+): { name: string; color?: string; icon?: string } | undefined {
   if (!categoryId) return undefined;
   const cat = categories.value.find((c) => c.id === categoryId);
   if (!cat) return undefined;
-  return { name: cat.name, color: cat.color ?? undefined };
+  return { name: cat.name, color: cat.color ?? undefined, icon: cat.icon ?? undefined };
 }
 
 function rowsForBucket(b: BucketKey): RowItem[] {
@@ -188,9 +211,11 @@ function rowsForBucket(b: BucketKey): RowItem[] {
       return {
         id: x.id,
         name: x.name,
+        subtitle: bundleSubtitle(x),
         kind: "bundle",
         categoryName: cat?.name,
         categoryColor: cat?.color,
+        categoryIcon: cat?.icon,
         isFavorite: x.is_favorite,
       };
     });
@@ -209,9 +234,11 @@ function rowsForBucket(b: BucketKey): RowItem[] {
       return {
         id: x.id,
         name: x.name,
+        subtitle: templateSubtitle(x),
         kind: "template",
         categoryName: cat?.name,
         categoryColor: cat?.color,
+        categoryIcon: cat?.icon,
         isFavorite: x.is_favorite,
       };
     });
@@ -221,20 +248,33 @@ function rowsForBucket(b: BucketKey): RowItem[] {
     return {
       id: x.id,
       name: x.name,
+      subtitle: moduleSubtitle(x),
       kind: x.type,
       categoryName: cat?.name,
       categoryColor: cat?.color,
+      categoryIcon: cat?.icon,
       isFavorite: x.is_favorite,
     };
   });
 }
 
+/** Rows a bucket actually renders — `rowsForBucket` narrowed by the search
+ *  box. Section counts and select-all both read this, so "select all" acts on
+ *  exactly what the user can see rather than silently selecting hidden rows. */
+function visibleRowsForBucket(b: BucketKey): RowItem[] {
+  return rowsForBucket(b).filter(rowMatchesQuery);
+}
+
+// Both header counts read the VISIBLE rows so the section's checkbox state
+// (all / some / none) describes what the user is actually looking at. The
+// footer's `totalSelected` still reports the true export size.
 function bucketTotalCount(b: BucketKey): number {
-  return rowsForBucket(b).length;
+  return visibleRowsForBucket(b).length;
 }
 
 function bucketSelectedCount(b: BucketKey): number {
-  return selection.value[b].size;
+  const sel = selection.value[b];
+  return visibleRowsForBucket(b).reduce((n, r) => n + (sel.has(r.id) ? 1 : 0), 0);
 }
 
 function isRowSelected(b: BucketKey, id: string): boolean {
@@ -247,10 +287,15 @@ function toggleRow(b: BucketKey, id: string, on: boolean) {
   selection.value = { ...selection.value, [b]: next };
 }
 
+/** Select-all acts on the VISIBLE rows and leaves anything hidden by the
+ *  search box untouched — silently dropping a filtered-out selection on a
+ *  "deselect all" click would lose work the user can't even see. With no
+ *  query every row is visible, so this behaves exactly as before. */
 function toggleAllInBucket(b: BucketKey, on: boolean) {
-  const next = new Set<string>();
-  if (on) {
-    for (const r of rowsForBucket(b)) next.add(r.id);
+  const next = new Set(selection.value[b]);
+  for (const r of visibleRowsForBucket(b)) {
+    if (on) next.add(r.id);
+    else next.delete(r.id);
   }
   selection.value = { ...selection.value, [b]: next };
 }
@@ -710,6 +755,8 @@ function presetFavoritesOnly(): void {
       <span class="wp-export-presets__sep" aria-hidden="true"></span>
       <!-- Per-kind presets: clear everything, select only this kind. Disabled
            when the library has none of that kind. -->
+      <!-- Kind presets carry their canonical kind glyph, matching Full library
+           and Favorites (which already had icons) and the section headers. -->
       <button
         v-for="b in BUCKETS"
         :key="b.key"
@@ -718,8 +765,14 @@ function presetFavoritesOnly(): void {
         type="button"
         :disabled="idsForBucket(b.key).length === 0"
         @click="presetKindOnly(b.key)"
-      >{{ b.title }}</button>
+      ><i :class="kindIcon(b.key)" aria-hidden="true" /> {{ b.title }}</button>
     </div>
+
+    <PickerSearch
+      v-model="rowQuery"
+      aria-label="Search library entities"
+      data-test="export-tab-search"
+    />
 
     <div class="wp-export-tab__sections">
       <PickerSection
@@ -729,18 +782,21 @@ function presetFavoritesOnly(): void {
         :total-count="bucketTotalCount(bucket.key)"
         :selected-count="bucketSelectedCount(bucket.key)"
         :default-open="false"
+        :force-open="rowQuery.trim().length > 0 && bucketTotalCount(bucket.key) > 0"
         :kind="bucket.key"
         :data-test="`export-tab-section-${bucket.key}`"
         @toggle-all="(v: boolean) => toggleAllInBucket(bucket.key, v)"
       >
         <PickerRow
-          v-for="row in rowsForBucket(bucket.key)"
+          v-for="row in visibleRowsForBucket(bucket.key)"
           :key="`${bucket.key}:${row.id}`"
           :uuid="row.id"
           :name="row.name"
+          :subtitle="row.subtitle"
           :kind="row.kind"
           :category-name="row.categoryName"
           :category-color="row.categoryColor"
+          :category-icon="row.categoryIcon"
           :show-id="true"
           :checked="isRowSelected(bucket.key, row.id)"
           :status-badges="[]"
@@ -755,7 +811,8 @@ function presetFavoritesOnly(): void {
           v-if="bucketTotalCount(bucket.key) === 0"
           class="wp-export-tab__empty"
         >
-          <em>No {{ bucket.title.toLowerCase() }} in library.</em>
+          <em v-if="rowQuery.trim()">No {{ bucket.title.toLowerCase() }} match "{{ rowQuery }}".</em>
+          <em v-else>No {{ bucket.title.toLowerCase() }} in library.</em>
         </div>
       </PickerSection>
     </div>
@@ -856,6 +913,8 @@ function presetFavoritesOnly(): void {
   flex-direction: column;
   gap: 6px;
 }
+
+/* Cross-bucket search box now lives in PickerSearch.vue (shared with Import). */
 
 .wp-export-tab__empty {
   font-size: var(--wp-text-sm);

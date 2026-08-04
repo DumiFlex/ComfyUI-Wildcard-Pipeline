@@ -24,3 +24,28 @@ describe("uiStore checkOnLaunch", () => {
     expect(ui2.checkOnLaunch).toBe(false);
   });
 });
+
+describe("uiStore — keep empty tag groups", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    localStorage.clear();
+  });
+
+  it("drops empty groups by default, preserving the old behaviour", () => {
+    expect(useUiStore().keepEmptyTagGroups).toBe(false);
+  });
+
+  it("remembers the choice across sessions", () => {
+    useUiStore().setKeepEmptyTagGroups(true);
+    setActivePinia(createPinia());
+    expect(useUiStore().keepEmptyTagGroups).toBe(true);
+  });
+
+  it("goes back to dropping when turned off again", () => {
+    const a = useUiStore();
+    a.setKeepEmptyTagGroups(true);
+    a.setKeepEmptyTagGroups(false);
+    setActivePinia(createPinia());
+    expect(useUiStore().keepEmptyTagGroups).toBe(false);
+  });
+});

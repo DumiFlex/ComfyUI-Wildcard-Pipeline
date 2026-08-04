@@ -32,6 +32,7 @@ import {
   autoRelinkTarget,
   type RelinkCandidate,
 } from "../../manager/import-export/relink-match";
+import { localPayloadFingerprint } from "../../manager/import-export/fingerprint";
 import { app } from "#comfyui/app";
 import type { ModuleEntry } from "../../widgets/_shared";
 import WpCheck from "@/components/shared/WpCheck.vue";
@@ -95,6 +96,22 @@ const isLibraryMissing = computed(() => {
   return !(props.draft.id in libraryHashes.value);
 });
 
+/** Whether to OFFER the re-link picker.
+ *
+ *  Wider than `isLibraryMissing`, which requires a payload_hash. A hash-less
+ *  row was treated as "never library-tracked, nothing to re-link" — true for a
+ *  module authored in the widget, wrong for the cases that actually bite: a
+ *  shared workflow, or a row whose stored hash was lost. Those still correspond
+ *  to a library entry, and matching them is what `contentKey` is for.
+ *
+ *  Costs nothing when there IS no match: the picker only renders when
+ *  candidates come back, so a genuinely new module still sees the plain
+ *  save-as-new flow. */
+const needsRelink = computed(() => {
+  if (!props.draft || libraryHashes.value === null) return false;
+  return !(props.draft.id in libraryHashes.value);
+});
+
 /** "Update existing" is enabled only when the entry exists AND is
  *  library-tracked. Disabled when never library-tracked OR when the
  *  upstream entry has been deleted. */
@@ -108,23 +125,34 @@ const canUpdateExisting = computed(
  *  needs this to label + weakly-match candidates. */
 const relinkNames = ref<Map<string, { name: string; type: string }>>(new Map());
 
+/** uuid → locally computed payload fingerprint for every live library module.
+ *  Only consulted for a HASH-LESS draft, where the server hash can't decide.
+ *  Both sides are fingerprinted by the same local function, so this needs no
+ *  parity with the engine's own hashing. */
+const relinkContentKeys = ref<Map<string, string>>(new Map());
+
 async function fetchLibraryNames(): Promise<void> {
   try {
     const res = await fetch("/wp/api/modules");
     if (!res.ok) return;
     const data = (await res.json()) as
-      | { items?: Array<{ id?: string; name?: string; type?: string }> }
-      | Array<{ id?: string; name?: string; type?: string }>;
+      | { items?: Array<{ id?: string; name?: string; type?: string; payload?: unknown }> }
+      | Array<{ id?: string; name?: string; type?: string; payload?: unknown }>;
     const items = Array.isArray(data) ? data : (data.items ?? []);
     const next = new Map<string, { name: string; type: string }>();
+    const keys = new Map<string, string>();
     for (const it of items) {
       if (typeof it.id === "string" && it.id) {
         next.set(it.id, { name: it.name ?? "", type: it.type ?? "" });
+        if (it.payload !== undefined) {
+          keys.set(it.id, localPayloadFingerprint(it.payload));
+        }
       }
     }
     relinkNames.value = next;
+    relinkContentKeys.value = keys;
   } catch {
-    /* network — leave the map empty; no re-link offered */
+    /* network — leave the maps empty; no re-link offered */
   }
 }
 
@@ -133,15 +161,24 @@ async function fetchLibraryNames(): Promise<void> {
  *  whose (type, name) match (content differs). Empty unless the draft is
  *  detached (`isLibraryMissing`). */
 const relinkCandidates = computed<RelinkCandidate[]>(() => {
-  if (!props.draft || !isLibraryMissing.value || libraryHashes.value === null) return [];
+  if (!props.draft || !needsRelink.value || libraryHashes.value === null) return [];
+  // Merge the locally computed content keys into the hash map the matcher
+  // walks, so a hash-less draft can still match on payload content.
+  const live: Record<string, { type?: string; payload_hash: string; contentKey?: string }> = {};
+  for (const [uuid, entry] of Object.entries(libraryHashes.value)) {
+    live[uuid] = { ...entry, contentKey: relinkContentKeys.value.get(uuid) };
+  }
   return findRelinkCandidates(
     {
       id: props.draft.id,
       type: props.draft.type,
       payload_hash: props.draft.payload_hash,
+      contentKey: props.draft.payload_hash
+        ? undefined
+        : localPayloadFingerprint(props.draft.payload),
       name: props.draft.meta?.name ?? "",
     },
-    libraryHashes.value,
+    live,
     (u) => relinkNames.value.get(u),
   );
 });
@@ -162,6 +199,12 @@ const relinkFiltered = computed<RelinkCandidate[]>(() => {
  *  auto-target (single identical candidate). */
 const relinkTarget = computed<RelinkCandidate | null>(
   () => relinkPick.value ?? relinkAuto.value,
+);
+
+/** Danger tone only when there is genuinely nothing to reconnect to. With a
+ *  match on offer this is a routine "pick one" prompt, not a failure. */
+const relinkNoteClass = computed(() =>
+  relinkCandidates.value.length > 0 ? "wp-ptl-note--info" : "wp-ptl-note--danger",
 );
 
 function doRelink(): void {
@@ -268,17 +311,17 @@ watch(
     resetForm();
     void fetchBundlesContaining();
     void seedFromLibrary();
-    // Re-link candidates only matter for a DETACHED draft — skip the extra
-    // library-list fetch entirely when the row is tracked + present.
-    if (isLibraryMissing.value) void fetchLibraryNames();
+    // Re-link candidates only matter when the row's id ISN'T in the library —
+    // skip the extra library-list fetch entirely when it's present.
+    if (needsRelink.value) void fetchLibraryNames();
   },
 );
 
-// A drift poll can flip the draft to detached AFTER open (hashes land late);
-// fetch the candidate name map the first time that happens so re-link appears
-// without a reopen. One-shot: only when open, detached, and not yet loaded.
-watch(isLibraryMissing, (missing) => {
-  if (props.open && missing && relinkNames.value.size === 0) void fetchLibraryNames();
+// A drift poll can flip the draft to unlinked AFTER open (hashes land late);
+// fetch the candidate map the first time that happens so re-link appears
+// without a reopen. One-shot: only when open, unlinked, and not yet loaded.
+watch(needsRelink, (unlinked) => {
+  if (props.open && unlinked && relinkNames.value.size === 0) void fetchLibraryNames();
 });
 
 function close(): void {
@@ -506,7 +549,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
             </div>
 
             <div
-              v-if="isLibraryMissing && relinkCandidates.length"
+              v-if="needsRelink && relinkCandidates.length"
               class="wp-ptl-relink"
               data-test="ptl-relink"
             >
@@ -537,10 +580,20 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
                 >
                   <span class="wp-ptl-relink__name">{{ c.name || "(unnamed)" }}</span>
                   <code class="wp-ptl-relink__uuid">{{ c.uuid }}</code>
+                  <!-- "identical (content)" distinguishes a match established
+                       by locally fingerprinting the payload — the hash-less
+                       path — from one the server's own hash confirmed. Same
+                       confidence in practice, but the label shouldn't imply
+                       the authoritative hash agreed when there wasn't one. -->
                   <span
                     class="wp-ptl-relink__tag"
                     :class="c.contentIdentical ? 'is-identical' : 'is-diff'"
-                  >{{ c.contentIdentical ? "identical" : "content differs" }}</span>
+                    :title="c.matchedByContent
+                      ? 'Matched by comparing payload content — this module carries no stored hash'
+                      : undefined"
+                  >{{ c.contentIdentical
+                    ? (c.matchedByContent ? "identical (content)" : "identical")
+                    : "content differs" }}</span>
                 </li>
               </ul>
               <button
@@ -552,10 +605,25 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
               >Re-link<template v-if="relinkTarget"> to “{{ relinkTarget.name || relinkTarget.uuid }}”</template></button>
             </div>
 
-            <div v-if="isLibraryMissing" class="wp-ptl-note wp-ptl-note--danger" data-test="ptl-missing">
-              The library entry for this module has been deleted upstream. "Update existing"
-              is unavailable — use "Save as new entry" to re-add it to the library as a fresh
-              entry.
+            <!-- States the OBSERVABLE fact and points at Re-link first when a
+                 match exists. The old copy asserted the entry "has been
+                 deleted upstream" — a cause it cannot know (a shared workflow,
+                 a re-import under a new id, or a lost hash all look identical
+                 from here) — and recommended "Save as new entry" while the
+                 Re-link panel sat directly above offering the better option,
+                 which is how duplicates got made. -->
+            <div v-if="needsRelink" class="wp-ptl-note" :class="relinkNoteClass" data-test="ptl-missing">
+              <template v-if="relinkCandidates.length > 0">
+                This module isn’t linked to any library entry under its recorded id.
+                {{ relinkTarget?.contentIdentical
+                  ? "A library entry with identical content is selected above — re-linking reconnects them."
+                  : "Pick a match above to re-link, or save it as a new entry." }}
+              </template>
+              <template v-else>
+                This module isn’t linked to any library entry under its recorded id, and
+                nothing in the library matches its content or name. “Update existing” is
+                unavailable — “Save as new entry” adds it to the library.
+              </template>
             </div>
 
             <div v-if="errorMsg" class="wp-ptl-error" data-test="ptl-error">
@@ -652,7 +720,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   font-family: inherit;
 }
 .wp-ptl-input:focus { outline: 1px solid var(--wp-accent-500, #8b5cf6); }
-.wp-ptl-input--multi { resize: vertical; min-height: 48px; }
+.wp-ptl-input--multi { resize: vertical; overscroll-behavior: contain; min-height: 48px; }
 .wp-ptl-payload {
   margin: 0;
   padding: 8px 10px;
@@ -699,6 +767,14 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   background: color-mix(in oklab, var(--wp-danger, #ef4444) 12%, transparent);
   border: 1px solid color-mix(in oklab, var(--wp-danger, #ef4444) 32%, transparent);
   color: var(--wp-danger, #ef4444);
+}
+/* Informational tone for the "pick a match" case — a re-linkable module is a
+   routine state, not an error, and painting it red pushed users toward the
+   duplicate-creating escape hatch. */
+.wp-ptl-note--info {
+  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 10%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 30%, transparent);
+  color: var(--wp-text, #e7e7ee);
 }
 .wp-ptl-relink {
   padding: 10px 12px;

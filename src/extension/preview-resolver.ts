@@ -85,6 +85,31 @@ const failed = new Map<string, FailureRecord>();
  *  generate one fetch per 400ms reactive tick. */
 const RETRY_TTL_MS = 30_000;
 
+/** Wall-clock stamp for each SUCCESSFUL cache entry, so a snapshot can go
+ *  stale. Kept in a sibling map rather than on `PreviewLookup` so the public
+ *  shape consumers read stays free of bookkeeping fields. */
+const cachedAt = new Map<string, number>();
+
+/** Backstop freshness window.
+ *
+ *  Successful entries used to live for the lifetime of the page: `ensure()`
+ *  short-circuits on `cache.has(u)` and nothing but `_resetForTests` ever
+ *  cleared the map. So the canvas kept whatever a wildcard looked like the
+ *  first time it was referenced — add an 11th option in the SPA and the canvas
+ *  went on reporting 10, while the SPA (which reads the live catalog) reported
+ *  11.
+ *
+ *  The PRIMARY invalidation is `markAllStale` on window focus / tab
+ *  visibility (see below): editing in the SPA and switching back to the canvas
+ *  refreshes immediately, which is the actual workflow. This timer only covers
+ *  the case where focus never changes — two visible windows on one desktop,
+ *  say — so it can be generous without anyone waiting on it.
+ *
+ *  The stale entry is deliberately KEPT while the refresh is in flight — and
+ *  kept even if the refresh fails — so a label never flickers back to a raw
+ *  uuid. */
+const FRESH_TTL_MS = 60_000;
+
 /**
  * Bumped whenever a fetch settles (success or failure). Vue computeds
  * that depend on `lookup()` results should read this value once to opt
@@ -93,9 +118,72 @@ const RETRY_TTL_MS = 30_000;
  */
 export const cacheVersion = ref(0);
 
-/** Sync read — returns undefined if not yet fetched (or fetch failed). */
+/**
+ * Record a failure the server has CONFIRMED — the uuid does not exist.
+ *
+ * Evicts the snapshot as well as stamping the tombstone. Keeping it is what
+ * let a module deleted from the library go on rendering as a perfectly valid
+ * chip, complete with the option count it had before it was deleted: the
+ * tombstone was set, but `lookup()` still answered from `cache`, so no
+ * consumer ever learned the ref had broken.
+ *
+ * The "keep the stale value so nothing flickers back to a raw uuid" rule this
+ * departs from is right for TRANSIENT failures, where the old value is our
+ * best guess at the current one. Once the server says the module is gone, the
+ * old value is not a guess — it is a false statement.
+ */
+function tombstonePermanent(uuid: string, at: number): void {
+  failed.set(uuid, { at, permanent: true });
+  cache.delete(uuid);
+  cachedAt.delete(uuid);
+}
+
+/**
+ * Sync read — undefined if not yet fetched, or if the fetch failed.
+ *
+ * A confirmed-missing uuid resolves to undefined even if something else
+ * repopulated the cache. `tombstonePermanent` already evicts, so this is the
+ * belt to that braces: "the server says it does not exist" has to beat any
+ * cached snapshot, whatever wrote it, or a broken ref renders as a live one.
+ */
 export function lookup(uuid: string): PreviewLookup | undefined {
+  if (failed.get(uuid)?.permanent) return undefined;
   return cache.get(uuid);
+}
+
+/**
+ * Mark every cached snapshot stale so the next `ensure()` refetches it.
+ *
+ * Drops only the freshness stamps, never `cache` itself: consumers keep
+ * rendering the last known values until the refresh lands, so nothing
+ * flickers back to a raw uuid. Transient failure tombstones are cleared too —
+ * a deliberate "check again now" should retry them rather than wait out
+ * `RETRY_TTL_MS`. Permanent (404) tombstones stay, since the server already
+ * confirmed those uuids don't exist.
+ */
+export function markAllStale(): void {
+  cachedAt.clear();
+  for (const [u, f] of failed) {
+    if (!f.permanent) failed.delete(u);
+  }
+}
+
+/**
+ * The canvas and the SPA are separate pages, so a library edit in one is
+ * invisible to the other — there is no shared invalidation event to subscribe
+ * to. What IS observable is the user coming back: they edit a wildcard in the
+ * SPA tab, switch to the ComfyUI tab, and expect the canvas to agree.
+ *
+ * `visibilitychange` covers the tab switch, `focus` covers clicking between
+ * two windows. Both just mark stale — the refetch itself is lazy, driven by
+ * whatever `ensure()` call the next reactive tick makes, so a focus event on a
+ * graph with no `@{}` refs costs nothing.
+ */
+if (typeof window !== "undefined" && typeof document !== "undefined") {
+  window.addEventListener("focus", markAllStale);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) markAllStale();
+  });
 }
 
 /**
@@ -108,16 +196,22 @@ export function ensure(uuids: Iterable<string>): void {
   const now = Date.now();
   const missing: string[] = [];
   for (const u of uuids) {
-    if (cache.has(u) || inflight.has(u)) continue;
+    if (inflight.has(u)) continue;
     const fail = failed.get(u);
     if (fail) {
       // 404 stays permanent — server confirmed the uuid doesn't
       // exist, retrying won't help. Transient failures retry once
       // the TTL elapses, recovering from page-load flakes.
+      // Checked BEFORE the cache so a stale entry whose refresh 404'd
+      // can't re-enter the fetch queue on every reactive tick.
       if (fail.permanent) continue;
       if (now - fail.at < RETRY_TTL_MS) continue;
       failed.delete(u);
     }
+    // Cached AND still fresh → nothing to do. A STALE entry falls through to
+    // a refresh; `lookup` keeps serving the old value until the new one lands.
+    const at = cachedAt.get(u);
+    if (cache.has(u) && at !== undefined && now - at < FRESH_TTL_MS) continue;
     missing.push(u);
   }
   if (!missing.length) return;
@@ -130,13 +224,25 @@ export function ensure(uuids: Iterable<string>): void {
 /** Test seam — clear all caches. Not exported in production paths. */
 export function _resetForTests(): void {
   cache.clear();
+  cachedAt.clear();
   inflight.clear();
   failed.clear();
 }
 
-/** Test seam — directly seed the cache without going through fetch. */
+/** Test seam — directly seed the cache without going through fetch. Stamps
+ *  `cachedAt` too, otherwise the seeded entry reads as stale and the very
+ *  next `ensure()` would fire a real fetch. */
 export function _setForTests(uuid: string, entry: PreviewLookup): void {
   cache.set(uuid, entry);
+  cachedAt.set(uuid, Date.now());
+}
+
+/** Test seam — record the server having confirmed a uuid is gone, without
+ *  standing up a fetch mock. Deliberately does NOT clear the cache first, so
+ *  a suite can assert the guard in `lookup` holds even against a populated
+ *  entry — the exact shape of the deleted-module bug. */
+export function _tombstoneForTests(uuid: string): void {
+  failed.set(uuid, { at: Date.now(), permanent: true });
 }
 
 interface BundleSnapshot {
@@ -162,7 +268,12 @@ async function fetchBundle(uuids: string[]): Promise<void> {
       // server restart) → retryable after the TTL elapses.
       const permanent = res.status === 404;
       const at = Date.now();
-      for (const u of uuids) failed.set(u, { at, permanent });
+      for (const u of uuids) {
+        // A 404 is the server confirming these are gone, so their snapshots
+        // must go with them. Anything else keeps its last known value.
+        if (permanent) tombstonePermanent(u, at);
+        else failed.set(u, { at, permanent });
+      }
       return;
     }
     const data = (await res.json()) as {
@@ -173,9 +284,10 @@ async function fetchBundle(uuids: string[]): Promise<void> {
     for (const u of uuids) {
       const snap = got[u];
       if (!snap) {
-        // Server returned a successful response but didn't include
-        // this uuid — module deleted or never existed. Permanent.
-        failed.set(u, { at, permanent: true });
+        // Server returned a successful response but didn't include this
+        // uuid — module deleted or never existed. Just as confirmed as a
+        // 404, so the snapshot goes too.
+        tombstonePermanent(u, at);
         continue;
       }
       const entry: PreviewLookup = { name: snap.name };
@@ -211,6 +323,10 @@ async function fetchBundle(uuids: string[]): Promise<void> {
         if (tagSets.length) entry.optionTagSets = tagSets;
       }
       cache.set(u, entry);
+      cachedAt.set(u, at);
+      // A successful refresh clears any earlier failure so the entry is not
+      // held back by a stale tombstone on the next staleness check.
+      failed.delete(u);
     }
   } catch (err) {
     // Network error / JSON parse error — transient by definition. Log
