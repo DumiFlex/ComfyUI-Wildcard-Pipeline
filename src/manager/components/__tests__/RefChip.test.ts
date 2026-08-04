@@ -463,3 +463,107 @@ describe("RefChip — selection", () => {
     w.unmount();
   });
 });
+
+/**
+ * Broken refs.
+ *
+ * A ref whose target was deleted from the library used to render as a healthy
+ * chip with a hover card quoting the option count the module had before it was
+ * deleted. The resolution fix lives in `preview-resolver`; what is pinned here
+ * is that the chip a broken ref DOES produce is useful rather than a bare "?".
+ *
+ * `@{uuid#name}` preserves the name the target had when the ref was written,
+ * so the chip can name the missing module instead of only its id.
+ */
+describe("RefChip — broken refs", () => {
+  afterEach(() => { vi.useRealTimers(); });
+
+  function brokenChip(props: Record<string, unknown> = {}) {
+    return mount(RefChip, {
+      props: { kind: "ref", name: "test", uuid: "22945cab", resolved: false, ...props },
+      attachTo: document.body,
+    });
+  }
+  async function openCard(w: ReturnType<typeof brokenChip>): Promise<string> {
+    await w.find(".wp-refchip").trigger("mouseenter");
+    vi.advanceTimersByTime(300);
+    await nextTick();
+    return document.querySelector('[data-test="refchip-hover"]')?.textContent ?? "";
+  }
+
+  it("keeps the name the ref was written against, rather than collapsing to '?'", () => {
+    const w = brokenChip();
+    expect(w.find(".wp-refchip__label").text()).toBe("test");
+    expect(w.find(".wp-refchip").classes()).toContain("wp-refchip--unresolved");
+    w.unmount();
+  });
+
+  it("falls back to the uuid when the ref stored no name", () => {
+    const w = brokenChip({ name: "" });
+    expect(w.find(".wp-refchip__label").text()).toBe("22945cab");
+    w.unmount();
+  });
+
+  it("marks the chip with '?' instead of the resolved-ref glyph", () => {
+    const w = brokenChip();
+    expect(w.find(".wp-refchip").text()).toContain("?");
+    expect(w.find(".wp-refchip").text()).not.toContain("✦");
+    w.unmount();
+  });
+
+  it("names the missing module in the hover card", async () => {
+    vi.useFakeTimers();
+    const w = brokenChip();
+    const text = await openCard(w);
+    expect(text).toContain("22945cab");
+    expect(text).toContain("not in the library");
+    expect(text).toContain("test");
+    expect(text).toMatch(/broken/i);
+    w.unmount();
+  });
+
+  it("says how to fix it", async () => {
+    vi.useFakeTimers();
+    const w = brokenChip();
+    expect(await openCard(w)).toMatch(/point it at another module/i);
+    w.unmount();
+  });
+
+  // The false statement from the report: a card claiming the ref reads from
+  // the library while also saying it is not in the library.
+  it("does NOT claim a pool it cannot read from", async () => {
+    vi.useFakeTimers();
+    const w = brokenChip();
+    const text = await openCard(w);
+    expect(text).not.toContain("pool:");
+    expect(document.querySelector('[data-test="refchip-pool"]')).toBeNull();
+    w.unmount();
+  });
+
+  it("does not quote an option count for a module that is gone", async () => {
+    // Even with a snapshot still sitting in the resolver cache, a chip told it
+    // is unresolved must not report counts from it.
+    _setForTests("22945cab", { name: "test", kind: "wildcard", optionTagSets: [[], []] });
+    vi.useFakeTimers();
+    const w = brokenChip();
+    const text = await openCard(w);
+    expect(text).not.toContain("2 options");
+    expect(document.querySelector('[data-test="refchip-count"]')).toBeNull();
+    w.unmount();
+  });
+
+  it("says only the id is known when no name was stored", async () => {
+    vi.useFakeTimers();
+    const w = brokenChip({ name: "" });
+    expect(await openCard(w)).toMatch(/stored no name/i);
+    w.unmount();
+  });
+
+  it("clicking asks for a remap rather than opening the edit popover", async () => {
+    const w = brokenChip();
+    await w.find(".wp-refchip").trigger("click");
+    expect(w.emitted("remap")).toBeTruthy();
+    expect(w.emitted("click")).toBeFalsy();
+    w.unmount();
+  });
+});

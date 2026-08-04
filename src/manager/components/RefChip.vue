@@ -315,6 +315,14 @@ const pool = computed(() => {
 /** Total options + how many survive the filter, computed over whichever pool
  *  won above — so the count always describes what the graph will do. */
 const optionStats = computed<{ total: number; matched: number } | null>(() => {
+  // An unresolved ref has nothing to count. Without this the card would print
+  // a count sourced from whatever snapshot is still cached — which is the
+  // deleted-module lie in its second form: the resolver may have been
+  // corrected, but a chip told `resolved: false` by any other route (a uuid
+  // absent from the live chain, say) would still quote stale numbers. The
+  // count also outranks the broken branch in the template, so it would hide
+  // the explanation entirely.
+  if (isRef.value && !props.resolved) return null;
   const p = pool.value;
   if (!p || p.tagSets.length === 0) return null;
   const total = p.tagSets.length;
@@ -329,6 +337,10 @@ const poolFromNode = computed(() => pool.value?.source === "context");
 /** Human label for the winning pool. Names the module when the node supplies
  *  it, because a node can hold a renamed copy of a library row. */
 const poolLabel = computed<string | null>(() => {
+  // A broken ref has no pool. `resolvePoolFor` still answers "library" for an
+  // unknown uuid — that is its fallback, not a finding — and printing it put
+  // "not in library" and "pool: library" in the same card.
+  if (isRef.value && !props.resolved) return null;
   const p = pool.value;
   if (!p) return null;
   if (p.source === "library") return "pool: library";
@@ -486,7 +498,25 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
           {{ hasExpr ? `${optionStats.matched} of ${optionStats.total} options match`
                      : `${optionStats.total} option${optionStats.total === 1 ? "" : "s"}` }}
         </div>
-        <div v-else-if="!resolved" class="wp-refchip-pop__count">not in library</div>
+        <!-- Broken ref. The `@{uuid#name}` syntax preserves the name the
+             target had when the reference was written, so the card can say
+             WHICH module went missing instead of only that something did.
+             Stated as "was", because presenting a name we can no longer verify
+             as current is how the old card ended up lying. -->
+        <template v-else-if="!resolved">
+          <div class="wp-refchip-pop__count" data-test="refchip-broken">
+            not in the library
+          </div>
+          <div v-if="name" class="wp-refchip-pop__broken" data-test="refchip-broken-name">
+            was “{{ name }}” — deleted, renamed away, or never imported here
+          </div>
+          <div v-else class="wp-refchip-pop__broken">
+            this reference stored no name, so only the id is known
+          </div>
+          <div class="wp-refchip-pop__broken wp-refchip-pop__broken--fix">
+            click the chip to point it at another module
+          </div>
+        </template>
         <!-- Which pool produced that count. Without it the number is
              unfalsifiable: a node holding a drifted snapshot and the library
              give different answers and both look authoritative. -->
@@ -661,6 +691,19 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
 .wp-refchip-pop__uuid { color: var(--wp-text-muted); }
 .wp-refchip-pop__filter { color: var(--wp-text-dim); }
 .wp-refchip-pop__count { color: var(--wp-accent-text); font-weight: 600; }
+/* Broken-ref detail lines. Danger-toned so the card matches the red chip that
+ * opened it — an accent-purple explanation under a red chip reads as ordinary
+ * information rather than a fault. */
+.wp-refchip-pop__count[data-test="refchip-broken"] {
+  color: var(--wp-danger-text, var(--wp-danger, #f87171));
+}
+.wp-refchip-pop__broken {
+  color: var(--wp-text-muted);
+  font-weight: 400;
+  line-height: 1.45;
+  margin-top: 2px;
+}
+.wp-refchip-pop__broken--fix { color: var(--wp-text-dim); font-style: italic; }
 .wp-refchip-pop__nonull { color: var(--wp-status-modified, #fbbf24); margin-left: 4px; }
 /* Pool provenance — dimmer than the count it qualifies, since it is context
    for that number rather than a second fact competing with it. */

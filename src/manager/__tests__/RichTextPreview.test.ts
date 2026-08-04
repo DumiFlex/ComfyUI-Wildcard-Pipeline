@@ -18,7 +18,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import { nextTick } from "vue";
 import RichTextPreview from "../components/RichTextPreview.vue";
-import { _resetForTests, _setForTests } from "../../extension/preview-resolver";
+import { _resetForTests, _setForTests, _tombstoneForTests } from "../../extension/preview-resolver";
 
 describe("RichTextPreview", () => {
   beforeEach(() => _resetForTests());
@@ -101,6 +101,45 @@ describe("RichTextPreview", () => {
     expect(chip.exists()).toBe(true);
     expect(chip.classes()).not.toContain("wp-refchip--unresolved");
     expect(w.find(".wp-refchip__label").text()).toBe("@lib_var");
+  });
+
+  /**
+   * Deleting a module from the library used to leave its refs looking healthy:
+   * the tombstone was recorded but the snapshot was not evicted, so the chip
+   * kept the module's name, its colour, and a hover card quoting the option
+   * count it had before deletion. The node badge said BROKEN REF while the
+   * chip inside the modal said otherwise.
+   */
+  it("goes red once the module is deleted, even with a snapshot still cached", () => {
+    _setForTests("22945cab", {
+      name: "test", kind: "wildcard", varBinding: "test",
+      optionValues: ["a", "b"],
+    });
+    _tombstoneForTests("22945cab");
+    const w = mount(RichTextPreview, {
+      props: { value: "@{22945cab}", uuidToName: new Map() },
+    });
+    expect(w.find(".wp-refchip").classes()).toContain("wp-refchip--unresolved");
+  });
+
+  it("a deleted module's ref is not clickable — there is nothing to open", () => {
+    _setForTests("22945cab", { name: "test", kind: "wildcard" });
+    _tombstoneForTests("22945cab");
+    const w = mount(RichTextPreview, {
+      props: { value: "@{22945cab}", uuidToName: new Map(), clickableRefs: true },
+    });
+    w.find(".wp-refchip").trigger("click");
+    expect(w.emitted("ref-click")).toBeUndefined();
+  });
+
+  // A LOCAL name still wins: the module exists in this chain, so the library
+  // saying otherwise is not the authority on it.
+  it("still resolves when the live chain knows the uuid", () => {
+    _tombstoneForTests("22945cab");
+    const w = mount(RichTextPreview, {
+      props: { value: "@{22945cab}", uuidToName: new Map([["22945cab", "local"]]) },
+    });
+    expect(w.find(".wp-refchip").classes()).not.toContain("wp-refchip--unresolved");
   });
 
   it("renders the red unresolved chip when neither uuidToName nor the cache knows the uuid", () => {

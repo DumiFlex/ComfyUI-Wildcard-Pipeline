@@ -118,8 +118,36 @@ const FRESH_TTL_MS = 60_000;
  */
 export const cacheVersion = ref(0);
 
-/** Sync read — returns undefined if not yet fetched (or fetch failed). */
+/**
+ * Record a failure the server has CONFIRMED — the uuid does not exist.
+ *
+ * Evicts the snapshot as well as stamping the tombstone. Keeping it is what
+ * let a module deleted from the library go on rendering as a perfectly valid
+ * chip, complete with the option count it had before it was deleted: the
+ * tombstone was set, but `lookup()` still answered from `cache`, so no
+ * consumer ever learned the ref had broken.
+ *
+ * The "keep the stale value so nothing flickers back to a raw uuid" rule this
+ * departs from is right for TRANSIENT failures, where the old value is our
+ * best guess at the current one. Once the server says the module is gone, the
+ * old value is not a guess — it is a false statement.
+ */
+function tombstonePermanent(uuid: string, at: number): void {
+  failed.set(uuid, { at, permanent: true });
+  cache.delete(uuid);
+  cachedAt.delete(uuid);
+}
+
+/**
+ * Sync read — undefined if not yet fetched, or if the fetch failed.
+ *
+ * A confirmed-missing uuid resolves to undefined even if something else
+ * repopulated the cache. `tombstonePermanent` already evicts, so this is the
+ * belt to that braces: "the server says it does not exist" has to beat any
+ * cached snapshot, whatever wrote it, or a broken ref renders as a live one.
+ */
 export function lookup(uuid: string): PreviewLookup | undefined {
+  if (failed.get(uuid)?.permanent) return undefined;
   return cache.get(uuid);
 }
 
@@ -209,6 +237,14 @@ export function _setForTests(uuid: string, entry: PreviewLookup): void {
   cachedAt.set(uuid, Date.now());
 }
 
+/** Test seam — record the server having confirmed a uuid is gone, without
+ *  standing up a fetch mock. Deliberately does NOT clear the cache first, so
+ *  a suite can assert the guard in `lookup` holds even against a populated
+ *  entry — the exact shape of the deleted-module bug. */
+export function _tombstoneForTests(uuid: string): void {
+  failed.set(uuid, { at: Date.now(), permanent: true });
+}
+
 interface BundleSnapshot {
   name?: string;
   type?: string;
@@ -232,7 +268,12 @@ async function fetchBundle(uuids: string[]): Promise<void> {
       // server restart) → retryable after the TTL elapses.
       const permanent = res.status === 404;
       const at = Date.now();
-      for (const u of uuids) failed.set(u, { at, permanent });
+      for (const u of uuids) {
+        // A 404 is the server confirming these are gone, so their snapshots
+        // must go with them. Anything else keeps its last known value.
+        if (permanent) tombstonePermanent(u, at);
+        else failed.set(u, { at, permanent });
+      }
       return;
     }
     const data = (await res.json()) as {
@@ -243,9 +284,10 @@ async function fetchBundle(uuids: string[]): Promise<void> {
     for (const u of uuids) {
       const snap = got[u];
       if (!snap) {
-        // Server returned a successful response but didn't include
-        // this uuid — module deleted or never existed. Permanent.
-        failed.set(u, { at, permanent: true });
+        // Server returned a successful response but didn't include this
+        // uuid — module deleted or never existed. Just as confirmed as a
+        // 404, so the snapshot goes too.
+        tombstonePermanent(u, at);
         continue;
       }
       const entry: PreviewLookup = { name: snap.name };
