@@ -18,7 +18,10 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
-    include: ["src/**/*.test.ts"],
+    // `scripts/` is plain ESM with no Vue/TS pipeline, but the release
+    // tooling there is worth testing like anything else — a broken
+    // announcement transform is only noticed after it has been posted.
+    include: ["src/**/*.test.ts", "scripts/**/*.test.mjs"],
     setupFiles: ["./src/test-setup.ts"],
     coverage: {
       // V8 coverage works against the Vite test pipeline without a separate

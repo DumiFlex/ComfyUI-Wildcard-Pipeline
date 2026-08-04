@@ -25,7 +25,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage --passWithNoTests",
     "test:py": "pytest",
-    "prepare": "husky"
+    "prepare": "husky",
+    "announce": "node scripts/discord-announce.mjs"
   },
   "dependencies": {
     "pinia": "^2.2.6",
