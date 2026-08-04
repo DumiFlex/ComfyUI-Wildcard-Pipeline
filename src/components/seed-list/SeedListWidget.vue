@@ -198,6 +198,18 @@ function toggleOverrideStrategy(): void {
       </div>
     </div>
 
+    <button type="button" class="wp-seedlist__seedbtn" data-test="seedlist-seeds-btn" @click="seedsOpen = true">
+      <span class="wp-seedlist__seedbtn-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10" /><circle cx="20" cy="18" r="1.4" fill="currentColor" stroke="none" /></svg></span>
+      Per-iteration seeds
+      <span class="wp-seedlist__seedbtn-fill" />
+      <span v-if="lockedCount" class="wp-seedlist__seedbtn-badge" data-test="seedlist-seeds-badge">{{ lockedCount }} locked</span>
+      <span v-if="bypassedCount" class="wp-seedlist__seedbtn-badge" data-test="seedlist-seeds-bypass-badge">{{ bypassedCount }} bypassed</span>
+      <svg class="wp-seedlist__seedbtn-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6" /></svg>
+    </button>
+
+    <!-- Directly under the seeds button it belongs to: the chips are the
+         inline view of what that modal lists, so they read as its expansion
+         rather than as another unrelated section. -->
     <FrameChips
       label="seeds"
       test-id="seedlist-frame"
@@ -207,15 +219,6 @@ function toggleOverrideStrategy(): void {
       :bypass-readonly-hint="BYPASS_READONLY_HINT"
       @toggle-lock="toggleFrameLock"
     />
-
-    <button type="button" class="wp-seedlist__seedbtn" data-test="seedlist-seeds-btn" @click="seedsOpen = true">
-      <span class="wp-seedlist__seedbtn-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10" /><circle cx="20" cy="18" r="1.4" fill="currentColor" stroke="none" /></svg></span>
-      Per-iteration seeds
-      <span class="wp-seedlist__seedbtn-fill" />
-      <span v-if="lockedCount" class="wp-seedlist__seedbtn-badge" data-test="seedlist-seeds-badge">{{ lockedCount }} locked</span>
-      <span v-if="bypassedCount" class="wp-seedlist__seedbtn-badge" data-test="seedlist-seeds-bypass-badge">{{ bypassedCount }} bypassed</span>
-      <svg class="wp-seedlist__seedbtn-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6" /></svg>
-    </button>
 
     <div class="wp-seedlist__row" :title="OVERRIDE_SEED_TOOLTIP">
       <span class="wp-seedlist__row-label">Override base seed from loop</span>
