@@ -65,18 +65,28 @@ const MONO = "'JetBrains Mono', Consolas, Monaco, 'Courier New', monospace";
 const textW = (s, px, mono = false) => s.length * px * (mono ? 0.6 : 0.52);
 
 /** Inner markup of a PrimeIcon, scaled to `size` and centred on (cx, cy).
- *  Fills become `currentColor` so the wrapping `<g>`'s colour drives it. */
+ *
+ * Colour comes from the wrapping `<g fill="currentColor">`, NOT from rewriting
+ * each path. Most PrimeIcons declare no `fill` at all (only `sparkles` does),
+ * so a rewrite-what-exists approach leaves them at SVG's default black — which
+ * is exactly how every node icon came out black while the feeder pills, whose
+ * icons happened to carry fills, coloured correctly.
+ *
+ * `fill="none"` is preserved: on the icons that use it, it marks the part that
+ * is deliberately hollow, and filling it would blob the glyph.
+ */
 function icon(name, cx, cy, size) {
   const raw = fs.readFileSync(path.join(ICON_DIR, `${name}.svg`), "utf8");
   const inner = raw
     .replace(/^[\s\S]*?<svg[^>]*>/, "")
     .replace(/<\/svg>\s*$/, "")
     .replace(/\s(?:width|height)="[^"]*"/g, "")
-    .replace(/fill="(?!none)[^"]*"/g, 'fill="currentColor"')
-    .replace(/stroke="(?!none)[^"]*"/g, 'stroke="currentColor"')
+    // Drop concrete fills so the group's currentColor wins; keep `none`.
+    .replace(/\sfill="(?!none)[^"]*"/g, "")
+    .replace(/\sstroke="(?!none)[^"]*"/g, ' stroke="currentColor"')
     .trim();
   const s = size / 24;
-  return `<g transform="translate(${cx - size / 2} ${cy - size / 2}) scale(${s})">${inner}</g>`;
+  return `<g fill="currentColor" transform="translate(${cx - size / 2} ${cy - size / 2}) scale(${s})">${inner}</g>`;
 }
 
 /** A node card. Vertical, centred: icon, name, mono subtitle — the SPA's
