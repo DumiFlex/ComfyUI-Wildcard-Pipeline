@@ -95,3 +95,47 @@ describe("renderReleaseNotes", () => {
     expect(html).toContain("·");
   });
 });
+
+describe("renderReleaseNotes — modal cut", () => {
+  // The release body is written for the release PAGE. The dialog has a 320px
+  // scroll box and one job: answer "is this worth clicking Update now". Notes
+  // carry a `<!-- /modal -->` marker after the highlights; the dialog stops
+  // there, and the tail stays on the page where there is room for it.
+  const body = [
+    "Headline sentence.",
+    "",
+    "### Highlights",
+    "",
+    "- **First thing** that matters",
+    "",
+    "<!-- /modal -->",
+    "",
+    "### Also in this release",
+    "",
+    "- a smaller thing nobody upgrades for",
+  ].join("\n");
+
+  it("stops at the marker", () => {
+    const html = renderReleaseNotes(body);
+    expect(html).toContain("First thing");
+    expect(html).not.toContain("Also in this release");
+    expect(html).not.toContain("nobody upgrades for");
+  });
+
+  it("renders a body with no marker whole — every release before this one", () => {
+    const html = renderReleaseNotes("### Highlights\n\n- one\n\n### Also\n\n- two");
+    expect(html).toContain("one");
+    expect(html).toContain("two");
+  });
+
+  it("never leaks a maintainer comment as visible text", () => {
+    const html = renderReleaseNotes("Intro\n\n<!-- a note to maintainers -->\n\n- kept");
+    expect(html).not.toContain("note to maintainers");
+    expect(html).toContain("kept");
+  });
+
+  it("falls back to the empty state when nothing precedes the marker", () => {
+    expect(renderReleaseNotes("<!-- /modal -->\n\n### Also\n\n- tail only"))
+      .toContain("No release notes.");
+  });
+});

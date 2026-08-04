@@ -61,6 +61,30 @@ function renderInline(escaped: string): string {
  * The trailing `---` rule that preceded the block goes too, otherwise the notes
  * end on a stray divider.
  */
+/**
+ * Everything the modal should show, and no more.
+ *
+ * The release body is written for the release PAGE, where the reader has room
+ * to browse. The modal has a 320px scroll box and one job: answer "is this
+ * worth clicking Update now". Release notes therefore carry a
+ * `<!-- /modal -->` marker after the highlights; the dialog stops there.
+ *
+ * Bodies without the marker (every release before it existed) are unaffected —
+ * they render whole, exactly as before.
+ */
+const MODAL_CUT = /<!--\s*\/modal\s*-->/i;
+
+function cutAtModalMarker(md: string): string {
+  const at = md.search(MODAL_CUT);
+  return at === -1 ? md : md.slice(0, at);
+}
+
+/** HTML comments are invisible on GitHub but would render as escaped text
+ *  here, so drop them regardless of whether the cut marker was found. */
+function stripComments(md: string): string {
+  return md.replace(/<!--[\s\S]*?-->/g, "");
+}
+
 function stripFullChangelog(md: string): string {
   return md
     .replace(
@@ -86,7 +110,7 @@ export function renderReleaseNotes(md: string): string {
   if (!md || !md.trim()) {
     return '<p class="wpc-relnotes__empty">No release notes.</p>';
   }
-  const trimmed = stripFullChangelog(md);
+  const trimmed = stripComments(stripFullChangelog(cutAtModalMarker(md)));
   if (!trimmed.trim()) {
     return '<p class="wpc-relnotes__empty">No release notes.</p>';
   }
