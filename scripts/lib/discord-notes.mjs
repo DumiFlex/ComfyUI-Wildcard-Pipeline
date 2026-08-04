@@ -27,6 +27,26 @@ export const EMBED_DESCRIPTION_LIMIT = 4096;
 export const BRAND_COLOR = 0x8b5cf6;
 
 /**
+ * Who the post appears to be from.
+ *
+ * A webhook posts under whatever name and avatar it was created with — the
+ * Discord default is a generic name like "Captain Hook" and a placeholder
+ * image, which is what an announcement went out as. `username` and
+ * `avatar_url` override that PER MESSAGE, so the identity lives here rather
+ * than in a webhook's settings: it stays right if the webhook is ever rotated
+ * or recreated, and it is the same in every channel the automation posts to.
+ */
+export const WEBHOOK_USERNAME = "Wildcard Pipeline";
+
+/**
+ * Discord fetches this server-side, so it has to be a public raster URL — an
+ * SVG will not render, which rules out the repo's `favicon.svg`. Pinned to
+ * `main` rather than a tag so replacing the logo does not need a code change.
+ */
+export const WEBHOOK_AVATAR_URL =
+  "https://raw.githubusercontent.com/DumiFlex/ComfyUI-Wildcard-Pipeline/main/public/images/web-app-manifest-512x512.png";
+
+/**
  * Split a release body into the part worth announcing and what is left behind.
  *
  * The cut is the same one the in-app update dialog makes, for the same reason:
@@ -163,10 +183,14 @@ export function buildPayload({
   releaseUrl,
   compareUrl,
   roleId,
+  username = WEBHOOK_USERNAME,
+  avatarUrl = WEBHOOK_AVATAR_URL,
   installHint = 'ComfyUI Manager → search "Wildcard Pipeline" → Update → restart ComfyUI',
 }) {
   const description = buildDescription(body, { compareUrl });
   return {
+    username,
+    avatar_url: avatarUrl,
     content: roleId ? `<@&${roleId}>` : "",
     allowed_mentions: { parse: [], roles: roleId ? [roleId] : [] },
     embeds: [
@@ -191,7 +215,9 @@ export function buildPayload({
  *
  * `releases` is newest-first: `{ version, body }`.
  */
-export function buildRollupPayload({ releases, sinceVersion, releaseUrl, roleId, installHint }) {
+export function buildRollupPayload({
+  releases, sinceVersion, releaseUrl, roleId, installHint, username, avatarUrl,
+}) {
   const latest = releases[0];
   const sections = releases.map((r) => {
     const { head } = splitBody(r.body);
@@ -205,6 +231,8 @@ export function buildRollupPayload({ releases, sinceVersion, releaseUrl, roleId,
     releaseUrl,
     roleId,
     installHint,
+    username,
+    avatarUrl,
   });
   base.embeds[0].title = sinceVersion
     ? `Wildcard Pipeline ${latest?.version ?? ""} — everything since ${sinceVersion}`

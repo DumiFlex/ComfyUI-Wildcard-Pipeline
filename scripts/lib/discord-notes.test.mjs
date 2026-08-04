@@ -187,6 +187,27 @@ describe("buildPayload", () => {
     expect(p.allowed_mentions.roles).toEqual(["123"]);
   });
 
+  // A webhook posts under whatever name and avatar it was created with —
+  // Discord's default is a generic name ("Captain Hook") and a placeholder
+  // image, which is exactly what v2.12.0 went out as.
+  it("posts under the project's own name and avatar, not the webhook's", () => {
+    const p = buildPayload({ version: "v1", body: "x" });
+    expect(p.username).toBe("Wildcard Pipeline");
+    expect(p.avatar_url).toMatch(/^https:\/\/.+\.png$/);
+  });
+
+  it("uses a raster avatar — Discord will not render an SVG", () => {
+    expect(buildPayload({ version: "v1", body: "x" }).avatar_url).not.toMatch(/\.svg$/i);
+  });
+
+  it("lets a caller override the identity", () => {
+    const p = buildPayload({
+      version: "v1", body: "x", username: "WP Staff", avatarUrl: "https://x/a.png",
+    });
+    expect(p.username).toBe("WP Staff");
+    expect(p.avatar_url).toBe("https://x/a.png");
+  });
+
   it("stays inside the embed description cap", () => {
     const huge = Array.from({ length: 900 }, (_, i) => `- change ${i}`).join("\n");
     const p = buildPayload({ version: "v1", body: huge });
@@ -208,6 +229,15 @@ describe("buildRollupPayload", () => {
     expect(p.embeds[0].title).toBe("Wildcard Pipeline v2.12.0 — everything since v2.10.2");
     expect(p.embeds[0].description).toContain("**v2.12.0**");
     expect(p.embeds[0].description).toContain("**v2.11.0**");
+  });
+
+  it("keeps the identity on a roll-up too", () => {
+    const p = buildRollupPayload({
+      releases: [{ version: "v2.12.0", body: "- x" }],
+      sinceVersion: "v2.10.2",
+    });
+    expect(p.username).toBe("Wildcard Pipeline");
+    expect(p.avatar_url).toMatch(/\.png$/);
   });
 
   it("leads with the newest, which is what people decide to install", () => {

@@ -19,6 +19,8 @@
  * Environment:
  *   DISCORD_WEBHOOK_URL   required with --post
  *   DISCORD_ROLE_ID       optional; pinged as <@&ID>
+ *   DISCORD_USERNAME      optional; overrides the posting name
+ *   DISCORD_AVATAR_URL    optional; overrides the posting avatar (raster only)
  *   GITHUB_TOKEN          optional; raises the API rate limit for --since
  */
 import { readFileSync } from "node:fs";
@@ -63,6 +65,11 @@ async function fetchReleasesSince(sinceTag) {
 async function main() {
   const post = arg("post", false) === true;
   const roleId = process.env.DISCORD_ROLE_ID || undefined;
+  // Undefined falls through to the defaults in discord-notes.mjs — an empty
+  // env var must not blank the identity and hand the post back to the
+  // webhook's own name.
+  const username = process.env.DISCORD_USERNAME || undefined;
+  const avatarUrl = process.env.DISCORD_AVATAR_URL || undefined;
   const since = arg("since");
   const notesFile = arg("notes-file");
   let version = arg("version");
@@ -80,6 +87,8 @@ async function main() {
       sinceVersion: since,
       releaseUrl: releases[0].html_url,
       roleId,
+      username,
+      avatarUrl,
     });
   } else if (typeof notesFile === "string") {
     // Local preview against unreleased notes. No network, so the compare link
@@ -88,6 +97,8 @@ async function main() {
       version: version || "(unreleased)",
       body: readFileSync(notesFile, "utf8"),
       roleId,
+      username,
+      avatarUrl,
     });
   } else {
     const rel = await fetchRelease(typeof version === "string" ? version : undefined);
@@ -97,11 +108,18 @@ async function main() {
       body: rel.body ?? "",
       releaseUrl: rel.html_url,
       roleId,
+      username,
+      avatarUrl,
     });
   }
 
   if (!post) {
     console.log("--- DRY RUN (pass --post to send) ---\n");
+    // Identity is part of what a preview is for: it is the thing that was
+    // wrong on the first real post, and it is invisible in the embed body.
+    console.log(`posting as: ${payload.username}`);
+    console.log(`avatar:     ${payload.avatar_url}`);
+    console.log("");
     console.log(payload.embeds[0].title);
     console.log("-".repeat(60));
     console.log(payload.embeds[0].description);
