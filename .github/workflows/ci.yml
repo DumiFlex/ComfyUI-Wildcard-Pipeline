@@ -1,8 +1,12 @@
 name: CI
 
 on:
+  # Every branch, not just main. The pre-commit hook now scopes its checks to
+  # the files that changed (see .husky/pre-commit), which is only safe because
+  # the full suite runs here on every push — previously a feature branch got no
+  # remote verification at all until a PR was opened.
   push:
-    branches: [main]
+    branches: ["**"]
   pull_request:
     branches: [main]
 
