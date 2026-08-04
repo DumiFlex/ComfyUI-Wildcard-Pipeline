@@ -81,8 +81,10 @@ RULES
 4. The tail is grouped by area, one line each, no bold-lead paragraphs. Group
    names are free-form — use whatever the release actually contains. It sits in
    a <details> so a long release does not double the page; put the count in the
-   summary so the reader knows what they are opening. Note that collapsed text
-   is not reliably reachable by browser find-in-page, which is the cost.
+   summary so the reader knows what they are opening. That number is written by
+   hand here and can drift — the update dialog computes its own from the same
+   bullets, so if the two disagree, this one is wrong. Note also that collapsed
+   text is not reliably reachable by browser find-in-page, which is the cost.
 
 5. Write what changed for the user, not what changed in the code. Name the
    symptom, not the fix: "the field went blank" beats "guarded a null deref".

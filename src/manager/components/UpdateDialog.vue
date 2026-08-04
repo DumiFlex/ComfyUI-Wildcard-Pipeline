@@ -12,7 +12,7 @@ import Modal from "./ui/Modal.vue";
 import Button from "./ui/Button.vue";
 import { useReleaseCheck } from "../composables/useReleaseCheck";
 import { useComfyManagerUpdate, type ManagerAvailability } from "../composables/useComfyManagerUpdate";
-import { renderReleaseNotes } from "../utils/releaseNotes";
+import { renderReleaseNotes, tailChangeCount } from "../utils/releaseNotes";
 import { GITHUB_REPO } from "../config/links";
 
 const props = defineProps<{ open: boolean }>();
@@ -36,6 +36,9 @@ watch(
 );
 
 const notesHtml = computed(() => renderReleaseNotes(releaseBody.value ?? ""));
+// The dialog stops at the highlights, so say what is left behind rather than
+// ending on a cliff. Zero for releases published before the cut marker existed.
+const tailCount = computed(() => tailChangeCount(releaseBody.value ?? ""));
 const fullChangelogUrl = computed(() => releaseUrl.value ?? `${GITHUB_REPO}/releases`);
 
 const severityLabel = computed(() =>
@@ -84,6 +87,12 @@ function onUpdateNow(): void {
            renderReleaseNotes, which escapes before transforming, so this
            is the one sanctioned v-html. -->
       <div class="wpc-relnotes" data-test="update-notes" v-html="notesHtml" />
+
+      <p
+        v-if="tailCount > 0"
+        class="wpc-upd__more"
+        data-test="update-tail-count"
+      >+ {{ tailCount }} smaller {{ tailCount === 1 ? "change" : "changes" }}</p>
 
       <a
         class="wpc-upd__full"
@@ -157,6 +166,7 @@ git pull
 .wpc-upd__full:hover { color: var(--wp-text); }
 .wpc-upd__fallback { border: 1px solid var(--wp-border); border-radius: var(--wp-radius); padding: var(--wp-space-4); display: flex; flex-direction: column; gap: var(--wp-space-3); }
 .wpc-upd__fallback-title { font-weight: 700; color: var(--wp-text); margin: 0; }
+.wpc-upd__more { margin: var(--wp-space-2) 0 0; font-size: var(--wp-text-xs); color: var(--wp-text-dim); }
 .wpc-upd__fallback-body { font-size: var(--wp-text-sm); color: var(--wp-text-muted); margin: 0; }
 .wpc-upd__manager-link { font-size: var(--wp-text-sm); color: var(--wp-accent-text); text-decoration: none; }
 .wpc-upd__cmd { background: var(--wp-bg-1); border: 1px solid var(--wp-border); border-radius: var(--wp-radius); padding: var(--wp-space-3); font-size: var(--wp-text-sm); overflow-x: auto; margin: 0; }

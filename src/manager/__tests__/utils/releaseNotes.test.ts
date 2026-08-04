@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderReleaseNotes } from "../../utils/releaseNotes";
+import { renderReleaseNotes, tailChangeCount } from "../../utils/releaseNotes";
 
 describe("renderReleaseNotes", () => {
   it("escapes raw HTML so scripts cannot execute", () => {
@@ -137,5 +137,42 @@ describe("renderReleaseNotes — modal cut", () => {
   it("falls back to the empty state when nothing precedes the marker", () => {
     expect(renderReleaseNotes("<!-- /modal -->\n\n### Also\n\n- tail only"))
       .toContain("No release notes.");
+  });
+});
+
+describe("tailChangeCount", () => {
+  // The dialog shows highlights only, so without this it ends on a cliff — a
+  // five-change release and an eighty-change one look identical.
+  it("counts the bullets below the cut", () => {
+    const body = [
+      "Headline.",
+      "",
+      "### Highlights",
+      "",
+      "- kept one",
+      "- kept two",
+      "",
+      "<!-- /modal -->",
+      "",
+      "**Group**",
+      "",
+      "- tail one",
+      "- tail two",
+      "- tail three",
+    ].join("\n");
+    expect(tailChangeCount(body)).toBe(3);
+  });
+
+  it("returns 0 with no marker, so older releases claim nothing", () => {
+    expect(tailChangeCount("### Highlights\n\n- one\n- two")).toBe(0);
+  });
+
+  it("ignores bullets that only exist inside a maintainer comment", () => {
+    const body = "a\n\n<!-- /modal -->\n\n- real\n\n<!--\n- not a change\n-->";
+    expect(tailChangeCount(body)).toBe(1);
+  });
+
+  it("handles an empty body", () => {
+    expect(tailChangeCount("")).toBe(0);
   });
 });

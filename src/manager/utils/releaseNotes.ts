@@ -81,6 +81,22 @@ function cutAtModalMarker(md: string): string {
 
 /** HTML comments are invisible on GitHub but would render as escaped text
  *  here, so drop them regardless of whether the cut marker was found. */
+/**
+ * How many bullet points sit BELOW the modal cut.
+ *
+ * The dialog shows only the highlights, which would otherwise end with no sign
+ * that the release contains anything else — the reader cannot tell a
+ * five-change release from an eighty-change one. Returns 0 when there is no
+ * cut marker (every release before it existed) so nothing is claimed.
+ */
+export function tailChangeCount(md: string): number {
+  if (!md) return 0;
+  const at = md.search(MODAL_CUT);
+  if (at === -1) return 0;
+  const tail = stripComments(md.slice(at));
+  return (tail.match(/^\s*[-*]\s+\S/gm) ?? []).length;
+}
+
 function stripComments(md: string): string {
   return md.replace(/<!--[\s\S]*?-->/g, "");
 }
