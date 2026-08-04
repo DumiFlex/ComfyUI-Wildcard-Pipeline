@@ -11,6 +11,10 @@ import { useCategoryStore } from "../stores/categoryStore";
 import CategoryChip from "../components/CategoryChip.vue";
 import { useRecentStore } from "../stores/recentStore";
 import { useModuleStore } from "../stores/moduleStore";
+import { useEngagementStore, measureSubstance } from "../stores/engagementStore";
+import { useReleaseCheck } from "../composables/useReleaseCheck";
+import WhatsNewCard from "../components/WhatsNewCard.vue";
+import StarPrompt from "../components/StarPrompt.vue";
 import { useBundleStore } from "../stores/bundleStore";
 
 /** Stat-tile + recent-row metadata. `type` is the ModuleType for module
@@ -43,6 +47,21 @@ const router = useRouter();
 const categoryStore = useCategoryStore();
 const recentStore = useRecentStore();
 const moduleStore = useModuleStore();
+const engagement = useEngagementStore();
+// Landing view, so this is where "they came back" gets recorded. Idempotent
+// within a calendar day.
+engagement.noteVisit();
+
+const release = useReleaseCheck();
+// The fetched body describes the LATEST release, which is not the installed
+// one while an update is pending — presenting it as "what's new in <your
+// version>" would describe changes the user does not have yet. Only pass it
+// through once the two agree; until then the update dialog owns that story.
+const whatsNewBody = computed<string | null>(() =>
+  release.latestVersion.value === release.current
+    ? (release.releaseBody.value ?? null)
+    : null,
+);
 const bundleStore = useBundleStore();
 
 /** Max rows rendered per tab. The Dashboard list section has more vertical
@@ -395,11 +414,25 @@ async function refresh() {
     refreshing.value = false;
   }
 }
-onMounted(refresh);
+onMounted(async () => {
+  await refresh();
+  // Only meaningful once the catalog is loaded: an existing user is recognised
+  // by already HAVING a real library the first time this store runs. Runs
+  // before noteVisit's day is counted against the threshold, and no-ops on
+  // every subsequent load.
+  engagement.creditIfEstablished(measureSubstance(moduleStore.catalog));
+});
 </script>
 
 <template>
   <div class="wp-page">
+    <WhatsNewCard
+      :version="release.current"
+      :body="whatsNewBody"
+      :url="release.releaseUrl.value ?? null"
+    />
+    <StarPrompt />
+
     <!-- Hero -->
     <div class="wp-hero">
       <div class="wp-hero__icon"><img :src="logoUrl" alt="" /></div>
