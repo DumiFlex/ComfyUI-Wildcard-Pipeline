@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
+  DISPATCH_URL,
+  normalizeRoleId,
   splitBody,
   toDiscordMarkdown,
   buildDescription,
@@ -180,11 +182,104 @@ describe("buildPayload", () => {
     expect(p.allowed_mentions.roles).toEqual([]);
   });
 
+  /**
+   * An unset secret was always safe. A MALFORMED one was not: any truthy string
+   * went straight into `<@&…>`, so a stray space produced a literal `<@&   >`
+   * at the top of the most public message the project sends.
+   */
+  describe("role ping", () => {
+    const content = (roleId) => buildPayload({ version: "v1", body: "x", roleId }).content;
+
+    it("stays silent for every flavour of absent", () => {
+      expect(content(undefined)).toBe("");
+      expect(content(null)).toBe("");
+      expect(content("")).toBe("");
+      expect(content("   ")).toBe("");
+    });
+
+    it("refuses anything that is not a snowflake, rather than guessing", () => {
+      expect(content("not-an-id")).toBe("");
+      expect(content("12345")).toBe("");          // too short
+      expect(content("1234567890123456789012")).toBe(""); // too long
+      expect(content("123abc456def78901")).toBe("");
+    });
+
+    it("never emits a half-formed mention", () => {
+      for (const bad of ["   ", "not-an-id", "<@&>", "@everyone"]) {
+        expect(content(bad)).not.toContain("<@&");
+      }
+    });
+
+    // "Copy ID" and copying the mention text are equally easy mistakes.
+    it("accepts a pasted mention as well as a bare id", () => {
+      expect(content("123456789012345678")).toBe("<@&123456789012345678>");
+      expect(content("<@&123456789012345678>")).toBe("<@&123456789012345678>");
+      expect(content(" 123456789012345678 ")).toBe("<@&123456789012345678>");
+    });
+
+    it("keeps allowed_mentions in step with the content", () => {
+      const bad = buildPayload({ version: "v1", body: "x", roleId: "junk" });
+      expect(bad.allowed_mentions.roles).toEqual([]);
+      const good = buildPayload({ version: "v1", body: "x", roleId: "123456789012345678" });
+      expect(good.allowed_mentions.roles).toEqual(["123456789012345678"]);
+      expect(good.allowed_mentions.parse).toEqual([]);
+    });
+
+    it("normalizeRoleId is the single decision point", () => {
+      expect(normalizeRoleId("<@&123456789012345678>")).toBe("123456789012345678");
+      expect(normalizeRoleId("nope")).toBeUndefined();
+      expect(normalizeRoleId(undefined)).toBeUndefined();
+    });
+  });
+
   it("pings only the configured role, and only when configured", () => {
     expect(buildPayload({ version: "v1", body: "x" }).content).toBe("");
-    const p = buildPayload({ version: "v1", body: "x", roleId: "123" });
-    expect(p.content).toBe("<@&123>");
-    expect(p.allowed_mentions.roles).toEqual(["123"]);
+    const p = buildPayload({ version: "v1", body: "x", roleId: "123456789012345678" });
+    expect(p.content).toBe("<@&123456789012345678>");
+    expect(p.allowed_mentions.roles).toEqual(["123456789012345678"]);
+  });
+
+  // A webhook posts under whatever name and avatar it was created with —
+  // Discord's default is a generic name ("Captain Hook") and a placeholder
+  // image, which is exactly what v2.12.0 went out as.
+  it("posts under the project's own name and avatar, not the webhook's", () => {
+    const p = buildPayload({ version: "v1", body: "x" });
+    expect(p.username).toBe("Wildcard Pipeline");
+    expect(p.avatar_url).toMatch(/^https:\/\/.+\.png$/);
+  });
+
+  it("uses a raster avatar — Discord will not render an SVG", () => {
+    expect(buildPayload({ version: "v1", body: "x" }).avatar_url).not.toMatch(/\.svg$/i);
+  });
+
+  it("lets a caller override the identity", () => {
+    const p = buildPayload({
+      version: "v1", body: "x", username: "WP Staff", avatarUrl: "https://x/a.png",
+    });
+    expect(p.username).toBe("WP Staff");
+    expect(p.avatar_url).toBe("https://x/a.png");
+  });
+
+  /**
+   * Two channels, deliberately asymmetric. The staff copy is the review step,
+   * so it carries the button that publishes it onward; the public copy is the
+   * announcement itself and must not tell readers how to re-send it.
+   */
+  it("gives the staff copy a publish link, so review and button are one thing", () => {
+    const p = buildPayload({ version: "v1", body: "x", channel: "staff" });
+    const field = p.embeds[0].fields[0];
+    expect(field.value).toContain(DISPATCH_URL);
+    expect(field.value).toMatch(/channel.*public/i);
+  });
+
+  it("defaults to the staff copy — the safe one to send by accident", () => {
+    expect(buildPayload({ version: "v1", body: "x" }).embeds[0].fields).toBeTruthy();
+  });
+
+  it("leaves the public copy without the publish link", () => {
+    const p = buildPayload({ version: "v1", body: "x", channel: "public" });
+    // `undefined`, not `[]` — an empty field block renders as dead space.
+    expect(p.embeds[0].fields).toBeUndefined();
   });
 
   it("stays inside the embed description cap", () => {
@@ -208,6 +303,26 @@ describe("buildRollupPayload", () => {
     expect(p.embeds[0].title).toBe("Wildcard Pipeline v2.12.0 — everything since v2.10.2");
     expect(p.embeds[0].description).toContain("**v2.12.0**");
     expect(p.embeds[0].description).toContain("**v2.11.0**");
+  });
+
+  it("carries the channel through a roll-up", () => {
+    const staff = buildRollupPayload({
+      releases: [{ version: "v2.12.0", body: "- x" }], sinceVersion: "v2.11.0", channel: "staff",
+    });
+    const pub = buildRollupPayload({
+      releases: [{ version: "v2.12.0", body: "- x" }], sinceVersion: "v2.11.0", channel: "public",
+    });
+    expect(staff.embeds[0].fields).toBeTruthy();
+    expect(pub.embeds[0].fields).toBeUndefined();
+  });
+
+  it("keeps the identity on a roll-up too", () => {
+    const p = buildRollupPayload({
+      releases: [{ version: "v2.12.0", body: "- x" }],
+      sinceVersion: "v2.10.2",
+    });
+    expect(p.username).toBe("Wildcard Pipeline");
+    expect(p.avatar_url).toMatch(/\.png$/);
   });
 
   it("leads with the newest, which is what people decide to install", () => {

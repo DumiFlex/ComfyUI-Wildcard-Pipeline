@@ -27,6 +27,54 @@ export const EMBED_DESCRIPTION_LIMIT = 4096;
 export const BRAND_COLOR = 0x8b5cf6;
 
 /**
+ * Who the post appears to be from.
+ *
+ * A webhook posts under whatever name and avatar it was created with — the
+ * Discord default is a generic name like "Captain Hook" and a placeholder
+ * image, which is what an announcement went out as. `username` and
+ * `avatar_url` override that PER MESSAGE, so the identity lives here rather
+ * than in a webhook's settings: it stays right if the webhook is ever rotated
+ * or recreated, and it is the same in every channel the automation posts to.
+ */
+export const WEBHOOK_USERNAME = "Wildcard Pipeline";
+
+/**
+ * Discord fetches this server-side, so it has to be a public raster URL — an
+ * SVG will not render, which rules out the repo's `favicon.svg`. Pinned to
+ * `main` rather than a tag so replacing the logo does not need a code change.
+ */
+export const WEBHOOK_AVATAR_URL =
+  "https://raw.githubusercontent.com/DumiFlex/ComfyUI-Wildcard-Pipeline/main/public/images/web-app-manifest-512x512.png";
+
+/**
+ * A role id we are willing to turn into a ping, or `undefined`.
+ *
+ * An unset secret was always safe, but a MALFORMED one was not: any truthy
+ * string went straight into `<@&…>`, so a stray space produced a literal
+ * `<@&   >` at the top of the announcement and a pasted mention produced
+ * `<@&<@&123>>`. Both render as visible junk in the most public message the
+ * project sends.
+ *
+ * Accepts a bare snowflake or the `<@&123>` form, since "Copy ID" and copying
+ * the mention text are equally easy mistakes to make. Anything else is
+ * rejected rather than guessed at — a ping that silently does not happen is a
+ * much smaller problem than a broken one that does.
+ */
+export function normalizeRoleId(raw) {
+  if (typeof raw !== "string" && typeof raw !== "number") return undefined;
+  const trimmed = String(raw).trim();
+  if (!trimmed) return undefined;
+  const unwrapped = trimmed.replace(/^<@&(\d+)>$/, "$1");
+  // Discord snowflakes are 17-20 digits today; the range leaves room without
+  // accepting arbitrary numbers.
+  return /^\d{17,20}$/.test(unwrapped) ? unwrapped : undefined;
+}
+
+/** Where the manual "publish to the public channel" run is started. */
+export const DISPATCH_URL =
+  "https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/actions/workflows/discord-announce.yml";
+
+/**
  * Split a release body into the part worth announcing and what is left behind.
  *
  * The cut is the same one the in-app update dialog makes, for the same reason:
@@ -162,11 +210,19 @@ export function buildPayload({
   body,
   releaseUrl,
   compareUrl,
-  roleId,
+  roleId: rawRoleId,
+  username = WEBHOOK_USERNAME,
+  avatarUrl = WEBHOOK_AVATAR_URL,
+  channel = "staff",
   installHint = 'ComfyUI Manager → search "Wildcard Pipeline" → Update → restart ComfyUI',
 }) {
   const description = buildDescription(body, { compareUrl });
+  // Normalised HERE rather than at the call site so every caller — CLI,
+  // roll-up, future ones — gets the same guarantee.
+  const roleId = normalizeRoleId(rawRoleId);
   return {
+    username,
+    avatar_url: avatarUrl,
     content: roleId ? `<@&${roleId}>` : "",
     allowed_mentions: { parse: [], roles: roleId ? [roleId] : [] },
     embeds: [
@@ -175,10 +231,35 @@ export function buildPayload({
         url: releaseUrl || undefined,
         description,
         color: BRAND_COLOR,
+        fields: reviewFields(channel),
         footer: { text: installHint },
       },
     ],
   };
+}
+
+/**
+ * The staff copy carries its own publish button; the public copy does not.
+ *
+ * This is what makes the staff channel a review step rather than a duplicate
+ * feed: the post you are reading is the post that will go out, and the link to
+ * send it is attached to it. Without that, "go and publish it" is a separate
+ * instruction living in someone's head.
+ *
+ * Returned as `undefined` for the public channel rather than an empty array —
+ * Discord rejects `fields: []` on some client versions, and an empty field
+ * block would render as dead space in the announcement everyone sees.
+ */
+function reviewFields(channel) {
+  if (channel !== "staff") return undefined;
+  return [
+    {
+      name: "Ready to go public?",
+      value:
+        `[Run the workflow](${DISPATCH_URL}) with **channel: public** and ` +
+        "**dry_run: false** to post this to the announcement channel.",
+    },
+  ];
 }
 
 /**
@@ -191,7 +272,10 @@ export function buildPayload({
  *
  * `releases` is newest-first: `{ version, body }`.
  */
-export function buildRollupPayload({ releases, sinceVersion, releaseUrl, roleId, installHint }) {
+export function buildRollupPayload({
+  releases, sinceVersion, releaseUrl, roleId, installHint, username, avatarUrl,
+  channel = "staff",
+}) {
   const latest = releases[0];
   const sections = releases.map((r) => {
     const { head } = splitBody(r.body);
@@ -205,6 +289,9 @@ export function buildRollupPayload({ releases, sinceVersion, releaseUrl, roleId,
     releaseUrl,
     roleId,
     installHint,
+    username,
+    avatarUrl,
+    channel,
   });
   base.embeds[0].title = sinceVersion
     ? `Wildcard Pipeline ${latest?.version ?? ""} — everything since ${sinceVersion}`
