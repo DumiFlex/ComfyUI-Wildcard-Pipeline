@@ -95,12 +95,50 @@ def _build_config_response() -> dict[str, Any]:
     }
 
 
+def _allowed_move_paths() -> set[Path]:
+    """The only paths a deferred move may read from or write to.
+
+    An allowlist rather than a sanitiser. The DB can legitimately live in
+    exactly three places, all computed here on the server, under one fixed
+    filename — so there is no reason to accept a client-supplied path at all,
+    and every reason not to: `execute_pending_move` runs `shutil.copy2` /
+    `shutil.move` at plugin load, as whatever user runs ComfyUI.
+
+    The live path is included because `WP_DB_PATH` / `COMFYUI_USER_DIR` can
+    place the database outside the three defaults, and a user who set those
+    must still be able to move off them.
+    """
+    out: set[Path] = set()
+    for fn in (user_location_path, global_location_path, root_location_path):
+        try:
+            p = fn()
+        except Exception:  # a location that cannot be resolved is simply not offered
+            continue
+        if p:
+            out.add(Path(p).resolve())
+    try:
+        out.add(resolve_db_path_with_source()[0].resolve())
+    except Exception:
+        pass
+    return out
+
+
 def _validate_pending_move(pm: Any) -> tuple[dict[str, str] | None, str | None]:
     """Validate a pending_move payload.
 
     Returns ``(value, None)`` on success where ``value`` is either a
     normalized dict or ``None`` (explicit clear). Returns ``(None, err)``
-    on validation failure."""
+    on validation failure.
+
+    SECURITY: `from` and `to` must each be one of the known database
+    locations. Requiring merely an ABSOLUTE path — which is all this used to
+    do — let an unauthenticated `PUT /wp/api/database/config` schedule a copy
+    or move between any two paths on the host, executed on the next ComfyUI
+    start. Every ComfyUI route is unauthenticated by default, so that was a
+    full arbitrary-read and arbitrary-overwrite primitive: copy a private key
+    into `web/`, which this plugin serves at `/wp/<path>`, or move any file
+    anywhere and destroy it.
+    """
     if pm is None:
         return None, None
     if not isinstance(pm, dict):
@@ -114,7 +152,22 @@ def _validate_pending_move(pm: Any) -> tuple[dict[str, str] | None, str | None]:
         return None, f"pending_move.mode must be one of: {sorted(_VALID_MODES)}"
     if not Path(src).is_absolute() or not Path(dst).is_absolute():
         return None, "pending_move.from and pending_move.to must be absolute paths"
-    return {"from": src, "to": dst, "mode": mode}, None
+
+    allowed = _allowed_move_paths()
+    # `resolve()` collapses `..` and follows symlinks, so neither traversal nor
+    # a symlink planted at an allowed path can smuggle a different target past
+    # the membership test.
+    src_r = Path(src).resolve()
+    dst_r = Path(dst).resolve()
+    if src_r not in allowed or dst_r not in allowed:
+        return None, (
+            "pending_move.from and pending_move.to must each be one of this "
+            "plugin's known database locations"
+        )
+    if src_r == dst_r:
+        return None, "pending_move.from and pending_move.to must differ"
+    # Store the RESOLVED paths: what was validated is what gets executed.
+    return {"from": str(src_r), "to": str(dst_r), "mode": mode}, None
 
 
 async def get_config(request: web.Request) -> web.Response:
