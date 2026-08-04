@@ -86,6 +86,13 @@ interface Props {
    *  Cannot be inferred from `producer`: a graph-aware host legitimately finds
    *  no writer. */
   graphAware?: boolean;
+  /** True only where a host actually LISTENS for `remap` — today the editable
+   *  `RichTextInput`. `RichTextPreview` renders the same chips read-only, so a
+   *  broken chip there has nowhere to go and the hover card must not offer a
+   *  fix that surface cannot perform. Defaults false: promising nothing is the
+   *  safe direction, since a caller that forgets the prop is exactly the
+   *  caller with no handler wired. */
+  remappable?: boolean;
 }
 
 /** Structural mirror of `extension/graph.ts:VarProducer`, declared locally so
@@ -117,6 +124,7 @@ const props = withDefaults(defineProps<Props>(), {
   inScope: false,
   producer: undefined,
   graphAware: false,
+  remappable: false,
 });
 
 const emit = defineEmits<{
@@ -513,8 +521,15 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
           <div v-else class="wp-refchip-pop__broken">
             this reference stored no name, so only the id is known
           </div>
-          <div class="wp-refchip-pop__broken wp-refchip-pop__broken--fix">
+          <div
+            v-if="remappable"
+            class="wp-refchip-pop__broken wp-refchip-pop__broken--fix"
+            data-test="refchip-broken-fix"
+          >
             click the chip to point it at another module
+          </div>
+          <div v-else class="wp-refchip-pop__broken wp-refchip-pop__broken--fix">
+            open this value in the SPA editor to repoint it
           </div>
         </template>
         <!-- Which pool produced that count. Without it the number is

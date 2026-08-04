@@ -522,10 +522,29 @@ describe("RefChip — broken refs", () => {
     w.unmount();
   });
 
-  it("says how to fix it", async () => {
+  // Only the editable RichTextInput listens for `remap`. RichTextPreview
+  // renders the same chips read-only — on the canvas the derivation modal's
+  // summary column is a preview, so a card promising "click to repoint" there
+  // described something that surface cannot do.
+  it("offers the in-place fix only where a host can actually perform it", async () => {
+    vi.useFakeTimers();
+    const w = brokenChip({ remappable: true });
+    expect(await openCard(w)).toMatch(/point it at another module/i);
+    w.unmount();
+  });
+
+  it("points read-only surfaces at the editor instead of promising a click", async () => {
     vi.useFakeTimers();
     const w = brokenChip();
-    expect(await openCard(w)).toMatch(/point it at another module/i);
+    const text = await openCard(w);
+    expect(text).toMatch(/SPA editor/i);
+    expect(document.querySelector('[data-test="refchip-broken-fix"]')).toBeNull();
+    w.unmount();
+  });
+
+  it("defaults to making no promise — a caller that forgets has no handler", () => {
+    const w = brokenChip();
+    expect(w.props("remappable")).toBe(false);
     w.unmount();
   });
 

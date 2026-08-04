@@ -2656,6 +2656,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
           :graph-aware="graphAware"
           :index="atom.kind === 'var' ? atom.index : undefined"
           :data-atom-index="idx"
+          remappable
           @click="(ev: MouseEvent) => onChipClick(idx, ev)"
           @remap="(ev: MouseEvent) => onChipRemap(idx, ev)"
         />
