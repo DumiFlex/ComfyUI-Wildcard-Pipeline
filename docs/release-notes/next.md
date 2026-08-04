@@ -11,7 +11,13 @@ Full support for ComfyUI's Nodes 2.0 renderer, and a pass over everything to do 
 <!-- /modal -->
 
 <details>
-<summary><b>Also in this release</b> — 20 smaller changes</summary>
+<summary><b>Also in this release</b> — 26 smaller changes</summary>
+
+**Sequences and seeds**
+
+- Lock a frame's seed or bypass it straight from its chip on the Context Loop — shift-click to lock, alt-click to bypass — instead of opening the per-iteration seeds dialog
+- The Seed List gets the same frame chips; clicking one locks its seed, and frames bypassed by a wired Context Loop are shown but not editable there, since that setting belongs to the loop
+- The frame grid collapses, and scrolls once it outgrows four rows, so a hundred-frame loop no longer owns the canvas. Collapsed state is saved with the workflow, and the header keeps reporting how many frames are locked or bypassed
 
 **Library and organisation**
 
@@ -27,6 +33,12 @@ Full support for ComfyUI's Nodes 2.0 renderer, and a pass over everything to do 
 - Reference hovers name the pool they counted and flag drift against the library
 - Wildcard option chips get the same hover card as every other surface
 - Sub-category filter state is derived from the parsed expression, so the chips match what the filter actually does
+- A reference to a module you have deleted from the library now reads as broken. It used to keep the deleted module's name and colour, and its hover card quoted the option count the module had before it was deleted — the node badge said the reference was broken while the chip inside the editor disagreed
+
+**The manager**
+
+- **What's new** moved to its own page, reached from the topbar with a dot when there is something unread. It is also the only place to read the notes for the version you are running — the update pill only exists while a newer one is available
+- The update check no longer burns through GitHub's hourly allowance. It was making one request per page load per consumer, so a few dozen reloads could exhaust the quota for everything else on that connection; results are now reused for six hours and a refusal is honoured rather than retried
 
 **Editing and layout**
 

@@ -33,6 +33,7 @@ Stock ComfyUI prompt nodes either take a single literal string or pick from a fl
 - **Persistent library** — a manager SPA backed by SQLite stores reusable modules, frozen bundles, prompt templates, and a category tree. Browse / edit / fork / push from the canvas.
 - **Inspector** — `WP Debug` shows the post-run snapshot, per-module trace, per-wildcard picks, and the conflict-scanner warnings.
 - **Type-coercion helpers** — `WP Var → Int / Float / Bool` parse typed values out of any `$variable` so wildcards can drive image width, step count, sampler cfg, conditional switches.
+- **Works on both renderers** — the legacy canvas and ComfyUI's Nodes 2.0 Vue renderer, including switching between them with a workflow already open.
 
 ## Installation
 

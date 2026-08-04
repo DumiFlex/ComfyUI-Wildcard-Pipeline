@@ -38,7 +38,12 @@ export function splitBody(md) {
   const at = String(md ?? "").search(MODAL_CUT);
   if (at === -1) return { head: String(md ?? ""), tail: "", tailCount: 0 };
   const head = md.slice(0, at);
-  const tail = stripDetails(md.slice(at));
+  // Count against comment-stripped text, NOT details-stripped text. The
+  // "Also in this release" bullets live INSIDE the <details> block, so
+  // stripping it first counts nothing real — while the authoring guidance in
+  // the trailing HTML comment contains bullets of its own that must not be
+  // counted. Getting this backwards reported a 26-change release as 3.
+  const tail = stripComments(md.slice(at));
   const tailCount = (tail.match(/^\s*[-*]\s+\S/gm) ?? []).length;
   return { head, tail, tailCount };
 }

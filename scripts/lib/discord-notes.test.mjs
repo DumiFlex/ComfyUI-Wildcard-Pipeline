@@ -117,6 +117,27 @@ describe("buildDescription", () => {
     expect(out).toContain("](https://x/compare)");
   });
 
+  // The "Also in this release" bullets live INSIDE a <details> block, and the
+  // file ends with an authoring comment that contains bullets of its own.
+  // Stripping details before counting reported a real 26-change release as 3.
+  it("counts the bullets inside <details>, and ignores those in comments", () => {
+    const body = [
+      "- highlight",
+      "<!-- /modal -->",
+      "<details><summary>Also in this release — 3 smaller changes</summary>",
+      "- one",
+      "- two",
+      "- three",
+      "</details>",
+      "<!--",
+      "  - not a change, this is authoring guidance",
+      "  - nor is this",
+      "-->",
+    ].join("\n");
+    expect(splitBody(body).tailCount).toBe(3);
+    expect(buildDescription(body)).toMatch(/plus 3 smaller changes/);
+  });
+
   it("says nothing about a tail that does not exist", () => {
     expect(buildDescription("- only this")).not.toMatch(/smaller change/);
   });
