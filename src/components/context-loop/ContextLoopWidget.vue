@@ -40,6 +40,10 @@ const props = withDefaults(
 
 const emit = defineEmits<{ "update:modelValue": [next: ContextLoopConfig] }>();
 
+/** Frame-grid collapse. Owned by the widget glue so it can persist to
+ *  `node.properties` and survive a workflow save. */
+const chipsCollapsed = defineModel<boolean>("chipsCollapsed", { default: false });
+
 const STRATEGIES: { id: LoopStrategy; label: string; hint: string }[] = [
   { id: "hash_index", label: "hash", hint: "Independent per-iteration; recommended for varied results." },
   { id: "sequential", label: "sequential", hint: "base, base+1, base+2, … Predictable diffs." },
@@ -212,6 +216,7 @@ function toggleTotalInternal(): void {
       :count="Math.max(1, count ?? 1)"
       :locked="[...lockSet]"
       :bypassed="[...bypassSet]"
+      v-model:collapsed="chipsCollapsed"
       :current="currentFrame"
       selectable
       show-base

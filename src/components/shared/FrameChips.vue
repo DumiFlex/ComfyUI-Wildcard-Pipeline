@@ -20,7 +20,7 @@
  * that covers the node you are reading; the modal stays for what it is
  * actually good at (lock all, paste a series, out-of-range locks).
  */
-import { computed, ref } from "vue";
+import { computed } from "vue";
 
 const props = withDefaults(
   defineProps<{
@@ -68,14 +68,18 @@ const emit = defineEmits<{
 }>();
 
 /**
- * Collapse is deliberately NOT persisted.
+ * Collapse state, persisted by the host.
  *
- * It would have to live on `node.properties` to survive a workflow save, and
- * a hidden grid that stays hidden across sessions is a good way for someone
- * to forget a frame is locked. Re-opening the node costs one click; a
- * forgotten lock costs a confusing run.
+ * `defineModel` so this works both ways: bound, the widget glue owns the value
+ * and writes it to `node.properties` (the workflow-JSON serialization root, and
+ * the only place per-node UI state survives a save); unbound, it falls back to
+ * a local ref, which is what keeps the component usable standalone.
+ *
+ * The risk a persisted collapse carries is someone forgetting a frame is
+ * locked behind a grid that stays hidden across sessions. That is why the
+ * header keeps reporting counts while collapsed — see `summary`.
  */
-const collapsed = ref(false);
+const collapsed = defineModel<boolean>("collapsed", { default: false });
 
 const frames = computed(() =>
   Array.from({ length: Math.max(1, props.count) }, (_, i) => i),

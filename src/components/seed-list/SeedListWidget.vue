@@ -50,6 +50,10 @@ const props = withDefaults(
 
 const emit = defineEmits<{ "update:modelValue": [next: SeedListConfig] }>();
 
+/** Frame-grid collapse. Owned by the widget glue so it can persist to
+ *  `node.properties` and survive a workflow save. */
+const chipsCollapsed = defineModel<boolean>("chipsCollapsed", { default: false });
+
 const STRATEGIES: { id: SeedListStrategy; label: string; hint: string }[] = [
   { id: "hash_index", label: "hash", hint: "Independent per-iteration; recommended for varied results." },
   { id: "sequential", label: "sequential", hint: "base, base+1, base+2, … Predictable diffs." },
@@ -213,6 +217,7 @@ function toggleOverrideStrategy(): void {
     <FrameChips
       label="seeds"
       test-id="seedlist-frame"
+      v-model:collapsed="chipsCollapsed"
       :count="Math.max(1, count ?? 1)"
       :locked="[...lockSet]"
       :bypassed="bypassedFrames"

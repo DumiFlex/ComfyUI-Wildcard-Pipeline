@@ -105,6 +105,15 @@ describe("FrameChips", () => {
       expect(summary.text()).toMatch(/1 bypassed/);
     });
 
+    it("is controllable by the host, which persists it to node.properties", async () => {
+      const w = mount(FrameChips, { props: { count: 4, collapsed: true } });
+      // Starts collapsed because the host said so — a saved workflow reopens
+      // the way it was left.
+      expect(w.find('[data-test="loop-frames-grid"]').exists()).toBe(false);
+      await w.find('[data-test="loop-frames-toggle"]').trigger("click");
+      expect(w.emitted("update:collapsed")?.[0]).toEqual([false]);
+    });
+
     it("shows no summary when nothing is set", () => {
       const w = mount(FrameChips, { props: { count: 6 } });
       expect(w.find('[data-test="loop-frames-summary"]').exists()).toBe(false);

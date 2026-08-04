@@ -26,9 +26,37 @@ const ContextLoopWidget = defineAsyncComponent(
 
 interface ContextLoopHostNode extends MountTargetNode, LiteNodeLike {
   mode?: number;
+  properties?: Record<string, unknown>;
 }
 
 export function create(node: ContextLoopHostNode, inputName: string) {
+  /**
+   * Frame-grid collapse, persisted so it survives a workflow save.
+   *
+   * `node.properties` is the serialization root — transient session state
+   * belongs in a WeakMap, but this has to come back on reload or the toggle is
+   * pointless. Keyed `wp_*` per the extension-isolation convention.
+   *
+   * The ref is the source of truth for rendering (so a toggle repaints
+   * immediately) and writes through to properties. `syncChipsCollapsed` re-reads
+   * them after ComfyUI restores a workflow, because `create()` runs before the
+   * saved properties are applied — without it a collapsed grid would come back
+   * open.
+   */
+  const CHIPS_COLLAPSED_KEY = "wp_frame_chips_collapsed";
+
+  function readChipsCollapsed(): boolean {
+    return !!(node.properties ?? {})[CHIPS_COLLAPSED_KEY];
+  }
+  const chipsCollapsed = ref<boolean>(readChipsCollapsed());
+  function syncChipsCollapsed(): void {
+    chipsCollapsed.value = readChipsCollapsed();
+  }
+  function onChipsCollapsed(next: boolean): void {
+    chipsCollapsed.value = next;
+    node.properties = node.properties ?? {};
+    node.properties[CHIPS_COLLAPSED_KEY] = next;
+  }
   const initialRaw = "";
   const config = ref<ContextLoopConfig>(
     parseContextLoopConfig(initialRaw) ?? emptyContextLoopConfig(),
@@ -79,6 +107,8 @@ export function create(node: ContextLoopHostNode, inputName: string) {
           count: count.value,
           previousSeeds: previousSeeds.value,
           "onUpdate:modelValue": onUpdate,
+          chipsCollapsed: chipsCollapsed.value,
+          "onUpdate:chipsCollapsed": onChipsCollapsed,
         });
     },
   };
@@ -86,6 +116,8 @@ export function create(node: ContextLoopHostNode, inputName: string) {
   host = createDomWidgetHost(node, inputName, wrapper, {
     initialValue: serializeContextLoopConfig(config.value),
     onValueRestored: (raw: string) => {
+      // Saved properties land with the workflow, after `create()` ran.
+      syncChipsCollapsed();
       // ComfyUI restored the widget value from workflow JSON. Re-parse
       // through the recovery layer so a corrupt save still loads.
       config.value = parseContextLoopConfig(raw);
