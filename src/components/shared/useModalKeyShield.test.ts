@@ -107,4 +107,48 @@ describe("useModalKeyShield", () => {
     window.removeEventListener("keydown", atWindow);
     wrapper.unmount();
   });
+
+  it("takes focus on open, so keys land inside instead of on the trigger", async () => {
+    // The real leak: clicking the button that OPENS a modal leaves focus on
+    // that button, which is outside the overlay, so keystrokes never traverse
+    // the shield. Measured before this: ["a","a","r"] all reached window.
+    const trigger = document.createElement("button");
+    document.body.appendChild(trigger);
+    trigger.focus();
+    expect(document.activeElement).toBe(trigger);
+
+    const wrapper = mount(Harness, { attachTo: document.body });
+    await nextTick();
+    expect(wrapper.element.contains(document.activeElement)).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("blocks keys aimed OUTSIDE the modal while it is open", async () => {
+    const atWindow = vi.fn();
+    window.addEventListener("keydown", atWindow);
+    const outside = document.createElement("button");
+    document.body.appendChild(outside);
+    const wrapper = mount(Harness, { attachTo: document.body });
+    await nextTick();
+
+    outside.dispatchEvent(new KeyboardEvent("keydown", { key: "r", bubbles: true }));
+    expect(atWindow).not.toHaveBeenCalled();
+    window.removeEventListener("keydown", atWindow);
+    wrapper.unmount();
+  });
+
+  it("still lets Escape out, so close handlers keep working", async () => {
+    const atWindow = vi.fn();
+    window.addEventListener("keydown", atWindow);
+    const outside = document.createElement("button");
+    document.body.appendChild(outside);
+    const wrapper = mount(Harness, { attachTo: document.body });
+    await nextTick();
+
+    outside.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(atWindow).toHaveBeenCalledTimes(1);
+    window.removeEventListener("keydown", atWindow);
+    wrapper.unmount();
+  });
+
 });

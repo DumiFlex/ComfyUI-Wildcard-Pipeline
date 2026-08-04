@@ -22,6 +22,17 @@ import { onBeforeUnmount, watch, type Ref } from "vue";
  * modal has already had its turn by then — inner `@keydown` handlers, input
  * defaults, IME — and the event simply stops before it can climb to window.
  *
+ * That alone is not enough, because a key only traverses the overlay if it is
+ * TARGETED inside it. Open a modal and type without clicking in it first and
+ * `document.activeElement` is still `<body>`, so the event goes body → window
+ * and never passes the shield at all — which is how `a` kept reaching ComfyUI
+ * even with the root listener in place. Two additions close that:
+ *
+ *   - focus the overlay when it opens, so keystrokes land inside the modal;
+ *   - guard at the document for keys targeted OUTSIDE the open modal, since a
+ *     modal owns the keyboard while it is up. Escape still passes, so the
+ *     modal's own window-level close handler keeps working.
+ *
  * Because of that, a modal's own key handling must live on the root too, not
  * on `window`: a window listener sits ABOVE the shield and would never see
  * keys pressed inside its own modal. `onKey` is where that logic goes.
@@ -58,10 +69,25 @@ export function useModalKeyShield(
     event.stopPropagation();
   };
 
+  // Keys aimed outside the open modal — the canvas, the body — never reach the
+  // overlay, so they are stopped here instead. Document bubble runs before
+  // window, where ComfyUI's keybindHandler lives.
+  const onOutside = (event: KeyboardEvent): void => {
+    if (!bound) return;
+    const target = event.target;
+    if (target instanceof Node && bound.contains(target)) return;
+    // Escape belongs to whoever wants to close something.
+    if (event.key === "Escape") return;
+    if (options.passThrough?.(event)) return;
+    event.stopPropagation();
+  };
+
   const detach = (): void => {
     if (!bound) return;
     bound.removeEventListener("keydown", onKeydown);
     bound.removeEventListener("keyup", onKeyup);
+    document.removeEventListener("keydown", onOutside);
+    document.removeEventListener("keyup", onOutside);
     bound = null;
   };
 
@@ -73,6 +99,15 @@ export function useModalKeyShield(
       bound = el;
       el.addEventListener("keydown", onKeydown);
       el.addEventListener("keyup", onKeyup);
+      document.addEventListener("keydown", onOutside);
+      document.addEventListener("keyup", onOutside);
+      // Pull focus in, so typing lands inside the modal rather than on <body>.
+      // Only when focus is not already somewhere inside — an autofocused input
+      // must keep it.
+      if (!el.contains(document.activeElement)) {
+        if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "-1");
+        el.focus({ preventScroll: true });
+      }
     },
     { immediate: true, flush: "post" },
   );
