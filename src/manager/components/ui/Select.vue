@@ -62,9 +62,11 @@ const markerWidth = computed<string | null>(() => {
   return hasDot ? "8px" : null;
 });
 
-/** Whether to advertise type-to-filter. Below this many options the list is
- *  scannable at a glance and the hint is just noise. */
-const FILTER_HINT_MIN_OPTIONS = 6;
+/** Whether to advertise type-to-filter. Only a single-option menu has nothing
+ *  to filter; anything above that benefits, and the capability was invisible
+ *  until you already knew about it. An earlier threshold of six hid the hint on
+ *  exactly the menus users were checking. */
+const FILTER_HINT_MIN_OPTIONS = 2;
 const showFilterHint = computed(() => props.options.length >= FILTER_HINT_MIN_OPTIONS);
 
 /** Options narrowed by `query` (case-insensitive substring on the label).

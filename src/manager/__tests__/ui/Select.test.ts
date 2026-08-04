@@ -267,9 +267,19 @@ describe("Select.vue — type-to-filter discoverability", () => {
     wrap.unmount();
   });
 
-  it("stays quiet on a short list, where the hint is just noise", async () => {
+  it("shows on a short list too — three options is where users looked", async () => {
     const wrap = mount(Select, {
       props: { modelValue: null, options: opts },
+      attachTo: document.body,
+    });
+    await wrap.get("[data-test='select-trigger']").trigger("click");
+    expect(document.querySelector("[data-test='select-filter-hint']")).not.toBeNull();
+    wrap.unmount();
+  });
+
+  it("stays quiet when there is nothing to filter", async () => {
+    const wrap = mount(Select, {
+      props: { modelValue: null, options: [{ value: "a", label: "Alpha" }] },
       attachTo: document.body,
     });
     await wrap.get("[data-test='select-trigger']").trigger("click");

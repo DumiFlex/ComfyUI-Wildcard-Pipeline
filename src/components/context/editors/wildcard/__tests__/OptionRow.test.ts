@@ -62,7 +62,7 @@ describe("OptionRow", () => {
     const opt = { id: "b1", value: "{2$$, $$@{ad00acd5}|warm}", weight: 1, sub_categories: [] };
     const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
     // The inner @{uuid} arm renders as a resolved ref chip, not raw uuid text.
-    const ref = w.find(".opt__tok--ref");
+    const ref = w.find(".wp-refchip--ref");
     expect(ref.exists()).toBe(true);
     expect(ref.text()).toContain("@mood");
     expect(w.find(".opt__tok--multi").exists()).toBe(true); // scaffolding coloured
@@ -73,11 +73,11 @@ describe("OptionRow", () => {
     _setForTests("ad00acd5", { name: "mood", varBinding: "mood" });
     const opt = { id: "b3", value: "{3$$, $$@{ad00acd5#mood!null}}", weight: 1, sub_categories: [] };
     const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
-    const ref = w.find(".opt__tok--ref");
+    const ref = w.find(".wp-refchip--ref");
     expect(ref.exists()).toBe(true);
     // The leaked `!null` is detected → ban (null-excluded) indicator shows.
-    expect(ref.find(".opt__tok-filter").exists()).toBe(true);
-    expect(ref.find(".opt__tok-nonull").exists()).toBe(true);
+    expect(ref.find(".wp-refchip__filter").exists()).toBe(true);
+    expect(ref.find(".wp-refchip__nonull").exists()).toBe(true);
     // Label is the clean name, not `@mood!null`.
     expect(ref.text()).toContain("@mood");
     expect(ref.text()).not.toContain("!null");
@@ -87,7 +87,7 @@ describe("OptionRow", () => {
     _setForTests("ad00acd5", { name: "hair", varBinding: "hair" });
     const opt = { id: "b2", value: "{warm|@{ad00acd5}}", weight: 1, sub_categories: [] };
     const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
-    expect(w.find(".opt__tok--ref").exists()).toBe(true);
+    expect(w.find(".wp-refchip--ref").exists()).toBe(true);
     expect(w.find(".opt__tok--brace").exists()).toBe(true);
     expect(w.find('[data-test="opt-name"]').text()).not.toContain("ad00acd5");
   });
@@ -250,18 +250,21 @@ describe("OptionRow", () => {
   it("renders @{uuid} ref token with raw uuid form when name not yet cached", () => {
     const opt = { id: "o9", value: "city @{a361dbdc} dusk", weight: 1, sub_categories: ["warm"] };
     const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
-    const ref = w.find('[data-test="opt-name"] .opt__tok--ref');
+    const ref = w.find('[data-test="opt-name"] .wp-refchip--ref');
     expect(ref.exists()).toBe(true);
     expect(ref.attributes("data-uuid")).toBe("a361dbdc");
-    expect(ref.find(".opt__tok-label").text()).toBe("@{a361dbdc}");
+    // RefChip prefixes `@` only once a ref RESOLVES; an unresolved one shows
+    // the cached name or bare uuid. Same convention as every other surface,
+    // which is the point of rendering the real component here.
+    expect(ref.find(".wp-refchip__label").text()).toBe("{a361dbdc}");
   });
 
   it("renders @{uuid} ref as @<varBinding> once resolver caches the entry", () => {
     _setForTests("a361dbdc", { name: "subject", varBinding: "subject_name" });
     const opt = { id: "o9", value: "city @{a361dbdc} dusk", weight: 1, sub_categories: ["warm"] };
     const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
-    const ref = w.find('[data-test="opt-name"] .opt__tok--ref');
-    expect(ref.find(".opt__tok-label").text()).toBe("@subject_name");
+    const ref = w.find('[data-test="opt-name"] .wp-refchip--ref');
+    expect(ref.find(".wp-refchip__label").text()).toBe("@subject_name");
   });
 
   it("renders a v2 boolean ref filter as funnel + ban, not inline !null text", () => {
@@ -273,18 +276,21 @@ describe("OptionRow", () => {
       sub_categories: ["canine"],
     };
     const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
-    const ref = w.find('[data-test="opt-name"] .opt__tok--ref');
+    const ref = w.find('[data-test="opt-name"] .wp-refchip--ref');
     expect(ref.exists()).toBe(true);
     // The raw expression + `!null` marker must NOT appear inline anymore.
     expect(ref.text()).not.toContain("!null");
     expect(ref.text()).not.toContain("warm or intense");
     // Compact indicators instead — funnel (expression) + ban (exclude-null),
     // matching the SPA RefChip grammar.
-    expect(ref.find(".opt__tok-funnel").exists()).toBe(true);
-    expect(ref.find(".opt__tok-nonull").exists()).toBe(true);
-    // Full normalized expression lives in the hover title, `!null` peeled.
-    expect(ref.attributes("title")).toContain("warm or intense");
-    expect(ref.attributes("title")).not.toContain("!null");
+    expect(ref.find(".wp-refchip__funnel").exists()).toBe(true);
+    expect(ref.find(".wp-refchip__nonull").exists()).toBe(true);
+    // The normalized expression is no longer a native `title`: RefChip
+    // deliberately renders an empty one and puts the detail in its hover
+    // card, so the chip carries the funnel/ban grammar and the card carries
+    // the "reads as" text.
+    expect(ref.attributes("title")).toBe("");
+    expect(ref.classes()).toContain("wp-refchip--filtered");
   });
 
   it("renders {a|b|c} brace block as a brace token (warn colour)", () => {
@@ -303,7 +309,7 @@ describe("OptionRow", () => {
   it("renders $varname as a var token", () => {
     const opt = { id: "o9", value: "uses $style here", weight: 1, sub_categories: ["warm"] };
     const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
-    expect(w.find('[data-test="opt-name"] .opt__tok--var .opt__tok-label').text()).toBe("$style");
+    expect(w.find('[data-test="opt-name"] .wp-refchip--var .wp-refchip__label').text()).toBe("$style");
   });
 
   it("typing weight back to library default clears the override (null)", async () => {

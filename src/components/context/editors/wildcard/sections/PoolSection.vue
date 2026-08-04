@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import type { VarProducerLike } from "@/manager/components/RefChip.vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import type { PairingBadge } from "../../../../../extension/constraint-pairs";
 import { patchInstance, patchInstanceMapEntry } from "../../instance/patch";
@@ -29,8 +30,10 @@ const props = withDefaults(
      *  `poolOpen`. Exposed so tests (and any host that wants the pool open on
      *  arrival) don't have to drive a click first. */
     defaultOpen?: boolean;
+    /** `$var` → producer, forwarded to each OptionRow's chips. */
+    varProducers?: ReadonlyMap<string, VarProducerLike>;
   }>(),
-  { viaOptionPairs: () => new Map(), defaultOpen: false },
+  { viaOptionPairs: () => new Map(), defaultOpen: false, varProducers: () => new Map() },
 );
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
 
@@ -582,6 +585,7 @@ const skewedTowards = computed(() => {
         <span class="pool__opt-head-cell pool__opt-head-cell--right">Category</span>
       </div>
       <OptionRow
+        :var-producers="varProducers"
         v-for="option in allOptions"
         :key="option.id"
         :option="option"

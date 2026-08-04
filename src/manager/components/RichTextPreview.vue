@@ -19,7 +19,7 @@
  * (unresolved chips have no actionable target).
  */
 import { computed } from "vue";
-import RefChip from "./RefChip.vue";
+import RefChip, { type VarProducerLike } from "./RefChip.vue";
 import { parse, type Atom, type TextAtom } from "./atomicEditorModel";
 import { escapeHtml, inlineTokenHtml } from "../../widgets/richTokenize";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
@@ -51,6 +51,13 @@ interface Props {
   uuidToKind?: ReadonlyMap<string, string>;
   /** $var names known to the surrounding scope. Drives the var chip's resolved state. */
   varSuggestions?: string[];
+  /** `$var` → who writes it upstream. Without this every var chip's hover
+   *  card falls back to "binds at runtime", which is technically true but
+   *  useless — it was showing that even for vars with an obvious producer. */
+  varProducers?: ReadonlyMap<string, VarProducerLike>;
+  /** Host can see a graph, so "no producer" is a real finding rather than
+   *  simply unknowable (the SPA has no graph). */
+  graphAware?: boolean;
   /** Surface gates ref styling: non-wildcard surfaces mark refs as "ignored". */
   surface?: SurfaceKind;
   /** Warning markers rendered at the trailing edge of the preview. */
@@ -69,6 +76,8 @@ const props = withDefaults(defineProps<Props>(), {
   uuidToName: () => new Map(),
   uuidToKind: () => new Map(),
   varSuggestions: () => [],
+  varProducers: () => new Map(),
+  graphAware: false,
   surface: "wildcard",
   warnings: () => [],
   moduleId: undefined,
@@ -232,6 +241,8 @@ function renderTextAtom(atom: TextAtom): string {
         :index="atom.index"
         :sub-categories="[]"
         :resolved="atomIsResolved(atom)"
+        :producer="varProducers.get(atom.name)"
+        :graph-aware="graphAware"
         class="wp-rt-var"
       />
       <span

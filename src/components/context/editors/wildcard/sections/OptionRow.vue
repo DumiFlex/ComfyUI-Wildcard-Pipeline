@@ -13,6 +13,7 @@ import type { PairingBadge } from "../../../../../extension/constraint-pairs";
 import { matches, parse, readsAs } from "@/manager/parsing/subcatFilter";
 import { formatProbability } from "@/manager/utils/percent";
 import PairBadge from "../../../PairBadge.vue";
+import RefChip, { type VarProducerLike } from "@/manager/components/RefChip.vue";
 import { axisHueAt } from "../../../../shared/axis-color";
 
 interface OptionFull extends WildcardOption {
@@ -38,8 +39,14 @@ const props = withDefaults(
      *  true the null option is excluded from the pool, so its row renders
      *  disabled/greyed + non-toggleable. Real option rows are unaffected. */
     multiActive?: boolean;
+    /** `$var` → who writes it upstream, so a var chip's hover card names the
+     *  producer instead of falling back to "binds at runtime". */
+    varProducers?: ReadonlyMap<string, VarProducerLike>;
   }>(),
-  { pairBadges: () => [], tagGroups: () => ({}), multiActive: false },
+  {
+    pairBadges: () => [], tagGroups: () => ({}), multiActive: false,
+    varProducers: () => new Map(),
+  },
 );
 
 const emit = defineEmits<{
@@ -110,25 +117,10 @@ const tokens = computed<RichToken[]>(() => {
   return out;
 });
 
-/**
- * Hover text for a nested-ref chip.
- *
- * Previously a ref chip only carried a `title` when it was unresolved or
- * filtered, so an ordinary resolved ref — the common case — had no hover at
- * all, and neither did `$var` chips. The chip label is itself abbreviated
- * (`@name`, no uuid), so with nothing on hover there was no way to see which
- * library entry a ref actually points at.
- */
-function refTitle(tok: RichToken): string | undefined {
-  const uuid = tok.meta?.uuid;
-  if (refIsUnresolved(uuid)) return `Reference ${uuid} not in library`;
-  const parts: string[] = [];
-  const label = refDisplay(uuid, tok.meta?.name, tok.raw);
-  parts.push(label.startsWith("@") ? label.slice(1) : label);
-  if (uuid) parts.push(uuid);
-  const filter = refFilter(tok).title;
-  if (filter) parts.push(filter);
-  return parts.join(" · ") || undefined;
+/** RefChip renders its own `@` prefix, so hand it the bare label. */
+function refChipName(tok: RichToken): string {
+  const label = refDisplay(tok.meta?.uuid, tok.meta?.name, tok.raw);
+  return label.startsWith("@") ? label.slice(1) : label;
 }
 
 function refDisplay(
@@ -174,7 +166,7 @@ function refIsUnresolved(uuid: string | undefined): boolean {
  *  peeling `!null`, so rejoin + `splitRefFilter` here rather than printing
  *  the glued `sub_categories` inline. Memoized per token object so the
  *  several template bindings don't each re-parse. */
-interface RefFilterInfo { hasExpr: boolean; excludeNull: boolean; isFiltered: boolean; title: string }
+interface RefFilterInfo { hasExpr: boolean; excludeNull: boolean; isFiltered: boolean; title: string; expr: string }
 const _refFilterMemo = new WeakMap<RichToken, RefFilterInfo>();
 function refFilter(tok: RichToken): RefFilterInfo {
   const cached = _refFilterMemo.get(tok);
@@ -201,6 +193,7 @@ function refFilter(tok: RichToken): RefFilterInfo {
   if (reads) parts.push(reads);
   if (excludeNull) parts.push("null excluded");
   const info: RefFilterInfo = {
+    expr,
     hasExpr: expr.length > 0,
     excludeNull,
     isFiltered: expr.length > 0 || excludeNull,
@@ -424,38 +417,32 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
         <span>null</span>
       </span>
       <template v-for="(tok, idx) in tokens" v-else :key="idx">
-        <span
+        <!-- The real RefChip, not a look-alike. These chips used to be
+             hand-rolled spans that only MIRRORED RefChip's styling, so they
+             were the one place in the editor with no hover card — you could
+             not see which library entry a ref pointed at, or who writes a
+             `$var`. Using the component gets the same card as everywhere
+             else, for free. -->
+        <RefChip
           v-if="tok.kind === 'ref'"
-          class="opt__tok opt__tok--ref"
-          :class="{
-            'opt__tok--filtered': refFilter(tok).isFiltered,
-            'opt__tok--unresolved': refIsUnresolved(tok.meta?.uuid),
-          }"
+          :kind="'ref'"
+          :name="refChipName(tok)"
+          :uuid="tok.meta?.uuid ?? ''"
+          :resolved="!refIsUnresolved(tok.meta?.uuid)"
+          :expr="refFilter(tok).expr"
+          :exclude-null="refFilter(tok).excludeNull"
           :data-uuid="tok.meta?.uuid"
-          :title="refTitle(tok)"
-        >
-          <span class="opt__tok-icon" aria-hidden="true">{{ refIsUnresolved(tok.meta?.uuid) ? '?' : '✦' }}</span>
-          <span class="opt__tok-label">{{ refDisplay(tok.meta?.uuid, tok.meta?.name, tok.raw) }}</span>
-          <!-- Compact filter mark, matching SPA RefChip: funnel = expression
-               set (full expr in hover title), ban = null option excluded.
-               The expression is never printed inline (it can be long). -->
-          <span
-            v-if="refFilter(tok).isFiltered"
-            class="opt__tok-filter"
-            aria-hidden="true"
-          >
-            <i v-if="refFilter(tok).hasExpr" class="pi pi-filter opt__tok-funnel"></i>
-            <i v-if="refFilter(tok).excludeNull" class="pi pi-ban opt__tok-nonull"></i>
-          </span>
-        </span>
-        <span
+          class="opt__tok opt__tok--chip"
+        />
+        <RefChip
           v-else-if="tok.kind === 'var'"
-          class="opt__tok opt__tok--var"
-          :title="`${tok.raw} — variable, resolved from upstream when the graph runs`"
-        >
-          <span class="opt__tok-icon" aria-hidden="true">⌘</span>
-          <span class="opt__tok-label">{{ tok.raw }}</span>
-        </span>
+          :kind="'var'"
+          :name="tok.raw.replace(/^\$/, '')"
+          :resolved="true"
+          :producer="varProducers?.get(tok.raw.replace(/^\$/, ''))"
+          graph-aware
+          class="opt__tok opt__tok--chip"
+        />
         <span
           v-else-if="tok.kind === 'dp-brace'"
           class="opt__tok opt__tok--brace"

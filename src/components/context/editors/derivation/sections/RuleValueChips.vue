@@ -19,6 +19,7 @@
  */
 import { computed } from "vue";
 import RichTextPreview from "../../../../../manager/components/RichTextPreview.vue";
+import type { VarProducerLike } from "../../../../../manager/components/RefChip.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -30,8 +31,16 @@ const props = withDefaults(
      *  VALID derivation action (replace-with-nothing), so it must read as an
      *  intentional empty, NOT the `?` that looked like a failed resolve. */
     placeholder?: string;
+    /** `$var` → producer, so the summary chips' hover cards can name who
+     *  writes the variable instead of falling back to "binds at runtime". */
+    varProducers?: ReadonlyMap<string, VarProducerLike>;
+    /** Canvas host — a missing producer is a real finding here. */
+    graphAware?: boolean;
   }>(),
-  { value: "", uuidToName: () => new Map(), placeholder: "empty" },
+  {
+    value: "", uuidToName: () => new Map(), placeholder: "empty",
+    varProducers: () => new Map(), graphAware: false,
+  },
 );
 
 const isEmpty = computed(() => (props.value ?? "").length === 0);
@@ -54,6 +63,8 @@ const isEmpty = computed(() => (props.value ?? "").length === 0);
       v-else
       :value="value"
       :uuid-to-name="uuidToName"
+      :var-producers="varProducers"
+      :graph-aware="graphAware"
       surface="wildcard"
     />
   </span>

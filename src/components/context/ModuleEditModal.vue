@@ -427,6 +427,7 @@ function cancel() {
       :module="draft"
       :is-modified="instanceModified"
       :upstream-vars="upstreamVars"
+      :upstream-producers="upstreamProducers"
       :sibling-vars="siblingVars"
       :via-option-pairs="viaOptionPairs"
       :frame-active="currentFrame != null"

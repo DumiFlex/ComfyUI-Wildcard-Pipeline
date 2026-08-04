@@ -503,14 +503,14 @@ function ruleSummaryText(rule: DerivationRule): string {
               <span
                 v-if="opUsesValue(rule.branches[0].condition?.op)"
                 class="rule-tok-val"
-              ><RuleValueChips :value="clampPreviewValue(rule.branches[0].condition?.value)" :uuid-to-name="uuidToName" /></span>
+              ><RuleValueChips :value="clampPreviewValue(rule.branches[0].condition?.value)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
               <span class="rule-tok-arrow">→</span>
               <span
                 v-if="rule.branches[0].action?.target_var"
                 :class="['rule-tok-var', varColorClass(rule.branches[0].action.target_var)]"
               >${{ rule.branches[0].action.target_var }}</span>
               <span class="rule-tok-op">{{ modeLabel(rule.branches[0].action?.mode) }}</span>
-              <span class="rule-tok-val"><RuleValueChips :value="clampPreviewValue(rule.branches[0].action?.value)" :uuid-to-name="uuidToName" /></span>
+              <span class="rule-tok-val"><RuleValueChips :value="clampPreviewValue(rule.branches[0].action?.value)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
               <!-- Inline ↪#N constraint-pair badge — rendered when this
                    derivation is a constraint carrier through the IF branch's
                    nested `@{uuid}` ref. Mirrors OptionRow's per-option badge
@@ -598,14 +598,14 @@ function ruleSummaryText(rule: DerivationRule): string {
                 <span
                   v-if="opUsesValue(branch.condition?.op)"
                   class="rule-tok-val"
-                ><RuleValueChips :value="clampPreviewValue(branch.condition?.value)" :uuid-to-name="uuidToName" /></span>
+                ><RuleValueChips :value="clampPreviewValue(branch.condition?.value)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
                 <span class="rule-tok-arrow">→</span>
                 <span
                   v-if="branch.action?.target_var"
                   :class="['rule-tok-var', varColorClass(branch.action.target_var)]"
                 >${{ branch.action.target_var }}</span>
                 <span class="rule-tok-op">{{ modeLabel(branch.action?.mode) }}</span>
-                <span class="rule-tok-val"><RuleValueChips :value="clampPreviewValue(branch.action?.value)" :uuid-to-name="uuidToName" /></span>
+                <span class="rule-tok-val"><RuleValueChips :value="clampPreviewValue(branch.action?.value)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
                 <PairBadge
                   v-for="p in pairBadgesFor(rule.id, bi)"
                   :key="`${p.number}-${p.targetUuid}`"
@@ -693,7 +693,7 @@ function ruleSummaryText(rule: DerivationRule): string {
                   :class="['rule-tok-var', varColorClass(rule.else.action.target_var)]"
                 >${{ rule.else.action.target_var }}</span>
                 <span class="rule-tok-op">{{ modeLabel(rule.else.action?.mode) }}</span>
-                <span class="rule-tok-val"><RuleValueChips :value="clampPreviewValue(rule.else.action?.value)" :uuid-to-name="uuidToName" /></span>
+                <span class="rule-tok-val"><RuleValueChips :value="clampPreviewValue(rule.else.action?.value)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
                 <PairBadge
                   v-for="p in pairBadgesFor(rule.id, 'else')"
                   :key="`${p.number}-${p.targetUuid}`"
