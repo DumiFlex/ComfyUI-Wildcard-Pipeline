@@ -3,6 +3,25 @@ name: Release
 on:
   push:
     branches: [main]
+    # Tooling-only pushes must not be able to cut a release, whatever their
+    # commit type says.
+    #
+    # 2.13.0 shipped as an empty release because three commits touching only
+    # `scripts/` and `.github/` were typed `feat(announce)` / `fix(announce)`.
+    # Both are release-triggering, so semantic-release did exactly what it was
+    # told — every user on 2.12.0 was offered an update with a blank changelog.
+    # Relying on remembering to type those `ci:` had already failed once.
+    #
+    # Neither path is part of what a user installs: `scripts/` is dev tooling
+    # and `.github/` is CI. GitHub skips the run only when EVERY changed file
+    # matches, so a push that touches shipped code alongside a workflow still
+    # releases correctly.
+    #
+    # `docs/**` is deliberately NOT here — `docs(readme)` is configured to bump
+    # a patch, and `docs/release-notes/next.md` is the release body itself.
+    paths-ignore:
+      - 'scripts/**'
+      - '.github/**'
 
 permissions:
   contents: write
