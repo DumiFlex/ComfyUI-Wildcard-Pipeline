@@ -10,7 +10,8 @@ Full support for ComfyUI's Nodes 2.0 renderer, and a pass over everything to do 
 
 <!-- /modal -->
 
-### Also in this release
+<details>
+<summary><b>Also in this release</b> — 20 smaller changes</summary>
 
 **Library and organisation**
 
@@ -44,6 +45,8 @@ Full support for ComfyUI's Nodes 2.0 renderer, and a pass over everything to do 
 - The Prompt Cleaner no longer rewrites `embedding:name` or `<lora:name:1.0>` references — punctuation stripping renamed embeddings ending in `_`, and fuzzy dedupe dropped one of two versioned files
 - Variable override counts report writers rather than write statements, so a module that creates a variable is no longer described as overriding writes that never happened
 
+</details>
+
 <!--
 HOW TO WRITE THIS FILE
 
@@ -52,8 +55,9 @@ Order, and nothing else:
   Headline                  one sentence, what this release is about
   ### Highlights            4-5 max
   <!- /modal ->             the update dialog stops rendering here
-  ### Also in this release  grouped one-liners
+  <details> Also in this…   grouped one-liners, collapsed
   ### Upgrade notes         only when the reader must act; delete otherwise
+                            — keep this OUTSIDE the <details>, it needs seeing
 
 This file IS the release body — the compare link is appended automatically and
 the per-commit list is deliberately not included. It is consumed at release
@@ -75,7 +79,10 @@ RULES
    real feature; `ui` was nine commits and almost entirely polish.
 
 4. The tail is grouped by area, one line each, no bold-lead paragraphs. Group
-   names are free-form — use whatever the release actually contains.
+   names are free-form — use whatever the release actually contains. It sits in
+   a <details> so a long release does not double the page; put the count in the
+   summary so the reader knows what they are opening. Note that collapsed text
+   is not reliably reachable by browser find-in-page, which is the cost.
 
 5. Write what changed for the user, not what changed in the code. Name the
    symptom, not the fix: "the field went blank" beats "guarded a null deref".

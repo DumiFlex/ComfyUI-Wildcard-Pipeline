@@ -1,102 +1,101 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 240" role="img" aria-label="WP Context Loop emits N prompts and feeds WP Seed List N seeds; both fan out into KSampler in lockstep">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 286" width="880" height="286" role="img" aria-label="WP Context Loop drives WP Context and the Prompt Assembler to produce N prompts, CLIP Encode turns them into conditioning for KSampler, and WP Seed List supplies the matching seed for each iteration directly to KSampler">
   <style><![CDATA[
-    .bg     { fill: #14161e; }
-    .panel  { fill: #1a1d2a; }
-    .border-loop    { stroke: #7c6ad6; }
-    .border-ctx     { stroke: #3a8fb7; }
-    .border-asm     { stroke: #7c6ad6; }
-    .border-seed    { stroke: #3a8fb7; }
-    .border-k       { stroke: #6a6a6a; }
-    .ico-loop       { fill: #c4b5fd; }
-    .ico-ctx        { fill: #7ec8e3; }
-    .ico-asm        { fill: #c4b5fd; }
-    .ico-seed       { fill: #7ec8e3; }
-    .ico-k          { fill: #aab; }
-    .name           { fill: #d6d8e0; font: 600 13px 'Inter', system-ui, sans-serif; }
-    .sub            { fill: #6f7384; font: 400 10px ui-monospace, monospace; }
-    .arrow-lbl      { fill: #6f7384; font: 600 10px 'Inter', system-ui, sans-serif; letter-spacing: 1px; text-transform: uppercase; }
-    .arrow-line     { stroke: #4a4d55; stroke-width: 2; fill: none; }
-    .arrow-line-dim { stroke: #353841; stroke-width: 2; fill: none; stroke-dasharray: 5 4; }
-    .arrow-head     { fill: #4a4d55; }
-    .caption        { fill: #6f7384; font: 500 11px 'Inter', system-ui, sans-serif; }
+    .frame, .card, .pill, .chip { stroke-width: 1; }
+    .cap { font: 400 10px 'Segoe UI', -apple-system, BlinkMacSystemFont, system-ui, sans-serif; letter-spacing: .06em; }
+    .feeder { font: 400 10.5px 'Segoe UI', -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+    .nm { font: 600 12px 'Segoe UI', -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+    .id { font: 400 9.5px 'JetBrains Mono', Consolas, Monaco, 'Courier New', monospace; }
+    .lbl, .varcap { font: 400 9.5px 'Segoe UI', -apple-system, BlinkMacSystemFont, system-ui, sans-serif; letter-spacing: .05em; }
+    .chipt { font: 400 10.5px 'JetBrains Mono', Consolas, Monaco, 'Courier New', monospace; }
+
+    .frame { fill: #1e1e1e; stroke: #3a3a3a; }
+    .card { fill: #232323; stroke: #4a4a4a; }
+    .card--wp { stroke: #2dd4bf; stroke-opacity: .55; }
+    .ico--wp { color: #2dd4bf; }
+    .ico--ext { color: #aaaaaa; }
+    .ico--wildcard { color: #a78bfa; }
+    .ico--fixed { color: #22d3ee; }
+    .ico--combine { color: #34d399; }
+    .ico--derivation { color: #fbbf24; }
+    .ico--constraint { color: #f472b6; }
+    .pill { fill: #232323; stroke: #3a3a3a; }
+    .feeder { fill: #aaaaaa; }
+    .nm { fill: #dddddd; }
+    .id, .lbl, .cap, .varcap { fill: #666666; }
+    .ln { stroke: #4a4a4a; }
+    .head { fill: #4a4a4a; }
+    .chip { fill: #232323; }
+    .chip--a { stroke: #8b5cf6; stroke-opacity: .4; }
+    .chip--b { stroke: #22d3ee; stroke-opacity: .4; }
+    .chip--c { stroke: #34d399; stroke-opacity: .4; }
+    .chipt--a { fill: #c4b5fd; }
+    .chipt--b { fill: #67e8f9; }
+    .chipt--c { fill: #86efac; }
+    @media (prefers-color-scheme: light) {
+      .frame { fill: #f5f5f5; stroke: #b0b0b0; }
+      .card { fill: #ffffff; stroke: #999999; }
+      .card--wp { stroke: #0f766e; stroke-opacity: .55; }
+      .ico--wp { color: #0f766e; }
+      .ico--ext { color: #555555; }
+      .ico--wildcard { color: #6d28d9; }
+      .ico--fixed { color: #1d4ed8; }
+      .ico--combine { color: #065f46; }
+      .ico--derivation { color: #92400e; }
+      .ico--constraint { color: #9d174d; }
+      .pill { fill: #ffffff; stroke: #b0b0b0; }
+      .feeder { fill: #555555; }
+      .nm { fill: #1a1a1a; }
+      .id,   .lbl,   .cap,   .varcap { fill: #888888; }
+      .ln { stroke: #999999; }
+      .head { fill: #999999; }
+      .chip { fill: #ffffff; }
+      .chip--a { stroke: #8b5cf6; stroke-opacity: .4; }
+      .chip--b { stroke: #22d3ee; stroke-opacity: .4; }
+      .chip--c { stroke: #34d399; stroke-opacity: .4; }
+      .chipt--a { fill: #6d28d9; }
+      .chipt--b { fill: #1d4ed8; }
+      .chipt--c { fill: #065f46; }
+    }
   ]]></style>
-
-  <rect class="bg" width="980" height="240" rx="8" />
-
-  <!-- WP Context Loop -->
-  <g transform="translate(30, 70)">
-    <rect class="panel border-loop" x="0" y="0" width="160" height="100" rx="10" stroke-width="2" />
-    <text class="ico-loop" x="80" y="32" text-anchor="middle" font-size="20">↺</text>
-    <text class="name" x="80" y="58" text-anchor="middle">WP Context Loop</text>
-    <text class="sub"  x="80" y="78" text-anchor="middle">N prompts</text>
-  </g>
-
-  <!-- Loop splits into TWO lanes -->
-
-  <!-- Lane A: loop_config → Seed List → seed[] -->
-  <g transform="translate(200, 60)">
-    <text class="arrow-lbl" x="50" y="-6" text-anchor="middle">loop_config</text>
-    <line class="arrow-line" x1="0" y1="6" x2="92" y2="6" />
-    <polygon class="arrow-head" points="92,1 100,6 92,11" />
-  </g>
-  <g transform="translate(310, 30)">
-    <rect class="panel border-seed" x="0" y="0" width="160" height="80" rx="10" stroke-width="2" />
-    <text class="ico-seed" x="80" y="28" text-anchor="middle" font-size="18">#</text>
-    <text class="name" x="80" y="50" text-anchor="middle">WP Seed List</text>
-    <text class="sub"  x="80" y="68" text-anchor="middle">N seeds</text>
-  </g>
-
-  <!-- Lane B: context → WP Context -->
-  <g transform="translate(200, 160)">
-    <text class="arrow-lbl" x="50" y="-6" text-anchor="middle">context</text>
-    <line class="arrow-line" x1="0" y1="6" x2="92" y2="6" />
-    <polygon class="arrow-head" points="92,1 100,6 92,11" />
-  </g>
-  <g transform="translate(310, 130)">
-    <rect class="panel border-ctx" x="0" y="0" width="160" height="80" rx="10" stroke-width="2" />
-    <text class="ico-ctx" x="80" y="28" text-anchor="middle" font-size="18">⌬</text>
-    <text class="name" x="80" y="50" text-anchor="middle">WP Context</text>
-    <text class="sub"  x="80" y="68" text-anchor="middle">module stack</text>
-  </g>
-
-  <!-- WP Context → Prompt Assembler -->
-  <g transform="translate(480, 160)">
-    <line class="arrow-line" x1="0" y1="6" x2="62" y2="6" />
-    <polygon class="arrow-head" points="62,1 70,6 62,11" />
-  </g>
-
-  <!-- Prompt Assembler -->
-  <g transform="translate(560, 130)">
-    <rect class="panel border-asm" x="0" y="0" width="160" height="80" rx="10" stroke-width="2" />
-    <text class="ico-asm" x="80" y="28" text-anchor="middle" font-size="18">≡</text>
-    <text class="name" x="80" y="50" text-anchor="middle">Prompt Assembler</text>
-    <text class="sub"  x="80" y="68" text-anchor="middle">N prompts</text>
-  </g>
-
-  <!-- Seed List → KSampler (top lane) -->
-  <g transform="translate(480, 60)">
-    <text class="arrow-lbl" x="180" y="-6" text-anchor="middle">seed[]</text>
-    <path class="arrow-line" d="M 0 6 L 360 6 L 360 64" />
-    <polygon class="arrow-head" points="355,59 360,67 365,59" />
-  </g>
-
-  <!-- Assembler → KSampler (bottom lane joining top arrow at sampler) -->
-  <g transform="translate(730, 160)">
-    <text class="arrow-lbl" x="40" y="-6" text-anchor="middle">prompt[]</text>
-    <line class="arrow-line" x1="0" y1="6" x2="62" y2="6" />
-    <polygon class="arrow-head" points="62,1 70,6 62,11" />
-  </g>
-
-  <!-- KSampler -->
-  <g transform="translate(810, 130)">
-    <rect class="panel border-k" x="0" y="0" width="140" height="80" rx="10" stroke-width="2" />
-    <text class="ico-k" x="70" y="28" text-anchor="middle" font-size="18">⚡</text>
-    <text class="name" x="70" y="50" text-anchor="middle">KSampler</text>
-    <text class="sub"  x="70" y="68" text-anchor="middle">N unique images</text>
-  </g>
-
-  <!-- Caption -->
-  <text class="caption" x="490" y="225" text-anchor="middle">
-    Loop emits N prompts · Seed List emits N seeds · both lists fan out into the sampler in lockstep — iteration N's prompt pairs with seed N
-  </text>
+  <rect class="frame" x="0.5" y="0.5" width="879" height="285" rx="12"/>
+  <text class="cap" x="440" y="30" text-anchor="middle">BOTH LISTS FAN OUT IN LOCKSTEP — ITERATION N MEETS SEED N</text>
+  <rect class="card card--wp" x="48.199999999999996" y="54" width="127.60000000000001" height="66" rx="10"/>
+  <g class="ico ico--wp"><g transform="translate(104 65) scale(0.6666666666666666)"><g id="refresh"><path d="M12,20.75a7.25,7.25,0,0,1,0-14.5h2.5a.75.75,0,0,1,0,1.5H12a5.75,5.75,0,1,0,5.75,5.75.75.75,0,0,1,1.5,0A7.26,7.26,0,0,1,12,20.75Z"/><path d="M12,10.75a.74.74,0,0,1-.53-.22.75.75,0,0,1,0-1.06L13.94,7,11.47,4.53a.75.75,0,1,1,1.06-1.06l3,3a.75.75,0,0,1,0,1.06l-3,3A.74.74,0,0,1,12,10.75Z"/></g></g></g>
+  <text class="nm" x="112" y="97" text-anchor="middle">WP Context Loop</text>
+  <text class="id" x="112" y="111" text-anchor="middle">N iterations</text>
+  <rect class="card card--wp" x="50" y="158" width="124" height="66" rx="10"/>
+  <g class="ico ico--wp"><g transform="translate(104 169) scale(0.6666666666666666)"><g id="list"><path d="M19,12.75H8a.75.75,0,0,1,0-1.5H19a.75.75,0,0,1,0,1.5Z"/><path d="M19,8.25H8a.75.75,0,0,1,0-1.5H19a.75.75,0,0,1,0,1.5Z"/><path d="M19,17.25H8a.75.75,0,0,1,0-1.5H19a.75.75,0,0,1,0,1.5Z"/><path d="M5,8.5a1,1,0,0,1-.38-.07,1.46,1.46,0,0,1-.33-.22A1,1,0,0,1,4,7.5a1.05,1.05,0,0,1,.29-.71.93.93,0,0,1,.33-.21,1,1,0,0,1,.76,0,1,1,0,0,1,.33.21A1.05,1.05,0,0,1,6,7.5a1,1,0,0,1-.29.71,1.46,1.46,0,0,1-.33.22A1,1,0,0,1,5,8.5Z"/><path d="M5,13a1,1,0,0,1-.38-.08,1.15,1.15,0,0,1-.33-.21A1,1,0,0,1,4,12a1.05,1.05,0,0,1,.29-.71,1.15,1.15,0,0,1,.33-.21A1,1,0,0,1,5.2,11l.18.06.18.09a1.58,1.58,0,0,1,.15.12A1.05,1.05,0,0,1,6,12a1,1,0,0,1-1,1Z"/><path d="M5,17.5a1,1,0,0,1-.38-.07,1.46,1.46,0,0,1-.33-.22,1.15,1.15,0,0,1-.21-.33.94.94,0,0,1,0-.76,1.15,1.15,0,0,1,.21-.33,1,1,0,0,1,1.09-.21,1,1,0,0,1,.33.21,1.15,1.15,0,0,1,.21.33.94.94,0,0,1,0,.76,1.15,1.15,0,0,1-.21.33A1,1,0,0,1,5,17.5Z"/></g></g></g>
+  <text class="nm" x="112" y="201" text-anchor="middle">WP Seed List</text>
+  <text class="id" x="112" y="215" text-anchor="middle">N seeds</text>
+  <rect class="card card--wp" x="278" y="54" width="124" height="66" rx="10"/>
+  <g class="ico ico--wp"><g transform="translate(332 65) scale(0.6666666666666666)"><g id="sitemap"><path d="M13.5,9.75h-3A1.76,1.76,0,0,1,8.75,8V5A1.76,1.76,0,0,1,10.5,3.25h3A1.76,1.76,0,0,1,15.25,5V8A1.76,1.76,0,0,1,13.5,9.75Zm-3-5a.25.25,0,0,0-.25.25V8a.25.25,0,0,0,.25.25h3A.25.25,0,0,0,13.75,8V5a.25.25,0,0,0-.25-.25Z"/><path d="M6,19.75H4A1.76,1.76,0,0,1,2.25,18V16A1.76,1.76,0,0,1,4,14.25H6A1.76,1.76,0,0,1,7.75,16v2A1.76,1.76,0,0,1,6,19.75Zm-2-4a.25.25,0,0,0-.25.25v2a.25.25,0,0,0,.25.25H6A.25.25,0,0,0,6.25,18V16A.25.25,0,0,0,6,15.75Z"/><path d="M13,19.75H11A1.76,1.76,0,0,1,9.25,18V16A1.76,1.76,0,0,1,11,14.25h2A1.76,1.76,0,0,1,14.75,16v2A1.76,1.76,0,0,1,13,19.75Zm-2-4a.25.25,0,0,0-.25.25v2a.25.25,0,0,0,.25.25h2a.25.25,0,0,0,.25-.25V16a.25.25,0,0,0-.25-.25Z"/><path d="M20,19.75H18A1.76,1.76,0,0,1,16.25,18V16A1.76,1.76,0,0,1,18,14.25h2A1.76,1.76,0,0,1,21.75,16v2A1.76,1.76,0,0,1,20,19.75Zm-2-4a.25.25,0,0,0-.25.25v2a.25.25,0,0,0,.25.25h2a.25.25,0,0,0,.25-.25V16a.25.25,0,0,0-.25-.25Z"/><path d="M19,15.75a.76.76,0,0,1-.75-.75V13a.25.25,0,0,0-.25-.25H6a.25.25,0,0,0-.25.25v2a.75.75,0,0,1-1.5,0V13A1.76,1.76,0,0,1,6,11.25H18A1.76,1.76,0,0,1,19.75,13v2A.76.76,0,0,1,19,15.75Z"/><path d="M12,15.75a.76.76,0,0,1-.75-.75V9a.75.75,0,0,1,1.5,0v6A.76.76,0,0,1,12,15.75Z"/></g></g></g>
+  <text class="nm" x="340" y="97" text-anchor="middle">WP Context</text>
+  <text class="id" x="340" y="111" text-anchor="middle">module stack</text>
+  <rect class="card card--wp" x="499.08" y="54" width="133.84" height="66" rx="10"/>
+  <g class="ico ico--wp"><g transform="translate(558 65) scale(0.6666666666666666)"><g id="align-left"><path d="M13.93,11h-10a.75.75,0,1,1,0-1.5h10a.75.75,0,0,1,0,1.5Z"/><path d="M20.07,7h-16a.75.75,0,0,1,0-1.5h16a.75.75,0,0,1,0,1.5Z"/><path d="M20.07,15h-16a.75.75,0,0,1,0-1.5h16a.75.75,0,0,1,0,1.5Z"/><path d="M13.93,19h-10a.75.75,0,1,1,0-1.5h10a.75.75,0,0,1,0,1.5Z"/></g></g></g>
+  <text class="nm" x="566" y="97" text-anchor="middle">Prompt Assembler</text>
+  <text class="id" x="566" y="111" text-anchor="middle">N prompts</text>
+  <rect class="card card--ext" x="504" y="158" width="124" height="66" rx="10"/>
+  <g class="ico ico--ext"><g transform="translate(558 169) scale(0.6666666666666666)"><g id="bolt"><path d="M11.09,21.5a.67.67,0,0,1-.24,0,.83.83,0,0,1-.59-.81v-.11l.9-6.35H6.82a.8.8,0,0,1-.71-.43.85.85,0,0,1,0-.86l2-3.49,4.1-6.52a.79.79,0,0,1,.92-.35.83.83,0,0,1,.59.81v.11l-.9,6.35h4.35a.8.8,0,0,1,.71.43.85.85,0,0,1,0,.86l-2,3.49-4.1,6.52A.79.79,0,0,1,11.09,21.5Zm-.53-1.21h0Zm-2.63-7.6h4a.84.84,0,0,1,.83.85v.11l-.59,4.14,2.5-4,1.44-2.48h-4a.84.84,0,0,1-.83-.85v-.11l.59-4.14-2.5,4Zm-.57,1Zm9.28-3.34ZM13.44,3.7h0Z"/></g></g></g>
+  <text class="nm" x="566" y="201" text-anchor="middle">CLIP Encode</text>
+  <text class="id" x="566" y="215" text-anchor="middle">N conditionings</text>
+  <rect class="card card--ext" x="710" y="158" width="124" height="66" rx="10"/>
+  <g class="ico ico--ext"><g transform="translate(764 169) scale(0.6666666666666666)"><g id="image"><path d="M18,4.25H6A2.75,2.75,0,0,0,3.25,7V17A2.75,2.75,0,0,0,6,19.75H18A2.75,2.75,0,0,0,20.75,17V7A2.75,2.75,0,0,0,18,4.25ZM6,5.75H18A1.25,1.25,0,0,1,19.25,7v8.19l-2.72-2.72a.7.7,0,0,0-.56-.22.79.79,0,0,0-.55.27l-1.29,1.55-4.6-4.6A.7.7,0,0,0,9,9.25a.79.79,0,0,0-.55.27L4.75,13.93V7A1.25,1.25,0,0,1,6,5.75ZM4.75,17v-.73l4.3-5.16,4.12,4.12-2.52,3H6A1.25,1.25,0,0,1,4.75,17ZM18,18.25H12.6l3.45-4.14,3.15,3.15A1.23,1.23,0,0,1,18,18.25Z"/></g></g></g>
+  <text class="nm" x="772" y="201" text-anchor="middle">KSampler</text>
+  <text class="id" x="772" y="215" text-anchor="middle">N images</text>
+  <text class="lbl" x="226.9" y="78" text-anchor="middle">CONTEXT</text>
+  <line class="ln" x1="183.8" y1="87" x2="264" y2="87"/>
+  <path class="head" d="M264 83 L270 87 L264 91 Z"/>
+  <text class="lbl" x="450.53999999999996" y="78" text-anchor="middle">$VARS</text>
+  <line class="ln" x1="410" y1="87" x2="485.08" y2="87"/>
+  <path class="head" d="M485.08 83 L491.08 87 L485.08 91 Z"/>
+  <text class="lbl" x="576" y="141">PROMPT</text>
+  <line class="ln" x1="566" y1="120" x2="566" y2="152"/>
+  <path class="head" d="M562 152 L566 158 L570 152 Z"/>
+  <text class="lbl" x="669" y="182" text-anchor="middle">COND</text>
+  <line class="ln" x1="636" y1="191" x2="696" y2="191"/>
+  <path class="head" d="M696 187 L702 191 L696 195 Z"/>
+  <path class="ln" fill="none" d="M112 224 V 252 H 772 V 230"/>
+  <path class="head" d="M768 230 L772 224 L776 230 Z"/>
+  <text class="lbl" x="420" y="244" text-anchor="middle">SEED[]</text>
 </svg>
