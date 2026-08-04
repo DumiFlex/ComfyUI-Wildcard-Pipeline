@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+from engine.cleaner.atoms import contains_atom
 from engine.cleaner.types import RuleResult
 
 _FUZZY_THRESHOLD = 0.9
@@ -74,7 +75,17 @@ def apply_fuzzy(text: str, mode: str, config: dict) -> RuleResult:
     for tag in tags:
         key = tag.casefold()
         is_dup = False
+        # Versioned file references are near-identical strings by design --
+        # `embedding:badhandv4` vs `...v5` scores well above the 0.9 threshold
+        # while naming two different files. Exact dedupe still collapses a
+        # genuinely repeated one; only the FUZZY pass is held back.
+        tag_is_atom = contains_atom(tag)
         for kept_tag in kept:
+            if tag_is_atom or contains_atom(kept_tag):
+                if key == kept_tag.casefold():
+                    is_dup = True
+                    break
+                continue
             if _ratio(key, kept_tag.casefold()) >= _FUZZY_THRESHOLD:
                 is_dup = True
                 break
