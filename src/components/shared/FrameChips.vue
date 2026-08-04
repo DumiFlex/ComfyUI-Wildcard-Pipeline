@@ -232,7 +232,16 @@ const hint = computed(() => {
 </template>
 
 <style scoped>
-@import "./theme.css";
+/* No `@import "./theme.css"` here on purpose.
+ *
+ * theme.css declares its tokens on `:root`, so one copy anywhere in the
+ * document serves everything — and this component only ever renders inside
+ * ContextLoopWidget or SeedListWidget, both of which already import it.
+ * Importing it again inlines the whole 521-line sheet into this shared chunk:
+ * a third copy of the same tokens, and 10.7 KB gzipped for a grid of buttons.
+ *
+ * Every declaration below carries a literal fallback anyway, so the component
+ * still renders standalone if it is ever used somewhere unthemed. */
 
 .wp-fchips { display: flex; flex-direction: column; gap: 4px; }
 
@@ -265,7 +274,7 @@ const hint = computed(() => {
   letter-spacing: 0.05em;
   padding: 2px 6px;
   border-radius: 3px;
-  color: var(--wp-accent-text, var(--wp-text));
+  color: var(--wp-accent-text, var(--wp-text, #e6e7ea));
   background: rgba(99, 102, 241, 0.14);
   border: 1px solid color-mix(in srgb, var(--wp-accent, #c4b5fd) 40%, transparent);
 }
@@ -305,7 +314,7 @@ const hint = computed(() => {
   font: 600 10px var(--wp-font-sans, sans-serif);
   cursor: pointer;
 }
-.wp-fchips__chip:hover { color: var(--wp-text); border-color: var(--wp-border-strong, #4a4d55); }
+.wp-fchips__chip:hover { color: var(--wp-text, #e6e7ea); border-color: var(--wp-border-strong, #4a4d55); }
 .wp-fchips__chip--active {
   background: color-mix(in srgb, var(--wp-accent, #c4b5fd) 18%, transparent);
   border-color: var(--wp-accent, #c4b5fd);
