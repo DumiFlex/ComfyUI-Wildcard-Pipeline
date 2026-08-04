@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   DISPATCH_URL,
+  normalizeRoleId,
   splitBody,
   toDiscordMarkdown,
   buildDescription,
@@ -181,11 +182,61 @@ describe("buildPayload", () => {
     expect(p.allowed_mentions.roles).toEqual([]);
   });
 
+  /**
+   * An unset secret was always safe. A MALFORMED one was not: any truthy string
+   * went straight into `<@&…>`, so a stray space produced a literal `<@&   >`
+   * at the top of the most public message the project sends.
+   */
+  describe("role ping", () => {
+    const content = (roleId) => buildPayload({ version: "v1", body: "x", roleId }).content;
+
+    it("stays silent for every flavour of absent", () => {
+      expect(content(undefined)).toBe("");
+      expect(content(null)).toBe("");
+      expect(content("")).toBe("");
+      expect(content("   ")).toBe("");
+    });
+
+    it("refuses anything that is not a snowflake, rather than guessing", () => {
+      expect(content("not-an-id")).toBe("");
+      expect(content("12345")).toBe("");          // too short
+      expect(content("1234567890123456789012")).toBe(""); // too long
+      expect(content("123abc456def78901")).toBe("");
+    });
+
+    it("never emits a half-formed mention", () => {
+      for (const bad of ["   ", "not-an-id", "<@&>", "@everyone"]) {
+        expect(content(bad)).not.toContain("<@&");
+      }
+    });
+
+    // "Copy ID" and copying the mention text are equally easy mistakes.
+    it("accepts a pasted mention as well as a bare id", () => {
+      expect(content("123456789012345678")).toBe("<@&123456789012345678>");
+      expect(content("<@&123456789012345678>")).toBe("<@&123456789012345678>");
+      expect(content(" 123456789012345678 ")).toBe("<@&123456789012345678>");
+    });
+
+    it("keeps allowed_mentions in step with the content", () => {
+      const bad = buildPayload({ version: "v1", body: "x", roleId: "junk" });
+      expect(bad.allowed_mentions.roles).toEqual([]);
+      const good = buildPayload({ version: "v1", body: "x", roleId: "123456789012345678" });
+      expect(good.allowed_mentions.roles).toEqual(["123456789012345678"]);
+      expect(good.allowed_mentions.parse).toEqual([]);
+    });
+
+    it("normalizeRoleId is the single decision point", () => {
+      expect(normalizeRoleId("<@&123456789012345678>")).toBe("123456789012345678");
+      expect(normalizeRoleId("nope")).toBeUndefined();
+      expect(normalizeRoleId(undefined)).toBeUndefined();
+    });
+  });
+
   it("pings only the configured role, and only when configured", () => {
     expect(buildPayload({ version: "v1", body: "x" }).content).toBe("");
-    const p = buildPayload({ version: "v1", body: "x", roleId: "123" });
-    expect(p.content).toBe("<@&123>");
-    expect(p.allowed_mentions.roles).toEqual(["123"]);
+    const p = buildPayload({ version: "v1", body: "x", roleId: "123456789012345678" });
+    expect(p.content).toBe("<@&123456789012345678>");
+    expect(p.allowed_mentions.roles).toEqual(["123456789012345678"]);
   });
 
   // A webhook posts under whatever name and avatar it was created with —

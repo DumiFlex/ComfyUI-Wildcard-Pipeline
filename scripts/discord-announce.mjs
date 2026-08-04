@@ -27,7 +27,7 @@
  *   GITHUB_TOKEN          optional; raises the API rate limit for --since
  */
 import { readFileSync } from "node:fs";
-import { buildPayload, buildRollupPayload } from "./lib/discord-notes.mjs";
+import { buildPayload, buildRollupPayload, normalizeRoleId } from "./lib/discord-notes.mjs";
 
 const REPO = "DumiFlex/ComfyUI-Wildcard-Pipeline";
 
@@ -101,7 +101,15 @@ async function main() {
   }
   // Only the public post pings. A role ping in the staff channel on every
   // release is noise in a room that already exists to watch releases.
-  const roleId = channel === "public" ? process.env.DISCORD_ROLE_ID || undefined : undefined;
+  const rawRole = channel === "public" ? process.env.DISCORD_ROLE_ID : undefined;
+  const roleId = normalizeRoleId(rawRole);
+  // `buildPayload` drops a malformed id either way, but silence would leave
+  // someone wondering why the ping never fired.
+  if (rawRole && rawRole.trim() && !roleId) {
+    console.warn(
+      `DISCORD_ROLE_ID is not a valid role id (${JSON.stringify(rawRole)}) — posting without a ping.`,
+    );
+  }
   // Undefined falls through to the defaults in discord-notes.mjs — an empty
   // env var must not blank the identity and hand the post back to the
   // webhook's own name.

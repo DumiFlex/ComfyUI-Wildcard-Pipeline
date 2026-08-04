@@ -46,6 +46,30 @@ export const WEBHOOK_USERNAME = "Wildcard Pipeline";
 export const WEBHOOK_AVATAR_URL =
   "https://raw.githubusercontent.com/DumiFlex/ComfyUI-Wildcard-Pipeline/main/public/images/web-app-manifest-512x512.png";
 
+/**
+ * A role id we are willing to turn into a ping, or `undefined`.
+ *
+ * An unset secret was always safe, but a MALFORMED one was not: any truthy
+ * string went straight into `<@&…>`, so a stray space produced a literal
+ * `<@&   >` at the top of the announcement and a pasted mention produced
+ * `<@&<@&123>>`. Both render as visible junk in the most public message the
+ * project sends.
+ *
+ * Accepts a bare snowflake or the `<@&123>` form, since "Copy ID" and copying
+ * the mention text are equally easy mistakes to make. Anything else is
+ * rejected rather than guessed at — a ping that silently does not happen is a
+ * much smaller problem than a broken one that does.
+ */
+export function normalizeRoleId(raw) {
+  if (typeof raw !== "string" && typeof raw !== "number") return undefined;
+  const trimmed = String(raw).trim();
+  if (!trimmed) return undefined;
+  const unwrapped = trimmed.replace(/^<@&(\d+)>$/, "$1");
+  // Discord snowflakes are 17-20 digits today; the range leaves room without
+  // accepting arbitrary numbers.
+  return /^\d{17,20}$/.test(unwrapped) ? unwrapped : undefined;
+}
+
 /** Where the manual "publish to the public channel" run is started. */
 export const DISPATCH_URL =
   "https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/actions/workflows/discord-announce.yml";
@@ -186,13 +210,16 @@ export function buildPayload({
   body,
   releaseUrl,
   compareUrl,
-  roleId,
+  roleId: rawRoleId,
   username = WEBHOOK_USERNAME,
   avatarUrl = WEBHOOK_AVATAR_URL,
   channel = "staff",
   installHint = 'ComfyUI Manager → search "Wildcard Pipeline" → Update → restart ComfyUI',
 }) {
   const description = buildDescription(body, { compareUrl });
+  // Normalised HERE rather than at the call site so every caller — CLI,
+  // roll-up, future ones — gets the same guarantee.
+  const roleId = normalizeRoleId(rawRoleId);
   return {
     username,
     avatar_url: avatarUrl,
