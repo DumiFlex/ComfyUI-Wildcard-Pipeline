@@ -32,6 +32,19 @@ import { GITHUB_REPO } from "../config/links";
 import { useUiStore } from "../stores/uiStore";
 
 const STORAGE_KEY = "wp.releaseCheck";
+/** Separate key: the history is a different shape and a different cadence. */
+const HISTORY_KEY = "wp.releaseHistory";
+
+/**
+ * How many past releases the What's new page offers.
+ *
+ * Three, because the gap being covered is small but real: a user who updates
+ * infrequently — or who was on 2.12.0 for the hour before 2.13.0 replaced it —
+ * would otherwise never see the notes for the release they actually skipped
+ * past. More than three and the page becomes a changelog, which the compare
+ * link already does better.
+ */
+export const HISTORY_COUNT = 3;
 
 /**
  * How stale the cache must be before a launch check goes back to the network.
@@ -70,6 +83,15 @@ const lastChecked = ref<string | null>(null);
 const checking = ref<boolean>(false);
 /** Epoch ms until which GitHub has refused us, or null when we are clear. */
 const rateLimitedUntil = ref<number | null>(null);
+/** Recent releases, newest first. Empty until `loadHistory` resolves. */
+const history = ref<ReleaseSummary[]>([]);
+
+export interface ReleaseSummary {
+  version: string;
+  body: string;
+  url: string | null;
+  publishedAt: string | null;
+}
 
 /** Guard so the once-per-session launch fetch fires at most once across all
  *  consumers. `checkNow` ignores it. */
@@ -97,6 +119,75 @@ export function resetReleaseCheckSession(): void {
   lastChecked.value = null;
   checking.value = false;
   rateLimitedUntil.value = null;
+  history.value = [];
+  historyFetched = false;
+}
+
+/** Once per page: the history does not change while someone reads it. */
+let historyFetched = false;
+
+function readHistoryCache(): { at: string; items: ReleaseSummary[] } | null {
+  if (typeof localStorage === "undefined") return null;
+  const raw = localStorage.getItem(HISTORY_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as { at: string; items: ReleaseSummary[] };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetch the last few releases for the What's new page.
+ *
+ * Subject to the same throttle and the same rate-limit lockout as the update
+ * check — this is a second GitHub call on a shared 60/hr anonymous quota, and
+ * the whole point of the caching work was that a page someone opens repeatedly
+ * must not spend a request each time.
+ */
+async function loadHistory(): Promise<void> {
+  const cached = readHistoryCache();
+  if (cached?.items?.length) history.value = cached.items;
+
+  const fresh = cached ? Date.now() - Date.parse(cached.at) < LAUNCH_TTL_MS : false;
+  if (historyFetched || fresh || isRateLimited()) return;
+  historyFetched = true;
+
+  const slug = repoSlug();
+  if (!slug) return;
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${slug}/releases?per_page=${HISTORY_COUNT}`,
+      { headers: { Accept: "application/vnd.github+json" } },
+    );
+    if (!res.ok) {
+      if (res.status === 403 || res.status === 429) {
+        const reset = Number.parseInt(res.headers?.get?.("X-RateLimit-Reset") ?? "", 10);
+        writeRateLimit(Number.isFinite(reset) ? reset * 1000 : Date.now() + 60 * 60 * 1000);
+      }
+      return;
+    }
+    const rows = (await res.json()) as Array<Record<string, unknown>>;
+    if (!Array.isArray(rows)) return;
+    const items: ReleaseSummary[] = rows
+      .filter((r) => r.draft !== true && r.prerelease !== true)
+      .map((r) => ({
+        version: normalizeTag(String(r.tag_name ?? "")),
+        body: typeof r.body === "string" ? r.body : "",
+        url: typeof r.html_url === "string" ? r.html_url : null,
+        publishedAt: typeof r.published_at === "string" ? r.published_at : null,
+      }))
+      .filter((r) => r.version.length > 0);
+    if (!items.length) return;
+    history.value = items;
+    try {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify({ at: new Date().toISOString(), items }));
+    } catch {
+      // Storage denied — the in-memory list still serves this page view.
+    }
+  } catch {
+    // Offline. The cached list, if any, is already painted.
+  }
 }
 
 /** Is the persisted check recent enough to skip the network? */
@@ -330,6 +421,8 @@ export function useReleaseCheck(): {
   lastChecked: ReturnType<typeof ref<string | null>>;
   checking: ReturnType<typeof ref<boolean>>;
   rateLimitedUntil: ReturnType<typeof ref<number | null>>;
+  history: ReturnType<typeof ref<ReleaseSummary[]>>;
+  loadHistory: () => Promise<void>;
   checkNow: () => Promise<void>;
 } {
   const current = __APP_VERSION__;
@@ -366,6 +459,7 @@ export function useReleaseCheck(): {
 
   return {
     current, latestVersion, hasUpdate, severity,
-    releaseBody, releaseUrl, lastChecked, checking, rateLimitedUntil, checkNow,
+    releaseBody, releaseUrl, lastChecked, checking, rateLimitedUntil,
+    history, loadHistory, checkNow,
   };
 }

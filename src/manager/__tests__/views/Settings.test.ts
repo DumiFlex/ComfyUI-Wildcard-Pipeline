@@ -27,6 +27,8 @@ beforeEach(() => {
     lastChecked: ref("2026-07-21T10:00:00.000Z"),
     checking: ref(false),
     rateLimitedUntil: ref(null),
+    history: ref([]),
+    loadHistory: vi.fn(),
     checkNow,
   } as ReturnType<typeof releaseCheck.useReleaseCheck>);
 });

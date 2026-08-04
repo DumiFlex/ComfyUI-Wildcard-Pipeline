@@ -25,6 +25,7 @@ import { useReleaseCheck } from "../composables/useReleaseCheck";
 import { useEngagementStore } from "../stores/engagementStore";
 import { renderReleaseNotes } from "../utils/releaseNotes";
 import { GITHUB_REPO } from "../config/links";
+import RelativeDate from "../components/RelativeDate.vue";
 
 const release = useReleaseCheck();
 const engagement = useEngagementStore();
@@ -43,9 +44,34 @@ const notesVersion = computed(() => release.latestVersion.value ?? release.curre
 const body = computed(() => release.releaseBody.value ?? "");
 const notesHtml = computed(() => renderReleaseNotes(body.value, { full: true }));
 const hasNotes = computed(() => body.value.trim().length > 0);
-const fullUrl = computed(() => release.releaseUrl.value ?? `${GITHUB_REPO}/releases`);
+/** The button says "All releases", so it goes to all of them. It used to
+ *  prefer this release's own URL, which made the label a lie whenever the
+ *  release check had resolved — the common case. The single release is still
+ *  one click away from the index, and each earlier entry below links to its
+ *  own page directly. */
+const allReleasesUrl = `${GITHUB_REPO}/releases`;
+
+/**
+ * Releases older than the one shown above.
+ *
+ * Without these, skipping a version means never seeing its notes: 2.12.0 was
+ * the current release for about an hour before 2.13.0 replaced it, so anyone
+ * updating from 2.11.0 lands on 2.13.0 and the largest release in months is
+ * simply invisible to them. The page already exists to answer "what changed";
+ * it should not answer only for the single most recent tag.
+ *
+ * Collapsed by default — the newest release is the reason someone opened the
+ * page, and the older ones are there to be found, not to compete with it.
+ */
+const older = computed(() =>
+  (release.history.value ?? [])
+    .filter((r) => r.version !== notesVersion.value)
+    .map((r) => ({ ...r, html: renderReleaseNotes(r.body, { full: true }) }))
+    .filter((r) => r.body.trim().length > 0),
+);
 
 onMounted(() => {
+  void release.loadHistory();
   // Reaching the page IS reading it, whether or not the notes had loaded —
   // otherwise a slow network leaves the dot lit after a deliberate visit.
   engagement.markReleaseSeen(release.current);
@@ -68,7 +94,7 @@ onMounted(() => {
       </div>
       <a
         class="wp-btn wp-btn--outline wp-btn--sm wp-whatsnew-hero__link"
-        :href="fullUrl"
+        :href="allReleasesUrl"
         target="_blank"
         rel="noopener"
         data-test="whats-new-github"
@@ -89,6 +115,31 @@ onMounted(() => {
           Check again
         </Button>
       </div>
+    </Card>
+
+    <!-- Previous releases. Rendered as native <details> so each stays
+         collapsed, findable, and costs nothing when unopened. -->
+    <Card v-if="older.length" data-test="whats-new-older">
+      <h3 class="wp-relnotes__older-head">Earlier releases</h3>
+      <details
+        v-for="rel in older"
+        :key="rel.version"
+        class="wp-relnotes__older"
+        :data-test="`whats-new-older-${rel.version}`"
+      >
+        <summary class="wp-relnotes__older-summary">
+          <span class="wp-relnotes__older-version">v{{ rel.version }}</span>
+          <RelativeDate v-if="rel.publishedAt" :value="rel.publishedAt" />
+        </summary>
+        <div class="wp-relnotes" v-html="rel.html" />
+        <a
+          v-if="rel.url"
+          class="wp-relnotes__older-link"
+          :href="rel.url"
+          target="_blank"
+          rel="noopener"
+        >Release page →</a>
+      </details>
     </Card>
   </div>
 </template>
@@ -143,4 +194,32 @@ onMounted(() => {
 }
 .wp-relnotes__none .pi { font-size: 26px; color: var(--wp-text-dim); }
 .wp-relnotes__none p { margin: 0; max-width: 46ch; }
+
+.wp-relnotes__older-head {
+  margin: 0 0 var(--wp-space-3);
+  font-size: var(--wp-text-sm);
+  font-weight: 600;
+  color: var(--wp-text-muted);
+}
+.wp-relnotes__older { border-top: 1px solid var(--wp-border); }
+.wp-relnotes__older:first-of-type { border-top: 0; }
+.wp-relnotes__older-summary {
+  display: flex;
+  align-items: baseline;
+  gap: var(--wp-space-3);
+  padding: var(--wp-space-3) 0;
+  cursor: pointer;
+  font-size: var(--wp-text-sm);
+  color: var(--wp-text-muted);
+}
+.wp-relnotes__older-summary:hover { color: var(--wp-text); }
+.wp-relnotes__older-version { font-weight: 600; color: var(--wp-text); }
+.wp-relnotes__older[open] .wp-relnotes__older-summary { color: var(--wp-text); }
+.wp-relnotes__older > .wp-relnotes { padding: 0 0 var(--wp-space-4); }
+.wp-relnotes__older-link {
+  display: inline-block;
+  margin-bottom: var(--wp-space-4);
+  font-size: var(--wp-text-xs);
+  color: var(--wp-accent-text);
+}
 </style>
