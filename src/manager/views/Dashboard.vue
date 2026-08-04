@@ -13,7 +13,6 @@ import { useRecentStore } from "../stores/recentStore";
 import { useModuleStore } from "../stores/moduleStore";
 import { useEngagementStore, measureSubstance } from "../stores/engagementStore";
 import { useReleaseCheck } from "../composables/useReleaseCheck";
-import WhatsNewCard from "../components/WhatsNewCard.vue";
 import StarPrompt from "../components/StarPrompt.vue";
 import { useBundleStore } from "../stores/bundleStore";
 
@@ -54,18 +53,12 @@ engagement.noteVisit();
 
 const release = useReleaseCheck();
 // Remember which version this user has already been running, so the NEXT
-// upgrade has something to compare against. Without it `hasUnseenRelease`
-// has no baseline and the what's-new card can never fire at all.
+// upgrade has something to compare against. Without a baseline
+// `hasUnseenRelease` is always false and the topbar's unread dot can never
+// light. Seeded here rather than in the topbar because the dashboard is the
+// landing view — the topbar also mounts on first paint, but this keeps the
+// one-time write next to `noteVisit`, which has the same lifecycle.
 engagement.bootstrapVersion(release.current);
-// The fetched body describes the LATEST release, which is not the installed
-// one while an update is pending — presenting it as "what's new in <your
-// version>" would describe changes the user does not have yet. Only pass it
-// through once the two agree; until then the update dialog owns that story.
-const whatsNewBody = computed<string | null>(() =>
-  release.latestVersion.value === release.current
-    ? (release.releaseBody.value ?? null)
-    : null,
-);
 const bundleStore = useBundleStore();
 
 /** Max rows rendered per tab. The Dashboard list section has more vertical
@@ -430,12 +423,6 @@ onMounted(async () => {
 
 <template>
   <div class="wp-page">
-    <WhatsNewCard
-      :version="release.current"
-      :body="whatsNewBody"
-      :url="release.releaseUrl.value ?? null"
-    />
-
     <!-- Hero -->
     <div class="wp-hero">
       <div class="wp-hero__icon"><img :src="logoUrl" alt="" /></div>

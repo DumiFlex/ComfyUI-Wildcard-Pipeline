@@ -8,16 +8,24 @@ import { useBrowserHistory } from "../composables/useBrowserHistory";
 import { useReleaseCheck } from "../composables/useReleaseCheck";
 import { useUiStore } from "../stores/uiStore";
 import { useTweaksStore } from "../stores/tweaksStore";
+import { useEngagementStore } from "../stores/engagementStore";
 import { isMac } from "../utils/platform";
 
 const ui = useUiStore();
 const tweaks = useTweaksStore();
+const engagement = useEngagementStore();
 
 // Version is injected at build time from package.json via vite's
 // `define` config (see vite.config.mts). The release check composable
 // looks up the latest GitHub release once per app session and surfaces a
 // `hasUpdate` flag + severity classification (major/minor/patch).
 const { current: version, latestVersion, hasUpdate, severity } = useReleaseCheck();
+
+// Unread dot on the What's new button: lit when the running version differs
+// from the last one whose notes were opened. Distinct from `hasUpdate`, which
+// is about a version you do NOT have yet — this is about the one you just
+// got. Clears when the page is visited.
+const hasUnreadNews = computed(() => engagement.hasUnseenRelease(version));
 
 // Pill tone follows severity: major bump → amber warn (read changelog
 // first), minor/patch → accent purple (safe to upgrade).
@@ -168,6 +176,28 @@ function openPalette(): void {
       <Icon name="pi-sliders-h" />
     </button>
 
+    <RouterLink
+      to="/whats-new"
+      class="wp-topbar__icon-btn wp-topbar__news"
+      :aria-label="hasUnreadNews ? `What's new in v${version} (unread)` : `What's new`"
+      :title="hasUnreadNews ? `What's new in v${version}` : `What's new`"
+      data-test="topbar-whats-new"
+    >
+      <!-- A megaphone is what "here is an announcement" looks like, so the
+           dot moves rather than the glyph: its horn occupies the top-right
+           corner, and a dot there reads as part of the icon. `pi-gift` says
+           reward, `pi-bell` promises actionable alerts this button does not
+           deliver, and `pi-sparkles` is the wildcard kind icon everywhere
+           else. -->
+      <Icon name="pi-megaphone" />
+      <span
+        v-if="hasUnreadNews"
+        class="wp-topbar__news-dot"
+        data-test="topbar-whats-new-dot"
+        aria-hidden="true"
+      />
+    </RouterLink>
+
     <!-- Discord gets a permanent home here: it's the fastest route to a human,
          and it used to be buried in the community tab's offline fallback. -->
     <a
@@ -205,6 +235,25 @@ function openPalette(): void {
 /* Discord brand tint on hover so it reads as the social route, not another
    settings control. */
 .wp-topbar__discord:hover { color: #5865f2; }
+
+/* What's new — an unread dot in the icon's BOTTOM-right corner, which is the
+ * only corner the megaphone's horn leaves empty; at top-right it merged into
+ * the glyph and stopped reading as a marker. Sized as a status dot rather
+ * than a badge: there is only ever one release to announce, so there is no
+ * count worth showing. The ring matches the bar behind it so the dot stays
+ * legible wherever it lands. */
+.wp-topbar__news { position: relative; }
+.wp-topbar__news-dot {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--wp-accent-500);
+  box-shadow: 0 0 0 2px var(--wp-bg-1);
+  pointer-events: none;
+}
 
 /* Wordmark gradient text — brand identity anchor #1.
  * Base color ensures legibility in browsers without background-clip: text. */

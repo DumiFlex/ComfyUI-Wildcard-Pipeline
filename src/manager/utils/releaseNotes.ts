@@ -122,11 +122,20 @@ function normalizeReleaseHtml(md: string): string {
     .replace(/<\/?(?:b|strong)>/gi, "**");
 }
 
-export function renderReleaseNotes(md: string): string {
+/**
+ * @param opts.full Keep everything below the `<!-- /modal -->` marker — the
+ *   "Also in this release" tail. The dialog cuts there because it is an
+ *   interruption and should stay short; the dedicated What's new PAGE is
+ *   somewhere the reader chose to go, so withholding half the notes there
+ *   would just send them to GitHub. The per-commit `<details>` dump is still
+ *   stripped in both modes: it is for people reading git, not release notes.
+ */
+export function renderReleaseNotes(md: string, opts?: { full?: boolean }): string {
   if (!md || !md.trim()) {
     return '<p class="wpc-relnotes__empty">No release notes.</p>';
   }
-  const trimmed = stripComments(stripFullChangelog(cutAtModalMarker(md)));
+  const scoped = opts?.full ? md : cutAtModalMarker(md);
+  const trimmed = stripComments(stripFullChangelog(scoped));
   if (!trimmed.trim()) {
     return '<p class="wpc-relnotes__empty">No release notes.</p>';
   }
