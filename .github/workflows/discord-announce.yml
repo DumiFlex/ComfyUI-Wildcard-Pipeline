@@ -32,6 +32,12 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
+          # setup-node sniffs the lockfile and tries to prime a pnpm cache,
+          # which fails because pnpm is never installed here. It is not needed:
+          # the announce script has no dependencies at all — plain ESM and the
+          # global fetch built into Node 18+. Nothing is installed, so there is
+          # nothing to cache.
+          package-manager-cache: false
 
       # `release` events always post. `workflow_dispatch` honours the dry_run
       # box, which defaults to true so a manual run cannot surprise anyone.
