@@ -114,6 +114,59 @@ function unregisterFillSync(sync: () => void): void {
   fillSyncs.delete(sync);
 }
 
+/* ── renderer-flip watcher ─────────────────────────────────────────────
+ *
+ * The Nodes 2.0 toggle in the menu does NOT reload the page, so every widget
+ * alive at that moment was built against the other renderer. Anything a widget
+ * cached about its geometry is stale from that instant, and the autosize
+ * bookkeeping is the damaging case: `pushSize` compares the node's current
+ * height against the last height WE set, and treats a mismatch as "the user
+ * dragged this, leave it alone". A renderer flip changes the node's height
+ * without us, so every widget silently decides the user owns its height and
+ * stops auto-collapsing — the Debug node's jump and the var picker staying
+ * tall after its dropdown closes are both this.
+ *
+ * One watcher, driven by the same DOM churn the flip itself causes, tells
+ * every widget to re-baseline.
+ */
+const rendererFlipSubs = new Set<() => void>();
+let rendererFlipObserver: MutationObserver | null = null;
+let lastRendererWasVue: boolean | null = null;
+let rendererFlipQueued = false;
+
+function checkRendererFlip(): void {
+  rendererFlipQueued = false;
+  const now = isVueNodes();
+  if (lastRendererWasVue === null) {
+    lastRendererWasVue = now;
+    return;
+  }
+  if (now === lastRendererWasVue) return;
+  lastRendererWasVue = now;
+  for (const sub of [...rendererFlipSubs]) sub();
+}
+
+function queueRendererFlipCheck(): void {
+  if (rendererFlipQueued) return;
+  rendererFlipQueued = true;
+  requestAnimationFrame(checkRendererFlip);
+}
+
+function onRendererFlip(sub: () => void): () => void {
+  rendererFlipSubs.add(sub);
+  if (
+    !rendererFlipObserver
+    && typeof MutationObserver !== "undefined"
+    && typeof document !== "undefined"
+    && document.body
+  ) {
+    rendererFlipObserver = new MutationObserver(queueRendererFlipCheck);
+    rendererFlipObserver.observe(document.body, { childList: true, subtree: true });
+  }
+  queueRendererFlipCheck();
+  return () => { rendererFlipSubs.delete(sub); };
+}
+
 interface ResizableNode {
   size?: number[];
   computeSize?: () => [number, number] | number[];
@@ -452,6 +505,14 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   let relayouting = false;
   let lastAutoSetWidth = 0;
   let lastAutoSetHeight = 0;
+  // A renderer flip resizes the node without going through us, which would
+  // otherwise read as a user drag and freeze the widget's height forever.
+  // Forget the baseline and re-fit to content.
+  const stopRendererWatch = onRendererFlip(() => {
+    lastAutoSetWidth = 0;
+    lastAutoSetHeight = 0;
+    requestRelayout();
+  });
   function requestRelayout(): void {
     if (relayouting) return;
     relayouting = true;
@@ -511,6 +572,7 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     unmount: () => {
       resizeObserver?.disconnect();
       fillDispose?.();
+      stopRendererWatch();
       removeWheelShield();
       app.unmount();
     },
