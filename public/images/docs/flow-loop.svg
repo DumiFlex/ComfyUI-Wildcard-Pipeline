@@ -62,12 +62,14 @@
     }
   ]]></style>
   <defs>
-    <!-- Mirrors the SPA frame wash: a radial gradient of the node colour at
-         6 percent from the top-left, gone by 60 percent, over bg-1. Without
-         it the panel reads as a flat slab. -->
-    <radialGradient id="wash" cx="0" cy="0" r="1.2" gradientTransform="scale(1 0.325)">
-      <stop class="wash" offset="0" stop-opacity="0.06"/>
-      <stop class="wash" offset="0.6" stop-opacity="0"/>
+    <!-- Mirrors the SPA frame wash. The CSS is an ellipse 120 percent of the
+         width by 100 percent of the HEIGHT, anchored top-left — so it spans
+         the whole panel. Squashing it by the aspect ratio instead pins it to
+         the corner and leaves the rest looking flat. -->
+    <radialGradient id="wash" cx="0" cy="0" r="1" gradientTransform="scale(1.2 1)">
+      <stop class="wash" offset="0" stop-opacity="0.10"/>
+      <stop class="wash" offset="0.6" stop-opacity="0.02"/>
+      <stop class="wash" offset="1" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="flowv" x1="0" y1="0" x2="0" y2="1">
       <stop class="flow0" offset="0" stop-opacity="0"/>
