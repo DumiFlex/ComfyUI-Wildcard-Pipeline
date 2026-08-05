@@ -46,10 +46,13 @@ const [
   import("./extension/topbar"),
   import("./components/settings/DisplayPlaygroundModal.vue"),
   import("./components/settings/playground-store"),
-  // Webfonts (Inter 400/600 + JetBrains Mono 400) — side-effect import,
-  // the module just owns the @font-face CSS chunk.
-  import("./extension/fonts"),
 ]);
+
+// Webfonts — deliberately NOT awaited above. The module only appends a
+// <link> for @font-face rules, and `font-display: swap` means text renders in
+// the system stack until they land. Nothing about registering a node type
+// depends on a font, so making registration wait on one was pure latency.
+void import("./extension/fonts");
 
 // Singleton toast container — one Vue app mounted to a body-level div renders
 // every toast pushed via shared/toast-store. Each Context node's Vue app

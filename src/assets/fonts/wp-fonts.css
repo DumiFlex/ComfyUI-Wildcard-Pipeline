@@ -1,0 +1,40 @@
+/* Webfonts for the canvas extension — Inter + JetBrains Mono, latin subset,
+ * variable axis 100-900.
+ *
+ * This file is NOT processed by Vite. `scripts/copy-fonts.mjs` copies this
+ * directory verbatim into `js/assets/fonts/`, and `src/extension/fonts.ts`
+ * injects a <link> to it at runtime.
+ *
+ * Why not an import: Vite library mode ALWAYS base64-inlines assets and
+ * ignores `build.assetsInlineLimit` entirely, so any woff2 reachable from a
+ * module graph becomes ~33% larger and lands inside a JS chunk — parsed as
+ * JavaScript, re-downloaded whenever that chunk's hash changes, and counted
+ * against the bundle-size gate. Keeping the fonts outside the graph is the
+ * only way to ship them as fonts.
+ *
+ * The `src` URLs below are relative to THIS FILE, so the browser resolves
+ * them against the stylesheet's own location. No path arithmetic in JS.
+ *
+ * font-display: swap renders the system stack first and re-paints when the
+ * woff2 lands, so text is never invisible during the fetch.
+ */
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src:
+    url("./inter-latin.woff2") format("woff2-variations"),
+    url("./inter-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src:
+    url("./jetbrains-mono-latin.woff2") format("woff2-variations"),
+    url("./jetbrains-mono-latin.woff2") format("woff2");
+}
