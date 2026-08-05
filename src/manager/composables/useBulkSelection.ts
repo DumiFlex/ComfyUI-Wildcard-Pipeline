@@ -34,7 +34,23 @@ export interface BulkSelection {
   selectedIds: () => string[];
 }
 
-export function useBulkSelection(getIds: () => string[]): BulkSelection {
+/**
+ * @param getIds        every selectable row, filtered or not. Drives `count`
+ *                      and `selectedIds`, so a selection survives the user
+ *                      changing the filter and still deletes what they picked.
+ * @param getVisibleIds the rows currently ON SCREEN. Drives `allSelected`,
+ *                      `someSelected` and `toggleAll`.
+ *
+ * The split exists because "select all" under an active filter must mean the
+ * rows you can see. Scoping it to `getIds` instead means filtering a list of
+ * 40 down to 3, clicking the header checkbox, and deleting all 40 — with 37 of
+ * them never rendered. Defaults to `getIds` so an unfiltered list behaves
+ * exactly as before.
+ */
+export function useBulkSelection(
+  getIds: () => string[],
+  getVisibleIds: () => string[] = getIds,
+): BulkSelection {
   const active = ref(false);
   const selected = ref<Set<string>>(new Set());
 
@@ -42,11 +58,11 @@ export function useBulkSelection(getIds: () => string[]): BulkSelection {
     () => getIds().filter((id) => selected.value.has(id)).length,
   );
   const allSelected = computed(() => {
-    const ids = getIds();
+    const ids = getVisibleIds();
     return ids.length > 0 && ids.every((id) => selected.value.has(id));
   });
   const someSelected = computed(() =>
-    getIds().some((id) => selected.value.has(id)),
+    getVisibleIds().some((id) => selected.value.has(id)),
   );
 
   function isSelected(id: string): boolean {
@@ -58,9 +74,15 @@ export function useBulkSelection(getIds: () => string[]): BulkSelection {
     else next.add(id);
     selected.value = next;
   }
+  /** Adds or removes ONLY the visible rows, so it never silently reaches a row
+   *  the filter is hiding — in either direction. Without a filter,
+   *  `getVisibleIds` is `getIds` and this is the original select-all/none. */
   function toggleAll(): void {
-    if (allSelected.value) selected.value = new Set();
-    else selected.value = new Set(getIds());
+    const visible = getVisibleIds();
+    const next = new Set(selected.value);
+    if (allSelected.value) for (const id of visible) next.delete(id);
+    else for (const id of visible) next.add(id);
+    selected.value = next;
   }
   function clear(): void {
     selected.value = new Set();

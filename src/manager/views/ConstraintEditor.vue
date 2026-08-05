@@ -23,6 +23,8 @@ import DraftBanner from "../components/DraftBanner.vue";
 import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
 import Checkbox from "../components/ui/Checkbox.vue";
+import ListFilter from "../components/ui/ListFilter.vue";
+import { constraintExceptionHaystack } from "../utils/listFilter";
 import BulkDeleteToolbar from "../components/BulkDeleteToolbar.vue";
 import { useBulkSelection } from "../composables/useBulkSelection";
 import RichTextPreview from "../components/RichTextPreview.vue";
@@ -899,7 +901,31 @@ function exUid(ex: object): string {
   }
   return u;
 }
-const exBulk = useBulkSelection(() => exceptions.value.map((ex) => exUid(ex)));
+/* ── Filter ──────────────────────────────────────────────────────────────
+ * An exception list outgrows the screen faster than the wildcard it filters:
+ * one row per source/target value pair, so a modest wildcard yields dozens.
+ *
+ * Matching runs over `displayLabel(...)` and the mode's human label — what the
+ * row actually READS AS. The stored `source`/`target` are frequently `@{uuid}`
+ * tokens, and nobody searches for a uuid they cannot see. */
+const exQuery = ref("");
+const exFilterActive = computed(() => exQuery.value.trim().length > 0);
+
+/** Rows to render, each carrying its ORIGINAL index: every row action —
+ *  `removeException(idx)`, `exceptions.value[idx]` in the update handlers —
+ *  addresses by position, so a filtered array alone would edit the wrong row. */
+const visibleExceptions = computed<{ ex: ConstraintException; idx: number }[]>(() => {
+  const rows = exceptions.value.map((ex, idx) => ({ ex, idx }));
+  const q = exQuery.value.trim().toLowerCase();
+  if (!q) return rows;
+  return rows.filter(({ ex }) =>
+    constraintExceptionHaystack(ex, displayLabel, (m) => modeMeta(m).label).includes(q));
+});
+
+const exBulk = useBulkSelection(
+  () => exceptions.value.map((ex) => exUid(ex)),
+  () => visibleExceptions.value.map(({ ex }) => exUid(ex)),
+);
 const {
   active: exBulkActive,
   count: exBulkCount,
@@ -1410,6 +1436,13 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
     <div id="editor-section-exceptions">
     <Card :title="`Exceptions (${exceptions.length})`" :padding="false" sticky-header>
       <template #actions>
+        <ListFilter
+          v-model="exQuery"
+          :total="exceptions.length"
+          :visible="visibleExceptions.length"
+          noun="exceptions"
+          test-prefix="cn-ex"
+        />
         <!-- Editing requires a live wildcard — the value pickers are empty
              when the ref is missing, so authoring a new exception is hidden
              in the read-only recovery view. -->
@@ -1459,9 +1492,10 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
         </thead>
         <tbody>
           <tr
-            v-for="(ex, idx) in exceptions"
-            :key="idx"
+            v-for="{ ex, idx } in visibleExceptions"
+            :key="exUid(ex)"
             class="cn-ex-row"
+            :data-row-index="idx"
             :style="{ '--cn-mode-var': `var(${modeMeta(ex.mode).cssVar})` }"
           >
             <td class="wp-mono" data-test="cn-ex-ro-src">{{ displayLabel(ex.source) || "⌀ null" }}</td>
@@ -1504,10 +1538,11 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
         </thead>
         <tbody>
           <tr
-            v-for="(ex, idx) in exceptions"
-            :key="idx"
+            v-for="{ ex, idx } in visibleExceptions"
+            :key="exUid(ex)"
             class="cn-ex-row"
             :class="{ 'cn-ex-row--selected': exBulkActive && exBulkIsSelected(exUid(ex)) }"
+            :data-row-index="idx"
             :style="{ '--cn-mode-var': `var(${modeMeta(ex.mode).cssVar})` }"
           >
             <td v-if="exBulkActive" class="cn-ex-col-check">
@@ -1632,6 +1667,15 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
                 aria-label="Remove exception"
                 @click="removeException(idx)"
               />
+            </td>
+          </tr>
+          <!-- Says the rows still exist. A filtered-empty table is otherwise
+               indistinguishable from having deleted everything. -->
+          <tr v-if="exFilterActive && visibleExceptions.length === 0">
+            <td :colspan="exBulkActive ? 6 : 5" class="cn-ex-noresults" data-test="cn-ex-noresults">
+              <b>No exception matches this filter</b>
+              All {{ exceptions.length }} are still here — only the view is filtered.
+              <button type="button" class="cn-ex-clearlink" @click="exQuery = ''">Clear filter</button>
             </td>
           </tr>
         </tbody>
@@ -1804,6 +1848,17 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
 .cn-ex-col-check { width: 34px; text-align: center; }
 .cn-ex-row--selected > td { background: color-mix(in oklab, var(--wp-accent) 10%, transparent); }
 .cn-ex-bulkbar { padding: 12px 16px 14px; }
+.cn-ex-noresults {
+  padding: var(--wp-space-6) var(--wp-space-5);
+  text-align: center; color: var(--wp-text-dim); font-size: 12px;
+}
+.cn-ex-noresults b { display: block; color: var(--wp-text); margin-bottom: 4px; }
+.cn-ex-clearlink {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--wp-text-muted); font: 11px var(--wp-font-sans);
+  text-decoration: underline;
+  margin-left: var(--wp-space-3);
+}
 
 /* Mode chip — icon glyph + label, tinted by --cn-mode-var. Editable +
  * read-only share the base; the read-only modifier mutes it to the same

@@ -331,7 +331,13 @@ function commitBulkValues(parsed: ParsedFixedValue[]): void {
 /* ── Bulk select + delete ────────────────────────────────────────────────
  * Multi-select value rows to delete many at once (the bulk-ADD panel above
  * stays independent). Selection keys off each row's stable `id`. */
-const bulk = useBulkSelection(() => values.value.map((v) => v.id));
+const bulk = useBulkSelection(
+  () => values.value.map((v) => v.id),
+  // Select-all must mean the FILTERED rows. Before this second argument it
+  // meant every row, so filtering 40 values to 3 and hitting the header
+  // checkbox selected — and deleted — all 40, 37 of them never on screen.
+  () => visibleValueRows.value.map(({ v }) => v.id),
+);
 const {
   active: bulkActive,
   count: bulkCount,

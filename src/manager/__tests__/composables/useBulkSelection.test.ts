@@ -66,4 +66,66 @@ describe("useBulkSelection", () => {
     const s = useBulkSelection(() => rows.value);
     expect(s.allSelected.value).toBe(false);
   });
+
+  /**
+   * Select-all under an active filter.
+   *
+   * Before the second argument existed, `toggleAll` selected `getIds()` — every
+   * row, filtered or not. Filtering 40 values down to 3 and clicking the header
+   * checkbox therefore selected all 40, and the delete that usually follows
+   * removed 37 rows that were never on screen. These are the tests that stop
+   * that coming back.
+   */
+  describe("with a filtered view", () => {
+    const all = ["a", "b", "c", "d"];
+
+    it("selects only the visible rows", () => {
+      const visible = ref(["a", "b"]);
+      const s = useBulkSelection(() => all, () => visible.value);
+      s.toggleAll();
+      expect(s.selectedIds()).toEqual(["a", "b"]);
+      expect(s.count.value).toBe(2);
+    });
+
+    it("reports allSelected against the visible rows, not every row", () => {
+      const visible = ref(["a", "b"]);
+      const s = useBulkSelection(() => all, () => visible.value);
+      s.toggleAll();
+      // Every VISIBLE row is selected, so the header checkbox is checked —
+      // even though c and d are not selected.
+      expect(s.allSelected.value).toBe(true);
+    });
+
+    it("deselects only the visible rows, leaving a hidden selection intact", () => {
+      const visible = ref(["a", "b"]);
+      const s = useBulkSelection(() => all, () => visible.value);
+      s.toggle("d");            // selected while it was visible earlier
+      s.toggleAll();            // + a, b
+      expect(s.selectedIds().sort()).toEqual(["a", "b", "d"]);
+      s.toggleAll();            // all visible selected → remove just those
+      expect(s.selectedIds()).toEqual(["d"]);
+    });
+
+    it("keeps a selection made before the filter changed", () => {
+      const visible = ref(["a", "b"]);
+      const s = useBulkSelection(() => all, () => visible.value);
+      s.toggleAll();
+      // User retypes the filter; c is now the only match.
+      visible.value = ["c"];
+      // a and b stay selected and stay deletable — the count is the honest
+      // total, which is what the bulk toolbar shows.
+      expect(s.count.value).toBe(2);
+      expect(s.selectedIds().sort()).toEqual(["a", "b"]);
+      expect(s.allSelected.value).toBe(false);
+    });
+
+    it("behaves exactly as before when no visible-getter is passed", () => {
+      const rows = ref(["a", "b", "c"]);
+      const s = useBulkSelection(() => rows.value);
+      s.toggleAll();
+      expect(s.count.value).toBe(3);
+      s.toggleAll();
+      expect(s.count.value).toBe(0);
+    });
+  });
 });
