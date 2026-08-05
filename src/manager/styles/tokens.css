@@ -588,6 +588,11 @@ input, textarea, select { font: inherit; }
   padding: 12px 14px;
   border-bottom: 1px solid var(--wp-border);
   display: flex; align-items: center; gap: 10px;
+  /* Wrap only engages once the row genuinely cannot fit, which previously
+     meant the widest flexible child collapsed instead — the derivation card
+     has four buttons and squeezed its filter input to 18px in a narrow
+     window. A header that fits is unaffected. */
+  flex-wrap: wrap;
 }
 .wp-card__title-wrap { display: flex; flex-direction: column; gap: 1px; }
 .wp-card__title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--wp-text-muted); margin: 0; font-weight: 600; }

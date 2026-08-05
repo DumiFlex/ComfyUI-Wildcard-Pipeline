@@ -86,14 +86,29 @@ const query = defineModel<string>({ required: true });
 .wp-lfilter {
   display: flex;
   align-items: center;
-  gap: var(--wp-space-2);
-  min-width: 0;
+  gap: var(--wp-space-4);
+  /* Card's header puts a `.wp-spacer` (flex: 1) between the title and this
+     slot. With a grow factor of 1 the two split the free space evenly and the
+     search box ends up half the width it should be. A far larger factor takes
+     effectively all of the slack while leaving the spacer in place, which is
+     what still separates the title from the controls. Inherited from the
+     fixed-values filter this was extracted from — the same header, the same
+     problem. */
+  flex: 1000 1 auto;
+  /* A floor, not a width. Below this the input is too small to read what you
+     typed, so the card header (which wraps) drops the filter onto its own row
+     instead of shaving it to nothing. The derivation card, with four buttons
+     beside it, is the case that forces this. */
+  min-width: 220px;
+  margin-right: var(--wp-space-4);
 }
 
 .wp-lfilter__search {
   display: flex;
   align-items: center;
-  gap: var(--wp-space-2);
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: var(--wp-space-3);
   padding: 0 var(--wp-space-2);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius-sm);
@@ -105,7 +120,12 @@ const query = defineModel<string>({ required: true });
 .wp-lfilter__search .pi { font-size: 11px; color: var(--wp-text-dim); }
 
 .wp-lfilter__search input {
-  width: 13ch;
+  /* 13ch basis is what the fixed-values filter used as a fixed width; keeping
+     it as the BASIS means a roomy header grows the box instead of leaving
+     slack, while a cramped one can still shrink rather than pushing the
+     card's buttons out of the row. */
+  flex: 1 1 13ch;
+  min-width: 0;
   border: 0;
   background: none;
   color: var(--wp-text);

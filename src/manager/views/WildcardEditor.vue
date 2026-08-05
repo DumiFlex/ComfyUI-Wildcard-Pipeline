@@ -1280,22 +1280,35 @@ const bulkAddOpen = ref(false);
 const selectedIds = ref<Set<string>>(new Set());
 const bulkNote = ref("");
 
-/** Options eligible for bulk selection — the null option is excluded since
- *  its weight + sub-categories are meaningless. */
-/** Every row can be selected, the null option included: selection drives
- *  moves, weight and delete, all of which it takes part in. Tag actions skip
- *  it separately — see `taggableSelection`. */
-const selectableOptions = computed(() => options.value);
 const selectedCount = computed(() => selectedIds.value.size);
+
+/**
+ * The rows select-all reaches: what the FILTER is showing, not every option.
+ *
+ * Every row is selectable, the null option included — selection drives moves,
+ * weight and delete, all of which it takes part in. Tag actions skip it
+ * separately; see `taggableSelection`.
+ *
+ * Scoping this to the full `options` list meant filtering 200 options down to 4,
+ * clicking the header checkbox and then hitting a bulk action — delete, or set
+ * weight, or a tag change — applied it to all 200. Delete at least changes the
+ * row count; `setWeightSelected` rewrote every weight in the list silently, and
+ * a hand-tuned distribution has no undo.
+ *
+ * Same fix as `useBulkSelection`'s `getVisibleIds`, which the three simpler
+ * editors take. This editor predates that composable and was never migrated,
+ * so it carried the bug independently.
+ */
+const selectableVisibleOptions = computed(() => visibleOptionRows.value.map(({ o }) => o));
 const allSelected = computed(
   () =>
-    selectableOptions.value.length > 0 &&
-    selectableOptions.value.every((o) => selectedIds.value.has(o.id as string)),
+    selectableVisibleOptions.value.length > 0 &&
+    selectableVisibleOptions.value.every((o) => selectedIds.value.has(o.id as string)),
 );
-/** ≥1 (but not necessarily all) selectable rows checked — drives the
- *  select-all checkbox's indeterminate dash. */
+/** ≥1 (but not necessarily all) VISIBLE rows checked — drives the select-all
+ *  checkbox's indeterminate dash. */
 const someSelected = computed(() =>
-  selectableOptions.value.some((o) => selectedIds.value.has(o.id as string)),
+  selectableVisibleOptions.value.some((o) => selectedIds.value.has(o.id as string)),
 );
 
 /** Sub-categories present on ≥1 selected row (union), in registry order —
@@ -1344,9 +1357,16 @@ function toggleSelect(id: string | undefined): void {
   else next.add(id);
   selectedIds.value = next;
 }
+/** Adds or removes ONLY the visible rows, in both directions, so it can never
+ *  reach a row the filter is hiding. A selection made under a previous query
+ *  survives — `selectedCount` reports the honest total, and the bulk bar shows
+ *  it. Only select-all was ever the hazard. */
 function toggleSelectAll(): void {
-  if (allSelected.value) selectedIds.value = new Set();
-  else selectedIds.value = new Set(selectableOptions.value.map((o) => o.id as string));
+  const visible = selectableVisibleOptions.value.map((o) => o.id as string);
+  const next = new Set(selectedIds.value);
+  if (allSelected.value) for (const id of visible) next.delete(id);
+  else for (const id of visible) next.add(id);
+  selectedIds.value = next;
 }
 function clearSelection(): void {
   selectedIds.value = new Set();

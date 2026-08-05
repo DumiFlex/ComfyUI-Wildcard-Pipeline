@@ -22,6 +22,7 @@ import RichTextInput from "../components/RichTextInput.vue";
 import BulkAddPanel from "../components/BulkAddPanel.vue";
 import BulkDeleteToolbar from "../components/BulkDeleteToolbar.vue";
 import Checkbox from "../components/ui/Checkbox.vue";
+import ListFilter from "../components/ui/ListFilter.vue";
 import { useBulkSelection } from "../composables/useBulkSelection";
 import type { ParsedFixedValue } from "../utils/bulkParse";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
@@ -549,36 +550,13 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
              filter here — these rows carry no tags — so the text box searches
              BOTH halves of a row, the binding and the content, because you
              look for either. -->
-        <div v-if="values.length > 8" class="fv-filter">
-          <label class="fv-filter__search" :class="{ 'fv-filter__search--on': fvQuery.length > 0 }">
-            <i class="pi pi-search" aria-hidden="true" />
-            <input
-              v-model="fvQuery"
-              type="text"
-              :placeholder="`Filter ${values.length} values…`"
-              aria-label="Filter values"
-              spellcheck="false"
-              autocomplete="off"
-              data-test="fv-search"
-            />
-            <button
-              v-if="fvQuery"
-              type="button"
-              class="fv-filter__clearx"
-              aria-label="Clear filter"
-              @click="fvQuery = ''"
-            ><i class="pi pi-times" aria-hidden="true" /></button>
-          </label>
-          <span class="fv-filter__count" data-test="fv-count">
-            <template v-if="fvFilterActive">
-              <span class="fv-filter__n" :data-zero="visibleValueRows.length === 0 ? '' : null">
-                {{ visibleValueRows.length }} of {{ values.length }}
-              </span>
-              <button type="button" class="fv-filter__clear" data-test="fv-clear" @click="fvQuery = ''">Clear</button>
-            </template>
-            <span v-else class="fv-filter__idle">{{ values.length }} values</span>
-          </span>
-        </div>
+        <ListFilter
+          v-model="fvQuery"
+          :total="values.length"
+          :visible="visibleValueRows.length"
+          noun="values"
+          test-prefix="fv"
+        />
         <Button
           size="sm"
           :variant="bulkActive ? 'secondary' : 'ghost'"
@@ -801,59 +779,6 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
 }
 
 /* ── Filter + reorder ───────────────────────────────────────────────── */
-.fv-filter {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-4);
-  /* Card's header puts a `.wp-spacer` (flex: 1) between the title and this
-     slot. With a grow factor of 1 the two split the free space evenly and the
-     search box ended up half the width it should be. A far larger factor takes
-     effectively all of the slack while leaving the spacer in place, which is
-     what still separates the title from the controls. */
-  flex: 1000 1 auto;
-  min-width: 0;
-  margin-right: var(--wp-space-4);
-}
-.fv-filter__search {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-3);
-  flex: 1 1 auto;
-  min-width: 90px;
-  padding: 3px var(--wp-space-4); /* audit-exempt: compact inline search */
-  background: var(--wp-bg-1);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text-dim);
-}
-.fv-filter__search--on {
-  border-color: var(--wp-accent-500);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-500) 20%, transparent);
-}
-.fv-filter__search .pi { font-size: 11px; }
-.fv-filter__search input {
-  flex: 1;
-  min-width: 0;
-  background: none;
-  border: none;
-  outline: none;
-  color: var(--wp-text);
-  font: 12px var(--wp-font-mono);
-}
-.fv-filter__clearx {
-  background: none; border: none; padding: 0; cursor: pointer;
-  color: var(--wp-text-dim); font-size: 10px;
-}
-.fv-filter__count {
-  display: flex; align-items: center; gap: var(--wp-space-3);
-  font-size: 11px; white-space: nowrap;
-}
-.fv-filter__n {
-  font-family: var(--wp-font-mono); font-variant-numeric: tabular-nums;
-  font-weight: 600; color: var(--wp-success);
-}
-.fv-filter__n[data-zero] { color: var(--wp-danger); }
-.fv-filter__idle { color: var(--wp-text-dim); font-family: var(--wp-font-mono); }
 .fv-filter__clear {
   background: none; border: none; padding: 0; cursor: pointer;
   color: var(--wp-text-muted); font: 11px var(--wp-font-sans);

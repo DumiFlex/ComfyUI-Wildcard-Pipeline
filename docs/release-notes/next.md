@@ -2,7 +2,7 @@ A faster start, filters on two more editors, and a bulk-delete fix worth reading
 
 ### Highlights
 
-- **"Select all" now means the rows you can see.** With a filter active in the fixed-values editor, the header checkbox selected *every* value, not the filtered ones — so narrowing a list of 40 down to 3, selecting all and deleting removed all 40, with 37 of them never on screen and no warning. It now selects only what the filter is showing. If you have ever lost values this way, this was why.
+- **"Select all" now means the rows you can see.** With a filter active, the header checkbox selected *every* row, not the filtered ones — so narrowing a list down to a handful, selecting all and deleting removed the whole list, most of it never on screen and with no warning. This affected the **wildcard** and **fixed-values** editors, and on wildcards it reached bulk weight and tag changes too: setting a weight on a filtered selection silently rewrote every option's weight, with no change in row count to hint at it. Select-all is now scoped to what the filter is showing, in both directions. If you have ever lost options or had a weight distribution flattened, this was why.
 
 - **Constraint exceptions and derivation rules have a filter bar.** The wildcard and fixed-values editors got one previously; these two did not, which was backwards — an exception list is routinely longer than the wildcard it filters. Type to narrow the list, with a count and a clear button.
 
