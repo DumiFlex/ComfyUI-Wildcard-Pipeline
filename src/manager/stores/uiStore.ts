@@ -12,6 +12,7 @@ const STORAGE_KEY_DENSITY = "wp-density-mode";
 const STORAGE_KEY_MAX_REF_DEPTH = "wp-wildcard-max-ref-depth";
 const STORAGE_KEY_CHECK_ON_LAUNCH = "wp-update-check-on-launch";
 const STORAGE_KEY_KEEP_EMPTY_GROUPS = "wp-keep-empty-tag-groups";
+const STORAGE_KEY_TAG_AUTOCOMPLETE = "wp-tag-autocomplete";
 const FLASH_SUPPRESS_MS = 120;
 const DEFAULT_MAX_REF_DEPTH = 8;
 const MIN_MAX_REF_DEPTH = 1;
@@ -51,6 +52,18 @@ function readStoredDensity(): DensityMode {
  * keeping one needs no new field and no schema bump. The DECISION is what
  * varies per user; the RESULT is recorded in the payload like any other edit.
  */
+/** Off unless explicitly enabled. The feature needs a tag list the user has
+ *  to fetch first, so defaulting it on would advertise a capability that is
+ *  not there yet. */
+function readStoredTagAutocomplete(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_KEY_TAG_AUTOCOMPLETE) === "1";
+  } catch {
+    /* localStorage unavailable */
+  }
+  return false;
+}
+
 function readStoredKeepEmptyGroups(): boolean {
   try {
     return localStorage.getItem(STORAGE_KEY_KEEP_EMPTY_GROUPS) === "1";
@@ -99,6 +112,16 @@ export const useUiStore = defineStore("ui", () => {
   const maxRefDepth = ref<number>(readStoredMaxRefDepth());
   const checkOnLaunch = ref<boolean>(readStoredCheckOnLaunch());
   const keepEmptyTagGroups = ref<boolean>(readStoredKeepEmptyGroups());
+  const tagAutocomplete = ref<boolean>(readStoredTagAutocomplete());
+
+  function setTagAutocomplete(v: boolean): void {
+    tagAutocomplete.value = v;
+    try {
+      localStorage.setItem(STORAGE_KEY_TAG_AUTOCOMPLETE, v ? "1" : "0");
+    } catch {
+      /* localStorage unavailable */
+    }
+  }
 
   function setKeepEmptyTagGroups(v: boolean): void {
     keepEmptyTagGroups.value = v;
@@ -192,6 +215,8 @@ export const useUiStore = defineStore("ui", () => {
     checkOnLaunch,
     keepEmptyTagGroups,
     setKeepEmptyTagGroups,
+    tagAutocomplete,
+    setTagAutocomplete,
     cycleTheme,
     setThemeMode,
     setDensity,

@@ -3,6 +3,7 @@ import type {
   BundleCreateInput, BundleListResponse, BundleRow, BundleUpdateInput,
   CategoryCreateInput, CategoryRow,
   DatabaseConfig, DatabaseConfigUpdate,
+  TagStatus, TagSuggestResponse, TagDownloadResult,
   DatabaseInfo, MaintenanceOp, MaintenanceResult,
   EmbedBundle,
   MatchRequest, MatchResponse,
@@ -229,6 +230,32 @@ export const api = {
       return request<void>(`/wp/api/categories/${id}`, { method: "DELETE" });
     },
   },
+  tags: {
+    /** Whether a tag list is installed, and what it contains. Drives Settings:
+     *  the toggle is meaningless without a file, so "off" and "impossible"
+     *  have to be distinguishable. */
+    status() {
+      return request<TagStatus>("/wp/api/tags/status", { method: "GET" });
+    },
+    /** Prefix search. The list itself is never sent to the browser — it is
+     *  several megabytes — so matching happens server-side and this returns
+     *  one screenful. */
+    suggest(q: string, limit = 20) {
+      const query = `?q=${encodeURIComponent(q)}&limit=${limit}`;
+      return request<TagSuggestResponse>(`/wp/api/tags/suggest${query}`, {
+        method: "GET",
+      });
+    },
+    /** Fetch the list from our GitHub release. Deliberately takes no
+     *  arguments: the URL and the destination are both fixed server-side so
+     *  there is nothing a caller can steer. See wp_api/_tag_download.py. */
+    download() {
+      return request<TagDownloadResult>("/wp/api/tags/download", {
+        method: "POST",
+      });
+    },
+  },
+
   database: {
     info() {
       return request<DatabaseInfo>("/wp/api/database/info", { method: "GET" });

@@ -559,3 +559,48 @@ export interface DatabaseConfigUpdate {
   /** Omit to leave unchanged; pass `null` to explicitly clear. */
   pending_move?: PendingMove | null;
 }
+
+/* ── Tag autocomplete ─────────────────────────────────────────────────── */
+
+/** Danbooru's numeric tag categories. `null` when the installed file is the
+ *  two-column `name,count` shape, which carries no category at all. */
+export type TagCategoryName =
+  | "general" | "artist" | "copyright" | "character" | "meta";
+
+export interface TagSuggestion {
+  /** The tag that gets INSERTED — always the canonical one, even when the
+   *  query matched an alias. */
+  name: string;
+  /** What the query actually matched. Differs from `name` only for an alias,
+   *  which is how the row can explain why it appeared. */
+  matched: string;
+  count: number;
+  category: number | null;
+  category_name: TagCategoryName | null;
+}
+
+export interface TagSuggestResponse {
+  available?: boolean;
+  tags: TagSuggestion[];
+}
+
+export interface TagStatus {
+  /** A file is installed AND parsed. The user setting is separate — the two
+   *  together are what decide whether suggestions appear. */
+  available: boolean;
+  /** Where the file is looked for, even when nothing is there yet. */
+  path: string | null;
+  tag_count: number;
+  /** False for a two-column file. The UI drops the colour column entirely
+   *  rather than rendering it grey and meaningless. */
+  has_categories: boolean;
+}
+
+export interface TagDownloadResult {
+  path: string;
+  bytes: number;
+  tag_count: number;
+  has_categories: boolean;
+  /** Echoed back so the UI can name exactly where the file came from. */
+  source: string;
+}
