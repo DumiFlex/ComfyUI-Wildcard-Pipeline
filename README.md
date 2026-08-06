@@ -144,6 +144,27 @@ See [Nodes → WP Debug](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/w
 - 💭 **[GitHub Discussions](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/discussions)** — long-form questions, ideas, design threads
 - 🐛 **[Issue tracker](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)** — bug reports + feature requests
 
+## Network access
+
+This extension works entirely offline. It makes **one** outbound request, and only when you ask for it:
+
+| What | When | Where to |
+| --- | --- | --- |
+| Booru tag list for the optional value autocomplete | Only when you click **Download** in Settings → Tag autocomplete | `github.com` → `objects.githubusercontent.com`, our own release asset |
+
+Nothing is fetched at startup, on a schedule, or as a side effect of anything else. Delete the file and the feature simply turns off. The update check in Settings talks to the GitHub releases API on the same terms — you can switch it off, and it never runs without you.
+
+Because ComfyUI serves its API without authentication, that download endpoint is deliberately built with nothing to steer:
+
+- **The URL is a constant.** There is no URL parameter — the request body is ignored — so it cannot be pointed at your internal network or a cloud metadata address.
+- **Redirects are checked at every hop** against a fixed host list, because GitHub serves release assets via a CDN. A redirect anywhere else is refused mid-chain.
+- **The destination is computed server-side** from ComfyUI's user directory plus a fixed filename. No caller input reaches the path, and a symlink sitting at that path is refused rather than followed.
+- **The response is size-capped while streaming**, so a hostile or corrupted reply cannot fill your disk. `Content-Length` is checked but never trusted alone.
+- **One download at a time**, so the endpoint cannot be used to start many large fetches at once.
+- **The file is parsed before it replaces anything.** A reply that is not a readable tag list leaves your existing one untouched, and the final move is atomic.
+
+The reasoning is kept next to the code in [`wp_api/_tag_download.py`](wp_api/_tag_download.py), and each restriction has a test in [`tests/wp_api/test_tag_download.py`](tests/wp_api/test_tag_download.py).
+
 ## Status
 
 Active development. Versioned releases with [semantic-release](https://github.com/semantic-release/semantic-release) — every merged commit on `main` either ships a release or stays as `next` until the next breaking / feature change rolls one. Bundle-size + test gates run on every branch push and PR.

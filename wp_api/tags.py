@@ -11,12 +11,15 @@ exact problem this release cycle went and fixed.
 """
 from __future__ import annotations
 
+import asyncio
+import functools
 from pathlib import Path
 
 from aiohttp import web
 
 from engine.db.connection import comfyui_user_dir
 from wp_api._helpers import json_error, json_ok
+from wp_api._tag_download import TAG_LIST_URL, DownloadError, download_tag_list
 from wp_api._tag_index import CATEGORY_NAMES, TagIndex, load_index
 
 #: One filename, in a directory we own. Not the package folder: a reinstall
@@ -109,6 +112,45 @@ async def suggest(request: web.Request) -> web.Response:
     })
 
 
+async def download(request: web.Request) -> web.Response:
+    """POST /wp/api/tags/download — fetch the list from our GitHub release.
+
+    The only outbound request this extension makes, and only on an explicit
+    click. **The request body is ignored entirely**: there is no URL parameter
+    and no destination parameter, so a caller cannot steer either. See
+    `_tag_download.py` for the reasoning behind each restriction.
+
+    Runs in a thread — it is a multi-megabyte download and must not block the
+    event loop that is also serving ComfyUI itself.
+    """
+    destination = tag_file_path()
+    if destination is None:
+        return json_error(
+            "ComfyUI's user directory could not be found, so there is nowhere "
+            "to save the tag list.",
+            status=409,
+        )
+    loop = asyncio.get_running_loop()
+    try:
+        result = await loop.run_in_executor(
+            None, functools.partial(download_tag_list, destination),
+        )
+    except DownloadError as err:
+        return json_error(str(err), status=502)
+
+    # Force a rebuild so the new list is live without a restart.
+    reset_cache()
+    index = _get_index()
+    return json_ok({
+        "path": str(result.path),
+        "bytes": result.bytes_written,
+        "tag_count": len(index) if index else 0,
+        "has_categories": index.has_categories if index else False,
+        "source": TAG_LIST_URL,
+    })
+
+
 def register(router: web.UrlDispatcher) -> None:
     router.add_get("/wp/api/tags/status", get_status)
     router.add_get("/wp/api/tags/suggest", suggest)
+    router.add_post("/wp/api/tags/download", download)
