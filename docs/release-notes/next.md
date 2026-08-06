@@ -8,6 +8,10 @@ A faster start, filters on two more editors, and a bulk-delete fix worth reading
 
   Rules keep their real numbers while filtered, so "Rule 5" stays Rule 5 instead of renumbering to 1, and editing or deleting a filtered row acts on that row rather than the one that happens to share its position.
 
+- **The library-change check stopped re-downloading your whole library every five seconds.** Both the manager and the in-graph Context node watch for library edits made elsewhere, by polling a list of module hashes. That list was re-sent in full on every tick with no caching headers — 33 KB every five seconds on a real library, roughly **24 MB an hour per open tab**, sitting idle. Producing it also re-read and re-parsed every module payload in the database each time.
+
+  The check now answers "nothing changed" with an empty response the browser already knows how to handle, and works that out from a cheap row count rather than by rebuilding the list. On a local install this was invisible; if you reach ComfyUI over Tailscale, a VPN or any metered connection, it was the largest thing this extension did.
+
 - **The webfonts are no longer bundled into JavaScript.** Both fonts were being base64-encoded into a code file that ComfyUI had to download and parse *before* it could finish registering this extension's nodes — about 90 KB of JavaScript that was never really JavaScript. They are now ordinary font files the browser fetches on its own, in the background, while everything else carries on. Node registration no longer waits for them.
 
   Two things follow from that. Text appears sooner on a slow CPU, because 90 KB stopped going through the JavaScript parser. And the fonts now stay cached when you update — previously every release changed the code file they were hidden inside, so your browser re-downloaded them every time.

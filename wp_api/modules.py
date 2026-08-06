@@ -8,7 +8,14 @@ from aiohttp import web
 from engine.db.repositories import BundleRepository, ModuleNotFound, ModuleRepository
 from engine.modules.dispatcher import get_handler
 from engine.modules.snapshot import freeze_snapshot, payload_hash
-from wp_api._helpers import db_session, json_error, json_ok
+from wp_api._helpers import (
+    db_session,
+    json_error,
+    json_ok,
+    json_ok_revalidated,
+    make_etag,
+    matches_if_none_match,
+)
 from wp_api._validators import validate_body_size, validate_meta, validate_wildcard_name
 
 
@@ -613,16 +620,31 @@ async def list_hashes(request: web.Request) -> web.Response:
     kind; lifting the filter fixes the false-positive missing dot on
     every non-wildcard card.
 
-    Lightweight (no payload, no metadata) so the SPA can poll on every
-    workflow load without measurable cost."""
+    The RESPONSE is small (no payload, no metadata). Producing it was not:
+    this used to call `ModuleRepository.list()`, which is `SELECT *` plus a
+    `json.loads` of every payload in the library, and then kept three fields
+    per row. Measured on a real install (2026-08-06): 33 KB on the wire every
+    5 seconds, per open tab, with no caching headers — and both the SPA and
+    the in-graph WP_Context subscribe, so a ComfyUI tab with a Context node
+    polls this whether or not the manager is ever opened.
+
+    Now conditional. The ETag comes from a cheap `COUNT/SUM(version)/MAX`
+    stamp, so an unchanged library answers 304 without touching a payload —
+    which is the case that repeats. The map is only built when the stamp
+    moves.
+    """
     with db_session(request) as conn:
-        rows = ModuleRepository(conn).list()
+        repo = ModuleRepository(conn)
+        etag = make_etag("modules-hashes-v1", repo.library_stamp())
+        if matches_if_none_match(request, etag):
+            return json_ok_revalidated(request, None, etag=etag)
+        rows = repo.list_hash_rows()
     # Wire key stays "hashes" (value string -> object) to avoid relabeling
     # consumers. `type` enables cross-kind id-clash detection; `payload_hash`
     # is the existing drift signal the in-graph WP_Context compares against
     # its embedded snapshot. Post-migration-004 the row's `id` IS the 8-hex
     # uuid the tokenizer's `@{8hex}` ref captures.
-    return json_ok({
+    return json_ok_revalidated(request, {
         "hashes": {
             row["id"]: {
                 "type": row["type"],
@@ -630,7 +652,7 @@ async def list_hashes(request: web.Request) -> web.Response:
             }
             for row in rows
         },
-    })
+    }, etag=etag)
 
 
 async def embed_bundle(request: web.Request) -> web.Response:

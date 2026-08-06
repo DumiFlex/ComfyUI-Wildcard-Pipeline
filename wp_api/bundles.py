@@ -13,7 +13,14 @@ from aiohttp import web
 
 from engine.db.repositories import BundleNotFound, BundleRepository
 from engine.modules.dispatcher import get_handler
-from wp_api._helpers import db_session, json_error, json_ok
+from wp_api._helpers import (
+    db_session,
+    json_error,
+    json_ok,
+    json_ok_revalidated,
+    make_etag,
+    matches_if_none_match,
+)
 from wp_api._validators import validate_body_size, validate_meta
 from wp_api.modules import _hydrate_constraint_exceptions
 
@@ -594,12 +601,22 @@ async def list_hashes(request: web.Request) -> web.Response:
     by the in-graph WP_Context widget to compare each BundleInstance's
     `inserted_at_hash` against the library's current `payload_hash`,
     surfacing a "library updated" indicator on bundle headers whose
-    library entry has changed since insert."""
+    library entry has changed since insert.
+
+    Conditional, and cheap on both sides — see `modules.list_hashes` for the
+    measurements that motivated it. `bundles.payload_hash` is a real stored
+    column, so `list_hash_rows` reads two columns and parses nothing; the old
+    `list()` call selected every column and parsed each bundle's `tags` and
+    `children` for a map that wants neither."""
     with db_session(request) as conn:
-        rows = BundleRepository(conn).list()
-    return json_ok({
+        repo = BundleRepository(conn)
+        etag = make_etag("bundles-hashes-v1", repo.library_stamp())
+        if matches_if_none_match(request, etag):
+            return json_ok_revalidated(request, None, etag=etag)
+        rows = repo.list_hash_rows()
+    return json_ok_revalidated(request, {
         "hashes": {row["id"]: row["payload_hash"] for row in rows},
-    })
+    }, etag=etag)
 
 
 def register(router) -> None:
