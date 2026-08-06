@@ -1442,6 +1442,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
           :visible="visibleExceptions.length"
           noun="exceptions"
           test-prefix="cn-ex"
+          :min-rows="5"
         />
         <!-- Editing requires a live wildcard — the value pickers are empty
              when the ref is missing, so authoring a new exception is hidden

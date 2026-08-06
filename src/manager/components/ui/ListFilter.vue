@@ -27,8 +27,16 @@ withDefaults(
     /** `data-test` prefix; yields `<prefix>-search`, `-count`, `-clear`. */
     testPrefix: string;
     /**
-     * Hide the control until the list is at least this long. A filter over
-     * four rows is noise — the rows are already all on screen.
+     * Hide the control until the list is longer than this.
+     *
+     * Callers set it from how tall their rows are, not from a house style: a
+     * derivation rule is a whole card and three of them already scroll, while
+     * a fixed-value is one table row and eight fit comfortably.
+     *
+     * The default of 8 came from the fixed-values filter and was applied
+     * unchanged to the constraint and derivation editors, where it hid the
+     * feature outright — a real library measured 2026-08-06 had at most 3
+     * rules and 2 exceptions per module, so nobody ever saw it.
      *
      * Gated on `total`, never on `visible`, so the box cannot disappear
      * underneath a query that filtered the list down past the threshold.

@@ -539,7 +539,7 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
           :visible="visibleRules.length"
           noun="rules"
           test-prefix="drv-rules"
-          :min-rows="4"
+          :min-rows="2"
         />
         <Button
           v-if="rules.length > 1"
