@@ -23,7 +23,7 @@ interface ComfySettingHost {
   extensionManager?: { setting?: { get?: (id: string) => unknown } };
 }
 
-export const CANVAS_SETTING_ID = "wildcardPipeline.editing.tagAutocomplete";
+export const CANVAS_SETTING_ID = "wildcardPipeline.behavior.tagAutocomplete";
 
 function canvasSetting(): boolean | null {
   const app = (globalThis as { app?: ComfySettingHost }).app;

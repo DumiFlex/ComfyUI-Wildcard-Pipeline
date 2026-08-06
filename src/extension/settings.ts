@@ -768,7 +768,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
     // failure this whole feature keeps having to design around: a control that
     // implies a capability it does not have.
     {
-      id: "wildcardPipeline.editing.tagAutocomplete",
+      id: "wildcardPipeline.behavior.tagAutocomplete",
       name: "Booru tag autocomplete",
       type: (_name, setter, value, _attrs) => {
         const wrap = document.createElement("label");
@@ -810,7 +810,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
         "Suggest danbooru tag names while typing in Wildcard Pipeline node "
         + "editors. Requires a tag list, installed from the manager's Settings. "
         + "Only affects this extension's own inputs.",
-      category: ["Wildcard Pipeline", "2. Sizing", "Tag autocomplete"],
+      category: ["Wildcard Pipeline", "7. Runtime behavior", "Tag autocomplete"],
     },
     // Visual axes — sizing, embellishment, identity
     {

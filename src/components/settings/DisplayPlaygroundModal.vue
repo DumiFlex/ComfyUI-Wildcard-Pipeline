@@ -78,6 +78,7 @@ const reduceMotion = ref<A11yMode>("auto");
 const contrast = ref<A11yMode>("auto");
 // Phase 2 — behavior axes
 const validation = ref<ValidationMode>("strict");
+const tagAutocomplete = ref<boolean>(false);
 const toastLifetime = ref<ToastLifetime>("default");
 const suppressInfoToasts = ref<boolean>(false);
 const newModuleDisabled = ref<boolean>(false);
@@ -103,6 +104,7 @@ function syncFromStore(): void {
   reduceMotion.value = asString(getSettingValue("reduceMotion"), "auto") as A11yMode;
   contrast.value = asString(getSettingValue("contrast"), "auto") as A11yMode;
   validation.value = asString(getSettingValue("validation"), "strict") as ValidationMode;
+  tagAutocomplete.value = getSettingValue("tagAutocomplete") === true;
   toastLifetime.value = asString(getSettingValue("toastLifetime"), "default") as ToastLifetime;
   suppressInfoToasts.value = asBool(getSettingValue("suppressInfoToasts"), false);
   newModuleDisabled.value = asBool(getSettingValue("newModuleDisabled"), false);
@@ -132,6 +134,7 @@ watch(focusMode, (v) => applySetting("focusMode", v));
 watch(reduceMotion, (v) => applySetting("reduceMotion", v));
 watch(contrast, (v) => applySetting("contrast", v));
 watch(validation, (v) => applySetting("validation", v));
+watch(tagAutocomplete, (v) => applySetting("tagAutocomplete", v));
 watch(toastLifetime, (v) => applySetting("toastLifetime", v));
 watch(suppressInfoToasts, (v) => applySetting("suppressInfoToasts", v));
 watch(newModuleDisabled, (v) => applySetting("newModuleDisabled", v));
@@ -152,6 +155,7 @@ interface Defaults {
   reduceMotion: A11yMode;
   contrast: A11yMode;
   validation: ValidationMode;
+  tagAutocomplete: boolean;
   toastLifetime: ToastLifetime;
   suppressInfoToasts: boolean;
   newModuleDisabled: boolean;
@@ -173,6 +177,7 @@ const defaults: Defaults = {
   reduceMotion: "auto",
   contrast: "auto",
   validation: "strict",
+  tagAutocomplete: false,
   toastLifetime: "default",
   suppressInfoToasts: false,
   newModuleDisabled: false,
@@ -369,6 +374,15 @@ onBeforeUnmount(() => {
 
             <fieldset class="wp-pg__group">
               <legend class="wp-pg__group-title">Runtime behavior</legend>
+              <!-- Behaviour, not visuals, so there is nothing to preview on
+                   the right. It lives here anyway because the playground is
+                   where the settings are expected to be mirrored, and a
+                   setting that exists in the panel but not here is exactly the
+                   divergence this modal keeps growing. -->
+              <label class="wp-pg__row">
+                <span class="wp-pg__row-label">Booru tag autocomplete</span>
+                <input v-model="tagAutocomplete" type="checkbox" class="wp-pg__check">
+              </label>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Validation strictness</span>
                 <select v-model="validation" class="wp-pg__select">

@@ -60,7 +60,8 @@ export type BehaviorKey =
   | "suppressInfoToasts"
   | "newModuleDisabled"
   | "confirmDestructiveBundle"
-  | "bundleMasterOffBehavior";
+  | "bundleMasterOffBehavior"
+  | "tagAutocomplete";
 
 export type SettingKey = DisplayKey | A11yKey | BehaviorKey;
 
@@ -72,6 +73,7 @@ const BEHAVIOR_KEYS = new Set<string>([
   "newModuleDisabled",
   "confirmDestructiveBundle",
   "bundleMasterOffBehavior",
+  "tagAutocomplete",
 ]);
 
 function settingId(key: SettingKey): string {
