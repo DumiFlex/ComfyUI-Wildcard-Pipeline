@@ -1,0 +1,101 @@
+name: Build tag list
+
+# MANUAL ONLY, and deliberately so.
+#
+# The list is not tied to our release cycle — it describes Danbooru, not this
+# project — and it goes stale slowly. Verified 2026-08-06: a roughly two-year-old
+# tag file still autocompletes correctly, because staleness moves post counts
+# (and therefore ranking) while tag NAMES barely change. There is no correctness
+# argument for a schedule, only a ranking one, and that does not justify a timer
+# pointed at someone else's API.
+#
+# So: run it when you want a refresh — a new character tag everyone is asking
+# for, or once in a while out of tidiness. The asset stays put until then.
+#
+# It publishes to a FIXED tag, replacing the asset in place, so the download URL
+# never changes:
+#
+#   https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/releases/download/tag-list/wildcard-pipeline-tags.csv
+#
+# That stability is the point: the SPA's "download tag list" button hardcodes
+# that URL and never needs updating. A per-run tag would break it every time.
+#
+# The tag is intentionally not semver, so semantic-release ignores it and this
+# never looks like a product release.
+on:
+  workflow_dispatch:
+    inputs:
+      min_count:
+        description: "Stop once tags drop below this many posts. 20 ≈ 150k tags; 68 ≈ the 100k other extensions ship."
+        required: true
+        default: "20"
+        type: string
+      alias_pages:
+        description: "Pages of aliases to fetch (1000 each). Aliases are what make `hires` find `highres`."
+        required: true
+        default: "60"
+        type: string
+      publish:
+        description: "Attach the result to the tag-list release. Off = build it and keep it as a run artifact only."
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # No dependencies on purpose: the builder uses urllib from the standard
+      # library, so there is nothing to install and nothing to keep patched.
+      - name: Build
+        run: |
+          python scripts/build_tag_list.py \
+            --min-count "${{ inputs.min_count }}" \
+            --alias-pages "${{ inputs.alias_pages }}" \
+            --out wildcard-pipeline-tags.csv
+
+      - name: Summarise
+        run: |
+          {
+            echo "### Tag list built"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Tags | $(wc -l < wildcard-pipeline-tags.csv) |"
+            echo "| Size | $(du -h wildcard-pipeline-tags.csv | cut -f1) |"
+            echo "| Floor | ${{ inputs.min_count }} posts |"
+            echo "| Published | ${{ inputs.publish }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Always kept, so a build can be inspected before it replaces the asset
+      # everyone downloads.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wildcard-pipeline-tags
+          path: wildcard-pipeline-tags.csv
+          retention-days: 14
+
+      - name: Publish to the fixed tag-list release
+        if: ${{ inputs.publish }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # `--clobber` replaces the asset in place, which is what keeps the
+          # download URL stable across refreshes.
+          if gh release view tag-list >/dev/null 2>&1; then
+            gh release upload tag-list wildcard-pipeline-tags.csv --clobber
+          else
+            gh release create tag-list wildcard-pipeline-tags.csv \
+              --title "Booru tag list" \
+              --notes "Autocomplete data for ComfyUI-Wildcard-Pipeline. Rebuilt on demand; not a product release. Download it from the manager's Settings page rather than by hand." \
+              --latest=false
+          fi
