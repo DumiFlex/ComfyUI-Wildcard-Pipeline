@@ -163,6 +163,55 @@ def _validate_cell(cell: Any, where: str) -> None:
         raise ValueError(f"constraint {where}.factor must not be negative")
 
 
+def exception_pair(exc: dict[str, Any]) -> tuple[str, str] | None:
+    """The `(source, target)` key an exception is filed under, or None.
+
+    MUST match `_constraint_math.combine_constraint_factor`'s key resolution
+    exactly — tier-2 `source_value`/`target_value` first, legacy
+    `source`/`target` as fallback. If the two ever disagree, the duplicate
+    check below stops describing what the engine actually does.
+    """
+    source = exc.get("source_value")
+    if source is None:
+        source = exc.get("source")
+    target = exc.get("target_value")
+    if target is None:
+        target = exc.get("target")
+    if isinstance(source, str) and isinstance(target, str):
+        return (source, target)
+    return None
+
+
+def find_duplicate_exception_pairs(payload: dict[str, Any]) -> list[tuple[str, str]]:
+    """`(source, target)` pairs appearing more than once, in first-seen order.
+
+    Two exceptions on the same pair cannot both apply. `combine_constraint_factor`
+    files them into a dict keyed by the pair, so the LAST one in the list wins
+    and every earlier one is discarded silently — and that includes discarding
+    an `exclude`, which the documented model says is absorbing:
+
+        exceptions [exclude, boost x3]  ->  factor 3.0   (exclusion defeated)
+        exceptions [boost x3, exclude]  ->  EXCLUDE
+        exceptions [boost x3, reduce x0.5] -> 0.5  (not the combined 1.5)
+
+    So the result depends on list order, which no surface shows and nothing
+    lets you edit. Reported by the maintainer 2026-08-06 after noticing the
+    editor would happily accept contradictory duplicates.
+    """
+    seen: set[tuple[str, str]] = set()
+    duplicates: list[tuple[str, str]] = []
+    for exc in payload.get("exceptions") or []:
+        if not isinstance(exc, dict):
+            continue
+        pair = exception_pair(exc)
+        if pair is None:
+            continue
+        if pair in seen and pair not in duplicates:
+            duplicates.append(pair)
+        seen.add(pair)
+    return duplicates
+
+
 class ConstraintHandler(ModuleHandler):
     """Records a constraint matrix into the context for downstream consumers."""
 
@@ -235,6 +284,31 @@ class ConstraintHandler(ModuleHandler):
                     f"constraint payload.exceptions[{i}].factor must not be negative"
                 )
         _validate_target_select(payload.get("target_select"))
+
+    @classmethod
+    def validate_authoring(cls, payload: dict[str, Any]) -> None:
+        """Extra rules applied when a payload is SAVED or IMPORTED, not when
+        it is executed.
+
+        Deliberately separate from `validate_payload`, which `resolve` calls on
+        every run. A rule enforced there would turn an existing bad payload
+        into a hard failure mid-graph — strictly worse than the silent
+        misbehaviour it replaces, and it would fire on data the user cannot
+        reach to fix without the graph running. Enforcing at the authoring
+        boundary stops new ones being created (from the editor, the API, or an
+        import) while leaving existing rows executable.
+        """
+        duplicates = find_duplicate_exception_pairs(payload)
+        if duplicates:
+            listed = ", ".join(
+                f"({source!r} -> {target!r})" for source, target in duplicates
+            )
+            raise ValueError(
+                "constraint payload.exceptions contains more than one rule for "
+                f"the same source/target pair: {listed}. Only one can apply — "
+                "the engine keeps whichever comes last — so keep the rule you "
+                "want and delete the rest."
+            )
 
     @classmethod
     def resolve(

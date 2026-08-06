@@ -367,3 +367,68 @@ async def test_constraint_hydrate_skips_unknown_option_id(wp_client):
         }],
     }, name="qa_hydrate_miss")
     assert resp.status == 400, await resp.text()
+
+
+# ─── Duplicate exception pairs ────────────────────────────────────────
+
+
+async def test_post_rejects_duplicate_exception_pairs(wp_client):
+    """Two rules for one source/target pair cannot both apply.
+
+    `combine_constraint_factor` keys exceptions by the pair, so the last one
+    wins and the rest are discarded — including an `exclude`, which the
+    documented model calls absorbing. Reported 2026-08-06.
+    """
+    resp = await _create(wp_client, "constraint", {
+        "source_wildcard_id": "src00001",
+        "target_wildcard_id": "tgt00001",
+        "matrix": {},
+        "exceptions": [
+            {"source": "rain", "target": "sandals", "mode": "exclude", "factor": 1},
+            {"source": "rain", "target": "sandals", "mode": "boost", "factor": 3},
+        ],
+    }, name="qa_dup_exceptions")
+    assert resp.status == 400, await resp.text()
+    body = await resp.text()
+    assert "rain" in body and "sandals" in body
+
+
+async def test_put_rejects_duplicate_exception_pairs(wp_client):
+    """The update path is a write boundary too — a clean row must not be
+    editable into a contradictory one."""
+    created = await _create(wp_client, "constraint", {
+        "source_wildcard_id": "src00001",
+        "target_wildcard_id": "tgt00001",
+        "matrix": {},
+        "exceptions": [
+            {"source": "rain", "target": "sandals", "mode": "exclude", "factor": 1},
+        ],
+    }, name="qa_dup_put")
+    assert created.status == 201, await created.text()
+    mid = (await created.json())["id"]
+
+    resp = await wp_client.put(f"/wp/api/modules/{mid}", json={"payload": {
+        "source_wildcard_id": "src00001",
+        "target_wildcard_id": "tgt00001",
+        "matrix": {},
+        "exceptions": [
+            {"source": "rain", "target": "sandals", "mode": "exclude", "factor": 1},
+            {"source": "rain", "target": "sandals", "mode": "reduce", "factor": 0.5},
+        ],
+    }})
+    assert resp.status == 400, await resp.text()
+
+
+async def test_post_accepts_distinct_exception_pairs(wp_client):
+    """The guard must not catch legitimate multi-rule constraints."""
+    resp = await _create(wp_client, "constraint", {
+        "source_wildcard_id": "src00001",
+        "target_wildcard_id": "tgt00001",
+        "matrix": {},
+        "exceptions": [
+            {"source": "rain", "target": "sandals", "mode": "exclude", "factor": 1},
+            {"source": "rain", "target": "boots", "mode": "boost", "factor": 3},
+            {"source": "sun", "target": "sandals", "mode": "boost", "factor": 2},
+        ],
+    }, name="qa_distinct_exceptions")
+    assert resp.status == 201, await resp.text()

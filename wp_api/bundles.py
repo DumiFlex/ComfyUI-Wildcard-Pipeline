@@ -279,6 +279,12 @@ def _validate_children_payloads(children: object, conn=None) -> str | None:
             continue
         try:
             handler.validate_payload(payload)
+            # Authoring-only rules — see `modules._validate_payload_for_type`.
+            # A bundle is authored the same way a module is, so a child that
+            # could not be saved on its own must not slip in through here.
+            authoring = getattr(handler, "validate_authoring", None)
+            if callable(authoring):
+                authoring(payload)
         except ValueError as exc:
             return f"children[{i}].payload: {exc}"
     return None

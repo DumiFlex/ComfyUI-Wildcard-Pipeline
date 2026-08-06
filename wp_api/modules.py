@@ -107,6 +107,14 @@ def _validate_payload_for_type(type_id: str, payload: dict) -> str | None:
         return None
     try:
         handler.validate_payload(payload)
+        # Optional per-type rules that apply when AUTHORING only. `resolve`
+        # re-runs `validate_payload` on every graph execution, so a rule
+        # belongs here whenever rejecting an already-stored payload mid-run
+        # would be worse than letting it through. Handlers that define no
+        # such rules simply don't have the hook.
+        authoring = getattr(handler, "validate_authoring", None)
+        if callable(authoring):
+            authoring(payload)
     except ValueError as exc:
         return str(exc)
     return None
