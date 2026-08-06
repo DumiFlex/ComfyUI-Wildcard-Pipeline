@@ -2930,7 +2930,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
           </button>
           <div v-if="tagLegend.length" class="wp-rt-tag__legend">
             <span v-for="cat in tagLegend" :key="cat">
-              <i :class="`wp-rt-tag__cat--${cat}`" />{{ cat }}
+              <i class="wp-rt-tag__swatch" :class="`wp-rt-tag__cat--${cat}`" />{{ cat }}
             </span>
           </div>
         </template>
@@ -3344,7 +3344,12 @@ function onHostKeydown(ev: KeyboardEvent): void {
 .wp-rt-suggestions__head { top: 0; }
 
 .wp-rt-tag__legend {
-  bottom: 0;
+  /* Pulled down over the root's `padding-bottom`. At `bottom: 0` the legend
+     sticks to the content box and that padding stays transparent below it, so
+     a scrolling row was visible underneath the legend band. */
+  bottom: calc(-1 * var(--wp-space-2));
+  margin-bottom: calc(-1 * var(--wp-space-2));
+  padding-bottom: calc(var(--wp-space-3) + var(--wp-space-2));
   display: flex;
   flex-wrap: wrap;
   gap: var(--wp-space-5);
@@ -3359,7 +3364,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
   margin-top: auto;
 }
 
-.wp-rt-tag__legend i {
+.wp-rt-tag__swatch {
   width: 4px;
   height: 10px;
   border-radius: 2px;
@@ -3390,6 +3395,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
   background: #4a4a58;
 }
 
+.wp-rt-tag__cat--general   { background: #4a4a58; }
 .wp-rt-tag__cat--character { background: var(--wp-var-3); }
 .wp-rt-tag__cat--copyright { background: var(--wp-var-1); }
 .wp-rt-tag__cat--artist    { background: var(--wp-var-5); }
