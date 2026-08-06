@@ -2922,11 +2922,15 @@ function onHostKeydown(ev: KeyboardEvent): void {
             <!-- Colour bar only when the loaded file HAS categories. A
                  two-column list would otherwise show a column of identical
                  grey bars explaining nothing. -->
+            <!-- `pi-tags` (plural) deliberately: `pi-tag` singular is already
+                 the fixed_values module kind, so a booru tag row would have
+                 rendered identically to a library module. Tinted by category,
+                 so this one slot says both "this is a tag" and "of this kind". -->
             <span
               v-if="tagHasCategories"
               class="wp-rt-tag__cat"
               :class="row.category_name ? `wp-rt-tag__cat--${row.category_name}` : null"
-            />
+            ><i class="pi pi-tags" aria-hidden="true" /></span>
             <span class="wp-rt-tag__body">
               <!-- Always the tag that will be INSERTED, never the alias that
                    matched. Pressing Enter must put exactly this on screen. -->
@@ -2942,7 +2946,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
           </button>
           <div v-if="tagLegend.length" class="wp-rt-tag__legend">
             <span v-for="cat in tagLegend" :key="cat">
-              <i class="wp-rt-tag__swatch" :class="`wp-rt-tag__cat--${cat}`" />{{ cat }}
+              <i class="pi pi-tags wp-rt-tag__swatch" :class="`wp-rt-tag__cat--${cat}`" aria-hidden="true" />{{ cat }}
             </span>
           </div>
         </template>
@@ -3376,12 +3380,11 @@ function onHostKeydown(ev: KeyboardEvent): void {
   margin-top: auto;
 }
 
+/* A tinted glyph now, not a 4px bar — the fixed width and height left over
+   from the bar squashed the icon to a sliver. */
 .wp-rt-tag__swatch {
-  width: 4px;
-  height: 10px;
-  border-radius: 2px;
-  display: inline-block;
   margin-right: 5px;
+  font-size: 11px;
   vertical-align: -1px;
 }
 
@@ -3400,18 +3403,22 @@ function onHostKeydown(ev: KeyboardEvent): void {
 .wp-rt-tag { display: flex; align-items: center; gap: 10px; }
 
 .wp-rt-tag__cat {
-  width: 4px;
-  height: 22px;
-  border-radius: 2px;
+  width: 15px;
   flex: 0 0 auto;
-  background: #4a4a58;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  /* Neutral is the `general` category, which is most rows — a coloured icon
+     on every line would make the coloured ones stop meaning anything. */
+  color: #6a6a7a;
 }
 
-.wp-rt-tag__cat--general   { background: #4a4a58; }
-.wp-rt-tag__cat--character { background: var(--wp-var-3); }
-.wp-rt-tag__cat--copyright { background: var(--wp-var-1); }
-.wp-rt-tag__cat--artist    { background: var(--wp-var-5); }
-.wp-rt-tag__cat--meta      { background: var(--wp-var-2); }
+.wp-rt-tag__cat--general   { color: #6a6a7a; }
+.wp-rt-tag__cat--character { color: var(--wp-var-3); }
+.wp-rt-tag__cat--copyright { color: var(--wp-var-1); }
+.wp-rt-tag__cat--artist    { color: var(--wp-var-5); }
+.wp-rt-tag__cat--meta      { color: var(--wp-var-2); }
 
 .wp-rt-tag__body {
   min-width: 0;
