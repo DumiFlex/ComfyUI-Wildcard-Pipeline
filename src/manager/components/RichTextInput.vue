@@ -705,7 +705,14 @@ function renderTextAtom(atom: TextAtom): string {
 }
 
 watch(() => props.modelValue, (next) => {
-  if (next === lastEmittedValue) return;  // echo of our own emit — ignore
+  // Echo of our own emit — ignore, so a round-tripped keystroke doesn't
+  // rebuild the DOM under a live caret. The string alone is not enough to
+  // tell an echo from a real write: `lastEmittedValue` seeds to the mount
+  // value, so an editor that mounted empty treats every later external ""
+  // as an echo. That is exactly the assembler's Clear button — it wrote "",
+  // the write was dropped, and the old template stayed on screen. Confirm
+  // the DOM actually already shows `next` before skipping.
+  if (next === lastEmittedValue && readHostAsText() === next) return;
   // External value swap from the parent — route through applyAtoms so
   // any stale user-typed text in a span (typed since the last echo)
   // gets force-synced to the new atom shape via the post-patch
@@ -1794,6 +1801,44 @@ function insertTagAtCursor(tag: string): void {
   void nextTick(() => restoreCursorAtChar(newCaret));
 }
 
+/**
+ * Insert plain text at the caret, adding a single separating space when
+ * the character before the caret isn't already whitespace.
+ *
+ * Public API — the only function on this component meant to be driven from
+ * outside. The assembler's chip strip is a SEPARATE widget on the same node,
+ * so it cannot splice into this editor's DOM; before Vue Nodes it spliced
+ * into the native `<textarea>` at `widget.inputEl`, which is now detached
+ * and unrendered. Writing `widget.value` instead would work but replaces the
+ * whole string and drops the caret.
+ *
+ * Deliberately does NOT consult `acStart` the way `insertTagAtCursor` does:
+ * that one is completing a word the user is mid-way through typing and must
+ * eat the typed prefix, whereas this one is a foreign insert and must not
+ * eat anything. When the caret isn't inside the editor (never focused, or
+ * focus is on the chip the user just clicked) `currentCursorCharOffset`
+ * reports end-of-text, which gives an append.
+ */
+function insertTextAtCaret(text: string): void {
+  const current = readHostAsText();
+  const caret = currentCursorCharOffset();
+  const before = current.slice(0, caret);
+  const after = current.slice(caret);
+  // Separate on BOTH sides. The trailing space is not cosmetic: inserting
+  // `$mood` before the word `portrait` would otherwise yield `$moodportrait`,
+  // which re-parses as a variable named `moodportrait` — the insert would
+  // quietly change which variable it inserted.
+  const lead = before && !/\s$/.test(before) ? " " : "";
+  const trail = after && !/^\s/.test(after) ? " " : "";
+  const insert = `${lead}${text}${trail}`;
+  const next = before + insert + after;
+  applyAtoms(parseForSurface(next), { rebuild: true });
+  emitValue(next);
+  // Caret sits after the token, before the trailing space, so the user can
+  // keep typing the token rather than landing past a gap.
+  void nextTick(() => restoreCursorAtChar(before.length + lead.length + text.length));
+}
+
 function insertVarAtCursor(name: string): void {
   insertChipAtCaret("$" + name);
 }
@@ -1982,7 +2027,12 @@ function __applyAutocompleteForTest(label: string): void {
   applyAutocomplete(label);
 }
 
-defineExpose({ __triggerAutocompleteForTest, __applyAutocompleteForTest, __confirmRemapForTest });
+defineExpose({
+  insertTextAtCaret,
+  __triggerAutocompleteForTest,
+  __applyAutocompleteForTest,
+  __confirmRemapForTest,
+});
 
 function onSuggestionMouseDown(e: MouseEvent, label: string): void {
   // `mousedown` (not click) so we beat the textarea blur.
