@@ -17,6 +17,7 @@ from wp_api import import_export as _import_export
 from wp_api import modules as _modules
 from wp_api import preview as _preview
 from wp_api import spa as _spa
+from wp_api import tags as _tags
 from wp_api import templates as _templates
 from wp_api import test_runner as _test_runner
 
@@ -97,6 +98,7 @@ def register_routes(app: web.Application) -> None:
     _import_export.register(app.router)
     _cascade.register(app.router)
     _preview.register(app.router)
+    _tags.register(app.router)
     # SPA fallback last — broad catch-all `/wp/{path:.*}` must not shadow
     # specific `/wp/api/...` routes. aiohttp resolves more-specific routes
     # first regardless of registration order, but late registration keeps

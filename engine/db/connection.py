@@ -102,6 +102,16 @@ def _load_sidecar() -> dict:
     return dict(load())
 
 
+def comfyui_user_dir() -> Path | None:
+    """ComfyUI's user directory, or ``None`` when it cannot be detected.
+
+    The same detector chain the ``user`` DB location uses, exposed because it
+    is not database-specific — anything of ours that must survive an extension
+    reinstall belongs under here rather than in the package folder.
+    """
+    return _comfyui_user_dir_from_api() or _comfyui_user_dir_from_path()
+
+
 def user_location_path() -> Path | None:
     """Return the ``user`` preference target path, or ``None`` if the
     ComfyUI user dir can't be detected.
