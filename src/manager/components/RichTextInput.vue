@@ -40,8 +40,8 @@ import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
 import { probeAutocomplete, probeTagWord } from "../utils/autocompleteProbe";
 import { api } from "../api/client";
 import type { TagCategoryName, TagSuggestion } from "../api/types";
-import { useUiStore } from "../stores/uiStore";
 import { loadTagAvailability } from "../utils/tagStatus";
+import { tagAutocompleteEnabled as tagSettingOn } from "../utils/tagSetting";
 import { refRows, varRows, type SuggestionRow } from "../utils/suggestion-rows";
 import { CONTEXT_POOLS_KEY, type ContextPoolMap } from "../../extension/context-pools";
 
@@ -279,26 +279,6 @@ const acQuery = ref("");
  *  `$` and `@` is deliberate: one popover, one trigger, so the modes are
  *  mutually exclusive by construction rather than by coordination. Two
  *  independent popovers could both be open over one caret. */
-/**
- * The tag-autocomplete setting, read lazily.
- *
- * NOT `useUiStore()` at setup scope: this component is mounted bare in a great
- * many tests that never install Pinia, and reaching for a global store there
- * threw for all of them. Every other setting reaches this component as a prop,
- * so the store dependency was the odd one out as well as the broken one.
- *
- * Resolved inside a computed instead, so a Pinia-less mount degrades to "off"
- * — exactly the right answer for an optional feature — while the real app
- * still tracks the toggle reactively.
- */
-function tagSettingOn(): boolean {
-  try {
-    return useUiStore().tagAutocomplete;
-  } catch {
-    return false;
-  }
-}
-
 const acTrigger = ref<"$" | "@" | "tag">("$");
 
 /* ── Booru tag autocomplete (optional, off unless enabled) ──────────────────
@@ -3439,6 +3419,14 @@ function onHostKeydown(ev: KeyboardEvent): void {
   /* So 856k / 44k / 3.1k line up instead of jittering row to row. */
   font-variant-numeric: tabular-nums;
 }
+
+/* The header (and, in tag mode, the legend) are sticky, so they OVERLAY the
+   scrollport rather than shrinking it. `scrollIntoView({block:"nearest"})`
+   only knows about the scrollport, so arrowing to the first or last row parked
+   it underneath a pinned band -- selected, highlighted, and invisible.
+   `scroll-margin` is the mechanism designed for exactly this. */
+.wp-rt-suggestions__item { scroll-margin-top: 38px; }
+.wp-rt-tag { scroll-margin-bottom: 40px; }
 
 .wp-rt-suggestions__item {
   display: flex;

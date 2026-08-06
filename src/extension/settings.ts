@@ -758,6 +758,60 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       tooltip: "Live preview of every display + a11y setting in one place.",
       category: ["Wildcard Pipeline", "1. Playground", "Open"],
     },
+    // Booru tag autocomplete — canvas half of the SPA setting, deliberately
+    // separate. Someone may want suggestions in the full manager and not while
+    // squinting at a node on a canvas, and a ComfyUI user looks for switches
+    // here rather than in our SPA.
+    //
+    // Rendered by hand so it can DISABLE itself when no tag list is installed.
+    // A plain boolean would happily switch on and do nothing, which is the
+    // failure this whole feature keeps having to design around: a control that
+    // implies a capability it does not have.
+    {
+      id: "wildcardPipeline.editing.tagAutocomplete",
+      name: "Booru tag autocomplete",
+      type: (_name, setter, value, _attrs) => {
+        const wrap = document.createElement("label");
+        wrap.style.cssText = "display:flex; align-items:center; gap:8px; cursor:pointer";
+        const box = document.createElement("input");
+        box.type = "checkbox";
+        box.checked = value === true;
+        const note = document.createElement("span");
+        note.style.cssText =
+          "font: 12px/1.3 var(--wp-font-sans, sans-serif); color: var(--descrip-text, #999)";
+        wrap.append(box, note);
+
+        // Ask the server whether a list exists. Until it answers, leave the
+        // control alone rather than flickering it disabled.
+        void fetch("/wp/api/tags/status")
+          .then((r) => r.json())
+          .then((s: { available?: boolean; tag_count?: number }) => {
+            if (s.available) {
+              note.textContent = `${(s.tag_count ?? 0).toLocaleString()} tags installed`;
+              return;
+            }
+            box.checked = false;
+            box.disabled = true;
+            wrap.style.cursor = "not-allowed";
+            wrap.title =
+              "No tag list installed. Open the Wildcard Pipeline manager → "
+              + "Settings → Tag autocomplete and press Download to enable this.";
+            note.textContent = "No tag list — download one in the manager's Settings";
+          })
+          .catch(() => {
+            note.textContent = "";
+          });
+
+        box.addEventListener("change", () => setter(box.checked));
+        return wrap;
+      },
+      defaultValue: false,
+      tooltip:
+        "Suggest danbooru tag names while typing in Wildcard Pipeline node "
+        + "editors. Requires a tag list, installed from the manager's Settings. "
+        + "Only affects this extension's own inputs.",
+      category: ["Wildcard Pipeline", "2. Sizing", "Tag autocomplete"],
+    },
     // Visual axes — sizing, embellishment, identity
     {
       id: SETTING_ID_DENSITY,
