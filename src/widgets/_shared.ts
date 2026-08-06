@@ -62,6 +62,18 @@ export interface CreateDomWidgetHostOptions<P extends Record<string, unknown>> {
    * `false` (current behavior: preserve user height drag).
    */
   autoHeight?: boolean;
+  /**
+   * Keep the widget's input socket.
+   *
+   * Every other WP widget is a self-contained editor with no meaningful
+   * upstream value, so the default hides the socket. The assembler's
+   * template editor is the exception: it stands in for a native multiline
+   * STRING widget, and that widget could always be driven by a link from
+   * another node's STRING output. The frontend decides by reading
+   * `options.socketless` off the widget the custom-widget factory returns
+   * — falsy is what makes it call `addInput(name, spec.type, {widget})`.
+   */
+  socketed?: boolean;
 }
 
 /** LiteGraph snaps node size to this grid by default. Mirror it when
@@ -193,7 +205,7 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   let minHeight = baseMin;
 
   const widgetOpts: Record<string, unknown> = {
-    socketless: true,
+    socketless: !options.socketed,
     getValue: () => state,
     setValue: (v: string) => {
       state = v;

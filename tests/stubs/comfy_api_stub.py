@@ -96,6 +96,12 @@ class _Slot:
     # Input() raises TypeError on any node that supplies them.
     tooltip: str | None = None
     display_name: str | None = None
+    # Merged verbatim into the input spec dict by `Input.as_dict`, AFTER
+    # every field the V3 classes know about. That ordering is why the
+    # assembler's `template` uses it to carry `widgetType`: unlike the
+    # `widget_type=` parameter it does not feed `get_io_type`, so the
+    # frontend picks our editor while the socket stays STRING.
+    extra_dict: dict[str, Any] | None = None
 
 
 class _IOType:

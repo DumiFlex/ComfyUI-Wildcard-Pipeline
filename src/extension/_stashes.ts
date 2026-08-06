@@ -90,3 +90,17 @@ export const nodeBadgePulseToken: WeakMap<object, number> = new WeakMap();
  *  persist across animations (last value retained), so `.has(node)`
  *  is true forever after the first collapse. */
 export const nodeCollapseAnimating: WeakSet<object> = new WeakSet();
+
+/** Caret-aware insert hook for a node's template editor, published by
+ *  `widgets/templateEditor.ts` when it mounts and read by the assembler
+ *  helper's chip strip.
+ *
+ *  Needed because the helper and the editor are two SEPARATE widgets on
+ *  the same node — the helper can reach the editor's VALUE through
+ *  `widget.value`, but a value write replaces the whole string and loses
+ *  the caret. Before Vue Nodes the helper spliced into `widget.inputEl`
+ *  (a real textarea); that element is now detached and unrendered, so the
+ *  only way to insert AT THE CARET is to ask the editor to do it. Absent
+ *  entry ⇒ the editor hasn't mounted yet, and callers fall back to a
+ *  value-level append. */
+export const templateInsertAtCaret: WeakMap<object, (token: string) => void> = new WeakMap();

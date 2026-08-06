@@ -42,6 +42,19 @@ class WPPromptAssembler(io.ComfyNode):
                         "verbatim here — produce randomness in a seeded "
                         "module instead."
                     ),
+                    # Render this input with our own editor instead of the
+                    # stock textarea, WITHOUT changing what the socket
+                    # accepts. `widget_type=` would do the first and break
+                    # the second: `WidgetInput.get_io_type` returns
+                    # widget_type when set, so the socket would stop being
+                    # STRING and no upstream STRING output could feed it.
+                    # `extra_dict` is merged last in `Input.as_dict` and
+                    # never consulted by `get_io_type`, so the spec carries
+                    # `widgetType` for the frontend's widget lookup while
+                    # the socket stays STRING. The value is still a plain
+                    # string in `widgets_values`, so workflows saved before
+                    # this change load their template unchanged.
+                    extra_dict={"widgetType": "WP_TEMPLATE_EDITOR"},
                 ),
             ],
             outputs=[io.String.Output("prompt")],
