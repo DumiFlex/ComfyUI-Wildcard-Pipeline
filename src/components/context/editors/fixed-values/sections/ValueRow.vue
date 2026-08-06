@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from "vue";
-import { useGrowableField } from "../../../../shared/useGrowableField";
+import { computed } from "vue";
+import RichTextInput from "../../../../../manager/components/RichTextInput.vue";
 import {
   rowOverrideKind,
   type DraftRow,
@@ -62,12 +62,7 @@ function onNameInput(ev: Event): void {
   if (el.value !== name) el.value = name;
   emit("update", props.row.id, { name });
 }
-function onValueInput(ev: Event): void {
-  const el = ev.target as HTMLTextAreaElement;
-  emit("update", props.row.id, { value: el.value });
-  autosize();
-  updateOverflowHint();
-}
+
 
 /** Grow the value field to fit its content, capped by the CSS `max-height`
  *  (after which it scrolls). The field is a `<textarea>` purely to get this
@@ -89,19 +84,6 @@ function onValueInput(ev: Event): void {
  * plain Enter is free — and users writing paragraph-length values want their
  * line breaks. */
 
-const valueEl = ref<HTMLTextAreaElement | null>(null);
-
-/* Shared auto-grow + overflow-hint + grip-follow. See `useGrowableField` for
- * why the three belong together — chiefly that auto-grow has to yield to the
- * drag handle, which the local copy did not. */
-const {
-  hasMoreBelow,
-  updateOverflowHint,
-  scheduleOverflowHint,
-  autosize,
-  attach,
-  startResize,
-} = useGrowableField(() => valueEl.value);
 
 /** True when the field is capped and still hiding content below the fold.
  *  Mirrors RichTextInput's hint — a capped box otherwise looks identical
@@ -112,23 +94,6 @@ const {
 
 
 
-/* Size correctly on first paint + whenever the row's value changes from
-   outside (reset-to-library, undo). */
-watch(
-  () => props.row.value,
-  () => void nextTick(() => {
-    autosize();
-    scheduleOverflowHint();
-  }),
-  { immediate: true },
-);
-
-
-onMounted(() => {
-  autosize();
-  scheduleOverflowHint();
-  attach();
-});
 
 
 function onReset(): void {
@@ -197,33 +162,26 @@ function onDelete(): void {
         class="row__value-wrap"
         :class="{
           'row__value-wrap--mod': valueOverridden,
-          'row__value-wrap--more': hasMoreBelow,
         }"
         data-test="row-value-wrap"
       >
-        <textarea
-          ref="valueEl"
+        <!-- RichTextInput on the `fixed_values` surface. Tag autocomplete
+             works here; `$` and `@` do NOT, and that is the engine's rule not a
+             UI preference: a fixed value DEFINES what `$name` resolves to, so
+             `resolve_text` gates both off and renders such a token as literal
+             text with a warning. The producer/consumer default in
+             RichTextInput encodes exactly that, so nothing is passed here. -->
+        <RichTextInput
           class="row__value"
           data-test="row-value"
-          rows="1"
-          spellcheck="false"
-          :value="row.value"
+          :model-value="row.value"
+          surface="fixed_values"
+          multiline
+          :rows="1"
           :disabled="!row.enabled"
           :aria-label="`Value for row ${row.id}`"
-          @input="onValueInput"
-          @scroll="updateOverflowHint"
+          @update:model-value="(v: string) => emit('update', props.row.id, { value: v })"
         />
-        <!-- Resize grip, replacing `resize: vertical`. The native resizer
-             recomputes from an origin captured at pointerdown and never clamps
-             to min/max, so over-dragging banks invisible travel the user has to
-             walk back — measured at 13 of 23 dead frames. Ours applies each
-             move's delta to the current height. -->
-        <span
-          class="row__grip"
-          data-test="row-grip"
-          aria-hidden="true"
-          @pointerdown="startResize"
-        ></span>
       </span>
       <span
         v-if="hasNonTextToken"

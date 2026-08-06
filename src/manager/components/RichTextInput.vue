@@ -166,6 +166,16 @@ interface Props {
    *  there (carrier) but compares `condition.value` raw, so condition inputs
    *  leave this false. The `wildcard` surface enables refs regardless. */
   allowNestedRefs?: boolean;
+  /**
+   * Override the producer/consumer default for `$var` reads.
+   *
+   * Tri-state on purpose. A `boolean` here would be inferred as a Vue Boolean
+   * prop, and Vue casts an ABSENT Boolean prop to `false` rather than leaving
+   * it undefined — so `props.allowVars ?? <default>` never reached the
+   * default and every surface silently lost `$`. `"auto"` says "use the
+   * surface's rule" in a way no prop-casting rule can quietly rewrite.
+   */
+  allowVars?: "auto" | "on" | "off";
   /** Map from UUID to display name; used to render `@{uuid}` refs as human labels. */
   uuidToName?: Map<string, string>;
   /** Map from wildcard UUID → its declared sub_categories. Used by the
@@ -245,6 +255,28 @@ const effectiveWarnings = computed<ResolveWarning[]>(() => [
  *  source for the parse-collapse + the `@`-autocomplete gate so they can't
  *  drift apart. */
 const refsEnabled = computed(() => props.surface === "wildcard" || props.allowNestedRefs);
+
+/**
+ * Whether `$var` READS mean anything on this surface.
+ *
+ * The engine already draws this line and calls it producer vs consumer:
+ * `wildcard` and `fixed_values` DEFINE what a `$name` resolves to, so a `$var`
+ * read inside one is not a reference — `resolve_text` gates both off and
+ * renders the token as literal text with a warning
+ * (`engine/modules/fixed_values_handler.py`, `engine/syntax/resolve.py`).
+ *
+ * The frontend used to hardcode `surface === "wildcard"` here, which made it
+ * MORE permissive than the engine: the SPA's fixed-values editor offered `$`
+ * autocomplete for tokens the engine would never resolve. A prop with a
+ * surface-derived default keeps the two aligned and lets a caller be explicit
+ * rather than adding a third name to a growing condition.
+ */
+const PRODUCER_SURFACES = new Set(["wildcard", "fixed_values"]);
+const varsEnabled = computed(() => {
+  if (props.allowVars === "on") return true;
+  if (props.allowVars === "off") return false;
+  return !PRODUCER_SURFACES.has(props.surface ?? "combine");
+});
 
 const emit = defineEmits<{
   "update:modelValue": [value: string];
@@ -1036,7 +1068,7 @@ function refreshAutocompleteFromHost(): void {
   // do. Blocking the popover in wildcard surface stops the user from
   // typing `$name` into an option value and ending up with a chip
   // that has no engine meaning.
-  if (hit.trigger === "$" && props.surface === "wildcard") {
+  if (hit.trigger === "$" && !varsEnabled.value) {
     acOpen.value = false;
     return;
   }
