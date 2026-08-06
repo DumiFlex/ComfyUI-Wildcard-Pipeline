@@ -37,7 +37,11 @@ import { useGrowableField } from "../../components/shared/useGrowableField";
 import { rewriteBrokenRef } from "../cascade/remap-ref-rewrite";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
-import { probeAutocomplete } from "../utils/autocompleteProbe";
+import { probeAutocomplete, probeTagWord } from "../utils/autocompleteProbe";
+import { api } from "../api/client";
+import type { TagSuggestion } from "../api/types";
+import { useUiStore } from "../stores/uiStore";
+import { loadTagAvailability } from "../utils/tagStatus";
 import { refRows, varRows, type SuggestionRow } from "../utils/suggestion-rows";
 import { CONTEXT_POOLS_KEY, type ContextPoolMap } from "../../extension/context-pools";
 
@@ -271,7 +275,82 @@ const ZWSP_RE = /​/g;
 // Autocomplete state.
 const acOpen = ref(false);
 const acQuery = ref("");
-const acTrigger = ref<"$" | "@">("$");
+/** `"tag"` is the sigil-less booru-tag mode. Keeping it in the SAME state as
+ *  `$` and `@` is deliberate: one popover, one trigger, so the modes are
+ *  mutually exclusive by construction rather than by coordination. Two
+ *  independent popovers could both be open over one caret. */
+/**
+ * The tag-autocomplete setting, read lazily.
+ *
+ * NOT `useUiStore()` at setup scope: this component is mounted bare in a great
+ * many tests that never install Pinia, and reaching for a global store there
+ * threw for all of them. Every other setting reaches this component as a prop,
+ * so the store dependency was the odd one out as well as the broken one.
+ *
+ * Resolved inside a computed instead, so a Pinia-less mount degrades to "off"
+ * — exactly the right answer for an optional feature — while the real app
+ * still tracks the toggle reactively.
+ */
+function tagSettingOn(): boolean {
+  try {
+    return useUiStore().tagAutocomplete;
+  } catch {
+    return false;
+  }
+}
+
+const acTrigger = ref<"$" | "@" | "tag">("$");
+
+/* ── Booru tag autocomplete (optional, off unless enabled) ──────────────────
+ * Rows come from the server: the tag list is several megabytes and is never
+ * sent to the browser, so every keystroke asks for one screenful instead.
+ *
+ * Gated three ways — the setting, an installed list, and the sigil probe not
+ * already owning the caret. Any one of them false and this stays silent. */
+/** 855605 -> "856k". The exact figure is noise; the order of magnitude is the
+ *  whole signal, and a full number would dominate a 12px row. */
+function formatTagCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${Math.round(n / 1000)}k`;
+  return String(n);
+}
+
+const tagRows = ref<TagSuggestion[]>([]);
+/** Row count for the ACTIVE mode — keyboard nav must not care which. */
+const acRowCount = computed(
+  () => (acTrigger.value === "tag" ? tagRows.value.length : acItems.value.length),
+);
+const tagListAvailable = ref(false);
+const tagHasCategories = ref(false);
+let tagFetchSeq = 0;
+let tagFetchTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Enabled only where a booru tag is a plausible thing to type: option values
+ *  and template text. Never in a name field. */
+const tagAutocompleteEnabled = computed(
+  () => tagSettingOn() && tagListAvailable.value && !props.disabled,
+);
+
+function scheduleTagFetch(query: string): void {
+  if (tagFetchTimer !== undefined) clearTimeout(tagFetchTimer);
+  // A sequence number, not just a timer: responses can land out of order and
+  // a slow answer for "blu" must not overwrite a fast one for "blue_ha".
+  const seq = ++tagFetchSeq;
+  tagFetchTimer = setTimeout(() => {
+    void api.tags.suggest(query, 20)
+      .then((res) => {
+        if (seq !== tagFetchSeq) return;
+        tagRows.value = res.tags;
+        acActive.value = 0;
+      })
+      .catch(() => {
+        if (seq !== tagFetchSeq) return;
+        // Silent: an optional convenience must not raise an error toast
+        // while someone is mid-sentence.
+        tagRows.value = [];
+      });
+  }, 120);
+}
 const acStart = ref(-1);
 const acActive = ref(0);
 // Popup geometry — `position: fixed` viewport coordinates so the teleported
@@ -779,6 +858,7 @@ const AC_MAX_ITEMS = 50;
  *  that hit 300 is simply false. */
 const acMatches = computed(() => {
   if (!acOpen.value) return [];
+  if (acTrigger.value === "tag") return [];  // tag rows live in `tagRows`
   if (acTrigger.value === "@" && !refsEnabled.value) return [];
   const pool = acTrigger.value === "@" ? props.refSuggestions : props.varSuggestions;
   const q = acQuery.value.toLowerCase();
@@ -912,9 +992,28 @@ function refreshAutocompleteFromHost(): void {
   const rawCaret = currentCursorCharOffset();
   const hit = probeAutocomplete(rawText, rawCaret);
   if (!hit) {
+    // No `$` / `@` token at the caret — the only situation where booru tags
+    // may be offered. This ordering IS the non-interference guarantee: the
+    // sigil probe gets first refusal on every keystroke.
+    if (tagAutocompleteEnabled.value) {
+      const word = probeTagWord(rawText, rawCaret);
+      if (word && !triggerIsInsideChip(word.start)) {
+        acOpen.value = true;
+        acStart.value = word.start;
+        acQuery.value = word.query;
+        acTrigger.value = "tag";
+        scheduleTagFetch(word.query);
+        positionPopup();
+        return;
+      }
+    }
     acOpen.value = false;
+    tagRows.value = [];
     return;
   }
+  // A sigil token owns the caret from here on; drop any tag rows so a stale
+  // list cannot be committed by an Enter meant for the sigil popover.
+  tagRows.value = [];
   // The trigger belongs to a chip that already exists — the user is not
   // filtering anything, so there is nothing to suggest. This fires whenever
   // the caret ends up flush against a chip's trailing edge: type a space after
@@ -1357,6 +1456,14 @@ const {
 onMounted(() => {
   scheduleOverflowHint();
   attach();
+  // Only ask when the user has actually switched the feature on — an install
+  // that never enables it makes no request at all.
+  if (tagSettingOn()) {
+    void loadTagAvailability().then((status) => {
+      tagListAvailable.value = status.available;
+      tagHasCategories.value = status.hasCategories;
+    });
+  }
 });
 
 /** True when the live host has FEWER rendered atom nodes than `atoms.value`
@@ -1627,6 +1734,32 @@ function insertRefAtCursor(
     ...(name ? { name } : {}),
   };
   insertChipAtCaret(serialiseRefAtom(refAtom), caretOverride);
+}
+
+/**
+ * Splice a plain booru tag over the word being typed.
+ *
+ * Mirrors `insertChipAtCaret`'s raw-text splice but inserts TEXT, not a chip.
+ * `$` and `@` commits build a chip because they carry engine meaning; a tag is
+ * just characters in the prompt, so parsing the result yields plain text and
+ * nothing renders as a pill.
+ *
+ * Deliberately not a branch inside `insertChipAtCaret`: that function's
+ * defensive re-derivation scans backwards for a `$`/`@` run, which is exactly
+ * wrong for a sigil-less word and would cut from the wrong place.
+ */
+function insertTagAtCursor(tag: string): void {
+  const text = readHostAsText();
+  const caret = currentCursorCharOffset();
+  const from = acStart.value >= 0 ? Math.min(acStart.value, caret) : caret;
+  const before = text.slice(0, from);
+  const newText = before + tag + text.slice(caret);
+  applyAtoms(parseForSurface(newText), { rebuild: true });
+  emitValue(newText);
+  const newCaret = (before + tag).length;
+  acOpen.value = false;
+  tagRows.value = [];
+  void nextTick(() => restoreCursorAtChar(newCaret));
 }
 
 function insertVarAtCursor(name: string): void {
@@ -2459,6 +2592,18 @@ function onHostKeydown(ev: KeyboardEvent): void {
   //   - No match + empty query (just `$` / `@`) → close popover, let
   //     the browser handle Enter normally (insert newline in multiline).
   if (ev.key === "Enter" && acOpen.value) {
+    if (acTrigger.value === "tag") {
+      const row = tagRows.value[acActive.value];
+      if (row) {
+        ev.preventDefault();
+        insertTagAtCursor(row.name);
+        return;
+      }
+      // Nothing to commit — close and let Enter behave natively rather than
+      // swallowing a newline the user actually wanted.
+      acOpen.value = false;
+      return;
+    }
     if (acItems.value.length > 0) {
       ev.preventDefault();
       applyAutocomplete(acItems.value[acActive.value]);
@@ -2484,7 +2629,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
   }
   if (ev.key === "ArrowDown" && acOpen.value) {
     ev.preventDefault();
-    acActive.value = Math.min(acItems.value.length - 1, acActive.value + 1);
+    acActive.value = Math.min(acRowCount.value - 1, acActive.value + 1);
     return;
   }
   if (ev.key === "ArrowUp" && acOpen.value) {
@@ -2709,7 +2854,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
          transformed scroll containers / table cells. -->
     <Teleport to="body">
       <div
-        v-if="acOpen && acItems.length > 0"
+        v-if="acOpen && acRowCount > 0"
         ref="popoverEl"
         class="wp-rt-suggestions"
         :class="[teleportThemeClass(), { 'wp-rt-suggestions--up': popupPos.flipped }]"
@@ -2720,7 +2865,51 @@ function onHostKeydown(ev: KeyboardEvent): void {
         }"
         role="listbox"
       >
-        <div class="wp-rt-suggestions__head">
+        <div v-if="acTrigger === 'tag'" class="wp-rt-suggestions__head">
+          <span class="wp-rt-suggestions__query">{{ acQuery }}</span>
+          <!-- Says WHICH autocomplete this is. Without a sigil in the query
+               there is otherwise nothing distinguishing it from the `$` / `@`
+               popover, which looks identical and behaves differently. -->
+          <span class="wp-rt-suggestions__src">tags</span>
+          <span class="wp-rt-suggestions__count">{{ tagRows.length }}</span>
+          <span class="wp-spacer" />
+          <span class="wp-rt-suggestions__hint">↑↓ · Enter · Esc</span>
+        </div>
+        <template v-if="acTrigger === 'tag'">
+          <button
+            v-for="(row, i) in tagRows"
+            :key="row.matched"
+            type="button"
+            class="wp-rt-suggestions__item wp-rt-tag"
+            :data-active="i === acActive ? '' : null"
+            role="option"
+            :aria-selected="i === acActive"
+            @mousedown.prevent="insertTagAtCursor(row.name)"
+            @mouseenter="acActive = i"
+          >
+            <!-- Colour bar only when the loaded file HAS categories. A
+                 two-column list would otherwise show a column of identical
+                 grey bars explaining nothing. -->
+            <span
+              v-if="tagHasCategories"
+              class="wp-rt-tag__cat"
+              :class="row.category_name ? `wp-rt-tag__cat--${row.category_name}` : null"
+            />
+            <span class="wp-rt-tag__body">
+              <!-- Always the tag that will be INSERTED, never the alias that
+                   matched. Pressing Enter must put exactly this on screen. -->
+              <span class="wp-rt-tag__name">{{ row.name }}</span>
+              <span v-if="row.matched !== row.name" class="wp-rt-tag__sub">
+                from <span class="wp-rt-tag__alias">{{ row.matched }}</span>
+              </span>
+              <span v-else-if="tagHasCategories && row.category_name" class="wp-rt-tag__sub">
+                {{ row.category_name }}
+              </span>
+            </span>
+            <span class="wp-rt-tag__count">{{ formatTagCount(row.count) }}</span>
+          </button>
+        </template>
+        <div v-else class="wp-rt-suggestions__head">
           <span class="wp-rt-suggestions__query">{{ acTrigger }}{{ acQuery }}</span>
           <!-- The match count belongs in the header, not implied by the list
                length: the list is capped and scrolls, so "how many did I
@@ -2741,7 +2930,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
           <span class="wp-rt-suggestions__hint">↑↓ · {{ acTrigger === "@" ? "Enter filter" : "Enter" }} · Esc</span>
         </div>
         <button
-          v-for="(row, i) in acRows"
+          v-for="(row, i) in (acTrigger === 'tag' ? [] : acRows)"
           :key="row.token"
           type="button"
           class="wp-rt-suggestions__item"
@@ -3111,6 +3300,72 @@ function onHostKeydown(ev: KeyboardEvent): void {
 /* Two lines per row now, so `align-items: center` would float the icon
    against the name rather than the row. `flex-start` plus a top offset on the
    icon lines it up with the FIRST line's text, which is where the eye is. */
+.wp-rt-suggestions__src {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--wp-text-dim);
+  border: 1px solid var(--wp-border);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+/* Booru tag rows. Same popover chrome, different row body — a tag has a
+   category and a post count where a `$`/`@` row has a producer and facts. */
+.wp-rt-tag { display: flex; align-items: center; gap: 10px; }
+
+.wp-rt-tag__cat {
+  width: 4px;
+  height: 22px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+  background: #4a4a58;
+}
+
+.wp-rt-tag__cat--character { background: var(--wp-var-3); }
+.wp-rt-tag__cat--copyright { background: var(--wp-var-1); }
+.wp-rt-tag__cat--artist    { background: var(--wp-var-5); }
+.wp-rt-tag__cat--meta      { background: var(--wp-var-2); }
+
+.wp-rt-tag__body {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+
+.wp-rt-tag__name {
+  font-family: var(--wp-font-mono);
+  font-size: 12.5px;
+  line-height: 1.25;
+  color: var(--wp-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wp-rt-tag__sub {
+  font-size: 10.5px;
+  line-height: 1.2;
+  color: var(--wp-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wp-rt-tag__alias { color: var(--wp-kind-ref); }
+
+.wp-rt-tag__count {
+  font-family: var(--wp-font-mono);
+  font-size: 11px;
+  color: var(--wp-text-dim);
+  flex: 0 0 auto;
+  /* So 856k / 44k / 3.1k line up instead of jittering row to row. */
+  font-variant-numeric: tabular-nums;
+}
+
 .wp-rt-suggestions__item {
   display: flex;
   align-items: flex-start;

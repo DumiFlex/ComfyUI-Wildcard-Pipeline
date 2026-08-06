@@ -2,6 +2,12 @@ A much faster ComfyUI start, filters on two more editors, and a bulk-delete fix 
 
 ### Highlights
 
+- **Optional booru tag autocomplete.** Turn it on in Settings → Tag autocomplete and typing a few letters into an option value suggests danbooru tags, ranked by how often they are actually used, colour-coded by kind (character, copyright, artist, meta) and resolving aliases — type `hires` and it offers `highres`, naming what it matched so the jump is never mysterious.
+
+  It stays out of the way of everything you already use: `$` variables and `@` references always win the caret, and suggestions never appear while you are typing one. Off unless you switch it on.
+
+  The tag list is a file you install once — press **Download** in Settings to fetch it from this project's GitHub release, or drop your own CSV at the path shown there. **This is the only thing this extension ever fetches from the internet**, it only happens when you press the button, and the [README](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline#network-access) documents exactly what that request does and the restrictions around it.
+
 - **This extension was making ComfyUI slow to load, and it will clean up after itself on the next start.** Our frontend files carry a content hash in their names, so every release produced new filenames — and ComfyUI Manager installs an update by writing the new files over the old ones without removing what the new version no longer ships. Nothing ever deleted the previous version's files, so they piled up with every update.
 
   On a real install that had been updated a dozen times: **1,774 files taking 60 MB, where about 300 were live.** ComfyUI requests every JavaScript file an extension exposes when the page loads, so that install was fetching 237 of our chunks instead of 58 — nearly 10 MB, which was 42% of all extension code on that page and by a wide margin the largest single contributor to its load time.

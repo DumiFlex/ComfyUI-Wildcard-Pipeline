@@ -25,6 +25,51 @@ export interface AutocompleteProbe {
  * This lets a `$var` branch that abuts the `$$sep$$` delimiter
  * (`{3$$,$$$style}`) still surface the var autocomplete.
  */
+export interface TagWordProbe {
+  /** Raw-text offset the word starts at — where a commit splices from. */
+  start: number;
+  query: string;
+}
+
+/**
+ * The bare word at the caret, for the optional booru-tag autocomplete.
+ *
+ * Unlike `probeAutocomplete` there is no trigger character to key off, so this
+ * has to be conservative about when it fires at all:
+ *
+ * - **Never over a `$` or `@` token.** Those belong to the sigil probe, and a
+ *   second popover competing for the same caret is the one behaviour this
+ *   feature must not introduce. Callers should only reach here when
+ *   `probeAutocomplete` returned null; the check below is the second lock.
+ * - **A minimum length**, because firing on one or two characters means a
+ *   popover on essentially every keystroke.
+ *
+ * Word characters include `_` since booru tags are underscore-joined, plus `'`
+ * and `-` which appear inside real tags (`cat's_cradle`, `t-shirt`). A space
+ * ends the word: multi-word queries are handled by typing underscores, which
+ * is how the tags themselves are written.
+ */
+export function probeTagWord(
+  str: string,
+  caret: number,
+  minLength = 3,
+): TagWordProbe | null {
+  if (caret <= 0 || caret > str.length) return null;
+  let i = caret - 1;
+  while (i >= 0 && /[a-zA-Z0-9_'-]/.test(str[i])) i--;
+  const start = i + 1;
+  const query = str.slice(start, caret);
+  if (query.length < minLength) return null;
+  // A sigil immediately before the word means this is `$foo` / `@foo` and the
+  // other probe owns it. Also covers `{$foo` and similar, since we only look
+  // at the single preceding character.
+  const preceding = start > 0 ? str[start - 1] : "";
+  if (preceding === "$" || preceding === "@") return null;
+  // A digit-only run is a weight or a count, not a tag prefix.
+  if (/^[0-9]+$/.test(query)) return null;
+  return { start, query };
+}
+
 export function probeAutocomplete(str: string, caret: number): AutocompleteProbe | null {
   // NB: the `@{uuid#name}` brace form is an INTERNAL serialisation, never
   // something the user types — they type `@name` and pick from the popover,
