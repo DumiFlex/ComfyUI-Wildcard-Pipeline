@@ -39,7 +39,7 @@ import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
 import { probeAutocomplete, probeTagWord } from "../utils/autocompleteProbe";
 import { api } from "../api/client";
-import type { TagSuggestion } from "../api/types";
+import type { TagCategoryName, TagSuggestion } from "../api/types";
 import { useUiStore } from "../stores/uiStore";
 import { loadTagAvailability } from "../utils/tagStatus";
 import { refRows, varRows, type SuggestionRow } from "../utils/suggestion-rows";
@@ -316,6 +316,26 @@ function formatTagCount(n: number): string {
 }
 
 const tagRows = ref<TagSuggestion[]>([]);
+
+/** Categories present in the CURRENT results, in Danbooru's own order.
+ *
+ *  The legend appears only when more than one kind is on screen. On an
+ *  all-general query every bar is the same neutral grey, and a legend naming
+ *  four colours none of which are visible explains nothing — it is decoration
+ *  that costs a row of height. */
+const tagLegend = computed(() => {
+  if (!tagHasCategories.value) return [];
+  const order: TagCategoryName[] = [
+    "character", "copyright", "artist", "meta", "general",
+  ];
+  const present = new Set(
+    tagRows.value
+      .map((t) => t.category_name)
+      .filter((c): c is TagCategoryName => c !== null),
+  );
+  const shown = order.filter((c) => present.has(c));
+  return shown.length > 1 ? shown : [];
+});
 /** Row count for the ACTIVE mode — keyboard nav must not care which. */
 const acRowCount = computed(
   () => (acTrigger.value === "tag" ? tagRows.value.length : acItems.value.length),
@@ -2908,6 +2928,11 @@ function onHostKeydown(ev: KeyboardEvent): void {
             </span>
             <span class="wp-rt-tag__count">{{ formatTagCount(row.count) }}</span>
           </button>
+          <div v-if="tagLegend.length" class="wp-rt-tag__legend">
+            <span v-for="cat in tagLegend" :key="cat">
+              <i :class="`wp-rt-tag__cat--${cat}`" />{{ cat }}
+            </span>
+          </div>
         </template>
         <div v-else class="wp-rt-suggestions__head">
           <span class="wp-rt-suggestions__query">{{ acTrigger }}{{ acQuery }}</span>
@@ -3300,6 +3325,49 @@ function onHostKeydown(ev: KeyboardEvent): void {
 /* Two lines per row now, so `align-items: center` would float the icon
    against the name rather than the row. `flex-start` plus a top offset on the
    icon lines it up with the FIRST line's text, which is where the eye is. */
+/* Pinned while the rows scroll underneath. `overflow-y: auto` lives on the
+   popover root, so without this the header scrolls out of view and the query
+   you are refining disappears — true for the `$`/`@` popover too, and fixed
+   for both here. The negative margins cancel the root's horizontal padding so
+   the pinned bands span the full width instead of leaving a transparent gutter
+   for rows to show through. */
+.wp-rt-suggestions__head,
+.wp-rt-tag__legend {
+  position: sticky;
+  z-index: 1;
+  background: var(--wp-bg-1, #11111b);
+  margin: 0 calc(-1 * var(--wp-space-2));
+  padding-left: var(--wp-space-2);
+  padding-right: var(--wp-space-2);
+}
+
+.wp-rt-suggestions__head { top: 0; }
+
+.wp-rt-tag__legend {
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--wp-space-5);
+  font-family: var(--wp-font);
+  font-size: 10.5px;
+  color: var(--wp-text-dim);
+  border-top: 1px solid var(--wp-border);
+  padding-top: var(--wp-space-3);
+  padding-bottom: var(--wp-space-3);
+  /* Sits below the last row rather than floating over it when the list is
+     short enough not to scroll. */
+  margin-top: auto;
+}
+
+.wp-rt-tag__legend i {
+  width: 4px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+  margin-right: 5px;
+  vertical-align: -1px;
+}
+
 .wp-rt-suggestions__src {
   font-size: 9.5px;
   text-transform: uppercase;
