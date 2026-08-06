@@ -32,9 +32,23 @@ STARTUP_ID = uuid.uuid4().hex
 
 @web.middleware
 async def _startup_id_middleware(request: web.Request, handler):
-    """Tag every /wp/api/* response with X-WP-Startup-Id."""
+    """Tag our own responses with X-WP-Startup-Id.
+
+    The path check is load-bearing and was missing until 2026-08-06. This
+    middleware is registered on ComfyUI's application, not on a sub-app, so
+    without it every response the whole server sends carried the header —
+    ComfyUI's own index, `/api/extensions`, image outputs, other extensions'
+    routes. Confirmed by a remote probe: `GET /` came back stamped.
+
+    Nothing depended on that: the only consumer is `manager/api/client.ts`,
+    which talks exclusively to `/wp/api/*`. Being a guest in someone else's
+    application means not writing on their responses — see CLAUDE.md's
+    extension-isolation section, which draws the same line for CSS selectors
+    and litegraph node properties.
+    """
     response = await handler(request)
-    if isinstance(response, web.StreamResponse):
+    is_ours = request.path == "/wp" or request.path.startswith("/wp/")
+    if is_ours and isinstance(response, web.StreamResponse):
         response.headers["X-WP-Startup-Id"] = STARTUP_ID
     return response
 
