@@ -5,6 +5,11 @@ import sys
 
 # Tells ComfyUI to serve files from this folder under
 # /extensions/<package-name>/ and auto-load any `*.js` it finds.
+#
+# "any *.js it finds" is load-bearing: ComfyUI fetches EVERY file it lists
+# here on page load, so a chunk left behind by an older version is not merely
+# dead weight on disk — it is a request and a parse on every visit. Hence the
+# prune below.
 WEB_DIRECTORY = "./js"
 
 # Expose engine/ and wp_nodes/ as top-level packages so internal absolute imports
@@ -21,6 +26,27 @@ if _PKG_DIR not in sys.path:
 # pyright: reportMissingImports=false
 # ruff: noqa: E402 — imports must follow the sys.path shim above
 from comfy_api.latest import ComfyExtension
+
+# Remove chunks left by previous versions BEFORE ComfyUI scans WEB_DIRECTORY.
+# Manager updates extract over the installed folder without deleting what the
+# new version dropped, and our filenames are content-hashed, so every update
+# leaves the previous build behind. Self-healing on the next start; see
+# `wp_api/web_assets.py` for the measurements that motivated it.
+#
+# Wrapped because nothing here is worth failing a plugin load over — the
+# fallback is the disk usage that already exists.
+try:
+    from pathlib import Path as _Path
+
+    from wp_api.web_assets import prune_package_assets as _prune_package_assets
+
+    _prune_package_assets(_Path(_PKG_DIR))
+except Exception:  # noqa: BLE001 - never crash ComfyUI over housekeeping
+    import logging as _logging
+
+    _logging.getLogger(__name__).exception(
+        "wildcard-pipeline: stale-asset prune failed",
+    )
 
 from wp_nodes.assembler_node import WPPromptAssembler
 from wp_nodes.context_loop import WPContextLoop

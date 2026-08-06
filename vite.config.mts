@@ -79,15 +79,21 @@ export default defineConfig(({ mode }) => {
           },
         },
         minify: "esbuild",
-        // `hidden` emits the .map files but writes no `sourceMappingURL`
-        // comment, so browsers never load them and every canvas stack trace
-        // arrives minified — frame after frame of `_e`/`rt` inside the Vue
-        // runtime, naming no component of ours. Set WP_DEBUG_MAPS=1 to link
-        // them and get a readable trace out of a user-reported crash.
+        // No maps by default. This used to be `"hidden"`, which still WRITES
+        // every .map file and merely omits the `sourceMappingURL` comment — so
+        // nothing ever loaded them and they shipped anyway. Measured on a real
+        // registry install (2026-08-06): 22.5 MB of sourcemaps on disk that no
+        // browser had ever requested, in a 38 MB extension folder.
+        //
+        // `pack-release.mjs` excluded `*.map` from the GitHub zip, but the
+        // registry package is built from `pyproject.toml`'s
+        // `includes = ["js", "web"]`, which has no exclusion — so the fix has
+        // to be "don't emit them", not "filter them out downstream".
+        //
+        // Set WP_DEBUG_MAPS=1 to get linked maps and a readable stack trace out
+        // of a user-reported crash:
         //   WP_DEBUG_MAPS=1 pnpm build:extension
-        // Left off by default: the comment ships to every install and the
-        // maps are large.
-        sourcemap: process.env.WP_DEBUG_MAPS === "1" ? true : "hidden",
+        sourcemap: process.env.WP_DEBUG_MAPS === "1" ? true : false,
         cssCodeSplit: true,
         reportCompressedSize: true,
         emptyOutDir: true,

@@ -1,6 +1,14 @@
-A faster start, filters on two more editors, and a bulk-delete fix worth reading.
+A much faster ComfyUI start, filters on two more editors, and a bulk-delete fix worth reading.
 
 ### Highlights
+
+- **This extension was making ComfyUI slow to load, and it will clean up after itself on the next start.** Our frontend files carry a content hash in their names, so every release produced new filenames — and ComfyUI Manager installs an update by writing the new files over the old ones without removing what the new version no longer ships. Nothing ever deleted the previous version's files, so they piled up with every update.
+
+  On a real install that had been updated a dozen times: **1,774 files taking 60 MB, where about 300 were live.** ComfyUI requests every JavaScript file an extension exposes when the page loads, so that install was fetching 237 of our chunks instead of 58 — nearly 10 MB, which was 42% of all extension code on that page and by a wide margin the largest single contributor to its load time.
+
+  This release records what each build produces and deletes anything left over from an older version when ComfyUI starts. **No action needed — the first start after updating does the cleanup**, and it is conservative: only files this project's build system generates are ever removed. On the install measured above it freed 52 MB and removed 1,579 files.
+
+- **Sourcemaps are no longer shipped.** They were being written on every build and included in the package, but never linked, so no browser had ever requested one — 22.5 MB of files that existed only to be ignored. Debug builds can still produce them.
 
 - **"Select all" now means the rows you can see.** With a filter active, the header checkbox selected *every* row, not the filtered ones — so narrowing a list down to a handful, selecting all and deleting removed the whole list, most of it never on screen and with no warning. This affected the **wildcard** and **fixed-values** editors, and on wildcards it reached bulk weight and tag changes too: setting a weight on a filtered selection silently rewrote every option's weight, with no change in row count to hint at it. Select-all is now scoped to what the filter is showing, in both directions. If you have ever lost options or had a weight distribution flattened, this was why.
 
