@@ -254,6 +254,13 @@ export const api = {
         method: "POST",
       });
     },
+    /** Delete the installed list. Takes no arguments for the same reason
+     *  `download` does not: the path is fixed server-side. */
+    remove() {
+      return request<{ removed: boolean; path: string }>("/wp/api/tags", {
+        method: "DELETE",
+      });
+    },
   },
 
   database: {

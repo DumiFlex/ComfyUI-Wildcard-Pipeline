@@ -20,6 +20,7 @@ import { api } from "../../api/client";
 import type { TagStatus } from "../../api/types";
 import { useUiStore } from "../../stores/uiStore";
 import { useToast } from "../../composables/useToast";
+import { resetTagAvailability } from "../../utils/tagStatus";
 
 const ui = useUiStore();
 const toast = useToast();
@@ -27,6 +28,7 @@ const toast = useToast();
 const status = ref<TagStatus | null>(null);
 const loading = ref(true);
 const downloading = ref(false);
+const busy = ref(false);
 
 /** Where the file is looked for, shown even when nothing is installed — it is
  *  the answer to "where do I put my own?", which is the supported alternative
@@ -53,6 +55,45 @@ async function refresh(): Promise<void> {
     status.value = null;
   } finally {
     loading.value = false;
+  }
+  // Editors cache "is a list available?" once per page. Drop it so a file
+  // dropped in by hand — or one just deleted — takes effect without a reload.
+  resetTagAvailability();
+}
+
+/** For a file copied in by hand: the server re-reads on mtime change, but
+ *  nothing tells the page to go and look. */
+async function recheck(): Promise<void> {
+  busy.value = true;
+  try {
+    await refresh();
+    toast.push({
+      severity: status.value?.available ? "success" : "info",
+      summary: status.value?.available
+        ? `${status.value.tag_count.toLocaleString()} tags found`
+        : "No tag list at that path",
+      life: 3000,
+    });
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function removeList(): Promise<void> {
+  busy.value = true;
+  try {
+    await api.tags.remove();
+    await refresh();
+    toast.push({ severity: "success", summary: "Tag list removed", life: 3000 });
+  } catch (err) {
+    toast.push({
+      severity: "error",
+      summary: "Could not remove the tag list",
+      detail: err instanceof Error ? err.message : undefined,
+      life: 5000,
+    });
+  } finally {
+    busy.value = false;
   }
 }
 
@@ -109,12 +150,34 @@ onMounted(refresh);
         </p>
         <p class="wp-dim wp-tagac__path">{{ pathLabel }}</p>
       </div>
-      <Button
-        variant="secondary"
-        :loading="downloading"
-        data-test="tagac-download"
-        @click="download"
-      >{{ status?.available ? "Replace" : "Download" }}</Button>
+      <div class="wp-tagac__actions">
+        <!-- Re-read the path. The server notices an mtime change on its own,
+             but nothing tells the page to go and look, so a file copied in by
+             hand stays invisible until something asks. -->
+        <Button
+          variant="ghost"
+          icon="pi-refresh"
+          :loading="busy"
+          data-test="tagac-refresh"
+          title="Re-check the path — use after copying a file there yourself"
+          @click="recheck"
+        >Refresh</Button>
+        <Button
+          v-if="status?.available"
+          variant="ghost"
+          icon="pi-trash"
+          :loading="busy"
+          data-test="tagac-remove"
+          title="Delete the installed tag list"
+          @click="removeList"
+        >Remove</Button>
+        <Button
+          variant="secondary"
+          :loading="downloading"
+          data-test="tagac-download"
+          @click="download"
+        >{{ status?.available ? "Replace" : "Download" }}</Button>
+      </div>
     </div>
 
     <!-- Stated in the UI, not only in the README. Someone deciding whether to
@@ -140,6 +203,14 @@ onMounted(refresh);
 }
 
 .wp-tagac__state { min-width: 0; }
+
+.wp-tagac__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-3);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
 
 .wp-tagac__count {
   margin: 0;

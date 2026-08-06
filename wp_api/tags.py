@@ -150,7 +150,32 @@ async def download(request: web.Request) -> web.Response:
     })
 
 
+async def remove(request: web.Request) -> web.Response:
+    """DELETE /wp/api/tags — delete the installed list.
+
+    Same shape as the download: the path is computed server-side from a fixed
+    filename, so there is nothing a caller can point this at. A symlink there
+    is refused rather than followed, which would otherwise let this unlink
+    whatever it points to.
+    """
+    path = tag_file_path()
+    if path is None:
+        return json_error("ComfyUI's user directory could not be found.", status=409)
+    if path.is_symlink():
+        return json_error(
+            f"{path.name} is a symlink; refusing to delete through it.", status=409,
+        )
+    try:
+        existed = path.is_file()
+        path.unlink(missing_ok=True)
+    except OSError as err:
+        return json_error(f"could not delete the tag list: {err}", status=500)
+    reset_cache()
+    return json_ok({"removed": existed, "path": str(path)})
+
+
 def register(router: web.UrlDispatcher) -> None:
     router.add_get("/wp/api/tags/status", get_status)
     router.add_get("/wp/api/tags/suggest", suggest)
     router.add_post("/wp/api/tags/download", download)
+    router.add_delete("/wp/api/tags", remove)
