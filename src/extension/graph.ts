@@ -1322,7 +1322,16 @@ function writeBindings(
     for (const v of libValues) {
       if (typeof v.name === "string" && typeof v.id === "string") libNameToId.set(v.name, v.id);
     }
-    for (const e of m.entries) {
+    // Both guards matter, and neither is theoretical. This walker runs inside
+    // `onConnectionsChange` (see `extension/reactive.ts`), so a throw here does
+    // not degrade to an empty preview — it escapes into litegraph's connection
+    // handling, and one malformed module breaks canvas interaction for the
+    // whole graph. A library payload that carries `payload.values` but no
+    // `entries` is enough to trigger it. The other two `entries` readers in
+    // this file (the kind scan and the producer walk) already use `?? []`;
+    // this one was the outlier.
+    for (const e of Array.isArray(m.entries) ? m.entries : []) {
+      if (typeof e?.variable_name !== "string") continue;
       const name = e.variable_name.replace(/^\$/, "").trim();
       if (!name) continue;
       const libId = libNameToId.get(e.variable_name);

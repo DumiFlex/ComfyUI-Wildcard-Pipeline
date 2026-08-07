@@ -1347,3 +1347,72 @@ describe("findWildcardHomesElsewhere", () => {
     expect(findWildcardHomesElsewhere(graphOf([self, asm]), self, "")).toEqual([]);
   });
 });
+
+/**
+ * These walkers run inside `onConnectionsChange` (see `extension/reactive.ts`),
+ * so a throw does not degrade to an empty preview — it escapes into litegraph's
+ * connection handling and one malformed module breaks canvas interaction for
+ * the whole graph. Both shapes below are things a real library payload can be:
+ * `entries` is a widget-side mirror that only exists once a module has been
+ * edited inline, so a row installed straight from the library has `payload`
+ * and nothing else.
+ */
+describe("collectUpstreamResolved — malformed fixed_values rows", () => {
+  /** A fixed_values module with whatever `entries` the caller wants (or none). */
+  function fixedValuesGraph(module: Record<string, unknown>): {
+    graph: LiteGraphLike;
+    asm: LiteNodeLike;
+  } {
+    const ctx: LiteNodeLike = {
+      id: 1,
+      type: "WP_Context",
+      inputs: [{ name: "upstream", link: null }],
+      outputs: [{ name: "context", links: [], type: "PIPELINE_CONTEXT" }],
+      widgets: [{ name: "wp_modules", value: JSON.stringify({ version: 1, modules: [module] }) }],
+    };
+    const asm: LiteNodeLike = {
+      id: 2,
+      type: "WP_PromptAssembler",
+      inputs: [{ name: "context", link: 100 }],
+    };
+    return {
+      asm,
+      graph: {
+        _nodes: [ctx, asm],
+        links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+        getNodeById: (id) => ({ 1: ctx, 2: asm } as Record<number, LiteNodeLike>)[id] ?? null,
+      },
+    };
+  }
+
+  const payload = {
+    values: [
+      { id: "v1", name: "style", value: "cinematic" },
+      { id: "v2", name: "mood", value: "brooding" },
+    ],
+  };
+
+  it("resolves from payload.values when the module has no `entries` key at all", () => {
+    const { graph, asm } = fixedValuesGraph({
+      id: "aa11bb22", type: "fixed_values", enabled: true, meta: { name: "looks" }, payload,
+    });
+    expect(collectUpstreamResolved(graph, asm)).toEqual({ style: "cinematic", mood: "brooding" });
+  });
+
+  it("skips an entry with no variable_name instead of throwing", () => {
+    const { graph, asm } = fixedValuesGraph({
+      id: "aa11bb22", type: "fixed_values", enabled: true, meta: { name: "looks" },
+      entries: [{ value: "orphaned" }, { variable_name: "$style", value: "noir" }],
+      payload: { values: [] },
+    });
+    expect(collectUpstreamResolved(graph, asm)).toEqual({ style: "noir" });
+  });
+
+  it("tolerates `entries` being a non-array", () => {
+    const { graph, asm } = fixedValuesGraph({
+      id: "aa11bb22", type: "fixed_values", enabled: true, meta: { name: "looks" },
+      entries: null, payload,
+    });
+    expect(collectUpstreamResolved(graph, asm)).toEqual({ style: "cinematic", mood: "brooding" });
+  });
+});
