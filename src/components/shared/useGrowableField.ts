@@ -257,6 +257,33 @@ export function useGrowableField(
     const el = getEl();
     if (!el) return;
     lastHeight = el.getBoundingClientRect().height;
+
+    /* Re-measure once the webfonts land.
+     *
+     * These fields are typed in `--wp-font-mono`, a bundled webfont declared
+     * `font-display: swap` — so the first paint uses the system fallback
+     * (Consolas / Monaco) and the real face swaps in later. The two stacks
+     * have different metrics, so the `scrollHeight` measured at mount is taken
+     * against type that is about to be replaced.
+     *
+     * That is the "sometimes the bottom fade is wrong" report: on a cold load
+     * the hint is computed against the fallback and never recomputed, and on a
+     * warm cache the font is already there so it looks fine. Any later scroll,
+     * input or resize also fixes it by accident, which is what made it look
+     * intermittent rather than deterministic.
+     *
+     * `document.fonts.ready` resolves once, after all pending faces settle.
+     * Cheap, and a no-op where the font was already cached.
+     */
+    if (typeof document !== "undefined" && document.fonts?.ready) {
+      void document.fonts.ready.then(() => {
+        // The field may have unmounted during the load.
+        if (!getEl()) return;
+        updateOverflowHint();
+        autosize();
+      });
+    }
+
     if (typeof ResizeObserver === "undefined") return;
     obs = new ResizeObserver(schedule);
     obs.observe(el);

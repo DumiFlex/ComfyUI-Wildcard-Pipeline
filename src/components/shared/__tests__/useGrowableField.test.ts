@@ -242,3 +242,47 @@ describe("useGrowableField — the drag itself", () => {
     wrap.unmount();
   });
 });
+
+describe("useGrowableField — re-measures after the webfonts land", () => {
+  /**
+   * These fields are typed in `--wp-font-mono`, a bundled webfont declared
+   * `font-display: swap`. The first paint uses the system fallback, the real
+   * face swaps in later, and the two stacks have different metrics — so the
+   * height measured at mount was taken against type about to be replaced.
+   *
+   * That is the "sometimes the bottom fade is wrong" report: wrong on a cold
+   * load, right on a warm cache, and fixed by accident by any later scroll or
+   * input. Deterministic once you know the font is the variable.
+   */
+  it("re-runs the overflow hint once document.fonts.ready resolves", async () => {
+    let resolveFonts!: () => void;
+    const ready = new Promise<void>((res) => { resolveFonts = res; });
+    Object.defineProperty(document, "fonts", {
+      value: { ready }, configurable: true,
+    });
+
+    const { api, node, wrap } = mountField();
+    // Fallback metrics: content fits, so no fade.
+    Object.defineProperty(node, "scrollHeight", { value: 100, configurable: true });
+    Object.defineProperty(node, "clientHeight", { value: 100, configurable: true });
+    Object.defineProperty(node, "scrollTop", { value: 0, configurable: true });
+    api.updateOverflowHint();
+    expect(api.hasMoreBelow.value).toBe(false);
+
+    // The real face is taller — the same text now overflows.
+    Object.defineProperty(node, "scrollHeight", { value: 260, configurable: true });
+    resolveFonts();
+    await ready;
+    await Promise.resolve();
+
+    expect(api.hasMoreBelow.value).toBe(true);
+    wrap.unmount();
+  });
+
+  it("does not throw where the host exposes no font loading API", async () => {
+    Object.defineProperty(document, "fonts", { value: undefined, configurable: true });
+    const { wrap } = mountField();
+    await Promise.resolve();
+    wrap.unmount();
+  });
+});
