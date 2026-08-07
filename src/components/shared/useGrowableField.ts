@@ -221,7 +221,16 @@ export function useGrowableField(
       el.style.maxHeight = "none";
       capLifted = true;
     }
-    (ev.currentTarget as HTMLElement | null)?.setPointerCapture?.(ev.pointerId);
+    // Capture is an optimisation — it keeps move events coming when the
+    // pointer outruns the 16px grip — but it is allowed to fail, and it used
+    // to take the drag with it. `setPointerCapture` throws `NotFoundError`
+    // for any id with no active pointer, and this call sat BEFORE the
+    // listeners were attached, so one throw meant a grip that visibly did
+    // nothing. The listeners are on `window` and work without capture, so
+    // failing here should cost nothing.
+    try {
+      (ev.currentTarget as HTMLElement | null)?.setPointerCapture?.(ev.pointerId);
+    } catch { /* no active pointer for this id — listeners below still work */ }
     window.addEventListener("pointermove", onResizeMove);
     window.addEventListener("pointerup", onPointerUp);
     window.addEventListener("pointercancel", onPointerUp);
