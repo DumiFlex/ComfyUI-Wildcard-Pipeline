@@ -2042,7 +2042,28 @@ function onSuggestionMouseDown(e: MouseEvent, label: string): void {
 
 // --- Global listeners: close popup on outside-click / scroll / resize.
 //     We attach lazily (only while open) so non-editing inputs cost nothing.
-function onDocumentMouseDown(e: MouseEvent): void {
+
+/**
+ * Close on any press that lands outside the input and outside the popover.
+ *
+ * Bound to `pointerdown` as well as `mousedown`, and that is the whole point:
+ * `mousedown` alone did not dismiss on canvas clicks. litegraph drives the
+ * canvas from pointer events and calls `preventDefault()` on `pointerdown` to
+ * suppress native text-selection and drag — and a prevented `pointerdown`
+ * suppresses the browser's compatibility `mousedown` entirely, so a
+ * mousedown-only listener never hears the click that matters. The canvas is
+ * most of the screen on a node graph, so this read as "the popover never
+ * closes".
+ *
+ * `pointerdown` fires first and nothing downstream can take it away. Both are
+ * kept: `mousedown` is the fallback for environments with no PointerEvent
+ * (jsdom under test, older embedded webviews). Closing twice is idempotent.
+ *
+ * Ordering is safe for suggestion rows. They commit on `mousedown` (to beat
+ * the host's blur), and this handler returns early for anything inside the
+ * popover, so firing before them changes nothing.
+ */
+function onDocumentPressStart(e: Event): void {
   const t = e.target as Node | null;
   if (!t) return;
   if (hostEl.value?.contains(t)) return;
@@ -2073,18 +2094,21 @@ function onWindowResize(): void {
 watch(acOpen, (open) => {
   if (open) {
     void nextTick(positionPopup);
-    window.addEventListener("mousedown", onDocumentMouseDown, true);
+    window.addEventListener("pointerdown", onDocumentPressStart, true);
+    window.addEventListener("mousedown", onDocumentPressStart, true);
     window.addEventListener("scroll", onWindowScroll, true);
     window.addEventListener("resize", onWindowResize);
   } else {
-    window.removeEventListener("mousedown", onDocumentMouseDown, true);
+    window.removeEventListener("pointerdown", onDocumentPressStart, true);
+    window.removeEventListener("mousedown", onDocumentPressStart, true);
     window.removeEventListener("scroll", onWindowScroll, true);
     window.removeEventListener("resize", onWindowResize);
   }
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener("mousedown", onDocumentMouseDown, true);
+  window.removeEventListener("pointerdown", onDocumentPressStart, true);
+  window.removeEventListener("mousedown", onDocumentPressStart, true);
   window.removeEventListener("scroll", onWindowScroll, true);
   window.removeEventListener("resize", onWindowResize);
   window.removeEventListener("keydown", onPickerEscape, true);

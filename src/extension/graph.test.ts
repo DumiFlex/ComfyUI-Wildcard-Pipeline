@@ -4,6 +4,7 @@ import {
   collectDownstreamWildcardUuids,
   collectLocalResolvedForModule,
   collectUpstreamProducers,
+  collectUpstreamRenderableVariables,
   collectUpstreamResolved,
   collectUpstreamVariables,
   collectUpstreamWildcardUuids,
@@ -11,6 +12,7 @@ import {
   findDownstreamAssemblers,
   findRootGraph,
   hasUpstreamLoopOverridingSeed,
+  internalVarNames,
   resolveUpstreamLoopSeed,
   type LiteGraphLike,
   type LiteNodeLike,
@@ -1414,5 +1416,78 @@ describe("collectUpstreamResolved — malformed fixed_values rows", () => {
       entries: null, payload,
     });
     expect(collectUpstreamResolved(graph, asm)).toEqual({ style: "cinematic", mood: "brooding" });
+  });
+});
+
+/**
+ * WP_PromptAssembler runs `strip_internals` over the render context before
+ * resolving, so a `$var` naming a variable the user flagged internal
+ * substitutes to nothing. The flagged names still cross the socket — Combine
+ * and Derivation downstream read them — so the plain variable list keeps
+ * them, and only the PROMPT surface filters. Before this split the
+ * assembler's `$` autocomplete offered `$iteration` and the `*_bool` toggles,
+ * which outnumbered the usable names.
+ */
+describe("collectUpstreamRenderableVariables", () => {
+  /** A Context node with one plain fixed_values module and one flagged
+   *  `instance.internal`. */
+  function graphWithInternalModule(): { graph: LiteGraphLike; asm: LiteNodeLike } {
+    const ctx: LiteNodeLike = {
+      id: 1,
+      type: "WP_Context",
+      inputs: [{ name: "upstream", link: null }],
+      outputs: [{ name: "context", links: [], type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "wp_modules",
+        value: JSON.stringify({
+          version: 1,
+          modules: [
+            {
+              id: "aa11bb22", type: "fixed_values", enabled: true, meta: { name: "looks" },
+              entries: [], payload: { values: [{ id: "v1", name: "style", value: "cinematic" }] },
+            },
+            {
+              id: "cc33dd44", type: "fixed_values", enabled: true, meta: { name: "toggles" },
+              entries: [], instance: { internal: true },
+              payload: { values: [{ id: "v2", name: "style_bool", value: "1" }] },
+            },
+          ],
+        }),
+      }],
+    };
+    const asm: LiteNodeLike = {
+      id: 2, type: "WP_PromptAssembler", inputs: [{ name: "context", link: 100 }],
+    };
+    return {
+      asm,
+      graph: {
+        _nodes: [ctx, asm],
+        links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+        getNodeById: (id) => ({ 1: ctx, 2: asm } as Record<number, LiteNodeLike>)[id] ?? null,
+      },
+    };
+  }
+
+  it("drops internal-flagged names that the prompt would never substitute", () => {
+    const { graph, asm } = graphWithInternalModule();
+    expect(collectUpstreamRenderableVariables(graph, asm)).toEqual(["style"]);
+  });
+
+  it("keeps them in the plain variable list, which other surfaces still need", () => {
+    const { graph, asm } = graphWithInternalModule();
+    expect(collectUpstreamVariables(graph, asm).sort()).toEqual(["style", "style_bool"]);
+  });
+
+  it("names the internal keys from the flag blob", () => {
+    const { graph, asm } = graphWithInternalModule();
+    expect([...internalVarNames(collectUpstreamResolved(graph, asm))]).toEqual(["style_bool"]);
+  });
+
+  it("treats a malformed flag blob as no internals rather than throwing", () => {
+    // The blob crosses the socket as an ordinary string value, so nothing
+    // guarantees it parses. A broken map should cost a mis-styled chip, not
+    // an exception inside a connection-change handler.
+    expect([...internalVarNames({ __wp_internal_flags__: "{not json" })]).toEqual([]);
+    expect([...internalVarNames({})]).toEqual([]);
   });
 });

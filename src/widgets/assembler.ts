@@ -9,6 +9,7 @@ import {
   collectUpstreamKinds,
   collectUpstreamResolved,
   findRootGraph,
+  internalVarNames,
   type LiteGraphLike,
   type LiteNodeLike,
 } from "../extension/graph";
@@ -307,16 +308,11 @@ export function mountHelper(node: AssemblerNode) {
           // engine flag map itself so chip strip + preview match the
           // server-side resolve result.
           const rawResolved = collectUpstreamResolved(g, node);
-          const flagsBlob = rawResolved["__wp_internal_flags__"];
-          const internalNames = new Set<string>();
-          if (typeof flagsBlob === "string") {
-            try {
-              const parsed = JSON.parse(flagsBlob) as Record<string, boolean>;
-              for (const [k, v] of Object.entries(parsed)) {
-                if (v) internalNames.add(k);
-              }
-            } catch { /* malformed, treat as empty */ }
-          }
+          // Shared with the template editor's `$` suggestion list — both
+          // surfaces on this node have to agree on which names the prompt
+          // will actually render, and they disagreed while each kept its
+          // own copy of the rule.
+          const internalNames = internalVarNames(rawResolved);
           const fallbackResolved: Record<string, ResolvedValue> = {};
           for (const [k, v] of Object.entries(rawResolved)) {
             if (k.startsWith("__")) continue;

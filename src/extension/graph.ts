@@ -478,6 +478,45 @@ export function collectUpstreamVariables(rootGraph: LiteGraphLike, node: LiteNod
 }
 
 /**
+ * Names the user flagged "hide from prompt", read out of the engine's
+ * `__wp_internal_flags__` blob that rides along in a resolved map.
+ *
+ * The blob is JSON in a string because it crosses the PIPELINE_CONTEXT socket
+ * as an ordinary context value. Malformed ⇒ treat as empty; a broken flag map
+ * should cost the user a mis-styled chip, not an exception in a graph walk.
+ */
+export function internalVarNames(resolved: Record<string, ResolvedValue>): Set<string> {
+  const out = new Set<string>();
+  const blob = resolved["__wp_internal_flags__"];
+  if (typeof blob !== "string") return out;
+  try {
+    for (const [k, v] of Object.entries(JSON.parse(blob) as Record<string, boolean>)) {
+      if (v) out.add(k);
+    }
+  } catch { /* malformed, treat as empty */ }
+  return out;
+}
+
+/**
+ * Upstream variables that would actually SUBSTITUTE in a rendered prompt —
+ * `collectUpstreamVariables` minus the ones flagged internal.
+ *
+ * WP_PromptAssembler runs `strip_internals` over the render context before
+ * resolving, so a `$var` naming an internal variable resolves to nothing. The
+ * flagged names still travel the socket (Combine and Derivation downstream
+ * read them), which is why the plain variable list keeps them — it is the
+ * PROMPT surface specifically that must not offer them.
+ */
+export function collectUpstreamRenderableVariables(
+  rootGraph: LiteGraphLike,
+  node: LiteNodeLike,
+): string[] {
+  const resolved = collectUpstreamResolved(rootGraph, node);
+  const internal = internalVarNames(resolved);
+  return Object.keys(resolved).filter((k) => !k.startsWith("__") && !internal.has(k));
+}
+
+/**
  * Walk upstream from `node` and return true iff some WP_ContextLoop in
  * the pipeline-context chain has `override_seed=true` in its widget
  * config. Used by WP_Context's widget glue to grey out the local `seed`

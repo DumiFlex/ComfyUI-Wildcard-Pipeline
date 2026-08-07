@@ -26,7 +26,7 @@ import { attachThemeDetector } from "../extension/theme-detector";
 import { templateInsertAtCaret } from "../extension/_stashes";
 import {
   collectUpstreamProducers,
-  collectUpstreamVariables,
+  collectUpstreamRenderableVariables,
   findRootGraph,
   type LiteGraphLike,
   type LiteNodeLike,
@@ -57,14 +57,19 @@ export function create(node: EditorNode, inputName: string) {
         return findRootGraph(start);
       };
 
-      // `$` suggestions are exactly the names an upstream Context chain
-      // resolves — the same set the assembler's chip strip shows as
-      // available. Names only; the popover reads attribution separately.
+      // `$` suggestions are the upstream names that will actually SUBSTITUTE
+      // here. Deliberately not the full upstream set: WP_PromptAssembler runs
+      // `strip_internals` before resolving, so a `$var` naming a variable the
+      // user flagged internal renders as nothing. Offering `$iteration` and
+      // the `*_bool` toggles — which is what the unfiltered list did, and they
+      // outnumbered the real ones — is offering tokens guaranteed to be no-ops.
+      // They still travel the socket for Combine / Derivation to read; it is
+      // the PROMPT surface specifically that must not suggest them.
       const varNames = reactiveFromGraph<string[]>(
         node as unknown as Parameters<typeof reactiveFromGraph>[0],
         () => {
           const g = rootGraph();
-          return g ? collectUpstreamVariables(g, node) : [];
+          return g ? collectUpstreamRenderableVariables(g, node) : [];
         },
         stringArrayEqual,
       );
