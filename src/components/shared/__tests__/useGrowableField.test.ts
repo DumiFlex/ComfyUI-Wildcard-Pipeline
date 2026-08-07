@@ -198,7 +198,7 @@ describe("useGrowableField — the drag itself", () => {
     }) as DOMRect;
     api.startResize(gripDown(500));
     const move = (y: number) => window.dispatchEvent(
-      Object.assign(new MouseEvent("pointermove", { clientY: y }), { pointerId: 1 }),
+      Object.assign(new MouseEvent("pointermove", { clientY: y, buttons: 1 }), { pointerId: 1 }),
     );
     move(520);
     expect(node.style.height).toBe("120px");
@@ -236,7 +236,7 @@ describe("useGrowableField — the drag itself", () => {
     }) as DOMRect;
     api.startResize(gripDown(500));
     window.dispatchEvent(
-      Object.assign(new MouseEvent("pointermove", { clientY: 400 }), { pointerId: 1 }),
+      Object.assign(new MouseEvent("pointermove", { clientY: 400, buttons: 1 }), { pointerId: 1 }),
     );
     expect(node.style.height).toBe("34px");
     wrap.unmount();
@@ -335,5 +335,81 @@ describe("useGrowableField — grip-follow only while a grip is held", () => {
     expect(scroller.scrollTop).toBeGreaterThan(0);
     wrap.unmount();
     scroller.remove();
+  });
+});
+
+describe("useGrowableField — a drag can always end", () => {
+  /**
+   * Reported symptom: "the resize is linked to my mouse and resizes as I move
+   * my mouse around without holding, and can't be interrupted no matter what I
+   * do or press."
+   *
+   * That is one state — `dragging` stuck true — reachable whenever a single
+   * `pointerup` is missed. It was reachable two ways: `setPointerCapture`
+   * retargeted every later pointer event to the grip, so a re-render that
+   * replaced that element delivered the `pointerup` to a detached node where it
+   * never bubbled; and the listeners sat in bubble phase, so any
+   * `stopPropagation()` in between hid it too. Nothing then ever cleared the
+   * flag, which is why no key or click could stop it.
+   */
+  function beginDrag(api: ReturnType<typeof useGrowableField>) {
+    api.startResize({
+      clientY: 100, pointerId: 1, preventDefault() {}, currentTarget: null,
+    } as unknown as PointerEvent);
+  }
+
+  const move = (y: number, buttons: number) =>
+    window.dispatchEvent(
+      Object.assign(new Event("pointermove", { bubbles: true }), { clientY: y, buttons }),
+    );
+
+  it("stops resizing after a pointerup, even one that never reached the window", () => {
+    const { api, node, wrap } = mountField(100);
+    beginDrag(api);
+    move(140, 1);
+    const grown = node.style.height;
+    expect(grown).not.toBe("");
+
+    // The pointerup is simply never delivered — the stranded-capture case.
+    // The next move reports no buttons held, which is the only honest signal
+    // left that the drag is over.
+    move(300, 0);
+    const afterRelease = node.style.height;
+    move(500, 0);
+    expect(node.style.height).toBe(afterRelease);
+    wrap.unmount();
+  });
+
+  it("ends on a pointerup seen in capture phase", () => {
+    const { api, node, wrap } = mountField(100);
+    beginDrag(api);
+    move(140, 1);
+    const held = node.style.height;
+    window.dispatchEvent(new Event("pointerup", { bubbles: true }));
+    move(400, 1);   // button still reported down, but the drag ended
+    expect(node.style.height).toBe(held);
+    wrap.unmount();
+  });
+
+  it("ends on Escape, the key a stuck user actually presses", () => {
+    const { api, node, wrap } = mountField(100);
+    beginDrag(api);
+    move(140, 1);
+    const held = node.style.height;
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    move(400, 1);
+    expect(node.style.height).toBe(held);
+    wrap.unmount();
+  });
+
+  it("ends when the window loses focus", () => {
+    const { api, node, wrap } = mountField(100);
+    beginDrag(api);
+    move(140, 1);
+    const held = node.style.height;
+    window.dispatchEvent(new Event("blur"));
+    move(400, 1);
+    expect(node.style.height).toBe(held);
+    wrap.unmount();
   });
 });

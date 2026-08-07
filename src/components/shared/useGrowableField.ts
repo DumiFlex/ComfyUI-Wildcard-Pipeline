@@ -229,24 +229,51 @@ export function useGrowableField(
       el.style.maxHeight = "none";
       capLifted = true;
     }
-    // Capture is an optimisation — it keeps move events coming when the
-    // pointer outruns the 16px grip — but it is allowed to fail, and it used
-    // to take the drag with it. `setPointerCapture` throws `NotFoundError`
-    // for any id with no active pointer, and this call sat BEFORE the
-    // listeners were attached, so one throw meant a grip that visibly did
-    // nothing. The listeners are on `window` and work without capture, so
-    // failing here should cost nothing.
-    try {
-      (ev.currentTarget as HTMLElement | null)?.setPointerCapture?.(ev.pointerId);
-    } catch { /* no active pointer for this id — listeners below still work */ }
-    window.addEventListener("pointermove", onResizeMove);
-    window.addEventListener("pointerup", onPointerUp);
-    window.addEventListener("pointercancel", onPointerUp);
+    /* No `setPointerCapture`.
+     *
+     * It reads like the right call and it is what stranded the drag. Capture
+     * retargets every subsequent pointer event to the grip — including
+     * `pointerup`. The editor re-renders while it resizes, and a captured
+     * element that gets replaced is detached: the `pointerup` is delivered to a
+     * node no longer in the tree, so it never bubbles to `window`, `dragging`
+     * stays true, and the box follows the cursor with no button held and no way
+     * to stop it. That is the reported symptom exactly.
+     *
+     * Capture bought nothing here anyway. The listeners below are on `window`,
+     * which sees the events regardless of what is under the cursor.
+     *
+     * CAPTURE PHASE on all three, so a `stopPropagation()` between the target
+     * and the window — ComfyUI's node layer does this to stop the canvas
+     * panning under a widget — cannot hide the end of the drag from us.
+     */
+    window.addEventListener("pointermove", onResizeMove, true);
+    window.addEventListener("pointerup", onPointerUp, true);
+    window.addEventListener("pointercancel", onPointerUp, true);
+    // A fresh press means the previous drag is over however it ended.
+    window.addEventListener("pointerdown", onPointerUp, true);
+    window.addEventListener("blur", onPointerUp);
+    window.addEventListener("keydown", onDragEscape, true);
+  }
+
+  /** Escape ends a drag. Cheap, and it is the key a stuck user presses. */
+  function onDragEscape(ev: KeyboardEvent): void {
+    if (ev.key === "Escape") onPointerUp();
   }
 
   function onResizeMove(ev: PointerEvent): void {
     const el = getEl();
     if (!el || !dragging) return;
+    // Self-heal. Every pointermove reports which buttons are down, so a move
+    // with none held means the pointerup was lost — whatever swallowed it —
+    // and the drag should already be over. Without this the field follows the
+    // cursor forever and no key or click can stop it, because nothing else in
+    // here ever clears `dragging`. Belt and braces on top of the listener
+    // changes above: those address the causes we found, this ends the state
+    // regardless of a cause we did not.
+    if (ev.buttons === 0) {
+      onPointerUp();
+      return;
+    }
     const dy = ev.clientY - lastPointerY;
     lastPointerY = ev.clientY;
     const cur = el.getBoundingClientRect().height;
