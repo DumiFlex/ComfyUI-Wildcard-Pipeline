@@ -452,6 +452,20 @@ export function mirrorHtmlWithIdx(tokens: RichToken[]): string {
 export function inlineTokenHtml(
   text: string,
   collapsedKinds?: ReadonlyArray<"var" | "ref"> | "var" | "ref",
+  /**
+   * Extra HTML attributes for a `var` sub-span, keyed off the bare name.
+   *
+   * Exists for the prompt-template surface, which renders `$name` as coloured
+   * EDITABLE TEXT rather than as a chip. Per-variable colour cannot come from a
+   * class: `.wp-rt .wp-rt-var` in `rich-text.css` already sets a colour at
+   * higher specificity than the global `.var-N` palette classes, so the hook
+   * returns an inline `style` instead — which wins without either stylesheet
+   * needing to know about the other.
+   *
+   * Returns a string spliced straight into the tag, so it must be
+   * caller-escaped. Only ever invoked for `var` tokens.
+   */
+  varAttrs?: (name: string) => string,
 ): string {
   if (!text) return "";
   const tokens = tokenizeRich(text);
@@ -493,7 +507,10 @@ export function inlineTokenHtml(
       html += escapeHtml(t.raw);
     } else {
       if (!isText(i - 1)) html += "&#x200B;";
-      html += `<span class="wp-rt-${t.kind}">${escapeHtml(t.raw)}</span>`;
+      const attrs = t.kind === "var" && varAttrs
+        ? varAttrs(t.raw.replace(/^\$/, ""))
+        : "";
+      html += `<span class="wp-rt-${t.kind}"${attrs}>${escapeHtml(t.raw)}</span>`;
       if (!isText(i + 1)) html += "&#x200B;";
     }
   }

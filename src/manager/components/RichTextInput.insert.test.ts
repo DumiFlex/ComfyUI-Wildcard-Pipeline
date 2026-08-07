@@ -53,19 +53,32 @@ describe("RichTextInput — insertTextAtCaret", () => {
     expect(emitted(w)).toBe("$subject");
   });
 
-  it("chipifies an inserted $var on a surface that reads vars", async () => {
+  it("renders an inserted $var immediately, without waiting for a keystroke", async () => {
     // The whole reason the assembler routes through here instead of writing
-    // `widget.value`: the insert is re-parsed, so the new token renders as a
-    // chip immediately rather than sitting as literal text until the next
-    // keystroke.
+    // `widget.value`: the insert is re-parsed, so the new token takes its
+    // rendering straight away rather than sitting as undecorated literal text.
+    //
+    // On this surface that rendering is a coloured `.wp-rt-var` run, NOT a
+    // chip — the template collapses vars to editable text so a caret can enter
+    // them and Backspace takes one character.
     const w = mount(RichTextInput, {
       props: { modelValue: "a portrait of", surface: "assembler", multiline: true },
     });
     await w.vm.$nextTick();
     insert(w, "$subject");
     await w.vm.$nextTick();
-    const labels = w.findAll(".wp-refchip__label").map((c) => c.text());
-    expect(labels).toContain("$subject");
+    expect(w.findAll(".wp-refchip").length).toBe(0);
+    expect(w.findAll(".wp-rt-var").map((c) => c.text())).toContain("$subject");
+  });
+
+  it("still chipifies on a surface that chips vars", async () => {
+    const w = mount(RichTextInput, {
+      props: { modelValue: "a portrait of", surface: "combine", multiline: true },
+    });
+    await w.vm.$nextTick();
+    insert(w, "$subject");
+    await w.vm.$nextTick();
+    expect(w.findAll(".wp-refchip__label").map((c) => c.text())).toContain("$subject");
   });
 
   it("separates on the trailing side too, so the token keeps its identity", async () => {

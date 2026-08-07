@@ -616,7 +616,14 @@ function parseForSurface(text: string): Atom[] {
   const collapseSet: Set<"var" | "ref"> =
     props.surface === "wildcard"
       ? new Set(["var"])
-      : props.surface === "fixed_values"
+      // fixed_values and assembler both keep `$name` as literal text, for
+      // opposite reasons. fixed_values PRODUCES bindings, so a `$var` read is
+      // meaningless there. The assembler reads them constantly — but a
+      // template is prose, and an atomic chip in prose behaves like an object:
+      // one Backspace deletes the whole token, the caret cannot enter it, and
+      // it takes a pointer cursor. Collapsed, it is ordinary editable text
+      // that happens to be coloured.
+      : props.surface === "fixed_values" || props.surface === "assembler"
         ? new Set(["var", "ref"])
         : new Set(["ref"]);
   // Action-value derivation inputs (allowNestedRefs) chipify `@{}` refs like
@@ -702,7 +709,36 @@ let lastEmittedValue = props.modelValue || "";
  *  those aren't chippable tokens, so their highlight IS the only signal. */
 function textAtomHtml(text: string): string {
   if (!text) return ZWSP;
-  return inlineTokenHtml(text, ["var", "ref"]);
+  // The always-collapse rule above has one exception, and it is the exception
+  // that proves it: the rationale is "the ABSENCE of a chip already signals
+  // not-committed, so an inline colour would only compete with the settled
+  // chip palette". On the prompt template there are no var chips at all, so
+  // nothing is being competed with and the colour is the only signal there is.
+  if (!flatVars.value) return inlineTokenHtml(text, ["var", "ref"]);
+  return inlineTokenHtml(text, ["ref"], varSpanAttrs);
+}
+
+/**
+ * Inline attributes for one `$name` run on the prompt-template surface.
+ *
+ * Colour comes from the same djb2 hash the assembler's variable strip uses, so
+ * a name reads identically in the template, in the strip and in the `$`
+ * popover. Inline rather than a class because `.wp-rt .wp-rt-var` already sets
+ * a colour at higher specificity than the global `.var-N` palette.
+ *
+ * A name nothing upstream writes gets the danger colour and a wavy underline
+ * instead. Losing the chip lost the one cue that separated a typo from a
+ * working variable, and colour alone cannot carry it — every run is coloured.
+ * Only claimed where the host actually walked a graph: in the SPA every var is
+ * out of scope because there is no graph to be in.
+ */
+function varSpanAttrs(name: string): string {
+  if (props.graphAware && !props.varSuggestions.includes(name)) {
+    return ' style="color:var(--wp-danger,#ef4444);'
+      + "text-decoration:underline wavy color-mix(in srgb,var(--wp-danger,#ef4444) 70%,transparent);"
+      + 'text-underline-offset:3px;text-decoration-thickness:1px"';
+  }
+  return ` style="color:var(--wp-var-${varColorIndex(name)})"`;
 }
 
 /** HTML for one text atom. SP2b brace-block scaffolding (the braces, count,
@@ -2941,7 +2977,6 @@ function onHostKeydown(ev: KeyboardEvent): void {
           :graph-aware="graphAware"
           :index="atom.kind === 'var' ? atom.index : undefined"
           :data-atom-index="idx"
-          :flat="flatVars ? 'on' : 'off'"
           remappable
           @click="(ev: MouseEvent) => onChipClick(idx, ev)"
           @remap="(ev: MouseEvent) => onChipRemap(idx, ev)"
@@ -3294,8 +3329,19 @@ function onHostKeydown(ev: KeyboardEvent): void {
   font-size: inherit;
   letter-spacing: 0;
   box-sizing: border-box;
+  /* A text field must look like one. Nothing here ever set a cursor, so the
+     host inherited whatever the surrounding chrome used — and on the canvas
+     that is ComfyUI's node wrapper, which carries `cursor-grab` for dragging
+     the node. The result was a grab hand over an editable field, which reads
+     as "you cannot type here". Inherited, so it never showed up in the SPA. */
+  cursor: text;
   /* Anchor for the absolutely-positioned placeholder ghost (below). */
   position: relative;
+}
+/* Read-only because a link drives the value — an I-beam would promise editing
+   that will not happen. */
+.wp-rt__host[contenteditable="false"] {
+  cursor: default;
 }
 .wp-rt__host--single {
   height: var(--wp-input-h, 34px);
