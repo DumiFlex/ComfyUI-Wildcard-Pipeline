@@ -43,6 +43,7 @@ import type { TagCategoryName, TagSuggestion } from "../api/types";
 import { loadTagAvailability } from "../utils/tagStatus";
 import { tagAutocompleteEnabled as tagSettingOn } from "../utils/tagSetting";
 import { refRows, varRows, type SuggestionRow } from "../utils/suggestion-rows";
+import { varColorClass, varColorIndex } from "../../components/shared/var-color";
 import { CONTEXT_POOLS_KEY, type ContextPoolMap } from "../../extension/context-pools";
 
 // --- 4-segment nested-ref serialization (SP1, §3.2) -----------------------
@@ -271,7 +272,20 @@ const refsEnabled = computed(() => props.surface === "wildcard" || props.allowNe
  * surface-derived default keeps the two aligned and lets a caller be explicit
  * rather than adding a third name to a growing condition.
  */
+/**
+ * Surfaces that render `$var` as coloured text rather than a chip.
+ *
+ * Only the prompt template. Everywhere else a chip is honest — the module
+ * editors let you click one to re-pick what it points at, so the border and
+ * fill are advertising a real affordance. A template is prose you are writing,
+ * the chip advertises nothing, and its box breaks the line rhythm of the
+ * sentence at 10px inside 12px text.
+ */
+const FLAT_VAR_SURFACES = new Set(["assembler"]);
+
 const PRODUCER_SURFACES = new Set(["wildcard", "fixed_values"]);
+const flatVars = computed(() => FLAT_VAR_SURFACES.has(props.surface ?? "combine"));
+
 const varsEnabled = computed(() => {
   if (props.allowVars === "on") return true;
   if (props.allowVars === "off") return false;
@@ -931,6 +945,26 @@ const acItems = computed(() => acMatches.value.slice(0, AC_MAX_ITEMS));
 function kindTint(kind: string): Record<string, string> {
   const token = `--wp-kind-${kind === "fixed_values" ? "fixed" : kind}`;
   const colour = `var(${token}, var(--wp-accent-text, #c4b5fd))`;
+  return {
+    color: colour,
+    background: `color-mix(in oklab, ${colour} 16%, transparent)`,
+  };
+}
+
+/**
+ * Tint for a `$` row, taken from the variable's own name.
+ *
+ * The assembler's variable strip sits a few pixels under this popover and
+ * colours every name through `varColorClass` — same hash, eight buckets. The
+ * popover painted each row by MODULE KIND instead, so the same `$quality` was
+ * one colour in the list and another in the strip, and you could not match a
+ * row to a chip by looking. `$` rows now take the variable's colour; `@` rows
+ * keep `kindTint`, where the kind IS the identity of the thing being picked.
+ *
+ * The glyph shape still carries the kind, exactly as it does in the strip.
+ */
+function varTint(name: string): Record<string, string> {
+  const colour = `var(--wp-var-${varColorIndex(name)})`;
   return {
     color: colour,
     background: `color-mix(in oklab, ${colour} 16%, transparent)`,
@@ -2907,6 +2941,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
           :graph-aware="graphAware"
           :index="atom.kind === 'var' ? atom.index : undefined"
           :data-atom-index="idx"
+          :flat="flatVars ? 'on' : 'off'"
           remappable
           @click="(ev: MouseEvent) => onChipClick(idx, ev)"
           @remap="(ev: MouseEvent) => onChipRemap(idx, ev)"
@@ -3061,11 +3096,14 @@ function onHostKeydown(ev: KeyboardEvent): void {
                one cue that says which. -->
           <span
             class="wp-rt-suggestions__icon-box"
-            :style="kindTint(row.kind)"
+            :style="acTrigger === '$' ? varTint(row.label) : kindTint(row.kind)"
             aria-hidden="true"
           ><i :class="row.icon" /></span>
           <span class="wp-rt-suggestions__body">
-            <span class="wp-rt-suggestions__label">
+            <span
+              class="wp-rt-suggestions__label"
+              :class="acTrigger === '$' ? varColorClass(row.label) : null"
+            >
               <span class="wp-rt-suggestions__trigger">{{ acTrigger }}</span>{{ row.label }}
             </span>
             <!-- Second line: the facts that separate same-named entries. For
@@ -3587,6 +3625,14 @@ function onHostKeydown(ev: KeyboardEvent): void {
 }
 .wp-rt-suggestions__trigger {
   color: var(--wp-accent-text, #c4b5fd);
+}
+/* On a `$` row the label carries a `var-N` colour, and the sigil is part of
+   the token — `$quality` is one word in the strip below, so splitting its
+   colour here would make the two read as different things. Refs keep the
+   accent sigil: `@` rows are coloured by kind, and the kind colour is already
+   doing that job in the icon box. */
+.wp-rt-suggestions__label[class*="var-"] .wp-rt-suggestions__trigger {
+  color: inherit;
 }
 /* The detail line. Wraps rather than clips: these are short independent
    facts, and dropping one silently would defeat the point of showing them.

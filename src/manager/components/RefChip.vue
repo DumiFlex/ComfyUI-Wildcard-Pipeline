@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { computed, inject, ref, onBeforeUnmount } from "vue";
 import { KIND_ICON_MAP } from "../../components/shared/kind-icons";
+import { varColorIndex } from "../../components/shared/var-color";
 import { parse, readsAs, matches } from "@/manager/parsing/subcatFilter";
 import { splitRefFilter } from "@/widgets/richTokenize";
 // Live library lookup — the hover card's "N of M options match" count reads
@@ -93,6 +94,22 @@ interface Props {
    *  safe direction, since a caller that forgets the prop is exactly the
    *  caller with no handler wired. */
   remappable?: boolean;
+  /**
+   * Drop the chip's box and colour the token by its own name instead.
+   *
+   * Tri-state for the same reason `allowVars` is: Vue casts an ABSENT Boolean
+   * prop to `false`, so a plain `boolean` cannot tell "caller said no" from
+   * "caller said nothing" — and this one has to default per-surface.
+   *
+   * The prompt template is prose, not a form. A border and a fill say "this is
+   * an object you can act on", which is true in the module editors (clicking a
+   * ref chip re-picks its wildcard) and false in a template. The box also cost
+   * a line-height the surrounding sentence wanted back.
+   *
+   * VAR chips only. Refs keep their box everywhere — a `@{uuid}` really is a
+   * clickable object with a picker behind it.
+   */
+  flat?: "auto" | "on" | "off";
 }
 
 /** Structural mirror of `extension/graph.ts:VarProducer`, declared locally so
@@ -125,7 +142,28 @@ const props = withDefaults(defineProps<Props>(), {
   producer: undefined,
   graphAware: false,
   remappable: false,
+  flat: "auto",
 });
+
+/** Flat rendering is opt-in; "auto" means no, so every existing caller keeps
+ *  its chips. Refs are never flat. */
+const isFlat = computed(() => props.kind === "var" && props.flat === "on");
+
+/**
+ * Flat, and nothing upstream writes this name.
+ *
+ * `resolved` cannot answer this — for a var it is only `name.length > 0`, so
+ * `$typo` is "resolved" too. `inScope` is the real signal, and it only means
+ * anything when the host actually walked a graph; in the SPA every var is
+ * out of scope because there is no graph to be in.
+ *
+ * Worth its own state because dropping the box cost the one thing that used to
+ * distinguish these: with a chip, a broken var still read as a chip. Colour
+ * alone cannot say "this resolves to nothing" — every flat token is already
+ * coloured. So this one keeps a mark.
+ */
+const flatUnbound = computed(() => isFlat.value && props.graphAware && !props.inScope);
+
 
 const emit = defineEmits<{
   /** Fired when a RESOLVED ref-kind chip body is clicked. The MouseEvent
@@ -271,6 +309,14 @@ const isKindAware = computed(() =>
 const toneStyle = computed<Record<string, string>>(() => {
   const out: Record<string, string> = {};
   if (isKindAware.value) out["--wp-refchip-tone"] = KIND_TONE[props.moduleKind];
+  // Inline, not a `.var-N` class. Those live in `theme.css` at the same
+  // specificity as `.wp-refchip--var`, and this component's scoped block is
+  // injected after it — so the class lost the cascade and every flat token
+  // still rendered `--wp-success` green. An inline declaration is the one
+  // place a colour can win without either file having to know about the other.
+  if (isFlat.value && props.resolved && !flatUnbound.value) {
+    out.color = `var(--wp-var-${varColorIndex(props.name)})`;
+  }
   return out;
 });
 
@@ -433,6 +479,8 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
       'wp-refchip--ref': kind === 'ref',
       'wp-refchip--unresolved': !resolved,
       'wp-refchip--filtered': isFiltered,
+      'wp-refchip--flat': isFlat,
+      'wp-refchip--flat-unbound': flatUnbound,
     }"
     :style="toneStyle"
     :title="filterTitle"
@@ -645,6 +693,41 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
 }
 .wp-refchip--unresolved:hover {
   background: color-mix(in srgb, var(--wp-danger, #ef4444) 25%, transparent);
+}
+/* ── Flat var rendering (prompt template surface) ─────────────────────────
+ *
+ * Box off, colour on. The `.var-N` class the component adds alongside this one
+ * supplies the actual `color`, hashed from the variable's name — so this rule
+ * must NOT set a colour of its own, only clear what `--var` painted.
+ *
+ * `--unresolved` deliberately still wins: it is declared after `--var` and
+ * carries its own background, and a name nothing upstream writes is exactly
+ * the state colour alone cannot express. Losing the box there would make a
+ * broken variable look identical to a working one.
+ *
+ * Font size steps up to match the surrounding text. Chips run at 10px inside
+ * 12px prose because a box needs to sit within the line; without the box there
+ * is nothing to fit inside, and a token a size smaller than the sentence it
+ * belongs to just reads as misaligned.
+ */
+.wp-refchip--flat:not(.wp-refchip--unresolved) {
+  background: none;
+  border-color: transparent;
+  padding: 0;
+  margin: 0;
+  font-size: inherit;
+  font-weight: 600;
+}
+/* Flat + nothing upstream writes it. Underlined rather than boxed: a box here
+   would reintroduce exactly what flat rendering removes, and the squiggle is
+   the convention every editor already uses for "this name is not known". The
+   colour is the danger token, so it separates from all eight var buckets. */
+.wp-refchip--flat-unbound {
+  color: var(--wp-danger, #ef4444);
+  text-decoration: underline wavy color-mix(in srgb, var(--wp-danger, #ef4444) 70%, transparent);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  cursor: pointer;
 }
 .wp-refchip__icon { font-size: 8px; opacity: 0.75; }
 /* PrimeIcon variant (moduleKind set) — sized to align with the unicode glyph baseline. */

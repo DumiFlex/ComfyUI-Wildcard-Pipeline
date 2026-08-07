@@ -665,8 +665,11 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
 .wp-asm-vars {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  padding: 6px;
+  /* On the project's own spacing scale rather than the bare 4/6 they were.
+     At 4px the chips ran together into one block of texture — the strip read
+     as a single control instead of a row of separate variables. */
+  gap: var(--wp-space-3);
+  padding: var(--wp-space-4);
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius);
