@@ -286,3 +286,54 @@ describe("useGrowableField — re-measures after the webfonts land", () => {
     wrap.unmount();
   });
 });
+
+describe("useGrowableField — grip-follow only while a grip is held", () => {
+  /**
+   * `followGrip` keeps the resize handle under the cursor by scrolling the
+   * container by the overshoot. Ungated it also ran on content-driven growth,
+   * so typing a long enough value scrolled the page out from under the user —
+   * and it made the resize flush mutate scroll position, which moves the very
+   * element the observer is measuring.
+   */
+  function mountInScroller(height: number) {
+    const scroller = document.createElement("div");
+    scroller.style.overflowY = "auto";
+    document.body.appendChild(scroller);
+    const { wrap, api, node } = mountField(height);
+    scroller.appendChild(node);
+    scroller.getBoundingClientRect = () => ({
+      height: 50, bottom: 50, top: 0, left: 0, right: 0, width: 100, x: 0, y: 0,
+      toJSON: () => ({}),
+    }) as DOMRect;
+    scroller.scrollTop = 0;
+    return { wrap, api, node, scroller };
+  }
+
+  it("does not scroll the container when the content simply grew", () => {
+    const { wrap, node, scroller } = mountInScroller(100);
+    // Element now overshoots the scroller's bottom edge by a long way.
+    node.getBoundingClientRect = () => ({
+      height: 400, bottom: 400, top: 0, left: 0, right: 0, width: 100, x: 0, y: 0,
+      toJSON: () => ({}),
+    }) as DOMRect;
+    observerCallback?.();
+    expect(scroller.scrollTop).toBe(0);
+    wrap.unmount();
+    scroller.remove();
+  });
+
+  it("does scroll while the handle is actually being dragged", () => {
+    const { wrap, api, node, scroller } = mountInScroller(100);
+    api.startResize({
+      clientY: 10, pointerId: 1, preventDefault() {}, currentTarget: null,
+    } as unknown as PointerEvent);
+    node.getBoundingClientRect = () => ({
+      height: 400, bottom: 400, top: 0, left: 0, right: 0, width: 100, x: 0, y: 0,
+      toJSON: () => ({}),
+    }) as DOMRect;
+    observerCallback?.();
+    expect(scroller.scrollTop).toBeGreaterThan(0);
+    wrap.unmount();
+    scroller.remove();
+  });
+});

@@ -165,7 +165,15 @@ export function useGrowableField(
     // cursor. Deferring this to pointerup (an earlier attempt at the stall,
     // which turned out to be the height cap) just made the field vanish off
     // the bottom for the whole drag.
-    if (h > lastHeight) followGrip();
+    //
+    // Gated on `dragging`, which is what the name always implied. It exists to
+    // keep the GRIP under the CURSOR, and there is no grip being held unless a
+    // drag is in progress. Ungated it also ran on content-driven growth — so
+    // typing a long enough template scrolled the page out from under you — and
+    // it made this flush mutate scroll position, which moves the element the
+    // observer is measuring. A resize handler that can change its own input is
+    // the shape a runaway needs.
+    if (dragging && h > lastHeight) followGrip();
     lastHeight = h;
   }
 
@@ -248,6 +256,14 @@ export function useGrowableField(
   function onPointerUp(): void {
     if (!dragging) return;
     dragging = false;
+    // Re-arm for the next drag. `capLifted` guards a one-time "pin the current
+    // height, release the max-height cap" step, and leaving it set meant the
+    // release survived for the lifetime of the field while the explicit height
+    // that bounded it did not — `applyAtoms` replaces the host element on a
+    // rebuild, which drops the inline height but not this flag. The next drag
+    // then found an uncapped, unpinned box. Each drag now re-establishes both
+    // against the element that actually exists.
+    capLifted = false;
     window.removeEventListener("pointermove", onResizeMove);
     window.removeEventListener("pointerup", onPointerUp);
     window.removeEventListener("pointercancel", onPointerUp);
