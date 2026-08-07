@@ -33,6 +33,17 @@ from pathlib import Path
 
 DB_FILENAME = "wildcard-pipeline.db"
 
+#: Our own folder under ComfyUI's user directory.
+#:
+#: Everything of ours that must survive an extension reinstall lives here: the
+#: library database and the downloaded tag list, with room for whatever comes
+#: next. They used to sit loose in `<ComfyUI>/user/` alongside ComfyUI's own
+#: files, which was fine when there was one of them and stopped being fine at
+#: two. One folder is also one thing to back up, and one thing to delete.
+#:
+#: `engine/db/relocate.py` moves pre-existing files in on first boot.
+WP_DATA_DIRNAME = "wildcard-pipeline"
+
 
 def _comfyui_user_dir_from_api() -> Path | None:
     """Use ComfyUI's `folder_paths.get_user_directory()` when the host
@@ -112,6 +123,18 @@ def comfyui_user_dir() -> Path | None:
     return _comfyui_user_dir_from_api() or _comfyui_user_dir_from_path()
 
 
+def wp_data_dir() -> Path | None:
+    """Our folder inside ComfyUI's user directory, or ``None`` when the user
+    directory cannot be detected.
+
+    Does NOT create the directory — callers that write do that, so a read-only
+    probe (the Settings panel asking "where would this live?") never has the
+    side effect of making a folder the user did not ask for.
+    """
+    base = comfyui_user_dir()
+    return (base / WP_DATA_DIRNAME) if base else None
+
+
 def user_location_path() -> Path | None:
     """Return the ``user`` preference target path, or ``None`` if the
     ComfyUI user dir can't be detected.
@@ -121,7 +144,7 @@ def user_location_path() -> Path | None:
     list all three potential locations regardless of which one is
     currently active (or whether one is detectable at all)."""
     comfy_user = _comfyui_user_dir_from_api() or _comfyui_user_dir_from_path()
-    return (comfy_user / DB_FILENAME) if comfy_user else None
+    return (comfy_user / WP_DATA_DIRNAME / DB_FILENAME) if comfy_user else None
 
 
 def global_location_path() -> Path:
@@ -163,14 +186,14 @@ def resolve_db_path_with_source() -> tuple[Path, str]:
     if preference == "user":
         comfy_user = _comfyui_user_dir_from_api() or _comfyui_user_dir_from_path()
         if comfy_user is not None:
-            return comfy_user / DB_FILENAME, "user"
+            return comfy_user / WP_DATA_DIRNAME / DB_FILENAME, "user"
         # Detection failed — fall through to the default chain rather
         # than crash. Last-ditch fallback below will catch it.
 
     # Default — same as explicit "user" preference.
     comfy_user = _comfyui_user_dir_from_api() or _comfyui_user_dir_from_path()
     if comfy_user is not None:
-        return comfy_user / DB_FILENAME, "user"
+        return comfy_user / WP_DATA_DIRNAME / DB_FILENAME, "user"
 
     # Last-ditch fallback. The design folds the old "legacy" label into
     # "global" because the path is identical and the UI has no separate

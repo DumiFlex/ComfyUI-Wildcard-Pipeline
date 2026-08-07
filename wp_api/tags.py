@@ -17,13 +17,18 @@ from pathlib import Path
 
 from aiohttp import web
 
-from engine.db.connection import comfyui_user_dir
+from engine.db.connection import wp_data_dir
 from wp_api._helpers import json_error, json_ok
 from wp_api._tag_download import TAG_LIST_URL, DownloadError, download_tag_list
 from wp_api._tag_index import CATEGORY_NAMES, TagIndex, load_index
 
 #: One filename, in a directory we own. Not the package folder: a reinstall
 #: replaces that, and the asset pruner walks it.
+#:
+#: Also mirrored in `engine/db/relocate.py`, which moves a pre-existing file in
+#: from the old loose-in-`user/` location. The engine cannot import this module
+#: (it would drag aiohttp into a package the directory contract keeps free of
+#: ComfyUI-facing imports), so the constant is duplicated there deliberately.
 TAG_FILE_NAME = "wildcard-pipeline-tags.csv"
 
 _index: TagIndex | None = None
@@ -32,8 +37,8 @@ _resolved_path: Path | None = None
 
 def tag_file_path() -> Path | None:
     """Where the tag list lives, or None when the user dir is undetectable."""
-    user_dir = comfyui_user_dir()
-    return (user_dir / TAG_FILE_NAME) if user_dir else None
+    data_dir = wp_data_dir()
+    return (data_dir / TAG_FILE_NAME) if data_dir else None
 
 
 def _get_index() -> TagIndex | None:
