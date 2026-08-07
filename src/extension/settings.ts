@@ -812,6 +812,66 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
         + "Only affects this extension's own inputs.",
       category: ["Wildcard Pipeline", "7. Runtime behavior", "Tag autocomplete"],
     },
+    // The other two completion sources. Far simpler controls than the tag one
+    // above: ComfyUI already enumerates both folders for its own node combos,
+    // so there is nothing to install and no "switched on but does nothing"
+    // state to design around. The count is shown anyway, because a source with
+    // zero files is worth knowing about before you wonder why nothing appears.
+    ...([
+      {
+        id: "wildcardPipeline.behavior.loraAutocomplete",
+        name: "LoRA autocomplete",
+        kind: "lora",
+        label: "LoRAs",
+        tooltip:
+          "Suggest installed LoRA names while typing in Wildcard Pipeline node "
+          + "editors, inserting the full <lora:name:1.0> syntax. Reads the "
+          + "models ComfyUI already knows about. Only affects this extension's "
+          + "own inputs.",
+      },
+      {
+        id: "wildcardPipeline.behavior.embeddingAutocomplete",
+        name: "Embedding autocomplete",
+        kind: "embedding",
+        label: "embeddings",
+        tooltip:
+          "Suggest installed embedding names while typing in Wildcard Pipeline "
+          + "node editors, inserting the full embedding:name syntax. Reads the "
+          + "models ComfyUI already knows about. Only affects this extension's "
+          + "own inputs.",
+      },
+    ] as const).map((src) => ({
+      id: src.id,
+      name: src.name,
+      type: ((_name: string, setter: (v: unknown) => void, value: unknown) => {
+        const wrap = document.createElement("label");
+        wrap.style.cssText = "display:flex; align-items:center; gap:8px; cursor:pointer";
+        const box = document.createElement("input");
+        box.type = "checkbox";
+        box.checked = value === true;
+        const note = document.createElement("span");
+        note.style.cssText =
+          "font: 12px/1.3 var(--wp-font-sans, sans-serif); color: var(--descrip-text, #999)";
+        wrap.append(box, note);
+
+        void fetch("/wp/api/models/status")
+          .then((r) => r.json())
+          .then((s: { sources?: { kind: string; count: number }[] }) => {
+            const found = (s.sources ?? []).find((x) => x.kind === src.kind);
+            const count = found?.count ?? 0;
+            note.textContent = count > 0
+              ? `${count.toLocaleString()} ${src.label} found`
+              : `No ${src.label} found`;
+          })
+          .catch(() => { note.textContent = ""; });
+
+        box.addEventListener("change", () => setter(box.checked));
+        return wrap;
+      }) as ComfySettingCustomRenderer,
+      defaultValue: false,
+      tooltip: src.tooltip,
+      category: ["Wildcard Pipeline", "7. Runtime behavior", src.name],
+    })),
     // Visual axes — sizing, embellishment, identity
     {
       id: SETTING_ID_DENSITY,

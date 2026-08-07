@@ -39,9 +39,9 @@ import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
 import { probeAutocomplete, probeTagWord } from "../utils/autocompleteProbe";
 import { api } from "../api/client";
-import type { TagCategoryName, TagSuggestion } from "../api/types";
+import type { ModelKind, ModelSuggestion, TagCategoryName, TagSuggestion } from "../api/types";
 import { loadTagAvailability } from "../utils/tagStatus";
-import { tagAutocompleteEnabled as tagSettingOn } from "../utils/tagSetting";
+import { completionSourceEnabled as sourceOn } from "../utils/tagSetting";
 import { refRows, varRows, type SuggestionRow } from "../utils/suggestion-rows";
 import { varColorClass, varColorIndex } from "../../components/shared/var-color";
 import { CONTEXT_POOLS_KEY, type ContextPoolMap } from "../../extension/context-pools";
@@ -342,6 +342,73 @@ function formatTagCount(n: number): string {
 }
 
 const tagRows = ref<TagSuggestion[]>([]);
+const modelRows = ref<Partial<Record<ModelKind, ModelSuggestion[]>>>({});
+
+/**
+ * One row of the bare-word popover, whatever source it came from.
+ *
+ * Kept as ONE FLAT ARRAY even though the popover renders sections, because
+ * `acActive` indexes it. Grouping the state instead would put the keyboard
+ * selection in charge of two coordinates and make "skip the header" a case to
+ * handle; flat, a header is simply not in the array and cannot be selected.
+ */
+type WordRow =
+  | { source: "tag"; tag: TagSuggestion }
+  | { source: ModelKind; model: ModelSuggestion };
+
+/**
+ * Sections, not one ranked list.
+ *
+ * The sources have no common ranking key: a tag ranks by post count in the tens
+ * of thousands, a LoRA has no count at all — you either have the file or you do
+ * not. Any flat ordering has to invent a comparison between "12,000 posts" and
+ * "a file on disk", and whichever is invented, tags win on weight of numbers
+ * and the user's own models sink below the fold. Sections also let each source
+ * cap its own rows, so 20 tags cannot crowd out 3 matching LoRAs.
+ *
+ * Tags lead because that is what a prompt is mostly made of.
+ */
+const wordRows = computed<WordRow[]>(() => [
+  ...tagRows.value.map((tag) => ({ source: "tag" as const, tag })),
+  ...(modelRows.value.lora ?? []).map((model) => ({ source: "lora" as const, model })),
+  ...(modelRows.value.embedding ?? []).map((model) => ({ source: "embedding" as const, model })),
+]);
+
+/** Rows grouped for rendering, in the same order as the flat list, with the
+ *  flat index carried along so a click knows what it selected. */
+const wordSections = computed(() => {
+  const order: Array<WordRow["source"]> = ["tag", "lora", "embedding"];
+  const labels: Record<WordRow["source"], string> = {
+    tag: "tags", lora: "loras", embedding: "embeddings",
+  };
+  const out: Array<{ source: WordRow["source"]; label: string; rows: Array<{ row: WordRow; index: number }> }> = [];
+  for (const source of order) {
+    const rows = wordRows.value
+      .map((row, index) => ({ row, index }))
+      .filter((e) => e.row.source === source);
+    if (rows.length) out.push({ source, label: labels[source], rows });
+  }
+  return out;
+});
+
+/** PrimeIcon per source. `pi-tags` plural is the booru tag — `pi-tag` singular
+ *  is already the fixed_values module kind. `pi-asterisk` and `pi-code` were
+ *  the only two candidates with no existing use anywhere in `src/`. */
+const SOURCE_ICON: Record<WordRow["source"], string> = {
+  tag: "pi pi-tags",
+  lora: "pi pi-asterisk",
+  embedding: "pi pi-code",
+};
+
+/** What a committed row puts in the document. A model inserts its FULL PATH,
+ *  not its display name: two folders can hold the same filename and ComfyUI
+ *  resolves by path, so inserting the short name would silently pick a
+ *  different file from the one shown. */
+function wordRowText(row: WordRow): string {
+  if (row.source === "tag") return row.tag.name;
+  if (row.source === "lora") return `<lora:${row.model.path}:1.0>`;
+  return `embedding:${row.model.path}`;
+}
 
 /** Categories present in the CURRENT results, in Danbooru's own order.
  *
@@ -364,7 +431,7 @@ const tagLegend = computed(() => {
 });
 /** Row count for the ACTIVE mode — keyboard nav must not care which. */
 const acRowCount = computed(
-  () => (acTrigger.value === "tag" ? tagRows.value.length : acItems.value.length),
+  () => (acTrigger.value === "tag" ? wordRows.value.length : acItems.value.length),
 );
 const tagListAvailable = ref(false);
 const tagHasCategories = ref(false);
@@ -373,9 +440,14 @@ let tagFetchTimer: ReturnType<typeof setTimeout> | undefined;
 
 /** Enabled only where a booru tag is a plausible thing to type: option values
  *  and template text. Never in a name field. */
-const tagAutocompleteEnabled = computed(
-  () => tagSettingOn() && tagListAvailable.value && !props.disabled,
-);
+const tagAutocompleteEnabled = computed(() => {
+  if (props.disabled) return false;
+  // Tags need a downloaded list; the model sources read what ComfyUI already
+  // enumerated, so for them "switched on" is the whole condition. Any one
+  // source being usable is enough to arm the bare-word probe.
+  if (sourceOn("tag") && tagListAvailable.value) return true;
+  return sourceOn("lora") || sourceOn("embedding");
+});
 
 function scheduleTagFetch(query: string): void {
   if (tagFetchTimer !== undefined) clearTimeout(tagFetchTimer);
@@ -383,17 +455,42 @@ function scheduleTagFetch(query: string): void {
   // a slow answer for "blu" must not overwrite a fast one for "blue_ha".
   const seq = ++tagFetchSeq;
   tagFetchTimer = setTimeout(() => {
-    void api.tags.suggest(query, 20)
+    // Each source settles on its own. Awaiting both together would hold the
+    // whole popover at the speed of the slower one, and the model lookup is an
+    // in-process list scan while the tag lookup walks a multi-megabyte index.
+    if (sourceOn("tag") && tagListAvailable.value) {
+      void api.tags.suggest(query, 20)
+        .then((res) => {
+          if (seq !== tagFetchSeq) return;
+          tagRows.value = res.tags;
+          acActive.value = 0;
+        })
+        .catch(() => {
+          if (seq !== tagFetchSeq) return;
+          // Silent: an optional convenience must not raise an error toast
+          // while someone is mid-sentence.
+          tagRows.value = [];
+        });
+    } else {
+      tagRows.value = [];
+    }
+
+    const kinds: ModelKind[] = [];
+    if (sourceOn("lora")) kinds.push("lora");
+    if (sourceOn("embedding")) kinds.push("embedding");
+    if (kinds.length === 0) {
+      modelRows.value = {};
+      return;
+    }
+    void api.models.suggest(query, kinds, 8)
       .then((res) => {
         if (seq !== tagFetchSeq) return;
-        tagRows.value = res.tags;
+        modelRows.value = res.results;
         acActive.value = 0;
       })
       .catch(() => {
         if (seq !== tagFetchSeq) return;
-        // Silent: an optional convenience must not raise an error toast
-        // while someone is mid-sentence.
-        tagRows.value = [];
+        modelRows.value = {};
       });
   }, 120);
 }
@@ -1118,11 +1215,13 @@ function refreshAutocompleteFromHost(): void {
     }
     acOpen.value = false;
     tagRows.value = [];
+    modelRows.value = {};
     return;
   }
-  // A sigil token owns the caret from here on; drop any tag rows so a stale
-  // list cannot be committed by an Enter meant for the sigil popover.
+  // A sigil token owns the caret from here on; drop any bare-word rows so a
+  // stale list cannot be committed by an Enter meant for the sigil popover.
   tagRows.value = [];
+  modelRows.value = {};
   // The trigger belongs to a chip that already exists — the user is not
   // filtering anything, so there is nothing to suggest. This fires whenever
   // the caret ends up flush against a chip's trailing edge: type a space after
@@ -1567,7 +1666,7 @@ onMounted(() => {
   attach();
   // Only ask when the user has actually switched the feature on — an install
   // that never enables it makes no request at all.
-  if (tagSettingOn()) {
+  if (sourceOn("tag")) {
     void loadTagAvailability().then((status) => {
       tagListAvailable.value = status.available;
       tagHasCategories.value = status.hasCategories;
@@ -1868,6 +1967,7 @@ function insertTagAtCursor(tag: string): void {
   const newCaret = (before + tag).length;
   acOpen.value = false;
   tagRows.value = [];
+  modelRows.value = {};
   void nextTick(() => restoreCursorAtChar(newCaret));
 }
 
@@ -2769,10 +2869,10 @@ function onHostKeydown(ev: KeyboardEvent): void {
   //     the browser handle Enter normally (insert newline in multiline).
   if (ev.key === "Enter" && acOpen.value) {
     if (acTrigger.value === "tag") {
-      const row = tagRows.value[acActive.value];
+      const row = wordRows.value[acActive.value];
       if (row) {
         ev.preventDefault();
-        insertTagAtCursor(row.name);
+        insertTagAtCursor(wordRowText(row));
         return;
       }
       // Nothing to commit — close and let Enter behave natively rather than
@@ -3046,48 +3146,82 @@ function onHostKeydown(ev: KeyboardEvent): void {
           <!-- Says WHICH autocomplete this is. Without a sigil in the query
                there is otherwise nothing distinguishing it from the `$` / `@`
                popover, which looks identical and behaves differently. -->
-          <span class="wp-rt-suggestions__src">tags</span>
-          <span class="wp-rt-suggestions__count">{{ tagRows.length }}</span>
+          <span class="wp-rt-suggestions__src">{{ wordSections.map((s) => s.label).join(" · ") }}</span>
+          <span class="wp-rt-suggestions__count">{{ wordRows.length }}</span>
           <span class="wp-spacer" />
           <span class="wp-rt-suggestions__hint">↑↓ · Enter · Esc</span>
         </div>
         <template v-if="acTrigger === 'tag'">
-          <button
-            v-for="(row, i) in tagRows"
-            :key="row.matched"
-            type="button"
-            class="wp-rt-suggestions__item wp-rt-tag"
-            :data-active="i === acActive ? '' : null"
-            role="option"
-            :aria-selected="i === acActive"
-            @mousedown.prevent="insertTagAtCursor(row.name)"
-            @mouseenter="acActive = i"
-          >
-            <!-- Colour bar only when the loaded file HAS categories. A
-                 two-column list would otherwise show a column of identical
-                 grey bars explaining nothing. -->
-            <!-- `pi-tags` (plural) deliberately: `pi-tag` singular is already
-                 the fixed_values module kind, so a booru tag row would have
-                 rendered identically to a library module. Tinted by category,
-                 so this one slot says both "this is a tag" and "of this kind". -->
-            <span
-              v-if="tagHasCategories"
-              class="wp-rt-tag__cat"
-              :class="row.category_name ? `wp-rt-tag__cat--${row.category_name}` : null"
-            ><i class="pi pi-tags" aria-hidden="true" /></span>
-            <span class="wp-rt-tag__body">
-              <!-- Always the tag that will be INSERTED, never the alias that
-                   matched. Pressing Enter must put exactly this on screen. -->
-              <span class="wp-rt-tag__name">{{ row.name }}</span>
-              <span v-if="row.matched !== row.name" class="wp-rt-tag__sub">
-                from <span class="wp-rt-tag__alias">{{ row.matched }}</span>
-              </span>
-              <span v-else-if="tagHasCategories && row.category_name" class="wp-rt-tag__sub">
-                {{ row.category_name }}
-              </span>
-            </span>
-            <span class="wp-rt-tag__count">{{ formatTagCount(row.count) }}</span>
-          </button>
+          <!-- Sections, because the sources have no common ranking key: a tag
+               ranks by post count in the tens of thousands, a model has no
+               count at all. Any single ordering has to invent a comparison
+               between "12,000 posts" and "a file on disk", and tags win it on
+               weight of numbers every time.
+
+               `entry.index` is the row's position in the FLAT `wordRows`, which
+               is what `acActive` indexes. Headers are not in that array, so
+               arrow-key navigation cannot land on one — no skip logic needed. -->
+          <template v-for="section in wordSections" :key="section.source">
+            <div
+              v-if="wordSections.length > 1"
+              class="wp-rt-suggestions__section"
+            >
+              <i :class="SOURCE_ICON[section.source]" aria-hidden="true" />{{ section.label }}
+            </div>
+            <button
+              v-for="entry in section.rows"
+              :key="section.source + ':' + (entry.row.source === 'tag' ? entry.row.tag.matched : entry.row.model.path)"
+              type="button"
+              class="wp-rt-suggestions__item wp-rt-tag"
+              :data-active="entry.index === acActive ? '' : null"
+              role="option"
+              :aria-selected="entry.index === acActive"
+              @mousedown.prevent="insertTagAtCursor(wordRowText(entry.row))"
+              @mouseenter="acActive = entry.index"
+            >
+              <template v-if="entry.row.source !== 'tag'">
+                <span class="wp-rt-tag__cat" :class="`wp-rt-tag__cat--${entry.row.source}`">
+                  <i :class="SOURCE_ICON[entry.row.source]" aria-hidden="true" />
+                </span>
+                <span class="wp-rt-tag__body">
+                  <span class="wp-rt-tag__name">{{ entry.row.model.name }}</span>
+                  <!-- The folder is the only thing separating two files with
+                       the same name, and the insert uses the full path. -->
+                  <span v-if="entry.row.model.folder" class="wp-rt-tag__sub">
+                    {{ entry.row.model.folder }}
+                  </span>
+                </span>
+              </template>
+              <template v-else>
+                <!-- Colour bar only when the loaded file HAS categories. A
+                     two-column list would otherwise show a column of identical
+                     grey bars explaining nothing. -->
+                <!-- `pi-tags` (plural) deliberately: `pi-tag` singular is
+                     already the fixed_values module kind, so a booru tag row
+                     would have rendered identically to a library module.
+                     Tinted by category, so this one slot says both "this is a
+                     tag" and "of this kind". -->
+                <span
+                  v-if="tagHasCategories"
+                  class="wp-rt-tag__cat"
+                  :class="entry.row.tag.category_name ? `wp-rt-tag__cat--${entry.row.tag.category_name}` : null"
+                ><i class="pi pi-tags" aria-hidden="true" /></span>
+                <span class="wp-rt-tag__body">
+                  <!-- Always the tag that will be INSERTED, never the alias
+                       that matched. Enter must put exactly this on screen. -->
+                  <span class="wp-rt-tag__name">{{ entry.row.tag.name }}</span>
+                  <span v-if="entry.row.tag.matched !== entry.row.tag.name" class="wp-rt-tag__sub">
+                    from <span class="wp-rt-tag__alias">{{ entry.row.tag.matched }}</span>
+                  </span>
+                  <span
+                    v-else-if="tagHasCategories && entry.row.tag.category_name"
+                    class="wp-rt-tag__sub"
+                  >{{ entry.row.tag.category_name }}</span>
+                </span>
+                <span class="wp-rt-tag__count">{{ formatTagCount(entry.row.tag.count) }}</span>
+              </template>
+            </button>
+          </template>
           <div v-if="tagLegend.length" class="wp-rt-tag__legend">
             <span v-for="cat in tagLegend" :key="cat">
               <i class="pi pi-tags wp-rt-tag__swatch" :class="`wp-rt-tag__cat--${cat}`" aria-hidden="true" />{{ cat }}
@@ -3573,6 +3707,29 @@ function onHostKeydown(ev: KeyboardEvent): void {
 }
 
 .wp-rt-tag__cat--general   { color: #6a6a7a; }
+/* The two model sources. Their own hues rather than a category colour — a LoRA
+   has no danbooru category, and reusing one would imply a relationship that
+   does not exist. */
+.wp-rt-tag__cat--lora      { color: var(--wp-var-6); }
+.wp-rt-tag__cat--embedding { color: var(--wp-var-7); }
+
+/* Section header. Only rendered when more than one source has hits, so it
+   never costs a row to say something the single visible group already says.
+   `scroll-margin-top` for the same reason the tag rows have it: arrow-key
+   navigation scrolls a row into view and the sticky query band would otherwise
+   park the first row of a section underneath itself. */
+.wp-rt-suggestions__section {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-3, 6px);
+  padding: 6px 10px 3px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--wp-text3, #666);
+  scroll-margin-top: 38px;
+}
+.wp-rt-suggestions__section i { font-size: 10px; opacity: 0.8; }
 .wp-rt-tag__cat--character { color: var(--wp-var-3); }
 .wp-rt-tag__cat--copyright { color: var(--wp-var-1); }
 .wp-rt-tag__cat--artist    { color: var(--wp-var-5); }

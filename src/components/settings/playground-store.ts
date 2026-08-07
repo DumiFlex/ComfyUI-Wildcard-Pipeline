@@ -61,7 +61,9 @@ export type BehaviorKey =
   | "newModuleDisabled"
   | "confirmDestructiveBundle"
   | "bundleMasterOffBehavior"
-  | "tagAutocomplete";
+  | "tagAutocomplete"
+  | "loraAutocomplete"
+  | "embeddingAutocomplete";
 
 export type SettingKey = DisplayKey | A11yKey | BehaviorKey;
 
@@ -74,6 +76,8 @@ const BEHAVIOR_KEYS = new Set<string>([
   "confirmDestructiveBundle",
   "bundleMasterOffBehavior",
   "tagAutocomplete",
+  "loraAutocomplete",
+  "embeddingAutocomplete",
 ]);
 
 function settingId(key: SettingKey): string {

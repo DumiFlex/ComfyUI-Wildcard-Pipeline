@@ -584,6 +584,30 @@ export interface TagSuggestResponse {
   tags: TagSuggestion[];
 }
 
+/** One installed LoRA or embedding, as an autocomplete row. */
+export interface ModelSuggestion {
+  /** Shown on screen — filename without folder or extension. */
+  name: string;
+  /** What gets INSERTED. The full relative path as ComfyUI knows it: two
+   *  folders can hold the same filename and ComfyUI resolves by path, so
+   *  inserting the display name would silently pick the wrong file. */
+  path: string;
+  /** Folder prefix, or "" at the root. The row's subtitle, so two same-named
+   *  files in different folders are tellable apart. */
+  folder: string;
+}
+
+export type ModelKind = "lora" | "embedding";
+
+export interface ModelSuggestResponse {
+  /** Keyed by kind. A kind the caller did not ask for is simply absent. */
+  results: Partial<Record<ModelKind, ModelSuggestion[]>>;
+}
+
+export interface ModelSourceStatus {
+  sources: Array<{ kind: ModelKind; count: number }>;
+}
+
 export interface TagStatus {
   /** A file is installed AND parsed. The user setting is separate — the two
    *  together are what decide whether suggestions appear. */

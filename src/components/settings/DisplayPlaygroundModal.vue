@@ -79,6 +79,8 @@ const contrast = ref<A11yMode>("auto");
 // Phase 2 — behavior axes
 const validation = ref<ValidationMode>("strict");
 const tagAutocomplete = ref<boolean>(false);
+const loraAutocomplete = ref<boolean>(false);
+const embeddingAutocomplete = ref<boolean>(false);
 const toastLifetime = ref<ToastLifetime>("default");
 const suppressInfoToasts = ref<boolean>(false);
 const newModuleDisabled = ref<boolean>(false);
@@ -105,6 +107,8 @@ function syncFromStore(): void {
   contrast.value = asString(getSettingValue("contrast"), "auto") as A11yMode;
   validation.value = asString(getSettingValue("validation"), "strict") as ValidationMode;
   tagAutocomplete.value = getSettingValue("tagAutocomplete") === true;
+  loraAutocomplete.value = getSettingValue("loraAutocomplete") === true;
+  embeddingAutocomplete.value = getSettingValue("embeddingAutocomplete") === true;
   toastLifetime.value = asString(getSettingValue("toastLifetime"), "default") as ToastLifetime;
   suppressInfoToasts.value = asBool(getSettingValue("suppressInfoToasts"), false);
   newModuleDisabled.value = asBool(getSettingValue("newModuleDisabled"), false);
@@ -135,6 +139,8 @@ watch(reduceMotion, (v) => applySetting("reduceMotion", v));
 watch(contrast, (v) => applySetting("contrast", v));
 watch(validation, (v) => applySetting("validation", v));
 watch(tagAutocomplete, (v) => applySetting("tagAutocomplete", v));
+watch(loraAutocomplete, (v) => applySetting("loraAutocomplete", v));
+watch(embeddingAutocomplete, (v) => applySetting("embeddingAutocomplete", v));
 watch(toastLifetime, (v) => applySetting("toastLifetime", v));
 watch(suppressInfoToasts, (v) => applySetting("suppressInfoToasts", v));
 watch(newModuleDisabled, (v) => applySetting("newModuleDisabled", v));
@@ -156,6 +162,8 @@ interface Defaults {
   contrast: A11yMode;
   validation: ValidationMode;
   tagAutocomplete: boolean;
+  loraAutocomplete: boolean;
+  embeddingAutocomplete: boolean;
   toastLifetime: ToastLifetime;
   suppressInfoToasts: boolean;
   newModuleDisabled: boolean;
@@ -178,6 +186,8 @@ const defaults: Defaults = {
   contrast: "auto",
   validation: "strict",
   tagAutocomplete: false,
+  loraAutocomplete: false,
+  embeddingAutocomplete: false,
   toastLifetime: "default",
   suppressInfoToasts: false,
   newModuleDisabled: false,
@@ -382,6 +392,17 @@ onBeforeUnmount(() => {
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Booru tag autocomplete</span>
                 <input v-model="tagAutocomplete" type="checkbox" class="wp-pg__check">
+              </label>
+              <!-- Separate switches on purpose: someone writing danbooru
+                   prompts may have no LoRAs at all, and someone with 200 of
+                   them may find the tag list noise. -->
+              <label class="wp-pg__row">
+                <span class="wp-pg__row-label">LoRA autocomplete</span>
+                <input v-model="loraAutocomplete" type="checkbox" class="wp-pg__check">
+              </label>
+              <label class="wp-pg__row">
+                <span class="wp-pg__row-label">Embedding autocomplete</span>
+                <input v-model="embeddingAutocomplete" type="checkbox" class="wp-pg__check">
               </label>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Validation strictness</span>

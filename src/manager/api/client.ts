@@ -4,6 +4,7 @@ import type {
   CategoryCreateInput, CategoryRow,
   DatabaseConfig, DatabaseConfigUpdate,
   TagStatus, TagSuggestResponse, TagDownloadResult,
+  ModelKind, ModelSourceStatus, ModelSuggestResponse,
   DatabaseInfo, MaintenanceOp, MaintenanceResult,
   EmbedBundle,
   MatchRequest, MatchResponse,
@@ -230,6 +231,28 @@ export const api = {
       return request<void>(`/wp/api/categories/${id}`, { method: "DELETE" });
     },
   },
+  models: {
+    /** How many LoRAs and embeddings ComfyUI knows about. Drives the settings
+     *  note — a source with zero files is worth saying so before the user
+     *  wonders why nothing appears. */
+    status() {
+      return request<ModelSourceStatus>("/wp/api/models/status", { method: "GET" });
+    },
+    /** Prefix search across the requested kinds only, so a source the user
+     *  switched off costs nothing on the wire. */
+    suggest(q: string, kinds: ModelKind[], limit = 10) {
+      const query = `?q=${encodeURIComponent(q)}&kinds=${kinds.join(",")}&limit=${limit}`;
+      return request<ModelSuggestResponse>(`/wp/api/models/suggest${query}`, {
+        method: "GET",
+      });
+    },
+    /** Re-read both folders. ComfyUI caches its own file lists, so a model
+     *  added while the server runs is invisible until something asks again. */
+    refresh() {
+      return request<ModelSourceStatus>("/wp/api/models/refresh", { method: "POST" });
+    },
+  },
+
   tags: {
     /** Whether a tag list is installed, and what it contains. Drives Settings:
      *  the toggle is meaningless without a file, so "off" and "impossible"
