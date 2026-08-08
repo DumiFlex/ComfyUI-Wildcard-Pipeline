@@ -1395,6 +1395,52 @@ function hostDomIsStale(): boolean {
   return host.querySelectorAll("[data-atom-index]").length < atoms.value.length;
 }
 
+/** True while every Fragment anchor Vue needs is still in the host.
+ *
+ *  Vue delimits each Fragment with two EMPTY TEXT NODES, and `<template
+ *  v-for>` builds one Fragment per atom plus one for the list itself — so a
+ *  healthy host holds `2N + 2` empty text nodes as direct children. They sit
+ *  inside a contenteditable, which makes them the browser's to destroy:
+ *  Firefox normalises empty text nodes away as the user types, Chromium keeps
+ *  them. That difference is why every crash in this family has been
+ *  Firefox-only.
+ *
+ *  Each anchor is load-bearing. Removing a list item walks `nextSibling` from
+ *  its start anchor until it reaches its end anchor (`removeFragment`), and
+ *  appending one inserts before the LIST's end anchor. With either gone the
+ *  render throws — `nextSibling of null`, or `insertBefore: Child to insert
+ *  before is not a child of this node` — and leaves a half-torn subtree that
+ *  no longer responds to anything, Save and Cancel included.
+ *
+ *  `hostDomIsStale` cannot stand in for this: it counts `[data-atom-index]`
+ *  ELEMENTS, and anchors are neither elements nor atoms.
+ *
+ *  Counts EMPTY text nodes only — characters the browser drops directly under
+ *  the host are non-empty (see `reconcileOrphanTextNodes`), and a surplus is
+ *  harmless, so the test is `>=`. */
+function hostAnchorsIntact(): boolean {
+  const host = hostEl.value;
+  if (!host) return true;
+  let empties = 0;
+  for (const node of host.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE && (node as Text).data === "") empties += 1;
+  }
+  return empties >= 2 * atoms.value.length + 2;
+}
+
+/** True when applying `next` would ADD or REMOVE atom nodes, or flip an atom
+ *  between its chip and its text branch.
+ *
+ *  Those are exactly the renders that make Vue insert or unmount list items,
+ *  and therefore the only ones that touch a fragment anchor. A same-shape
+ *  apply patches text and props in place and cannot trip over a missing one,
+ *  which is what keeps ordinary typing on the cheap path. */
+function isStructuralApply(next: Atom[]): boolean {
+  const cur = atoms.value;
+  if (cur.length !== next.length) return true;
+  return cur.some((atom, i) => (atom.kind === "text") !== (next[i].kind === "text"));
+}
+
 function applyAtoms(next: Atom[], opts?: { rebuild?: boolean }): void {
   // `rebuild` forces a full teardown+remount instead of an in-place patch.
   // Used ONLY on the structural-insert paths (autocomplete / ref-picker
@@ -1412,8 +1458,24 @@ function applyAtoms(next: Atom[], opts?: { rebuild?: boolean }): void {
   // re-keying was verified NOT to help — the key churn still walks destroyed
   // els and missing `<template v-for>` fragment anchors and throws on
   // `nextSibling` of null. See the `hostEpoch` docblock.
-  if (hostDomIsStale() || opts?.rebuild) hostEpoch.value += 1;
-  atoms.value = padAtoms(next);
+  //
+  // The third trigger is the general one, and the reason `rebuild` is no
+  // longer load-bearing on its own: ANY apply that adds, removes or re-branches
+  // an atom needs the fragment anchors, and the browser may have taken them.
+  // Marking individual call sites `rebuild` was a whitelist, and the whitelist
+  // kept missing entries — the ref picker, then Ctrl+A Ctrl+X, each crashing
+  // the same way from a path nobody had flagged. Asking the DOM instead covers
+  // all thirteen call sites at once, and costs nothing on Chromium, where the
+  // anchors are never missing in the first place.
+  const padded = padAtoms(next);
+  if (
+    hostDomIsStale() ||
+    opts?.rebuild ||
+    (isStructuralApply(padded) && !hostAnchorsIntact())
+  ) {
+    hostEpoch.value += 1;
+  }
+  atoms.value = padded;
   isEmpty.value = serialiseAtomsLocal(next).length === 0;
   void nextTick(() => {
     syncTextSpansToAtoms();

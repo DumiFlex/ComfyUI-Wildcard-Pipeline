@@ -339,6 +339,76 @@ describe("RichTextInput.vue", () => {
     wrap.unmount();
   });
 
+  it("survives Ctrl+A Ctrl+X after the anchors went missing", async () => {
+    // Reported on Firefox: select-all + cut inside an option value bricked the
+    // field — text input, Backspace and even Save/Cancel stopped responding —
+    // with `insertBefore: Child to insert before is not a child of this node`.
+    //
+    // `onHostCut` already routes the deletion through `applyAtoms` (2.13.1) so
+    // the browser never removes the spans itself. But the atom list still
+    // SHRINKS from N to 1, and shrinking a keyed list unmounts the surplus
+    // `<template v-for>` Fragments. With the fragment anchors normalised away
+    // by Firefox, that teardown walks off the end of the child list and takes
+    // the whole editor down — the same wound as the ref-picker crash, reached
+    // through a path that never asked for a rebuild.
+    const errors: string[] = [];
+    const onErr = (e: ErrorEvent): void => { errors.push(String(e.error ?? e.message)); };
+    window.addEventListener("error", onErr);
+    const ref = "@{aabbccdd#pose}";
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: `a ${ref} b ${ref} c`,
+        surface: "wildcard",
+        uuidToName: new Map([["aabbccdd", "pose"]]),
+      },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host").element as HTMLElement;
+    [...host.childNodes]
+      .filter((n) => n.nodeType === Node.TEXT_NODE && (n as Text).data === "")
+      .forEach((n) => (n as Text).remove());
+    // Ctrl+A.
+    const sel = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(host);
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    // Ctrl+X.
+    await wrap.find(".wp-rt__host").trigger("cut");
+    await flushPromises();
+    window.removeEventListener("error", onErr);
+
+    expect(errors).toEqual([]);
+    // Emptied, and still a live editor rather than a dead subtree.
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(events[events.length - 1]?.[0]).toBe("");
+    const fresh = wrap.find(".wp-rt__host").element as HTMLElement;
+    expect(fresh.querySelectorAll("[data-atom-index]").length).toBeGreaterThan(0);
+    wrap.unmount();
+  });
+
+  it("does not remount the host for a structural apply while the anchors are intact", async () => {
+    // The other half of the anchor check: it must stay OFF on the browser
+    // where the anchors survive. Settling a chip is a structural apply — it
+    // splits one text atom into text + chip + text — and it happens on nearly
+    // every keystroke that closes a token. Swapping the host there would cost
+    // a caret restore per settle on Chromium for no reason at all.
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "", varSuggestions: [] },
+      attachTo: document.body,
+    });
+    const before = wrap.find(".wp-rt__host").element;
+    const span = (before as HTMLElement).querySelector(".wp-rt__text") as HTMLElement;
+    span.textContent = "$runtimeVar ";
+    await wrap.find(".wp-rt__host").trigger("input", { inputType: "insertText", data: " " });
+    await flushPromises();
+    // The settle landed...
+    expect(wrap.findAll(".wp-refchip--var")).toHaveLength(1);
+    // ...on the very same host element.
+    expect(wrap.find(".wp-rt__host").element).toBe(before);
+    wrap.unmount();
+  });
+
   it("does not remount the host for the normal typing case (orphan text node)", async () => {
     // Guard against over-triggering the stale-DOM repair: browsers routinely
     // insert user-typed characters as raw text nodes directly under the host.
