@@ -84,6 +84,66 @@ export type ComfySettingCustomRenderer = (
   attrs?: Record<string, unknown>,
 ) => HTMLElement;
 
+/**
+ * A pill switch matching the one ComfyUI renders for a plain `type: "boolean"`.
+ *
+ * Only needed because this ONE setting cannot be a plain boolean: it disables
+ * itself when no tag list is installed, and a native boolean has no way to say
+ * "on is not available". Every other setting we own uses the real thing.
+ *
+ * Styled inline and namespaced rather than borrowing PrimeVue's classes: those
+ * are ComfyUI's internals and would silently stop matching the day they restyle
+ * or upgrade, leaving a control that looks like nothing at all.
+ */
+function buildSwitch(initial: boolean): {
+  root: HTMLElement;
+  setOn: (on: boolean) => void;
+  setDisabled: (off: boolean) => void;
+} {
+  let on = initial;
+  let disabled = false;
+  const root = document.createElement("span");
+  root.setAttribute("role", "switch");
+  root.tabIndex = 0;
+  const knob = document.createElement("span");
+  root.appendChild(knob);
+
+  const paint = (): void => {
+    root.setAttribute("aria-checked", on ? "true" : "false");
+    root.style.cssText = [
+      "display:inline-flex", "align-items:center", "flex:0 0 auto",
+      "width:34px", "height:18px", "border-radius:9px", "padding:2px",
+      "box-sizing:border-box", "transition:background-color .15s ease",
+      `background:${on ? "var(--p-primary-color, #3b82f6)" : "var(--p-toggleswitch-slider-background, #52525b)"}`,
+      `opacity:${disabled ? "0.45" : "1"}`,
+      `cursor:${disabled ? "not-allowed" : "pointer"}`,
+    ].join(";");
+    knob.style.cssText = [
+      "display:block", "width:14px", "height:14px", "border-radius:50%",
+      "background:#fff", "transition:transform .15s ease",
+      `transform:translateX(${on ? "16px" : "0"})`,
+    ].join(";");
+  };
+  paint();
+
+  const toggle = (): void => {
+    if (disabled) return;
+    on = !on;
+    paint();
+    root.dispatchEvent(new CustomEvent("wp-switch", { detail: on, bubbles: true }));
+  };
+  root.addEventListener("click", (e) => { e.preventDefault(); toggle(); });
+  root.addEventListener("keydown", (e) => {
+    if (e.key === " " || e.key === "Enter") { e.preventDefault(); toggle(); }
+  });
+
+  return {
+    root,
+    setOn: (next) => { on = next; paint(); },
+    setDisabled: (next) => { disabled = next; paint(); },
+  };
+}
+
 export interface ComfySetting {
   id: string;
   name: string;
@@ -772,10 +832,9 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       name: "Booru tag autocomplete",
       type: (_name, setter, value, _attrs) => {
         const wrap = document.createElement("label");
-        wrap.style.cssText = "display:flex; align-items:center; gap:8px; cursor:pointer";
-        const box = document.createElement("input");
-        box.type = "checkbox";
-        box.checked = value === true;
+        wrap.style.cssText =
+          "display:flex; align-items:center; justify-content:flex-end; gap:10px; cursor:pointer";
+        const { root: box, setOn, setDisabled } = buildSwitch(value === true);
         const note = document.createElement("span");
         note.style.cssText =
           "font: 12px/1.3 var(--wp-font-sans, sans-serif); color: var(--descrip-text, #999)";
@@ -790,8 +849,8 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
               note.textContent = `${(s.tag_count ?? 0).toLocaleString()} tags installed`;
               return;
             }
-            box.checked = false;
-            box.disabled = true;
+            setOn(false);
+            setDisabled(true);
             wrap.style.cursor = "not-allowed";
             wrap.title =
               "No tag list installed. Open the Wildcard Pipeline manager → "
@@ -802,7 +861,9 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
             note.textContent = "";
           });
 
-        box.addEventListener("change", () => setter(box.checked));
+        box.addEventListener("wp-switch", (e) => {
+          setter((e as CustomEvent<boolean>).detail);
+        });
         return wrap;
       },
       defaultValue: false,

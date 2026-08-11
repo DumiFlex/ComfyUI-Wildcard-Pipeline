@@ -77,7 +77,14 @@ async def suggest(request: web.Request) -> web.Response:
     never heard of should degrade to fewer results, not to an error.
     """
     query = (request.query.get("q") or "").strip()
-    if not query:
+    # An empty query normally returns nothing, so a stray keystroke cannot dump
+    # the whole models folder into a popover. Inside a `<lora:` or `embedding:`
+    # reference that guard is exactly wrong: the marker itself is the request,
+    # and "show me what I have" is the main way these get used. The client sets
+    # `all` only when the caret is inside a reference, where the intent is
+    # unambiguous.
+    browse_all = request.query.get("all") == "1"
+    if not query and not browse_all:
         return json_ok({"results": {}})
     try:
         limit = min(max(int(request.query.get("limit", 10)), 1), 50)
@@ -91,9 +98,14 @@ async def suggest(request: web.Request) -> web.Response:
     for folder, kind in _KINDS.items():
         if kind not in wanted:
             continue
+        hits = _hits(folder)
+        chosen = (
+            sorted(hits, key=lambda h: h.name.lower())[:limit]
+            if not query
+            else search(hits, query, limit)
+        )
         results[kind] = [
-            {"name": h.name, "path": h.path, "folder": h.folder}
-            for h in search(_hits(folder), query, limit)
+            {"name": h.name, "path": h.path, "folder": h.folder} for h in chosen
         ]
     return json_ok({"results": results})
 

@@ -527,7 +527,7 @@ function scheduleTagFetch(query: string): void {
       modelRows.value = {};
       return;
     }
-    void api.models.suggest(query, kinds, 8)
+    void api.models.suggest(query, kinds, 8, refKind.value !== null)
       .then((res) => {
         if (seq !== tagFetchSeq) return;
         modelRows.value = res.results;

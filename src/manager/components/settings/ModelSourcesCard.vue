@@ -41,7 +41,17 @@ function label(kind: ModelKind): string {
   if (n === undefined) return "Checking…";
   return n > 0
     ? `${n.toLocaleString()} found`
-    : `None found — check your models folder`;
+    : "None found — check your models folder";
+}
+
+/** Green when the source can actually do something, amber when it cannot.
+ *  Same vocabulary as the tag card's status dot, so "is this usable?" reads
+ *  identically on both. */
+function dotClass(kind: ModelKind): string {
+  if (unreachable.value) return "wp-models__dot--none";
+  const n = counts.value[kind];
+  if (n === undefined) return "wp-models__dot--none";
+  return n > 0 ? "wp-models__dot--ok" : "wp-models__dot--none";
 }
 
 const separatorHint = computed(() =>
@@ -95,7 +105,7 @@ onMounted(load);
   <Card title="LoRA and embedding autocomplete">
     <Field
       label="Suggest LoRAs"
-      :hint="`Offers installed LoRA names while you type, inserting the full <lora:name:1.0> syntax. ${label('lora')}.`"
+      hint="Offers installed LoRA names while you type, inserting the full <lora:name:1.0> syntax."
     >
       <Toggle
         :model-value="ui.loraAutocomplete"
@@ -104,10 +114,13 @@ onMounted(load);
         @update:model-value="ui.setLoraAutocomplete($event)"
       />
     </Field>
+    <p class="wp-models__count" data-test="lora-count">
+      <span class="wp-models__dot" :class="dotClass('lora')" />{{ label("lora") }}
+    </p>
 
     <Field
       label="Suggest embeddings"
-      :hint="`Offers installed embedding names, inserting the full embedding:name syntax. ${label('embedding')}.`"
+      hint="Offers installed embedding names, inserting the full embedding:name syntax."
     >
       <Toggle
         :model-value="ui.embeddingAutocomplete"
@@ -116,6 +129,9 @@ onMounted(load);
         @update:model-value="ui.setEmbeddingAutocomplete($event)"
       />
     </Field>
+    <p class="wp-models__count" data-test="embedding-count">
+      <span class="wp-models__dot" :class="dotClass('embedding')" />{{ label("embedding") }}
+    </p>
 
     <!-- Not a source, but it belongs beside the things it modifies. -->
     <Field
@@ -158,6 +174,28 @@ onMounted(load);
   padding-top: var(--wp-space-5);
   border-top: 1px solid var(--wp-border);
 }
+
+/* The count is the one fact on this card worth reading, and it was appended to
+   the dim `hint` where it disappeared into the explanation. Its own line, at
+   normal text colour, with the same dot the tag card uses. */
+.wp-models__count {
+  margin: calc(var(--wp-space-3) * -1) 0 var(--wp-space-5);
+  font-size: 12.5px;
+  color: var(--wp-text);
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-3);
+}
+
+.wp-models__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.wp-models__dot--ok { background: var(--wp-success); }
+.wp-models__dot--none { background: var(--wp-warn); }
 
 .wp-models__note {
   margin: 0;

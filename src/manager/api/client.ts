@@ -240,8 +240,12 @@ export const api = {
     },
     /** Prefix search across the requested kinds only, so a source the user
      *  switched off costs nothing on the wire. */
-    suggest(q: string, kinds: ModelKind[], limit = 10) {
-      const query = `?q=${encodeURIComponent(q)}&kinds=${kinds.join(",")}&limit=${limit}`;
+    /** `browseAll` asks for the first N of each kind when `q` is empty. Only
+     *  set inside a `<lora:`/`embedding:` reference, where the marker itself
+     *  is the request — for a bare word an empty query must stay empty. */
+    suggest(q: string, kinds: ModelKind[], limit = 10, browseAll = false) {
+      const query = `?q=${encodeURIComponent(q)}&kinds=${kinds.join(",")}&limit=${limit}`
+        + (browseAll ? "&all=1" : "");
       return request<ModelSuggestResponse>(`/wp/api/models/suggest${query}`, {
         method: "GET",
       });
