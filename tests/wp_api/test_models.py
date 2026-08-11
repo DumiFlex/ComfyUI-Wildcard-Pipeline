@@ -72,3 +72,44 @@ class TestSearch:
         first = [h.name for h in search(pool, "lazy", 10)]
         second = [h.name for h in search(pool, "lazy", 10)]
         assert first == second == ["lazyA", "lazyB", "lazyC"]
+
+
+class TestSeparatorInsensitiveSearch:
+    """Real filenames scatter `-`, `_`, `.` and spaces unpredictably, and nobody
+    remembers where they fell. Matching the literal string meant reproducing
+    punctuation the user had no reason to recall — `2xko` could not find
+    `2X-KO_more_-ill_r1` at all, which is how this was reported."""
+
+    POOL = (
+        r"style\2X-KO_more_-ill_r1.safetensors",
+        r"style\8.0-sprite pixel art style by skormino.safetensors",
+        r"style\lazyhand-e12c.safetensors",
+    )
+
+    def found(self, query: str):
+        return [h.name for h in search(hits(*self.POOL), query, 5)]
+
+    def test_finds_a_name_whose_separators_the_user_omitted(self):
+        assert self.found("2xko") == ["2X-KO_more_-ill_r1"]
+
+    def test_finds_it_with_the_wrong_separator_too(self):
+        # Guessing "-" where the file has "_" is the same class of miss.
+        assert self.found("2x-ko") == ["2X-KO_more_-ill_r1"]
+
+    def test_ignores_case_as_well(self):
+        assert self.found("2XKO") == ["2X-KO_more_-ill_r1"]
+
+    def test_matches_across_a_space(self):
+        assert self.found("spritepixel") == ["8.0-sprite pixel art style by skormino"]
+
+    def test_matches_a_full_path_typed_inside_a_reference(self):
+        assert self.found("lazyhande12c") == ["lazyhand-e12c"]
+
+    def test_still_matches_mid_name(self):
+        assert self.found("komore") == ["2X-KO_more_-ill_r1"]
+
+    def test_an_exact_prefix_still_outranks_a_folded_one(self):
+        # Someone who typed the name exactly should not be reordered beneath a
+        # fuzzier match.
+        pool = hits(r"a\lazy-hand.safetensors", r"a\lazyhand.safetensors")
+        assert search(pool, "lazyhand", 5)[0].name == "lazyhand"

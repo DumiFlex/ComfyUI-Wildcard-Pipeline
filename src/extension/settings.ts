@@ -91,16 +91,18 @@ export type ComfySettingCustomRenderer = (
  * itself when no tag list is installed, and a native boolean has no way to say
  * "on is not available". Every other setting we own uses the real thing.
  *
- * Geometry is PrimeVue's Aura preset — 40x24 pill, 16px handle — which is what
- * ComfyUI renders and what a frame-by-frame measurement of the real dialog
- * agrees with. An earlier 34x18 guess read as visibly smaller and duller than
- * the switches directly beneath it.
+ * EVERY dimension and colour reads PrimeVue's own `--p-toggleswitch-*` custom
+ * property first. Those are injected when their component first mounts — which
+ * has always happened by the time this renders, because our row sits in their
+ * settings dialog among their switches — so at render time this resolves to
+ * literally their pill, and follows their theme when it changes.
  *
- * Colour and timing come from `--p-primary-color` and `--p-transition-duration`,
- * which ComfyUI publishes on `:root`, so both follow their theme. The rest of
- * PrimeVue's `--p-toggleswitch-*` tokens are injected lazily when the component
- * first mounts and are absent until the settings dialog has been opened at
- * least once — so they are read WITH FALLBACKS rather than depended on.
+ * The fallbacks are Aura's defaults (40x24 pill, 16px handle), used only if a
+ * token is missing. An earlier hand-picked 34x18 read as visibly smaller and
+ * duller than the switches directly beneath it.
+ *
+ * Handle travel is a `calc()` over the same tokens rather than a fixed 16px, so
+ * a differently-sized track still lands the knob flush against its end.
  *
  * Not reusing `.p-toggleswitch` itself: those classes are ComfyUI's internals,
  * and borrowing them buys a perfect match today and a control that renders as
@@ -126,13 +128,21 @@ function buildSwitch(initial: boolean): {
   // of sliding. Only the properties that actually change are touched below.
   root.style.cssText = [
     "display:inline-flex", "align-items:center", "flex:0 0 auto",
-    "box-sizing:border-box", "width:40px", "height:24px",
-    "border-radius:30px", "padding:4px",
+    "box-sizing:border-box",
+    "width:var(--p-toggleswitch-width, 40px)",
+    "height:var(--p-toggleswitch-height, 24px)",
+    "border-radius:var(--p-toggleswitch-border-radius, 30px)",
+    "padding:var(--p-toggleswitch-gap, 4px)",
+    "border:var(--p-toggleswitch-border-width, 1px) solid "
+      + "var(--p-toggleswitch-border-color, transparent)",
     "transition:background-color var(--p-transition-duration, .2s) ease",
     "outline:none",
   ].join(";");
   knob.style.cssText = [
-    "display:block", "width:16px", "height:16px", "border-radius:50%",
+    "display:block",
+    "width:var(--p-toggleswitch-handle-size, 16px)",
+    "height:var(--p-toggleswitch-handle-size, 16px)",
+    "border-radius:var(--p-toggleswitch-handle-border-radius, 50%)",
     "background:var(--p-toggleswitch-handle-background, #fff)",
     "transition:transform var(--p-transition-duration, .2s) ease",
   ].join(";");
@@ -144,7 +154,13 @@ function buildSwitch(initial: boolean): {
       : "var(--p-toggleswitch-background, var(--p-surface-600, #52525b))";
     root.style.opacity = disabled ? "var(--p-disabled-opacity, .6)" : "1";
     root.style.cursor = disabled ? "not-allowed" : "pointer";
-    knob.style.transform = `translateX(${on ? "16px" : "0"})`;
+    // Travel is the track minus the handle minus both gaps, computed by the
+    // browser so it stays correct whatever `--p-toggleswitch-*` resolve to.
+    knob.style.transform = on
+      ? "translateX(calc(var(--p-toggleswitch-width, 40px)"
+        + " - var(--p-toggleswitch-handle-size, 16px)"
+        + " - (var(--p-toggleswitch-gap, 4px) * 2)))"
+      : "translateX(0)";
   };
   paint();
 
@@ -898,38 +914,61 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
         + "Only affects this extension's own inputs.",
       category: ["Wildcard Pipeline", "7. Runtime behavior", "Tag autocomplete"],
     },
-    // The other two completion sources, plus the separator preference.
-    //
-    // Plain `type: "boolean"`, which is what renders ComfyUI's own pill toggle.
-    // The tag setting above needs a hand-built control because it DISABLES
-    // itself when no list is installed — a switch that turns on and does
-    // nothing is the failure that whole feature keeps designing around. These
-    // three have no such state: ComfyUI already enumerates the model folders,
-    // so there is nothing to install and nothing to be unavailable. Counts
-    // live in the manager's own settings card, which can show them properly.
-    {
-      id: "wildcardPipeline.behavior.loraAutocomplete",
-      name: "LoRA autocomplete",
-      type: "boolean",
+    // The other two completion sources. Same hand-built control as the tag
+    // setting above, for the same reason it exists: a count beside the switch.
+    // "50 found" answers the question a bare toggle raises — is there anything
+    // for this to suggest? — and it is the question that sends people to the
+    // manager to check.
+    ...(
+      [
+        { id: "wildcardPipeline.behavior.loraAutocomplete", name: "LoRA autocomplete",
+          kind: "lora", noun: "LoRAs",
+          tooltip:
+            "Suggest installed LoRA names while typing in Wildcard Pipeline node "
+            + "editors, inserting the full <lora:name:1.0> syntax. Reads the models "
+            + "ComfyUI already knows about. Only affects this extension's own inputs." },
+        { id: "wildcardPipeline.behavior.embeddingAutocomplete", name: "Embedding autocomplete",
+          kind: "embedding", noun: "embeddings",
+          tooltip:
+            "Suggest installed embedding names while typing in Wildcard Pipeline "
+            + "node editors, inserting the full embedding:name syntax. Reads the "
+            + "models ComfyUI already knows about. Only affects this extension's "
+            + "own inputs." },
+      ] as const
+    ).map((src) => ({
+      id: src.id,
+      name: src.name,
+      type: ((_name: string, setter: (v: unknown) => void, value: unknown) => {
+        const wrap = document.createElement("label");
+        wrap.style.cssText =
+          "display:flex; align-items:center; justify-content:flex-end; gap:10px; cursor:pointer";
+        const { root: box } = buildSwitch(value === true);
+        const note = document.createElement("span");
+        note.style.cssText =
+          "font: 12px/1.3 var(--wp-font-sans, sans-serif); color: var(--descrip-text, #999)";
+        // Note first so the switch lands flush right, level with every
+        // neighbouring row's control.
+        wrap.append(note, box);
+
+        void fetch("/wp/api/models/status")
+          .then((r) => r.json())
+          .then((s: { sources?: { kind: string; count: number }[] }) => {
+            const count = (s.sources ?? []).find((x) => x.kind === src.kind)?.count ?? 0;
+            note.textContent = count > 0
+              ? `${count.toLocaleString()} ${src.noun} found`
+              : `No ${src.noun} found`;
+          })
+          .catch(() => { note.textContent = ""; });
+
+        box.addEventListener("wp-switch", (e) => {
+          setter((e as CustomEvent<boolean>).detail);
+        });
+        return wrap;
+      }) as ComfySettingCustomRenderer,
       defaultValue: false,
-      tooltip:
-        "Suggest installed LoRA names while typing in Wildcard Pipeline node "
-        + "editors, inserting the full <lora:name:1.0> syntax. Reads the models "
-        + "ComfyUI already knows about. Only affects this extension's own inputs.",
-      category: ["Wildcard Pipeline", "7. Runtime behavior", "LoRA autocomplete"],
-    },
-    {
-      id: "wildcardPipeline.behavior.embeddingAutocomplete",
-      name: "Embedding autocomplete",
-      type: "boolean",
-      defaultValue: false,
-      tooltip:
-        "Suggest installed embedding names while typing in Wildcard Pipeline "
-        + "node editors, inserting the full embedding:name syntax. Reads the "
-        + "models ComfyUI already knows about. Only affects this extension's "
-        + "own inputs.",
-      category: ["Wildcard Pipeline", "7. Runtime behavior", "Embedding autocomplete"],
-    },
+      tooltip: src.tooltip,
+      category: ["Wildcard Pipeline", "7. Runtime behavior", src.name],
+    })),
     {
       id: "wildcardPipeline.behavior.autocompleteSeparator",
       name: "Append \", \" after a completion",

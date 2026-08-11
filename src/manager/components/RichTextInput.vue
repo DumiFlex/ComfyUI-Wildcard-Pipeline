@@ -393,11 +393,31 @@ type WordRow =
  *
  * Tags lead because that is what a prompt is mostly made of.
  */
-const wordRows = computed<WordRow[]>(() => [
-  ...tagRows.value.map((tag) => ({ source: "tag" as const, tag })),
-  ...(modelRows.value.lora ?? []).map((model) => ({ source: "lora" as const, model })),
-  ...(modelRows.value.embedding ?? []).map((model) => ({ source: "embedding" as const, model })),
-]);
+/** Tag rows kept when a model also matched.
+ *
+ *  Sections alone did not deliver what they promised. Tags lead, and a query
+ *  like `lazy` matches twenty of them, so the embedding section existed but sat
+ *  entirely below the fold — the user could not filter to their own models
+ *  without scrolling a list they were not looking for. Capping the leading
+ *  section is what actually makes the others reachable.
+ *
+ *  Only applied when there IS something to protect: a query matching nothing
+ *  but tags still gets the full twenty. */
+const TAGS_WHEN_MODELS_MATCH = 6;
+
+const wordRows = computed<WordRow[]>(() => {
+  const loras = modelRows.value.lora ?? [];
+  const embeddings = modelRows.value.embedding ?? [];
+  const modelsPresent = loras.length > 0 || embeddings.length > 0;
+  const tags = modelsPresent
+    ? tagRows.value.slice(0, TAGS_WHEN_MODELS_MATCH)
+    : tagRows.value;
+  return [
+    ...tags.map((tag) => ({ source: "tag" as const, tag })),
+    ...loras.map((model) => ({ source: "lora" as const, model })),
+    ...embeddings.map((model) => ({ source: "embedding" as const, model })),
+  ];
+});
 
 /** Rows grouped for rendering, in the same order as the flat list, with the
  *  flat index carried along so a click knows what it selected. */

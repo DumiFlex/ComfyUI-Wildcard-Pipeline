@@ -41,6 +41,18 @@ def _folder_of(path: str) -> str:
     return norm.rsplit("/", 1)[0] if "/" in norm else ""
 
 
+#: Characters that carry no meaning when someone is trying to remember a model
+#: name. Real filenames scatter these unpredictably — `2X-KO_more_-ill_r1`,
+#: `8.0-sprite pixel art style by skormino` — and nobody recalls where they
+#: fell. Stripping them on BOTH sides makes `2xko` find `2X-KO_more_-ill_r1`.
+_NOISE = str.maketrans("", "", r"-_. /\()[]")
+
+
+def _fold(text: str) -> str:
+    """Lowercase and drop separators, for matching only. Never for display."""
+    return text.lower().translate(_NOISE)
+
+
 def build_hits(paths: list[str]) -> list[ModelHit]:
     """Turn ComfyUI's raw relative paths into displayable rows."""
     return [
@@ -64,22 +76,33 @@ def search(hits: list[ModelHit], query: str, limit: int) -> list[ModelHit]:
     # Normalise separators on BOTH sides. The client sends whatever the user
     # typed, and `embedding:style\lazyhand.safetensors` carries a backslash
     # that would never match a path stored with forward slashes.
-    q = query.strip().lower().replace("\\", "/")
-    if not q:
+    raw = query.strip().lower().replace("\\", "/")
+    if not raw:
         return []
-    prefix: list[ModelHit] = []
+    folded_q = _fold(raw)
+    if not folded_q:
+        return []
+
+    # Three tiers, best first. Separator-insensitive throughout: matching on the
+    # literal string meant a user had to reproduce punctuation they had no
+    # reason to remember, and `2xko` simply could not find `2X-KO_more_-ill_r1`.
+    exact_prefix: list[ModelHit] = []
+    folded_prefix: list[ModelHit] = []
     contains: list[ModelHit] = []
     for h in hits:
         low = h.name.lower()
         path_low = h.path.replace("\\", "/").lower()
-        # A full path typed inside a reference is a PREFIX of the stored path,
-        # not of the bare display name — so `style/lazyhand.safetensors` has to
-        # rank as a prefix hit or a completed reference sorts below unrelated
-        # substring matches.
-        if low.startswith(q) or path_low.startswith(q):
-            prefix.append(h)
-        elif q in low or q in path_low:
+        f_name = _fold(h.name)
+        # A full path typed inside a reference is a prefix of the stored PATH,
+        # not of the display name, so both have to be considered — otherwise a
+        # completed reference sorts below unrelated substring matches.
+        f_path = _fold(path_low)
+        if low.startswith(raw) or path_low.startswith(raw):
+            exact_prefix.append(h)
+        elif f_name.startswith(folded_q) or f_path.startswith(folded_q):
+            folded_prefix.append(h)
+        elif folded_q in f_name or folded_q in f_path:
             contains.append(h)
-    prefix.sort(key=lambda h: h.name.lower())
-    contains.sort(key=lambda h: h.name.lower())
-    return (prefix + contains)[:limit]
+    for bucket in (exact_prefix, folded_prefix, contains):
+        bucket.sort(key=lambda h: h.name.lower())
+    return (exact_prefix + folded_prefix + contains)[:limit]
