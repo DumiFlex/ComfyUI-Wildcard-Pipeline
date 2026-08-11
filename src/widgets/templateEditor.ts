@@ -113,6 +113,7 @@ export function create(node: EditorNode, inputName: string) {
           surface: "assembler",
           multiline: true,
           rows: 5,
+          fill: true,
           placeholder: linkDriven.value
             ? "Driven by the connected input — disconnect it to edit here."
             : PLACEHOLDER,
@@ -139,19 +140,25 @@ export function create(node: EditorNode, inputName: string) {
     socketed: true,
     minHeight: 96,
     minWidth: 300,
-    // Deliberately NOT `autoHeight`. That flag means "always follow content
-    // height, ignore the user's drag", and it was copied here from the Context
-    // and Injector widgets without their reason for it: those need it because a
-    // node stuck at a manually-set tall height breaks their collapse animation.
-    // This widget has no collapse animation, and the flag was actively hostile
-    // — it is the branch that makes `pushSize` discard a user height:
-    //
-    //   const userControlsHeight = !options.autoHeight && …
-    //   const rawTargetH = userControlsHeight ? Math.max(cur[1], min[1]) : min[1];
-    //
-    // With it off, the default path already does what a template editor wants:
-    // preserve whatever height the user settled on, and grow only when the
-    // content genuinely needs more room.
+    /* The NODE's corner is the only resize control.
+     *
+     * There used to be a second one — a drag grip inside the editor — and two
+     * authorities over one box is what produced both reported failures: a drag
+     * that never ended and stayed glued to the cursor, and a node that fought
+     * the editor over its height. Three rounds of arbitrating between them
+     * (dropping `autoHeight`, gating grip-follow, re-arming the height cap)
+     * each fixed a real defect and none fixed the symptom.
+     *
+     * `fillHost` removes the second authority instead: the node owns the
+     * height, the editor fills whatever box it is given, and the text scrolls.
+     * It also skips the content-size ResizeObserver entirely and takes our
+     * subtree out of flow, so the template can no longer push the node taller —
+     * the auto-scaling that made a deliberately-sized node spring back.
+     *
+     * `minHeight` is still the floor a node can be dragged down to: out-of-flow
+     * content measures zero, so without a declared minimum the node collapses.
+     */
+    fillHost: true,
     // Fired by ComfyUI's own value setter, i.e. workflow load and undo.
     onValueRestored: (v: string) => { model.value = v; },
   });

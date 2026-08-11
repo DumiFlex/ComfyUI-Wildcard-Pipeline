@@ -209,6 +209,21 @@ interface Props {
   /** True when the host walked a graph. Lets the chip say "no upstream
    *  producer" (canvas, actionable) rather than staying silent (SPA). */
   graphAware?: boolean;
+  /**
+   * Fill the height the host gives us and scroll the overflow, instead of
+   * growing to fit the content and offering a drag grip.
+   *
+   * For canvas widgets mounted with `fillHost`, where the NODE's own corner is
+   * the one and only resize control. Two resize authorities on one box is what
+   * produced a drag that never ended and a node that fought the editor over
+   * its height; this removes the second one rather than arbitrating between
+   * them.
+   *
+   * Hides the grip, drops the height cap, and makes the box a flex child that
+   * can shrink below its content — without `min-height: 0` a flex item refuses
+   * to, which is exactly how the payload used to push the node taller.
+   */
+  fill?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -238,6 +253,7 @@ const props = withDefaults(defineProps<Props>(), {
   disabled: false,
   varProducers: undefined,
   graphAware: false,
+  fill: false,
 });
 
 // Lazy-pull store on first prop access — singleton so doesn't matter
@@ -3028,6 +3044,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
       focused ? 'wp-rt--focused' : 'wp-rt--rest',
       disabled ? 'wp-rt--disabled' : null,
       hasMoreBelow ? 'wp-rt--more' : null,
+      fill ? 'wp-rt--fill' : null,
     ]"
     :data-focused="focused ? '' : null"
   >
@@ -3101,7 +3118,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
          Ours applies each move's DELTA to the current height, so the first
          pixel back off a limit moves the box. -->
     <div
-      v-if="wrap || multiline"
+      v-if="(wrap || multiline) && !fill"
       class="wp-rt__grip"
       data-test="rt-grip"
       aria-hidden="true"
@@ -3517,6 +3534,35 @@ function onHostKeydown(ev: KeyboardEvent): void {
 .wp-rt__host--single.wp-rt__host--wrap.wp-rt__host--empty::before {
   line-height: 1.6;
 }
+/* ── Fill mode ────────────────────────────────────────────────────────────
+ *
+ * The node owns the height; we take what we are given and scroll the rest.
+ *
+ * `min-height: 0` on both the root and the host is the load-bearing part. Both
+ * are flex items, and a flex item defaults to `min-height: auto`, which refuses
+ * to shrink below its content — so the template pushed the box, which pushed
+ * the node, which is the auto-scaling this mode exists to stop. Measured on the
+ * debug widget: without it the node inflated from 300 to 870 to fit its
+ * payload and could not be dragged shorter.
+ *
+ * `max-height: none` because the 14rem cap below is there to bound AUTO-growth.
+ * Nothing auto-grows here, and keeping it would cap the box well short of a
+ * node the user deliberately dragged tall.
+ */
+.wp-rt--fill {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.wp-rt--fill .wp-rt__host {
+  flex: 1 1 0%;
+  min-height: 0;
+  max-height: none;
+  height: auto;
+  overflow-y: auto;
+}
+
 .wp-rt__host--multi {
   padding: var(--wp-space-4) var(--wp-space-5);
   line-height: 1.9;
