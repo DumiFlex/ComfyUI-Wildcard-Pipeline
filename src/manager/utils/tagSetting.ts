@@ -18,6 +18,27 @@
  * full manager and not while squinting at a node on a canvas.
  */
 
+import { ref } from "vue";
+
+/**
+ * Bumped whenever one of our completion settings changes.
+ *
+ * The readers below ask ComfyUI's settings store directly, and that store is
+ * not a Vue reactive source — so a `computed` built on them caches on its OTHER
+ * dependencies and never invalidates when a switch is flipped. The symptom was
+ * that turning a source on did nothing until the page was reloaded.
+ *
+ * A counter rather than mirroring each value into its own ref: there is one
+ * question here ("did any of this change?"), the readers stay the single place
+ * that knows how to answer per host, and nothing has to be kept in sync.
+ */
+export const completionSettingsVersion = ref(0);
+
+/** Call from every place that writes one of these settings. */
+export function notifyCompletionSettingsChanged(): void {
+  completionSettingsVersion.value += 1;
+}
+
 /** ComfyUI's settings store, present only when running inside the canvas. */
 interface ComfySettingHost {
   extensionManager?: { setting?: { get?: (id: string) => unknown } };

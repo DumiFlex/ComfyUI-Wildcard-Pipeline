@@ -43,6 +43,7 @@ import type { ModelKind, ModelSuggestion, TagCategoryName, TagSuggestion } from 
 import { loadTagAvailability } from "../utils/tagStatus";
 import {
   autocompleteSeparatorEnabled,
+  completionSettingsVersion,
   completionSourceEnabled as sourceOn,
 } from "../utils/tagSetting";
 import { refRows, varRows, type SuggestionRow } from "../utils/suggestion-rows";
@@ -521,6 +522,10 @@ let tagFetchTimer: ReturnType<typeof setTimeout> | undefined;
 /** Enabled only where a booru tag is a plausible thing to type: option values
  *  and template text. Never in a name field. */
 const tagAutocompleteEnabled = computed(() => {
+  // The reactive dependency that makes this recompute at all: `sourceOn` reads
+  // ComfyUI's settings store, which Vue cannot track, so without this the
+  // result cached until the page reloaded.
+  void completionSettingsVersion.value;
   if (props.disabled) return false;
   // Tags need a downloaded list; the model sources read what ComfyUI already
   // enumerated, so for them "switched on" is the whole condition. Any one

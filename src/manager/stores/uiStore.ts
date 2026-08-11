@@ -12,6 +12,8 @@ const STORAGE_KEY_DENSITY = "wp-density-mode";
 const STORAGE_KEY_MAX_REF_DEPTH = "wp-wildcard-max-ref-depth";
 const STORAGE_KEY_CHECK_ON_LAUNCH = "wp-update-check-on-launch";
 const STORAGE_KEY_KEEP_EMPTY_GROUPS = "wp-keep-empty-tag-groups";
+import { notifyCompletionSettingsChanged } from "../utils/tagSetting";
+
 const STORAGE_KEY_TAG_AUTOCOMPLETE = "wp-tag-autocomplete";
 /* The other completion sources and the separator preference. Spellings are
  * shared with `manager/utils/tagSetting.ts`, which READS them on the editor's
@@ -140,6 +142,9 @@ export const useUiStore = defineStore("ui", () => {
     } catch {
       /* localStorage unavailable */
     }
+    // Editors read localStorage directly on their hot path rather than through
+    // this store, so they need telling that it moved.
+    notifyCompletionSettingsChanged();
   }
 
   function setLoraAutocomplete(v: boolean): void {

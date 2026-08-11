@@ -449,6 +449,36 @@ export function mirrorHtmlWithIdx(tokens: RichToken[]): string {
  * as vars. Tokens matching `collapsedKind` render with the plain
  * `wp-rt-text` class.
  */
+/**
+ * `<lora:…>` and `embedding:…` runs inside otherwise-plain text.
+ *
+ * Deliberately NOT a tokenizer kind. `tokenizeRich` is shared with the
+ * engine-parity resolver and the atomic editor model, and neither has any
+ * business knowing about ComfyUI prompt syntax — this is a rendering concern
+ * and it stays in the renderer.
+ *
+ * `embedding:` ends at whitespace or a comma; a LoRA ends at its own `>`.
+ */
+const MODEL_SYNTAX_RE = /<lora:[^>]*>?|embedding:[^\s,]+/gi;
+
+/** Fixed per kind, unlike `$var` which hashes its name into eight buckets.
+ *  There are exactly two of these and they mean the same thing every time, so
+ *  a stable colour is something you learn once. Matches the popover's own
+ *  section icons. */
+function modelSyntaxHtml(text: string): string {
+  let out = "";
+  let last = 0;
+  MODEL_SYNTAX_RE.lastIndex = 0;
+  for (let m = MODEL_SYNTAX_RE.exec(text); m; m = MODEL_SYNTAX_RE.exec(text)) {
+    out += escapeHtml(text.slice(last, m.index));
+    const isLora = m[0][0] === "<";
+    const cls = isLora ? "wp-rt-lora" : "wp-rt-embedding";
+    out += `<span class="${cls}">${escapeHtml(m[0])}</span>`;
+    last = m.index + m[0].length;
+  }
+  return last === 0 ? escapeHtml(text) : out + escapeHtml(text.slice(last));
+}
+
 export function inlineTokenHtml(
   text: string,
   collapsedKinds?: ReadonlyArray<"var" | "ref"> | "var" | "ref",
@@ -477,7 +507,7 @@ export function inlineTokenHtml(
   // pre-coloring). Keeps caret-math callers that walk `.firstChild`
   // happy for the common case (un-decorated text atoms).
   if (tokens.length === 1 && tokens[0].kind === "text") {
-    return escapeHtml(tokens[0].raw);
+    return modelSyntaxHtml(tokens[0].raw);
   }
   // Inline tokens stay editable (deliberate: brace blocks like
   // `{a|b|c}` are user-edited inline, not atomic chips). We add bare
@@ -504,7 +534,7 @@ export function inlineTokenHtml(
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
     if (isText(i)) {
-      html += escapeHtml(t.raw);
+      html += modelSyntaxHtml(t.raw);
     } else {
       if (!isText(i - 1)) html += "&#x200B;";
       const attrs = t.kind === "var" && varAttrs

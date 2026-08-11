@@ -19,6 +19,7 @@ import "../components/shared/vue-nodes.css";
 // (the SPA's rich-text.css isn't loaded on the canvas — see the file header).
 import "../components/shared/rich-text-canvas.css";
 import { pushToast } from "../components/shared/toast-store";
+import { notifyCompletionSettingsChanged } from "../manager/utils/tagSetting";
 import { openPlayground } from "../components/settings/playground-store";
 
 export type A11yMode = "auto" | "on" | "off";
@@ -904,6 +905,10 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
 
         box.addEventListener("wp-switch", (e) => {
           setter((e as CustomEvent<boolean>).detail);
+          // Editors read this straight out of ComfyUI's settings store, which
+          // Vue cannot track — without the nudge the change took a page reload
+          // to have any effect.
+          notifyCompletionSettingsChanged();
         });
         return wrap;
       },
@@ -962,6 +967,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
 
         box.addEventListener("wp-switch", (e) => {
           setter((e as CustomEvent<boolean>).detail);
+          notifyCompletionSettingsChanged();
         });
         return wrap;
       }) as ComfySettingCustomRenderer,
@@ -979,6 +985,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
         + "can be typed straight away. Never applied inside a <lora:…> or "
         + "embedding:… reference, where a comma would end the reference.",
       category: ["Wildcard Pipeline", "7. Runtime behavior", "Autocomplete separator"],
+      onChange: () => notifyCompletionSettingsChanged(),
     },
     // Visual axes — sizing, embellishment, identity
     {
