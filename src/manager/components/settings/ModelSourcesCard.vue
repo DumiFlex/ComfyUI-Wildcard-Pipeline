@@ -44,6 +44,15 @@ function label(kind: ModelKind): string {
     : "None found — check your models folder";
 }
 
+/** Tints the whole badge, not just the dot — at 11px the dot alone is easy to
+ *  miss, and "none found" is the case that most needs to be noticed. */
+function badgeClass(kind: ModelKind): string {
+  if (unreachable.value) return "wp-models__badge--warn";
+  const n = counts.value[kind];
+  if (n === undefined) return "";
+  return n > 0 ? "wp-models__badge--ok" : "wp-models__badge--warn";
+}
+
 /** Green when the source can actually do something, amber when it cannot.
  *  Same vocabulary as the tag card's status dot, so "is this usable?" reads
  *  identically on both. */
@@ -107,31 +116,39 @@ onMounted(load);
       label="Suggest LoRAs"
       hint="Offers installed LoRA names while you type, inserting the full <lora:name:1.0> syntax."
     >
-      <Toggle
-        :model-value="ui.loraAutocomplete"
-        label="Suggest LoRAs"
-        data-test="settings-lora-autocomplete"
-        @update:model-value="ui.setLoraAutocomplete($event)"
-      />
+      <div class="wp-models__control">
+        <Toggle
+          :model-value="ui.loraAutocomplete"
+          label="Suggest LoRAs"
+          data-test="settings-lora-autocomplete"
+          @update:model-value="ui.setLoraAutocomplete($event)"
+        />
+        <!-- On the control's own row, pushed right. As a separate line under
+             the hint it either crowded the explanation or overlapped it. -->
+        <span class="wp-models__badge" :class="badgeClass('lora')" data-test="lora-count">
+          <span class="wp-models__dot" :class="dotClass('lora')" />{{ label("lora") }}
+        </span>
+      </div>
     </Field>
-    <p class="wp-models__count" data-test="lora-count">
-      <span class="wp-models__dot" :class="dotClass('lora')" />{{ label("lora") }}
-    </p>
 
     <Field
       label="Suggest embeddings"
       hint="Offers installed embedding names, inserting the full embedding:name syntax."
     >
-      <Toggle
-        :model-value="ui.embeddingAutocomplete"
-        label="Suggest embeddings"
-        data-test="settings-embedding-autocomplete"
-        @update:model-value="ui.setEmbeddingAutocomplete($event)"
-      />
+      <div class="wp-models__control">
+        <Toggle
+          :model-value="ui.embeddingAutocomplete"
+          label="Suggest embeddings"
+          data-test="settings-embedding-autocomplete"
+          @update:model-value="ui.setEmbeddingAutocomplete($event)"
+        />
+        <!-- On the control's own row, pushed right. As a separate line under
+             the hint it either crowded the explanation or overlapped it. -->
+        <span class="wp-models__badge" :class="badgeClass('embedding')" data-test="embedding-count">
+          <span class="wp-models__dot" :class="dotClass('embedding')" />{{ label("embedding") }}
+        </span>
+      </div>
     </Field>
-    <p class="wp-models__count" data-test="embedding-count">
-      <span class="wp-models__dot" :class="dotClass('embedding')" />{{ label("embedding") }}
-    </p>
 
     <!-- Not a source, but it belongs beside the things it modifies. -->
     <Field
@@ -175,16 +192,41 @@ onMounted(load);
   border-top: 1px solid var(--wp-border);
 }
 
-/* The count is the one fact on this card worth reading, and it was appended to
-   the dim `hint` where it disappeared into the explanation. Its own line, at
-   normal text colour, with the same dot the tag card uses. */
-.wp-models__count {
-  margin: calc(var(--wp-space-3) * -1) 0 var(--wp-space-5);
-  font-size: 12.5px;
-  color: var(--wp-text);
+/* Control and count share a row; the badge is pushed to the far edge. The count
+   was first appended to the dim `hint`, where the one fact worth reading was
+   the least readable thing on the card, and then given its own line, where it
+   crowded the explanation above it. */
+.wp-models__control {
   display: flex;
   align-items: center;
+  gap: var(--wp-space-5);
+}
+
+.wp-models__badge {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
   gap: var(--wp-space-3);
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  white-space: nowrap;
+  color: var(--wp-text);
+  background: var(--wp-bg-2, var(--wp-bg));
+  border: 1px solid var(--wp-border);
+}
+
+.wp-models__badge--ok {
+  color: var(--wp-success);
+  border-color: color-mix(in srgb, var(--wp-success) 40%, transparent);
+  background: color-mix(in srgb, var(--wp-success) 12%, transparent);
+}
+
+.wp-models__badge--warn {
+  color: var(--wp-warn);
+  border-color: color-mix(in srgb, var(--wp-warn) 40%, transparent);
+  background: color-mix(in srgb, var(--wp-warn) 12%, transparent);
 }
 
 .wp-models__dot {

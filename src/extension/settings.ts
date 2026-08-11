@@ -91,9 +91,20 @@ export type ComfySettingCustomRenderer = (
  * itself when no tag list is installed, and a native boolean has no way to say
  * "on is not available". Every other setting we own uses the real thing.
  *
- * Styled inline and namespaced rather than borrowing PrimeVue's classes: those
- * are ComfyUI's internals and would silently stop matching the day they restyle
- * or upgrade, leaving a control that looks like nothing at all.
+ * Geometry is PrimeVue's Aura preset — 40x24 pill, 16px handle — which is what
+ * ComfyUI renders and what a frame-by-frame measurement of the real dialog
+ * agrees with. An earlier 34x18 guess read as visibly smaller and duller than
+ * the switches directly beneath it.
+ *
+ * Colour and timing come from `--p-primary-color` and `--p-transition-duration`,
+ * which ComfyUI publishes on `:root`, so both follow their theme. The rest of
+ * PrimeVue's `--p-toggleswitch-*` tokens are injected lazily when the component
+ * first mounts and are absent until the settings dialog has been opened at
+ * least once — so they are read WITH FALLBACKS rather than depended on.
+ *
+ * Not reusing `.p-toggleswitch` itself: those classes are ComfyUI's internals,
+ * and borrowing them buys a perfect match today and a control that renders as
+ * nothing the day they restyle or upgrade PrimeVue.
  */
 function buildSwitch(initial: boolean): {
   root: HTMLElement;
@@ -102,27 +113,38 @@ function buildSwitch(initial: boolean): {
 } {
   let on = initial;
   let disabled = false;
+
   const root = document.createElement("span");
   root.setAttribute("role", "switch");
   root.tabIndex = 0;
   const knob = document.createElement("span");
   root.appendChild(knob);
 
+  // Static styling is written ONCE. Rewriting `cssText` on every change — the
+  // first version did — replaces the `transition` declaration mid-flight, so
+  // the browser has nothing to animate between and the knob teleports instead
+  // of sliding. Only the properties that actually change are touched below.
+  root.style.cssText = [
+    "display:inline-flex", "align-items:center", "flex:0 0 auto",
+    "box-sizing:border-box", "width:40px", "height:24px",
+    "border-radius:30px", "padding:4px",
+    "transition:background-color var(--p-transition-duration, .2s) ease",
+    "outline:none",
+  ].join(";");
+  knob.style.cssText = [
+    "display:block", "width:16px", "height:16px", "border-radius:50%",
+    "background:var(--p-toggleswitch-handle-background, #fff)",
+    "transition:transform var(--p-transition-duration, .2s) ease",
+  ].join(";");
+
   const paint = (): void => {
     root.setAttribute("aria-checked", on ? "true" : "false");
-    root.style.cssText = [
-      "display:inline-flex", "align-items:center", "flex:0 0 auto",
-      "width:34px", "height:18px", "border-radius:9px", "padding:2px",
-      "box-sizing:border-box", "transition:background-color .15s ease",
-      `background:${on ? "var(--p-primary-color, #3b82f6)" : "var(--p-toggleswitch-slider-background, #52525b)"}`,
-      `opacity:${disabled ? "0.45" : "1"}`,
-      `cursor:${disabled ? "not-allowed" : "pointer"}`,
-    ].join(";");
-    knob.style.cssText = [
-      "display:block", "width:14px", "height:14px", "border-radius:50%",
-      "background:#fff", "transition:transform .15s ease",
-      `transform:translateX(${on ? "16px" : "0"})`,
-    ].join(";");
+    root.style.background = on
+      ? "var(--p-toggleswitch-checked-background, var(--p-primary-color, #60a5fa))"
+      : "var(--p-toggleswitch-background, var(--p-surface-600, #52525b))";
+    root.style.opacity = disabled ? "var(--p-disabled-opacity, .6)" : "1";
+    root.style.cursor = disabled ? "not-allowed" : "pointer";
+    knob.style.transform = `translateX(${on ? "16px" : "0"})`;
   };
   paint();
 
@@ -836,9 +858,12 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
           "display:flex; align-items:center; justify-content:flex-end; gap:10px; cursor:pointer";
         const { root: box, setOn, setDisabled } = buildSwitch(value === true);
         const note = document.createElement("span");
+        // NOTE FIRST, then the switch. Appended the other way round the control
+        // floated mid-row while every neighbouring toggle sat flush right, and
+        // a row that does not line up reads as broken before it reads as ours.
         note.style.cssText =
           "font: 12px/1.3 var(--wp-font-sans, sans-serif); color: var(--descrip-text, #999)";
-        wrap.append(box, note);
+        wrap.append(note, box);
 
         // Ask the server whether a list exists. Until it answers, leave the
         // control alone rather than flickering it disabled.
