@@ -744,7 +744,9 @@ function onKeydown(ev: KeyboardEvent): void {
   font: 11px/1.5 var(--wp-font-mono);
   color: var(--wp-text);
   min-height: 56px;
-  resize: vertical; overscroll-behavior: contain;
+  /* No `resize: vertical` here. This class is on the RichTextInput root, and
+     the component carries its own drag grip — the native resizer put a second
+     handle in the same corner. Left over from the <textarea> this replaced. */
 }
 .ibm__template:focus { outline: none; border-color: var(--wp-accent); }
 .ibm__template--set {

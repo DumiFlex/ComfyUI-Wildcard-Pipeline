@@ -15,7 +15,7 @@ import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
 import Field from "../components/ui/Field.vue";
-import Textarea from "../components/ui/Textarea.vue";
+import RichTextInput from "../components/RichTextInput.vue";
 import { useToast } from "../composables/useToast";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useTemplateStore } from "../stores/templateStore";
@@ -131,11 +131,18 @@ function cancel() {
       />
       <Card>
         <Field label="Template" hint="The PromptAssembler template string — $var tokens are resolved at render.">
-          <Textarea
+          <!-- The same editor the assembler node uses, on the same surface.
+               A template IS an assembler template string — saved here, loaded
+               there — so the two have to agree about what the syntax means and
+               what may be completed in it. As a plain textarea this was the
+               one place you could write a template with no tag, LoRA or
+               embedding completion at all. -->
+          <RichTextInput
             v-model="templateString"
+            surface="assembler"
+            multiline
             :rows="5"
             placeholder="$subject wearing $outfit, $style, $lighting"
-            spellcheck="false"
             aria-label="Template"
           />
         </Field>

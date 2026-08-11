@@ -302,71 +302,30 @@ function onDelete(): void {
 }
 .row__name:focus, .row__value:focus { outline: none; }
 
-/* The value field is a <textarea> so a long value WRAPS and the box grows to
- * fit (height driven by `autosizeValue`). Capped so a pasted paragraph can't
- * push the rest of the modal off-screen; past the cap it scrolls. */
+/* This class sits on the RichTextInput ROOT, and everything it used to declare
+ * about scrolling and sizing belonged to the <textarea> that used to be here.
+ *
+ * That textarea went in `ca87384b`. The rule stayed, and the two scroll
+ * declarations then nested: the component's own `.wp-rt__host` already caps
+ * and scrolls, so a capped, scrolling box sat inside another capped, scrolling
+ * box and the row showed TWO vertical scrollbars. `min-height`, `max-height`,
+ * `line-height` and `white-space` were the same mistake without a visible
+ * symptom — the component declares each of them for itself.
+ *
+ * Only `word-break` survives, because a long unbroken value is a row-layout
+ * concern rather than an editor one. */
 .row__value {
-  /* Manual drag handle as well as the auto-grow, matching the derivation and
-     combine template inputs — auto-sizing picks a sensible height, the handle
-     lets the user override it. */
-  overscroll-behavior: contain;
-  overflow-y: auto;
-  /* Floor for the drag handle. Without it the computed `min-height` is `auto`,
-     which reads as 0 — so the field could be dragged away to a sliver with no
-     way to see what you were editing. One line plus its padding. */
-  min-height: 28px;
-  max-height: 12rem;
-  line-height: 1.5;
-  white-space: pre-wrap;
   word-break: break-word;
-  font-family: var(--wp-font-mono);
 }
 /* The wrapper centred a single-line input; with a growing field the label
  * column should sit at the top instead of drifting down as it grows. */
 .row__value-wrap { align-items: flex-start; position: relative; }
 
-/* "More below" hint, matching RichTextInput. A <textarea> can't carry a
- * dependable `::after`, so it hangs off the wrapper. Gradient runs to a
- * TRANSPARENT accent so the text underneath still reads; the 1px accent line
- * at the bottom is what catches the eye. */
-/* Sits in the corner the overflow fade deliberately leaves clear. */
-.row__grip {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  width: 14px;
-  height: 14px;
-  cursor: ns-resize;
-  z-index: 2;
-  background: repeating-linear-gradient(
-    135deg,
-    transparent 0 2px,
-    var(--wp-text3, #8a8a9a) 2px 3px
-  );
-  /* Clipped to a bottom-right triangle so the hatching runs parallel to the
-     hypotenuse — the shape the browser's own resizer draws, which is what
-     users already read as "drag me". A filled square read as a button. */
-  clip-path: polygon(100% 0, 100% 100%, 0 100%);
-  opacity: 0.55;
-}
-.row__grip:hover { opacity: 0.9; }
+/* The overflow fade and the drag grip both live in RichTextInput now, and both
+ * were reimplemented here only because a <textarea> could not carry them. The
+ * markup for each went with the textarea in `ca87384b`; these rules outlived
+ * it, matching nothing. */
 
-.row__value-wrap--more::after {
-  content: "";
-  position: absolute;
-  /* Right edge stops short of the resize grip. The band is as tall as the
-     handle and sat straight on top of it, so a resizable field's grip was
-     invisible — users aimed, missed, re-grabbed. */
-  inset: auto 16px 0 0;
-  height: 14px;
-  pointer-events: none;
-  background: linear-gradient(
-    to bottom,
-    transparent,
-    color-mix(in srgb, var(--wp-accent, #6366f1) 26%, transparent)
-  );
-  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--wp-accent, #6366f1) 60%, transparent);
-}
 
 .row--off { color: var(--wp-text-dim, var(--wp-text3)); }
 .row--off .row__name-wrap, .row--off .row__value-wrap { opacity: 0.5; }
