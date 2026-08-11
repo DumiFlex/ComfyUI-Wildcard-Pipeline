@@ -1,5 +1,31 @@
-/* Webfonts for the canvas extension — Inter + JetBrains Mono, latin subset,
+/* Webfonts for the canvas extension — JetBrains Mono, latin subset,
  * variable axis 100-900.
+ *
+ * NO INTER HERE, deliberately. ComfyUI's own frontend serves an Inter that is
+ * identical to the one we used to ship — same family name, same
+ * `font-weight: 100 900` variable axis, same latin woff2, same
+ * `font-display: swap` — and it declares it in its MAIN stylesheet, so it is
+ * already loaded on every page a canvas widget can appear on. We were shipping
+ * and downloading a 48 KB duplicate.
+ *
+ * The coupling this creates is on the FAMILY NAME, not on their URL: our
+ * `--wp-font-sans` stack names `Inter` and the browser resolves it against
+ * whatever `Inter` face is loaded, so their file being renamed, re-subset or
+ * re-hashed is invisible to us. Their copy also lives in `public/fonts/`,
+ * which Vite serves un-hashed precisely so the URL stays stable — hashed
+ * assets go to `assets/`.
+ *
+ * Evidence for the bet, since "rely on a host asset" deserves some: added
+ * 2025-09-16 in Comfy-Org/ComfyUI_frontend 4ff18fd ("Add Inter font used by
+ * Figma designs", #5535) and untouched since — one commit in its whole
+ * history. It is the typeface of their entire UI, so removing it means
+ * restyling their product, not dropping an optional extra.
+ *
+ * And if they do remove it, nothing breaks loudly: the stack falls through to
+ * `-apple-system, Segoe UI, Roboto, sans-serif`, which is the behaviour
+ * `font-display: swap` already shows during every cold load.
+ *
+ * JetBrains Mono stays. ComfyUI ships no monospace face.
  *
  * This file is NOT processed by Vite. `scripts/copy-fonts.mjs` copies this
  * directory verbatim into `js/assets/fonts/`, and `src/extension/fonts.ts`
@@ -18,16 +44,6 @@
  * font-display: swap renders the system stack first and re-paints when the
  * woff2 lands, so text is never invisible during the fetch.
  */
-
-@font-face {
-  font-family: "Inter";
-  font-style: normal;
-  font-weight: 100 900;
-  font-display: swap;
-  src:
-    url("./inter-latin.woff2") format("woff2-variations"),
-    url("./inter-latin.woff2") format("woff2");
-}
 
 @font-face {
   font-family: "JetBrains Mono";

@@ -1,4 +1,5 @@
 import { walkAllNodes, collectUpstreamVariables, type LiteGraphLike, type LiteNodeLike } from "./graph";
+import { startAdaptivePoll } from "./reactive";
 import { scanConflicts, scanTemplateConflicts, labelFor, type Conflict, type Severity } from "./conflicts";
 import { parseWidgetJson, type ContextWidgetValue } from "../widgets/_shared";
 import { onGraphLoaded } from "./graph-events";
@@ -285,8 +286,10 @@ export function attachSubgraphBadge(node: SubgraphNodeLike, rootGraph: LiteGraph
     return;
   }
 
-  function recompute() {
-    if (!node.subgraph || !Ctor) return;
+  /** Returns whether anything actually moved, which is what lets the shared
+   *  adaptive poll back off on a still canvas. */
+  function recompute(): "changed" | "quiet" {
+    if (!node.subgraph || !Ctor) return "quiet";
     const next = computeBadgeState(rootGraph, node.subgraph);
     // Cache key includes both severity AND text — same severity with a new
     // variable name (e.g. user fixed $foo but $bar is still missing) needs a
@@ -295,7 +298,7 @@ export function attachSubgraphBadge(node: SubgraphNodeLike, rootGraph: LiteGraph
     const sameAsBefore =
       (next === null && prevSeverity === null) ||
       (!!next && next.severity === prevSeverity && next.text === readBadge(node)?.text);
-    if (sameAsBefore) return;
+    if (sameAsBefore) return "quiet";
     // Pulse triggers: badge appears (null -> something) or severity worsens.
     // Same-severity text changes (e.g. $foo -> $bar still warning) get a
     // silent re-render — the wording change is informational, not urgent.
@@ -311,6 +314,7 @@ export function attachSubgraphBadge(node: SubgraphNodeLike, rootGraph: LiteGraph
       if (badge && isAppear) pulseBadge(node, badge, 0.4, 1.12);
       else if (badge && isEscalation) pulseBadge(node, badge, 1.0, 1.18);
     }
+    return "changed";
   }
 
   // Initial compute happens on next tick — workflow may still be loading
@@ -319,7 +323,12 @@ export function attachSubgraphBadge(node: SubgraphNodeLike, rootGraph: LiteGraph
 
   // Polling fallback. 800ms is coarse but the badge isn't latency-critical;
   // the user is already used to seeing conflict dots within ~1s elsewhere.
-  const interval = window.setInterval(recompute, 800);
+  //
+  // Shared with `reactive.ts` rather than a second bare `setInterval`: this
+  // one scans the whole subgraph on every tick, per SubgraphNode, forever —
+  // including on a hidden tab, where nobody can see a badge, and on a still
+  // canvas, where nothing can have changed the conflicts it reports.
+  const stopPoll = startAdaptivePoll(800, recompute);
 
   // Recompute on connection changes — wires added/removed inside the
   // subgraph or to/from the SubgraphNode itself.
@@ -340,7 +349,7 @@ export function attachSubgraphBadge(node: SubgraphNodeLike, rootGraph: LiteGraph
   // its observers cleanly. We chain so other extensions still run.
   const origRemoved = node.onRemoved;
   const cleanup = () => {
-    window.clearInterval(interval);
+    stopPoll();
     unsubGraphLoaded();
     node.onConnectionsChange = origCC;
     node.onRemoved = origRemoved;
