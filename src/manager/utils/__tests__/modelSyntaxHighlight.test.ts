@@ -10,17 +10,21 @@ import { inlineTokenHtml } from "../../../widgets/richTokenize";
 describe("model syntax highlighting", () => {
   it("wraps a lora reference", () => {
     const html = inlineTokenHtml("a <lora:style/foo.safetensors:1.0> b");
-    expect(html).toContain('<span class="wp-rt-lora">&lt;lora:style/foo.safetensors:1.0&gt;</span>');
+    expect(html).toContain('class="wp-rt-lora"');
+    expect(html).toContain("--wp-var-6");
+    expect(html).toContain("&lt;lora:style/foo.safetensors:1.0&gt;");
   });
 
   it("wraps an embedding reference", () => {
     const html = inlineTokenHtml("x embedding:neg/bad.pt y");
-    expect(html).toContain('<span class="wp-rt-embedding">embedding:neg/bad.pt</span>');
+    expect(html).toContain('class="wp-rt-embedding"');
+    expect(html).toContain("--wp-var-7");
+    expect(html).toContain("embedding:neg/bad.pt");
   });
 
   it("stops an embedding at a comma, which is where the prompt moves on", () => {
     const html = inlineTokenHtml("embedding:one, two");
-    expect(html).toContain('<span class="wp-rt-embedding">embedding:one</span>');
+    expect(html).toContain(">embedding:one</span>");
     expect(html).not.toContain("two</span>");
   });
 

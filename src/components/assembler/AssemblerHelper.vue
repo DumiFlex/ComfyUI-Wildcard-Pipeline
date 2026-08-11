@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { varColorClass } from "../shared/var-color";
+import { modelSyntaxHtml } from "../../widgets/richTokenize";
 import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
 import { kindIcon, type WpKind } from "../shared/kind-icons";
 import { applyVarAccessor, type ResolvedValue } from "../../widgets/richTokenize";
@@ -396,7 +397,6 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
             @click="onLoadTemplate"
           >
             <i class="pi pi-folder-open" aria-hidden="true" />
-            <span>Load</span>
           </button>
           <button
             v-if="onSaveTemplate"
@@ -409,7 +409,6 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
             @click="onSaveTemplate"
           >
             <i class="pi pi-save" aria-hidden="true" />
-            <span>Save</span>
           </button>
           <button
             v-if="onClearTemplate"
@@ -422,7 +421,6 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
             @click="onClearTemplate"
           >
             <i class="pi pi-trash" aria-hidden="true" />
-            <span>Clear template</span>
           </button>
         </div>
         <span class="wp-asm-section-stat">
@@ -490,18 +488,22 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
           </div>
           <div v-else key="tokens" class="wp-asm-preview__tokens">
             <template v-for="(tok, i) in previewTokens" :key="i">
-              <span v-if="tok.kind === 'literal'" class="literal">{{ tok.text }}</span>
+              <!-- Literal preview text still carries `<lora:…>` and
+                   `embedding:…`, which resolve to themselves rather than to a
+                   variable — so without this they were the only place the two
+                   syntaxes appeared uncoloured. Same function the editor uses,
+                   so the two cannot drift; it escapes everything it emits. -->
+              <span
+                v-if="tok.kind === 'literal'"
+                class="literal"
+                v-html="modelSyntaxHtml(tok.text)"
+              ></span>
               <span v-else :class="['res', varColorClass(tok.varName ?? '')]">{{ tok.text }}</span>
             </template>
           </div>
         </Transition>
       </div>
 
-      <!-- hint -->
-      <div class="wp-asm-hint">
-        <span>click → insert <kbd>$var</kbd> · <kbd>Ctrl</kbd>+click → remove · right-click → more</span>
-        <span style="margin-left: auto;">click missing → remove</span>
-      </div>
       </div>
     </Transition>
 
@@ -588,11 +590,15 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
   gap: 6px;
   justify-content: center;
 }
+/* Icon-only. Each button already carried a `title` and an `aria-label`, so the
+   visible word was the only thing dropped — and three words across the row
+   were most of its width. Square-ish padding keeps the tap target honest. */
 .wp-asm-toolbtn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 3px 10px;
+  padding: 4px 7px;
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
   border-radius: 3px;
@@ -776,23 +782,5 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
   text-align: center;
 }
 .wp-asm-preview__ghost-text { display: inline; }
-
-.wp-asm-hint {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 4px;
-  font: 11px/1.3 var(--wp-font-sans);
-  color: var(--wp-text-dim);
-}
-.wp-asm-hint kbd {
-  background: var(--wp-bg-1);
-  border: 1px solid var(--wp-border-soft);
-  border-bottom-width: 2px;
-  border-radius: 2px;
-  font: 10px/1 var(--wp-font-mono);
-  padding: 1px 4px;
-  color: var(--wp-text-muted);
-}
 
 </style>

@@ -217,24 +217,3 @@
   background: rgba(192, 38, 211, 0.13);
   box-shadow: inset 0 0 0 1px rgba(192, 38, 211, 0.36);
 }
-
-/* ── Model syntax ─────────────────────────────────────────────────────────
- *
- * `<lora:…>` and `embedding:…` get ONE colour each, everywhere, forever.
- *
- * `$var` hashes its name into eight buckets because there are arbitrarily many
- * variables and the colour is how you tell two of them apart. There are
- * exactly two of these and they always mean the same thing, so a fixed colour
- * is something learned once rather than decoded each time — and it matches the
- * `loras` / `embeddings` section icons in the suggestion popover, so the thing
- * being inserted and the thing on the page read as the same kind.
- */
-.wp-rt .wp-rt-lora,
-.wp-rt-preview .wp-rt-lora {
-  color: var(--wp-var-6);
-}
-
-.wp-rt .wp-rt-embedding,
-.wp-rt-preview .wp-rt-embedding {
-  color: var(--wp-var-7);
-}

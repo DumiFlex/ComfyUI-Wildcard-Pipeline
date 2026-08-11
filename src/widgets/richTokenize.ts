@@ -464,8 +464,17 @@ const MODEL_SYNTAX_RE = /<lora:[^>]*>?|embedding:[^\s,]+/gi;
 /** Fixed per kind, unlike `$var` which hashes its name into eight buckets.
  *  There are exactly two of these and they mean the same thing every time, so
  *  a stable colour is something you learn once. Matches the popover's own
- *  section icons. */
-function modelSyntaxHtml(text: string): string {
+ *  section icons.
+ *
+ *  Coloured INLINE rather than from a stylesheet, for two reasons that each
+ *  independently decide it. The SPA's `rich-text.css` is not loaded on the
+ *  canvas at all — the canvas has its own `rich-text-canvas.css` carrying a
+ *  "keep in sync" note — so a rule would have to be written twice. And these
+ *  spans are produced through `v-html`, so they never receive the `data-v-*`
+ *  scope attribute that a rule inside a `<style scoped>` block requires,
+ *  which is why the first attempt rendered plain `#ddd` on both hosts. One
+ *  declaration here covers every host and cannot fall out of sync. */
+export function modelSyntaxHtml(text: string): string {
   let out = "";
   let last = 0;
   MODEL_SYNTAX_RE.lastIndex = 0;
@@ -473,7 +482,8 @@ function modelSyntaxHtml(text: string): string {
     out += escapeHtml(text.slice(last, m.index));
     const isLora = m[0][0] === "<";
     const cls = isLora ? "wp-rt-lora" : "wp-rt-embedding";
-    out += `<span class="${cls}">${escapeHtml(m[0])}</span>`;
+    const tone = isLora ? "var(--wp-var-6)" : "var(--wp-var-7)";
+    out += `<span class="${cls}" style="color:${tone}">${escapeHtml(m[0])}</span>`;
     last = m.index + m[0].length;
   }
   return last === 0 ? escapeHtml(text) : out + escapeHtml(text.slice(last));
