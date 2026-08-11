@@ -446,6 +446,10 @@ onMounted(async () => {
       </div>
     </div>
 
+    <!-- Directly under the hero: visible without scrolling, but still not the
+         first thing on the page. See StarPrompt for the placement argument. -->
+    <StarPrompt />
+
     <!-- Stats -->
     <div class="wp-stats" aria-label="Library counts">
       <button
@@ -641,10 +645,6 @@ onMounted(async () => {
         }}
       </p>
     </Card>
-
-    <!-- Below everything the user actually came here for. See StarPrompt for
-         why it is last rather than first. -->
-    <StarPrompt />
   </div>
 </template>
 

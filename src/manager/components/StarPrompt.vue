@@ -10,11 +10,20 @@
  *
  * PLACEMENT AND WEIGHT
  *
- * It renders at the BOTTOM of the dashboard, below the content someone opened
- * the app to use. Above the hero it was the first thing on the page — louder
- * than the product's own welcome, which is the layout of an ad rather than of
- * an aside. The eligibility rule already selects a returning user, so it will
- * be found without being put in the way.
+ * It renders directly UNDER THE HERO — visible without scrolling, but never the
+ * first thing on the page.
+ *
+ * It sat at the bottom of the dashboard first, on the reasoning that a favour
+ * belongs below the content someone opened the app to use. That reasoning was
+ * half right and the result was wrong: it landed below the stats, the quick-create
+ * row AND the full recents list, so it could not be seen at all without
+ * deliberately scrolling to the end of a page nobody scrolls to the end of. An
+ * aside nobody can see is not tactful, it is just absent.
+ *
+ * The concern behind that first placement still holds and still shapes this
+ * one: ABOVE the hero it was louder than the product's own welcome, which is
+ * the layout of an ad. Under the hero keeps the welcome first and the favour
+ * second, which is the order that was actually wanted.
  *
  * It is built from the same `Card` / `Button` / `Icon` primitives as the rest
  * of the manager, in the manager's accent, so it reads as part of the app.

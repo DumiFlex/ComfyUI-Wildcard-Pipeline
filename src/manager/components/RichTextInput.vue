@@ -370,6 +370,24 @@ const modelRows = ref<Partial<Record<ModelKind, ModelSuggestion[]>>>({});
 const refKind = ref<ModelKind | null>(null);
 
 /**
+ * The query the rows currently on screen were actually fetched for.
+ *
+ * The header renders `acQuery`, which updates synchronously on every
+ * keystroke, while the rows arrive from a debounced fetch — so there is a
+ * window where the popover shows the PREVIOUS query's results under the
+ * CURRENT query's header. Caught on video: the field read `lazy` while the
+ * third row was `laser` (from the alias `lazer`), which is not a `lazy` prefix
+ * at all — those were the results for `laz`.
+ *
+ * The rows are deliberately not cleared while the next fetch is in flight;
+ * blanking on every keystroke flickers far worse than briefly-stale content.
+ * Instead the popover says so, which turns an unexplained reflow into an
+ * obvious "still looking".
+ */
+const rowsQuery = ref("");
+const rowsStale = computed(() => acOpen.value && rowsQuery.value !== acQuery.value);
+
+/**
  * One row of the bare-word popover, whatever source it came from.
  *
  * Kept as ONE FLAT ARRAY even though the popover renders sections, because
@@ -517,46 +535,46 @@ function scheduleTagFetch(query: string): void {
   // a slow answer for "blu" must not overwrite a fast one for "blue_ha".
   const seq = ++tagFetchSeq;
   tagFetchTimer = setTimeout(() => {
-    // Each source settles on its own. Awaiting both together would hold the
-    // whole popover at the speed of the slower one, and the model lookup is an
-    // in-process list scan while the tag lookup walks a multi-megabyte index.
-    if (refKind.value === null && sourceOn("tag") && tagListAvailable.value) {
-      void api.tags.suggest(query, 20)
-        .then((res) => {
-          if (seq !== tagFetchSeq) return;
-          tagRows.value = res.tags;
-          acActive.value = 0;
-        })
-        .catch(() => {
-          if (seq !== tagFetchSeq) return;
-          // Silent: an optional convenience must not raise an error toast
-          // while someone is mid-sentence.
-          tagRows.value = [];
-        });
-    } else {
-      tagRows.value = [];
-    }
-
+    /* ONE settle for all sources, not one per source.
+     *
+     * These used to resolve independently, on the reasoning that the popover
+     * should never be held at the speed of the slower one. That optimised for a
+     * latency that does not exist — both endpoints are in-process on localhost —
+     * and paid for it with a visible double reflow on EVERY keystroke: the tag
+     * rows landed and rendered, then the model rows landed, appended their
+     * sections and re-capped the tags, so the list rebuilt twice in a few tens
+     * of milliseconds. That is the flicker.
+     *
+     * `allSettled`, so one source failing still shows the other. A failure is
+     * an empty list for that source and nothing else — an optional convenience
+     * must not raise anything while someone is mid-sentence.
+     */
+    const wantTags = refKind.value === null && sourceOn("tag") && tagListAvailable.value;
     const kinds: ModelKind[] = refKind.value !== null
       ? [refKind.value]
       : [
         ...(sourceOn("lora") ? ["lora" as const] : []),
         ...(sourceOn("embedding") ? ["embedding" as const] : []),
       ];
-    if (kinds.length === 0) {
-      modelRows.value = {};
-      return;
-    }
-    void api.models.suggest(query, kinds, 8, refKind.value !== null)
-      .then((res) => {
-        if (seq !== tagFetchSeq) return;
-        modelRows.value = res.results;
-        acActive.value = 0;
-      })
-      .catch(() => {
-        if (seq !== tagFetchSeq) return;
-        modelRows.value = {};
-      });
+
+    void Promise.allSettled([
+      wantTags ? api.tags.suggest(query, 20) : Promise.resolve(null),
+      kinds.length > 0
+        ? api.models.suggest(query, kinds, 8, refKind.value !== null)
+        : Promise.resolve(null),
+    ]).then(([tagRes, modelRes]) => {
+      // Stale-response guard: a newer keystroke already scheduled its own
+      // fetch, and its answer must not be overwritten by ours arriving late.
+      if (seq !== tagFetchSeq) return;
+      tagRows.value = tagRes.status === "fulfilled" && tagRes.value
+        ? tagRes.value.tags
+        : [];
+      modelRows.value = modelRes.status === "fulfilled" && modelRes.value
+        ? modelRes.value.results
+        : {};
+      rowsQuery.value = query;
+      acActive.value = 0;
+    });
   }, 120);
 }
 const acStart = ref(-1);
@@ -3217,6 +3235,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
         ref="popoverEl"
         class="wp-rt-suggestions"
         :class="[teleportThemeClass(), { 'wp-rt-suggestions--up': popupPos.flipped }]"
+        :data-stale="rowsStale ? '' : null"
         :style="{
           top: popupPos.top + 'px',
           left: popupPos.left + 'px',
@@ -3231,6 +3250,10 @@ function onHostKeydown(ev: KeyboardEvent): void {
                popover, which looks identical and behaves differently. -->
           <span class="wp-rt-suggestions__src">{{ wordSections.map((s) => s.label).join(" · ") }}</span>
           <span class="wp-rt-suggestions__count">{{ wordRows.length }}</span>
+          <!-- Names the one thing the rows cannot: that they are not for what
+               is currently typed. Without it the reflow when results land
+               reads as the list glitching. -->
+          <span v-if="rowsStale" class="wp-rt-suggestions__stale">searching…</span>
           <span class="wp-spacer" />
           <span class="wp-rt-suggestions__hint">↑↓ · Enter · Esc</span>
         </div>
@@ -3830,6 +3853,19 @@ function onHostKeydown(ev: KeyboardEvent): void {
    `scroll-margin-top` for the same reason the tag rows have it: arrow-key
    navigation scrolls a row into view and the sticky query band would otherwise
    park the first row of a section underneath itself. */
+/* Dimmed rather than hidden: the stale rows are still the best guess on screen
+   and blanking them on every keystroke flickers far worse. */
+.wp-rt-suggestions__stale {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--wp-accent-text, #c4b5fd);
+  opacity: 0.85;
+}
+.wp-rt-suggestions[data-stale] .wp-rt-suggestions__item {
+  opacity: 0.55;
+  transition: opacity .12s ease;
+}
+
 .wp-rt-suggestions__section {
   display: flex;
   align-items: center;
