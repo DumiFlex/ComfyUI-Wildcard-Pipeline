@@ -13,6 +13,21 @@ const STORAGE_KEY_MAX_REF_DEPTH = "wp-wildcard-max-ref-depth";
 const STORAGE_KEY_CHECK_ON_LAUNCH = "wp-update-check-on-launch";
 const STORAGE_KEY_KEEP_EMPTY_GROUPS = "wp-keep-empty-tag-groups";
 const STORAGE_KEY_TAG_AUTOCOMPLETE = "wp-tag-autocomplete";
+/* The other completion sources and the separator preference. Spellings are
+ * shared with `manager/utils/tagSetting.ts`, which READS them on the editor's
+ * hot path without going through Pinia — the canvas has no Pinia at all. This
+ * store is the writer; that module is the reader. */
+const STORAGE_KEY_LORA_AUTOCOMPLETE = "wp-lora-autocomplete";
+const STORAGE_KEY_EMBEDDING_AUTOCOMPLETE = "wp-embedding-autocomplete";
+const STORAGE_KEY_AUTOCOMPLETE_SEPARATOR = "wp-autocomplete-separator";
+
+function readStoredFlag(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === "1";
+  } catch {
+    return false;
+  }
+}
 const FLASH_SUPPRESS_MS = 120;
 const DEFAULT_MAX_REF_DEPTH = 8;
 const MIN_MAX_REF_DEPTH = 1;
@@ -113,6 +128,29 @@ export const useUiStore = defineStore("ui", () => {
   const checkOnLaunch = ref<boolean>(readStoredCheckOnLaunch());
   const keepEmptyTagGroups = ref<boolean>(readStoredKeepEmptyGroups());
   const tagAutocomplete = ref<boolean>(readStoredTagAutocomplete());
+  const loraAutocomplete = ref<boolean>(readStoredFlag(STORAGE_KEY_LORA_AUTOCOMPLETE));
+  const embeddingAutocomplete = ref<boolean>(readStoredFlag(STORAGE_KEY_EMBEDDING_AUTOCOMPLETE));
+  const autocompleteSeparator = ref<boolean>(readStoredFlag(STORAGE_KEY_AUTOCOMPLETE_SEPARATOR));
+
+  /** One writer for the three flags that share a shape. */
+  function writeFlag(target: { value: boolean }, key: string, v: boolean): void {
+    target.value = v;
+    try {
+      localStorage.setItem(key, v ? "1" : "0");
+    } catch {
+      /* localStorage unavailable */
+    }
+  }
+
+  function setLoraAutocomplete(v: boolean): void {
+    writeFlag(loraAutocomplete, STORAGE_KEY_LORA_AUTOCOMPLETE, v);
+  }
+  function setEmbeddingAutocomplete(v: boolean): void {
+    writeFlag(embeddingAutocomplete, STORAGE_KEY_EMBEDDING_AUTOCOMPLETE, v);
+  }
+  function setAutocompleteSeparator(v: boolean): void {
+    writeFlag(autocompleteSeparator, STORAGE_KEY_AUTOCOMPLETE_SEPARATOR, v);
+  }
 
   function setTagAutocomplete(v: boolean): void {
     tagAutocomplete.value = v;
@@ -217,6 +255,12 @@ export const useUiStore = defineStore("ui", () => {
     setKeepEmptyTagGroups,
     tagAutocomplete,
     setTagAutocomplete,
+    loraAutocomplete,
+    setLoraAutocomplete,
+    embeddingAutocomplete,
+    setEmbeddingAutocomplete,
+    autocompleteSeparator,
+    setAutocompleteSeparator,
     cycleTheme,
     setThemeMode,
     setDensity,

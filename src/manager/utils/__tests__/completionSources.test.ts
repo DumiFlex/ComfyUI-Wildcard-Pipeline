@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { completionSourceEnabled, enabledCompletionSources } from "../tagSetting";
+import { autocompleteSeparatorEnabled, completionSourceEnabled } from "../tagSetting";
 
 /**
  * Three independently switchable sources, answered per host.
@@ -53,17 +53,16 @@ describe("completion sources", () => {
       expect(completionSourceEnabled("embedding")).toBe(true);
     });
 
-    it("lists enabled sources in display order, tags first", () => {
-      withCanvas({
-        "wildcardPipeline.behavior.embeddingAutocomplete": true,
-        "wildcardPipeline.behavior.tagAutocomplete": true,
-      });
-      expect(enabledCompletionSources()).toEqual(["tag", "embedding"]);
+    it("reads the separator preference from the same host", () => {
+      withCanvas({ "wildcardPipeline.behavior.autocompleteSeparator": true });
+      expect(autocompleteSeparatorEnabled()).toBe(true);
     });
 
-    it("returns nothing when every source is off", () => {
+    it("defaults the separator off", () => {
+      // Wrong inside a `<lora:…>` reference, and wrong for anyone whose
+      // separator is a newline — so opt-in, not opt-out.
       withCanvas({});
-      expect(enabledCompletionSources()).toEqual([]);
+      expect(autocompleteSeparatorEnabled()).toBe(false);
     });
   });
 });

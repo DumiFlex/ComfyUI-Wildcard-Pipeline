@@ -63,7 +63,8 @@ export type BehaviorKey =
   | "bundleMasterOffBehavior"
   | "tagAutocomplete"
   | "loraAutocomplete"
-  | "embeddingAutocomplete";
+  | "embeddingAutocomplete"
+  | "autocompleteSeparator";
 
 export type SettingKey = DisplayKey | A11yKey | BehaviorKey;
 
@@ -78,6 +79,7 @@ const BEHAVIOR_KEYS = new Set<string>([
   "tagAutocomplete",
   "loraAutocomplete",
   "embeddingAutocomplete",
+  "autocompleteSeparator",
 ]);
 
 function settingId(key: SettingKey): string {

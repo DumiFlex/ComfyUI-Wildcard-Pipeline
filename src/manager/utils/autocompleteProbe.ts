@@ -31,6 +31,71 @@ export interface TagWordProbe {
   query: string;
 }
 
+/** A caret sitting inside a model reference the user is part-way through. */
+export interface ModelRefProbe {
+  /** Where the NAME starts — after the marker, so a commit replaces only the
+   *  path and leaves `<lora:` / `embedding:` in place. */
+  start: number;
+  /** The path typed so far. May contain spaces, dots and separators: model
+   *  filenames routinely have all three. */
+  query: string;
+  /** Which source to search. A reference names one kind by construction, so
+   *  offering the other — or offering tags — is offering something that cannot
+   *  be inserted here. */
+  kind: "lora" | "embedding";
+}
+
+/** `<lora:` and `embedding:`, lower-cased for matching. */
+const LORA_OPEN = "<lora:";
+const EMBED_OPEN = "embedding:";
+
+/**
+ * The model reference the caret is inside, if any.
+ *
+ * Takes precedence over {@link probeTagWord}, and exists because that probe
+ * cannot describe a filename. Its word class stops at any character outside
+ * `[a-zA-Z0-9_'-]`, so a caret at the end of
+ * `embedding:style\lazyhand-e12c.safetensors` walked back only as far as the
+ * dot and searched for `safetensors` — matching every model on disk and
+ * nothing the user meant. Real names carry dots, path separators and spaces
+ * (`8.0-sprite pixel art style by skormino`), none of which a character class
+ * can bound.
+ *
+ * So the bound comes from the SYNTAX instead: everything between the marker
+ * and the caret. Unambiguous, and it works for names no character class could
+ * describe.
+ *
+ * Scanning stops at the characters that cannot appear inside a reference — a
+ * comma, a newline, or a closing `>` — so a completed `<lora:x>` earlier in the
+ * prompt cannot claim a caret that is now somewhere else entirely.
+ */
+export function probeModelRef(str: string, caret: number): ModelRefProbe | null {
+  if (caret <= 0 || caret > str.length) return null;
+  const lower = str.slice(0, caret).toLowerCase();
+
+  let markerAt = -1;
+  let kind: "lora" | "embedding" = "lora";
+  const loraAt = lower.lastIndexOf(LORA_OPEN);
+  const embedAt = lower.lastIndexOf(EMBED_OPEN);
+  if (loraAt > embedAt) {
+    markerAt = loraAt;
+    kind = "lora";
+  } else if (embedAt >= 0) {
+    markerAt = embedAt;
+    kind = "embedding";
+  }
+  if (markerAt < 0) return null;
+
+  const start = markerAt + (kind === "lora" ? LORA_OPEN.length : EMBED_OPEN.length);
+  const between = str.slice(start, caret);
+  // Anything that closes or separates means the caret has left the reference.
+  if (/[,\n>]/.test(between)) return null;
+  // A LoRA's weight follows a second colon; a caret past it is editing the
+  // number, not the name.
+  if (kind === "lora" && between.includes(":")) return null;
+  return { start, query: between, kind };
+}
+
 /**
  * The bare word at the caret, for the optional booru-tag autocomplete.
  *

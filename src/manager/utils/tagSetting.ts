@@ -72,17 +72,31 @@ function spaSetting(storageKey: string): boolean {
   }
 }
 
+/** Canvas id and storage key for the "append a separator" preference. Not a
+ *  source, so it sits outside the `KEYS` map rather than pretending to be one. */
+const SEPARATOR_KEYS = {
+  canvas: "wildcardPipeline.behavior.autocompleteSeparator",
+  storage: "wp-autocomplete-separator",
+};
+
+/**
+ * True when a committed completion should be followed by `", "`.
+ *
+ * Off by default. A prompt is usually comma-separated and this saves two
+ * keystrokes per tag, but it is wrong inside a `<lora:…>` reference and wrong
+ * for anyone whose separator is a newline — so it is opt-in rather than a
+ * behaviour everyone has to discover and turn off.
+ */
+export function autocompleteSeparatorEnabled(): boolean {
+  const canvas = canvasSetting(SEPARATOR_KEYS.canvas);
+  return canvas === null ? spaSetting(SEPARATOR_KEYS.storage) : canvas;
+}
+
 /** True when the host this editor runs in has `source` switched on. */
 export function completionSourceEnabled(source: CompletionSource): boolean {
   const keys = KEYS[source];
   const canvas = canvasSetting(keys.canvas);
   return canvas === null ? spaSetting(keys.storage) : canvas;
-}
-
-/** Every source currently switched on, in the order they are shown. Tags lead
- *  because that is what a prompt is mostly made of. */
-export function enabledCompletionSources(): CompletionSource[] {
-  return (["tag", "lora", "embedding"] as const).filter(completionSourceEnabled);
 }
 
 /**

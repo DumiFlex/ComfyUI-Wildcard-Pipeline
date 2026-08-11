@@ -37,11 +37,14 @@ import { useGrowableField } from "../../components/shared/useGrowableField";
 import { rewriteBrokenRef } from "../cascade/remap-ref-rewrite";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
-import { probeAutocomplete, probeTagWord } from "../utils/autocompleteProbe";
+import { probeAutocomplete, probeModelRef, probeTagWord } from "../utils/autocompleteProbe";
 import { api } from "../api/client";
 import type { ModelKind, ModelSuggestion, TagCategoryName, TagSuggestion } from "../api/types";
 import { loadTagAvailability } from "../utils/tagStatus";
-import { completionSourceEnabled as sourceOn } from "../utils/tagSetting";
+import {
+  autocompleteSeparatorEnabled,
+  completionSourceEnabled as sourceOn,
+} from "../utils/tagSetting";
 import { refRows, varRows, type SuggestionRow } from "../utils/suggestion-rows";
 import { varColorClass, varColorIndex } from "../../components/shared/var-color";
 import { CONTEXT_POOLS_KEY, type ContextPoolMap } from "../../extension/context-pools";
@@ -360,6 +363,12 @@ function formatTagCount(n: number): string {
 const tagRows = ref<TagSuggestion[]>([]);
 const modelRows = ref<Partial<Record<ModelKind, ModelSuggestion[]>>>({});
 
+/** Set while the caret sits inside a `<lora:…>` or `embedding:…` reference.
+ *  Restricts the popover to that kind: a reference names one by construction,
+ *  so offering the other — or offering tags — is offering something that
+ *  cannot legally be inserted at that caret. */
+const refKind = ref<ModelKind | null>(null);
+
 /**
  * One row of the bare-word popover, whatever source it came from.
  *
@@ -420,8 +429,25 @@ const SOURCE_ICON: Record<WordRow["source"], string> = {
  *  not its display name: two folders can hold the same filename and ComfyUI
  *  resolves by path, so inserting the short name would silently pick a
  *  different file from the one shown. */
+/**
+ * What follows a committed completion.
+ *
+ * Opt-in `", "`, so the next tag can be typed straight away. Suppressed inside
+ * a `<lora:…>` or `embedding:…` reference: there the caret is mid-syntax and a
+ * comma would terminate the very reference being completed — the LoRA still
+ * needs its `:weight>`.
+ */
+function committedSuffix(): string {
+  if (refKind.value !== null) return "";
+  return autocompleteSeparatorEnabled() ? ", " : "";
+}
+
 function wordRowText(row: WordRow): string {
   if (row.source === "tag") return row.tag.name;
+  // Inside an existing reference the caller already typed the marker, and
+  // `acStart` points at the path — so emitting the whole syntax again would
+  // produce `<lora:<lora:name:1.0>:1.0>`.
+  if (refKind.value !== null) return row.model.path;
   if (row.source === "lora") return `<lora:${row.model.path}:1.0>`;
   return `embedding:${row.model.path}`;
 }
@@ -474,7 +500,7 @@ function scheduleTagFetch(query: string): void {
     // Each source settles on its own. Awaiting both together would hold the
     // whole popover at the speed of the slower one, and the model lookup is an
     // in-process list scan while the tag lookup walks a multi-megabyte index.
-    if (sourceOn("tag") && tagListAvailable.value) {
+    if (refKind.value === null && sourceOn("tag") && tagListAvailable.value) {
       void api.tags.suggest(query, 20)
         .then((res) => {
           if (seq !== tagFetchSeq) return;
@@ -491,9 +517,12 @@ function scheduleTagFetch(query: string): void {
       tagRows.value = [];
     }
 
-    const kinds: ModelKind[] = [];
-    if (sourceOn("lora")) kinds.push("lora");
-    if (sourceOn("embedding")) kinds.push("embedding");
+    const kinds: ModelKind[] = refKind.value !== null
+      ? [refKind.value]
+      : [
+        ...(sourceOn("lora") ? ["lora" as const] : []),
+        ...(sourceOn("embedding") ? ["embedding" as const] : []),
+      ];
     if (kinds.length === 0) {
       modelRows.value = {};
       return;
@@ -1218,6 +1247,23 @@ function refreshAutocompleteFromHost(): void {
     // may be offered. This ordering IS the non-interference guarantee: the
     // sigil probe gets first refusal on every keystroke.
     if (tagAutocompleteEnabled.value) {
+      // A model reference wins over the bare word. The caret inside
+      // `<lora:…>` or after `embedding:` is unambiguously naming ONE kind, and
+      // the bare-word probe cannot even describe what is being typed there —
+      // its word class stops at the first dot, so a full filename searched for
+      // whatever followed the last one.
+      const ref = probeModelRef(rawText, rawCaret);
+      if (ref && sourceOn(ref.kind)) {
+        acOpen.value = true;
+        acStart.value = ref.start;
+        acQuery.value = ref.query;
+        acTrigger.value = "tag";
+        refKind.value = ref.kind;
+        scheduleTagFetch(ref.query);
+        positionPopup();
+        return;
+      }
+      refKind.value = null;
       const word = probeTagWord(rawText, rawCaret);
       if (word && !triggerIsInsideChip(word.start)) {
         acOpen.value = true;
@@ -2888,7 +2934,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
       const row = wordRows.value[acActive.value];
       if (row) {
         ev.preventDefault();
-        insertTagAtCursor(wordRowText(row));
+        insertTagAtCursor(wordRowText(row) + committedSuffix());
         return;
       }
       // Nothing to commit — close and let Enter behave natively rather than
@@ -3193,7 +3239,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
               :data-active="entry.index === acActive ? '' : null"
               role="option"
               :aria-selected="entry.index === acActive"
-              @mousedown.prevent="insertTagAtCursor(wordRowText(entry.row))"
+              @mousedown.prevent="insertTagAtCursor(wordRowText(entry.row) + committedSuffix())"
               @mouseenter="acActive = entry.index"
             >
               <template v-if="entry.row.source !== 'tag'">

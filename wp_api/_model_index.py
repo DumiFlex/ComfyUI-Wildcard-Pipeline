@@ -61,16 +61,24 @@ def search(hits: list[ModelHit], query: str, limit: int) -> list[ModelHit]:
     Ties break on name so the order is stable between calls; an unstable list
     under a moving keyboard selection is how you press Enter on the wrong row.
     """
-    q = query.strip().lower()
+    # Normalise separators on BOTH sides. The client sends whatever the user
+    # typed, and `embedding:style\lazyhand.safetensors` carries a backslash
+    # that would never match a path stored with forward slashes.
+    q = query.strip().lower().replace("\\", "/")
     if not q:
         return []
     prefix: list[ModelHit] = []
     contains: list[ModelHit] = []
     for h in hits:
         low = h.name.lower()
-        if low.startswith(q):
+        path_low = h.path.replace("\\", "/").lower()
+        # A full path typed inside a reference is a PREFIX of the stored path,
+        # not of the bare display name — so `style/lazyhand.safetensors` has to
+        # rank as a prefix hit or a completed reference sorts below unrelated
+        # substring matches.
+        if low.startswith(q) or path_low.startswith(q):
             prefix.append(h)
-        elif q in low or q in h.path.replace("\\", "/").lower():
+        elif q in low or q in path_low:
             contains.append(h)
     prefix.sort(key=lambda h: h.name.lower())
     contains.sort(key=lambda h: h.name.lower())

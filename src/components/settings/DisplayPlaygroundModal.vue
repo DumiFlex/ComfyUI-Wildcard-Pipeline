@@ -81,6 +81,7 @@ const validation = ref<ValidationMode>("strict");
 const tagAutocomplete = ref<boolean>(false);
 const loraAutocomplete = ref<boolean>(false);
 const embeddingAutocomplete = ref<boolean>(false);
+const autocompleteSeparator = ref<boolean>(false);
 const toastLifetime = ref<ToastLifetime>("default");
 const suppressInfoToasts = ref<boolean>(false);
 const newModuleDisabled = ref<boolean>(false);
@@ -109,6 +110,7 @@ function syncFromStore(): void {
   tagAutocomplete.value = getSettingValue("tagAutocomplete") === true;
   loraAutocomplete.value = getSettingValue("loraAutocomplete") === true;
   embeddingAutocomplete.value = getSettingValue("embeddingAutocomplete") === true;
+  autocompleteSeparator.value = getSettingValue("autocompleteSeparator") === true;
   toastLifetime.value = asString(getSettingValue("toastLifetime"), "default") as ToastLifetime;
   suppressInfoToasts.value = asBool(getSettingValue("suppressInfoToasts"), false);
   newModuleDisabled.value = asBool(getSettingValue("newModuleDisabled"), false);
@@ -141,6 +143,7 @@ watch(validation, (v) => applySetting("validation", v));
 watch(tagAutocomplete, (v) => applySetting("tagAutocomplete", v));
 watch(loraAutocomplete, (v) => applySetting("loraAutocomplete", v));
 watch(embeddingAutocomplete, (v) => applySetting("embeddingAutocomplete", v));
+watch(autocompleteSeparator, (v) => applySetting("autocompleteSeparator", v));
 watch(toastLifetime, (v) => applySetting("toastLifetime", v));
 watch(suppressInfoToasts, (v) => applySetting("suppressInfoToasts", v));
 watch(newModuleDisabled, (v) => applySetting("newModuleDisabled", v));
@@ -164,6 +167,7 @@ interface Defaults {
   tagAutocomplete: boolean;
   loraAutocomplete: boolean;
   embeddingAutocomplete: boolean;
+  autocompleteSeparator: boolean;
   toastLifetime: ToastLifetime;
   suppressInfoToasts: boolean;
   newModuleDisabled: boolean;
@@ -188,6 +192,7 @@ const defaults: Defaults = {
   tagAutocomplete: false,
   loraAutocomplete: false,
   embeddingAutocomplete: false,
+  autocompleteSeparator: false,
   toastLifetime: "default",
   suppressInfoToasts: false,
   newModuleDisabled: false,
@@ -403,6 +408,10 @@ onBeforeUnmount(() => {
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Embedding autocomplete</span>
                 <input v-model="embeddingAutocomplete" type="checkbox" class="wp-pg__check">
+              </label>
+              <label class="wp-pg__row">
+                <span class="wp-pg__row-label">Append ", " after a completion</span>
+                <input v-model="autocompleteSeparator" type="checkbox" class="wp-pg__check">
               </label>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Validation strictness</span>

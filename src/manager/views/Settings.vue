@@ -19,6 +19,7 @@ import Button from "../components/ui/Button.vue";
 import BrowserPrefsCard from "../components/settings/BrowserPrefsCard.vue";
 import DatabaseCard from "../components/settings/DatabaseCard.vue";
 import TagAutocompleteCard from "../components/settings/TagAutocompleteCard.vue";
+import ModelSourcesCard from "../components/settings/ModelSourcesCard.vue";
 import { useUiStore, type ThemeMode } from "../stores/uiStore";
 import { useReleaseCheck } from "../composables/useReleaseCheck";
 import { GITHUB_REPO } from "../config/links";
@@ -106,6 +107,7 @@ function setTheme(mode: ThemeMode) {
     </Card>
 
     <TagAutocompleteCard />
+    <ModelSourcesCard />
 
     <Card title="Updates">
       <Field
