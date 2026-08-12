@@ -302,6 +302,113 @@ describe("RichTextInput.vue", () => {
     wrap.unmount();
   });
 
+  it("survives a blur re-parse that drops an atom after the anchors went missing", async () => {
+    // The sibling of the picker-Apply crash: same missing `<template v-for>`
+    // fragment anchors, reached from the plain re-parse path (no `rebuild`).
+    // Shrinking the list unmounts an item's Fragment, and `removeFragment`
+    // would walk off the end exactly as it does on a full re-key.
+    // Here `hostDomIsStale()` DOES fire — the deleted chip drops the atom-node
+    // count below the list length — so the host swap already covers it. This
+    // pins that: the two repairs must not diverge, since only one of them was
+    // ever reachable when the anchors are gone but the elements are intact.
+    const errors: string[] = [];
+    const onErr = (e: ErrorEvent): void => { errors.push(String(e.error ?? e.message)); };
+    window.addEventListener("error", onErr);
+    const ref = "@{aabbccdd#pose}";
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: `a ${ref} b ${ref} c`,
+        surface: "wildcard",
+        uuidToName: new Map([["aabbccdd", "pose"]]),
+      },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host").element as HTMLElement;
+    [...host.childNodes]
+      .filter((n) => n.nodeType === Node.TEXT_NODE && (n as Text).data === "")
+      .forEach((n) => (n as Text).remove());
+    // User deletes the second chip; the surviving atom nodes stay put.
+    const chips = host.querySelectorAll(".wp-refchip");
+    chips[1].remove();
+    await wrap.find(".wp-rt__host").trigger("blur");
+    await flushPromises();
+    window.removeEventListener("error", onErr);
+
+    expect(errors).toEqual([]);
+    expect(wrap.findAll(".wp-refchip")).toHaveLength(1);
+    wrap.unmount();
+  });
+
+  it("survives Ctrl+A Ctrl+X after the anchors went missing", async () => {
+    // Reported on Firefox: select-all + cut inside an option value bricked the
+    // field — text input, Backspace and even Save/Cancel stopped responding —
+    // with `insertBefore: Child to insert before is not a child of this node`.
+    //
+    // `onHostCut` already routes the deletion through `applyAtoms` (2.13.1) so
+    // the browser never removes the spans itself. But the atom list still
+    // SHRINKS from N to 1, and shrinking a keyed list unmounts the surplus
+    // `<template v-for>` Fragments. With the fragment anchors normalised away
+    // by Firefox, that teardown walks off the end of the child list and takes
+    // the whole editor down — the same wound as the ref-picker crash, reached
+    // through a path that never asked for a rebuild.
+    const errors: string[] = [];
+    const onErr = (e: ErrorEvent): void => { errors.push(String(e.error ?? e.message)); };
+    window.addEventListener("error", onErr);
+    const ref = "@{aabbccdd#pose}";
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: `a ${ref} b ${ref} c`,
+        surface: "wildcard",
+        uuidToName: new Map([["aabbccdd", "pose"]]),
+      },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host").element as HTMLElement;
+    [...host.childNodes]
+      .filter((n) => n.nodeType === Node.TEXT_NODE && (n as Text).data === "")
+      .forEach((n) => (n as Text).remove());
+    // Ctrl+A.
+    const sel = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(host);
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    // Ctrl+X.
+    await wrap.find(".wp-rt__host").trigger("cut");
+    await flushPromises();
+    window.removeEventListener("error", onErr);
+
+    expect(errors).toEqual([]);
+    // Emptied, and still a live editor rather than a dead subtree.
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(events[events.length - 1]?.[0]).toBe("");
+    const fresh = wrap.find(".wp-rt__host").element as HTMLElement;
+    expect(fresh.querySelectorAll("[data-atom-index]").length).toBeGreaterThan(0);
+    wrap.unmount();
+  });
+
+  it("does not remount the host for a structural apply while the anchors are intact", async () => {
+    // The other half of the anchor check: it must stay OFF on the browser
+    // where the anchors survive. Settling a chip is a structural apply — it
+    // splits one text atom into text + chip + text — and it happens on nearly
+    // every keystroke that closes a token. Swapping the host there would cost
+    // a caret restore per settle on Chromium for no reason at all.
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "", varSuggestions: [] },
+      attachTo: document.body,
+    });
+    const before = wrap.find(".wp-rt__host").element;
+    const span = (before as HTMLElement).querySelector(".wp-rt__text") as HTMLElement;
+    span.textContent = "$runtimeVar ";
+    await wrap.find(".wp-rt__host").trigger("input", { inputType: "insertText", data: " " });
+    await flushPromises();
+    // The settle landed...
+    expect(wrap.findAll(".wp-refchip--var")).toHaveLength(1);
+    // ...on the very same host element.
+    expect(wrap.find(".wp-rt__host").element).toBe(before);
+    wrap.unmount();
+  });
+
   it("does not remount the host for the normal typing case (orphan text node)", async () => {
     // Guard against over-triggering the stale-DOM repair: browsers routinely
     // insert user-typed characters as raw text nodes directly under the host.
@@ -678,6 +785,61 @@ describe("RichTextInput.vue", () => {
     const events = wrap.emitted("update:modelValue") ?? [];
     expect(events[events.length - 1]?.[0]).toBe("@{aabbccdd#color:warm}");
     expect(document.querySelector('[data-test="subcat-picker"]')).toBeNull();
+    wrap.unmount();
+  });
+
+  it("survives a picker Apply after the browser dropped the v-for fragment anchors", async () => {
+    // Regression (Firefox): `<template v-for>` mounts each atom inside a
+    // Fragment, and a Fragment is delimited in the DOM by two EMPTY text
+    // nodes. Those anchors live inside a contenteditable, and Firefox
+    // normalises empty text nodes away as the user types — Chromium keeps
+    // them, which is why this only ever reproduced on Firefox.
+    //
+    // The picker-Apply path then remounts the atom v-for, and Vue's
+    // `removeFragment` walks `nextSibling` from the start anchor until it
+    // reaches the end anchor. With the end anchor gone the walk runs off the
+    // end of the child list and derefs null: "can't access property
+    // nextSibling, e is null", followed by the unmount cascade that leaves
+    // the editor dead behind the ErrorBoundary.
+    //
+    // `hostDomIsStale()` cannot see this — it counts `[data-atom-index]`
+    // ELEMENTS, and the destroyed nodes are anchors, not atoms.
+    const errors: string[] = [];
+    const onErr = (e: ErrorEvent): void => { errors.push(String(e.error ?? e.message)); };
+    window.addEventListener("error", onErr);
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "hair ",
+        surface: "wildcard",
+        refSuggestions: ["aabbccdd"],
+        uuidToName: new Map([["aabbccdd", "color"]]),
+        uuidToSubCategories: new Map([["aabbccdd", ["warm", "cool"]]]),
+      },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host").element as HTMLElement;
+    // What Firefox does to the host while the user types `@hair`.
+    const anchors = [...host.childNodes].filter(
+      (n) => n.nodeType === Node.TEXT_NODE && (n as Text).data === "",
+    );
+    expect(anchors.length).toBeGreaterThan(0);
+    anchors.forEach((n) => (n as Text).remove());
+
+    await (wrap.vm as unknown as { __triggerAutocompleteForTest: (t: "@" | "$") => Promise<void> })
+      .__triggerAutocompleteForTest("@");
+    await (wrap.vm as unknown as { __applyAutocompleteForTest: (label: string) => Promise<void> })
+      .__applyAutocompleteForTest("aabbccdd");
+    (document.querySelector('[data-test="subcat-chip"][data-value="warm"]') as HTMLElement).click();
+    await flushPromises();
+    (document.querySelector('[data-test="picker-apply"]') as HTMLElement).click();
+    await flushPromises();
+    window.removeEventListener("error", onErr);
+
+    expect(errors).toEqual([]);
+    // And the insert actually landed — the editor is still alive, not a
+    // half-torn subtree.
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(events[events.length - 1]?.[0]).toContain("@{aabbccdd#color:warm}");
     wrap.unmount();
   });
 

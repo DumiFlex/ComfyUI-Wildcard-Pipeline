@@ -296,7 +296,14 @@ export function useGrowableField(
     window.removeEventListener("pointercancel", onPointerUp);
   }
 
+  /** Idempotent: callers re-attach when the element they own is REPLACED
+   *  rather than mutated (RichTextInput swaps its contenteditable host to
+   *  repair a browser-mangled DOM). Without the disconnect the old observer
+   *  would keep watching a detached node and leak, and the hint would go
+   *  permanently stale on the live one. */
   function attach(): void {
+    obs?.disconnect();
+    obs = null;
     const el = getEl();
     if (!el) return;
     lastHeight = el.getBoundingClientRect().height;
