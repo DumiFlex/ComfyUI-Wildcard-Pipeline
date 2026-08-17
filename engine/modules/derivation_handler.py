@@ -19,7 +19,11 @@ from engine.modules import build_resolve_ctx
 from engine.modules._seed import derive_module_rng
 from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
-from engine.syntax.types import deref_var_value, split_var_accessor
+from engine.syntax.types import (
+    deref_var_value,
+    parse_var_reference,
+    split_var_accessor,
+)
 
 _VALID_OPS = {
     "equals", "not_equals", "contains", "matches",
@@ -56,11 +60,42 @@ def _ctx_get_raw(ctx: Any, name: str) -> Any:
     return None
 
 
+def _ctx_axis(ctx: Any, base: str, axis: str, index: int | None) -> str:
+    """Read a rolled axis choice out of `ctx["__wp_axes__"]`.
+
+    Mirrors the resolver's `_resolve_axis` shaping so a condition and a
+    template agree on what `$outfit.SHOES` means. Missing yields "" rather than
+    raising: derivations are control flow, so an unanswerable condition is
+    simply false.
+    """
+    if not isinstance(ctx, dict):
+        return ""
+    entry = (ctx.get("__wp_axes__") or {}).get(base)
+    if isinstance(entry, list):
+        vals = [
+            e.get(axis, "") for e in entry
+            if isinstance(e, dict) and e.get(axis)
+        ]
+        if index is None:
+            return ", ".join(vals)
+        return vals[index] if 0 <= index < len(vals) else ""
+    if isinstance(entry, dict):
+        got = entry.get(axis, "")
+        # A single pick behaves as a one-element list, as everywhere else.
+        if index is not None:
+            return got if index == 0 else ""
+        return got
+    return ""
+
+
 def _ctx_get(ctx: Any, name: str) -> str:
-    """Read `name` as a string, honoring a `.K` list accessor and folding a
-    ListVar to its joined value (SP2a): `$mood.0` splits to base `mood` +
-    index 0. The fold/accessor contract lives in deref_var_value."""
-    base, index = split_var_accessor(name)
+    """Read `name` as a string, honoring a `.K` list accessor, a `.AXIS` read
+    (2026-08 tag axes), and folding a ListVar to its joined value (SP2a):
+    `$mood.0` splits to base `mood` + index 0. The fold/accessor contract lives
+    in deref_var_value; the axis contract in `_ctx_axis`."""
+    base, index, axis = parse_var_reference(name)
+    if axis:
+        return _ctx_axis(ctx, base, axis, index)
     return deref_var_value(_ctx_get_raw(ctx, base), index)
 
 
@@ -76,7 +111,21 @@ def _ctx_has(ctx: Any, name: str) -> bool:
     """
     if ctx is None:
         return False
-    name = split_var_accessor(name)[0]  # SP2a: presence checks the base var
+    base, _index, axis = parse_var_reference(name)
+    if axis:
+        # An axis is present when the binding actually rolled it. Checked
+        # against the axes bucket, not ctx: `$outfit.SHOES` can exist while
+        # `outfit` is unbound, and vice versa.
+        entry = (
+            (ctx.get("__wp_axes__") or {}).get(base)
+            if isinstance(ctx, dict) else None
+        )
+        if isinstance(entry, dict):
+            return axis in entry
+        if isinstance(entry, list):
+            return any(isinstance(e, dict) and axis in e for e in entry)
+        return False
+    name = base  # SP2a: presence checks the base var
     # Engine ctx is a dict in tests + at runtime; check `__contains__`
     # before falling back to a getter probe so we get the cheap path.
     try:
