@@ -11,8 +11,11 @@ CORPUS = json.loads(_CORPUS_PATH.read_text())
 
 @pytest.mark.parametrize("case", CORPUS["cases"], ids=lambda c: c["name"])
 def test_corpus(case):
+    # `source_axis_kinds` is absent on every pre-axis case, and absence must
+    # reproduce the old fold exactly — that is what makes the feature additive.
     got = combine_constraint_factor(
-        case["picks"], case["option"], case["matrix"], case["exceptions"])
+        case["picks"], case["option"], case["matrix"], case["exceptions"],
+        axis_kinds=case.get("source_axis_kinds"))
     if case["expect"] == "EXCLUDE":
         assert got is EXCLUDE
     else:
