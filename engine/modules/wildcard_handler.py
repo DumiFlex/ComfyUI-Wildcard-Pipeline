@@ -107,7 +107,7 @@ def _apply_constraint_to_options(
         combine fn treats as a no-op.
     These are diagnostic only; they never change the computed weight.
     """
-    from engine.modules._constraint_math import EXCLUDE, combine_constraint_factor
+    from engine.modules._constraint_math import combine_constraint_factor
 
     matrix = constraint.get("matrix") or {}
     exceptions = constraint.get("exceptions") or []
@@ -135,8 +135,11 @@ def _apply_constraint_to_options(
     for opt in options:
         option = {"value": opt.get("value", ""), "tags": opt.get("sub_categories") or []}
         f = combine_constraint_factor(picks, option, matrix, exceptions)
+        # `isinstance(f, float)` rather than `f is not EXCLUDE`: identity
+        # against a sentinel does not narrow the union, so the multiply below
+        # was unprovable. Same test, and the type checker can follow it.
         weight = float(opt.get("weight", 1))
-        weight = 0.0 if f is EXCLUDE else max(0.0, weight * float(f))
+        weight = max(0.0, weight * f) if isinstance(f, float) else 0.0
         adjusted.append({**opt, "weight": weight})
     return adjusted
 
@@ -420,6 +423,38 @@ class WildcardHandler(ModuleHandler):
                             f"more than one group"
                         )
                     seen_grouped.add(mem)
+
+        # Group KIND (2026-08 tag axes). Additive: absence means every group
+        # is `classify`, which is exactly today's behaviour, so no stored
+        # payload changes meaning. `accepts` marks the group's tags as
+        # alternatives the option offers — an OR-set the constraint fold reads
+        # with max, and which `$var.AXIS` rolls one winner from.
+        kinds = payload.get("tag_group_kinds")
+        if kinds is not None:
+            if not isinstance(kinds, dict):
+                raise ValueError(
+                    "wildcard payload.tag_group_kinds must be an object"
+                )
+            declared = tag_groups if isinstance(tag_groups, dict) else {}
+            for gname, kind in kinds.items():
+                if gname not in declared:
+                    raise ValueError(
+                        f"wildcard payload.tag_group_kinds[{gname!r}]: "
+                        f"not a declared tag group"
+                    )
+                if kind not in ("classify", "accepts"):
+                    raise ValueError(
+                        f"wildcard payload.tag_group_kinds[{gname!r}] must be "
+                        f"'classify' or 'accepts' (got {kind!r})"
+                    )
+                # Only an `accepts` axis is addressable as `$var.AXIS`, so only
+                # it has to survive the accessor grammar. A `classify` group
+                # keeps whatever name it has today.
+                if kind == "accepts" and not _IDENT_RE.match(gname):
+                    raise ValueError(
+                        f"wildcard payload.tag_group_kinds[{gname!r}]: an "
+                        f"'accepts' group name must be a valid identifier"
+                    )
 
         seen_ids: set[str] = set()
         null_count = 0
