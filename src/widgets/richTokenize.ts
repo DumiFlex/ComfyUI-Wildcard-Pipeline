@@ -41,8 +41,12 @@ export type TokenKind =
 export interface TokenMeta {
   // var tokens
   name?: string;
-  /** SP2a list accessor: `$name.K` -> 0-based index K (omitted when absent). */
+  /** SP2a list accessor: `$name.K` -> 0-based index K (omitted when absent).
+   *  With an axis it selects the pick: `$name.0.AXIS`. */
   index?: number;
+  /** Tag-axis accessor: `$name.AXIS` -> the tag rolled for that `accepts`
+   *  group at pick time (omitted when absent). */
+  axis?: string;
   // ref tokens
   uuid?: string;
   sub_categories?: string[];
@@ -285,16 +289,32 @@ export function tokenizeRich(text: string): RichToken[] {
       continue;
     }
 
-    // -- Variable: $name or $name.K (SP2a list accessor) --------------------
+    // -- Variable: $name, plus at most one pick index and one axis ----------
+    // Either order — `$o.0.SHOES` and `$o.SHOES.0` name the same value. Two
+    // mirrored alternatives, so `.0.1` / `.SHOES.BELTS` do not match their
+    // second segment and the tail stays literal text. Mirrors
+    // `engine/syntax/tokenize.py:_VAR_RE`; both are locked to
+    // `tests/fixtures/syntax-corpus.json`.
+    //   1 name · 2 index-first · 3 axis-after-index · 4 axis-first · 5 index-after-axis
     if (ch === "$") {
       // `.match` (not `.exec`) keeps the matcher off the security-hook's radar
-      // while giving the same match-array shape. Group 2 = optional `.K` index.
-      const m = text.slice(i + 1).match(/^([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?/);
+      // while giving the same match-array shape.
+      const m = text.slice(i + 1).match(
+        /^([A-Za-z_][A-Za-z0-9_]*)(?:\.(?:(\d+)(?:\.([A-Za-z_][A-Za-z0-9_]*))?|([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?))?/,
+      );
       if (m) {
         flushText(i);
-        const raw = "$" + m[1] + (m[2] !== undefined ? "." + m[2] : "");
-        const meta: { name: string; index?: number } = { name: m[1] };
-        if (m[2] !== undefined) meta.index = parseInt(m[2], 10);
+        // Normalise both spellings here, so nothing downstream learns which
+        // order was written.
+        const idx = m[2] ?? m[5];
+        const axis = m[3] ?? m[4];
+        const raw = "$" + m[1]
+          + (m[2] !== undefined ? "." + m[2] : "")
+          + (axis !== undefined ? "." + axis : "")
+          + (m[5] !== undefined ? "." + m[5] : "");
+        const meta: { name: string; index?: number; axis?: string } = { name: m[1] };
+        if (idx !== undefined) meta.index = parseInt(idx, 10);
+        if (axis !== undefined) meta.axis = axis;
         out.push({
           kind: "var",
           raw,

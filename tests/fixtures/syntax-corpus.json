@@ -6,38 +6,93 @@
       "name": "var_accessor_index",
       "input": "$colors.0",
       "expected_tokens": [
-        {"kind": "var", "raw": "$colors.0", "start": 0, "end": 9, "meta": {"name": "colors", "index": 0}}
+        {
+          "kind": "var",
+          "raw": "$colors.0",
+          "start": 0,
+          "end": 9,
+          "meta": {
+            "name": "colors",
+            "index": 0
+          }
+        }
       ]
     },
     {
       "name": "var_accessor_multidigit",
       "input": "$x.123",
       "expected_tokens": [
-        {"kind": "var", "raw": "$x.123", "start": 0, "end": 6, "meta": {"name": "x", "index": 123}}
+        {
+          "kind": "var",
+          "raw": "$x.123",
+          "start": 0,
+          "end": 6,
+          "meta": {
+            "name": "x",
+            "index": 123
+          }
+        }
       ]
     },
     {
       "name": "var_lone_dot_is_text",
       "input": "$x.",
       "expected_tokens": [
-        {"kind": "var", "raw": "$x", "start": 0, "end": 2, "meta": {"name": "x"}},
-        {"kind": "text", "raw": ".", "start": 2, "end": 3, "meta": {}}
+        {
+          "kind": "var",
+          "raw": "$x",
+          "start": 0,
+          "end": 2,
+          "meta": {
+            "name": "x"
+          }
+        },
+        {
+          "kind": "text",
+          "raw": ".",
+          "start": 2,
+          "end": 3,
+          "meta": {}
+        }
       ]
     },
     {
-      "name": "var_nondigit_accessor_is_text",
+      "name": "var_axis_accessor",
       "input": "$x.y",
       "expected_tokens": [
-        {"kind": "var", "raw": "$x", "start": 0, "end": 2, "meta": {"name": "x"}},
-        {"kind": "text", "raw": ".y", "start": 2, "end": 4, "meta": {}}
+        {
+          "kind": "var",
+          "raw": "$x.y",
+          "start": 0,
+          "end": 4,
+          "meta": {
+            "name": "x",
+            "axis": "y"
+          }
+        }
       ]
     },
     {
       "name": "var_double_accessor_first_only",
       "input": "$x.0.1",
       "expected_tokens": [
-        {"kind": "var", "raw": "$x.0", "start": 0, "end": 4, "meta": {"name": "x", "index": 0}},
-        {"kind": "text", "raw": ".1", "start": 4, "end": 6, "meta": {}}
+        {
+          "kind": "var",
+          "raw": "$x.0",
+          "start": 0,
+          "end": 4,
+          "meta": {
+            "name": "x",
+            "index": 0
+          }
+        },
+        {
+          "kind": "text",
+          "raw": ".1",
+          "start": 4,
+          "end": 6,
+          "meta": {}
+        }
       ]
     },
     {
@@ -56,7 +111,13 @@
       "name": "plain_literal_text",
       "input": "hello world",
       "expected_tokens": [
-        {"kind": "text", "raw": "hello world", "start": 0, "end": 11, "meta": {}}
+        {
+          "kind": "text",
+          "raw": "hello world",
+          "start": 0,
+          "end": 11,
+          "meta": {}
+        }
       ],
       "expected_resolution": {
         "seed": 42,
@@ -70,9 +131,29 @@
       "name": "escape_dollar",
       "input": "price: $$5",
       "expected_tokens": [
-        {"kind": "text", "raw": "price: ", "start": 0, "end": 7, "meta": {}},
-        {"kind": "escape", "raw": "$$", "start": 7, "end": 9, "meta": {"literal": "$"}},
-        {"kind": "text", "raw": "5", "start": 9, "end": 10, "meta": {}}
+        {
+          "kind": "text",
+          "raw": "price: ",
+          "start": 0,
+          "end": 7,
+          "meta": {}
+        },
+        {
+          "kind": "escape",
+          "raw": "$$",
+          "start": 7,
+          "end": 9,
+          "meta": {
+            "literal": "$"
+          }
+        },
+        {
+          "kind": "text",
+          "raw": "5",
+          "start": 9,
+          "end": 10,
+          "meta": {}
+        }
       ],
       "expected_resolution": {
         "seed": 42,
@@ -86,9 +167,29 @@
       "name": "escape_at",
       "input": "user@@example",
       "expected_tokens": [
-        {"kind": "text", "raw": "user", "start": 0, "end": 4, "meta": {}},
-        {"kind": "escape", "raw": "@@", "start": 4, "end": 6, "meta": {"literal": "@"}},
-        {"kind": "text", "raw": "example", "start": 6, "end": 13, "meta": {}}
+        {
+          "kind": "text",
+          "raw": "user",
+          "start": 0,
+          "end": 4,
+          "meta": {}
+        },
+        {
+          "kind": "escape",
+          "raw": "@@",
+          "start": 4,
+          "end": 6,
+          "meta": {
+            "literal": "@"
+          }
+        },
+        {
+          "kind": "text",
+          "raw": "example",
+          "start": 6,
+          "end": 13,
+          "meta": {}
+        }
       ],
       "expected_resolution": {
         "seed": 42,
@@ -102,11 +203,21 @@
       "name": "single_var",
       "input": "$style",
       "expected_tokens": [
-        {"kind": "var", "raw": "$style", "start": 0, "end": 6, "meta": {"name": "style"}}
+        {
+          "kind": "var",
+          "raw": "$style",
+          "start": 0,
+          "end": 6,
+          "meta": {
+            "name": "style"
+          }
+        }
       ],
       "expected_resolution": {
         "seed": 42,
-        "ctx_vars": {"style": "gothic"},
+        "ctx_vars": {
+          "style": "gothic"
+        },
         "catalog": [],
         "surface": "combine",
         "output": "gothic"
@@ -116,13 +227,35 @@
       "name": "var_in_text",
       "input": "a $color cat",
       "expected_tokens": [
-        {"kind": "text", "raw": "a ", "start": 0, "end": 2, "meta": {}},
-        {"kind": "var", "raw": "$color", "start": 2, "end": 8, "meta": {"name": "color"}},
-        {"kind": "text", "raw": " cat", "start": 8, "end": 12, "meta": {}}
+        {
+          "kind": "text",
+          "raw": "a ",
+          "start": 0,
+          "end": 2,
+          "meta": {}
+        },
+        {
+          "kind": "var",
+          "raw": "$color",
+          "start": 2,
+          "end": 8,
+          "meta": {
+            "name": "color"
+          }
+        },
+        {
+          "kind": "text",
+          "raw": " cat",
+          "start": 8,
+          "end": 12,
+          "meta": {}
+        }
       ],
       "expected_resolution": {
         "seed": 42,
-        "ctx_vars": {"color": "red"},
+        "ctx_vars": {
+          "color": "red"
+        },
         "catalog": [],
         "surface": "combine",
         "output": "a red cat"
@@ -132,14 +265,28 @@
       "name": "var_with_underscore_and_digits",
       "input": "$hair_color_2",
       "expected_tokens": [
-        {"kind": "var", "raw": "$hair_color_2", "start": 0, "end": 13, "meta": {"name": "hair_color_2"}}
+        {
+          "kind": "var",
+          "raw": "$hair_color_2",
+          "start": 0,
+          "end": 13,
+          "meta": {
+            "name": "hair_color_2"
+          }
+        }
       ]
     },
     {
       "name": "lone_dollar_is_literal_text",
       "input": "cost: $",
       "expected_tokens": [
-        {"kind": "text", "raw": "cost: $", "start": 0, "end": 7, "meta": {}}
+        {
+          "kind": "text",
+          "raw": "cost: $",
+          "start": 0,
+          "end": 7,
+          "meta": {}
+        }
       ],
       "expected_resolution": {
         "seed": 42,
@@ -153,7 +300,13 @@
       "name": "dollar_followed_by_non_ident_is_literal_text",
       "input": "$ space",
       "expected_tokens": [
-        {"kind": "text", "raw": "$ space", "start": 0, "end": 7, "meta": {}}
+        {
+          "kind": "text",
+          "raw": "$ space",
+          "start": 0,
+          "end": 7,
+          "meta": {}
+        }
       ],
       "expected_resolution": {
         "seed": 42,
@@ -167,23 +320,57 @@
       "name": "single_ref",
       "input": "@{a4f7b2e1}",
       "expected_tokens": [
-        {"kind": "ref", "raw": "@{a4f7b2e1}", "start": 0, "end": 11, "meta": {"uuid": "a4f7b2e1"}}
+        {
+          "kind": "ref",
+          "raw": "@{a4f7b2e1}",
+          "start": 0,
+          "end": 11,
+          "meta": {
+            "uuid": "a4f7b2e1"
+          }
+        }
       ]
     },
     {
       "name": "ref_in_text",
       "input": "x @{deadbeef} y",
       "expected_tokens": [
-        {"kind": "text", "raw": "x ", "start": 0, "end": 2, "meta": {}},
-        {"kind": "ref", "raw": "@{deadbeef}", "start": 2, "end": 13, "meta": {"uuid": "deadbeef"}},
-        {"kind": "text", "raw": " y", "start": 13, "end": 15, "meta": {}}
+        {
+          "kind": "text",
+          "raw": "x ",
+          "start": 0,
+          "end": 2,
+          "meta": {}
+        },
+        {
+          "kind": "ref",
+          "raw": "@{deadbeef}",
+          "start": 2,
+          "end": 13,
+          "meta": {
+            "uuid": "deadbeef"
+          }
+        },
+        {
+          "kind": "text",
+          "raw": " y",
+          "start": 13,
+          "end": 15,
+          "meta": {}
+        }
       ]
     },
     {
       "name": "at_without_braces_is_literal",
       "input": "email@host",
       "expected_tokens": [
-        {"kind": "text", "raw": "email@host", "start": 0, "end": 10, "meta": {}}
+        {
+          "kind": "text",
+          "raw": "email@host",
+          "start": 0,
+          "end": 10,
+          "meta": {}
+        }
       ],
       "expected_resolution": {
         "seed": 42,
@@ -197,7 +384,13 @@
       "name": "at_brace_non_hex_is_literal",
       "input": "@{not_uuid}",
       "expected_tokens": [
-        {"kind": "text", "raw": "@{not_uuid}", "start": 0, "end": 11, "meta": {}}
+        {
+          "kind": "text",
+          "raw": "@{not_uuid}",
+          "start": 0,
+          "end": 11,
+          "meta": {}
+        }
       ],
       "expected_resolution": {
         "seed": 42,
@@ -211,7 +404,13 @@
       "name": "at_brace_wrong_length_is_literal",
       "input": "@{abc} short",
       "expected_tokens": [
-        {"kind": "text", "raw": "@{abc} short", "start": 0, "end": 12, "meta": {}}
+        {
+          "kind": "text",
+          "raw": "@{abc} short",
+          "start": 0,
+          "end": 12,
+          "meta": {}
+        }
       ],
       "expected_resolution": {
         "seed": 42,
@@ -225,73 +424,196 @@
       "name": "inline_pick_simple",
       "input": "{red|blue|green}",
       "expected_tokens": [
-        {"kind": "dp_brace", "raw": "{red|blue|green}", "start": 0, "end": 16,
-         "meta": {"branches": ["red", "blue", "green"]}}
+        {
+          "kind": "dp_brace",
+          "raw": "{red|blue|green}",
+          "start": 0,
+          "end": 16,
+          "meta": {
+            "branches": [
+              "red",
+              "blue",
+              "green"
+            ]
+          }
+        }
       ]
     },
     {
       "name": "inline_pick_in_text",
       "input": "a {red|blue} cat",
       "expected_tokens": [
-        {"kind": "text", "raw": "a ", "start": 0, "end": 2, "meta": {}},
-        {"kind": "dp_brace", "raw": "{red|blue}", "start": 2, "end": 12,
-         "meta": {"branches": ["red", "blue"]}},
-        {"kind": "text", "raw": " cat", "start": 12, "end": 16, "meta": {}}
+        {
+          "kind": "text",
+          "raw": "a ",
+          "start": 0,
+          "end": 2,
+          "meta": {}
+        },
+        {
+          "kind": "dp_brace",
+          "raw": "{red|blue}",
+          "start": 2,
+          "end": 12,
+          "meta": {
+            "branches": [
+              "red",
+              "blue"
+            ]
+          }
+        },
+        {
+          "kind": "text",
+          "raw": " cat",
+          "start": 12,
+          "end": 16,
+          "meta": {}
+        }
       ]
     },
     {
       "name": "inline_pick_with_empty_branch",
       "input": "{a||c}",
       "expected_tokens": [
-        {"kind": "dp_brace", "raw": "{a||c}", "start": 0, "end": 6,
-         "meta": {"branches": ["a", "", "c"]}}
+        {
+          "kind": "dp_brace",
+          "raw": "{a||c}",
+          "start": 0,
+          "end": 6,
+          "meta": {
+            "branches": [
+              "a",
+              "",
+              "c"
+            ]
+          }
+        }
       ]
     },
     {
       "name": "inline_pick_nested",
       "input": "{a|{b|c}|d}",
       "expected_tokens": [
-        {"kind": "dp_brace", "raw": "{a|{b|c}|d}", "start": 0, "end": 11,
-         "meta": {"branches": ["a", "{b|c}", "d"]}}
+        {
+          "kind": "dp_brace",
+          "raw": "{a|{b|c}|d}",
+          "start": 0,
+          "end": 11,
+          "meta": {
+            "branches": [
+              "a",
+              "{b|c}",
+              "d"
+            ]
+          }
+        }
       ]
     },
     {
       "name": "multi_pick_simple",
       "input": "{2$$, $$red|blue|green}",
       "expected_tokens": [
-        {"kind": "dp_multi", "raw": "{2$$, $$red|blue|green}", "start": 0, "end": 23,
-         "meta": {"min": 2, "max": 2, "independent": false, "count": 2, "sep": ", ", "branches": ["red", "blue", "green"]}}
+        {
+          "kind": "dp_multi",
+          "raw": "{2$$, $$red|blue|green}",
+          "start": 0,
+          "end": 23,
+          "meta": {
+            "min": 2,
+            "max": 2,
+            "independent": false,
+            "count": 2,
+            "sep": ", ",
+            "branches": [
+              "red",
+              "blue",
+              "green"
+            ]
+          }
+        }
       ]
     },
     {
       "name": "multi_pick_empty_sep",
       "input": "{3$$$$a|b|c}",
       "expected_tokens": [
-        {"kind": "dp_multi", "raw": "{3$$$$a|b|c}", "start": 0, "end": 12,
-         "meta": {"min": 3, "max": 3, "independent": false, "count": 3, "sep": "", "branches": ["a", "b", "c"]}}
+        {
+          "kind": "dp_multi",
+          "raw": "{3$$$$a|b|c}",
+          "start": 0,
+          "end": 12,
+          "meta": {
+            "min": 3,
+            "max": 3,
+            "independent": false,
+            "count": 3,
+            "sep": "",
+            "branches": [
+              "a",
+              "b",
+              "c"
+            ]
+          }
+        }
       ]
     },
     {
       "name": "multi_pick_range_independent",
       "input": "{2-4~$$, $$a|b|c}",
       "expected_tokens": [
-        {"kind": "dp_multi", "raw": "{2-4~$$, $$a|b|c}", "start": 0, "end": 17,
-         "meta": {"min": 2, "max": 4, "independent": true, "count": 4, "sep": ", ", "branches": ["a", "b", "c"]}}
+        {
+          "kind": "dp_multi",
+          "raw": "{2-4~$$, $$a|b|c}",
+          "start": 0,
+          "end": 17,
+          "meta": {
+            "min": 2,
+            "max": 4,
+            "independent": true,
+            "count": 4,
+            "sep": ", ",
+            "branches": [
+              "a",
+              "b",
+              "c"
+            ]
+          }
+        }
       ]
     },
     {
       "name": "multi_pick_lone_ref",
       "input": "{3$$, $$@{aabbccdd}}",
       "expected_tokens": [
-        {"kind": "dp_multi", "raw": "{3$$, $$@{aabbccdd}}", "start": 0, "end": 20,
-         "meta": {"min": 3, "max": 3, "independent": false, "count": 3, "sep": ", ", "branches": ["@{aabbccdd}"]}}
+        {
+          "kind": "dp_multi",
+          "raw": "{3$$, $$@{aabbccdd}}",
+          "start": 0,
+          "end": 20,
+          "meta": {
+            "min": 3,
+            "max": 3,
+            "independent": false,
+            "count": 3,
+            "sep": ", ",
+            "branches": [
+              "@{aabbccdd}"
+            ]
+          }
+        }
       ]
     },
     {
       "name": "unclosed_brace_is_literal_text",
       "input": "{a|b incomplete",
       "expected_tokens": [
-        {"kind": "text", "raw": "{a|b incomplete", "start": 0, "end": 15, "meta": {}}
+        {
+          "kind": "text",
+          "raw": "{a|b incomplete",
+          "start": 0,
+          "end": 15,
+          "meta": {}
+        }
       ],
       "expected_resolution": {
         "seed": 42,
@@ -305,7 +627,13 @@
       "name": "single_branch_no_pipe_is_literal",
       "input": "{just_one}",
       "expected_tokens": [
-        {"kind": "text", "raw": "{just_one}", "start": 0, "end": 10, "meta": {}}
+        {
+          "kind": "text",
+          "raw": "{just_one}",
+          "start": 0,
+          "end": 10,
+          "meta": {}
+        }
       ],
       "expected_resolution": {
         "seed": 42,
@@ -314,6 +642,86 @@
         "surface": "wildcard",
         "output": "{just_one}"
       }
+    },
+    {
+      "name": "var_index_then_axis",
+      "input": "$x.0.y",
+      "expected_tokens": [
+        {
+          "kind": "var",
+          "raw": "$x.0.y",
+          "start": 0,
+          "end": 6,
+          "meta": {
+            "name": "x",
+            "index": 0,
+            "axis": "y"
+          }
+        }
+      ]
+    },
+    {
+      "name": "var_axis_then_index",
+      "input": "$x.y.0",
+      "expected_tokens": [
+        {
+          "kind": "var",
+          "raw": "$x.y.0",
+          "start": 0,
+          "end": 6,
+          "meta": {
+            "name": "x",
+            "axis": "y",
+            "index": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "var_two_indices_tail_is_text",
+      "input": "$x.0.1",
+      "expected_tokens": [
+        {
+          "kind": "var",
+          "raw": "$x.0",
+          "start": 0,
+          "end": 4,
+          "meta": {
+            "name": "x",
+            "index": 0
+          }
+        },
+        {
+          "kind": "text",
+          "raw": ".1",
+          "start": 4,
+          "end": 6,
+          "meta": {}
+        }
+      ]
+    },
+    {
+      "name": "var_two_axes_tail_is_text",
+      "input": "$x.y.z",
+      "expected_tokens": [
+        {
+          "kind": "var",
+          "raw": "$x.y",
+          "start": 0,
+          "end": 4,
+          "meta": {
+            "name": "x",
+            "axis": "y"
+          }
+        },
+        {
+          "kind": "text",
+          "raw": ".z",
+          "start": 4,
+          "end": 6,
+          "meta": {}
+        }
+      ]
     }
   ]
 }
