@@ -146,6 +146,101 @@ def test_no_accepts_group_means_no_axes_bucket_entry():
     assert ctx["__wp_picks__"]["abc12345"]["picks"][0]["axes"] == {}
 
 
+# ── the reported failure, end to end ────────────────────────────────────
+
+
+def _shoe_options(shoes):
+    return [{"id": s, "value": s, "weight": 1, "sub_categories": [s]} for s in shoes]
+
+
+def _diagonal(shoes, sources=None):
+    """A 'same tag wins, everything else is out' matrix — the obvious rule a
+    user writes when linking two wildcards."""
+    return {
+        src: {tgt: {"mode": "allow" if src == tgt else "exclude"} for tgt in shoes}
+        for src in (sources or shoes)
+    }
+
+
+def test_reported_case_narrows_to_the_option_menu():
+    """The bug this feature exists for: an option tagged with three shoe tags
+    used to zero every target and fall through to options[0] forever."""
+    from engine.modules.wildcard_handler import _apply_constraint_to_options
+
+    menu = ["sneakers", "high_heels", "sandals"]
+    source_pick = {
+        "value": "white t-shirt, denim skirt",
+        "sub_categories": ["casual", *menu],
+        "picks": [{
+            "value": "white t-shirt, denim skirt",
+            "tags": ["casual", *menu],
+            "axes": {"SHOES": menu},
+        }],
+    }
+    shoes = ["sneakers", "boots", "high_heels", "stiletto_heels", "sandals", "oxfords"]
+    out = _apply_constraint_to_options(
+        _shoe_options(shoes),
+        {"matrix": _diagonal(shoes, sources=menu), "exceptions": []},
+        source_pick,
+    )
+    assert {o["id"] for o in out if o["weight"] > 0} == set(menu)
+
+
+def _two_pick_source(menu_a, menu_b):
+    return {
+        "value": "tee, jacket",
+        "picks": [
+            {"value": "tee", "tags": list(menu_a), "axes": {"SHOES": list(menu_a)}},
+            {"value": "jacket", "tags": list(menu_b), "axes": {"SHOES": list(menu_b)}},
+        ],
+    }
+
+
+def test_multi_pick_menus_intersect():
+    """Spec 5.5: worn together, garments each veto shoes they disagree with.
+    A union would pair a ball gown with sneakers because one garment allowed
+    it."""
+    from engine.modules.wildcard_handler import _apply_constraint_to_options
+
+    shoes = ["sneakers", "boots", "high_heels", "sandals"]
+    out = _apply_constraint_to_options(
+        _shoe_options(shoes),
+        {"matrix": _diagonal(shoes), "exceptions": []},
+        _two_pick_source(["sneakers", "high_heels", "sandals"], ["sneakers", "boots"]),
+    )
+    assert {o["id"] for o in out if o["weight"] > 0} == {"sneakers"}
+
+
+def test_disjoint_menus_empty_the_pool():
+    """Documented consequence of intersecting: garments sharing no shoe leave
+    nothing. Visible via constraint_excludes_all_options; the options[0]
+    fallback itself is a separate follow-up, not this branch."""
+    from engine.modules.wildcard_handler import _apply_constraint_to_options
+
+    shoes = ["sneakers", "stiletto_heels"]
+    out = _apply_constraint_to_options(
+        _shoe_options(shoes),
+        {"matrix": _diagonal(shoes), "exceptions": []},
+        _two_pick_source(["sneakers"], ["stiletto_heels"]),
+    )
+    assert all(o["weight"] == 0 for o in out)
+
+
+def test_source_without_axes_still_folds_as_before():
+    """The regression lock: no `axes` on the pick means the flat product, so
+    the old all-excluded outcome is preserved for legacy records."""
+    from engine.modules.wildcard_handler import _apply_constraint_to_options
+
+    menu = ["sneakers", "high_heels", "sandals"]
+    shoes = ["sneakers", "boots", "high_heels", "sandals"]
+    out = _apply_constraint_to_options(
+        _shoe_options(shoes),
+        {"matrix": _diagonal(shoes, sources=menu), "exceptions": []},
+        {"value": "tee", "picks": [{"value": "tee", "tags": menu}]},
+    )
+    assert all(o["weight"] == 0 for o in out)
+
+
 def test_multi_pick_rolls_one_axis_per_pick():
     payload = _payload(
         options=[

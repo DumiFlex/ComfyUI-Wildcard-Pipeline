@@ -131,10 +131,21 @@ def _apply_constraint_to_options(
             picks, options, matrix, exceptions, adjustment_warnings,
         )
 
+    # A pick only carries an `axes` entry when the source declared that group
+    # `accepts` (see `_axis_menus`), so the pick record IS the kind map. This
+    # keeps `combine_constraint_factor` pure — it never looks up a payload —
+    # and a legacy pick with no `axes` yields an empty map, which takes the
+    # unchanged flat-product path.
+    axis_kinds = {
+        axis: "accepts"
+        for p in picks
+        for axis in (p.get("axes") or {})
+    }
+
     adjusted: list[dict[str, Any]] = []
     for opt in options:
         option = {"value": opt.get("value", ""), "tags": opt.get("sub_categories") or []}
-        f = combine_constraint_factor(picks, option, matrix, exceptions)
+        f = combine_constraint_factor(picks, option, matrix, exceptions, axis_kinds)
         # `isinstance(f, float)` rather than `f is not EXCLUDE`: identity
         # against a sentinel does not narrow the union, so the multiply below
         # was unprovable. Same test, and the type checker can follow it.
