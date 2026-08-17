@@ -1562,3 +1562,88 @@ describe("scanConflicts — combine @{} templates are an intentional non-gap", (
     expect(scanConflicts(value, [])).toEqual([]);
   });
 });
+
+/** A wildcard writing `binding`, optionally declaring `accepts` axes. */
+const wc = (
+  id: string,
+  binding: string,
+  kinds: Record<string, string> = {},
+): ContextWidgetValue["modules"][number] => ({
+  id, type: "wildcard", enabled: true, meta: { name: "" }, entries: [],
+  payload: {
+    var_binding: binding,
+    sub_categories: ["sneakers"],
+    tag_groups: { SHOES: ["sneakers"] },
+    ...(Object.keys(kinds).length > 0 ? { tag_group_kinds: kinds } : {}),
+    options: [{ id: "o1", value: "tee", weight: 1, sub_categories: ["sneakers"] }],
+  },
+} as ContextWidgetValue["modules"][number]);
+
+/** A combine reading `template`. */
+const cmb = (id: string, template: string): ContextWidgetValue["modules"][number] => ({
+  id, type: "combine", enabled: true, meta: { name: "" }, entries: [],
+  payload: { template, output_var: "out" },
+} as ContextWidgetValue["modules"][number]);
+
+describe("scanConflicts — unknown_tag_axis", () => {
+  it("flags a $var.AXIS read when the producing wildcard declares no such axis", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [wc("w1", "outfit", { SHOES: "accepts" }), cmb("c1", "wearing $outfit.BELTS")],
+    };
+    const out = scanConflicts(value, []);
+    expect(out).toContainEqual(expect.objectContaining({
+      type: "unknown_tag_axis", variable: "outfit.BELTS", severity: "warning",
+    }));
+  });
+
+  it("does not flag a declared axis", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [wc("w1", "outfit", { SHOES: "accepts" }), cmb("c1", "wearing $outfit.SHOES")],
+    };
+    const out = scanConflicts(value, []);
+    expect(out.every((c) => c.type !== "unknown_tag_axis")).toBe(true);
+  });
+
+  it("flags an axis whose group exists but was never promoted", () => {
+    // The commonest mistake by far: the group is right there, it just still
+    // says classify.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [wc("w1", "outfit"), cmb("c1", "wearing $outfit.SHOES")],
+    };
+    const out = scanConflicts(value, []);
+    expect(out).toContainEqual(expect.objectContaining({ type: "unknown_tag_axis" }));
+  });
+
+  it("accepts either accessor order", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        wc("w1", "outfit", { SHOES: "accepts" }),
+        cmb("c1", "$outfit.0.SHOES and $outfit.SHOES.0"),
+      ],
+    };
+    const out = scanConflicts(value, []);
+    expect(out.every((c) => c.type !== "unknown_tag_axis")).toBe(true);
+  });
+
+  it("stays silent when the producer is not in this node", () => {
+    // The scanner receives upstream vars as NAMES only, so it cannot see an
+    // upstream wildcard's groups. Warning here would fire on correct
+    // workflows; under-reporting beats a warning nobody can act on.
+    const value: ContextWidgetValue = { version: 1, modules: [cmb("c1", "$outfit.SHOES")] };
+    const out = scanConflicts(value, ["outfit"]);
+    expect(out.every((c) => c.type !== "unknown_tag_axis")).toBe(true);
+  });
+
+  it("reports one entry per distinct name.axis, not per occurrence", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [wc("w1", "outfit"), cmb("c1", "$outfit.SHOES $outfit.SHOES $outfit.SHOES")],
+    };
+    const out = scanConflicts(value, []);
+    expect(out.filter((c) => c.type === "unknown_tag_axis")).toHaveLength(1);
+  });
+});
