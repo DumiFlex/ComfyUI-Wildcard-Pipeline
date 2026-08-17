@@ -46,6 +46,16 @@ export interface WildcardPayload {
    */
   tag_groups?: Record<string, string[]>;
   /**
+   * Per-group meaning. Absent (and `classify`) is today's behaviour: tags
+   * describe what an option IS and fold with AND in the constraint matrix.
+   * `accepts` marks the group's tags as alternatives the option offers — an
+   * OR-set the fold reads with max, and which `$var.AXIS` rolls one winner
+   * from. Only `accepts` entries are ever stored, so an untouched payload
+   * stays byte-identical. An `accepts` group name must be a valid identifier
+   * so `$var.AXIS` parses.
+   */
+  tag_group_kinds?: Record<string, "accepts">;
+  /**
    * The `$varname` other modules use to read this wildcard's resolved value.
    * Optional — defaults to `slug(name)` when missing/blank. User-editable so
    * collisions or renames can be resolved without breaking downstream refs.

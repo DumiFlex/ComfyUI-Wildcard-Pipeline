@@ -135,6 +135,14 @@ const subCategories = ref<string[]>([]);
  *  (`payload.tag_groups`). Serialised back into the payload on save so
  *  grouping survives sharing. The engine ignores it. */
 const tagGroups = ref<Record<string, string[]>>({});
+/** Per-group meaning (`payload.tag_group_kinds`). Absent means `classify` —
+ *  today's behaviour and what every stored payload means — so only `accepts`
+ *  entries are ever stored, keeping an untouched payload byte-identical. */
+const tagGroupKinds = ref<Record<string, "accepts">>({});
+
+/** An `accepts` group is addressable as `$var.NAME`, so its name has to
+ *  survive the accessor grammar. A `classify` group keeps any name. */
+const AXIS_IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const options = ref<WildcardOption[]>([
   { id: `opt_${Math.random().toString(16).slice(2, 8)}`, value: "", weight: 1, sub_categories: [] },
   { id: `opt_${Math.random().toString(16).slice(2, 8)}`, value: "", weight: 1, sub_categories: [] },
@@ -194,6 +202,7 @@ function snapshot(): string {
     varBinding: varBinding.value,
     subCategories: subCategories.value,
     tagGroups: tagGroups.value,
+    tagGroupKinds: tagGroupKinds.value,
     options: options.value,
   });
 }
@@ -236,6 +245,7 @@ function applyDraft(): void {
       varBinding: string;
       subCategories: string[];
       tagGroups?: Record<string, string[]>;
+      tagGroupKinds?: Record<string, "accepts">;
       options: typeof options.value;
     };
     name.value = parsed.name;
@@ -245,6 +255,7 @@ function applyDraft(): void {
     varBinding.value = parsed.varBinding;
     subCategories.value = parsed.subCategories;
     tagGroups.value = parsed.tagGroups ?? {};
+    tagGroupKinds.value = parsed.tagGroupKinds ?? {};
     options.value = parsed.options;
   } catch {
     toast.push({ severity: "error", summary: "Draft restore failed", life: 3000 });
@@ -482,8 +493,13 @@ function addGroup(): void {
   openAddTag(candidate);
 }
 
-/** Rename an axis in place (UI-only — axis names are not part of the ref
- *  grammar, so no cascade needed). Preserves insertion order + members. */
+/** Rename an axis in place. Preserves insertion order + members.
+ *
+ *  Axis names are not part of the `@{}` ref grammar, but an `accepts` axis IS
+ *  addressable as `$var.NAME`, so a rename can strand a template read. The
+ *  kind is carried across here; a stranded read is reported by the
+ *  `unknown_tag_axis` conflict rule rather than blocked, matching how every
+ *  other cross-module reference is handled. */
 function renameGroup(oldAxis: string, nextAxis: string): void {
   const trimmed = nextAxis.trim();
   if (!trimmed || trimmed === oldAxis) return;
@@ -493,6 +509,15 @@ function renameGroup(oldAxis: string, nextAxis: string): void {
     next[axis === oldAxis ? trimmed : axis] = members;
   }
   tagGroups.value = next;
+
+  if (tagGroupKinds.value[oldAxis] !== undefined) {
+    const nextKinds = { ...tagGroupKinds.value };
+    delete nextKinds[oldAxis];
+    // Renaming to something the accessor cannot parse demotes rather than
+    // storing an unreadable axis, which validate_payload would reject on save.
+    if (AXIS_IDENT.test(trimmed)) nextKinds[trimmed] = "accepts";
+    tagGroupKinds.value = nextKinds;
+  }
 }
 
 /** Disband an axis — its tags fall back into the ungrouped box (they
@@ -502,6 +527,12 @@ function ungroupAxis(axis: string): void {
   const next = { ...tagGroups.value };
   delete next[axis];
   tagGroups.value = next;
+  // The kind goes with the group; a kind naming no group is invalid payload.
+  if (tagGroupKinds.value[axis] !== undefined) {
+    const nextKinds = { ...tagGroupKinds.value };
+    delete nextKinds[axis];
+    tagGroupKinds.value = nextKinds;
+  }
 }
 
 /** Destinations the "Move to group…" submenu offers for a pill in
@@ -772,6 +803,61 @@ function normalizeTagGroups(
  *  right for a box made by accident and wrong for one made on purpose, and
  *  only the user knows which it was. An empty axis persists as `{axis: []}`,
  *  a shape the engine's validator already accepts. */
+/** Coerce a raw `payload.tag_group_kinds` into the editor's shape: keep only
+ *  `accepts` entries naming a group that actually exists, since `classify` is
+ *  the default and a kind for a vanished group is meaningless. */
+function normalizeTagGroupKinds(
+  raw: unknown,
+  groups: Record<string, string[]>,
+): Record<string, "accepts"> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, "accepts"> = {};
+  for (const [axis, kind] of Object.entries(raw as Record<string, unknown>)) {
+    if (kind === "accepts" && axis in groups) out[axis] = "accepts";
+  }
+  return out;
+}
+
+/** Build `payload.tag_group_kinds`, restricted to groups that survived
+ *  serialisation. Returns null when nothing is promoted so the payload omits
+ *  the key entirely — that omission is what keeps existing wildcards
+ *  byte-identical. */
+function serializeTagGroupKinds(
+  serializedGroups: Record<string, string[]> | null,
+): Record<string, "accepts"> | null {
+  const out: Record<string, "accepts"> = {};
+  for (const axis of Object.keys(tagGroupKinds.value)) {
+    // An axis dropped by `serializeTagGroups` (empty, not kept) must not leave
+    // a kind behind — the engine rejects a kind naming a missing group.
+    if (serializedGroups && axis in serializedGroups) out[axis] = "accepts";
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+/** Promote or demote a group. Refuses a name the accessor grammar cannot
+ *  parse, here in the editor where the user can still fix it cheaply, rather
+ *  than at save time where the message arrives after the work. */
+function setGroupKind(axis: string, kind: string, el?: HTMLSelectElement): void {
+  if (kind === "accepts" && !AXIS_IDENT.test(axis)) {
+    toast.push({
+      severity: "warn",
+      summary: `Rename "${axis}" first`,
+      detail: "An accepts group is read as $var.NAME, so its name must be "
+        + "letters, digits and underscores, starting with a letter.",
+      life: 6000,
+    });
+    // Put the control back. The bound value never changed, so Vue has no
+    // reason to re-render, and the select would sit there showing a state we
+    // just refused to store.
+    if (el) el.value = tagGroupKinds.value[axis] ?? "classify";
+    return;
+  }
+  const next = { ...tagGroupKinds.value };
+  if (kind === "accepts") next[axis] = "accepts";
+  else delete next[axis];
+  tagGroupKinds.value = next;
+}
+
 function serializeTagGroups(): Record<string, string[]> | null {
   const reg = new Set(subCategories.value);
   const keepEmpty = ui.keepEmptyTagGroups;
@@ -817,6 +903,8 @@ onMounted(async () => {
       }));
       subCategories.value = [...(p.sub_categories ?? [])];
       tagGroups.value = normalizeTagGroups(p.tag_groups, subCategories.value);
+      tagGroupKinds.value = normalizeTagGroupKinds(p.tag_group_kinds, tagGroups.value);
+  tagGroupKinds.value = normalizeTagGroupKinds(p.tag_group_kinds, tagGroups.value);
       varBinding.value = (p.var_binding && p.var_binding.trim()) || toIdentifier(row.name);
       historyEntries.value = readHistory(row.payload);
       recent.push({ id: props.id, kind: "wildcard", name: name.value });
@@ -1572,6 +1660,7 @@ function applyRestore(entry: ModuleHistoryEntry): void {
   }));
   subCategories.value = [...(p.sub_categories ?? [])];
   tagGroups.value = normalizeTagGroups(p.tag_groups, subCategories.value);
+  tagGroupKinds.value = normalizeTagGroupKinds(p.tag_group_kinds, tagGroups.value);
   varBinding.value = (p.var_binding && p.var_binding.trim()) || toIdentifier(entry.name);
   toast.push({
     severity: "info",
@@ -1607,11 +1696,13 @@ async function save() {
     // the key entirely when nothing is grouped, keeping legacy payloads
     // byte-identical when grouping is unused.
     const serializedGroups = serializeTagGroups();
+    const serializedKinds = serializeTagGroupKinds(serializedGroups);
     const payload: WildcardPayload = {
       options: sortedOptions,
       sub_categories: subCategories.value,
       var_binding: finalBinding,
       ...(serializedGroups ? { tag_groups: serializedGroups } : {}),
+      ...(serializedKinds ? { tag_group_kinds: serializedKinds } : {}),
     };
     const newPayload = payload as unknown as Record<string, unknown>;
     if (isEdit.value && props.id) {
@@ -1853,6 +1944,27 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                 @keydown.enter.prevent="(e) => (e.target as HTMLInputElement).blur()"
               />
               <span v-else class="subcat-group__name subcat-group__name--other">ungrouped</span>
+              <!-- What this group MEANS to the engine. classify (default) is
+                   today's behaviour: tags describe the option and fold with
+                   AND. accepts makes them alternatives the option offers —
+                   an OR-set, readable as $var.NAME. Ungrouped tags have no
+                   kind, so the trailing box does not get one. -->
+              <select
+                v-if="!group.isOther"
+                class="subcat-group__kind"
+                :data-test="`group-kind-${group.axis}`"
+                :value="tagGroupKinds[group.axis] ?? 'classify'"
+                :aria-label="`Meaning of group ${group.axis}`"
+                title="classify: describes the option, several true at once.&#10;accepts: alternatives the option offers, exactly one applies."
+                @change="setGroupKind(
+                  group.axis,
+                  ($event.target as HTMLSelectElement).value,
+                  $event.target as HTMLSelectElement,
+                )"
+              >
+                <option value="classify">classify</option>
+                <option value="accepts">accepts</option>
+              </select>
               <!-- A folded axis still reports how many tags are inside, so
                    folding never hides the fact that there is something there. -->
               <span
@@ -2601,6 +2713,17 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
   color: var(--wp-text);
   outline: none;
 }
+.subcat-group__kind {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  background: transparent;
+  color: var(--wp-text-dim);
+  border: 1px solid var(--wp-border);
+  border-radius: 4px;
+  padding: 0 2px;
+  cursor: pointer;
+}
+
 .subcat-group__name--other {
   font-style: italic;
   padding-left: 0;
