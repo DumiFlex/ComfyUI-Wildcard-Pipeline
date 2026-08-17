@@ -47,6 +47,34 @@ class _RuntimeResolveContext:
     # occurrence matches on. None outside any carrier option.
     _carrier_uid: str | None = None
     _carrier_option_id: str | None = None
+    # Rolled `accepts`-axis choices, keyed by VARIABLE BINDING (the namespace
+    # `$outfit.SHOES` addresses) rather than module uuid like `_picks`. A
+    # projection of `ctx["__wp_axes__"]`, built once here so the resolver stays
+    # a pure consumer with no ctx dependency.
+    _axes: dict[str, Any] = field(default_factory=dict)
+
+    def get_axis(self, name: str, axis: str) -> Any:
+        """Rolled axis choice(s) for a binding, or None when it has none.
+
+        Returns a plain string for a single-pick source and a list (one entry
+        per pick, in pick order) for a multi-select one, mirroring the shape of
+        the variable itself. Shaping and the empty/warn decision belong to the
+        resolver; this only fetches.
+
+        A binding that rolled no axes at all, and a binding that rolled some
+        but not THIS one, both yield None — the caller cannot act differently
+        on those two, and collapsing them keeps the read a single lookup.
+        """
+        entry = self._axes.get(name)
+        if isinstance(entry, list):
+            got = [
+                e.get(axis) for e in entry
+                if isinstance(e, dict) and e.get(axis) is not None
+            ]
+            return got or None
+        if isinstance(entry, dict):
+            return entry.get(axis)
+        return None
 
     def get_var(self, name: str) -> str | None:
         # SP2a: return the raw stored value (may be a ListVar from a
@@ -132,6 +160,7 @@ def build_resolve_ctx(
     """
     constraints = ctx.get("__wp_constraints__")
     picks = ctx.get("__wp_picks__")
+    axes = ctx.get("__wp_axes__")
     hits = ctx.setdefault("__wp_constraint_hits__", {})
     return _RuntimeResolveContext(  # type: ignore[return-value]
         rng=ctx["__wp_rng__"],
@@ -153,6 +182,10 @@ def build_resolve_ctx(
         # resolver's increments stick in ctx + share one counter with
         # the direct path for first/next coverage.
         _hits=hits if isinstance(hits, dict) else {},
+        # Same treatment as `_vars`: a projection built at frame construction,
+        # so `get_axis` is a dict lookup and the resolver never reaches into
+        # ctx.
+        _axes=axes if isinstance(axes, dict) else {},
     )
 
 
