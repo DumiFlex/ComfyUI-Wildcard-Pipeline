@@ -67,7 +67,7 @@ def test_record_pick_adds_by_origin_when_origin_present():
     assert entry["by_origin"]["originA"]["value"] == "long"
     assert entry["by_origin"]["originA"]["sub_categories"] == ["long"]
     assert entry["by_origin"]["originA"]["picks"] == [
-        {"value": "long", "tags": ["long"]}
+        {"value": "long", "tags": ["long"], "axes": {}}
     ]
 
 

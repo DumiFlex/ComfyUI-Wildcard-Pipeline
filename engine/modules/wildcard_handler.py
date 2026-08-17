@@ -260,7 +260,63 @@ def _file_pick_by_origin(
     entry["by_origin"] = by_origin
 
 
-def _record_pick(ctx: Any, chosen: dict[str, Any]) -> None:
+def _axis_menus(
+    payload: dict[str, Any], tags: list[str] | None
+) -> dict[str, list[str]]:
+    """The option's tags, grouped by `accepts` axis, in registry order.
+
+    Only `accepts` groups appear — a `classify` group's tags stay in the flat
+    bag where the constraint fold multiplies them, which is today's behaviour.
+    An axis the option says nothing about is omitted rather than mapped to an
+    empty list, so callers can treat presence as meaning.
+    """
+    kinds = payload.get("tag_group_kinds") or {}
+    groups = payload.get("tag_groups") or {}
+    have = set(tags or [])
+    out: dict[str, list[str]] = {}
+    for axis, members in groups.items():
+        if kinds.get(axis) != "accepts":
+            continue
+        in_axis = [m for m in (members or []) if m in have]
+        if in_axis:
+            out[axis] = in_axis
+    return out
+
+
+def _roll_axes(menus: dict[str, list[str]], rng) -> dict[str, str]:
+    """One winner per axis, uniform over the option's own menu.
+
+    Uniform rather than weighted: option `weight` describes how often the
+    OPTION is chosen, and nothing in the payload expresses a preference between
+    an option's accepted tags. Inventing one would be a guess.
+
+    Axis order is the payload's group order, so the draw sequence is stable
+    across runs for a given seed.
+    """
+    return {
+        axis: members[int(rng.random() * len(members))]
+        for axis, members in menus.items()
+        if members
+    }
+
+
+def _record_axes(ctx: Any, binding: str, rolled: Any) -> None:
+    """Publish the rolled axis choices under the VARIABLE binding.
+
+    Deliberately not on the pick record: `$outfit.SHOES` addresses by binding,
+    while `__wp_picks__` is keyed by module uuid. Keying each consumer the way
+    it addresses things means neither has to translate, and the axis read never
+    inherits the uuid-bucket collision (task_5200c1fc) that only reaches
+    consumers binding by uuid.
+    """
+    if not isinstance(ctx, dict) or not binding:
+        return
+    bucket = ctx.setdefault("__wp_axes__", {})
+    if isinstance(bucket, dict):
+        bucket[binding] = rolled
+
+
+def _record_pick(ctx: Any, chosen: dict[str, Any], payload: dict[str, Any]) -> None:
     """Stash the picked option dict in `ctx["__wp_picks__"][module_id]` so a
     downstream constraint-aware wildcard can look up its source's value +
     sub_categories. Keyed by the active module id (set by pipeline.py).
@@ -288,6 +344,10 @@ def _record_pick(ctx: Any, chosen: dict[str, Any]) -> None:
             "picks": [{
                 "value": chosen.get("value", ""),
                 "tags": list(chosen.get("sub_categories") or []),
+                # Which of those tags belong to which `accepts` axis. The
+                # constraint fold is pure and never sees a library payload, so
+                # this map is how it learns to fold an axis with max.
+                "axes": _axis_menus(payload, chosen.get("sub_categories")),
             }],
         }
         # Additive per-instance view (task_5200c1fc). When this wildcard
@@ -301,7 +361,12 @@ def _record_pick(ctx: Any, chosen: dict[str, Any]) -> None:
         bucket[module_id] = entry
 
 
-def _record_pick_multi(ctx: Any, chosen_list: list[dict[str, Any]], sep: str) -> None:
+def _record_pick_multi(
+    ctx: Any,
+    chosen_list: list[dict[str, Any]],
+    sep: str,
+    payload: dict[str, Any],
+) -> None:
     """Multi-select counterpart to `_record_pick` (SP2a). Stash the joined
     value + the individual picked values + the union of their sub-categories,
     so the debug Picks view can render the list. Single-pick records (via
@@ -323,7 +388,13 @@ def _record_pick_multi(ctx: Any, chosen_list: list[dict[str, Any]], sep: str) ->
     # combine fn can apply the matrix per pick. The union above stays for the
     # debug Picks view; `picks` is what constraint application reads.
     per_pick = [
-        {"value": str(c.get("value", "")), "tags": list(c.get("sub_categories") or [])}
+        {
+            "value": str(c.get("value", "")),
+            "tags": list(c.get("sub_categories") or []),
+            # Per pick, not the union: each pick offers its own menu, and the
+            # fold intersects them across picks.
+            "axes": _axis_menus(payload, c.get("sub_categories")),
+        }
         for c in chosen_list
     ]
     entry = {
@@ -584,7 +655,15 @@ class WildcardHandler(ModuleHandler):
                 # Track the pinned pick the same way as a random pick —
                 # downstream constraint-aware wildcards need source
                 # info regardless of how the source resolved its option.
-                _record_pick(ctx, pinned)
+                _record_pick(ctx, pinned, payload)
+                # A pinned option still rolls its axes: pinning fixes WHICH
+                # option fires, not which of the shoes it accepts.
+                _record_axes(ctx, binding, _roll_axes(
+                    _axis_menus(payload, pinned.get("sub_categories")),
+                    _derive_module_rng(
+                        int(ctx.get("__wp_node_seed__", 0) or 0), f"{binding}::axes",
+                    ),
+                ))
                 value = str(pinned.get("value", ""))
                 if not value:
                     return {binding: ""}
@@ -741,7 +820,14 @@ class WildcardHandler(ModuleHandler):
                     items.append(resolve_text(str(opt.get("value", "")), multi_ctx))
             finally:
                 ctx["__wp_rng__"] = saved_rng_multi
-            _record_pick_multi(ctx, picks, sep)
+            _record_pick_multi(ctx, picks, sep, payload)
+            # One roll per pick, in pick order, so `$outfit.SHOES` mirrors the
+            # shape of `$outfit` and `$outfit.1.SHOES` lines up with
+            # `$outfit.1`.
+            _record_axes(ctx, binding, [
+                _roll_axes(_axis_menus(payload, o.get("sub_categories")), rng)
+                for o in picks
+            ])
             return {binding: ListVar(items, sep)}
 
         chosen = _pick_weighted(options, rng)
@@ -752,7 +838,14 @@ class WildcardHandler(ModuleHandler):
         # wildcard can read it. Done BEFORE resolve_text so even an
         # empty-string-value pick is registered (matters if a
         # constraint exception keys on the literal empty pick value).
-        _record_pick(ctx, chosen)
+        _record_pick(ctx, chosen, payload)
+
+        # Rolled AFTER the option draw on the same rng, so an existing
+        # locked_seed still reproduces the same option — the extra draws happen
+        # downstream of it and cannot shift the pick.
+        _record_axes(ctx, binding, _roll_axes(
+            _axis_menus(payload, chosen.get("sub_categories")), rng,
+        ))
 
         value = str(chosen.get("value", ""))
         if not value:

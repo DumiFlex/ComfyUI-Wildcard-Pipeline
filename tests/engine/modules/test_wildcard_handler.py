@@ -76,7 +76,7 @@ def test_record_pick_multi_stores_values_and_union_tags():
     _record_pick_multi(ctx, [
         {"value": "red", "sub_categories": ["warm"], "id": "o1"},
         {"value": "blue", "sub_categories": ["cool"], "id": "o2"},
-    ], ", ")
+    ], ", ", {})
     rec = ctx["__wp_picks__"]["m1"]
     assert rec["value"] == "red, blue"
     assert rec["values"] == ["red", "blue"]
@@ -91,9 +91,14 @@ def test_record_pick_multi_carries_per_pick_structure():
         {"value": "red", "sub_categories": ["warm"], "id": "o1"},
         {"value": "blue", "sub_categories": ["cool"], "id": "o2"},
     ]
-    _record_pick_multi(ctx, chosen, ", ")
+    # Empty payload = no tag groups at all, so every pick's `axes` map is
+    # empty. The key is always present so consumers never branch on absence.
+    _record_pick_multi(ctx, chosen, ", ", {})
     rec = ctx["__wp_picks__"]["m1"]
-    assert rec["picks"] == [{"value": "red", "tags": ["warm"]}, {"value": "blue", "tags": ["cool"]}]
+    assert rec["picks"] == [
+        {"value": "red", "tags": ["warm"], "axes": {}},
+        {"value": "blue", "tags": ["cool"], "axes": {}},
+    ]
     assert rec["value"] == "red, blue"
     assert rec["values"] == ["red", "blue"]
 
@@ -101,8 +106,10 @@ def test_record_pick_multi_carries_per_pick_structure():
 def test_record_pick_single_carries_one_pick():
     from engine.modules.wildcard_handler import _record_pick
     ctx = {"__wp_current_module_id__": "m1"}
-    _record_pick(ctx, {"value": "red", "sub_categories": ["warm"], "id": "o1"})
-    assert ctx["__wp_picks__"]["m1"]["picks"] == [{"value": "red", "tags": ["warm"]}]
+    _record_pick(ctx, {"value": "red", "sub_categories": ["warm"], "id": "o1"}, {})
+    assert ctx["__wp_picks__"]["m1"]["picks"] == [
+        {"value": "red", "tags": ["warm"], "axes": {}}
+    ]
 
 
 def test_multi_pick_binds_listvar_unique():
