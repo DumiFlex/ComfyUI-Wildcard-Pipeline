@@ -834,11 +834,21 @@ function serializeTagGroupKinds(
   return Object.keys(out).length > 0 ? out : null;
 }
 
-/** Promote or demote a group. Refuses a name the accessor grammar cannot
- *  parse, here in the editor where the user can still fix it cheaply, rather
- *  than at save time where the message arrives after the work. */
-function setGroupKind(axis: string, kind: string, el?: HTMLSelectElement): void {
-  if (kind === "accepts" && !AXIS_IDENT.test(axis)) {
+/** Flip a group between descriptive (`classify`, the default) and `accepts`.
+ *
+ *  Refuses a name the accessor grammar cannot parse, here in the editor where
+ *  the user can still fix it cheaply, rather than at save time where the
+ *  message arrives after the work is done. Nothing is stored on refusal and
+ *  the button renders from `tagGroupKinds`, so the control cannot end up
+ *  showing a state we declined to keep. */
+function toggleGroupKind(axis: string): void {
+  const next = { ...tagGroupKinds.value };
+  if (next[axis] === "accepts") {
+    delete next[axis];
+    tagGroupKinds.value = next;
+    return;
+  }
+  if (!AXIS_IDENT.test(axis)) {
     toast.push({
       severity: "warn",
       summary: `Rename "${axis}" first`,
@@ -846,15 +856,9 @@ function setGroupKind(axis: string, kind: string, el?: HTMLSelectElement): void 
         + "letters, digits and underscores, starting with a letter.",
       life: 6000,
     });
-    // Put the control back. The bound value never changed, so Vue has no
-    // reason to re-render, and the select would sit there showing a state we
-    // just refused to store.
-    if (el) el.value = tagGroupKinds.value[axis] ?? "classify";
     return;
   }
-  const next = { ...tagGroupKinds.value };
-  if (kind === "accepts") next[axis] = "accepts";
-  else delete next[axis];
+  next[axis] = "accepts";
   tagGroupKinds.value = next;
 }
 
@@ -1944,27 +1948,27 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                 @keydown.enter.prevent="(e) => (e.target as HTMLInputElement).blur()"
               />
               <span v-else class="subcat-group__name subcat-group__name--other">ungrouped</span>
-              <!-- What this group MEANS to the engine. classify (default) is
-                   today's behaviour: tags describe the option and fold with
-                   AND. accepts makes them alternatives the option offers —
-                   an OR-set, readable as $var.NAME. Ungrouped tags have no
-                   kind, so the trailing box does not get one. -->
-              <select
+              <!-- What this group MEANS to the engine. classify (the default)
+                   is today's behaviour: tags describe the option and fold with
+                   AND. accepts makes them alternatives the option offers — an
+                   OR-set, readable as $var.NAME. Built as an icon toggle
+                   rather than a dropdown so a classify group — every group
+                   that exists today — carries no extra chrome at all; the
+                   promoted state is what earns the ink. Ungrouped tags have
+                   no kind, so the trailing box does not get one. -->
+              <button
                 v-if="!group.isOther"
+                type="button"
                 class="subcat-group__kind"
+                :class="{ 'subcat-group__kind--accepts': tagGroupKinds[group.axis] === 'accepts' }"
+                :aria-pressed="tagGroupKinds[group.axis] === 'accepts'"
+                :aria-label="`Group ${group.axis} is ${tagGroupKinds[group.axis] === 'accepts' ? 'an accepts axis' : 'descriptive'}`"
                 :data-test="`group-kind-${group.axis}`"
-                :value="tagGroupKinds[group.axis] ?? 'classify'"
-                :aria-label="`Meaning of group ${group.axis}`"
-                title="classify: describes the option, several true at once.&#10;accepts: alternatives the option offers, exactly one applies."
-                @change="setGroupKind(
-                  group.axis,
-                  ($event.target as HTMLSelectElement).value,
-                  $event.target as HTMLSelectElement,
-                )"
-              >
-                <option value="classify">classify</option>
-                <option value="accepts">accepts</option>
-              </select>
+                :title="tagGroupKinds[group.axis] === 'accepts'
+                  ? `Accepts axis — an option's tags here are alternatives it offers, and $${varBinding}.${group.axis} reads the one that was rolled. Click to make it descriptive.`
+                  : 'Descriptive — these tags say what an option IS, several true at once. Click to make them alternatives it accepts.'"
+                @click.stop="toggleGroupKind(group.axis)"
+              ><i class="pi pi-tag" aria-hidden="true" /></button>
               <!-- A folded axis still reports how many tags are inside, so
                    folding never hides the fact that there is something there. -->
               <span
@@ -2713,15 +2717,29 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
   color: var(--wp-text);
   outline: none;
 }
+/* Same 24px icon-button shape as `__ungroup` beside it — the header's
+   established vocabulary is icon buttons, not form controls. */
 .subcat-group__kind {
-  flex: 0 0 auto;
-  font-size: 10.5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
   background: transparent;
-  color: var(--wp-text-dim);
-  border: 1px solid var(--wp-border);
-  border-radius: 4px;
-  padding: 0 2px;
   cursor: pointer;
+  color: var(--wp-text-dim);
+  border-radius: var(--wp-radius-sm);
+}
+.subcat-group__kind:hover {
+  color: var(--wp-text);
+  background: var(--wp-bg-3);
+}
+/* Promoted: carries the group's own hue, the same colour its name already
+   uses, so the axis reads as one thing rather than a row of unrelated bits. */
+.subcat-group__kind--accepts {
+  color: color-mix(in srgb, var(--group-hue, var(--wp-accent)) 80%, var(--wp-text));
+  background: color-mix(in srgb, var(--group-hue, var(--wp-accent)) 14%, transparent);
 }
 
 .subcat-group__name--other {

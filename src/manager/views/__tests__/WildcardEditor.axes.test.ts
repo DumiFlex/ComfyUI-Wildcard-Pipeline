@@ -91,22 +91,24 @@ type EditorVm = {
 };
 
 describe("WildcardEditor tag-group kinds", () => {
-  it("defaults an existing group to classify", async () => {
+  it("defaults an existing group to classify, with no promoted styling", async () => {
     const w = await mountSeeded();
-    const sel = w.get('[data-test="group-kind-SHOES"]');
-    expect((sel.element as HTMLSelectElement).value).toBe("classify");
+    const btn = w.get('[data-test="group-kind-SHOES"]');
+    expect(btn.attributes("aria-pressed")).toBe("false");
+    expect(btn.classes()).not.toContain("subcat-group__kind--accepts");
   });
 
   it("stores the kind when a group is promoted", async () => {
     const w = await mountSeeded();
-    await w.get('[data-test="group-kind-SHOES"]').setValue("accepts");
+    await w.get('[data-test="group-kind-SHOES"]').trigger("click");
     expect((w.vm as unknown as EditorVm).tagGroupKinds).toEqual({ SHOES: "accepts" });
+    expect(w.get('[data-test="group-kind-SHOES"]').attributes("aria-pressed")).toBe("true");
   });
 
   it("drops the key again on classify, so a default payload stays clean", async () => {
     const w = await mountSeeded({ tag_group_kinds: { SHOES: "accepts" } });
     expect((w.vm as unknown as EditorVm).tagGroupKinds).toEqual({ SHOES: "accepts" });
-    await w.get('[data-test="group-kind-SHOES"]').setValue("classify");
+    await w.get('[data-test="group-kind-SHOES"]').trigger("click");
     expect((w.vm as unknown as EditorVm).tagGroupKinds).toEqual({});
   });
 
@@ -116,12 +118,12 @@ describe("WildcardEditor tag-group kinds", () => {
     const w = await mountSeeded({
       tag_groups: { "My Shoes": ["sneakers", "sandals"] },
     });
-    const sel = w.get('[data-test="group-kind-My Shoes"]');
-    await sel.setValue("accepts");
+    const btn = w.get('[data-test="group-kind-My Shoes"]');
+    await btn.trigger("click");
     expect((w.vm as unknown as EditorVm).tagGroupKinds).toEqual({});
-    // And the control goes back — refusing the change while leaving the select
-    // showing it would tell the user the opposite of what was stored.
-    expect((sel.element as HTMLSelectElement).value).toBe("classify");
+    // The button renders from state, so a refused promotion cannot leave the
+    // control showing something that was never stored.
+    expect(btn.attributes("aria-pressed")).toBe("false");
   });
 
   it("the ungrouped box has no kind selector", async () => {
@@ -156,7 +158,7 @@ describe("WildcardEditor tag-group kinds", () => {
 
   it("saves tag_group_kinds into the payload", async () => {
     const w = await mountSeeded();
-    await w.get('[data-test="group-kind-SHOES"]').setValue("accepts");
+    await w.get('[data-test="group-kind-SHOES"]').trigger("click");
     apiMod.update.mockResolvedValue({});
     await w.get('[data-test="save-btn"]').trigger("click");
     await flushPromises();
