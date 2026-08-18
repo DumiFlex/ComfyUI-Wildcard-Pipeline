@@ -67,13 +67,22 @@ export interface TokenMeta {
   range?: string;
 }
 
-/** SP2a: reduce a var reference to its BASE name — drop an optional leading
- *  `$` and an optional trailing `.K` list accessor. `$mood.0` -> `mood`;
- *  `mood` -> `mood`; `weird.name` (non-digit suffix) -> unchanged. Used by
- *  validation + conflict scanning so a `.K` accessor resolves against the
- *  bound base var, not a phantom `mood.0`. */
+/** Reduce a var reference to its BASE name — drop an optional leading `$` and
+ *  any accessor: a `.K` pick index, a `.AXIS` tag-axis read, or both in either
+ *  order. `$mood.0` -> `mood`; `$outfit.SHOES` -> `outfit`;
+ *  `$outfit.0.SHOES` -> `outfit`; `mood` -> `mood`.
+ *
+ *  Mirrors the accessor grammar in `engine/syntax/tokenize.py:_VAR_RE`. Used by
+ *  validation, conflict scanning and the editor's chip lookup, so a reference
+ *  with an accessor resolves against the bound base var rather than a phantom
+ *  `outfit.SHOES` — which is what made an axis read render as inert text
+ *  instead of a chip. */
 export function varBaseName(raw: string): string {
-  return raw.replace(/^\$/, "").replace(/\.\d+$/, "").trim();
+  const bare = raw.replace(/^\$/, "").trim();
+  const m = bare.match(
+    /^([A-Za-z_][A-Za-z0-9_]*)(?:\.(?:\d+(?:\.[A-Za-z_][A-Za-z0-9_]*)?|[A-Za-z_][A-Za-z0-9_]*(?:\.\d+)?))?$/,
+  );
+  return m ? m[1] : bare;
 }
 
 /** SP2a: a resolved variable value as a TS preview surface sees it — a plain

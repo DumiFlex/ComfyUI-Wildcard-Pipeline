@@ -145,13 +145,22 @@ export function probeAutocomplete(str: string, caret: number): AutocompleteProbe
   // `@{…` runs and spaces was fixing a misdiagnosis (the real bug was that
   // deletion never re-probed — see `onHostKeydown`'s Backspace branch).
   let i = caret - 1;
-  // SP2a: skip a trailing `.K` list accessor (digits then ONE dot, only when a
-  // word char precedes the dot) so `$mood.0<caret>` still resolves back to the
-  // `$` trigger and keeps the popover open.
-  let j = i;
-  while (j >= 0 && /[0-9]/.test(str[j])) j--;
-  if (j < i && j >= 1 && str[j] === "." && /[A-Za-z0-9_]/.test(str[j - 1])) {
-    i = j - 1;
+  // Skip a trailing accessor so `$mood.0<caret>` and `$outfit.SHOES<caret>`
+  // both still resolve back to the `$` trigger and keep the popover open.
+  // Up to two segments, since the grammar allows one pick index and one axis
+  // in either order (`$o.0.SHOES` / `$o.SHOES.0`).
+  //
+  // Without this an axis read fell through to the booru-tag probe, which
+  // matched the axis NAME against tag data and offered shoe tags for `.SHOES`
+  // — suggestions that could not be inserted at that caret.
+  for (let seg = 0; seg < 2; seg += 1) {
+    let j = i;
+    while (j >= 0 && /[A-Za-z0-9_]/.test(str[j])) j--;
+    if (j < i && j >= 1 && str[j] === "." && /[A-Za-z0-9_]/.test(str[j - 1])) {
+      i = j - 1;
+    } else {
+      break;
+    }
   }
   while (i >= 0 && /[a-zA-Z0-9_]/.test(str[i])) i--;
   if (i < 0) return null;

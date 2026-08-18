@@ -51,3 +51,33 @@ describe("probeAutocomplete", () => {
     expect(probeAutocomplete("@pose pool", 10)).toBeNull();
   });
 });
+
+describe("probeAutocomplete — accessor accessors keep the $ trigger", () => {
+  // Without these the probe met a dot it did not recognise, gave up, and the
+  // booru-tag probe took the caret — offering shoe TAGS for `$outfit.SHOES`,
+  // none of which can be inserted at that position.
+  it("walks back over an axis accessor", () => {
+    const p = probeAutocomplete("wearing $outfit.SHOES", 21);
+    expect(p).toMatchObject({ trigger: "$", query: "outfit.SHOES" });
+  });
+
+  it("walks back over an index then an axis", () => {
+    const p = probeAutocomplete("$outfit.0.SHOES", 15);
+    expect(p).toMatchObject({ trigger: "$", query: "outfit.0.SHOES" });
+  });
+
+  it("walks back over an axis then an index", () => {
+    const p = probeAutocomplete("$outfit.SHOES.1", 15);
+    expect(p).toMatchObject({ trigger: "$", query: "outfit.SHOES.1" });
+  });
+
+  it("still handles the plain list accessor", () => {
+    expect(probeAutocomplete("$mood.0", 7)).toMatchObject({ query: "mood.0" });
+  });
+
+  it("stops after two segments, so prose is not swallowed", () => {
+    // `a.b.c.d` is not a reference; the probe must not chew backwards through
+    // an entire dotted sentence looking for a sigil.
+    expect(probeAutocomplete("see file.tar.gz.bak", 19)).toBeNull();
+  });
+});
