@@ -1193,6 +1193,26 @@ const acMatches = computed(() => {
   if (!acOpen.value) return [];
   if (acTrigger.value === "tag") return [];  // tag rows live in `tagRows`
   if (acTrigger.value === "@" && !refsEnabled.value) return [];
+  // Once the query carries an accessor the flat substring filter stops being
+  // the right question: `outfit.0.` matches no entry, so the list emptied and
+  // the popover vanished at exactly the point the user was reaching for an
+  // axis. (`outfit.` only ever worked by luck — "outfit.shoes" happens to
+  // contain it.) From the first dot on, offer that variable's AXES, keeping
+  // any pick index the user already typed.
+  if (acTrigger.value === "$" && acQuery.value.includes(".")) {
+    const q = acQuery.value;
+    const base = q.slice(0, q.indexOf("."));
+    const rest = q.slice(q.indexOf(".") + 1);
+    // A leading numeric segment is a pick index; the axis fragment is whatever
+    // follows it. `outfit.0.SH` -> index "0", fragment "sh".
+    const m = rest.match(/^(\d+)\.?(.*)$/);
+    const idx = m ? `.${m[1]}` : "";
+    const frag = (m ? m[2] : rest).toLowerCase();
+    const axes = props.varProducers?.get(base)?.axes ?? [];
+    return axes
+      .filter((a) => a.axis.toLowerCase().includes(frag))
+      .map((a) => `${base}${idx}.${a.axis}`);
+  }
   // `$` pool carries each variable's `accepts` axes as `name.AXIS` entries,
   // directly after the variable they belong to. Query matching is unchanged:
   // "out" still finds `outfit`, and now finds `outfit.SHOES` with it.

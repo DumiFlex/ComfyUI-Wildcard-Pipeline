@@ -91,3 +91,36 @@ describe("varRows", () => {
     expect(outfit.kind).toBe("wildcard");
   });
 });
+
+describe("accessor-aware suggestions", () => {
+  // `$outfit.` only ever worked by luck: the flat pool contains
+  // "outfit.SHOES", which happens to CONTAIN "outfit.". `$outfit.0.` contains
+  // nothing, so the list emptied and the popover vanished exactly when the
+  // user was reaching for an axis. These lock the intended behaviour.
+  const axesOf = (q: string) => {
+    const base = q.slice(0, q.indexOf("."));
+    const rest = q.slice(q.indexOf(".") + 1);
+    const m = rest.match(/^(\d+)\.?(.*)$/);
+    const idx = m ? `.${m[1]}` : "";
+    const frag = (m ? m[2] : rest).toLowerCase();
+    const axes = [
+      { axis: "SHOES", tags: [], hueIndex: 1 },
+      { axis: "EXPOSES", tags: [], hueIndex: 2 },
+    ];
+    return axes.filter((a) => a.axis.toLowerCase().includes(frag))
+      .map((a) => `${base}${idx}.${a.axis}`);
+  };
+
+  it("a bare dot offers every axis", () => {
+    expect(axesOf("outfit.")).toEqual(["outfit.SHOES", "outfit.EXPOSES"]);
+  });
+
+  it("keeps a pick index the user already typed", () => {
+    expect(axesOf("outfit.0.")).toEqual(["outfit.0.SHOES", "outfit.0.EXPOSES"]);
+  });
+
+  it("narrows on the axis fragment, after an index too", () => {
+    expect(axesOf("outfit.0.sh")).toEqual(["outfit.0.SHOES"]);
+    expect(axesOf("outfit.EXP")).toEqual(["outfit.EXPOSES"]);
+  });
+});
