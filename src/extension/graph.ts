@@ -929,6 +929,14 @@ export function collectUpstreamKinds(
  * one. This carries the owning node and module through instead of discarding
  * them.
  */
+/** One `accepts` tag group a producing wildcard declares, with its member
+ *  tags. A library fact, so it is safe to complete against; a pick index is
+ *  not, because `pick_min`/`pick_max` live on the instance. */
+export interface VarAxis {
+  axis: string;
+  tags: string[];
+}
+
 export interface VarProducer {
   /** "wildcard" | "fixed_values" | "combine" | "derivation" | "injector" | "loop" */
   kind: string;
@@ -942,6 +950,9 @@ export interface VarProducer {
   /** Display name of the writing module. Absent for injector / loop, which
    *  write from node config rather than a library module. */
   moduleName?: string;
+  /** `accepts` axes this variable exposes, for `$var.AXIS` completion.
+   *  Wildcards only, and omitted when the wildcard declares none. */
+  axes?: VarAxis[];
   /** 8-hex module id, when a module wrote it. */
   moduleId?: string;
   /** Flagged internal — resolves downstream but the assembler strips it from
@@ -1132,9 +1143,29 @@ export function collectUpstreamProducers(
       }
 
       const inst = (m.instance ?? {}) as { variable_binding?: string | null };
-      const payload = (m.payload ?? {}) as { var_binding?: string; output_var?: string };
+      const payload = (m.payload ?? {}) as {
+        var_binding?: string;
+        output_var?: string;
+        tag_groups?: Record<string, string[]>;
+        tag_group_kinds?: Record<string, string>;
+      };
       const raw = inst.variable_binding ?? payload.var_binding ?? payload.output_var ?? "";
-      write(raw.replace(/^\$/, "").trim(), base, writerKey);
+      // `accepts` axes ride along so the template editor can complete
+      // `$var.AXIS`. Read from the PAYLOAD because a group's kind is a library
+      // fact shared by every instance — unlike `pick_min`/`pick_max`, which are
+      // per-instance and therefore cannot be suggested from a library surface.
+      const axes: VarAxis[] = [];
+      if (m.type === "wildcard") {
+        const kinds = payload.tag_group_kinds ?? {};
+        for (const [axis, tags] of Object.entries(payload.tag_groups ?? {})) {
+          if (kinds[axis] === "accepts") axes.push({ axis, tags: tags ?? [] });
+        }
+      }
+      write(
+        raw.replace(/^\$/, "").trim(),
+        axes.length > 0 ? { ...base, axes } : base,
+        writerKey,
+      );
     }
   }
   return out;

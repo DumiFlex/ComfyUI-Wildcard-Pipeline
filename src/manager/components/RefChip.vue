@@ -97,6 +97,16 @@ interface Props {
 
 /** Structural mirror of `extension/graph.ts:VarProducer`, declared locally so
  *  the SPA build never pulls the canvas graph walker in just for a type. */
+/** One `accepts` tag group a variable's producing wildcard declares, with the
+ *  tags it will roll from. A LIBRARY fact — every instance of that wildcard
+ *  has it — which is why axes can be suggested while a pick INDEX cannot:
+ *  `pick_min`/`pick_max` live on the instance, so no library-level surface
+ *  knows whether a given use is multi-pick. */
+export interface VarAxis {
+  axis: string;
+  tags: string[];
+}
+
 export interface VarProducerLike {
   kind: string;
   /** Where the writer lives. Canvas passes a node codename / title; the SPA
@@ -109,6 +119,9 @@ export interface VarProducerLike {
    *  SPA: how many OTHER library modules bind the same name — no execution
    *  order exists there, so it reads as "N others bind this" rather than as an
    *  override. `siblingLabel` distinguishes the two. */
+  /** `accepts` axes this variable exposes, for `$var.AXIS` completion.
+   *  Empty or absent when the producer declares none. */
+  axes?: VarAxis[];
   shadowed: number;
   /** Wording for the `shadowed` count. Defaults to the canvas override
    *  phrasing; the SPA passes its own since nothing is overridden there. */

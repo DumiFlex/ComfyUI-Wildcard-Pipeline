@@ -310,6 +310,11 @@ const varProducers = computed<Map<string, VarProducerLike>>(() => {
       kind: first.kind,
       moduleName: first.name,
       moduleId: first.id,
+      // Axes come off the FIRST binder. With several modules binding one name
+      // the library has no execution order to pick a winner, so completing
+      // against the first is a guess — but a guess that names a real axis on a
+      // real module beats offering nothing.
+      axes: first.axes,
       shadowed: refs.length - 1,
       siblingLabel: "library module",
     });
