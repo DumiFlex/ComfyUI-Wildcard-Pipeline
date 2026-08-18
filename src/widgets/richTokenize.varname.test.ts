@@ -24,3 +24,24 @@ describe("varBaseName — strips every accessor shape", () => {
     expect(varBaseName("$outfit.A.B.C")).toBe("outfit.A.B.C");
   });
 });
+
+describe("inlineTokenHtml — accessor sub-span", () => {
+  it("splits the accessor into its own span inside one var atom", async () => {
+    const { inlineTokenHtml } = await import("./richTokenize");
+    const html = inlineTokenHtml("go $outfit.SHOES now");
+    // One `.wp-rt-var` — the reference must still delete and move as a unit.
+    expect(html.match(/class="wp-rt-var"/g)).toHaveLength(1);
+    expect(html).toContain('<span class="wp-rt-var__accessor">.SHOES</span>');
+  });
+
+  it("leaves a plain variable as a single undivided span", async () => {
+    const { inlineTokenHtml } = await import("./richTokenize");
+    const html = inlineTokenHtml("go $outfit now");
+    expect(html).not.toContain("wp-rt-var__accessor");
+  });
+
+  it("splits a numeric accessor the same way", async () => {
+    const { inlineTokenHtml } = await import("./richTokenize");
+    expect(inlineTokenHtml("$mood.0")).toContain('__accessor">.0</span>');
+  });
+});

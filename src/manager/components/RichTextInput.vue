@@ -930,12 +930,31 @@ function textAtomHtml(text: string): string {
  * out of scope because there is no graph to be in.
  */
 function varSpanAttrs(name: string): string {
-  if (props.graphAware && !props.varSuggestions.includes(name)) {
+  // `name` arrives with any accessor attached (`outfit.SHOES`). Scope is a
+  // property of the BASE variable, so checking the whole string flagged every
+  // valid axis read as an unknown variable — a correct reference wearing the
+  // error styling.
+  const base = varBaseName(name);
+  const axis = base !== name && !/^\d+$/.test(name.slice(base.length + 1))
+    ? name.slice(base.length + 1).replace(/\.\d+$/, "")
+    : "";
+  if (props.graphAware && axis) {
+    // The base resolves but the axis does not: the engine renders that as an
+    // empty string, so without a mark the only symptom is a missing word.
+    const declared = (props.varProducers?.get(base)?.axes ?? [])
+      .some((a) => a.axis === axis);
+    if (props.varSuggestions.includes(base) && !declared) {
+      return ' style="color:var(--wp-warn,#f59e0b);'
+        + "text-decoration:underline wavy color-mix(in srgb,var(--wp-warn,#f59e0b) 70%,transparent);"
+        + 'text-underline-offset:3px;text-decoration-thickness:1px"';
+    }
+  }
+  if (props.graphAware && !props.varSuggestions.includes(base)) {
     return ' style="color:var(--wp-danger,#ef4444);'
       + "text-decoration:underline wavy color-mix(in srgb,var(--wp-danger,#ef4444) 70%,transparent);"
       + 'text-underline-offset:3px;text-decoration-thickness:1px"';
   }
-  return ` style="color:var(--wp-var-${varColorIndex(name)})"`;
+  return ` style="color:var(--wp-var-${varColorIndex(base)})"`;
 }
 
 /** HTML for one text atom. SP2b brace-block scaffolding (the braces, count,

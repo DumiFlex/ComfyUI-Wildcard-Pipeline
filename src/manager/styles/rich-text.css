@@ -41,6 +41,16 @@
   font-weight: 500;
 }
 
+/* The accessor tail of a `$var.AXIS` reference. Inside the same `.wp-rt-var`
+   atom, so the reference still deletes and moves as one unit — this only
+   changes how it reads. Dimmer than the name because the variable is what you
+   scan for; the axis qualifies it. */
+.wp-rt .wp-rt-var__accessor,
+.wp-rt-preview .wp-rt-var__accessor {
+  opacity: 0.82;
+  font-weight: 600;
+}
+
 .wp-rt .wp-rt-ref,
 .wp-rt-preview .wp-rt-ref {
   color: var(--wp-kind-wildcard, #f0abfc);

@@ -579,7 +579,19 @@ export function inlineTokenHtml(
       const attrs = t.kind === "var" && varAttrs
         ? varAttrs(t.raw.replace(/^\$/, ""))
         : "";
-      html += `<span class="wp-rt-${t.kind}"${attrs}>${escapeHtml(t.raw)}</span>`;
+      // A var carrying an accessor renders as one atom with two readings: the
+      // name keeps the variable colouring, the `.AXIS` / `.K` tail gets its own
+      // span so it can take the group's hue. Still ONE `.wp-rt-var`, so caret
+      // math and deletion continue to treat the reference as a single unit.
+      const accessorAt = t.kind === "var" ? t.raw.indexOf(".") : -1;
+      if (accessorAt > 0) {
+        html += `<span class="wp-rt-${t.kind}"${attrs}>`
+          + `${escapeHtml(t.raw.slice(0, accessorAt))}`
+          + `<span class="wp-rt-var__accessor">${escapeHtml(t.raw.slice(accessorAt))}</span>`
+          + `</span>`;
+      } else {
+        html += `<span class="wp-rt-${t.kind}"${attrs}>${escapeHtml(t.raw)}</span>`;
+      }
       if (!isText(i + 1)) html += "&#x200B;";
     }
   }
