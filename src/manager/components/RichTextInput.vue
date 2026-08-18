@@ -939,6 +939,25 @@ function textAtomHtml(text: string): string {
  * Only claimed where the host actually walked a graph: in the SPA every var is
  * out of scope because there is no graph to be in.
  */
+/** Whether a chip's axis is one its producer declares.
+ *
+ *  `undefined` means UNKNOWABLE, and that is the important case: a canvas node
+ *  carries its own payload SNAPSHOT of a module, so a wildcard added before its
+ *  group was promoted has `tag_groups` but no `tag_group_kinds` at all. That is
+ *  indistinguishable from "declares no axes", and marking either as an error
+ *  put a red squiggle under a reference that resolves perfectly well once the
+ *  node's snapshot is refreshed.
+ *
+ *  So the warning is only claimed when the producer declares SOME axes and this
+ *  is not among them — the one case where we actually know the read is wrong.
+ */
+function axisKnownFor(atom: Atom): boolean | undefined {
+  if (atom.kind !== "var" || !atom.axis) return undefined;
+  const axes = props.varProducers?.get(atom.name)?.axes;
+  if (!axes || axes.length === 0) return undefined;
+  return axes.some((a) => a.axis === atom.axis);
+}
+
 function varSpanAttrs(name: string): string {
   // `name` arrives with any accessor attached (`outfit.SHOES`). Scope is a
   // property of the BASE variable, so checking the whole string flagged every
@@ -951,9 +970,11 @@ function varSpanAttrs(name: string): string {
   if (props.graphAware && axis) {
     // The base resolves but the axis does not: the engine renders that as an
     // empty string, so without a mark the only symptom is a missing word.
-    const declared = (props.varProducers?.get(base)?.axes ?? [])
-      .some((a) => a.axis === axis);
-    if (props.varSuggestions.includes(base) && !declared) {
+    // Only claimed when the producer declares SOME axes — see `axisKnownFor`
+    // for why an empty list has to stay silent.
+    const known = props.varProducers?.get(base)?.axes;
+    const declared = (known ?? []).some((a) => a.axis === axis);
+    if (known && known.length > 0 && props.varSuggestions.includes(base) && !declared) {
       return ' style="color:var(--wp-warn,#f59e0b);'
         + "text-decoration:underline wavy color-mix(in srgb,var(--wp-warn,#f59e0b) 70%,transparent);"
         + 'text-underline-offset:3px;text-decoration-thickness:1px"';
@@ -3338,9 +3359,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
           :graph-aware="graphAware"
           :index="atom.kind === 'var' ? atom.index : undefined"
           :axis="atom.kind === 'var' ? atom.axis : undefined"
-          :axis-known="atom.kind === 'var' && atom.axis
-            ? (varProducers?.get(atom.name)?.axes ?? []).some((a) => a.axis === atom.axis)
-            : undefined"
+          :axis-known="axisKnownFor(atom)"
           :data-atom-index="idx"
           remappable
           @click="(ev: MouseEvent) => onChipClick(idx, ev)"

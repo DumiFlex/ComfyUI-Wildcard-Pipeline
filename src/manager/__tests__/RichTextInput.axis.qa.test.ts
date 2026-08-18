@@ -213,3 +213,41 @@ describe("echo guard — the cause behind the Backspace bug", () => {
     wrap.unmount();
   });
 });
+
+describe("stale node snapshots must not look like errors", () => {
+  it("stays silent when the producer declares no axes at all", async () => {
+    // A canvas node carries its own payload SNAPSHOT, so a wildcard added
+    // before its group was promoted has tag_groups but no tag_group_kinds.
+    // That is indistinguishable from "declares none", and marking either put a
+    // squiggle under a reference that resolves fine once the node refreshes.
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "$shoes.SHOES",
+        varSuggestions: ["outfit", "shoes"],
+        varProducers: PRODUCERS,   // `shoes` has no axes
+        graphAware: true,
+      },
+      attachTo: document.body,
+    });
+    await nextTick();
+    const html = (wrap.find(".wp-rt__host").element as HTMLElement).innerHTML;
+    expect(html).not.toContain("wp-refchip__accessor--unknown");
+    wrap.unmount();
+  });
+
+  it("still warns when the producer declares axes and this is not one", async () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "$outfit.BELTS",
+        varSuggestions: ["outfit", "shoes"],
+        varProducers: PRODUCERS,   // `outfit` declares SHOES + EXPOSES
+        graphAware: true,
+      },
+      attachTo: document.body,
+    });
+    await nextTick();
+    const html = (wrap.find(".wp-rt__host").element as HTMLElement).innerHTML;
+    expect(html).toContain("wp-refchip__accessor--unknown");
+    wrap.unmount();
+  });
+});
