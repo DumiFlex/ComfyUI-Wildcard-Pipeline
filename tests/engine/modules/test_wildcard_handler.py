@@ -352,7 +352,11 @@ def test_resolve_returns_empty_when_no_binding():
     assert out == {}
 
 
-def test_resolve_zero_weight_falls_back_to_first():
+def test_resolve_every_weight_zero_emits_nothing():
+    """Weight 0 is documented as "disable without deleting", so ALL of them
+    zero means nothing is selectable. This used to return the first option —
+    a real option, right shape, right place, and wrong, silently, until the
+    list was reordered and the "choice" changed."""
     ctx = _ctx(seed=0)
     payload = _payload([
         {"id": "a", "value": "alpha", "weight": 0},
@@ -361,7 +365,7 @@ def test_resolve_zero_weight_falls_back_to_first():
     out = WildcardHandler.resolve(
         payload, instance={"variable_binding": "$x"}, ctx=ctx,
     )
-    assert out == {"$x": "alpha"}  # all zero weights → first option
+    assert out == {"$x": ""}
 
 
 def test_resolve_negative_weight_clamped_to_zero():

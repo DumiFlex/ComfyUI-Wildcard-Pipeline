@@ -31,16 +31,19 @@ import { toIdentifier } from "./slug";
 /* Wildcards                                                                  */
 /* -------------------------------------------------------------------------- */
 
-/** Pick a weighted-random option. Returns null only when `options` is empty. */
+/** Pick a weighted-random option, or null when nothing is selectable —
+ *  an empty pool, every weight 0, or a constraint that excluded everything.
+ *  Mirrors engine `_pick_weighted`; returning `options[0]` for an excluded
+ *  pool showed the user a plausible option the run would never produce. */
 export function pickWeightedOption(
   options: WildcardOption[],
 ): WildcardOption | null {
   if (!options.length) return null;
   const total = options.reduce(
-    (a, b) => a + (Number(b.weight) || 0),
+    (a, b) => a + Math.max(0, Number(b.weight) || 0),
     0,
   );
-  if (total <= 0) return options[0];
+  if (total <= 0) return null;
   let r = Math.random() * total;
   for (const opt of options) {
     r -= Number(opt.weight) || 0;

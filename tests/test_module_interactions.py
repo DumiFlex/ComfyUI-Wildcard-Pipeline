@@ -198,9 +198,11 @@ class TestWildcardConstraint:
         warning_types = [w["type"] for w in ctx["__wp_warnings__"]]
         assert "unknown_constraint_source" in warning_types
 
-    def test_constraint_excludes_all_options_warns_and_falls_back(self):
+    def test_constraint_excludes_all_options_warns_and_emits_nothing(self):
         """Exception list excludes every target option → engine emits
-        constraint_excludes_all_options + falls back to options[0]."""
+        constraint_excludes_all_options and the target binds an empty
+        string. Returning options[0] instead made an over-narrowed
+        constraint look like a working pick."""
         ctx = _run([
             _wildcard("src", "hair", [{"id": "h1", "value": "long_hair", "weight": 1}]),
             _constraint("c1", source="src", target="tgt", exceptions=[
@@ -214,7 +216,7 @@ class TestWildcardConstraint:
         ], seed=1)
         warning_types = [w["type"] for w in ctx["__wp_warnings__"]]
         assert "constraint_excludes_all_options" in warning_types
-        assert ctx["style"] == "punk"  # falls back to options[0]
+        assert ctx["style"] == ""  # nothing survived the exclusion
 
 
 # ─── Nested @{} refs (wildcard option contains @{other_uuid}) ────────
@@ -588,8 +590,10 @@ class TestConstraintComposition:
                 {"id": "s2", "value": "classic", "weight": 1},
             ]),
         ], seed=1)
-        # Both excludes apply → whole pool zeroed → fallback options[0].
-        assert ctx["style"] == "punk"
+        # Both excludes apply → whole pool zeroed → the target emits
+        # nothing. Two constraints composing to exclude everything is
+        # still a configuration the user needs to see, not a silent pick.
+        assert ctx["style"] == ""
         hits = ctx.get("__wp_constraint_hits__", {})
         assert hits.get("c1") == 1 and hits.get("c2") == 1
         never = [

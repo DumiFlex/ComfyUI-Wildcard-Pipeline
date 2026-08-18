@@ -189,7 +189,13 @@ def _pick_weighted(options: list[dict], rng) -> dict | None:
         return None
     total = sum(max(0.0, float(o.get("weight", 1))) for o in options)
     if total <= 0:
-        return options[0]
+        # Nothing is selectable — every option is either weight 0 (documented
+        # as "disable without deleting") or was excluded by a constraint.
+        # Returning options[0] here looked like a working pick: a real option,
+        # right shape, right place, and wrong. It stayed wrong silently until
+        # the list was reordered. Callers turn None into an empty binding,
+        # which is what the null option already means.
+        return None
     r = rng.random() * total
     acc = 0.0
     for opt in options:

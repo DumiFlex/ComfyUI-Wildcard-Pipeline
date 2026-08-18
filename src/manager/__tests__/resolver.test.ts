@@ -70,12 +70,24 @@ describe("pickWeightedOption", () => {
     expect(aHits / N).toBeLessThan(0.96);
   });
 
-  it("falls back to first when all weights are zero", () => {
+  it("picks nothing when all weights are zero", () => {
+    // Weight 0 means "disabled", so all of them zero means nothing is
+    // selectable. Returning the first option showed the user a plausible
+    // pick the engine would never actually produce.
     const opts: WildcardOption[] = [
       { id: "a", value: "a", weight: 0, sub_categories: [] },
       { id: "b", value: "b", weight: 0, sub_categories: [] },
     ];
-    expect(pickWeightedOption(opts)?.value).toBe("a");
+    expect(pickWeightedOption(opts)).toBeNull();
+  });
+
+  it("still picks the one live option among disabled ones", () => {
+    const opts: WildcardOption[] = [
+      { id: "a", value: "a", weight: 0, sub_categories: [] },
+      { id: "b", value: "b", weight: 2, sub_categories: [] },
+      { id: "c", value: "c", weight: 0, sub_categories: [] },
+    ];
+    expect(pickWeightedOption(opts)?.value).toBe("b");
   });
 });
 
