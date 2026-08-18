@@ -65,6 +65,12 @@
   --wp-text-dim:    #8a8a9a;
 
   /* Status */
+  /* Tag-axis accessor (`$outfit.SHOES`). One fixed colour rather than the
+     group's own hue: an accessor is the same KIND of thing wherever it
+     appears, and per-group hues made the meaning look different per
+     variable. Deliberately amber-400, not --wp-warn (amber-500), so a valid
+     axis never reads as the undeclared-axis warning. */
+  --wp-axis: #fbbf24;
   --wp-success: #22c55e;
   --wp-warn:    #f59e0b;
   --wp-danger:  #ef4444;

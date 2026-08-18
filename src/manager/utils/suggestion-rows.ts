@@ -38,9 +38,6 @@ export interface SuggestionRow {
   /** True for a `name.AXIS` entry, so the popover can indent it under the
    *  variable it belongs to instead of listing it as a peer. */
   isAxis?: boolean;
-  /** The group's position among ALL its wildcard's tag groups, so the row can
-   *  take the same hue that group wears in the wildcard editor. */
-  axisHueIndex?: number;
   /** What gets inserted — a uuid for `@`, a bare name for `$`. */
   token: string;
   /** What the user reads. */
@@ -228,7 +225,6 @@ export function varRows(
         badge: undefined,
         internal: p?.internal === true,
         isAxis: true,
-        axisHueIndex: axis?.hueIndex,
       };
     }
     return {

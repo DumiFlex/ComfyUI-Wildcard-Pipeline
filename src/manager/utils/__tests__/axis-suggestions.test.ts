@@ -73,10 +73,12 @@ describe("expandVarsWithAxes", () => {
 });
 
 describe("varRows", () => {
-  it("marks an axis row and gives it its group's hue index", () => {
+  it("marks an axis row so the popover can indent and tint it", () => {
+    // Colour is a single amber token now, not the group's hue: an accessor is
+    // the same KIND of thing wherever it appears, and per-group hues made one
+    // meaning look different from variable to variable.
     const [, shoes] = varRows(["outfit", "outfit.SHOES"], producers, false);
     expect(shoes.isAxis).toBe(true);
-    expect(shoes.axisHueIndex).toBe(1);
     expect(shoes.token).toBe("outfit.SHOES");
   });
 

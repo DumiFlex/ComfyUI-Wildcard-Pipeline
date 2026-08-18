@@ -2,9 +2,6 @@
 <script setup lang="ts">
 import { computed, inject, ref, onBeforeUnmount } from "vue";
 import { KIND_ICON_MAP } from "../../components/shared/kind-icons";
-// Same hue source the wildcard editor and the suggestion row use, so one axis
-// is one colour everywhere it appears.
-import { axisHueAt } from "../../components/shared/axis-color";
 import { parse, readsAs, matches } from "@/manager/parsing/subcatFilter";
 import { splitRefFilter } from "@/widgets/richTokenize";
 // Live library lookup — the hover card's "N of M options match" count reads
@@ -43,10 +40,6 @@ interface Props {
    *  marked — otherwise the only symptom is a word missing from the prompt,
    *  with a chip that looks perfectly healthy. */
   axisKnown?: boolean;
-  /** Position of the axis among ALL its wildcard's tag groups, so the chip can
-   *  wear the same hue the group wears in the wildcard editor and in the
-   *  suggestion row. Absent when unknown. */
-  axisHueIndex?: number;
   /** UUID of the wildcard library entry (ref-kind only). */
   uuid?: string;
   /** True when the name resolved against the catalog / surface. False → render as red `?` chip. */
@@ -265,10 +258,6 @@ const readsAsExpr = computed(() => {
 const filterTitle = "";
 
 /** Whether the exclude-null mark should render (effective flag). */
-function axisTint(i: number): string {
-  return `color-mix(in oklab, ${axisHueAt(i)} 85%, var(--wp-text))`;
-}
-
 const showNoNull = computed(() => isRef.value && filter.value.excludeNull);
 
 /** The accessor tail of a var chip — `.0`, `.SHOES`, or both. Refs never have
@@ -508,8 +497,6 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
       v-if="accessorSuffix"
       class="wp-refchip__accessor"
       :class="{ 'wp-refchip__accessor--unknown': axis && axisKnown === false }"
-      :style="axis && axisKnown !== false && axisHueIndex !== undefined
-        ? { color: axisTint(axisHueIndex) } : undefined"
       :title="axis && axisKnown === false
         ? `No '${axis}' axis on this variable — is that tag group marked 'accepts'?`
         : undefined"
@@ -694,6 +681,29 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
  * via inline style when `moduleKind` differs from `wildcard`. The
  * fallback to `--wp-kind-wildcard` keeps legacy (no-prop) callers on
  * the original violet palette. */
+/* The accessor tail of a var chip (`.SHOES`, `.0`). One fixed amber wherever an
+   accessor appears — chip and suggestion row alike — rather than the axis
+   group's own hue: an accessor is the same KIND of thing everywhere, and
+   per-group hues made one meaning look different from variable to variable.
+   Colour is set here rather than inherited because the accessor sits inside
+   the label, which carries the chip's own colour. */
+.wp-refchip__accessor {
+  color: var(--wp-axis, #fbbf24);
+  font-weight: var(--wp-weight-semibold);
+}
+
+/* An axis the producing wildcard does not declare. Amber-500 plus a wavy rule,
+   distinct from the amber-400 above so a broken axis never reads as a working
+   one. The engine renders such a read as an empty string, so without this the
+   only symptom is a word silently missing from the prompt. */
+.wp-refchip__accessor--unknown {
+  color: var(--wp-warn, #f59e0b);
+  text-decoration: underline wavy
+    color-mix(in srgb, var(--wp-warn, #f59e0b) 70%, transparent);
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+
 .wp-refchip--ref {
   background: color-mix(in srgb, var(--wp-refchip-tone, var(--wp-kind-wildcard, #a855f7)) 15%, transparent);
   border-color: color-mix(in srgb, var(--wp-refchip-tone, var(--wp-kind-wildcard, #a855f7)) 50%, transparent);

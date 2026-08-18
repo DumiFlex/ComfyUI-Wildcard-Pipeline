@@ -51,9 +51,6 @@ import {
 } from "../utils/tagSetting";
 import { refRows, varRows, type SuggestionRow, expandVarsWithAxes } from "../utils/suggestion-rows";
 import { varColorClass, varColorIndex } from "../../components/shared/var-color";
-// An axis row wears the same hue its group wears in the wildcard editor, so
-// the reference and the tags it reads are visibly the same thing.
-import { axisHueAt } from "../../components/shared/axis-color";
 import { CONTEXT_POOLS_KEY, type ContextPoolMap } from "../../extension/context-pools";
 
 // --- 4-segment nested-ref serialization (SP1, §3.2) -----------------------
@@ -3341,10 +3338,6 @@ function onHostKeydown(ev: KeyboardEvent): void {
           :graph-aware="graphAware"
           :index="atom.kind === 'var' ? atom.index : undefined"
           :axis="atom.kind === 'var' ? atom.axis : undefined"
-          :axis-hue-index="atom.kind === 'var' && atom.axis
-            ? (varProducers?.get(atom.name)?.axes ?? [])
-                .find((a) => a.axis === atom.axis)?.hueIndex
-            : undefined"
           :axis-known="atom.kind === 'var' && atom.axis
             ? (varProducers?.get(atom.name)?.axes ?? []).some((a) => a.axis === atom.axis)
             : undefined"
@@ -3531,8 +3524,6 @@ function onHostKeydown(ev: KeyboardEvent): void {
           type="button"
           class="wp-rt-suggestions__item"
           :class="{ 'wp-rt-suggestions__item--axis': row.isAxis }"
-          :style="row.isAxis && row.axisHueIndex !== undefined
-            ? { '--axis-hue': axisHueAt(row.axisHueIndex) } : undefined"
           :data-active="i === acActive ? '' : null"
           role="option"
           :aria-selected="i === acActive"
@@ -4128,7 +4119,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
 }
 
 .wp-rt-suggestions__axis {
-  color: color-mix(in oklab, var(--axis-hue, var(--wp-accent-400)) 82%, var(--wp-text));
+  color: var(--wp-axis, #fbbf24);
   font-weight: var(--wp-weight-semibold);
 }
 
