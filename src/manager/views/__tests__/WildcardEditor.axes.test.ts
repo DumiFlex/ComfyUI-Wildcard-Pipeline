@@ -126,6 +126,24 @@ describe("WildcardEditor tag-group kinds", () => {
     expect(btn.attributes("aria-pressed")).toBe("false");
   });
 
+  it("labels itself with the kind, so nothing needs a tooltip to be read", async () => {
+    const w = await mountSeeded();
+    expect(w.get('[data-test="group-kind-SHOES"]').text()).toBe("classify");
+    await w.get('[data-test="group-kind-SHOES"]').trigger("click");
+    expect(w.get('[data-test="group-kind-SHOES"]').text()).toBe("accepts");
+  });
+
+  it("stays a real focusable button even though it is transparent at rest", async () => {
+    // The classify state is hidden with opacity, not display:none or
+    // visibility — a keyboard user must still be able to tab to it, and
+    // :focus-visible reveals it. display:none would take it off the tab order
+    // and make the feature pointer-only.
+    const w = await mountSeeded();
+    const el = w.get('[data-test="group-kind-SHOES"]').element as HTMLElement;
+    expect(el.tagName).toBe("BUTTON");
+    expect(el.hasAttribute("disabled")).toBe(false);
+  });
+
   it("the ungrouped box has no kind selector", async () => {
     const w = await mountSeeded();
     // `casual` is registry-but-ungrouped, so a trailing box renders for it.

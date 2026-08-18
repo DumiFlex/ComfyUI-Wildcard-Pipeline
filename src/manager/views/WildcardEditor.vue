@@ -1951,11 +1951,15 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
               <!-- What this group MEANS to the engine. classify (the default)
                    is today's behaviour: tags describe the option and fold with
                    AND. accepts makes them alternatives the option offers — an
-                   OR-set, readable as $var.NAME. Built as an icon toggle
-                   rather than a dropdown so a classify group — every group
-                   that exists today — carries no extra chrome at all; the
-                   promoted state is what earns the ink. Ungrouped tags have
-                   no kind, so the trailing box does not get one. -->
+                   OR-set, readable as $var.NAME.
+
+                   Shaped as a capsule because that is the grammar of the pills
+                   it governs — it is a property of the axis, not a utility
+                   action like the ungroup button. A classify group (every
+                   group that exists today) shows nothing until the header is
+                   hovered, so the default costs no ink; only the promoted
+                   state, which is real information, is always visible.
+                   Ungrouped tags have no kind, so that box gets no control. -->
               <button
                 v-if="!group.isOther"
                 type="button"
@@ -1968,7 +1972,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                   ? `Accepts axis — an option's tags here are alternatives it offers, and $${varBinding}.${group.axis} reads the one that was rolled. Click to make it descriptive.`
                   : 'Descriptive — these tags say what an option IS, several true at once. Click to make them alternatives it accepts.'"
                 @click.stop="toggleGroupKind(group.axis)"
-              ><i class="pi pi-tag" aria-hidden="true" /></button>
+              >{{ tagGroupKinds[group.axis] === 'accepts' ? 'accepts' : 'classify' }}</button>
               <!-- A folded axis still reports how many tags are inside, so
                    folding never hides the fact that there is something there. -->
               <span
@@ -2717,29 +2721,58 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
   color: var(--wp-text);
   outline: none;
 }
-/* Same 24px icon-button shape as `__ungroup` beside it — the header's
-   established vocabulary is icon buttons, not form controls. */
+/* A capsule, not an icon button: the pills this control governs are
+   hue-tinted capsules, so borrowing their grammar makes it read as a property
+   of the axis. The earlier icon button borrowed `__ungroup`'s flat grey
+   square, which is the vocabulary of a utility ACTION, and the hover landed as
+   a hard block unrelated to anything around it. */
 .subcat-group__kind {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: none;
+  height: 20px;
+  padding: 0 var(--wp-space-4);
+  border: 1px solid transparent;
+  border-radius: 999px;
   background: transparent;
-  cursor: pointer;
   color: var(--wp-text-dim);
-  border-radius: var(--wp-radius-sm);
+  font-size: var(--wp-text-xs);
+  font-weight: var(--wp-weight-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  /* Hidden at rest — see the `__head:hover` rule below. */
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    color 120ms ease,
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+/* A classify group is the default and says nothing worth permanent ink, so it
+   appears only when the user is looking at that header. Keyboard users get it
+   on focus, so it is discoverable without a pointer. */
+.subcat-group__head:hover .subcat-group__kind,
+.subcat-group__kind:focus-visible {
+  opacity: 1;
 }
 .subcat-group__kind:hover {
-  color: var(--wp-text);
-  background: var(--wp-bg-3);
+  color: var(--wp-text-muted);
+  border-color: var(--wp-border-strong);
 }
-/* Promoted: carries the group's own hue, the same colour its name already
-   uses, so the axis reads as one thing rather than a row of unrelated bits. */
+/* Promoted: always visible, in the group's own hue and the pills' exact fill
+   recipe, so the axis reads as one thing. Hover deepens the tint that is
+   already there rather than introducing a second colour. */
 .subcat-group__kind--accepts {
-  color: color-mix(in srgb, var(--group-hue, var(--wp-accent)) 80%, var(--wp-text));
-  background: color-mix(in srgb, var(--group-hue, var(--wp-accent)) 14%, transparent);
+  opacity: 1;
+  color: color-mix(in srgb, var(--group-hue, var(--wp-accent-400)) 78%, var(--wp-text));
+  border-color: color-mix(in srgb, var(--group-hue, var(--wp-accent-400)) 55%, var(--wp-border));
+  background: color-mix(in srgb, var(--group-hue, var(--wp-accent-400)) 17%, var(--wp-bg-1));
+}
+.subcat-group__kind--accepts:hover {
+  background: color-mix(in srgb, var(--group-hue, var(--wp-accent-400)) 28%, var(--wp-bg-1));
+}
+@media (prefers-reduced-motion: reduce) {
+  .subcat-group__kind { transition: none; }
 }
 
 .subcat-group__name--other {
