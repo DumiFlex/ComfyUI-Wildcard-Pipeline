@@ -150,6 +150,30 @@ describe("collectUpstreamProducers", () => {
     expect(out.shared.shadowed).toBe(1);
   });
 
+  it("keeps a wildcard's accepts axes when a later node rebinds the var", () => {
+    // The engine keys `__wp_axes__` by BINDING and writes it at pick time, so
+    // a derivation downstream that rewrites `$shared` does not clear the
+    // rolled axis — `$shared.SHOES` still resolves. The producer map replaced
+    // the record wholesale, so the axis rows disappeared as soon as anything
+    // downstream touched the name: true of essentially every real graph.
+    const up = ctxWriting(1, "Outfit", "shared");
+    const upMods = JSON.parse(String(up.widgets![0].value));
+    upMods.modules[0].payload.tag_groups = { SHOES: ["sneakers", "heels"] };
+    upMods.modules[0].payload.tag_group_kinds = { SHOES: "accepts" };
+    up.widgets![0].value = JSON.stringify(upMods);
+    const mid = ctxDerivation(2, "Rewrite", "shared", 4, 100);
+    const pov = ctxWriting(3, "Other", "unused", 101);
+    const out = collectUpstreamProducers(
+      chain([up, mid, pov], {
+        100: { origin_id: 1, target_id: 2 },
+        101: { origin_id: 2, target_id: 3 },
+      }),
+      pov,
+    );
+    expect(out.shared.moduleName).toBe("Rewrite");
+    expect(out.shared.axes?.map((a) => a.axis)).toEqual(["SHOES"]);
+  });
+
   it("counts two DIFFERENT modules in one node as two writers", () => {
     // They share `nodeId` and `kind`, so keying on those alone would collapse
     // a real last-write-wins conflict into a single silent writer.
@@ -700,6 +724,57 @@ function fakeWildcardContextNode(
     }],
   };
 }
+
+describe("collectUpstreamResolved axis reads", () => {
+  beforeEach(() => _resetForTests());
+
+  /** Build a chain whose combine template reads `$outfit.SHOES`. */
+  function axisGraph(template: string) {
+    const ctx = fakeWildcardContextNode(1, [
+      { id: "aaaaaaaa", binding: "$outfit", options: [{ value: "a white t-shirt" }] },
+    ]);
+    const mods = JSON.parse(String(ctx.widgets![0].value));
+    mods.modules[0].payload.tag_groups = { SHOES: ["sneakers", "heels"], FIT: ["loose"] };
+    mods.modules[0].payload.tag_group_kinds = { SHOES: "accepts" };
+    mods.modules.push({
+      id: "bbbbbbbb", type: "combine", enabled: true, meta: { name: "" }, entries: [],
+      payload: { output_var: "scene", template },
+    });
+    ctx.widgets![0].value = JSON.stringify(mods);
+    const asm: LiteNodeLike = {
+      id: 2, type: "WP_PromptAssembler", inputs: [{ name: "context", link: 100 }],
+    };
+    return {
+      _nodes: [ctx, asm],
+      links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id: number) => ({ 1: ctx, 2: asm } as Record<number, LiteNodeLike>)[id] ?? null,
+    } as LiteGraphLike;
+  }
+
+  it("REPORTED: an axis read previews as a TAG, not the variable text plus a stranded accessor", () => {
+    // Was "a white t-shirt.SHOES" — `$outfit` substituted, `.SHOES` left behind.
+    const out = collectUpstreamResolved(axisGraph("wearing $outfit.SHOES"), {
+      id: 2, type: "WP_PromptAssembler", inputs: [{ name: "context", link: 100 }],
+    });
+    expect(out.scene).toBe("wearing sneakers");
+  });
+
+  it("leaves an unknown accessor verbatim rather than swallowing it", () => {
+    // FIT exists but is a classify group, so it is not readable — and BELTS
+    // does not exist at all. Consuming either would silently delete text.
+    const out = collectUpstreamResolved(axisGraph("wearing $outfit.BELTS"), {
+      id: 2, type: "WP_PromptAssembler", inputs: [{ name: "context", link: 100 }],
+    });
+    expect(out.scene).toBe("wearing $outfit.BELTS");
+  });
+
+  it("still resolves a plain read", () => {
+    const out = collectUpstreamResolved(axisGraph("wearing $outfit"), {
+      id: 2, type: "WP_PromptAssembler", inputs: [{ name: "context", link: 100 }],
+    });
+    expect(out.scene).toBe("wearing a white t-shirt");
+  });
+});
 
 describe("collectUpstreamResolved nested @{uuid} fallback", () => {
   beforeEach(() => _resetForTests());

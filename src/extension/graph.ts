@@ -1045,6 +1045,14 @@ export function collectUpstreamProducers(
     lastWriter.set(name, who);
     out[name] = {
       ...info,
+      // Axes survive being overwritten. The engine records a rolled axis in
+      // `__wp_axes__` keyed by BINDING at pick time, and a later writer
+      // rebinding the same `$var` — a derivation, an injector row — replaces
+      // the text without touching that record, so `$outfit.SHOES` still
+      // resolves. Replacing the producer wholesale dropped the wildcard's
+      // axes the moment anything downstream wrote the same name, which is
+      // every real graph: the axis rows vanished one node along the chain.
+      ...(info.axes ?? prev?.axes ? { axes: info.axes ?? prev?.axes } : {}),
       shadowed: prev ? (sameWriter ? prev.shadowed : prev.shadowed + 1) : 0,
     };
   };
@@ -1202,13 +1210,39 @@ export function collectUpstreamProducers(
 
 // SP2a: optional `.K` list accessor (group 2) so `$mood.0` is consumed whole
 // (no stranded ".0" literal) and the index drives applyVarAccessor below.
-const VAR_REF_RE = /\$([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?/g;
+const VAR_REF_RE =
+  /\$([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?(?:\.([A-Za-z_][A-Za-z0-9_]*))?(?:\.(\d+))?/g;
 const WC_REF_RE = /@\{([0-9a-f]{8})(?:#[^#:}@{]*)?(?::[^}]*)?\}/g;
 const MAX_REF_DEPTH = 8;
 
 interface MinimalWildcard {
   options?: Array<{ value?: string; weight?: number }>;
   var_binding?: string;
+  tag_groups?: Record<string, string[]>;
+  tag_group_kinds?: Record<string, string>;
+}
+
+/** The tag a `$var.AXIS` read previews as, or undefined when no wildcard in
+ *  the chain binds `name` with an `accepts` group called `axis`.
+ *
+ *  Runtime rolls one member of the group per pick; the static preview has no
+ *  rng, so it shows the FIRST member — the same deterministic convention the
+ *  `@{uuid}` expansion uses when it previews a wildcard as its first option.
+ *  Returning undefined for an unknown axis is what keeps the caller from
+ *  swallowing an accessor it cannot resolve: `$size.LARGE` where LARGE is not
+ *  an axis stays verbatim rather than silently losing text. */
+function previewAxisTag(
+  catalog: Map<string, MinimalWildcard>,
+  name: string,
+  axis: string,
+): string | undefined {
+  for (const wc of catalog.values()) {
+    if ((wc.var_binding ?? "").replace(/^\$/, "") !== name) continue;
+    if (wc.tag_group_kinds?.[axis] !== "accepts") continue;
+    const tags = wc.tag_groups?.[axis] ?? [];
+    if (tags.length > 0) return tags[0];
+  }
+  return undefined;
 }
 
 function resolveChainStatic(chain: LiteNodeLike[]): Record<string, ResolvedValue> {
@@ -1591,10 +1625,24 @@ function expandValue(
   //    unknowns (incl. their accessor) intact. ctx values are strings in this
   //    static resolver, so applyVarAccessor treats `$s.0` as `$s` and `$s.K>0`
   //    as "" — never leaking the literal ".K" into the preview.
-  let out = raw.replace(VAR_REF_RE, (full, name, idx) =>
-    Object.prototype.hasOwnProperty.call(ctx, name)
-      ? applyVarAccessor(ctx[name], idx != null ? parseInt(idx, 10) : undefined)
-      : full,
+  let out = raw.replace(
+    VAR_REF_RE,
+    (full, name, idxA, axis, idxB) => {
+      if (!Object.prototype.hasOwnProperty.call(ctx, name)) return full;
+      const idx = idxA ?? idxB;
+      const base = applyVarAccessor(
+        ctx[name],
+        idx != null ? parseInt(idx, 10) : undefined,
+      );
+      // An axis read resolves to a TAG, not to the variable's text. Without
+      // this the preview substituted `$outfit` and left `.SHOES` stranded, so
+      // both the preview and the resolved line read
+      // "a white t-shirt and denim skirt.SHOES" — the accessor looked broken
+      // in exactly the editor meant to teach it.
+      if (axis == null) return base;
+      const tag = previewAxisTag(catalog, name, axis);
+      return tag ?? full;
+    },
   );
   // 2. Substitute `@{8hex}` with the referenced wildcard's first option,
   //    recursively expanded so chains (`@{a}` → "@{b} hat" → "blue hat")

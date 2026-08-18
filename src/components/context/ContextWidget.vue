@@ -935,8 +935,16 @@ const allVarProducers = computed<Record<string, VarProducerLike>>(() => {
   const merged: Record<string, VarProducerLike> = { ...upstream };
   for (const [name, sib] of Object.entries(siblingVarInfo.value.producers)) {
     const up = upstream[name];
+    // Same carry-forward as the graph walk: a same-node writer that declares
+    // no axes must not erase the ones an upstream wildcard declared for this
+    // binding — the engine keys `__wp_axes__` by binding, so the rolled axis
+    // outlives a rebind.
     merged[name] = up
-      ? { ...sib, shadowed: sib.shadowed + up.shadowed + 1 }
+      ? {
+          ...sib,
+          ...(sib.axes ?? up.axes ? { axes: sib.axes ?? up.axes } : {}),
+          shadowed: sib.shadowed + up.shadowed + 1,
+        }
       : sib;
   }
   return merged;

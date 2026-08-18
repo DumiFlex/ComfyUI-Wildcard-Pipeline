@@ -21,6 +21,12 @@ class ContextInternals(TypedDict, total=False):
 Context = dict[str, Any]
 
 
+#: Engine tables the text resolver reads by key rather than as variables.
+#: `strip_internals` keeps these so accessor syntax (`$var.0`, `$var.AXIS`)
+#: works at the prompt-render boundary, not just inside the pipeline.
+_RESOLVER_TABLES = ("__wp_axes__", "__wp_picks__")
+
+
 def strip_internals(ctx: dict[str, Any]) -> dict[str, Any]:
     """Return a copy of ``ctx`` with engine-only + user-flagged-internal keys removed.
 
@@ -47,10 +53,19 @@ def strip_internals(ctx: dict[str, Any]) -> dict[str, Any]:
     internal_names: set[str] = set()
     if isinstance(flags, dict):
         internal_names = {k for k, v in flags.items() if v}
-    return {
+    out = {
         k: v for k, v in ctx.items()
         if not k.startswith("__") and k not in internal_names
     }
+    # The accessor tables are not variables — the resolver reads them off the
+    # ctx dict by key, and `_vars` already excludes every `__` name, so they
+    # can never surface as a `$var` substitution. Dropping them here is what
+    # made `$outfit.SHOES` and `$outfit.0` resolve in a Combine but render as
+    # literal text in the assembler: same grammar, different boundary.
+    for key in _RESOLVER_TABLES:
+        if key in ctx:
+            out[key] = ctx[key]
+    return out
 
 
 def strip_engine_internals(ctx: dict[str, Any]) -> dict[str, Any]:
