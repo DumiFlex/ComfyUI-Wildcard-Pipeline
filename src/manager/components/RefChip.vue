@@ -105,6 +105,10 @@ interface Props {
 export interface VarAxis {
   axis: string;
   tags: string[];
+  /** Position among ALL of the wildcard's tag groups, not among the accepts
+   *  ones — `axisHueAt()` is indexed that way in the wildcard editor, so
+   *  filtering first would give SHOES a different colour in the two places. */
+  hueIndex: number;
 }
 
 export interface VarProducerLike {

@@ -935,6 +935,10 @@ export function collectUpstreamKinds(
 export interface VarAxis {
   axis: string;
   tags: string[];
+  /** Position among ALL of the wildcard's tag groups, not among the accepts
+   *  ones — `axisHueAt()` is indexed that way in the wildcard editor, so
+   *  filtering first would give SHOES a different colour in the two places. */
+  hueIndex: number;
 }
 
 export interface VarProducer {
@@ -1157,9 +1161,10 @@ export function collectUpstreamProducers(
       const axes: VarAxis[] = [];
       if (m.type === "wildcard") {
         const kinds = payload.tag_group_kinds ?? {};
-        for (const [axis, tags] of Object.entries(payload.tag_groups ?? {})) {
-          if (kinds[axis] === "accepts") axes.push({ axis, tags: tags ?? [] });
-        }
+        // Index over EVERY group so the hue matches the wildcard editor's.
+        Object.entries(payload.tag_groups ?? {}).forEach(([axis, tags], hueIndex) => {
+          if (kinds[axis] === "accepts") axes.push({ axis, tags: tags ?? [], hueIndex });
+        });
       }
       write(
         raw.replace(/^\$/, "").trim(),

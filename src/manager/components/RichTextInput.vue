@@ -29,7 +29,9 @@ import {
   type RefAtom,
   type TextAtom,
 } from "./atomicEditorModel";
-import { escapeHtml, inlineTokenHtml, splitRefFilter, tokenizeRich } from "../../widgets/richTokenize";
+import {
+  escapeHtml, inlineTokenHtml, splitRefFilter, tokenizeRich, varBaseName,
+} from "../../widgets/richTokenize";
 import RefChip, { type VarProducerLike } from "./RefChip.vue";
 import SubcategoryFilterPicker from "./SubcategoryFilterPicker.vue";
 import RemapRefPopup from "./RemapRefPopup.vue";
@@ -46,8 +48,11 @@ import {
   completionSettingsVersion,
   completionSourceEnabled as sourceOn,
 } from "../utils/tagSetting";
-import { refRows, varRows, type SuggestionRow } from "../utils/suggestion-rows";
+import { refRows, varRows, type SuggestionRow, expandVarsWithAxes } from "../utils/suggestion-rows";
 import { varColorClass, varColorIndex } from "../../components/shared/var-color";
+// An axis row wears the same hue its group wears in the wildcard editor, so
+// the reference and the tags it reads are visibly the same thing.
+import { axisHueAt } from "../../components/shared/axis-color";
 import { CONTEXT_POOLS_KEY, type ContextPoolMap } from "../../extension/context-pools";
 
 // --- 4-segment nested-ref serialization (SP1, §3.2) -----------------------
@@ -1141,7 +1146,12 @@ const acMatches = computed(() => {
   if (!acOpen.value) return [];
   if (acTrigger.value === "tag") return [];  // tag rows live in `tagRows`
   if (acTrigger.value === "@" && !refsEnabled.value) return [];
-  const pool = acTrigger.value === "@" ? props.refSuggestions : props.varSuggestions;
+  // `$` pool carries each variable's `accepts` axes as `name.AXIS` entries,
+  // directly after the variable they belong to. Query matching is unchanged:
+  // "out" still finds `outfit`, and now finds `outfit.SHOES` with it.
+  const pool = acTrigger.value === "@"
+    ? props.refSuggestions
+    : expandVarsWithAxes(props.varSuggestions, props.varProducers);
   const q = acQuery.value.toLowerCase();
   const labelOf = acTrigger.value === "@"
     ? (uuid: string) => (props.uuidToName.get(uuid) ?? uuid).toLowerCase()
@@ -3445,6 +3455,9 @@ function onHostKeydown(ev: KeyboardEvent): void {
           :key="row.token"
           type="button"
           class="wp-rt-suggestions__item"
+          :class="{ 'wp-rt-suggestions__item--axis': row.isAxis }"
+          :style="row.isAxis && row.axisHueIndex !== undefined
+            ? { '--axis-hue': axisHueAt(row.axisHueIndex) } : undefined"
           :data-active="i === acActive ? '' : null"
           role="option"
           :aria-selected="i === acActive"
@@ -3457,15 +3470,20 @@ function onHostKeydown(ev: KeyboardEvent): void {
                one cue that says which. -->
           <span
             class="wp-rt-suggestions__icon-box"
-            :style="acTrigger === '$' ? varTint(row.label) : kindTint(row.kind)"
+            :style="acTrigger === '$' ? varTint(varBaseName(row.label)) : kindTint(row.kind)"
             aria-hidden="true"
           ><i :class="row.icon" /></span>
           <span class="wp-rt-suggestions__body">
             <span
               class="wp-rt-suggestions__label"
-              :class="acTrigger === '$' ? varColorClass(row.label) : null"
+              :class="acTrigger === '$' ? varColorClass(varBaseName(row.label)) : null"
             >
-              <span class="wp-rt-suggestions__trigger">{{ acTrigger }}</span>{{ row.label }}
+              <span class="wp-rt-suggestions__trigger">{{ acTrigger }}</span
+              ><template v-if="row.isAxis"
+                >{{ row.label.slice(0, row.label.indexOf('.')) }}<span
+                  class="wp-rt-suggestions__axis"
+                >.{{ row.label.slice(row.label.indexOf('.') + 1) }}</span></template
+              ><template v-else>{{ row.label }}</template>
             </span>
             <!-- Second line: the facts that separate same-named entries. For
                  `@` these are structural (options/axes/tags); for `$` it is
@@ -4015,6 +4033,20 @@ function onHostKeydown(ev: KeyboardEvent): void {
    `scroll-margin` is the mechanism designed for exactly this. */
 .wp-rt-suggestions__item { scroll-margin-top: 38px; }
 .wp-rt-tag { scroll-margin-bottom: 40px; }
+
+/* An axis belongs TO the variable above it, so it is indented under it rather
+   than listed as a peer. The rule sits before the base block so the base's
+   padding shorthand does not undo the inset. */
+.wp-rt-suggestions__item--axis {
+  padding-left: var(--wp-space-7);
+}
+/* The accessor segment carries the group's own hue — the same colour those
+   tags wear in the wildcard editor — while the variable name keeps its usual
+   per-name tint. One row, two readings. */
+.wp-rt-suggestions__axis {
+  color: color-mix(in oklab, var(--axis-hue, var(--wp-accent-400)) 82%, var(--wp-text));
+  font-weight: var(--wp-weight-semibold);
+}
 
 .wp-rt-suggestions__item {
   display: flex;

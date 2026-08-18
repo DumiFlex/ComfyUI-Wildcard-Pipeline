@@ -30,9 +30,17 @@ export interface ProducerLike {
   internal?: boolean;
   shadowed: number;
   siblingLabel?: string;
+  /** `accepts` axes the producing wildcard declares, for `$var.AXIS` rows. */
+  axes?: { axis: string; tags: string[]; hueIndex: number }[];
 }
 
 export interface SuggestionRow {
+  /** True for a `name.AXIS` entry, so the popover can indent it under the
+   *  variable it belongs to instead of listing it as a peer. */
+  isAxis?: boolean;
+  /** The group's position among ALL its wildcard's tag groups, so the row can
+   *  take the same hue that group wears in the wildcard editor. */
+  axisHueIndex?: number;
   /** What gets inserted — a uuid for `@`, a bare name for `$`. */
   token: string;
   /** What the user reads. */
@@ -162,13 +170,67 @@ export function producerBadge(p: ProducerLike): string | undefined {
 }
 
 /** One row per `$` hit. */
+/** How many `accepts` axes one variable may contribute to the list.
+ *
+ *  Axes are naturally few — a wildcard with more than a handful of them is
+ *  unusual — but the cap means a single pathological variable can never bury
+ *  every other match. Anything beyond it stays typeable and is offered by the
+ *  dot-triggered popover, which lists that one variable's axes in full. */
+const MAX_AXIS_ROWS_PER_VAR = 6;
+
+/** Expand a bare variable list so each variable is followed by its `accepts`
+ *  axes as `name.AXIS` entries.
+ *
+ *  Flattened into the same list rather than hidden behind a second step: the
+ *  axes are then visible while the user is still choosing, which is both one
+ *  keystroke cheaper and the only advertisement the feature gets. A pick INDEX
+ *  is deliberately absent — `pick_min`/`pick_max` are per-instance, so a
+ *  library-authored template has no range to offer and any number shown would
+ *  be true for one use and wrong for the next. */
+export function expandVarsWithAxes(
+  names: readonly string[],
+  producers: ReadonlyMap<string, ProducerLike> | undefined,
+): string[] {
+  const out: string[] = [];
+  for (const name of names) {
+    out.push(name);
+    const axes = producers?.get(name)?.axes ?? [];
+    for (const a of axes.slice(0, MAX_AXIS_ROWS_PER_VAR)) {
+      if (a.axis) out.push(`${name}.${a.axis}`);
+    }
+  }
+  return out;
+}
+
 export function varRows(
   names: readonly string[],
   producers: ReadonlyMap<string, ProducerLike> | undefined,
   graphAware: boolean,
 ): SuggestionRow[] {
   return names.map((name) => {
-    const p = producers?.get(name);
+    // An axis entry is `base.AXIS`; it borrows its base's producer, since the
+    // axis is a property of that same module.
+    const dot = name.indexOf(".");
+    const base = dot > 0 ? name.slice(0, dot) : name;
+    const axisName = dot > 0 ? name.slice(dot + 1) : "";
+    const p = producers?.get(base);
+    if (axisName) {
+      const axis = (p?.axes ?? []).find((a) => a.axis === axisName);
+      return {
+        token: name,
+        label: name,
+        icon: "pi pi-tag",
+        kind: "axis",
+        // The member tags ARE the disambiguator — SHOES and EXPOSES are
+        // otherwise two words with no way to tell which is which.
+        facts: axis ? axis.tags.slice(0, 4) : [],
+        producer: undefined,
+        badge: undefined,
+        internal: p?.internal === true,
+        isAxis: true,
+        axisHueIndex: axis?.hueIndex,
+      };
+    }
     return {
       token: name,
       label: name,
