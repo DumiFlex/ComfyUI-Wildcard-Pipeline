@@ -273,10 +273,22 @@ const labelBase = computed(() =>
 
 const accessorSuffix = computed(() => {
   if (isRef.value) return "";
-  const idx = props.index != null ? `.${props.index}` : "";
-  const axis = props.axis ? `.${props.axis}` : "";
-  return `${idx}${axis}`;
+  return `${accessorIndex.value}${accessorAxis.value}`;
 });
+
+/** The pick-index segment (`.0`), rendered NEUTRAL. A pick index is
+ *  positional, not semantic, and whether a source is multi-pick is a runtime
+ *  fact no static surface can know — so tinting `.0` the axis colour read as
+ *  "this is an axis / something is special here". Kept its own span so only
+ *  the axis carries the accent. */
+const accessorIndex = computed(() =>
+  !isRef.value && props.index != null ? `.${props.index}` : "");
+
+/** The tag-axis segment (`.SHOES`), rendered in the axis accent (or the
+ *  unknown-axis warning). This is the only part of the accessor that names a
+ *  library concept, so it is the only part that earns a colour. */
+const accessorAxis = computed(() =>
+  !isRef.value && props.axis ? `.${props.axis}` : "");
 
 const label = computed(() => {
   // SP2a: a var chip may carry a `.K` list accessor (`$colors.0`); refs never do.
@@ -493,14 +505,18 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
       aria-hidden="true"
     ></i>
     <span v-else class="wp-refchip__icon" aria-hidden="true">{{ icon }}</span>
-    <span class="wp-refchip__label">{{ labelBase }}<span
-      v-if="accessorSuffix"
-      class="wp-refchip__accessor"
-      :class="{ 'wp-refchip__accessor--unknown': axis && axisKnown === false }"
-      :title="axis && axisKnown === false
-        ? `No '${axis}' axis on this variable — is that tag group marked 'accepts'?`
-        : undefined"
-    >{{ accessorSuffix }}</span></span>
+    <span class="wp-refchip__label">{{ labelBase
+      }}<span
+        v-if="accessorIndex"
+        class="wp-refchip__index"
+      >{{ accessorIndex }}</span><span
+        v-if="accessorAxis"
+        class="wp-refchip__accessor"
+        :class="{ 'wp-refchip__accessor--unknown': axisKnown === false }"
+        :title="axisKnown === false
+          ? `No '${axis}' axis on this variable — is that tag group marked 'accepts'?`
+          : undefined"
+      >{{ accessorAxis }}</span></span>
     <!-- The pool this ref resolves against came from THIS node's own module
          snapshot, not the library. That changes what the ref will actually
          produce — a node copy can hold different options from the library row
@@ -689,6 +705,16 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
    the label, which carries the chip's own colour. */
 .wp-refchip__accessor {
   color: var(--wp-axis, #fbbf24);
+  font-weight: var(--wp-weight-semibold);
+}
+
+/* The pick-index segment (`.0`). Deliberately UNaccented — it shares the
+   chip's own label colour, dimmed — so the amber is reserved for the axis.
+   A pick index is positional and, being a runtime-only concept, is never a
+   thing the editor can validate; colouring it invited exactly the "why is my
+   index yellow?" confusion. */
+.wp-refchip__index {
+  opacity: 0.6;
   font-weight: var(--wp-weight-semibold);
 }
 
