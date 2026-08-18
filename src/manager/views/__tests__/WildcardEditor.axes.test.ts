@@ -133,15 +133,21 @@ describe("WildcardEditor tag-group kinds", () => {
     expect(w.get('[data-test="group-kind-SHOES"]').text()).toBe("accepts");
   });
 
-  it("stays a real focusable button even though it is transparent at rest", async () => {
-    // The classify state is hidden with opacity, not display:none or
-    // visibility — a keyboard user must still be able to tab to it, and
-    // :focus-visible reveals it. display:none would take it off the tab order
-    // and make the feature pointer-only.
+  it("is a real focusable button, reachable without a pointer", async () => {
     const w = await mountSeeded();
     const el = w.get('[data-test="group-kind-SHOES"]').element as HTMLElement;
     expect(el.tagName).toBe("BUTTON");
     expect(el.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("shows its kind without being hovered", async () => {
+    // Regression: an earlier version faded the classify capsule in on header
+    // hover. A control you only see by accident is one most people never learn
+    // exists, which is fatal for a capability nobody is looking for yet.
+    const w = await mountSeeded();
+    const el = w.get('[data-test="group-kind-SHOES"]').element as HTMLElement;
+    expect(el.textContent?.trim()).toBe("classify");
+    expect(el.className).not.toContain("hover-only");
   });
 
   it("the ungrouped box has no kind selector", async () => {

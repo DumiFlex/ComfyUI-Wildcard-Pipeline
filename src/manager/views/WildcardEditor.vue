@@ -1955,10 +1955,10 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
 
                    Shaped as a capsule because that is the grammar of the pills
                    it governs — it is a property of the axis, not a utility
-                   action like the ungroup button. A classify group (every
-                   group that exists today) shows nothing until the header is
-                   hovered, so the default costs no ink; only the promoted
-                   state, which is real information, is always visible.
+                   action like the ungroup button. Always labelled and always
+                   visible: every group states its kind, so the capability is
+                   discoverable by anyone who opens the editor rather than only
+                   by someone who happens to hover the right spot.
                    Ungrouped tags have no kind, so that box gets no control. -->
               <button
                 v-if="!group.isOther"
@@ -2740,21 +2740,16 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
   letter-spacing: 0.06em;
   text-transform: uppercase;
   cursor: pointer;
-  /* Hidden at rest — see the `__head:hover` rule below. */
-  opacity: 0;
   transition:
-    opacity 120ms ease,
     color 120ms ease,
     background-color 120ms ease,
     border-color 120ms ease;
 }
-/* A classify group is the default and says nothing worth permanent ink, so it
-   appears only when the user is looking at that header. Keyboard users get it
-   on focus, so it is discoverable without a pointer. */
-.subcat-group__head:hover .subcat-group__kind,
-.subcat-group__kind:focus-visible {
-  opacity: 1;
-}
+/* Always visible, including the default. An earlier version faded the
+   classify state in on hover to keep the header quiet; that optimised for ink
+   over discovery, and a control you only see by accident is one most people
+   never learn exists — fatal for a capability nobody is looking for yet. The
+   dim weight keeps it from competing with the axis name. */
 .subcat-group__kind:hover {
   color: var(--wp-text-muted);
   border-color: var(--wp-border-strong);
