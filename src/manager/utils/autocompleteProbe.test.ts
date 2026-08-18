@@ -81,3 +81,27 @@ describe("probeAutocomplete — accessor accessors keep the $ trigger", () => {
     expect(probeAutocomplete("see file.tar.gz.bak", 19)).toBeNull();
   });
 });
+
+describe("probeAutocomplete — a dangling dot keeps the reference alive", () => {
+  it("REPORTED: `$outfit.` still resolves to the $ trigger", () => {
+    // This is the instant the user is reaching for an axis. Treating the dot
+    // as "not a reference" closed the popover exactly when it was wanted.
+    expect(probeAutocomplete("$outfit.", 8)).toMatchObject({
+      trigger: "$", query: "outfit.",
+    });
+  });
+
+  it("keeps it alive after an index too", () => {
+    expect(probeAutocomplete("$outfit.0.", 10)).toMatchObject({
+      trigger: "$", query: "outfit.0.",
+    });
+  });
+
+  it("a bare dot after nothing is still not a reference", () => {
+    expect(probeAutocomplete("end.", 4)).toBeNull();
+  });
+
+  it("prose with a trailing dot is not swallowed", () => {
+    expect(probeAutocomplete("a sentence ends here.", 21)).toBeNull();
+  });
+});

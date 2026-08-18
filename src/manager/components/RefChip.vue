@@ -32,6 +32,14 @@ interface Props {
   name: string;
   /** SP2a list accessor for a var chip: `$name.K` (0-based). Ignored by refs. */
   index?: number;
+  /** Tag-axis accessor on a var chip (`$outfit.SHOES`). Rendered as its own
+   *  segment so the axis reads as a qualifier rather than part of the name. */
+  axis?: string;
+  /** False when `axis` names no `accepts` group on the producing wildcard.
+   *  The engine renders such a read as an empty string, so the accessor is
+   *  marked — otherwise the only symptom is a word missing from the prompt,
+   *  with a chip that looks perfectly healthy. */
+  axisKnown?: boolean;
   /** UUID of the wildcard library entry (ref-kind only). */
   uuid?: string;
   /** True when the name resolved against the catalog / surface. False → render as red `?` chip. */
@@ -252,9 +260,27 @@ const filterTitle = "";
 /** Whether the exclude-null mark should render (effective flag). */
 const showNoNull = computed(() => isRef.value && filter.value.excludeNull);
 
+/** The accessor tail of a var chip — `.0`, `.SHOES`, or both. Refs never have
+ *  one. Kept apart from `label` so the template can render it in its own span:
+ *  the chip previously showed only the NAME, so `$outfit.SHOES` displayed as
+ *  `$outfit` and looked like a different reference than the one stored. */
+/** `label` minus its accessor, so the two can be styled separately without
+ *  either duplicating the fallback logic `label` already encodes. */
+const labelBase = computed(() =>
+  accessorSuffix.value && label.value.endsWith(accessorSuffix.value)
+    ? label.value.slice(0, -accessorSuffix.value.length)
+    : label.value);
+
+const accessorSuffix = computed(() => {
+  if (isRef.value) return "";
+  const idx = props.index != null ? `.${props.index}` : "";
+  const axis = props.axis ? `.${props.axis}` : "";
+  return `${idx}${axis}`;
+});
+
 const label = computed(() => {
   // SP2a: a var chip may carry a `.K` list accessor (`$colors.0`); refs never do.
-  const idxSuffix = !isRef.value && props.index != null ? "." + props.index : "";
+  const idxSuffix = accessorSuffix.value;
   if (!props.resolved) {
     // Unresolved refs prefer the cached `#name` (kept on the ref atom
     // from the `@{uuid#name}` syntax) so a broken reference still
@@ -467,7 +493,14 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
       aria-hidden="true"
     ></i>
     <span v-else class="wp-refchip__icon" aria-hidden="true">{{ icon }}</span>
-    <span class="wp-refchip__label">{{ label }}</span>
+    <span class="wp-refchip__label">{{ labelBase }}<span
+      v-if="accessorSuffix"
+      class="wp-refchip__accessor"
+      :class="{ 'wp-refchip__accessor--unknown': axis && axisKnown === false }"
+      :title="axis && axisKnown === false
+        ? `No '${axis}' axis on this variable — is that tag group marked 'accepts'?`
+        : undefined"
+    >{{ accessorSuffix }}</span></span>
     <!-- The pool this ref resolves against came from THIS node's own module
          snapshot, not the library. That changes what the ref will actually
          produce — a node copy can hold different options from the library row
@@ -569,7 +602,7 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
       </template>
       <template v-else>
         <div class="wp-refchip-pop__head">
-          <span class="wp-refchip-pop__name">${{ name }}{{ index != null ? "." + index : "" }}</span>
+          <span class="wp-refchip-pop__name">${{ name }}{{ accessorSuffix }}</span>
         </div>
         <!-- Producer attribution. `kind` alone ("came from a wildcard") isn't
              actionable when several near-identical modules bind the same name,

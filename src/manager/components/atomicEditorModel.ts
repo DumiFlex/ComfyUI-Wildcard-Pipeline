@@ -27,6 +27,24 @@ export interface VarAtom {
   name: string;
   /** SP2a list accessor: `$name.K` -> 0-based index K (omitted when absent). */
   index?: number;
+  /** Tag-axis accessor: `$name.AXIS` (omitted when absent). */
+  axis?: string;
+}
+
+/** Serialise a var atom back to source text, accessors included.
+ *
+ *  Single source for this, because there were four hand-rolled copies and one
+ *  of them had already drifted: the collapse path in `parseForSurface` wrote
+ *  `"$" + name` and silently dropped a `.K` index, so a `$mood.0` on the
+ *  assembler surface lost its accessor on the next round-trip. An accessor is
+ *  part of the reference's meaning, so losing it changes what the template
+ *  resolves to rather than just how it looks. */
+export function serialiseVarAtom(a: VarAtom): string {
+  const idx = a.index != null ? `.${a.index}` : "";
+  const axis = a.axis ? `.${a.axis}` : "";
+  // Index before axis matches the canonical spelling the docs teach
+  // (`$outfit.0.SHOES`); the engine accepts either order and normalises.
+  return `$${a.name}${idx}${axis}`;
 }
 export type Atom = TextAtom | RefAtom | VarAtom;
 
@@ -44,9 +62,10 @@ function tokenToChipAtom(tok: RichToken): RefAtom | VarAtom | null {
     return refAtom;
   }
   if (tok.kind === "var") {
-    const meta = tok.meta as { name?: string; index?: number } | undefined;
+    const meta = tok.meta as { name?: string; index?: number; axis?: string } | undefined;
     const varAtom: VarAtom = { kind: "var", name: meta?.name ?? "" };
     if (typeof meta?.index === "number") varAtom.index = meta.index;
+    if (typeof meta?.axis === "string" && meta.axis) varAtom.axis = meta.axis;
     return varAtom;
   }
   return null;
@@ -119,7 +138,7 @@ export function serialise(atoms: Atom[]): string {
   let out = "";
   for (const a of atoms) {
     if (a.kind === "text") out += a.text;
-    else if (a.kind === "var") out += "$" + a.name + (a.index != null ? "." + a.index : "");
+    else if (a.kind === "var") out += serialiseVarAtom(a);
     else if (a.kind === "ref") {
       out += "@{" + a.uuid;
       if (a.name && a.name.length > 0) out += "#" + a.name;

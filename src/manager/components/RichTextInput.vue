@@ -25,6 +25,7 @@ import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } fr
 import {
   parse,
   replaceAtom,
+  serialiseVarAtom,
   type Atom,
   type RefAtom,
   type TextAtom,
@@ -135,7 +136,7 @@ function serialiseAtomsLocal(atoms: Atom[]): string {
   let out = "";
   for (const a of atoms) {
     if (a.kind === "text") out += a.text;
-    else if (a.kind === "var") out += "$" + a.name + (a.index != null ? "." + a.index : "");
+    else if (a.kind === "var") out += serialiseVarAtom(a);
     else out += serialiseRefAtom(a);
   }
   return out;
@@ -827,7 +828,7 @@ function parseForSurface(text: string): Atom[] {
       // Refs use the 4-segment form so a collapsed-surface round-trip
       // keeps `:expr` + `!null` intact (legacy comma body reconstructs
       // loss-free via `refFilterOf`).
-      const raw = a.kind === "var" ? "$" + a.name : serialiseRefAtom(a);
+      const raw = a.kind === "var" ? serialiseVarAtom(a) : serialiseRefAtom(a);
       const last = out[out.length - 1];
       if (last && last.kind === "text") {
         // A collapsed arm folds into its surrounding run and inherits that
@@ -2539,7 +2540,7 @@ function readHostAsText(): string {
         // SP2a: keep the `.K` list accessor (matches serialiseAtomsLocal +
         // atomicEditorModel.serialise). Dropping it here silently rewrote
         // `$mood.0` -> `$mood` on every host re-read (input / blur / settle).
-        out += "$" + atom.name + (atom.index != null ? "." + atom.index : "");
+        out += serialiseVarAtom(atom);
       }
       continue;
     }
@@ -3292,6 +3293,10 @@ function onHostKeydown(ev: KeyboardEvent): void {
           :producer="atom.kind === 'var' ? varProducers?.get(atom.name) : undefined"
           :graph-aware="graphAware"
           :index="atom.kind === 'var' ? atom.index : undefined"
+          :axis="atom.kind === 'var' ? atom.axis : undefined"
+          :axis-known="atom.kind === 'var' && atom.axis
+            ? (varProducers?.get(atom.name)?.axes ?? []).some((a) => a.axis === atom.axis)
+            : undefined"
           :data-atom-index="idx"
           remappable
           @click="(ev: MouseEvent) => onChipClick(idx, ev)"
@@ -4053,15 +4058,19 @@ function onHostKeydown(ev: KeyboardEvent): void {
 .wp-rt-suggestions__item { scroll-margin-top: 38px; }
 .wp-rt-tag { scroll-margin-bottom: 40px; }
 
-/* An axis belongs TO the variable above it, so it is indented under it rather
-   than listed as a peer. The rule sits before the base block so the base's
-   padding shorthand does not undo the inset. */
-.wp-rt-suggestions__item--axis {
-  padding-left: var(--wp-space-7);
-}
 /* The accessor segment carries the group's own hue — the same colour those
    tags wear in the wildcard editor — while the variable name keeps its usual
    per-name tint. One row, two readings. */
+/* An axis belongs TO the variable above it, so it is indented under it rather
+   than listed as a peer.
+   Declared AFTER `.wp-rt-suggestions__item` on purpose: that rule sets the
+   `padding` SHORTHAND, which resets padding-left no matter what came before
+   it. An earlier version sat above the base rule with a comment claiming the
+   order protected it — it did not, and the rows rendered flat. */
+.wp-rt-suggestions__item--axis {
+  padding-left: var(--wp-space-7);
+}
+
 .wp-rt-suggestions__axis {
   color: color-mix(in oklab, var(--axis-hue, var(--wp-accent-400)) 82%, var(--wp-text));
   font-weight: var(--wp-weight-semibold);

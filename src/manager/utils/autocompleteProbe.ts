@@ -153,6 +153,13 @@ export function probeAutocomplete(str: string, caret: number): AutocompleteProbe
   // Without this an axis read fell through to the booru-tag probe, which
   // matched the axis NAME against tag data and offered shoe tags for `.SHOES`
   // — suggestions that could not be inserted at that caret.
+  // A DANGLING dot is the moment the user is reaching for an accessor
+  // (`$outfit.<caret>`), so it has to keep the trigger alive — this is exactly
+  // when the axis list is most wanted, and treating it as "not a reference"
+  // closed the popover instead of opening it.
+  if (i >= 1 && str[i] === "." && /[A-Za-z0-9_]/.test(str[i - 1])) {
+    i -= 1;
+  }
   for (let seg = 0; seg < 2; seg += 1) {
     let j = i;
     while (j >= 0 && /[A-Za-z0-9_]/.test(str[j])) j--;
