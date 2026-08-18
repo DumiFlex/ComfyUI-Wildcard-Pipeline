@@ -2,7 +2,7 @@
 
 from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 
-from engine.context import strip_internals
+from engine.context import strip_internals, with_resolver_tables
 from engine.template import resolve_variables
 from wp_nodes.types import PipelineContext
 
@@ -77,5 +77,8 @@ class WPPromptAssembler(io.ComfyNode):
         flags = (context.internals or {}).get("__wp_internal_flags__")
         if isinstance(flags, dict):
             render_ctx["__wp_internal_flags__"] = flags
-        resolved = resolve_variables(template, strip_internals(render_ctx))
+        resolved = resolve_variables(
+            template,
+            with_resolver_tables(strip_internals(render_ctx), render_ctx),
+        )
         return io.NodeOutput(resolved)
