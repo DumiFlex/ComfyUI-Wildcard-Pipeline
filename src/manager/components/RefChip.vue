@@ -2,6 +2,9 @@
 <script setup lang="ts">
 import { computed, inject, ref, onBeforeUnmount } from "vue";
 import { KIND_ICON_MAP } from "../../components/shared/kind-icons";
+// Same hue source the wildcard editor and the suggestion row use, so one axis
+// is one colour everywhere it appears.
+import { axisHueAt } from "../../components/shared/axis-color";
 import { parse, readsAs, matches } from "@/manager/parsing/subcatFilter";
 import { splitRefFilter } from "@/widgets/richTokenize";
 // Live library lookup — the hover card's "N of M options match" count reads
@@ -40,6 +43,10 @@ interface Props {
    *  marked — otherwise the only symptom is a word missing from the prompt,
    *  with a chip that looks perfectly healthy. */
   axisKnown?: boolean;
+  /** Position of the axis among ALL its wildcard's tag groups, so the chip can
+   *  wear the same hue the group wears in the wildcard editor and in the
+   *  suggestion row. Absent when unknown. */
+  axisHueIndex?: number;
   /** UUID of the wildcard library entry (ref-kind only). */
   uuid?: string;
   /** True when the name resolved against the catalog / surface. False → render as red `?` chip. */
@@ -258,6 +265,10 @@ const readsAsExpr = computed(() => {
 const filterTitle = "";
 
 /** Whether the exclude-null mark should render (effective flag). */
+function axisTint(i: number): string {
+  return `color-mix(in oklab, ${axisHueAt(i)} 85%, var(--wp-text))`;
+}
+
 const showNoNull = computed(() => isRef.value && filter.value.excludeNull);
 
 /** The accessor tail of a var chip — `.0`, `.SHOES`, or both. Refs never have
@@ -497,6 +508,8 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
       v-if="accessorSuffix"
       class="wp-refchip__accessor"
       :class="{ 'wp-refchip__accessor--unknown': axis && axisKnown === false }"
+      :style="axis && axisKnown !== false && axisHueIndex !== undefined
+        ? { color: axisTint(axisHueIndex) } : undefined"
       :title="axis && axisKnown === false
         ? `No '${axis}' axis on this variable — is that tag group marked 'accepts'?`
         : undefined"

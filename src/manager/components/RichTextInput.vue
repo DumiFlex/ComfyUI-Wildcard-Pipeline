@@ -392,7 +392,16 @@ const refKind = ref<ModelKind | null>(null);
  * obvious "still looking".
  */
 const rowsQuery = ref("");
-const rowsStale = computed(() => acOpen.value && rowsQuery.value !== acQuery.value);
+/** True while the visible rows were fetched for an older query than the one in
+ *  the box, so they can be dimmed until they catch up.
+ *
+ *  Gated to the bare-word trigger: only tag/model rows are fetched
+ *  asynchronously, and `rowsQuery` only advances when such a fetch settles. On
+ *  a `$` or `@` popover — which filters a list already in memory, synchronously
+ *  — `rowsQuery` never moves, so this read true from the first keystroke and
+ *  never recovered, dimming a list that was always current. */
+const rowsStale = computed(() =>
+  acOpen.value && acTrigger.value === "tag" && rowsQuery.value !== acQuery.value);
 
 /**
  * One row of the bare-word popover, whatever source it came from.
@@ -888,6 +897,9 @@ const atoms = ref<Atom[]>(padAtoms(parseForSurface(props.modelValue || "")));
 // with no anchor to insert before.
 const hostEpoch = ref(0);
 let lastEmittedValue = props.modelValue || "";
+/** Set by `emitValue`, consumed by the `modelValue` watcher: marks the single
+ *  round-trip that our own emit is about to cause. See `emitValue`. */
+let echoPending = false;
 
 /** Text-atom HTML: tokenises the atom's raw text and emits colored
  *  sub-spans for inline syntax (brace blocks, multi-select, weights,
@@ -979,6 +991,10 @@ watch(() => props.modelValue, (next) => {
   // as an echo. That is exactly the assembler's Clear button — it wrote "",
   // the write was dropped, and the old template stayed on screen. Confirm
   // the DOM actually already shows `next` before skipping.
+  if (echoPending && next === lastEmittedValue) {
+    echoPending = false;
+    return;
+  }
   if (next === lastEmittedValue && readHostAsText() === next) return;
   // External value swap from the parent — route through applyAtoms so
   // any stale user-typed text in a span (typed since the last echo)
@@ -992,7 +1008,18 @@ watch(() => props.modelValue, (next) => {
  *  above doesn't trip the echo. */
 function emitValue(v: string): void {
   lastEmittedValue = v;
+  // Claim the NEXT watcher run as our own echo. The string check alone was not
+  // enough on the atom-direct edit paths: `applyAtoms` syncs the host DOM
+  // imperatively AFTER the model updates, so at emit time `readHostAsText()`
+  // still returned the pre-edit string, the guard missed, and the watcher
+  // re-parsed through `parseForSurface` — which CHIPIFIES. That is why one
+  // Backspace mid-word sealed `$mo` into a chip, closed the popover and threw
+  // the caret onto the host root: three symptoms, one echo.
+  echoPending = true;
   emit("update:modelValue", v);
+  // If the parent does not round-trip (uncontrolled use), release the claim so
+  // a later genuine external write is not mistaken for this echo.
+  void nextTick(() => { echoPending = false; });
 }
 
 function atomIsResolved(atom: Atom): boolean {
@@ -3294,6 +3321,10 @@ function onHostKeydown(ev: KeyboardEvent): void {
           :graph-aware="graphAware"
           :index="atom.kind === 'var' ? atom.index : undefined"
           :axis="atom.kind === 'var' ? atom.axis : undefined"
+          :axis-hue-index="atom.kind === 'var' && atom.axis
+            ? (varProducers?.get(atom.name)?.axes ?? [])
+                .find((a) => a.axis === atom.axis)?.hueIndex
+            : undefined"
           :axis-known="atom.kind === 'var' && atom.axis
             ? (varProducers?.get(atom.name)?.axes ?? []).some((a) => a.axis === atom.axis)
             : undefined"
@@ -4067,7 +4098,12 @@ function onHostKeydown(ev: KeyboardEvent): void {
    `padding` SHORTHAND, which resets padding-left no matter what came before
    it. An earlier version sat above the base rule with a comment claiming the
    order protected it — it did not, and the rows rendered flat. */
-.wp-rt-suggestions__item--axis {
+.wp-rt-suggestions .wp-rt-suggestions__item--axis {
+  /* Scoped under the popover to outrank `.wp-rt-suggestions__item`, whose
+     `padding` SHORTHAND resets padding-left. Both are single-class selectors,
+     so source order decided it — and the base block sits later in this file.
+     Raising specificity makes the indent independent of where either rule
+     happens to live. */
   padding-left: var(--wp-space-7);
 }
 

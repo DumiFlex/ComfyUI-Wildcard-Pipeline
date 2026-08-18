@@ -187,3 +187,29 @@ describe("axis authoring — editing an existing reference", () => {
     wrap.unmount();
   });
 });
+
+describe("echo guard — the cause behind the Backspace bug", () => {
+  it("a parent that echoes modelValue back must not re-parse it into chips", async () => {
+    // Found in a real browser, invisible to jsdom: the atom-direct edit paths
+    // sync the host DOM imperatively AFTER updating the model, so the watcher's
+    // `readHostAsText() === next` guard still saw the PRE-edit string, missed,
+    // and re-parsed through parseForSurface — which chipifies. One Backspace
+    // mid-word therefore sealed `$mo` into a chip, closed the popover and threw
+    // the caret onto the host root: three reported symptoms, one echo.
+    const wrap = mountEditor("start");
+    await nextTick();
+    // Emit, then echo the emitted value back exactly as a controlled parent does.
+    const host = wrap.find(".wp-rt__host");
+    const span = (host.element as HTMLElement).querySelector(".wp-rt__text");
+    if (span) span.textContent = "start $mo";
+    await host.trigger("input");
+    await flushPromises();
+    const ev = wrap.emitted("update:modelValue") ?? [];
+    const emitted = ev[ev.length - 1]?.[0] as string;
+    await wrap.setProps({ modelValue: emitted });
+    await flushPromises();
+    // Mid-word text stays text; the echo must be a no-op.
+    expect((host.element as HTMLElement).querySelectorAll(".wp-refchip").length).toBe(0);
+    wrap.unmount();
+  });
+});
