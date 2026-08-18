@@ -18,6 +18,10 @@ const props = defineProps<{
    * precedence over `resolved`.
    */
   resolvedMap?: Record<string, ResolvedValue>;
+  /** `{ varName: { AXIS: firstTag } }`. A `$var.AXIS` read resolves against
+   *  this, never against `resolvedMap` — the axis names a tag menu, not the
+   *  variable's text. */
+  varAxes?: Record<string, Record<string, string>>;
   /**
    * Pre-resolved string — template with $var replaced by resolved values.
    * Legacy fallback when `resolvedMap` not provided. Suffers from
@@ -86,7 +90,10 @@ const VAR_RE = /\$([A-Za-z_][A-Za-z0-9_]*)/g;
 // SP2a: capture an optional `.K` list accessor (group 2) so `$mood.0` consumes
 // the whole token — `m[0].length` then advances past `.K` (no stranded ".0"
 // literal) and group 2 drives applyVarAccessor in the substitution below.
-const TEMPLATE_VAR_RE = /(?<!\$)\$([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?/g;
+// Groups: 1=name · 2=index · 3=axis. The accessor has to be part of the match
+// or the preview prints the resolved value and strands ".SHOES" after it.
+const TEMPLATE_VAR_RE =
+  /(?<!\$)\$([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?(?:\.([A-Za-z_][A-Za-z0-9_]*))?/g;
 
 /** Variable names referenced in the template. */
 const templateVarsInternal = computed(() => {
@@ -149,14 +156,19 @@ const previewTokens = computed<PreviewToken[]>(() => {
       const name = m[1];
       const idxStr = m[2];
       const index = idxStr != null ? parseInt(idxStr, 10) : undefined;
+      const axis = m[3];
+      const raw = `$${name}${idxStr != null ? "." + idxStr : ""}${axis ? "." + axis : ""}`;
       const has = Object.prototype.hasOwnProperty.call(props.resolvedMap, name);
-      // Resolved → join (bare $name) or index (.K) via the shared accessor;
-      // unresolved → keep the raw `$name.K` so the user sees what's missing.
+      // An axis read resolves to a TAG. Falling through to the value here is
+      // what rendered "a white t-shirt and denim skirt.SHOES"; an axis the
+      // chain does not declare stays raw so the gap is visible rather than
+      // silently dropped.
+      const axisTag = axis ? props.varAxes?.[name]?.[axis] : undefined;
       tokens.push({
         kind: "var",
-        text: has
-          ? applyVarAccessor(props.resolvedMap[name], index)
-          : `$${name}${idxStr != null ? "." + idxStr : ""}`,
+        text: axis
+          ? (axisTag ?? raw)
+          : (has ? applyVarAccessor(props.resolvedMap[name], index) : raw),
         varName: name,
       });
       last = idx + m[0].length;

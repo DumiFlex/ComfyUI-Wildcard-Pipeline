@@ -7,6 +7,7 @@ import {
   collectUpstreamChain,
   collectUpstreamInjectorBindings,
   collectUpstreamKinds,
+  collectUpstreamProducers,
   collectUpstreamResolved,
   findRootGraph,
   internalVarNames,
@@ -97,6 +98,9 @@ interface UpstreamSnapshot {
   /** Sync fallback: client-side option-[0] resolution. Shown until
    *  the API resolves OR when the API is unreachable. */
   fallbackResolved: Record<string, ResolvedValue>;
+  /** `{ varName: { AXIS: firstTag } }` for every upstream `accepts` axis, so
+   *  the preview can resolve a `$var.AXIS` read to the tag it will roll. */
+  varAxes: Record<string, Record<string, string>>;
   /** Bindings contributed by upstream WP_ContextInjector nodes. The
    *  preview API doesn't simulate injectors — these keys must come
    *  from the static fallback even when api results are available,
@@ -319,10 +323,20 @@ export function mountHelper(node: AssemblerNode) {
             if (internalNames.has(k)) continue;
             fallbackResolved[k] = v;
           }
+          // `$var.AXIS` resolves against a tag menu, not against the var's
+          // value, so the preview needs the axes as well as the values —
+          // without them it printed the value and left ".SHOES" beside it.
+          const varAxes: Record<string, Record<string, string>> = {};
+          for (const [name, p] of Object.entries(collectUpstreamProducers(g, node))) {
+            for (const a of p.axes ?? []) {
+              if (a.tags.length > 0) (varAxes[name] ??= {})[a.axis] = a.tags[0];
+            }
+          }
           return {
             chainKey: hashChain(chain),
             chain,
             fallbackResolved,
+            varAxes,
             injectorKeys: collectUpstreamInjectorBindings(g, node),
             template: templateOf(node),
           };
@@ -424,6 +438,14 @@ export function mountHelper(node: AssemblerNode) {
           for (const k of injectorKeys) {
             if (k in fallback) fresh[k] = fallback[k];
           }
+          // The API returns the run ctx, engine bookkeeping included, and
+          // `upstreamVars` is just `Object.keys(fresh)` — so every `__`-key
+          // rendered as a variable chip (`$__wp_axes__`, `$__wp_picks__`).
+          // The fallback path already filtered these; the API path never did,
+          // so the chips only appeared once something put a table in the ctx.
+          for (const k of Object.keys(fresh)) {
+            if (k.startsWith("__")) delete fresh[k];
+          }
         } else {
           fresh = fallback;
         }
@@ -480,6 +502,7 @@ export function mountHelper(node: AssemblerNode) {
             templateVars: templateVarsArr,
             template,
             resolvedMap: fresh,
+            varAxes: snapshot.value.varAxes,
             kindByVar,
             previewSeed: PREVIEW_SEED,
             nodeMode: nodeMode.value,
