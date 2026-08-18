@@ -66,3 +66,6 @@ Thumbs.db
 db-config.json
 /db/
 .tmp-check/
+
+# Playwright MCP session artifacts (page snapshots, console logs).
+.playwright-mcp/
