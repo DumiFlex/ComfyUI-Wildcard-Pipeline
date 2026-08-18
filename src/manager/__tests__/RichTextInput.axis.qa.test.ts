@@ -251,3 +251,63 @@ describe("stale node snapshots must not look like errors", () => {
     wrap.unmount();
   });
 });
+
+describe("the host swap must not read as the user leaving the field", () => {
+  /** Committing a suggestion re-mounts the host element (see the `hostEpoch`
+   *  bump in `applyAtoms`). In a real browser that removes the element the
+   *  caret lives in, and the browser fires `blur` on the way out — which
+   *  `onHostBlur` used to treat as a commit: it read the already-detached
+   *  host as "", saw that differ from the atoms it had just applied, and
+   *  re-applied the empty parse. Every `$var` commit erased the whole field.
+   *  jsdom does not fire blur on removal, so this dispatches the blur the
+   *  browser would, in the window before the swap settles. */
+  it("REPORTED: committing a $var suggestion does not erase the field", async () => {
+    const wrap = mountEditor("x ");
+    await nextTick();
+    const vm = wrap.vm as unknown as {
+      __triggerAutocompleteForTest: (t: "@" | "$") => void;
+      __applyAutocompleteForTest: (label: string) => void;
+    };
+    const host = wrap.find(".wp-rt__host");
+    vm.__triggerAutocompleteForTest("$");
+    vm.__applyAutocompleteForTest("outfit");
+    // Synchronous, like the blur the element removal fires during the patch —
+    // BEFORE the nextTick that clears the swap flag.
+    await host.trigger("blur");
+    await flushPromises();
+    // Re-query: the swap replaced the element `host` was captured from.
+    expect(wrap.find(".wp-rt__host").text()).toContain("$outfit");
+    wrap.unmount();
+  });
+
+  it("commits an axis reference whole", async () => {
+    const wrap = mountEditor("x ");
+    await nextTick();
+    const vm = wrap.vm as unknown as {
+      __triggerAutocompleteForTest: (t: "@" | "$") => void;
+      __applyAutocompleteForTest: (label: string) => void;
+    };
+    const host = wrap.find(".wp-rt__host");
+    vm.__triggerAutocompleteForTest("$");
+    vm.__applyAutocompleteForTest("outfit.SHOES");
+    await host.trigger("blur");
+    await flushPromises();
+    expect(wrap.find(".wp-rt__host").text()).toContain("$outfit.SHOES");
+    wrap.unmount();
+  });
+
+  it("a genuine blur still settles pending text into chips", async () => {
+    // The guard must be narrow: only the swap's own blur is ignored.
+    const wrap = mountEditor("");
+    await nextTick();
+    const host = wrap.find(".wp-rt__host");
+    const span = (host.element as HTMLElement).querySelector(".wp-rt__text");
+    if (span) span.textContent = "$outfit";
+    await host.trigger("input");
+    await host.trigger("blur");
+    await flushPromises();
+    expect((host.element as HTMLElement).querySelectorAll(".wp-refchip").length)
+      .toBeGreaterThan(0);
+    wrap.unmount();
+  });
+});

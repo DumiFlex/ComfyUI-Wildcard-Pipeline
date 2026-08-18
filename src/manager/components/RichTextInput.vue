@@ -1950,6 +1950,11 @@ function hostAnchorsIntact(): boolean {
  *  and therefore the only ones that touch a fragment anchor. A same-shape
  *  apply patches text and props in place and cannot trip over a missing one,
  *  which is what keeps ordinary typing on the cheap path. */
+/** True while a host-element swap is in flight — see the `hostEpoch` bump in
+ *  `applyAtoms`. Not a ref: nothing renders off it, and a plain let keeps the
+ *  read in `onHostBlur` synchronous with the blur the swap itself fires. */
+let hostSwapping = false;
+
 function isStructuralApply(next: Atom[]): boolean {
   const cur = atoms.value;
   if (cur.length !== next.length) return true;
@@ -1989,6 +1994,15 @@ function applyAtoms(next: Atom[], opts?: { rebuild?: boolean }): void {
     (isStructuralApply(padded) && !hostAnchorsIntact())
   ) {
     hostEpoch.value += 1;
+    // The swap removes the element the caret is sitting in, and the browser
+    // fires `blur` on the way out. That blur is not the user leaving the
+    // field — it is us replacing the field underneath them — so
+    // `onHostBlur` must not treat it as a commit. It read the detached host
+    // as "", found it differed from the atoms it had just been handed, and
+    // re-applied the empty parse: every autocomplete commit erased the whole
+    // template. Cleared on the tick the new host mounts.
+    hostSwapping = true;
+    void nextTick(() => { hostSwapping = false; });
   }
   atoms.value = padded;
   isEmpty.value = serialiseAtomsLocal(next).length === 0;
@@ -3074,6 +3088,9 @@ function onHostPaste(ev: ClipboardEvent): void {
 }
 
 function onHostBlur(): void {
+  // Our own host swap, not the user leaving. The old element is already
+  // detached, so every read below would see an empty field.
+  if (hostSwapping) return;
   focused.value = false;
   // Safety net: any leftover `$name` / `@{uuid}` / `{a|b|c}` text that
   // didn't trigger a settle-by-delimiter during typing chips up here.
