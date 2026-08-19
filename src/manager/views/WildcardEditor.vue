@@ -395,6 +395,20 @@ function tagUsageCount(tag: string): number {
   return options.value.filter((o) => (o.sub_categories ?? []).includes(tag)).length;
 }
 
+/** Options carrying NO tag from an accepts axis — for those picks `$var.AXIS`
+ *  resolves to empty. Advisory only (non-blocking): an under-covered axis is a
+ *  valid design ("only some outfits specify shoes"). Excludes the null option,
+ *  which deliberately produces nothing. */
+function axisUncoveredCount(axis: string): number {
+  const members = tagGroups.value[axis] ?? [];
+  if (members.length === 0) return 0;
+  const memberSet = new Set(members);
+  return options.value.filter(
+    (o) => !(o as { is_null?: boolean }).is_null
+      && !(o.sub_categories ?? []).some((t) => memberSet.has(t)),
+  ).length;
+}
+
 function kebabKey(axis: string, tag: string): string {
   return `${axis}::${tag}`;
 }
@@ -2112,6 +2126,27 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
               class="subcat-addtag__error"
               :data-test="`group-addtag-error-${group.axis}`"
             >{{ addTagError }}</p>
+
+            <!-- Accepts-axis coverage advisory (non-blocking). An accepts axis
+                 only yields a value for options that carry one of its tags; an
+                 option with none makes $var.AXIS render empty when it's picked.
+                 Shown only for accepts groups with a gap, so a fully-covered
+                 axis stays silent. -->
+            <p
+              v-if="!group.isOther
+                && tagGroupKinds[group.axis] === 'accepts'
+                && !collapsedAxes.has(group.axis)
+                && axisUncoveredCount(group.axis) > 0"
+              class="subcat-group__axis-note"
+              :data-test="`axis-coverage-${group.axis}`"
+            >
+              <i class="pi pi-info-circle" aria-hidden="true" />
+              <span>{{ axisUncoveredCount(group.axis) }}
+                option{{ axisUncoveredCount(group.axis) === 1 ? "" : "s" }}
+                {{ axisUncoveredCount(group.axis) === 1 ? "carries" : "carry" }} no
+                <b>{{ group.axis }}</b> tag — <code>${{ varBinding }}.{{ group.axis }}</code>
+                is empty when {{ axisUncoveredCount(group.axis) === 1 ? "it's" : "they're" }} picked.</span>
+            </p>
           </section>
 
           <button
@@ -2809,6 +2844,22 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
   color: var(--wp-text);
   background: var(--wp-bg-3);
 }
+.subcat-group__axis-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 9px 2px 2px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--wp-warn, #f59e0b);
+}
+.subcat-group__axis-note .pi { font-size: 12px; margin-top: 1px; flex-shrink: 0; }
+.subcat-group__axis-note code {
+  font-family: var(--wp-font-mono, monospace);
+  color: color-mix(in srgb, var(--wp-warn, #f59e0b) 80%, var(--wp-text));
+}
+.subcat-group__axis-note b { color: var(--wp-text); font-weight: 600; }
+
 .subcat-group__pills {
   display: flex;
   flex-wrap: wrap;

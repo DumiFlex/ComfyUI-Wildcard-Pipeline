@@ -207,3 +207,56 @@ describe("WildcardEditor tag-group kinds", () => {
     expect("tag_group_kinds" in payload).toBe(false);
   });
 });
+
+describe("WildcardEditor — accepts-axis coverage advisory", () => {
+  it("flags options that carry no tag for an accepts axis", async () => {
+    const w = await mountSeeded({
+      tag_group_kinds: { SHOES: "accepts" },
+      options: [
+        { id: "o1", value: "sneaker outfit", weight: 1, sub_categories: ["sneakers"] },
+        { id: "o2", value: "shoeless", weight: 1, sub_categories: ["casual"] },
+      ],
+    });
+    const note = w.find('[data-test="axis-coverage-SHOES"]');
+    expect(note.exists()).toBe(true);
+    expect(note.text()).toContain("1 option");
+    expect(note.text()).toContain("$outfit.SHOES");
+    w.unmount();
+  });
+
+  it("stays silent when every option covers the accepts axis", async () => {
+    const w = await mountSeeded({
+      tag_group_kinds: { SHOES: "accepts" },
+      options: [
+        { id: "o1", value: "a", weight: 1, sub_categories: ["sneakers"] },
+        { id: "o2", value: "b", weight: 1, sub_categories: ["sandals"] },
+      ],
+    });
+    expect(w.find('[data-test="axis-coverage-SHOES"]').exists()).toBe(false);
+    w.unmount();
+  });
+
+  it("does not flag a classify group", async () => {
+    const w = await mountSeeded({
+      tag_group_kinds: {},
+      options: [
+        { id: "o1", value: "a", weight: 1, sub_categories: ["sneakers"] },
+        { id: "o2", value: "b", weight: 1, sub_categories: ["casual"] },
+      ],
+    });
+    expect(w.find('[data-test="axis-coverage-SHOES"]').exists()).toBe(false);
+    w.unmount();
+  });
+
+  it("excludes the null option from the coverage count", async () => {
+    const w = await mountSeeded({
+      tag_group_kinds: { SHOES: "accepts" },
+      options: [
+        { id: "o1", value: "a", weight: 1, sub_categories: ["sneakers"] },
+        { id: "_null", value: "", weight: 1, is_null: true, sub_categories: [] },
+      ],
+    });
+    expect(w.find('[data-test="axis-coverage-SHOES"]').exists()).toBe(false);
+    w.unmount();
+  });
+});
