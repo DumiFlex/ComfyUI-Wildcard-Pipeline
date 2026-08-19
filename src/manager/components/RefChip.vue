@@ -475,7 +475,48 @@ function onEnter(ev: MouseEvent): void {
 function onLeave(): void {
   if (hoverTimer !== undefined) window.clearTimeout(hoverTimer);
   hoverTimer = undefined;
-  hoverOpen.value = false;
+  // Delayed, not immediate: the info card is now interactive (Copy id / Open),
+  // so leaving the chip must not yank it away before the pointer reaches the
+  // buttons. onCardEnter cancels this; onCardLeave re-arms it. (The
+  // GitHub-hovercard bridge.)
+  scheduleClose();
+}
+
+let closeTimer: number | undefined;
+function scheduleClose(): void {
+  if (closeTimer !== undefined) window.clearTimeout(closeTimer);
+  closeTimer = window.setTimeout(() => { hoverOpen.value = false; }, 160);
+}
+function onCardEnter(): void {
+  if (closeTimer !== undefined) window.clearTimeout(closeTimer);
+  closeTimer = undefined;
+}
+function onCardLeave(): void {
+  scheduleClose();
+}
+
+/** SPA editor route segment per module kind. Refs are wildcard-only in
+ *  practice, but map every kind so a mis-typed ref still lands somewhere real. */
+const KIND_ROUTE: Record<ChipModuleKind, string> = {
+  wildcard: "wildcards", fixed_values: "fixed-values", combine: "combines",
+  derivation: "derivations", constraint: "constraints", bundle: "bundles",
+};
+/** Absolute SPA editor URL for the referenced module. Absolute (`/wp/...`) so
+ *  it opens from the canvas too — same origin, manager mounted at /wp/. */
+const editHref = computed(() =>
+  props.uuid ? `/wp/${KIND_ROUTE[props.moduleKind] ?? "wildcards"}/${props.uuid}/edit` : "");
+
+const copied = ref(false);
+let copiedTimer: number | undefined;
+function copyId(): void {
+  if (!props.uuid) return;
+  void navigator.clipboard?.writeText(props.uuid);
+  copied.value = true;
+  if (copiedTimer !== undefined) window.clearTimeout(copiedTimer);
+  copiedTimer = window.setTimeout(() => { copied.value = false; }, 1200);
+}
+function openInNewWindow(): void {
+  if (editHref.value) window.open(editHref.value, "_blank", "noopener");
 }
 
 onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverTimer); });
@@ -555,6 +596,8 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
       :class="{ 'wp-refchip-pop--up': popPos.flip }"
       :style="{ top: popPos.top + 'px', left: popPos.left + 'px' }"
       data-test="refchip-hover"
+      @mouseenter="onCardEnter"
+      @mouseleave="onCardLeave"
     >
       <template v-if="kind === 'ref'">
         <div class="wp-refchip-pop__head">
@@ -615,6 +658,33 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
           class="wp-refchip-pop__pool wp-refchip-pop__pool--foreign"
           data-test="refchip-pool-foreign"
         >{{ foreignPoolNote }}</div>
+        <!-- Actions. The card is interactive here (unlike the var branch) —
+             copy the id, or open the linked module in a new window. Copy works
+             even for a broken ref (the id is still known); open is gated on the
+             ref resolving, since a missing module would 404. -->
+        <div v-if="uuid" class="wp-refchip-pop__acts" data-test="refchip-acts">
+          <button
+            type="button"
+            class="wp-refchip-pop__act"
+            data-test="refchip-copy-id"
+            title="Copy the module id"
+            @click.stop="copyId"
+          >
+            <i :class="copied ? 'pi pi-check' : 'pi pi-copy'" aria-hidden="true"></i>
+            {{ copied ? "Copied" : "Copy id" }}
+          </button>
+          <button
+            v-if="resolved"
+            type="button"
+            class="wp-refchip-pop__act"
+            data-test="refchip-open-new"
+            title="Open the linked module in a new window"
+            @click.stop="openInNewWindow"
+          >
+            <i class="pi pi-external-link" aria-hidden="true"></i>
+            Open
+          </button>
+        </div>
       </template>
       <template v-else>
         <div class="wp-refchip-pop__head">
@@ -783,25 +853,60 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
 .wp-refchip-pop {
   position: fixed;
   z-index: 10030;
-  width: 260px;
-  padding: 7px 9px;
+  width: 264px;
+  padding: 10px 12px;
   background: var(--wp-bg-1);
   border: 1px solid var(--wp-border-strong);
   border-radius: 7px;
   box-shadow: var(--wp-shadow-lg);
-  font: 10px/1.5 var(--wp-font-mono, monospace);
+  /* Was 10px — the "unnecessarily small" the report called out. 12px reads as a
+     panel, not a tooltip afterthought. */
+  font: 12px/1.55 var(--wp-font-mono, monospace);
   color: var(--wp-text);
-  pointer-events: none;
+  /* Interactive now (Copy id / Open) — the hover bridge in onLeave/onCardEnter
+     keeps it from vanishing as the pointer travels in from the chip. */
+  pointer-events: auto;
 }
+/* The action row. Full-bleed to the card edges, divided from the info above and
+   between buttons, so it reads as a footer rather than two floating links. */
+.wp-refchip-pop__acts {
+  display: flex;
+  margin: 8px -12px -10px;
+  border-top: 1px solid var(--wp-border);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.wp-refchip-pop__act {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--wp-text-muted);
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--wp-border);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.wp-refchip-pop__act:last-child { border-right: none; }
+.wp-refchip-pop__act:hover { background: var(--wp-bg-3); color: var(--wp-text); }
+.wp-refchip-pop__act:focus-visible {
+  outline: none; background: var(--wp-bg-3); color: var(--wp-text);
+}
+.wp-refchip-pop__act .pi { font-size: 11px; }
+.wp-refchip-pop__act .pi-check { color: var(--wp-success, #22c55e); }
 .wp-refchip-pop--up { transform: translateY(-100%); }
 .wp-refchip-pop > div { padding: 1px 0; word-break: break-word; }
 .wp-refchip-pop__head { display: flex; gap: 6px; align-items: baseline; }
 .wp-refchip-pop__name { font-weight: 600; }
 .wp-refchip-pop__kind {
-  font-size: 8px; text-transform: uppercase;
+  font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em;
   color: var(--wp-text-dim);
   border: 1px solid var(--wp-border);
-  border-radius: 3px; padding: 0 3px;
+  border-radius: 999px; padding: 0 6px;
 }
 .wp-refchip-pop__uuid { color: var(--wp-text-muted); }
 .wp-refchip-pop__filter { color: var(--wp-text-dim); }
