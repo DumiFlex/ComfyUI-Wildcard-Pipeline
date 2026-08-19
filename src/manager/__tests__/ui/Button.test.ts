@@ -78,3 +78,23 @@ describe("Button variants × states", () => {
     });
   }
 });
+
+describe("Button — icon-only hover tooltip", () => {
+  it("mirrors aria-label into title when there is no visible text", () => {
+    const wrap = mount(Button, { props: { icon: "pi-pencil", ariaLabel: "Edit" } });
+    expect(wrap.get("button").attributes("title")).toBe("Edit");
+  });
+
+  it("does NOT set a title when the button has visible text", () => {
+    const wrap = mount(Button, {
+      props: { icon: "pi-pencil", ariaLabel: "Edit" },
+      slots: { default: "Edit" },
+    });
+    expect(wrap.get("button").attributes("title")).toBeUndefined();
+  });
+
+  it("sets no title when there is no aria-label to mirror", () => {
+    const wrap = mount(Button, { props: { icon: "pi-pencil" } });
+    expect(wrap.get("button").attributes("title")).toBeUndefined();
+  });
+});

@@ -564,6 +564,9 @@ async def duplicate_module(request: web.Request) -> web.Response:
             description=src["description"], category_id=src["category_id"],
             tags=list(src["tags"]), payload=src["payload"],
             is_favorite=False,
+            # An 18+ derivative is still 18+ — carry the rating so the copy
+            # isn't silently downgraded to SFW and out from under the filter.
+            content_rating=src["content_rating"],
         )
     return json_ok(copy, status=201)
 
