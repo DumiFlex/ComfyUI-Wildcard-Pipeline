@@ -86,10 +86,10 @@ function onBypassFrames(next: number[]): void {
  * of frames is the common case; the modal earns its place for the bulk
  * operations (lock all, paste a series, out-of-range locks) and keeps them.
  *
- * Modifier choice: Alt and Shift both survive the trip. Ctrl is out because on
- * macOS Ctrl-click IS a right-click, so the combo would open a context menu
- * instead. Alt for bypass follows the seed modal's existing Alt-click-for-a-
- * variant idiom on its Copy button.
+ * Modifier choice: Alt-click locks a seed, Ctrl-click bypasses — the reflex
+ * pairing users reach for. On macOS Ctrl-click IS a right-click, so Cmd stands
+ * in for bypass there (see FrameChips `isBypassChord`); Alt/Option survives the
+ * trip on every platform.
  * ------------------------------------------------------------------------- */
 
 /** 0-based locked frame indices. Keys are strings in the config; anything

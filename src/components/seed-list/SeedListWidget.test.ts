@@ -263,7 +263,8 @@ describe("SeedListWidget frame chips", () => {
   // writing to a different node.
   it("refuses to change bypass — it is owned by the loop", async () => {
     const w = fw({}, { bypassedFrames: [1] });
-    await w.find('[data-test="seedlist-frame-2"]').trigger("click", { altKey: true });
+    // Ctrl is the bypass chord now; here bypass is foreign, so it must no-op.
+    await w.find('[data-test="seedlist-frame-2"]').trigger("click", { ctrlKey: true });
     expect(w.emitted("update:modelValue")).toBeUndefined();
   });
 

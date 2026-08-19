@@ -198,9 +198,9 @@ describe("ContextLoopWidget frame chip modifier-clicks", () => {
     return calls?.[calls.length - 1]?.[0] as ReturnType<typeof emptyContextLoopConfig>;
   };
 
-  it("shift-click locks the frame to the seed it would have used", async () => {
+  it("alt-click locks the frame to the seed it would have used", async () => {
     const w = fw();
-    await w.find('[data-test="loop-frame-3"]').trigger("click", { shiftKey: true });
+    await w.find('[data-test="loop-frame-3"]').trigger("click", { altKey: true });
     const next = lastEmit(w);
     // Frame index 2, and the value must be a real derived seed — not a
     // placeholder, or the lock would silently change the output it froze.
@@ -208,44 +208,44 @@ describe("ContextLoopWidget frame chip modifier-clicks", () => {
     expect(Number.isInteger(next.seed_locks!["2"])).toBe(true);
   });
 
-  it("shift-click on a locked frame unlocks it", async () => {
+  it("alt-click on a locked frame unlocks it", async () => {
     const w = fw({ seed_locks: { "2": 777 } });
-    await w.find('[data-test="loop-frame-3"]').trigger("click", { shiftKey: true });
+    await w.find('[data-test="loop-frame-3"]').trigger("click", { altKey: true });
     expect(lastEmit(w).seed_locks).toEqual({});
   });
 
   it("the chip-lock value matches what the modal's Lock all would write", async () => {
     const w = fw();
-    await w.find('[data-test="loop-frame-2"]').trigger("click", { shiftKey: true });
+    await w.find('[data-test="loop-frame-2"]').trigger("click", { altKey: true });
     const chipValue = lastEmit(w).seed_locks!["1"];
     expect(chipValue).toBe(deriveLoopSeeds(42, 4, "hash_index")[1]);
   });
 
-  it("alt-click bypasses a frame, and again re-enables it", async () => {
+  it("ctrl-click bypasses a frame, and again re-enables it", async () => {
     const w = fw();
-    await w.find('[data-test="loop-frame-2"]').trigger("click", { altKey: true });
+    await w.find('[data-test="loop-frame-2"]').trigger("click", { ctrlKey: true });
     expect(lastEmit(w).bypass_frames).toEqual([1]);
 
     const w2 = fw({ bypass_frames: [1] });
-    await w2.find('[data-test="loop-frame-2"]').trigger("click", { altKey: true });
+    await w2.find('[data-test="loop-frame-2"]').trigger("click", { ctrlKey: true });
     expect(lastEmit(w2).bypass_frames).toEqual([]);
   });
 
   it("keeps bypassed indices sorted so the config does not churn", async () => {
     const w = fw({ bypass_frames: [3] });
-    await w.find('[data-test="loop-frame-2"]').trigger("click", { altKey: true });
+    await w.find('[data-test="loop-frame-2"]').trigger("click", { ctrlKey: true });
     expect(lastEmit(w).bypass_frames).toEqual([1, 3]);
   });
 
   it("refuses to bypass the last running frame — a loop needs one", async () => {
     const w = fw({ bypass_frames: [0, 1, 2] }, 4);
-    await w.find('[data-test="loop-frame-4"]').trigger("click", { altKey: true });
+    await w.find('[data-test="loop-frame-4"]').trigger("click", { ctrlKey: true });
     expect(w.emitted("update:modelValue")).toBeUndefined();
   });
 
   it("still lets the last running frame be re-enabled and locked", async () => {
     const w = fw({ bypass_frames: [0, 1, 2] }, 4);
-    await w.find('[data-test="loop-frame-1"]').trigger("click", { altKey: true });
+    await w.find('[data-test="loop-frame-1"]').trigger("click", { ctrlKey: true });
     expect(lastEmit(w).bypass_frames).toEqual([1, 2]);
   });
 
@@ -253,9 +253,9 @@ describe("ContextLoopWidget frame chip modifier-clicks", () => {
   // kind of surprise that makes people stop trusting a shortcut.
   it("a modifier click never also moves the edit cursor", async () => {
     const w = fw();
-    await w.find('[data-test="loop-frame-3"]').trigger("click", { shiftKey: true });
+    await w.find('[data-test="loop-frame-3"]').trigger("click", { altKey: true });
     expect(currentFrame.value).toBe(null);
-    await w.find('[data-test="loop-frame-2"]').trigger("click", { altKey: true });
+    await w.find('[data-test="loop-frame-2"]').trigger("click", { ctrlKey: true });
     expect(currentFrame.value).toBe(null);
   });
 
@@ -268,8 +268,8 @@ describe("ContextLoopWidget frame chip modifier-clicks", () => {
 
   it("base takes no modifiers — it has no seed and nothing to bypass", async () => {
     const w = fw();
-    await w.find('[data-test="loop-frame-base"]').trigger("click", { shiftKey: true });
     await w.find('[data-test="loop-frame-base"]').trigger("click", { altKey: true });
+    await w.find('[data-test="loop-frame-base"]').trigger("click", { ctrlKey: true });
     expect(w.emitted("update:modelValue")).toBeUndefined();
   });
 
@@ -293,7 +293,7 @@ describe("ContextLoopWidget frame chip modifier-clicks", () => {
 
   it("advertises the combos in the widget, not just in tooltips", () => {
     const w = fw();
-    expect(w.find('[data-test="loop-frames-hint"]').text()).toMatch(/shift/i);
+    expect(w.find('[data-test="loop-frames-hint"]').text()).toMatch(/alt-click locks/i);
     expect(w.find('[data-test="loop-frames-hint"]').text()).toMatch(/alt|option/i);
   });
 
