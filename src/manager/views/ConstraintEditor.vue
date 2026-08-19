@@ -1625,6 +1625,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
                 :options="MODE_OPTIONS"
                 aria-label="Exception mode"
                 data-test="cn-ex-mode-select"
+                class="cn-mode-select"
                 @update:model-value="(v) => setExceptionMode(idx, v as ConstraintMode)"
               >
                 <!-- Trigger + dropdown items render the mode as a colored
@@ -1866,6 +1867,11 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
 /* Mode chip — icon glyph + label, tinted by --cn-mode-var. Editable +
  * read-only share the base; the read-only modifier mutes it to the same
  * ~1/3 intensity the read-only matrix cells use. */
+/* The exception mode dropdown lives in a table cell that collapses the trigger
+   narrow; the Select sizes its menu to the trigger, so the nowrap mode chips
+   clipped ("Neutral" -> "N"). Floor the width so every label fits. */
+.cn-mode-select { min-width: 132px; }
+
 .cn-mode-chip {
   display: inline-flex;
   align-items: center;
