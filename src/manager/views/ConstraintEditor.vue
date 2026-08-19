@@ -1625,6 +1625,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
                 :options="MODE_OPTIONS"
                 aria-label="Exception mode"
                 data-test="cn-ex-mode-select"
+                :filterable="false"
                 class="cn-mode-select"
                 @update:model-value="(v) => setExceptionMode(idx, v as ConstraintMode)"
               >
