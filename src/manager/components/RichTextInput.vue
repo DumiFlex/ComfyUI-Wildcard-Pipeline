@@ -31,7 +31,7 @@ import {
   type TextAtom,
 } from "./atomicEditorModel";
 import {
-  escapeHtml, inlineTokenHtml, splitRefFilter, tokenizeRich, varBaseName,
+  escapeHtml, inlineTokenHtml, splitRefFilter, tokenizeRich, varAccessorParts, varBaseName,
 } from "../../widgets/richTokenize";
 import RefChip, { type VarProducerLike } from "./RefChip.vue";
 import SubcategoryFilterPicker from "./SubcategoryFilterPicker.vue";
@@ -963,10 +963,11 @@ function varSpanAttrs(name: string): string {
   // property of the BASE variable, so checking the whole string flagged every
   // valid axis read as an unknown variable — a correct reference wearing the
   // error styling.
-  const base = varBaseName(name);
-  const axis = base !== name && !/^\d+$/.test(name.slice(base.length + 1))
-    ? name.slice(base.length + 1).replace(/\.\d+$/, "")
-    : "";
+  // Parse through the ONE grammar. The old hand-rolled slice only stripped a
+  // TRAILING index, so `outfit.0.SHOES` produced axis "0.SHOES" — no such axis
+  // declared, so a perfectly valid index-first reference got the unknown-axis
+  // warning. That is the wavy underline the assembler template showed.
+  const { base, axis = "" } = varAccessorParts(name);
   if (props.graphAware && axis) {
     // The base resolves but the axis does not: the engine renders that as an
     // empty string, so without a mark the only symptom is a missing word.

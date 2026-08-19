@@ -507,6 +507,56 @@ describe("collectDownstreamWildcardUuids", () => {
   });
 });
 
+describe("collectUpstreamVariables — internal flag is last-write-wins", () => {
+  /** One Context node, two fixed_values both binding `name`, with the given
+   *  internal flags in order. Mirrors the reported canvas setup. */
+  function twoWriters(
+    first: { value: string; internal: boolean },
+    second: { value: string; internal: boolean },
+  ): LiteGraphLike {
+    const mod = (uid: string, value: string, internal: boolean) => ({
+      id: uid, _uid: uid, type: "fixed_values", enabled: true, meta: { name: uid },
+      payload: { values: [{ id: uid + "v", name: "outfit", value }] },
+      instance: { internal },
+    });
+    const ctx: LiteNodeLike = {
+      id: 1, type: "WP_Context",
+      inputs: [{ name: "upstream", link: null }],
+      outputs: [{ name: "context", links: [], type: "PIPELINE_CONTEXT" }],
+      widgets: [{ name: "wp_modules", value: JSON.stringify({
+        version: 1, modules: [mod("aaaaaaaa", first.value, first.internal),
+                              mod("bbbbbbbb", second.value, second.internal)] }) }],
+    };
+    const asm: LiteNodeLike = {
+      id: 2, type: "WP_PromptAssembler", inputs: [{ name: "context", link: 100 }],
+    };
+    return {
+      _nodes: [ctx, asm],
+      links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id) => ({ 1: ctx, 2: asm } as Record<number, LiteNodeLike>)[id] ?? null,
+    };
+  }
+
+  it("REPORTED: a public writer AFTER an internal one makes the var renderable", () => {
+    // internal → public. The public override is the last write, so the
+    // assembler's PROMPT surface must see `outfit`. Add-only left it hidden
+    // forever. (The plain variable list always keeps it; it is the renderable
+    // list — the one the assembler's `$var` substitution honours — that must
+    // reflect the last writer.)
+    const g = twoWriters({ value: "hidden", internal: true },
+                         { value: "public", internal: false });
+    const asm = g.getNodeById(2)!;
+    expect(collectUpstreamRenderableVariables(g, asm)).toContain("outfit");
+  });
+
+  it("an internal writer AFTER a public one hides the var from the prompt", () => {
+    const g = twoWriters({ value: "public", internal: false },
+                         { value: "hidden", internal: true });
+    const asm = g.getNodeById(2)!;
+    expect(collectUpstreamRenderableVariables(g, asm)).not.toContain("outfit");
+  });
+});
+
 describe("collectUpstreamVariables — mute/bypass mode", () => {
   function makeChain(modeOnA?: number) {
     // a (writes "style") → b. If `modeOnA` is 2 (mute) or 4 (bypass),

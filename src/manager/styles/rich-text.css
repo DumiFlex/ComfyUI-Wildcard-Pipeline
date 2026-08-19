@@ -41,13 +41,23 @@
   font-weight: 500;
 }
 
-/* The accessor tail of a `$var.AXIS` reference. Inside the same `.wp-rt-var`
-   atom, so the reference still deletes and moves as one unit — this only
-   changes how it reads. Dimmer than the name because the variable is what you
-   scan for; the axis qualifies it. */
+/* The AXIS tail of a `$var.AXIS` reference. Amber — the same accent the
+   settled chip uses — because the axis is the one part of the accessor that
+   names a library concept. Inside the same `.wp-rt-var` atom, so the reference
+   still deletes and moves as one unit; this only changes how it reads. */
 .wp-rt .wp-rt-var__accessor,
 .wp-rt-preview .wp-rt-var__accessor {
-  opacity: 0.82;
+  color: var(--wp-axis, #fbbf24);
+  font-weight: 600;
+}
+
+/* The pick-INDEX tail (`.0`). Deliberately unaccented — it keeps the variable's
+   own colour, dimmed — so amber stays reserved for the axis. A pick index is
+   positional and only meaningful on a multi-pick source, which is a runtime
+   fact the editor cannot know, so it must not be flagged or specially tinted. */
+.wp-rt .wp-rt-var__index,
+.wp-rt-preview .wp-rt-var__index {
+  opacity: 0.6;
   font-weight: 600;
 }
 

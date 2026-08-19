@@ -792,6 +792,14 @@ export function collectUpstreamKinds(
 
   const kinds: Record<string, string> = {};
   const internalKeys = new Set<string>();
+  // Internal-ness is last-write-wins, exactly like the value: the CLOSEST
+  // writer of a var decides. `add`-only left a var internal forever once any
+  // writer marked it so — mark $outfit internal, override with a public
+  // $outfit, and the public override stayed hidden from the assembler.
+  const flagInternal = (name: string, on: boolean): void => {
+    if (on) internalKeys.add(name);
+    else internalKeys.delete(name);
+  };
   // Walk furthest-upstream → closest, so later writes override
   // earlier ones (last-write-wins matches runtime).
   for (let i = chain.length - 1; i >= 0; i--) {
@@ -807,7 +815,7 @@ export function collectUpstreamKinds(
         const b = (row.binding ?? "").trim();
         if (!b) continue;
         kinds[b] = "injector";
-        if (row.internal === true) internalKeys.add(b);
+        flagInternal(b, row.internal === true);
       }
       continue;
     }
@@ -827,8 +835,8 @@ export function collectUpstreamKinds(
       const totalName = `${baseName}_total`;
       kinds[baseName] = "loop";
       kinds[totalName] = "loop";
-      if (cfg.iteration_internal === true) internalKeys.add(baseName);
-      if (cfg.total_internal === true) internalKeys.add(totalName);
+      flagInternal(baseName, cfg.iteration_internal === true);
+      flagInternal(totalName, cfg.total_internal === true);
       continue;
     }
     if (n.type !== "WP_Context") continue;
@@ -858,7 +866,7 @@ export function collectUpstreamKinds(
             if (!passes(val.id)) continue;
             const name = (val.name ?? "").replace(/^\$/, "").trim();
             if (name) kinds[name] = "fixed_values";
-            if (name && m.instance?.internal) internalKeys.add(name);
+            if (name) flagInternal(name, !!m.instance?.internal);
           }
           continue;
         }
@@ -867,12 +875,12 @@ export function collectUpstreamKinds(
           if (!passes(val.id)) continue;
           const name = (val.name ?? "").replace(/^\$/, "").trim();
           if (name) kinds[name] = "fixed_values";
-          if (name && m.instance?.internal) internalKeys.add(name);
+          if (name) flagInternal(name, !!m.instance?.internal);
         }
         for (const e of m.entries ?? []) {
           const name = (e.variable_name ?? "").replace(/^\$/, "").trim();
           if (name) kinds[name] = "fixed_values";
-          if (name && m.instance?.internal) internalKeys.add(name);
+          if (name) flagInternal(name, !!m.instance?.internal);
         }
         continue;
       }
@@ -891,11 +899,11 @@ export function collectUpstreamKinds(
           for (const branch of rule.branches ?? []) {
             const name = (branch.action?.target_var ?? "").replace(/^\$/, "").trim();
             if (name) kinds[name] = "derivation";
-            if (name && m.instance?.internal) internalKeys.add(name);
+            if (name) flagInternal(name, !!m.instance?.internal);
           }
           const elseName = (rule.else?.action?.target_var ?? "").replace(/^\$/, "").trim();
           if (elseName) kinds[elseName] = "derivation";
-          if (elseName && m.instance?.internal) internalKeys.add(elseName);
+          if (elseName) flagInternal(elseName, !!m.instance?.internal);
         }
         continue;
       }
@@ -906,7 +914,7 @@ export function collectUpstreamKinds(
       const raw = inst.variable_binding ?? payload.var_binding ?? payload.output_var ?? "";
       const name = raw.replace(/^\$/, "").trim();
       if (name) kinds[name] = m.type;
-      if (name && m.instance?.internal) internalKeys.add(name);
+      if (name) flagInternal(name, !!m.instance?.internal);
     }
   }
   // Stash internal-flag map on the reserved slot (parallels
@@ -1332,6 +1340,7 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, ResolvedValue
         if (!binding) continue;
         ctx[binding] = `$${binding}`;
         if (row.internal === true) internalKeys.add(binding);
+        else internalKeys.delete(binding);
       }
       continue;
     }
@@ -1354,7 +1363,9 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, ResolvedValue
       ctx[baseName] = "1";
       ctx[totalName] = "1";
       if (cfg.iteration_internal === true) internalKeys.add(baseName);
+      else internalKeys.delete(baseName);
       if (cfg.total_internal === true) internalKeys.add(totalName);
+      else internalKeys.delete(totalName);
       continue;
     }
     if (n.type !== "WP_Context") continue;
@@ -1365,11 +1376,17 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, ResolvedValue
     const bundleEnabled = buildBundleEnabledMap(v.bundles);
     for (const m of v.modules) {
       if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
-      const beforeKeys = new Set(Object.keys(ctx));
+      // Snapshot VALUES, not just keys: an override rebinds an existing key,
+      // so a key-presence check never sees it and the flag could not flip.
+      const beforeVals = new Map(Object.entries(ctx));
       writeBindings(ctx, m, catalog);
-      if (m.instance?.internal) {
-        for (const k of Object.keys(ctx)) {
-          if (!beforeKeys.has(k)) internalKeys.add(k);
+      const isInternal = !!m.instance?.internal;
+      for (const k of Object.keys(ctx)) {
+        // Written by THIS module = new key or changed value. Last writer wins,
+        // so its internal flag replaces whatever an earlier writer set.
+        if (!beforeVals.has(k) || beforeVals.get(k) !== ctx[k]) {
+          if (isInternal) internalKeys.add(k);
+          else internalKeys.delete(k);
         }
       }
     }

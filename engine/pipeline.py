@@ -625,9 +625,18 @@ class PipelineEngine:
                 key = var.lstrip("$")
                 before = ctx.get(key)
                 ctx[key] = value
+                # Last-write-wins applies to the internal flag too: whichever
+                # module writes the var LAST decides whether it is internal. A
+                # public writer overriding an earlier internal one MUST clear
+                # the flag — otherwise the var stays hidden from the assembler
+                # forever, even though its final value came from a public
+                # module. (Mark $outfit internal, then override it with a
+                # public $outfit: the override should be visible.)
+                flags = ctx.setdefault("__wp_internal_flags__", {})
                 if mark_internal:
-                    flags = ctx.setdefault("__wp_internal_flags__", {})
                     flags[key] = True
+                else:
+                    flags.pop(key, None)
                 writes.append({
                     "variable": key,
                     "value": value,

@@ -78,11 +78,31 @@ export interface TokenMeta {
  *  `outfit.SHOES` — which is what made an axis read render as inert text
  *  instead of a chip. */
 export function varBaseName(raw: string): string {
+  return varAccessorParts(raw).base;
+}
+
+/** Split a var reference into base + accessor parts using the ONE canonical
+ *  grammar (index-first `$o.0.SHOES` and axis-first `$o.SHOES.0` both parse).
+ *  Every surface that needs "which axis / which index" must go through this —
+ *  the inline renderer used to hand-roll a `.replace(/\.\d+$/,"")` that only
+ *  stripped a TRAILING index, so `$outfit.0.SHOES` yielded axis "0.SHOES",
+ *  matched no declared axis, and painted a valid reference with the
+ *  unknown-axis warning. Mirrors `engine/syntax/tokenize.py:_VAR_RE`. */
+export function varAccessorParts(
+  raw: string,
+): { base: string; index?: number; axis?: string } {
   const bare = raw.replace(/^\$/, "").trim();
   const m = bare.match(
-    /^([A-Za-z_][A-Za-z0-9_]*)(?:\.(?:\d+(?:\.[A-Za-z_][A-Za-z0-9_]*)?|[A-Za-z_][A-Za-z0-9_]*(?:\.\d+)?))?$/,
+    /^([A-Za-z_][A-Za-z0-9_]*)(?:\.(?:(\d+)(?:\.([A-Za-z_][A-Za-z0-9_]*))?|([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?))?$/,
   );
-  return m ? m[1] : bare;
+  if (!m) return { base: bare };
+  const index = m[2] ?? m[5];
+  const axis = m[3] ?? m[4];
+  return {
+    base: m[1],
+    ...(index !== undefined ? { index: parseInt(index, 10) } : {}),
+    ...(axis !== undefined ? { axis } : {}),
+  };
 }
 
 /** SP2a: a resolved variable value as a TS preview surface sees it — a plain
@@ -585,9 +605,26 @@ export function inlineTokenHtml(
       // math and deletion continue to treat the reference as a single unit.
       const accessorAt = t.kind === "var" ? t.raw.indexOf(".") : -1;
       if (accessorAt > 0) {
+        // Split index from axis so the pick index stays neutral and only the
+        // axis carries the accent — mirrors the settled chip. Rebuilt from the
+        // parsed parts rather than sliced raw so `.0.SHOES` and `.SHOES.0`
+        // both land the index in the neutral span and the axis in the accent
+        // span, regardless of the order the user typed.
+        const parts = varAccessorParts(t.raw);
+        const idxHtml = parts.index != null
+          ? `<span class="wp-rt-var__index">.${parts.index}</span>`
+          : "";
+        const axisHtml = parts.axis
+          ? `<span class="wp-rt-var__accessor">.${escapeHtml(parts.axis)}</span>`
+          : "";
+        // Fallback: an accessor the grammar did not recognise stays one plain
+        // tail span rather than vanishing.
+        const tail = idxHtml || axisHtml
+          ? idxHtml + axisHtml
+          : `<span class="wp-rt-var__accessor">${escapeHtml(t.raw.slice(accessorAt))}</span>`;
         html += `<span class="wp-rt-${t.kind}"${attrs}>`
-          + `${escapeHtml(t.raw.slice(0, accessorAt))}`
-          + `<span class="wp-rt-var__accessor">${escapeHtml(t.raw.slice(accessorAt))}</span>`
+          + `${escapeHtml("$" + parts.base)}`
+          + tail
           + `</span>`;
       } else {
         html += `<span class="wp-rt-${t.kind}"${attrs}>${escapeHtml(t.raw)}</span>`;
