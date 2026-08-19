@@ -80,8 +80,13 @@ async function mountSeeded() {
   // The Sub-Categories card ships COLLAPSED — a well-tagged wildcard's axes
   // and pills pushed the options table off screen. Every test in this file is
   // about those pills, so open it once here.
-  await wrap.get('[data-test="subcat-collapse"]').trigger("click");
-  await flushPromises();
+  // The panel default is now expanded-when-populated, so a seeded (populated)
+  // wildcard opens on its own. Only click to open if it actually shipped
+  // collapsed, otherwise the click would toggle it shut.
+  if (wrap.find('[data-test="subcat-collapsed"]').exists()) {
+    await wrap.get('[data-test="subcat-collapse"]').trigger("click");
+    await flushPromises();
+  }
   return wrap;
 }
 

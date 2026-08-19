@@ -17,6 +17,7 @@ import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import type { SaveState, EditorFieldError } from "../components/EditorFrame.types";
 import { useRouter, useRoute } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
+import SendToTestRunner from "../components/SendToTestRunner.vue";
 import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
@@ -257,6 +258,7 @@ function applyDraft(): void {
     tagGroups.value = parsed.tagGroups ?? {};
     tagGroupKinds.value = parsed.tagGroupKinds ?? {};
     options.value = parsed.options;
+    subcatOpen.value = resolveSubcatDefaultOpen();
   } catch {
     toast.push({ severity: "error", summary: "Draft restore failed", life: 3000 });
   }
@@ -309,12 +311,25 @@ interface SubcatGroup {
   isOther: boolean;
 }
 
-/** Sub-Categories section disclosure. Starts COLLAPSED: on a well-tagged
- *  wildcard the axes and their pills fill the screen and push the options
- *  table — the thing being edited — out of view. The collapsed header carries a
- *  tag/axis count plus an accented `+`, so it still advertises that there is
- *  something in there to open. */
+/** Sub-Categories section disclosure. The default is set once on load from the
+ *  `subcatDefault` display-pref (see `uiStore`): `"populated"` opens it only
+ *  when the wildcard already has groups (so a well-tagged wildcard's axes don't
+ *  push the options table out of view on a blank one, but an existing library
+ *  of groups is visible without a click); `"always"` opens it even when empty;
+ *  `"never"` keeps it shut. The collapsed header carries a tag/axis count plus
+ *  an accented `+`, so it still advertises there is something to open. */
 const subcatOpen = ref(false);
+
+/** Resolve the panel's initial open state from the pref + current group count.
+ *  Called once after the row hydrates, never on every group edit — otherwise
+ *  collapsing it and adding a tag would yank it back open. */
+function resolveSubcatDefaultOpen(): boolean {
+  switch (ui.subcatDefault) {
+    case "always": return true;
+    case "never": return false;
+    default: return Object.keys(tagGroups.value).length > 0;
+  }
+}
 
 /** What the collapsed section reports, so shutting it doesn't hide whether the
  *  wildcard is tagged at all. */
@@ -908,7 +923,6 @@ onMounted(async () => {
       subCategories.value = [...(p.sub_categories ?? [])];
       tagGroups.value = normalizeTagGroups(p.tag_groups, subCategories.value);
       tagGroupKinds.value = normalizeTagGroupKinds(p.tag_group_kinds, tagGroups.value);
-  tagGroupKinds.value = normalizeTagGroupKinds(p.tag_group_kinds, tagGroups.value);
       varBinding.value = (p.var_binding && p.var_binding.trim()) || toIdentifier(row.name);
       historyEntries.value = readHistory(row.payload);
       recent.push({ id: props.id, kind: "wildcard", name: name.value });
@@ -927,6 +941,9 @@ onMounted(async () => {
       { id: _newOptionId(), value: "a fox", weight: 1, sub_categories: [] },
     ];
   }
+  // After every load path (existing row, blank new, starter) settle the
+  // sub-category panel to the user's chosen default.
+  subcatOpen.value = resolveSubcatDefaultOpen();
   baseline.value = snapshot();
 });
 
@@ -1844,6 +1861,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
     @restore="applyRestore"
   >
     <template v-if="isEdit && currentRow" #header-extra>
+      <SendToTestRunner v-if="props.id" :kind="'wildcard'" :id="props.id" />
       <CommunityRowActions :row="currentRow" kind="module" labeled />
     </template>
     <template v-if="isEdit" #footer-left>

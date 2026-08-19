@@ -7,11 +7,17 @@ export type ThemeMode = "dark" | "light" | "auto";
 /** Spacing/height density mode. `"comfortable"` is the default (multiplier 1). */
 export type DensityMode = "comfortable" | "compact";
 
+/** When the wildcard editor's sub-category panel opens on load.
+ *  `"populated"` (default) expands it only when the wildcard already has groups;
+ *  `"always"` expands it even when empty; `"never"` keeps it collapsed. */
+export type SubcatDefault = "populated" | "always" | "never";
+
 const STORAGE_KEY = "wp-theme-mode";
 const STORAGE_KEY_DENSITY = "wp-density-mode";
 const STORAGE_KEY_MAX_REF_DEPTH = "wp-wildcard-max-ref-depth";
 const STORAGE_KEY_CHECK_ON_LAUNCH = "wp-update-check-on-launch";
 const STORAGE_KEY_KEEP_EMPTY_GROUPS = "wp-keep-empty-tag-groups";
+const STORAGE_KEY_SUBCAT_DEFAULT = "wp-subcat-default";
 import { notifyCompletionSettingsChanged } from "../utils/tagSetting";
 
 const STORAGE_KEY_TAG_AUTOCOMPLETE = "wp-tag-autocomplete";
@@ -90,6 +96,16 @@ function readStoredKeepEmptyGroups(): boolean {
   return false;
 }
 
+function readStoredSubcatDefault(): SubcatDefault {
+  try {
+    const v = localStorage.getItem(STORAGE_KEY_SUBCAT_DEFAULT);
+    if (v === "populated" || v === "always" || v === "never") return v;
+  } catch {
+    /* localStorage unavailable */
+  }
+  return "populated";
+}
+
 function readStoredMaxRefDepth(): number {
   try {
     const v = localStorage.getItem(STORAGE_KEY_MAX_REF_DEPTH);
@@ -129,6 +145,7 @@ export const useUiStore = defineStore("ui", () => {
   const maxRefDepth = ref<number>(readStoredMaxRefDepth());
   const checkOnLaunch = ref<boolean>(readStoredCheckOnLaunch());
   const keepEmptyTagGroups = ref<boolean>(readStoredKeepEmptyGroups());
+  const subcatDefault = ref<SubcatDefault>(readStoredSubcatDefault());
   const tagAutocomplete = ref<boolean>(readStoredTagAutocomplete());
   const loraAutocomplete = ref<boolean>(readStoredFlag(STORAGE_KEY_LORA_AUTOCOMPLETE));
   const embeddingAutocomplete = ref<boolean>(readStoredFlag(STORAGE_KEY_EMBEDDING_AUTOCOMPLETE));
@@ -170,6 +187,15 @@ export const useUiStore = defineStore("ui", () => {
     keepEmptyTagGroups.value = v;
     try {
       localStorage.setItem(STORAGE_KEY_KEEP_EMPTY_GROUPS, v ? "1" : "0");
+    } catch {
+      /* localStorage unavailable */
+    }
+  }
+
+  function setSubcatDefault(v: SubcatDefault): void {
+    subcatDefault.value = v;
+    try {
+      localStorage.setItem(STORAGE_KEY_SUBCAT_DEFAULT, v);
     } catch {
       /* localStorage unavailable */
     }
@@ -258,6 +284,8 @@ export const useUiStore = defineStore("ui", () => {
     checkOnLaunch,
     keepEmptyTagGroups,
     setKeepEmptyTagGroups,
+    subcatDefault,
+    setSubcatDefault,
     tagAutocomplete,
     setTagAutocomplete,
     loraAutocomplete,

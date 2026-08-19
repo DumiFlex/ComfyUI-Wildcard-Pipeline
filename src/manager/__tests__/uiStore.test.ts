@@ -88,3 +88,31 @@ describe("uiStore — theme cycle", () => {
     expect(ui.themeMode).toBe("auto");
   });
 });
+
+describe("uiStore · subcatDefault", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    setActivePinia(createPinia());
+  });
+
+  it("defaults to 'populated'", () => {
+    const ui = useUiStore();
+    expect(ui.subcatDefault).toBe("populated");
+  });
+
+  it("persists a chosen value to localStorage", () => {
+    const ui = useUiStore();
+    ui.setSubcatDefault("always");
+    expect(ui.subcatDefault).toBe("always");
+    expect(localStorage.getItem("wp-subcat-default")).toBe("always");
+  });
+
+  it("reads a stored value on init, ignoring garbage", () => {
+    localStorage.setItem("wp-subcat-default", "never");
+    setActivePinia(createPinia());
+    expect(useUiStore().subcatDefault).toBe("never");
+    localStorage.setItem("wp-subcat-default", "bogus");
+    setActivePinia(createPinia());
+    expect(useUiStore().subcatDefault).toBe("populated");
+  });
+});

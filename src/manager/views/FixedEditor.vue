@@ -13,6 +13,7 @@ import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import type { SaveState } from "../components/EditorFrame.types";
 import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
+import SendToTestRunner from "../components/SendToTestRunner.vue";
 import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
@@ -511,6 +512,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
       />
     </template>
     <template v-if="isEdit" #header-extra>
+      <SendToTestRunner v-if="props.id" :kind="'fixed_values'" :id="props.id" />
       <span v-if="cascadeRefs.length > 0" class="wp-editor-used-by">
         used by <PillCountBadge :count="cascadeRefs.length" />
       </span>

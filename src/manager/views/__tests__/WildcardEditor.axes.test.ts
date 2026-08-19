@@ -78,8 +78,13 @@ async function mountSeeded(overrides: Record<string, unknown> = {}) {
   await flushPromises();
   // The Sub-Categories card ships collapsed; every test here is about the
   // group headers inside it.
-  await wrap.get('[data-test="subcat-collapse"]').trigger("click");
-  await flushPromises();
+  // The panel default is now expanded-when-populated, so a seeded (populated)
+  // wildcard opens on its own. Only click to open if it actually shipped
+  // collapsed, otherwise the click would toggle it shut.
+  if (wrap.find('[data-test="subcat-collapsed"]').exists()) {
+    await wrap.get('[data-test="subcat-collapse"]').trigger("click");
+    await flushPromises();
+  }
   return wrap;
 }
 
