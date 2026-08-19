@@ -46,6 +46,10 @@ const props = withDefaults(
      *  ConstraintMatrix. Empty → flat source/target-tinted headers. */
     sourceGroups?: Record<string, string[]>;
     targetGroups?: Record<string, string[]>;
+    /** axis name → kind. `"accepts"` axes get a marked band (see SPA
+     *  ConstraintMatrix) — the matrix otherwise can't show accepts-ness. */
+    sourceGroupKinds?: Record<string, string>;
+    targetGroupKinds?: Record<string, string>;
     /** Read-only recovery view: the source/target wildcard was deleted, so
      *  the configured rules are shown for understanding only. Cells don't
      *  open the rule popover; the grid frame + cells mute to a snapshot.
@@ -53,7 +57,8 @@ const props = withDefaults(
      *  ConstraintMatrix `readonly` prop / `wp-mx--readonly` treatment. */
     stranded?: boolean;
   }>(),
-  { sourceName: "", targetName: "", sourceGroups: () => ({}), targetGroups: () => ({}), stranded: false },
+  { sourceName: "", targetName: "", sourceGroups: () => ({}), targetGroups: () => ({}),
+    sourceGroupKinds: () => ({}), targetGroupKinds: () => ({}), stranded: false },
 );
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
 
@@ -80,6 +85,22 @@ const orderedSources = computed(() => orderByGroups([...props.sourceSubs], props
 const orderedTargets = computed(() => orderByGroups([...props.targetSubs], props.targetGroups));
 const rowGroups = computed(() => toGroups(orderedSources.value));
 const colGroups = computed(() => toGroups(orderedTargets.value));
+
+const sourceAcceptsAxes = computed(() => acceptsSet(props.sourceGroupKinds));
+const targetAcceptsAxes = computed(() => acceptsSet(props.targetGroupKinds));
+function acceptsSet(kinds: Record<string, string>): Set<string> {
+  return new Set(Object.entries(kinds).filter(([, k]) => k === "accepts").map(([a]) => a));
+}
+function isAcceptsBand(grp: { axisName: string }, which: "source" | "target"): boolean {
+  const set = which === "source" ? sourceAcceptsAxes.value : targetAcceptsAxes.value;
+  return set.has(grp.axisName);
+}
+function acceptsTip(grp: { axisName: string }): string {
+  return `Accepts axis — rolls one tag per pick, readable as $var.${grp.axisName}`;
+}
+const hasAcceptsAxis = computed(
+  () => sourceAcceptsAxes.value.size > 0 || targetAcceptsAxes.value.size > 0,
+);
 const hasColBands = computed(() => colGroups.value.some((g) => !isBucket(g)));
 const hasRowGroups = computed(() => rowGroups.value.some((g) => !isBucket(g)));
 
@@ -388,8 +409,9 @@ onBeforeUnmount(() => {
                 :class="{ 'mx-th-band--bucket': isBucket(grp) }"
                 :colspan="grp.tags.length"
                 :style="{ '--ax': tagHue(grp, 'target', true) }"
-                :title="groupLabel(grp)"
-              ><span class="chip">{{ groupLabel(grp) }}</span></th>
+                :title="isAcceptsBand(grp, 'target') ? acceptsTip(grp) : groupLabel(grp)"
+              ><span class="chip">{{ groupLabel(grp)
+                }}<i v-if="isAcceptsBand(grp, 'target')" class="pi pi-sync mx-axis-mark" aria-hidden="true" /></span></th>
             </template>
             <!-- Flat cols: tag headers sit directly in the single header row. -->
             <template v-else>
@@ -427,8 +449,9 @@ onBeforeUnmount(() => {
                 :class="{ 'mx-grp-head--bucket': isBucket(grp) }"
                 :colspan="orderedTargets.length + 1"
                 :style="{ '--ax': tagHue(grp, 'source', true) }"
-                :title="groupLabel(grp)"
-              ><span class="chip">{{ groupLabel(grp) }}</span></th>
+                :title="isAcceptsBand(grp, 'source') ? acceptsTip(grp) : groupLabel(grp)"
+              ><span class="chip">{{ groupLabel(grp)
+                }}<i v-if="isAcceptsBand(grp, 'source')" class="pi pi-sync mx-axis-mark" aria-hidden="true" /></span></th>
             </tr>
             <tr v-for="s in grp.tags" :key="s">
               <th
@@ -440,7 +463,8 @@ onBeforeUnmount(() => {
                 :style="{ '--ax': tagHue(grp, 'source', hasRowGroups) }"
               >
                 <span v-if="!isBucket(grp) && grp.tags.length === 1" class="chip">
-                  <span class="eye">{{ grp.axisName }}</span>
+                  <span class="eye">{{ grp.axisName
+                    }}<i v-if="isAcceptsBand(grp, 'source')" class="pi pi-sync mx-axis-mark" :title="acceptsTip(grp)" aria-hidden="true" /></span>
                   <span class="v">{{ s }}</span>
                 </span>
                 <span v-else class="chip">{{ s }}</span>
@@ -474,7 +498,7 @@ onBeforeUnmount(() => {
       Reattach a live wildcard to edit these rules.
     </p>
 
-    <MatrixLegend />
+    <MatrixLegend :show-accepts="hasAcceptsAxis" />
 
     <!-- Popover lives in a body-level portal so its hover state stays
          isolated from the source cell, the cells in the row below
@@ -509,6 +533,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.mx-axis-mark { color: var(--wp-axis, #fbbf24); font-size: 9px; margin-left: 5px; vertical-align: baseline; }
 .mx {
   padding: 12px 16px;
   background: var(--wp-bg2);

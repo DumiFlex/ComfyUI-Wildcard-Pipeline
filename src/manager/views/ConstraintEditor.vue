@@ -135,6 +135,7 @@ interface WildcardPayloadShape {
   options?: WildcardOption[];
   sub_categories?: string[];
   tag_groups?: Record<string, string[]>;
+  tag_group_kinds?: Record<string, string>;
 }
 
 const name = ref("");
@@ -560,6 +561,12 @@ const sourceGroups = computed<Record<string, string[]>>(
 );
 const targetGroups = computed<Record<string, string[]>>(
   () => (targetWildcard.value?.payload as WildcardPayloadShape)?.tag_groups ?? {},
+);
+const sourceGroupKinds = computed<Record<string, string>>(
+  () => (sourceWildcard.value?.payload as WildcardPayloadShape)?.tag_group_kinds ?? {},
+);
+const targetGroupKinds = computed<Record<string, string>>(
+  () => (targetWildcard.value?.payload as WildcardPayloadShape)?.tag_group_kinds ?? {},
 );
 
 const targetSubCategories = computed<string[]>(() => {
@@ -1428,6 +1435,8 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
         :target-name="targetWildcard?.name ?? (targetWildcardName ?? '')"
         :source-groups="sourceGroups"
         :target-groups="targetGroups"
+        :source-group-kinds="sourceGroupKinds"
+        :target-group-kinds="targetGroupKinds"
         :readonly="refMissing"
         data-test="matrix-grid"
         @update:model-value="onMatrixUpdate"

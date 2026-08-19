@@ -46,6 +46,12 @@ interface Props {
    *  tinted headers as before. */
   sourceGroups?: Record<string, string[]>;
   targetGroups?: Record<string, string[]>;
+  /** axis name → kind for each wildcard. An `"accepts"` axis rolls one tag per
+   *  pick and is readable as `$var.AXIS`; the matrix marks those bands so a
+   *  reader can tell an axis from an ordinary tag group (which the editor shows
+   *  via its accepts button, but the matrix otherwise cannot). */
+  sourceGroupKinds?: Record<string, string>;
+  targetGroupKinds?: Record<string, string>;
   // Read-only recovery view: the source/target wildcard was deleted, so the
   // configured rules are shown for understanding only. Cells don't open the
   // rule popover; reattach a live wildcard to edit.
@@ -56,6 +62,8 @@ const props = withDefaults(defineProps<Props>(), {
   targetName: "",
   sourceGroups: () => ({}),
   targetGroups: () => ({}),
+  sourceGroupKinds: () => ({}),
+  targetGroupKinds: () => ({}),
   readonly: false,
 });
 const emit = defineEmits<{ "update:modelValue": [value: ConstraintMatrix] }>();
@@ -139,6 +147,26 @@ const orderedRows = computed(() => orderByGroups(props.rows, props.sourceGroups)
 const orderedCols = computed(() => orderByGroups(props.cols, props.targetGroups));
 const rowGroups = computed(() => toGroups(orderedRows.value));
 const colGroups = computed(() => toGroups(orderedCols.value));
+
+/** Axis names marked `accepts` on each side. */
+const sourceAcceptsAxes = computed(() => acceptsSet(props.sourceGroupKinds));
+const targetAcceptsAxes = computed(() => acceptsSet(props.targetGroupKinds));
+function acceptsSet(kinds: Record<string, string>): Set<string> {
+  return new Set(Object.entries(kinds).filter(([, k]) => k === "accepts").map(([a]) => a));
+}
+/** Whether a band's axis is an accepts axis on the given side. */
+function isAcceptsBand(grp: { axisName: string }, which: "source" | "target"): boolean {
+  const set = which === "source" ? sourceAcceptsAxes.value : targetAcceptsAxes.value;
+  return set.has(grp.axisName);
+}
+/** Hover text for the accepts mark. */
+function acceptsTip(grp: { axisName: string }): string {
+  return `Accepts axis — rolls one tag per pick, readable as $var.${grp.axisName}`;
+}
+/** Any accepts axis at all, so the legend can hide its row otherwise. */
+const hasAcceptsAxis = computed(
+  () => sourceAcceptsAxes.value.size > 0 || targetAcceptsAxes.value.size > 0,
+);
 /** True when at least one column / row axis is a NAMED group — then the header
  *  grows a band/chip and the leftover bucket is worth labelling. A fully-flat
  *  matrix keeps the legacy source/target tint and grows no band/chip. */
@@ -318,9 +346,14 @@ defineExpose({ cellAt });
                 :class="{ 'wp-mx-th-band--bucket': isBucket(grp) }"
                 :colspan="grp.tags.length"
                 :style="{ '--ax': tagHue(grp, 'target', true) }"
-                :title="groupLabel(grp)"
+                :title="isAcceptsBand(grp, 'target') ? acceptsTip(grp) : groupLabel(grp)"
               >
-                <span class="chip">{{ groupLabel(grp) }}</span>
+                <span class="chip">{{ groupLabel(grp)
+                  }}<i
+                    v-if="isAcceptsBand(grp, 'target')"
+                    class="pi pi-sync wp-mx-axis-mark"
+                    aria-hidden="true"
+                  /></span>
               </th>
             </template>
             <!-- Flat cols: tag headers sit directly in the single header row. -->
@@ -359,8 +392,13 @@ defineExpose({ cellAt });
                 :class="{ 'wp-mx-grp-head--bucket': isBucket(grp) }"
                 :colspan="orderedCols.length + 1"
                 :style="{ '--ax': tagHue(grp, 'source', true) }"
-                :title="groupLabel(grp)"
-              ><span class="chip">{{ groupLabel(grp) }}</span></th>
+                :title="isAcceptsBand(grp, 'source') ? acceptsTip(grp) : groupLabel(grp)"
+              ><span class="chip">{{ groupLabel(grp)
+                }}<i
+                  v-if="isAcceptsBand(grp, 'source')"
+                  class="pi pi-sync wp-mx-axis-mark"
+                  aria-hidden="true"
+                /></span></th>
             </tr>
             <tr v-for="tag in grp.tags" :key="tag">
               <th
@@ -372,7 +410,13 @@ defineExpose({ cellAt });
                 :style="{ '--ax': tagHue(grp, 'source', hasRowGroups) }"
               >
                 <span v-if="!isBucket(grp) && grp.tags.length === 1" class="chip">
-                  <span class="eye">{{ grp.axisName }}</span>
+                  <span class="eye">{{ grp.axisName
+                    }}<i
+                      v-if="isAcceptsBand(grp, 'source')"
+                      class="pi pi-sync wp-mx-axis-mark"
+                      :title="acceptsTip(grp)"
+                      aria-hidden="true"
+                    /></span>
                   <span class="v">{{ tag }}</span>
                 </span>
                 <span v-else class="chip">{{ tag }}</span>
@@ -419,7 +463,7 @@ defineExpose({ cellAt });
       Reattach the source to edit these rules.
     </p>
 
-    <MatrixLegend />
+    <MatrixLegend :show-accepts="hasAcceptsAxis" />
 
     <!-- Popover teleports to body so its hover state stays isolated
          from the source cell + any table-level clipping. -->
@@ -567,6 +611,16 @@ defineExpose({ cellAt });
   background: color-mix(in srgb, var(--ax) 15%, var(--wp-bg-1));
   border-bottom: 2px solid color-mix(in srgb, var(--ax) 55%, transparent);
 }
+/* Accepts-axis mark — a small amber pi-sync after the band/eyebrow label. The
+   band keeps its own group hue (so it never collides with an amber group); the
+   mark is a distinct glyph. Meaning lives in the tooltip + the legend row. */
+.wp-mx-axis-mark {
+  color: var(--wp-axis, #fbbf24);
+  font-size: 9px;
+  margin-left: 5px;
+  vertical-align: baseline;
+}
+
 /* The uncategorized bucket reads as a catch-all, not a real axis: same neutral
  * tint (via --ax) but a dashed edge instead of the solid axis accent. */
 .wp-mx-th-band--bucket .chip { border-bottom-style: dashed; }

@@ -101,6 +101,7 @@ interface WildcardPayload {
   sub_categories?: string[];
   options?: Array<{ value?: string }>;
   tag_groups?: Record<string, string[]>;
+  tag_group_kinds?: Record<string, string>;
 }
 
 /** Normalised module shape the resolution lookups consume. Unifies the
@@ -306,6 +307,14 @@ const sourceGroups = computed<Record<string, string[]>>(() => {
 const targetGroups = computed<Record<string, string[]>>(() => {
   const pl = (props.module.payload ?? {}) as ConstraintPayload;
   return findWildcard(pl.target_wildcard_id)?.tag_groups ?? {};
+});
+const sourceGroupKinds = computed<Record<string, string>>(() => {
+  const pl = (props.module.payload ?? {}) as ConstraintPayload;
+  return findWildcard(pl.source_wildcard_id)?.tag_group_kinds ?? {};
+});
+const targetGroupKinds = computed<Record<string, string>>(() => {
+  const pl = (props.module.payload ?? {}) as ConstraintPayload;
+  return findWildcard(pl.target_wildcard_id)?.tag_group_kinds ?? {};
 });
 
 const sourceName = computed(() => {
@@ -715,6 +724,8 @@ function onSpaClick(): void {
       :target-name="targetName"
       :source-groups="sourceGroups"
       :target-groups="targetGroups"
+      :source-group-kinds="sourceGroupKinds"
+      :target-group-kinds="targetGroupKinds"
       :stranded="hasDangling"
       @update="onUpdate"
     />
