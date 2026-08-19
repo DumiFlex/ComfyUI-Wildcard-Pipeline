@@ -17,7 +17,7 @@
  * `wp-page__*`, `wp-breadcrumb`, `wp-card`, `wp-footer-bar` tokens that
  * already live in `tokens.css`.
  */
-import { computed, ref } from "vue";
+import { computed, ref, watch, nextTick } from "vue";
 import { RouterLink } from "vue-router";
 import Button from "./ui/Button.vue";
 import HistoryPanel from "./HistoryPanel.vue";
@@ -118,6 +118,23 @@ function scrollToField(id: string): void {
     : el.querySelector<HTMLInputElement>("input, textarea, select");
   input?.focus();
 }
+
+/** A failed Save is the moment the editor flips `errors` from empty to
+ *  populated (they gate the rollup behind a "tried to save" flag). The Save
+ *  button and the error banner are at opposite ends of a long editor, so
+ *  clicking Save on a wildcard with 30 options did nothing the user could see —
+ *  they clicked it five times before finding the banner. Jump to the first
+ *  offending field on that transition, so the failure is where the eyes are.
+ *  Length-guarded to the empty→non-empty edge so re-validation on each
+ *  keystroke while fixing it doesn't yank the scroll around. */
+watch(
+  () => props.errors.length,
+  (now, before) => {
+    if (now > 0 && (before ?? 0) === 0) {
+      void nextTick(() => scrollToField(props.errors[0].field));
+    }
+  },
+);
 </script>
 
 <template>
