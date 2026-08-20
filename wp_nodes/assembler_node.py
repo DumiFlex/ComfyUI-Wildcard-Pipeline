@@ -74,9 +74,19 @@ class WPPromptAssembler(io.ComfyNode):
         # before resolution — net effect: `$var` for an internal var
         # never substitutes in the rendered prompt.
         render_ctx = dict(context.context)
-        flags = (context.internals or {}).get("__wp_internal_flags__")
-        if isinstance(flags, dict):
-            render_ctx["__wp_internal_flags__"] = flags
+        # The accessor tables (`__wp_axes__`, `__wp_picks__`) AND the
+        # internal-flag map ride on `context.internals`, NOT `context.context`:
+        # every one is `__`-prefixed, so the socket boundary
+        # (`strip_engine_internals` in `build_payload`) drops them from the
+        # user-facing payload and re-files the cross-node subset under
+        # `internals`. Merge that whole carve-out back in before resolving so
+        # `strip_internals` can re-apply the hide-from-prompt filter AND
+        # `with_resolver_tables` can re-attach the `$var.AXIS` / `$var.N`
+        # tables. Pre-fix only `__wp_internal_flags__` was merged, so
+        # `$outfit.SHOES` rendered "" across the socket even though the
+        # identical read resolved one node upstream (the combine surface,
+        # which runs before the socket strips the table).
+        render_ctx.update(context.internals or {})
         resolved = resolve_variables(
             template,
             with_resolver_tables(strip_internals(render_ctx), render_ctx),

@@ -522,6 +522,7 @@ def ref_option_pool(tok: Token, ctx: ResolveContext) -> list[dict]:
                 apply_constraints_for_target,
                 warn_excludes_all,
             )
+            from engine.modules.wildcard_handler import _accepts_axes
             # SP3: share the ctx-resident hit counter so a nested-ref
             # target occurrence counts toward the same first/next
             # coverage as direct top-level instances. `carrier_ctx` is
@@ -539,6 +540,13 @@ def ref_option_pool(tok: Token, ctx: ResolveContext) -> list[dict]:
             options, any_applied = apply_constraints_for_target(
                 options, uuid, constraints, get_picks(), ctx.warnings,
                 hits=hits, firing_uid=None, carrier_ctx=carrier_ctx,
+                # TARGET-side accepts axes for a nested @{} target, so its
+                # multi-tag accepts option survives when the source allows any
+                # alternative (same as the top-level path).
+                target_axes=(
+                    _accepts_axes(payload_dict)
+                    if isinstance(payload_dict, dict) else {}
+                ),
             )
             if any_applied:
                 warn_excludes_all(options, uuid, ctx.warnings)

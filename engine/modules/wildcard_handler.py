@@ -85,6 +85,7 @@ def _apply_constraint_to_options(
     constraint: dict[str, Any],
     source_pick: dict[str, Any],
     adjustment_warnings: list[dict[str, Any]] | None = None,
+    target_axes: dict[str, list[str]] | None = None,
 ) -> list[dict[str, Any]]:
     """Adjust option weights according to a single constraint, given the
     already-picked source option(s).
@@ -151,7 +152,9 @@ def _apply_constraint_to_options(
     adjusted: list[dict[str, Any]] = []
     for opt in options:
         option = {"value": opt.get("value", ""), "tags": opt.get("sub_categories") or []}
-        f = combine_constraint_factor(picks, option, matrix, exceptions, axis_kinds)
+        f = combine_constraint_factor(
+            picks, option, matrix, exceptions, axis_kinds, target_axes,
+        )
         # `isinstance(f, float)` rather than `f is not EXCLUDE`: identity
         # against a sentinel does not narrow the union, so the multiply below
         # was unprovable. Same test, and the type checker can follow it.
@@ -300,6 +303,24 @@ def _axis_menus(
     return out
 
 
+def _accepts_axes(payload: dict[str, Any]) -> dict[str, list[str]]:
+    """Every ``accepts`` axis on this payload as group → full member list
+    (independent of any option). Fed to the constraint fold as the TARGET side:
+    a target option's tags inside one of these groups are ALTERNATIVES, so the
+    fold keeps the option viable when the source allows any of them (symmetric
+    to the source's rolled-winner collapse), and the target's own roll is later
+    restricted to the allowed members. Empty ⇒ the fold takes the flat product
+    path, i.e. today's behaviour.
+    """
+    kinds = payload.get("tag_group_kinds") or {}
+    groups = payload.get("tag_groups") or {}
+    return {
+        g: list(members or [])
+        for g, members in groups.items()
+        if kinds.get(g) == "accepts"
+    }
+
+
 def _roll_axes(menus: dict[str, list[str]], rng) -> dict[str, str]:
     """One winner per axis, uniform over the option's own menu.
 
@@ -315,6 +336,77 @@ def _roll_axes(menus: dict[str, list[str]], rng) -> dict[str, str]:
         for axis, members in menus.items()
         if members
     }
+
+
+def _pick_record_for_constraint(
+    chosen: dict[str, Any], payload: dict[str, Any], rolled: dict[str, str] | None
+) -> dict[str, Any]:
+    """The per-pick record a constraint reads. For an ``accepts`` axis the
+    option offers a menu but rolls ONE winner; the constraint keys on that
+    single winner (the value ``$var.AXIS`` exposes), NOT the whole menu —
+    otherwise a diagonal narrows the target to the entire accepted set instead
+    of the rolled tag, and ``$source.AXIS`` disagrees with the picked target
+    (the reported "picks are not good"). So each accepts axis collapses to its
+    winner: the axis members leave the flat ``tags`` bag and the winner is added
+    back, and ``axes`` carries only the winner. Classify tags are untouched
+    (they still multiply). An option with no accepts axis produces the same
+    record as before the feature.
+    """
+    sub = list(chosen.get("sub_categories") or [])
+    menus = _axis_menus(payload, sub)
+    rolled = rolled or {}
+    axis_members = {m for members in menus.values() for m in members}
+    winners = [rolled[a] for a in menus if a in rolled]
+    tags = [t for t in sub if t not in axis_members] + winners
+    axes = {a: [rolled[a]] for a in menus if a in rolled}
+    return {"value": chosen.get("value", ""), "tags": tags, "axes": axes}
+
+
+def _restrict_menus_by_constraints(
+    menus: dict[str, list[str]],
+    applied_constraints: list[tuple[dict[str, Any], dict[str, Any]]] | None,
+) -> dict[str, list[str]]:
+    """Drop from each accepts-axis menu the tags a FIRED constraint excludes, so
+    the target's own roll can only land on a constraint-allowed tag.
+
+    Under a diagonal from a source that rolled ``sandals``, the target's
+    ``{sandals, heels}`` option can no longer roll ``heels`` — so
+    ``$source.SHOES`` and ``$target.SHOES`` agree. A tag survives iff EVERY
+    fired constraint gives a single-tag option ``{tags: [t]}`` a positive
+    factor. Never empties an axis: if every member is excluded the menu is left
+    intact (the option itself survived the pool narrowing, so its axis must
+    still roll something) — reachable only with a pathological matrix.
+    """
+    if not applied_constraints or not menus:
+        return menus
+    from engine.modules._constraint_math import combine_constraint_factor
+    out: dict[str, list[str]] = {}
+    for axis, members in menus.items():
+        allowed: list[str] = []
+        for t in members:
+            ok = True
+            for c, src_pick in applied_constraints:
+                s_picks = src_pick.get("picks")
+                if not isinstance(s_picks, list):
+                    s_picks = [{
+                        "value": src_pick.get("value", ""),
+                        "tags": list(src_pick.get("sub_categories") or []),
+                    }]
+                axis_kinds = {
+                    ax: "accepts"
+                    for p in s_picks for ax in (p.get("axes") or {})
+                }
+                f = combine_constraint_factor(
+                    s_picks, {"value": "", "tags": [t]},
+                    c.get("matrix") or {}, c.get("exceptions") or [], axis_kinds,
+                )
+                if not (isinstance(f, float) and f > 0.0):
+                    ok = False
+                    break
+            if ok:
+                allowed.append(t)
+        out[axis] = allowed if allowed else members
+    return out
 
 
 def _record_axes(ctx: Any, binding: str, rolled: Any) -> None:
@@ -333,7 +425,12 @@ def _record_axes(ctx: Any, binding: str, rolled: Any) -> None:
         bucket[binding] = rolled
 
 
-def _record_pick(ctx: Any, chosen: dict[str, Any], payload: dict[str, Any]) -> None:
+def _record_pick(
+    ctx: Any,
+    chosen: dict[str, Any],
+    payload: dict[str, Any],
+    rolled: dict[str, str] | None = None,
+) -> None:
     """Stash the picked option dict in `ctx["__wp_picks__"][module_id]` so a
     downstream constraint-aware wildcard can look up its source's value +
     sub_categories. Keyed by the active module id (set by pipeline.py).
@@ -358,14 +455,10 @@ def _record_pick(ctx: Any, chosen: dict[str, Any], payload: dict[str, Any]) -> N
             # SP3: per-pick list the combine fn reads. A single pick is a
             # one-element list so the multi-tag/multi-pick applier has a
             # uniform shape regardless of single- vs multi-select source.
-            "picks": [{
-                "value": chosen.get("value", ""),
-                "tags": list(chosen.get("sub_categories") or []),
-                # Which of those tags belong to which `accepts` axis. The
-                # constraint fold is pure and never sees a library payload, so
-                # this map is how it learns to fold an axis with max.
-                "axes": _axis_menus(payload, chosen.get("sub_categories")),
-            }],
+            # An `accepts` axis is collapsed to its rolled winner here (see
+            # `_pick_record_for_constraint`) so the constraint keys on the one
+            # tag `$var.AXIS` exposes, not the whole menu.
+            "picks": [_pick_record_for_constraint(chosen, payload, rolled)],
         }
         # Additive per-instance view (task_5200c1fc). When this wildcard
         # carries a `bundle_origin`, ALSO file the pick under
@@ -383,6 +476,7 @@ def _record_pick_multi(
     chosen_list: list[dict[str, Any]],
     sep: str,
     payload: dict[str, Any],
+    rolled_list: list[dict[str, str]] | None = None,
 ) -> None:
     """Multi-select counterpart to `_record_pick` (SP2a). Stash the joined
     value + the individual picked values + the union of their sub-categories,
@@ -403,16 +497,15 @@ def _record_pick_multi(
                 union.append(t)
     # SP3: per-pick list (value + that pick's own tags, NOT the union) so the
     # combine fn can apply the matrix per pick. The union above stays for the
-    # debug Picks view; `picks` is what constraint application reads.
+    # debug Picks view; `picks` is what constraint application reads. Each
+    # pick's `accepts` axis is collapsed to its own rolled winner (parallel to
+    # the single-pick path) so a multi-select source contributes one tag per
+    # pick, not each pick's whole menu.
     per_pick = [
-        {
-            "value": str(c.get("value", "")),
-            "tags": list(c.get("sub_categories") or []),
-            # Per pick, not the union: each pick offers its own menu, and the
-            # fold intersects them across picks.
-            "axes": _axis_menus(payload, c.get("sub_categories")),
-        }
-        for c in chosen_list
+        _pick_record_for_constraint(
+            c, payload, (rolled_list[i] if rolled_list and i < len(rolled_list) else None)
+        )
+        for i, c in enumerate(chosen_list)
     ]
     entry = {
         "value": sep.join(values),
@@ -669,18 +762,23 @@ class WildcardHandler(ModuleHandler):
             pinned_id = instance.get("pinned_option_id")
             pinned = next((o for o in options if o.get("id") == pinned_id), None)
             if pinned is not None:
-                # Track the pinned pick the same way as a random pick —
-                # downstream constraint-aware wildcards need source
-                # info regardless of how the source resolved its option.
-                _record_pick(ctx, pinned, payload)
                 # A pinned option still rolls its axes: pinning fixes WHICH
-                # option fires, not which of the shoes it accepts.
-                _record_axes(ctx, binding, _roll_axes(
+                # option fires, not which of the shoes it accepts. Roll BEFORE
+                # recording so the pick carries the single rolled winner (the
+                # constraint source-view a downstream target reads), same as the
+                # random path. Pinned bypasses this wildcard's own constraint
+                # application, so there's nothing to restrict the roll against.
+                pinned_rolled = _roll_axes(
                     _axis_menus(payload, pinned.get("sub_categories")),
                     _derive_module_rng(
                         int(ctx.get("__wp_node_seed__", 0) or 0), f"{binding}::axes",
                     ),
-                ))
+                )
+                # Track the pinned pick the same way as a random pick —
+                # downstream constraint-aware wildcards need source
+                # info regardless of how the source resolved its option.
+                _record_pick(ctx, pinned, payload, pinned_rolled)
+                _record_axes(ctx, binding, pinned_rolled)
                 value = str(pinned.get("value", ""))
                 if not value:
                     return {binding: ""}
@@ -745,6 +843,11 @@ class WildcardHandler(ModuleHandler):
         )
         my_id = ctx.get("__wp_current_module_id__") if ctx is not None else None
         any_constraint_applied = False
+        # (constraint, source_pick) pairs that actually re-weighted this target.
+        # Used below to restrict this wildcard's OWN accepts-axis roll to tags
+        # those constraints allow, so `$source.AXIS` == `$target.AXIS` under a
+        # diagonal (A). Empty when nothing constrains this instance.
+        applied_constraints: list[tuple[dict[str, Any], dict[str, Any]]] = []
         if my_id:
             constraints = ctx.get("__wp_constraints__") if ctx is not None else None
             picks = ctx.get("__wp_picks__") if ctx is not None else None
@@ -764,6 +867,13 @@ class WildcardHandler(ModuleHandler):
             options, any_constraint_applied = apply_constraints_for_target(
                 options, my_id, constraints, picks, ctx["__wp_warnings__"],
                 hits=hits, firing_uid=firing_uid,
+                applied_out=applied_constraints,
+                # TARGET-side accepts axes: a target option's tags in one of
+                # these groups are alternatives the option offers, so the fold
+                # keeps it viable when the source allows any of them (mirror of
+                # the source rolled-winner collapse). The roll is then pinned to
+                # the allowed member by `_restrict_menus_by_constraints`.
+                target_axes=_accepts_axes(payload),
             )
         if any_constraint_applied:
             warn_excludes_all(options, my_id or "", ctx["__wp_warnings__"])
@@ -837,32 +947,51 @@ class WildcardHandler(ModuleHandler):
                     items.append(resolve_text(str(opt.get("value", "")), multi_ctx))
             finally:
                 ctx["__wp_rng__"] = saved_rng_multi
-            _record_pick_multi(ctx, picks, sep, payload)
             # One roll per pick, in pick order, so `$outfit.SHOES` mirrors the
-            # shape of `$outfit` and `$outfit.1.SHOES` lines up with
-            # `$outfit.1`.
-            _record_axes(ctx, binding, [
-                _roll_axes(_axis_menus(payload, o.get("sub_categories")), rng)
+            # shape of `$outfit` and `$outfit.1.SHOES` lines up with `$outfit.1`.
+            # Each pick's accepts menu is first restricted to the tags the fired
+            # constraints allow (A), then rolled; the winners feed BOTH the pick
+            # record (source view) and the accessor. Rolled before the record —
+            # the record draws no rng and the restriction consumes none + keeps
+            # one draw per axis, so downstream reproducibility is unchanged.
+            rolled_list = [
+                _roll_axes(
+                    _restrict_menus_by_constraints(
+                        _axis_menus(payload, o.get("sub_categories")),
+                        applied_constraints,
+                    ),
+                    rng,
+                )
                 for o in picks
-            ])
+            ]
+            _record_pick_multi(ctx, picks, sep, payload, rolled_list)
+            _record_axes(ctx, binding, rolled_list)
             return {binding: ListVar(items, sep)}
 
         chosen = _pick_weighted(options, rng)
         if chosen is None:
             return {binding: ""}
 
+        # Roll the accepts axes AFTER the option draw (same rng, so a locked
+        # seed still reproduces the option) but BEFORE recording the pick, so
+        # the pick a downstream target reads carries the single rolled winner
+        # per axis (source fix). This wildcard's OWN menu is first restricted to
+        # tags the constraints that fired on it allow (A) — so a constrained
+        # `$target.AXIS` agrees with the source. The restriction consumes no rng
+        # and keeps one draw per axis, so downstream reproducibility holds.
+        rolled = _roll_axes(
+            _restrict_menus_by_constraints(
+                _axis_menus(payload, chosen.get("sub_categories")),
+                applied_constraints,
+            ),
+            rng,
+        )
         # Record this wildcard's pick so a downstream constraint-aware
         # wildcard can read it. Done BEFORE resolve_text so even an
         # empty-string-value pick is registered (matters if a
         # constraint exception keys on the literal empty pick value).
-        _record_pick(ctx, chosen, payload)
-
-        # Rolled AFTER the option draw on the same rng, so an existing
-        # locked_seed still reproduces the same option — the extra draws happen
-        # downstream of it and cannot shift the pick.
-        _record_axes(ctx, binding, _roll_axes(
-            _axis_menus(payload, chosen.get("sub_categories")), rng,
-        ))
+        _record_pick(ctx, chosen, payload, rolled)
+        _record_axes(ctx, binding, rolled)
 
         value = str(chosen.get("value", ""))
         if not value:

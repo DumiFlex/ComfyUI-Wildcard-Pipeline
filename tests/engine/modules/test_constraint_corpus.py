@@ -15,7 +15,8 @@ def test_corpus(case):
     # reproduce the old fold exactly — that is what makes the feature additive.
     got = combine_constraint_factor(
         case["picks"], case["option"], case["matrix"], case["exceptions"],
-        axis_kinds=case.get("source_axis_kinds"))
+        axis_kinds=case.get("source_axis_kinds"),
+        target_axes=case.get("target_axes"))
     if case["expect"] == "EXCLUDE":
         assert got is EXCLUDE
     else:

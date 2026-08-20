@@ -18,7 +18,7 @@ describe("combineConstraintFactor", () => {
     // `source_axis_kinds` is absent on every pre-axis case, and absence must
     // reproduce the old fold exactly — that is what makes the feature additive.
     const got = combineConstraintFactor(
-      c.picks, c.option, c.matrix, c.exceptions, c.source_axis_kinds,
+      c.picks, c.option, c.matrix, c.exceptions, c.source_axis_kinds, c.target_axes,
     );
     if (c.expect === "EXCLUDE") expect(got).toBe(EXCLUDE);
     else expect(got).toBeCloseTo(c.expect as number);

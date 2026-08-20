@@ -49,24 +49,52 @@ def _apply_rule(rule: dict[str, Any]) -> _Factor:
 
 
 def _cell_factor(
-    matrix: dict[str, Any], source_tag: str, opt_tags: list[str]
+    matrix: dict[str, Any],
+    source_tag: str,
+    opt_tags: list[str],
+    target_axes: dict[str, list[str]] | None = None,
 ) -> _Factor:
     """Fold one source tag against every tag on the option.
 
-    Product, because an option sitting on several rows of the same source tag
-    is genuinely several separate statements about it. EXCLUDE is absorbing.
+    Classify target tags fold with PRODUCT — an option sitting on several rows
+    of the same source tag is genuinely several separate statements about it.
+    Tags belonging to a target ``accepts`` axis (``target_axes``: group →
+    members) fold with MAX instead: the option OFFERS those as ALTERNATIVES, so
+    it stays viable when the source allows ANY of them (the mirror of the
+    source-side accepts fold — the target's own roll is then restricted to the
+    allowed members by the caller). A no-rule target tag is neutral (1.0).
+    EXCLUDE is absorbing for a classify tag and for a fully-excluded axis; the
+    ``target_axes`` path is unreachable unless the caller passes it, so a legacy
+    call folds byte-identically.
     """
-    factor = 1.0
     row = matrix.get(source_tag)
     if not isinstance(row, dict):
-        return factor
+        return 1.0
+    target_axes = target_axes or {}
+    axis_of = {t: ax for ax, members in target_axes.items() for t in (members or [])}
+    factor = 1.0
+    axis_members: dict[str, list[str]] = {}
     for t in opt_tags:
-        rule = row.get(t)
-        if isinstance(rule, dict):
-            r = _apply_rule(rule)
-            if isinstance(r, _ExcludeSentinel):
-                return EXCLUDE
-            factor *= r
+        ax = axis_of.get(t)
+        if ax is None:
+            rule = row.get(t)
+            if isinstance(rule, dict):
+                r = _apply_rule(rule)
+                if isinstance(r, _ExcludeSentinel):
+                    return EXCLUDE
+                factor *= r
+        else:
+            axis_members.setdefault(ax, []).append(t)
+    for members in axis_members.values():
+        best = 0.0
+        for t in members:
+            rule = row.get(t)
+            r = _apply_rule(rule) if isinstance(rule, dict) else 1.0
+            best = max(best, 0.0 if isinstance(r, _ExcludeSentinel) else r)
+        # Every alternative this axis offered was excluded → the option drops.
+        if best <= 0.0:
+            return EXCLUDE
+        factor *= best
     return factor
 
 
@@ -76,9 +104,11 @@ def combine_constraint_factor(
     matrix: dict[str, Any] | None,
     exceptions: list[Any] | None,
     axis_kinds: dict[str, str] | None = None,
+    target_axes: dict[str, list[str]] | None = None,
 ) -> _Factor:
     matrix = matrix or {}
     axis_kinds = axis_kinds or {}
+    target_axes = target_axes or {}
     exc_by_pair: dict[tuple[str, str], dict] = {}
     for e in (exceptions or []):
         if not isinstance(e, dict):
@@ -123,7 +153,7 @@ def combine_constraint_factor(
         for s in p_tags:
             if s in claimed:
                 continue
-            r = _cell_factor(matrix, s, opt_tags)
+            r = _cell_factor(matrix, s, opt_tags, target_axes)
             if isinstance(r, _ExcludeSentinel):
                 return EXCLUDE
             factor *= r
@@ -131,7 +161,7 @@ def combine_constraint_factor(
         for members in accepts.values():
             best = 0.0
             for s in members:
-                r = _cell_factor(matrix, s, opt_tags)
+                r = _cell_factor(matrix, s, opt_tags, target_axes)
                 # One member's EXCLUDE is that member declining, not the axis
                 # declining — it contributes 0 to the max and the siblings
                 # still get their say.

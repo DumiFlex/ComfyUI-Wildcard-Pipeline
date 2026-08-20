@@ -132,11 +132,19 @@ def test_two_bindings_are_independent():
     assert set(ctx["__wp_axes__"]) == {"a", "b"}
 
 
-def test_pick_entry_carries_its_axis_menu():
+def test_pick_entry_collapses_accepts_axis_to_the_rolled_winner():
+    # An accepts axis sends its SINGLE rolled winner to the constraint, not the
+    # whole menu — so a diagonal pins the target to the rolled tag instead of
+    # narrowing to the entire accepted set (the reported "picks are not good").
+    # The winner recorded on the pick is the same one `$var.AXIS` exposes.
     ctx = _fresh_ctx()
     WildcardHandler.resolve(_TWO_SHOE_OPTION, {"variable_binding": "outfit"}, ctx)
-    entry = ctx["__wp_picks__"]["abc12345"]
-    assert entry["picks"][0]["axes"] == {"SHOES": ["sneakers", "sandals"]}
+    pick = ctx["__wp_picks__"]["abc12345"]["picks"][0]
+    winner = ctx["__wp_axes__"]["outfit"]["SHOES"]
+    assert winner in ("sneakers", "sandals")
+    assert pick["axes"] == {"SHOES": [winner]}
+    # The non-rolled sibling is gone from the flat constraint tag bag too.
+    assert pick["tags"] == [winner]
 
 
 def test_no_accepts_group_means_no_axes_bucket_entry():

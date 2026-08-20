@@ -132,6 +132,8 @@ def apply_constraints_for_target(
     hits=None,
     firing_uid=None,
     carrier_ctx=None,
+    applied_out=None,
+    target_axes=None,
 ) -> tuple[list[dict[str, Any]], bool]:
     """Apply EVERY constraint whose reach selector covers this firing
     target instance, combined sequentially.
@@ -219,9 +221,18 @@ def apply_constraints_for_target(
             continue
         adjust_warnings: list[dict[str, Any]] = []
         options = _apply_constraint_to_options(
-            options, c, src_pick, adjust_warnings,
+            options, c, src_pick, adjust_warnings, target_axes,
         )
         any_applied = True
+        # Record the (constraint, resolved source pick) pairs that actually
+        # covered THIS firing target instance. The caller (wildcard_handler)
+        # uses them to restrict the target's OWN `accepts`-axis roll to tags
+        # these same constraints don't exclude — so `$source.AXIS` and
+        # `$target.AXIS` agree under a diagonal. Only covered constraints land
+        # here, so a selector-limited constraint (`first`/`next`/`pick`) that
+        # skipped this instance also leaves the axis roll alone.
+        if applied_out is not None:
+            applied_out.append((c, src_pick))
         for w in adjust_warnings:
             _push_constraint_warning(
                 warnings,

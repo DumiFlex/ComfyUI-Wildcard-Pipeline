@@ -61,12 +61,17 @@ _SAMPLES: dict[str, tuple[type, dict]] = {
         {
             "var_binding": "mood",
             "sub_categories": ["soft", "bold"],
+            # Tag axes: an `accepts` group must survive the round-trip, so the
+            # sample carries both the group map and its kind. A stripped
+            # tag_group_kinds silently degrades the axis to classify.
+            "tag_groups": {"TEXTURE": ["soft", "bold"]},
+            "tag_group_kinds": {"TEXTURE": "accepts"},
             "options": [
-                {"id": "opt00001", "value": "serene", "weight": 1, "sub_category": "soft"},
+                {"id": "opt00001", "value": "serene", "weight": 1, "sub_categories": ["soft"]},
                 # Null option: the is_null contract. Must round-trip
                 # through the validator or install rebuilds it as an
                 # invalid empty-value option.
-                {"id": "opt00002", "value": "", "weight": 1, "sub_category": None, "is_null": True},
+                {"id": "opt00002", "value": "", "weight": 1, "sub_categories": [], "is_null": True},
             ],
         },
     ),
@@ -112,6 +117,9 @@ _SAMPLES: dict[str, tuple[type, dict]] = {
             "target_wildcard_id": "tgt00001",
             "exceptions": [],
             "matrix": {"soft": {"bold": {"mode": "boost", "factor": 3}}},
+            # SP3 reach selector — must survive the round-trip, not strip back
+            # to the {mode: "all"} default.
+            "target_select": {"mode": "next", "count": 2},
         },
     ),
 }
