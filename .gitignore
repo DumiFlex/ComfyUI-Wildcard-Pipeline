@@ -61,6 +61,10 @@ Thumbs.db
 
 # Throwaway design / scratch artifacts (mockups, screenshots, demos)
 /_temp/
+# Root-level PNGs are always scratch QA screenshots here — legit images live
+# under public/. Anchored so it never touches public/images/**. Keeps stray
+# captures out of git and out of pack-release's ship-list gate.
+/*.png
 
 # DB location control — per-contributor sidecar config + root-location DB dir
 db-config.json
