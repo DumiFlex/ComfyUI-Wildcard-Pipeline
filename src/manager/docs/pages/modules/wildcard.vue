@@ -10,8 +10,8 @@ import DocRef from "../../../components/docs/DocRef.vue";
 import StarterButton from "../../../components/docs/StarterButton.vue";
 
 const tagGroupKinds = [
-  { term: "classify (default)", desc: "The tags describe what the option IS — casual, t-shirt, skirt. Several are true at once, so the constraint matrix folds them together with AND. This is how every group has always behaved; leaving it alone changes nothing." },
-  { term: "accepts", desc: "The tags are alternatives the option OFFERS — an outfit that works with sneakers, heels or sandals. Exactly one applies, so the matrix folds them with OR, and one of them is rolled at pick time." },
+  { term: "classify (default)", desc: "The tags describe what the option IS — casual, t-shirt, skirt. Several are true at once, so a constraint on this group uses all of them together (AND). This is how every group has always behaved; leaving it alone changes nothing." },
+  { term: "accepts", desc: "The tags are alternatives the option OFFERS — an outfit that works with sneakers, heels or sandals. Exactly one is rolled at pick time and read as $var.AXIS, and it's that single rolled tag a constraint keys on — so a diagonal “same tag wins” constraint pins the target to exactly the shoe that was rolled, not the whole accepted set." },
 ];
 
 const optionFields = [

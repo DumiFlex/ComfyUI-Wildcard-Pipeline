@@ -1,6 +1,10 @@
-A much faster ComfyUI start, filters on two more editors, and a bulk-delete fix worth reading.
+Read a wildcard's chosen tag as a variable, a much faster ComfyUI start, and a bulk-delete fix worth reading.
 
 ### Highlights
+
+- **Tag groups can now be axes you read as variables.** Mark a wildcard's tag group **accepts** and it becomes an *axis*: the wildcard rolls exactly one of its tags each pick, and you can read that tag anywhere with **`$var.AXIS`**. An `$outfit` wildcard with an accepts group `SHOES` exposes **`$outfit.SHOES`** as the shoe it chose this run — the same value in every template, combine, derivation and chained node, because it is rolled once when the option is picked rather than each time it is read. Groups left **classify** (the default) behave exactly as before, so nothing already in your library changes.
+
+  Where it pays off is constraints. When an accepts axis is the **source** of a constraint, the rule keys on the single rolled tag rather than every tag the option happens to carry — so a diagonal "same tag wins" matrix pins the target to exactly what was rolled, and `$outfit.SHOES` and the shoe that gets picked agree every run. If the **target** is also an accepts axis, it stays in the pool when the source allows any of its alternatives and then rolls the matched one, so the two wildcards never disagree on the axis. The editor marks accepts groups in the constraint matrix, warns when an option carries none of its axis's tags, and offers a wildcard's axes in the `$` autocomplete.
 
 - **Optional booru tag autocomplete.** Turn it on in Settings → Tag autocomplete and typing a few letters into an option value suggests danbooru tags, ranked by how often they are actually used, colour-coded by kind (character, copyright, artist, meta) and resolving aliases — type `hires` and it offers `highres`, naming what it matched so the jump is never mysterious.
 

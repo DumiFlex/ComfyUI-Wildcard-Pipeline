@@ -34,6 +34,8 @@ const scannerRules: WarningRow[] = [
   { label: "Constraint source not upstream", severity: "warn", desc: "The constraint's source wildcard doesn't appear before the constraint in the chain, so it can't read a pick from it." },
   { label: "Constraint target not downstream", severity: "warn", desc: "No copy of the target wildcard appears after the constraint. Each constraint needs its own downstream target — N constraints on the same wildcard need N copies." },
   { label: "Injector binding unmatched", severity: "warn", desc: "A WP Context Injector row names a variable that nothing upstream produces." },
+  { label: "Unknown tag axis", severity: "warn", desc: "A $var.AXIS read names an accepts axis the wildcard doesn't declare, so it resolves to empty. Promote that tag group to accepts, or fix the axis name in the read." },
+  { label: "Option misses its accepts-axis tag", severity: "info", desc: "Some options of an accepts-axis wildcard carry none of the axis's tags, so $var.AXIS is empty on the runs those options are picked. Add a tag from the axis to those options, or leave it if empty is intended." },
 ];
 </script>
 
