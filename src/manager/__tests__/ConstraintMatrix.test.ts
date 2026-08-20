@@ -290,3 +290,56 @@ describe("ConstraintMatrix.vue", () => {
     wrap.unmount();
   });
 });
+
+describe("ConstraintMatrix.vue — accepts-axis mark", () => {
+  const groups = { SHOES: ["sneakers", "heels"], REGISTER: ["casual", "formal"] };
+
+  it("marks an accepts source band with the amber pi-sync, classify bands unmarked", () => {
+    const wrap = mount(ConstraintMatrix, {
+      props: {
+        rows: ["sneakers", "heels", "casual", "formal"],
+        cols: ["warm", "cool"],
+        modelValue: {},
+        sourceGroups: groups,
+        sourceGroupKinds: { SHOES: "accepts" },
+      },
+      attachTo: document.body,
+    });
+    const marks = wrap.findAll(".wp-mx-axis-mark");
+    expect(marks.length).toBe(1);
+    // it sits on the SHOES band, not REGISTER
+    const shoesHead = wrap.findAll(".wp-mx-grp-head").find((h) => h.text().includes("SHOES"));
+    expect(shoesHead?.find(".wp-mx-axis-mark").exists()).toBe(true);
+    const registerHead = wrap.findAll(".wp-mx-grp-head").find((h) => h.text().includes("REGISTER"));
+    expect(registerHead?.find(".wp-mx-axis-mark").exists()).toBe(false);
+    wrap.unmount();
+  });
+
+  it("marks an accepts TARGET column band too", () => {
+    const wrap = mount(ConstraintMatrix, {
+      props: {
+        rows: ["warm", "cool"],
+        cols: ["sneakers", "heels"],
+        modelValue: {},
+        targetGroups: { SHOES: ["sneakers", "heels"] },
+        targetGroupKinds: { SHOES: "accepts" },
+      },
+      attachTo: document.body,
+    });
+    expect(wrap.find(".wp-mx-th-band .wp-mx-axis-mark").exists()).toBe(true);
+    wrap.unmount();
+  });
+
+  it("shows nothing when no group is accepts", () => {
+    const wrap = mount(ConstraintMatrix, {
+      props: {
+        rows: ["sneakers", "heels"], cols: ["warm", "cool"], modelValue: {},
+        sourceGroups: { SHOES: ["sneakers", "heels"] },
+        sourceGroupKinds: { SHOES: "classify" },
+      },
+      attachTo: document.body,
+    });
+    expect(wrap.findAll(".wp-mx-axis-mark").length).toBe(0);
+    wrap.unmount();
+  });
+});

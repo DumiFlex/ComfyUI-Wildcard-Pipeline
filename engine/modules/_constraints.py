@@ -132,6 +132,8 @@ def apply_constraints_for_target(
     hits=None,
     firing_uid=None,
     carrier_ctx=None,
+    applied_out=None,
+    target_axes=None,
 ) -> tuple[list[dict[str, Any]], bool]:
     """Apply EVERY constraint whose reach selector covers this firing
     target instance, combined sequentially.
@@ -219,9 +221,18 @@ def apply_constraints_for_target(
             continue
         adjust_warnings: list[dict[str, Any]] = []
         options = _apply_constraint_to_options(
-            options, c, src_pick, adjust_warnings,
+            options, c, src_pick, adjust_warnings, target_axes,
         )
         any_applied = True
+        # Record the (constraint, resolved source pick) pairs that actually
+        # covered THIS firing target instance. The caller (wildcard_handler)
+        # uses them to restrict the target's OWN `accepts`-axis roll to tags
+        # these same constraints don't exclude — so `$source.AXIS` and
+        # `$target.AXIS` agree under a diagonal. Only covered constraints land
+        # here, so a selector-limited constraint (`first`/`next`/`pick`) that
+        # skipped this instance also leaves the axis roll alone.
+        if applied_out is not None:
+            applied_out.append((c, src_pick))
         for w in adjust_warnings:
             _push_constraint_warning(
                 warnings,
@@ -242,10 +253,10 @@ def warn_excludes_all(
     warnings: list[dict[str, Any]],
 ) -> None:
     """Emit the ``constraint_excludes_all_options`` warning when post-
-    application weights sum to zero. ``_pick_weighted`` falls back to
-    ``options[0]`` silently — without this warning the user sees the
-    same option forever with no signal that constraints over-narrowed
-    the pool.
+    application weights sum to zero. ``_pick_weighted`` returns None for
+    such a pool and the wildcard binds an empty string, so without this
+    warning an over-narrowed pool is indistinguishable from a wildcard
+    that legitimately rolled its null option.
 
     Call AFTER ``apply_constraints_for_target`` returned ``any_applied``.
     """
@@ -259,6 +270,6 @@ def warn_excludes_all(
             target_uuid=target_uuid,
             detail={
                 "target_wildcard_id": target_uuid,
-                "hint": "every option was excluded; falling back to options[0]",
+                "hint": "every option was excluded; the target emits nothing",
             },
         )

@@ -114,10 +114,13 @@ describe("InjectorWidget — template persistence (Phase 6)", () => {
     editItem!.click();
     await w.vm.$nextTick();
 
-    const textarea = document.querySelector<HTMLTextAreaElement>('[data-test="ibm-template"]');
-    expect(textarea).not.toBeNull();
-    textarea!.value = "i love $input_0";
-    textarea!.dispatchEvent(new Event("input"));
+    // The template field is a RichTextInput (contenteditable) rather than a
+    // <textarea>, so drive the component instead of assigning `.value`.
+    // jsdom does not implement contenteditable editing, and this test cares
+    // that the value reaches the persisted JSON, not how the caret moved.
+    const rt = w.findComponent({ name: "RichTextInput" });
+    expect(rt.exists()).toBe(true);
+    rt.vm.$emit("update:modelValue", "i love $input_0");
     await w.vm.$nextTick();
 
     const saveBtn = document.querySelector<HTMLButtonElement>('[data-test="ibm-save"]');

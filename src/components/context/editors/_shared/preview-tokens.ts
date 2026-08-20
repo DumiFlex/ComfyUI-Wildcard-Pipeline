@@ -29,6 +29,11 @@ export interface PreviewToken {
   varName?: string;
   /** SP2a `.K` list accessor on a var token (`$mood.0` -> index 0). */
   index?: number;
+  /** Tag-axis accessor (`$outfit.SHOES` -> "SHOES"). Carried for the same
+   *  reason `index` is: without it the axis segment is not part of the var
+   *  token, so every consumer renders the variable and then the bare text
+   *  ".SHOES" beside it. */
+  axis?: string;
   refUuid?: string;
   branches?: string[];
   count?: number;
@@ -42,7 +47,11 @@ const REF_VALID_SURFACES = new Set<Surface>(["wildcard"]);
 // Group 2 = optional `.K` list accessor (SP2a) so `$mood.0` is ONE var token
 // (base name in m[1], index in m[2]) — mirrors engine tokenize.py +
 // richTokenize.ts, so the `.K` never strands as a separate text token.
-const VAR_RE = /\$([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?/y;
+// Groups: 1=name · 2=index-first · 3=axis-after-index · 4=axis-first ·
+// 5=index-after-axis. Two mirrored alternatives because the accessor order is
+// free (`$v.0.AXIS` and `$v.AXIS.0` both parse) — same shape as richTokenize.
+const VAR_RE =
+  /\$([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?(?:\.([A-Za-z_][A-Za-z0-9_]*))?|\$([A-Za-z_][A-Za-z0-9_]*)(?:\.([A-Za-z_][A-Za-z0-9_]*))?(?:\.(\d+))?/y;
 // Optional `:subcat[,subcat]` per-call sub-category filter — empty
 // filter is equivalent to no filter, sub-categories are stripped of
 // whitespace + comma-separated.
@@ -90,6 +99,7 @@ export function tokenize(text: string, surface: Surface): PreviewToken[] {
           raw: m[0],
           varName: m[1],
           index: m[2] !== undefined ? Number.parseInt(m[2], 10) : undefined,
+          axis: m[3],
           invalid: !VAR_VALID_SURFACES.has(surface),
         });
         i += m[0].length;

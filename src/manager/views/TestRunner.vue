@@ -7,7 +7,7 @@
  * Uses ui/* primitives only — no PrimeVue.
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
 import Field from "../components/ui/Field.vue";
@@ -52,6 +52,7 @@ type SelectorKind = ModuleType | "bundle";
 
 const toast = useToast();
 const router = useRouter();
+const route = useRoute();
 
 /* -------------------------- kind metadata -------------------------- */
 
@@ -82,8 +83,22 @@ const KIND_DEFAULT_SAMPLES: Record<SelectorKind, number> = {
 
 /* ------------------------------ state ------------------------------ */
 
+const VALID_KINDS = new Set<string>(KINDS.map((k) => k.value));
+
 const kind = ref<SelectorKind>("wildcard");
 const moduleId = ref<string | null>(null);
+
+/** "Send to Test Runner" deep-links here as `?kind=<kind>&module=<id>`. Kind is
+ *  applied now (before the `watch(kind)` below is registered, so it doesn't
+ *  reset the selection); the module id waits for the pool to load — see
+ *  `refresh`. Consumed once so a later manual kind switch isn't overridden. */
+let pendingModuleId: string | null = null;
+{
+  const qk = route.query.kind;
+  if (typeof qk === "string" && VALID_KINDS.has(qk)) kind.value = qk as SelectorKind;
+  const qm = route.query.module;
+  if (typeof qm === "string" && qm) pendingModuleId = qm;
+}
 const samples = ref<number>(KIND_DEFAULT_SAMPLES.wildcard);
 const running = ref(false);
 const allModules = ref<ModuleRow[]>([]);
@@ -216,7 +231,10 @@ async function refresh() {
     const pool = kind.value === "bundle"
       ? allBundles.value.map((b) => b.id)
       : allModules.value.filter((m) => m.type === kind.value).map((m) => m.id);
-    if (!moduleId.value || !pool.includes(moduleId.value)) {
+    if (pendingModuleId && pool.includes(pendingModuleId)) {
+      moduleId.value = pendingModuleId;
+      pendingModuleId = null;
+    } else if (!moduleId.value || !pool.includes(moduleId.value)) {
       moduleId.value = pool[0] ?? null;
     }
   } catch (e) {

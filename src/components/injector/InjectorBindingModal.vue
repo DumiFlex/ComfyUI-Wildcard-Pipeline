@@ -22,6 +22,7 @@
  */
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import type { InjectorRow } from "../../widgets/_shared";
+import RichTextInput from "../../manager/components/RichTextInput.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -144,7 +145,6 @@ const insertOptions = computed<InsertOption[]>(() => {
   }];
 });
 
-const taRef = ref<HTMLTextAreaElement | null>(null);
 const showInsertMenu = ref(false);
 
 // Draft buffer — mirrors the module InstanceModal pattern. Edits land
@@ -175,33 +175,36 @@ function onBindingInput(ev: Event): void {
   draftBinding.value = (ev.target as HTMLInputElement).value;
 }
 
-function onTemplateInput(ev: Event): void {
-  draftTemplate.value = (ev.target as HTMLTextAreaElement).value;
-}
+/**
+ * The `$` pool for this modal, and ONLY this modal's refs.
+ *
+ * A socket row can reference just its own slot; the general row can reference
+ * every socket. That is the same rule `insertOptions` already encodes for the
+ * "+ $ref" menu, so the autocomplete and the menu cannot drift apart — they
+ * read the same list. Deliberately not the library's variables: nothing here
+ * can resolve one.
+ */
+const refSuggestionNames = computed(() => insertOptions.value.map((o) => o.slotName));
 
 function onResetTemplate(): void {
   draftTemplate.value = "";
 }
 
+/**
+ * The "+ $ref" menu still appends, but no longer reaches into a textarea's
+ * selection to do it.
+ *
+ * RichTextInput owns its own caret — it is contenteditable with atom spans,
+ * not a plain text box, so `selectionStart` does not exist and the old
+ * splice-at-cursor path had nothing to splice into. Appending is honest about
+ * what it does; the menu is now the fallback anyway, since typing `$` opens
+ * the same list in place.
+ */
 function insertSlotRef(slotName: string): void {
-  const ta = taRef.value;
-  const insertion = `$${slotName}`;
   const current = templateValue.value;
-  let next: string;
-  if (ta && typeof ta.selectionStart === "number") {
-    const start = ta.selectionStart;
-    const end = ta.selectionEnd ?? start;
-    next = current.slice(0, start) + insertion + current.slice(end);
-    const caret = start + insertion.length;
-    queueMicrotask(() => {
-      ta.focus();
-      ta.setSelectionRange(caret, caret);
-    });
-  } else {
-    next = current + insertion;
-  }
+  const sep = current && !current.endsWith(" ") ? " " : "";
   closeInsertMenu();
-  draftTemplate.value = next;
+  draftTemplate.value = `${current}${sep}$${slotName}`;
 }
 
 function onSave(): void {
@@ -478,18 +481,26 @@ function onKeydown(ev: KeyboardEvent): void {
           </div>
         </div>
 
-        <textarea
-          ref="taRef"
+        <!-- RichTextInput rather than a bare <textarea>: the `$` handler it
+             brings is exactly what this field needs, and the ref list feeding
+             the "+ $ref" menu beside it was already the right suggestion pool
+             — it simply had nothing to feed. `assembler` surface because this
+             composes a template; it is NOT `wildcard`, which suppresses `$`
+             on purpose. -->
+        <RichTextInput
           class="ibm__template"
           :class="{ 'ibm__template--set': !!templateValue }"
           data-test="ibm-template"
-          :value="templateValue"
+          :model-value="templateValue"
+          surface="assembler"
+          multiline
+          :rows="3"
+          :var-suggestions="refSuggestionNames"
           :placeholder="isGeneral
             ? 'e.g. $input_0 by $test — composed after all socket rows'
             : 'e.g. i love $input_0 — leave empty to pass the raw socket value'"
           aria-label="Template"
-          rows="3"
-          @input="onTemplateInput"
+          @update:model-value="(v: string) => (draftTemplate = v)"
         />
 
         <div v-if="templateValue" class="ibm__detected">
@@ -733,7 +744,9 @@ function onKeydown(ev: KeyboardEvent): void {
   font: 11px/1.5 var(--wp-font-mono);
   color: var(--wp-text);
   min-height: 56px;
-  resize: vertical; overscroll-behavior: contain;
+  /* No `resize: vertical` here. This class is on the RichTextInput root, and
+     the component carries its own drag grip — the native resizer put a second
+     handle in the same corner. Left over from the <textarea> this replaced. */
 }
 .ibm__template:focus { outline: none; border-color: var(--wp-accent); }
 .ibm__template--set {

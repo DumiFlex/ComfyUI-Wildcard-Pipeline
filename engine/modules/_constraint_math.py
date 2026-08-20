@@ -3,14 +3,40 @@
 One multiply operator at three levels: across an option's matching matrix
 cells (multi-tag), across source picks (multi-pick), and — by the caller —
 across constraints. `exclude` (factor 0) is the absorbing element.
+
+**One exception, added 2026-08 (tag axes).** Tags belonging to a source group
+the wildcard declared `accepts` are ALTERNATIVES the option offers, not
+statements that are all true at once. Those fold with `max`, so one sibling's
+`exclude` cannot speak for the rest. Everything else still multiplies, and the
+axis path is unreachable unless the caller passes `axis_kinds` — so a payload
+that predates the feature folds byte-identically.
 """
 from __future__ import annotations
 
 from typing import Any
 
-EXCLUDE = object()  # sentinel: option drops out of the pool
 
-def _apply_rule(rule: dict[str, Any]):
+class _ExcludeSentinel:
+    """Absorbing zero: the option drops out of the pool entirely.
+
+    A distinct class rather than a bare ``object()`` so a type checker can
+    narrow ``float | _ExcludeSentinel`` after an isinstance test. With the bare
+    sentinel every ``factor *= r`` was unprovable, because ``is EXCLUDE`` does
+    not narrow an ``object``.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:  # pragma: no cover - debug aid only
+        return "EXCLUDE"
+
+
+EXCLUDE = _ExcludeSentinel()  # sentinel: option drops out of the pool
+
+_Factor = float | _ExcludeSentinel
+
+
+def _apply_rule(rule: dict[str, Any]) -> _Factor:
     mode = rule.get("mode")
     if mode == "exclude":
         return EXCLUDE
@@ -21,8 +47,68 @@ def _apply_rule(rule: dict[str, Any]):
             return 1.0
     return 1.0  # allow / unknown -> no weight change
 
-def combine_constraint_factor(source_picks, option, matrix, exceptions):
+
+def _cell_factor(
+    matrix: dict[str, Any],
+    source_tag: str,
+    opt_tags: list[str],
+    target_axes: dict[str, list[str]] | None = None,
+) -> _Factor:
+    """Fold one source tag against every tag on the option.
+
+    Classify target tags fold with PRODUCT — an option sitting on several rows
+    of the same source tag is genuinely several separate statements about it.
+    Tags belonging to a target ``accepts`` axis (``target_axes``: group →
+    members) fold with MAX instead: the option OFFERS those as ALTERNATIVES, so
+    it stays viable when the source allows ANY of them (the mirror of the
+    source-side accepts fold — the target's own roll is then restricted to the
+    allowed members by the caller). A no-rule target tag is neutral (1.0).
+    EXCLUDE is absorbing for a classify tag and for a fully-excluded axis; the
+    ``target_axes`` path is unreachable unless the caller passes it, so a legacy
+    call folds byte-identically.
+    """
+    row = matrix.get(source_tag)
+    if not isinstance(row, dict):
+        return 1.0
+    target_axes = target_axes or {}
+    axis_of = {t: ax for ax, members in target_axes.items() for t in (members or [])}
+    factor = 1.0
+    axis_members: dict[str, list[str]] = {}
+    for t in opt_tags:
+        ax = axis_of.get(t)
+        if ax is None:
+            rule = row.get(t)
+            if isinstance(rule, dict):
+                r = _apply_rule(rule)
+                if isinstance(r, _ExcludeSentinel):
+                    return EXCLUDE
+                factor *= r
+        else:
+            axis_members.setdefault(ax, []).append(t)
+    for members in axis_members.values():
+        best = 0.0
+        for t in members:
+            rule = row.get(t)
+            r = _apply_rule(rule) if isinstance(rule, dict) else 1.0
+            best = max(best, 0.0 if isinstance(r, _ExcludeSentinel) else r)
+        # Every alternative this axis offered was excluded → the option drops.
+        if best <= 0.0:
+            return EXCLUDE
+        factor *= best
+    return factor
+
+
+def combine_constraint_factor(
+    source_picks: list[dict[str, Any]] | None,
+    option: dict[str, Any],
+    matrix: dict[str, Any] | None,
+    exceptions: list[Any] | None,
+    axis_kinds: dict[str, str] | None = None,
+    target_axes: dict[str, list[str]] | None = None,
+) -> _Factor:
     matrix = matrix or {}
+    axis_kinds = axis_kinds or {}
+    target_axes = target_axes or {}
     exc_by_pair: dict[tuple[str, str], dict] = {}
     for e in (exceptions or []):
         if not isinstance(e, dict):
@@ -44,19 +130,45 @@ def combine_constraint_factor(source_picks, option, matrix, exceptions):
         exc = exc_by_pair.get((p_value, opt_value))
         if exc is not None:
             r = _apply_rule(exc)
-            if r is EXCLUDE:
+            if isinstance(r, _ExcludeSentinel):
                 return EXCLUDE
             factor *= r
             continue
-        for s in p_tags:
-            row = matrix.get(s)
-            if not isinstance(row, dict):
+
+        # Partition this pick's tags: those inside an `accepts` axis fold with
+        # max, the rest keep multiplying. A pick only carries `axes` when the
+        # source wildcard declared the group `accepts`, and `axis_kinds` gates
+        # it a second time, so a legacy pick takes the flat path untouched.
+        pick_axes = pick.get("axes") or {}
+        accepts: dict[str, list[str]] = {}
+        claimed: set[str] = set()
+        for axis, members in pick_axes.items():
+            if axis_kinds.get(axis) != "accepts":
                 continue
-            for t in opt_tags:
-                rule = row.get(t)
-                if isinstance(rule, dict):
-                    r = _apply_rule(rule)
-                    if r is EXCLUDE:
-                        return EXCLUDE
-                    factor *= r
+            in_axis = [t for t in p_tags if t in (members or [])]
+            if in_axis:
+                accepts[axis] = in_axis
+                claimed.update(in_axis)
+
+        for s in p_tags:
+            if s in claimed:
+                continue
+            r = _cell_factor(matrix, s, opt_tags, target_axes)
+            if isinstance(r, _ExcludeSentinel):
+                return EXCLUDE
+            factor *= r
+
+        for members in accepts.values():
+            best = 0.0
+            for s in members:
+                r = _cell_factor(matrix, s, opt_tags, target_axes)
+                # One member's EXCLUDE is that member declining, not the axis
+                # declining — it contributes 0 to the max and the siblings
+                # still get their say.
+                best = max(best, 0.0 if isinstance(r, _ExcludeSentinel) else r)
+            # Every alternative the option offered was excluded, so the option
+            # really does drop out.
+            if best <= 0.0:
+                return EXCLUDE
+            factor *= best
     return factor

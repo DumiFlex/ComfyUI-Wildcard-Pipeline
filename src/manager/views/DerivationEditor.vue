@@ -11,6 +11,7 @@ import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import type { SaveState } from "../components/EditorFrame.types";
 import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
+import SendToTestRunner from "../components/SendToTestRunner.vue";
 import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
@@ -18,6 +19,8 @@ import CommunityRowActions from "../components/CommunityRowActions.vue";
 import DraftBanner from "../components/DraftBanner.vue";
 import DerivationRuleCard from "../components/DerivationRuleCard.vue";
 import Checkbox from "../components/ui/Checkbox.vue";
+import ListFilter from "../components/ui/ListFilter.vue";
+import { derivationRuleHaystack } from "../utils/listFilter";
 import BulkDeleteToolbar from "../components/BulkDeleteToolbar.vue";
 import { useBulkSelection } from "../composables/useBulkSelection";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
@@ -190,6 +193,11 @@ const varProducers = computed<Map<string, VarProducerLike>>(() => {
       kind: first.kind,
       moduleName: first.name,
       moduleId: first.id,
+      // Axes come off the FIRST binder. With several modules binding one name
+      // the library has no execution order to pick a winner, so completing
+      // against the first is a guess — but a guess that names a real axis on a
+      // real module beats offering nothing.
+      axes: first.axes,
       shadowed: refs.length - 1,
       siblingLabel: "library module",
     });
@@ -327,7 +335,32 @@ function collapseAllRules(collapsed: boolean): void {
 /* ── Bulk select + delete ────────────────────────────────────────────────
  * Rules are a card list (not a table), so the checkbox rides alongside each
  * card. Rules carry a stable `id`, so selection keys off that directly. */
-const ruleBulk = useBulkSelection(() => rules.value.map((r) => r.id));
+/* ── Filter ──────────────────────────────────────────────────────────────
+ * A rule is a stack of IF/ELIF branches plus an optional ELSE, and each card
+ * is tall — a dozen rules is already a lot of scrolling to answer "which rule
+ * touches $outfit?".
+ *
+ * So the haystack is every variable name and literal the rule mentions:
+ * each branch's condition (`var`, `value`) and action (`target_var`, `value`),
+ * plus the else action. Searching a rule by its `id` would be useless — the id
+ * is generated and never shown. */
+const ruleQuery = ref("");
+const ruleFilterActive = computed(() => ruleQuery.value.trim().length > 0);
+
+/** Rules to render, each keeping its ORIGINAL index — `removeRule(idx)` and
+ *  `updateRule(idx, …)` address by position, and the cards show `index` as the
+ *  rule's human number. Renumbering under a filter would be a lie. */
+const visibleRules = computed<{ rule: DerivationRule; idx: number }[]>(() => {
+  const rows = rules.value.map((rule, idx) => ({ rule, idx }));
+  const q = ruleQuery.value.trim().toLowerCase();
+  if (!q) return rows;
+  return rows.filter(({ rule }) => derivationRuleHaystack(rule).includes(q));
+});
+
+const ruleBulk = useBulkSelection(
+  () => rules.value.map((r) => r.id),
+  () => visibleRules.value.map(({ rule }) => rule.id),
+);
 const {
   active: ruleBulkActive,
   count: ruleBulkCount,
@@ -472,6 +505,7 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
       />
     </template>
     <template v-if="isEdit" #header-extra>
+      <SendToTestRunner v-if="props.id" :kind="'derivation'" :id="props.id" />
       <span v-if="cascadeRefs.length > 0" class="wp-editor-used-by">
         used by <PillCountBadge :count="cascadeRefs.length" />
       </span>
@@ -506,6 +540,14 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
 
     <Card :title="`Rules (${rules.length})`" sticky-header>
       <template #actions>
+        <ListFilter
+          v-model="ruleQuery"
+          :total="rules.length"
+          :visible="visibleRules.length"
+          noun="rules"
+          test-prefix="drv-rules"
+          :min-rows="2"
+        />
         <Button
           v-if="rules.length > 1"
           size="sm"
@@ -564,9 +606,19 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
         No rules yet. Click <strong>Add rule</strong> to start defining IF / ELIF / ELSE behaviour.
       </div>
 
+      <div
+        v-else-if="ruleFilterActive && visibleRules.length === 0"
+        class="wp-empty-card"
+        data-test="drv-rules-noresults"
+      >
+        <b>No rule matches this filter</b>
+        All {{ rules.length }} are still here — only the view is filtered.
+        <button type="button" class="drv-clearlink" @click="ruleQuery = ''">Clear filter</button>
+      </div>
+
       <div v-else class="rules-stack" data-test="rules-stack">
         <div
-          v-for="(rule, idx) in rules"
+          v-for="{ rule, idx } in visibleRules"
           :key="rule.id"
           class="rule-row"
           :class="{ 'rule-row--selected': ruleBulkActive && ruleBulkIsSelected(rule.id) }"
@@ -650,6 +702,12 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
 .rule-row { display: flex; align-items: flex-start; gap: 10px; }
 .rule-row__card { flex: 1 1 auto; min-width: 0; }
 .rule-row__check { margin-top: 14px; flex: 0 0 auto; }
+.drv-clearlink {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--wp-text-muted); font: 11px var(--wp-font-sans);
+  text-decoration: underline;
+  margin-left: var(--wp-space-3);
+}
 .rule-row--selected .rule-row__card {
   outline: 2px solid color-mix(in oklab, var(--wp-accent) 45%, transparent);
   outline-offset: 2px;

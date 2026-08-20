@@ -17,6 +17,7 @@ import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import type { SaveState, EditorFieldError } from "../components/EditorFrame.types";
 import { useRouter, useRoute } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
+import SendToTestRunner from "../components/SendToTestRunner.vue";
 import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
@@ -135,6 +136,14 @@ const subCategories = ref<string[]>([]);
  *  (`payload.tag_groups`). Serialised back into the payload on save so
  *  grouping survives sharing. The engine ignores it. */
 const tagGroups = ref<Record<string, string[]>>({});
+/** Per-group meaning (`payload.tag_group_kinds`). Absent means `classify` —
+ *  today's behaviour and what every stored payload means — so only `accepts`
+ *  entries are ever stored, keeping an untouched payload byte-identical. */
+const tagGroupKinds = ref<Record<string, "accepts">>({});
+
+/** An `accepts` group is addressable as `$var.NAME`, so its name has to
+ *  survive the accessor grammar. A `classify` group keeps any name. */
+const AXIS_IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const options = ref<WildcardOption[]>([
   { id: `opt_${Math.random().toString(16).slice(2, 8)}`, value: "", weight: 1, sub_categories: [] },
   { id: `opt_${Math.random().toString(16).slice(2, 8)}`, value: "", weight: 1, sub_categories: [] },
@@ -194,6 +203,7 @@ function snapshot(): string {
     varBinding: varBinding.value,
     subCategories: subCategories.value,
     tagGroups: tagGroups.value,
+    tagGroupKinds: tagGroupKinds.value,
     options: options.value,
   });
 }
@@ -236,6 +246,7 @@ function applyDraft(): void {
       varBinding: string;
       subCategories: string[];
       tagGroups?: Record<string, string[]>;
+      tagGroupKinds?: Record<string, "accepts">;
       options: typeof options.value;
     };
     name.value = parsed.name;
@@ -245,7 +256,9 @@ function applyDraft(): void {
     varBinding.value = parsed.varBinding;
     subCategories.value = parsed.subCategories;
     tagGroups.value = parsed.tagGroups ?? {};
+    tagGroupKinds.value = parsed.tagGroupKinds ?? {};
     options.value = parsed.options;
+    subcatOpen.value = resolveSubcatDefaultOpen();
   } catch {
     toast.push({ severity: "error", summary: "Draft restore failed", life: 3000 });
   }
@@ -298,12 +311,25 @@ interface SubcatGroup {
   isOther: boolean;
 }
 
-/** Sub-Categories section disclosure. Starts COLLAPSED: on a well-tagged
- *  wildcard the axes and their pills fill the screen and push the options
- *  table — the thing being edited — out of view. The collapsed header carries a
- *  tag/axis count plus an accented `+`, so it still advertises that there is
- *  something in there to open. */
+/** Sub-Categories section disclosure. The default is set once on load from the
+ *  `subcatDefault` display-pref (see `uiStore`): `"populated"` opens it only
+ *  when the wildcard already has groups (so a well-tagged wildcard's axes don't
+ *  push the options table out of view on a blank one, but an existing library
+ *  of groups is visible without a click); `"always"` opens it even when empty;
+ *  `"never"` keeps it shut. The collapsed header carries a tag/axis count plus
+ *  an accented `+`, so it still advertises there is something to open. */
 const subcatOpen = ref(false);
+
+/** Resolve the panel's initial open state from the pref + current group count.
+ *  Called once after the row hydrates, never on every group edit — otherwise
+ *  collapsing it and adding a tag would yank it back open. */
+function resolveSubcatDefaultOpen(): boolean {
+  switch (ui.subcatDefault) {
+    case "always": return true;
+    case "never": return false;
+    default: return Object.keys(tagGroups.value).length > 0;
+  }
+}
 
 /** What the collapsed section reports, so shutting it doesn't hide whether the
  *  wildcard is tagged at all. */
@@ -367,6 +393,20 @@ function axisHue(axis: string): string {
 /** How many options carry this tag — the pill's `(count)` badge. */
 function tagUsageCount(tag: string): number {
   return options.value.filter((o) => (o.sub_categories ?? []).includes(tag)).length;
+}
+
+/** Options carrying NO tag from an accepts axis — for those picks `$var.AXIS`
+ *  resolves to empty. Advisory only (non-blocking): an under-covered axis is a
+ *  valid design ("only some outfits specify shoes"). Excludes the null option,
+ *  which deliberately produces nothing. */
+function axisUncoveredCount(axis: string): number {
+  const members = tagGroups.value[axis] ?? [];
+  if (members.length === 0) return 0;
+  const memberSet = new Set(members);
+  return options.value.filter(
+    (o) => !(o as { is_null?: boolean }).is_null
+      && !(o.sub_categories ?? []).some((t) => memberSet.has(t)),
+  ).length;
 }
 
 function kebabKey(axis: string, tag: string): string {
@@ -482,8 +522,13 @@ function addGroup(): void {
   openAddTag(candidate);
 }
 
-/** Rename an axis in place (UI-only — axis names are not part of the ref
- *  grammar, so no cascade needed). Preserves insertion order + members. */
+/** Rename an axis in place. Preserves insertion order + members.
+ *
+ *  Axis names are not part of the `@{}` ref grammar, but an `accepts` axis IS
+ *  addressable as `$var.NAME`, so a rename can strand a template read. The
+ *  kind is carried across here; a stranded read is reported by the
+ *  `unknown_tag_axis` conflict rule rather than blocked, matching how every
+ *  other cross-module reference is handled. */
 function renameGroup(oldAxis: string, nextAxis: string): void {
   const trimmed = nextAxis.trim();
   if (!trimmed || trimmed === oldAxis) return;
@@ -493,6 +538,15 @@ function renameGroup(oldAxis: string, nextAxis: string): void {
     next[axis === oldAxis ? trimmed : axis] = members;
   }
   tagGroups.value = next;
+
+  if (tagGroupKinds.value[oldAxis] !== undefined) {
+    const nextKinds = { ...tagGroupKinds.value };
+    delete nextKinds[oldAxis];
+    // Renaming to something the accessor cannot parse demotes rather than
+    // storing an unreadable axis, which validate_payload would reject on save.
+    if (AXIS_IDENT.test(trimmed)) nextKinds[trimmed] = "accepts";
+    tagGroupKinds.value = nextKinds;
+  }
 }
 
 /** Disband an axis — its tags fall back into the ungrouped box (they
@@ -502,6 +556,12 @@ function ungroupAxis(axis: string): void {
   const next = { ...tagGroups.value };
   delete next[axis];
   tagGroups.value = next;
+  // The kind goes with the group; a kind naming no group is invalid payload.
+  if (tagGroupKinds.value[axis] !== undefined) {
+    const nextKinds = { ...tagGroupKinds.value };
+    delete nextKinds[axis];
+    tagGroupKinds.value = nextKinds;
+  }
 }
 
 /** Destinations the "Move to group…" submenu offers for a pill in
@@ -772,6 +832,65 @@ function normalizeTagGroups(
  *  right for a box made by accident and wrong for one made on purpose, and
  *  only the user knows which it was. An empty axis persists as `{axis: []}`,
  *  a shape the engine's validator already accepts. */
+/** Coerce a raw `payload.tag_group_kinds` into the editor's shape: keep only
+ *  `accepts` entries naming a group that actually exists, since `classify` is
+ *  the default and a kind for a vanished group is meaningless. */
+function normalizeTagGroupKinds(
+  raw: unknown,
+  groups: Record<string, string[]>,
+): Record<string, "accepts"> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, "accepts"> = {};
+  for (const [axis, kind] of Object.entries(raw as Record<string, unknown>)) {
+    if (kind === "accepts" && axis in groups) out[axis] = "accepts";
+  }
+  return out;
+}
+
+/** Build `payload.tag_group_kinds`, restricted to groups that survived
+ *  serialisation. Returns null when nothing is promoted so the payload omits
+ *  the key entirely — that omission is what keeps existing wildcards
+ *  byte-identical. */
+function serializeTagGroupKinds(
+  serializedGroups: Record<string, string[]> | null,
+): Record<string, "accepts"> | null {
+  const out: Record<string, "accepts"> = {};
+  for (const axis of Object.keys(tagGroupKinds.value)) {
+    // An axis dropped by `serializeTagGroups` (empty, not kept) must not leave
+    // a kind behind — the engine rejects a kind naming a missing group.
+    if (serializedGroups && axis in serializedGroups) out[axis] = "accepts";
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+/** Flip a group between descriptive (`classify`, the default) and `accepts`.
+ *
+ *  Refuses a name the accessor grammar cannot parse, here in the editor where
+ *  the user can still fix it cheaply, rather than at save time where the
+ *  message arrives after the work is done. Nothing is stored on refusal and
+ *  the button renders from `tagGroupKinds`, so the control cannot end up
+ *  showing a state we declined to keep. */
+function toggleGroupKind(axis: string): void {
+  const next = { ...tagGroupKinds.value };
+  if (next[axis] === "accepts") {
+    delete next[axis];
+    tagGroupKinds.value = next;
+    return;
+  }
+  if (!AXIS_IDENT.test(axis)) {
+    toast.push({
+      severity: "warn",
+      summary: `Rename "${axis}" first`,
+      detail: "An accepts group is read as $var.NAME, so its name must be "
+        + "letters, digits and underscores, starting with a letter.",
+      life: 6000,
+    });
+    return;
+  }
+  next[axis] = "accepts";
+  tagGroupKinds.value = next;
+}
+
 function serializeTagGroups(): Record<string, string[]> | null {
   const reg = new Set(subCategories.value);
   const keepEmpty = ui.keepEmptyTagGroups;
@@ -817,6 +936,7 @@ onMounted(async () => {
       }));
       subCategories.value = [...(p.sub_categories ?? [])];
       tagGroups.value = normalizeTagGroups(p.tag_groups, subCategories.value);
+      tagGroupKinds.value = normalizeTagGroupKinds(p.tag_group_kinds, tagGroups.value);
       varBinding.value = (p.var_binding && p.var_binding.trim()) || toIdentifier(row.name);
       historyEntries.value = readHistory(row.payload);
       recent.push({ id: props.id, kind: "wildcard", name: name.value });
@@ -835,6 +955,9 @@ onMounted(async () => {
       { id: _newOptionId(), value: "a fox", weight: 1, sub_categories: [] },
     ];
   }
+  // After every load path (existing row, blank new, starter) settle the
+  // sub-category panel to the user's chosen default.
+  subcatOpen.value = resolveSubcatDefaultOpen();
   baseline.value = snapshot();
 });
 
@@ -1280,22 +1403,35 @@ const bulkAddOpen = ref(false);
 const selectedIds = ref<Set<string>>(new Set());
 const bulkNote = ref("");
 
-/** Options eligible for bulk selection — the null option is excluded since
- *  its weight + sub-categories are meaningless. */
-/** Every row can be selected, the null option included: selection drives
- *  moves, weight and delete, all of which it takes part in. Tag actions skip
- *  it separately — see `taggableSelection`. */
-const selectableOptions = computed(() => options.value);
 const selectedCount = computed(() => selectedIds.value.size);
+
+/**
+ * The rows select-all reaches: what the FILTER is showing, not every option.
+ *
+ * Every row is selectable, the null option included — selection drives moves,
+ * weight and delete, all of which it takes part in. Tag actions skip it
+ * separately; see `taggableSelection`.
+ *
+ * Scoping this to the full `options` list meant filtering 200 options down to 4,
+ * clicking the header checkbox and then hitting a bulk action — delete, or set
+ * weight, or a tag change — applied it to all 200. Delete at least changes the
+ * row count; `setWeightSelected` rewrote every weight in the list silently, and
+ * a hand-tuned distribution has no undo.
+ *
+ * Same fix as `useBulkSelection`'s `getVisibleIds`, which the three simpler
+ * editors take. This editor predates that composable and was never migrated,
+ * so it carried the bug independently.
+ */
+const selectableVisibleOptions = computed(() => visibleOptionRows.value.map(({ o }) => o));
 const allSelected = computed(
   () =>
-    selectableOptions.value.length > 0 &&
-    selectableOptions.value.every((o) => selectedIds.value.has(o.id as string)),
+    selectableVisibleOptions.value.length > 0 &&
+    selectableVisibleOptions.value.every((o) => selectedIds.value.has(o.id as string)),
 );
-/** ≥1 (but not necessarily all) selectable rows checked — drives the
- *  select-all checkbox's indeterminate dash. */
+/** ≥1 (but not necessarily all) VISIBLE rows checked — drives the select-all
+ *  checkbox's indeterminate dash. */
 const someSelected = computed(() =>
-  selectableOptions.value.some((o) => selectedIds.value.has(o.id as string)),
+  selectableVisibleOptions.value.some((o) => selectedIds.value.has(o.id as string)),
 );
 
 /** Sub-categories present on ≥1 selected row (union), in registry order —
@@ -1344,9 +1480,16 @@ function toggleSelect(id: string | undefined): void {
   else next.add(id);
   selectedIds.value = next;
 }
+/** Adds or removes ONLY the visible rows, in both directions, so it can never
+ *  reach a row the filter is hiding. A selection made under a previous query
+ *  survives — `selectedCount` reports the honest total, and the bulk bar shows
+ *  it. Only select-all was ever the hazard. */
 function toggleSelectAll(): void {
-  if (allSelected.value) selectedIds.value = new Set();
-  else selectedIds.value = new Set(selectableOptions.value.map((o) => o.id as string));
+  const visible = selectableVisibleOptions.value.map((o) => o.id as string);
+  const next = new Set(selectedIds.value);
+  if (allSelected.value) for (const id of visible) next.delete(id);
+  else for (const id of visible) next.add(id);
+  selectedIds.value = next;
 }
 function clearSelection(): void {
   selectedIds.value = new Set();
@@ -1552,6 +1695,7 @@ function applyRestore(entry: ModuleHistoryEntry): void {
   }));
   subCategories.value = [...(p.sub_categories ?? [])];
   tagGroups.value = normalizeTagGroups(p.tag_groups, subCategories.value);
+  tagGroupKinds.value = normalizeTagGroupKinds(p.tag_group_kinds, tagGroups.value);
   varBinding.value = (p.var_binding && p.var_binding.trim()) || toIdentifier(entry.name);
   toast.push({
     severity: "info",
@@ -1587,11 +1731,13 @@ async function save() {
     // the key entirely when nothing is grouped, keeping legacy payloads
     // byte-identical when grouping is unused.
     const serializedGroups = serializeTagGroups();
+    const serializedKinds = serializeTagGroupKinds(serializedGroups);
     const payload: WildcardPayload = {
       options: sortedOptions,
       sub_categories: subCategories.value,
       var_binding: finalBinding,
       ...(serializedGroups ? { tag_groups: serializedGroups } : {}),
+      ...(serializedKinds ? { tag_group_kinds: serializedKinds } : {}),
     };
     const newPayload = payload as unknown as Record<string, unknown>;
     if (isEdit.value && props.id) {
@@ -1729,6 +1875,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
     @restore="applyRestore"
   >
     <template v-if="isEdit && currentRow" #header-extra>
+      <SendToTestRunner v-if="props.id" :kind="'wildcard'" :id="props.id" />
       <CommunityRowActions :row="currentRow" kind="module" labeled />
     </template>
     <template v-if="isEdit" #footer-left>
@@ -1833,6 +1980,31 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                 @keydown.enter.prevent="(e) => (e.target as HTMLInputElement).blur()"
               />
               <span v-else class="subcat-group__name subcat-group__name--other">ungrouped</span>
+              <!-- What this group MEANS to the engine. classify (the default)
+                   is today's behaviour: tags describe the option and fold with
+                   AND. accepts makes them alternatives the option offers — an
+                   OR-set, readable as $var.NAME.
+
+                   Shaped as a capsule because that is the grammar of the pills
+                   it governs — it is a property of the axis, not a utility
+                   action like the ungroup button. Always labelled and always
+                   visible: every group states its kind, so the capability is
+                   discoverable by anyone who opens the editor rather than only
+                   by someone who happens to hover the right spot.
+                   Ungrouped tags have no kind, so that box gets no control. -->
+              <button
+                v-if="!group.isOther"
+                type="button"
+                class="subcat-group__kind"
+                :class="{ 'subcat-group__kind--accepts': tagGroupKinds[group.axis] === 'accepts' }"
+                :aria-pressed="tagGroupKinds[group.axis] === 'accepts'"
+                :aria-label="`Group ${group.axis} is ${tagGroupKinds[group.axis] === 'accepts' ? 'an accepts axis' : 'descriptive'}`"
+                :data-test="`group-kind-${group.axis}`"
+                :title="tagGroupKinds[group.axis] === 'accepts'
+                  ? `Accepts axis — an option's tags here are alternatives it offers, and $${varBinding}.${group.axis} reads the one that was rolled. Click to make it descriptive.`
+                  : 'Descriptive — these tags say what an option IS, several true at once. Click to make them alternatives it accepts.'"
+                @click.stop="toggleGroupKind(group.axis)"
+              >{{ tagGroupKinds[group.axis] === 'accepts' ? 'accepts' : 'classify' }}</button>
               <!-- A folded axis still reports how many tags are inside, so
                    folding never hides the fact that there is something there. -->
               <span
@@ -1954,6 +2126,27 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
               class="subcat-addtag__error"
               :data-test="`group-addtag-error-${group.axis}`"
             >{{ addTagError }}</p>
+
+            <!-- Accepts-axis coverage advisory (non-blocking). An accepts axis
+                 only yields a value for options that carry one of its tags; an
+                 option with none makes $var.AXIS render empty when it's picked.
+                 Shown only for accepts groups with a gap, so a fully-covered
+                 axis stays silent. -->
+            <p
+              v-if="!group.isOther
+                && tagGroupKinds[group.axis] === 'accepts'
+                && !collapsedAxes.has(group.axis)
+                && axisUncoveredCount(group.axis) > 0"
+              class="subcat-group__axis-note"
+              :data-test="`axis-coverage-${group.axis}`"
+            >
+              <i class="pi pi-info-circle" aria-hidden="true" />
+              <span>{{ axisUncoveredCount(group.axis) }}
+                option{{ axisUncoveredCount(group.axis) === 1 ? "" : "s" }}
+                {{ axisUncoveredCount(group.axis) === 1 ? "carries" : "carry" }} no
+                <b>{{ group.axis }}</b> tag — <code>${{ varBinding }}.{{ group.axis }}</code>
+                is empty when {{ axisUncoveredCount(group.axis) === 1 ? "it's" : "they're" }} picked.</span>
+            </p>
           </section>
 
           <button
@@ -2581,6 +2774,55 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
   color: var(--wp-text);
   outline: none;
 }
+/* A capsule, not an icon button: the pills this control governs are
+   hue-tinted capsules, so borrowing their grammar makes it read as a property
+   of the axis. The earlier icon button borrowed `__ungroup`'s flat grey
+   square, which is the vocabulary of a utility ACTION, and the hover landed as
+   a hard block unrelated to anything around it. */
+.subcat-group__kind {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 var(--wp-space-4);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--wp-text-dim);
+  font-size: var(--wp-text-xs);
+  font-weight: var(--wp-weight-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+/* Always visible, including the default. An earlier version faded the
+   classify state in on hover to keep the header quiet; that optimised for ink
+   over discovery, and a control you only see by accident is one most people
+   never learn exists — fatal for a capability nobody is looking for yet. The
+   dim weight keeps it from competing with the axis name. */
+.subcat-group__kind:hover {
+  color: var(--wp-text-muted);
+  border-color: var(--wp-border-strong);
+}
+/* Promoted: always visible, in the group's own hue and the pills' exact fill
+   recipe, so the axis reads as one thing. Hover deepens the tint that is
+   already there rather than introducing a second colour. */
+.subcat-group__kind--accepts {
+  opacity: 1;
+  color: color-mix(in srgb, var(--group-hue, var(--wp-accent-400)) 78%, var(--wp-text));
+  border-color: color-mix(in srgb, var(--group-hue, var(--wp-accent-400)) 55%, var(--wp-border));
+  background: color-mix(in srgb, var(--group-hue, var(--wp-accent-400)) 17%, var(--wp-bg-1));
+}
+.subcat-group__kind--accepts:hover {
+  background: color-mix(in srgb, var(--group-hue, var(--wp-accent-400)) 28%, var(--wp-bg-1));
+}
+@media (prefers-reduced-motion: reduce) {
+  .subcat-group__kind { transition: none; }
+}
+
 .subcat-group__name--other {
   font-style: italic;
   padding-left: 0;
@@ -2602,6 +2844,22 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
   color: var(--wp-text);
   background: var(--wp-bg-3);
 }
+.subcat-group__axis-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 9px 2px 2px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--wp-warn, #f59e0b);
+}
+.subcat-group__axis-note .pi { font-size: 12px; margin-top: 1px; flex-shrink: 0; }
+.subcat-group__axis-note code {
+  font-family: var(--wp-font-mono, monospace);
+  color: color-mix(in srgb, var(--wp-warn, #f59e0b) 80%, var(--wp-text));
+}
+.subcat-group__axis-note b { color: var(--wp-text); font-weight: 600; }
+
 .subcat-group__pills {
   display: flex;
   flex-wrap: wrap;

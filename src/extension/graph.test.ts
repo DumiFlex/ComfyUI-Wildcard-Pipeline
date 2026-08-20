@@ -4,6 +4,7 @@ import {
   collectDownstreamWildcardUuids,
   collectLocalResolvedForModule,
   collectUpstreamProducers,
+  collectUpstreamRenderableVariables,
   collectUpstreamResolved,
   collectUpstreamVariables,
   collectUpstreamWildcardUuids,
@@ -11,6 +12,7 @@ import {
   findDownstreamAssemblers,
   findRootGraph,
   hasUpstreamLoopOverridingSeed,
+  internalVarNames,
   resolveUpstreamLoopSeed,
   type LiteGraphLike,
   type LiteNodeLike,
@@ -146,6 +148,30 @@ describe("collectUpstreamProducers", () => {
     // once, and the wildcard upstream is the single thing it overrode.
     expect(out.shared.moduleName).toBe("Rewrite");
     expect(out.shared.shadowed).toBe(1);
+  });
+
+  it("keeps a wildcard's accepts axes when a later node rebinds the var", () => {
+    // The engine keys `__wp_axes__` by BINDING and writes it at pick time, so
+    // a derivation downstream that rewrites `$shared` does not clear the
+    // rolled axis — `$shared.SHOES` still resolves. The producer map replaced
+    // the record wholesale, so the axis rows disappeared as soon as anything
+    // downstream touched the name: true of essentially every real graph.
+    const up = ctxWriting(1, "Outfit", "shared");
+    const upMods = JSON.parse(String(up.widgets![0].value));
+    upMods.modules[0].payload.tag_groups = { SHOES: ["sneakers", "heels"] };
+    upMods.modules[0].payload.tag_group_kinds = { SHOES: "accepts" };
+    up.widgets![0].value = JSON.stringify(upMods);
+    const mid = ctxDerivation(2, "Rewrite", "shared", 4, 100);
+    const pov = ctxWriting(3, "Other", "unused", 101);
+    const out = collectUpstreamProducers(
+      chain([up, mid, pov], {
+        100: { origin_id: 1, target_id: 2 },
+        101: { origin_id: 2, target_id: 3 },
+      }),
+      pov,
+    );
+    expect(out.shared.moduleName).toBe("Rewrite");
+    expect(out.shared.axes?.map((a) => a.axis)).toEqual(["SHOES"]);
   });
 
   it("counts two DIFFERENT modules in one node as two writers", () => {
@@ -481,6 +507,56 @@ describe("collectDownstreamWildcardUuids", () => {
   });
 });
 
+describe("collectUpstreamVariables — internal flag is last-write-wins", () => {
+  /** One Context node, two fixed_values both binding `name`, with the given
+   *  internal flags in order. Mirrors the reported canvas setup. */
+  function twoWriters(
+    first: { value: string; internal: boolean },
+    second: { value: string; internal: boolean },
+  ): LiteGraphLike {
+    const mod = (uid: string, value: string, internal: boolean) => ({
+      id: uid, _uid: uid, type: "fixed_values", enabled: true, meta: { name: uid },
+      payload: { values: [{ id: uid + "v", name: "outfit", value }] },
+      instance: { internal },
+    });
+    const ctx: LiteNodeLike = {
+      id: 1, type: "WP_Context",
+      inputs: [{ name: "upstream", link: null }],
+      outputs: [{ name: "context", links: [], type: "PIPELINE_CONTEXT" }],
+      widgets: [{ name: "wp_modules", value: JSON.stringify({
+        version: 1, modules: [mod("aaaaaaaa", first.value, first.internal),
+                              mod("bbbbbbbb", second.value, second.internal)] }) }],
+    };
+    const asm: LiteNodeLike = {
+      id: 2, type: "WP_PromptAssembler", inputs: [{ name: "context", link: 100 }],
+    };
+    return {
+      _nodes: [ctx, asm],
+      links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id) => ({ 1: ctx, 2: asm } as Record<number, LiteNodeLike>)[id] ?? null,
+    };
+  }
+
+  it("REPORTED: a public writer AFTER an internal one makes the var renderable", () => {
+    // internal → public. The public override is the last write, so the
+    // assembler's PROMPT surface must see `outfit`. Add-only left it hidden
+    // forever. (The plain variable list always keeps it; it is the renderable
+    // list — the one the assembler's `$var` substitution honours — that must
+    // reflect the last writer.)
+    const g = twoWriters({ value: "hidden", internal: true },
+                         { value: "public", internal: false });
+    const asm = g.getNodeById(2)!;
+    expect(collectUpstreamRenderableVariables(g, asm)).toContain("outfit");
+  });
+
+  it("an internal writer AFTER a public one hides the var from the prompt", () => {
+    const g = twoWriters({ value: "public", internal: false },
+                         { value: "hidden", internal: true });
+    const asm = g.getNodeById(2)!;
+    expect(collectUpstreamRenderableVariables(g, asm)).not.toContain("outfit");
+  });
+});
+
 describe("collectUpstreamVariables — mute/bypass mode", () => {
   function makeChain(modeOnA?: number) {
     // a (writes "style") → b. If `modeOnA` is 2 (mute) or 4 (bypass),
@@ -698,6 +774,57 @@ function fakeWildcardContextNode(
     }],
   };
 }
+
+describe("collectUpstreamResolved axis reads", () => {
+  beforeEach(() => _resetForTests());
+
+  /** Build a chain whose combine template reads `$outfit.SHOES`. */
+  function axisGraph(template: string) {
+    const ctx = fakeWildcardContextNode(1, [
+      { id: "aaaaaaaa", binding: "$outfit", options: [{ value: "a white t-shirt" }] },
+    ]);
+    const mods = JSON.parse(String(ctx.widgets![0].value));
+    mods.modules[0].payload.tag_groups = { SHOES: ["sneakers", "heels"], FIT: ["loose"] };
+    mods.modules[0].payload.tag_group_kinds = { SHOES: "accepts" };
+    mods.modules.push({
+      id: "bbbbbbbb", type: "combine", enabled: true, meta: { name: "" }, entries: [],
+      payload: { output_var: "scene", template },
+    });
+    ctx.widgets![0].value = JSON.stringify(mods);
+    const asm: LiteNodeLike = {
+      id: 2, type: "WP_PromptAssembler", inputs: [{ name: "context", link: 100 }],
+    };
+    return {
+      _nodes: [ctx, asm],
+      links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id: number) => ({ 1: ctx, 2: asm } as Record<number, LiteNodeLike>)[id] ?? null,
+    } as LiteGraphLike;
+  }
+
+  it("REPORTED: an axis read previews as a TAG, not the variable text plus a stranded accessor", () => {
+    // Was "a white t-shirt.SHOES" — `$outfit` substituted, `.SHOES` left behind.
+    const out = collectUpstreamResolved(axisGraph("wearing $outfit.SHOES"), {
+      id: 2, type: "WP_PromptAssembler", inputs: [{ name: "context", link: 100 }],
+    });
+    expect(out.scene).toBe("wearing sneakers");
+  });
+
+  it("leaves an unknown accessor verbatim rather than swallowing it", () => {
+    // FIT exists but is a classify group, so it is not readable — and BELTS
+    // does not exist at all. Consuming either would silently delete text.
+    const out = collectUpstreamResolved(axisGraph("wearing $outfit.BELTS"), {
+      id: 2, type: "WP_PromptAssembler", inputs: [{ name: "context", link: 100 }],
+    });
+    expect(out.scene).toBe("wearing $outfit.BELTS");
+  });
+
+  it("still resolves a plain read", () => {
+    const out = collectUpstreamResolved(axisGraph("wearing $outfit"), {
+      id: 2, type: "WP_PromptAssembler", inputs: [{ name: "context", link: 100 }],
+    });
+    expect(out.scene).toBe("wearing a white t-shirt");
+  });
+});
 
 describe("collectUpstreamResolved nested @{uuid} fallback", () => {
   beforeEach(() => _resetForTests());
@@ -1345,5 +1472,147 @@ describe("findWildcardHomesElsewhere", () => {
     const self = ctxWith(1, []);
     const asm: LiteNodeLike = { id: 2, type: "WP_PromptAssembler", inputs: [], outputs: [] };
     expect(findWildcardHomesElsewhere(graphOf([self, asm]), self, "")).toEqual([]);
+  });
+});
+
+/**
+ * These walkers run inside `onConnectionsChange` (see `extension/reactive.ts`),
+ * so a throw does not degrade to an empty preview — it escapes into litegraph's
+ * connection handling and one malformed module breaks canvas interaction for
+ * the whole graph. Both shapes below are things a real library payload can be:
+ * `entries` is a widget-side mirror that only exists once a module has been
+ * edited inline, so a row installed straight from the library has `payload`
+ * and nothing else.
+ */
+describe("collectUpstreamResolved — malformed fixed_values rows", () => {
+  /** A fixed_values module with whatever `entries` the caller wants (or none). */
+  function fixedValuesGraph(module: Record<string, unknown>): {
+    graph: LiteGraphLike;
+    asm: LiteNodeLike;
+  } {
+    const ctx: LiteNodeLike = {
+      id: 1,
+      type: "WP_Context",
+      inputs: [{ name: "upstream", link: null }],
+      outputs: [{ name: "context", links: [], type: "PIPELINE_CONTEXT" }],
+      widgets: [{ name: "wp_modules", value: JSON.stringify({ version: 1, modules: [module] }) }],
+    };
+    const asm: LiteNodeLike = {
+      id: 2,
+      type: "WP_PromptAssembler",
+      inputs: [{ name: "context", link: 100 }],
+    };
+    return {
+      asm,
+      graph: {
+        _nodes: [ctx, asm],
+        links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+        getNodeById: (id) => ({ 1: ctx, 2: asm } as Record<number, LiteNodeLike>)[id] ?? null,
+      },
+    };
+  }
+
+  const payload = {
+    values: [
+      { id: "v1", name: "style", value: "cinematic" },
+      { id: "v2", name: "mood", value: "brooding" },
+    ],
+  };
+
+  it("resolves from payload.values when the module has no `entries` key at all", () => {
+    const { graph, asm } = fixedValuesGraph({
+      id: "aa11bb22", type: "fixed_values", enabled: true, meta: { name: "looks" }, payload,
+    });
+    expect(collectUpstreamResolved(graph, asm)).toEqual({ style: "cinematic", mood: "brooding" });
+  });
+
+  it("skips an entry with no variable_name instead of throwing", () => {
+    const { graph, asm } = fixedValuesGraph({
+      id: "aa11bb22", type: "fixed_values", enabled: true, meta: { name: "looks" },
+      entries: [{ value: "orphaned" }, { variable_name: "$style", value: "noir" }],
+      payload: { values: [] },
+    });
+    expect(collectUpstreamResolved(graph, asm)).toEqual({ style: "noir" });
+  });
+
+  it("tolerates `entries` being a non-array", () => {
+    const { graph, asm } = fixedValuesGraph({
+      id: "aa11bb22", type: "fixed_values", enabled: true, meta: { name: "looks" },
+      entries: null, payload,
+    });
+    expect(collectUpstreamResolved(graph, asm)).toEqual({ style: "cinematic", mood: "brooding" });
+  });
+});
+
+/**
+ * WP_PromptAssembler runs `strip_internals` over the render context before
+ * resolving, so a `$var` naming a variable the user flagged internal
+ * substitutes to nothing. The flagged names still cross the socket — Combine
+ * and Derivation downstream read them — so the plain variable list keeps
+ * them, and only the PROMPT surface filters. Before this split the
+ * assembler's `$` autocomplete offered `$iteration` and the `*_bool` toggles,
+ * which outnumbered the usable names.
+ */
+describe("collectUpstreamRenderableVariables", () => {
+  /** A Context node with one plain fixed_values module and one flagged
+   *  `instance.internal`. */
+  function graphWithInternalModule(): { graph: LiteGraphLike; asm: LiteNodeLike } {
+    const ctx: LiteNodeLike = {
+      id: 1,
+      type: "WP_Context",
+      inputs: [{ name: "upstream", link: null }],
+      outputs: [{ name: "context", links: [], type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "wp_modules",
+        value: JSON.stringify({
+          version: 1,
+          modules: [
+            {
+              id: "aa11bb22", type: "fixed_values", enabled: true, meta: { name: "looks" },
+              entries: [], payload: { values: [{ id: "v1", name: "style", value: "cinematic" }] },
+            },
+            {
+              id: "cc33dd44", type: "fixed_values", enabled: true, meta: { name: "toggles" },
+              entries: [], instance: { internal: true },
+              payload: { values: [{ id: "v2", name: "style_bool", value: "1" }] },
+            },
+          ],
+        }),
+      }],
+    };
+    const asm: LiteNodeLike = {
+      id: 2, type: "WP_PromptAssembler", inputs: [{ name: "context", link: 100 }],
+    };
+    return {
+      asm,
+      graph: {
+        _nodes: [ctx, asm],
+        links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+        getNodeById: (id) => ({ 1: ctx, 2: asm } as Record<number, LiteNodeLike>)[id] ?? null,
+      },
+    };
+  }
+
+  it("drops internal-flagged names that the prompt would never substitute", () => {
+    const { graph, asm } = graphWithInternalModule();
+    expect(collectUpstreamRenderableVariables(graph, asm)).toEqual(["style"]);
+  });
+
+  it("keeps them in the plain variable list, which other surfaces still need", () => {
+    const { graph, asm } = graphWithInternalModule();
+    expect(collectUpstreamVariables(graph, asm).sort()).toEqual(["style", "style_bool"]);
+  });
+
+  it("names the internal keys from the flag blob", () => {
+    const { graph, asm } = graphWithInternalModule();
+    expect([...internalVarNames(collectUpstreamResolved(graph, asm))]).toEqual(["style_bool"]);
+  });
+
+  it("treats a malformed flag blob as no internals rather than throwing", () => {
+    // The blob crosses the socket as an ordinary string value, so nothing
+    // guarantees it parses. A broken map should cost a mis-styled chip, not
+    // an exception inside a connection-change handler.
+    expect([...internalVarNames({ __wp_internal_flags__: "{not json" })]).toEqual([]);
+    expect([...internalVarNames({})]).toEqual([]);
   });
 });

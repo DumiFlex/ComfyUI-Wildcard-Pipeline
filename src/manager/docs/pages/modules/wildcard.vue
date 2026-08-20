@@ -9,9 +9,14 @@ import VarToken from "../../../components/docs/VarToken.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
 import StarterButton from "../../../components/docs/StarterButton.vue";
 
+const tagGroupKinds = [
+  { term: "classify (default)", desc: "The tags describe what the option IS — casual, t-shirt, skirt. Several are true at once, so a constraint on this group uses all of them together (AND). This is how every group has always behaved; leaving it alone changes nothing." },
+  { term: "accepts", desc: "The tags are alternatives the option OFFERS — an outfit that works with sneakers, heels or sandals. Exactly one is rolled at pick time and read as $var.AXIS, and it's that single rolled tag a constraint keys on — so a diagonal “same tag wins” constraint pins the target to exactly the shoe that was rolled, not the whole accepted set." },
+];
+
 const optionFields = [
   { term: "Value", desc: 'The text that goes into the prompt when this option is picked — for example, "a cat", "a dog", or "a fox".' },
-  { term: "Weight", desc: "How likely this option is to be chosen relative to the others. A weight of 2 is twice as likely as a weight of 1. Set to 0 to disable without deleting." },
+  { term: "Weight", desc: "How likely this option is to be chosen relative to the others. A weight of 2 is twice as likely as a weight of 1. Set to 0 to disable without deleting — and if every option ends up at 0, whether you set them or a constraint excluded them, the wildcard resolves to nothing rather than quietly using the first one." },
   { term: "Sub-categories", desc: 'Zero or more labels on an option (e.g. "feline", "warm") — an option can carry several at once. They group options in the editor, form the Constraint matrix axes, power bulk selection, and back the per-use category filter below. Tags can be organised into axes (e.g. species, temperature) so the editor shows grouped pills.' },
   { term: "Null option", desc: 'Marks this option as the "no pick" result — the wildcard resolves to an empty string. At most one option per wildcard can be a null option.' },
 ];
@@ -108,6 +113,39 @@ const instanceOptions = [
         a value another module set, no matter the order. To build a value from earlier picks, use a
         Combine or Derivation. The full token grammar and the per-surface gate live on
         <DocRef id="variable-pipeline" />.
+      </DocCallout>
+    </DocSection>
+
+    <DocSection title="What a tag is, and the two kinds">
+      <p>
+        A sub-category is a <b>label on an option</b>. It filters the pool and drives the
+        Constraint matrix. It is not a variable, and until you say otherwise nothing outside those
+        two places can read it.
+      </p>
+      <p>
+        Every tag group carries a kind, chosen on the group's header:
+      </p>
+      <DocKeyList :items="tagGroupKinds" />
+      <p>
+        The test is what the tag says about the option. <i>"Is this outfit casual?"</i> is
+        classify. <i>"Which shoes go with this outfit?"</i> is accepts.
+      </p>
+      <p>
+        An <b>accepts</b> group can be read as a variable. If a
+        <VarToken>$outfit</VarToken> wildcard has an accepts group named
+        <VarToken kind="inline">SHOES</VarToken>, then
+        <VarToken>$outfit.SHOES</VarToken> is the tag rolled for this run — the same value in
+        every template, every module and every chained node, because it is rolled once when the
+        option is picked rather than each time it is read. When the wildcard picks more than one
+        option, <VarToken>$outfit.0.SHOES</VarToken> is the first pick's.
+      </p>
+      <DocCallout variant="warn">
+        Only <b>accepts</b> groups are readable. Ungrouped tags, and tags in a classify group,
+        stay editor-only — <VarToken>$outfit.SHOES</VarToken> renders as nothing if
+        <VarToken kind="inline">SHOES</VarToken> was never promoted, and the conflict scanner
+        flags it. An accepts group's name is read as
+        <VarToken>$var.NAME</VarToken>, so it must be letters, digits and underscores starting
+        with a letter; renaming one can strand a template that reads it.
       </DocCallout>
     </DocSection>
 

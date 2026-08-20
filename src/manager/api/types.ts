@@ -46,6 +46,16 @@ export interface WildcardPayload {
    */
   tag_groups?: Record<string, string[]>;
   /**
+   * Per-group meaning. Absent (and `classify`) is today's behaviour: tags
+   * describe what an option IS and fold with AND in the constraint matrix.
+   * `accepts` marks the group's tags as alternatives the option offers — an
+   * OR-set the fold reads with max, and which `$var.AXIS` rolls one winner
+   * from. Only `accepts` entries are ever stored, so an untouched payload
+   * stays byte-identical. An `accepts` group name must be a valid identifier
+   * so `$var.AXIS` parses.
+   */
+  tag_group_kinds?: Record<string, "accepts">;
+  /**
    * The `$varname` other modules use to read this wildcard's resolved value.
    * Optional — defaults to `slug(name)` when missing/blank. User-editable so
    * collisions or renames can be resolved without breaking downstream refs.
@@ -558,4 +568,73 @@ export interface DatabaseConfigUpdate {
   preference?: DatabasePreference | null;
   /** Omit to leave unchanged; pass `null` to explicitly clear. */
   pending_move?: PendingMove | null;
+}
+
+/* ── Tag autocomplete ─────────────────────────────────────────────────── */
+
+/** Danbooru's numeric tag categories. `null` when the installed file is the
+ *  two-column `name,count` shape, which carries no category at all. */
+export type TagCategoryName =
+  | "general" | "artist" | "copyright" | "character" | "meta";
+
+export interface TagSuggestion {
+  /** The tag that gets INSERTED — always the canonical one, even when the
+   *  query matched an alias. */
+  name: string;
+  /** What the query actually matched. Differs from `name` only for an alias,
+   *  which is how the row can explain why it appeared. */
+  matched: string;
+  count: number;
+  category: number | null;
+  category_name: TagCategoryName | null;
+}
+
+export interface TagSuggestResponse {
+  available?: boolean;
+  tags: TagSuggestion[];
+}
+
+/** One installed LoRA or embedding, as an autocomplete row. */
+export interface ModelSuggestion {
+  /** Shown on screen — filename without folder or extension. */
+  name: string;
+  /** What gets INSERTED. The full relative path as ComfyUI knows it: two
+   *  folders can hold the same filename and ComfyUI resolves by path, so
+   *  inserting the display name would silently pick the wrong file. */
+  path: string;
+  /** Folder prefix, or "" at the root. The row's subtitle, so two same-named
+   *  files in different folders are tellable apart. */
+  folder: string;
+}
+
+export type ModelKind = "lora" | "embedding";
+
+export interface ModelSuggestResponse {
+  /** Keyed by kind. A kind the caller did not ask for is simply absent. */
+  results: Partial<Record<ModelKind, ModelSuggestion[]>>;
+}
+
+export interface ModelSourceStatus {
+  sources: Array<{ kind: ModelKind; count: number }>;
+}
+
+export interface TagStatus {
+  /** A file is installed AND parsed. The user setting is separate — the two
+   *  together are what decide whether suggestions appear. */
+  available: boolean;
+  /** Where the file is looked for, even when nothing is there yet. */
+  path: string | null;
+  tag_count: number;
+  /** False for a two-column file. The UI drops the colour column entirely
+   *  rather than rendering it grey and meaningless. */
+  has_categories: boolean;
+}
+
+export interface TagDownloadResult {
+  path: string;
+  bytes: number;
+  tag_count: number;
+  has_categories: boolean;
+  /** Echoed back so the UI can name exactly where the file came from. */
+  source: string;
 }

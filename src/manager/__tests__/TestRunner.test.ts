@@ -1,4 +1,5 @@
 import { mount, flushPromises } from "@vue/test-utils";
+import { createMemoryHistory, createRouter } from "vue-router";
 import { setActivePinia, createPinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ModuleRow } from "../api/types";
@@ -105,8 +106,18 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+function makeRouter() {
+  return createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: "/", component: { template: "<div/>" } },
+      { path: "/test", name: "test", component: { template: "<div/>" } },
+    ],
+  });
+}
+
 function mountRunner() {
-  return mount(TestRunner, { global: { plugins: [] } });
+  return mount(TestRunner, { global: { plugins: [makeRouter()] } });
 }
 
 describe("TestRunner.vue", () => {

@@ -422,6 +422,57 @@ class ModuleRepository:
         rows = self._conn.execute(sql, params).fetchall()
         return [_row_to_module(r) for r in rows]
 
+    def library_stamp(self) -> str:
+        """A cheap value that changes whenever any module's payload changes.
+
+        Exists so the drift endpoint can answer "nothing changed" WITHOUT
+        building the hash map. That map costs a `json.loads` of every payload
+        in the library, and the drift poll asks for it every five seconds per
+        open tab — so the expensive part has to sit behind this, not in front
+        of it.
+
+        Three columns, each covering what the others miss:
+          - `COUNT(*)`    — any insert or delete.
+          - `SUM(version)`— any payload edit; `update` does `version = version + 1`.
+          - `MAX(updated_at)` — backstop for a delete+insert that happened to
+            leave count and version-sum unchanged.
+
+        Note what deliberately does NOT move it: `set_community_origin` and the
+        favorite toggle write without bumping `version`, and neither changes a
+        `payload_hash`. A stamp that ignored them would be wrong; a stamp that
+        moved on them would just cost every client a pointless refetch.
+        """
+        row = self._conn.execute(
+            "SELECT COUNT(*) AS n, COALESCE(SUM(version), 0) AS v, "
+            "COALESCE(MAX(updated_at), '') AS t FROM modules;"
+        ).fetchone()
+        return f"{row['n']}:{row['v']}:{row['t']}"
+
+    def list_hash_rows(self) -> list[dict[str, Any]]:
+        """`{id, type, payload_hash}` for every module — the drift map.
+
+        Deliberately not `list()`. That selects every column and runs each row
+        through `_row_to_module`, which parses `tags`, reads the community and
+        content-rating columns and builds a seventeen-key dict — all of it
+        discarded here. This selects the three columns the drift map needs.
+
+        The `payload` parse survives because `payload_hash` is computed, not
+        stored (unlike `bundles`, which has the column). Removing that too
+        means a schema migration; the stamp above makes it moot in the steady
+        state, which is the case that actually repeats.
+        """
+        rows = self._conn.execute(
+            "SELECT id, type, payload FROM modules;"
+        ).fetchall()
+        return [
+            {
+                "id": r["id"],
+                "type": r["type"],
+                "payload_hash": payload_hash(json.loads(r["payload"])),
+            }
+            for r in rows
+        ]
+
     def count(
         self,
         *,
@@ -812,6 +863,30 @@ class BundleRepository:
             params.append(offset)
         rows = self._conn.execute(sql, params).fetchall()
         return [_row_to_bundle(r) for r in rows]
+
+    def library_stamp(self) -> str:
+        """Cheap change signal for the bundle drift poll.
+
+        See `ModuleRepository.library_stamp` — same three columns, same
+        reasoning."""
+        row = self._conn.execute(
+            "SELECT COUNT(*) AS n, COALESCE(SUM(version), 0) AS v, "
+            "COALESCE(MAX(updated_at), '') AS t FROM bundles;"
+        ).fetchone()
+        return f"{row['n']}:{row['v']}:{row['t']}"
+
+    def list_hash_rows(self) -> list[dict[str, Any]]:
+        """`{id, payload_hash}` for every bundle.
+
+        Unlike modules, `bundles.payload_hash` is a real stored column, so
+        this reads two columns and parses nothing at all. `list()` here would
+        have selected every column and run `_row_to_bundle` over each row,
+        which parses `tags` AND `children` per bundle for a map that wants
+        neither."""
+        rows = self._conn.execute(
+            "SELECT id, payload_hash FROM bundles;"
+        ).fetchall()
+        return [{"id": r["id"], "payload_hash": r["payload_hash"]} for r in rows]
 
     def count(
         self,

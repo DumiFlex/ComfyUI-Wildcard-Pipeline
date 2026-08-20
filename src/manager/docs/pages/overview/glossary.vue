@@ -14,6 +14,18 @@ const terms = [
     desc: "A module that holds a list of options. Each time the pipeline runs, one option is picked at random (weighted by the numbers you set). The picked value is stored in the context under a $variable name.",
   },
   {
+    term: "Sub-category (tag)",
+    desc: "A label on a wildcard option — e.g. \"warm\", \"sneakers\". An option can carry several. Tags filter the pool and drive constraint matrices, and can be grouped into named groups; they are editor-only unless a group is marked accepts.",
+  },
+  {
+    term: "Axis (accepts group)",
+    desc: "A tag group marked accepts: its tags are alternatives the option offers, and exactly one is rolled per pick. Read it anywhere with $var.AXIS (e.g. $outfit.SHOES). A constraint from an accepts source keys on that single rolled tag, and an accepts target agrees with it under a diagonal.",
+  },
+  {
+    term: "Classify group",
+    desc: "The default tag-group kind: the tags describe what the option is, all true at once. Not readable as a variable; a constraint on a classify group uses all its tags together (AND).",
+  },
+  {
     term: "$variable",
     desc: "A named slot in the context that holds a text value. Wildcards, Fixed Values, and Combines all write into $variables. Your template reads from them — for example $subject or $style.",
   },

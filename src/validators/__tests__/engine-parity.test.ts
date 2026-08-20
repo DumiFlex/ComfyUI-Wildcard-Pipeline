@@ -41,3 +41,37 @@ describe("engine parity: strict v1 validators accept real engine output", () => 
     });
   }
 });
+
+// Acceptance isn't enough: the lenient payload object silently strips any key
+// the schema doesn't list, and install stores the parsed row — so an unlisted
+// field is lost even though validation "passed". These lock that the tag-axes
+// kind map and the constraint reach selector are actually PRESERVED, which is
+// the whole point of listing them (a shared accepts axis must not degrade to
+// classify on import).
+describe("engine parity: strict parse preserves tag-axes + reach fields", () => {
+  it("wildcard keeps tag_group_kinds through a strict parse", () => {
+    const validator = getValidator({
+      kind: "module",
+      subtype: "wildcard",
+      version: CURRENT_SCHEMA_VERSION,
+      mode: "strict",
+    });
+    const parsed = validator.parse(wildcardRow) as {
+      payload: { tag_group_kinds?: unknown };
+    };
+    expect(parsed.payload.tag_group_kinds).toEqual({ TEXTURE: "accepts" });
+  });
+
+  it("constraint keeps target_select through a strict parse", () => {
+    const validator = getValidator({
+      kind: "module",
+      subtype: "constraint",
+      version: CURRENT_SCHEMA_VERSION,
+      mode: "strict",
+    });
+    const parsed = validator.parse(constraintRow) as {
+      payload: { target_select?: unknown };
+    };
+    expect(parsed.payload.target_select).toEqual({ mode: "next", count: 2 });
+  });
+});

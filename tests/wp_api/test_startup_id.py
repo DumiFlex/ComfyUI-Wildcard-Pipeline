@@ -25,3 +25,36 @@ async def test_startup_id_present_on_error_responses(wp_client):
     )
     assert resp.status == 400
     assert "X-WP-Startup-Id" in resp.headers
+
+
+async def test_startup_id_is_not_stamped_on_other_routes(aiohttp_client):
+    """We are a guest in ComfyUI's application.
+
+    The middleware is registered on the host app, so until 2026-08-06 it
+    stamped the header on EVERY response the whole server sent — ComfyUI's own
+    index, other extensions' routes, image outputs. A remote probe of `GET /`
+    came back carrying it.
+
+    This mounts a non-`/wp` route alongside ours and asserts we keep our hands
+    off it.
+    """
+    from aiohttp import web
+
+    import wp_api
+
+    app = web.Application(middlewares=[wp_api._startup_id_middleware])
+
+    async def foreign(_request):
+        return web.json_response({"owner": "not us"})
+
+    app.router.add_get("/api/extensions", foreign)
+    app.router.add_get("/wp/api/mine", foreign)
+
+    client = await aiohttp_client(app)
+
+    theirs = await client.get("/api/extensions")
+    assert theirs.status == 200
+    assert "X-WP-Startup-Id" not in theirs.headers
+
+    ours = await client.get("/wp/api/mine")
+    assert "X-WP-Startup-Id" in ours.headers

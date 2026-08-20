@@ -4,6 +4,31 @@ import { nextTick } from "vue";
 import InjectorBindingModal from "./InjectorBindingModal.vue";
 import type { InjectorRow } from "../../widgets/_shared";
 
+// The template field is a RichTextInput now, not a <textarea>: it needs the
+// `$` handler, and the ref list that already fed the "+ $ref" menu is exactly
+// the right suggestion pool. Stubbed the same way the combine editor's tests
+// stub it — assert prop wiring and simulate emits rather than driving
+// contenteditable in jsdom.
+const RichTextInputStub = {
+  name: "RichTextInput",
+  props: ["modelValue", "varSuggestions", "multiline", "rows", "surface", "placeholder", "ariaLabel"],
+  emits: ["update:modelValue"],
+  template: `<div class="wp-rt-stub" data-test="ibm-template" :data-model-value="modelValue"></div>`,
+};
+const globalStubs = { RichTextInput: RichTextInputStub };
+
+/** Read what the template field is currently showing. */
+function templateValue(w: any): string | undefined {
+  return w.findComponent(RichTextInputStub).props("modelValue");
+}
+
+/** Type into the template field. */
+async function typeTemplate(w: any, value: string): Promise<void> {
+  w.findComponent(RichTextInputStub).vm.$emit("update:modelValue", value);
+  await w.vm.$nextTick();
+}
+
+
 // The insert menu is `<Teleport to="body">` — it escapes the modal's scroll
 // container so it can't be clipped, which means it is NOT inside the test
 // wrapper's subtree. Query the document for it instead.
@@ -25,7 +50,18 @@ async function clickMenuItem(name: string): Promise<void> {
 const mounted: { unmount: () => void }[] = [];
 type MountArgs = Parameters<typeof mount<typeof InjectorBindingModal>>;
 function mountModal(...args: MountArgs): ReturnType<typeof mount<typeof InjectorBindingModal>> {
-  const w = mount(...args);
+  // Stub RichTextInput for every mount here. It is contenteditable with atom
+  // spans, which jsdom does not implement, and these tests are about the
+  // modal's own wiring rather than the editor's internals.
+  const [component, options] = args as [unknown, Record<string, any> | undefined];
+  const merged = {
+    ...(options ?? {}),
+    global: {
+      ...((options?.global as Record<string, unknown>) ?? {}),
+      stubs: { ...globalStubs, ...((options?.global as any)?.stubs ?? {}) },
+    },
+  };
+  const w = mount(component as never, merged as never);
   mounted.push(w);
   return w;
 }
@@ -77,13 +113,13 @@ describe("InjectorBindingModal — template section", () => {
     const w = mountModal(InjectorBindingModal, {
       props: { row: makeRow({ template: "i love $input_1" }) },
     });
-    const ta = w.find<HTMLTextAreaElement>('[data-test="ibm-template"]');
-    expect(ta.element.value).toBe("i love $input_1");
+    const shown = templateValue(w);
+    expect(shown).toBe("i love $input_1");
   });
 
   it("Save emits a non-empty template string verbatim (no null collapse)", async () => {
     const w = mountModal(InjectorBindingModal, { props: { row: makeRow() } });
-    await w.find<HTMLTextAreaElement>('[data-test="ibm-template"]').setValue("i love $input_2");
+    await typeTemplate(w, "i love $input_2");
     await w.find('[data-test="ibm-save"]').trigger("click");
     const updates = w.emitted("update")!;
     const last = updates[updates.length - 1][0] as Partial<InjectorRow>;
@@ -95,7 +131,7 @@ describe("InjectorBindingModal — template section", () => {
     const w = mountModal(InjectorBindingModal, {
       props: { row: makeRow({ template: "hello" }) },
     });
-    await w.find<HTMLTextAreaElement>('[data-test="ibm-template"]').setValue("   ");
+    await typeTemplate(w, "   ");
     await w.find('[data-test="ibm-save"]').trigger("click");
     const updates = w.emitted("update")!;
     const last = updates[updates.length - 1][0] as Partial<InjectorRow>;
@@ -142,8 +178,8 @@ describe("InjectorBindingModal — template section", () => {
       props: { row: makeRow({ template: "hi" }) },
     });
     await w.find('[data-test="ibm-template-reset"]').trigger("click");
-    const ta = w.find<HTMLTextAreaElement>('[data-test="ibm-template"]');
-    expect(ta.element.value).toBe("");
+    const shown = templateValue(w);
+    expect(shown).toBe("");
   });
 
   it("typing a bare $ does NOT crash the tokenizer (regression)", () => {
@@ -252,7 +288,7 @@ describe("InjectorBindingModal — general (template) row", () => {
     const w = mountModal(InjectorBindingModal, {
       props: { row: generalRow({ binding: "combo", template: "$input_0" }), references: ["input_0", "test"] },
     });
-    await w.find<HTMLTextAreaElement>('[data-test="ibm-template"]').setValue("$input_0 by $test");
+    await typeTemplate(w, "$input_0 by $test");
     await w.find('[data-test="ibm-save"]').trigger("click");
     const updates = w.emitted("update")!;
     const last = updates[updates.length - 1][0] as Partial<InjectorRow>;

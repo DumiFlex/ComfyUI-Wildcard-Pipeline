@@ -1,10 +1,23 @@
-// Webfonts (Inter + JetBrains Mono, latin variable axis 100-900) injected
-// at extension load. We side-step `cssInjectedByJsPlugin`'s URL-inlining
-// behavior by wiring the @font-face rules in JS — `new URL(path,
-// import.meta.url)` keeps woff2 files as separate assets (NOT
-// base64-inlined into the JS chunk) and resolves the URL at runtime
-// relative to the loaded module's location, which ComfyUI serves at
-// `/extensions/wildcard-pipeline/assets/...`.
+// Webfonts (Inter + JetBrains Mono, latin variable axis 100-900) linked at
+// extension load.
+//
+// The @font-face rules live in `src/assets/fonts/wp-fonts.css`, copied verbatim
+// into `js/assets/fonts/` by `scripts/copy-fonts.mjs`. This module only points a
+// <link> at them; the browser resolves each woff2 URL relative to the
+// stylesheet, so there is no path arithmetic here.
+//
+// WHY NOT AN IMPORT. This file used to do
+//   new URL("../assets/fonts/inter-latin.woff2", import.meta.url)
+// in the belief that it kept the woff2 as separate assets. It did not — Vite
+// ignores `build.assetsInlineLimit` whenever `build.lib` is set and inlines
+// every asset unconditionally. Both fonts were base64'd into the chunk: 88,660
+// bytes of woff2 became a 118,896-byte JS file, downloaded and parsed as
+// JavaScript before ComfyUI could finish registering the extension.
+//
+// Do NOT turn `CSS_HREF` below back into a string literal. Vite's asset
+// transform fires on `new URL(<literal>, import.meta.url)` specifically, and
+// making it a literal would silently re-inline the stylesheet — undoing all of
+// this with no build error and no test failure.
 //
 // Trade-off vs. fontsource @import:
 //   - Single latin subset only — no cyrillic/greek/vietnamese coverage.
@@ -13,38 +26,23 @@
 //   - Variable axis covers every weight from 100..900 in one file each,
 //     so we don't pay per-weight asset cost.
 
-const interUrl = new URL("../assets/fonts/inter-latin.woff2", import.meta.url).href;
-const jetBrainsMonoUrl = new URL("../assets/fonts/jetbrains-mono-latin.woff2", import.meta.url).href;
+/** Built from parts so Vite's `new URL(<literal>, ...)` transform cannot see a
+ *  literal path to resolve. See the note above before "simplifying" this. */
+const CSS_HREF = ["fonts", "wp-fonts.css"].join("/");
 
 let injected = false;
 
 function ensureFontFaces(): void {
   if (injected || typeof document === "undefined") return;
   injected = true;
-  const style = document.createElement("style");
-  style.id = "wp-webfonts";
-  // font-display: swap renders the system stack first then re-paints when
-  // the woff2 lands — avoids invisible text during the 100–300ms fetch on
-  // first load. font-weight `100 900` is the variable axis range.
-  style.textContent = `
-    @font-face {
-      font-family: 'Inter';
-      font-style: normal;
-      font-weight: 100 900;
-      font-display: swap;
-      src: url(${interUrl}) format('woff2-variations'),
-           url(${interUrl}) format('woff2');
-    }
-    @font-face {
-      font-family: 'JetBrains Mono';
-      font-style: normal;
-      font-weight: 100 900;
-      font-display: swap;
-      src: url(${jetBrainsMonoUrl}) format('woff2-variations'),
-           url(${jetBrainsMonoUrl}) format('woff2');
-    }
-  `;
-  document.head.appendChild(style);
+  const link = document.createElement("link");
+  link.id = "wp-webfonts";
+  link.rel = "stylesheet";
+  // Resolved against this chunk's own URL — `/extensions/<package>/assets/` —
+  // so a renamed install directory still works. Hardcoding the package name
+  // would break for anyone who cloned to a different folder name.
+  link.href = new URL(CSS_HREF, import.meta.url).href;
+  document.head.appendChild(link);
 }
 
 ensureFontFaces();

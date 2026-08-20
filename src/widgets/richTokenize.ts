@@ -41,8 +41,12 @@ export type TokenKind =
 export interface TokenMeta {
   // var tokens
   name?: string;
-  /** SP2a list accessor: `$name.K` -> 0-based index K (omitted when absent). */
+  /** SP2a list accessor: `$name.K` -> 0-based index K (omitted when absent).
+   *  With an axis it selects the pick: `$name.0.AXIS`. */
   index?: number;
+  /** Tag-axis accessor: `$name.AXIS` -> the tag rolled for that `accepts`
+   *  group at pick time (omitted when absent). */
+  axis?: string;
   // ref tokens
   uuid?: string;
   sub_categories?: string[];
@@ -63,13 +67,42 @@ export interface TokenMeta {
   range?: string;
 }
 
-/** SP2a: reduce a var reference to its BASE name — drop an optional leading
- *  `$` and an optional trailing `.K` list accessor. `$mood.0` -> `mood`;
- *  `mood` -> `mood`; `weird.name` (non-digit suffix) -> unchanged. Used by
- *  validation + conflict scanning so a `.K` accessor resolves against the
- *  bound base var, not a phantom `mood.0`. */
+/** Reduce a var reference to its BASE name — drop an optional leading `$` and
+ *  any accessor: a `.K` pick index, a `.AXIS` tag-axis read, or both in either
+ *  order. `$mood.0` -> `mood`; `$outfit.SHOES` -> `outfit`;
+ *  `$outfit.0.SHOES` -> `outfit`; `mood` -> `mood`.
+ *
+ *  Mirrors the accessor grammar in `engine/syntax/tokenize.py:_VAR_RE`. Used by
+ *  validation, conflict scanning and the editor's chip lookup, so a reference
+ *  with an accessor resolves against the bound base var rather than a phantom
+ *  `outfit.SHOES` — which is what made an axis read render as inert text
+ *  instead of a chip. */
 export function varBaseName(raw: string): string {
-  return raw.replace(/^\$/, "").replace(/\.\d+$/, "").trim();
+  return varAccessorParts(raw).base;
+}
+
+/** Split a var reference into base + accessor parts using the ONE canonical
+ *  grammar (index-first `$o.0.SHOES` and axis-first `$o.SHOES.0` both parse).
+ *  Every surface that needs "which axis / which index" must go through this —
+ *  the inline renderer used to hand-roll a `.replace(/\.\d+$/,"")` that only
+ *  stripped a TRAILING index, so `$outfit.0.SHOES` yielded axis "0.SHOES",
+ *  matched no declared axis, and painted a valid reference with the
+ *  unknown-axis warning. Mirrors `engine/syntax/tokenize.py:_VAR_RE`. */
+export function varAccessorParts(
+  raw: string,
+): { base: string; index?: number; axis?: string } {
+  const bare = raw.replace(/^\$/, "").trim();
+  const m = bare.match(
+    /^([A-Za-z_][A-Za-z0-9_]*)(?:\.(?:(\d+)(?:\.([A-Za-z_][A-Za-z0-9_]*))?|([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?))?$/,
+  );
+  if (!m) return { base: bare };
+  const index = m[2] ?? m[5];
+  const axis = m[3] ?? m[4];
+  return {
+    base: m[1],
+    ...(index !== undefined ? { index: parseInt(index, 10) } : {}),
+    ...(axis !== undefined ? { axis } : {}),
+  };
 }
 
 /** SP2a: a resolved variable value as a TS preview surface sees it — a plain
@@ -285,16 +318,32 @@ export function tokenizeRich(text: string): RichToken[] {
       continue;
     }
 
-    // -- Variable: $name or $name.K (SP2a list accessor) --------------------
+    // -- Variable: $name, plus at most one pick index and one axis ----------
+    // Either order — `$o.0.SHOES` and `$o.SHOES.0` name the same value. Two
+    // mirrored alternatives, so `.0.1` / `.SHOES.BELTS` do not match their
+    // second segment and the tail stays literal text. Mirrors
+    // `engine/syntax/tokenize.py:_VAR_RE`; both are locked to
+    // `tests/fixtures/syntax-corpus.json`.
+    //   1 name · 2 index-first · 3 axis-after-index · 4 axis-first · 5 index-after-axis
     if (ch === "$") {
       // `.match` (not `.exec`) keeps the matcher off the security-hook's radar
-      // while giving the same match-array shape. Group 2 = optional `.K` index.
-      const m = text.slice(i + 1).match(/^([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?/);
+      // while giving the same match-array shape.
+      const m = text.slice(i + 1).match(
+        /^([A-Za-z_][A-Za-z0-9_]*)(?:\.(?:(\d+)(?:\.([A-Za-z_][A-Za-z0-9_]*))?|([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?))?/,
+      );
       if (m) {
         flushText(i);
-        const raw = "$" + m[1] + (m[2] !== undefined ? "." + m[2] : "");
-        const meta: { name: string; index?: number } = { name: m[1] };
-        if (m[2] !== undefined) meta.index = parseInt(m[2], 10);
+        // Normalise both spellings here, so nothing downstream learns which
+        // order was written.
+        const idx = m[2] ?? m[5];
+        const axis = m[3] ?? m[4];
+        const raw = "$" + m[1]
+          + (m[2] !== undefined ? "." + m[2] : "")
+          + (axis !== undefined ? "." + axis : "")
+          + (m[5] !== undefined ? "." + m[5] : "");
+        const meta: { name: string; index?: number; axis?: string } = { name: m[1] };
+        if (idx !== undefined) meta.index = parseInt(idx, 10);
+        if (axis !== undefined) meta.axis = axis;
         out.push({
           kind: "var",
           raw,
@@ -449,9 +498,63 @@ export function mirrorHtmlWithIdx(tokens: RichToken[]): string {
  * as vars. Tokens matching `collapsedKind` render with the plain
  * `wp-rt-text` class.
  */
+/**
+ * `<lora:…>` and `embedding:…` runs inside otherwise-plain text.
+ *
+ * Deliberately NOT a tokenizer kind. `tokenizeRich` is shared with the
+ * engine-parity resolver and the atomic editor model, and neither has any
+ * business knowing about ComfyUI prompt syntax — this is a rendering concern
+ * and it stays in the renderer.
+ *
+ * `embedding:` ends at whitespace or a comma; a LoRA ends at its own `>`.
+ */
+const MODEL_SYNTAX_RE = /<lora:[^>]*>?|embedding:[^\s,]+/gi;
+
+/** Fixed per kind, unlike `$var` which hashes its name into eight buckets.
+ *  There are exactly two of these and they mean the same thing every time, so
+ *  a stable colour is something you learn once. Matches the popover's own
+ *  section icons.
+ *
+ *  Coloured INLINE rather than from a stylesheet, for two reasons that each
+ *  independently decide it. The SPA's `rich-text.css` is not loaded on the
+ *  canvas at all — the canvas has its own `rich-text-canvas.css` carrying a
+ *  "keep in sync" note — so a rule would have to be written twice. And these
+ *  spans are produced through `v-html`, so they never receive the `data-v-*`
+ *  scope attribute that a rule inside a `<style scoped>` block requires,
+ *  which is why the first attempt rendered plain `#ddd` on both hosts. One
+ *  declaration here covers every host and cannot fall out of sync. */
+export function modelSyntaxHtml(text: string): string {
+  let out = "";
+  let last = 0;
+  MODEL_SYNTAX_RE.lastIndex = 0;
+  for (let m = MODEL_SYNTAX_RE.exec(text); m; m = MODEL_SYNTAX_RE.exec(text)) {
+    out += escapeHtml(text.slice(last, m.index));
+    const isLora = m[0][0] === "<";
+    const cls = isLora ? "wp-rt-lora" : "wp-rt-embedding";
+    const tone = isLora ? "var(--wp-var-6)" : "var(--wp-var-7)";
+    out += `<span class="${cls}" style="color:${tone}">${escapeHtml(m[0])}</span>`;
+    last = m.index + m[0].length;
+  }
+  return last === 0 ? escapeHtml(text) : out + escapeHtml(text.slice(last));
+}
+
 export function inlineTokenHtml(
   text: string,
   collapsedKinds?: ReadonlyArray<"var" | "ref"> | "var" | "ref",
+  /**
+   * Extra HTML attributes for a `var` sub-span, keyed off the bare name.
+   *
+   * Exists for the prompt-template surface, which renders `$name` as coloured
+   * EDITABLE TEXT rather than as a chip. Per-variable colour cannot come from a
+   * class: `.wp-rt .wp-rt-var` in `rich-text.css` already sets a colour at
+   * higher specificity than the global `.var-N` palette classes, so the hook
+   * returns an inline `style` instead — which wins without either stylesheet
+   * needing to know about the other.
+   *
+   * Returns a string spliced straight into the tag, so it must be
+   * caller-escaped. Only ever invoked for `var` tokens.
+   */
+  varAttrs?: (name: string) => string,
 ): string {
   if (!text) return "";
   const tokens = tokenizeRich(text);
@@ -463,7 +566,7 @@ export function inlineTokenHtml(
   // pre-coloring). Keeps caret-math callers that walk `.firstChild`
   // happy for the common case (un-decorated text atoms).
   if (tokens.length === 1 && tokens[0].kind === "text") {
-    return escapeHtml(tokens[0].raw);
+    return modelSyntaxHtml(tokens[0].raw);
   }
   // Inline tokens stay editable (deliberate: brace blocks like
   // `{a|b|c}` are user-edited inline, not atomic chips). We add bare
@@ -490,10 +593,42 @@ export function inlineTokenHtml(
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
     if (isText(i)) {
-      html += escapeHtml(t.raw);
+      html += modelSyntaxHtml(t.raw);
     } else {
       if (!isText(i - 1)) html += "&#x200B;";
-      html += `<span class="wp-rt-${t.kind}">${escapeHtml(t.raw)}</span>`;
+      const attrs = t.kind === "var" && varAttrs
+        ? varAttrs(t.raw.replace(/^\$/, ""))
+        : "";
+      // A var carrying an accessor renders as one atom with two readings: the
+      // name keeps the variable colouring, the `.AXIS` / `.K` tail gets its own
+      // span so it can take the group's hue. Still ONE `.wp-rt-var`, so caret
+      // math and deletion continue to treat the reference as a single unit.
+      const accessorAt = t.kind === "var" ? t.raw.indexOf(".") : -1;
+      if (accessorAt > 0) {
+        // Split index from axis so the pick index stays neutral and only the
+        // axis carries the accent — mirrors the settled chip. Rebuilt from the
+        // parsed parts rather than sliced raw so `.0.SHOES` and `.SHOES.0`
+        // both land the index in the neutral span and the axis in the accent
+        // span, regardless of the order the user typed.
+        const parts = varAccessorParts(t.raw);
+        const idxHtml = parts.index != null
+          ? `<span class="wp-rt-var__index">.${parts.index}</span>`
+          : "";
+        const axisHtml = parts.axis
+          ? `<span class="wp-rt-var__accessor">.${escapeHtml(parts.axis)}</span>`
+          : "";
+        // Fallback: an accessor the grammar did not recognise stays one plain
+        // tail span rather than vanishing.
+        const tail = idxHtml || axisHtml
+          ? idxHtml + axisHtml
+          : `<span class="wp-rt-var__accessor">${escapeHtml(t.raw.slice(accessorAt))}</span>`;
+        html += `<span class="wp-rt-${t.kind}"${attrs}>`
+          + `${escapeHtml("$" + parts.base)}`
+          + tail
+          + `</span>`;
+      } else {
+        html += `<span class="wp-rt-${t.kind}"${attrs}>${escapeHtml(t.raw)}</span>`;
+      }
       if (!isText(i + 1)) html += "&#x200B;";
     }
   }

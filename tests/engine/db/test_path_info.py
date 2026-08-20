@@ -51,7 +51,7 @@ def test_comfyui_user_dir_resolved(monkeypatch, tmp_path):
     monkeypatch.setattr("engine.db.connection._comfyui_user_dir_from_path", lambda: None)
     monkeypatch.setattr("engine.db.connection._load_sidecar", lambda: {})
     path, source = resolve_db_path_with_source()
-    assert path == user_dir / "wildcard-pipeline.db"
+    assert path == user_dir / "wildcard-pipeline" / "wildcard-pipeline.db"
     # Source is now "user" — the design renames the old "comfyui_user_dir"
     # label to "user" so it matches the UI radio button.
     assert source == "user"
@@ -68,7 +68,7 @@ def test_sidecar_user_preference(monkeypatch, tmp_path):
     monkeypatch.setattr("engine.db.connection._load_sidecar", lambda: {"preference": "user"})
     path, source = resolve_db_path_with_source()
     assert source == "user"
-    assert path == user_dir / "wildcard-pipeline.db"
+    assert path == user_dir / "wildcard-pipeline" / "wildcard-pipeline.db"
 
 
 def test_sidecar_global_preference(monkeypatch):
@@ -104,12 +104,16 @@ def test_env_wins_over_sidecar(monkeypatch, tmp_path):
 # ---------------------------------------------------------------------------
 
 
+# The `user` location lives inside our own `wildcard-pipeline/` subfolder, not
+# loose in ComfyUI's user directory. The database and the tag list are two files
+# now, and `engine/db/relocate.py` moves pre-existing installs in on first boot —
+# so these paths and that mover have to agree.
 def test_user_location_path_returns_path_when_detected(monkeypatch, tmp_path):
     user_dir = tmp_path / "user"
     user_dir.mkdir()
     monkeypatch.setattr("engine.db.connection._comfyui_user_dir_from_api", lambda: user_dir)
     monkeypatch.setattr("engine.db.connection._comfyui_user_dir_from_path", lambda: None)
-    assert user_location_path() == user_dir / "wildcard-pipeline.db"
+    assert user_location_path() == user_dir / "wildcard-pipeline" / "wildcard-pipeline.db"
 
 
 def test_user_location_path_falls_back_to_path_detector(monkeypatch, tmp_path):
@@ -117,7 +121,7 @@ def test_user_location_path_falls_back_to_path_detector(monkeypatch, tmp_path):
     user_dir.mkdir()
     monkeypatch.setattr("engine.db.connection._comfyui_user_dir_from_api", lambda: None)
     monkeypatch.setattr("engine.db.connection._comfyui_user_dir_from_path", lambda: user_dir)
-    assert user_location_path() == user_dir / "wildcard-pipeline.db"
+    assert user_location_path() == user_dir / "wildcard-pipeline" / "wildcard-pipeline.db"
 
 
 def test_user_location_path_returns_none_when_undetected(monkeypatch):

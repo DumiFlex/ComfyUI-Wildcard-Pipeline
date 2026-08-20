@@ -355,6 +355,12 @@ def deserialize_node_input(
 #: default-leak.
 _CROSS_NODE_INTERNAL_KEYS = (
     "__wp_picks__",
+    # Rolled `accepts`-axis choices, keyed by variable binding. Crosses for the
+    # same reason picks do: a `$outfit.SHOES` read in Context C must see the
+    # roll that happened in Context A, and re-rolling on read is precisely the
+    # inconsistency the design forbids. A dropped key renders "" rather than
+    # erroring, so losing it looks like a content bug, not a plumbing one.
+    "__wp_axes__",
     "__wp_constraints__",
     # `__wp_constraints__` propagates so a constraint registered in
     # Context A can fire on a wildcard rolled in Context B. The matching

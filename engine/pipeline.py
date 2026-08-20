@@ -248,6 +248,32 @@ def _module_seed_scope(module: object) -> str | None:
     return None
 
 
+def _module_binding(module: object) -> str | None:
+    """Read the variable name a wildcard binds to, instance override first.
+
+    Mirrors the precedence in `WildcardHandler.resolve`. Needed because rolled
+    axes are keyed by BINDING — the namespace `$outfit.SHOES` addresses — while
+    picks are keyed by module id, so the two carry-forwards cannot share a key.
+    """
+    inst = (
+        module.get("instance") if isinstance(module, dict)
+        else getattr(module, "instance", None)
+    )
+    if isinstance(inst, dict):
+        b = inst.get("variable_binding")
+        if isinstance(b, str) and b:
+            return b
+    payload = (
+        module.get("payload") if isinstance(module, dict)
+        else getattr(module, "payload", None)
+    )
+    if isinstance(payload, dict):
+        b = payload.get("var_binding")
+        if isinstance(b, str) and b:
+            return b
+    return None
+
+
 class PipelineEngine:
     """Runs an ordered list of modules against a context dict."""
 
@@ -326,6 +352,25 @@ class PipelineEngine:
                         )
                         if _mid and _mid in _base_picks and _mid not in _real_picks:
                             _real_picks[_mid] = _base_picks[_mid]
+            # Same carry-forward for rolled axes, but keyed by BINDING rather
+            # than module id — that is the namespace `$outfit.SHOES` addresses.
+            # Restricted to held modules, and `not in` rather than assignment,
+            # so a wildcard that never asked to hold still re-rolls this
+            # iteration.
+            _base_axes = base_ctx.get("__wp_axes__")
+            if isinstance(_base_axes, dict):
+                _real_axes = ctx.setdefault("__wp_axes__", {})
+                if isinstance(_real_axes, dict):
+                    for _m in modules:
+                        if _module_seed_scope(_m) != "hold":
+                            continue
+                        _binding = _module_binding(_m)
+                        if (
+                            _binding
+                            and _binding in _base_axes
+                            and _binding not in _real_axes
+                        ):
+                            _real_axes[_binding] = _base_axes[_binding]
             _base_hits = base_ctx.get("__wp_constraint_hits__")
             if isinstance(_base_hits, dict):
                 _real_hits = ctx.setdefault("__wp_constraint_hits__", {})
@@ -580,9 +625,18 @@ class PipelineEngine:
                 key = var.lstrip("$")
                 before = ctx.get(key)
                 ctx[key] = value
+                # Last-write-wins applies to the internal flag too: whichever
+                # module writes the var LAST decides whether it is internal. A
+                # public writer overriding an earlier internal one MUST clear
+                # the flag — otherwise the var stays hidden from the assembler
+                # forever, even though its final value came from a public
+                # module. (Mark $outfit internal, then override it with a
+                # public $outfit: the override should be visible.)
+                flags = ctx.setdefault("__wp_internal_flags__", {})
                 if mark_internal:
-                    flags = ctx.setdefault("__wp_internal_flags__", {})
                     flags[key] = True
+                else:
+                    flags.pop(key, None)
                 writes.append({
                     "variable": key,
                     "value": value,

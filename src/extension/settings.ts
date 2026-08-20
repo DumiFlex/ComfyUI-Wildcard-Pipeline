@@ -19,6 +19,7 @@ import "../components/shared/vue-nodes.css";
 // (the SPA's rich-text.css isn't loaded on the canvas — see the file header).
 import "../components/shared/rich-text-canvas.css";
 import { pushToast } from "../components/shared/toast-store";
+import { notifyCompletionSettingsChanged } from "../manager/utils/tagSetting";
 import { openPlayground } from "../components/settings/playground-store";
 
 export type A11yMode = "auto" | "on" | "off";
@@ -83,6 +84,104 @@ export type ComfySettingCustomRenderer = (
   value: unknown,
   attrs?: Record<string, unknown>,
 ) => HTMLElement;
+
+/**
+ * A pill switch matching the one ComfyUI renders for a plain `type: "boolean"`.
+ *
+ * Only needed because this ONE setting cannot be a plain boolean: it disables
+ * itself when no tag list is installed, and a native boolean has no way to say
+ * "on is not available". Every other setting we own uses the real thing.
+ *
+ * EVERY dimension and colour reads PrimeVue's own `--p-toggleswitch-*` custom
+ * property first. Those are injected when their component first mounts — which
+ * has always happened by the time this renders, because our row sits in their
+ * settings dialog among their switches — so at render time this resolves to
+ * literally their pill, and follows their theme when it changes.
+ *
+ * The fallbacks are Aura's defaults (40x24 pill, 16px handle), used only if a
+ * token is missing. An earlier hand-picked 34x18 read as visibly smaller and
+ * duller than the switches directly beneath it.
+ *
+ * Handle travel is a `calc()` over the same tokens rather than a fixed 16px, so
+ * a differently-sized track still lands the knob flush against its end.
+ *
+ * Not reusing `.p-toggleswitch` itself: those classes are ComfyUI's internals,
+ * and borrowing them buys a perfect match today and a control that renders as
+ * nothing the day they restyle or upgrade PrimeVue.
+ */
+function buildSwitch(initial: boolean): {
+  root: HTMLElement;
+  setOn: (on: boolean) => void;
+  setDisabled: (off: boolean) => void;
+} {
+  let on = initial;
+  let disabled = false;
+
+  const root = document.createElement("span");
+  root.setAttribute("role", "switch");
+  root.tabIndex = 0;
+  const knob = document.createElement("span");
+  root.appendChild(knob);
+
+  // Static styling is written ONCE. Rewriting `cssText` on every change — the
+  // first version did — replaces the `transition` declaration mid-flight, so
+  // the browser has nothing to animate between and the knob teleports instead
+  // of sliding. Only the properties that actually change are touched below.
+  root.style.cssText = [
+    "display:inline-flex", "align-items:center", "flex:0 0 auto",
+    "box-sizing:border-box",
+    "width:var(--p-toggleswitch-width, 40px)",
+    "height:var(--p-toggleswitch-height, 24px)",
+    "border-radius:var(--p-toggleswitch-border-radius, 30px)",
+    "padding:var(--p-toggleswitch-gap, 4px)",
+    "border:var(--p-toggleswitch-border-width, 1px) solid "
+      + "var(--p-toggleswitch-border-color, transparent)",
+    "transition:background-color var(--p-transition-duration, .2s) ease",
+    "outline:none",
+  ].join(";");
+  knob.style.cssText = [
+    "display:block",
+    "width:var(--p-toggleswitch-handle-size, 16px)",
+    "height:var(--p-toggleswitch-handle-size, 16px)",
+    "border-radius:var(--p-toggleswitch-handle-border-radius, 50%)",
+    "background:var(--p-toggleswitch-handle-background, #fff)",
+    "transition:transform var(--p-transition-duration, .2s) ease",
+  ].join(";");
+
+  const paint = (): void => {
+    root.setAttribute("aria-checked", on ? "true" : "false");
+    root.style.background = on
+      ? "var(--p-toggleswitch-checked-background, var(--p-primary-color, #60a5fa))"
+      : "var(--p-toggleswitch-background, var(--p-surface-600, #52525b))";
+    root.style.opacity = disabled ? "var(--p-disabled-opacity, .6)" : "1";
+    root.style.cursor = disabled ? "not-allowed" : "pointer";
+    // Travel is the track minus the handle minus both gaps, computed by the
+    // browser so it stays correct whatever `--p-toggleswitch-*` resolve to.
+    knob.style.transform = on
+      ? "translateX(calc(var(--p-toggleswitch-width, 40px)"
+        + " - var(--p-toggleswitch-handle-size, 16px)"
+        + " - (var(--p-toggleswitch-gap, 4px) * 2)))"
+      : "translateX(0)";
+  };
+  paint();
+
+  const toggle = (): void => {
+    if (disabled) return;
+    on = !on;
+    paint();
+    root.dispatchEvent(new CustomEvent("wp-switch", { detail: on, bubbles: true }));
+  };
+  root.addEventListener("click", (e) => { e.preventDefault(); toggle(); });
+  root.addEventListener("keydown", (e) => {
+    if (e.key === " " || e.key === "Enter") { e.preventDefault(); toggle(); }
+  });
+
+  return {
+    root,
+    setOn: (next) => { on = next; paint(); },
+    setDisabled: (next) => { disabled = next; paint(); },
+  };
+}
 
 export interface ComfySetting {
   id: string;
@@ -757,6 +856,136 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       defaultValue: null,
       tooltip: "Live preview of every display + a11y setting in one place.",
       category: ["Wildcard Pipeline", "1. Playground", "Open"],
+    },
+    // Booru tag autocomplete — canvas half of the SPA setting, deliberately
+    // separate. Someone may want suggestions in the full manager and not while
+    // squinting at a node on a canvas, and a ComfyUI user looks for switches
+    // here rather than in our SPA.
+    //
+    // Rendered by hand so it can DISABLE itself when no tag list is installed.
+    // A plain boolean would happily switch on and do nothing, which is the
+    // failure this whole feature keeps having to design around: a control that
+    // implies a capability it does not have.
+    {
+      id: "wildcardPipeline.behavior.tagAutocomplete",
+      name: "Booru tag autocomplete",
+      type: (_name, setter, value, _attrs) => {
+        const wrap = document.createElement("label");
+        wrap.style.cssText =
+          "display:flex; align-items:center; justify-content:flex-end; gap:10px; cursor:pointer";
+        const { root: box, setOn, setDisabled } = buildSwitch(value === true);
+        const note = document.createElement("span");
+        // NOTE FIRST, then the switch. Appended the other way round the control
+        // floated mid-row while every neighbouring toggle sat flush right, and
+        // a row that does not line up reads as broken before it reads as ours.
+        note.style.cssText =
+          "font: 12px/1.3 var(--wp-font-sans, sans-serif); color: var(--descrip-text, #999)";
+        wrap.append(note, box);
+
+        // Ask the server whether a list exists. Until it answers, leave the
+        // control alone rather than flickering it disabled.
+        void fetch("/wp/api/tags/status")
+          .then((r) => r.json())
+          .then((s: { available?: boolean; tag_count?: number }) => {
+            if (s.available) {
+              note.textContent = `${(s.tag_count ?? 0).toLocaleString()} tags installed`;
+              return;
+            }
+            setOn(false);
+            setDisabled(true);
+            wrap.style.cursor = "not-allowed";
+            wrap.title =
+              "No tag list installed. Open the Wildcard Pipeline manager → "
+              + "Settings → Tag autocomplete and press Download to enable this.";
+            note.textContent = "No tag list — download one in the manager's Settings";
+          })
+          .catch(() => {
+            note.textContent = "";
+          });
+
+        box.addEventListener("wp-switch", (e) => {
+          setter((e as CustomEvent<boolean>).detail);
+          // Editors read this straight out of ComfyUI's settings store, which
+          // Vue cannot track — without the nudge the change took a page reload
+          // to have any effect.
+          notifyCompletionSettingsChanged();
+        });
+        return wrap;
+      },
+      defaultValue: false,
+      tooltip:
+        "Suggest danbooru tag names while typing in Wildcard Pipeline node "
+        + "editors. Requires a tag list, installed from the manager's Settings. "
+        + "Only affects this extension's own inputs.",
+      category: ["Wildcard Pipeline", "7. Runtime behavior", "Tag autocomplete"],
+    },
+    // The other two completion sources. Same hand-built control as the tag
+    // setting above, for the same reason it exists: a count beside the switch.
+    // "50 found" answers the question a bare toggle raises — is there anything
+    // for this to suggest? — and it is the question that sends people to the
+    // manager to check.
+    ...(
+      [
+        { id: "wildcardPipeline.behavior.loraAutocomplete", name: "LoRA autocomplete",
+          kind: "lora", noun: "LoRAs",
+          tooltip:
+            "Suggest installed LoRA names while typing in Wildcard Pipeline node "
+            + "editors, inserting the full <lora:name:1.0> syntax. Reads the models "
+            + "ComfyUI already knows about. Only affects this extension's own inputs." },
+        { id: "wildcardPipeline.behavior.embeddingAutocomplete", name: "Embedding autocomplete",
+          kind: "embedding", noun: "embeddings",
+          tooltip:
+            "Suggest installed embedding names while typing in Wildcard Pipeline "
+            + "node editors, inserting the full embedding:name syntax. Reads the "
+            + "models ComfyUI already knows about. Only affects this extension's "
+            + "own inputs." },
+      ] as const
+    ).map((src) => ({
+      id: src.id,
+      name: src.name,
+      type: ((_name: string, setter: (v: unknown) => void, value: unknown) => {
+        const wrap = document.createElement("label");
+        wrap.style.cssText =
+          "display:flex; align-items:center; justify-content:flex-end; gap:10px; cursor:pointer";
+        const { root: box } = buildSwitch(value === true);
+        const note = document.createElement("span");
+        note.style.cssText =
+          "font: 12px/1.3 var(--wp-font-sans, sans-serif); color: var(--descrip-text, #999)";
+        // Note first so the switch lands flush right, level with every
+        // neighbouring row's control.
+        wrap.append(note, box);
+
+        void fetch("/wp/api/models/status")
+          .then((r) => r.json())
+          .then((s: { sources?: { kind: string; count: number }[] }) => {
+            const count = (s.sources ?? []).find((x) => x.kind === src.kind)?.count ?? 0;
+            note.textContent = count > 0
+              ? `${count.toLocaleString()} ${src.noun} found`
+              : `No ${src.noun} found`;
+          })
+          .catch(() => { note.textContent = ""; });
+
+        box.addEventListener("wp-switch", (e) => {
+          setter((e as CustomEvent<boolean>).detail);
+          notifyCompletionSettingsChanged();
+        });
+        return wrap;
+      }) as ComfySettingCustomRenderer,
+      defaultValue: false,
+      tooltip: src.tooltip,
+      category: ["Wildcard Pipeline", "7. Runtime behavior", src.name],
+    })),
+    {
+      id: "wildcardPipeline.behavior.autocompleteSeparator",
+      name: "Append \", \" after a completion",
+      type: "boolean",
+      defaultValue: false,
+      tooltip:
+        "Insert a comma and a space after picking a suggestion, so the next tag "
+        + "can be typed straight away. Never applied inside a <lora:…> or "
+        + "embedding:… reference, where a comma would end the reference.",
+      category: ["Wildcard Pipeline", "7. Runtime behavior", "Autocomplete separator"],
+      onChange: () => notifyCompletionSettingsChanged(),
     },
     // Visual axes — sizing, embellishment, identity
     {

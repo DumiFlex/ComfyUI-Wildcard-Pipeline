@@ -76,7 +76,7 @@ def test_record_pick_multi_stores_values_and_union_tags():
     _record_pick_multi(ctx, [
         {"value": "red", "sub_categories": ["warm"], "id": "o1"},
         {"value": "blue", "sub_categories": ["cool"], "id": "o2"},
-    ], ", ")
+    ], ", ", {})
     rec = ctx["__wp_picks__"]["m1"]
     assert rec["value"] == "red, blue"
     assert rec["values"] == ["red", "blue"]
@@ -91,9 +91,14 @@ def test_record_pick_multi_carries_per_pick_structure():
         {"value": "red", "sub_categories": ["warm"], "id": "o1"},
         {"value": "blue", "sub_categories": ["cool"], "id": "o2"},
     ]
-    _record_pick_multi(ctx, chosen, ", ")
+    # Empty payload = no tag groups at all, so every pick's `axes` map is
+    # empty. The key is always present so consumers never branch on absence.
+    _record_pick_multi(ctx, chosen, ", ", {})
     rec = ctx["__wp_picks__"]["m1"]
-    assert rec["picks"] == [{"value": "red", "tags": ["warm"]}, {"value": "blue", "tags": ["cool"]}]
+    assert rec["picks"] == [
+        {"value": "red", "tags": ["warm"], "axes": {}},
+        {"value": "blue", "tags": ["cool"], "axes": {}},
+    ]
     assert rec["value"] == "red, blue"
     assert rec["values"] == ["red", "blue"]
 
@@ -101,8 +106,10 @@ def test_record_pick_multi_carries_per_pick_structure():
 def test_record_pick_single_carries_one_pick():
     from engine.modules.wildcard_handler import _record_pick
     ctx = {"__wp_current_module_id__": "m1"}
-    _record_pick(ctx, {"value": "red", "sub_categories": ["warm"], "id": "o1"})
-    assert ctx["__wp_picks__"]["m1"]["picks"] == [{"value": "red", "tags": ["warm"]}]
+    _record_pick(ctx, {"value": "red", "sub_categories": ["warm"], "id": "o1"}, {})
+    assert ctx["__wp_picks__"]["m1"]["picks"] == [
+        {"value": "red", "tags": ["warm"], "axes": {}}
+    ]
 
 
 def test_multi_pick_binds_listvar_unique():
@@ -345,7 +352,11 @@ def test_resolve_returns_empty_when_no_binding():
     assert out == {}
 
 
-def test_resolve_zero_weight_falls_back_to_first():
+def test_resolve_every_weight_zero_emits_nothing():
+    """Weight 0 is documented as "disable without deleting", so ALL of them
+    zero means nothing is selectable. This used to return the first option —
+    a real option, right shape, right place, and wrong, silently, until the
+    list was reordered and the "choice" changed."""
     ctx = _ctx(seed=0)
     payload = _payload([
         {"id": "a", "value": "alpha", "weight": 0},
@@ -354,7 +365,7 @@ def test_resolve_zero_weight_falls_back_to_first():
     out = WildcardHandler.resolve(
         payload, instance={"variable_binding": "$x"}, ctx=ctx,
     )
-    assert out == {"$x": "alpha"}  # all zero weights → first option
+    assert out == {"$x": ""}
 
 
 def test_resolve_negative_weight_clamped_to_zero():

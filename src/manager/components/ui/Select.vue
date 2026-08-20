@@ -17,8 +17,13 @@ interface Props {
   disabled?: boolean;
   error?: boolean;
   ariaLabel?: string;
+  /** Type-to-filter. Default on. Turn OFF for a small fixed list (e.g. a
+   *  4-item mode picker) that needs neither the "Type to filter" hint nor the
+   *  height it adds — the hint row was what pushed the menu into a scrollbar
+   *  that overlapped the selected row's tick. */
+  filterable?: boolean;
 }
-const props = withDefaults(defineProps<Props>(), { size: "md", placeholder: "Select…" });
+const props = withDefaults(defineProps<Props>(), { size: "md", placeholder: "Select…", filterable: true });
 
 const emit = defineEmits<{
   (e: "update:modelValue", v: string | number | null): void;
@@ -67,11 +72,12 @@ const markerWidth = computed<string | null>(() => {
  *  until you already knew about it. An earlier threshold of six hid the hint on
  *  exactly the menus users were checking. */
 const FILTER_HINT_MIN_OPTIONS = 2;
-const showFilterHint = computed(() => props.options.length >= FILTER_HINT_MIN_OPTIONS);
+const showFilterHint = computed(() => props.filterable && props.options.length >= FILTER_HINT_MIN_OPTIONS);
 
 /** Options narrowed by `query` (case-insensitive substring on the label).
  *  Empty query → all options, so every dropdown is type-to-filter. */
 const filtered = computed<SelectOption[]>(() => {
+  if (!props.filterable) return props.options;
   const q = query.value.trim().toLowerCase();
   if (!q) return props.options;
   // Match `meta` too — when several rows share a label, the meta (option
@@ -242,7 +248,7 @@ function onKeydown(e: KeyboardEvent) {
     e.preventDefault();
     query.value = query.value.slice(0, -1);
     active.value = 0;
-  } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+  } else if (props.filterable && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
     // Printable key → type-to-filter; jump the highlight back to the top.
     e.preventDefault();
     query.value += e.key;
@@ -545,7 +551,12 @@ function onKeydown(e: KeyboardEvent) {
  * where the user is actually reading. `min-width: 0` keeps the meta + tick on
  * screen either way. */
 .wp-select__option-label {
-  flex: 1;
+  /* `flex: 0 1 auto` not `1`: at basis 0 it split the row 50/50 with the
+     always-present .wp-spacer, so a SHORT option (a nowrap mode chip) got
+     squeezed to half-width and clipped by the overflow:hidden below — even
+     with room to spare. Sizing to content lets the spacer do the filling; a
+     long option still shrinks (flex-shrink:1) into the 2-line clamp. */
+  flex: 0 1 auto;
   min-width: 0;
   /* Explicit rather than `normal` so the leading dot/icon can be centred
    * against exactly this height — and so `line-clamp` measures a known line. */

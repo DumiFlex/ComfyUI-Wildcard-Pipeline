@@ -795,6 +795,28 @@ const resolvedForEditing = computed<Record<string, ResolvedValue>>(() => {
  * Built in the same pass as the name list so the two cannot disagree about
  * which module owns a name.
  */
+/** The `accepts` axes a wildcard payload declares, with the tags each rolls
+ *  from. `hueIndex` counts EVERY group so a colour matches the wildcard
+ *  editor's. Mirrors `acceptsAxesOf` in `manager/utils/library-suggestions`;
+ *  duplicated rather than imported because that module pulls the whole module
+ *  store into the canvas bundle, which the size gate will not carry. */
+function acceptsAxesOfPayload(
+  payload: unknown,
+): { axis: string; tags: string[]; hueIndex: number }[] | undefined {
+  const p = (payload ?? {}) as {
+    tag_groups?: Record<string, string[]>;
+    tag_group_kinds?: Record<string, string>;
+  };
+  if (!p.tag_group_kinds) return undefined;
+  const out: { axis: string; tags: string[]; hueIndex: number }[] = [];
+  Object.entries(p.tag_groups ?? {}).forEach(([axis, tags], hueIndex) => {
+    if (p.tag_group_kinds?.[axis] === "accepts") {
+      out.push({ axis, tags: tags ?? [], hueIndex });
+    }
+  });
+  return out.length > 0 ? out : undefined;
+}
+
 const siblingVarInfo = computed<{
   names: string[];
   producers: Record<string, VarProducerLike>;
@@ -804,7 +826,10 @@ const siblingVarInfo = computed<{
   /** Last module to write each name, so repeat writes from one module (a
    *  derivation's branches) do not inflate the override count. */
   const lastWriter = new Map<string, string>();
-  let owner: { kind: string; moduleName: string; moduleId: string } | null = null;
+  let owner: {
+    kind: string; moduleName: string; moduleId: string;
+    axes?: { axis: string; tags: string[]; hueIndex: number }[];
+  } | null = null;
   function add(name: string | undefined | null): void {
     const trimmed = (name ?? "").replace(/^\$+/, "").trim();
     if (!trimmed) return;
@@ -825,6 +850,12 @@ const siblingVarInfo = computed<{
       // would be noise when every sibling gives the same answer.
       nodeLabel: "this node",
       shadowed: prev ? (sameWriter ? prev.shadowed : prev.shadowed + 1) : 0,
+      // `accepts` axes, so `$var.AXIS` completion works for a variable written
+      // in THIS node. Same-node writers replace the upstream entry wholesale
+      // in `allVarProducers`, so axes attached only during the graph walk were
+      // dropped for exactly the common case: the wildcard and the template
+      // that reads it sitting in one Context.
+      ...(owner.axes ? { axes: owner.axes } : {}),
     };
   }
   const editingM = editingModule.value;
@@ -840,6 +871,10 @@ const siblingVarInfo = computed<{
       kind: m.type,
       moduleName: m.meta?.name ?? m.type,
       moduleId: m.id,
+      // Read from the module's own payload snapshot — the node runs what it
+      // captured, so this is the truth for THIS node regardless of what the
+      // library says now.
+      ...(m.type === "wildcard" ? { axes: acceptsAxesOfPayload(m.payload) } : {}),
     };
     for (const e of m.entries) add(e.variable_name);
     const inst = (m.instance ?? {}) as {
@@ -900,8 +935,16 @@ const allVarProducers = computed<Record<string, VarProducerLike>>(() => {
   const merged: Record<string, VarProducerLike> = { ...upstream };
   for (const [name, sib] of Object.entries(siblingVarInfo.value.producers)) {
     const up = upstream[name];
+    // Same carry-forward as the graph walk: a same-node writer that declares
+    // no axes must not erase the ones an upstream wildcard declared for this
+    // binding — the engine keys `__wp_axes__` by binding, so the rolled axis
+    // outlives a rebind.
     merged[name] = up
-      ? { ...sib, shadowed: sib.shadowed + up.shadowed + 1 }
+      ? {
+          ...sib,
+          ...(sib.axes ?? up.axes ? { axes: sib.axes ?? up.axes } : {}),
+          shadowed: sib.shadowed + up.shadowed + 1,
+        }
       : sib;
   }
   return merged;

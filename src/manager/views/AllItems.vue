@@ -27,6 +27,8 @@ import { useLoadError } from "../composables/useLoadError";
 import { useBulkActions } from "../composables/useBulkActions";
 import { makeMixedKindAdapter, type AnyRow } from "../composables/bulkAdapters";
 import ModuleListView from "../components/ModuleListView.vue";
+import SendToTestRunner from "../components/SendToTestRunner.vue";
+import type { TestRunnerKind } from "../components/SendToTestRunner.vue";
 import ValidityIcon from "../components/ValidityIcon.vue";
 import { validateBundle, validateModule, type ValidationIssue } from "../utils/validateModule";
 import Button from "../components/ui/Button.vue";
@@ -543,6 +545,7 @@ function refresh() {
 
     <template #actions="{ row }">
       <Button variant="ghost" size="sm" icon="pi-pencil" aria-label="Edit" @click="editRow(row)" />
+      <SendToTestRunner :kind="(row.kind as TestRunnerKind)" :id="row.id" compact />
       <Button variant="ghost" size="sm" icon="pi-trash" aria-label="Delete" @click="del(row)" />
     </template>
 

@@ -84,5 +84,14 @@ export const constraintV1 = moduleRowBase.extend({
     target_wildcard_id: z.string().optional(),
     exceptions: z.array(z.unknown()).optional(),
     matrix: z.record(z.unknown()).optional(),
+    // SP3 reach selector. Additive + optional (absent ⇒ the engine defaults it
+    // to {mode: "all"}), listed here so a shared constraint's reach survives
+    // the round-trip instead of being stripped back to "all". Shape mirrors
+    // engine/modules/constraint_handler.py::_validate_target_select.
+    target_select: z.object({
+      mode: z.enum(["first", "next", "all", "pick"]),
+      count: z.number().optional(),
+      picks: z.array(z.unknown()).optional(),
+    }).optional(),
   }),
 }).strict();

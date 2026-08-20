@@ -198,7 +198,7 @@ describe("useGrowableField — the drag itself", () => {
     }) as DOMRect;
     api.startResize(gripDown(500));
     const move = (y: number) => window.dispatchEvent(
-      Object.assign(new MouseEvent("pointermove", { clientY: y }), { pointerId: 1 }),
+      Object.assign(new MouseEvent("pointermove", { clientY: y, buttons: 1 }), { pointerId: 1 }),
     );
     move(520);
     expect(node.style.height).toBe("120px");
@@ -236,9 +236,180 @@ describe("useGrowableField — the drag itself", () => {
     }) as DOMRect;
     api.startResize(gripDown(500));
     window.dispatchEvent(
-      Object.assign(new MouseEvent("pointermove", { clientY: 400 }), { pointerId: 1 }),
+      Object.assign(new MouseEvent("pointermove", { clientY: 400, buttons: 1 }), { pointerId: 1 }),
     );
     expect(node.style.height).toBe("34px");
+    wrap.unmount();
+  });
+});
+
+describe("useGrowableField — re-measures after the webfonts land", () => {
+  /**
+   * These fields are typed in `--wp-font-mono`, a bundled webfont declared
+   * `font-display: swap`. The first paint uses the system fallback, the real
+   * face swaps in later, and the two stacks have different metrics — so the
+   * height measured at mount was taken against type about to be replaced.
+   *
+   * That is the "sometimes the bottom fade is wrong" report: wrong on a cold
+   * load, right on a warm cache, and fixed by accident by any later scroll or
+   * input. Deterministic once you know the font is the variable.
+   */
+  it("re-runs the overflow hint once document.fonts.ready resolves", async () => {
+    let resolveFonts!: () => void;
+    const ready = new Promise<void>((res) => { resolveFonts = res; });
+    Object.defineProperty(document, "fonts", {
+      value: { ready }, configurable: true,
+    });
+
+    const { api, node, wrap } = mountField();
+    // Fallback metrics: content fits, so no fade.
+    Object.defineProperty(node, "scrollHeight", { value: 100, configurable: true });
+    Object.defineProperty(node, "clientHeight", { value: 100, configurable: true });
+    Object.defineProperty(node, "scrollTop", { value: 0, configurable: true });
+    api.updateOverflowHint();
+    expect(api.hasMoreBelow.value).toBe(false);
+
+    // The real face is taller — the same text now overflows.
+    Object.defineProperty(node, "scrollHeight", { value: 260, configurable: true });
+    resolveFonts();
+    await ready;
+    await Promise.resolve();
+
+    expect(api.hasMoreBelow.value).toBe(true);
+    wrap.unmount();
+  });
+
+  it("does not throw where the host exposes no font loading API", async () => {
+    Object.defineProperty(document, "fonts", { value: undefined, configurable: true });
+    const { wrap } = mountField();
+    await Promise.resolve();
+    wrap.unmount();
+  });
+});
+
+describe("useGrowableField — grip-follow only while a grip is held", () => {
+  /**
+   * `followGrip` keeps the resize handle under the cursor by scrolling the
+   * container by the overshoot. Ungated it also ran on content-driven growth,
+   * so typing a long enough value scrolled the page out from under the user —
+   * and it made the resize flush mutate scroll position, which moves the very
+   * element the observer is measuring.
+   */
+  function mountInScroller(height: number) {
+    const scroller = document.createElement("div");
+    scroller.style.overflowY = "auto";
+    document.body.appendChild(scroller);
+    const { wrap, api, node } = mountField(height);
+    scroller.appendChild(node);
+    scroller.getBoundingClientRect = () => ({
+      height: 50, bottom: 50, top: 0, left: 0, right: 0, width: 100, x: 0, y: 0,
+      toJSON: () => ({}),
+    }) as DOMRect;
+    scroller.scrollTop = 0;
+    return { wrap, api, node, scroller };
+  }
+
+  it("does not scroll the container when the content simply grew", () => {
+    const { wrap, node, scroller } = mountInScroller(100);
+    // Element now overshoots the scroller's bottom edge by a long way.
+    node.getBoundingClientRect = () => ({
+      height: 400, bottom: 400, top: 0, left: 0, right: 0, width: 100, x: 0, y: 0,
+      toJSON: () => ({}),
+    }) as DOMRect;
+    observerCallback?.();
+    expect(scroller.scrollTop).toBe(0);
+    wrap.unmount();
+    scroller.remove();
+  });
+
+  it("does scroll while the handle is actually being dragged", () => {
+    const { wrap, api, node, scroller } = mountInScroller(100);
+    api.startResize({
+      clientY: 10, pointerId: 1, preventDefault() {}, currentTarget: null,
+    } as unknown as PointerEvent);
+    node.getBoundingClientRect = () => ({
+      height: 400, bottom: 400, top: 0, left: 0, right: 0, width: 100, x: 0, y: 0,
+      toJSON: () => ({}),
+    }) as DOMRect;
+    observerCallback?.();
+    expect(scroller.scrollTop).toBeGreaterThan(0);
+    wrap.unmount();
+    scroller.remove();
+  });
+});
+
+describe("useGrowableField — a drag can always end", () => {
+  /**
+   * Reported symptom: "the resize is linked to my mouse and resizes as I move
+   * my mouse around without holding, and can't be interrupted no matter what I
+   * do or press."
+   *
+   * That is one state — `dragging` stuck true — reachable whenever a single
+   * `pointerup` is missed. It was reachable two ways: `setPointerCapture`
+   * retargeted every later pointer event to the grip, so a re-render that
+   * replaced that element delivered the `pointerup` to a detached node where it
+   * never bubbled; and the listeners sat in bubble phase, so any
+   * `stopPropagation()` in between hid it too. Nothing then ever cleared the
+   * flag, which is why no key or click could stop it.
+   */
+  function beginDrag(api: ReturnType<typeof useGrowableField>) {
+    api.startResize({
+      clientY: 100, pointerId: 1, preventDefault() {}, currentTarget: null,
+    } as unknown as PointerEvent);
+  }
+
+  const move = (y: number, buttons: number) =>
+    window.dispatchEvent(
+      Object.assign(new Event("pointermove", { bubbles: true }), { clientY: y, buttons }),
+    );
+
+  it("stops resizing after a pointerup, even one that never reached the window", () => {
+    const { api, node, wrap } = mountField(100);
+    beginDrag(api);
+    move(140, 1);
+    const grown = node.style.height;
+    expect(grown).not.toBe("");
+
+    // The pointerup is simply never delivered — the stranded-capture case.
+    // The next move reports no buttons held, which is the only honest signal
+    // left that the drag is over.
+    move(300, 0);
+    const afterRelease = node.style.height;
+    move(500, 0);
+    expect(node.style.height).toBe(afterRelease);
+    wrap.unmount();
+  });
+
+  it("ends on a pointerup seen in capture phase", () => {
+    const { api, node, wrap } = mountField(100);
+    beginDrag(api);
+    move(140, 1);
+    const held = node.style.height;
+    window.dispatchEvent(new Event("pointerup", { bubbles: true }));
+    move(400, 1);   // button still reported down, but the drag ended
+    expect(node.style.height).toBe(held);
+    wrap.unmount();
+  });
+
+  it("ends on Escape, the key a stuck user actually presses", () => {
+    const { api, node, wrap } = mountField(100);
+    beginDrag(api);
+    move(140, 1);
+    const held = node.style.height;
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    move(400, 1);
+    expect(node.style.height).toBe(held);
+    wrap.unmount();
+  });
+
+  it("ends when the window loses focus", () => {
+    const { api, node, wrap } = mountField(100);
+    beginDrag(api);
+    move(140, 1);
+    const held = node.style.height;
+    window.dispatchEvent(new Event("blur"));
+    move(400, 1);
+    expect(node.style.height).toBe(held);
     wrap.unmount();
   });
 });

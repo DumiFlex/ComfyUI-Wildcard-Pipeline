@@ -3,6 +3,8 @@ import type {
   BundleCreateInput, BundleListResponse, BundleRow, BundleUpdateInput,
   CategoryCreateInput, CategoryRow,
   DatabaseConfig, DatabaseConfigUpdate,
+  TagStatus, TagSuggestResponse, TagDownloadResult,
+  ModelKind, ModelSourceStatus, ModelSuggestResponse,
   DatabaseInfo, MaintenanceOp, MaintenanceResult,
   EmbedBundle,
   MatchRequest, MatchResponse,
@@ -229,6 +231,65 @@ export const api = {
       return request<void>(`/wp/api/categories/${id}`, { method: "DELETE" });
     },
   },
+  models: {
+    /** How many LoRAs and embeddings ComfyUI knows about. Drives the settings
+     *  note — a source with zero files is worth saying so before the user
+     *  wonders why nothing appears. */
+    status() {
+      return request<ModelSourceStatus>("/wp/api/models/status", { method: "GET" });
+    },
+    /** Prefix search across the requested kinds only, so a source the user
+     *  switched off costs nothing on the wire. */
+    /** `browseAll` asks for the first N of each kind when `q` is empty. Only
+     *  set inside a `<lora:`/`embedding:` reference, where the marker itself
+     *  is the request — for a bare word an empty query must stay empty. */
+    suggest(q: string, kinds: ModelKind[], limit = 10, browseAll = false) {
+      const query = `?q=${encodeURIComponent(q)}&kinds=${kinds.join(",")}&limit=${limit}`
+        + (browseAll ? "&all=1" : "");
+      return request<ModelSuggestResponse>(`/wp/api/models/suggest${query}`, {
+        method: "GET",
+      });
+    },
+    /** Re-read both folders. ComfyUI caches its own file lists, so a model
+     *  added while the server runs is invisible until something asks again. */
+    refresh() {
+      return request<ModelSourceStatus>("/wp/api/models/refresh", { method: "POST" });
+    },
+  },
+
+  tags: {
+    /** Whether a tag list is installed, and what it contains. Drives Settings:
+     *  the toggle is meaningless without a file, so "off" and "impossible"
+     *  have to be distinguishable. */
+    status() {
+      return request<TagStatus>("/wp/api/tags/status", { method: "GET" });
+    },
+    /** Prefix search. The list itself is never sent to the browser — it is
+     *  several megabytes — so matching happens server-side and this returns
+     *  one screenful. */
+    suggest(q: string, limit = 20) {
+      const query = `?q=${encodeURIComponent(q)}&limit=${limit}`;
+      return request<TagSuggestResponse>(`/wp/api/tags/suggest${query}`, {
+        method: "GET",
+      });
+    },
+    /** Fetch the list from our GitHub release. Deliberately takes no
+     *  arguments: the URL and the destination are both fixed server-side so
+     *  there is nothing a caller can steer. See wp_api/_tag_download.py. */
+    download() {
+      return request<TagDownloadResult>("/wp/api/tags/download", {
+        method: "POST",
+      });
+    },
+    /** Delete the installed list. Takes no arguments for the same reason
+     *  `download` does not: the path is fixed server-side. */
+    remove() {
+      return request<{ removed: boolean; path: string }>("/wp/api/tags", {
+        method: "DELETE",
+      });
+    },
+  },
+
   database: {
     info() {
       return request<DatabaseInfo>("/wp/api/database/info", { method: "GET" });

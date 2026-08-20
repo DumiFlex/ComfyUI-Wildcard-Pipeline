@@ -7,11 +7,35 @@ export type ThemeMode = "dark" | "light" | "auto";
 /** Spacing/height density mode. `"comfortable"` is the default (multiplier 1). */
 export type DensityMode = "comfortable" | "compact";
 
+/** When the wildcard editor's sub-category panel opens on load.
+ *  `"populated"` (default) expands it only when the wildcard already has groups;
+ *  `"always"` expands it even when empty; `"never"` keeps it collapsed. */
+export type SubcatDefault = "populated" | "always" | "never";
+
 const STORAGE_KEY = "wp-theme-mode";
 const STORAGE_KEY_DENSITY = "wp-density-mode";
 const STORAGE_KEY_MAX_REF_DEPTH = "wp-wildcard-max-ref-depth";
 const STORAGE_KEY_CHECK_ON_LAUNCH = "wp-update-check-on-launch";
 const STORAGE_KEY_KEEP_EMPTY_GROUPS = "wp-keep-empty-tag-groups";
+const STORAGE_KEY_SUBCAT_DEFAULT = "wp-subcat-default";
+import { notifyCompletionSettingsChanged } from "../utils/tagSetting";
+
+const STORAGE_KEY_TAG_AUTOCOMPLETE = "wp-tag-autocomplete";
+/* The other completion sources and the separator preference. Spellings are
+ * shared with `manager/utils/tagSetting.ts`, which READS them on the editor's
+ * hot path without going through Pinia — the canvas has no Pinia at all. This
+ * store is the writer; that module is the reader. */
+const STORAGE_KEY_LORA_AUTOCOMPLETE = "wp-lora-autocomplete";
+const STORAGE_KEY_EMBEDDING_AUTOCOMPLETE = "wp-embedding-autocomplete";
+const STORAGE_KEY_AUTOCOMPLETE_SEPARATOR = "wp-autocomplete-separator";
+
+function readStoredFlag(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === "1";
+  } catch {
+    return false;
+  }
+}
 const FLASH_SUPPRESS_MS = 120;
 const DEFAULT_MAX_REF_DEPTH = 8;
 const MIN_MAX_REF_DEPTH = 1;
@@ -51,6 +75,18 @@ function readStoredDensity(): DensityMode {
  * keeping one needs no new field and no schema bump. The DECISION is what
  * varies per user; the RESULT is recorded in the payload like any other edit.
  */
+/** Off unless explicitly enabled. The feature needs a tag list the user has
+ *  to fetch first, so defaulting it on would advertise a capability that is
+ *  not there yet. */
+function readStoredTagAutocomplete(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_KEY_TAG_AUTOCOMPLETE) === "1";
+  } catch {
+    /* localStorage unavailable */
+  }
+  return false;
+}
+
 function readStoredKeepEmptyGroups(): boolean {
   try {
     return localStorage.getItem(STORAGE_KEY_KEEP_EMPTY_GROUPS) === "1";
@@ -58,6 +94,16 @@ function readStoredKeepEmptyGroups(): boolean {
     /* localStorage unavailable */
   }
   return false;
+}
+
+function readStoredSubcatDefault(): SubcatDefault {
+  try {
+    const v = localStorage.getItem(STORAGE_KEY_SUBCAT_DEFAULT);
+    if (v === "populated" || v === "always" || v === "never") return v;
+  } catch {
+    /* localStorage unavailable */
+  }
+  return "populated";
 }
 
 function readStoredMaxRefDepth(): number {
@@ -99,11 +145,57 @@ export const useUiStore = defineStore("ui", () => {
   const maxRefDepth = ref<number>(readStoredMaxRefDepth());
   const checkOnLaunch = ref<boolean>(readStoredCheckOnLaunch());
   const keepEmptyTagGroups = ref<boolean>(readStoredKeepEmptyGroups());
+  const subcatDefault = ref<SubcatDefault>(readStoredSubcatDefault());
+  const tagAutocomplete = ref<boolean>(readStoredTagAutocomplete());
+  const loraAutocomplete = ref<boolean>(readStoredFlag(STORAGE_KEY_LORA_AUTOCOMPLETE));
+  const embeddingAutocomplete = ref<boolean>(readStoredFlag(STORAGE_KEY_EMBEDDING_AUTOCOMPLETE));
+  const autocompleteSeparator = ref<boolean>(readStoredFlag(STORAGE_KEY_AUTOCOMPLETE_SEPARATOR));
+
+  /** One writer for the three flags that share a shape. */
+  function writeFlag(target: { value: boolean }, key: string, v: boolean): void {
+    target.value = v;
+    try {
+      localStorage.setItem(key, v ? "1" : "0");
+    } catch {
+      /* localStorage unavailable */
+    }
+    // Editors read localStorage directly on their hot path rather than through
+    // this store, so they need telling that it moved.
+    notifyCompletionSettingsChanged();
+  }
+
+  function setLoraAutocomplete(v: boolean): void {
+    writeFlag(loraAutocomplete, STORAGE_KEY_LORA_AUTOCOMPLETE, v);
+  }
+  function setEmbeddingAutocomplete(v: boolean): void {
+    writeFlag(embeddingAutocomplete, STORAGE_KEY_EMBEDDING_AUTOCOMPLETE, v);
+  }
+  function setAutocompleteSeparator(v: boolean): void {
+    writeFlag(autocompleteSeparator, STORAGE_KEY_AUTOCOMPLETE_SEPARATOR, v);
+  }
+
+  function setTagAutocomplete(v: boolean): void {
+    tagAutocomplete.value = v;
+    try {
+      localStorage.setItem(STORAGE_KEY_TAG_AUTOCOMPLETE, v ? "1" : "0");
+    } catch {
+      /* localStorage unavailable */
+    }
+  }
 
   function setKeepEmptyTagGroups(v: boolean): void {
     keepEmptyTagGroups.value = v;
     try {
       localStorage.setItem(STORAGE_KEY_KEEP_EMPTY_GROUPS, v ? "1" : "0");
+    } catch {
+      /* localStorage unavailable */
+    }
+  }
+
+  function setSubcatDefault(v: SubcatDefault): void {
+    subcatDefault.value = v;
+    try {
+      localStorage.setItem(STORAGE_KEY_SUBCAT_DEFAULT, v);
     } catch {
       /* localStorage unavailable */
     }
@@ -192,6 +284,16 @@ export const useUiStore = defineStore("ui", () => {
     checkOnLaunch,
     keepEmptyTagGroups,
     setKeepEmptyTagGroups,
+    subcatDefault,
+    setSubcatDefault,
+    tagAutocomplete,
+    setTagAutocomplete,
+    loraAutocomplete,
+    setLoraAutocomplete,
+    embeddingAutocomplete,
+    setEmbeddingAutocomplete,
+    autocompleteSeparator,
+    setAutocompleteSeparator,
     cycleTheme,
     setThemeMode,
     setDensity,

@@ -7,13 +7,16 @@ import {
   collectUpstreamChain,
   collectUpstreamInjectorBindings,
   collectUpstreamKinds,
+  collectUpstreamProducers,
   collectUpstreamResolved,
   findRootGraph,
+  internalVarNames,
   type LiteGraphLike,
   type LiteNodeLike,
 } from "../extension/graph";
 import { reactiveFromGraph } from "../extension/reactive";
 import { pushToast } from "../components/shared/toast-store";
+import { templateInsertAtCaret } from "../extension/_stashes";
 
 const PREVIEW_SEED = 42;
 
@@ -28,8 +31,23 @@ interface AssemblerNode extends LiteNodeLike, MountTargetNode {
   widgets?: { name: string; value: unknown }[];
 }
 
+/**
+ * The `template` widget.
+ *
+ * Its `value` is the ONLY handle on the template string. It used to also
+ * expose `inputEl`, a real `<textarea>` that these helpers spliced into, but
+ * the node now renders `template` through our own editor
+ * (`widgets/templateEditor.ts`) — and even for the stock multiline widget
+ * that element became detached and unrendered when the frontend moved widget
+ * values into a store. Writing it was a no-op that happened to sit next to
+ * the `w.value` write that actually did the work.
+ */
+function templateWidget(node: AssemblerNode): { name: string; value: unknown } | undefined {
+  return node.widgets?.find((x) => x.name === "template");
+}
+
 function templateOf(node: AssemblerNode): string {
-  const w = node.widgets?.find((x) => x.name === "template");
+  const w = templateWidget(node);
   return typeof w?.value === "string" ? w.value : "";
 }
 
@@ -62,23 +80,11 @@ function setLoadedTemplateRef(node: AssemblerNode, ref: LoadedTemplateRef | null
   else delete n.properties["wp_loaded_template"];
 }
 
-/** Overwrite the whole template string. Mirrors `clearTemplate`'s
- *  el/widget/dispatch shape so litegraph + the SFC both observe the
- *  change (the native STRING widget's `inputEl` is the source of truth
- *  when present; the widget `.value` is the serialization fallback). */
+/** Overwrite the whole template string. The widget's setter propagates to
+ *  the editor, so nothing else has to be notified. */
 function writeTemplate(node: AssemblerNode, next: string) {
-  const w = node.widgets?.find((x) => x.name === "template") as
-    | { name: string; value: unknown; inputEl?: HTMLTextAreaElement | HTMLInputElement }
-    | undefined;
-  if (!w) return;
-  const el = w.inputEl;
-  if (el) {
-    el.value = next;
-    w.value = next;
-    el.dispatchEvent(new Event("input", { bubbles: true }));
-    return;
-  }
-  w.value = next;
+  const w = templateWidget(node);
+  if (w) w.value = next;
 }
 
 interface UpstreamSnapshot {
@@ -92,6 +98,9 @@ interface UpstreamSnapshot {
   /** Sync fallback: client-side option-[0] resolution. Shown until
    *  the API resolves OR when the API is unreachable. */
   fallbackResolved: Record<string, ResolvedValue>;
+  /** `{ varName: { AXIS: firstTag } }` for every upstream `accepts` axis, so
+   *  the preview can resolve a `$var.AXIS` read to the tag it will roll. */
+  varAxes: Record<string, Record<string, string>>;
   /** Bindings contributed by upstream WP_ContextInjector nodes. The
    *  preview API doesn't simulate injectors — these keys must come
    *  from the static fallback even when api results are available,
@@ -303,26 +312,31 @@ export function mountHelper(node: AssemblerNode) {
           // engine flag map itself so chip strip + preview match the
           // server-side resolve result.
           const rawResolved = collectUpstreamResolved(g, node);
-          const flagsBlob = rawResolved["__wp_internal_flags__"];
-          const internalNames = new Set<string>();
-          if (typeof flagsBlob === "string") {
-            try {
-              const parsed = JSON.parse(flagsBlob) as Record<string, boolean>;
-              for (const [k, v] of Object.entries(parsed)) {
-                if (v) internalNames.add(k);
-              }
-            } catch { /* malformed, treat as empty */ }
-          }
+          // Shared with the template editor's `$` suggestion list — both
+          // surfaces on this node have to agree on which names the prompt
+          // will actually render, and they disagreed while each kept its
+          // own copy of the rule.
+          const internalNames = internalVarNames(rawResolved);
           const fallbackResolved: Record<string, ResolvedValue> = {};
           for (const [k, v] of Object.entries(rawResolved)) {
             if (k.startsWith("__")) continue;
             if (internalNames.has(k)) continue;
             fallbackResolved[k] = v;
           }
+          // `$var.AXIS` resolves against a tag menu, not against the var's
+          // value, so the preview needs the axes as well as the values —
+          // without them it printed the value and left ".SHOES" beside it.
+          const varAxes: Record<string, Record<string, string>> = {};
+          for (const [name, p] of Object.entries(collectUpstreamProducers(g, node))) {
+            for (const a of p.axes ?? []) {
+              if (a.tags.length > 0) (varAxes[name] ??= {})[a.axis] = a.tags[0];
+            }
+          }
           return {
             chainKey: hashChain(chain),
             chain,
             fallbackResolved,
+            varAxes,
             injectorKeys: collectUpstreamInjectorBindings(g, node),
             template: templateOf(node),
           };
@@ -424,6 +438,14 @@ export function mountHelper(node: AssemblerNode) {
           for (const k of injectorKeys) {
             if (k in fallback) fresh[k] = fallback[k];
           }
+          // The API returns the run ctx, engine bookkeeping included, and
+          // `upstreamVars` is just `Object.keys(fresh)` — so every `__`-key
+          // rendered as a variable chip (`$__wp_axes__`, `$__wp_picks__`).
+          // The fallback path already filtered these; the API path never did,
+          // so the chips only appeared once something put a table in the ctx.
+          for (const k of Object.keys(fresh)) {
+            if (k.startsWith("__")) delete fresh[k];
+          }
         } else {
           fresh = fallback;
         }
@@ -480,6 +502,7 @@ export function mountHelper(node: AssemblerNode) {
             templateVars: templateVarsArr,
             template,
             resolvedMap: fresh,
+            varAxes: snapshot.value.varAxes,
             kindByVar,
             previewSeed: PREVIEW_SEED,
             nodeMode: nodeMode.value,
@@ -586,27 +609,19 @@ function insertIntoTemplate(node: AssemblerNode, token: string) {
     | undefined;
   if (!w || typeof w.value !== "string") return;
 
-  // Multiline STRING widgets in ComfyUI back the input with a real <textarea>
-  // exposed at widget.inputEl. If we can find it, splice the token at the
-  // current caret. If not (collapsed canvas mode, etc.), fall back to a
-  // smart-append.
-  const el = w.inputEl;
-  if (el && typeof el.selectionStart === "number") {
-    const start = el.selectionStart ?? el.value.length;
-    const end = el.selectionEnd ?? start;
-    const needsLeadingSpace = start > 0 && !/\s$/.test(el.value.slice(0, start));
-    const insert = `${needsLeadingSpace ? " " : ""}${token}`;
-    el.value = el.value.slice(0, start) + insert + el.value.slice(end);
-    w.value = el.value;
-    // Restore focus + place caret immediately after the inserted token.
-    el.focus();
-    const caret = start + insert.length;
-    el.setSelectionRange(caret, caret);
-    el.dispatchEvent(new Event("input", { bubbles: true }));
+  // Ask the editor to splice at its own caret. It is a separate widget with
+  // its own contenteditable, so this is the only way to insert anywhere but
+  // the end — and the hook re-parses the result, which is what turns the
+  // inserted `$name` into a chip.
+  const insertAtCaret = templateInsertAtCaret.get(node);
+  if (insertAtCaret) {
+    insertAtCaret(token);
     return;
   }
 
-  // Fallback: append with a single-space separator.
+  // The editor has not mounted yet (chips can only be clicked once it has,
+  // but a workflow-load race is cheap to survive). Append with a
+  // single-space separator.
   const cur = w.value;
   w.value = `${cur}${cur.endsWith(" ") || !cur ? "" : " "}${token}`;
 }
@@ -618,53 +633,26 @@ function insertIntoTemplate(node: AssemblerNode, token: string) {
  * UNRESOLVED chips so users can one-click drop names that no upstream
  * module binds.
  *
- * Mirrors the textarea-vs-fallback split of {@link insertIntoTemplate}
- * so caret + native input event fire the same way — downstream
- * widgets/listeners stay in sync regardless of which path runs.
+ * Unlike {@link insertIntoTemplate} this needs no caret: it rewrites the
+ * whole string, so a plain value write is both sufficient and correct.
  */
 function removeFromTemplate(node: AssemblerNode, varname: string) {
-  const w = node.widgets?.find((x) => x.name === "template") as
-    | { name: string; value: unknown; inputEl?: HTMLTextAreaElement | HTMLInputElement }
-    | undefined;
+  const w = templateWidget(node);
   if (!w || typeof w.value !== "string") return;
 
   // Word-boundary `\b` after the name so `$foo` doesn't blow up `$foobar`.
   // Allow optional leading whitespace to be eaten with the var so we
   // don't leave "  " gaps; collapse any leftover doubles afterwards.
   const stripRe = new RegExp(`\\s?\\$${escapeRegex(varname)}\\b`, "g");
-  const next = w.value.replace(stripRe, "").replace(/[ \t]{2,}/g, " ").replace(/^[ \t]+/, "");
-
-  const el = w.inputEl;
-  if (el) {
-    el.value = next;
-    w.value = next;
-    el.dispatchEvent(new Event("input", { bubbles: true }));
-    return;
-  }
-  w.value = next;
+  w.value = w.value.replace(stripRe, "").replace(/[ \t]{2,}/g, " ").replace(/^[ \t]+/, "");
 }
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/**
- * Wipe the entire template string. Mirrors the textarea-vs-fallback
- * split of insertIntoTemplate/removeFromTemplate so caret + native
- * input event fire the same way — downstream widgets/listeners stay
- * in sync regardless of which path runs.
- */
+/** Wipe the entire template string. */
 function clearTemplate(node: AssemblerNode) {
-  const w = node.widgets?.find((x) => x.name === "template") as
-    | { name: string; value: unknown; inputEl?: HTMLTextAreaElement | HTMLInputElement }
-    | undefined;
-  if (!w || typeof w.value !== "string") return;
-  const el = w.inputEl;
-  if (el) {
-    el.value = "";
-    w.value = "";
-    el.dispatchEvent(new Event("input", { bubbles: true }));
-    return;
-  }
-  w.value = "";
+  const w = templateWidget(node);
+  if (w) w.value = "";
 }

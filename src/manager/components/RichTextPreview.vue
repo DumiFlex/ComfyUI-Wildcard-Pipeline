@@ -201,7 +201,11 @@ function textHtml(text: string): string {
   if (!text) return "";
   const collapsed: ReadonlyArray<"var" | "ref"> =
     props.surface === "wildcard" ? ["var"]
-    : props.surface === "fixed_values" ? ["var", "ref"]
+    // Mirrors `RichTextInput.parseForSurface`. The assembler keeps `$name` as
+    // literal text so the editor can render it as ordinary coloured prose
+    // rather than an atomic chip; the read-only preview has to agree, or the
+    // same template renders with chips here and without them there.
+    : props.surface === "fixed_values" || props.surface === "assembler" ? ["var", "ref"]
     : ["ref"];
   return inlineTokenHtml(text, collapsed);
 }

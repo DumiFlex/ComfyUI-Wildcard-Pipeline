@@ -125,6 +125,37 @@ const reachModes = [
       />
     </DocSection>
 
+    <DocSection title="Accepts axes as a source or target">
+      <p>
+        When a wildcard group is marked <b>accepts</b> — an <em>axis</em>, read as
+        <VarToken>$var.AXIS</VarToken> — the matrix folds differently on whichever side of the
+        constraint the axis sits, so the tag you read always agrees with the tag the constraint
+        acts on.
+      </p>
+      <ul>
+        <li>
+          <b>Accepts source.</b> The axis rolls exactly one tag per pick, so the constraint keys on
+          that <em>single rolled tag</em> — not every tag the source option carries. A source outfit
+          tagged sneakers · heels · sandals that rolls <em>sandals</em> makes a diagonal
+          “same tag wins” matrix pin the target to sandals, so <VarToken>$outfit.SHOES</VarToken>
+          and the shoe that gets picked match. A <b>classify</b> source keeps the older behaviour:
+          all its tags apply together (AND), so a multi-tag classify option under a strict diagonal
+          can exclude the whole target pool.
+        </li>
+        <li>
+          <b>Accepts target.</b> A target option's tags inside an accepts axis are alternatives, so
+          the option stays in the pool when the source allows <em>any</em> of them, and the target's
+          own axis roll is then restricted to the allowed tag. A target shoe tagged sandals · heels
+          isn't dropped just because heels is excluded — it survives as sandals and rolls sandals.
+        </li>
+      </ul>
+      <DocCallout variant="tip">
+        Put the two together — an accepts source, an accepts target, and a diagonal matrix — and
+        <VarToken>$source.AXIS</VarToken> always equals <VarToken>$target.AXIS</VarToken>: the two
+        wildcards agree on the axis every run.
+      </DocCallout>
+    </DocSection>
+
     <DocSection title="Target reach">
       <p>
         A constraint is not a one-shot. By default it re-weights <em>every</em> target wildcard

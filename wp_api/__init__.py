@@ -14,9 +14,11 @@ from wp_api import cascade as _cascade
 from wp_api import categories as _categories
 from wp_api import database as _database
 from wp_api import import_export as _import_export
+from wp_api import models as _models
 from wp_api import modules as _modules
 from wp_api import preview as _preview
 from wp_api import spa as _spa
+from wp_api import tags as _tags
 from wp_api import templates as _templates
 from wp_api import test_runner as _test_runner
 
@@ -32,9 +34,23 @@ STARTUP_ID = uuid.uuid4().hex
 
 @web.middleware
 async def _startup_id_middleware(request: web.Request, handler):
-    """Tag every /wp/api/* response with X-WP-Startup-Id."""
+    """Tag our own responses with X-WP-Startup-Id.
+
+    The path check is load-bearing and was missing until 2026-08-06. This
+    middleware is registered on ComfyUI's application, not on a sub-app, so
+    without it every response the whole server sends carried the header —
+    ComfyUI's own index, `/api/extensions`, image outputs, other extensions'
+    routes. Confirmed by a remote probe: `GET /` came back stamped.
+
+    Nothing depended on that: the only consumer is `manager/api/client.ts`,
+    which talks exclusively to `/wp/api/*`. Being a guest in someone else's
+    application means not writing on their responses — see CLAUDE.md's
+    extension-isolation section, which draws the same line for CSS selectors
+    and litegraph node properties.
+    """
     response = await handler(request)
-    if isinstance(response, web.StreamResponse):
+    is_ours = request.path == "/wp" or request.path.startswith("/wp/")
+    if is_ours and isinstance(response, web.StreamResponse):
         response.headers["X-WP-Startup-Id"] = STARTUP_ID
     return response
 
@@ -83,6 +99,8 @@ def register_routes(app: web.Application) -> None:
     _import_export.register(app.router)
     _cascade.register(app.router)
     _preview.register(app.router)
+    _tags.register(app.router)
+    _models.register(app.router)
     # SPA fallback last — broad catch-all `/wp/{path:.*}` must not shadow
     # specific `/wp/api/...` routes. aiohttp resolves more-specific routes
     # first regardless of registration order, but late registration keeps

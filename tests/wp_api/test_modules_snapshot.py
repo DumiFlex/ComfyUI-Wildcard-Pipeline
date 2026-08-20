@@ -54,6 +54,15 @@ async def test_duplicate_creates_copy_with_suffix(wp_client):
     assert body["is_favorite"] is False
 
 
+async def test_duplicate_carries_content_rating(wp_client):
+    # An 18+ module's copy must stay 18+, or it slips out from under the filter.
+    created = await _create(wp_client, name="spicy", content_rating="nsfw")
+    resp = await wp_client.post(f"/wp/api/modules/{created['id']}/duplicate")
+    assert resp.status == 201
+    body = await resp.json()
+    assert body["content_rating"] == "nsfw"
+
+
 async def test_duplicate_missing_404(wp_client):
     resp = await wp_client.post("/wp/api/modules/ghost/duplicate")
     assert resp.status == 404

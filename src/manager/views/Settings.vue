@@ -15,9 +15,13 @@ import Field from "../components/ui/Field.vue";
 import Icon from "../components/ui/Icon.vue";
 import Input from "../components/ui/Input.vue";
 import Toggle from "../components/ui/Toggle.vue";
+import Select from "../components/ui/Select.vue";
+import type { SelectOption } from "../components/ui/select-types";
 import Button from "../components/ui/Button.vue";
 import BrowserPrefsCard from "../components/settings/BrowserPrefsCard.vue";
 import DatabaseCard from "../components/settings/DatabaseCard.vue";
+import TagAutocompleteCard from "../components/settings/TagAutocompleteCard.vue";
+import ModelSourcesCard from "../components/settings/ModelSourcesCard.vue";
 import { useUiStore, type ThemeMode } from "../stores/uiStore";
 import { useReleaseCheck } from "../composables/useReleaseCheck";
 import { GITHUB_REPO } from "../config/links";
@@ -61,6 +65,12 @@ const THEMES: ThemeOption[] = [
 function setTheme(mode: ThemeMode) {
   uiStore.setThemeMode(mode);
 }
+
+const SUBCAT_DEFAULT_OPTIONS: SelectOption[] = [
+  { value: "populated", label: "Expanded when it has groups" },
+  { value: "always", label: "Always expanded" },
+  { value: "never", label: "Always collapsed" },
+];
 </script>
 
 <template>
@@ -102,7 +112,22 @@ function setTheme(mode: ThemeMode) {
           @update:model-value="uiStore.setKeepEmptyTagGroups($event)"
         />
       </Field>
+      <Field
+        label="Sub-categories panel"
+        hint="Whether the sub-categories / axes panel opens on its own when you edit a wildcard. 'Expanded when it has groups' opens it only for wildcards that already have some."
+      >
+        <Select
+          :model-value="uiStore.subcatDefault"
+          :options="SUBCAT_DEFAULT_OPTIONS"
+          aria-label="Sub-categories panel default"
+          data-test="settings-subcat-default"
+          @update:model-value="(v) => uiStore.setSubcatDefault(v as 'populated' | 'always' | 'never')"
+        />
+      </Field>
     </Card>
+
+    <TagAutocompleteCard />
+    <ModelSourcesCard />
 
     <Card title="Updates">
       <Field

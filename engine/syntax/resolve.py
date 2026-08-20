@@ -103,6 +103,13 @@ def _resolve_var(tok: Token, ctx: ResolveContext) -> str:
             ),
         )
         return f"${name}"
+    # An axis read is a different lookup against a different bucket, so it
+    # branches BEFORE the var lookup — `$outfit.SHOES` must resolve even when
+    # nothing bound `$outfit` itself, and must not raise `unknown_var` on the
+    # way past.
+    axis = tok.meta.get("axis")
+    if axis:
+        return _resolve_axis(tok, ctx, str(axis))
     value = ctx.get_var(name)
     if value is None:
         _push_warning(
@@ -125,6 +132,48 @@ def _resolve_var(tok: Token, ctx: ResolveContext) -> str:
     return deref_var_value(value, tok.meta.get("index"))
 
 
+def _resolve_axis(tok: Token, ctx: ResolveContext, axis: str) -> str:
+    """Render `$name.AXIS`, `$name.K.AXIS` and `$name.AXIS.K`.
+
+    Never re-rolls: the choice was made when the wildcard picked, and this
+    reads it back — that is what makes two modules, or two nodes, agree.
+
+    Deliberately does NOT route through `deref_var_value`. An axis value is not
+    a ListVar, and keeping it off that path leaves the SP2a accessor contract
+    untouched.
+    """
+    name = str(tok.meta.get("name", ""))
+    got = ctx.get_axis(name, axis)
+    if got is None:
+        _push_warning(
+            ctx,
+            type="unknown_tag_axis",
+            severity="warn",
+            module_id="",
+            source_field="",
+            position=tok.start,
+            token_index=None,
+            detail={"name": name, "axis": axis, "surface": ctx.surface},
+            message=(
+                f"${name} has no '{axis}' axis — is that tag group marked "
+                f"'accepts'?"
+            ),
+        )
+        return ""
+    index = tok.meta.get("index")
+    if isinstance(got, list):
+        if index is None:
+            return ", ".join(g for g in got if g)
+        if isinstance(index, int) and 0 <= index < len(got):
+            return got[index] or ""
+        return ""
+    # A single pick behaves as a one-element list, mirroring deref_var_value so
+    # `$x.0.AXIS` == `$x.AXIS` and any higher index is empty.
+    if index is not None:
+        return str(got) if index == 0 else ""
+    return str(got)
+
+
 def _push_warning(ctx: ResolveContext, **fields) -> None:
     """Append a warning dict to ctx.warnings. Helper to keep call sites tidy."""
     ctx.warnings.append(fields)
@@ -140,7 +189,13 @@ def _pick_weighted(options: list[dict], rng) -> dict | None:
         return None
     total = sum(max(0.0, float(o.get("weight", 1))) for o in options)
     if total <= 0:
-        return options[0]
+        # Nothing is selectable — every option is either weight 0 (documented
+        # as "disable without deleting") or was excluded by a constraint.
+        # Returning options[0] here looked like a working pick: a real option,
+        # right shape, right place, and wrong. It stayed wrong silently until
+        # the list was reordered. Callers turn None into an empty binding,
+        # which is what the null option already means.
+        return None
     r = rng.random() * total
     acc = 0.0
     for opt in options:
@@ -467,6 +522,7 @@ def ref_option_pool(tok: Token, ctx: ResolveContext) -> list[dict]:
                 apply_constraints_for_target,
                 warn_excludes_all,
             )
+            from engine.modules.wildcard_handler import _accepts_axes
             # SP3: share the ctx-resident hit counter so a nested-ref
             # target occurrence counts toward the same first/next
             # coverage as direct top-level instances. `carrier_ctx` is
@@ -484,6 +540,13 @@ def ref_option_pool(tok: Token, ctx: ResolveContext) -> list[dict]:
             options, any_applied = apply_constraints_for_target(
                 options, uuid, constraints, get_picks(), ctx.warnings,
                 hits=hits, firing_uid=None, carrier_ctx=carrier_ctx,
+                # TARGET-side accepts axes for a nested @{} target, so its
+                # multi-tag accepts option survives when the source allows any
+                # alternative (same as the top-level path).
+                target_axes=(
+                    _accepts_axes(payload_dict)
+                    if isinstance(payload_dict, dict) else {}
+                ),
             )
             if any_applied:
                 warn_excludes_all(options, uuid, ctx.warnings)

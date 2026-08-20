@@ -17,6 +17,10 @@
           "factor": 3
         }
       }
+    },
+    "target_select": {
+      "mode": "next",
+      "count": 2
     }
   }
 }

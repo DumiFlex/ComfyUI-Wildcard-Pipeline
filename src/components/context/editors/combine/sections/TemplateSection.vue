@@ -146,6 +146,15 @@ interface ResolvedToken {
   kind: "literal" | "var-resolved" | "var-unresolved";
   varName?: string;
 }
+/** First tag of `axis` on whichever producer writes `name`, or undefined when
+ *  that producer declares no such `accepts` axis — in which case the read
+ *  stays unresolved rather than silently losing the accessor. */
+function producerAxisTag(name: string, axis: string): string | undefined {
+  const axes = varProducerMap.value.get(name)?.axes ?? [];
+  const hit = axes.find((a: { axis: string; tags: string[] }) => a.axis === axis);
+  return hit && hit.tags.length > 0 ? hit.tags[0] : undefined;
+}
+
 const resolvedTokens = computed<ResolvedToken[]>(() => {
   const tokens: ResolvedToken[] = [];
   const map = props.upstreamResolved;
@@ -159,6 +168,21 @@ const resolvedTokens = computed<ResolvedToken[]>(() => {
         // SP2a: resolve via the shared accessor so `$mood.0` indexes (and a
         // bare `$mood` joins a list) — the `.K` never strands as literal text.
         // Presence is keyed on the base name, not the value's type.
+        if (tok.axis) {
+          // An axis read resolves to a TAG, never to the variable's text.
+          // Resolving it as a plain `$var` and letting the tokenizer's axis
+          // segment fall through as literal is what produced
+          // "a white t-shirt and denim skirt.SHOES" in both preview lines.
+          // Runtime rolls one member per pick; with no rng here, show the
+          // first — same convention the rest of the static preview uses.
+          const tag = producerAxisTag(tok.varName, tok.axis);
+          tokens.push(
+            tag != null
+              ? { text: tag, kind: "var-resolved", varName: tok.varName }
+              : { text: tok.raw, kind: "var-unresolved", varName: tok.varName },
+          );
+          break;
+        }
         if (Object.prototype.hasOwnProperty.call(map, tok.varName)) {
           tokens.push({
             text: applyVarAccessor(map[tok.varName], tok.index),

@@ -21,6 +21,25 @@ class TestWPPromptAssemblerSchema:
         assert tmpl_in.type_name == "STRING"
         assert tmpl_in.multiline is True
 
+    def test_template_uses_our_editor_without_losing_the_string_socket(self):
+        """The whole point of routing `widgetType` through `extra_dict`.
+
+        The frontend picks a widget constructor with `widgetType ?? type` and
+        adds the socket from `type`, so these two facts have to hold at the
+        same time: the widget is ours, the socket is still STRING and can be
+        driven by an upstream STRING output.
+
+        Using V3's `widget_type=` parameter instead would satisfy the first
+        and break the second — `WidgetInput.get_io_type` returns widget_type
+        when set, so the socket would become `WP_TEMPLATE_EDITOR` and nothing
+        could connect to it. Assert both together; either one alone passes
+        while the feature is broken.
+        """
+        schema = WPPromptAssembler.define_schema()
+        tmpl_in = next(s for s in schema.inputs if s.name == "template")
+        assert tmpl_in.type_name == "STRING"
+        assert (tmpl_in.extra_dict or {}).get("widgetType") == "WP_TEMPLATE_EDITOR"
+
     def test_outputs(self):
         schema = WPPromptAssembler.define_schema()
         assert len(schema.outputs) == 1

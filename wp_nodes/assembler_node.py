@@ -2,7 +2,7 @@
 
 from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 
-from engine.context import strip_internals
+from engine.context import strip_internals, with_resolver_tables
 from engine.template import resolve_variables
 from wp_nodes.types import PipelineContext
 
@@ -42,6 +42,19 @@ class WPPromptAssembler(io.ComfyNode):
                         "verbatim here — produce randomness in a seeded "
                         "module instead."
                     ),
+                    # Render this input with our own editor instead of the
+                    # stock textarea, WITHOUT changing what the socket
+                    # accepts. `widget_type=` would do the first and break
+                    # the second: `WidgetInput.get_io_type` returns
+                    # widget_type when set, so the socket would stop being
+                    # STRING and no upstream STRING output could feed it.
+                    # `extra_dict` is merged last in `Input.as_dict` and
+                    # never consulted by `get_io_type`, so the spec carries
+                    # `widgetType` for the frontend's widget lookup while
+                    # the socket stays STRING. The value is still a plain
+                    # string in `widgets_values`, so workflows saved before
+                    # this change load their template unchanged.
+                    extra_dict={"widgetType": "WP_TEMPLATE_EDITOR"},
                 ),
             ],
             outputs=[io.String.Output("prompt")],
@@ -61,8 +74,21 @@ class WPPromptAssembler(io.ComfyNode):
         # before resolution — net effect: `$var` for an internal var
         # never substitutes in the rendered prompt.
         render_ctx = dict(context.context)
-        flags = (context.internals or {}).get("__wp_internal_flags__")
-        if isinstance(flags, dict):
-            render_ctx["__wp_internal_flags__"] = flags
-        resolved = resolve_variables(template, strip_internals(render_ctx))
+        # The accessor tables (`__wp_axes__`, `__wp_picks__`) AND the
+        # internal-flag map ride on `context.internals`, NOT `context.context`:
+        # every one is `__`-prefixed, so the socket boundary
+        # (`strip_engine_internals` in `build_payload`) drops them from the
+        # user-facing payload and re-files the cross-node subset under
+        # `internals`. Merge that whole carve-out back in before resolving so
+        # `strip_internals` can re-apply the hide-from-prompt filter AND
+        # `with_resolver_tables` can re-attach the `$var.AXIS` / `$var.N`
+        # tables. Pre-fix only `__wp_internal_flags__` was merged, so
+        # `$outfit.SHOES` rendered "" across the socket even though the
+        # identical read resolved one node upstream (the combine surface,
+        # which runs before the socket strips the table).
+        render_ctx.update(context.internals or {})
+        resolved = resolve_variables(
+            template,
+            with_resolver_tables(strip_internals(render_ctx), render_ctx),
+        )
         return io.NodeOutput(resolved)

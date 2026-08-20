@@ -31,16 +31,19 @@ import { toIdentifier } from "./slug";
 /* Wildcards                                                                  */
 /* -------------------------------------------------------------------------- */
 
-/** Pick a weighted-random option. Returns null only when `options` is empty. */
+/** Pick a weighted-random option, or null when nothing is selectable —
+ *  an empty pool, every weight 0, or a constraint that excluded everything.
+ *  Mirrors engine `_pick_weighted`; returning `options[0]` for an excluded
+ *  pool showed the user a plausible option the run would never produce. */
 export function pickWeightedOption(
   options: WildcardOption[],
 ): WildcardOption | null {
   if (!options.length) return null;
   const total = options.reduce(
-    (a, b) => a + (Number(b.weight) || 0),
+    (a, b) => a + Math.max(0, Number(b.weight) || 0),
     0,
   );
-  if (total <= 0) return options[0];
+  if (total <= 0) return null;
   let r = Math.random() * total;
   for (const opt of options) {
     r -= Number(opt.weight) || 0;
@@ -338,6 +341,9 @@ export interface AdjustedOption extends WildcardOption {
 export interface SourcePickEntry {
   value: string;
   tags: string[];
+  /** Which of `tags` belong to which `accepts` axis. Present only when the
+   *  source wildcard declared that group `accepts`. */
+  axes?: Record<string, string[]>;
 }
 
 /** A source wildcard's recorded pick, as the preview threads it. Mirrors
@@ -388,12 +394,28 @@ function buildSourcePicks(pick: SourcePick): SourcePickEntry[] {
     return pick.picks.map((p) => ({
       value: String(p.value ?? ""),
       tags: Array.isArray(p.tags) ? p.tags : [],
+      // Carried through so the preview folds accepts-axes with max like the
+      // engine does. Dropping it here would show the user a narrower pool
+      // than the run actually produces.
+      ...(p.axes ? { axes: p.axes } : {}),
     }));
   }
   return [{
     value: String(pick.value ?? ""),
     tags: Array.isArray(pick.sub_categories) ? pick.sub_categories : [],
   }];
+}
+
+/** The kind map the combine fn needs, derived from the picks themselves.
+ *  A pick only carries an `axes` entry when its source declared that group
+ *  `accepts`, so the record IS the map — same derivation as engine
+ *  `_apply_constraint_to_options`. */
+function axisKindsFrom(picks: SourcePickEntry[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const p of picks) {
+    for (const axis of Object.keys(p.axes ?? {})) out[axis] = "accepts";
+  }
+  return out;
 }
 
 /** Collapse a combine factor to the table's `_mode` annotation. The
@@ -429,6 +451,7 @@ function applyConstraintFactor(
       { value: String(opt.value ?? ""), tags: opt.sub_categories ?? [] },
       m,
       exc,
+      axisKindsFrom(picks),
     );
     const w = Number(opt.weight) || 0;
     const weight = f === EXCLUDE ? 0 : Math.max(0, w * Number(f));

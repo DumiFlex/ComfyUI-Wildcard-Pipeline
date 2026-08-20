@@ -478,6 +478,45 @@ export function collectUpstreamVariables(rootGraph: LiteGraphLike, node: LiteNod
 }
 
 /**
+ * Names the user flagged "hide from prompt", read out of the engine's
+ * `__wp_internal_flags__` blob that rides along in a resolved map.
+ *
+ * The blob is JSON in a string because it crosses the PIPELINE_CONTEXT socket
+ * as an ordinary context value. Malformed ⇒ treat as empty; a broken flag map
+ * should cost the user a mis-styled chip, not an exception in a graph walk.
+ */
+export function internalVarNames(resolved: Record<string, ResolvedValue>): Set<string> {
+  const out = new Set<string>();
+  const blob = resolved["__wp_internal_flags__"];
+  if (typeof blob !== "string") return out;
+  try {
+    for (const [k, v] of Object.entries(JSON.parse(blob) as Record<string, boolean>)) {
+      if (v) out.add(k);
+    }
+  } catch { /* malformed, treat as empty */ }
+  return out;
+}
+
+/**
+ * Upstream variables that would actually SUBSTITUTE in a rendered prompt —
+ * `collectUpstreamVariables` minus the ones flagged internal.
+ *
+ * WP_PromptAssembler runs `strip_internals` over the render context before
+ * resolving, so a `$var` naming an internal variable resolves to nothing. The
+ * flagged names still travel the socket (Combine and Derivation downstream
+ * read them), which is why the plain variable list keeps them — it is the
+ * PROMPT surface specifically that must not offer them.
+ */
+export function collectUpstreamRenderableVariables(
+  rootGraph: LiteGraphLike,
+  node: LiteNodeLike,
+): string[] {
+  const resolved = collectUpstreamResolved(rootGraph, node);
+  const internal = internalVarNames(resolved);
+  return Object.keys(resolved).filter((k) => !k.startsWith("__") && !internal.has(k));
+}
+
+/**
  * Walk upstream from `node` and return true iff some WP_ContextLoop in
  * the pipeline-context chain has `override_seed=true` in its widget
  * config. Used by WP_Context's widget glue to grey out the local `seed`
@@ -753,6 +792,14 @@ export function collectUpstreamKinds(
 
   const kinds: Record<string, string> = {};
   const internalKeys = new Set<string>();
+  // Internal-ness is last-write-wins, exactly like the value: the CLOSEST
+  // writer of a var decides. `add`-only left a var internal forever once any
+  // writer marked it so — mark $outfit internal, override with a public
+  // $outfit, and the public override stayed hidden from the assembler.
+  const flagInternal = (name: string, on: boolean): void => {
+    if (on) internalKeys.add(name);
+    else internalKeys.delete(name);
+  };
   // Walk furthest-upstream → closest, so later writes override
   // earlier ones (last-write-wins matches runtime).
   for (let i = chain.length - 1; i >= 0; i--) {
@@ -768,7 +815,7 @@ export function collectUpstreamKinds(
         const b = (row.binding ?? "").trim();
         if (!b) continue;
         kinds[b] = "injector";
-        if (row.internal === true) internalKeys.add(b);
+        flagInternal(b, row.internal === true);
       }
       continue;
     }
@@ -788,8 +835,8 @@ export function collectUpstreamKinds(
       const totalName = `${baseName}_total`;
       kinds[baseName] = "loop";
       kinds[totalName] = "loop";
-      if (cfg.iteration_internal === true) internalKeys.add(baseName);
-      if (cfg.total_internal === true) internalKeys.add(totalName);
+      flagInternal(baseName, cfg.iteration_internal === true);
+      flagInternal(totalName, cfg.total_internal === true);
       continue;
     }
     if (n.type !== "WP_Context") continue;
@@ -819,7 +866,7 @@ export function collectUpstreamKinds(
             if (!passes(val.id)) continue;
             const name = (val.name ?? "").replace(/^\$/, "").trim();
             if (name) kinds[name] = "fixed_values";
-            if (name && m.instance?.internal) internalKeys.add(name);
+            if (name) flagInternal(name, !!m.instance?.internal);
           }
           continue;
         }
@@ -828,12 +875,12 @@ export function collectUpstreamKinds(
           if (!passes(val.id)) continue;
           const name = (val.name ?? "").replace(/^\$/, "").trim();
           if (name) kinds[name] = "fixed_values";
-          if (name && m.instance?.internal) internalKeys.add(name);
+          if (name) flagInternal(name, !!m.instance?.internal);
         }
         for (const e of m.entries ?? []) {
           const name = (e.variable_name ?? "").replace(/^\$/, "").trim();
           if (name) kinds[name] = "fixed_values";
-          if (name && m.instance?.internal) internalKeys.add(name);
+          if (name) flagInternal(name, !!m.instance?.internal);
         }
         continue;
       }
@@ -852,11 +899,11 @@ export function collectUpstreamKinds(
           for (const branch of rule.branches ?? []) {
             const name = (branch.action?.target_var ?? "").replace(/^\$/, "").trim();
             if (name) kinds[name] = "derivation";
-            if (name && m.instance?.internal) internalKeys.add(name);
+            if (name) flagInternal(name, !!m.instance?.internal);
           }
           const elseName = (rule.else?.action?.target_var ?? "").replace(/^\$/, "").trim();
           if (elseName) kinds[elseName] = "derivation";
-          if (elseName && m.instance?.internal) internalKeys.add(elseName);
+          if (elseName) flagInternal(elseName, !!m.instance?.internal);
         }
         continue;
       }
@@ -867,7 +914,7 @@ export function collectUpstreamKinds(
       const raw = inst.variable_binding ?? payload.var_binding ?? payload.output_var ?? "";
       const name = raw.replace(/^\$/, "").trim();
       if (name) kinds[name] = m.type;
-      if (name && m.instance?.internal) internalKeys.add(name);
+      if (name) flagInternal(name, !!m.instance?.internal);
     }
   }
   // Stash internal-flag map on the reserved slot (parallels
@@ -890,6 +937,18 @@ export function collectUpstreamKinds(
  * one. This carries the owning node and module through instead of discarding
  * them.
  */
+/** One `accepts` tag group a producing wildcard declares, with its member
+ *  tags. A library fact, so it is safe to complete against; a pick index is
+ *  not, because `pick_min`/`pick_max` live on the instance. */
+export interface VarAxis {
+  axis: string;
+  tags: string[];
+  /** Position among ALL of the wildcard's tag groups, not among the accepts
+   *  ones — `axisHueAt()` is indexed that way in the wildcard editor, so
+   *  filtering first would give SHOES a different colour in the two places. */
+  hueIndex: number;
+}
+
 export interface VarProducer {
   /** "wildcard" | "fixed_values" | "combine" | "derivation" | "injector" | "loop" */
   kind: string;
@@ -903,6 +962,9 @@ export interface VarProducer {
   /** Display name of the writing module. Absent for injector / loop, which
    *  write from node config rather than a library module. */
   moduleName?: string;
+  /** `accepts` axes this variable exposes, for `$var.AXIS` completion.
+   *  Wildcards only, and omitted when the wildcard declares none. */
+  axes?: VarAxis[];
   /** 8-hex module id, when a module wrote it. */
   moduleId?: string;
   /** Flagged internal — resolves downstream but the assembler strips it from
@@ -991,6 +1053,14 @@ export function collectUpstreamProducers(
     lastWriter.set(name, who);
     out[name] = {
       ...info,
+      // Axes survive being overwritten. The engine records a rolled axis in
+      // `__wp_axes__` keyed by BINDING at pick time, and a later writer
+      // rebinding the same `$var` — a derivation, an injector row — replaces
+      // the text without touching that record, so `$outfit.SHOES` still
+      // resolves. Replacing the producer wholesale dropped the wildcard's
+      // axes the moment anything downstream wrote the same name, which is
+      // every real graph: the axis rows vanished one node along the chain.
+      ...(info.axes ?? prev?.axes ? { axes: info.axes ?? prev?.axes } : {}),
       shadowed: prev ? (sameWriter ? prev.shadowed : prev.shadowed + 1) : 0,
     };
   };
@@ -1093,9 +1163,30 @@ export function collectUpstreamProducers(
       }
 
       const inst = (m.instance ?? {}) as { variable_binding?: string | null };
-      const payload = (m.payload ?? {}) as { var_binding?: string; output_var?: string };
+      const payload = (m.payload ?? {}) as {
+        var_binding?: string;
+        output_var?: string;
+        tag_groups?: Record<string, string[]>;
+        tag_group_kinds?: Record<string, string>;
+      };
       const raw = inst.variable_binding ?? payload.var_binding ?? payload.output_var ?? "";
-      write(raw.replace(/^\$/, "").trim(), base, writerKey);
+      // `accepts` axes ride along so the template editor can complete
+      // `$var.AXIS`. Read from the PAYLOAD because a group's kind is a library
+      // fact shared by every instance — unlike `pick_min`/`pick_max`, which are
+      // per-instance and therefore cannot be suggested from a library surface.
+      const axes: VarAxis[] = [];
+      if (m.type === "wildcard") {
+        const kinds = payload.tag_group_kinds ?? {};
+        // Index over EVERY group so the hue matches the wildcard editor's.
+        Object.entries(payload.tag_groups ?? {}).forEach(([axis, tags], hueIndex) => {
+          if (kinds[axis] === "accepts") axes.push({ axis, tags: tags ?? [], hueIndex });
+        });
+      }
+      write(
+        raw.replace(/^\$/, "").trim(),
+        axes.length > 0 ? { ...base, axes } : base,
+        writerKey,
+      );
     }
   }
   return out;
@@ -1127,13 +1218,39 @@ export function collectUpstreamProducers(
 
 // SP2a: optional `.K` list accessor (group 2) so `$mood.0` is consumed whole
 // (no stranded ".0" literal) and the index drives applyVarAccessor below.
-const VAR_REF_RE = /\$([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?/g;
+const VAR_REF_RE =
+  /\$([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?(?:\.([A-Za-z_][A-Za-z0-9_]*))?(?:\.(\d+))?/g;
 const WC_REF_RE = /@\{([0-9a-f]{8})(?:#[^#:}@{]*)?(?::[^}]*)?\}/g;
 const MAX_REF_DEPTH = 8;
 
 interface MinimalWildcard {
   options?: Array<{ value?: string; weight?: number }>;
   var_binding?: string;
+  tag_groups?: Record<string, string[]>;
+  tag_group_kinds?: Record<string, string>;
+}
+
+/** The tag a `$var.AXIS` read previews as, or undefined when no wildcard in
+ *  the chain binds `name` with an `accepts` group called `axis`.
+ *
+ *  Runtime rolls one member of the group per pick; the static preview has no
+ *  rng, so it shows the FIRST member — the same deterministic convention the
+ *  `@{uuid}` expansion uses when it previews a wildcard as its first option.
+ *  Returning undefined for an unknown axis is what keeps the caller from
+ *  swallowing an accessor it cannot resolve: `$size.LARGE` where LARGE is not
+ *  an axis stays verbatim rather than silently losing text. */
+function previewAxisTag(
+  catalog: Map<string, MinimalWildcard>,
+  name: string,
+  axis: string,
+): string | undefined {
+  for (const wc of catalog.values()) {
+    if ((wc.var_binding ?? "").replace(/^\$/, "") !== name) continue;
+    if (wc.tag_group_kinds?.[axis] !== "accepts") continue;
+    const tags = wc.tag_groups?.[axis] ?? [];
+    if (tags.length > 0) return tags[0];
+  }
+  return undefined;
 }
 
 function resolveChainStatic(chain: LiteNodeLike[]): Record<string, ResolvedValue> {
@@ -1223,6 +1340,7 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, ResolvedValue
         if (!binding) continue;
         ctx[binding] = `$${binding}`;
         if (row.internal === true) internalKeys.add(binding);
+        else internalKeys.delete(binding);
       }
       continue;
     }
@@ -1245,7 +1363,9 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, ResolvedValue
       ctx[baseName] = "1";
       ctx[totalName] = "1";
       if (cfg.iteration_internal === true) internalKeys.add(baseName);
+      else internalKeys.delete(baseName);
       if (cfg.total_internal === true) internalKeys.add(totalName);
+      else internalKeys.delete(totalName);
       continue;
     }
     if (n.type !== "WP_Context") continue;
@@ -1256,11 +1376,17 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, ResolvedValue
     const bundleEnabled = buildBundleEnabledMap(v.bundles);
     for (const m of v.modules) {
       if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
-      const beforeKeys = new Set(Object.keys(ctx));
+      // Snapshot VALUES, not just keys: an override rebinds an existing key,
+      // so a key-presence check never sees it and the flag could not flip.
+      const beforeVals = new Map(Object.entries(ctx));
       writeBindings(ctx, m, catalog);
-      if (m.instance?.internal) {
-        for (const k of Object.keys(ctx)) {
-          if (!beforeKeys.has(k)) internalKeys.add(k);
+      const isInternal = !!m.instance?.internal;
+      for (const k of Object.keys(ctx)) {
+        // Written by THIS module = new key or changed value. Last writer wins,
+        // so its internal flag replaces whatever an earlier writer set.
+        if (!beforeVals.has(k) || beforeVals.get(k) !== ctx[k]) {
+          if (isInternal) internalKeys.add(k);
+          else internalKeys.delete(k);
         }
       }
     }
@@ -1322,7 +1448,16 @@ function writeBindings(
     for (const v of libValues) {
       if (typeof v.name === "string" && typeof v.id === "string") libNameToId.set(v.name, v.id);
     }
-    for (const e of m.entries) {
+    // Both guards matter, and neither is theoretical. This walker runs inside
+    // `onConnectionsChange` (see `extension/reactive.ts`), so a throw here does
+    // not degrade to an empty preview — it escapes into litegraph's connection
+    // handling, and one malformed module breaks canvas interaction for the
+    // whole graph. A library payload that carries `payload.values` but no
+    // `entries` is enough to trigger it. The other two `entries` readers in
+    // this file (the kind scan and the producer walk) already use `?? []`;
+    // this one was the outlier.
+    for (const e of Array.isArray(m.entries) ? m.entries : []) {
+      if (typeof e?.variable_name !== "string") continue;
       const name = e.variable_name.replace(/^\$/, "").trim();
       if (!name) continue;
       const libId = libNameToId.get(e.variable_name);
@@ -1507,10 +1642,24 @@ function expandValue(
   //    unknowns (incl. their accessor) intact. ctx values are strings in this
   //    static resolver, so applyVarAccessor treats `$s.0` as `$s` and `$s.K>0`
   //    as "" — never leaking the literal ".K" into the preview.
-  let out = raw.replace(VAR_REF_RE, (full, name, idx) =>
-    Object.prototype.hasOwnProperty.call(ctx, name)
-      ? applyVarAccessor(ctx[name], idx != null ? parseInt(idx, 10) : undefined)
-      : full,
+  let out = raw.replace(
+    VAR_REF_RE,
+    (full, name, idxA, axis, idxB) => {
+      if (!Object.prototype.hasOwnProperty.call(ctx, name)) return full;
+      const idx = idxA ?? idxB;
+      const base = applyVarAccessor(
+        ctx[name],
+        idx != null ? parseInt(idx, 10) : undefined,
+      );
+      // An axis read resolves to a TAG, not to the variable's text. Without
+      // this the preview substituted `$outfit` and left `.SHOES` stranded, so
+      // both the preview and the resolved line read
+      // "a white t-shirt and denim skirt.SHOES" — the accessor looked broken
+      // in exactly the editor meant to teach it.
+      if (axis == null) return base;
+      const tag = previewAxisTag(catalog, name, axis);
+      return tag ?? full;
+    },
   );
   // 2. Substitute `@{8hex}` with the referenced wildcard's first option,
   //    recursively expanded so chains (`@{a}` → "@{b} hat" → "blue hat")

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { varColorClass } from "../shared/var-color";
+import { modelSyntaxHtml } from "../../widgets/richTokenize";
 import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
 import { kindIcon, type WpKind } from "../shared/kind-icons";
 import { applyVarAccessor, type ResolvedValue } from "../../widgets/richTokenize";
@@ -17,6 +18,10 @@ const props = defineProps<{
    * precedence over `resolved`.
    */
   resolvedMap?: Record<string, ResolvedValue>;
+  /** `{ varName: { AXIS: firstTag } }`. A `$var.AXIS` read resolves against
+   *  this, never against `resolvedMap` — the axis names a tag menu, not the
+   *  variable's text. */
+  varAxes?: Record<string, Record<string, string>>;
   /**
    * Pre-resolved string — template with $var replaced by resolved values.
    * Legacy fallback when `resolvedMap` not provided. Suffers from
@@ -85,7 +90,10 @@ const VAR_RE = /\$([A-Za-z_][A-Za-z0-9_]*)/g;
 // SP2a: capture an optional `.K` list accessor (group 2) so `$mood.0` consumes
 // the whole token — `m[0].length` then advances past `.K` (no stranded ".0"
 // literal) and group 2 drives applyVarAccessor in the substitution below.
-const TEMPLATE_VAR_RE = /(?<!\$)\$([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?/g;
+// Groups: 1=name · 2=index · 3=axis. The accessor has to be part of the match
+// or the preview prints the resolved value and strands ".SHOES" after it.
+const TEMPLATE_VAR_RE =
+  /(?<!\$)\$([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?(?:\.([A-Za-z_][A-Za-z0-9_]*))?/g;
 
 /** Variable names referenced in the template. */
 const templateVarsInternal = computed(() => {
@@ -148,14 +156,19 @@ const previewTokens = computed<PreviewToken[]>(() => {
       const name = m[1];
       const idxStr = m[2];
       const index = idxStr != null ? parseInt(idxStr, 10) : undefined;
+      const axis = m[3];
+      const raw = `$${name}${idxStr != null ? "." + idxStr : ""}${axis ? "." + axis : ""}`;
       const has = Object.prototype.hasOwnProperty.call(props.resolvedMap, name);
-      // Resolved → join (bare $name) or index (.K) via the shared accessor;
-      // unresolved → keep the raw `$name.K` so the user sees what's missing.
+      // An axis read resolves to a TAG. Falling through to the value here is
+      // what rendered "a white t-shirt and denim skirt.SHOES"; an axis the
+      // chain does not declare stays raw so the gap is visible rather than
+      // silently dropped.
+      const axisTag = axis ? props.varAxes?.[name]?.[axis] : undefined;
       tokens.push({
         kind: "var",
-        text: has
-          ? applyVarAccessor(props.resolvedMap[name], index)
-          : `$${name}${idxStr != null ? "." + idxStr : ""}`,
+        text: axis
+          ? (axisTag ?? raw)
+          : (has ? applyVarAccessor(props.resolvedMap[name], index) : raw),
         varName: name,
       });
       last = idx + m[0].length;
@@ -396,7 +409,6 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
             @click="onLoadTemplate"
           >
             <i class="pi pi-folder-open" aria-hidden="true" />
-            <span>Load</span>
           </button>
           <button
             v-if="onSaveTemplate"
@@ -409,7 +421,6 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
             @click="onSaveTemplate"
           >
             <i class="pi pi-save" aria-hidden="true" />
-            <span>Save</span>
           </button>
           <button
             v-if="onClearTemplate"
@@ -422,7 +433,6 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
             @click="onClearTemplate"
           >
             <i class="pi pi-trash" aria-hidden="true" />
-            <span>Clear template</span>
           </button>
         </div>
         <span class="wp-asm-section-stat">
@@ -490,18 +500,22 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
           </div>
           <div v-else key="tokens" class="wp-asm-preview__tokens">
             <template v-for="(tok, i) in previewTokens" :key="i">
-              <span v-if="tok.kind === 'literal'" class="literal">{{ tok.text }}</span>
+              <!-- Literal preview text still carries `<lora:…>` and
+                   `embedding:…`, which resolve to themselves rather than to a
+                   variable — so without this they were the only place the two
+                   syntaxes appeared uncoloured. Same function the editor uses,
+                   so the two cannot drift; it escapes everything it emits. -->
+              <span
+                v-if="tok.kind === 'literal'"
+                class="literal"
+                v-html="modelSyntaxHtml(tok.text)"
+              ></span>
               <span v-else :class="['res', varColorClass(tok.varName ?? '')]">{{ tok.text }}</span>
             </template>
           </div>
         </Transition>
       </div>
 
-      <!-- hint -->
-      <div class="wp-asm-hint">
-        <span>click → insert <kbd>$var</kbd> · <kbd>Ctrl</kbd>+click → remove · right-click → more</span>
-        <span style="margin-left: auto;">click missing → remove</span>
-      </div>
       </div>
     </Transition>
 
@@ -588,11 +602,15 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
   gap: 6px;
   justify-content: center;
 }
+/* Icon-only. Each button already carried a `title` and an `aria-label`, so the
+   visible word was the only thing dropped — and three words across the row
+   were most of its width. Square-ish padding keeps the tap target honest. */
 .wp-asm-toolbtn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 3px 10px;
+  padding: 4px 7px;
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
   border-radius: 3px;
@@ -665,8 +683,11 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
 .wp-asm-vars {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  padding: 6px;
+  /* On the project's own spacing scale rather than the bare 4/6 they were.
+     At 4px the chips ran together into one block of texture — the strip read
+     as a single control instead of a row of separate variables. */
+  gap: var(--wp-space-3);
+  padding: var(--wp-space-4);
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius);
@@ -773,23 +794,5 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
   text-align: center;
 }
 .wp-asm-preview__ghost-text { display: inline; }
-
-.wp-asm-hint {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 4px;
-  font: 11px/1.3 var(--wp-font-sans);
-  color: var(--wp-text-dim);
-}
-.wp-asm-hint kbd {
-  background: var(--wp-bg-1);
-  border: 1px solid var(--wp-border-soft);
-  border-bottom-width: 2px;
-  border-radius: 2px;
-  font: 10px/1 var(--wp-font-mono);
-  padding: 1px 4px;
-  color: var(--wp-text-muted);
-}
 
 </style>

@@ -37,7 +37,7 @@ const props = withDefaults(
     selectable?: boolean;
     /** Render the `base` chip. Only the Loop has values every frame inherits. */
     showBase?: boolean;
-    /** Alt-click may toggle bypass. False where bypass belongs to another node. */
+    /** Ctrl/Cmd-click may toggle bypass. False where bypass belongs to another node. */
     bypassInteractive?: boolean;
     /** Section heading. */
     label?: string;
@@ -101,15 +101,26 @@ const summary = computed(() => {
   return bits.join(" · ");
 });
 
+const IS_MAC =
+  typeof navigator !== "undefined" && /Mac|iP(hone|ad|od)/i.test(navigator.userAgent);
+
 /** Option on a Mac keyboard, Alt everywhere else. `altKey` covers both; only
  *  the printed label differs. */
-const ALT_LABEL =
-  typeof navigator !== "undefined" && /Mac|iP(hone|ad|od)/i.test(navigator.userAgent)
-    ? "⌥"
-    : "Alt";
+const ALT_LABEL = IS_MAC ? "⌥" : "Alt";
+
+/** Bypass modifier: Cmd on macOS, Ctrl everywhere else. Cmd rather than Ctrl on
+ *  Mac because a Ctrl-click there is a right-click and never reaches this
+ *  handler as a plain click. */
+const CTRL_LABEL = IS_MAC ? "⌘" : "Ctrl";
+
+/** True when the event carries the bypass modifier for this platform. */
+function isBypassChord(ev: MouseEvent): boolean {
+  return IS_MAC ? ev.metaKey : ev.ctrlKey;
+}
 
 function onChipClick(i: number, ev: MouseEvent): void {
-  if (ev.altKey) {
+  // Ctrl (Cmd on macOS) toggles bypass, wherever bypass is interactive.
+  if (isBypassChord(ev)) {
     if (props.bypassInteractive) emit("toggleBypass", i);
     return;
   }
@@ -118,7 +129,8 @@ function onChipClick(i: number, ev: MouseEvent): void {
     emit("toggleLock", i);
     return;
   }
-  if (ev.shiftKey) { emit("toggleLock", i); return; }
+  // Alt toggles the seed lock; a plain click is spoken for by the edit cursor.
+  if (ev.altKey) { emit("toggleLock", i); return; }
   emit("select", i);
 }
 
@@ -130,12 +142,12 @@ function chipTitle(i: number): string {
   const lines = [`Frame ${i + 1}${state ? ` — ${state}` : ""}`];
   const lockVerb = lockedSet.value.has(i) ? "Unlock" : "Lock";
   if (props.selectable) {
-    lines.push("Click to edit this frame", `Shift-click to ${lockVerb.toLowerCase()} its seed`);
+    lines.push("Click to edit this frame", `${ALT_LABEL}-click to ${lockVerb.toLowerCase()} its seed`);
   } else {
     lines.push(`Click to ${lockVerb.toLowerCase()} its seed`);
   }
   if (props.bypassInteractive) {
-    lines.push(`${ALT_LABEL}-click to ${bypassedSet.value.has(i) ? "re-enable" : "bypass"} it`);
+    lines.push(`${CTRL_LABEL}-click to ${bypassedSet.value.has(i) ? "re-enable" : "bypass"} it`);
   } else if (bypassedSet.value.has(i) && props.bypassReadonlyHint) {
     lines.push(props.bypassReadonlyHint);
   }
@@ -155,7 +167,7 @@ const uiId = computed(() => `${props.testId}s`);
  *  shortcut, and this row is where the reader is already looking. */
 const hint = computed(() => {
   if (!props.selectable) return "Click a frame to lock its seed";
-  return `Shift-click locks a seed · ${ALT_LABEL}-click bypasses`;
+  return `${ALT_LABEL}-click locks a seed · ${CTRL_LABEL}-click bypasses`;
 });
 </script>
 

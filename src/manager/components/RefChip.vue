@@ -32,6 +32,14 @@ interface Props {
   name: string;
   /** SP2a list accessor for a var chip: `$name.K` (0-based). Ignored by refs. */
   index?: number;
+  /** Tag-axis accessor on a var chip (`$outfit.SHOES`). Rendered as its own
+   *  segment so the axis reads as a qualifier rather than part of the name. */
+  axis?: string;
+  /** False when `axis` names no `accepts` group on the producing wildcard.
+   *  The engine renders such a read as an empty string, so the accessor is
+   *  marked — otherwise the only symptom is a word missing from the prompt,
+   *  with a chip that looks perfectly healthy. */
+  axisKnown?: boolean;
   /** UUID of the wildcard library entry (ref-kind only). */
   uuid?: string;
   /** True when the name resolved against the catalog / surface. False → render as red `?` chip. */
@@ -97,6 +105,20 @@ interface Props {
 
 /** Structural mirror of `extension/graph.ts:VarProducer`, declared locally so
  *  the SPA build never pulls the canvas graph walker in just for a type. */
+/** One `accepts` tag group a variable's producing wildcard declares, with the
+ *  tags it will roll from. A LIBRARY fact — every instance of that wildcard
+ *  has it — which is why axes can be suggested while a pick INDEX cannot:
+ *  `pick_min`/`pick_max` live on the instance, so no library-level surface
+ *  knows whether a given use is multi-pick. */
+export interface VarAxis {
+  axis: string;
+  tags: string[];
+  /** Position among ALL of the wildcard's tag groups, not among the accepts
+   *  ones — `axisHueAt()` is indexed that way in the wildcard editor, so
+   *  filtering first would give SHOES a different colour in the two places. */
+  hueIndex: number;
+}
+
 export interface VarProducerLike {
   kind: string;
   /** Where the writer lives. Canvas passes a node codename / title; the SPA
@@ -109,6 +131,9 @@ export interface VarProducerLike {
    *  SPA: how many OTHER library modules bind the same name — no execution
    *  order exists there, so it reads as "N others bind this" rather than as an
    *  override. `siblingLabel` distinguishes the two. */
+  /** `accepts` axes this variable exposes, for `$var.AXIS` completion.
+   *  Empty or absent when the producer declares none. */
+  axes?: VarAxis[];
   shadowed: number;
   /** Wording for the `shadowed` count. Defaults to the canvas override
    *  phrasing; the SPA passes its own since nothing is overridden there. */
@@ -126,6 +151,7 @@ const props = withDefaults(defineProps<Props>(), {
   graphAware: false,
   remappable: false,
 });
+
 
 const emit = defineEmits<{
   /** Fired when a RESOLVED ref-kind chip body is clicked. The MouseEvent
@@ -234,9 +260,39 @@ const filterTitle = "";
 /** Whether the exclude-null mark should render (effective flag). */
 const showNoNull = computed(() => isRef.value && filter.value.excludeNull);
 
+/** The accessor tail of a var chip — `.0`, `.SHOES`, or both. Refs never have
+ *  one. Kept apart from `label` so the template can render it in its own span:
+ *  the chip previously showed only the NAME, so `$outfit.SHOES` displayed as
+ *  `$outfit` and looked like a different reference than the one stored. */
+/** `label` minus its accessor, so the two can be styled separately without
+ *  either duplicating the fallback logic `label` already encodes. */
+const labelBase = computed(() =>
+  accessorSuffix.value && label.value.endsWith(accessorSuffix.value)
+    ? label.value.slice(0, -accessorSuffix.value.length)
+    : label.value);
+
+const accessorSuffix = computed(() => {
+  if (isRef.value) return "";
+  return `${accessorIndex.value}${accessorAxis.value}`;
+});
+
+/** The pick-index segment (`.0`), rendered NEUTRAL. A pick index is
+ *  positional, not semantic, and whether a source is multi-pick is a runtime
+ *  fact no static surface can know — so tinting `.0` the axis colour read as
+ *  "this is an axis / something is special here". Kept its own span so only
+ *  the axis carries the accent. */
+const accessorIndex = computed(() =>
+  !isRef.value && props.index != null ? `.${props.index}` : "");
+
+/** The tag-axis segment (`.SHOES`), rendered in the axis accent (or the
+ *  unknown-axis warning). This is the only part of the accessor that names a
+ *  library concept, so it is the only part that earns a colour. */
+const accessorAxis = computed(() =>
+  !isRef.value && props.axis ? `.${props.axis}` : "");
+
 const label = computed(() => {
   // SP2a: a var chip may carry a `.K` list accessor (`$colors.0`); refs never do.
-  const idxSuffix = !isRef.value && props.index != null ? "." + props.index : "";
+  const idxSuffix = accessorSuffix.value;
   if (!props.resolved) {
     // Unresolved refs prefer the cached `#name` (kept on the ref atom
     // from the `@{uuid#name}` syntax) so a broken reference still
@@ -419,7 +475,48 @@ function onEnter(ev: MouseEvent): void {
 function onLeave(): void {
   if (hoverTimer !== undefined) window.clearTimeout(hoverTimer);
   hoverTimer = undefined;
-  hoverOpen.value = false;
+  // Delayed, not immediate: the info card is now interactive (Copy id / Open),
+  // so leaving the chip must not yank it away before the pointer reaches the
+  // buttons. onCardEnter cancels this; onCardLeave re-arms it. (The
+  // GitHub-hovercard bridge.)
+  scheduleClose();
+}
+
+let closeTimer: number | undefined;
+function scheduleClose(): void {
+  if (closeTimer !== undefined) window.clearTimeout(closeTimer);
+  closeTimer = window.setTimeout(() => { hoverOpen.value = false; }, 160);
+}
+function onCardEnter(): void {
+  if (closeTimer !== undefined) window.clearTimeout(closeTimer);
+  closeTimer = undefined;
+}
+function onCardLeave(): void {
+  scheduleClose();
+}
+
+/** SPA editor route segment per module kind. Refs are wildcard-only in
+ *  practice, but map every kind so a mis-typed ref still lands somewhere real. */
+const KIND_ROUTE: Record<ChipModuleKind, string> = {
+  wildcard: "wildcards", fixed_values: "fixed-values", combine: "combines",
+  derivation: "derivations", constraint: "constraints", bundle: "bundles",
+};
+/** Absolute SPA editor URL for the referenced module. Absolute (`/wp/...`) so
+ *  it opens from the canvas too — same origin, manager mounted at /wp/. */
+const editHref = computed(() =>
+  props.uuid ? `/wp/${KIND_ROUTE[props.moduleKind] ?? "wildcards"}/${props.uuid}/edit` : "");
+
+const copied = ref(false);
+let copiedTimer: number | undefined;
+function copyId(): void {
+  if (!props.uuid) return;
+  void navigator.clipboard?.writeText(props.uuid);
+  copied.value = true;
+  if (copiedTimer !== undefined) window.clearTimeout(copiedTimer);
+  copiedTimer = window.setTimeout(() => { copied.value = false; }, 1200);
+}
+function openInNewWindow(): void {
+  if (editHref.value) window.open(editHref.value, "_blank", "noopener");
 }
 
 onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverTimer); });
@@ -449,7 +546,18 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
       aria-hidden="true"
     ></i>
     <span v-else class="wp-refchip__icon" aria-hidden="true">{{ icon }}</span>
-    <span class="wp-refchip__label">{{ label }}</span>
+    <span class="wp-refchip__label">{{ labelBase
+      }}<span
+        v-if="accessorIndex"
+        class="wp-refchip__index"
+      >{{ accessorIndex }}</span><span
+        v-if="accessorAxis"
+        class="wp-refchip__accessor"
+        :class="{ 'wp-refchip__accessor--unknown': axisKnown === false }"
+        :title="axisKnown === false
+          ? `No '${axis}' axis on this variable — is that tag group marked 'accepts'?`
+          : undefined"
+      >{{ accessorAxis }}</span></span>
     <!-- The pool this ref resolves against came from THIS node's own module
          snapshot, not the library. That changes what the ref will actually
          produce — a node copy can hold different options from the library row
@@ -488,6 +596,8 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
       :class="{ 'wp-refchip-pop--up': popPos.flip }"
       :style="{ top: popPos.top + 'px', left: popPos.left + 'px' }"
       data-test="refchip-hover"
+      @mouseenter="onCardEnter"
+      @mouseleave="onCardLeave"
     >
       <template v-if="kind === 'ref'">
         <div class="wp-refchip-pop__head">
@@ -548,10 +658,37 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
           class="wp-refchip-pop__pool wp-refchip-pop__pool--foreign"
           data-test="refchip-pool-foreign"
         >{{ foreignPoolNote }}</div>
+        <!-- Actions. The card is interactive here (unlike the var branch) —
+             copy the id, or open the linked module in a new window. Copy works
+             even for a broken ref (the id is still known); open is gated on the
+             ref resolving, since a missing module would 404. -->
+        <div v-if="uuid" class="wp-refchip-pop__acts" data-test="refchip-acts">
+          <button
+            type="button"
+            class="wp-refchip-pop__act"
+            data-test="refchip-copy-id"
+            title="Copy the module id"
+            @click.stop="copyId"
+          >
+            <i :class="copied ? 'pi pi-check' : 'pi pi-copy'" aria-hidden="true"></i>
+            {{ copied ? "Copied" : "Copy id" }}
+          </button>
+          <button
+            v-if="resolved"
+            type="button"
+            class="wp-refchip-pop__act"
+            data-test="refchip-open-new"
+            title="Open the linked module in a new window"
+            @click.stop="openInNewWindow"
+          >
+            <i class="pi pi-external-link" aria-hidden="true"></i>
+            Open
+          </button>
+        </div>
       </template>
       <template v-else>
         <div class="wp-refchip-pop__head">
-          <span class="wp-refchip-pop__name">${{ name }}{{ index != null ? "." + index : "" }}</span>
+          <span class="wp-refchip-pop__name">${{ name }}{{ accessorSuffix }}</span>
         </div>
         <!-- Producer attribution. `kind` alone ("came from a wildcard") isn't
              actionable when several near-identical modules bind the same name,
@@ -630,6 +767,39 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
  * via inline style when `moduleKind` differs from `wildcard`. The
  * fallback to `--wp-kind-wildcard` keeps legacy (no-prop) callers on
  * the original violet palette. */
+/* The accessor tail of a var chip (`.SHOES`, `.0`). One fixed amber wherever an
+   accessor appears — chip and suggestion row alike — rather than the axis
+   group's own hue: an accessor is the same KIND of thing everywhere, and
+   per-group hues made one meaning look different from variable to variable.
+   Colour is set here rather than inherited because the accessor sits inside
+   the label, which carries the chip's own colour. */
+.wp-refchip__accessor {
+  color: var(--wp-axis, #fbbf24);
+  font-weight: var(--wp-weight-semibold);
+}
+
+/* The pick-index segment (`.0`). Deliberately UNaccented — it shares the
+   chip's own label colour, dimmed — so the amber is reserved for the axis.
+   A pick index is positional and, being a runtime-only concept, is never a
+   thing the editor can validate; colouring it invited exactly the "why is my
+   index yellow?" confusion. */
+.wp-refchip__index {
+  opacity: 0.6;
+  font-weight: var(--wp-weight-semibold);
+}
+
+/* An axis the producing wildcard does not declare. Amber-500 plus a wavy rule,
+   distinct from the amber-400 above so a broken axis never reads as a working
+   one. The engine renders such a read as an empty string, so without this the
+   only symptom is a word silently missing from the prompt. */
+.wp-refchip__accessor--unknown {
+  color: var(--wp-warn, #f59e0b);
+  text-decoration: underline wavy
+    color-mix(in srgb, var(--wp-warn, #f59e0b) 70%, transparent);
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+
 .wp-refchip--ref {
   background: color-mix(in srgb, var(--wp-refchip-tone, var(--wp-kind-wildcard, #a855f7)) 15%, transparent);
   border-color: color-mix(in srgb, var(--wp-refchip-tone, var(--wp-kind-wildcard, #a855f7)) 50%, transparent);
@@ -683,25 +853,60 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
 .wp-refchip-pop {
   position: fixed;
   z-index: 10030;
-  width: 260px;
-  padding: 7px 9px;
+  width: 264px;
+  padding: 10px 12px;
   background: var(--wp-bg-1);
   border: 1px solid var(--wp-border-strong);
   border-radius: 7px;
   box-shadow: var(--wp-shadow-lg);
-  font: 10px/1.5 var(--wp-font-mono, monospace);
+  /* Was 10px — the "unnecessarily small" the report called out. 12px reads as a
+     panel, not a tooltip afterthought. */
+  font: 12px/1.55 var(--wp-font-mono, monospace);
   color: var(--wp-text);
-  pointer-events: none;
+  /* Interactive now (Copy id / Open) — the hover bridge in onLeave/onCardEnter
+     keeps it from vanishing as the pointer travels in from the chip. */
+  pointer-events: auto;
 }
+/* The action row. Full-bleed to the card edges, divided from the info above and
+   between buttons, so it reads as a footer rather than two floating links. */
+.wp-refchip-pop__acts {
+  display: flex;
+  margin: 8px -12px -10px;
+  border-top: 1px solid var(--wp-border);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.wp-refchip-pop__act {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--wp-text-muted);
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--wp-border);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.wp-refchip-pop__act:last-child { border-right: none; }
+.wp-refchip-pop__act:hover { background: var(--wp-bg-3); color: var(--wp-text); }
+.wp-refchip-pop__act:focus-visible {
+  outline: none; background: var(--wp-bg-3); color: var(--wp-text);
+}
+.wp-refchip-pop__act .pi { font-size: 11px; }
+.wp-refchip-pop__act .pi-check { color: var(--wp-success, #22c55e); }
 .wp-refchip-pop--up { transform: translateY(-100%); }
 .wp-refchip-pop > div { padding: 1px 0; word-break: break-word; }
 .wp-refchip-pop__head { display: flex; gap: 6px; align-items: baseline; }
 .wp-refchip-pop__name { font-weight: 600; }
 .wp-refchip-pop__kind {
-  font-size: 8px; text-transform: uppercase;
+  font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em;
   color: var(--wp-text-dim);
   border: 1px solid var(--wp-border);
-  border-radius: 3px; padding: 0 3px;
+  border-radius: 999px; padding: 0 6px;
 }
 .wp-refchip-pop__uuid { color: var(--wp-text-muted); }
 .wp-refchip-pop__filter { color: var(--wp-text-dim); }

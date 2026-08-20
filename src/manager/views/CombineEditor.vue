@@ -13,6 +13,7 @@ import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import type { SaveState } from "../components/EditorFrame.types";
 import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
+import SendToTestRunner from "../components/SendToTestRunner.vue";
 import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
@@ -310,6 +311,11 @@ const varProducers = computed<Map<string, VarProducerLike>>(() => {
       kind: first.kind,
       moduleName: first.name,
       moduleId: first.id,
+      // Axes come off the FIRST binder. With several modules binding one name
+      // the library has no execution order to pick a winner, so completing
+      // against the first is a guess — but a guess that names a real axis on a
+      // real module beats offering nothing.
+      axes: first.axes,
       shadowed: refs.length - 1,
       siblingLabel: "library module",
     });
@@ -527,6 +533,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
       />
     </template>
     <template v-if="isEdit" #header-extra>
+      <SendToTestRunner v-if="props.id" :kind="'combine'" :id="props.id" />
       <span v-if="cascadeRefs.length > 0" class="wp-editor-used-by">
         used by <PillCountBadge :count="cascadeRefs.length" />
       </span>

@@ -1,0 +1,108 @@
+"""Prefix search over the LoRA and embedding files ComfyUI already knows about.
+
+Nothing is downloaded and nothing is parsed from disk by us: ComfyUI enumerates
+both folders for its own node combos, so the entire source is one call into
+`folder_paths`. That is the whole reason these two sources cost so little next
+to the booru tag list, which needed a fetch, a cache, a byte cap and a parser.
+
+Kept separate from `wp_api/models.py` (the HTTP layer) so the matching rules are
+testable without aiohttp, and separate from `_tag_index.py` because the two have
+almost nothing in common — tags rank by post count, these have no count at all.
+"""
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class ModelHit:
+    """One matched file."""
+
+    #: What goes on screen — the filename without extension or folder.
+    name: str
+    #: The full relative path as ComfyUI knows it, e.g. `style/foo.safetensors`.
+    #: This is what the insert syntax must use: two folders can hold a `foo`
+    #: and ComfyUI resolves by the full path, so showing the short name while
+    #: inserting the short name would silently pick the wrong file.
+    path: str
+    #: Folder prefix when the file is nested, else "". Shown as the row's
+    #: subtitle so two same-named files are tellable apart.
+    folder: str
+
+
+def _display_name(path: str) -> str:
+    base = path.replace("\\", "/").rsplit("/", 1)[-1]
+    return os.path.splitext(base)[0]
+
+
+def _folder_of(path: str) -> str:
+    norm = path.replace("\\", "/")
+    return norm.rsplit("/", 1)[0] if "/" in norm else ""
+
+
+#: Characters that carry no meaning when someone is trying to remember a model
+#: name. Real filenames scatter these unpredictably — `2X-KO_more_-ill_r1`,
+#: `8.0-sprite pixel art style by skormino` — and nobody recalls where they
+#: fell. Stripping them on BOTH sides makes `2xko` find `2X-KO_more_-ill_r1`.
+_NOISE = str.maketrans("", "", r"-_. /\()[]")
+
+
+def _fold(text: str) -> str:
+    """Lowercase and drop separators, for matching only. Never for display."""
+    return text.lower().translate(_NOISE)
+
+
+def build_hits(paths: list[str]) -> list[ModelHit]:
+    """Turn ComfyUI's raw relative paths into displayable rows."""
+    return [
+        ModelHit(name=_display_name(p), path=p, folder=_folder_of(p))
+        for p in paths
+    ]
+
+
+def search(hits: list[ModelHit], query: str, limit: int) -> list[ModelHit]:
+    """Case-insensitive match, prefix hits before substring hits.
+
+    No score beyond that ordering. These lists are tens to low hundreds of
+    entries — the user broadly knows what they installed — so the useful job is
+    "get it in front of me", not "rank it". Anything cleverer would also have to
+    invent a comparison with the tag list's post counts, which is exactly the
+    comparison that made a single flat result list the wrong shape.
+
+    Ties break on name so the order is stable between calls; an unstable list
+    under a moving keyboard selection is how you press Enter on the wrong row.
+    """
+    # Normalise separators on BOTH sides. The client sends whatever the user
+    # typed, and `embedding:style\lazyhand.safetensors` carries a backslash
+    # that would never match a path stored with forward slashes.
+    raw = query.strip().lower().replace("\\", "/")
+    if not raw:
+        return []
+    folded_q = _fold(raw)
+    if not folded_q:
+        return []
+
+    # Three tiers, best first. Separator-insensitive throughout: matching on the
+    # literal string meant a user had to reproduce punctuation they had no
+    # reason to remember, and `2xko` simply could not find `2X-KO_more_-ill_r1`.
+    exact_prefix: list[ModelHit] = []
+    folded_prefix: list[ModelHit] = []
+    contains: list[ModelHit] = []
+    for h in hits:
+        low = h.name.lower()
+        path_low = h.path.replace("\\", "/").lower()
+        f_name = _fold(h.name)
+        # A full path typed inside a reference is a prefix of the stored PATH,
+        # not of the display name, so both have to be considered — otherwise a
+        # completed reference sorts below unrelated substring matches.
+        f_path = _fold(path_low)
+        if low.startswith(raw) or path_low.startswith(raw):
+            exact_prefix.append(h)
+        elif f_name.startswith(folded_q) or f_path.startswith(folded_q):
+            folded_prefix.append(h)
+        elif folded_q in f_name or folded_q in f_path:
+            contains.append(h)
+    for bucket in (exact_prefix, folded_prefix, contains):
+        bucket.sort(key=lambda h: h.name.lower())
+    return (exact_prefix + folded_prefix + contains)[:limit]

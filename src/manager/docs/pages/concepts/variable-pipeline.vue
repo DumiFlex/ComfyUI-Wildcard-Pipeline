@@ -50,6 +50,16 @@ import VarToken from "../../../components/docs/VarToken.vue";
               <VarToken>$colors.0</VarToken> is the first pick. Out-of-range indices resolve to empty.</td>
           </tr>
           <tr>
+            <td><VarToken>$name.AXIS</VarToken></td>
+            <td>combine, derivation, assembler</td>
+            <td>Reads the tag an <b>accepts</b> axis named <code>AXIS</code> rolled on the source
+              wildcard — e.g. <VarToken>$outfit.SHOES</VarToken> is the shoe tag chosen this run.
+              Rolled once when the option is picked, so it's the same value in every template,
+              module and chained node. For a multi-pick source, <VarToken>$name.K.AXIS</VarToken> is
+              the K-th pick's (index and axis compose in either order). A tag that was never promoted
+              to an accepts axis — or one in a classify group — resolves to empty and is flagged.</td>
+          </tr>
+          <tr>
             <td><VarToken kind="ref">@{8hexchars}</VarToken></td>
             <td>wildcard options, derivation actions</td>
             <td>

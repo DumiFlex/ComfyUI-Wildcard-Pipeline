@@ -65,6 +65,12 @@
   --wp-text-dim:    #8a8a9a;
 
   /* Status */
+  /* Tag-axis accessor (`$outfit.SHOES`). One fixed colour rather than the
+     group's own hue: an accessor is the same KIND of thing wherever it
+     appears, and per-group hues made the meaning look different per
+     variable. Deliberately amber-400, not --wp-warn (amber-500), so a valid
+     axis never reads as the undeclared-axis warning. */
+  --wp-axis: #fbbf24;
   --wp-success: #22c55e;
   --wp-warn:    #f59e0b;
   --wp-danger:  #ef4444;
@@ -588,6 +594,11 @@ input, textarea, select { font: inherit; }
   padding: 12px 14px;
   border-bottom: 1px solid var(--wp-border);
   display: flex; align-items: center; gap: 10px;
+  /* Wrap only engages once the row genuinely cannot fit, which previously
+     meant the widest flexible child collapsed instead — the derivation card
+     has four buttons and squeezed its filter input to 18px in a narrow
+     window. A header that fits is unaffected. */
+  flex-wrap: wrap;
 }
 .wp-card__title-wrap { display: flex; flex-direction: column; gap: 1px; }
 .wp-card__title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--wp-text-muted); margin: 0; font-weight: 600; }

@@ -63,6 +63,13 @@ const slots = useSlots();
 
 const hasContent = computed(() => Boolean(slots.default));
 
+/** Native hover tooltip for icon-only buttons. Their `aria-label` names them
+ *  for screen readers, but a sighted user hovering a bare icon gets nothing —
+ *  so mirror the label into `title` when there's no visible text. A button with
+ *  text already says what it does, so it stays untitled. */
+const titleAttr = computed(() =>
+  !hasContent.value && props.ariaLabel ? props.ariaLabel : undefined);
+
 const classes = computed(() => [
   "wp-btn",
   `wp-btn--${props.variant}`,
@@ -82,6 +89,7 @@ function onClick(e: MouseEvent) {
     :class="classes"
     :disabled="disabled || loading"
     :aria-label="ariaLabel"
+    :title="titleAttr"
     :aria-busy="loading || undefined"
     @click="onClick"
   >

@@ -9,10 +9,11 @@
   "packageManager": "pnpm@9.12.0",
   "scripts": {
     "dev": "vite build --watch --mode extension",
-    "build:extension": "vite build --mode extension && pnpm docs:copy",
-    "build:manager": "vite build --mode manager",
+    "build:extension": "vite build --mode extension && pnpm docs:copy && pnpm fonts:copy && node scripts/write-asset-manifest.mjs js",
+    "build:manager": "vite build --mode manager && node scripts/write-asset-manifest.mjs web",
     "build": "pnpm build:extension && pnpm build:manager",
     "docs:copy": "node scripts/copy-help-docs.mjs",
+    "fonts:copy": "node scripts/copy-fonts.mjs",
     "docs:figures": "node scripts/build-flow-figures.mjs",
     "typecheck": "vue-tsc --noEmit",
     "lint": "eslint \"src/**/*.{ts,vue}\"",

@@ -247,7 +247,17 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // previous bump left 179 bytes free, which meant every subsequent change had
 // to argue with the gate. Explicitly approved by the maintainer, who asked for
 // the budget to be raised as needed rather than features trimmed to fit.
-const TOTAL_LIMIT = 490 * 1024;     // 490 KB
+// LOWERED 490 -> 420 KB on 2026-08-06, after the webfonts stopped being bundled.
+// Vite library mode ignores `assetsInlineLimit` and base64-inlined both woff2
+// files into a JS chunk; they are now copied to js/assets/fonts/ and <link>ed at
+// runtime (see src/extension/fonts.ts). Measured 492,407 -> 403,055 bytes.
+//
+// Tightened rather than banked, because the gate is what stops it silently
+// regressing: re-inlining the fonts would add ~90 KB, which fits under 490 KB
+// and would have passed unnoticed. It does not fit under 420 KB. The 17 KB of
+// headroom left is deliberate — enough for ordinary work, not enough to hide a
+// whole asset class coming back.
+const TOTAL_LIMIT = 420 * 1024;     // 420 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

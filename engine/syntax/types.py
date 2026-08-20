@@ -93,6 +93,36 @@ def split_var_accessor(name: str) -> tuple[str, int | None]:
     return (name, None)
 
 
+_VAR_REF_RE = re.compile(
+    r"^([A-Za-z_][A-Za-z0-9_]*)"
+    r"(?:\.(?:(\d+)(?:\.([A-Za-z_][A-Za-z0-9_]*))?"
+    r"|([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?))?$"
+)
+
+
+def parse_var_reference(name: str) -> tuple[str, int | None, str | None]:
+    """Split a bare var reference into ``(base, index, axis)``.
+
+    The string-path twin of the tokenizer's ``_VAR_RE`` — derivation conditions
+    store ``condition.var`` as text, not tokens. Kept separate from
+    :func:`split_var_accessor` so the SP2a list-accessor contract and its
+    existing callers are untouched.
+
+    Both accessor orders are accepted and normalise to the same triple:
+    ``outfit.0.SHOES`` and ``outfit.SHOES.0`` are the same reference. A name
+    that matches nothing is returned whole with both accessors ``None``, so an
+    unusual ctx key resolves as itself rather than being truncated.
+    """
+    if not isinstance(name, str):
+        return ("", None, None)
+    m = _VAR_REF_RE.match(name)
+    if not m:
+        return (name, None, None)
+    idx = m.group(2) or m.group(5)
+    axis = m.group(3) or m.group(4)
+    return (m.group(1), int(idx) if idx is not None else None, axis)
+
+
 def deref_var_value(value: str | ListVar | None, index: int | None) -> str:
     """Render a resolved var value to a string, honoring an optional ``.K``
     list accessor (SP2a). ListVar: bare -> ``sep.join(items)``; ``.K`` ->
@@ -132,6 +162,16 @@ class ResolveContext(Protocol):
         """Return the bound value of `name`, or None if unbound. A
         multi-select wildcard binds a ``ListVar`` (SP2a); everything else
         binds a ``str``."""
+        ...
+
+    def get_axis(self, name: str, axis: str) -> str | list[str] | None:
+        """Return the tag rolled for `name`'s `axis`, or None if it has none.
+
+        A single-pick source yields a ``str``; a multi-select one yields a
+        ``list[str]``, one entry per pick in pick order. The value was rolled
+        when the wildcard picked — this only reads it back, which is what makes
+        two modules (or two nodes) agree.
+        """
         ...
 
     def get_module(self, uuid: str) -> dict[str, Any] | None:

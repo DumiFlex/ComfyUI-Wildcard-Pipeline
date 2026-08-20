@@ -70,7 +70,7 @@ def test_resolve_db_path_prefers_comfyui_user_dir(monkeypatch, tmp_path):
     monkeypatch.setattr(conn_mod, "_comfyui_user_dir_from_path", lambda: fake_comfy_user)
     monkeypatch.setattr(conn_mod, "_load_sidecar", lambda: {})
     result = resolve_db_path()
-    assert result == fake_comfy_user / "wildcard-pipeline.db"
+    assert result == fake_comfy_user / "wildcard-pipeline" / "wildcard-pipeline.db"
 
 
 def test_resolve_db_path_falls_back_to_home_when_no_comfyui_root(monkeypatch):

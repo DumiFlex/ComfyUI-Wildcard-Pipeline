@@ -117,6 +117,7 @@ import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import type { SaveState, EditorFieldError } from "../components/EditorFrame.types";
 import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
+import SendToTestRunner from "../components/SendToTestRunner.vue";
 import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
@@ -1029,6 +1030,7 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
       </span>
     </template>
     <template v-if="isEdit" #header-extra>
+      <SendToTestRunner v-if="props.id" :kind="'bundle'" :id="props.id" />
       <CommunityRowActions
         v-if="currentRow"
         :row="currentRow"

@@ -29,20 +29,20 @@ describe("FrameChips", () => {
     const sel = (extra = {}) =>
       mount(FrameChips, { props: { count: 4, selectable: true, showBase: true, bypassInteractive: true, ...extra } });
 
-    it("plain click selects, shift locks, alt bypasses", async () => {
+    it("plain click selects, alt locks, ctrl bypasses", async () => {
       const w = sel();
       await at(w, 2).trigger("click");
       expect(w.emitted("select")?.[0]).toEqual([1]);
-      await at(w, 3).trigger("click", { shiftKey: true });
+      await at(w, 3).trigger("click", { altKey: true });
       expect(w.emitted("toggleLock")?.[0]).toEqual([2]);
-      await at(w, 4).trigger("click", { altKey: true });
+      await at(w, 4).trigger("click", { ctrlKey: true });
       expect(w.emitted("toggleBypass")?.[0]).toEqual([3]);
     });
 
     it("a modifier click never also selects", async () => {
       const w = sel();
-      await at(w, 2).trigger("click", { shiftKey: true });
-      await at(w, 3).trigger("click", { altKey: true });
+      await at(w, 2).trigger("click", { altKey: true });
+      await at(w, 3).trigger("click", { ctrlKey: true });
       expect(w.emitted("select")).toBeUndefined();
     });
 
@@ -67,9 +67,9 @@ describe("FrameChips", () => {
       expect(w.emitted("select")).toBeUndefined();
     });
 
-    it("alt does nothing when bypass belongs to another node", async () => {
+    it("ctrl does nothing when bypass belongs to another node", async () => {
       const w = plain({ bypassed: [1] });
-      await at(w, 2).trigger("click", { altKey: true });
+      await at(w, 2).trigger("click", { ctrlKey: true });
       expect(w.emitted("toggleBypass")).toBeUndefined();
       expect(w.emitted("toggleLock")).toBeUndefined();
     });
@@ -137,7 +137,8 @@ describe("FrameChips", () => {
 
   it("prints the combos that apply to this mode", () => {
     const loop = mount(FrameChips, { props: { count: 2, selectable: true } });
-    expect(loop.find('[data-test="loop-frames-hint"]').text()).toMatch(/shift/i);
+    expect(loop.find('[data-test="loop-frames-hint"]').text()).toMatch(/alt-click locks/i);
+    expect(loop.find('[data-test="loop-frames-hint"]').text()).toMatch(/ctrl-click bypasses/i);
     const list = mount(FrameChips, { props: { count: 2 } });
     expect(list.find('[data-test="loop-frames-hint"]').text()).toMatch(/click a frame to lock/i);
     expect(list.find('[data-test="loop-frames-hint"]').text()).not.toMatch(/shift/i);

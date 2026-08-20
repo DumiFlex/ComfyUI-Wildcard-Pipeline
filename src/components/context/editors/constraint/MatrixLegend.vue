@@ -6,6 +6,12 @@
  */
 import { ref } from "vue";
 
+defineProps<{
+  /** Show the accepts-axis row — only when this matrix actually has one, so the
+   *  legend doesn't explain a mark that isn't on screen. */
+  showAccepts?: boolean;
+}>();
+
 const expanded = ref(false);
 
 function toggle(): void {
@@ -46,12 +52,28 @@ function toggle(): void {
         <span class="legend-name n-reduce">Reduce</span>
         <span class="legend-desc">When the source sub-cat is picked, target values in this column are N times less likely.</span>
       </div>
+      <div v-if="showAccepts" class="legend-row">
+        <span class="legend-sample s-axis"><i class="pi pi-sync glyph" aria-hidden="true" /></span>
+        <span class="legend-name n-axis">Accepts axis</span>
+        <span class="legend-desc">This group rolls one tag per pick and is readable as <code>$var.NAME</code>. Marked <i class="pi pi-sync" aria-hidden="true" /> on its band.</span>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
 .legend { margin-top: 14px; }
+.legend-sample.s-axis {
+  color: var(--wp-axis, #fbbf24);
+  background: color-mix(in srgb, var(--wp-axis, #fbbf24) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wp-axis, #fbbf24) 40%, transparent);
+}
+.legend-name.n-axis { color: var(--wp-axis, #fbbf24); }
+.legend-desc code {
+  font-family: var(--wp-font-mono, monospace);
+  color: var(--wp-text-muted, #a1a1ad);
+}
+.legend-desc .pi-sync { color: var(--wp-axis, #fbbf24); font-size: 10px; }
 .legend-toggle {
   display: inline-flex;
   align-items: center;

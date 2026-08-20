@@ -149,6 +149,10 @@ export type ConflictType =
   // collapse into the two `orphan_*` types below. `_missing` rules stay
   // for the "uuid not in any catalog" case which is independent of
   // position.
+  // A `$var.AXIS` read naming a group no in-node wildcard declares `accepts`.
+  // Commonest cause is a group that exists but was never promoted; second
+  // commonest is an axis renamed after the read was written.
+  | "unknown_tag_axis"
   | "constraint_source_missing"
   | "constraint_target_missing"
   | "constraint_orphan_source"   // no source instance upstream
@@ -190,6 +194,7 @@ export function labelFor(type: ConflictType): string {
   if (type === "shadows_upstream") return "overrides upstream";
   if (type === "duplicate_variable") return "duplicate";
   if (type === "missing_template_variable") return "missing";
+  if (type === "unknown_tag_axis") return "unknown tag axis — is that group marked 'accepts'?";
   if (type === "constraint_source_missing") return "source missing";
   if (type === "constraint_target_missing") return "target missing";
   if (type === "constraint_orphan_source") return "source missing — no upstream instance";
@@ -210,6 +215,7 @@ export function shortConflictLabel(type: ConflictType): string {
     case "shadows_upstream":            return "override";
     case "duplicate_variable":          return "duplicate";
     case "missing_template_variable":   return "missing var";
+    case "unknown_tag_axis":            return "unknown axis";
     case "constraint_source_missing":   return "src missing";
     case "constraint_target_missing":   return "tgt missing";
     case "constraint_orphan_source":    return "no src upstream";
@@ -297,6 +303,45 @@ const TEMPLATE_VAR = /(?<!\$)\$([A-Za-z_][A-Za-z0-9_]*)/g;
 function templateVarsIn(template: string): string[] {
   const out: string[] = [];
   for (const m of template.matchAll(TEMPLATE_VAR)) out.push(m[1]);
+  return out;
+}
+
+/** `$name.AXIS` references, either accessor order. Mirrors the accessor
+ *  grammar in `engine/syntax/tokenize.py:_VAR_RE` — at most one pick index and
+ *  one axis, so `.0.AXIS` and `.AXIS.0` both yield the same pair. */
+const TEMPLATE_VAR_AXIS =
+  /(?<!\$)\$([A-Za-z_][A-Za-z0-9_]*)(?:\.(?:\d+\.([A-Za-z_][A-Za-z0-9_]*)|([A-Za-z_][A-Za-z0-9_]*)(?:\.\d+)?))/g;
+
+export interface AxisRef { name: string; axis: string }
+
+function templateAxisRefsIn(template: string): AxisRef[] {
+  const out: AxisRef[] = [];
+  for (const m of template.matchAll(TEMPLATE_VAR_AXIS)) {
+    const axis = m[2] ?? m[3];
+    if (axis) out.push({ name: m[1], axis });
+  }
+  return out;
+}
+
+/** Axis references a derivation's CONDITIONS make. Conditions store `var` as
+ *  bare text (no `$`), so the template regex does not apply. */
+function conditionAxisRefsIn(m: ModuleEntry): AxisRef[] {
+  if (m.type !== "derivation") return [];
+  const out: AxisRef[] = [];
+  const rules = ((m.payload as { rules?: unknown[] } | undefined)?.rules ?? []) as Array<{
+    branches?: Array<{ condition?: { var?: unknown } }>;
+  }>;
+  for (const rule of rules) {
+    for (const br of rule.branches ?? []) {
+      const v = br.condition?.var;
+      if (typeof v !== "string") continue;
+      const mm = v.match(
+        /^([A-Za-z_][A-Za-z0-9_]*)(?:\.(?:\d+\.([A-Za-z_][A-Za-z0-9_]*)|([A-Za-z_][A-Za-z0-9_]*)(?:\.\d+)?))$/,
+      );
+      const axis = mm?.[2] ?? mm?.[3];
+      if (mm && axis) out.push({ name: mm[1], axis });
+    }
+  }
   return out;
 }
 
@@ -585,6 +630,37 @@ export function scanConflicts(
     }
     return out;
   })();
+  // Which `accepts` axes each binding written IN THIS NODE declares. Built up
+  // front because a `$var.AXIS` read can sit above the wildcard that produces
+  // it in module order — the read is resolved by the runtime ctx, not by
+  // position, so judging it by position would be wrong.
+  //
+  // Only wildcards contribute: no other module type has tag groups. A binding
+  // written outside this node is absent from the map and reads against it are
+  // left alone (see `flagAxis`).
+  const axisProducers = ((): Map<string, Set<string>> => {
+    const out = new Map<string, Set<string>>();
+    for (const m of value.modules) {
+      if (m.type !== "wildcard") continue;
+      const payload = (m.payload ?? {}) as {
+        var_binding?: unknown;
+        tag_group_kinds?: Record<string, unknown>;
+      };
+      const inst = (m.instance ?? {}) as { variable_binding?: unknown };
+      const binding = typeof inst.variable_binding === "string" && inst.variable_binding
+        ? inst.variable_binding
+        : (typeof payload.var_binding === "string" ? payload.var_binding : "");
+      if (!binding) continue;
+      const declared = out.get(binding) ?? new Set<string>();
+      for (const [axis, kind] of Object.entries(payload.tag_group_kinds ?? {})) {
+        if (kind === "accepts") declared.add(axis);
+      }
+      // Two wildcards can share a binding (last-write-wins at runtime); union
+      // their axes rather than letting the second erase the first's.
+      out.set(binding, declared);
+    }
+    return out;
+  })();
   const written = new Set<string>();
   // Track the kind of the FIRST module to write each name in this
   // node. Used to distinguish intentional cross-kind overrides
@@ -655,6 +731,36 @@ export function scanConflicts(
     for (const v of varReadsOf(m)) flagMissing(v);
     for (const tpl of templatesOf(m)) {
       for (const v of templateVarsIn(tpl)) flagMissing(v);
+    }
+
+    // 1b. `$var.AXIS` reads naming a group nothing declares `accepts`. The
+    //     engine renders those empty, so without a signal here the only
+    //     symptom is a silently missing word in the prompt.
+    //
+    //     Deliberately conservative: this scanner runs PER NODE and receives
+    //     upstream variables as names only, never payloads. So a read is
+    //     checked only when a wildcard in THIS node writes that binding — if
+    //     the producer lives in another node we cannot see its groups, and
+    //     guessing would fire on correct workflows. Under-reporting beats a
+    //     warning the user cannot act on.
+    const seenAxis = new Set<string>();
+    const flagAxis = ({ name, axis }: AxisRef): void => {
+      const producer = axisProducers.get(name);
+      if (!producer) return;              // not written here — cannot judge
+      if (producer.has(axis)) return;     // declared accepts, all good
+      const key = `${name}.${axis}`;
+      if (seenAxis.has(key)) return;
+      seenAxis.add(key);
+      out.push({
+        moduleId: m._uid ?? m.id,
+        variable: key,
+        type: "unknown_tag_axis",
+        severity: "warning",
+      });
+    };
+    for (const ref of conditionAxisRefsIn(m)) flagAxis(ref);
+    for (const tpl of templatesOf(m)) {
+      for (const ref of templateAxisRefsIn(tpl)) flagAxis(ref);
     }
 
     // 2. Writes from this module — order-dependent, so happens AFTER

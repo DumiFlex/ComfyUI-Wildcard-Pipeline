@@ -1,5 +1,6 @@
 import { mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { nextTick } from "vue";
+import { describe, expect, it, vi } from "vitest";
 import { createMemoryHistory, createRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import type { ModuleHistoryEntry } from "../api/types";
@@ -91,5 +92,56 @@ describe("EditorFrame.vue", () => {
     const wrap = mountFrame({ saveDisabled: true });
     const saveBtn = wrap.find('[data-test="save-btn"]');
     expect((saveBtn.element as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe("EditorFrame.vue — failed-save auto-scroll", () => {
+  it("scrolls the first error's field into view when errors first appear", async () => {
+    // The offending section must exist in the DOM to be scrolled to.
+    const section = document.createElement("div");
+    section.id = "editor-section-options";
+    const input = document.createElement("input");
+    section.appendChild(input);
+    document.body.appendChild(section);
+    // jsdom has no scrollIntoView — define it as a spy.
+    const spy = vi.fn();
+    (section as unknown as { scrollIntoView: unknown }).scrollIntoView = spy;
+
+    const wrap = mount(EditorFrame, {
+      props: { title: "T", backRoute: "/wildcards", backLabel: "W", errors: [] },
+      slots: { default: "<div/>" },
+      global: { plugins: [makeRouter()] },
+    });
+    // Empty -> populated is the "tried to save while invalid" edge.
+    await wrap.setProps({
+      errors: [{ field: "editor-section-options", label: "Options", message: "Required" }],
+    });
+    await nextTick();
+    expect(spy).toHaveBeenCalledOnce();
+
+    section.remove();
+  });
+
+  it("does not re-scroll while the error list only shrinks/changes", async () => {
+    const section = document.createElement("div");
+    section.id = "editor-section-identity";
+    document.body.appendChild(section);
+    const spy = vi.fn();
+    (section as unknown as { scrollIntoView: unknown }).scrollIntoView = spy;
+    const err = (field: string) => ({ field, label: "X", message: "bad" });
+
+    const wrap = mount(EditorFrame, {
+      props: { title: "T", backRoute: "/wildcards", backLabel: "W",
+        errors: [err("editor-section-identity"), err("editor-section-options")] },
+      slots: { default: "<div/>" },
+      global: { plugins: [makeRouter()] },
+    });
+    await nextTick();
+    spy.mockClear();
+    // Fixing one error keeps the list non-empty — must NOT yank the scroll.
+    await wrap.setProps({ errors: [err("editor-section-identity")] });
+    await nextTick();
+    expect(spy).not.toHaveBeenCalled();
+    section.remove();
   });
 });

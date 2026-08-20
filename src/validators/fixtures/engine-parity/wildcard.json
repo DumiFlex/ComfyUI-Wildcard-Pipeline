@@ -12,6 +12,15 @@
       "soft",
       "bold"
     ],
+    "tag_groups": {
+      "TEXTURE": [
+        "soft",
+        "bold"
+      ]
+    },
+    "tag_group_kinds": {
+      "TEXTURE": "accepts"
+    },
     "options": [
       {
         "id": "opt00001",

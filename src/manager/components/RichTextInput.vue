@@ -25,11 +25,14 @@ import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } fr
 import {
   parse,
   replaceAtom,
+  serialiseVarAtom,
   type Atom,
   type RefAtom,
   type TextAtom,
 } from "./atomicEditorModel";
-import { escapeHtml, inlineTokenHtml, splitRefFilter, tokenizeRich } from "../../widgets/richTokenize";
+import {
+  escapeHtml, inlineTokenHtml, splitRefFilter, tokenizeRich, varAccessorParts, varBaseName,
+} from "../../widgets/richTokenize";
 import RefChip, { type VarProducerLike } from "./RefChip.vue";
 import SubcategoryFilterPicker from "./SubcategoryFilterPicker.vue";
 import RemapRefPopup from "./RemapRefPopup.vue";
@@ -37,8 +40,17 @@ import { useGrowableField } from "../../components/shared/useGrowableField";
 import { rewriteBrokenRef } from "../cascade/remap-ref-rewrite";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
-import { probeAutocomplete } from "../utils/autocompleteProbe";
-import { refRows, varRows, type SuggestionRow } from "../utils/suggestion-rows";
+import { probeAutocomplete, probeModelRef, probeTagWord } from "../utils/autocompleteProbe";
+import { api } from "../api/client";
+import type { ModelKind, ModelSuggestion, TagCategoryName, TagSuggestion } from "../api/types";
+import { loadTagAvailability } from "../utils/tagStatus";
+import {
+  autocompleteSeparatorEnabled,
+  completionSettingsVersion,
+  completionSourceEnabled as sourceOn,
+} from "../utils/tagSetting";
+import { refRows, varRows, type SuggestionRow, expandVarsWithAxes } from "../utils/suggestion-rows";
+import { varColorClass, varColorIndex } from "../../components/shared/var-color";
 import { CONTEXT_POOLS_KEY, type ContextPoolMap } from "../../extension/context-pools";
 
 // --- 4-segment nested-ref serialization (SP1, §3.2) -----------------------
@@ -121,7 +133,7 @@ function serialiseAtomsLocal(atoms: Atom[]): string {
   let out = "";
   for (const a of atoms) {
     if (a.kind === "text") out += a.text;
-    else if (a.kind === "var") out += "$" + a.name + (a.index != null ? "." + a.index : "");
+    else if (a.kind === "var") out += serialiseVarAtom(a);
     else out += serialiseRefAtom(a);
   }
   return out;
@@ -162,6 +174,16 @@ interface Props {
    *  there (carrier) but compares `condition.value` raw, so condition inputs
    *  leave this false. The `wildcard` surface enables refs regardless. */
   allowNestedRefs?: boolean;
+  /**
+   * Override the producer/consumer default for `$var` reads.
+   *
+   * Tri-state on purpose. A `boolean` here would be inferred as a Vue Boolean
+   * prop, and Vue casts an ABSENT Boolean prop to `false` rather than leaving
+   * it undefined — so `props.allowVars ?? <default>` never reached the
+   * default and every surface silently lost `$`. `"auto"` says "use the
+   * surface's rule" in a way no prop-casting rule can quietly rewrite.
+   */
+  allowVars?: "auto" | "on" | "off";
   /** Map from UUID to display name; used to render `@{uuid}` refs as human labels. */
   uuidToName?: Map<string, string>;
   /** Map from wildcard UUID → its declared sub_categories. Used by the
@@ -194,6 +216,21 @@ interface Props {
   /** True when the host walked a graph. Lets the chip say "no upstream
    *  producer" (canvas, actionable) rather than staying silent (SPA). */
   graphAware?: boolean;
+  /**
+   * Fill the height the host gives us and scroll the overflow, instead of
+   * growing to fit the content and offering a drag grip.
+   *
+   * For canvas widgets mounted with `fillHost`, where the NODE's own corner is
+   * the one and only resize control. Two resize authorities on one box is what
+   * produced a drag that never ended and a node that fought the editor over
+   * its height; this removes the second one rather than arbitrating between
+   * them.
+   *
+   * Hides the grip, drops the height cap, and makes the box a flex child that
+   * can shrink below its content — without `min-height: 0` a flex item refuses
+   * to, which is exactly how the payload used to push the node taller.
+   */
+  fill?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -223,6 +260,7 @@ const props = withDefaults(defineProps<Props>(), {
   disabled: false,
   varProducers: undefined,
   graphAware: false,
+  fill: false,
 });
 
 // Lazy-pull store on first prop access — singleton so doesn't matter
@@ -241,6 +279,41 @@ const effectiveWarnings = computed<ResolveWarning[]>(() => [
  *  source for the parse-collapse + the `@`-autocomplete gate so they can't
  *  drift apart. */
 const refsEnabled = computed(() => props.surface === "wildcard" || props.allowNestedRefs);
+
+/**
+ * Whether `$var` READS mean anything on this surface.
+ *
+ * The engine already draws this line and calls it producer vs consumer:
+ * `wildcard` and `fixed_values` DEFINE what a `$name` resolves to, so a `$var`
+ * read inside one is not a reference — `resolve_text` gates both off and
+ * renders the token as literal text with a warning
+ * (`engine/modules/fixed_values_handler.py`, `engine/syntax/resolve.py`).
+ *
+ * The frontend used to hardcode `surface === "wildcard"` here, which made it
+ * MORE permissive than the engine: the SPA's fixed-values editor offered `$`
+ * autocomplete for tokens the engine would never resolve. A prop with a
+ * surface-derived default keeps the two aligned and lets a caller be explicit
+ * rather than adding a third name to a growing condition.
+ */
+/**
+ * Surfaces that render `$var` as coloured text rather than a chip.
+ *
+ * Only the prompt template. Everywhere else a chip is honest — the module
+ * editors let you click one to re-pick what it points at, so the border and
+ * fill are advertising a real affordance. A template is prose you are writing,
+ * the chip advertises nothing, and its box breaks the line rhythm of the
+ * sentence at 10px inside 12px text.
+ */
+const FLAT_VAR_SURFACES = new Set(["assembler"]);
+
+const PRODUCER_SURFACES = new Set(["wildcard", "fixed_values"]);
+const flatVars = computed(() => FLAT_VAR_SURFACES.has(props.surface ?? "combine"));
+
+const varsEnabled = computed(() => {
+  if (props.allowVars === "on") return true;
+  if (props.allowVars === "off") return false;
+  return !PRODUCER_SURFACES.has(props.surface ?? "combine");
+});
 
 const emit = defineEmits<{
   "update:modelValue": [value: string];
@@ -271,7 +344,256 @@ const ZWSP_RE = /​/g;
 // Autocomplete state.
 const acOpen = ref(false);
 const acQuery = ref("");
-const acTrigger = ref<"$" | "@">("$");
+/** `"tag"` is the sigil-less booru-tag mode. Keeping it in the SAME state as
+ *  `$` and `@` is deliberate: one popover, one trigger, so the modes are
+ *  mutually exclusive by construction rather than by coordination. Two
+ *  independent popovers could both be open over one caret. */
+const acTrigger = ref<"$" | "@" | "tag">("$");
+
+/* ── Booru tag autocomplete (optional, off unless enabled) ──────────────────
+ * Rows come from the server: the tag list is several megabytes and is never
+ * sent to the browser, so every keystroke asks for one screenful instead.
+ *
+ * Gated three ways — the setting, an installed list, and the sigil probe not
+ * already owning the caret. Any one of them false and this stays silent. */
+/** 855605 -> "856k". The exact figure is noise; the order of magnitude is the
+ *  whole signal, and a full number would dominate a 12px row. */
+function formatTagCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${Math.round(n / 1000)}k`;
+  return String(n);
+}
+
+const tagRows = ref<TagSuggestion[]>([]);
+const modelRows = ref<Partial<Record<ModelKind, ModelSuggestion[]>>>({});
+
+/** Set while the caret sits inside a `<lora:…>` or `embedding:…` reference.
+ *  Restricts the popover to that kind: a reference names one by construction,
+ *  so offering the other — or offering tags — is offering something that
+ *  cannot legally be inserted at that caret. */
+const refKind = ref<ModelKind | null>(null);
+
+/**
+ * The query the rows currently on screen were actually fetched for.
+ *
+ * The header renders `acQuery`, which updates synchronously on every
+ * keystroke, while the rows arrive from a debounced fetch — so there is a
+ * window where the popover shows the PREVIOUS query's results under the
+ * CURRENT query's header. Caught on video: the field read `lazy` while the
+ * third row was `laser` (from the alias `lazer`), which is not a `lazy` prefix
+ * at all — those were the results for `laz`.
+ *
+ * The rows are deliberately not cleared while the next fetch is in flight;
+ * blanking on every keystroke flickers far worse than briefly-stale content.
+ * Instead the popover says so, which turns an unexplained reflow into an
+ * obvious "still looking".
+ */
+const rowsQuery = ref("");
+/** True while the visible rows were fetched for an older query than the one in
+ *  the box, so they can be dimmed until they catch up.
+ *
+ *  Gated to the bare-word trigger: only tag/model rows are fetched
+ *  asynchronously, and `rowsQuery` only advances when such a fetch settles. On
+ *  a `$` or `@` popover — which filters a list already in memory, synchronously
+ *  — `rowsQuery` never moves, so this read true from the first keystroke and
+ *  never recovered, dimming a list that was always current. */
+const rowsStale = computed(() =>
+  acOpen.value && acTrigger.value === "tag" && rowsQuery.value !== acQuery.value);
+
+/**
+ * One row of the bare-word popover, whatever source it came from.
+ *
+ * Kept as ONE FLAT ARRAY even though the popover renders sections, because
+ * `acActive` indexes it. Grouping the state instead would put the keyboard
+ * selection in charge of two coordinates and make "skip the header" a case to
+ * handle; flat, a header is simply not in the array and cannot be selected.
+ */
+type WordRow =
+  | { source: "tag"; tag: TagSuggestion }
+  | { source: ModelKind; model: ModelSuggestion };
+
+/**
+ * Sections, not one ranked list.
+ *
+ * The sources have no common ranking key: a tag ranks by post count in the tens
+ * of thousands, a LoRA has no count at all — you either have the file or you do
+ * not. Any flat ordering has to invent a comparison between "12,000 posts" and
+ * "a file on disk", and whichever is invented, tags win on weight of numbers
+ * and the user's own models sink below the fold. Sections also let each source
+ * cap its own rows, so 20 tags cannot crowd out 3 matching LoRAs.
+ *
+ * Tags lead because that is what a prompt is mostly made of.
+ */
+/** Tag rows kept when a model also matched.
+ *
+ *  Sections alone did not deliver what they promised. Tags lead, and a query
+ *  like `lazy` matches twenty of them, so the embedding section existed but sat
+ *  entirely below the fold — the user could not filter to their own models
+ *  without scrolling a list they were not looking for. Capping the leading
+ *  section is what actually makes the others reachable.
+ *
+ *  Only applied when there IS something to protect: a query matching nothing
+ *  but tags still gets the full twenty. */
+const TAGS_WHEN_MODELS_MATCH = 6;
+
+const wordRows = computed<WordRow[]>(() => {
+  const loras = modelRows.value.lora ?? [];
+  const embeddings = modelRows.value.embedding ?? [];
+  const modelsPresent = loras.length > 0 || embeddings.length > 0;
+  const tags = modelsPresent
+    ? tagRows.value.slice(0, TAGS_WHEN_MODELS_MATCH)
+    : tagRows.value;
+  return [
+    ...tags.map((tag) => ({ source: "tag" as const, tag })),
+    ...loras.map((model) => ({ source: "lora" as const, model })),
+    ...embeddings.map((model) => ({ source: "embedding" as const, model })),
+  ];
+});
+
+/** Rows grouped for rendering, in the same order as the flat list, with the
+ *  flat index carried along so a click knows what it selected. */
+const wordSections = computed(() => {
+  const order: Array<WordRow["source"]> = ["tag", "lora", "embedding"];
+  const labels: Record<WordRow["source"], string> = {
+    tag: "tags", lora: "loras", embedding: "embeddings",
+  };
+  const out: Array<{ source: WordRow["source"]; label: string; rows: Array<{ row: WordRow; index: number }> }> = [];
+  for (const source of order) {
+    const rows = wordRows.value
+      .map((row, index) => ({ row, index }))
+      .filter((e) => e.row.source === source);
+    if (rows.length) out.push({ source, label: labels[source], rows });
+  }
+  return out;
+});
+
+/** PrimeIcon per source. `pi-tags` plural is the booru tag — `pi-tag` singular
+ *  is already the fixed_values module kind. `pi-asterisk` and `pi-code` were
+ *  the only two candidates with no existing use anywhere in `src/`. */
+const SOURCE_ICON: Record<WordRow["source"], string> = {
+  tag: "pi pi-tags",
+  lora: "pi pi-asterisk",
+  embedding: "pi pi-code",
+};
+
+/** What a committed row puts in the document. A model inserts its FULL PATH,
+ *  not its display name: two folders can hold the same filename and ComfyUI
+ *  resolves by path, so inserting the short name would silently pick a
+ *  different file from the one shown. */
+/**
+ * What follows a committed completion.
+ *
+ * Opt-in `", "`, so the next tag can be typed straight away. Suppressed inside
+ * a `<lora:…>` or `embedding:…` reference: there the caret is mid-syntax and a
+ * comma would terminate the very reference being completed — the LoRA still
+ * needs its `:weight>`.
+ */
+function committedSuffix(): string {
+  if (refKind.value !== null) return "";
+  return autocompleteSeparatorEnabled() ? ", " : "";
+}
+
+function wordRowText(row: WordRow): string {
+  if (row.source === "tag") return row.tag.name;
+  // Inside an existing reference the caller already typed the marker, and
+  // `acStart` points at the path — so emitting the whole syntax again would
+  // produce `<lora:<lora:name:1.0>:1.0>`.
+  if (refKind.value !== null) return row.model.path;
+  if (row.source === "lora") return `<lora:${row.model.path}:1.0>`;
+  return `embedding:${row.model.path}`;
+}
+
+/** Categories present in the CURRENT results, in Danbooru's own order.
+ *
+ *  The legend appears only when more than one kind is on screen. On an
+ *  all-general query every bar is the same neutral grey, and a legend naming
+ *  four colours none of which are visible explains nothing — it is decoration
+ *  that costs a row of height. */
+const tagLegend = computed(() => {
+  if (!tagHasCategories.value) return [];
+  const order: TagCategoryName[] = [
+    "character", "copyright", "artist", "meta", "general",
+  ];
+  const present = new Set(
+    tagRows.value
+      .map((t) => t.category_name)
+      .filter((c): c is TagCategoryName => c !== null),
+  );
+  const shown = order.filter((c) => present.has(c));
+  return shown.length > 1 ? shown : [];
+});
+/** Row count for the ACTIVE mode — keyboard nav must not care which. */
+const acRowCount = computed(
+  () => (acTrigger.value === "tag" ? wordRows.value.length : acItems.value.length),
+);
+const tagListAvailable = ref(false);
+const tagHasCategories = ref(false);
+let tagFetchSeq = 0;
+let tagFetchTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Enabled only where a booru tag is a plausible thing to type: option values
+ *  and template text. Never in a name field. */
+const tagAutocompleteEnabled = computed(() => {
+  // The reactive dependency that makes this recompute at all: `sourceOn` reads
+  // ComfyUI's settings store, which Vue cannot track, so without this the
+  // result cached until the page reloaded.
+  void completionSettingsVersion.value;
+  if (props.disabled) return false;
+  // Tags need a downloaded list; the model sources read what ComfyUI already
+  // enumerated, so for them "switched on" is the whole condition. Any one
+  // source being usable is enough to arm the bare-word probe.
+  if (sourceOn("tag") && tagListAvailable.value) return true;
+  return sourceOn("lora") || sourceOn("embedding");
+});
+
+function scheduleTagFetch(query: string): void {
+  if (tagFetchTimer !== undefined) clearTimeout(tagFetchTimer);
+  // A sequence number, not just a timer: responses can land out of order and
+  // a slow answer for "blu" must not overwrite a fast one for "blue_ha".
+  const seq = ++tagFetchSeq;
+  tagFetchTimer = setTimeout(() => {
+    /* ONE settle for all sources, not one per source.
+     *
+     * These used to resolve independently, on the reasoning that the popover
+     * should never be held at the speed of the slower one. That optimised for a
+     * latency that does not exist — both endpoints are in-process on localhost —
+     * and paid for it with a visible double reflow on EVERY keystroke: the tag
+     * rows landed and rendered, then the model rows landed, appended their
+     * sections and re-capped the tags, so the list rebuilt twice in a few tens
+     * of milliseconds. That is the flicker.
+     *
+     * `allSettled`, so one source failing still shows the other. A failure is
+     * an empty list for that source and nothing else — an optional convenience
+     * must not raise anything while someone is mid-sentence.
+     */
+    const wantTags = refKind.value === null && sourceOn("tag") && tagListAvailable.value;
+    const kinds: ModelKind[] = refKind.value !== null
+      ? [refKind.value]
+      : [
+        ...(sourceOn("lora") ? ["lora" as const] : []),
+        ...(sourceOn("embedding") ? ["embedding" as const] : []),
+      ];
+
+    void Promise.allSettled([
+      wantTags ? api.tags.suggest(query, 20) : Promise.resolve(null),
+      kinds.length > 0
+        ? api.models.suggest(query, kinds, 8, refKind.value !== null)
+        : Promise.resolve(null),
+    ]).then(([tagRes, modelRes]) => {
+      // Stale-response guard: a newer keystroke already scheduled its own
+      // fetch, and its answer must not be overwritten by ours arriving late.
+      if (seq !== tagFetchSeq) return;
+      tagRows.value = tagRes.status === "fulfilled" && tagRes.value
+        ? tagRes.value.tags
+        : [];
+      modelRows.value = modelRes.status === "fulfilled" && modelRes.value
+        ? modelRes.value.results
+        : {};
+      rowsQuery.value = query;
+      acActive.value = 0;
+    });
+  }, 120);
+}
 const acStart = ref(-1);
 const acActive = ref(0);
 // Popup geometry — `position: fixed` viewport coordinates so the teleported
@@ -491,7 +813,14 @@ function parseForSurface(text: string): Atom[] {
   const collapseSet: Set<"var" | "ref"> =
     props.surface === "wildcard"
       ? new Set(["var"])
-      : props.surface === "fixed_values"
+      // fixed_values and assembler both keep `$name` as literal text, for
+      // opposite reasons. fixed_values PRODUCES bindings, so a `$var` read is
+      // meaningless there. The assembler reads them constantly — but a
+      // template is prose, and an atomic chip in prose behaves like an object:
+      // one Backspace deletes the whole token, the caret cannot enter it, and
+      // it takes a pointer cursor. Collapsed, it is ordinary editable text
+      // that happens to be coloured.
+      : props.surface === "fixed_values" || props.surface === "assembler"
         ? new Set(["var", "ref"])
         : new Set(["ref"]);
   // Action-value derivation inputs (allowNestedRefs) chipify `@{}` refs like
@@ -505,7 +834,7 @@ function parseForSurface(text: string): Atom[] {
       // Refs use the 4-segment form so a collapsed-surface round-trip
       // keeps `:expr` + `!null` intact (legacy comma body reconstructs
       // loss-free via `refFilterOf`).
-      const raw = a.kind === "var" ? "$" + a.name : serialiseRefAtom(a);
+      const raw = a.kind === "var" ? serialiseVarAtom(a) : serialiseRefAtom(a);
       const last = out[out.length - 1];
       if (last && last.kind === "text") {
         // A collapsed arm folds into its surrounding run and inherits that
@@ -565,6 +894,9 @@ const atoms = ref<Atom[]>(padAtoms(parseForSurface(props.modelValue || "")));
 // with no anchor to insert before.
 const hostEpoch = ref(0);
 let lastEmittedValue = props.modelValue || "";
+/** Set by `emitValue`, consumed by the `modelValue` watcher: marks the single
+ *  round-trip that our own emit is about to cause. See `emitValue`. */
+let echoPending = false;
 
 /** Text-atom HTML: tokenises the atom's raw text and emits colored
  *  sub-spans for inline syntax (brace blocks, multi-select, weights,
@@ -584,7 +916,77 @@ let lastEmittedValue = props.modelValue || "";
  *  those aren't chippable tokens, so their highlight IS the only signal. */
 function textAtomHtml(text: string): string {
   if (!text) return ZWSP;
-  return inlineTokenHtml(text, ["var", "ref"]);
+  // The always-collapse rule above has one exception, and it is the exception
+  // that proves it: the rationale is "the ABSENCE of a chip already signals
+  // not-committed, so an inline colour would only compete with the settled
+  // chip palette". On the prompt template there are no var chips at all, so
+  // nothing is being competed with and the colour is the only signal there is.
+  if (!flatVars.value) return inlineTokenHtml(text, ["var", "ref"]);
+  return inlineTokenHtml(text, ["ref"], varSpanAttrs);
+}
+
+/**
+ * Inline attributes for one `$name` run on the prompt-template surface.
+ *
+ * Colour comes from the same djb2 hash the assembler's variable strip uses, so
+ * a name reads identically in the template, in the strip and in the `$`
+ * popover. Inline rather than a class because `.wp-rt .wp-rt-var` already sets
+ * a colour at higher specificity than the global `.var-N` palette.
+ *
+ * A name nothing upstream writes gets the danger colour and a wavy underline
+ * instead. Losing the chip lost the one cue that separated a typo from a
+ * working variable, and colour alone cannot carry it — every run is coloured.
+ * Only claimed where the host actually walked a graph: in the SPA every var is
+ * out of scope because there is no graph to be in.
+ */
+/** Whether a chip's axis is one its producer declares.
+ *
+ *  `undefined` means UNKNOWABLE, and that is the important case: a canvas node
+ *  carries its own payload SNAPSHOT of a module, so a wildcard added before its
+ *  group was promoted has `tag_groups` but no `tag_group_kinds` at all. That is
+ *  indistinguishable from "declares no axes", and marking either as an error
+ *  put a red squiggle under a reference that resolves perfectly well once the
+ *  node's snapshot is refreshed.
+ *
+ *  So the warning is only claimed when the producer declares SOME axes and this
+ *  is not among them — the one case where we actually know the read is wrong.
+ */
+function axisKnownFor(atom: Atom): boolean | undefined {
+  if (atom.kind !== "var" || !atom.axis) return undefined;
+  const axes = props.varProducers?.get(atom.name)?.axes;
+  if (!axes || axes.length === 0) return undefined;
+  return axes.some((a) => a.axis === atom.axis);
+}
+
+function varSpanAttrs(name: string): string {
+  // `name` arrives with any accessor attached (`outfit.SHOES`). Scope is a
+  // property of the BASE variable, so checking the whole string flagged every
+  // valid axis read as an unknown variable — a correct reference wearing the
+  // error styling.
+  // Parse through the ONE grammar. The old hand-rolled slice only stripped a
+  // TRAILING index, so `outfit.0.SHOES` produced axis "0.SHOES" — no such axis
+  // declared, so a perfectly valid index-first reference got the unknown-axis
+  // warning. That is the wavy underline the assembler template showed.
+  const { base, axis = "" } = varAccessorParts(name);
+  if (props.graphAware && axis) {
+    // The base resolves but the axis does not: the engine renders that as an
+    // empty string, so without a mark the only symptom is a missing word.
+    // Only claimed when the producer declares SOME axes — see `axisKnownFor`
+    // for why an empty list has to stay silent.
+    const known = props.varProducers?.get(base)?.axes;
+    const declared = (known ?? []).some((a) => a.axis === axis);
+    if (known && known.length > 0 && props.varSuggestions.includes(base) && !declared) {
+      return ' style="color:var(--wp-warn,#f59e0b);'
+        + "text-decoration:underline wavy color-mix(in srgb,var(--wp-warn,#f59e0b) 70%,transparent);"
+        + 'text-underline-offset:3px;text-decoration-thickness:1px"';
+    }
+  }
+  if (props.graphAware && !props.varSuggestions.includes(base)) {
+    return ' style="color:var(--wp-danger,#ef4444);'
+      + "text-decoration:underline wavy color-mix(in srgb,var(--wp-danger,#ef4444) 70%,transparent);"
+      + 'text-underline-offset:3px;text-decoration-thickness:1px"';
+  }
+  return ` style="color:var(--wp-var-${varColorIndex(base)})"`;
 }
 
 /** HTML for one text atom. SP2b brace-block scaffolding (the braces, count,
@@ -601,7 +1003,18 @@ function renderTextAtom(atom: TextAtom): string {
 }
 
 watch(() => props.modelValue, (next) => {
-  if (next === lastEmittedValue) return;  // echo of our own emit — ignore
+  // Echo of our own emit — ignore, so a round-tripped keystroke doesn't
+  // rebuild the DOM under a live caret. The string alone is not enough to
+  // tell an echo from a real write: `lastEmittedValue` seeds to the mount
+  // value, so an editor that mounted empty treats every later external ""
+  // as an echo. That is exactly the assembler's Clear button — it wrote "",
+  // the write was dropped, and the old template stayed on screen. Confirm
+  // the DOM actually already shows `next` before skipping.
+  if (echoPending && next === lastEmittedValue) {
+    echoPending = false;
+    return;
+  }
+  if (next === lastEmittedValue && readHostAsText() === next) return;
   // External value swap from the parent — route through applyAtoms so
   // any stale user-typed text in a span (typed since the last echo)
   // gets force-synced to the new atom shape via the post-patch
@@ -614,7 +1027,18 @@ watch(() => props.modelValue, (next) => {
  *  above doesn't trip the echo. */
 function emitValue(v: string): void {
   lastEmittedValue = v;
+  // Claim the NEXT watcher run as our own echo. The string check alone was not
+  // enough on the atom-direct edit paths: `applyAtoms` syncs the host DOM
+  // imperatively AFTER the model updates, so at emit time `readHostAsText()`
+  // still returned the pre-edit string, the guard missed, and the watcher
+  // re-parsed through `parseForSurface` — which CHIPIFIES. That is why one
+  // Backspace mid-word sealed `$mo` into a chip, closed the popover and threw
+  // the caret onto the host root: three symptoms, one echo.
+  echoPending = true;
   emit("update:modelValue", v);
+  // If the parent does not round-trip (uncontrolled use), release the claim so
+  // a later genuine external write is not mistaken for this echo.
+  void nextTick(() => { echoPending = false; });
 }
 
 function atomIsResolved(atom: Atom): boolean {
@@ -786,8 +1210,34 @@ const AC_MAX_ITEMS = 50;
  *  that hit 300 is simply false. */
 const acMatches = computed(() => {
   if (!acOpen.value) return [];
+  if (acTrigger.value === "tag") return [];  // tag rows live in `tagRows`
   if (acTrigger.value === "@" && !refsEnabled.value) return [];
-  const pool = acTrigger.value === "@" ? props.refSuggestions : props.varSuggestions;
+  // Once the query carries an accessor the flat substring filter stops being
+  // the right question: `outfit.0.` matches no entry, so the list emptied and
+  // the popover vanished at exactly the point the user was reaching for an
+  // axis. (`outfit.` only ever worked by luck — "outfit.shoes" happens to
+  // contain it.) From the first dot on, offer that variable's AXES, keeping
+  // any pick index the user already typed.
+  if (acTrigger.value === "$" && acQuery.value.includes(".")) {
+    const q = acQuery.value;
+    const base = q.slice(0, q.indexOf("."));
+    const rest = q.slice(q.indexOf(".") + 1);
+    // A leading numeric segment is a pick index; the axis fragment is whatever
+    // follows it. `outfit.0.SH` -> index "0", fragment "sh".
+    const m = rest.match(/^(\d+)\.?(.*)$/);
+    const idx = m ? `.${m[1]}` : "";
+    const frag = (m ? m[2] : rest).toLowerCase();
+    const axes = props.varProducers?.get(base)?.axes ?? [];
+    return axes
+      .filter((a) => a.axis.toLowerCase().includes(frag))
+      .map((a) => `${base}${idx}.${a.axis}`);
+  }
+  // `$` pool carries each variable's `accepts` axes as `name.AXIS` entries,
+  // directly after the variable they belong to. Query matching is unchanged:
+  // "out" still finds `outfit`, and now finds `outfit.SHOES` with it.
+  const pool = acTrigger.value === "@"
+    ? props.refSuggestions
+    : expandVarsWithAxes(props.varSuggestions, props.varProducers);
   const q = acQuery.value.toLowerCase();
   const labelOf = acTrigger.value === "@"
     ? (uuid: string) => (props.uuidToName.get(uuid) ?? uuid).toLowerCase()
@@ -819,6 +1269,26 @@ const acItems = computed(() => acMatches.value.slice(0, AC_MAX_ITEMS));
 function kindTint(kind: string): Record<string, string> {
   const token = `--wp-kind-${kind === "fixed_values" ? "fixed" : kind}`;
   const colour = `var(${token}, var(--wp-accent-text, #c4b5fd))`;
+  return {
+    color: colour,
+    background: `color-mix(in oklab, ${colour} 16%, transparent)`,
+  };
+}
+
+/**
+ * Tint for a `$` row, taken from the variable's own name.
+ *
+ * The assembler's variable strip sits a few pixels under this popover and
+ * colours every name through `varColorClass` — same hash, eight buckets. The
+ * popover painted each row by MODULE KIND instead, so the same `$quality` was
+ * one colour in the list and another in the strip, and you could not match a
+ * row to a chip by looking. `$` rows now take the variable's colour; `@` rows
+ * keep `kindTint`, where the kind IS the identity of the thing being picked.
+ *
+ * The glyph shape still carries the kind, exactly as it does in the strip.
+ */
+function varTint(name: string): Record<string, string> {
+  const colour = `var(--wp-var-${varColorIndex(name)})`;
   return {
     color: colour,
     background: `color-mix(in oklab, ${colour} 16%, transparent)`,
@@ -919,9 +1389,47 @@ function refreshAutocompleteFromHost(): void {
   const rawCaret = currentCursorCharOffset();
   const hit = probeAutocomplete(rawText, rawCaret);
   if (!hit) {
+    // No `$` / `@` token at the caret — the only situation where booru tags
+    // may be offered. This ordering IS the non-interference guarantee: the
+    // sigil probe gets first refusal on every keystroke.
+    if (tagAutocompleteEnabled.value) {
+      // A model reference wins over the bare word. The caret inside
+      // `<lora:…>` or after `embedding:` is unambiguously naming ONE kind, and
+      // the bare-word probe cannot even describe what is being typed there —
+      // its word class stops at the first dot, so a full filename searched for
+      // whatever followed the last one.
+      const ref = probeModelRef(rawText, rawCaret);
+      if (ref && sourceOn(ref.kind)) {
+        acOpen.value = true;
+        acStart.value = ref.start;
+        acQuery.value = ref.query;
+        acTrigger.value = "tag";
+        refKind.value = ref.kind;
+        scheduleTagFetch(ref.query);
+        positionPopup();
+        return;
+      }
+      refKind.value = null;
+      const word = probeTagWord(rawText, rawCaret);
+      if (word && !triggerIsInsideChip(word.start)) {
+        acOpen.value = true;
+        acStart.value = word.start;
+        acQuery.value = word.query;
+        acTrigger.value = "tag";
+        scheduleTagFetch(word.query);
+        positionPopup();
+        return;
+      }
+    }
     acOpen.value = false;
+    tagRows.value = [];
+    modelRows.value = {};
     return;
   }
+  // A sigil token owns the caret from here on; drop any bare-word rows so a
+  // stale list cannot be committed by an Enter meant for the sigil popover.
+  tagRows.value = [];
+  modelRows.value = {};
   // The trigger belongs to a chip that already exists — the user is not
   // filtering anything, so there is nothing to suggest. This fires whenever
   // the caret ends up flush against a chip's trailing edge: type a space after
@@ -944,7 +1452,7 @@ function refreshAutocompleteFromHost(): void {
   // do. Blocking the popover in wildcard surface stops the user from
   // typing `$name` into an option value and ending up with a chip
   // that has no engine meaning.
-  if (hit.trigger === "$" && props.surface === "wildcard") {
+  if (hit.trigger === "$" && !varsEnabled.value) {
     acOpen.value = false;
     return;
   }
@@ -1364,6 +1872,14 @@ const {
 onMounted(() => {
   scheduleOverflowHint();
   attach();
+  // Only ask when the user has actually switched the feature on — an install
+  // that never enables it makes no request at all.
+  if (sourceOn("tag")) {
+    void loadTagAvailability().then((status) => {
+      tagListAvailable.value = status.available;
+      tagHasCategories.value = status.hasCategories;
+    });
+  }
 });
 
 /** A host swap replaces the observed element, so the ResizeObserver has to
@@ -1435,6 +1951,11 @@ function hostAnchorsIntact(): boolean {
  *  and therefore the only ones that touch a fragment anchor. A same-shape
  *  apply patches text and props in place and cannot trip over a missing one,
  *  which is what keeps ordinary typing on the cheap path. */
+/** True while a host-element swap is in flight — see the `hostEpoch` bump in
+ *  `applyAtoms`. Not a ref: nothing renders off it, and a plain let keeps the
+ *  read in `onHostBlur` synchronous with the blur the swap itself fires. */
+let hostSwapping = false;
+
 function isStructuralApply(next: Atom[]): boolean {
   const cur = atoms.value;
   if (cur.length !== next.length) return true;
@@ -1474,6 +1995,15 @@ function applyAtoms(next: Atom[], opts?: { rebuild?: boolean }): void {
     (isStructuralApply(padded) && !hostAnchorsIntact())
   ) {
     hostEpoch.value += 1;
+    // The swap removes the element the caret is sitting in, and the browser
+    // fires `blur` on the way out. That blur is not the user leaving the
+    // field — it is us replacing the field underneath them — so
+    // `onHostBlur` must not treat it as a commit. It read the detached host
+    // as "", found it differed from the atoms it had just been handed, and
+    // re-applied the empty parse: every autocomplete commit erased the whole
+    // template. Cleared on the tick the new host mounts.
+    hostSwapping = true;
+    void nextTick(() => { hostSwapping = false; });
   }
   atoms.value = padded;
   isEmpty.value = serialiseAtomsLocal(next).length === 0;
@@ -1710,6 +2240,71 @@ function insertRefAtCursor(
   insertChipAtCaret(serialiseRefAtom(refAtom), caretOverride);
 }
 
+/**
+ * Splice a plain booru tag over the word being typed.
+ *
+ * Mirrors `insertChipAtCaret`'s raw-text splice but inserts TEXT, not a chip.
+ * `$` and `@` commits build a chip because they carry engine meaning; a tag is
+ * just characters in the prompt, so parsing the result yields plain text and
+ * nothing renders as a pill.
+ *
+ * Deliberately not a branch inside `insertChipAtCaret`: that function's
+ * defensive re-derivation scans backwards for a `$`/`@` run, which is exactly
+ * wrong for a sigil-less word and would cut from the wrong place.
+ */
+function insertTagAtCursor(tag: string): void {
+  const text = readHostAsText();
+  const caret = currentCursorCharOffset();
+  const from = acStart.value >= 0 ? Math.min(acStart.value, caret) : caret;
+  const before = text.slice(0, from);
+  const newText = before + tag + text.slice(caret);
+  applyAtoms(parseForSurface(newText), { rebuild: true });
+  emitValue(newText);
+  const newCaret = (before + tag).length;
+  acOpen.value = false;
+  tagRows.value = [];
+  modelRows.value = {};
+  void nextTick(() => restoreCursorAtChar(newCaret));
+}
+
+/**
+ * Insert plain text at the caret, adding a single separating space when
+ * the character before the caret isn't already whitespace.
+ *
+ * Public API — the only function on this component meant to be driven from
+ * outside. The assembler's chip strip is a SEPARATE widget on the same node,
+ * so it cannot splice into this editor's DOM; before Vue Nodes it spliced
+ * into the native `<textarea>` at `widget.inputEl`, which is now detached
+ * and unrendered. Writing `widget.value` instead would work but replaces the
+ * whole string and drops the caret.
+ *
+ * Deliberately does NOT consult `acStart` the way `insertTagAtCursor` does:
+ * that one is completing a word the user is mid-way through typing and must
+ * eat the typed prefix, whereas this one is a foreign insert and must not
+ * eat anything. When the caret isn't inside the editor (never focused, or
+ * focus is on the chip the user just clicked) `currentCursorCharOffset`
+ * reports end-of-text, which gives an append.
+ */
+function insertTextAtCaret(text: string): void {
+  const current = readHostAsText();
+  const caret = currentCursorCharOffset();
+  const before = current.slice(0, caret);
+  const after = current.slice(caret);
+  // Separate on BOTH sides. The trailing space is not cosmetic: inserting
+  // `$mood` before the word `portrait` would otherwise yield `$moodportrait`,
+  // which re-parses as a variable named `moodportrait` — the insert would
+  // quietly change which variable it inserted.
+  const lead = before && !/\s$/.test(before) ? " " : "";
+  const trail = after && !/^\s/.test(after) ? " " : "";
+  const insert = `${lead}${text}${trail}`;
+  const next = before + insert + after;
+  applyAtoms(parseForSurface(next), { rebuild: true });
+  emitValue(next);
+  // Caret sits after the token, before the trailing space, so the user can
+  // keep typing the token rather than landing past a gap.
+  void nextTick(() => restoreCursorAtChar(before.length + lead.length + text.length));
+}
+
 function insertVarAtCursor(name: string): void {
   insertChipAtCaret("$" + name);
 }
@@ -1898,7 +2493,12 @@ function __applyAutocompleteForTest(label: string): void {
   applyAutocomplete(label);
 }
 
-defineExpose({ __triggerAutocompleteForTest, __applyAutocompleteForTest, __confirmRemapForTest });
+defineExpose({
+  insertTextAtCaret,
+  __triggerAutocompleteForTest,
+  __applyAutocompleteForTest,
+  __confirmRemapForTest,
+});
 
 function onSuggestionMouseDown(e: MouseEvent, label: string): void {
   // `mousedown` (not click) so we beat the textarea blur.
@@ -1908,7 +2508,28 @@ function onSuggestionMouseDown(e: MouseEvent, label: string): void {
 
 // --- Global listeners: close popup on outside-click / scroll / resize.
 //     We attach lazily (only while open) so non-editing inputs cost nothing.
-function onDocumentMouseDown(e: MouseEvent): void {
+
+/**
+ * Close on any press that lands outside the input and outside the popover.
+ *
+ * Bound to `pointerdown` as well as `mousedown`, and that is the whole point:
+ * `mousedown` alone did not dismiss on canvas clicks. litegraph drives the
+ * canvas from pointer events and calls `preventDefault()` on `pointerdown` to
+ * suppress native text-selection and drag — and a prevented `pointerdown`
+ * suppresses the browser's compatibility `mousedown` entirely, so a
+ * mousedown-only listener never hears the click that matters. The canvas is
+ * most of the screen on a node graph, so this read as "the popover never
+ * closes".
+ *
+ * `pointerdown` fires first and nothing downstream can take it away. Both are
+ * kept: `mousedown` is the fallback for environments with no PointerEvent
+ * (jsdom under test, older embedded webviews). Closing twice is idempotent.
+ *
+ * Ordering is safe for suggestion rows. They commit on `mousedown` (to beat
+ * the host's blur), and this handler returns early for anything inside the
+ * popover, so firing before them changes nothing.
+ */
+function onDocumentPressStart(e: Event): void {
   const t = e.target as Node | null;
   if (!t) return;
   if (hostEl.value?.contains(t)) return;
@@ -1939,18 +2560,21 @@ function onWindowResize(): void {
 watch(acOpen, (open) => {
   if (open) {
     void nextTick(positionPopup);
-    window.addEventListener("mousedown", onDocumentMouseDown, true);
+    window.addEventListener("pointerdown", onDocumentPressStart, true);
+    window.addEventListener("mousedown", onDocumentPressStart, true);
     window.addEventListener("scroll", onWindowScroll, true);
     window.addEventListener("resize", onWindowResize);
   } else {
-    window.removeEventListener("mousedown", onDocumentMouseDown, true);
+    window.removeEventListener("pointerdown", onDocumentPressStart, true);
+    window.removeEventListener("mousedown", onDocumentPressStart, true);
     window.removeEventListener("scroll", onWindowScroll, true);
     window.removeEventListener("resize", onWindowResize);
   }
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener("mousedown", onDocumentMouseDown, true);
+  window.removeEventListener("pointerdown", onDocumentPressStart, true);
+  window.removeEventListener("mousedown", onDocumentPressStart, true);
   window.removeEventListener("scroll", onWindowScroll, true);
   window.removeEventListener("resize", onWindowResize);
   window.removeEventListener("keydown", onPickerEscape, true);
@@ -1996,7 +2620,7 @@ function readHostAsText(): string {
         // SP2a: keep the `.K` list accessor (matches serialiseAtomsLocal +
         // atomicEditorModel.serialise). Dropping it here silently rewrote
         // `$mood.0` -> `$mood` on every host re-read (input / blur / settle).
-        out += "$" + atom.name + (atom.index != null ? "." + atom.index : "");
+        out += serialiseVarAtom(atom);
       }
       continue;
     }
@@ -2465,6 +3089,9 @@ function onHostPaste(ev: ClipboardEvent): void {
 }
 
 function onHostBlur(): void {
+  // Our own host swap, not the user leaving. The old element is already
+  // detached, so every read below would see an empty field.
+  if (hostSwapping) return;
   focused.value = false;
   // Safety net: any leftover `$name` / `@{uuid}` / `{a|b|c}` text that
   // didn't trigger a settle-by-delimiter during typing chips up here.
@@ -2540,6 +3167,18 @@ function onHostKeydown(ev: KeyboardEvent): void {
   //   - No match + empty query (just `$` / `@`) → close popover, let
   //     the browser handle Enter normally (insert newline in multiline).
   if (ev.key === "Enter" && acOpen.value) {
+    if (acTrigger.value === "tag") {
+      const row = wordRows.value[acActive.value];
+      if (row) {
+        ev.preventDefault();
+        insertTagAtCursor(wordRowText(row) + committedSuffix());
+        return;
+      }
+      // Nothing to commit — close and let Enter behave natively rather than
+      // swallowing a newline the user actually wanted.
+      acOpen.value = false;
+      return;
+    }
     if (acItems.value.length > 0) {
       ev.preventDefault();
       applyAutocomplete(acItems.value[acActive.value]);
@@ -2565,7 +3204,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
   }
   if (ev.key === "ArrowDown" && acOpen.value) {
     ev.preventDefault();
-    acActive.value = Math.min(acItems.value.length - 1, acActive.value + 1);
+    acActive.value = Math.min(acRowCount.value - 1, acActive.value + 1);
     return;
   }
   if (ev.key === "ArrowUp" && acOpen.value) {
@@ -2688,6 +3327,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
       focused ? 'wp-rt--focused' : 'wp-rt--rest',
       disabled ? 'wp-rt--disabled' : null,
       hasMoreBelow ? 'wp-rt--more' : null,
+      fill ? 'wp-rt--fill' : null,
     ]"
     :data-focused="focused ? '' : null"
   >
@@ -2736,6 +3376,8 @@ function onHostKeydown(ev: KeyboardEvent): void {
           :producer="atom.kind === 'var' ? varProducers?.get(atom.name) : undefined"
           :graph-aware="graphAware"
           :index="atom.kind === 'var' ? atom.index : undefined"
+          :axis="atom.kind === 'var' ? atom.axis : undefined"
+          :axis-known="axisKnownFor(atom)"
           :data-atom-index="idx"
           remappable
           @click="(ev: MouseEvent) => onChipClick(idx, ev)"
@@ -2761,7 +3403,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
          Ours applies each move's DELTA to the current height, so the first
          pixel back off a limit moves the box. -->
     <div
-      v-if="wrap || multiline"
+      v-if="(wrap || multiline) && !fill"
       class="wp-rt__grip"
       data-test="rt-grip"
       aria-hidden="true"
@@ -2790,10 +3432,11 @@ function onHostKeydown(ev: KeyboardEvent): void {
          transformed scroll containers / table cells. -->
     <Teleport to="body">
       <div
-        v-if="acOpen && acItems.length > 0"
+        v-if="acOpen && acRowCount > 0"
         ref="popoverEl"
         class="wp-rt-suggestions"
         :class="[teleportThemeClass(), { 'wp-rt-suggestions--up': popupPos.flipped }]"
+        :data-stale="rowsStale ? '' : null"
         :style="{
           top: popupPos.top + 'px',
           left: popupPos.left + 'px',
@@ -2801,7 +3444,98 @@ function onHostKeydown(ev: KeyboardEvent): void {
         }"
         role="listbox"
       >
-        <div class="wp-rt-suggestions__head">
+        <div v-if="acTrigger === 'tag'" class="wp-rt-suggestions__head">
+          <span class="wp-rt-suggestions__query">{{ acQuery }}</span>
+          <!-- Says WHICH autocomplete this is. Without a sigil in the query
+               there is otherwise nothing distinguishing it from the `$` / `@`
+               popover, which looks identical and behaves differently. -->
+          <span class="wp-rt-suggestions__src">{{ wordSections.map((s) => s.label).join(" · ") }}</span>
+          <span class="wp-rt-suggestions__count">{{ wordRows.length }}</span>
+          <!-- Names the one thing the rows cannot: that they are not for what
+               is currently typed. Without it the reflow when results land
+               reads as the list glitching. -->
+          <span v-if="rowsStale" class="wp-rt-suggestions__stale">searching…</span>
+          <span class="wp-spacer" />
+          <span class="wp-rt-suggestions__hint">↑↓ · Enter · Esc</span>
+        </div>
+        <template v-if="acTrigger === 'tag'">
+          <!-- Sections, because the sources have no common ranking key: a tag
+               ranks by post count in the tens of thousands, a model has no
+               count at all. Any single ordering has to invent a comparison
+               between "12,000 posts" and "a file on disk", and tags win it on
+               weight of numbers every time.
+
+               `entry.index` is the row's position in the FLAT `wordRows`, which
+               is what `acActive` indexes. Headers are not in that array, so
+               arrow-key navigation cannot land on one — no skip logic needed. -->
+          <template v-for="section in wordSections" :key="section.source">
+            <div
+              v-if="wordSections.length > 1"
+              class="wp-rt-suggestions__section"
+            >
+              <i :class="SOURCE_ICON[section.source]" aria-hidden="true" />{{ section.label }}
+            </div>
+            <button
+              v-for="entry in section.rows"
+              :key="section.source + ':' + (entry.row.source === 'tag' ? entry.row.tag.matched : entry.row.model.path)"
+              type="button"
+              class="wp-rt-suggestions__item wp-rt-tag"
+              :data-active="entry.index === acActive ? '' : null"
+              role="option"
+              :aria-selected="entry.index === acActive"
+              @mousedown.prevent="insertTagAtCursor(wordRowText(entry.row) + committedSuffix())"
+              @mouseenter="acActive = entry.index"
+            >
+              <template v-if="entry.row.source !== 'tag'">
+                <span class="wp-rt-tag__cat" :class="`wp-rt-tag__cat--${entry.row.source}`">
+                  <i :class="SOURCE_ICON[entry.row.source]" aria-hidden="true" />
+                </span>
+                <span class="wp-rt-tag__body">
+                  <span class="wp-rt-tag__name">{{ entry.row.model.name }}</span>
+                  <!-- The folder is the only thing separating two files with
+                       the same name, and the insert uses the full path. -->
+                  <span v-if="entry.row.model.folder" class="wp-rt-tag__sub">
+                    {{ entry.row.model.folder }}
+                  </span>
+                </span>
+              </template>
+              <template v-else>
+                <!-- Colour bar only when the loaded file HAS categories. A
+                     two-column list would otherwise show a column of identical
+                     grey bars explaining nothing. -->
+                <!-- `pi-tags` (plural) deliberately: `pi-tag` singular is
+                     already the fixed_values module kind, so a booru tag row
+                     would have rendered identically to a library module.
+                     Tinted by category, so this one slot says both "this is a
+                     tag" and "of this kind". -->
+                <span
+                  v-if="tagHasCategories"
+                  class="wp-rt-tag__cat"
+                  :class="entry.row.tag.category_name ? `wp-rt-tag__cat--${entry.row.tag.category_name}` : null"
+                ><i class="pi pi-tags" aria-hidden="true" /></span>
+                <span class="wp-rt-tag__body">
+                  <!-- Always the tag that will be INSERTED, never the alias
+                       that matched. Enter must put exactly this on screen. -->
+                  <span class="wp-rt-tag__name">{{ entry.row.tag.name }}</span>
+                  <span v-if="entry.row.tag.matched !== entry.row.tag.name" class="wp-rt-tag__sub">
+                    from <span class="wp-rt-tag__alias">{{ entry.row.tag.matched }}</span>
+                  </span>
+                  <span
+                    v-else-if="tagHasCategories && entry.row.tag.category_name"
+                    class="wp-rt-tag__sub"
+                  >{{ entry.row.tag.category_name }}</span>
+                </span>
+                <span class="wp-rt-tag__count">{{ formatTagCount(entry.row.tag.count) }}</span>
+              </template>
+            </button>
+          </template>
+          <div v-if="tagLegend.length" class="wp-rt-tag__legend">
+            <span v-for="cat in tagLegend" :key="cat">
+              <i class="pi pi-tags wp-rt-tag__swatch" :class="`wp-rt-tag__cat--${cat}`" aria-hidden="true" />{{ cat }}
+            </span>
+          </div>
+        </template>
+        <div v-else class="wp-rt-suggestions__head">
           <span class="wp-rt-suggestions__query">{{ acTrigger }}{{ acQuery }}</span>
           <!-- The match count belongs in the header, not implied by the list
                length: the list is capped and scrolls, so "how many did I
@@ -2822,10 +3556,11 @@ function onHostKeydown(ev: KeyboardEvent): void {
           <span class="wp-rt-suggestions__hint">↑↓ · {{ acTrigger === "@" ? "Enter filter" : "Enter" }} · Esc</span>
         </div>
         <button
-          v-for="(row, i) in acRows"
+          v-for="(row, i) in (acTrigger === 'tag' ? [] : acRows)"
           :key="row.token"
           type="button"
           class="wp-rt-suggestions__item"
+          :class="{ 'wp-rt-suggestions__item--axis': row.isAxis }"
           :data-active="i === acActive ? '' : null"
           role="option"
           :aria-selected="i === acActive"
@@ -2838,12 +3573,20 @@ function onHostKeydown(ev: KeyboardEvent): void {
                one cue that says which. -->
           <span
             class="wp-rt-suggestions__icon-box"
-            :style="kindTint(row.kind)"
+            :style="acTrigger === '$' ? varTint(varBaseName(row.label)) : kindTint(row.kind)"
             aria-hidden="true"
           ><i :class="row.icon" /></span>
           <span class="wp-rt-suggestions__body">
-            <span class="wp-rt-suggestions__label">
-              <span class="wp-rt-suggestions__trigger">{{ acTrigger }}</span>{{ row.label }}
+            <span
+              class="wp-rt-suggestions__label"
+              :class="acTrigger === '$' ? varColorClass(varBaseName(row.label)) : null"
+            >
+              <span class="wp-rt-suggestions__trigger">{{ acTrigger }}</span
+              ><template v-if="row.isAxis"
+                >{{ row.label.slice(0, row.label.indexOf('.')) }}<span
+                  class="wp-rt-suggestions__axis"
+                >.{{ row.label.slice(row.label.indexOf('.') + 1) }}</span></template
+              ><template v-else>{{ row.label }}</template>
             </span>
             <!-- Second line: the facts that separate same-named entries. For
                  `@` these are structural (options/axes/tags); for `$` it is
@@ -3033,8 +3776,19 @@ function onHostKeydown(ev: KeyboardEvent): void {
   font-size: inherit;
   letter-spacing: 0;
   box-sizing: border-box;
+  /* A text field must look like one. Nothing here ever set a cursor, so the
+     host inherited whatever the surrounding chrome used — and on the canvas
+     that is ComfyUI's node wrapper, which carries `cursor-grab` for dragging
+     the node. The result was a grab hand over an editable field, which reads
+     as "you cannot type here". Inherited, so it never showed up in the SPA. */
+  cursor: text;
   /* Anchor for the absolutely-positioned placeholder ghost (below). */
   position: relative;
+}
+/* Read-only because a link drives the value — an I-beam would promise editing
+   that will not happen. */
+.wp-rt__host[contenteditable="false"] {
+  cursor: default;
 }
 .wp-rt__host--single {
   height: var(--wp-input-h, 34px);
@@ -3076,6 +3830,35 @@ function onHostKeydown(ev: KeyboardEvent): void {
 .wp-rt__host--single.wp-rt__host--wrap.wp-rt__host--empty::before {
   line-height: 1.6;
 }
+/* ── Fill mode ────────────────────────────────────────────────────────────
+ *
+ * The node owns the height; we take what we are given and scroll the rest.
+ *
+ * `min-height: 0` on both the root and the host is the load-bearing part. Both
+ * are flex items, and a flex item defaults to `min-height: auto`, which refuses
+ * to shrink below its content — so the template pushed the box, which pushed
+ * the node, which is the auto-scaling this mode exists to stop. Measured on the
+ * debug widget: without it the node inflated from 300 to 870 to fit its
+ * payload and could not be dragged shorter.
+ *
+ * `max-height: none` because the 14rem cap below is there to bound AUTO-growth.
+ * Nothing auto-grows here, and keeping it would cap the box well short of a
+ * node the user deliberately dragged tall.
+ */
+.wp-rt--fill {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.wp-rt--fill .wp-rt__host {
+  flex: 1 1 0%;
+  min-height: 0;
+  max-height: none;
+  height: auto;
+  overflow-y: auto;
+}
+
 .wp-rt__host--multi {
   padding: var(--wp-space-4) var(--wp-space-5);
   line-height: 1.9;
@@ -3192,6 +3975,191 @@ function onHostKeydown(ev: KeyboardEvent): void {
 /* Two lines per row now, so `align-items: center` would float the icon
    against the name rather than the row. `flex-start` plus a top offset on the
    icon lines it up with the FIRST line's text, which is where the eye is. */
+/* Pinned while the rows scroll underneath. `overflow-y: auto` lives on the
+   popover root, so without this the header scrolls out of view and the query
+   you are refining disappears — true for the `$`/`@` popover too, and fixed
+   for both here. The negative margins cancel the root's horizontal padding so
+   the pinned bands span the full width instead of leaving a transparent gutter
+   for rows to show through. */
+.wp-rt-suggestions__head,
+.wp-rt-tag__legend {
+  position: sticky;
+  z-index: 1;
+  background: var(--wp-bg-1, #11111b);
+  margin: 0 calc(-1 * var(--wp-space-2));
+  padding-left: var(--wp-space-2);
+  padding-right: var(--wp-space-2);
+}
+
+.wp-rt-suggestions__head { top: 0; }
+
+.wp-rt-tag__legend {
+  /* Pulled down over the root's `padding-bottom`. At `bottom: 0` the legend
+     sticks to the content box and that padding stays transparent below it, so
+     a scrolling row was visible underneath the legend band. */
+  bottom: calc(-1 * var(--wp-space-2));
+  margin-bottom: calc(-1 * var(--wp-space-2));
+  padding-bottom: calc(var(--wp-space-3) + var(--wp-space-2));
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--wp-space-5);
+  font-family: var(--wp-font);
+  font-size: 10.5px;
+  color: var(--wp-text-dim);
+  border-top: 1px solid var(--wp-border);
+  padding-top: var(--wp-space-3);
+  padding-bottom: var(--wp-space-3);
+  /* Sits below the last row rather than floating over it when the list is
+     short enough not to scroll. */
+  margin-top: auto;
+}
+
+/* A tinted glyph now, not a 4px bar — the fixed width and height left over
+   from the bar squashed the icon to a sliver. */
+.wp-rt-tag__swatch {
+  margin-right: 5px;
+  font-size: 11px;
+  vertical-align: -1px;
+}
+
+.wp-rt-suggestions__src {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--wp-text-dim);
+  border: 1px solid var(--wp-border);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+/* Booru tag rows. Same popover chrome, different row body — a tag has a
+   category and a post count where a `$`/`@` row has a producer and facts. */
+.wp-rt-tag { display: flex; align-items: center; gap: 10px; }
+
+.wp-rt-tag__cat {
+  width: 15px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  /* Neutral is the `general` category, which is most rows — a coloured icon
+     on every line would make the coloured ones stop meaning anything. */
+  color: #6a6a7a;
+}
+
+.wp-rt-tag__cat--general   { color: #6a6a7a; }
+/* The two model sources. Their own hues rather than a category colour — a LoRA
+   has no danbooru category, and reusing one would imply a relationship that
+   does not exist. */
+.wp-rt-tag__cat--lora      { color: var(--wp-var-6); }
+.wp-rt-tag__cat--embedding { color: var(--wp-var-7); }
+
+/* Section header. Only rendered when more than one source has hits, so it
+   never costs a row to say something the single visible group already says.
+   `scroll-margin-top` for the same reason the tag rows have it: arrow-key
+   navigation scrolls a row into view and the sticky query band would otherwise
+   park the first row of a section underneath itself. */
+/* Dimmed rather than hidden: the stale rows are still the best guess on screen
+   and blanking them on every keystroke flickers far worse. */
+.wp-rt-suggestions__stale {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--wp-accent-text, #c4b5fd);
+  opacity: 0.85;
+}
+.wp-rt-suggestions[data-stale] .wp-rt-suggestions__item {
+  opacity: 0.55;
+  transition: opacity .12s ease;
+}
+
+.wp-rt-suggestions__section {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-3, 6px);
+  padding: 6px 10px 3px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--wp-text3, #666);
+  scroll-margin-top: 38px;
+}
+.wp-rt-suggestions__section i { font-size: 10px; opacity: 0.8; }
+.wp-rt-tag__cat--character { color: var(--wp-var-3); }
+.wp-rt-tag__cat--copyright { color: var(--wp-var-1); }
+.wp-rt-tag__cat--artist    { color: var(--wp-var-5); }
+.wp-rt-tag__cat--meta      { color: var(--wp-var-2); }
+
+.wp-rt-tag__body {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+
+.wp-rt-tag__name {
+  font-family: var(--wp-font-mono);
+  font-size: 12.5px;
+  line-height: 1.25;
+  color: var(--wp-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wp-rt-tag__sub {
+  font-size: 10.5px;
+  line-height: 1.2;
+  color: var(--wp-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wp-rt-tag__alias { color: var(--wp-kind-ref); }
+
+.wp-rt-tag__count {
+  font-family: var(--wp-font-mono);
+  font-size: 11px;
+  color: var(--wp-text-dim);
+  flex: 0 0 auto;
+  /* So 856k / 44k / 3.1k line up instead of jittering row to row. */
+  font-variant-numeric: tabular-nums;
+}
+
+/* The header (and, in tag mode, the legend) are sticky, so they OVERLAY the
+   scrollport rather than shrinking it. `scrollIntoView({block:"nearest"})`
+   only knows about the scrollport, so arrowing to the first or last row parked
+   it underneath a pinned band -- selected, highlighted, and invisible.
+   `scroll-margin` is the mechanism designed for exactly this. */
+.wp-rt-suggestions__item { scroll-margin-top: 38px; }
+.wp-rt-tag { scroll-margin-bottom: 40px; }
+
+/* The accessor segment carries the group's own hue — the same colour those
+   tags wear in the wildcard editor — while the variable name keeps its usual
+   per-name tint. One row, two readings. */
+/* An axis belongs TO the variable above it, so it is indented under it rather
+   than listed as a peer.
+   Declared AFTER `.wp-rt-suggestions__item` on purpose: that rule sets the
+   `padding` SHORTHAND, which resets padding-left no matter what came before
+   it. An earlier version sat above the base rule with a comment claiming the
+   order protected it — it did not, and the rows rendered flat. */
+.wp-rt-suggestions .wp-rt-suggestions__item--axis {
+  /* Scoped under the popover to outrank `.wp-rt-suggestions__item`, whose
+     `padding` SHORTHAND resets padding-left. Both are single-class selectors,
+     so source order decided it — and the base block sits later in this file.
+     Raising specificity makes the indent independent of where either rule
+     happens to live. */
+  padding-left: var(--wp-space-7);
+}
+
+.wp-rt-suggestions__axis {
+  color: var(--wp-axis, #fbbf24);
+  font-weight: var(--wp-weight-semibold);
+}
+
 .wp-rt-suggestions__item {
   display: flex;
   align-items: flex-start;
@@ -3238,6 +4206,14 @@ function onHostKeydown(ev: KeyboardEvent): void {
 }
 .wp-rt-suggestions__trigger {
   color: var(--wp-accent-text, #c4b5fd);
+}
+/* On a `$` row the label carries a `var-N` colour, and the sigil is part of
+   the token — `$quality` is one word in the strip below, so splitting its
+   colour here would make the two read as different things. Refs keep the
+   accent sigil: `@` rows are coloured by kind, and the kind colour is already
+   doing that job in the icon box. */
+.wp-rt-suggestions__label[class*="var-"] .wp-rt-suggestions__trigger {
+  color: inherit;
 }
 /* The detail line. Wraps rather than clips: these are short independent
    facts, and dropping one silently would defeat the point of showing them.
