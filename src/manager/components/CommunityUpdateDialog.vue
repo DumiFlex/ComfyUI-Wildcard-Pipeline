@@ -38,6 +38,7 @@ import { appendSnapshot, stripHistory } from "../utils/history";
 import { installEnvelope } from "../import-export/install";
 import { api } from "../api/client";
 import { wrapAsEngineExport } from "./engine-export-wrap";
+import { UNSTAMPED_SCHEMA_VERSION } from "../community/community-posts";
 
 interface UpdateEntry {
   entity_id: string;
@@ -77,13 +78,23 @@ const oldName = computed(() => {
  * downloads are open for everyone (anon downloads still increment the
  * post counter, which is the desired behaviour anyway).
  */
-async function fetchLatestPayload(slug: string): Promise<{ payload: Record<string, unknown>; version: number }> {
+async function fetchLatestPayload(
+  slug: string,
+): Promise<{ payload: Record<string, unknown>; version: number; schemaVersion: number }> {
   const resp = await fetch(`${WPC_API_URL}/api/v1/posts/${slug}/download`);
   if (!resp.ok) {
     throw new Error(`Failed to fetch latest version (HTTP ${resp.status})`);
   }
-  const body = await resp.json() as { data: { payload_json: Record<string, unknown>; version_number: number } };
-  return { payload: body.data.payload_json, version: body.data.version_number };
+  const body = await resp.json() as {
+    data: { payload_json: Record<string, unknown>; version_number: number; schema_version?: number };
+  };
+  return {
+    payload: body.data.payload_json,
+    version: body.data.version_number,
+    schemaVersion: typeof body.data.schema_version === "number"
+      ? body.data.schema_version
+      : UNSTAMPED_SCHEMA_VERSION,
+  };
 }
 
 /**
@@ -163,6 +174,7 @@ async function onUpdateInPlace() {
       kind: props.entry.entity_kind,
       subtype,
       payload: entityPayload,
+      schema_version: fetched.schemaVersion,
     });
     const localEntityId = props.entry.entity_id;
     const result = await installEnvelope(
@@ -237,6 +249,7 @@ async function onInstallAsNew() {
       kind: kindGuess,
       subtype: subtype as string | null,
       payload: fetched.payload,
+      schema_version: fetched.schemaVersion,
     });
     const result = await installEnvelope(
       { envelope },

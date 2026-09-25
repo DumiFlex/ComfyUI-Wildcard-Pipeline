@@ -10,13 +10,15 @@
  *
  * Why a separate copy instead of importing the community one: this
  * file ships in the sister extension's manager bundle and runs
- * without any network reach back to the community web build. Pinning
- * `schema_version` here means a sister vendored at a different
- * version still has a known schema target rather than picking up
- * whatever the live community deploys.
+ * without any network reach back to the community web build.
+ *
+ * `schema_version` is the downloaded version's own stamp (the value
+ * the community stored at publish), exactly like the community
+ * mirror. It must NOT be a pinned constant: `installEnvelope` walks
+ * the migration chain from this number, so an under-stamp (this file
+ * used to pin 1) re-runs v1→v2 over a payload that is already v2+,
+ * and an over-stamp skips a migration a genuinely old pack needs.
  */
-
-export const ENGINE_SCHEMA_VERSION = 1;
 
 type Bucket =
   | "bundles"
@@ -63,9 +65,11 @@ export function wrapAsEngineExport(args: {
   kind: "module" | "bundle";
   subtype: string | null;
   payload: Record<string, unknown>;
+  /** The downloaded version's `schema_version`. */
+  schema_version: number;
 }): EngineExportEnvelope {
   const envelope: EngineExportEnvelope = {
-    schema_version: ENGINE_SCHEMA_VERSION,
+    schema_version: args.schema_version,
     exported_at: new Date().toISOString(),
     bundles: [],
     wildcards: [],

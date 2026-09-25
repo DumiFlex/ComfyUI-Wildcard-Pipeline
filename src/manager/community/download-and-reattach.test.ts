@@ -9,6 +9,7 @@ describe("downloadDepsForDangling", () => {
     const download = vi.fn(async () => ({
       payload: { id: "aabb0001", type: "wildcard", name: "Subject", payload: { options: [] } },
       version_number: 1,
+      schema_version: 3,
     }));
     const install = vi.fn(async () => ({ ok: true }));
 
@@ -22,8 +23,10 @@ describe("downloadDepsForDangling", () => {
     expect(out.pulled).toEqual(["author/subject"]);
     expect(install).toHaveBeenCalledTimes(1);
     // Origin-stamped so the installed dep gets the community badge + update tracking.
+    // Stamped with the download's own schema_version so install migrates it
+    // from where it actually is (was a hard-coded 4).
     expect(install).toHaveBeenCalledWith(
-      expect.anything(),
+      expect.objectContaining({ schema_version: 3, wildcards: [expect.objectContaining({ id: "aabb0001" })] }),
       expect.anything(),
       { post_slug: "author/subject", version_number: 1 },
     );
@@ -46,7 +49,7 @@ describe("downloadDepsForDangling", () => {
       danglingUuid: "aabb0001",
       constraintDeps: [{ slug: "author/subject", module_id: "aabb0001" }],
       fetchDetail: vi.fn(async (slug: string) => ({ slug, latest_version_number: 1, dependencies: [] })),
-      download: vi.fn(async () => ({ payload: { id: "aabb0001", type: "wildcard", name: "S", payload: {} }, version_number: 1 })),
+      download: vi.fn(async () => ({ payload: { id: "aabb0001", type: "wildcard", name: "S", payload: {} }, version_number: 1, schema_version: 2 })),
       install: vi.fn(async () => ({ ok: false, error: { message: "boom" } })),
     });
     expect(out.ok).toBe(false);

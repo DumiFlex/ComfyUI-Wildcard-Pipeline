@@ -34,6 +34,15 @@ describe("community-posts", () => {
     }));
     expect(dl.payload).toEqual({ id: "aabb0001", type: "wildcard", name: "Subject", payload: {} });
     expect(dl.version_number).toBe(1);
+    // No stamp in the response → the community's pre-versioning default (v1).
+    expect(dl.schema_version).toBe(1);
+  });
+
+  it("downloadCommunityVersion carries the version's schema_version", async () => {
+    const dl = await downloadCommunityVersion("author/axes", jsonFetch({
+      data: { payload_json: { id: "aabb0002" }, version_number: 3, schema_version: 5 },
+    }));
+    expect(dl.schema_version).toBe(5);
   });
 
   it("throws on a non-ok response", async () => {
