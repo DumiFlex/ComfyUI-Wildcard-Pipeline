@@ -1,7 +1,7 @@
 import { defineAsyncComponent, h, ref, type Component } from "vue";
 import { app } from "#comfyui/app";
 import { createDomWidgetHost, type MountTargetNode } from "./_shared";
-import { type ResolvedValue } from "./richTokenize";
+import { type ResolvedValue, type RolledAxes } from "./richTokenize";
 import { attachThemeDetector } from "../extension/theme-detector";
 import {
   collectUpstreamChain,
@@ -355,6 +355,9 @@ export function mountHelper(node: AssemblerNode) {
 
       // API-backed resolved map. Updates whenever `chainKey` shifts.
       const apiResolved = ref<Record<string, ResolvedValue> | null>(null);
+      // The rolled axes from the same preview run, so `$var.AXIS` agrees with
+      // the values beside it. Replaced wholesale with each response.
+      const apiAxes = ref<Record<string, RolledAxes> | null>(null);
       const apiKey = ref<string>("");
       // Inflight de-dup so a slow fetch from the previous chain doesn't
       // overwrite a fast fetch from the current one.
@@ -376,7 +379,10 @@ export function mountHelper(node: AssemblerNode) {
           body: JSON.stringify({ chain, seed: PREVIEW_SEED }),
         })
           .then((r) => (r.ok ? r.json() : null))
-          .then((body: { resolved?: Record<string, ResolvedValue> } | null) => {
+          .then((body: {
+            resolved?: Record<string, ResolvedValue>;
+            axes?: Record<string, RolledAxes>;
+          } | null) => {
             // Stale-response guard: if another fetch started after us,
             // drop ours so we don't clobber the newer state.
             if (inflightKey !== key) return;
@@ -389,6 +395,10 @@ export function mountHelper(node: AssemblerNode) {
               // (e.g. last_locked_seed-only edits, no-op enables).
               if (!shallowEqualResolved(apiResolved.value, body.resolved)) {
                 apiResolved.value = body.resolved;
+              }
+              const axes = typeof body.axes === "object" && body.axes !== null ? body.axes : {};
+              if (JSON.stringify(apiAxes.value) !== JSON.stringify(axes)) {
+                apiAxes.value = axes;
               }
               apiKey.value = key;
             }
@@ -503,6 +513,7 @@ export function mountHelper(node: AssemblerNode) {
             template,
             resolvedMap: fresh,
             varAxes: snapshot.value.varAxes,
+            rolledAxes: api ? (apiAxes.value ?? undefined) : undefined,
             kindByVar,
             previewSeed: PREVIEW_SEED,
             nodeMode: nodeMode.value,

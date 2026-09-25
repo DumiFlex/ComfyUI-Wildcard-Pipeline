@@ -452,3 +452,45 @@ describe("AssemblerHelper var-color rendering", () => {
     expect(wrapper.find('[data-test="asm-save-template"]').attributes("disabled")).toBeDefined();
   });
 });
+
+describe("AssemblerHelper $var.AXIS preview (tag axes)", () => {
+  const base = {
+    upstreamVars: ["outfit", "shoes"],
+    templateVars: ["outfit", "shoes"],
+    resolvedMap: { outfit: "robe", shoes: "red stilettos" },
+    varAxes: { outfit: { SHOES: "sandals" } },
+  };
+  const preview = (props: Record<string, unknown>) =>
+    mount(AssemblerHelper, { props: { ...base, ...props } as never })
+      .find('[data-test="asm-preview"]').text();
+
+  it("reads the tag the preview run rolled, not the axis's first tag", () => {
+    expect(preview({
+      template: "$outfit.SHOES | $outfit",
+      resolvedMap: { outfit: "summer dress", shoes: "red stilettos" },
+      rolledAxes: { outfit: { SHOES: "heels" } },
+    })).toBe("heels | summer dress");
+  });
+
+  it("renders empty when the picked option carries no tag on the axis", () => {
+    // The reported preview: "sandals | robe" while the prompt said "| robe".
+    expect(preview({ template: "$outfit.SHOES | $outfit", rolledAxes: { outfit: {} } }))
+      .toBe("| robe");
+  });
+
+  it("guesses the first tag only until the preview run answers", () => {
+    expect(preview({ template: "$outfit.SHOES" })).toBe("sandals");
+  });
+
+  it("keeps an undeclared axis raw so the gap stays visible", () => {
+    expect(preview({ template: "$outfit.BELTS", rolledAxes: { outfit: {} } }))
+      .toBe("$outfit.BELTS");
+  });
+
+  it("indexes a multi-pick positionally in either accessor order", () => {
+    const rolledAxes = { outfit: [{}, { SHOES: "boots" }] };
+    expect(preview({ template: "[$outfit.0.SHOES] [$outfit.1.SHOES] [$outfit.SHOES.1]", rolledAxes }))
+      .toBe("[] [boots] [boots]");
+    expect(preview({ template: "$outfit.SHOES", rolledAxes })).toBe("boots");
+  });
+});
