@@ -19,7 +19,7 @@ def test_returns_payload_as_is_at_current_version():
 
 
 def test_rejects_future_version():
-    # The reject threshold is MAX_KNOWN (5), not CURRENT (2): only versions
+    # The reject threshold is MAX_KNOWN (6), not CURRENT (2): only versions
     # beyond what the runtime natively supports are rejected.
     payload = {"schema_version": MAX_KNOWN_SCHEMA_VERSION + 1, **EMPTY_7}
     result = migrate_payload(payload)
@@ -106,14 +106,15 @@ def test_defaults_missing_arrays_to_empty():
 # === Install-path fork: accept natively-supported future versions ==========
 # Mirror of the TS `migrateImportEnvelope` fork. A payload at
 # CURRENT < v <= MAX_KNOWN (v3 = text-grammar only; v4 = additive
-# `target_select`; v5 = additive `accepts` tag axes) is shape-compatible with
+# `target_select`; v5 = additive `accepts` tag axes; v6 = the constraint
+# `only` rule) is shape-compatible with
 # v2 and natively handled at runtime, so the engine's commit-side re-validate must accept it AS-IS:
 # not rejected, not migrated (the while-loop bound stays CURRENT so there is
 # nothing to do), schema_version preserved. Only v > MAX_KNOWN rejects.
 
 
-def test_max_known_schema_version_is_5():
-    assert MAX_KNOWN_SCHEMA_VERSION == 5
+def test_max_known_schema_version_is_6():
+    assert MAX_KNOWN_SCHEMA_VERSION == 6
 
 
 def test_v3_payload_passes_through_unchanged():
@@ -170,6 +171,24 @@ def test_v5_accepts_axis_payload_passes_through_unchanged():
     assert result["migrated_entity_count"] == 0
     wc = result["migrated"]["wildcards"][0]
     assert wc["payload"]["tag_group_kinds"] == {"SHOES": "accepts"}
+
+
+def test_v6_only_rule_payload_passes_through_unchanged():
+    only = {"source_value": "maid", "target_value": "apron", "mode": "only", "factor": 1.0}
+    payload = {
+        "schema_version": 6,
+        **EMPTY_7,
+        "constraints": [
+            {"id": "cnonly", "type": "constraint", "name": "link", "payload": {
+                "source_wildcard_id": "a", "target_wildcard_id": "b",
+                "matrix": {}, "exceptions": [only]}}
+        ],
+    }
+    result = migrate_payload(payload)
+    assert result["ok"] is True
+    assert result["migrated"]["schema_version"] == 6
+    assert result["migrated_entity_count"] == 0
+    assert result["migrated"]["constraints"][0]["payload"]["exceptions"] == [only]
 
 
 def test_v2_still_migrates_from_older_version():

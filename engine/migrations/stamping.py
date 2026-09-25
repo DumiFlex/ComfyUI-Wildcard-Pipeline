@@ -5,6 +5,8 @@ A payload is stamped with the LOWEST catalog version its features need, so
 an older consumer can still install everything that doesn't use a newer
 feature:
 
+- ``CONSTRAINT_ONLY_SCHEMA_VERSION`` (6): a constraint matrix cell,
+  exception or instance mode override uses the ``only`` rule.
 - ``TAG_AXES_SCHEMA_VERSION`` (5): a wildcard ``tag_group_kinds`` map marks
   any group ``accepts``.
 - ``SP3_REACH_SCHEMA_VERSION`` (4): a constraint carries a non-default
@@ -24,6 +26,7 @@ import re
 from typing import Any
 
 from engine.migrations import (
+    CONSTRAINT_ONLY_SCHEMA_VERSION,
     CURRENT_SCHEMA_VERSION,
     SP2B_SCHEMA_VERSION,
     SP3_REACH_SCHEMA_VERSION,
@@ -85,6 +88,50 @@ def uses_accepts_tag_axis(node: Any) -> bool:
     )
 
 
+_EXCEPTION_LIST_KEYS = ("exceptions", "extra_exceptions")
+_MODE_OVERRIDE_KEYS = ("cell_mode_overrides", "exception_mode_overrides")
+
+
+def _matrix_uses_only(matrix: Any) -> bool:
+    if not isinstance(matrix, dict):
+        return False
+    return any(
+        isinstance(row, dict) and any(
+            isinstance(cell, dict) and cell.get("mode") == "only"
+            for cell in row.values()
+        )
+        for row in matrix.values()
+    )
+
+
+def uses_constraint_only_rule(node: Any) -> bool:
+    """Any constraint rule at any depth whose mode is ``only``: a library
+    matrix cell or exception, an instance extra exception, or an instance mode
+    override (a string map)."""
+    if isinstance(node, list):
+        return any(uses_constraint_only_rule(child) for child in node)
+    if not isinstance(node, dict):
+        return False
+    if _matrix_uses_only(node.get("matrix")):
+        return True
+    for key in _EXCEPTION_LIST_KEYS:
+        excs = node.get(key)
+        if isinstance(excs, list) and any(
+            isinstance(e, dict) and e.get("mode") == "only" for e in excs
+        ):
+            return True
+    for key in _MODE_OVERRIDE_KEYS:
+        overrides = node.get(key)
+        if isinstance(overrides, dict) and any(
+            m == "only" for m in overrides.values()
+        ):
+            return True
+    return any(
+        isinstance(value, (dict, list)) and uses_constraint_only_rule(value)
+        for value in node.values()
+    )
+
+
 def uses_sp2b_grammar(node: Any) -> bool:
     """Range-count or ``~`` multi-pick anywhere in the serialised payload."""
     text = json.dumps(node, ensure_ascii=False, default=str)
@@ -93,6 +140,8 @@ def uses_sp2b_grammar(node: Any) -> bool:
 
 def schema_version_for_payload(payload: Any) -> int:
     """The lowest catalog version that covers every feature in ``payload``."""
+    if uses_constraint_only_rule(payload):
+        return CONSTRAINT_ONLY_SCHEMA_VERSION
     if uses_accepts_tag_axis(payload):
         return TAG_AXES_SCHEMA_VERSION
     if uses_target_select_reach(payload):

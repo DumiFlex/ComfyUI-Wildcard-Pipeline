@@ -7,6 +7,7 @@ import {
 } from "@/manager/import-export/single-row-publish";
 import { parsePayload } from "@/manager/import-export/parse";
 import {
+  CONSTRAINT_ONLY_SCHEMA_VERSION,
   CURRENT_SCHEMA_VERSION,
   SP2B_SCHEMA_VERSION,
   SP3_REACH_SCHEMA_VERSION,
@@ -335,5 +336,59 @@ describe("publish body stamping", () => {
       description: "",
     });
     expect(body.schema_version).toBe(TAG_AXES_SCHEMA_VERSION);
+  });
+
+  // --- Linked picks: stamp catalog v6 ONLY when a constraint rule uses the
+  //     `only` mode, wherever it lives (library matrix/exceptions, instance
+  //     extra exceptions, instance mode overrides). ---
+
+  function withPayload(extra: Record<string, unknown>): Record<string, unknown> {
+    const row = constraintRow() as { payload: Record<string, unknown> };
+    return { ...row, payload: { ...row.payload, ...extra } };
+  }
+
+  it("stamps CONSTRAINT_ONLY (6) for an `only` exception", () => {
+    const row = withPayload({
+      exceptions: [{ source_value: "maid", target_value: "apron", mode: "only", factor: 1 }],
+    });
+    expect(schemaVersionForPayload(row)).toBe(CONSTRAINT_ONLY_SCHEMA_VERSION);
+  });
+
+  it("stamps CONSTRAINT_ONLY (6) for an `only` matrix cell", () => {
+    const row = withPayload({ matrix: { summer: { open: { mode: "only", factor: 1 } } } });
+    expect(schemaVersionForPayload(row)).toBe(CONSTRAINT_ONLY_SCHEMA_VERSION);
+  });
+
+  it("finds `only` in instance overrides and extra exceptions", () => {
+    const withInstance = (instance: Record<string, unknown>) => ({ ...constraintRow(), instance });
+    expect(schemaVersionForPayload(withInstance({ cell_mode_overrides: { k: "only" } })))
+      .toBe(CONSTRAINT_ONLY_SCHEMA_VERSION);
+    expect(schemaVersionForPayload(withInstance({ exception_mode_overrides: { k: "only" } })))
+      .toBe(CONSTRAINT_ONLY_SCHEMA_VERSION);
+    expect(schemaVersionForPayload(withInstance({
+      extra_exceptions: [{ source: "a", target: "b", mode: "only", factor: 1 }],
+    }))).toBe(CONSTRAINT_ONLY_SCHEMA_VERSION);
+    expect(schemaVersionForPayload(withInstance({ cell_mode_overrides: { k: "exclude" } })))
+      .toBe(CURRENT_SCHEMA_VERSION);
+  });
+
+  it("keeps the lower stamp when no rule uses `only`", () => {
+    const row = withPayload({
+      matrix: { summer: { open: { mode: "boost", factor: 2 } } },
+      exceptions: [{ source_value: "a", target_value: "b", mode: "exclude", factor: 0 }],
+    });
+    expect(schemaVersionForPayload(row)).toBe(CURRENT_SCHEMA_VERSION);
+  });
+
+  it("stamps CONSTRAINT_ONLY (6) over an accepts axis in the same bundle", () => {
+    const bundle = {
+      id: "bd-004abc",
+      name: "linked-bundle",
+      children: [
+        withPayload({ exceptions: [{ source_value: "a", target_value: "b", mode: "only", factor: 1 }] }),
+        axisRow({ TEXTURE: "accepts" }),
+      ],
+    } as Record<string, unknown>;
+    expect(schemaVersionForPayload(bundle)).toBe(CONSTRAINT_ONLY_SCHEMA_VERSION);
   });
 });

@@ -31,7 +31,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
 /**
  * Highest schema version this runtime can correctly READ + WRITE — distinct
  * from CURRENT_SCHEMA_VERSION (the migration-chain head, which stays 2 because
- * v2→v3, v3→v4 and v4→v5 are no-ops). This is the value advertised to the community
+ * v2→v3 through v5→v6 are no-ops). This is the value advertised to the community
  * publish-gate / boot catalog-probe ("am I new enough to publish?").
  *
  * MAINTENANCE CONTRACT: bump this whenever `schemaVersionForPayload()` learns
@@ -39,7 +39,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  * very shapes this runtime just learned to produce, one version up. The
  * regression test below pins MAX_KNOWN >= the highest content-stamp.
  */
-export const MAX_KNOWN_SCHEMA_VERSION = 5;
+export const MAX_KNOWN_SCHEMA_VERSION = 6;
 
 /**
  * Community catalog version for the SP2b nested multi-pick TEXT grammar
@@ -87,6 +87,20 @@ export const SP3_REACH_SCHEMA_VERSION = 4;
  * present — see `schemaVersionForPayload` / `usesAcceptsTagAxis`.
  */
 export const TAG_AXES_SCHEMA_VERSION = 5;
+
+/**
+ * Community catalog version for the constraint `only` rule (linked picks): a
+ * matrix cell, exception or instance override whose mode is `only`.
+ *
+ * Additive: `only` is a new value in an existing field, and a constraint that
+ * never uses it folds exactly as before, so there is no `migrateV5ToV6` and
+ * `CURRENT_SCHEMA_VERSION` stays 2. The bump exists because a pre-`only`
+ * engine rejects the unknown mode outright, failing the whole constraint mid-
+ * graph; the v6 stamp makes that extension refuse the pack and ask for an
+ * update instead. Publish stamps THIS version only when an `only` rule is
+ * present — see `schemaVersionForPayload` / `usesConstraintOnlyRule`.
+ */
+export const CONSTRAINT_ONLY_SCHEMA_VERSION = 6;
 
 export interface MigrationOk<T> {
   ok: true;
