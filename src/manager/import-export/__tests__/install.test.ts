@@ -172,13 +172,44 @@ describe("installEnvelope — natively-supported future versions install as-is",
     });
   });
 
-  it("rejects a v5 envelope (> MAX_KNOWN) at parse with the future-version error", async () => {
+  it("installs a v5 wildcard (accepts tag axis) without rejecting or migrating", async () => {
     const v5Envelope = {
       schema_version: 5,
-      bundles: [], wildcards: [], fixed_values: [], combines: [], derivations: [], constraints: [], categories: [], templates: [],
+      bundles: [], fixed_values: [], combines: [], derivations: [], constraints: [], categories: [], templates: [],
+      wildcards: [
+        {
+          id: "wcaxis01",
+          type: "wildcard",
+          name: "outfit",
+          payload: {
+            sub_categories: ["boots"],
+            tag_groups: { SHOES: ["boots"] },
+            tag_group_kinds: { SHOES: "accepts" },
+            options: [{ id: "o1", value: "hiker", weight: 1, sub_categories: ["boots"] }],
+          },
+        },
+      ],
     };
     const { importExport, seen } = fakeCommit();
     const result = await installEnvelope({ envelope: v5Envelope }, { importExport });
+
+    expect(result.ok).toBe(true);
+    expect(result.installed.wildcard).toBe(1);
+    expect(result.migratedEntityCount).toBe(0);
+    const added = seen[0].adds.find((a) => a.kind === "wildcard");
+    if (!added) throw new Error("wildcard add not found in commit payload");
+    expect((added.entity.payload as Record<string, unknown>).tag_group_kinds).toEqual({
+      SHOES: "accepts",
+    });
+  });
+
+  it("rejects a v6 envelope (> MAX_KNOWN) at parse with the future-version error", async () => {
+    const v6Envelope = {
+      schema_version: 6,
+      bundles: [], wildcards: [], fixed_values: [], combines: [], derivations: [], constraints: [], categories: [], templates: [],
+    };
+    const { importExport, seen } = fakeCommit();
+    const result = await installEnvelope({ envelope: v6Envelope }, { importExport });
 
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("parse_failed");

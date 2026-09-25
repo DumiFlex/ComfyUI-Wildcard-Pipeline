@@ -46,8 +46,10 @@ export interface DownloadDepsResult {
 }
 
 /** Group ONE engine-row module payload into the install envelope shape
- *  (mirror of Feature 4's buildExtractEnvelope / install.test.ts RawPayload). */
-function envelopeFor(payload: Record<string, unknown>): unknown {
+ *  (mirror of Feature 4's buildExtractEnvelope / install.test.ts RawPayload),
+ *  stamped with the downloaded version's own `schema_version` so install
+ *  migrates it from where it actually is. */
+function envelopeFor(payload: Record<string, unknown>, schemaVersion: number): unknown {
   const type = typeof payload.type === "string" ? payload.type : "";
   const bucket: Record<string, string> = {
     wildcard: "wildcards", fixed_values: "fixed_values", combine: "combines",
@@ -60,7 +62,7 @@ function envelopeFor(payload: Record<string, unknown>): unknown {
   const key = bucket[type];
   if (key) buckets[key].push(payload);
   else if (typeof payload.children !== "undefined") buckets.bundles.push(payload);
-  return { schema_version: 4, ...buckets };
+  return { schema_version: schemaVersion, ...buckets };
 }
 
 export async function downloadDepsForDangling(
@@ -92,7 +94,7 @@ export async function downloadDepsForDangling(
     const deps: InstallDependencyEdge[] = detail.dependencies
       .filter((e) => typeof e.module_id === "string" && e.module_id)
       .map((e) => ({ module_id: e.module_id, slug: e.slug }));
-    const res = await args.install(envelopeFor(dl.payload), deps, {
+    const res = await args.install(envelopeFor(dl.payload, dl.schema_version), deps, {
       post_slug: slug,
       version_number: dl.version_number,
     });

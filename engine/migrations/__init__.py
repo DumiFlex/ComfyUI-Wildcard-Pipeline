@@ -16,16 +16,17 @@ CURRENT_SCHEMA_VERSION = 2
 
 # Highest schema version this runtime can natively READ + WRITE — distinct
 # from CURRENT_SCHEMA_VERSION (the migration-chain head, which stays 2 because
-# v2->v3/v3->v4 are no-ops). v3 is the SP2b text-grammar bump (shape-identical
-# to v2) and v4 is the additive `target_select` constraint reach; both are
-# handled natively, so a payload at CURRENT < v <= MAX_KNOWN installs AS-IS
-# with no migration. Mirror of TS `MAX_KNOWN_SCHEMA_VERSION` in
+# v2->v3/v3->v4/v4->v5 are no-ops). v3 is the SP2b text-grammar bump (shape-
+# identical to v2), v4 is the additive `target_select` constraint reach and v5
+# is the additive `accepts` tag-axis kind; all are handled natively, so a
+# payload at CURRENT < v <= MAX_KNOWN installs AS-IS with no migration.
+# Mirror of TS `MAX_KNOWN_SCHEMA_VERSION` in
 # `src/manager/import-export/migrations.ts`.
 #
 # MAINTENANCE CONTRACT: bump this whenever the TS `schemaVersionForPayload()`
 # learns to stamp a new (higher) version — otherwise this commit-side
 # re-validate will reject the very shapes the runtime just learned to produce.
-MAX_KNOWN_SCHEMA_VERSION = 4
+MAX_KNOWN_SCHEMA_VERSION = 5
 
 _CHAIN = {
     0: migrate_v0_to_v1,

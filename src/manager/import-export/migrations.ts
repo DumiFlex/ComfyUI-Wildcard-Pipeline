@@ -31,7 +31,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
 /**
  * Highest schema version this runtime can correctly READ + WRITE — distinct
  * from CURRENT_SCHEMA_VERSION (the migration-chain head, which stays 2 because
- * v2→v3/v3→v4 are no-ops). This is the value advertised to the community
+ * v2→v3, v3→v4 and v4→v5 are no-ops). This is the value advertised to the community
  * publish-gate / boot catalog-probe ("am I new enough to publish?").
  *
  * MAINTENANCE CONTRACT: bump this whenever `schemaVersionForPayload()` learns
@@ -39,7 +39,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  * very shapes this runtime just learned to produce, one version up. The
  * regression test below pins MAX_KNOWN >= the highest content-stamp.
  */
-export const MAX_KNOWN_SCHEMA_VERSION = 4;
+export const MAX_KNOWN_SCHEMA_VERSION = 5;
 
 /**
  * Community catalog version for the SP2b nested multi-pick TEXT grammar
@@ -72,6 +72,21 @@ export const SP2B_SCHEMA_VERSION = 3;
  * is non-default — see `schemaVersionForPayload` / `usesTargetSelectReach`.
  */
 export const SP3_REACH_SCHEMA_VERSION = 4;
+
+/**
+ * Community catalog version for tag axes: a wildcard `tag_group_kinds` map
+ * that marks at least one tag group `accepts`.
+ *
+ * Additive like SP3: `tag_group_kinds` is optional and an absent or
+ * all-`classify` map behaves exactly like a pre-axes wildcard, so there is no
+ * `migrateV4ToV5` and `CURRENT_SCHEMA_VERSION` stays 2. The bump exists so a
+ * pre-axes consumer is told the pack needs a newer extension instead of
+ * silently dropping the map (its validator strips unknown keys), which would
+ * turn every accepts axis back into a classify group and leave `$var.AXIS`
+ * reads empty. Publish stamps THIS version only when an `accepts` group is
+ * present — see `schemaVersionForPayload` / `usesAcceptsTagAxis`.
+ */
+export const TAG_AXES_SCHEMA_VERSION = 5;
 
 export interface MigrationOk<T> {
   ok: true;
@@ -288,7 +303,7 @@ export function migrateImportEnvelope(payload: Partial<RawPayload>): MigrationRe
   // Reject threshold reads MAX_KNOWN (the highest version this runtime can
   // natively READ + WRITE), NOT CURRENT (the migration-chain head). A payload
   // at CURRENT < v <= MAX_KNOWN (v3 = text-grammar only; v4 = additive
-  // `target_select`) is shape-compatible with v2 and handled natively at
+  // `target_select`; v5 = additive accepts tag axes) is shape-compatible with v2 and handled natively at
   // runtime, so it passes through AS-IS — the migration loop below is bound by
   // CURRENT, so for such a payload there is nothing to migrate and its
   // schema_version is preserved. Only genuinely-future shapes (> MAX_KNOWN) are

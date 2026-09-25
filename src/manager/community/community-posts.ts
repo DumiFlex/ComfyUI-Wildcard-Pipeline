@@ -22,7 +22,13 @@ export interface CommunityPostDetail {
 export interface CommunityDownload {
   payload: Record<string, unknown>;
   version_number: number;
+  /** The shape version the community stamped at publish. */
+  schema_version: number;
 }
+
+/** The server stamps every version; a row that somehow lacks one predates
+ *  schema versioning, which the community's own grace default treats as v1. */
+export const UNSTAMPED_SCHEMA_VERSION = 1;
 
 /** An `Error` that also carries the HTTP status that produced it, so callers
  *  (e.g. `communityPostExists`) can distinguish a definite not-found (404/410)
@@ -92,10 +98,13 @@ export async function downloadCommunityVersion(
 ): Promise<CommunityDownload> {
   const r = await fetchFn(`${WPC_API_URL}/api/v1/posts/${slug}/download`);
   if (!r.ok) throw new Error(`community download ${slug}: HTTP ${r.status}`);
-  const j = (await r.json()) as { data?: { payload_json?: Record<string, unknown>; version_number?: number } };
+  const j = (await r.json()) as {
+    data?: { payload_json?: Record<string, unknown>; version_number?: number; schema_version?: number };
+  };
   const d = j.data ?? {};
   return {
     payload: (d.payload_json ?? {}) as Record<string, unknown>,
     version_number: typeof d.version_number === "number" ? d.version_number : 0,
+    schema_version: typeof d.schema_version === "number" ? d.schema_version : UNSTAMPED_SCHEMA_VERSION,
   };
 }

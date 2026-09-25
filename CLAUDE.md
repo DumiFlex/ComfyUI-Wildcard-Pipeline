@@ -81,11 +81,19 @@ Spec: `D:\Desktop\Wildcard-Pipeline-Community\docs\superpowers\specs\2026-06-05-
 - `tolerant_drift_status TEXT` — `none` | `tolerant` | `strict`. Set by parseTolerantAsCurrentShape during install.
 - `schema_migrated_at TEXT` — wall-clock stamp of last lazy migration step.
 
+**Which number goes where** (three constants, one job each — don't collapse them):
+
+- **`CURRENT_SCHEMA_VERSION` = 2** (`src/manager/import-export/migrations.ts`, mirrored in `engine/migrations/__init__.py`): head of the migration chain. Stays 2 because v3/v4/v5 are additive and need no migrator.
+- **`MAX_KNOWN_SCHEMA_VERSION` = 5** (same two files): the highest version this runtime reads + writes natively. Advertised to the community as `window.__wpcRuntime.schemaVersion` (`src/manager/main.ts`) and the ceiling above which `migrateImportEnvelope` refuses a pack.
+- **Content stamp** (`schemaVersionForPayload` in `src/manager/import-export/single-row-publish.ts`): what publish sends — the LOWEST version the payload's features need (2 baseline, 3 SP2b range/`~` grammar, 4 non-default constraint `target_select`, 5 a wildcard `accepts` tag axis).
+
+A pack arriving from the community keeps the stamp the server stored for it (`CommunityDownload.schema_version`, fed to `wrapAsEngineExport` / the dependency downloader) so install migrates it from where it actually is. Never stamp a received pack with a constant. Local round-trips of live rows (e.g. `BundleEditor` extract) stamp `MAX_KNOWN_SCHEMA_VERSION`.
+
 **The machine**:
 
-- **Validator registry** (`src/manager/import-export/validators/`): one Zod validator per known `schema_version`. Strict at `≤ CURRENT_SCHEMA_VERSION`; future versions go through `parseTolerantAsCurrentShape` (additive-strip).
+- **Validator registry** (`src/validators/index.ts:getValidator`): one Zod validator per shape-changing `schema_version` (v1, v2). v3–v5 didn't change a shape, so they validate against v2. Tolerant mode (`.strip()`) is for installing newer payloads (`parseTolerantAsCurrentShape`).
 - **`parseTolerantAsCurrentShape(raw, currentVersion)`** (`src/manager/import-export/tolerant-parse.ts`): strips fields the current shape doesn't know, returns the projection that matches `currentVersion`. Used at install when source `schema_version > CURRENT`.
-- **`migratePayload(payload, from, to)`** (`src/manager/import-export/migration-machine.ts`): forward-only chain. Each step is a registered function in the migrators map. `from > to` is illegal — no downgrades.
+- **`migratePayload(payload, from, to)`** (`src/manager/import-export/migrations.ts`, beside the envelope-level `migrateImportEnvelope`): forward-only chain. Each step is a registered function in the migrators map. `from > to` is illegal — no downgrades.
 - **`lazy_migrate_row(row, currentVersion, migrators, validators)`** (`engine/db/lazy_migrate.py`): reads `original_payload_json` (or `payload` if absent), walks the migrator chain to `currentVersion`, validates, writes back. Bulk-at-boot runner is eager iteration of this routine.
 - **Install decision tree** (`src/manager/import-export/install.ts`): branches on `source_schema_version` vs `CURRENT_SCHEMA_VERSION`:
   - `=`: strict validate + insert.
@@ -93,20 +101,30 @@ Spec: `D:\Desktop\Wildcard-Pipeline-Community\docs\superpowers\specs\2026-06-05-
   - `>` and tolerant-only diff: parseTolerantAsCurrentShape, mark `tolerant_drift_status='tolerant'`, insert.
   - `>` and breaking-future diff (per catalog `is_breaking_from_previous` AND-fold across the interval): refuse install with a clear error.
 
-**Server probe**: `engine-export-wrap.ts:ENGINE_SCHEMA_VERSION` is the sister's pinned CURRENT — it ships in the sister bundle, not fetched from server. The host bridge install path reads it from `window.__wpcRuntime.schemaVersion`. Server-first deploy ordering (see community CLAUDE.md) means the community catalog always reflects shapes ≥ sister's CURRENT.
+**Server probe**: the host bridge advertises `MAX_KNOWN_SCHEMA_VERSION` as `window.__wpcRuntime.schemaVersion`; it ships in the sister bundle, not fetched from server. The community embed refuses to install a pack stamped above it. Server-first deploy ordering (see community CLAUDE.md) means the community catalog always reflects shapes ≥ sister's MAX_KNOWN.
 
 ### Bumping `schema_version` (the proper way)
 
 When a payload shape change lands (not a row-column change — those don't bump schema):
 
-1. **Add the new shape's validator.** New file under `src/manager/import-export/validators/v<N>.ts` exporting a Zod schema. Register in `validators/index.ts`.
-2. **Add the migrator step.** In `src/manager/import-export/migration-machine.ts`, register `migrators[N-1 → N]: (payload) => ...`. Forward-only. The function is pure — no side effects.
-3. **Add fixtures.** `src/manager/__tests__/import-export/fixtures/v<N>/` — at minimum: a `valid-strict.json`, a `from-v<N-1>-migrated.json` round-trip case, and one `breaking-shape.json` if the bump is breaking.
-4. **Bump the constant.** `CURRENT_SCHEMA_VERSION` lives in the validator registry. Bump it to `N`. Also bump `ENGINE_SCHEMA_VERSION` in `src/manager/components/engine-export-wrap.ts`.
+**Additive bump** (an optional field or new text grammar an old runtime can safely lack — v3, v4, v5 all were):
+
+1. **Add the version constant** next to `SP3_REACH_SCHEMA_VERSION` / `TAG_AXES_SCHEMA_VERSION` in `migrations.ts`, with a comment saying what triggers it.
+2. **Teach `schemaVersionForPayload`** to return it only when the payload actually uses the feature (structural walk, bundle children included), and add cases to `src/manager/__tests__/import-export/publish-stamping.test.ts`.
+3. **Bump `MAX_KNOWN_SCHEMA_VERSION`** in `migrations.ts` AND `engine/migrations/__init__.py`, and update the drift guard in `schema-version-fork.test.ts` to exercise the new highest stamp.
+4. **Make sure the strict validator keeps the new field** (it strips unknown keys) — `src/validators/module/v2.ts` + the engine-parity test.
+5. **Catalog row** — step 7 below. `CURRENT_SCHEMA_VERSION` does not move.
+
+**Shape-changing bump** (needs a migrator):
+
+1. **Add the new shape's validator.** New file under `src/validators/module/v<N>.ts` (and `bundle/` if needed). Register every subtype at `N` in `src/validators/index.ts`.
+2. **Add the migrator step.** In `src/manager/import-export/migrations.ts`, add to `MIGRATION_CHAIN` (envelope) and/or `registerMigrator` (per row), and mirror it under `engine/migrations/`. Forward-only. The function is pure — no side effects.
+3. **Add fixtures.** Under `src/validators/fixtures/v<N>/` — at minimum a strict-valid module per subtype, plus a migrated-from-v<N-1> round-trip case in `src/manager/__tests__/import-export/migration-machine.test.ts`.
+4. **Bump the constants.** `CURRENT_SCHEMA_VERSION` and `MAX_KNOWN_SCHEMA_VERSION` to at least `N`, in both `migrations.ts` and `engine/migrations/__init__.py`.
 5. **Write the migration test.** `tests/engine/db/test_lazy_migrate.py` should cover v<N-1>→v<N> round-trip + the breaking-future path if applicable.
 6. **Run `pytest tests/engine/ -q && pnpm test` until green.** Sister pre-commit hook (~2 min) also runs lint + typecheck + build + size; expect that wait.
 7. **Coordinate the community-side catalog row.** Community web's `schema_catalog` table gets the matching `(version, is_breaking_from_previous, notes)` row + a deploy that lands BEFORE sister's PR merges. See community CLAUDE.md "Bumping the schema" for the server side.
-8. **Sister deploys after server.** Once catalog HEAD ≥ sister's CURRENT, sister can safely refuse breaking-future shapes.
+8. **Sister deploys after server.** Once catalog HEAD ≥ sister's MAX_KNOWN, sister can safely publish the new stamp and refuse breaking-future shapes.
 
 ### Validator ↔ engine parity (DON'T skip)
 
@@ -122,6 +140,9 @@ this:
   shape to `src/validators/fixtures/engine-parity/*.json`.
 - `src/validators/__tests__/engine-parity.test.ts` asserts the **strict**
   community validator accepts every one of those fixtures.
+- `tests/test_engine_parity_fixtures.py` re-runs the dump in memory and fails
+  pytest when a committed fixture is stale, so forgetting the script is
+  caught in CI.
 
 **Any time you change an engine module payload shape** (a `*_handler.py`
 `validate_payload`, or what the editor stores), run
