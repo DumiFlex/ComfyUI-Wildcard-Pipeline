@@ -1,3 +1,19 @@
+## 🎉 Wildcard Pipeline 2.15.3
+
+📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
+
+New docs for chips, references and the filter grammar.
+
+### Highlights
+
+- **Docs: Chips & references.** A new page in the manager's Docs tab (How it connects → Chips & references) explains the chips you see in text fields and their three states (resolved, filtered, broken), how to make a placeholder `$var` chip before anything produces it, the full `@{uuid#name:filter!null}` reference form and why plain `@name` stays text, and the sub-category filter grammar: `not`, `and`, `or` (or a comma) and parentheses, e.g. `not warm and (low or high)`. Searching the docs for "chip" or "filter" now finds it.
+
+
+
+---
+
+**Full changelog:** [v2.15.2…v2.15.3](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/compare/v2.15.2...v2.15.3)
+
 ## 🎉 Wildcard Pipeline 2.15.2
 
 📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
