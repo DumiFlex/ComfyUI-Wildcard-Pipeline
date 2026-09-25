@@ -33,7 +33,7 @@ from engine.db.repositories import (
     TemplateNotFound,
     TemplateRepository,
 )
-from engine.migrations import CURRENT_SCHEMA_VERSION
+from engine.migrations.stamping import schema_version_for_payload
 
 
 def _walk_inner_bundles(repo: BundleRepository, seed: list[str]) -> list[str]:
@@ -152,9 +152,7 @@ def build_export_payload(
         except TemplateNotFound:
             pass
 
-    return {
-        "schema_version": CURRENT_SCHEMA_VERSION,
-        "exported_at": now_iso(),
+    buckets: dict[str, list[dict[str, Any]]] = {
         "bundles": bundles,
         "wildcards": wildcards,
         "fixed_values": fixed_values,
@@ -163,4 +161,12 @@ def build_export_payload(
         "constraints": constraints,
         "categories": categories,
         "templates": templates,
+    }
+    # Stamp the lowest version the exported content needs (range grammar 3,
+    # constraint reach 4, accepts tag axes 5), not the migration-chain head:
+    # an older extension must refuse a file whose features it can't read.
+    return {
+        "schema_version": schema_version_for_payload(buckets),
+        "exported_at": now_iso(),
+        **buckets,
     }
