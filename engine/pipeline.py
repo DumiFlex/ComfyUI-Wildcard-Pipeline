@@ -357,20 +357,24 @@ class PipelineEngine:
             # Restricted to held modules, and `not in` rather than assignment,
             # so a wildcard that never asked to hold still re-rolls this
             # iteration.
-            _base_axes = base_ctx.get("__wp_axes__")
-            if isinstance(_base_axes, dict):
-                _real_axes = ctx.setdefault("__wp_axes__", {})
-                if isinstance(_real_axes, dict):
-                    for _m in modules:
-                        if _module_seed_scope(_m) != "hold":
-                            continue
-                        _binding = _module_binding(_m)
-                        if (
-                            _binding
-                            and _binding in _base_axes
-                            and _binding not in _real_axes
-                        ):
-                            _real_axes[_binding] = _base_axes[_binding]
+            # The declared-axes table travels with the rolls it describes.
+            for _table in ("__wp_axes__", "__wp_axis_decl__"):
+                _base_axes = base_ctx.get(_table)
+                if not isinstance(_base_axes, dict):
+                    continue
+                _real_axes = ctx.setdefault(_table, {})
+                if not isinstance(_real_axes, dict):
+                    continue
+                for _m in modules:
+                    if _module_seed_scope(_m) != "hold":
+                        continue
+                    _binding = _module_binding(_m)
+                    if (
+                        _binding
+                        and _binding in _base_axes
+                        and _binding not in _real_axes
+                    ):
+                        _real_axes[_binding] = _base_axes[_binding]
             _base_hits = base_ctx.get("__wp_constraint_hits__")
             if isinstance(_base_hits, dict):
                 _real_hits = ctx.setdefault("__wp_constraint_hits__", {})

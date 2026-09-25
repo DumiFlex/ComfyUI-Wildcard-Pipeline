@@ -154,6 +154,25 @@ def test_no_accepts_group_means_no_axes_bucket_entry():
     assert ctx["__wp_picks__"]["abc12345"]["picks"][0]["axes"] == {}
 
 
+def test_declared_axes_recorded_even_when_the_pick_has_no_tag():
+    # The resolver needs this to tell "no SHOES tag on this pick" from "no
+    # SHOES axis", which `__wp_axes__` alone cannot.
+    ctx = _fresh_ctx()
+    payload = _payload(
+        options=[{"id": "o1", "value": "robe", "sub_categories": []}],
+        tag_group_kinds={"SHOES": "accepts"},
+    )
+    WildcardHandler.resolve(payload, {"variable_binding": "outfit"}, ctx)
+    assert ctx["__wp_axes__"]["outfit"] == {}
+    assert ctx["__wp_axis_decl__"]["outfit"] == ["SHOES"]
+
+
+def test_classify_only_wildcard_declares_no_axes():
+    ctx = _fresh_ctx()
+    WildcardHandler.resolve(_payload(), {"variable_binding": "outfit"}, ctx)
+    assert ctx["__wp_axis_decl__"]["outfit"] == []
+
+
 # ── the reported failure, end to end ────────────────────────────────────
 
 

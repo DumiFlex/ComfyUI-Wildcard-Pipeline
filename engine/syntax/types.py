@@ -176,6 +176,12 @@ class ResolveContext(Protocol):
         """
         ...
 
+    def declared_axes(self, name: str) -> list[str] | None:
+        """Return the ``accepts`` axes the wildcard bound to `name` declares,
+        or None when that is not known. Lets an empty axis read tell "this
+        pick carries no tag on the axis" apart from "there is no such axis"."""
+        ...
+
     def get_module(self, uuid: str) -> dict[str, Any] | None:
         """Return the module catalog row for `uuid`, or None if missing.
 

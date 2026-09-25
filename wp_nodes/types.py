@@ -361,6 +361,10 @@ _CROSS_NODE_INTERNAL_KEYS = (
     # inconsistency the design forbids. A dropped key renders "" rather than
     # erroring, so losing it looks like a content bug, not a plumbing one.
     "__wp_axes__",
+    # Which accepts axes each binding declares. Rides with `__wp_axes__` so a
+    # `$outfit.SHOES` read in a later node can still tell "no SHOES tag on this
+    # pick" from "no SHOES axis"; losing it only makes that warning vaguer.
+    "__wp_axis_decl__",
     "__wp_constraints__",
     # `__wp_constraints__` propagates so a constraint registered in
     # Context A can fire on a wildcard rolled in Context B. The matching
