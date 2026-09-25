@@ -1,3 +1,17 @@
+## 🎉 Wildcard Pipeline 2.15.1
+
+📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
+
+### Fixes
+
+- **Library file exports now record the schema version their content needs.** Exporting from the library always wrote schema version 2 into the file, even when it held range multi-picks like `{1-3$$…}`, constraints with a narrowed reach, or wildcards with an **accepts** tag axis. An older extension would then import the file and silently misread or drop those features. Exports now say 3, 4 or 5 when they use those features, so an older extension refuses the file and asks you to update. Files without them still export as version 2.
+
+
+
+---
+
+**Full changelog:** [v2.15.0…v2.15.1](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/compare/v2.15.0...v2.15.1)
+
 ## 🎉 Wildcard Pipeline 2.15.0
 
 📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
