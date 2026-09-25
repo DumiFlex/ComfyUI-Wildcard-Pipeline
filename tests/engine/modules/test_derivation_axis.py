@@ -75,6 +75,16 @@ def test_multi_pick_axis_indexes_in_either_order():
         )["footwear"] == "strappy sandals"
 
 
+def test_multi_pick_axis_index_keeps_its_slot_when_a_pick_has_no_axis_tag():
+    axes = {"outfit": [{}, {"SHOES": "sneakers"}]}
+    assert DerivationHandler.resolve(
+        _rule("outfit.1.SHOES", value="sneakers"), {}, _ctx(axes=axes),
+    )["footwear"] == "strappy sandals"
+    assert DerivationHandler.resolve(
+        _rule("outfit.0.SHOES", value="sneakers"), {}, _ctx(axes=axes),
+    ) == {}
+
+
 def test_plain_var_condition_is_untouched():
     assert DerivationHandler.resolve(
         _rule("location", value="outdoors"), {}, _ctx(),

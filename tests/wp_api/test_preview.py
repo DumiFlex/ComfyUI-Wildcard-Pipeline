@@ -5,7 +5,7 @@ async def test_preview_empty_chain_returns_empty(wp_client):
     resp = await wp_client.post("/wp/api/preview/resolve", json={"chain": []})
     assert resp.status == 200
     body = await resp.json()
-    assert body == {"resolved": {}}
+    assert body == {"resolved": {}, "axes": {}}
 
 
 async def test_preview_resolves_fixed_values_module(wp_client):
@@ -146,3 +146,49 @@ async def test_preview_internals_stripped(wp_client):
     resp = await wp_client.post("/wp/api/preview/resolve", json={"chain": chain, "seed": 42})
     body = await resp.json()
     assert all(not k.startswith("__") for k in body["resolved"])
+
+
+async def test_preview_returns_the_rolled_accepts_axes(wp_client):
+    """`$var.AXIS` in the assembler preview has to read the tag the preview
+    run actually rolled, so the axes table rides beside the values. An option
+    with no tag on the axis rolls nothing, which is what renders empty."""
+    chain = [[
+        {
+            "id": "abcdef01",
+            "type": "wildcard",
+            "enabled": True,
+            "meta": {"name": "outfit"},
+            "entries": [],
+            "payload": {
+                "var_binding": "outfit",
+                "sub_categories": ["sandals", "boots"],
+                "tag_groups": {"SHOES": ["sandals", "boots"]},
+                "tag_group_kinds": {"SHOES": "accepts"},
+                "options": [
+                    {"id": "o1", "value": "jeans", "weight": 1,
+                     "sub_categories": ["boots"]},
+                ],
+            },
+        },
+        {
+            "id": "abcdef02",
+            "type": "wildcard",
+            "enabled": True,
+            "meta": {"name": "hat"},
+            "entries": [],
+            "payload": {
+                "var_binding": "hat",
+                "sub_categories": ["sandals"],
+                "tag_groups": {"SHOES": ["sandals"]},
+                "tag_group_kinds": {"SHOES": "accepts"},
+                "options": [{"id": "o1", "value": "cap", "weight": 1}],
+            },
+        },
+    ]]
+    resp = await wp_client.post(
+        "/wp/api/preview/resolve", json={"chain": chain, "seed": 42},
+    )
+    body = await resp.json()
+    assert body["resolved"]["outfit"] == "jeans"
+    assert body["axes"]["outfit"] == {"SHOES": "boots"}
+    assert body["axes"]["hat"] == {}

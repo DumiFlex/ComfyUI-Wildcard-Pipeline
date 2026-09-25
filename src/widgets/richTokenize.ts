@@ -144,6 +144,33 @@ export function applyVarAccessor(
   return value;
 }
 
+/** One binding's rolled `accepts` axes as `__wp_axes__` stores them (and the
+ *  preview endpoint returns them): `{AXIS: tag}` for a single pick, one such
+ *  map per pick for a multi-select. A pick whose option carries no tag on an
+ *  axis simply has no key for it. */
+export type RolledAxes = Record<string, string> | Array<Record<string, string>>;
+
+/** Render a `$var.AXIS` read against the rolled axes — the TS mirror of
+ *  engine `_resolve_axis` (engine/syntax/resolve.py). Single pick: the tag,
+ *  `.0` is itself and any higher index is "". Multi-pick: bare joins the picks
+ *  that have the axis with ", "; `.K` is pick K's tag, positional, so it lines
+ *  up with `$var.K`. Nothing rolled renders "", as at run time. */
+export function readRolledAxis(
+  entry: RolledAxes | null | undefined,
+  axis: string,
+  index: number | undefined,
+): string {
+  if (Array.isArray(entry)) {
+    const slots = entry.map((e) => (e && typeof e === "object" ? e[axis] ?? "" : ""));
+    if (index == null) return slots.filter((t) => t).join(", ");
+    return index >= 0 && index < slots.length ? slots[index] : "";
+  }
+  const got = entry && typeof entry === "object" ? entry[axis] : undefined;
+  if (got == null) return "";
+  if (index != null) return index === 0 ? got : "";
+  return got;
+}
+
 export interface RichToken {
   kind: TokenKind;
   start: number;

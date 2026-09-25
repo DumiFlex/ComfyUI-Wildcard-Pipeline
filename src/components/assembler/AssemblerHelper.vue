@@ -4,7 +4,13 @@ import { varColorClass } from "../shared/var-color";
 import { modelSyntaxHtml } from "../../widgets/richTokenize";
 import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
 import { kindIcon, type WpKind } from "../shared/kind-icons";
-import { applyVarAccessor, type ResolvedValue } from "../../widgets/richTokenize";
+import {
+  applyVarAccessor,
+  readRolledAxis,
+  varAccessorParts,
+  type ResolvedValue,
+  type RolledAxes,
+} from "../../widgets/richTokenize";
 
 const props = defineProps<{
   /** Flat array of upstream variable names. Primary prop shape. */
@@ -22,6 +28,12 @@ const props = defineProps<{
    *  this, never against `resolvedMap` — the axis names a tag menu, not the
    *  variable's text. */
   varAxes?: Record<string, Record<string, string>>;
+  /** What the preview run actually rolled, keyed by binding (the preview
+   *  endpoint's `axes`). Preferred over `varAxes` for any axis the chain
+   *  declares, because `varAxes` only knows the axis's first tag — it printed
+   *  "sandals" beside an option with no shoes and beside a pick whose
+   *  constrained target had rolled heels. */
+  rolledAxes?: Record<string, RolledAxes>;
   /**
    * Pre-resolved string — template with $var replaced by resolved values.
    * Legacy fallback when `resolvedMap` not provided. Suffers from
@@ -92,8 +104,10 @@ const VAR_RE = /\$([A-Za-z_][A-Za-z0-9_]*)/g;
 // literal) and group 2 drives applyVarAccessor in the substitution below.
 // Groups: 1=name · 2=index · 3=axis. The accessor has to be part of the match
 // or the preview prints the resolved value and strands ".SHOES" after it.
+// Both accessor orders the engine accepts (`$o.0.SHOES`, `$o.SHOES.0`); the
+// match is re-split by `varAccessorParts`, the one canonical grammar.
 const TEMPLATE_VAR_RE =
-  /(?<!\$)\$([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?(?:\.([A-Za-z_][A-Za-z0-9_]*))?/g;
+  /(?<!\$)\$([A-Za-z_][A-Za-z0-9_]*)(?:\.(?:\d+(?:\.[A-Za-z_][A-Za-z0-9_]*)?|[A-Za-z_][A-Za-z0-9_]*(?:\.\d+)?))?/g;
 
 /** Variable names referenced in the template. */
 const templateVarsInternal = computed(() => {
@@ -142,6 +156,22 @@ watch(
 
 interface PreviewToken { kind: "literal" | "var"; text: string; varName?: string }
 
+/** An axis read resolves to a TAG. Falling through to the value is what
+ *  rendered "a white t-shirt and denim skirt.SHOES". An axis the chain does not
+ *  declare stays raw so the gap is visible rather than silently dropped; a
+ *  declared one reads what the preview run rolled (empty when the picked
+ *  option carries no tag on it, exactly as the prompt will), and only guesses
+ *  the axis's first tag until that run has answered. */
+function axisText(name: string, axis: string, index: number | undefined, raw: string): string {
+  const guess = props.varAxes?.[name]?.[axis];
+  if (guess === undefined) return raw;
+  const rolled = props.rolledAxes;
+  if (rolled && Object.prototype.hasOwnProperty.call(rolled, name)) {
+    return readRolledAxis(rolled[name], axis, index);
+  }
+  return index != null && index > 0 ? "" : guess;
+}
+
 const previewTokens = computed<PreviewToken[]>(() => {
   if (!props.template) return [];
 
@@ -153,21 +183,13 @@ const previewTokens = computed<PreviewToken[]>(() => {
     for (const m of props.template.matchAll(TEMPLATE_VAR_RE)) {
       const idx = m.index ?? 0;
       if (idx > last) tokens.push({ kind: "literal", text: props.template.slice(last, idx) });
-      const name = m[1];
-      const idxStr = m[2];
-      const index = idxStr != null ? parseInt(idxStr, 10) : undefined;
-      const axis = m[3];
-      const raw = `$${name}${idxStr != null ? "." + idxStr : ""}${axis ? "." + axis : ""}`;
+      const raw = m[0];
+      const { base: name, index, axis } = varAccessorParts(raw);
       const has = Object.prototype.hasOwnProperty.call(props.resolvedMap, name);
-      // An axis read resolves to a TAG. Falling through to the value here is
-      // what rendered "a white t-shirt and denim skirt.SHOES"; an axis the
-      // chain does not declare stays raw so the gap is visible rather than
-      // silently dropped.
-      const axisTag = axis ? props.varAxes?.[name]?.[axis] : undefined;
       tokens.push({
         kind: "var",
         text: axis
-          ? (axisTag ?? raw)
+          ? axisText(name, axis, index, raw)
           : (has ? applyVarAccessor(props.resolvedMap[name], index) : raw),
         varName: name,
       });

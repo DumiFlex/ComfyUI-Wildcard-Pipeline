@@ -17,7 +17,8 @@ serialises into a node's `modules` widget value: list of module dicts
 with `id`, `type`, `enabled`, `payload`, `entries`, `instance`, ...
 
 Returns:
-    {"resolved": {<name>: <value>, ...}}
+    {"resolved": {<name>: <value>, ...},
+     "axes": {<binding>: {<AXIS>: <tag>} | [{<AXIS>: <tag>}, ...], ...}}
 
 Empty chain or any malformed step → empty resolved map (never 500).
 """
@@ -170,7 +171,15 @@ async def resolve_preview(request: web.Request) -> web.Response:
             # whatever we resolved up to this point.
             break
 
-    return json_ok({"resolved": _jsonify_resolved(strip_internals(ctx))})
+    # The rolled `accepts` axes ride alongside, keyed by binding exactly as
+    # `__wp_axes__` stores them. `strip_internals` drops that table, and
+    # without it the preview could only guess `$var.AXIS` from the wildcard's
+    # tag list — printing "sandals" beside an option that carries no shoes.
+    axes = ctx.get("__wp_axes__")
+    return json_ok({
+        "resolved": _jsonify_resolved(strip_internals(ctx)),
+        "axes": axes if isinstance(axes, dict) else {},
+    })
 
 
 def register(router) -> None:
