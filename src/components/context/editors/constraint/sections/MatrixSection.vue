@@ -29,7 +29,7 @@ import {
   toGroups,
 } from "../../../../shared/matrix-axis";
 
-type Mode = "neutral" | "exclude" | "boost" | "reduce";
+type Mode = "neutral" | "exclude" | "boost" | "reduce" | "only";
 
 interface Cell { mode: Mode; factor: number }
 
@@ -72,8 +72,8 @@ const instance = computed(() => props.module.instance ?? {});
 const disabledCells = computed<Set<string>>(
   () => new Set(instance.value.disabled_matrix_cells ?? []),
 );
-const cellModeOverrides = computed<Record<string, Mode>>(
-  () => (instance.value.cell_mode_overrides as Record<string, Mode> | null) ?? {},
+const cellModeOverrides = computed<Record<string, string>>(
+  () => (instance.value.cell_mode_overrides as Record<string, string> | null) ?? {},
 );
 const cellFactorOverrides = computed<Record<string, number>>(
   () => (instance.value.cell_factor_overrides as Record<string, number> | null) ?? {},
@@ -135,7 +135,10 @@ function effectiveState(src: string, tgt: string): Mode {
   const key = encodeKey([src, tgt]);
   if (disabledCells.value.has(key)) return "neutral";
   const override = cellModeOverrides.value[key];
-  if (override === "neutral" || override === "exclude" || override === "boost" || override === "reduce") {
+  // `allow` is how a neutral override is stored (the engine's name for it);
+  // `neutral` is what earlier builds wrote, still read for saved workflows.
+  if (override === "allow" || override === "neutral") return "neutral";
+  if (override === "exclude" || override === "boost" || override === "reduce" || override === "only") {
     return override;
   }
   const lib = libCell(src, tgt);
@@ -161,18 +164,34 @@ function isOverridden(src: string, tgt: string): boolean {
 function cellClasses(src: string, tgt: string): string[] {
   const out = ["mx-cell", `s-${effectiveState(src, tgt)}`];
   if (isOverridden(src, tgt)) out.push("mx-cell--mod");
+  if (isImpliedOut(src, tgt)) out.push("implied-out");
   const open = openPopover.value;
   if (open && open.src === src && open.tgt === tgt) out.push("open");
   return out;
 }
 
 function cellGlyph(src: string, tgt: string): string {
+  if (isImpliedOut(src, tgt)) return "×";
   switch (effectiveState(src, tgt)) {
     case "neutral": return "·";
     case "exclude": return "×";
     case "boost":   return "↑";
     case "reduce":  return "↓";
+    case "only":    return "✓";
   }
+}
+
+/** Source rows holding an `only` cell (effective, override-aware). Their
+ *  neutral cells are shut out at runtime, so the grid marks them. */
+const onlyRows = computed<Set<string>>(() => {
+  const out = new Set<string>();
+  for (const src of props.sourceSubs) {
+    if (props.targetSubs.some((tgt) => effectiveState(src, tgt) === "only")) out.add(src);
+  }
+  return out;
+});
+function isImpliedOut(src: string, tgt: string): boolean {
+  return onlyRows.value.has(src) && effectiveState(src, tgt) === "neutral";
 }
 
 function cellShowsFactor(src: string, tgt: string): boolean {
@@ -188,10 +207,11 @@ function cellFactorText(src: string, tgt: string): string {
 function cellAriaLabel(src: string, tgt: string): string {
   const s = effectiveState(src, tgt);
   const factor = (s === "boost" || s === "reduce") ? ` ×${effectiveFactor(src, tgt).toFixed(1)}` : "";
+  const implied = isImpliedOut(src, tgt) ? " (excluded by an only rule in this row)" : "";
   // Stranded → the grid is a read-only snapshot, so drop the "Click to
   // edit" affordance from the label (the cell is inert).
   const suffix = props.stranded ? " (read-only)" : ". Click to edit.";
-  return `Rule: ${src} → ${tgt}, current state ${s}${factor}${suffix}`;
+  return `Rule: ${src} → ${tgt}, current state ${s}${factor}${implied}${suffix}`;
 }
 
 // ── Popover ────────────────────────────────────────────────────
@@ -267,9 +287,11 @@ function commitMode(src: string, tgt: string, next: Mode): void {
   const key = encodeKey([src, tgt]);
   const lib = libCell(src, tgt);
   const libMode: Mode = lib ? lib.mode : "neutral";
-  const modeMap = { ...cellModeOverrides.value };
+  const modeMap: Record<string, string> = { ...cellModeOverrides.value };
   if (next === libMode) delete modeMap[key];
-  else modeMap[key] = next;
+  // Store neutral as `allow`, the engine's name for it — a stored "neutral"
+  // failed the whole constraint at run time.
+  else modeMap[key] = next === "neutral" ? "allow" : next;
   const factorMap = { ...cellFactorOverrides.value };
   // When leaving boost/reduce, drop the factor override too so the
   // cell falls back fully to library / default.
@@ -769,6 +791,17 @@ onBeforeUnmount(() => {
   color: var(--wp-warn);
   border: 1px solid color-mix(in srgb, var(--wp-warn, #f97316) 45%, transparent);
 }
+.mx-cell.s-only {
+  background: color-mix(in srgb, var(--wp-info, #3b82f6) 22%, transparent);
+  color: var(--wp-info, #3b82f6);
+  border: 1px solid color-mix(in srgb, var(--wp-info, #3b82f6) 45%, transparent);
+}
+/* A neutral cell in a row that has an Only rule: shut out at runtime. Faint
+ * danger hue on the dashed border so it reads as implied, not authored. */
+.mx-cell.s-neutral.implied-out {
+  color: color-mix(in srgb, var(--wp-danger, #ef4444) 60%, var(--wp-text-dim, #595c66));
+  border-color: color-mix(in srgb, var(--wp-danger, #ef4444) 30%, transparent);
+}
 .mx-cell--mod {
   outline: 1px dashed var(--wp-status-modified, #fb923c);
   outline-offset: -1px;
@@ -805,6 +838,11 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--wp-danger, #ef4444) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--wp-danger, #ef4444) 18%, transparent);
   color: color-mix(in srgb, var(--wp-danger, #ef4444) 70%, var(--wp-text-dim));
+}
+.mx--readonly .mx-cell.s-only {
+  background: color-mix(in srgb, var(--wp-info, #3b82f6) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-info, #3b82f6) 18%, transparent);
+  color: color-mix(in srgb, var(--wp-info, #3b82f6) 70%, var(--wp-text-dim));
 }
 .mx__readonly-hint {
   margin: 8px 0 0;

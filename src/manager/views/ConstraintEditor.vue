@@ -246,12 +246,16 @@ const MODE_DEFAULT_FACTOR: Record<ConstraintMode, number> = {
   exclude: 0,
   boost: 2,
   reduce: 0.5,
+  only: 1,
 };
 const MODE_OPTIONS = [
   { label: "Allow", value: "allow" },
   { label: "Exclude", value: "exclude" },
   { label: "Boost", value: "boost" },
   { label: "Reduce", value: "reduce" },
+  // Linked picks: when the source value fires, only target values that have
+  // an exception of their own can be picked.
+  { label: "Only", value: "only" },
 ];
 
 /** Mode → {glyph, label, CSS var} for the colored exception-mode chips
@@ -266,6 +270,7 @@ const MODE_META: Record<ConstraintMode, ModeMeta> = {
   reduce: { glyph: "↓", label: "Reduce", cssVar: "--wp-warn" },
   exclude: { glyph: "×", label: "Exclude", cssVar: "--wp-danger" },
   allow: { glyph: "·", label: "Neutral", cssVar: "--wp-text-dim" },
+  only: { glyph: "✓", label: "Only", cssVar: "--wp-info" },
 };
 function modeMeta(mode: ConstraintMode | string | undefined): ModeMeta {
   return MODE_META[(mode ?? "allow") as ConstraintMode] ?? MODE_META.allow;
@@ -922,6 +927,17 @@ const exFilterActive = computed(() => exQuery.value.trim().length > 0);
 /** Rows to render, each carrying its ORIGINAL index: every row action —
  *  `removeException(idx)`, `exceptions.value[idx]` in the update handlers —
  *  addresses by position, so a filtered array alone would edit the wrong row. */
+/** Source values that carry an `only` exception. For each, every target value
+ *  without an exception of its own is excluded at runtime — the note under
+ *  the table says so, since the rows alone don't show the shut-out targets. */
+const onlyLinkSources = computed<string[]>(() => {
+  const out: string[] = [];
+  for (const ex of exceptions.value) {
+    if (ex.mode === "only" && !out.includes(ex.source)) out.push(ex.source);
+  }
+  return out;
+});
+
 const visibleExceptions = computed<{ ex: ConstraintException; idx: number }[]>(() => {
   const rows = exceptions.value.map((ex, idx) => ({ ex, idx }));
   const q = exQuery.value.trim().toLowerCase();
@@ -1484,6 +1500,12 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
         <i class="pi pi-info-circle" />
         Per-pair overrides for specific option values that the matrix doesn't cover.
       </div>
+      <p v-if="onlyLinkSources.length" class="cn-only-note" data-test="cn-only-note">
+        <span class="cn-only-note__glyph" aria-hidden="true">✓</span>
+        Linked: when {{ onlyLinkSources.map((s) => displayLabel(s) || "⌀ null").join(", ") }}
+        {{ onlyLinkSources.length === 1 ? "is" : "are" }} picked, only target values listed here for
+        {{ onlyLinkSources.length === 1 ? "it" : "them" }} can be picked.
+      </p>
       <!-- Read-only recovery view: the source/target wildcard was deleted, so
            the exception option lists (built from the LIVE wildcard's values)
            are empty and would swallow the stored source/target in the edit
@@ -1834,6 +1856,14 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
  * their set widths; source + target split the remaining space and TRUNCATE
  * (each cell's Select trigger ellipsis-clips) instead of overflowing the page. */
 .cn-ex-table { table-layout: fixed; width: 100%; }
+.cn-only-note {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: var(--wp-text-xs);
+  color: var(--wp-text-muted);
+  border-bottom: 1px solid var(--wp-border);
+}
+.cn-only-note__glyph { color: var(--wp-info, #3b82f6); margin-right: 4px; }
 /* Read-only (stranded) value cells: clip long text to one line to match the
  * editable Selects rather than wrapping into tall rows. */
 .cn-ex-table td.wp-mono {

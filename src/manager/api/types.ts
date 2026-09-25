@@ -125,7 +125,9 @@ export interface DerivationPayload {
   rules: DerivationRule[];
 }
 
-export type ConstraintMode = "allow" | "exclude" | "boost" | "reduce";
+/** `only` (linked picks) turns its row into an allow-list: when the source
+ *  fires, every target without a rule of its own is excluded. */
+export type ConstraintMode = "allow" | "exclude" | "boost" | "reduce" | "only";
 
 export interface ConstraintCell {
   mode: ConstraintMode;

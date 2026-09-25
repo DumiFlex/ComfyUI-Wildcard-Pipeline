@@ -11,7 +11,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
 const modes = [
   {
     term: "Allow",
-    desc: "Keep only matching options in the target pool. Everything else is removed before the target rolls.",
+    desc: "No change. Shown as Neutral in the matrix: the pair rolls as if there were no rule.",
   },
   {
     term: "Exclude",
@@ -24,6 +24,10 @@ const modes = [
   {
     term: "Reduce",
     desc: "Multiply the weight of matching options by a factor less than 1 (= less likely).",
+  },
+  {
+    term: "Only",
+    desc: "Link picks. When the source rolls this, only targets that have a rule of their own in the same row can be picked. Everything else in the row is removed.",
   },
 ];
 
@@ -123,6 +127,33 @@ const reachModes = [
         ratio="16 / 7"
         caption="The SPA's full Edit constraint page for the Starter pairing entry (breadcrumb Library › Constraints › Starter pairing, Unsaved badge). Wildcards section pins Starter subject as source + Starter mood as target. Rule matrix grids feline/canine × calm/intense with feline×intense + canine×calm at ↑×3 and the mismatched diagonals at ↓×0.3. Exceptions table below carries one row: tiger → sleepy · Exclude · — — the EXTRA exception wins over the matrix when both apply."
       />
+    </DocSection>
+
+    <DocSection title="Linking picks with Only">
+      <p>
+        <b>Only</b> ties one wildcard's pick to another's. Add an exception
+        <em>maid → frilled apron</em> in Only mode, and whenever the source rolls "maid" the target
+        can only roll "frilled apron". You don't list every outfit to exclude, and an outfit you
+        add to the target later is shut out too.
+      </p>
+      <ul>
+        <li>
+          <b>On an exception</b>, Only links exact values. Several Only exceptions for the same
+          source value make a short list: "maid" can pick "frilled apron" or "kimono" and nothing
+          else. A target with any other exception of its own for that source (a Boost, say) stays
+          in the pool with that rule.
+        </li>
+        <li>
+          <b>In the matrix</b>, Only links subcategories. An Only cell summer → open means a summer
+          pick can only reach targets tagged open (or tagged with anything else that has a rule in
+          the summer row). The other cells in that row show a faint × so you can see what is shut
+          out. A Neutral cell does not count as a rule here.
+        </li>
+      </ul>
+      <DocCallout variant="tip">
+        Only rows and exceptions for other source values are unaffected. A "biker" pick in the
+        example above still rolls every outfit.
+      </DocCallout>
     </DocSection>
 
     <DocSection title="Accepts axes as a source or target">

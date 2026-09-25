@@ -904,7 +904,7 @@ export interface ModuleEntry {
      * with overrides present. Engine reads override before payload
      * value at resolve time.
      */
-    cell_mode_overrides?: Record<string, "allow" | "exclude" | "boost" | "reduce"> | null;
+    cell_mode_overrides?: Record<string, "allow" | "exclude" | "boost" | "reduce" | "only"> | null;
     /**
      * Per-instance per-cell factor override. Same keying as
      * `cell_mode_overrides`. Numbers >= 0; engine rejects negatives
@@ -916,7 +916,7 @@ export interface ModuleEntry {
      * `encodeKey([source_value, target_value])`. Sparse — same
      * semantics as cell overrides but for the exceptions list.
      */
-    exception_mode_overrides?: Record<string, "allow" | "exclude" | "boost" | "reduce"> | null;
+    exception_mode_overrides?: Record<string, "allow" | "exclude" | "boost" | "reduce" | "only"> | null;
     /**
      * Per-instance per-exception factor override. Same keying as
      * `exception_mode_overrides`.
@@ -930,7 +930,7 @@ export interface ModuleEntry {
     extra_exceptions?: Array<{
       source_value: string;
       target_value: string;
-      mode: "allow" | "exclude" | "boost" | "reduce";
+      mode: "allow" | "exclude" | "boost" | "reduce" | "only";
       factor: number;
     }> | null;
     /**

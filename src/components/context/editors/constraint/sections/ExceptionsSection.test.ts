@@ -100,20 +100,24 @@ describe("constraint ExceptionsSection", () => {
     expect(patch.instance?.exception_mode_overrides).toEqual({ '["red","black"]': "boost" });
   });
 
-  it("mode cycle from reduce goes back to allow (4-state, no disabled)", async () => {
-    const w = mount(ExceptionsSection, {
-      props: {
-        module: makeModule({
-          instance: { exception_mode_overrides: { '["red","black"]': "reduce" } },
-        }),
-        sourceValues: SOURCE_VALUES,
-        targetValues: TARGET_VALUES,
-      },
-    });
-    await w.find('[data-test="ex-mode-0"]').trigger("click");
-    const updates = w.emitted("update")!;
-    const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
-    expect(patch.instance?.exception_mode_overrides).toEqual({ '["red","black"]': "allow" });
+  it("mode cycle goes reduce → only → allow (5-state, no disabled)", async () => {
+    const cycleFrom = async (mode: "reduce" | "only") => {
+      const w = mount(ExceptionsSection, {
+        props: {
+          module: makeModule({
+            instance: { exception_mode_overrides: { '["red","black"]': mode } },
+          }),
+          sourceValues: SOURCE_VALUES,
+          targetValues: TARGET_VALUES,
+        },
+      });
+      await w.find('[data-test="ex-mode-0"]').trigger("click");
+      const updates = w.emitted("update")!;
+      const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
+      return patch.instance?.exception_mode_overrides;
+    };
+    expect(await cycleFrom("reduce")).toEqual({ '["red","black"]': "only" });
+    expect(await cycleFrom("only")).toEqual({ '["red","black"]': "allow" });
   });
 
   it("factor input visible only when effective mode is boost or reduce", () => {

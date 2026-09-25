@@ -2,7 +2,7 @@
 /**
  * Constraint ExceptionsSection — library exception list + extras
  * section. Library rows: checkbox toggles `disabled_exception_keys`,
- * mode chip cycles 4 modes (no "disabled" — that's the row checkbox's
+ * mode chip cycles 5 modes (no "disabled" — that's the row checkbox's
  * job), factor input visible on boost/reduce.
  *
  * Extras section: instance-only rows from `extra_exceptions`. Source
@@ -20,7 +20,7 @@ import { patchInstance } from "../../instance/patch";
 import RichTextPreview from "../../../../../manager/components/RichTextPreview.vue";
 import Select, { type SelectOption } from "../../../../../manager/components/ui/Select.vue";
 
-type Mode = "allow" | "exclude" | "boost" | "reduce";
+type Mode = "allow" | "exclude" | "boost" | "reduce" | "only";
 
 /** Mode → glyph + label for the colored mode chips. Glyphs mirror the
  *  matrix's MODE_ICON / cellGlyph convention (boost ↑ / reduce ↓ /
@@ -32,6 +32,7 @@ const MODE_META: Record<Mode, { glyph: string; label: string }> = {
   reduce: { glyph: "↓", label: "Reduce" },
   exclude: { glyph: "×", label: "Exclude" },
   allow: { glyph: "·", label: "Neutral" },
+  only: { glyph: "✓", label: "Only" },
 };
 
 /**
@@ -187,7 +188,8 @@ const MODE_CYCLE: Record<Mode, Mode> = {
   allow: "exclude",
   exclude: "boost",
   boost: "reduce",
-  reduce: "allow",
+  reduce: "only",
+  only: "allow",
 };
 
 /**
@@ -676,6 +678,10 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
   border-left-color: color-mix(in srgb, var(--wp-warn, #f97316) 60%, transparent);
   background: color-mix(in srgb, var(--wp-warn, #f97316) 5%, transparent);
 }
+.ex__row--only:not(.ex__row--extra) {
+  border-left-color: color-mix(in srgb, var(--wp-info, #3b82f6) 60%, transparent);
+  background: color-mix(in srgb, var(--wp-info, #3b82f6) 5%, transparent);
+}
 .ex__row--exclude:not(.ex__row--extra) {
   border-left-color: color-mix(in srgb, var(--wp-danger, #ef4444) 60%, transparent);
   background: color-mix(in srgb, var(--wp-danger, #ef4444) 5%, transparent);
@@ -805,6 +811,7 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
 .ex__mode-chip--allow { background: color-mix(in srgb, var(--wp-accent) 22%, transparent); color: var(--wp-accent-text, var(--wp-text)); }
 .ex__mode-chip--exclude { background: color-mix(in srgb, var(--wp-danger, #e05252) 22%, transparent); color: var(--wp-danger, #e05252); }
 .ex__mode-chip--boost { background: color-mix(in srgb, var(--wp-success, #6bc96f) 22%, transparent); color: var(--wp-success, #6bc96f); }
+.ex__mode-chip--only { background: color-mix(in srgb, var(--wp-info, #3b82f6) 22%, transparent); color: var(--wp-info, #3b82f6); }
 .ex__mode-chip--reduce { background: color-mix(in srgb, var(--wp-warn, #f59e0b) 22%, transparent); color: var(--wp-warn, #f59e0b); }
 .ex__factor-wrap {
   display: inline-flex;
