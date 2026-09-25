@@ -30,6 +30,18 @@ const terms = [
     desc: "A named slot in the context that holds a text value. Wildcards, Fixed Values, and Combines all write into $variables. Your template reads from them — for example $subject or $style.",
   },
   {
+    term: "Chip",
+    desc: "The small tinted pill a text field shows for a $variable or an @{…} reference, so it edits as one unit. A chip is resolved (points at something real), filtered (a funnel: the reference narrows its pool), or broken (red ?: its target isn't in your library).",
+  },
+  {
+    term: "Reference (@{…})",
+    desc: "An embedded fresh pick from another module, written @{uuid#name:filter!null} with only the 8-character id required. Plain @name is not a reference; it stays literal text.",
+  },
+  {
+    term: "Filter expression",
+    desc: "The :filter part of a reference: sub-category names joined with not, and, or (or a comma), grouped with parentheses, e.g. not warm and (low or high).",
+  },
+  {
     term: "Combine",
     desc: "A module that joins two or more $variables (and any fixed text) into a new $variable. Useful for building phrases like \"$style portrait of $subject\".",
   },

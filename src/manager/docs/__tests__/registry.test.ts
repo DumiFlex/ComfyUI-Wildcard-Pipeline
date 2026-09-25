@@ -31,6 +31,12 @@ describe("docs registry", () => {
     expect(searchPages("").length).toBe(DOC_PAGES.length);
   });
 
+  it("searching the terms users reach for finds the chips page", () => {
+    for (const q of ["chip", "filter", "placeholder", "@name", "negation"]) {
+      expect(searchPages(q).some((p) => p.id === "chips-and-references"), q).toBe(true);
+    }
+  });
+
   it("toneVar maps tones to css vars; bundle + neutral are muted", () => {
     expect(toneVar("node")).toContain("--wp-node");
     expect(toneVar("wildcard")).toContain("--wp-kind-wildcard");

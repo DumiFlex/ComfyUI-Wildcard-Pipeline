@@ -104,7 +104,9 @@ const instanceOptions = [
         and drop its null option with <VarToken kind="inline">!null</VarToken> — for example
         <VarToken kind="ref">@{abcd1234:warm}</VarToken> rolls the nested wildcard but only from its
         warm-tagged options. Inline <VarToken kind="inline">{a|b}</VarToken> picks work in option
-        text too.
+        text too. Type <b>@</b> to insert one; the chip states, the full filter grammar
+        (<code>not</code> / <code>and</code> / <code>or</code> / parentheses) and why plain
+        <code>@name</code> stays text are on <DocRef id="chips-and-references" />.
       </p>
       <DocCallout variant="warn">
         A wildcard is a <b>producer</b>: on its option text,
