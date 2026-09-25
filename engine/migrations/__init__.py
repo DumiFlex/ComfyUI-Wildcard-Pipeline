@@ -28,6 +28,13 @@ CURRENT_SCHEMA_VERSION = 2
 # re-validate will reject the very shapes the runtime just learned to produce.
 MAX_KNOWN_SCHEMA_VERSION = 5
 
+# Feature stamps (mirror of the TS constants beside MAX_KNOWN). Each is the
+# catalog version a payload needs once it uses that feature; see
+# `engine/migrations/stamping.py:schema_version_for_payload`.
+SP2B_SCHEMA_VERSION = 3  # range count / `~` flag in a `{N$$…}` multi-pick
+SP3_REACH_SCHEMA_VERSION = 4  # non-default constraint `target_select`
+TAG_AXES_SCHEMA_VERSION = 5  # wildcard `tag_group_kinds` with an `accepts` group
+
 _CHAIN = {
     0: migrate_v0_to_v1,
     1: migrate_v1_to_v2,
