@@ -67,11 +67,12 @@ class _RuntimeResolveContext:
         """
         entry = self._axes.get(name)
         if isinstance(entry, list):
-            got = [
-                e.get(axis) for e in entry
-                if isinstance(e, dict) and e.get(axis) is not None
-            ]
-            return got or None
+            # Positional: one slot per pick, None where that pick's option
+            # carries no tag on this axis. Compacting the gaps away shifted
+            # every later pick down, so `$outfit.1.SHOES` read pick 2's shoe
+            # beside `$outfit.1`.
+            got = [e.get(axis) if isinstance(e, dict) else None for e in entry]
+            return got if any(g is not None for g in got) else None
         if isinstance(entry, dict):
             return entry.get(axis)
         return None

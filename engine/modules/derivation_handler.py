@@ -72,12 +72,13 @@ def _ctx_axis(ctx: Any, base: str, axis: str, index: int | None) -> str:
         return ""
     entry = (ctx.get("__wp_axes__") or {}).get(base)
     if isinstance(entry, list):
+        # Positional, like the resolver: a pick with no tag on this axis keeps
+        # its slot so `.K` lines up with `$outfit.K`.
         vals = [
-            e.get(axis, "") for e in entry
-            if isinstance(e, dict) and e.get(axis)
+            (e.get(axis) or "") if isinstance(e, dict) else "" for e in entry
         ]
         if index is None:
-            return ", ".join(vals)
+            return ", ".join(v for v in vals if v)
         return vals[index] if 0 <= index < len(vals) else ""
     if isinstance(entry, dict):
         got = entry.get(axis, "")

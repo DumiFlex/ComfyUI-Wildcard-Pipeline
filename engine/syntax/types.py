@@ -164,11 +164,13 @@ class ResolveContext(Protocol):
         binds a ``str``."""
         ...
 
-    def get_axis(self, name: str, axis: str) -> str | list[str] | None:
+    def get_axis(self, name: str, axis: str) -> str | list[str | None] | None:
         """Return the tag rolled for `name`'s `axis`, or None if it has none.
 
         A single-pick source yields a ``str``; a multi-select one yields a
-        ``list[str]``, one entry per pick in pick order. The value was rolled
+        list with one slot per pick in pick order (``None`` for a pick whose
+        option carries no tag on this axis, so indexes line up with the
+        variable's own). The value was rolled
         when the wildcard picked — this only reads it back, which is what makes
         two modules (or two nodes) agree.
         """
