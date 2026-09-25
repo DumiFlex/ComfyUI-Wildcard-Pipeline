@@ -409,7 +409,9 @@ def _restrict_menus_by_constraints(
     return out
 
 
-def _record_axes(ctx: Any, binding: str, rolled: Any) -> None:
+def _record_axes(
+    ctx: Any, binding: str, rolled: Any, payload: dict[str, Any]
+) -> None:
     """Publish the rolled axis choices under the VARIABLE binding.
 
     Deliberately not on the pick record: `$outfit.SHOES` addresses by binding,
@@ -423,6 +425,14 @@ def _record_axes(ctx: Any, binding: str, rolled: Any) -> None:
     bucket = ctx.setdefault("__wp_axes__", {})
     if isinstance(bucket, dict):
         bucket[binding] = rolled
+    # Which accepts axes this binding's wildcard DECLARES, whatever the pick
+    # rolled. `__wp_axes__` alone cannot tell "the picked option has no SHOES
+    # tag" from "there is no SHOES axis", and the resolver's warning needs to
+    # say which one happened. Always written (even empty) so a later wildcard
+    # rebinding the same name replaces the earlier declaration.
+    decl = ctx.setdefault("__wp_axis_decl__", {})
+    if isinstance(decl, dict):
+        decl[binding] = list(_accepts_axes(payload))
 
 
 def _record_pick(
@@ -778,7 +788,7 @@ class WildcardHandler(ModuleHandler):
                 # downstream constraint-aware wildcards need source
                 # info regardless of how the source resolved its option.
                 _record_pick(ctx, pinned, payload, pinned_rolled)
-                _record_axes(ctx, binding, pinned_rolled)
+                _record_axes(ctx, binding, pinned_rolled, payload)
                 value = str(pinned.get("value", ""))
                 if not value:
                     return {binding: ""}
@@ -965,7 +975,7 @@ class WildcardHandler(ModuleHandler):
                 for o in picks
             ]
             _record_pick_multi(ctx, picks, sep, payload, rolled_list)
-            _record_axes(ctx, binding, rolled_list)
+            _record_axes(ctx, binding, rolled_list, payload)
             return {binding: ListVar(items, sep)}
 
         chosen = _pick_weighted(options, rng)
@@ -991,7 +1001,7 @@ class WildcardHandler(ModuleHandler):
         # empty-string-value pick is registered (matters if a
         # constraint exception keys on the literal empty pick value).
         _record_pick(ctx, chosen, payload, rolled)
-        _record_axes(ctx, binding, rolled)
+        _record_axes(ctx, binding, rolled, payload)
 
         value = str(chosen.get("value", ""))
         if not value:

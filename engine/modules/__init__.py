@@ -52,6 +52,10 @@ class _RuntimeResolveContext:
     # projection of `ctx["__wp_axes__"]`, built once here so the resolver stays
     # a pure consumer with no ctx dependency.
     _axes: dict[str, Any] = field(default_factory=dict)
+    # Accepts axes each binding's wildcard declares (`ctx["__wp_axis_decl__"]`),
+    # so an empty axis read can say whether the axis is missing or the pick
+    # simply carried no tag on it.
+    _axis_decl: dict[str, Any] = field(default_factory=dict)
 
     def get_axis(self, name: str, axis: str) -> Any:
         """Rolled axis choice(s) for a binding, or None when it has none.
@@ -76,6 +80,13 @@ class _RuntimeResolveContext:
         if isinstance(entry, dict):
             return entry.get(axis)
         return None
+
+    def declared_axes(self, name: str) -> list[str] | None:
+        """Accepts axes the wildcard bound to `name` declares, or None when
+        that is unknown (nothing recorded, e.g. a ctx from before this table
+        existed or a binding no wildcard wrote)."""
+        got = self._axis_decl.get(name)
+        return [str(a) for a in got] if isinstance(got, list) else None
 
     def get_var(self, name: str) -> str | None:
         # SP2a: return the raw stored value (may be a ListVar from a
@@ -162,6 +173,7 @@ def build_resolve_ctx(
     constraints = ctx.get("__wp_constraints__")
     picks = ctx.get("__wp_picks__")
     axes = ctx.get("__wp_axes__")
+    axis_decl = ctx.get("__wp_axis_decl__")
     hits = ctx.setdefault("__wp_constraint_hits__", {})
     return _RuntimeResolveContext(  # type: ignore[return-value]
         rng=ctx["__wp_rng__"],
@@ -187,6 +199,7 @@ def build_resolve_ctx(
         # so `get_axis` is a dict lookup and the resolver never reaches into
         # ctx.
         _axes=axes if isinstance(axes, dict) else {},
+        _axis_decl=axis_decl if isinstance(axis_decl, dict) else {},
     )
 
 

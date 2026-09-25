@@ -145,6 +145,39 @@ def _resolve_axis(tok: Token, ctx: ResolveContext, axis: str) -> str:
     name = str(tok.meta.get("name", ""))
     got = ctx.get_axis(name, axis)
     if got is None:
+        declared = ctx.declared_axes(name)
+        if declared is not None and axis in declared:
+            # The axis exists; this roll's option just carries no tag on it.
+            # Legitimate (the editor already advises on such options), so it
+            # is an info note, and asking whether the group is marked
+            # `accepts` would send the user to fix something that is fine.
+            _push_warning(
+                ctx,
+                type="axis_untagged_pick",
+                severity="info",
+                module_id="",
+                source_field="",
+                position=tok.start,
+                token_index=None,
+                detail={"name": name, "axis": axis, "surface": ctx.surface},
+                message=(
+                    f"${name}.{axis} is empty: the picked ${name} option "
+                    f"has no '{axis}' tag"
+                ),
+            )
+            return ""
+        if declared:
+            hint = (
+                f"its wildcard's accepts groups are {', '.join(declared)}. "
+                f"Is '{axis}' a classify group, or misspelled?"
+            )
+        elif declared is not None:
+            hint = (
+                "its wildcard has no accepts groups. Is that tag group "
+                "marked 'accepts'?"
+            )
+        else:
+            hint = "is that tag group marked 'accepts'?"
         _push_warning(
             ctx,
             type="unknown_tag_axis",
@@ -153,11 +186,11 @@ def _resolve_axis(tok: Token, ctx: ResolveContext, axis: str) -> str:
             source_field="",
             position=tok.start,
             token_index=None,
-            detail={"name": name, "axis": axis, "surface": ctx.surface},
-            message=(
-                f"${name} has no '{axis}' axis — is that tag group marked "
-                f"'accepts'?"
-            ),
+            detail={
+                "name": name, "axis": axis, "surface": ctx.surface,
+                "declared": declared,
+            },
+            message=f"${name} has no '{axis}' axis — {hint}",
         )
         return ""
     index = tok.meta.get("index")

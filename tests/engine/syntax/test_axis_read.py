@@ -9,13 +9,16 @@ from engine.modules import build_resolve_ctx
 from engine.syntax import resolve_text
 
 
-def _ctx(axes):
-    return {
+def _ctx(axes, decl=None):
+    c = {
         "__wp_rng__": random.Random(0),
         "__wp_warnings__": [],
         "__wp_axes__": axes,
         "outfit": "white t-shirt",
     }
+    if decl is not None:
+        c["__wp_axis_decl__"] = decl
+    return c
 
 
 def test_single_pick_axis_reads_the_rolled_tag():
@@ -83,6 +86,45 @@ def test_axis_on_a_binding_that_rolled_nothing_warns():
     rc = build_resolve_ctx(c, surface="combine")
     assert resolve_text("$outfit.SHOES", rc) == ""
     assert any(w["type"] == "unknown_tag_axis" for w in c["__wp_warnings__"])
+
+
+def test_declared_axis_the_pick_has_no_tag_on_is_an_info_note():
+    # The reported confusion: the pick ("robe") simply carries no SHOES tag,
+    # and the warning asked whether SHOES was marked accepts, which it was.
+    c = _ctx({"outfit": {}}, decl={"outfit": ["SHOES"]})
+    rc = build_resolve_ctx(c, surface="combine")
+    assert resolve_text("$outfit.SHOES", rc) == ""
+    [w] = c["__wp_warnings__"]
+    assert w["type"] == "axis_untagged_pick"
+    assert w["severity"] == "info"
+    assert "has no 'SHOES' tag" in w["message"]
+    assert "accepts" not in w["message"]
+
+
+def test_multi_pick_with_no_tag_on_any_pick_is_an_info_note():
+    c = _ctx({"outfit": [{}, {}]}, decl={"outfit": ["SHOES"]})
+    rc = build_resolve_ctx(c, surface="combine")
+    assert resolve_text("$outfit.SHOES", rc) == ""
+    assert [w["type"] for w in c["__wp_warnings__"]] == ["axis_untagged_pick"]
+
+
+def test_undeclared_axis_names_the_axes_that_do_exist():
+    c = _ctx({"outfit": {"SHOES": "sandals"}}, decl={"outfit": ["SHOES"]})
+    rc = build_resolve_ctx(c, surface="combine")
+    assert resolve_text("$outfit.BELTS", rc) == ""
+    [w] = c["__wp_warnings__"]
+    assert w["type"] == "unknown_tag_axis"
+    assert w["severity"] == "warn"
+    assert "SHOES" in w["message"]
+
+
+def test_wildcard_with_no_accepts_groups_asks_about_accepts():
+    c = _ctx({"outfit": {}}, decl={"outfit": []})
+    rc = build_resolve_ctx(c, surface="combine")
+    assert resolve_text("$outfit.SHOES", rc) == ""
+    [w] = c["__wp_warnings__"]
+    assert w["type"] == "unknown_tag_axis"
+    assert "no accepts groups" in w["message"]
 
 
 def test_plain_var_read_is_untouched():
