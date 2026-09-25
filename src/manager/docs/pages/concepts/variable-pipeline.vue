@@ -6,6 +6,7 @@ import DocFigure from "../../../components/docs/DocFigure.vue";
 import PipelineDiagram from "../../../components/docs/PipelineDiagram.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
+import DocRef from "../../../components/docs/DocRef.vue";
 </script>
 
 <template>
@@ -69,7 +70,8 @@ import VarToken from "../../../components/docs/VarToken.vue";
               <VarToken kind="inline">:filter</VarToken> narrows a referenced wildcard's pool by a
               sub-category boolean expression (e.g. <code>warm or cool</code>), and
               <VarToken kind="inline">!null</VarToken> drops the null option. Full form:
-              <VarToken kind="ref">@{abcd1234#Mood:calm or intense!null}</VarToken>.
+              <VarToken kind="ref">@{abcd1234#Mood:calm or intense!null}</VarToken>. Filter grammar:
+              <DocRef id="chips-and-references" />.
             </td>
           </tr>
           <tr>
