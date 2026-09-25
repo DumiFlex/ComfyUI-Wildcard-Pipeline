@@ -528,11 +528,38 @@ function addGroup(): void {
  *  addressable as `$var.NAME`, so a rename can strand a template read. The
  *  kind is carried across here; a stranded read is reported by the
  *  `unknown_tag_axis` conflict rule rather than blocked, matching how every
- *  other cross-module reference is handled. */
-function renameGroup(oldAxis: string, nextAxis: string): void {
+ *  other cross-module reference is handled.
+ *
+ *  Returns whether the rename was applied. A refused rename leaves the group
+ *  exactly as it was and tells the user why, so the caller can put the old
+ *  name back in the input. */
+function renameGroup(oldAxis: string, nextAxis: string): boolean {
   const trimmed = nextAxis.trim();
-  if (!trimmed || trimmed === oldAxis) return;
-  if (tagGroups.value[trimmed] !== undefined) return; // name collision — ignore
+  if (!trimmed || trimmed === oldAxis) return false;
+  if (tagGroups.value[trimmed] !== undefined) {
+    toast.push({
+      severity: "warn",
+      summary: `A group named "${trimmed}" already exists`,
+      detail: `"${oldAxis}" keeps its name.`,
+      life: 6000,
+    });
+    return false;
+  }
+  // An accepts group is read as `$var.NAME`. Renaming it to something that
+  // grammar cannot parse used to demote it to classify without a word, which
+  // quietly broke every `$var.AXIS` read of it. Refuse instead, the same way
+  // `toggleGroupKind` refuses to promote such a name.
+  if (tagGroupKinds.value[oldAxis] === "accepts" && !AXIS_IDENT.test(trimmed)) {
+    toast.push({
+      severity: "warn",
+      summary: `"${oldAxis}" keeps its name`,
+      detail: "An accepts group is read as $var.NAME, so its name must be "
+        + "letters, digits and underscores, starting with a letter. "
+        + "Switch it to classify first to use any name.",
+      life: 6000,
+    });
+    return false;
+  }
   const next: Record<string, string[]> = {};
   for (const [axis, members] of Object.entries(tagGroups.value)) {
     next[axis === oldAxis ? trimmed : axis] = members;
@@ -542,11 +569,18 @@ function renameGroup(oldAxis: string, nextAxis: string): void {
   if (tagGroupKinds.value[oldAxis] !== undefined) {
     const nextKinds = { ...tagGroupKinds.value };
     delete nextKinds[oldAxis];
-    // Renaming to something the accessor cannot parse demotes rather than
-    // storing an unreadable axis, which validate_payload would reject on save.
-    if (AXIS_IDENT.test(trimmed)) nextKinds[trimmed] = "accepts";
+    nextKinds[trimmed] = "accepts";
     tagGroupKinds.value = nextKinds;
   }
+  return true;
+}
+
+/** The group-name input's change handler. The input is bound one-way to the
+ *  group's name, so when a rename is refused nothing re-renders it — reset it
+ *  by hand or it keeps showing a name that was never stored. */
+function onGroupNameChange(oldAxis: string, e: Event): void {
+  const input = e.target as HTMLInputElement;
+  if (!renameGroup(oldAxis, input.value)) input.value = oldAxis;
 }
 
 /** Disband an axis — its tags fall back into the ungrouped box (they
@@ -1976,7 +2010,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                 :value="group.axis"
                 :aria-label="`Rename group ${group.axis}`"
                 :data-test="`subcat-group-name-${group.axis}`"
-                @change="(e) => renameGroup(group.axis, (e.target as HTMLInputElement).value)"
+                @change="(e) => onGroupNameChange(group.axis, e)"
                 @keydown.enter.prevent="(e) => (e.target as HTMLInputElement).blur()"
               />
               <span v-else class="subcat-group__name subcat-group__name--other">ungrouped</span>

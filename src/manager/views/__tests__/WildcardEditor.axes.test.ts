@@ -91,7 +91,7 @@ async function mountSeeded(overrides: Record<string, unknown> = {}) {
 type EditorVm = {
   tagGroupKinds: Record<string, string>;
   tagGroups: Record<string, string[]>;
-  renameGroup: (from: string, to: string) => void;
+  renameGroup: (from: string, to: string) => boolean;
   ungroupAxis: (axis: string) => void;
 };
 
@@ -170,11 +170,40 @@ describe("WildcardEditor tag-group kinds", () => {
     expect((w.vm as unknown as EditorVm).tagGroupKinds).toEqual({ FOOTWEAR: "accepts" });
   });
 
-  it("renaming to a non-identifier demotes rather than storing an unreadable axis", async () => {
+  it("refuses to rename an accepts group to a non-identifier, keeping it accepts", async () => {
+    // Regression: this used to demote the group to classify without a word,
+    // which silently emptied every `$outfit.SHOES` read of it.
     const w = await mountSeeded({ tag_group_kinds: { SHOES: "accepts" } });
+    const input = w.get('[data-test="subcat-group-name-SHOES"]');
+    (input.element as HTMLInputElement).value = "My Shoes";
+    await input.trigger("change");
+    await flushPromises();
+    const vm = w.vm as unknown as EditorVm;
+    expect(vm.tagGroupKinds).toEqual({ SHOES: "accepts" });
+    expect(Object.keys(vm.tagGroups)).toEqual(["SHOES"]);
+    // The input is bound one-way, so a refusal has to put the name back itself.
+    expect((w.get('[data-test="subcat-group-name-SHOES"]').element as HTMLInputElement).value)
+      .toBe("SHOES");
+  });
+
+  it("still lets a classify group take any name", async () => {
+    const w = await mountSeeded();
     (w.vm as unknown as EditorVm).renameGroup("SHOES", "My Shoes");
     await flushPromises();
-    expect((w.vm as unknown as EditorVm).tagGroupKinds).toEqual({});
+    expect(Object.keys((w.vm as unknown as EditorVm).tagGroups)).toEqual(["My Shoes"]);
+  });
+
+  it("puts the old name back when the new one collides with another group", async () => {
+    const w = await mountSeeded({
+      tag_groups: { SHOES: ["sneakers"], HATS: ["sandals"] },
+    });
+    const input = w.get('[data-test="subcat-group-name-SHOES"]');
+    (input.element as HTMLInputElement).value = "HATS";
+    await input.trigger("change");
+    await flushPromises();
+    expect(Object.keys((w.vm as unknown as EditorVm).tagGroups)).toEqual(["SHOES", "HATS"]);
+    expect((w.get('[data-test="subcat-group-name-SHOES"]').element as HTMLInputElement).value)
+      .toBe("SHOES");
   });
 
   it("ungrouping an axis drops its kind", async () => {
