@@ -2011,4 +2011,49 @@ describe("RichTextInput — cut and copy", () => {
     expect(ev.defaultPrevented).toBe(false);
     w.unmount();
   });
+
+  // Ctrl+A Ctrl+X on a field that is ALREADY empty selects nothing but the
+  // ZWSP caret pad. Left to the browser, that cut put the invisible pad on the
+  // clipboard, overwriting whatever the user had just cut — so the second
+  // Ctrl+X of the "cut, cut again, paste" repro silently lost their text.
+  // Measured in Firefox 153 against 2.14.0: the paste landed U+200B.
+  it.each(["cut", "copy"] as const)(
+    "a %s over an empty field keeps the clipboard as it was",
+    async (type) => {
+      const w = mount(RichTextInput, {
+        props: { modelValue: "" },
+        attachTo: document.body,
+      });
+      await flushPromises();
+      const host = w.get('[contenteditable="true"]').element as HTMLElement;
+      selectAll(host);
+      const ev = clipEvent(type);
+      host.dispatchEvent(ev);
+      await flushPromises();
+      expect(ev.defaultPrevented).toBe(true);
+      expect(ev.__data["text/plain"]).toBeUndefined();
+      expect(w.emitted("update:modelValue")).toBeUndefined();
+      w.unmount();
+    },
+  );
+
+  it("paste drops caret-pad ZWSPs instead of writing them into the value", async () => {
+    // Clipboards already holding a pad (cut by an older build, or copied from
+    // another field's DOM) must not smuggle an invisible character into the
+    // prompt text.
+    const w = mount(RichTextInput, {
+      props: { modelValue: "" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const host = w.get('[contenteditable="true"]').element as HTMLElement;
+    selectAll(host);
+    const paste = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, "clipboardData", { value: { getData: () => "​red​ dress" } });
+    host.dispatchEvent(paste);
+    await flushPromises();
+    const emitted = w.emitted("update:modelValue");
+    expect(emitted?.[emitted.length - 1]).toEqual(["red dress"]);
+    w.unmount();
+  });
 });

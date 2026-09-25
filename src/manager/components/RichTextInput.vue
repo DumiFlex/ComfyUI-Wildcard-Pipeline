@@ -3021,6 +3021,24 @@ function selectedRawText(): { text: string; start: number; end: number } {
 }
 
 /**
+ * True when a non-collapsed selection sits inside this host. Paired with an
+ * empty `selectedRawText()` it means the selection covers DOM but no value —
+ * in practice Ctrl+A on an empty field, which selects only the ZWSP caret pad.
+ *
+ * Copy and cut must swallow that case instead of returning early. Left to the
+ * browser, the pad itself went onto the clipboard and overwrote what was
+ * there: cut an option, press Ctrl+A Ctrl+X again on the now-empty field, and
+ * the text you meant to paste was gone, replaced by an invisible U+200B.
+ * Measured in Firefox 153 against 2.14.0 — the tail of the "cut it twice" report.
+ */
+function selectionInHost(): boolean {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return false;
+  const host = hostEl.value;
+  return !!host && host.contains(sel.getRangeAt(0).commonAncestorContainer);
+}
+
+/**
  * Copy the SOURCE of the selection, not what the chips happen to render.
  *
  * A ref chip's DOM text is its display label — for an unresolved ref, nothing
@@ -3031,7 +3049,10 @@ function selectedRawText(): { text: string; start: number; end: number } {
 function onHostCopy(ev: ClipboardEvent): void {
   if (props.disabled) return;
   const { text } = selectedRawText();
-  if (!text) return;
+  if (!text) {
+    if (selectionInHost()) ev.preventDefault();
+    return;
+  }
   ev.clipboardData?.setData("text/plain", text);
   ev.preventDefault();
 }
@@ -3054,7 +3075,10 @@ function onHostCut(ev: ClipboardEvent): void {
   if (props.disabled) return;
   const all = readHostAsText();
   const { text, start, end } = selectedRawText();
-  if (!text) return;
+  if (!text) {
+    if (selectionInHost()) ev.preventDefault();
+    return;
+  }
   ev.clipboardData?.setData("text/plain", text);
   ev.preventDefault();
   const remainder = all.slice(0, start) + all.slice(end);
@@ -3078,7 +3102,11 @@ function onHostPaste(ev: ClipboardEvent): void {
   // Strip CRLF / LF normalisation — single-line inputs ignore newlines,
   // multi-line inputs keep them. Atoms model treats text atoms as
   // opaque strings either way.
-  const pasted = props.multiline ? data : data.replace(/[\r\n]+/g, " ");
+  // ZWSPs are render-only caret pads (see `readHostAsText`); one that rode
+  // in on the clipboard would otherwise land in the value as an invisible
+  // character nobody can see or find to delete.
+  const clean = data.replace(ZWSP_RE, "");
+  const pasted = props.multiline ? clean : clean.replace(/[\r\n]+/g, " ");
   const before = currentText.slice(0, start);
   const after = currentText.slice(end);
   const newText = before + pasted + after;
