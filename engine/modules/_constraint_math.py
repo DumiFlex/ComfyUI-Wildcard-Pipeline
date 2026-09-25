@@ -10,6 +10,19 @@ statements that are all true at once. Those fold with `max`, so one sibling's
 `exclude` cannot speak for the rest. Everything else still multiplies, and the
 axis path is unreachable unless the caller passes `axis_kinds` — so a payload
 that predates the feature folds byte-identically.
+
+**`only` (2026-09, linked picks).** A rule that turns its row into an
+allow-list: when the source fires, every target WITHOUT a rule of its own in
+that row is excluded. On an exception it gates by literal value — any target
+value with no exception for that source value drops out. In a matrix row it
+gates by tag — an option carrying no tag that has a rule in the row drops out.
+The `only` rule itself weighs 1.0 (like `allow`), and a target that has any
+other rule in the row keeps that rule, so `only` shuts out the unmentioned and
+leaves the mentioned alone. In a matrix row an `allow` cell does NOT count as
+a mention: the editors show `allow` as the empty "neutral" state, so counting
+it would let an invisible cell through. An `allow` exception is a visible row
+in the exceptions list, so it does count. A payload with no `only` rule never reaches either
+gate, so it folds byte-identically.
 """
 from __future__ import annotations
 
@@ -45,7 +58,11 @@ def _apply_rule(rule: dict[str, Any]) -> _Factor:
             return max(0.0, float(rule.get("factor", 1.0)))
         except (TypeError, ValueError):
             return 1.0
-    return 1.0  # allow / unknown -> no weight change
+    return 1.0  # allow / only / unknown -> no weight change
+
+
+def _row_has_only(row: dict[str, Any]) -> bool:
+    return any(isinstance(r, dict) and r.get("mode") == "only" for r in row.values())
 
 
 def _cell_factor(
@@ -70,6 +87,19 @@ def _cell_factor(
     row = matrix.get(source_tag)
     if not isinstance(row, dict):
         return 1.0
+    # `only` makes the row an allow-list: an option carrying no tag that the
+    # row mentions is shut out. Inside an accepts axis an unmentioned member
+    # then offers nothing (0), rather than the usual neutral 1.0. A neutral
+    # (`allow`) cell is not a mention — see the module docstring.
+    has_only = _row_has_only(row)
+    if has_only:
+        row = {
+            t: r for t, r in row.items()
+            if isinstance(r, dict) and r.get("mode") != "allow"
+        }
+        if not any(t in row for t in opt_tags):
+            return EXCLUDE
+    unruled = 0.0 if has_only else 1.0
     target_axes = target_axes or {}
     axis_of = {t: ax for ax, members in target_axes.items() for t in (members or [])}
     factor = 1.0
@@ -89,7 +119,7 @@ def _cell_factor(
         best = 0.0
         for t in members:
             rule = row.get(t)
-            r = _apply_rule(rule) if isinstance(rule, dict) else 1.0
+            r = _apply_rule(rule) if isinstance(rule, dict) else unruled
             best = max(best, 0.0 if isinstance(r, _ExcludeSentinel) else r)
         # Every alternative this axis offered was excluded → the option drops.
         if best <= 0.0:
@@ -121,6 +151,12 @@ def combine_constraint_factor(
             t = e.get("target")
         if isinstance(s, str) and isinstance(t, str):
             exc_by_pair[(s, t)] = e
+    # Source values whose exceptions include an `only`: for those, a target
+    # value with no exception of its own is excluded. Read off the de-duplicated
+    # pair map so it agrees with the rule that actually applies to each pair.
+    only_sources = {
+        s for (s, _t), e in exc_by_pair.items() if e.get("mode") == "only"
+    }
     opt_value = str(option.get("value", ""))
     opt_tags = option.get("tags") or []
     factor = 1.0
@@ -134,6 +170,8 @@ def combine_constraint_factor(
                 return EXCLUDE
             factor *= r
             continue
+        if p_value in only_sources:
+            return EXCLUDE
 
         # Partition this pick's tags: those inside an `accepts` axis fold with
         # max, the rest keep multiplying. A pick only carries `axes` when the

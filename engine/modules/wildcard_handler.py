@@ -164,7 +164,7 @@ def _apply_constraint_to_options(
     return adjusted
 
 
-_KNOWN_CONSTRAINT_MODES = frozenset({"allow", "exclude", "boost", "reduce"})
+_KNOWN_CONSTRAINT_MODES = frozenset({"allow", "exclude", "boost", "reduce", "only"})
 
 
 def _exc_pair_index(exceptions: list[Any]) -> dict[tuple[str, str], dict[str, Any]]:
@@ -228,8 +228,8 @@ def _warn_for_rule(
     adjustment_warnings: list[dict[str, Any]],
 ) -> None:
     mode = rule.get("mode")
-    if mode == "allow":
-        # `allow` is a weight no-op; a non-1 factor is almost certainly a
+    if mode in ("allow", "only"):
+        # `allow` / `only` weigh 1.0; a non-1 factor is almost certainly a
         # user expecting weight×factor and silently getting full weight.
         try:
             factor = float(rule.get("factor", 1.0))
@@ -396,9 +396,17 @@ def _restrict_menus_by_constraints(
                     ax: "accepts"
                     for p in s_picks for ax in (p.get("axes") or {})
                 }
+                # The probe is a bare tag with no real value, so a
+                # value-level `only` would shut it out and leave the menu
+                # unrestricted. The option itself already passed that gate
+                # in the pool, so only the tag rules matter here.
+                probe_excs = [
+                    e for e in (c.get("exceptions") or [])
+                    if not (isinstance(e, dict) and e.get("mode") == "only")
+                ]
                 f = combine_constraint_factor(
                     s_picks, {"value": "", "tags": [t]},
-                    c.get("matrix") or {}, c.get("exceptions") or [], axis_kinds,
+                    c.get("matrix") or {}, probe_excs, axis_kinds,
                 )
                 if not (isinstance(f, float) and f > 0.0):
                     ok = False
