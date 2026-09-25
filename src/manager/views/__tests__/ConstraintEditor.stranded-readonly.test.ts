@@ -249,3 +249,40 @@ describe("ConstraintEditor — stranded constraint renders matrix + exceptions r
     w.unmount();
   });
 });
+
+describe("ConstraintEditor — an only exception keeps the exceptions table", () => {
+  // The "Linked" note sits beside the tables; placed inside their
+  // v-if/v-else chain it hid both tables whenever an only link existed.
+  function withOnly<T extends { payload: { exceptions: unknown[] } }>(row: T): T {
+    row.payload.exceptions = [{ source: "red", target: "matte", mode: "only", factor: 1 }];
+    return row;
+  }
+
+  it("editable table renders alongside the Linked note", async () => {
+    apiMod.list.mockResolvedValue({ items: healthyCatalog(), total: healthyCatalog().length });
+    apiMod.get.mockResolvedValue(withOnly(healthyConstraint()));
+    const w = mount(ConstraintEditor, {
+      props: { id: "c0ffee02" },
+      global: { plugins: [makeRouter()] },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    expect(w.find("[data-test='cn-only-note']").text()).toContain("red");
+    expect(w.find("[data-test='cn-ex-src-select']").exists()).toBe(true);
+    w.unmount();
+  });
+
+  it("read-only table renders alongside the Linked note when stranded", async () => {
+    apiMod.list.mockResolvedValue({ items: strandedCatalog(), total: strandedCatalog().length });
+    apiMod.get.mockResolvedValue(withOnly(strandedConstraint()));
+    const w = mount(ConstraintEditor, {
+      props: { id: "c0ffee01" },
+      global: { plugins: [makeRouter()] },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    expect(w.find("[data-test='cn-only-note']").exists()).toBe(true);
+    expect(w.find("[data-test='cn-ex-readonly']").text()).toContain("matte");
+    w.unmount();
+  });
+});

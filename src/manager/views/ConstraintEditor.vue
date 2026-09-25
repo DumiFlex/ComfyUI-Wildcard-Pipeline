@@ -1500,12 +1500,6 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
         <i class="pi pi-info-circle" />
         Per-pair overrides for specific option values that the matrix doesn't cover.
       </div>
-      <p v-if="onlyLinkSources.length" class="cn-only-note" data-test="cn-only-note">
-        <span class="cn-only-note__glyph" aria-hidden="true">✓</span>
-        Linked: when {{ onlyLinkSources.map((s) => displayLabel(s) || "⌀ null").join(", ") }}
-        {{ onlyLinkSources.length === 1 ? "is" : "are" }} picked, only target values listed here for
-        {{ onlyLinkSources.length === 1 ? "it" : "them" }} can be picked.
-      </p>
       <!-- Read-only recovery view: the source/target wildcard was deleted, so
            the exception option lists (built from the LIVE wildcard's values)
            are empty and would swallow the stored source/target in the edit
@@ -1716,6 +1710,12 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
           </tr>
         </tbody>
       </table>
+      <p v-if="onlyLinkSources.length" class="cn-only-note" data-test="cn-only-note">
+        <span class="cn-only-note__glyph" aria-hidden="true">✓</span>
+        Linked: when {{ onlyLinkSources.map((s) => displayLabel(s) || "⌀ null").join(", ") }}
+        {{ onlyLinkSources.length === 1 ? "is" : "are" }} picked, only target values listed here for
+        {{ onlyLinkSources.length === 1 ? "it" : "them" }} can be picked.
+      </p>
     </Card>
     </div>
     <!-- CascadeConfirmDialog: shown when entity has downstream refs. -->
