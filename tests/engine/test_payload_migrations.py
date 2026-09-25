@@ -19,7 +19,7 @@ def test_returns_payload_as_is_at_current_version():
 
 
 def test_rejects_future_version():
-    # The reject threshold is MAX_KNOWN (4), not CURRENT (2): only versions
+    # The reject threshold is MAX_KNOWN (5), not CURRENT (2): only versions
     # beyond what the runtime natively supports are rejected.
     payload = {"schema_version": MAX_KNOWN_SCHEMA_VERSION + 1, **EMPTY_7}
     result = migrate_payload(payload)
@@ -106,14 +106,14 @@ def test_defaults_missing_arrays_to_empty():
 # === Install-path fork: accept natively-supported future versions ==========
 # Mirror of the TS `migrateImportEnvelope` fork. A payload at
 # CURRENT < v <= MAX_KNOWN (v3 = text-grammar only; v4 = additive
-# `target_select`) is shape-compatible with v2 and natively handled at
-# runtime, so the engine's commit-side re-validate must accept it AS-IS:
+# `target_select`; v5 = additive `accepts` tag axes) is shape-compatible with
+# v2 and natively handled at runtime, so the engine's commit-side re-validate must accept it AS-IS:
 # not rejected, not migrated (the while-loop bound stays CURRENT so there is
 # nothing to do), schema_version preserved. Only v > MAX_KNOWN rejects.
 
 
-def test_max_known_schema_version_is_4():
-    assert MAX_KNOWN_SCHEMA_VERSION == 4
+def test_max_known_schema_version_is_5():
+    assert MAX_KNOWN_SCHEMA_VERSION == 5
 
 
 def test_v3_payload_passes_through_unchanged():
@@ -150,6 +150,26 @@ def test_v4_target_select_payload_passes_through_unchanged():
     # The additive target_select field survives verbatim.
     cn = result["migrated"]["constraints"][0]
     assert cn["payload"]["target_select"] == {"mode": "next", "count": 2}
+
+
+def test_v5_accepts_axis_payload_passes_through_unchanged():
+    payload = {
+        "schema_version": 5,
+        **EMPTY_7,
+        "wildcards": [
+            {"id": "wcaxs", "type": "wildcard", "name": "outfit", "payload": {
+                "tag_groups": {"SHOES": ["boots"]},
+                "tag_group_kinds": {"SHOES": "accepts"},
+                "options": [{"id": "o", "value": "hiker", "weight": 1,
+                             "sub_categories": ["boots"]}]}}
+        ],
+    }
+    result = migrate_payload(payload)
+    assert result["ok"] is True
+    assert result["migrated"]["schema_version"] == 5
+    assert result["migrated_entity_count"] == 0
+    wc = result["migrated"]["wildcards"][0]
+    assert wc["payload"]["tag_group_kinds"] == {"SHOES": "accepts"}
 
 
 def test_v2_still_migrates_from_older_version():

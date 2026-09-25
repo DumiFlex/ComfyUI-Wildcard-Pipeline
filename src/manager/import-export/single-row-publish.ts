@@ -31,6 +31,7 @@ import {
   CURRENT_SCHEMA_VERSION,
   SP2B_SCHEMA_VERSION,
   SP3_REACH_SCHEMA_VERSION,
+  TAG_AXES_SCHEMA_VERSION,
 } from "./migrations";
 import { getValidator, type ModuleSubtype } from "@/validators";
 import { version as ENGINE_VERSION } from "../../../package.json";
@@ -115,14 +116,42 @@ export function usesTargetSelectReach(node: unknown): boolean {
 }
 
 /**
+ * Walk `node` (object/array, any depth) looking for a `tag_group_kinds` map
+ * that marks ANY group `accepts`. A wildcard can sit at the top level or
+ * inside a bundle's `children`, so this is a structural walk like
+ * `usesTargetSelectReach`. An absent map or an all-`classify` one is the
+ * pre-axes behaviour and must NOT bump the catalog version.
+ */
+export function usesAcceptsTagAxis(node: unknown): boolean {
+  if (Array.isArray(node)) {
+    return node.some((child) => usesAcceptsTagAxis(child));
+  }
+  if (!node || typeof node !== "object") return false;
+  const obj = node as Record<string, unknown>;
+  const kinds = obj.tag_group_kinds;
+  if (kinds && typeof kinds === "object" && !Array.isArray(kinds)
+    && Object.values(kinds).some((k) => k === "accepts")) {
+    return true;
+  }
+  for (const value of Object.values(obj)) {
+    if (value && typeof value === "object" && usesAcceptsTagAxis(value)) return true;
+  }
+  return false;
+}
+
+/**
  * Choose the community catalog `schema_version` to stamp for a payload — the
  * MAX version any feature in the payload requires:
+ *   - `TAG_AXES_SCHEMA_VERSION` (5) when ANY wildcard marks a tag group
+ *     `accepts` (`usesAcceptsTagAxis`).
  *   - `SP3_REACH_SCHEMA_VERSION` (4) when ANY constraint carries a non-default
  *     `target_select` reach selector (`usesTargetSelectReach`).
  *   - `SP2B_SCHEMA_VERSION` (3) when the payload TEXT uses a range count or the
  *     `~` independent flag.
  *   - `CURRENT_SCHEMA_VERSION` (2) baseline otherwise.
- * A payload using BOTH range syntax and non-default reach stamps 4 (the max).
+ * Versions nest (each is additive over the last), so the highest feature
+ * present wins: range syntax plus non-default reach stamps 4, and any of them
+ * plus an accepts axis stamps 5.
  * Both scan the WHOLE serialised payload / structure so the marker is found
  * wherever it lives (wildcard option values, combine templates, constraint
  * selectors, bundle children, instance overrides). Stamping the LOWEST
@@ -130,6 +159,7 @@ export function usesTargetSelectReach(node: unknown): boolean {
  * doesn't actually use a newer feature.
  */
 export function schemaVersionForPayload(payload: Record<string, unknown>): number {
+  if (usesAcceptsTagAxis(payload)) return TAG_AXES_SCHEMA_VERSION;
   if (usesTargetSelectReach(payload)) return SP3_REACH_SCHEMA_VERSION;
   return SP2B_MARKER_RE.test(JSON.stringify(payload))
     ? SP2B_SCHEMA_VERSION

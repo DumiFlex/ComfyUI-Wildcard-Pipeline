@@ -10,8 +10,10 @@ import {
   CURRENT_SCHEMA_VERSION,
   SP2B_SCHEMA_VERSION,
   SP3_REACH_SCHEMA_VERSION,
+  TAG_AXES_SCHEMA_VERSION,
 } from "@/manager/import-export/migrations";
 import wildcardFixture from "@/validators/fixtures/v1/module-wildcard.json";
+import axisWildcardRow from "@/validators/fixtures/engine-parity/wildcard.json";
 
 /** Minimal engine-row constraint module carrying a `target_select`. Carries
  *  every `moduleRowBase` required field so it also passes strict v2
@@ -280,5 +282,58 @@ describe("publish body stamping", () => {
       description: "",
     });
     expect(body.schema_version).toBe(SP3_REACH_SCHEMA_VERSION);
+  });
+
+  // --- Tag axes: stamp catalog v5 ONLY when a wildcard marks a tag group
+  //     `accepts`. An absent or all-classify `tag_group_kinds` map is the
+  //     pre-axes behaviour and keeps the lower stamp. ---
+
+  function axisRow(kinds?: Record<string, string>): Record<string, unknown> {
+    const row = JSON.parse(JSON.stringify(axisWildcardRow)) as {
+      payload: Record<string, unknown>;
+    };
+    if (kinds === undefined) delete row.payload.tag_group_kinds;
+    else row.payload.tag_group_kinds = kinds;
+    return row as unknown as Record<string, unknown>;
+  }
+
+  it("stamps TAG_AXES (5) for a wildcard with an accepts tag group", () => {
+    expect(schemaVersionForPayload(axisRow({ TEXTURE: "accepts" }))).toBe(
+      TAG_AXES_SCHEMA_VERSION,
+    );
+  });
+
+  it("keeps CURRENT for an all-classify or absent tag_group_kinds map", () => {
+    expect(schemaVersionForPayload(axisRow({ TEXTURE: "classify" }))).toBe(
+      CURRENT_SCHEMA_VERSION,
+    );
+    expect(schemaVersionForPayload(axisRow())).toBe(CURRENT_SCHEMA_VERSION);
+  });
+
+  it("finds an accepts axis on a wildcard nested in a bundle child", () => {
+    const bundle = {
+      id: "bd-002abc",
+      name: "axis-bundle",
+      children: [constraintRow(), axisRow({ TEXTURE: "accepts" })],
+    } as Record<string, unknown>;
+    expect(schemaVersionForPayload(bundle)).toBe(TAG_AXES_SCHEMA_VERSION);
+  });
+
+  it("stamps TAG_AXES (5) over non-default reach when both are present", () => {
+    const bundle = {
+      id: "bd-003abc",
+      name: "both-bundle",
+      children: [constraintRow({ mode: "next", count: 2 }), axisRow({ TEXTURE: "accepts" })],
+    } as Record<string, unknown>;
+    expect(schemaVersionForPayload(bundle)).toBe(TAG_AXES_SCHEMA_VERSION);
+  });
+
+  it("buildPublishBody stamps TAG_AXES for a published wildcard with an accepts axis", () => {
+    const body = buildPublishBody({
+      payload: axisRow({ TEXTURE: "accepts" }),
+      name: "demo",
+      description: "",
+    });
+    expect(body.schema_version).toBe(TAG_AXES_SCHEMA_VERSION);
   });
 });
