@@ -149,7 +149,11 @@ async function loadHistory(): Promise<void> {
   const cached = readHistoryCache();
   if (cached?.items?.length) history.value = cached.items;
 
-  const fresh = cached ? Date.now() - Date.parse(cached.at) < LAUNCH_TTL_MS : false;
+  // Same rule as `isFresh`: a list whose newest entry predates the running
+  // build was fetched before the update, so it is missing at least one release.
+  const newest = cached?.items?.[0]?.version;
+  const behind = typeof newest === "string" && semverCompare(newest, __APP_VERSION__) < 0;
+  const fresh = cached && !behind ? Date.now() - Date.parse(cached.at) < LAUNCH_TTL_MS : false;
   if (historyFetched || fresh || isRateLimited()) return;
   historyFetched = true;
 
@@ -193,6 +197,15 @@ async function loadHistory(): Promise<void> {
 /** Is the persisted check recent enough to skip the network? */
 function isFresh(cached: CachedRelease | null, now = Date.now()): boolean {
   if (!cached?.checked_at) return false;
+  // A cached "latest" older than the build now running is wrong by
+  // definition: the user updated since the check ran, so a newer release
+  // exists. Trusting it for the rest of the TTL made What's new headline the
+  // release before last (2.15.3 on a 2.17.0 install) for up to six hours.
+  if (
+    typeof cached.latest_version === "string"
+    && typeof __APP_VERSION__ === "string"
+    && semverCompare(cached.latest_version, __APP_VERSION__) < 0
+  ) return false;
   const at = Date.parse(cached.checked_at);
   if (Number.isNaN(at)) return false;
   return now - at < LAUNCH_TTL_MS;
@@ -267,7 +280,7 @@ function normalizeTag(tag: string): string {
  * segments compare lexically. Good enough for "is the latest tag
  * newer than what we're running" without pulling in a semver lib.
  */
-function semverCompare(a: string, b: string): number {
+export function semverCompare(a: string, b: string): number {
   const [aBase, aPre = ""] = a.split("-");
   const [bBase, bPre = ""] = b.split("-");
   const aParts = aBase.split(".").map((n) => Number.parseInt(n, 10) || 0);

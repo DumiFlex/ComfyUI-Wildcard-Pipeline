@@ -113,6 +113,43 @@ describe("useReleaseCheck", () => {
     wrap.unmount();
   });
 
+  // Updating the extension does not clear localStorage, so a check cached
+  // before the update names a release OLDER than the build now running. It
+  // is wrong by definition and must not ride out the TTL.
+  it("refetches when the fresh cache names a release older than the running build", async () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      checked_at: new Date().toISOString(),
+      latest_version: "1.6.5",
+      body: "old",
+    }));
+    const fetchMock = vi.fn().mockResolvedValue(releaseResponse("v1.7.0", "current"));
+    vi.stubGlobal("fetch", fetchMock);
+    const wrap = mount(host());
+    await settle();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(lastResult!.latestVersion.value).toBe("1.7.0");
+    expect(lastResult!.releaseBody.value).toBe("current");
+    wrap.unmount();
+  });
+
+  it("refetches the history when its newest entry predates the running build", async () => {
+    localStorage.setItem("wp.releaseHistory", JSON.stringify({
+      at: new Date().toISOString(),
+      items: [{ version: "1.6.5", body: "old", url: null, publishedAt: null }],
+    }));
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [{ tag_name: "v1.7.0", body: "current", html_url: "https://x/17", published_at: null }],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    useUiStore().setCheckOnLaunch(false);
+    const wrap = mount(host());
+    await lastResult!.loadHistory();
+    expect(fetchMock).toHaveBeenCalled();
+    expect(lastResult!.history.value?.[0]?.version).toBe("1.7.0");
+    wrap.unmount();
+  });
+
   it("a fresh cache does not block an explicit checkNow()", async () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       checked_at: new Date().toISOString(),

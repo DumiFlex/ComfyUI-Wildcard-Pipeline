@@ -117,3 +117,33 @@ describe("WhatsNew — earlier releases", () => {
     expect(href).not.toContain("/tag/");
   });
 });
+
+describe("WhatsNew — headline release", () => {
+  // The update check and the history are cached separately. A check cached
+  // before the user updated named 2.15.3 while the history already had
+  // 2.17.0, and the headline followed the stale check.
+  it("headlines the newest release even when the update check is older", async () => {
+    stubRelease({
+      latestVersion: ref("2.12.0"),
+      releaseBody: ref("The big one.\n\n- **Nodes 2.0.** yes"),
+    });
+    const w = await mountPage();
+    expect(w.find(".wp-hero__sub").text()).toContain("v2.13.0");
+    expect(w.find(".wp-hero__sub").text()).not.toContain("you are running");
+    expect(w.find('[data-test="whats-new-body"]').text()).toContain("A thing.");
+    expect(w.find('[data-test="whats-new-older-2.12.0"]').exists()).toBe(true);
+    expect(w.find('[data-test="whats-new-older-2.13.0"]').exists()).toBe(false);
+  });
+
+  it("still headlines a pending update over the installed release", async () => {
+    stubRelease({
+      latestVersion: ref("2.14.0"),
+      hasUpdate: ref(true),
+      releaseBody: ref("Next.\n\n- **Upcoming.** soon"),
+    });
+    const w = await mountPage();
+    expect(w.find(".wp-hero__sub").text()).toContain("v2.14.0");
+    expect(w.find(".wp-hero__sub").text()).toContain("you are running v2.13.0");
+    expect(w.find('[data-test="whats-new-older-2.13.0"]').exists()).toBe(true);
+  });
+});
