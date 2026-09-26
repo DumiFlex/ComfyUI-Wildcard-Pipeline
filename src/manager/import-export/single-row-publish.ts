@@ -28,6 +28,7 @@ import {
   type ReferencingModule,
 } from "./dependencies";
 import {
+  CONSTRAINT_ONLY_SCHEMA_VERSION,
   CURRENT_SCHEMA_VERSION,
   SP2B_SCHEMA_VERSION,
   SP3_REACH_SCHEMA_VERSION,
@@ -139,9 +140,53 @@ export function usesAcceptsTagAxis(node: unknown): boolean {
   return false;
 }
 
+const EXCEPTION_LIST_KEYS = ["exceptions", "extra_exceptions"] as const;
+const MODE_OVERRIDE_KEYS = ["cell_mode_overrides", "exception_mode_overrides"] as const;
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
+function hasOnlyMode(v: unknown): boolean {
+  return isPlainObject(v) && v.mode === "only";
+}
+
+/**
+ * Walk `node` (object/array, any depth) looking for a constraint rule whose
+ * mode is `only` (linked picks): a library `matrix` cell or `exceptions`
+ * entry, an instance `extra_exceptions` entry, or an instance mode override
+ * (`cell_mode_overrides` / `exception_mode_overrides`, string maps). Mirror of
+ * `engine/migrations/stamping.py:uses_constraint_only_rule`.
+ */
+export function usesConstraintOnlyRule(node: unknown): boolean {
+  if (Array.isArray(node)) {
+    return node.some((child) => usesConstraintOnlyRule(child));
+  }
+  if (!isPlainObject(node)) return false;
+  const matrix = node.matrix;
+  if (isPlainObject(matrix)
+    && Object.values(matrix).some((row) => isPlainObject(row) && Object.values(row).some(hasOnlyMode))) {
+    return true;
+  }
+  for (const key of EXCEPTION_LIST_KEYS) {
+    const excs = node[key];
+    if (Array.isArray(excs) && excs.some(hasOnlyMode)) return true;
+  }
+  for (const key of MODE_OVERRIDE_KEYS) {
+    const overrides = node[key];
+    if (isPlainObject(overrides) && Object.values(overrides).some((m) => m === "only")) return true;
+  }
+  for (const value of Object.values(node)) {
+    if (value && typeof value === "object" && usesConstraintOnlyRule(value)) return true;
+  }
+  return false;
+}
+
 /**
  * Choose the community catalog `schema_version` to stamp for a payload — the
  * MAX version any feature in the payload requires:
+ *   - `CONSTRAINT_ONLY_SCHEMA_VERSION` (6) when ANY constraint rule uses the
+ *     `only` mode (`usesConstraintOnlyRule`).
  *   - `TAG_AXES_SCHEMA_VERSION` (5) when ANY wildcard marks a tag group
  *     `accepts` (`usesAcceptsTagAxis`).
  *   - `SP3_REACH_SCHEMA_VERSION` (4) when ANY constraint carries a non-default
@@ -159,6 +204,7 @@ export function usesAcceptsTagAxis(node: unknown): boolean {
  * doesn't actually use a newer feature.
  */
 export function schemaVersionForPayload(payload: Record<string, unknown>): number {
+  if (usesConstraintOnlyRule(payload)) return CONSTRAINT_ONLY_SCHEMA_VERSION;
   if (usesAcceptsTagAxis(payload)) return TAG_AXES_SCHEMA_VERSION;
   if (usesTargetSelectReach(payload)) return SP3_REACH_SCHEMA_VERSION;
   return SP2B_MARKER_RE.test(JSON.stringify(payload))

@@ -3,6 +3,7 @@
 import pytest
 
 from engine.migrations import (
+    CONSTRAINT_ONLY_SCHEMA_VERSION,
     CURRENT_SCHEMA_VERSION,
     SP2B_SCHEMA_VERSION,
     SP3_REACH_SCHEMA_VERSION,
@@ -82,3 +83,35 @@ def test_highest_feature_wins():
     assert schema_version_for_payload(payload) == SP3_REACH_SCHEMA_VERSION
     payload["constraints"] = []
     assert schema_version_for_payload(payload) == SP2B_SCHEMA_VERSION
+
+
+_ONLY = {"mode": "only", "factor": 1.0}
+
+
+@pytest.mark.parametrize("payload_extra, instance, expected", [
+    ({"exceptions": [{"source_value": "a", "target_value": "b", **_ONLY}]}, None,
+     CONSTRAINT_ONLY_SCHEMA_VERSION),
+    ({"matrix": {"summer": {"open": _ONLY}}}, None, CONSTRAINT_ONLY_SCHEMA_VERSION),
+    ({}, {"cell_mode_overrides": {"k": "only"}}, CONSTRAINT_ONLY_SCHEMA_VERSION),
+    ({}, {"exception_mode_overrides": {"k": "only"}}, CONSTRAINT_ONLY_SCHEMA_VERSION),
+    ({}, {"extra_exceptions": [{"source": "a", "target": "b", **_ONLY}]},
+     CONSTRAINT_ONLY_SCHEMA_VERSION),
+    ({"matrix": {"summer": {"open": {"mode": "boost", "factor": 2.0}}}},
+     {"cell_mode_overrides": {"k": "exclude"}}, CURRENT_SCHEMA_VERSION),
+])
+def test_constraint_only_rule(payload_extra, instance, expected):
+    row = _constraint_row()
+    row["payload"].update(payload_extra)
+    if instance is not None:
+        row["instance"] = instance
+    assert schema_version_for_payload(row) == expected
+
+
+def test_only_rule_outranks_accepts_axis():
+    row = _constraint_row()
+    row["payload"]["exceptions"] = [{"source_value": "a", "target_value": "b", **_ONLY}]
+    bundle = {"children": [
+        row,
+        {"type": "wildcard", "payload": {"options": [], "tag_group_kinds": {"g": "accepts"}}},
+    ]}
+    assert schema_version_for_payload(bundle) == CONSTRAINT_ONLY_SCHEMA_VERSION

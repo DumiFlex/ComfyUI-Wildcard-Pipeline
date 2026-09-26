@@ -31,7 +31,7 @@ import {
   toGroups,
 } from "../../components/shared/matrix-axis";
 
-type RuleState = "neutral" | "exclude" | "boost" | "reduce";
+type RuleState = "neutral" | "exclude" | "boost" | "reduce" | "only";
 
 interface Props {
   rows: string[];      // source sub-categories
@@ -73,18 +73,21 @@ const MODE_DEFAULT_FACTOR: Record<ConstraintMode, number> = {
   exclude: 0,
   boost: 1.5,
   reduce: 0.5,
+  only: 1,
 };
 const MODE_ICON: Record<ConstraintMode, string> = {
   allow: "·",
   exclude: "×",
   boost: "↑",
   reduce: "↓",
+  only: "✓",
 };
 const MODE_LABEL: Record<ConstraintMode, string> = {
   allow: "Neutral",
   exclude: "Exclude",
   boost: "Boost",
   reduce: "Reduce",
+  only: "Only",
 };
 
 /** Storage uses "allow"; popover speaks "neutral". Translate at boundary. */
@@ -106,6 +109,19 @@ function cellAt(row: string, col: string): ConstraintCell {
   const factor =
     typeof raw.factor === "number" ? raw.factor : MODE_DEFAULT_FACTOR[mode] ?? 1;
   return { mode, factor };
+}
+
+/** Rows holding an `only` cell. Their neutral cells are shut out at runtime,
+ *  so the grid marks them instead of letting them read as "no rule". */
+const onlyRows = computed(() => {
+  const out = new Set<string>();
+  for (const [row, byCol] of Object.entries(props.modelValue ?? {})) {
+    if (Object.values(byCol ?? {}).some((c) => c?.mode === "only")) out.add(row);
+  }
+  return out;
+});
+function isImpliedOut(row: string, col: string): boolean {
+  return onlyRows.value.has(row) && cellAt(row, col).mode === "allow";
 }
 
 function cloneMatrix(src: ConstraintMatrix): ConstraintMatrix {
@@ -187,7 +203,8 @@ watch(colGroups, () => void nextTick(measureBands));
 function cellAriaLabel(row: string, col: string): string {
   const c = cellAt(row, col);
   const factor = (c.mode === "boost" || c.mode === "reduce") ? ` ×${fmtFactor(c.factor)}` : "";
-  return `Rule: ${row} → ${col}, current state ${MODE_LABEL[c.mode]}${factor}. Click to edit.`;
+  const implied = isImpliedOut(row, col) ? " (excluded by an Only rule in this row)" : "";
+  return `Rule: ${row} → ${col}, current state ${MODE_LABEL[c.mode]}${factor}${implied}. Click to edit.`;
 }
 
 // ── Popover state ───────────────────────────────────────────────
@@ -426,7 +443,7 @@ defineExpose({ cellAt });
                   class="wp-mx-cell"
                   :class="[
                     `s-${toState(cellAt(tag, c.tag).mode)}`,
-                    { open: isOpenAt(tag, c.tag) },
+                    { open: isOpenAt(tag, c.tag), 'implied-out': isImpliedOut(tag, c.tag) },
                   ]"
                   :data-mode="cellAt(tag, c.tag).mode"
                   :data-test="`cell-${tag}-${c.tag}`"
@@ -437,7 +454,7 @@ defineExpose({ cellAt });
                   @keydown.enter.prevent="openPopover(tag, c.tag, $event as unknown as MouseEvent)"
                   @keydown.space.prevent="openPopover(tag, c.tag, $event as unknown as MouseEvent)"
                 >
-                  <span class="glyph">{{ MODE_ICON[cellAt(tag, c.tag).mode] }}</span>
+                  <span class="glyph">{{ isImpliedOut(tag, c.tag) ? "×" : MODE_ICON[cellAt(tag, c.tag).mode] }}</span>
                   <span
                     v-if="cellAt(tag, c.tag).mode === 'boost' || cellAt(tag, c.tag).mode === 'reduce'"
                     class="factor"
@@ -769,6 +786,17 @@ defineExpose({ cellAt });
   color: var(--wp-warn);
   border: 1px solid color-mix(in srgb, var(--wp-warn, #f97316) 45%, transparent);
 }
+.wp-mx-cell.s-only {
+  background: color-mix(in srgb, var(--wp-info, #3b82f6) 22%, transparent);
+  color: var(--wp-info, #3b82f6);
+  border: 1px solid color-mix(in srgb, var(--wp-info, #3b82f6) 45%, transparent);
+}
+/* A neutral cell in a row that has an Only rule: shut out at runtime. Faint
+ * danger hue + dashed border so it reads as "implied", not authored. */
+.wp-mx-cell.s-neutral.implied-out {
+  color: color-mix(in srgb, var(--wp-danger, #ef4444) 60%, var(--wp-text-dim, #595c66));
+  border-color: color-mix(in srgb, var(--wp-danger, #ef4444) 30%, transparent);
+}
 .glyph { font-size: 14px; line-height: 1; }
 .factor { font-size: 11px; font-weight: 700; }
 
@@ -801,6 +829,11 @@ defineExpose({ cellAt });
   background: color-mix(in srgb, var(--wp-danger, #ef4444) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--wp-danger, #ef4444) 18%, transparent);
   color: color-mix(in srgb, var(--wp-danger, #ef4444) 70%, var(--wp-text-dim));
+}
+.wp-mx--readonly .wp-mx-cell.s-only {
+  background: color-mix(in srgb, var(--wp-info, #3b82f6) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-info, #3b82f6) 18%, transparent);
+  color: color-mix(in srgb, var(--wp-info, #3b82f6) 70%, var(--wp-text-dim));
 }
 .wp-mx-readonly-hint {
   margin: 8px 0 0;

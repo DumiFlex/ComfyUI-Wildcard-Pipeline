@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import logging
+import re
 import uuid
+from pathlib import Path
 
 from aiohttp import web
 
@@ -32,9 +34,28 @@ logger = logging.getLogger(__name__)
 STARTUP_ID = uuid.uuid4().hex
 
 
+def _read_installed_version() -> str:
+    """The pack version on disk when this process started (`pyproject.toml`).
+
+    An update only takes effect on the backend after a restart, but a browser
+    tab keeps running the JS it loaded before. Stamping this lets the SPA and
+    the canvas notice they're older than the installed pack and ask for a
+    refresh. Regex rather than tomllib so Python 3.10 works too.
+    """
+    try:
+        text = (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text("utf-8")
+    except OSError:
+        return ""
+    m = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
+    return m.group(1) if m else ""
+
+
+INSTALLED_VERSION = _read_installed_version()
+
+
 @web.middleware
 async def _startup_id_middleware(request: web.Request, handler):
-    """Tag our own responses with X-WP-Startup-Id.
+    """Tag our own responses with X-WP-Startup-Id and X-WP-Version.
 
     The path check is load-bearing and was missing until 2026-08-06. This
     middleware is registered on ComfyUI's application, not on a sub-app, so
@@ -52,6 +73,8 @@ async def _startup_id_middleware(request: web.Request, handler):
     is_ours = request.path == "/wp" or request.path.startswith("/wp/")
     if is_ours and isinstance(response, web.StreamResponse):
         response.headers["X-WP-Startup-Id"] = STARTUP_ID
+        if INSTALLED_VERSION:
+            response.headers["X-WP-Version"] = INSTALLED_VERSION
     return response
 
 

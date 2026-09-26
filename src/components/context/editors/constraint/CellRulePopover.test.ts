@@ -3,20 +3,34 @@ import { describe, it, expect } from "vitest";
 import CellRulePopover from "../../../../../src/components/context/editors/constraint/CellRulePopover.vue";
 
 describe("CellRulePopover", () => {
-  it("renders four labeled state buttons", () => {
+  it("renders five labeled state buttons", () => {
     const wrap = mount(CellRulePopover, {
       props: { state: "neutral", factor: 1, srcLabel: "warm", tgtLabel: "positive_qa" },
     });
     const btns = wrap.findAll("button.pop-btn");
-    expect(btns).toHaveLength(4);
+    expect(btns).toHaveLength(5);
     expect(btns.map((b) => b.text())).toEqual(
       expect.arrayContaining([
         expect.stringMatching(/neutral/i),
         expect.stringMatching(/exclude/i),
         expect.stringMatching(/boost/i),
         expect.stringMatching(/reduce/i),
+        expect.stringMatching(/only/i),
       ]),
     );
+  });
+
+  it("emits only and explains the row-wide effect when only is active", async () => {
+    const wrap = mount(CellRulePopover, {
+      props: { state: "neutral", factor: 1, srcLabel: "summer", tgtLabel: "open" },
+    });
+    expect(wrap.find(".pop-note").exists()).toBe(false);
+    await wrap.find("button.b-only").trigger("click");
+    expect(wrap.emitted("update:state")?.[0]).toEqual(["only"]);
+    await wrap.setProps({ state: "only" });
+    expect(wrap.find(".pop-note").text()).toMatch(/without a rule of its own is excluded when summer fires/);
+    // `only` weighs 1.0, so there is no factor to edit.
+    expect(wrap.find(".pop-factor").exists()).toBe(false);
   });
 
   it("marks the current state button as active", () => {

@@ -32,7 +32,17 @@ export class ApiError extends Error {
  */
 let cachedStartupId: string | null = null;
 
+let versionMismatchSent = false;
+
 function checkStartupId(resp: Response): void {
+  // `X-WP-Version` is the pack version installed on disk. When it differs
+  // from the version this page was built as, the pack was updated under us:
+  // flag the page stale even if we never saw the restart itself.
+  const version = resp.headers.get("X-WP-Version") ?? "";
+  if (version && version !== __APP_VERSION__ && !versionMismatchSent) {
+    versionMismatchSent = true;
+    window.dispatchEvent(new CustomEvent("wp:server-restarted", { detail: { version } }));
+  }
   const sid = resp.headers.get("X-WP-Startup-Id");
   if (!sid) return;
   if (cachedStartupId === null) {
@@ -41,7 +51,7 @@ function checkStartupId(resp: Response): void {
   }
   if (sid !== cachedStartupId) {
     cachedStartupId = sid;
-    window.dispatchEvent(new CustomEvent("wp:server-restarted"));
+    window.dispatchEvent(new CustomEvent("wp:server-restarted", { detail: { version } }));
   }
 }
 

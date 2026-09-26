@@ -15,6 +15,14 @@
 // Everything else still multiplies. Both axis paths are unreachable unless the
 // caller passes `axisKinds` / `targetAxes`, so a payload that predates the
 // feature folds identically.
+//
+// `only` (2026-09, linked picks). Turns its row into an allow-list: when the
+// source fires, every target WITHOUT a rule of its own in that row is excluded
+// — by literal value on an exception, by tag in a matrix row. The `only` rule
+// itself weighs 1 (like `allow`); a target with any other rule keeps it. In a
+// matrix row an `allow` cell is NOT a mention (editors show it as the empty
+// "neutral" state); an `allow` exception is a visible row, so it is. A payload
+// with no `only` rule never reaches either gate.
 
 export const EXCLUDE = Symbol("constraint-exclude");
 
@@ -36,7 +44,11 @@ function applyRule(rule: Rule): number | typeof EXCLUDE {
     const f = Number(rule.factor ?? 1);
     return Number.isFinite(f) ? Math.max(0, f) : 1;
   }
-  return 1; // allow / unknown -> no weight change
+  return 1; // allow / only / unknown -> no weight change
+}
+
+function rowHasOnly(row: Record<string, Rule>): boolean {
+  return Object.values(row).some((r) => r?.mode === "only");
 }
 
 /** Fold one source tag against every tag on the option. Classify target tags
@@ -54,8 +66,17 @@ function cellFactor(
   optTags: string[],
   targetAxes?: Record<string, string[]>,
 ): number | typeof EXCLUDE {
-  const row = (matrix ?? {})[sourceTag];
-  if (!row) return 1;
+  const rawRow = (matrix ?? {})[sourceTag];
+  if (!rawRow) return 1;
+  // `only` makes the row an allow-list: an option carrying no tag the row
+  // mentions is shut out, and an unmentioned accepts-axis member offers 0. A
+  // neutral (`allow`) cell is not a mention.
+  const hasOnly = rowHasOnly(rawRow);
+  const row = hasOnly
+    ? Object.fromEntries(Object.entries(rawRow).filter(([, r]) => r && r.mode !== "allow"))
+    : rawRow;
+  if (hasOnly && !optTags.some((t) => row[t] !== undefined)) return EXCLUDE;
+  const unruled = hasOnly ? 0 : 1;
   const axes = targetAxes ?? {};
   const axisOf: Record<string, string> = {};
   for (const [ax, members] of Object.entries(axes)) {
@@ -80,7 +101,7 @@ function cellFactor(
     let best = 0;
     for (const t of members) {
       const rule = row[t];
-      const r = rule ? applyRule(rule) : 1;
+      const r = rule ? applyRule(rule) : unruled;
       best = Math.max(best, r === EXCLUDE ? 0 : r);
     }
     // Every alternative this axis offered was excluded → the option drops.
@@ -108,6 +129,13 @@ export function combineConstraintFactor(
       excByPair.set(`${s}${SEP}${t}`, e as Rule);
     }
   }
+  // Source values whose exceptions include an `only`: a target value with no
+  // exception of its own is excluded for them. Read off the de-duplicated map
+  // so it agrees with the rule that actually applies to each pair.
+  const onlySources = new Set<string>();
+  for (const [key, rule] of excByPair) {
+    if (rule.mode === "only") onlySources.add(key.slice(0, key.indexOf(SEP)));
+  }
   const optValue = String(option.value ?? "");
   const optTags = option.tags ?? [];
   let factor = 1;
@@ -121,6 +149,7 @@ export function combineConstraintFactor(
       factor *= r;
       continue;
     }
+    if (onlySources.has(pValue)) return EXCLUDE;
     // Partition this pick's tags: those inside an `accepts` axis fold with max,
     // the rest keep multiplying. A pick only carries `axes` when the source
     // wildcard declared the group `accepts`, and `kinds` gates it a second

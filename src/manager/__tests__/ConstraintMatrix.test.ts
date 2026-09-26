@@ -342,4 +342,24 @@ describe("ConstraintMatrix.vue — accepts-axis mark", () => {
     expect(wrap.findAll(".wp-mx-axis-mark").length).toBe(0);
     wrap.unmount();
   });
+
+  it("picking ONLY writes mode=only with factor 1", async () => {
+    const wrap = mountGrid({}, ["red"], ["warm"]);
+    await wrap.find('[data-test="cell-red-warm"]').trigger("click");
+    await popover(wrap).find("button.pop-btn.b-only").trigger("click");
+    expect(lastEmitted(wrap)?.red?.warm).toEqual({ mode: "only", factor: 1 });
+    wrap.unmount();
+  });
+
+  it("marks the neutral cells of an only row as shut out, and only that row", () => {
+    const wrap = mountGrid({ red: { warm: { mode: "only", factor: 1 } } }, ["red", "blue"], ["warm", "cool"]);
+    const only = wrap.find('[data-test="cell-red-warm"]');
+    expect(only.classes()).toContain("s-only");
+    const shut = wrap.find('[data-test="cell-red-cool"]');
+    expect(shut.classes()).toContain("implied-out");
+    expect(shut.text()).toContain("×");
+    expect(shut.attributes("aria-label")).toMatch(/excluded by an Only rule/);
+    expect(wrap.find('[data-test="cell-blue-cool"]').classes()).not.toContain("implied-out");
+    wrap.unmount();
+  });
 });

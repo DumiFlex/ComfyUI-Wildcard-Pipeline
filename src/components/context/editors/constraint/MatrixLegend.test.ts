@@ -8,11 +8,11 @@ describe("MatrixLegend", () => {
     expect(wrap.find(".legend-body").exists()).toBe(false);
   });
 
-  it("clicking the toggle expands the body with four state rows", async () => {
+  it("clicking the toggle expands the body with five state rows", async () => {
     const wrap = mount(MatrixLegend);
     await wrap.find(".legend-toggle").trigger("click");
     expect(wrap.find(".legend-body").exists()).toBe(true);
-    expect(wrap.findAll(".legend-row")).toHaveLength(4);
+    expect(wrap.findAll(".legend-row")).toHaveLength(5);
   });
 
   it("each row labels one state in plain language", async () => {
@@ -20,7 +20,7 @@ describe("MatrixLegend", () => {
     await wrap.find(".legend-toggle").trigger("click");
     const names = wrap.findAll(".legend-name").map((n) => n.text().toLowerCase());
     expect(names).toEqual(
-      expect.arrayContaining(["neutral", "exclude", "boost", "reduce"]),
+      expect.arrayContaining(["neutral", "exclude", "boost", "reduce", "only"]),
     );
     const descs = wrap.findAll(".legend-desc").map((d) => d.text());
     expect(descs.some((d) => /excluded entirely/i.test(d))).toBe(true);
