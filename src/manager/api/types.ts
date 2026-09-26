@@ -436,6 +436,17 @@ export type ScenarioValue = string | { items: string[]; sep: string };
 
 export interface ScenarioTraceWrite { variable: string; value: ScenarioValue; overwrite: boolean }
 
+/** A nested `@{ref}` pick made while a module resolved, in pre-order;
+ *  `depth` 0 is a ref written directly in the module's own option. */
+export interface ScenarioTraceRef {
+  uuid: string;
+  name: string;
+  option_id: string | null;
+  depth: number;
+  /** What the ref expanded to, nested refs included. */
+  value: ScenarioValue;
+}
+
 export interface ScenarioTraceRow {
   id: string;
   /** Stack uid: `s{i}` for a module, `s{i}.{j}` for a bundle child. */
@@ -447,6 +458,7 @@ export interface ScenarioTraceRow {
   seed: number | null;
   error: string | null;
   writes: ScenarioTraceWrite[];
+  refs: ScenarioTraceRef[];
 }
 
 export interface ScenarioWarning {

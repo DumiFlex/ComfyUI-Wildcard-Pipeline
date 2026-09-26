@@ -49,6 +49,12 @@ const rows = computed(() => {
       warnings: s.warnings.length,
     }));
 });
+/** True when the output came out the same on every run. */
+const constant = computed(() => {
+  const v = props.outputVar ? props.result.variables[props.outputVar] : undefined;
+  return !!v && v.distinct === 1 && props.result.runs > 1;
+});
+
 const available = computed(() => props.result.samples.filter((s) => !s.error).length);
 </script>
 
@@ -74,6 +80,10 @@ const available = computed(() => props.result.samples.filter((s) => !s.error).le
           for the first {{ rows.length }} of {{ result.runs }} seeds. Tinted parts show which variable wrote them; click a row for its trace.
         </span>
       </div>
+      <p v-if="constant" class="wp-tro__same" data-test="output-constant">
+        <code>${{ outputVar }}</code> came out the same on all {{ result.runs - result.failed }} runs.
+        If it should vary, check that the variables it reads are set earlier in the stack (the stack card says when one isn't) or pinned.
+      </p>
       <ol class="wp-tro__list">
         <li v-for="r in rows" :key="r.seed">
           <button type="button" class="wp-tro__row" data-test="output-row" @click="emit('open', r.seed)">
@@ -106,6 +116,12 @@ const available = computed(() => props.result.samples.filter((s) => !s.error).le
 .wp-tro__note { margin: 0; font-size: var(--wp-text-xs); color: var(--wp-text-dim); }
 .wp-tro__head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--wp-space-4); font-size: var(--wp-text-sm); color: var(--wp-text-muted); }
 .wp-tro__pick { width: 200px; }
+.wp-tro__same {
+  margin: 0; font-size: var(--wp-text-sm); color: var(--wp-text-muted);
+  border: 1px solid var(--wp-border); border-left: 3px solid var(--wp-warn);
+  border-radius: var(--wp-radius-sm); padding: var(--wp-space-4) var(--wp-space-5);
+}
+.wp-tro__same code { color: var(--wp-accent-text); }
 .wp-tro__note code { color: var(--wp-accent-text); }
 .wp-tro__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--wp-space-3); }
 .wp-tro__row {

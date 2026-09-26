@@ -19,6 +19,8 @@ import type { StackItemView } from "../../utils/scenario";
 const props = defineProps<{
   stack: ScenarioStackItem[];
   views: StackItemView[];
+  /** Per item, the `$vars` it reads that nothing earlier in the stack sets. */
+  unset: string[][];
   pins: Record<string, string>;
   modules: ModuleRow[];
   bundles: BundleRow[];
@@ -150,6 +152,12 @@ function removePin(name: string): void {
         </div>
         <span class="wp-trs__name">{{ v.name }}</span>
         <span class="wp-trs__detail">{{ v.missing ? "deleted from the library" : v.enabled ? v.detail : "switched off" }}</span>
+        <span
+          v-if="unset[i]?.length"
+          class="wp-trs__unset"
+          :title="`Nothing earlier in the stack sets ${unset[i].map((n) => '$' + n).join(', ')}, so it reads as empty. Add the module that writes it, or pin a value.`"
+          data-test="stack-unset"
+        >reads {{ unset[i].map((n) => "$" + n).join(", ") }}, not set earlier</span>
         <button
           type="button"
           class="wp-trs__remove"
@@ -256,6 +264,10 @@ function removePin(name: string): void {
 }
 .wp-trs__detail { font: var(--wp-text-xs) var(--wp-font-mono); color: var(--wp-text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wp-trs__card[data-missing="true"] .wp-trs__detail { color: var(--wp-danger-text); }
+.wp-trs__unset {
+  font-size: var(--wp-text-xs); color: var(--wp-warn); line-height: var(--wp-line-xs);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
 .wp-trs__remove {
   position: absolute; top: calc(-1 * var(--wp-space-4)); right: calc(-1 * var(--wp-space-4));
   width: 22px; height: 22px; border-radius: 50%; /* audit-exempt: round close badge */

@@ -241,3 +241,82 @@ export function searchText(row: { id: string; name: string; tags?: string[]; pay
   walk(row.children, 0);
   return parts.join("\n").toLowerCase();
 }
+
+/* ------------------------------------------------------------------ */
+/* Reads nothing earlier in the stack sets                              */
+/* ------------------------------------------------------------------ */
+
+type PayloadRow = { type?: unknown; payload?: unknown; name?: unknown };
+
+const VAR_RE = /\$([A-Za-z_][A-Za-z0-9_]*)/g;
+
+/** `$names` a module's text reads: a combine's template, a derivation's
+ *  conditions and action values. Axis and index suffixes (`$outfit.SHOES`,
+ *  `$tags.0`) read their base variable, so only the base name counts. */
+export function moduleReads(row: PayloadRow): string[] {
+  const p = (row.payload ?? {}) as Record<string, unknown>;
+  const found = new Set<string>();
+  const scan = (text: unknown): void => {
+    if (typeof text !== "string") return;
+    for (const m of text.matchAll(VAR_RE)) found.add(m[1]);
+  };
+  if (row.type === "combine") scan(p.template);
+  if (row.type === "derivation") {
+    const rules = Array.isArray(p.rules) ? p.rules : [];
+    for (const r of rules as { branches?: { condition?: { var?: unknown }; action?: { value?: unknown } }[]; else?: { action?: { value?: unknown } } }[]) {
+      for (const b of r.branches ?? []) {
+        if (typeof b.condition?.var === "string") found.add(b.condition.var.replace(/^\$/, "").split(".")[0]);
+        scan(b.action?.value);
+      }
+      scan(r.else?.action?.value);
+    }
+  }
+  return [...found];
+}
+
+/** Every `$var` a module can write. */
+export function moduleWrites(row: PayloadRow): string[] {
+  const p = (row.payload ?? {}) as Record<string, unknown>;
+  if (row.type === "fixed_values") {
+    const vals = Array.isArray(p.values) ? p.values : [];
+    return (vals as { name?: unknown; var?: unknown }[])
+      .map((v) => String(v.name ?? v.var ?? "").replace(/^\$/, ""))
+      .filter(Boolean);
+  }
+  if (row.type === "derivation") {
+    const out = new Set<string>();
+    const rules = Array.isArray(p.rules) ? p.rules : [];
+    for (const r of rules as { branches?: { action?: { target_var?: unknown } }[]; else?: { action?: { target_var?: unknown } } }[]) {
+      for (const b of r.branches ?? []) if (typeof b.action?.target_var === "string") out.add(b.action.target_var.replace(/^\$/, ""));
+      if (typeof r.else?.action?.target_var === "string") out.add(r.else.action.target_var.replace(/^\$/, ""));
+    }
+    return [...out];
+  }
+  const b = moduleBinding({ type: row.type as ModuleType, name: String(row.name ?? ""), payload: row.payload as ModuleRow["payload"] });
+  return b ? [b] : [];
+}
+
+/** Per stack item, the variables it reads that no pin and no earlier
+ *  enabled item sets. At run time those read as empty, which is the usual
+ *  reason a combine keeps producing the same text. */
+export function unsetReads(
+  stack: ScenarioStackItem[],
+  modules: ModuleRow[],
+  bundles: BundleRow[],
+  pins: Record<string, string>,
+): string[][] {
+  const written = new Set(Object.keys(pins).map((k) => k.replace(/^\$/, "")));
+  const byId = new Map(modules.map((m) => [m.id, m]));
+  return stack.map((item) => {
+    if (item.enabled === false) return [];
+    const rows: PayloadRow[] = isBundleItem(item)
+      ? ((bundles.find((b) => b.id === item.bundle)?.children ?? []) as PayloadRow[])
+      : [byId.get(item.module)].filter((m): m is ModuleRow => !!m);
+    const missing: string[] = [];
+    for (const row of rows) {
+      for (const v of moduleReads(row)) if (!written.has(v) && !missing.includes(v)) missing.push(v);
+      for (const v of moduleWrites(row)) written.add(v);
+    }
+    return missing;
+  });
+}

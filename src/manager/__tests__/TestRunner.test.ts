@@ -35,6 +35,7 @@ vi.mock("../api/client", () => {
       trace: [{
         id: "aabbccdd", _uid: "s0", type: "wildcard", name: "Hair Color", binding: "hair",
         status: "ok", seed, error: null, writes: [{ variable: "hair", value: seed ? "red" : "black", overwrite: false }],
+        refs: [{ uuid: "eeeeeeee", name: "Shade", option_id: "o1", depth: 0, value: seed ? "red" : "black" }],
       }],
       warnings: [],
       error: null,
@@ -111,6 +112,8 @@ describe("TestRunner.vue", () => {
     await rows[1].trigger("click");
     expect(wrap.find('[data-test="trace-drawer"]').attributes("data-open")).toBe("true");
     expect(wrap.find('[data-test="trace-step"]').text()).toContain("red");
+    expect(wrap.find('[data-test="trace-ref"]').text()).toContain("@Shade");
+    expect(wrap.find('[data-test="trace-step"]').text()).not.toContain("no change");
 
     await wrap.find('[data-test="tab-warnings"]').trigger("click");
     expect(wrap.find('[data-test="warning"]').text()).toContain("2 of 2 runs");

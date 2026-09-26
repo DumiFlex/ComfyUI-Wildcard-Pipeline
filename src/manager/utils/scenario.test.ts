@@ -12,6 +12,9 @@ import {
   segmentOutput,
   summarizeVariables,
   type StackItemView,
+  moduleReads,
+  moduleWrites,
+  unsetReads,
 } from "./scenario";
 
 function mod(id: string, type: ModuleRow["type"], name: string, payload: Record<string, unknown>): ModuleRow {
@@ -147,5 +150,33 @@ describe("lastRunSummary / seedLabel / searchText", () => {
     expect(text).toContain("prompt");
     expect(text).toContain("portrait");
     expect(text).toContain("$name, $hair");
+  });
+});
+
+describe("unsetReads", () => {
+  const SHOES = mod("11111111", "wildcard", "shoes", { options: [], var_binding: "shoes" });
+  const SCENE = mod("22222222", "combine", "Scene", { template: "wearing $shoes, $outfit.SHOES and $pinned", output_var: "scene" });
+  const mods = [SHOES, SCENE, FIXED, DERIV];
+
+  it("reads base names, including axis reads", () => {
+    expect(moduleReads(SCENE).sort()).toEqual(["outfit", "pinned", "shoes"]);
+    expect(moduleWrites(FIXED)).toEqual(["name"]);
+    expect(moduleWrites(DERIV)).toEqual(["mood"]);
+  });
+
+  it("flags reads that nothing earlier sets", () => {
+    const res = unsetReads([{ module: "22222222" }, { module: "11111111" }], mods, [], { pinned: "x" });
+    expect(res).toEqual([["shoes", "outfit"], []]);
+  });
+
+  it("counts earlier modules, pins and bundle children as writers", () => {
+    const bundles = [{ id: "b2", name: "Look", children: [{ type: "wildcard", name: "outfit", payload: { var_binding: "outfit" } }] } as unknown as BundleRow];
+    const res = unsetReads([{ module: "11111111" }, { bundle: "b2" }, { module: "22222222" }], mods, bundles, { $pinned: "x" });
+    expect(res).toEqual([[], [], []]);
+  });
+
+  it("ignores switched-off items as writers", () => {
+    const res = unsetReads([{ module: "11111111", enabled: false }, { module: "22222222" }], mods, [], { pinned: "x", outfit: "y" });
+    expect(res[1]).toEqual(["shoes"]);
   });
 });

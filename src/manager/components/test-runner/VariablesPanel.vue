@@ -55,6 +55,9 @@ function toggle(name: string): void {
       </button>
     </p>
 
+    <p v-if="!varying.length && !summary.constants.length && !hiddenOutput" class="wp-trv__none" data-test="variables-empty">
+      This stack writes no variables. A constraint on its own only re-weights a later wildcard: add its source and target wildcards to see its effect.
+    </p>
     <div class="wp-trv__grid">
       <section v-for="v in varying" :key="v.name" class="wp-trv__var" data-test="variable">
         <h4>
@@ -121,6 +124,7 @@ function toggle(name: string): void {
   gap: var(--wp-space-4); align-items: center; font-size: var(--wp-text-sm);
 }
 .wp-trv__val { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-trv__none { margin: 0; font-size: var(--wp-text-sm); color: var(--wp-text-muted); }
 .wp-trv__empty { color: var(--wp-text-dim); }
 .wp-trv__track { height: 8px; background: var(--wp-bg-3); border-radius: 3px; overflow: hidden; } /* audit-exempt: bar */
 .wp-trv__fill { display: block; height: 100%; background: var(--wp-accent-500); border-radius: 3px; transition: width .2s; } /* audit-exempt: bar */

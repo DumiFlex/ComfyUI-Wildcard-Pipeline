@@ -18,13 +18,18 @@ const emit = defineEmits<{ (e: "open", seed: number): void }>();
 const MAX_COLS = 6;
 const filter = ref("");
 
-/** Columns: variables that took more than one value, in stack order,
- *  excluding the (long) output which the Outputs tab covers. */
+/** Columns: variables that took more than one value, in stack order, with
+ *  the output last. When nothing varied, every variable is shown so the
+ *  table is never just a list of seeds. */
 const columns = computed(() => {
-  const names = Object.entries(props.result.variables)
-    .filter(([n, v]) => v.distinct > 1 && n !== props.outputVar)
+  const vars = props.result.variables;
+  const out = props.outputVar && props.outputVar in vars ? props.outputVar : null;
+  let names = Object.entries(vars)
+    .filter(([n, v]) => v.distinct > 1 && n !== out)
     .map(([n]) => n);
-  return orderByStack(names, props.views).slice(0, MAX_COLS);
+  if (!names.length && !out) names = Object.keys(vars);
+  const ordered = orderByStack(names, props.views).slice(0, out ? MAX_COLS - 1 : MAX_COLS);
+  return out ? [...ordered, out] : ordered;
 });
 
 const rows = computed(() => {
@@ -52,12 +57,15 @@ const rows = computed(() => {
       >
       <span>{{ rows.length }} of {{ result.samples.length }} returned seeds<template v-if="result.samples.length < result.runs"> (the run covered {{ result.runs }})</template></span>
     </div>
-    <div class="wp-trsm__scroll">
+    <p v-if="!columns.length" class="wp-trsm__none" data-test="samples-empty">
+      This stack writes no variables, so there is nothing to tabulate. A constraint on its own only re-weights a later wildcard: add its source and target wildcards to see its effect.
+    </p>
+    <div v-else class="wp-trsm__scroll">
       <table>
         <thead>
           <tr>
             <th>Seed</th>
-            <th v-for="c in columns" :key="c"><code>${{ c }}</code></th>
+            <th v-for="c in columns" :key="c" :data-output="c === outputVar ? 'true' : 'false'"><code>${{ c }}</code></th>
             <th>Warnings</th>
           </tr>
         </thead>
@@ -74,7 +82,12 @@ const rows = computed(() => {
             <td class="wp-trsm__seed">{{ r.seed }}</td>
             <td v-if="r.error" :colspan="Math.max(1, columns.length)" class="wp-trsm__err">{{ r.error }}</td>
             <template v-else>
-              <td v-for="(cell, i) in r.cells" :key="i" :title="cell">{{ cell }}</td>
+              <td
+                v-for="(cell, i) in r.cells"
+                :key="i"
+                :title="cell"
+                :data-output="columns[i] === outputVar ? 'true' : 'false'"
+              >{{ cell }}</td>
             </template>
             <td :class="{ 'wp-trsm__warn': r.warnings }">{{ r.warnings }}</td>
           </tr>
@@ -105,11 +118,14 @@ td {
   padding: var(--wp-space-3) var(--wp-space-4); border-bottom: 1px solid var(--wp-border);
   max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+td[data-output="true"] { max-width: 520px; }
+th[data-output="true"] code { color: var(--wp-text); }
 tbody tr { cursor: pointer; }
 tbody tr:hover td { background: var(--wp-bg-3); }
 tbody tr[data-selected="true"] td { background: color-mix(in oklab, var(--wp-accent-500) 16%, transparent); }
 tbody tr:focus-visible { outline: 2px solid var(--wp-border-focus); outline-offset: -2px; }
 .wp-trsm__seed { font-family: var(--wp-font-mono); color: var(--wp-text-muted); }
+.wp-trsm__none { margin: 0; font-size: var(--wp-text-sm); color: var(--wp-text-muted); }
 .wp-trsm__warn { color: var(--wp-warn); }
 .wp-trsm__err { color: var(--wp-danger-text); }
 </style>

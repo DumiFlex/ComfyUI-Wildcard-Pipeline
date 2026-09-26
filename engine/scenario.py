@@ -108,10 +108,33 @@ def _json_value(value: Any) -> Any:
     return value if isinstance(value, (str, int, float, bool)) or value is None else str(value)
 
 
-def _slim_trace(trace: Any, names: dict[str, str]) -> list[dict[str, Any]]:
+def _refs_by_owner(log: Any) -> dict[str, list[dict[str, Any]]]:
+    """Group the engine's nested-ref log by the stack uid whose resolve made
+    each pick, keeping pre-order so `depth` draws the tree."""
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    if not isinstance(log, list):
+        return grouped
+    for row in log:
+        if not isinstance(row, dict):
+            continue
+        grouped.setdefault(str(row.get("owner") or ""), []).append({
+            "uuid": row.get("uuid", ""),
+            "name": row.get("name", ""),
+            "option_id": row.get("option_id"),
+            "depth": int(row.get("depth") or 0),
+            "value": _json_value(row.get("value", row.get("raw", ""))),
+        })
+    return grouped
+
+
+def _slim_trace(
+    trace: Any, names: dict[str, str], refs: dict[str, list[dict[str, Any]]] | None = None,
+) -> list[dict[str, Any]]:
     """The engine trace, trimmed to what a per-seed view needs. The engine
     doesn't carry display names on trace rows, so they come from the stack
-    (keyed by `_uid`, falling back to the library id)."""
+    (keyed by `_uid`, falling back to the library id). ``refs`` adds the
+    nested `@{ref}` picks each row's resolve made, as a pre-order list."""
+    refs = refs or {}
     out: list[dict[str, Any]] = []
     if not isinstance(trace, list):
         return out
@@ -136,6 +159,7 @@ def _slim_trace(trace: Any, names: dict[str, str]) -> list[dict[str, Any]]:
             "seed": row.get("seed"),
             "error": row.get("error"),
             "writes": writes,
+            "refs": refs.get(str(row.get("_uid") or ""), []),
         })
     return out
 
@@ -207,6 +231,8 @@ def run_scenario(
     for seed in seeds:
         ctx: dict[str, Any] = dict(pins)
         ctx["__wp_catalog__"] = catalog
+        # Ask the resolver to record nested @{ref} picks for the trace.
+        ctx["__wp_ref_log__"] = []
         try:
             # The engine mutates module dicts in places (coercion, per-run
             # stamps); a deep copy keeps every seed starting from the same
@@ -241,6 +267,16 @@ def run_scenario(
                 elif entry.get("id") is not None:
                     bucket[str(entry["id"])] += 1
 
+        # Nested @{ref} picks count toward their wildcard's option counts
+        # too, so a wildcard reached only through refs still shows up.
+        ref_log = ctx.get("__wp_ref_log__")
+        if isinstance(ref_log, list):
+            for row in ref_log:
+                if isinstance(row, dict) and row.get("uuid"):
+                    oid = row.get("option_id")
+                    key = str(oid) if oid is not None else str(row.get("raw", ""))
+                    pick_counts.setdefault(str(row["uuid"]), Counter())[key] += 1
+
         hits = ctx.get("__wp_constraint_hits__")
         if isinstance(hits, dict):
             for cid, n in hits.items():
@@ -260,7 +296,9 @@ def run_scenario(
             samples.append({
                 "seed": seed,
                 "vars": {k: _json_value(v) for k, v in resolved.items()},
-                "trace": _slim_trace(ctx.get("__wp_trace__"), names),
+                "trace": _slim_trace(
+                    ctx.get("__wp_trace__"), names, _refs_by_owner(ctx.get("__wp_ref_log__")),
+                ),
                 "warnings": sample_warnings,
                 "error": None,
             })

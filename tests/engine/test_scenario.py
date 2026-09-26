@@ -189,3 +189,62 @@ def test_stack_is_not_mutated_between_seeds():
     before = repr(modules)
     run_scenario(modules, seeds=list(range(10)))
     assert repr(modules) == before
+
+
+def _catalog_entry(uuid: str, name: str, options: list[dict]) -> dict:
+    return {"uuid": uuid, "type": "wildcard", "name": name, "payload": {
+        "var_binding": name, "sub_categories": [], "options": options,
+    }}
+
+
+def test_nested_refs_are_recorded_on_the_owning_trace_row():
+    shade = _catalog_entry("eeeeeeee", "shade", [{"id": "c1", "value": "navy", "weight": 1}])
+    outfit = _catalog_entry(
+        "cccccccc", "outfit", [{"id": "o1", "value": "a @{eeeeeeee} coat", "weight": 1}],
+    )
+    probe = _wildcard(
+        "dddddddd", "probe", [{"id": "p1", "value": "wearing @{cccccccc}", "weight": 1}], uid="s0",
+    )
+    res = run_scenario([probe], seeds=[1], catalog={"cccccccc": outfit, "eeeeeeee": shade})
+    row = res["samples"][0]["trace"][0]
+    assert res["samples"][0]["vars"]["probe"] == "wearing a navy coat"
+    assert row["refs"] == [
+        {"uuid": "cccccccc", "name": "outfit", "option_id": "o1", "depth": 0,
+         "value": "a navy coat"},
+        {"uuid": "eeeeeeee", "name": "shade", "option_id": "c1", "depth": 1, "value": "navy"},
+    ]
+    # Wildcards reached only through refs still get pick counts.
+    assert res["picks"]["cccccccc"] == {"o1": 1}
+    assert res["picks"]["eeeeeeee"] == {"c1": 1}
+
+
+def test_multi_pick_refs_are_recorded_with_their_option_ids():
+    shade = _catalog_entry("eeeeeeee", "shade", [
+        {"id": "c1", "value": "navy", "weight": 1}, {"id": "c2", "value": "olive", "weight": 1},
+    ])
+    probe = _wildcard(
+        "dddddddd", "probe", [{"id": "p1", "value": "{2$$ and $$@{eeeeeeee}}", "weight": 1}],
+        uid="s0",
+    )
+    res = run_scenario([probe], seeds=[3], catalog={"eeeeeeee": shade})
+    refs = res["samples"][0]["trace"][0]["refs"]
+    assert sorted(r["option_id"] for r in refs) == ["c1", "c2"]
+    assert {r["value"] for r in refs} == {"navy", "olive"}
+
+
+def test_ref_log_does_not_change_the_result():
+    shade = _catalog_entry("eeeeeeee", "shade", [
+        {"id": "c1", "value": "navy", "weight": 1},
+        {"id": "c2", "value": "{olive|teal}", "weight": 2},
+    ])
+    probe = _wildcard(
+        "dddddddd", "probe", [{"id": "p1", "value": "a @{eeeeeeee} coat", "weight": 1}], uid="s0",
+    )
+    catalog = {"eeeeeeee": shade}
+    res = run_scenario([probe], seeds=list(range(40)), catalog=catalog)
+    for sample in res["samples"]:
+        plain = PipelineEngine().run(
+            [dict(probe)], ctx={"__wp_catalog__": catalog}, seed=sample["seed"],
+        )
+        assert plain["probe"] == sample["vars"]["probe"]
+        assert "__wp_ref_log__" not in plain

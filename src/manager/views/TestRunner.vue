@@ -193,6 +193,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
           v-model:stack="draft.stack"
           v-model:pins="draft.pins"
           :views="wb.stackViews.value"
+          :unset="wb.unset.value"
           :modules="wb.modules.value"
           :bundles="wb.bundles.value"
         />

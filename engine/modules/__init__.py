@@ -56,6 +56,23 @@ class _RuntimeResolveContext:
     # so an empty axis read can say whether the axis is missing or the pick
     # simply carried no tag on it.
     _axis_decl: dict[str, Any] = field(default_factory=dict)
+    # Opt-in record of every nested `@{uuid}` pick (`ctx["__wp_ref_log__"]`,
+    # a list the caller seeds, e.g. the Test Runner). None when the caller
+    # did not ask, so a canvas run records nothing. `_ref_owner` is the
+    # stack uid of the module whose resolve this frame belongs to.
+    _ref_log: list[dict[str, Any]] | None = None
+    _ref_owner: str | None = None
+
+    def log_ref(self, entry: dict[str, Any]) -> dict[str, Any] | None:
+        """Append one nested-ref pick to the ref log, tagged with the
+        owning module's uid, and return the stored dict (so the resolver
+        can fill in the resolved text after recursing). No-op → None when
+        no log was requested."""
+        if self._ref_log is None:
+            return None
+        row = {"owner": self._ref_owner, **entry}
+        self._ref_log.append(row)
+        return row
 
     def get_axis(self, name: str, axis: str) -> Any:
         """Rolled axis choice(s) for a binding, or None when it has none.
@@ -175,6 +192,7 @@ def build_resolve_ctx(
     axes = ctx.get("__wp_axes__")
     axis_decl = ctx.get("__wp_axis_decl__")
     hits = ctx.setdefault("__wp_constraint_hits__", {})
+    ref_log = ctx.get("__wp_ref_log__")
     return _RuntimeResolveContext(  # type: ignore[return-value]
         rng=ctx["__wp_rng__"],
         max_ref_depth=int(ctx.get("__wp_max_ref_depth__", 8)),
@@ -200,6 +218,8 @@ def build_resolve_ctx(
         # ctx.
         _axes=axes if isinstance(axes, dict) else {},
         _axis_decl=axis_decl if isinstance(axis_decl, dict) else {},
+        _ref_log=ref_log if isinstance(ref_log, list) else None,
+        _ref_owner=ctx.get("__wp_current_module_uid__"),
     )
 
 

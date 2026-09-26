@@ -21,6 +21,7 @@ import {
   defaultOutputVar,
   describeItem,
   lastRunSummary,
+  unsetReads,
 } from "../utils/scenario";
 
 export interface ScenarioDraft {
@@ -75,6 +76,11 @@ export function useScenarioWorkbench() {
 
   const stackViews = computed(() =>
     draft.value.stack.map((item) => describeItem(item, modules.value, bundles.value)),
+  );
+
+  /** Per stack item, the `$vars` it reads that nothing earlier sets. */
+  const unset = computed(() =>
+    unsetReads(draft.value.stack, modules.value, bundles.value, draft.value.pins),
   );
 
   const outputVar = computed(() => draft.value.output_var ?? defaultOutputVar(stackViews.value));
@@ -204,7 +210,7 @@ export function useScenarioWorkbench() {
   return {
     modules, bundles, scenarios, loading,
     draft, dirty, result, running, saving, runError,
-    stackViews, outputVar,
+    stackViews, outputVar, unset,
     loadLibrary, openScenario, newQuickRun, run, save, remove, togglePin,
   };
 }

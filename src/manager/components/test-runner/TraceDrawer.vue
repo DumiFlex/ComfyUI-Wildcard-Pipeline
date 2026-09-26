@@ -70,6 +70,17 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
             <div v-for="(w, j) in s.writes" :key="j"><code>${{ w.variable }}</code> = {{ renderValue(w.value) }}</div>
           </div>
           <div v-else class="wp-trd__none">{{ s.type === "constraint" ? "re-weights a later pick, writes nothing" : "no change" }}</div>
+          <ul v-if="s.refs?.length" class="wp-trd__refs" aria-label="Nested picks" data-test="trace-refs">
+            <li
+              v-for="(r, j) in s.refs"
+              :key="j"
+              :style="{ '--depth': r.depth }"
+              data-test="trace-ref"
+            >
+              <span class="wp-trd__ref-name">@{{ r.name }}</span>
+              <span class="wp-trd__ref-val">{{ renderValue(r.value) || "(empty)" }}</span>
+            </li>
+          </ul>
         </li>
       </ol>
       <section v-if="sample.warnings.length" class="wp-trd__warns">
@@ -110,6 +121,18 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 .wp-trd__status { margin-left: auto; font-size: var(--wp-text-xs); color: var(--wp-text-dim); }
 .wp-trd__writes { font: var(--wp-text-xs)/1.5 var(--wp-font-mono); color: var(--wp-text-muted); word-break: break-word; }
 .wp-trd__writes code { color: var(--wp-accent-text); }
+.wp-trd__refs {
+  list-style: none; margin: var(--wp-space-1) 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: var(--wp-space-1);
+  font-size: var(--wp-text-xs); border-top: 1px dashed var(--wp-border); padding-top: var(--wp-space-2);
+}
+.wp-trd__refs li {
+  display: flex; gap: var(--wp-space-3); align-items: baseline; min-width: 0;
+  padding-left: calc(var(--depth) * var(--wp-space-5));
+}
+.wp-trd__refs li::before { content: "↳"; color: var(--wp-text-dim); }
+.wp-trd__ref-name { font-family: var(--wp-font-mono); color: var(--wp-accent-text); white-space: nowrap; }
+.wp-trd__ref-val { color: var(--wp-text-muted); word-break: break-word; }
 .wp-trd__none { font-size: var(--wp-text-xs); color: var(--wp-text-dim); }
 .wp-trd__err { margin: 0; color: var(--wp-danger-text); font-size: var(--wp-text-xs); padding: 0 var(--wp-space-6); }
 .wp-trd__step .wp-trd__err { padding: 0; }
