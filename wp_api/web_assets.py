@@ -30,7 +30,7 @@ from pathlib import Path
 
 _MANIFEST_NAME = ".wp-assets.json"
 
-# Rollup/Vite hashed output: `name-B1a2C3d4.mjs` (`.js` before 2.16), `style-XyZ98765.css`, and
+# Rollup/Vite hashed output: `name-B1a2C3d4.mjs` (`.js` in older builds), `style-XyZ98765.css`, and
 # their sourcemaps, which append `.map` to the WHOLE filename rather than
 # replacing the extension — `name-B1a2C3d4.js.map`. The optional group is what
 # catches those; without it, orphaned maps were the one artefact class the
