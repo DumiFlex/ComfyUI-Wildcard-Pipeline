@@ -421,3 +421,37 @@ describe("constraint ExceptionsSection — stranded read-only", () => {
     expect(w.find('[data-test="ex-add-extra"]').exists()).toBe(true);
   });
 });
+
+describe("constraint ExceptionsSection — only-link note", () => {
+  const mountWith = (overrides: Partial<ModuleEntry>) =>
+    mount(ExceptionsSection, {
+      props: { module: makeModule(overrides), sourceValues: SOURCE_VALUES, targetValues: TARGET_VALUES },
+    });
+
+  it("hides the note when no exception is only", () => {
+    expect(mountWith({}).find('[data-test="ex-only-note"]').exists()).toBe(false);
+  });
+
+  it("names the source of a library only link", () => {
+    const w = mountWith({
+      payload: {
+        source_wildcard_id: "wc_color", target_wildcard_id: "wc_fabric", matrix: {},
+        exceptions: [{ source_value: "red", target_value: "black", mode: "only", factor: 1 }],
+      },
+    });
+    expect(w.find('[data-test="ex-only-note"]').text()).toContain("when red is picked");
+  });
+
+  it("follows instance overrides, disabled rows and extras", () => {
+    const w = mountWith({
+      instance: {
+        exception_mode_overrides: { '["blue","green"]': "only" },
+        disabled_exception_keys: ['["red","black"]'],
+        extra_exceptions: [{ source_value: "silver", target_value: "white", mode: "only", factor: 1 }],
+      },
+    });
+    const text = w.find('[data-test="ex-only-note"]').text();
+    expect(text).toContain("blue, silver are picked");
+    expect(text).not.toContain("red");
+  });
+});

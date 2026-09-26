@@ -826,8 +826,13 @@ function normalizeExceptions(raw: unknown): ConstraintException[] {
     .map((e) => {
       if (!e || typeof e !== "object") return null;
       const r = e as Record<string, unknown>;
-      const source = typeof r.source === "string" ? r.source : "";
-      const target = typeof r.target === "string" ? r.target : "";
+      // The engine reads tier-2 `source_value` / `target_value` first, then
+      // legacy `source` / `target` (constraint_handler.py). Mirror that so an
+      // imported or API-written row doesn't load with blank values.
+      const pick = (a: unknown, b: unknown): string =>
+        typeof a === "string" ? a : typeof b === "string" ? b : "";
+      const source = pick(r.source_value, r.source);
+      const target = pick(r.target_value, r.target);
       const source_id = typeof r.source_id === "string" ? r.source_id : undefined;
       const target_id = typeof r.target_id === "string" ? r.target_id : undefined;
       const mode = (typeof r.mode === "string" ? r.mode : "allow") as ConstraintMode;

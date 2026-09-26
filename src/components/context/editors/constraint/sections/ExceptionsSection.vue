@@ -184,6 +184,22 @@ function effectiveFactor(exc: LibraryException): number {
   return factorOverrides.value[libKey(exc)] ?? exc.factor;
 }
 
+/** Source values with an active `only` link (library rows that are enabled,
+ *  after instance mode overrides, plus instance extras). Drives the
+ *  "Linked" note, mirroring the SPA ConstraintEditor's `onlyLinkSources`. */
+const onlyLinkSources = computed<string[]>(() => {
+  const out: string[] = [];
+  const push = (src: string) => { if (!out.includes(src)) out.push(src); };
+  for (const exc of libraryExceptions.value) {
+    if (disabledKeys.value.has(libKey(exc))) continue;
+    if (effectiveMode(exc) === "only") push(excSrc(exc, props.sourceOptionsById));
+  }
+  for (const exc of extras.value) {
+    if (exc.mode === "only") push(exc.source_value);
+  }
+  return out;
+});
+
 const MODE_CYCLE: Record<Mode, Mode> = {
   allow: "exclude",
   exclude: "boost",
@@ -610,6 +626,13 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
     </div>
     </div>
 
+    <p v-if="onlyLinkSources.length" class="ex__only-note" data-test="ex-only-note">
+      <span class="ex__only-note-glyph" aria-hidden="true">✓</span>
+      Linked: when {{ onlyLinkSources.map((s) => s || "⌀ null").join(", ") }}
+      {{ onlyLinkSources.length === 1 ? "is" : "are" }} picked, only target values listed here for
+      {{ onlyLinkSources.length === 1 ? "it" : "them" }} can be picked.
+    </p>
+
     <button
       v-if="!stranded"
       type="button"
@@ -918,6 +941,12 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
   color: var(--wp-accent-text, var(--wp-text));
 }
 .ex__add-extra .pi { font-size: 10px; }
+.ex__only-note {
+  margin: 8px 0 0;
+  font: 400 11px var(--wp-font-sans);
+  color: var(--wp-text-dim, var(--wp-text3));
+}
+.ex__only-note-glyph { color: var(--wp-info, #3b82f6); margin-right: 4px; }
 .ex__readonly-hint {
   margin: 8px 0 0;
   font: 10px var(--wp-font-sans);

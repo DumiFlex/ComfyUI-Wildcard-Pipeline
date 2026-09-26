@@ -286,3 +286,23 @@ describe("ConstraintEditor — an only exception keeps the exceptions table", ()
     w.unmount();
   });
 });
+
+describe("ConstraintEditor — tier-2 exception keys", () => {
+  it("loads source_value / target_value rows with their values", async () => {
+    const row = healthyConstraint();
+    (row.payload as { exceptions: unknown[] }).exceptions = [
+      { source_value: "red", target_value: "matte", mode: "only", factor: 1 },
+    ];
+    apiMod.list.mockResolvedValue({ items: healthyCatalog(), total: healthyCatalog().length });
+    apiMod.get.mockResolvedValue(row);
+    const w = mount(ConstraintEditor, {
+      props: { id: "c0ffee02" },
+      global: { plugins: [makeRouter()] },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    expect(w.find("[data-test='cn-only-note']").text()).toContain("when red is picked");
+    expect(w.find("[data-test='cn-ex-src-select']").text()).toContain("red");
+    w.unmount();
+  });
+});
