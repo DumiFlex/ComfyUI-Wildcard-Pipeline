@@ -1093,3 +1093,156 @@ class TemplateRepository:
             "SELECT COUNT(*) AS n FROM templates" + where, params,
         ).fetchone()
         return int(row["n"]) if row is not None else 0
+
+
+class ScenarioNotFound(LookupError):
+    """Raised when a requested Test Runner scenario id does not exist."""
+
+
+_DEFAULT_SCENARIO_SEEDS: dict[str, Any] = {"from": 0, "count": 100}
+
+
+def _json_or_none(raw: str | None) -> Any:
+    return json.loads(raw) if raw else None
+
+
+def _row_to_scenario(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "description": row["description"],
+        "is_pinned": bool(row["is_pinned"]),
+        "stack": json.loads(row["stack"]),
+        "pins": json.loads(row["pins"]),
+        "seeds": json.loads(row["seeds"]),
+        "output_var": row["output_var"],
+        "baseline": _json_or_none(row["baseline"]),
+        "last_run": _json_or_none(row["last_run"]),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+class ScenarioRepository:
+    """CRUD for saved Test Runner scenarios (migration 018).
+
+    A scenario's stack references library modules / bundles by id and is
+    resolved live at run time, so nothing here snapshots module payloads.
+    `baseline` and `last_run` are opaque JSON the Test Runner writes; the
+    repository only stores them. Pure DB — engine-isolated.
+    """
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._conn = conn
+
+    def _gen_id(self) -> str:
+        return secrets.token_hex(_ID_HEX_LEN // 2)
+
+    def create(
+        self,
+        *,
+        name: str,
+        description: str = "",
+        is_pinned: bool = False,
+        stack: list[Any] | None = None,
+        pins: dict[str, str] | None = None,
+        seeds: dict[str, Any] | None = None,
+        output_var: str | None = None,
+        baseline: dict[str, Any] | None = None,
+        last_run: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        sid = self._gen_id()
+        now = _now()
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO test_scenarios("
+                "id, name, description, is_pinned, stack, pins, seeds, "
+                "output_var, baseline, last_run, created_at, updated_at"
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+                (
+                    sid, name, description, int(is_pinned),
+                    json.dumps(stack or []), json.dumps(pins or {}),
+                    json.dumps(seeds or _DEFAULT_SCENARIO_SEEDS), output_var,
+                    None if baseline is None else json.dumps(baseline),
+                    None if last_run is None else json.dumps(last_run),
+                    now, now,
+                ),
+            )
+        return self.get(sid)
+
+    def get(self, scenario_id: str) -> dict[str, Any]:
+        row = self._conn.execute(
+            "SELECT * FROM test_scenarios WHERE id = ?;", (scenario_id,),
+        ).fetchone()
+        if row is None:
+            raise ScenarioNotFound(scenario_id)
+        return _row_to_scenario(row)
+
+    _UPDATABLE = (
+        "name", "description", "is_pinned", "stack", "pins", "seeds",
+        "output_var", "baseline", "last_run",
+    )
+
+    def update(self, scenario_id: str, **fields: Any) -> dict[str, Any]:
+        """Patch any of `_UPDATABLE`. `baseline` / `last_run` / `output_var`
+        accept None to clear. Unknown keys raise TypeError."""
+        unknown = set(fields) - set(self._UPDATABLE)
+        if unknown:
+            raise TypeError(f"unknown scenario fields: {sorted(unknown)}")
+        existing = self.get(scenario_id)
+        new = {**existing, **fields}
+
+        def _opt(value: Any) -> str | None:
+            return None if value is None else json.dumps(value)
+
+        with self._conn:
+            self._conn.execute(
+                "UPDATE test_scenarios SET "
+                "name = ?, description = ?, is_pinned = ?, stack = ?, pins = ?, "
+                "seeds = ?, output_var = ?, baseline = ?, last_run = ?, updated_at = ? "
+                "WHERE id = ?;",
+                (
+                    new["name"], new["description"], int(bool(new["is_pinned"])),
+                    json.dumps(new["stack"]), json.dumps(new["pins"]),
+                    json.dumps(new["seeds"]), new["output_var"],
+                    _opt(new["baseline"]), _opt(new["last_run"]),
+                    _now(), scenario_id,
+                ),
+            )
+        return self.get(scenario_id)
+
+    def delete(self, scenario_id: str) -> None:
+        with self._conn:
+            cur = self._conn.execute(
+                "DELETE FROM test_scenarios WHERE id = ?;", (scenario_id,),
+            )
+        if cur.rowcount == 0:
+            raise ScenarioNotFound(scenario_id)
+
+    def list(self, *, query: str | None = None) -> list[dict[str, Any]]:
+        """Pinned first, then most recently updated. `query` matches the
+        name (case-insensitive substring)."""
+        sql = "SELECT * FROM test_scenarios"
+        params: list[Any] = []
+        if query:
+            escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            sql += " WHERE name LIKE ? ESCAPE '\\' COLLATE NOCASE"
+            params.append(f"%{escaped}%")
+        sql += " ORDER BY is_pinned DESC, updated_at DESC, id;"
+        return [_row_to_scenario(r) for r in self._conn.execute(sql, params).fetchall()]
+
+    def using(self, *, module_id: str | None = None, bundle_id: str | None = None) -> list[str]:
+        """Ids of scenarios whose stack references a module or bundle — the
+        "used in N scenarios" hint in the module editors."""
+        key, target = ("module", module_id) if module_id else ("bundle", bundle_id)
+        if not target:
+            return []
+        out: list[str] = []
+        for row in self._conn.execute("SELECT id, stack FROM test_scenarios;").fetchall():
+            try:
+                stack = json.loads(row["stack"])
+            except (TypeError, ValueError):
+                continue
+            if any(isinstance(i, dict) and i.get(key) == target for i in stack):
+                out.append(row["id"])
+        return out

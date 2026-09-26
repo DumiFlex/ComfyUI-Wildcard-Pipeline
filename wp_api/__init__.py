@@ -19,6 +19,7 @@ from wp_api import import_export as _import_export
 from wp_api import models as _models
 from wp_api import modules as _modules
 from wp_api import preview as _preview
+from wp_api import scenarios as _scenarios
 from wp_api import spa as _spa
 from wp_api import tags as _tags
 from wp_api import templates as _templates
@@ -119,6 +120,7 @@ def register_routes(app: web.Application) -> None:
     _categories.register(app.router)
     _database.register(app.router)
     _test_runner.register(app.router)
+    _scenarios.register(app.router)
     _import_export.register(app.router)
     _cascade.register(app.router)
     _preview.register(app.router)

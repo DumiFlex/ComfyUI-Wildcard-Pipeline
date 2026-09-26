@@ -1,0 +1,150 @@
+<script setup lang="ts">
+/**
+ * Outputs tab: the rendered output variable for each returned sample, with
+ * the parts other variables wrote tinted so you can see who wrote what.
+ * Click a row to open that seed's trace.
+ */
+import { computed, ref } from "vue";
+import Select from "../ui/Select.vue";
+import type { ScenarioRunResponse } from "../../api/types";
+import { orderByStack, renderValue, segmentOutput, type StackItemView } from "../../utils/scenario";
+
+const props = defineProps<{
+  result: ScenarioRunResponse;
+  views: StackItemView[];
+  outputVar: string | null;
+}>();
+const emit = defineEmits<{
+  (e: "open", seed: number): void;
+  (e: "update:outputVar", v: string | null): void;
+}>();
+
+/** Any variable the run produced can be the one shown; the default (the
+ *  last combine's output) is listed first. */
+const choices = computed(() =>
+  orderByStack(Object.keys(props.result.variables), props.views)
+    .map((n) => ({ value: n, label: `$${n}` })),
+);
+
+const PAGE = 25;
+const limit = ref(PAGE);
+
+/** Colour slot per variable, in stack order, cycling the 8 var colours. */
+const colourOf = computed(() => {
+  const m = new Map<string, number>();
+  for (const v of props.views) if (v.binding && !m.has(v.binding)) m.set(v.binding, (m.size % 8) + 1);
+  return m;
+});
+const allowed = computed(() => new Set(colourOf.value.keys()));
+
+const rows = computed(() => {
+  const out = props.outputVar;
+  if (!out) return [];
+  return props.result.samples
+    .filter((s) => !s.error)
+    .slice(0, limit.value)
+    .map((s) => ({
+      seed: s.seed,
+      segments: segmentOutput(renderValue(s.vars[out]), s.vars, out, allowed.value),
+      warnings: s.warnings.length,
+    }));
+});
+/** True when the output came out the same on every run. */
+const constant = computed(() => {
+  const v = props.outputVar ? props.result.variables[props.outputVar] : undefined;
+  return !!v && v.distinct === 1 && props.result.runs > 1;
+});
+
+/** The output comes from a combine whose template is plain text. */
+const fixedSource = computed(() =>
+  props.views.find((v) => v.enabled && v.kind === "combine" && v.binding === props.outputVar)?.fixedText === true,
+);
+
+const available = computed(() => props.result.samples.filter((s) => !s.error).length);
+</script>
+
+<template>
+  <div class="wp-tro" data-test="outputs-panel">
+    <p v-if="!outputVar" class="wp-tro__note">
+      Nothing in the stack writes a variable yet, so there is no output to show.
+    </p>
+    <template v-else>
+      <div class="wp-tro__head">
+        <span>Show</span>
+        <Select
+          class="wp-tro__pick"
+          :model-value="outputVar"
+          :options="choices"
+          size="sm"
+          :filterable="choices.length > 8"
+          aria-label="Variable to show"
+          data-test="output-var"
+          @update:model-value="(v) => emit('update:outputVar', v === null ? null : String(v))"
+        />
+        <span class="wp-tro__note">
+          for the first {{ rows.length }} of {{ result.runs }} seeds. Tinted parts show which variable wrote them; click a row for its trace.
+        </span>
+      </div>
+      <p v-if="constant" class="wp-tro__same" data-test="output-constant">
+        <code>${{ outputVar }}</code> came out the same on all {{ result.runs - result.failed }} runs.
+        <template v-if="fixedSource">Its combine's template is plain text that reads no variables, so it can't vary. Add the <code>$variables</code> it should use to the template.</template>
+        <template v-else>If it should vary, check that the variables it reads are set earlier in the stack (the stack card says when one isn't) or pinned.</template>
+      </p>
+      <ol class="wp-tro__list">
+        <li v-for="r in rows" :key="r.seed">
+          <button type="button" class="wp-tro__row" data-test="output-row" @click="emit('open', r.seed)">
+            <span class="wp-tro__seed">#{{ r.seed }}</span>
+            <span class="wp-tro__text">
+              <template v-for="(seg, i) in r.segments" :key="i">
+                <span
+                  v-if="seg.varName"
+                  class="wp-tro__tok"
+                  :class="`var-${colourOf.get(seg.varName) ?? 1}`"
+                  :title="`$${seg.varName}`"
+                >{{ seg.text }}</span>
+                <template v-else>{{ seg.text }}</template>
+              </template>
+              <em v-if="r.segments.length === 1 && !r.segments[0].text" class="wp-tro__empty">(empty)</em>
+            </span>
+            <span v-if="r.warnings" class="wp-tro__warn">{{ r.warnings }} warning{{ r.warnings === 1 ? "" : "s" }}</span>
+          </button>
+        </li>
+      </ol>
+      <button v-if="rows.length < available" type="button" class="wp-tro__more" @click="limit += PAGE">
+        Show {{ Math.min(PAGE, available - rows.length) }} more
+      </button>
+    </template>
+  </div>
+</template>
+
+<style scoped>
+.wp-tro { display: flex; flex-direction: column; gap: var(--wp-space-5); }
+.wp-tro__note { margin: 0; font-size: var(--wp-text-xs); color: var(--wp-text-dim); }
+.wp-tro__head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--wp-space-4); font-size: var(--wp-text-sm); color: var(--wp-text-muted); }
+.wp-tro__pick { width: 200px; }
+.wp-tro__same {
+  margin: 0; font-size: var(--wp-text-sm); color: var(--wp-text-muted);
+  border: 1px solid var(--wp-border); border-left: 3px solid var(--wp-warn);
+  border-radius: var(--wp-radius-sm); padding: var(--wp-space-4) var(--wp-space-5);
+}
+.wp-tro__same code { color: var(--wp-accent-text); }
+.wp-tro__note code { color: var(--wp-accent-text); }
+.wp-tro__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--wp-space-3); }
+.wp-tro__row {
+  width: 100%; text-align: left; cursor: pointer; font: inherit; color: var(--wp-text);
+  display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; gap: var(--wp-space-5); align-items: start;
+  background: var(--wp-bg-1); border: 1px solid var(--wp-border); border-radius: var(--wp-radius-sm);
+  padding: var(--wp-space-4) var(--wp-space-5);
+}
+.wp-tro__row:hover { border-color: var(--wp-border-strong); }
+.wp-tro__row:focus-visible { outline: 2px solid var(--wp-border-focus); }
+.wp-tro__seed { font: var(--wp-text-xs) var(--wp-font-mono); color: var(--wp-text-dim); padding-top: 2px; }
+.wp-tro__text { font-size: var(--wp-text-base); line-height: var(--wp-line-base); word-break: break-word; }
+.wp-tro__tok { border-radius: 3px; padding: 0 2px; background: color-mix(in oklab, currentColor 12%, transparent); } /* audit-exempt: inline token */
+.wp-tro__empty { color: var(--wp-text-dim); }
+.wp-tro__warn { font-size: var(--wp-text-xs); color: var(--wp-warn); white-space: nowrap; }
+.wp-tro__more {
+  align-self: flex-start; background: none; border: 0; cursor: pointer; padding: 0;
+  color: var(--wp-accent-text); font-size: var(--wp-text-sm);
+}
+</style>

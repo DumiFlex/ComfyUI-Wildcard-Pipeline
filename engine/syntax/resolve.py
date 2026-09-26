@@ -7,6 +7,7 @@ happens inside `_resolve_ref` (Task 9) and brace resolvers (Tasks 10–11).
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from engine.syntax.subcat_filter import matches as _subcat_matches
 from engine.syntax.subcat_filter import parse as _parse_subcat
@@ -397,13 +398,18 @@ def _resolve_multi_pick(
             if callable(set_carrier):
                 set_carrier(ref_uuid, None)
             try:
-                return sep.join(
-                    _resolve_tokens(
+                parts: list[str] = []
+                id_of = {str(o.get("value", "")): o.get("id") for o in pool}
+                for v in chosen:
+                    logged = _log_ref_pick(ctx, ref_uuid, id_of.get(v), depth, v)
+                    out = _resolve_tokens(
                         tokenize_text(v), ctx, depth=depth + 1,
                         visited=visited + (ref_uuid,),
                     ) if v else ""
-                    for v in chosen
-                )
+                    if logged is not None:
+                        logged["value"] = out
+                    parts.append(out)
+                return sep.join(parts)
             finally:
                 if callable(set_carrier) and saved_carrier is not None:
                     set_carrier(*saved_carrier)
@@ -586,6 +592,26 @@ def ref_option_pool(tok: Token, ctx: ResolveContext) -> list[dict]:
     return options
 
 
+def _log_ref_pick(
+    ctx: ResolveContext, uuid: str, option_id: Any, depth: int, raw: str,
+) -> dict[str, Any] | None:
+    """Record one nested `@{uuid}` pick in the opt-in ref log, if the
+    context carries one (the Test Runner seeds it; canvas runs don't).
+    Returns the stored row so the caller can add the expanded `value`
+    after recursing, or None when nothing is being logged."""
+    log_ref = getattr(ctx, "log_ref", None)
+    if not callable(log_ref):
+        return None
+    module = ctx.get_module(uuid)
+    return log_ref({
+        "uuid": uuid,
+        "name": (module or {}).get("name") or uuid,
+        "option_id": option_id,
+        "depth": depth,
+        "raw": raw,
+    })
+
+
 def _resolve_ref(
     tok: Token,
     ctx: ResolveContext,
@@ -679,15 +705,22 @@ def _resolve_ref(
     # that's the expected deeper-than-one-hop behaviour (positional
     # first/next/all cover deeper nesting). Mirrors the rng save/restore.
     nested_tokens = tokenize_text(chosen_value)
+    # Opt-in ref log (Test Runner): record this pick before recursing so
+    # the log reads in pre-order, then fill in what it expanded to.
+    logged = _log_ref_pick(ctx, uuid, chosen.get("id"), depth, chosen_value)
     get_carrier = getattr(ctx, "get_carrier", None)
     set_carrier = getattr(ctx, "set_carrier", None)
     if callable(get_carrier) and callable(set_carrier):
         saved_carrier = get_carrier()
         set_carrier(uuid, chosen.get("id"))
         try:
-            return _resolve_tokens(
+            out = _resolve_tokens(
                 nested_tokens, ctx, depth=depth + 1, visited=visited + (uuid,)
             )
         finally:
             set_carrier(*saved_carrier)
-    return _resolve_tokens(nested_tokens, ctx, depth=depth + 1, visited=visited + (uuid,))
+    else:
+        out = _resolve_tokens(nested_tokens, ctx, depth=depth + 1, visited=visited + (uuid,))
+    if logged is not None:
+        logged["value"] = out
+    return out
