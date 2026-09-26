@@ -21,7 +21,7 @@ import { computed, onMounted } from "vue";
 import Card from "../components/ui/Card.vue";
 import Icon from "../components/ui/Icon.vue";
 import Button from "../components/ui/Button.vue";
-import { useReleaseCheck } from "../composables/useReleaseCheck";
+import { semverCompare, useReleaseCheck } from "../composables/useReleaseCheck";
 import { useEngagementStore } from "../stores/engagementStore";
 import { renderReleaseNotes } from "../utils/releaseNotes";
 import { GITHUB_REPO } from "../config/links";
@@ -39,9 +39,31 @@ const engagement = useEngagementStore();
  * they belong to. Claiming them as "your version" would be a lie, and hiding
  * them would be unhelpful.
  */
-const isInstalled = computed(() => release.latestVersion.value === release.current);
-const notesVersion = computed(() => release.latestVersion.value ?? release.current);
-const body = computed(() => release.releaseBody.value ?? "");
+/**
+ * The release the headline describes: the newest one the page knows about.
+ *
+ * Two sources can name it, the update check (`latestVersion` + its body) and
+ * the history list, and they are cached separately. Reading only the update
+ * check made the page headline 2.15.3 on a 2.17.0 install while the history
+ * right below it already listed 2.17.0, because that check had been cached
+ * before the update. So take whichever is newer; on a tie prefer the entry
+ * that actually has notes.
+ */
+const headline = computed(() => {
+  const candidates: Array<{ version: string; body: string }> = [];
+  const latest = release.latestVersion.value;
+  if (latest) candidates.push({ version: latest, body: release.releaseBody.value ?? "" });
+  for (const r of release.history.value ?? []) candidates.push({ version: r.version, body: r.body });
+  let best: { version: string; body: string } | null = null;
+  for (const c of candidates) {
+    const cmp = best ? semverCompare(c.version, best.version) : 1;
+    if (cmp > 0 || (cmp === 0 && best && !best.body.trim() && c.body.trim())) best = c;
+  }
+  return best ?? { version: release.current, body: "" };
+});
+const isInstalled = computed(() => headline.value.version === release.current);
+const notesVersion = computed(() => headline.value.version);
+const body = computed(() => headline.value.body);
 const notesHtml = computed(() => renderReleaseNotes(body.value, { full: true }));
 const hasNotes = computed(() => body.value.trim().length > 0);
 /** The button says "All releases", so it goes to all of them. It used to
