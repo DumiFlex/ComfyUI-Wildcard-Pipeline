@@ -511,6 +511,30 @@ export interface ScenarioRunResponse {
   pins: Record<string, string>;
 }
 
+/** A saved Test Runner scenario — GET/POST/PUT /wp/api/test/scenarios. */
+export interface ScenarioRow {
+  id: string;
+  name: string;
+  description: string;
+  is_pinned: boolean;
+  stack: ScenarioStackItem[];
+  pins: Record<string, string>;
+  seeds: ScenarioSeedSpec;
+  output_var: string | null;
+  /** Opaque snapshot of the run to compare against; written by the Test Runner. */
+  baseline: Record<string, unknown> | null;
+  /** Opaque summary of the latest run; written by the Test Runner. */
+  last_run: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ScenarioCreateInput =
+  Pick<ScenarioRow, "name"> & Partial<Omit<ScenarioRow, "id" | "created_at" | "updated_at">>;
+export type ScenarioUpdateInput = Partial<Omit<ScenarioRow, "id" | "created_at" | "updated_at">>;
+
+export interface ScenarioListResponse { items: ScenarioRow[]; total: number }
+
 /**
  * Spec §2.4 — canonical snapshot entry. Mirrors the Python
  * `engine.modules.snapshot.SnapshotEntry` TypedDict. Stored:

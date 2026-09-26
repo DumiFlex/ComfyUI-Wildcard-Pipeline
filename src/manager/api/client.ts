@@ -11,6 +11,7 @@ import type {
   ModuleCreateInput, ModuleListResponse, ModuleRow, ModuleUpdateInput,
   SnapshotShape, TestRequest, TestResponse,
   ScenarioRunRequest, ScenarioRunResponse,
+  ScenarioRow, ScenarioCreateInput, ScenarioUpdateInput, ScenarioListResponse,
   TemplateCreateInput, TemplateListResponse, TemplateRow, TemplateUpdateInput,
 } from "./types";
 
@@ -326,6 +327,33 @@ export const api = {
     return request<ScenarioRunResponse>("/wp/api/test/run", {
       method: "POST", body: JSON.stringify(body),
     });
+  },
+  /** Saved Test Runner scenarios. `module` / `bundle` filter to the ones using it. */
+  scenarios: {
+    list(params: { q?: string; module?: string; bundle?: string } = {}) {
+      const qs = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) if (v) qs.set(k, v);
+      const tail = qs.toString();
+      return request<ScenarioListResponse>(`/wp/api/test/scenarios${tail ? `?${tail}` : ""}`, { method: "GET" });
+    },
+    get(id: string) {
+      return request<ScenarioRow>(`/wp/api/test/scenarios/${encodeURIComponent(id)}`, { method: "GET" });
+    },
+    create(body: ScenarioCreateInput) {
+      return request<ScenarioRow>("/wp/api/test/scenarios", {
+        method: "POST", body: JSON.stringify(body),
+      });
+    },
+    update(id: string, body: ScenarioUpdateInput) {
+      return request<ScenarioRow>(`/wp/api/test/scenarios/${encodeURIComponent(id)}`, {
+        method: "PUT", body: JSON.stringify(body),
+      });
+    },
+    remove(id: string) {
+      return request<{ deleted: string }>(`/wp/api/test/scenarios/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+    },
   },
   /**
    * Cascade-apply endpoints. `cascade_apply` fires a dry-run or live
