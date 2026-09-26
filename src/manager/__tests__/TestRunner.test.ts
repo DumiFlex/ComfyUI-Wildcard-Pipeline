@@ -2,94 +2,57 @@ import { mount, flushPromises } from "@vue/test-utils";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { setActivePinia, createPinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ModuleRow } from "../api/types";
+import type { ModuleRow, ScenarioRow, ScenarioRunResponse } from "../api/types";
 
 vi.mock("../api/client", () => {
-  // Post migration 004 every module's id IS its 8-hex uuid; cross-refs
-  // (pipeline step.module_id, constraint source/target) carry the same
-  // 8-hex form.
-  const MOCK_MODULES: ModuleRow[] = [
-    {
-      id: "aabbccdd", type: "wildcard", name: "Hair Color",
-      description: "", category_id: null, tags: [], is_favorite: false,
-      payload: {
-        options: [
-          { id: "o1", value: "auburn",  weight: 2, sub_categories: ["warm"] },
-          { id: "o2", value: "blonde",  weight: 1, sub_categories: ["cool"] },
-        ],
-        sub_categories: ["warm", "cool"],
-        var_binding: "hair_color",
-      },
-      payload_hash: "0".repeat(64),
-      version: 1, created_at: "", updated_at: "",
-    },
-    {
-      id: "bbbbbbbb", type: "wildcard", name: "Outfit",
-      description: "", category_id: null, tags: [], is_favorite: false,
-      payload: {
-        options: [
-          { id: "o1", value: "{linen|cotton} dress", weight: 2, sub_categories: [] },
-        ],
-        sub_categories: [],
-      },
-      payload_hash: "0".repeat(64),
-      version: 1, created_at: "", updated_at: "",
-    },
-    {
-      id: "cccccccc", type: "fixed_values", name: "Subject Profile",
-      description: "", category_id: null, tags: [], is_favorite: false,
-      payload: { values: [{ var: "name", value: "Mira" }, { var: "age", value: "29" }] },
-      payload_hash: "0".repeat(64),
-      version: 1, created_at: "", updated_at: "",
-    },
-    {
-      id: "dddddddd", type: "combine", name: "Subject Phrase",
-      description: "", category_id: null, tags: [], is_favorite: false,
-      payload: {
-        template: "$name with $hair_color hair",
-        output_var: "subject_phrase",
-        input_vars: ["name", "hair_color"],
-      },
-      payload_hash: "0".repeat(64),
-      version: 1, created_at: "", updated_at: "",
-    },
-    {
-      id: "eeeeeeee", type: "derivation", name: "Always Append",
-      description: "", category_id: null, tags: [], is_favorite: false,
-      payload: {
-        rules: [{
-          id: "r1",
-          branches: [{
-            condition: { var: "subject", op: "contains", value: "person" },
-            action: { target_var: "subject", mode: "append", value: "wet" },
-          }],
-        }],
-      },
-      payload_hash: "0".repeat(64),
-      version: 1, created_at: "", updated_at: "",
-    },
-    {
-      id: "ffffffff", type: "constraint", name: "Hair × Outfit",
-      description: "", category_id: null, tags: [], is_favorite: false,
-      payload: {
-        source_wildcard_id: "aabbccdd",
-        target_wildcard_id: "bbbbbbbb",
-        matrix: { warm: {} },
-        exceptions: [],
-      },
-      payload_hash: "0".repeat(64),
-      version: 1, created_at: "", updated_at: "",
-    },
+  const mod = (id: string, type: string, name: string, payload: Record<string, unknown>): ModuleRow => ({
+    id, type, name, description: "", category_id: null, tags: [], is_favorite: false,
+    payload, payload_hash: "0".repeat(64), version: 1, created_at: "", updated_at: "",
+  }) as ModuleRow;
+  const MODULES = [
+    mod("aabbccdd", "wildcard", "Hair Color", { options: [], var_binding: "hair" }),
+    mod("cccccccc", "fixed_values", "Profile", { values: [{ var: "name", value: "Mira" }] }),
+    mod("dddddddd", "combine", "Prompt", { template: "$name with $hair hair", output_var: "prompt" }),
   ];
+  const SCENARIO: ScenarioRow = {
+    id: "sc000001", name: "Portrait", description: "", is_pinned: true,
+    stack: [{ module: "aabbccdd" }, { module: "cccccccc" }, { module: "dddddddd" }],
+    pins: {}, seeds: { from: 0, count: 2 }, output_var: null, baseline: null,
+    last_run: null, created_at: "2026-01-01", updated_at: "2026-01-01",
+  };
+  const RESULT: ScenarioRunResponse = {
+    runs: 2, failed: 0, elapsed_ms: 4, seeds: { first: 0, count: 2 },
+    variables: {
+      hair: { counts: { black: 1, red: 1 }, distinct: 2, other: 0, internal: false },
+      name: { counts: { Mira: 2 }, distinct: 1, other: 0, internal: false },
+      prompt: { counts: { "Mira with black hair": 1, "Mira with red hair": 1 }, distinct: 2, other: 0, internal: false },
+    },
+    picks: {}, constraint_hits: {},
+    warnings: [{ type: "constraint_never_applied", message: "never applied", count: 2, seeds: [0, 1] }],
+    samples: [0, 1].map((seed) => ({
+      seed,
+      vars: { hair: seed ? "red" : "black", name: "Mira", prompt: `Mira with ${seed ? "red" : "black"} hair` },
+      trace: [{
+        id: "aabbccdd", _uid: "s0", type: "wildcard", name: "Hair Color", binding: "hair",
+        status: "ok", seed, error: null, writes: [{ variable: "hair", value: seed ? "red" : "black", overwrite: false }],
+      }],
+      warnings: [],
+      error: null,
+    })),
+    stack: [], missing: [], pins: {},
+  };
   return {
     api: {
-      modules: {
-        list: vi.fn().mockResolvedValue({ items: MOCK_MODULES, total: MOCK_MODULES.length }),
+      modules: { list: vi.fn().mockResolvedValue({ items: MODULES, total: MODULES.length }) },
+      bundles: { list: vi.fn().mockResolvedValue({ items: [], total: 0 }) },
+      scenarios: {
+        list: vi.fn().mockResolvedValue({ items: [SCENARIO], total: 1 }),
+        create: vi.fn(),
+        update: vi.fn().mockImplementation((_id: string, body: Partial<ScenarioRow>) =>
+          Promise.resolve({ ...SCENARIO, ...body })),
+        remove: vi.fn().mockResolvedValue(undefined),
       },
-      bundles: {
-        list: vi.fn().mockResolvedValue({ items: [], total: 0 }),
-      },
-      test: vi.fn(),
+      testRun: vi.fn().mockResolvedValue(RESULT),
     },
     ApiError: class extends Error {
       constructor(public status: number, message: string) { super(message); }
@@ -98,131 +61,92 @@ vi.mock("../api/client", () => {
 });
 
 import TestRunner from "../views/TestRunner.vue";
+import { api } from "../api/client";
 
 beforeEach(() => {
   setActivePinia(createPinia());
 });
 afterEach(() => {
   vi.clearAllMocks();
+  document.body.innerHTML = "";
 });
 
-function makeRouter() {
-  return createRouter({
+async function mountRunner(query: Record<string, string> = {}) {
+  const router = createRouter({
     history: createMemoryHistory(),
-    routes: [
-      { path: "/", component: { template: "<div/>" } },
-      { path: "/test", name: "test", component: { template: "<div/>" } },
-    ],
+    routes: [{ path: "/test", name: "test", component: { template: "<div/>" } }],
   });
-}
-
-function mountRunner() {
-  return mount(TestRunner, { global: { plugins: [makeRouter()] } });
+  await router.push({ path: "/test", query });
+  const wrap = mount(TestRunner, { global: { plugins: [router] }, attachTo: document.body });
+  await flushPromises();
+  return wrap;
 }
 
 describe("TestRunner.vue", () => {
-  it("renders heading and no result before run", async () => {
-    const wrap = mountRunner();
-    await flushPromises();
-    expect(wrap.text()).toContain("Test runner");
-    // No per-kind result panels rendered yet.
-    expect(wrap.find('[data-test="result-wildcard"]').exists()).toBe(false);
-    expect(wrap.find('[data-test="result-fixed"]').exists()).toBe(false);
+  it("opens the first saved scenario with its stack", async () => {
+    const wrap = await mountRunner();
+    expect(wrap.findAll('[data-test="scenario-row"]')).toHaveLength(1);
+    expect(wrap.find('[data-test="scenario-name"]').text()).toBe("Portrait");
+    expect(wrap.findAll('[data-test="stack-card"]')).toHaveLength(3);
+    expect(wrap.find('[data-test="run-hint"]').exists()).toBe(true);
+    expect(api.testRun).not.toHaveBeenCalled();
   });
 
-  it("Run button disabled when no module selected", async () => {
-    // Override modules.list to return empty so no auto-pick happens.
-    const { api } = await import("../api/client");
-    (api.modules.list as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ items: [], total: 0 });
-    const wrap = mountRunner();
+  it("runs the stack and shows stats, variables and the trace", async () => {
+    const wrap = await mountRunner();
+    await wrap.find('[data-test="run-btn"]').trigger("click");
     await flushPromises();
-    const btn = wrap.find('[data-test="run-btn"] button, button[data-test="run-btn"]');
-    const el = (btn.exists() ? btn : wrap.findAll("button").find((b) => b.text().includes("Run"))) as ReturnType<typeof wrap.find>;
-    // PrimeVue Button forwards :disabled to the button element.
-    expect((el?.attributes ? el.attributes("disabled") : undefined)).toBeDefined();
+    expect(api.testRun).toHaveBeenCalledWith(expect.objectContaining({
+      stack: [{ module: "aabbccdd" }, { module: "cccccccc" }, { module: "dddddddd" }],
+      seeds: { from: 0, count: 2 },
+    }));
+    // A saved scenario records the run summary for the rail.
+    expect(api.scenarios.update).toHaveBeenCalledWith("sc000001", { last_run: expect.objectContaining({ runs: 2 }) });
+    expect(wrap.find('[data-test="run-stats"]').text()).toContain("2");
+    expect(wrap.find('[data-test="variables-panel"]').text()).toContain("black");
+
+    await wrap.find('[data-test="tab-samples"]').trigger("click");
+    const rows = wrap.findAll('[data-test="sample-row"]');
+    expect(rows).toHaveLength(2);
+    await rows[1].trigger("click");
+    expect(wrap.find('[data-test="trace-drawer"]').attributes("data-open")).toBe("true");
+    expect(wrap.find('[data-test="trace-step"]').text()).toContain("red");
+
+    await wrap.find('[data-test="tab-warnings"]').trigger("click");
+    expect(wrap.find('[data-test="warning"]').text()).toContain("2 of 2 runs");
   });
 
-  it("kind selector switches the module dropdown to that kind only", async () => {
-    const wrap = mountRunner();
-    await flushPromises();
-    // Click the Combine button in the segmented kind picker.
-    const kindSelector = wrap.find('[data-test="kind-selector"]');
-    const combineOpt = kindSelector
-      .findAll("button")
-      .find((el) => el.text().trim().includes("Combine"));
-    expect(combineOpt).toBeTruthy();
-    await combineOpt!.trigger("click");
-    await flushPromises();
-    // ui/Select renders the options inline once open. Click the trigger button.
-    const trigger = wrap
-      .find('[data-test="module-select"]')
-      .find('[data-test="select-trigger"]');
-    await trigger.trigger("click");
-    await flushPromises();
-    // Combine modules should appear in the menu; non-combine ones should not.
-    const html = wrap.html();
-    expect(html).toContain("Subject Phrase");
-    expect(html).not.toContain("Hair Color");
+  it("deep link opens a quick run with that module and runs it", async () => {
+    const wrap = await mountRunner({ kind: "wildcard", module: "aabbccdd" });
+    expect(wrap.find('[data-test="scenario-name"]').text()).toBe("Quick run: Hair Color");
+    expect(wrap.findAll('[data-test="stack-card"]')).toHaveLength(1);
+    expect(api.testRun).toHaveBeenCalledWith(expect.objectContaining({ stack: [{ module: "aabbccdd" }] }));
   });
 
-  it("runs wildcard kind and renders histogram panel", async () => {
-    const wrap = mountRunner();
+  it("asks before discarding unsaved changes", async () => {
+    const wrap = await mountRunner();
+    await wrap.findAll('[data-test="stack-remove"]')[0].trigger("click");
+    expect(wrap.find('[data-test="dirty"]').exists()).toBe(true);
+    await wrap.find('[data-test="new-quick-run"]').trigger("click");
     await flushPromises();
-    const runBtn = wrap.findAll("button").find((b) => b.text().includes("Run"));
-    expect(runBtn).toBeTruthy();
-    await runBtn!.trigger("click");
+    // Still on the edited scenario until the dialog is confirmed.
+    expect(wrap.find('[data-test="scenario-name"]').text()).toBe("Portrait");
+    expect(document.body.textContent).toContain("Discard unsaved changes?");
+    const discard = [...document.body.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Discard");
+    discard?.click();
     await flushPromises();
-    await flushPromises();
-    expect(wrap.find('[data-test="result-wildcard"]').exists()).toBe(true);
+    expect(wrap.find('[data-test="scenario-name"]').text()).toBe("Quick run");
   });
 
-  it("runs fixed_values kind producing the bindings panel", async () => {
-    const wrap = mountRunner();
+  it("deletes a scenario only after confirming", async () => {
+    const wrap = await mountRunner();
+    await wrap.find('[data-test="scenario-delete"]').trigger("click");
     await flushPromises();
-    const kindSelector = wrap.find('[data-test="kind-selector"]');
-    const fixedOpt = kindSelector
-      .findAll("div, span, button")
-      .find((el) => el.text().trim() === "Fixed");
-    await fixedOpt!.trigger("click");
+    expect(api.scenarios.remove).not.toHaveBeenCalled();
+    const del = [...document.body.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Delete");
+    del?.click();
     await flushPromises();
-    const runBtn = wrap.findAll("button").find((b) => b.text().includes("Run"));
-    await runBtn!.trigger("click");
-    await flushPromises();
-    await flushPromises();
-    expect(wrap.find('[data-test="result-fixed"]').exists()).toBe(true);
-    expect(wrap.text()).toContain("$name");
-    expect(wrap.text()).toContain("Mira");
-  });
-
-  it("runs derivation kind producing rule trace", async () => {
-    const wrap = mountRunner();
-    await flushPromises();
-    const kindSelector = wrap.find('[data-test="kind-selector"]');
-    const dvOpt = kindSelector
-      .findAll("div, span, button")
-      .find((el) => el.text().trim() === "Derivation");
-    await dvOpt!.trigger("click");
-    await flushPromises();
-    const runBtn = wrap.findAll("button").find((b) => b.text().includes("Run"));
-    await runBtn!.trigger("click");
-    await flushPromises();
-    await flushPromises();
-    expect(wrap.find('[data-test="result-derivation"]').exists()).toBe(true);
-  });
-
-  it("runs constraint kind producing the matrix table", async () => {
-    const wrap = mountRunner();
-    await flushPromises();
-    const kindSelector = wrap.find('[data-test="kind-selector"]');
-    const cnOpt = kindSelector
-      .findAll("div, span, button")
-      .find((el) => el.text().trim() === "Constraint");
-    await cnOpt!.trigger("click");
-    await flushPromises();
-    const runBtn = wrap.findAll("button").find((b) => b.text().includes("Run"));
-    await runBtn!.trigger("click");
-    await flushPromises();
-    await flushPromises();
-    expect(wrap.find('[data-test="result-constraint"]').exists()).toBe(true);
+    expect(api.scenarios.remove).toHaveBeenCalledWith("sc000001");
+    expect(wrap.findAll('[data-test="scenario-row"]')).toHaveLength(0);
   });
 });

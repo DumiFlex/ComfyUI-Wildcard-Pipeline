@@ -404,18 +404,6 @@ export type MatchResponse =
   | { matched: false }
   | { matched: true; id: string; version: number };
 
-export interface TestRequest {
-  type: ModuleType;
-  payload: Record<string, unknown>;
-  instance: Record<string, unknown>;
-  samples: number;
-}
-
-export interface TestResponse {
-  results: Record<string, string>[];
-  histogram: Record<string, number>;
-}
-
 /* ------------------------------------------------------------------ */
 /* Scenario runs — POST /wp/api/test/run (mirrors engine/scenario.py)   */
 /* ------------------------------------------------------------------ */

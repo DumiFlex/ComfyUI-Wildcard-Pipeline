@@ -1,7 +1,7 @@
 """Walker + SnapshotEntry tests. Mirrors spec §2.4–2.10 + §6 (5.5.0).
 
 The walker is the single shared lazy-walk implementation used by:
-- wp_api/test_runner.py:run_test (request-scoped roots)
+- wp_api/test_runner.py:_build_catalog (scenario stack roots)
 - wp_api/modules.py:embed_bundle (user pick roots)
 NEVER called from wp_nodes/context_node.py — graph runs use pre-walked
 snapshots embedded in workflow JSON."""

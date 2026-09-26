@@ -9,7 +9,7 @@ import type {
   EmbedBundle,
   MatchRequest, MatchResponse,
   ModuleCreateInput, ModuleListResponse, ModuleRow, ModuleUpdateInput,
-  SnapshotShape, TestRequest, TestResponse,
+  SnapshotShape,
   ScenarioRunRequest, ScenarioRunResponse,
   ScenarioRow, ScenarioCreateInput, ScenarioUpdateInput, ScenarioListResponse,
   TemplateCreateInput, TemplateListResponse, TemplateRow, TemplateUpdateInput,
@@ -316,11 +316,6 @@ export const api = {
         method: "DELETE",
       });
     },
-  },
-  test(body: TestRequest) {
-    return request<TestResponse>("/wp/api/test", {
-      method: "POST", body: JSON.stringify(body),
-    });
   },
   /** Run a scenario through the real engine, one chain seed per run. */
   testRun(body: ScenarioRunRequest) {

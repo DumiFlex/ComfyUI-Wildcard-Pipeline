@@ -116,15 +116,6 @@ describe("api.categories", () => {
   });
 });
 
-describe("api.test", () => {
-  it("test endpoint forwards samples", async () => {
-    fetchMock.mockResolvedValue(jsonResponse({ results: [], histogram: {} }));
-    await api.test({ type: "wildcard", payload: {}, instance: {}, samples: 3 });
-    const init = fetchMock.mock.calls[0]![1] as RequestInit;
-    expect(JSON.parse(init.body as string).samples).toBe(3);
-  });
-});
-
 describe("ApiError", () => {
   it("captures status code", () => {
     const e = new ApiError(500, "boom");
