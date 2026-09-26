@@ -158,6 +158,12 @@ function removePin(name: string): void {
           :title="`Nothing earlier in the stack sets ${unset[i].map((n) => '$' + n).join(', ')}, so it reads as empty. Add the module that writes it, or pin a value.`"
           data-test="stack-unset"
         >reads {{ unset[i].map((n) => "$" + n).join(", ") }}, not set earlier</span>
+        <span
+          v-else-if="v.fixedText && v.enabled"
+          class="wp-trs__unset"
+          title="The template is plain text with no $variables, @{references} or {a|b} choices, so it writes the same value on every run."
+          data-test="stack-fixed"
+        >template reads nothing, same text every run</span>
         <button
           type="button"
           class="wp-trs__remove"

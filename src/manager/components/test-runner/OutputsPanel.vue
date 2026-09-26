@@ -55,6 +55,11 @@ const constant = computed(() => {
   return !!v && v.distinct === 1 && props.result.runs > 1;
 });
 
+/** The output comes from a combine whose template is plain text. */
+const fixedSource = computed(() =>
+  props.views.find((v) => v.enabled && v.kind === "combine" && v.binding === props.outputVar)?.fixedText === true,
+);
+
 const available = computed(() => props.result.samples.filter((s) => !s.error).length);
 </script>
 
@@ -82,7 +87,8 @@ const available = computed(() => props.result.samples.filter((s) => !s.error).le
       </div>
       <p v-if="constant" class="wp-tro__same" data-test="output-constant">
         <code>${{ outputVar }}</code> came out the same on all {{ result.runs - result.failed }} runs.
-        If it should vary, check that the variables it reads are set earlier in the stack (the stack card says when one isn't) or pinned.
+        <template v-if="fixedSource">Its combine's template is plain text that reads no variables, so it can't vary. Add the <code>$variables</code> it should use to the template.</template>
+        <template v-else>If it should vary, check that the variables it reads are set earlier in the stack (the stack card says when one isn't) or pinned.</template>
       </p>
       <ol class="wp-tro__list">
         <li v-for="r in rows" :key="r.seed">

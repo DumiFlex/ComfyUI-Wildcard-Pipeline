@@ -15,6 +15,7 @@ import {
   moduleReads,
   moduleWrites,
   unsetReads,
+  isFixedTemplate,
 } from "./scenario";
 
 function mod(id: string, type: ModuleRow["type"], name: string, payload: Record<string, unknown>): ModuleRow {
@@ -178,5 +179,20 @@ describe("unsetReads", () => {
   it("ignores switched-off items as writers", () => {
     const res = unsetReads([{ module: "11111111", enabled: false }, { module: "22222222" }], mods, [], { pinned: "x", outfit: "y" });
     expect(res[1]).toEqual(["shoes"]);
+  });
+});
+
+describe("isFixedTemplate", () => {
+  const combine = (template: string) => mod("99999999", "combine", "C", { template, output_var: "scene" });
+  it("flags a combine whose template is plain text", () => {
+    expect(isFixedTemplate(combine("wearing "))).toBe(true);
+    expect(describeItem({ module: "99999999" }, [combine("wearing ")], []).fixedText).toBe(true);
+  });
+  it("treats any syntax as dynamic", () => {
+    for (const t of ["wearing $shoes", "a @{aabbccdd}", "{red|blue} hat", "~hat", "__hats__", "[x]"]) {
+      expect(isFixedTemplate(combine(t))).toBe(false);
+    }
+    expect(isFixedTemplate(HAIR)).toBe(false);
+    expect(describeItem({ module: "dddddddd" }, MODULES, BUNDLES).fixedText).toBeUndefined();
   });
 });

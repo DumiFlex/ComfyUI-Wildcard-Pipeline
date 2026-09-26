@@ -27,6 +27,9 @@ export interface StackItemView {
   detail: string;
   enabled: boolean;
   missing: boolean;
+  /** A combine whose template is plain text: it reads nothing, so its
+   *  output can never vary. */
+  fixedText?: boolean;
 }
 
 export const DEFAULT_SEEDS: ScenarioSeedSpec = { from: 0, count: 100 };
@@ -95,10 +98,21 @@ export function describeItem(
       detail: "deleted", enabled, missing: true,
     };
   }
-  return {
+  const view: StackItemView = {
     kind: m.type, id: m.id, name: m.name, binding: moduleBinding(m),
     detail: moduleDetail(m, byId), enabled, missing: false,
   };
+  if (isFixedTemplate(m)) view.fixedText = true;
+  return view;
+}
+
+/** True for a combine whose template has no `$var`, `@{ref}`, `{a|b}` or
+ *  other syntax: it renders the same text on every run. Anything that might
+ *  be syntax counts as dynamic, so this never flags a template that varies. */
+export function isFixedTemplate(row: PayloadRow): boolean {
+  if (row.type !== "combine") return false;
+  const t = (row.payload as Record<string, unknown> | undefined)?.template;
+  return typeof t === "string" && !/[$@{}~[\]|]|__/.test(t);
 }
 
 /** The variable a scenario treats as its prompt when none is chosen: the
