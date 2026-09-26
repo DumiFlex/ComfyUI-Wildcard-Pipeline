@@ -5,15 +5,26 @@
  * Click a row to open that seed's trace.
  */
 import { computed, ref } from "vue";
+import Select from "../ui/Select.vue";
 import type { ScenarioRunResponse } from "../../api/types";
-import { renderValue, segmentOutput, type StackItemView } from "../../utils/scenario";
+import { orderByStack, renderValue, segmentOutput, type StackItemView } from "../../utils/scenario";
 
 const props = defineProps<{
   result: ScenarioRunResponse;
   views: StackItemView[];
   outputVar: string | null;
 }>();
-const emit = defineEmits<{ (e: "open", seed: number): void }>();
+const emit = defineEmits<{
+  (e: "open", seed: number): void;
+  (e: "update:outputVar", v: string | null): void;
+}>();
+
+/** Any variable the run produced can be the one shown; the default (the
+ *  last combine's output) is listed first. */
+const choices = computed(() =>
+  orderByStack(Object.keys(props.result.variables), props.views)
+    .map((n) => ({ value: n, label: `$${n}` })),
+);
 
 const PAGE = 25;
 const limit = ref(PAGE);
@@ -47,10 +58,22 @@ const available = computed(() => props.result.samples.filter((s) => !s.error).le
       Nothing in the stack writes a variable yet, so there is no output to show.
     </p>
     <template v-else>
-      <p class="wp-tro__note">
-        <code>${{ outputVar }}</code> for the first {{ rows.length }} of {{ result.runs }} seeds.
-        Tinted parts show which variable wrote them. Click a row for its trace.
-      </p>
+      <div class="wp-tro__head">
+        <span>Show</span>
+        <Select
+          class="wp-tro__pick"
+          :model-value="outputVar"
+          :options="choices"
+          size="sm"
+          :filterable="choices.length > 8"
+          aria-label="Variable to show"
+          data-test="output-var"
+          @update:model-value="(v) => emit('update:outputVar', v === null ? null : String(v))"
+        />
+        <span class="wp-tro__note">
+          for the first {{ rows.length }} of {{ result.runs }} seeds. Tinted parts show which variable wrote them; click a row for its trace.
+        </span>
+      </div>
       <ol class="wp-tro__list">
         <li v-for="r in rows" :key="r.seed">
           <button type="button" class="wp-tro__row" data-test="output-row" @click="emit('open', r.seed)">
@@ -81,11 +104,13 @@ const available = computed(() => props.result.samples.filter((s) => !s.error).le
 <style scoped>
 .wp-tro { display: flex; flex-direction: column; gap: var(--wp-space-5); }
 .wp-tro__note { margin: 0; font-size: var(--wp-text-xs); color: var(--wp-text-dim); }
+.wp-tro__head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--wp-space-4); font-size: var(--wp-text-sm); color: var(--wp-text-muted); }
+.wp-tro__pick { width: 200px; }
 .wp-tro__note code { color: var(--wp-accent-text); }
 .wp-tro__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--wp-space-3); }
 .wp-tro__row {
   width: 100%; text-align: left; cursor: pointer; font: inherit; color: var(--wp-text);
-  display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; gap: var(--wp-space-5); align-items: start;
+  display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; gap: var(--wp-space-5); align-items: start;
   background: var(--wp-bg-1); border: 1px solid var(--wp-border); border-radius: var(--wp-radius-sm);
   padding: var(--wp-space-4) var(--wp-space-5);
 }

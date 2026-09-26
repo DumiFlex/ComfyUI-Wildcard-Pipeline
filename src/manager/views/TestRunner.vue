@@ -13,6 +13,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import Button from "../components/ui/Button.vue";
+import Icon, { ICON_SM } from "../components/ui/Icon.vue";
 import ScenarioRail from "../components/test-runner/ScenarioRail.vue";
 import StackBuilder from "../components/test-runner/StackBuilder.vue";
 import SeedControl from "../components/test-runner/SeedControl.vue";
@@ -157,7 +158,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
           >
           <h1 v-else>
             <button type="button" class="wp-tr__name" title="Rename" data-test="scenario-name" @click="editingName = true">
-              {{ draft.name || "Untitled scenario" }}
+              {{ draft.name || "Untitled scenario" }}<Icon class="wp-tr__pen" name="pi-pencil" :size="ICON_SM" />
             </button>
           </h1>
           <p class="wp-tr__sub">
@@ -191,12 +192,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
         <StackBuilder
           v-model:stack="draft.stack"
           v-model:pins="draft.pins"
-          :output-var="wb.outputVar.value"
-          :output-is-default="draft.output_var === null"
           :views="wb.stackViews.value"
           :modules="wb.modules.value"
           :bundles="wb.bundles.value"
-          @update:output-var="(v) => (draft.output_var = v)"
         />
 
         <div v-if="!draft.stack.length" class="wp-tr__start" data-test="start-hint">
@@ -229,7 +227,14 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
             </div>
             <div class="wp-tr__pane" role="tabpanel">
               <VariablesPanel v-if="tab === 'variables'" :result="result" :views="wb.stackViews.value" :output-var="wb.outputVar.value" />
-              <OutputsPanel v-else-if="tab === 'outputs'" :result="result" :views="wb.stackViews.value" :output-var="wb.outputVar.value" @open="openTrace" />
+              <OutputsPanel
+                v-else-if="tab === 'outputs'"
+                :result="result"
+                :views="wb.stackViews.value"
+                :output-var="wb.outputVar.value"
+                @open="openTrace"
+                @update:output-var="(v) => (draft.output_var = v)"
+              />
               <SamplesPanel v-else-if="tab === 'samples'" :result="result" :views="wb.stackViews.value" :output-var="wb.outputVar.value" :selected-seed="traceSeed" @open="openTrace" />
               <WarningsPanel v-else :result="result" :uuid-to-name="uuidToName" @open="openTrace" />
             </div>
@@ -275,20 +280,21 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 .wp-tr__bar {
   position: sticky; top: 0; z-index: 20;
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--wp-space-5);
-  padding: var(--wp-space-5) var(--wp-space-7);
+  padding: var(--wp-space-4) var(--wp-space-7);
   background: color-mix(in oklab, var(--wp-bg) 92%, transparent); backdrop-filter: blur(6px);
   border-bottom: 1px solid var(--wp-border);
 }
 .wp-tr__title { min-width: 0; }
-.wp-tr__title h1 { margin: 0; font-size: var(--wp-text-xl); font-weight: var(--wp-weight-semibold); }
+.wp-tr__title h1 { margin: 0; font-size: var(--wp-text-lg); font-weight: var(--wp-weight-semibold); }
 .wp-tr__name {
   background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: text;
-  border-bottom: 1px dashed transparent;
+  display: inline-flex; align-items: center; gap: var(--wp-space-3);
 }
-.wp-tr__name:hover { border-bottom-color: var(--wp-border-strong); }
+.wp-tr__pen { color: var(--wp-text-dim); opacity: 0; transition: opacity .12s; }
+.wp-tr__name:hover .wp-tr__pen, .wp-tr__name:focus-visible .wp-tr__pen { opacity: 1; }
 .wp-tr__name:focus-visible { outline: 2px solid var(--wp-border-focus); }
 .wp-tr__name-input {
-  font-size: var(--wp-text-xl); font-weight: var(--wp-weight-semibold); color: var(--wp-text);
+  font-size: var(--wp-text-lg); font-weight: var(--wp-weight-semibold); color: var(--wp-text);
   background: var(--wp-bg-2); border: 1px solid var(--wp-border-focus); border-radius: var(--wp-radius-sm);
   padding: 0 var(--wp-space-3);
 }

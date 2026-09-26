@@ -138,6 +138,32 @@ describe("TestRunner.vue", () => {
     expect(wrap.find('[data-test="scenario-name"]').text()).toBe("Quick run");
   });
 
+  it("switching a card off and on again leaves the scenario unchanged", async () => {
+    const wrap = await mountRunner();
+    const sw = () => wrap.findAll('[data-test="stack-toggle"] button')[0];
+    await sw().trigger("click");
+    expect(wrap.find('[data-test="dirty"]').exists()).toBe(true);
+    expect(wrap.findAll('[data-test="stack-card"]')[0].attributes("data-off")).toBe("true");
+    await sw().trigger("click");
+    expect(wrap.find('[data-test="dirty"]').exists()).toBe(false);
+  });
+
+  it("the Outputs tab picks which variable is the output", async () => {
+    const wrap = await mountRunner();
+    await wrap.find('[data-test="run-btn"]').trigger("click");
+    await flushPromises();
+    await wrap.find('[data-test="tab-outputs"]').trigger("click");
+    expect(wrap.find('[data-test="output-row"]').text()).toContain("Mira with black hair");
+    await wrap.find('[data-test="output-var"] [data-test="select-trigger"]').trigger("click");
+    await flushPromises();
+    const opt = [...document.body.querySelectorAll('[role="option"]')].find((o) => o.textContent?.trim() === "$hair");
+    opt?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    await flushPromises();
+    expect(wrap.find('[data-test="output-row"]').text()).toContain("black");
+    expect(wrap.find('[data-test="output-row"]').text()).not.toContain("Mira");
+    expect(wrap.find('[data-test="run-stats"]').text()).toContain("of $hair");
+  });
+
   it("deletes a scenario only after confirming", async () => {
     const wrap = await mountRunner();
     await wrap.find('[data-test="scenario-delete"]').trigger("click");

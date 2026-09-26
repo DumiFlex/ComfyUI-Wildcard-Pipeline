@@ -4,12 +4,13 @@
  * (left to right here) like a Context node, plus pinned `$var` values that
  * stand in for whatever an upstream node would pass in.
  *
- * Each card can be moved, switched off, removed, or chosen as the output
- * the Outputs tab renders.
+ * Each card can be switched off, removed, or dragged to a new place
+ * (Alt + arrow keys move a focused card).
  */
 import { computed, ref } from "vue";
 import Button from "../ui/Button.vue";
 import Icon, { ICON_SM } from "../ui/Icon.vue";
+import Toggle from "../ui/Toggle.vue";
 import ModulePicker from "./ModulePicker.vue";
 import { KIND_META } from "./kinds";
 import type { BundleRow, ModuleRow, ScenarioStackItem } from "../../api/types";
@@ -19,9 +20,6 @@ const props = defineProps<{
   stack: ScenarioStackItem[];
   views: StackItemView[];
   pins: Record<string, string>;
-  outputVar: string | null;
-  /** True when the output follows the stack rather than a user choice. */
-  outputIsDefault: boolean;
   modules: ModuleRow[];
   bundles: BundleRow[];
 }>();
@@ -29,7 +27,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "update:stack", v: ScenarioStackItem[]): void;
   (e: "update:pins", v: Record<string, string>): void;
-  (e: "update:outputVar", v: string | null): void;
 }>();
 
 const pickerOpen = ref(false);
@@ -39,26 +36,52 @@ function add(item: ScenarioStackItem): void {
   pickerOpen.value = false;
 }
 
-function move(i: number, delta: number): void {
-  const j = i + delta;
-  if (j < 0 || j >= props.stack.length) return;
+function moveTo(from: number, to: number): void {
+  if (from === to || to < 0 || to >= props.stack.length) return;
   const next = [...props.stack];
-  [next[i], next[j]] = [next[j], next[i]];
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
   emit("update:stack", next);
 }
 
-function toggle(i: number): void {
-  const next = props.stack.map((it, k) => (k === i ? { ...it, enabled: it.enabled === false } : it));
+function onCardKey(e: KeyboardEvent, i: number): void {
+  if (!e.altKey) return;
+  if (e.key === "ArrowLeft") { e.preventDefault(); moveTo(i, i - 1); }
+  else if (e.key === "ArrowRight") { e.preventDefault(); moveTo(i, i + 1); }
+}
+
+/* Drag to reorder: the card being dragged and the slot it would land in. */
+const dragFrom = ref<number | null>(null);
+const dragOver = ref<number | null>(null);
+
+function onDragStart(e: DragEvent, i: number): void {
+  dragFrom.value = i;
+  e.dataTransfer?.setData("text/plain", String(i));
+  if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+}
+function onDrop(i: number): void {
+  if (dragFrom.value !== null) moveTo(dragFrom.value, i);
+  dragFrom.value = null;
+  dragOver.value = null;
+}
+function onDragEnd(): void {
+  dragFrom.value = null;
+  dragOver.value = null;
+}
+
+function setEnabled(i: number, on: boolean): void {
+  // "On" is the default, so drop the key rather than store `enabled: true`:
+  // switching a card off and on again leaves the scenario unchanged.
+  const next = props.stack.map((it, k) => {
+    if (k !== i) return it;
+    const { enabled: _was, ...rest } = it;
+    return on ? rest : { ...rest, enabled: false };
+  });
   emit("update:stack", next);
 }
 
 function removeAt(i: number): void {
   emit("update:stack", props.stack.filter((_, k) => k !== i));
-}
-
-function chooseOutput(v: StackItemView): void {
-  if (!v.binding) return;
-  emit("update:outputVar", props.outputVar === v.binding && !props.outputIsDefault ? null : v.binding);
 }
 
 /* ---------------------------- pins ---------------------------- */
@@ -89,7 +112,7 @@ function removePin(name: string): void {
   <section class="wp-trs" aria-label="Stack" data-test="stack-builder">
     <header class="wp-trs__head">
       <h3>Stack</h3>
-      <span class="wp-trs__sub">runs left to right, like a Context node</span>
+      <span class="wp-trs__sub">runs left to right, like the modules on a Context node · drag to reorder</span>
     </header>
 
     <ol class="wp-trs__cards">
@@ -100,32 +123,41 @@ function removePin(name: string): void {
         :style="{ '--kc': KIND_META[v.kind].color }"
         :data-off="v.enabled ? 'false' : 'true'"
         :data-missing="v.missing ? 'true' : 'false'"
-        :data-output="v.binding && v.binding === outputVar ? 'true' : 'false'"
+        :data-dragging="dragFrom === i ? 'true' : 'false'"
+        :data-drop="dragOver === i && dragFrom !== i ? 'true' : 'false'"
+        :aria-label="`${i + 1}. ${KIND_META[v.kind].label} ${v.name}`"
+        title="Drag to reorder, or Alt + arrow keys"
+        tabindex="0"
+        draggable="true"
         data-test="stack-card"
+        @dragstart="onDragStart($event, i)"
+        @dragover.prevent="dragOver = i"
+        @dragleave="dragOver = dragOver === i ? null : dragOver"
+        @drop.prevent="onDrop(i)"
+        @dragend="onDragEnd"
+        @keydown="onCardKey($event, i)"
       >
-        <span class="wp-trs__kind">{{ KIND_META[v.kind].label }}</span>
-        <span class="wp-trs__name" :title="v.name">{{ v.name }}</span>
-        <span class="wp-trs__detail">{{ v.missing ? "deleted from the library" : v.detail }}</span>
-        <span v-if="v.binding && v.binding === outputVar" class="wp-trs__out">output</span>
-        <span class="wp-trs__acts">
-          <button type="button" :aria-label="`Move ${v.name} earlier`" :disabled="i === 0" @click="move(i, -1)"><Icon name="pi-arrow-left" :size="ICON_SM" /></button>
-          <button type="button" :aria-label="`Move ${v.name} later`" :disabled="i === views.length - 1" @click="move(i, 1)"><Icon name="pi-arrow-right" :size="ICON_SM" /></button>
-          <button
-            v-if="v.binding"
-            type="button"
-            :aria-label="`Use $${v.binding} as the output`"
-            :data-on="v.binding === outputVar ? 'true' : 'false'"
-            data-test="stack-output"
-            @click="chooseOutput(v)"
-          ><Icon name="pi-flag" :size="ICON_SM" /></button>
-          <button
-            type="button"
+        <div class="wp-trs__top">
+          <span class="wp-trs__step">{{ i + 1 }}</span>
+          <span class="wp-trs__kind">{{ KIND_META[v.kind].label }}</span>
+          <Toggle
+            class="wp-trs__switch"
+            :model-value="v.enabled"
             :aria-label="v.enabled ? `Switch off ${v.name}` : `Switch on ${v.name}`"
             data-test="stack-toggle"
-            @click="toggle(i)"
-          ><Icon :name="v.enabled ? 'pi-eye' : 'pi-eye-slash'" :size="ICON_SM" /></button>
-          <button type="button" :aria-label="`Remove ${v.name}`" data-test="stack-remove" @click="removeAt(i)"><Icon name="pi-times" :size="ICON_SM" /></button>
-        </span>
+            @update:model-value="(on: boolean) => setEnabled(i, on)"
+          />
+        </div>
+        <span class="wp-trs__name">{{ v.name }}</span>
+        <span class="wp-trs__detail">{{ v.missing ? "deleted from the library" : v.enabled ? v.detail : "switched off" }}</span>
+        <button
+          type="button"
+          class="wp-trs__remove"
+          :aria-label="`Remove ${v.name}`"
+          title="Remove"
+          data-test="stack-remove"
+          @click="removeAt(i)"
+        ><Icon name="pi-times" :size="ICON_SM" /></button>
       </li>
       <li class="wp-trs__add-wrap">
         <button
@@ -152,7 +184,7 @@ function removePin(name: string): void {
         <button type="button" :aria-label="`Remove pin $${name}`" @click="removePin(name)"><Icon name="pi-times" :size="ICON_SM" /></button>
       </span>
       <span v-if="!pinEntries.length && !pinFormOpen" class="wp-trs__pins-hint">
-        none: pin a $var to stand in for a value an upstream node would pass in
+        Stand in for a value an upstream node would pass in, e.g. <code>$subject</code>.
       </span>
       <form v-if="pinFormOpen" class="wp-trs__pin-form" @submit.prevent="addPin">
         <input id="wp-tr-pin-name" v-model="pinName" placeholder="$name" aria-label="Variable name" data-test="pin-name">
@@ -182,44 +214,63 @@ function removePin(name: string): void {
 .wp-trs__sub { font-size: var(--wp-text-xs); color: var(--wp-text-dim); }
 .wp-trs__cards {
   list-style: none; margin: 0; padding: var(--wp-space-6);
-  display: flex; flex-wrap: wrap; gap: var(--wp-space-4); align-items: stretch;
+  display: flex; flex-wrap: wrap; gap: var(--wp-space-5); align-items: stretch;
 }
 .wp-trs__card {
-  position: relative; min-width: 128px; max-width: 220px;
-  background: var(--wp-bg-3); border: 1px solid var(--wp-border);
-  border-top: 3px solid var(--kc); border-radius: var(--wp-radius);
-  padding: var(--wp-space-4) var(--wp-space-5) var(--wp-space-3);
-  display: flex; flex-direction: column; gap: var(--wp-space-1);
+  position: relative; width: 196px;
+  background: var(--wp-bg-3); border: 1px solid var(--wp-border); border-radius: var(--wp-radius);
+  box-shadow: inset 3px 0 0 var(--kc);
+  padding: var(--wp-space-4) var(--wp-space-5) var(--wp-space-5) var(--wp-space-6);
+  display: flex; flex-direction: column; gap: var(--wp-space-2);
+  cursor: grab; transition: border-color .12s, opacity .12s;
 }
-.wp-trs__card[data-off="true"] { opacity: .45; }
-.wp-trs__card[data-missing="true"] { border-style: dashed; border-top-style: solid; border-top-color: var(--wp-danger); }
-.wp-trs__card[data-output="true"] { box-shadow: 0 0 0 1px var(--wp-accent-500); }
+.wp-trs__card:hover { border-color: var(--wp-border-strong); }
+.wp-trs__card:focus-visible { outline: 2px solid var(--wp-border-focus); outline-offset: 1px; }
+.wp-trs__card[data-dragging="true"] { opacity: .4; cursor: grabbing; }
+.wp-trs__card[data-drop="true"] { border-color: var(--wp-accent-500); }
+.wp-trs__card[data-off="true"] { box-shadow: inset 3px 0 0 var(--wp-border-strong); }
+.wp-trs__card[data-off="true"] .wp-trs__name,
+.wp-trs__card[data-off="true"] .wp-trs__kind { opacity: .5; }
+.wp-trs__card[data-missing="true"] { border-style: dashed; box-shadow: inset 3px 0 0 var(--wp-danger); }
+.wp-trs__top { display: flex; align-items: center; gap: var(--wp-space-3); min-height: 20px; }
+.wp-trs__step {
+  font: var(--wp-weight-semibold) var(--wp-text-xs) var(--wp-font-mono);
+  color: var(--wp-text-dim); font-variant-numeric: tabular-nums;
+}
 .wp-trs__kind {
-  font: var(--wp-weight-medium) var(--wp-text-xs) var(--wp-font-mono);
+  flex: 1; font: var(--wp-weight-medium) var(--wp-text-xs) var(--wp-font-mono);
   color: var(--kc); text-transform: uppercase; letter-spacing: .05em;
 }
-.wp-trs__name { font-weight: var(--wp-weight-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-trs__switch { flex: none; min-height: 0; }
+/* A quieter, smaller switch than the form one: seven of them sit in a row. */
+.wp-trs__switch :deep(.wp-toggle) { width: 26px; height: 14px; }
+.wp-trs__switch :deep(.wp-toggle)::after { width: 10px; height: 10px; }
+.wp-trs__switch :deep(.wp-toggle[data-on="true"]) {
+  background: color-mix(in oklab, var(--wp-accent-600) 55%, var(--wp-bg-3));
+  border-color: color-mix(in oklab, var(--wp-accent-500) 60%, var(--wp-border));
+}
+.wp-trs__switch :deep(.wp-toggle[data-on="true"])::after { transform: translateX(12px); }
+.wp-trs__name {
+  font-weight: var(--wp-weight-medium); line-height: var(--wp-line-base);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
 .wp-trs__detail { font: var(--wp-text-xs) var(--wp-font-mono); color: var(--wp-text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wp-trs__card[data-missing="true"] .wp-trs__detail { color: var(--wp-danger-text); }
-.wp-trs__out {
-  position: absolute; top: -9px; right: var(--wp-space-4); /* audit-exempt: badge straddles the top border */
-  background: var(--wp-accent-600); color: #fff;
-  font: var(--wp-weight-semibold) 9px/14px var(--wp-font-mono); /* audit-exempt: badge text */
-  padding: 0 var(--wp-space-3); border-radius: 999px; text-transform: uppercase; /* audit-exempt: pill */
+.wp-trs__remove {
+  position: absolute; top: calc(-1 * var(--wp-space-4)); right: calc(-1 * var(--wp-space-4));
+  width: 22px; height: 22px; border-radius: 50%; /* audit-exempt: round close badge */
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+  background: var(--wp-bg-4); color: var(--wp-text-muted); border: 1px solid var(--wp-border-strong);
+  opacity: 0; transition: opacity .12s;
 }
-.wp-trs__acts { display: flex; gap: var(--wp-space-1); margin-top: var(--wp-space-2); opacity: .55; transition: opacity .12s; }
-.wp-trs__card:hover .wp-trs__acts, .wp-trs__card:focus-within .wp-trs__acts { opacity: 1; }
-.wp-trs__acts button {
-  background: none; border: 0; color: var(--wp-text-muted); cursor: pointer;
-  padding: var(--wp-space-1); border-radius: var(--wp-radius-sm); display: inline-flex;
-}
-.wp-trs__acts button:hover:not(:disabled) { color: var(--wp-text); background: var(--wp-bg-4); }
-.wp-trs__acts button:disabled { opacity: .35; cursor: default; }
-.wp-trs__acts button[data-on="true"] { color: var(--wp-accent-text); }
-.wp-trs__acts button:focus-visible { outline: 2px solid var(--wp-border-focus); }
+.wp-trs__card:hover .wp-trs__remove, .wp-trs__card:focus-within .wp-trs__remove { opacity: 1; }
+.wp-trs__remove:hover { color: var(--wp-danger-text); border-color: var(--wp-danger); }
+.wp-trs__remove:focus-visible { opacity: 1; outline: 2px solid var(--wp-border-focus); }
+@media (hover: none) { .wp-trs__remove { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .wp-trs__card, .wp-trs__remove { transition: none; } }
 .wp-trs__add-wrap { position: relative; display: flex; }
 .wp-trs__add {
-  min-width: 128px; border: 1px dashed var(--wp-border-strong); background: none;
+  min-width: 160px; border: 1px dashed var(--wp-border-strong); background: none;
   border-radius: var(--wp-radius); color: var(--wp-text-muted); cursor: pointer;
   padding: var(--wp-space-5); display: inline-flex; align-items: center; gap: var(--wp-space-3);
   font-size: var(--wp-text-sm);
@@ -228,9 +279,15 @@ function removePin(name: string): void {
 .wp-trs__add:focus-visible { outline: 2px solid var(--wp-border-focus); }
 .wp-trs__pins {
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--wp-space-4);
-  padding: 0 var(--wp-space-6) var(--wp-space-6); font-size: var(--wp-text-sm);
+  padding: var(--wp-space-4) var(--wp-space-6); font-size: var(--wp-text-sm);
+  border-top: 1px solid var(--wp-border); background: var(--wp-bg-1);
+  border-radius: 0 0 var(--wp-radius) var(--wp-radius);
 }
-.wp-trs__pins-label { color: var(--wp-text-muted); }
+.wp-trs__pins-label {
+  font-size: var(--wp-text-xs); font-weight: var(--wp-weight-semibold);
+  letter-spacing: .08em; text-transform: uppercase; color: var(--wp-text-muted);
+}
+.wp-trs__pins-hint code { color: var(--wp-text-muted); }
 .wp-trs__pins-hint { color: var(--wp-text-dim); font-size: var(--wp-text-xs); }
 .wp-trs__pin {
   display: inline-flex; align-items: center; gap: var(--wp-space-2);
