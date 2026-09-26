@@ -132,23 +132,27 @@ export function useScenarioWorkbench() {
     if (!draft.value.stack.length || running.value) return;
     running.value = true;
     runError.value = null;
+    // The user can open another scenario while a big run is in flight:
+    // pin the run to the draft and scenario that started it.
+    const started = draft.value;
+    const id = started.id;
     try {
       const res = await api.testRun({
-        stack: draft.value.stack,
-        pins: draft.value.pins,
-        seeds: draft.value.seeds,
+        stack: started.stack,
+        pins: started.pins,
+        seeds: started.seeds,
         sample_limit: SAMPLE_LIMIT,
       });
-      result.value = res;
-      const id = draft.value.id;
+      if (draft.value === started) result.value = res;
       if (id) {
         // Persist the rail summary without touching the user's unsaved edits.
         const row = await api.scenarios.update(id, { last_run: { ...lastRunSummary(res) } });
         scenarios.value = scenarios.value.map((s) => (s.id === id ? row : s));
       }
     } catch (e) {
-      runError.value = e instanceof Error ? e.message : String(e);
-      toast.push({ severity: "error", summary: "Run failed", detail: runError.value, life: 4000 });
+      const msg = e instanceof Error ? e.message : String(e);
+      if (draft.value === started) runError.value = msg;
+      toast.push({ severity: "error", summary: "Run failed", detail: msg, life: 4000 });
     } finally {
       running.value = false;
     }

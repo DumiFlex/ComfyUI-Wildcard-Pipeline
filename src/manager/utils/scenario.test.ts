@@ -73,6 +73,20 @@ describe("defaultOutputVar", () => {
   it("prefers the last enabled combine", () => {
     expect(defaultOutputVar([view("combine", "a"), view("wildcard", "b"), view("combine", "c", { enabled: false })])).toBe("a");
   });
+  it("looks inside bundles, nested ones included", () => {
+    const bundles = [
+      { id: "in", name: "Inner", children: [{ type: "combine", name: "line", payload: { output_var: "line" } }] },
+      { id: "out", name: "Outer", children: [
+        { type: "wildcard", meta: { name: "Top Coat" }, payload: {} },
+        { type: "bundle", id: "in", children: [{ type: "combine", name: "line", payload: { output_var: "line" } }] },
+      ] },
+      { id: "wild", name: "Wild", children: [{ type: "wildcard", meta: { name: "Top Coat" }, payload: {} }] },
+    ] as unknown as BundleRow[];
+    const v = (id: string) => describeItem({ bundle: id }, MODULES, bundles);
+    expect(defaultOutputVar([view("wildcard", "a"), v("out")])).toBe("line");
+    expect(defaultOutputVar([v("wild")])).toBe("top_coat");
+    expect(defaultOutputVar([view("combine", "p"), v("wild")])).toBe("p");
+  });
   it("falls back to the last binding, else null", () => {
     expect(defaultOutputVar([view("wildcard", "a"), view("wildcard", "b")])).toBe("b");
     expect(defaultOutputVar([view("fixed_values", "")])).toBeNull();

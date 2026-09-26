@@ -167,6 +167,22 @@ describe("TestRunner.vue", () => {
     expect(wrap.find('[data-test="run-stats"]').text()).toContain("of $hair");
   });
 
+  it("a run that finishes after switching away stays with its own scenario", async () => {
+    const wrap = await mountRunner();
+    let finish: (r: unknown) => void = () => {};
+    const RESULT = await (api.testRun as unknown as () => Promise<unknown>)();
+    vi.mocked(api.testRun).mockClear();
+    vi.mocked(api.testRun).mockImplementationOnce(() => new Promise((r) => { finish = r as (r: unknown) => void; }));
+    await wrap.find('[data-test="run-btn"]').trigger("click");
+    await wrap.find('[data-test="new-quick-run"]').trigger("click");
+    await flushPromises();
+    expect(wrap.find('[data-test="scenario-name"]').text()).toBe("Quick run");
+    finish(RESULT);
+    await flushPromises();
+    expect(wrap.find('[data-test="run-stats"]').exists()).toBe(false);
+    expect(api.scenarios.update).toHaveBeenCalledWith("sc000001", { last_run: expect.objectContaining({ runs: 2 }) });
+  });
+
   it("deletes a scenario only after confirming", async () => {
     const wrap = await mountRunner();
     await wrap.find('[data-test="scenario-delete"]').trigger("click");

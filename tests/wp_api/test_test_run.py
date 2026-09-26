@@ -86,6 +86,32 @@ async def test_bundle_expands_with_origin_and_pins(wp_client):
     assert [r["name"] for r in trace] == ["outfit", "phrase"]
 
 
+async def test_nested_bundle_expands_inline(wp_client):
+    """A bundle child that references another bundle runs that bundle's
+    modules, the way inserting it on the canvas does."""
+    color, _, _, inner = _seed_library()
+    conn = get_connection()
+    try:
+        outer = BundleRepository(conn).create(name="outer", children=[
+            {"id": color["id"], "type": "wildcard", "enabled": True,
+             "meta": {"name": "color"}, "payload": color["payload"], "instance": {}},
+            {"id": inner["id"], "type": "bundle", "name": "look"},
+            {"id": "0badf00d", "type": "bundle", "name": "gone"},
+        ])
+    finally:
+        conn.close()
+    resp = await wp_client.post("/wp/api/test/run", json={
+        "stack": [{"bundle": outer["id"]}],
+        "pins": {"who": "a fox"},
+        "seeds": {"from": 0, "count": 3},
+    })
+    body = await resp.json()
+    assert body["stack"][0]["uids"] == ["s0.0", "s0.1.0", "s0.1.1"]
+    trace = body["samples"][0]["trace"]
+    assert [r["name"] for r in trace] == ["color", "outfit", "phrase"]
+    assert all(p.startswith("a fox wearing ") for p in body["variables"]["phrase"]["counts"])
+
+
 async def test_disabled_items_are_skipped(wp_client):
     color, outfit, *_ = _seed_library()
     resp = await wp_client.post("/wp/api/test/run", json={

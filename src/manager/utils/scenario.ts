@@ -30,6 +30,9 @@ export interface StackItemView {
   /** A combine whose template is plain text: it reads nothing, so its
    *  output can never vary. */
   fixedText?: boolean;
+  /** Bundles only: the output of the last combine inside, and the last
+   *  variable any child writes (nested bundles flattened). */
+  bundleOutputs?: { combine: string | null; last: string | null };
 }
 
 export const DEFAULT_SEEDS: ScenarioSeedSpec = { from: 0, count: 100 };
@@ -88,6 +91,7 @@ export function describeItem(
     return {
       kind: "bundle", id: item.bundle, name: b?.name ?? item.bundle, binding: "",
       detail: b ? `${n} module${n === 1 ? "" : "s"}` : "deleted", enabled, missing: !b,
+      bundleOutputs: bundleOutputs(b?.children ?? []),
     };
   }
   const byId = new Map(modules.map((m) => [m.id, m]));
@@ -117,10 +121,33 @@ export function isFixedTemplate(row: PayloadRow): boolean {
 
 /** The variable a scenario treats as its prompt when none is chosen: the
  *  last enabled combine's output, else the last binding in the stack. */
+function bundleOutputs(children: unknown[]): { combine: string | null; last: string | null } {
+  let combine: string | null = null;
+  let last: string | null = null;
+  const walk = (list: unknown[]): void => {
+    for (const c of list as { type?: unknown; name?: unknown; meta?: { name?: unknown }; payload?: unknown; children?: unknown }[]) {
+      if (!c || typeof c !== "object") continue;
+      if (c.type === "bundle") {
+        if (Array.isArray(c.children)) walk(c.children);
+        continue;
+      }
+      const b = moduleBinding({ type: c.type, name: typeof c.name === "string" ? c.name : typeof c.meta?.name === "string" ? c.meta.name : "", payload: c.payload } as Pick<ModuleRow, "type" | "name" | "payload">);
+      if (!b) continue;
+      last = b;
+      if (c.type === "combine") combine = b;
+    }
+  };
+  walk(children);
+  return { combine, last };
+}
+
 export function defaultOutputVar(views: StackItemView[]): string | null {
   const on = views.filter((v) => v.enabled && !v.missing);
-  for (let i = on.length - 1; i >= 0; i--) if (on[i].kind === "combine" && on[i].binding) return on[i].binding;
-  for (let i = on.length - 1; i >= 0; i--) if (on[i].binding) return on[i].binding;
+  const combineOut = (v: StackItemView): string | null =>
+    (v.kind === "combine" ? v.binding : v.bundleOutputs?.combine) || null;
+  const lastOut = (v: StackItemView): string | null => v.binding || v.bundleOutputs?.last || null;
+  for (let i = on.length - 1; i >= 0; i--) { const o = combineOut(on[i]); if (o) return o; }
+  for (let i = on.length - 1; i >= 0; i--) { const o = lastOut(on[i]); if (o) return o; }
   return null;
 }
 

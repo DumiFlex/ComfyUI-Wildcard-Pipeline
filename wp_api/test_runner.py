@@ -6,6 +6,7 @@ optional pinned ``$var`` values and a seed spec — through the real
 """
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from aiohttp import web
@@ -46,23 +47,48 @@ def _module_entry(row: dict[str, Any], uid: str, item: dict[str, Any]) -> dict[s
     }
 
 
-def _bundle_entries(bundle: dict[str, Any], uid: str, item: dict[str, Any]) -> list[dict[str, Any]]:
+def _bundle_entries(
+    bundle: dict[str, Any], uid: str, item: dict[str, Any], repo: BundleRepository,
+) -> list[dict[str, Any]]:
     """A bundle's children, stamped the way inserting it on the canvas does:
-    each child gets its own `_uid` and the bundle's `bundle_origin`, so a
-    constraint inside the bundle binds to its own copy's source pick."""
+    each child gets its own `_uid` and a `bundle_origin`, so a constraint
+    inside the bundle binds to its own copy's source pick.
+
+    A nested bundle is stored as an id reference; like the canvas insert, it
+    expands inline to the referenced bundle's current children with their own
+    `bundle_origin`. The tier-2 nesting cap means those are leaves. A missing
+    reference is dropped."""
     bundle_on = bool(item.get("enabled", True))
     out: list[dict[str, Any]] = []
-    for j, child in enumerate(bundle.get("children") or []):
-        if not isinstance(child, dict):
-            continue
+
+    def stamp(child: dict[str, Any], child_uid: str, origin: str, on: bool) -> None:
         entry = dict(child)
         meta = entry.get("meta") if isinstance(entry.get("meta"), dict) else {}
-        entry["_uid"] = f"{uid}.{j}"
-        entry["bundle_origin"] = uid
-        entry["enabled"] = bundle_on and bool(entry.get("enabled", True))
+        entry["_uid"] = child_uid
+        entry["bundle_origin"] = origin
+        entry["enabled"] = on and bool(entry.get("enabled", True))
         entry.setdefault("name", meta.get("name", ""))
         entry.setdefault("instance", {})
         out.append(entry)
+
+    for j, child in enumerate(bundle.get("children") or []):
+        if not isinstance(child, dict):
+            continue
+        if child.get("type") != "bundle":
+            stamp(child, f"{uid}.{j}", uid, bundle_on)
+            continue
+        ref_id = child.get("id")
+        try:
+            inner = repo.get(ref_id) if isinstance(ref_id, str) else None
+        except BundleNotFound:
+            inner = None
+        if inner is None:
+            continue
+        inner_uid = f"{uid}.{j}"
+        inner_on = bundle_on and bool(child.get("enabled", True))
+        for k, grandchild in enumerate(inner.get("children") or []):
+            if isinstance(grandchild, dict) and grandchild.get("type") != "bundle":
+                stamp(grandchild, f"{inner_uid}.{k}", inner_uid, inner_on)
     return out
 
 
@@ -104,7 +130,7 @@ def _build_stack(conn, stack: list[Any]) -> _Stack:
             except BundleNotFound:
                 missing.append({"kind": "bundle", "id": item["bundle"]})
                 continue
-            children = _bundle_entries(bundle, uid, item)
+            children = _bundle_entries(bundle, uid, item, bundles_repo)
             modules.extend(children)
             layout.append({
                 "index": i, "kind": "bundle", "id": bundle["id"],
@@ -180,7 +206,10 @@ async def run_scenario_route(request: web.Request) -> web.Response:
     except ScenarioError as exc:
         return json_error(str(exc), status=400)
 
-    result = run_scenario(
+    # Up to thousands of engine runs: keep them off the event loop so
+    # ComfyUI's websocket and other routes stay responsive meanwhile.
+    result = await asyncio.to_thread(
+        run_scenario,
         modules, seeds=seeds, catalog=catalog, pins=pins,
         sample_limit=sample_limit, value_limit=value_limit,
     )
