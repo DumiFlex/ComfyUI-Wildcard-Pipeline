@@ -119,7 +119,11 @@ export default {
       "@semantic-release/exec",
       {
         // 1. Stamp version into package.json + pyproject.toml.
-        // 2. Pack the deployable file set into a zip so the
+        // 2. Rebuild js/ + web/ so the bundle's baked-in version matches the
+        //    stamped pyproject.toml. The server reports that version and the
+        //    canvas + manager ask for a reload while the two differ, so a zip
+        //    packed from the pre-stamp build would nag on every page load.
+        //    Pack the deployable file set into a zip so the
         //    @semantic-release/github plugin can attach it to the
         //    release. Zip is built AFTER versioning so the file lands
         //    with the right version in its name.
@@ -127,7 +131,7 @@ export default {
         //    from a clean slate (the content already lives in this release's
         //    notes + CHANGELOG.md).
         prepareCmd:
-          "node -e \"const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.version='${nextRelease.version}';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\\n');const t=fs.readFileSync('pyproject.toml','utf8').replace(/^version = \\\".+?\\\"/m,'version = \\\"${nextRelease.version}\\\"');fs.writeFileSync('pyproject.toml',t);\" && node -e \"require('fs').writeFileSync('docs/release-notes/next.md','')\" && node scripts/pack-release.mjs ${nextRelease.version}",
+          "node -e \"const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.version='${nextRelease.version}';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\\n');const t=fs.readFileSync('pyproject.toml','utf8').replace(/^version = \\\".+?\\\"/m,'version = \\\"${nextRelease.version}\\\"');fs.writeFileSync('pyproject.toml',t);\" && node -e \"require('fs').writeFileSync('docs/release-notes/next.md','')\" && pnpm build && node scripts/pack-release.mjs ${nextRelease.version}",
       },
     ],
     [
