@@ -416,6 +416,101 @@ export interface TestResponse {
   histogram: Record<string, number>;
 }
 
+/* ------------------------------------------------------------------ */
+/* Scenario runs — POST /wp/api/test/run (mirrors engine/scenario.py)   */
+/* ------------------------------------------------------------------ */
+
+/** One entry in a scenario's stack: a library module or a whole bundle. */
+export type ScenarioStackItem =
+  | { module: string; enabled?: boolean; instance?: Record<string, unknown> }
+  | { bundle: string; enabled?: boolean };
+
+/** Which chain seeds to run: a consecutive range, N random seeds, or a list. */
+export type ScenarioSeedSpec =
+  | { from: number; count: number }
+  | { random: true; count: number }
+  | { list: number[] };
+
+export interface ScenarioRunRequest {
+  stack: ScenarioStackItem[];
+  /** `$var` name (with or without `$`) → value, as if passed in from upstream. */
+  pins?: Record<string, string>;
+  /** Defaults to 100 random seeds. */
+  seeds?: ScenarioSeedSpec;
+  /** Samples returned in full (0..1000, default 200). Counts always cover every seed. */
+  sample_limit?: number;
+  /** Distinct values kept per variable (0..5000, default 500); the rest fold into `other`. */
+  value_limit?: number;
+}
+
+/** A multi-pick variable keeps its items so `$name.K` can index it. */
+export type ScenarioValue = string | { items: string[]; sep: string };
+
+export interface ScenarioTraceWrite { variable: string; value: ScenarioValue; overwrite: boolean }
+
+export interface ScenarioTraceRow {
+  id: string;
+  /** Stack uid: `s{i}` for a module, `s{i}.{j}` for a bundle child. */
+  _uid: string;
+  type: string;
+  name: string;
+  binding: string;
+  status: string;
+  seed: number | null;
+  error: string | null;
+  writes: ScenarioTraceWrite[];
+}
+
+export interface ScenarioWarning {
+  type: string;
+  message: string;
+  [key: string]: unknown;
+}
+
+export interface ScenarioSample {
+  seed: number;
+  vars: Record<string, ScenarioValue>;
+  trace: ScenarioTraceRow[];
+  warnings: ScenarioWarning[];
+  error: string | null;
+}
+
+export interface ScenarioVariable {
+  /** Fully expanded value → runs that produced it (top `value_limit`). */
+  counts: Record<string, number>;
+  distinct: number;
+  /** Runs whose value fell outside `counts`. */
+  other: number;
+  /** Marked internal by its module: feeds other modules, never the prompt. */
+  internal: boolean;
+}
+
+export interface ScenarioStackLayout {
+  index: number;
+  kind: "module" | "bundle";
+  id: string;
+  name: string;
+  type: ModuleType | "bundle";
+  uids: string[];
+}
+
+export interface ScenarioRunResponse {
+  runs: number;
+  failed: number;
+  elapsed_ms: number;
+  seeds: { first: number | null; count: number };
+  variables: Record<string, ScenarioVariable>;
+  /** Wildcard library id → option id → times picked. */
+  picks: Record<string, Record<string, number>>;
+  /** Constraint uid → downstream hits summed over every seed. */
+  constraint_hits: Record<string, number>;
+  warnings: (ScenarioWarning & { count: number; seeds: number[] })[];
+  samples: ScenarioSample[];
+  stack: ScenarioStackLayout[];
+  missing: { kind: "module" | "bundle"; id: string }[];
+  pins: Record<string, string>;
+}
+
 /**
  * Spec §2.4 — canonical snapshot entry. Mirrors the Python
  * `engine.modules.snapshot.SnapshotEntry` TypedDict. Stored:

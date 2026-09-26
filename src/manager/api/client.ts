@@ -10,6 +10,7 @@ import type {
   MatchRequest, MatchResponse,
   ModuleCreateInput, ModuleListResponse, ModuleRow, ModuleUpdateInput,
   SnapshotShape, TestRequest, TestResponse,
+  ScenarioRunRequest, ScenarioRunResponse,
   TemplateCreateInput, TemplateListResponse, TemplateRow, TemplateUpdateInput,
 } from "./types";
 
@@ -317,6 +318,12 @@ export const api = {
   },
   test(body: TestRequest) {
     return request<TestResponse>("/wp/api/test", {
+      method: "POST", body: JSON.stringify(body),
+    });
+  },
+  /** Run a scenario through the real engine, one chain seed per run. */
+  testRun(body: ScenarioRunRequest) {
+    return request<ScenarioRunResponse>("/wp/api/test/run", {
       method: "POST", body: JSON.stringify(body),
     });
   },
