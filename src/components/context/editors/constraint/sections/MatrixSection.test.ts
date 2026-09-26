@@ -1,6 +1,6 @@
 // Constraint MatrixSection — sub_cat × sub_cat grid.
 //
-// Click any cell opens CellRulePopover (4 labeled state buttons +
+// Click any cell opens CellRulePopover (5 labeled state buttons +
 // numeric factor input). The old 4-state click-cycle and cog-anchored
 // factor popover are gone. `mode: "allow"` / `"disabled"` collapse to
 // `"neutral"` on read; touching a legacy-disabled cell strips its
@@ -485,5 +485,72 @@ describe("constraint MatrixSection — keyboard", () => {
     await w.vm.$nextTick();
     expect(w.findComponent({ name: "CellRulePopover" }).exists()).toBe(false);
     w.unmount();
+  });
+});
+
+describe("constraint MatrixSection — only (linked picks)", () => {
+  it("selecting neutral on a library boost stores `allow`, the engine's name", async () => {
+    // A stored "neutral" override failed the whole constraint at run time.
+    const updates: Array<Partial<ModuleEntry>> = [];
+    const w = mount(MatrixSection, {
+      props: {
+        module: makeModule(),
+        sourceSubs: SOURCE_SUBS,
+        targetSubs: TARGET_SUBS,
+        "onUpdate": (p: Partial<ModuleEntry>) => updates.push(p),
+      },
+    });
+    await w.find('[data-test="mx-cell-red-silk"]').trigger("click");
+    await popoverWrap(w).find("button.pop-btn.b-neutral").trigger("click");
+    const last = updates[updates.length - 1].instance as Record<string, unknown>;
+    expect(last.cell_mode_overrides).toEqual({ [RED_SILK]: "allow" });
+  });
+
+  it("reads a legacy `neutral` override as neutral", () => {
+    const w = mount(MatrixSection, {
+      props: {
+        module: makeModule({ instance: { cell_mode_overrides: { [RED_SILK]: "neutral" as unknown as "allow" } } }),
+        sourceSubs: SOURCE_SUBS,
+        targetSubs: TARGET_SUBS,
+      },
+    });
+    expect(w.find('[data-test="mx-cell-red-silk"]').classes()).toContain("s-neutral");
+  });
+
+  it("selecting only writes the override with no factor", async () => {
+    const updates: Array<Partial<ModuleEntry>> = [];
+    const w = mount(MatrixSection, {
+      props: {
+        module: makeModule(),
+        sourceSubs: SOURCE_SUBS,
+        targetSubs: TARGET_SUBS,
+        "onUpdate": (p: Partial<ModuleEntry>) => updates.push(p),
+      },
+    });
+    await w.find('[data-test="mx-cell-red-cotton"]').trigger("click");
+    await popoverWrap(w).find("button.pop-btn.b-only").trigger("click");
+    const last = updates[updates.length - 1].instance as Record<string, unknown>;
+    expect(last.cell_mode_overrides).toEqual({ [RED_COTTON]: "only" });
+    expect(last.cell_factor_overrides ?? null).toBeNull();
+  });
+
+  it("marks the neutral cells of an only row as implied-out", () => {
+    const w = mount(MatrixSection, {
+      props: {
+        module: makeModule({ instance: { cell_mode_overrides: { [BLUE_SILK]: "only" } } }),
+        sourceSubs: SOURCE_SUBS,
+        targetSubs: ["cotton", "silk", "wool"],
+      },
+    });
+    const silk = w.find('[data-test="mx-cell-blue-silk"]');
+    expect(silk.classes()).toContain("s-only");
+    expect(silk.text()).toContain("✓");
+    for (const tgt of ["cotton", "wool"]) {
+      const cell = w.find(`[data-test="mx-cell-blue-${tgt}"]`);
+      expect(cell.classes()).toContain("implied-out");
+      expect(cell.text()).toContain("×");
+    }
+    // Rows without an only rule are untouched.
+    expect(w.find('[data-test="mx-cell-red-cotton"]').classes()).not.toContain("implied-out");
   });
 });

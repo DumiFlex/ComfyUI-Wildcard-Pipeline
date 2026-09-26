@@ -2,7 +2,7 @@
 /**
  * CellRulePopover — body of the constraint-matrix cell editor.
  *
- * Renders four labeled state buttons (NEUTRAL/EXCLUDE/BOOST/REDUCE) plus
+ * Renders five labeled state buttons (NEUTRAL/EXCLUDE/BOOST/REDUCE/ONLY) plus
  * a numeric factor input (boost / reduce only) and an optional "Reset"
  * button shown when the caller signals there's an override to clear.
  *
@@ -12,7 +12,7 @@
  */
 import { computed, nextTick, onMounted, ref, watch } from "vue";
 
-type RuleState = "neutral" | "exclude" | "boost" | "reduce";
+type RuleState = "neutral" | "exclude" | "boost" | "reduce" | "only";
 
 const props = withDefaults(
   defineProps<{
@@ -165,6 +165,19 @@ function onReset(): void {
       >
         <span class="b-glyph">↓</span> Reduce
       </button>
+      <button
+        type="button"
+        class="pop-btn b-only"
+        :class="{ active: state === 'only' }"
+        :aria-pressed="state === 'only'"
+        title="Link: when this source tag fires, only targets with a rule in this row can be picked"
+        @click="pickState('only')"
+      >
+        <span class="b-glyph">✓</span> Only
+      </button>
+    </div>
+    <div v-if="state === 'only'" class="pop-note">
+      Every target in this row without a rule of its own is excluded when {{ srcLabel }} fires.
     </div>
 
     <div v-if="showFactor" class="pop-factor">
@@ -274,6 +287,17 @@ function onReset(): void {
 }
 .pop-btn.b-exclude.active { background: color-mix(in srgb, var(--wp-danger, #ef4444) 22%, transparent); color: var(--wp-danger); border-color: color-mix(in srgb, var(--wp-danger, #ef4444) 50%, transparent); }
 .pop-btn.b-boost.active   { background: color-mix(in srgb, var(--wp-success, #22c55e) 22%, transparent); color: var(--wp-success); border-color: color-mix(in srgb, var(--wp-success, #22c55e) 50%, transparent); }
+.pop-btn.b-only {
+  /* Fifth button spans the grid so the 2-column layout stays even. */
+  grid-column: 1 / -1;
+}
+.pop-btn.b-only.active    { background: color-mix(in srgb, var(--wp-info, #3b82f6) 22%, transparent); color: var(--wp-info, #3b82f6); border-color: color-mix(in srgb, var(--wp-info, #3b82f6) 50%, transparent); }
+.pop-note {
+  margin: -2px 0 8px;
+  font: 10px var(--wp-font-sans, sans-serif);
+  color: var(--wp-text-muted, #8a8d99);
+  line-height: 1.4;
+}
 .pop-btn.b-reduce.active  { background: color-mix(in srgb, var(--wp-warn, #f97316) 22%, transparent); color: var(--wp-warn); border-color: color-mix(in srgb, var(--wp-warn, #f97316) 50%, transparent); }
 
 /* ── Factor input — wrap + stacked stepper, mirrors OptionRow's

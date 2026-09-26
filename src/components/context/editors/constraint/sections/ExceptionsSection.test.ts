@@ -100,20 +100,24 @@ describe("constraint ExceptionsSection", () => {
     expect(patch.instance?.exception_mode_overrides).toEqual({ '["red","black"]': "boost" });
   });
 
-  it("mode cycle from reduce goes back to allow (4-state, no disabled)", async () => {
-    const w = mount(ExceptionsSection, {
-      props: {
-        module: makeModule({
-          instance: { exception_mode_overrides: { '["red","black"]': "reduce" } },
-        }),
-        sourceValues: SOURCE_VALUES,
-        targetValues: TARGET_VALUES,
-      },
-    });
-    await w.find('[data-test="ex-mode-0"]').trigger("click");
-    const updates = w.emitted("update")!;
-    const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
-    expect(patch.instance?.exception_mode_overrides).toEqual({ '["red","black"]': "allow" });
+  it("mode cycle goes reduce → only → allow (5-state, no disabled)", async () => {
+    const cycleFrom = async (mode: "reduce" | "only") => {
+      const w = mount(ExceptionsSection, {
+        props: {
+          module: makeModule({
+            instance: { exception_mode_overrides: { '["red","black"]': mode } },
+          }),
+          sourceValues: SOURCE_VALUES,
+          targetValues: TARGET_VALUES,
+        },
+      });
+      await w.find('[data-test="ex-mode-0"]').trigger("click");
+      const updates = w.emitted("update")!;
+      const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
+      return patch.instance?.exception_mode_overrides;
+    };
+    expect(await cycleFrom("reduce")).toEqual({ '["red","black"]': "only" });
+    expect(await cycleFrom("only")).toEqual({ '["red","black"]': "allow" });
   });
 
   it("factor input visible only when effective mode is boost or reduce", () => {
@@ -415,5 +419,39 @@ describe("constraint ExceptionsSection — stranded read-only", () => {
     expect(w.find('[data-test="ex-mode-ro-0"]').exists()).toBe(false);
     expect(w.find('[data-test="ex-cb-0"]').exists()).toBe(true);
     expect(w.find('[data-test="ex-add-extra"]').exists()).toBe(true);
+  });
+});
+
+describe("constraint ExceptionsSection — only-link note", () => {
+  const mountWith = (overrides: Partial<ModuleEntry>) =>
+    mount(ExceptionsSection, {
+      props: { module: makeModule(overrides), sourceValues: SOURCE_VALUES, targetValues: TARGET_VALUES },
+    });
+
+  it("hides the note when no exception is only", () => {
+    expect(mountWith({}).find('[data-test="ex-only-note"]').exists()).toBe(false);
+  });
+
+  it("names the source of a library only link", () => {
+    const w = mountWith({
+      payload: {
+        source_wildcard_id: "wc_color", target_wildcard_id: "wc_fabric", matrix: {},
+        exceptions: [{ source_value: "red", target_value: "black", mode: "only", factor: 1 }],
+      },
+    });
+    expect(w.find('[data-test="ex-only-note"]').text()).toContain("when red is picked");
+  });
+
+  it("follows instance overrides, disabled rows and extras", () => {
+    const w = mountWith({
+      instance: {
+        exception_mode_overrides: { '["blue","green"]': "only" },
+        disabled_exception_keys: ['["red","black"]'],
+        extra_exceptions: [{ source_value: "silver", target_value: "white", mode: "only", factor: 1 }],
+      },
+    });
+    const text = w.find('[data-test="ex-only-note"]').text();
+    expect(text).toContain("blue, silver are picked");
+    expect(text).not.toContain("red");
   });
 });

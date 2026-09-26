@@ -116,8 +116,9 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
-function onServerRestarted(): void {
-  stale.markStale();
+function onServerRestarted(ev: Event): void {
+  const detail = (ev as CustomEvent<{ version?: string } | undefined>).detail;
+  stale.markStale(detail?.version);
 }
 
 /** How often to ping for restart-detection while the tab is visible.

@@ -52,6 +52,11 @@ function toggle(): void {
         <span class="legend-name n-reduce">Reduce</span>
         <span class="legend-desc">When the source sub-cat is picked, target values in this column are N times less likely.</span>
       </div>
+      <div class="legend-row">
+        <span class="legend-sample s-only"><span class="glyph">✓</span></span>
+        <span class="legend-name n-only">Only</span>
+        <span class="legend-desc">Links picks. When the source sub-cat is picked, only target values with a rule in this row can be picked; everything else in the row is excluded.</span>
+      </div>
       <div v-if="showAccepts" class="legend-row">
         <span class="legend-sample s-axis"><i class="pi pi-sync glyph" aria-hidden="true" /></span>
         <span class="legend-name n-axis">Accepts axis</span>
@@ -63,6 +68,12 @@ function toggle(): void {
 
 <style scoped>
 .legend { margin-top: 14px; }
+.legend-sample.s-only {
+  color: var(--wp-info, #3b82f6);
+  background: color-mix(in srgb, var(--wp-info, #3b82f6) 22%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-info, #3b82f6) 45%, transparent);
+}
+.legend-name.n-only { color: var(--wp-info, #3b82f6); }
 .legend-sample.s-axis {
   color: var(--wp-axis, #fbbf24);
   background: color-mix(in srgb, var(--wp-axis, #fbbf24) 14%, transparent);

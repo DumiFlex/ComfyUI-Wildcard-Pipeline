@@ -2,7 +2,7 @@
 /**
  * Constraint ExceptionsSection — library exception list + extras
  * section. Library rows: checkbox toggles `disabled_exception_keys`,
- * mode chip cycles 4 modes (no "disabled" — that's the row checkbox's
+ * mode chip cycles 5 modes (no "disabled" — that's the row checkbox's
  * job), factor input visible on boost/reduce.
  *
  * Extras section: instance-only rows from `extra_exceptions`. Source
@@ -20,7 +20,7 @@ import { patchInstance } from "../../instance/patch";
 import RichTextPreview from "../../../../../manager/components/RichTextPreview.vue";
 import Select, { type SelectOption } from "../../../../../manager/components/ui/Select.vue";
 
-type Mode = "allow" | "exclude" | "boost" | "reduce";
+type Mode = "allow" | "exclude" | "boost" | "reduce" | "only";
 
 /** Mode → glyph + label for the colored mode chips. Glyphs mirror the
  *  matrix's MODE_ICON / cellGlyph convention (boost ↑ / reduce ↓ /
@@ -32,6 +32,7 @@ const MODE_META: Record<Mode, { glyph: string; label: string }> = {
   reduce: { glyph: "↓", label: "Reduce" },
   exclude: { glyph: "×", label: "Exclude" },
   allow: { glyph: "·", label: "Neutral" },
+  only: { glyph: "✓", label: "Only" },
 };
 
 /**
@@ -183,11 +184,28 @@ function effectiveFactor(exc: LibraryException): number {
   return factorOverrides.value[libKey(exc)] ?? exc.factor;
 }
 
+/** Source values with an active `only` link (library rows that are enabled,
+ *  after instance mode overrides, plus instance extras). Drives the
+ *  "Linked" note, mirroring the SPA ConstraintEditor's `onlyLinkSources`. */
+const onlyLinkSources = computed<string[]>(() => {
+  const out: string[] = [];
+  const push = (src: string) => { if (!out.includes(src)) out.push(src); };
+  for (const exc of libraryExceptions.value) {
+    if (disabledKeys.value.has(libKey(exc))) continue;
+    if (effectiveMode(exc) === "only") push(excSrc(exc, props.sourceOptionsById));
+  }
+  for (const exc of extras.value) {
+    if (exc.mode === "only") push(exc.source_value);
+  }
+  return out;
+});
+
 const MODE_CYCLE: Record<Mode, Mode> = {
   allow: "exclude",
   exclude: "boost",
   boost: "reduce",
-  reduce: "allow",
+  reduce: "only",
+  only: "allow",
 };
 
 /**
@@ -608,6 +626,13 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
     </div>
     </div>
 
+    <p v-if="onlyLinkSources.length" class="ex__only-note" data-test="ex-only-note">
+      <span class="ex__only-note-glyph" aria-hidden="true">✓</span>
+      Linked: when {{ onlyLinkSources.map((s) => s || "⌀ null").join(", ") }}
+      {{ onlyLinkSources.length === 1 ? "is" : "are" }} picked, only target values listed here for
+      {{ onlyLinkSources.length === 1 ? "it" : "them" }} can be picked.
+    </p>
+
     <button
       v-if="!stranded"
       type="button"
@@ -675,6 +700,10 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
 .ex__row--reduce:not(.ex__row--extra) {
   border-left-color: color-mix(in srgb, var(--wp-warn, #f97316) 60%, transparent);
   background: color-mix(in srgb, var(--wp-warn, #f97316) 5%, transparent);
+}
+.ex__row--only:not(.ex__row--extra) {
+  border-left-color: color-mix(in srgb, var(--wp-info, #3b82f6) 60%, transparent);
+  background: color-mix(in srgb, var(--wp-info, #3b82f6) 5%, transparent);
 }
 .ex__row--exclude:not(.ex__row--extra) {
   border-left-color: color-mix(in srgb, var(--wp-danger, #ef4444) 60%, transparent);
@@ -805,6 +834,7 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
 .ex__mode-chip--allow { background: color-mix(in srgb, var(--wp-accent) 22%, transparent); color: var(--wp-accent-text, var(--wp-text)); }
 .ex__mode-chip--exclude { background: color-mix(in srgb, var(--wp-danger, #e05252) 22%, transparent); color: var(--wp-danger, #e05252); }
 .ex__mode-chip--boost { background: color-mix(in srgb, var(--wp-success, #6bc96f) 22%, transparent); color: var(--wp-success, #6bc96f); }
+.ex__mode-chip--only { background: color-mix(in srgb, var(--wp-info, #3b82f6) 22%, transparent); color: var(--wp-info, #3b82f6); }
 .ex__mode-chip--reduce { background: color-mix(in srgb, var(--wp-warn, #f59e0b) 22%, transparent); color: var(--wp-warn, #f59e0b); }
 .ex__factor-wrap {
   display: inline-flex;
@@ -911,6 +941,12 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
   color: var(--wp-accent-text, var(--wp-text));
 }
 .ex__add-extra .pi { font-size: 10px; }
+.ex__only-note {
+  margin: 8px 0 0;
+  font: 400 11px var(--wp-font-sans);
+  color: var(--wp-text-dim, var(--wp-text3));
+}
+.ex__only-note-glyph { color: var(--wp-info, #3b82f6); margin-right: 4px; }
 .ex__readonly-hint {
   margin: 8px 0 0;
   font: 10px var(--wp-font-sans);

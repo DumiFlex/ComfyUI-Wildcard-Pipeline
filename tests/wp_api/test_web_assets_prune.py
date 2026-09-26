@@ -45,6 +45,21 @@ class TestRemovesStaleArtefacts:
         assert (root / "assets/context-AAAAAAAA.js").exists()
         assert (root / "main.js").exists()
 
+    def test_upgrade_to_mjs_chunks_drops_the_old_js_chunks(self, tmp_path):
+        # Lazy chunks switched from `.js` to `.mjs`. The first start after the
+        # update must delete the old `.js` copies (ComfyUI would still import
+        # them) and keep the new `.mjs` ones the manifest lists.
+        root = _build(
+            tmp_path / "js",
+            live=["main.js", "assets/context-AAAAAAAA.mjs"],
+            stale=["assets/context-BBBBBBBB.js", "assets/context-CCCCCCCC.mjs"],
+        )
+        removed = prune_stale_assets(root)
+        assert sorted(removed) == [
+            "assets/context-BBBBBBBB.js", "assets/context-CCCCCCCC.mjs",
+        ]
+        assert (root / "assets/context-AAAAAAAA.mjs").exists()
+
     def test_removes_orphaned_css_and_map_artefacts_too(self, tmp_path):
         root = _build(
             tmp_path / "web",

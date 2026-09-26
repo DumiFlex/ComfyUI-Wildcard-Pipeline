@@ -18,14 +18,18 @@ import { ref } from "vue";
  */
 export const useStaleStore = defineStore("stale", () => {
   const isStale = ref(false);
+  /** Set when the installed pack version differs from the one this page
+   *  was built as — the banner then says the pack was updated. */
+  const newVersion = ref<string | null>(null);
 
-  function markStale(): void {
+  function markStale(version?: string): void {
     isStale.value = true;
+    if (version && version !== __APP_VERSION__) newVersion.value = version;
   }
 
   function reload(): void {
     window.location.reload();
   }
 
-  return { isStale, markStale, reload };
+  return { isStale, newVersion, markStale, reload };
 });

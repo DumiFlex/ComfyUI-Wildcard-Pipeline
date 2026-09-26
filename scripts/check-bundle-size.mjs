@@ -269,7 +269,7 @@ function allJsFiles(dir) {
     const full = join(dir, name);
     if (statSync(full).isDirectory()) {
       out.push(...allJsFiles(full));
-    } else if (name.endsWith(".js")) {
+    } else if (name.endsWith(".js") || name.endsWith(".mjs")) {
       out.push(full);
     }
   }
@@ -291,7 +291,9 @@ for (const file of files) {
   // content edit and would otherwise show every chunk as added/removed.
   // Normalize Windows backslashes so the manifest diffs cleanly against
   // CI runs (which always emit forward slashes on Linux).
-  const stable = rel.replace(/-[A-Za-z0-9_-]{8,}\.js$/, ".js").replaceAll("\\", "/");
+  // Lazy chunks are `.mjs` (see vite.config.mts); report them under `.js` so
+  // manifests from before that switch still diff chunk-for-chunk.
+  const stable = rel.replace(/-[A-Za-z0-9_-]{8,}\.m?js$/, ".js").replaceAll("\\", "/");
   manifest.files[stable] = size;
   console.log(`  ${rel.padEnd(40)}  ${(size / 1024).toFixed(2).padStart(7)} KB`);
 }

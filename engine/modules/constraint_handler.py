@@ -22,7 +22,9 @@ from typing import Any
 from engine.modules._keys import decode_key, encode_key
 from engine.modules.dispatcher import ModuleHandler
 
-_VALID_MODES = {"allow", "exclude", "boost", "reduce"}
+# `only` (2026-09, linked picks) turns its row into an allow-list — see
+# `_constraint_math`. Additive: a payload using it stamps schema_version 6.
+_VALID_MODES = {"allow", "exclude", "boost", "reduce", "only"}
 
 # SP3 reach selector — which downstream target instance(s) a constraint
 # reaches. Shape only here; reach *behaviour* is applied by a later task.
@@ -140,6 +142,14 @@ def _ctx_set_constraint(ctx: Any, meta: dict[str, Any]) -> None:
                     f"{type(e).__name__}: {e}"
                 ),
             })
+
+
+def _override_mode(mode: Any) -> Any:
+    """Canvas matrix builds before 2026-09 stored a neutral cell override as
+    ``"neutral"`` (the editor's name) instead of ``"allow"`` (the engine's),
+    which failed the whole constraint at run time. Read it as ``allow`` so
+    workflows saved by those builds run."""
+    return "allow" if mode == "neutral" else mode
 
 
 def _validate_cell(cell: Any, where: str) -> None:
@@ -362,7 +372,7 @@ class ConstraintHandler(ModuleHandler):
                 # value across resolves.
                 merged = dict(cell)
                 if key in cell_mode_overrides:
-                    mode = cell_mode_overrides[key]
+                    mode = _override_mode(cell_mode_overrides[key])
                     if mode not in _VALID_MODES:
                         raise ValueError(
                             f"constraint cell_mode_overrides[{key!r}] must be one of "
@@ -402,7 +412,7 @@ class ConstraintHandler(ModuleHandler):
             if len(parts) != 2:
                 continue
             src, tgt = parts[0], parts[1]
-            mode = cell_mode_overrides.get(key, "allow")
+            mode = _override_mode(cell_mode_overrides.get(key, "allow"))
             if mode not in _VALID_MODES:
                 raise ValueError(
                     f"constraint cell_mode_overrides[{key!r}] must be one of "

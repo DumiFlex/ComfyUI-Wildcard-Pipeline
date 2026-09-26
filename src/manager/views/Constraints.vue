@@ -202,7 +202,7 @@ function formatFactor(f: number): string {
   <div class="wp-route-root">
   <ModuleListView
     title="Constraints"
-    subtitle="Constraints set rules between two wildcards' sub-categories — exclude, boost, or reduce specific combinations, with per-pair exceptions."
+    subtitle="Constraints set rules between two wildcards' sub-categories — exclude, boost, reduce, or link specific combinations, with per-pair exceptions."
     new-label="New Constraint"
     new-route="/constraints/new"
     :items="store.items"

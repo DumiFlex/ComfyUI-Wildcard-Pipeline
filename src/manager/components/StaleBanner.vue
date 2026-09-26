@@ -42,7 +42,10 @@ function onRestartCancelled() {
     >
       <Icon name="pi-refresh" />
       <span class="wp-stale__msg">
-        ComfyUI has restarted. This page may be out of date.
+        <template v-if="stale.newVersion">
+          Wildcard Pipeline was updated to v{{ stale.newVersion }}. Reload to use the new version.
+        </template>
+        <template v-else>ComfyUI has restarted. This page may be out of date.</template>
       </span>
       <Button
         variant="primary"

@@ -246,12 +246,16 @@ const MODE_DEFAULT_FACTOR: Record<ConstraintMode, number> = {
   exclude: 0,
   boost: 2,
   reduce: 0.5,
+  only: 1,
 };
 const MODE_OPTIONS = [
   { label: "Allow", value: "allow" },
   { label: "Exclude", value: "exclude" },
   { label: "Boost", value: "boost" },
   { label: "Reduce", value: "reduce" },
+  // Linked picks: when the source value fires, only target values that have
+  // an exception of their own can be picked.
+  { label: "Only", value: "only" },
 ];
 
 /** Mode → {glyph, label, CSS var} for the colored exception-mode chips
@@ -266,6 +270,7 @@ const MODE_META: Record<ConstraintMode, ModeMeta> = {
   reduce: { glyph: "↓", label: "Reduce", cssVar: "--wp-warn" },
   exclude: { glyph: "×", label: "Exclude", cssVar: "--wp-danger" },
   allow: { glyph: "·", label: "Neutral", cssVar: "--wp-text-dim" },
+  only: { glyph: "✓", label: "Only", cssVar: "--wp-info" },
 };
 function modeMeta(mode: ConstraintMode | string | undefined): ModeMeta {
   return MODE_META[(mode ?? "allow") as ConstraintMode] ?? MODE_META.allow;
@@ -821,8 +826,13 @@ function normalizeExceptions(raw: unknown): ConstraintException[] {
     .map((e) => {
       if (!e || typeof e !== "object") return null;
       const r = e as Record<string, unknown>;
-      const source = typeof r.source === "string" ? r.source : "";
-      const target = typeof r.target === "string" ? r.target : "";
+      // The engine reads tier-2 `source_value` / `target_value` first, then
+      // legacy `source` / `target` (constraint_handler.py). Mirror that so an
+      // imported or API-written row doesn't load with blank values.
+      const pick = (a: unknown, b: unknown): string =>
+        typeof a === "string" ? a : typeof b === "string" ? b : "";
+      const source = pick(r.source_value, r.source);
+      const target = pick(r.target_value, r.target);
       const source_id = typeof r.source_id === "string" ? r.source_id : undefined;
       const target_id = typeof r.target_id === "string" ? r.target_id : undefined;
       const mode = (typeof r.mode === "string" ? r.mode : "allow") as ConstraintMode;
@@ -922,6 +932,17 @@ const exFilterActive = computed(() => exQuery.value.trim().length > 0);
 /** Rows to render, each carrying its ORIGINAL index: every row action —
  *  `removeException(idx)`, `exceptions.value[idx]` in the update handlers —
  *  addresses by position, so a filtered array alone would edit the wrong row. */
+/** Source values that carry an `only` exception. For each, every target value
+ *  without an exception of its own is excluded at runtime — the note under
+ *  the table says so, since the rows alone don't show the shut-out targets. */
+const onlyLinkSources = computed<string[]>(() => {
+  const out: string[] = [];
+  for (const ex of exceptions.value) {
+    if (ex.mode === "only" && !out.includes(ex.source)) out.push(ex.source);
+  }
+  return out;
+});
+
 const visibleExceptions = computed<{ ex: ConstraintException; idx: number }[]>(() => {
   const rows = exceptions.value.map((ex, idx) => ({ ex, idx }));
   const q = exQuery.value.trim().toLowerCase();
@@ -1694,6 +1715,12 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
           </tr>
         </tbody>
       </table>
+      <p v-if="onlyLinkSources.length" class="cn-only-note" data-test="cn-only-note">
+        <span class="cn-only-note__glyph" aria-hidden="true">✓</span>
+        Linked: when {{ onlyLinkSources.map((s) => displayLabel(s) || "⌀ null").join(", ") }}
+        {{ onlyLinkSources.length === 1 ? "is" : "are" }} picked, only target values listed here for
+        {{ onlyLinkSources.length === 1 ? "it" : "them" }} can be picked.
+      </p>
     </Card>
     </div>
     <!-- CascadeConfirmDialog: shown when entity has downstream refs. -->
@@ -1834,6 +1861,14 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
  * their set widths; source + target split the remaining space and TRUNCATE
  * (each cell's Select trigger ellipsis-clips) instead of overflowing the page. */
 .cn-ex-table { table-layout: fixed; width: 100%; }
+.cn-only-note {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: var(--wp-text-xs);
+  color: var(--wp-text-muted);
+  border-bottom: 1px solid var(--wp-border);
+}
+.cn-only-note__glyph { color: var(--wp-info, #3b82f6); margin-right: 4px; }
 /* Read-only (stranded) value cells: clip long text to one line to match the
  * editable Selects rather than wrapping into tall rows. */
 .cn-ex-table td.wp-mono {

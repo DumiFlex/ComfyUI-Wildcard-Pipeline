@@ -16,9 +16,10 @@ CURRENT_SCHEMA_VERSION = 2
 
 # Highest schema version this runtime can natively READ + WRITE — distinct
 # from CURRENT_SCHEMA_VERSION (the migration-chain head, which stays 2 because
-# v2->v3/v3->v4/v4->v5 are no-ops). v3 is the SP2b text-grammar bump (shape-
-# identical to v2), v4 is the additive `target_select` constraint reach and v5
-# is the additive `accepts` tag-axis kind; all are handled natively, so a
+# v2->v3 through v5->v6 are no-ops). v3 is the SP2b text-grammar bump (shape-
+# identical to v2), v4 is the additive `target_select` constraint reach, v5
+# is the additive `accepts` tag-axis kind and v6 the constraint `only` rule;
+# all are handled natively, so a
 # payload at CURRENT < v <= MAX_KNOWN installs AS-IS with no migration.
 # Mirror of TS `MAX_KNOWN_SCHEMA_VERSION` in
 # `src/manager/import-export/migrations.ts`.
@@ -26,7 +27,7 @@ CURRENT_SCHEMA_VERSION = 2
 # MAINTENANCE CONTRACT: bump this whenever the TS `schemaVersionForPayload()`
 # learns to stamp a new (higher) version — otherwise this commit-side
 # re-validate will reject the very shapes the runtime just learned to produce.
-MAX_KNOWN_SCHEMA_VERSION = 5
+MAX_KNOWN_SCHEMA_VERSION = 6
 
 # Feature stamps (mirror of the TS constants beside MAX_KNOWN). Each is the
 # catalog version a payload needs once it uses that feature; see
@@ -34,6 +35,7 @@ MAX_KNOWN_SCHEMA_VERSION = 5
 SP2B_SCHEMA_VERSION = 3  # range count / `~` flag in a `{N$$…}` multi-pick
 SP3_REACH_SCHEMA_VERSION = 4  # non-default constraint `target_select`
 TAG_AXES_SCHEMA_VERSION = 5  # wildcard `tag_group_kinds` with an `accepts` group
+CONSTRAINT_ONLY_SCHEMA_VERSION = 6  # constraint rule with mode `only`
 
 _CHAIN = {
     0: migrate_v0_to_v1,

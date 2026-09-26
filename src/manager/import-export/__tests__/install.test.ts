@@ -203,13 +203,45 @@ describe("installEnvelope — natively-supported future versions install as-is",
     });
   });
 
-  it("rejects a v6 envelope (> MAX_KNOWN) at parse with the future-version error", async () => {
+  it("installs a v6 constraint (`only` rule) without rejecting or migrating", async () => {
+    const onlyExc = { source_value: "maid", target_value: "apron", mode: "only", factor: 1 };
     const v6Envelope = {
       schema_version: 6,
-      bundles: [], wildcards: [], fixed_values: [], combines: [], derivations: [], constraints: [], categories: [], templates: [],
+      bundles: [], wildcards: [], fixed_values: [], combines: [], derivations: [], categories: [], templates: [],
+      constraints: [
+        {
+          id: "cnonly01",
+          type: "constraint",
+          name: "role-outfit",
+          payload: {
+            source_wildcard_id: "wcrole01",
+            target_wildcard_id: "wcoutf01",
+            matrix: { summer: { open: { mode: "only", factor: 1 } } },
+            exceptions: [onlyExc],
+          },
+        },
+      ],
     };
     const { importExport, seen } = fakeCommit();
     const result = await installEnvelope({ envelope: v6Envelope }, { importExport });
+
+    expect(result.ok).toBe(true);
+    expect(result.installed.constraint).toBe(1);
+    expect(result.migratedEntityCount).toBe(0);
+    const added = seen[0].adds.find((a) => a.kind === "constraint");
+    if (!added) throw new Error("constraint add not found in commit payload");
+    const payload = added.entity.payload as Record<string, unknown>;
+    expect(payload.exceptions).toEqual([onlyExc]);
+    expect(payload.matrix).toEqual({ summer: { open: { mode: "only", factor: 1 } } });
+  });
+
+  it("rejects a v7 envelope (> MAX_KNOWN) at parse with the future-version error", async () => {
+    const v7Envelope = {
+      schema_version: 7,
+      bundles: [], wildcards: [], fixed_values: [], combines: [], derivations: [], constraints: [], categories: [], templates: [],
+    };
+    const { importExport, seen } = fakeCommit();
+    const result = await installEnvelope({ envelope: v7Envelope }, { importExport });
 
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("parse_failed");
