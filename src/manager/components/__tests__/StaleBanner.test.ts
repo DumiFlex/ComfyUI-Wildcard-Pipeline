@@ -30,4 +30,19 @@ describe("StaleBanner", () => {
     await wrapper.find("[data-test='stale-reload']").trigger("click");
     expect(spy).toHaveBeenCalled();
   });
+
+  it("names the new version when the pack was updated", async () => {
+    const wrapper = mount(StaleBanner);
+    useStaleStore().markStale("9.9.9");
+    await wrapper.vm.$nextTick();
+    expect(wrapper.text()).toContain("updated to v9.9.9");
+    expect(wrapper.text()).not.toContain("restarted");
+  });
+
+  it("keeps the restart wording when the version is unchanged", async () => {
+    const wrapper = mount(StaleBanner);
+    useStaleStore().markStale(__APP_VERSION__);
+    await wrapper.vm.$nextTick();
+    expect(wrapper.text()).toContain("restarted");
+  });
 });

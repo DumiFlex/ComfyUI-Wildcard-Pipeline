@@ -58,3 +58,15 @@ async def test_startup_id_is_not_stamped_on_other_routes(aiohttp_client):
 
     ours = await client.get("/wp/api/mine")
     assert "X-WP-Startup-Id" in ours.headers
+
+
+async def test_response_includes_installed_version(wp_client):
+    """X-WP-Version carries the pyproject version so an old tab can tell
+    the pack was updated under it."""
+    import re
+    from pathlib import Path
+
+    text = (Path(__file__).resolve().parents[2] / "pyproject.toml").read_text("utf-8")
+    expected = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE).group(1)
+    resp = await wp_client.get("/wp/api/database/info")
+    assert resp.headers.get("X-WP-Version") == expected

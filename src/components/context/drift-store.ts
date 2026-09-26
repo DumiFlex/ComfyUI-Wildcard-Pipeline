@@ -1,5 +1,6 @@
 import { ref, type Ref } from "vue";
 import type { ModuleEntry } from "../../widgets/_shared";
+import { checkInstalledVersion } from "./version-notice";
 
 /**
  * Shape of the SnapshotEntry returned by `POST /wp/api/modules/embed-bundle`
@@ -119,6 +120,7 @@ function sameModuleHashes(
 async function fetchModuleHashes(): Promise<void> {
   try {
     const res = await fetch("/wp/api/modules/hashes");
+    checkInstalledVersion(res);
     if (!res.ok) return;
     const body = (await res.json()) as {
       hashes?: Record<string, { type?: string; payload_hash: string }>;
