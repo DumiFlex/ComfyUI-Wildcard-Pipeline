@@ -30,7 +30,7 @@ from pathlib import Path
 
 _MANIFEST_NAME = ".wp-assets.json"
 
-# Rollup/Vite hashed output: `name-B1a2C3d4.js`, `style-XyZ98765.css`, and
+# Rollup/Vite hashed output: `name-B1a2C3d4.mjs` (`.js` before 2.16), `style-XyZ98765.css`, and
 # their sourcemaps, which append `.map` to the WHOLE filename rather than
 # replacing the extension — `name-B1a2C3d4.js.map`. The optional group is what
 # catches those; without it, orphaned maps were the one artefact class the
@@ -40,7 +40,7 @@ _MANIFEST_NAME = ".wp-assets.json"
 # is left alone even when the manifest does not mention it, so a doc, an image
 # or a file a user dropped in by hand is never at risk. The cost of missing a
 # stale file is disk; the cost of deleting a live one is a broken install.
-_HASHED = re.compile(r"-[A-Za-z0-9_-]{8,}\.(?:js|css)(?:\.map)?$")
+_HASHED = re.compile(r"-[A-Za-z0-9_-]{8,}\.(?:m?js|css)(?:\.map)?$")
 
 
 def _is_build_artefact(name: str) -> bool:

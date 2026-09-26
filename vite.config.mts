@@ -71,7 +71,15 @@ export default defineConfig(({ mode }) => {
           output: {
             dir: "js",
             entryFileNames: "main.js",
-            chunkFileNames: "assets/[name]-[hash].js",
+            // `.mjs`, not `.js`: ComfyUI's /api/extensions lists every `**/*.js`
+            // under WEB_DIRECTORY and the frontend imports each one at page
+            // load, which turned every lazy chunk eager (all 62 files, ~421 KB
+            // gzip, even on a canvas with no WP node). Only the entry keeps
+            // `.js` so ComfyUI still finds it. ComfyUI serves extension files
+            // through aiohttp's `web.static`, whose MIME table is Python's
+            // built-in one (not the Windows registry), and that maps `.mjs` to
+            // JavaScript on every Python we support (3.10+).
+            chunkFileNames: "assets/[name]-[hash].mjs",
             assetFileNames: "assets/[name]-[hash][extname]",
             // Rewrite the alias to ComfyUI's runtime URL so the browser can
             // resolve it. ComfyUI serves /scripts/app.js as the live app.

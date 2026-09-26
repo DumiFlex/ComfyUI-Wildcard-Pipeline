@@ -4,7 +4,9 @@ import os
 import sys
 
 # Tells ComfyUI to serve files from this folder under
-# /extensions/<package-name>/ and auto-load any `*.js` it finds.
+# /extensions/<package-name>/ and auto-load any `*.js` it finds. Only the
+# entry `main.js` uses that extension; lazy chunks are `.mjs` so ComfyUI does
+# not import them all up front (vite.config.mts).
 #
 # "any *.js it finds" is load-bearing: ComfyUI fetches EVERY file it lists
 # here on page load, so a chunk left behind by an older version is not merely
