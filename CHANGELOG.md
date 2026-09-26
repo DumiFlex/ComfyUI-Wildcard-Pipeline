@@ -1,3 +1,17 @@
+## 🎉 Wildcard Pipeline 2.17.1
+
+📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
+
+### Fixes
+
+- **What's new shows the release you are running.** After an update, the page could keep showing the notes of an older release for a few hours ("Release notes for v2.15.3 — you are running v2.17.0"), because it trusted a release check cached before the update. It now headlines the newest release it knows about, and a cached check older than your version is fetched again.
+
+
+
+---
+
+**Full changelog:** [v2.17.0…v2.17.1](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/compare/v2.17.0...v2.17.1)
+
 ## 🎉 Wildcard Pipeline 2.17.0
 
 📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
