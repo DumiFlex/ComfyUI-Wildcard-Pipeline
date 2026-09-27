@@ -221,29 +221,30 @@ function onKeydown(ev: KeyboardEvent): void {
   }
 }
 
-watch(
-  playgroundOpen,
-  (open) => {
-    if (open) {
-      // Resync local refs from the store on every open so external
-      // changes (settings panel edits between modal opens, OS pref
-      // changes, debug-helper writes) reflect immediately. Without
-      // this, refs hold whatever they were when the modal last
-      // closed and the user sees stale values.
-      syncFromStore();
-      window.addEventListener("keydown", onKeydown);
-      // Lock body scroll while the modal is open — same pattern as
-      // ModalShell uses for ModuleEditModal / ModulePickerModal.
-      document.body.style.overflow = "hidden";
-    } else {
-      window.removeEventListener("keydown", onKeydown);
-      document.body.style.overflow = "";
-    }
-  },
-);
+function onOpenChange(open: boolean): void {
+  if (open) {
+    // Resync local refs from the store on every open so external
+    // changes (settings panel edits between modal opens, OS pref
+    // changes, debug-helper writes) reflect immediately. Without
+    // this, refs hold whatever they were when the modal last
+    // closed and the user sees stale values.
+    syncFromStore();
+    window.addEventListener("keydown", onKeydown);
+    // Lock body scroll while the modal is open — same pattern as
+    // ModalShell uses for ModuleEditModal / ModulePickerModal.
+    document.body.style.overflow = "hidden";
+  } else {
+    window.removeEventListener("keydown", onKeydown);
+    document.body.style.overflow = "";
+  }
+}
 
+watch(playgroundOpen, onOpenChange);
+
+// `main.ts` mounts this the first time the launcher opens it, so the ref is
+// usually already true here and the watcher above never saw the change.
 onMounted(() => {
-  if (playgroundOpen.value) window.addEventListener("keydown", onKeydown);
+  if (playgroundOpen.value) onOpenChange(true);
 });
 
 onBeforeUnmount(() => {

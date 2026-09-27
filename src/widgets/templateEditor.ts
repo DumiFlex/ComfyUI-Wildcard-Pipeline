@@ -16,11 +16,12 @@
  *      is why this is the one place that passes `socketed: true`. The helper
  *      widget must stay socketless — it is an editor, not a value.
  *   2. `getCustomWidgets` factories must return synchronously, so the module
- *      is preloaded by `main.ts` like every other widget chunk.
+ *      is preloaded by `main.ts` (through `boot.ts`) like every other widget
+ *      glue file. The editor itself stays lazy, as every other widget's SFC
+ *      does, so a canvas with no assembler never downloads it.
  */
-import { computed, h, ref, type Component } from "vue";
+import { computed, defineAsyncComponent, h, ref, type Component } from "vue";
 import { app } from "#comfyui/app";
-import RichTextInput from "../manager/components/RichTextInput.vue";
 import { createDomWidgetHost, type MountTargetNode } from "./_shared";
 import { attachThemeDetector } from "../extension/theme-detector";
 import { templateInsertAtCaret } from "../extension/_stashes";
@@ -35,6 +36,8 @@ import {
 import { reactiveFromGraph, stringArrayEqual } from "../extension/reactive";
 
 type EditorNode = LiteNodeLike & MountTargetNode;
+
+const RichTextInput = defineAsyncComponent(() => import("../manager/components/RichTextInput.vue"));
 
 const PLACEHOLDER = "A $style portrait of $subject";
 
