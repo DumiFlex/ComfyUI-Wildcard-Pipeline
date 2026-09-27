@@ -248,3 +248,27 @@ def test_ref_log_does_not_change_the_result():
         )
         assert plain["probe"] == sample["vars"]["probe"]
         assert "__wp_ref_log__" not in plain
+
+
+# ── tracked values (baselines) ────────────────────────────────────────
+
+def test_tracked_values_follow_seed_order_and_limit():
+    stack = [COLOR, _combine("d0000001", "a $color hat", "hat")]
+    out = run_scenario(stack, seeds=[5, 1, 9, 2], track=["$hat", "missing"], track_limit=3)
+    assert out["tracked"]["seeds"] == [5, 1, 9]
+    hats = out["tracked"]["values"]["hat"]
+    by_seed = {s["seed"]: s["vars"]["hat"] for s in out["samples"]}
+    assert hats == [by_seed[5], by_seed[1], by_seed[9]]
+    assert out["tracked"]["values"]["missing"] == [None, None, None]
+
+
+def test_tracking_is_off_by_default():
+    assert run_scenario([COLOR], seeds=[1])["tracked"] is None
+
+
+def test_a_failed_seed_tracks_none(monkeypatch):
+    def boom(self, modules, ctx=None, seed=0, **kw):
+        raise RuntimeError("bad")
+    monkeypatch.setattr(PipelineEngine, "run", boom)
+    out = run_scenario([COLOR], seeds=[3], track=["color"])
+    assert out["tracked"] == {"seeds": [3], "values": {"color": [None]}}

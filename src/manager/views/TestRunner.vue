@@ -21,6 +21,7 @@ import VariablesPanel from "../components/test-runner/VariablesPanel.vue";
 import OutputsPanel from "../components/test-runner/OutputsPanel.vue";
 import SamplesPanel from "../components/test-runner/SamplesPanel.vue";
 import WarningsPanel from "../components/test-runner/WarningsPanel.vue";
+import ComparePanel from "../components/test-runner/ComparePanel.vue";
 import TraceDrawer from "../components/test-runner/TraceDrawer.vue";
 import { useScenarioWorkbench } from "../composables/useScenarioWorkbench";
 import { useDeleteConfirm } from "../composables/useDeleteConfirm";
@@ -33,7 +34,7 @@ const route = useRoute();
 const wb = useScenarioWorkbench();
 const { draft, result } = wb;
 
-type Tab = "variables" | "outputs" | "samples" | "warnings";
+type Tab = "variables" | "outputs" | "samples" | "warnings" | "compare";
 const tab = ref<Tab>("variables");
 const traceSeed = ref<number | null>(null);
 const editingName = ref(false);
@@ -55,7 +56,14 @@ const TABS = computed<{ id: Tab; label: string; count?: number }[]>(() => [
   { id: "outputs", label: "Outputs" },
   { id: "samples", label: "Samples", count: result.value?.samples.length },
   { id: "warnings", label: "Warnings", count: result.value ? warningCount.value + result.value.failed : undefined },
+  { id: "compare", label: "Compare", count: wb.diff.value ? wb.diff.value.changed.length : undefined },
 ]);
+
+/** Tab badge tone: the Compare count is a change count, not a total. */
+function countTone(id: Tab): string | undefined {
+  if (id !== "compare" || !wb.diff.value) return undefined;
+  return wb.diff.value.same ? "ok" : "warn";
+}
 
 function openTrace(seed: number): void {
   traceSeed.value = seed;
@@ -72,10 +80,24 @@ function deepLinkItem(): ScenarioStackItem | null {
   return kind === "bundle" ? { bundle: id } : { module: id };
 }
 
+/** `?uses=<id>` narrows the rail to scenarios holding that module/bundle. */
+const usesId = ref<string | null>(typeof route.query.uses === "string" && route.query.uses ? route.query.uses : null);
+const uses = computed(() => {
+  const id = usesId.value;
+  if (!id) return null;
+  const name = wb.modules.value.find((m) => m.id === id)?.name ?? wb.bundles.value.find((b) => b.id === id)?.name ?? id;
+  return { id, name };
+});
+
 onMounted(async () => {
   await wb.loadLibrary();
   const item = deepLinkItem();
-  if (item) {
+  const using = usesId.value
+    ? wb.scenarios.value.find((s) => s.stack.some((i) => ("module" in i ? i.module : i.bundle) === usesId.value))
+    : undefined;
+  if (using) {
+    wb.openScenario(using);
+  } else if (item) {
     wb.newQuickRun(item);
     void wb.run();
   } else if (wb.scenarios.value.length) {
@@ -137,7 +159,11 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
       :scenarios="wb.scenarios.value"
       :active-id="draft.id"
       :quick-run-name="draft.id ? null : draft.name"
+      :rerun="wb.rerun.value"
+      :uses="uses"
+      @clear-uses="usesId = null"
       @select="onSelect"
+      @rerun-pinned="wb.rerunPinned"
       @new="onNew"
       @toggle-pin="wb.togglePin"
       @delete="delConfirm.ask"
@@ -184,7 +210,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
           :loading="wb.running.value"
           title="Ctrl + Enter"
           data-test="run-btn"
-          @click="wb.run"
+          @click="wb.run()"
         >{{ wb.running.value ? "Running…" : "Run" }}</Button>
       </div>
 
@@ -208,7 +234,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
             Skipped {{ result.missing.length }} item{{ result.missing.length === 1 ? "" : "s" }} no longer in the library.
           </p>
           <div class="wp-tr__stats" data-test="run-stats">
-            <div><span>Runs</span><strong>{{ result.runs }}</strong><em>{{ seedLabel(draft.seeds) }}</em></div>
+            <div><span>Runs</span><strong>{{ result.runs }}</strong><em>{{ seedLabel(wb.ranSeeds.value ?? draft.seeds) }}</em></div>
             <div><span>Unique outputs</span><strong>{{ uniqueOutputs ?? "none" }}</strong><em>{{ wb.outputVar.value ? `of $${wb.outputVar.value}` : "no output variable" }}</em></div>
             <div><span>Warnings</span><strong :data-warn="warningCount + result.failed ? 'true' : 'false'">{{ warningCount + result.failed }}</strong><em>{{ result.failed ? `${result.failed} runs failed` : result.warnings.length ? `${result.warnings.length} kinds` : "none reported" }}</em></div>
             <div><span>Engine time</span><strong>{{ result.elapsed_ms < 1000 ? `${Math.round(result.elapsed_ms)} ms` : `${(result.elapsed_ms / 1000).toFixed(2)} s` }}</strong><em>real engine, seeded</em></div>
@@ -224,7 +250,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
                 :aria-selected="tab === t.id"
                 :data-test="`tab-${t.id}`"
                 @click="tab = t.id"
-              >{{ t.label }}<span v-if="t.count !== undefined" class="wp-tr__count">{{ t.count }}</span></button>
+              >{{ t.label }}<span v-if="t.count !== undefined" class="wp-tr__count" :data-tone="countTone(t.id)">{{ t.count }}</span></button>
             </div>
             <div class="wp-tr__pane" role="tabpanel">
               <VariablesPanel v-if="tab === 'variables'" :result="result" :views="wb.stackViews.value" :output-var="wb.outputVar.value" />
@@ -237,7 +263,19 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
                 @update:output-var="(v) => (draft.output_var = v)"
               />
               <SamplesPanel v-else-if="tab === 'samples'" :result="result" :views="wb.stackViews.value" :output-var="wb.outputVar.value" :selected-seed="traceSeed" @open="openTrace" />
-              <WarningsPanel v-else :result="result" :uuid-to-name="uuidToName" @open="openTrace" />
+              <WarningsPanel v-else-if="tab === 'warnings'" :result="result" :uuid-to-name="uuidToName" @open="openTrace" />
+              <ComparePanel
+                v-else
+                :result="result"
+                :baseline="wb.baseline.value"
+                :diff="wb.diff.value"
+                :saved="!!draft.id && !wb.dirty.value"
+                :running="wb.running.value"
+                @set-baseline="wb.setBaseline"
+                @clear-baseline="wb.clearBaseline"
+                @run-baseline-seeds="wb.runBaselineSeeds"
+                @open="openTrace"
+              />
             </div>
           </section>
         </template>
@@ -337,6 +375,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   font: var(--wp-text-xs) var(--wp-font-mono); background: var(--wp-bg-4); color: var(--wp-text-muted);
   border-radius: 999px; padding: 0 var(--wp-space-3); /* audit-exempt: pill */
 }
+.wp-tr__count[data-tone="ok"] { background: color-mix(in oklab, var(--wp-success) 16%, transparent); color: var(--wp-success); }
+.wp-tr__count[data-tone="warn"] { background: color-mix(in oklab, var(--wp-warn) 16%, transparent); color: var(--wp-warn); }
 .wp-tr__pane { padding: var(--wp-space-6); }
 @media (max-width: 900px) {
   .wp-tr { grid-template-columns: 1fr; height: auto; }
