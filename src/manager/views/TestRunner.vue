@@ -11,7 +11,7 @@
  * opens an unsaved quick run holding that module or bundle.
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import Button from "../components/ui/Button.vue";
 import Icon, { ICON_SM } from "../components/ui/Icon.vue";
 import ScenarioRail from "../components/test-runner/ScenarioRail.vue";
@@ -23,14 +23,17 @@ import SamplesPanel from "../components/test-runner/SamplesPanel.vue";
 import WarningsPanel from "../components/test-runner/WarningsPanel.vue";
 import ComparePanel from "../components/test-runner/ComparePanel.vue";
 import TraceDrawer from "../components/test-runner/TraceDrawer.vue";
+import InspectorDrawer from "../components/test-runner/InspectorDrawer.vue";
 import { useScenarioWorkbench } from "../composables/useScenarioWorkbench";
 import { useDeleteConfirm } from "../composables/useDeleteConfirm";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { buildUuidToName } from "../utils/wildcardSyntax";
 import { seedLabel } from "../utils/scenario";
+import { inspectItem } from "../utils/inspect";
 import type { ScenarioRow, ScenarioStackItem } from "../api/types";
 
 const route = useRoute();
+const router = useRouter();
 const wb = useScenarioWorkbench();
 const { draft, result } = wb;
 
@@ -66,10 +69,52 @@ function countTone(id: Tab): string | undefined {
 }
 
 function openTrace(seed: number): void {
+  inspectIndex.value = null;
   traceSeed.value = seed;
 }
 
-watch(() => draft.value.id, () => { traceSeed.value = null; });
+/* ---------------------------- inspector ---------------------------- */
+
+const inspectIndex = ref<number | null>(null);
+const inspectView = computed(() =>
+  inspectIndex.value === null ? null : wb.stackViews.value[inspectIndex.value] ?? null,
+);
+const inspectData = computed(() => {
+  const v = inspectView.value;
+  if (!v || inspectIndex.value === null) return null;
+  return inspectItem(v, inspectIndex.value, wb.modules.value, wb.bundles.value, v.enabled ? result.value : null);
+});
+/** The last run still lines up with the inspected card. */
+const inspectHasRun = computed(() => {
+  const i = inspectIndex.value;
+  const v = inspectView.value;
+  return !!v && i !== null && !!result.value?.stack.some((s) => s.index === i && s.id === v.id);
+});
+
+function openInspector(i: number): void {
+  traceSeed.value = null;
+  inspectIndex.value = inspectIndex.value === i ? null : i;
+}
+
+const EDIT_ROUTES: Record<string, string> = {
+  wildcard: "wildcards-edit",
+  combine: "combines-edit",
+  derivation: "derivations-edit",
+  constraint: "constraints-edit",
+  fixed_values: "fixed-values-edit",
+  bundle: "bundles-edit",
+};
+
+function editInspected(): void {
+  const v = inspectView.value;
+  if (!v) return;
+  const name = EDIT_ROUTES[v.kind];
+  if (name) guardDirty(() => void router.push({ name, params: { id: v.id } }));
+}
+
+watch(() => draft.value.id, () => { traceSeed.value = null; inspectIndex.value = null; });
+// The inspected card moved or was removed: close rather than show another.
+watch(() => draft.value.stack.length, () => { inspectIndex.value = null; });
 
 /* --------------------------- deep link ---------------------------- */
 
@@ -222,6 +267,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
           :unset="wb.unset.value"
           :modules="wb.modules.value"
           :bundles="wb.bundles.value"
+          :inspecting="inspectIndex"
+          @inspect="openInspector"
         />
 
         <div v-if="!draft.stack.length" class="wp-tr__start" data-test="start-hint">
@@ -288,6 +335,14 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
     </main>
 
     <TraceDrawer :sample="traceSample" @close="traceSeed = null" />
+    <InspectorDrawer
+      :view="inspectView"
+      :index="inspectIndex"
+      :data="inspectData"
+      :has-run="inspectHasRun"
+      @close="inspectIndex = null"
+      @edit="editInspected"
+    />
 
     <ConfirmDialog
       :visible="delConfirm.visible.value"

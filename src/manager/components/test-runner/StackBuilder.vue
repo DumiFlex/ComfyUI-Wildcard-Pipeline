@@ -5,7 +5,8 @@
  * stand in for whatever an upstream node would pass in.
  *
  * Each card can be switched off, removed, or dragged to a new place
- * (Alt + arrow keys move a focused card).
+ * (Alt + arrow keys move a focused card). Clicking a card (or Enter on a
+ * focused one) opens its inspector.
  */
 import { computed, ref } from "vue";
 import Button from "../ui/Button.vue";
@@ -24,11 +25,14 @@ const props = defineProps<{
   pins: Record<string, string>;
   modules: ModuleRow[];
   bundles: BundleRow[];
+  /** The card whose inspector is open. */
+  inspecting?: number | null;
 }>();
 
 const emit = defineEmits<{
   (e: "update:stack", v: ScenarioStackItem[]): void;
   (e: "update:pins", v: Record<string, string>): void;
+  (e: "inspect", index: number): void;
 }>();
 
 const pickerOpen = ref(false);
@@ -47,6 +51,7 @@ function moveTo(from: number, to: number): void {
 }
 
 function onCardKey(e: KeyboardEvent, i: number): void {
+  if (e.key === "Enter" && e.target === e.currentTarget) { e.preventDefault(); emit("inspect", i); return; }
   if (!e.altKey) return;
   if (e.key === "ArrowLeft") { e.preventDefault(); moveTo(i, i - 1); }
   else if (e.key === "ArrowRight") { e.preventDefault(); moveTo(i, i + 1); }
@@ -127,8 +132,9 @@ function removePin(name: string): void {
         :data-missing="v.missing ? 'true' : 'false'"
         :data-dragging="dragFrom === i ? 'true' : 'false'"
         :data-drop="dragOver === i && dragFrom !== i ? 'true' : 'false'"
+        :data-active="inspecting === i ? 'true' : 'false'"
         :aria-label="`${i + 1}. ${KIND_META[v.kind].label} ${v.name}`"
-        title="Drag to reorder, or Alt + arrow keys"
+        title="Click to inspect. Drag to reorder, or Alt + arrow keys"
         tabindex="0"
         draggable="true"
         data-test="stack-card"
@@ -138,6 +144,7 @@ function removePin(name: string): void {
         @drop.prevent="onDrop(i)"
         @dragend="onDragEnd"
         @keydown="onCardKey($event, i)"
+        @click="emit('inspect', i)"
       >
         <div class="wp-trs__top">
           <span class="wp-trs__step">{{ i + 1 }}</span>
@@ -147,6 +154,7 @@ function removePin(name: string): void {
             :model-value="v.enabled"
             :aria-label="v.enabled ? `Switch off ${v.name}` : `Switch on ${v.name}`"
             data-test="stack-toggle"
+            @click.stop
             @update:model-value="(on: boolean) => setEnabled(i, on)"
           />
         </div>
@@ -170,7 +178,7 @@ function removePin(name: string): void {
           :aria-label="`Remove ${v.name}`"
           title="Remove"
           data-test="stack-remove"
-          @click="removeAt(i)"
+          @click.stop="removeAt(i)"
         ><Icon name="pi-times" :size="ICON_SM" /></button>
       </li>
       <li class="wp-trs__add-wrap">
@@ -236,12 +244,13 @@ function removePin(name: string): void {
   box-shadow: inset 3px 0 0 var(--kc);
   padding: var(--wp-space-4) var(--wp-space-5) var(--wp-space-5) var(--wp-space-6);
   display: flex; flex-direction: column; gap: var(--wp-space-2);
-  cursor: grab; transition: border-color .12s, opacity .12s;
+  cursor: pointer; transition: border-color .12s, opacity .12s;
 }
 .wp-trs__card:hover { border-color: var(--wp-border-strong); }
 .wp-trs__card:focus-visible { outline: 2px solid var(--wp-border-focus); outline-offset: 1px; }
 .wp-trs__card[data-dragging="true"] { opacity: .4; cursor: grabbing; }
 .wp-trs__card[data-drop="true"] { border-color: var(--wp-accent-500); }
+.wp-trs__card[data-active="true"] { border-color: var(--kc); }
 .wp-trs__card[data-off="true"] { box-shadow: inset 3px 0 0 var(--wp-border-strong); }
 .wp-trs__card[data-off="true"] .wp-trs__name,
 .wp-trs__card[data-off="true"] .wp-trs__kind { opacity: .5; }

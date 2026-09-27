@@ -95,11 +95,13 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 .wp-trd {
   position: fixed; top: 0; right: 0; bottom: 0; z-index: 40;
   width: min(460px, 100vw); background: var(--wp-bg-1);
-  border-left: 1px solid var(--wp-border-strong); box-shadow: -20px 0 40px rgba(0, 0, 0, .4);
-  transform: translateX(100%); transition: transform .2s ease;
+  border-left: 1px solid var(--wp-border-strong);
+  /* Off-canvas while closed, with no shadow bleeding back on screen. */
+  transform: translateX(100%); visibility: hidden;
+  transition: transform .2s ease, visibility 0s linear .2s;
   display: flex; flex-direction: column; overflow: auto;
 }
-.wp-trd[data-open="true"] { transform: none; }
+.wp-trd[data-open="true"] { transform: none; visibility: visible; box-shadow: var(--wp-shadow-xl); transition: transform .2s ease; }
 .wp-trd__head {
   position: sticky; top: 0; background: var(--wp-bg-1);
   display: flex; align-items: center; gap: var(--wp-space-3);
