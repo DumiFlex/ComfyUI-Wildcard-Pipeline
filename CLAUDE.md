@@ -58,12 +58,13 @@ ruff check .           # Python lint
 
 ## Frontend overview
 
-- **Entry** `src/main.ts` → `js/main.js` (~1.6 KB gzip). Top-level await preload widget chunks so `getCustomWidgets` factories run sync (Promise return → `{widget: undefined}` and widget never mount). Register extension + lazy-import widget code only when ComfyUI hand matching node.
-- **Lazy chunks** `src/widgets/{context,debug,assembler}.ts` — one mount glue per widget. Each `import()` become own asset chunk, plus sibling SFC chunk (`ContextWidget`, `DebugViewer`, `AssemblerHelper`).
+- **Entry** `src/main.ts` → `js/main.js` (~4 KB gzip). One top-level `await import("./boot")` preload widget glue so `getCustomWidgets` factories run sync (Promise return → `{widget: undefined}` and widget never mount; ComfyUI does not await an async `getCustomWidgets`).
+- **Boot chunk** `src/boot.ts` — everything registration + node creation need, re-exported from ONE module so it ship as ONE chunk (empty canvas = `main.js` + `boot-*.mjs`). Before, each preload was own `import()` and shared deps split out: 43 files. Only add what registration needs; anything reached by user action (modal, toast stack, subgraph badge) gets a `load*` helper in `boot.ts`, not an `import()` in `main.ts` (a chunk loaded from `main.ts` makes Rollup split vue + stores back out).
+- **Widget glue** `src/widgets/*.ts` — one mount glue per widget, in the boot chunk. Each loads its SFC via `defineAsyncComponent` (`ContextWidget`, `DebugViewer`, `AssemblerHelper`, `RichTextInput`, …) so SFC chunks download only when a matching node exists.
 - **Shared** `src/widgets/_shared.ts` expose `createDomWidgetHost`, JSON helpers (`parseWidgetJson`, `parseWidgetJsonWithRecovery` for corrupt-workflow recovery path), shared types. Largest shared chunk (`_shared`, ~33 KB gzip) is Vue runtime + plugin-vue helper, pulled in by every widget on first use.
 - **Graph + conflicts** `src/extension/{graph,conflicts,subgraph-badge,reactive,graph-events}.ts` — pure logic, no DOM. Imported by widgets, easy to unit-test isolated.
 - **Reactivity** `extension/reactive.ts:reactiveFromGraph` — wires `onConnectionsChange` chain + 400ms polling fallback + `afterConfigureGraph` re-sync so widgets recompute on graph edits + workflow loads without flashing stale state.
-- **Adding new widget**: (1) write SFC under `src/components/<name>/`, (2) add `src/widgets/<name>.ts` exposing `create(node, inputName)` that return `createDomWidgetHost(...)`, (3) wire in `src/main.ts` — either as `getCustomWidgets` entry (for inputs declared with matching widget-type) or via `beforeRegisterNodeDef → onNodeCreated` (for free-floating helpers). Use `import("./widgets/<name>")` so stay out of entry chunk + size gate keep holding.
+- **Adding new widget**: (1) write SFC under `src/components/<name>/`, (2) add `src/widgets/<name>.ts` exposing `create(node, inputName)` that return `createDomWidgetHost(...)`, (3) re-export it from `src/boot.ts` and wire in `src/main.ts` — either as `getCustomWidgets` entry (for inputs declared with matching widget-type) or via `beforeRegisterNodeDef → onNodeCreated` (for free-floating helpers). SFC via `defineAsyncComponent`, never static import, so boot chunk stay small.
 
 ## Schema versioning + lazy migration machine
 
