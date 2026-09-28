@@ -490,8 +490,12 @@ describe("RichTextInput.vue", () => {
       sel?.removeAllRanges();
       sel?.addRange(range);
     };
+    // Match rows only: a query no module is named also offers a trailing
+    // "Placeholder @…" row, which is not a match.
     const rowCount = (): number =>
-      document.body.querySelectorAll(".wp-rt-suggestions__item").length;
+      document.body.querySelectorAll(
+        ".wp-rt-suggestions__item:not(.wp-rt-suggestions__item--placeholder)",
+      ).length;
 
     // Type `@act` → the three act* names match.
     span.textContent = "@act";

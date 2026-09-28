@@ -109,6 +109,32 @@ function extractRefs(text: string): Array<{ uuid: string; filter?: string; name?
   return out;
 }
 
+/** Display label for a ref that did not resolve: its cached `#name` as
+ *  `@name`, else the bare `@{uuid}` so the id can still be copied. */
+function missingRefLabel(ref: { uuid: string; name?: string }): string {
+  return ref.name ? `@${ref.name}` : `@{${ref.uuid}}`;
+}
+
+/**
+ * Labels of every `@{uuid}` ref in `text` whose target `known` does not hold,
+ * in order, deduplicated. Editors use it to mark the exact row that carries a
+ * broken ref (or a placeholder not pointed at a module yet), so the fix does
+ * not start with hunting through the table for the red chip.
+ */
+export function brokenRefLabels(
+  text: string | null | undefined,
+  known: { has(id: string): boolean },
+): string[] {
+  if (!text || !text.includes("@")) return [];
+  const out: string[] = [];
+  for (const ref of extractRefs(text)) {
+    if (known.has(ref.uuid)) continue;
+    const label = missingRefLabel(ref);
+    if (!out.includes(label)) out.push(label);
+  }
+  return out;
+}
+
 function extractVars(text: string): string[] {
   const out: string[] = [];
   for (const t of tokensFor(text)) {
@@ -185,7 +211,7 @@ function validateWildcard(
         // braces — reads like a normal var-style ref); fallback to
         // uuid renders as `@{uuid}` so the user can still copy/paste
         // the bare identifier when the name was never cached.
-        const label = ref.name ? `@${ref.name}` : `@{${ref.uuid}}`;
+        const label = missingRefLabel(ref);
         issues.push({
           severity: "error",
           message: `Option ${i + 1}: missing ref ${label}`,
@@ -284,7 +310,7 @@ function validateCombine(
   if (typeof p.template === "string") {
     for (const ref of extractRefs(p.template)) {
       if (!idx.byId.has(ref.uuid)) {
-        const label = ref.name ? `@${ref.name}` : `@{${ref.uuid}}`;
+        const label = missingRefLabel(ref);
         issues.push({ severity: "error", message: `Template ref ${label} missing` });
       }
     }
@@ -338,7 +364,7 @@ function validateDerivation(
         if (typeof condValue === "string") {
           for (const ref of extractRefs(condValue)) {
             if (!idx.byId.has(ref.uuid)) {
-              const label = ref.name ? `@${ref.name}` : `@{${ref.uuid}}`;
+              const label = missingRefLabel(ref);
               issues.push({
                 severity: "error",
                 message: `Rule ${ri + 1} branch ${bi + 1}: condition ref ${label} missing`,
@@ -351,7 +377,7 @@ function validateDerivation(
       if (typeof actionValue === "string") {
         for (const ref of extractRefs(actionValue)) {
           if (!idx.byId.has(ref.uuid)) {
-            const label = ref.name ? `@${ref.name}` : `@{${ref.uuid}}`;
+            const label = missingRefLabel(ref);
             issues.push({
               severity: "error",
               message: `Rule ${ri + 1} branch ${bi + 1}: action ref ${label} missing`,

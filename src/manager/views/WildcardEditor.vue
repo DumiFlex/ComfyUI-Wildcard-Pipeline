@@ -69,6 +69,7 @@ import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
 import CascadeRenameDialog from "../cascade/CascadeRenameDialog.vue";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { ResolveWarning } from "../utils/resolveTokens";
+import { brokenRefLabels } from "../utils/validateModule";
 
 const props = defineProps<{ id?: string }>();
 const router = useRouter();
@@ -286,6 +287,13 @@ const wcSuggestions = computed<string[]>(
 // template + `wcSuggestions` sort key are untouched.
 const refData = computed(() => buildWildcardRefData(moduleStore.catalog));
 const nameByUuid = computed(() => refData.value.uuidToName);
+/** Missing `@` refs per option value — the same test the chips use, so a row
+ *  is marked exactly when it shows a red chip. */
+function optionBrokenRefs(value: string): string[] {
+  // Nothing is known until the catalog loads; do not paint every ref red then.
+  if (nameByUuid.value.size === 0) return [];
+  return brokenRefLabels(value, nameByUuid.value);
+}
 const uuidToSubCategories = computed(() => refData.value.uuidToSubCategories);
 const uuidToOptionsCount = computed(() => refData.value.uuidToOptionsCount);
 const uuidToHasNull = computed(() => refData.value.uuidToHasNull);
@@ -2354,6 +2362,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
               'wc-opt-row--dropbefore': dragOver === i && dragFrom !== null && dragFrom !== i,
               'wc-opt-row--cargo': moveArmed && isSelected(o.id),
               'wc-opt-row--landing': moveArmed && !isSelected(o.id),
+              'wc-opt-row--broken': !o.is_null && optionBrokenRefs(o.value).length > 0,
             }"
             @dragover="onOptDragOver(i, $event)"
             @drop.prevent="onOptDrop(i)"
@@ -2448,6 +2457,14 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                 placeholder="value (type @ for nested wildcards · {a|b|c} for inline choices)"
                 aria-label="Option value"
               />
+              <div
+                v-if="!o.is_null && optionBrokenRefs(o.value).length"
+                class="wc-broken-note"
+                :data-test="`wc-opt-broken-${i}`"
+              >
+                <i class="pi pi-exclamation-triangle" aria-hidden="true" />
+                <span>{{ optionBrokenRefs(o.value).join(", ") }} not in the library · click the chip to point it at a module</span>
+              </div>
             </td>
             <td>
               <span v-if="o.is_null" class="wc-em-dash" aria-hidden="true">—</span>
@@ -2694,6 +2711,22 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
 }
 .wc-opt-row--null {
   background: color-mix(in srgb, var(--wp-text) 2%, transparent);
+}
+/* An option holding a ref that points at nothing: red rail on the leading
+   cell plus a faint wash, so the row is findable in a long table. */
+.wc-opt-row--broken > td {
+  background: color-mix(in srgb, var(--wp-danger, #ef4444) 6%, transparent);
+}
+.wc-opt-row--broken > td:first-child {
+  box-shadow: inset 3px 0 0 var(--wp-danger, #ef4444);
+}
+.wc-broken-note {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-2);
+  margin-top: var(--wp-space-2);
+  font-size: var(--wp-text-xs);
+  color: var(--wp-danger, #ef4444);
 }
 
 /* ── Sub-category group boxes (H1) ───────────────────────────────── */

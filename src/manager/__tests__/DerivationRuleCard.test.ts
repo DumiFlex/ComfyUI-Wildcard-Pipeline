@@ -555,3 +555,44 @@ describe("DerivationRuleCard.vue", () => {
     });
   });
 });
+
+describe("DerivationRuleCard — broken refs", () => {
+  const known = new Map([["aabbccdd", "outfit"]]);
+  function mountWith(rule: DerivationRule) {
+    return mount(DerivationRuleCard, {
+      props: { modelValue: rule, index: 0, uuidToName: known },
+    });
+  }
+
+  it("marks the branch and the rule when an action value points at nothing", () => {
+    const wrap = mountWith(makeRule({
+      branches: [{
+        condition: { var: "x", op: "equals", value: "y" },
+        action: { target_var: "out", mode: "replace", value: "a @{11223344#castle} b" },
+      }],
+    }));
+    expect(wrap.find('[data-test="branch-0-0"]').classes()).toContain("branch--broken");
+    expect(wrap.find('[data-test="branch-broken-0-0"]').text()).toContain("@castle");
+    expect(wrap.find('[data-test="rule-broken-0"]').exists()).toBe(true);
+  });
+
+  it("marks the ELSE branch on its own", () => {
+    const wrap = mountWith(makeRule({
+      else: { action: { target_var: "out", mode: "replace", value: "@{11223344#castle}" } },
+    }));
+    expect(wrap.find('[data-test="branch-0-0"]').classes()).not.toContain("branch--broken");
+    expect(wrap.find('[data-test="branch-else-0"]').classes()).toContain("branch--broken");
+    expect(wrap.find('[data-test="branch-broken-else-0"]').text()).toContain("@castle");
+  });
+
+  it("leaves resolved refs alone", () => {
+    const wrap = mountWith(makeRule({
+      branches: [{
+        condition: { var: "x", op: "equals", value: "y" },
+        action: { target_var: "out", mode: "replace", value: "@{aabbccdd#outfit}" },
+      }],
+    }));
+    expect(wrap.find(".branch--broken").exists()).toBe(false);
+    expect(wrap.find('[data-test="rule-broken-0"]').exists()).toBe(false);
+  });
+});

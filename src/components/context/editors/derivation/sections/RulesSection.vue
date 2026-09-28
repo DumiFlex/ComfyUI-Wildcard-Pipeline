@@ -31,6 +31,7 @@ import type { VarProducerLike } from "../../../../../manager/components/RefChip.
 import { patchInstance } from "../../instance/patch";
 import { varColorClass } from "../../../../shared/var-color";
 import RuleValueChips from "./RuleValueChips.vue";
+import { tokenizeRich } from "../../../../../widgets/richTokenize";
 import PairBadge from "../../../PairBadge.vue";
 import {
   conditionLeaves,
@@ -57,6 +58,37 @@ interface DerivationRule {
   id: string;
   branches?: DerivationBranch[];
   else?: { action?: DerivationAction };
+}
+
+/** `@` refs in a rule (test values, action values and this node's value
+ *  overrides) whose target the catalog does not hold, labelled `@name`. Empty
+ *  until the catalog has loaded, so a rule never flashes red while it fetches. */
+function ruleBrokenRefs(rule: DerivationRule): string[] {
+  const known = props.uuidToName;
+  if (known.size === 0) return [];
+  const texts: unknown[] = [];
+  for (const b of rule.branches ?? []) {
+    for (const t of conditionLeaves<DerivationCondition>(b.condition)) texts.push(t.value);
+    texts.push(b.action?.value);
+  }
+  texts.push(rule.else?.action?.value);
+  const inst = props.module.instance as Record<string, unknown> | undefined;
+  for (const key of ["action_value_overrides", "condition_value_overrides"]) {
+    const byRule = (inst?.[key] as Record<string, Record<string, unknown>> | null | undefined)?.[rule.id];
+    if (byRule && typeof byRule === "object") texts.push(...Object.values(byRule));
+  }
+  const out: string[] = [];
+  for (const text of texts) {
+    if (typeof text !== "string" || !text.includes("@")) continue;
+    for (const tok of tokenizeRich(text)) {
+      const uuid = tok.kind === "ref" ? tok.meta?.uuid : undefined;
+      if (!uuid || known.has(uuid)) continue;
+      const name = typeof tok.meta?.name === "string" && tok.meta.name ? tok.meta.name : "";
+      const label = name ? `@${name}` : `@{${uuid}}`;
+      if (!out.includes(label)) out.push(label);
+    }
+  }
+  return out;
 }
 
 const props = withDefaults(
@@ -494,6 +526,7 @@ function ruleSummaryText(rule: DerivationRule): string {
           'rule-card--open': isExpanded(rule.id),
           'rule-card--dragging': draggingRuleId === rule.id,
           'rule-card--drop-target': dragOverRuleId === rule.id && draggingRuleId !== null && draggingRuleId !== rule.id,
+          'rule-card--broken': ruleBrokenRefs(rule).length > 0,
         }"
         :data-test="`rule-card-${rule.id}`"
         @dragover="(ev) => onRuleDragOver(rule.id, ev)"
@@ -527,6 +560,12 @@ function ruleSummaryText(rule: DerivationRule): string {
           </span>
 
           <span class="rule-head__num" :title="`Rule id ${rule.id}`">Rule {{ ruleIdx + 1 }}</span>
+          <i
+            v-if="ruleBrokenRefs(rule).length"
+            class="pi pi-exclamation-triangle rule-head__broken"
+            :title="`${ruleBrokenRefs(rule).join(', ')} not in the library`"
+            :data-test="`rule-broken-${rule.id}`"
+          />
 
           <span
             class="rule-head__summary"
@@ -870,6 +909,14 @@ function ruleSummaryText(rule: DerivationRule): string {
   flex-shrink: 0;
 }
 .rule-card--off { opacity: 0.55; }
+.rule-card--broken {
+  border-color: color-mix(in srgb, var(--wp-danger, #ef4444) 55%, transparent);
+  box-shadow: inset 3px 0 0 var(--wp-danger, #ef4444);
+}
+.rule-head__broken {
+  font-size: 10px;
+  color: var(--wp-danger, #ef4444);
+}
 .rule-card--dragging { opacity: 0.5; }
 .rule-card--drop-target {
   /* Visual cue that dropping here will insert the dragged rule

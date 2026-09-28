@@ -17,6 +17,7 @@ import type {
 } from "../api/types";
 import DerivationConditionEditor from "./DerivationConditionEditor.vue";
 import { conditionLeaves } from "../../extension/derivation-conditions";
+import { brokenRefLabels } from "../utils/validateModule";
 
 interface Props {
   modelValue: DerivationRule;
@@ -117,6 +118,31 @@ function branchPeek(branch: DerivationBranch): string {
   const more = tests.length > 1 ? ` +${tests.length - 1}` : "";
   const tvar = branch.action.target_var;
   return `${cvar ? "$" + cvar : "$?"}${more} → ${tvar ? "$" + tvar : "$?"}`;
+}
+
+/** Missing `@` refs anywhere in a branch (its tests' values and its action
+ *  value), labelled like the list view's warning so the two agree. */
+function branchBrokenRefs(branch: DerivationBranch): string[] {
+  const texts = [
+    ...conditionLeaves<DerivationCondition>(branch.condition).map((t) => t.value),
+    branch.action.value,
+  ];
+  const out: string[] = [];
+  for (const text of texts) {
+    for (const label of brokenRefLabels(text, props.uuidToName)) {
+      if (!out.includes(label)) out.push(label);
+    }
+  }
+  return out;
+}
+const elseBrokenRefs = computed(() =>
+  brokenRefLabels(rule.value.else?.action.value, props.uuidToName));
+const ruleHasBrokenRef = computed(() =>
+  elseBrokenRefs.value.length > 0
+  || rule.value.branches.some((b) => branchBrokenRefs(b).length > 0));
+
+function brokenTitle(labels: string[]): string {
+  return `${labels.join(", ")} not in the library. Click the red chip to point it at a module.`;
 }
 
 const emit = defineEmits<{
@@ -245,6 +271,12 @@ const branchCount = computed(() => rule.value.branches.length);
         {{ branchCount }} branch{{ branchCount === 1 ? "" : "es" }}
         <span v-if="rule.else"> + ELSE</span>
       </span>
+      <i
+        v-if="ruleHasBrokenRef"
+        class="pi pi-exclamation-triangle dvr-broken-mark"
+        title="A branch in this rule references a module that is not in the library"
+        :data-test="`rule-broken-${index}`"
+      />
       <span class="spacer" />
       <!-- Inline per-rule collapse/expand of THIS rule's conditions. Only
            useful when the rule card itself is open. -->
@@ -281,6 +313,7 @@ const branchCount = computed(() => rule.value.branches.length);
         v-for="(branch, bi) in rule.branches"
         :key="bi"
         class="branch"
+        :class="{ 'branch--broken': branchBrokenRefs(branch).length > 0 }"
         :data-kind="bi === 0 ? 'if' : 'elif'"
         :data-test="`branch-${index}-${bi}`"
       >
@@ -309,6 +342,12 @@ const branchCount = computed(() => rule.value.branches.length);
             :data-test="`branch-peek-${index}-${bi}`"
           >{{ branchPeek(branch) }}</span>
           <span class="spacer" />
+          <span
+            v-if="branchBrokenRefs(branch).length"
+            class="dvr-broken-mark"
+            :title="brokenTitle(branchBrokenRefs(branch))"
+            :data-test="`branch-broken-${index}-${bi}`"
+          ><i class="pi pi-exclamation-triangle" aria-hidden="true" /> {{ branchBrokenRefs(branch).join(", ") }}</span>
           <Button
             v-if="bi > 0"
             icon="pi-times"
@@ -395,7 +434,13 @@ const branchCount = computed(() => rule.value.branches.length);
       </div>
 
       <!-- ELSE branch -->
-      <div v-if="rule.else" class="branch branch--else" data-kind="else" :data-test="`branch-else-${index}`">
+      <div
+        v-if="rule.else"
+        class="branch branch--else"
+        :class="{ 'branch--broken': elseBrokenRefs.length > 0 }"
+        data-kind="else"
+        :data-test="`branch-else-${index}`"
+      >
         <div class="branch-head" @click="onBranchHeadClick($event, -1)">
           <button
             type="button"
@@ -414,6 +459,12 @@ const branchCount = computed(() => rule.value.branches.length);
             :data-test="`branch-peek-else-${index}`"
           >→ {{ rule.else.action.target_var ? "$" + rule.else.action.target_var : "$?" }}</span>
           <span class="spacer" />
+          <span
+            v-if="elseBrokenRefs.length"
+            class="dvr-broken-mark"
+            :title="brokenTitle(elseBrokenRefs)"
+            :data-test="`branch-broken-else-${index}`"
+          ><i class="pi pi-exclamation-triangle" aria-hidden="true" /> {{ elseBrokenRefs.join(", ") }}</span>
           <Button
             icon="pi-times"
             variant="ghost"
@@ -555,6 +606,18 @@ const branchCount = computed(() => rule.value.branches.length);
 }
 .branch--else {
   border-style: dashed;
+}
+/* A branch holding a ref that points at nothing. */
+.branch--broken {
+  border-color: color-mix(in srgb, var(--wp-danger, #ef4444) 55%, transparent);
+  box-shadow: inset 3px 0 0 var(--wp-danger, #ef4444);
+}
+.dvr-broken-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wp-space-2);
+  font-size: var(--wp-text-xs);
+  color: var(--wp-danger, #ef4444);
 }
 
 .branch-head {

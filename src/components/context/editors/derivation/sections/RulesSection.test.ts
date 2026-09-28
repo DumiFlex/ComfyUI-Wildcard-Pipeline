@@ -688,3 +688,47 @@ describe("DerivationInstanceModal — forwards viaOptionPairs to RulesSection", 
     expect(rules.props("viaOptionPairs")).toEqual(pairs);
   });
 });
+
+describe("RulesSection — broken-ref rule marker", () => {
+  const known = new Map([["aabbccdd", "color"]]);
+  function ruleWith(value: string): DerivationRule {
+    return {
+      id: "r1",
+      branches: [{
+        condition: { var: "mood", op: "equals", value: "calm" },
+        action: { target_var: "out", mode: "replace", value },
+      }],
+    };
+  }
+
+  it("marks a rule whose action holds a ref the catalog lacks", () => {
+    const w = mount(RulesSection, {
+      props: { module: makeModule([ruleWith("x @{11223344#castle}")]), uuidToName: known },
+    });
+    expect(w.find('[data-test="rule-card-r1"]').classes()).toContain("rule-card--broken");
+    expect(w.find('[data-test="rule-broken-r1"]').attributes("title")).toContain("@castle");
+  });
+
+  it("marks a rule whose value OVERRIDE holds the broken ref", () => {
+    const w = mount(RulesSection, {
+      props: {
+        module: makeModule([ruleWith("plain")], {
+          action_value_overrides: { r1: { "0": "@{11223344#castle}" } },
+        }),
+        uuidToName: known,
+      },
+    });
+    expect(w.find('[data-test="rule-card-r1"]').classes()).toContain("rule-card--broken");
+  });
+
+  it("stays unmarked for resolved refs and before the catalog loads", () => {
+    const ok = mount(RulesSection, {
+      props: { module: makeModule([ruleWith("@{aabbccdd#color}")]), uuidToName: known },
+    });
+    expect(ok.find(".rule-card--broken").exists()).toBe(false);
+    const loading = mount(RulesSection, {
+      props: { module: makeModule([ruleWith("@{11223344#castle}")]), uuidToName: new Map() },
+    });
+    expect(loading.find(".rule-card--broken").exists()).toBe(false);
+  });
+});
