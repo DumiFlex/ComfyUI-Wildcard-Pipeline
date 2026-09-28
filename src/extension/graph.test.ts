@@ -826,6 +826,53 @@ describe("collectUpstreamResolved axis reads", () => {
   });
 });
 
+describe("collectUpstreamResolved derivation condition groups", () => {
+  beforeEach(() => _resetForTests());
+
+  /** `$mood` = calm and `$time` = night upstream, then a derivation whose one
+   *  branch tests them with the given condition and writes `$light`. */
+  function groupGraph(condition: unknown) {
+    const ctx = fakeWildcardContextNode(1, [
+      { id: "aaaaaaaa", binding: "$mood", options: [{ value: "calm" }] },
+      { id: "cccccccc", binding: "$time", options: [{ value: "night" }] },
+    ]);
+    const mods = JSON.parse(String(ctx.widgets![0].value));
+    mods.modules.push({
+      id: "bbbbbbbb", type: "derivation", enabled: true, meta: { name: "" }, entries: [],
+      payload: { rules: [{
+        id: "r1",
+        branches: [{ condition, action: { target_var: "light", mode: "replace", value: "soft" } }],
+        else: { action: { target_var: "light", mode: "replace", value: "hard" } },
+      }] },
+    });
+    ctx.widgets![0].value = JSON.stringify(mods);
+    const asm: LiteNodeLike = {
+      id: 2, type: "WP_PromptAssembler", inputs: [{ name: "context", link: 100 }],
+    };
+    return {
+      _nodes: [ctx, asm],
+      links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id: number) => ({ 1: ctx, 2: asm } as Record<number, LiteNodeLike>)[id] ?? null,
+    } as LiteGraphLike;
+  }
+  const asm: LiteNodeLike = { id: 2, type: "WP_PromptAssembler", inputs: [{ name: "context", link: 100 }] };
+  const mood = { var: "mood", op: "equals", value: "calm" };
+  const day = { var: "time", op: "equals", value: "day" };
+
+  it("AND needs every test", () => {
+    expect(collectUpstreamResolved(groupGraph({ match: "all", conditions: [mood, day] }), asm).light).toBe("hard");
+  });
+
+  it("OR needs any test", () => {
+    expect(collectUpstreamResolved(groupGraph({ match: "any", conditions: [mood, day] }), asm).light).toBe("soft");
+  });
+
+  it("previews the emptiness ops", () => {
+    expect(collectUpstreamResolved(groupGraph({ var: "time", op: "is_not_empty", value: "" }), asm).light).toBe("soft");
+    expect(collectUpstreamResolved(groupGraph({ var: "time", op: "is_empty", value: "" }), asm).light).toBe("hard");
+  });
+});
+
 describe("collectUpstreamResolved nested @{uuid} fallback", () => {
   beforeEach(() => _resetForTests());
 

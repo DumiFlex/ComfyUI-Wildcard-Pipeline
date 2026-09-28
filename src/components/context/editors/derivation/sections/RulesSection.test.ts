@@ -31,7 +31,7 @@ async function expandAndFindRti(
 }
 
 interface DerivationBranch {
-  condition: { var: string; op: string; value: string };
+  condition: { var: string; op: string; value: string } | { match: string; conditions: unknown[] };
   action: { target_var: string; mode: string; value: string };
 }
 interface DerivationRule {
@@ -282,6 +282,47 @@ describe("derivation RulesSection (tier-D accordion + branch table)", () => {
     expect(lastPatch(w).instance?.condition_value_overrides).toEqual({
       r1: { "0": "purple" },
     });
+  });
+
+  // ── AND / OR groups ──────────────────────────────────────────────
+
+  function groupedRule(): DerivationRule {
+    return {
+      id: "r1",
+      branches: [{
+        condition: {
+          match: "all",
+          conditions: [
+            { var: "color", op: "equals", value: "red" },
+            { match: "any", conditions: [
+              { var: "hat", op: "exists", value: "" },
+              { var: "time", op: "equals", value: "night" },
+            ] },
+          ],
+        },
+        action: { target_var: "mood", mode: "replace", value: "warm" },
+      }],
+    };
+  }
+
+  it("summarises a grouped condition with its connectors", () => {
+    const w = mount(RulesSection, { props: { module: makeModule([groupedRule()]) } });
+    const head = w.get('[data-test="rule-summary-r1"]');
+    expect(head.text()).toBe("$color=redAND($hatexistsOR$time=night)→$mood=warm");
+    expect(head.attributes("title")).toBe("$color = red AND ( $hat exists OR $time = night ) → $mood = warm");
+  });
+
+  it("gives each value-taking test of a group its own override field", async () => {
+    const w = mount(RulesSection, { props: { module: makeModule([groupedRule()]) } });
+    // Tests depth-first: color (0), hat (0.1, no value), time (0.2).
+    const input = await expandAndFindRti(w, "r1", "cond-override-r1-0.2");
+    expect(input).toBeDefined();
+    const ids = w.findAllComponents(RichTextInput).map((c) => c.attributes("data-test"));
+    expect(ids).toContain("cond-override-r1-0");
+    expect(ids).not.toContain("cond-override-r1-0.1");
+    input!.vm.$emit("update:modelValue", "dawn");
+    await w.vm.$nextTick();
+    expect(lastPatch(w).instance?.condition_value_overrides).toEqual({ r1: { "0.2": "dawn" } });
   });
 
   // ── Mod-count chip ───────────────────────────────────────────────

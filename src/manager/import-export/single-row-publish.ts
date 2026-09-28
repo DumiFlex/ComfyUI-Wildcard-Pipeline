@@ -30,6 +30,7 @@ import {
 import {
   CONSTRAINT_ONLY_SCHEMA_VERSION,
   CURRENT_SCHEMA_VERSION,
+  DERIVATION_CONDITIONS_SCHEMA_VERSION,
   SP2B_SCHEMA_VERSION,
   SP3_REACH_SCHEMA_VERSION,
   TAG_AXES_SCHEMA_VERSION,
@@ -182,9 +183,42 @@ export function usesConstraintOnlyRule(node: unknown): boolean {
   return false;
 }
 
+const V7_CONDITION_OPS: ReadonlySet<unknown> = new Set(["is_empty", "is_not_empty"]);
+
+function isV7Condition(cond: unknown): boolean {
+  if (!isPlainObject(cond)) return false;
+  if ("conditions" in cond) return true;
+  return V7_CONDITION_OPS.has(cond.op);
+}
+
+/**
+ * Walk `node` (object/array, any depth) looking for a derivation branch whose
+ * `condition` is an AND / OR group or a test using `is_empty` /
+ * `is_not_empty`. Mirror of
+ * `engine/migrations/stamping.py:uses_derivation_conditions`.
+ */
+export function usesDerivationConditions(node: unknown): boolean {
+  if (Array.isArray(node)) {
+    return node.some((child) => usesDerivationConditions(child));
+  }
+  if (!isPlainObject(node)) return false;
+  const branches = node.branches;
+  if (Array.isArray(branches)
+    && branches.some((b) => isPlainObject(b) && isV7Condition(b.condition))) {
+    return true;
+  }
+  for (const value of Object.values(node)) {
+    if (value && typeof value === "object" && usesDerivationConditions(value)) return true;
+  }
+  return false;
+}
+
 /**
  * Choose the community catalog `schema_version` to stamp for a payload — the
  * MAX version any feature in the payload requires:
+ *   - `DERIVATION_CONDITIONS_SCHEMA_VERSION` (7) when ANY derivation branch
+ *     groups tests with AND / OR or uses `is_empty` / `is_not_empty`
+ *     (`usesDerivationConditions`).
  *   - `CONSTRAINT_ONLY_SCHEMA_VERSION` (6) when ANY constraint rule uses the
  *     `only` mode (`usesConstraintOnlyRule`).
  *   - `TAG_AXES_SCHEMA_VERSION` (5) when ANY wildcard marks a tag group
@@ -204,6 +238,7 @@ export function usesConstraintOnlyRule(node: unknown): boolean {
  * doesn't actually use a newer feature.
  */
 export function schemaVersionForPayload(payload: Record<string, unknown>): number {
+  if (usesDerivationConditions(payload)) return DERIVATION_CONDITIONS_SCHEMA_VERSION;
   if (usesConstraintOnlyRule(payload)) return CONSTRAINT_ONLY_SCHEMA_VERSION;
   if (usesAcceptsTagAxis(payload)) return TAG_AXES_SCHEMA_VERSION;
   if (usesTargetSelectReach(payload)) return SP3_REACH_SCHEMA_VERSION;

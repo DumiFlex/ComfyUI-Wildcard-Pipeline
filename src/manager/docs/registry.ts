@@ -118,7 +118,7 @@ export const DOC_PAGES: DocPageMeta[] = [
     blurb: "Template-fill $vars into one output $var.", keywords: ["template", "merge"],
     ...page(() => import("./pages/modules/combine.vue")) },
   { id: "derivation", title: "Derivation", group: "modules", icon: "pi pi-arrow-right-arrow-left", tone: "derivation",
-    blurb: "IF/ELIF/ELSE rules that mutate the Context.", keywords: ["rule", "condition", "logic"],
+    blurb: "IF/ELIF/ELSE rules that mutate the Context.", keywords: ["rule", "condition", "logic", "and", "or", "group"],
     ...page(() => import("./pages/modules/derivation.vue")) },
   { id: "constraint", title: "Constraint", group: "modules", icon: "pi pi-filter", tone: "constraint",
     blurb: "Reweight a target wildcard from a source pick.", keywords: ["pairing", "matrix", "exclude"],

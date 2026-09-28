@@ -13,7 +13,7 @@ const conditionOps = [
   { term: "equals / not equals", desc: "Matches when the variable's value is (or isn't) exactly the text you provide. Case-sensitive." },
   { term: "contains", desc: "Matches when the variable's value includes the text you provide somewhere inside it." },
   { term: "matches", desc: "Matches using a regular expression — for flexible pattern-based conditions." },
-  { term: "exists / not exists", desc: "Matches when the variable is present in the Context (or absent), regardless of its value." },
+  { term: "exists / not exists", desc: "Matches when the variable is present in the Context (or absent), regardless of its value. Under exists, a switch narrows it: any, is empty (present but empty, e.g. a wildcard that rolled its null option) or has value." },
   { term: "is set / is unset", desc: "is set matches when the variable is present and non-empty; is unset matches when it's absent or empty." },
 ];
 
@@ -26,7 +26,7 @@ const actionModes = [
 const instanceOptions = [
   { term: "Disable a rule", desc: "Skip one of the top-level IF/ELIF/ELSE rules for this use without removing it from the library entry." },
   { term: "Disable a branch", desc: "Skip a specific IF, ELIF, or ELSE branch within a rule for this use." },
-  { term: "Value override", desc: "Replace the text that a specific branch action writes, for this use only." },
+  { term: "Value override", desc: "Replace the text that a specific branch action writes, or the value a condition compares against, for this use only. A branch that combines tests gets one condition field per test." },
   { term: "Rule order", desc: "Reorder the rules for this use without changing the shared library entry." },
 ];
 </script>
@@ -73,6 +73,26 @@ const instanceOptions = [
 
     <DocSection title="Condition operators">
       <DocKeyList :items="conditionOps" />
+    </DocSection>
+
+    <DocSection title="Combining tests with AND / OR">
+      <p>
+        A branch can check more than one thing. Click <b>+ Condition</b> under a test to add
+        another; the connector between them reads <b>AND</b> (every test must match) and one click
+        flips it to <b>OR</b> (any test may match). The connector applies to the whole list, so a
+        list is either all AND or all OR.
+      </p>
+      <p>
+        To mix the two, click <b>+ Group</b>. A group is a boxed list of its own with the opposite
+        connector, so IF <VarToken>$time</VarToken> equals "night" AND (<VarToken>$weather</VarToken>
+        equals "rain" OR <VarToken>$weather</VarToken> equals "fog") is one test plus a group of two.
+        Groups nest up to three levels deep.
+      </p>
+      <DocCallout variant="tip">
+        Removing tests until one is left turns the branch back into a plain single test, so a
+        derivation only needs the newer format when it really combines tests. An older Wildcard
+        Pipeline refuses a shared pack that does and asks for an update.
+      </DocCallout>
     </DocSection>
 
     <DocSection title="Action modes">

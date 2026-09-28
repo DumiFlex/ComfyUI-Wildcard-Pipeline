@@ -2,7 +2,7 @@ import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 import DerivationRuleCard from "../components/DerivationRuleCard.vue";
 import RichTextInput from "../components/RichTextInput.vue";
-import type { DerivationRule } from "../api/types";
+import type { DerivationCondition, DerivationRule } from "../api/types";
 
 function makeRule(overrides: Partial<DerivationRule> = {}): DerivationRule {
   return {
@@ -70,9 +70,9 @@ describe("DerivationRuleCard.vue", () => {
     const next = events[0][0] as DerivationRule;
     expect(next.branches.length).toBe(2);
     // First branch unchanged
-    expect(next.branches[0].condition.var).toBe("x");
+    expect((next.branches[0].condition as DerivationCondition).var).toBe("x");
     // New branch has default condition
-    expect(next.branches[1].condition.op).toBe("equals");
+    expect((next.branches[1].condition as DerivationCondition).op).toBe("equals");
     expect(next.branches[1].action.mode).toBe("replace");
   });
 
@@ -131,7 +131,7 @@ describe("DerivationRuleCard.vue", () => {
     expect(events.length).toBe(1);
     const next = events[0][0] as DerivationRule;
     expect(next.branches.length).toBe(1);
-    expect(next.branches[0].condition.value).toBe("a");
+    expect((next.branches[0].condition as DerivationCondition).value).toBe("a");
   });
 
   // ── 2026-05-09 redesign: compact grid + presence ops + UX polish ────
@@ -351,7 +351,7 @@ describe("DerivationRuleCard.vue", () => {
     await wrap.find('[data-test="cond-refinement-empty-0-0"]').trigger("click");
     const events = wrap.emitted("update:modelValue") ?? [];
     const next = events[events.length - 1][0] as DerivationRule;
-    expect(next.branches[0].condition.op).toBe("is_empty");
+    expect((next.branches[0].condition as DerivationCondition).op).toBe("is_empty");
   });
 
   it("clicking 'has value' on a bare exists rule emits is_set", async () => {
@@ -365,7 +365,7 @@ describe("DerivationRuleCard.vue", () => {
     await wrap.find('[data-test="cond-refinement-value-0-0"]').trigger("click");
     const events = wrap.emitted("update:modelValue") ?? [];
     const next = events[events.length - 1][0] as DerivationRule;
-    expect(next.branches[0].condition.op).toBe("is_set");
+    expect((next.branches[0].condition as DerivationCondition).op).toBe("is_set");
   });
 
   it("clicking 'any' on an is_empty rule reverts to bare exists", async () => {
@@ -379,7 +379,7 @@ describe("DerivationRuleCard.vue", () => {
     await wrap.find('[data-test="cond-refinement-any-0-0"]').trigger("click");
     const events = wrap.emitted("update:modelValue") ?? [];
     const next = events[events.length - 1][0] as DerivationRule;
-    expect(next.branches[0].condition.op).toBe("exists");
+    expect((next.branches[0].condition as DerivationCondition).op).toBe("exists");
   });
 
   // ── 2026-05-10 follow-up: var autocomplete uses RichTextInput popover style ──
@@ -466,6 +466,92 @@ describe("DerivationRuleCard.vue", () => {
       expect(hidden(branches())).toBe(true);
       await wrap.setProps({ collapseCommand: { nonce: 2, collapsed: false } });
       expect(hidden(branches())).toBe(false);
+    });
+  });
+
+  describe("AND / OR conditions", () => {
+    async function expanded(rule: DerivationRule) {
+      const wrap = mountCard(rule, 0);
+      await wrap.get('[data-test="expand-branches-0"]').trigger("click");
+      return wrap;
+    }
+    const lastRule = (wrap: ReturnType<typeof mountCard>) => {
+      const ev = wrap.emitted("update:modelValue") ?? [];
+      return ev[ev.length - 1][0] as DerivationRule;
+    };
+    const a = { var: "a", op: "equals" as const, value: "1" };
+    const b = { var: "b", op: "equals" as const, value: "2" };
+
+    it("adding a condition turns the single test into an AND group", async () => {
+      const wrap = await expanded(makeRule());
+      await wrap.get('[data-test="cond-add-0-0"]').trigger("click");
+      expect(lastRule(wrap).branches[0].condition).toEqual({
+        match: "all",
+        conditions: [{ var: "x", op: "equals", value: "y" }, { var: "", op: "equals", value: "" }],
+      });
+    });
+
+    it("the connector flips the whole group between AND and OR", async () => {
+      const rule = makeRule();
+      rule.branches[0].condition = { match: "all", conditions: [a, b] };
+      const wrap = await expanded(rule);
+      const pill = wrap.get('[data-test="cond-match-0-0-1"]');
+      expect(pill.text()).toBe("AND");
+      await pill.trigger("click");
+      expect(lastRule(wrap).branches[0].condition).toEqual({ match: "any", conditions: [a, b] });
+    });
+
+    it("removing down to one test restores the plain single-test shape", async () => {
+      const rule = makeRule();
+      rule.branches[0].condition = { match: "any", conditions: [a, b] };
+      const wrap = await expanded(rule);
+      await wrap.get('[data-test="cond-remove-0-0-1"]').trigger("click");
+      expect(lastRule(wrap).branches[0].condition).toEqual(a);
+    });
+
+    it("a single test cannot be removed", async () => {
+      const wrap = await expanded(makeRule());
+      expect(wrap.find('[data-test="cond-remove-0-0"]').exists()).toBe(false);
+    });
+
+    it("a new group nests with the opposite connector and two tests", async () => {
+      const rule = makeRule();
+      rule.branches[0].condition = { match: "all", conditions: [a, b] };
+      const wrap = await expanded(rule);
+      await wrap.get('[data-test="cond-add-group-0-0"]').trigger("click");
+      const blank = { var: "", op: "equals", value: "" };
+      expect(lastRule(wrap).branches[0].condition).toEqual({
+        match: "all",
+        conditions: [a, b, { match: "any", conditions: [blank, blank] }],
+      });
+    });
+
+    it("edits a test inside a nested group", async () => {
+      const rule = makeRule();
+      rule.branches[0].condition = { match: "all", conditions: [a, { match: "any", conditions: [a, b] }] };
+      const wrap = await expanded(rule);
+      expect(wrap.find('[data-test="cond-group-0-0-1"]').exists()).toBe(true);
+      expect(wrap.get('[data-test="cond-match-0-0-1.1"]').text()).toBe("OR");
+      await wrap.get('[data-test="cond-remove-0-0-1.1"]').trigger("click");
+      expect(lastRule(wrap).branches[0].condition).toEqual({
+        match: "all",
+        conditions: [a, { match: "any", conditions: [a] }],
+      });
+    });
+
+    it("removing a nested group drops it from its parent", async () => {
+      const rule = makeRule();
+      rule.branches[0].condition = { match: "all", conditions: [a, b, { match: "any", conditions: [a, b] }] };
+      const wrap = await expanded(rule);
+      await wrap.get('[data-test="cond-remove-group-0-0-2"]').trigger("click");
+      expect(lastRule(wrap).branches[0].condition).toEqual({ match: "all", conditions: [a, b] });
+    });
+
+    it("the collapsed peek counts the extra tests", async () => {
+      const rule = makeRule();
+      rule.branches[0].condition = { match: "all", conditions: [a, { match: "any", conditions: [b, b] }] };
+      const wrap = mountCard(rule, 0);
+      expect(wrap.get('[data-test="branch-peek-0-0"]').text()).toBe("$a +2 → $out");
     });
   });
 });

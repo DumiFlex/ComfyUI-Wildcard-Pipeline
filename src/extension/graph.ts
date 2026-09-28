@@ -14,6 +14,7 @@ import {
 } from "../components/context/editors/wildcard/probability";
 import { ensure as ensurePreviewLookup, lookup as previewLookup } from "./preview-resolver";
 import { assignCodenames, baseCodename } from "./node-codename";
+import { evalConditionTree } from "./derivation-conditions";
 import type { SeedStrategy } from "../components/shared/seed-derive";
 
 // ── Subgraph boundary primer ────────────────────────────────────────────
@@ -1562,7 +1563,7 @@ function writeBindings(
     // derivation outputs.
     const dp = (m.payload ?? {}) as { rules?: Array<{
       branches?: Array<{
-        condition?: { var?: string; op?: string; value?: string };
+        condition?: unknown;
         action?: { target_var?: string; mode?: string; value?: string };
       }>;
       else?: { action?: { target_var?: string; mode?: string; value?: string } };
@@ -1570,7 +1571,7 @@ function writeBindings(
     for (const rule of dp.rules ?? []) {
       let applied = false;
       for (const branch of rule.branches ?? []) {
-        if (matchDerivationCondition(branch.condition, ctx)) {
+        if (evalConditionTree<DerivationTest>(branch.condition, (t) => matchDerivationCondition(t, ctx))) {
           applyDerivationAction(branch.action, ctx, catalog);
           applied = true;
           break;
@@ -1585,8 +1586,10 @@ function writeBindings(
   // constraint / pipeline: no static binding for preview.
 }
 
+type DerivationTest = { var?: string; op?: string; value?: string };
+
 function matchDerivationCondition(
-  cond: { var?: string; op?: string; value?: string } | undefined,
+  cond: DerivationTest | undefined,
   ctx: Record<string, ResolvedValue>,
 ): boolean {
   if (!cond) return false;
@@ -1602,6 +1605,8 @@ function matchDerivationCondition(
   if (op === "not_exists") return !(varName in ctx);
   if (op === "is_set") return varName in ctx && actual !== "";
   if (op === "is_unset") return !(varName in ctx) || actual === "";
+  if (op === "is_empty") return varName in ctx && actual === "";
+  if (op === "is_not_empty") return actual !== "";
   if (op === "equals") return actual === value;
   if (op === "not_equals") return actual !== value;
   if (op === "contains") return actual.includes(value);

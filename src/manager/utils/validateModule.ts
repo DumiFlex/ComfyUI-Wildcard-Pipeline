@@ -21,6 +21,7 @@ import type { BundleRow, ModuleRow } from "../api/types";
 import { tokenizeRich, varBaseName, type RichToken } from "../../widgets/richTokenize";
 import { validateExpression } from "../parsing/subcatFilter";
 import { isValidVariableName } from "../validation/names";
+import { conditionLeaves } from "../../extension/derivation-conditions";
 
 /** A produced-var NAME must be a clean `$varname` identifier
  *  (`[A-Za-z_][A-Za-z0-9_]*`). Anything else — a comma, space, or other
@@ -316,31 +317,33 @@ function validateDerivation(
     }
     for (const [bi, branch] of branches.entries()) {
       const b = branch as {
-        condition?: { var?: unknown; value?: unknown };
+        condition?: unknown;
         action?: { target_var?: unknown; value?: unknown };
       };
-      const condVar = b.condition?.var;
-      if (typeof condVar === "string" && condVar.length > 0) {
-        // SP2a: a `.K` list accessor resolves against the base var, so
-        // `$mood.0` checks `mood` — not a phantom `mood.0` binding. Message
-        // keeps the raw `$${condVar}` so the user sees what they typed.
-        const condBase = varBaseName(condVar);
-        if (condBase.length > 0 && !vars.has(condBase)) {
-          issues.push({
-            severity: "warn",
-            message: `Rule ${ri + 1} branch ${bi + 1}: $${condVar} not bound`,
-          });
-        }
-      }
-      const condValue = b.condition?.value;
-      if (typeof condValue === "string") {
-        for (const ref of extractRefs(condValue)) {
-          if (!idx.byId.has(ref.uuid)) {
-            const label = ref.name ? `@${ref.name}` : `@{${ref.uuid}}`;
+      for (const test of conditionLeaves<{ var?: unknown; value?: unknown }>(b.condition)) {
+        const condVar = test.var;
+        if (typeof condVar === "string" && condVar.length > 0) {
+          // SP2a: a `.K` list accessor resolves against the base var, so
+          // `$mood.0` checks `mood` — not a phantom `mood.0` binding. Message
+          // keeps the raw `$${condVar}` so the user sees what they typed.
+          const condBase = varBaseName(condVar);
+          if (condBase.length > 0 && !vars.has(condBase)) {
             issues.push({
-              severity: "error",
-              message: `Rule ${ri + 1} branch ${bi + 1}: condition ref ${label} missing`,
+              severity: "warn",
+              message: `Rule ${ri + 1} branch ${bi + 1}: $${condVar} not bound`,
             });
+          }
+        }
+        const condValue = test.value;
+        if (typeof condValue === "string") {
+          for (const ref of extractRefs(condValue)) {
+            if (!idx.byId.has(ref.uuid)) {
+              const label = ref.name ? `@${ref.name}` : `@{${ref.uuid}}`;
+              issues.push({
+                severity: "error",
+                message: `Rule ${ri + 1} branch ${bi + 1}: condition ref ${label} missing`,
+              });
+            }
           }
         }
       }

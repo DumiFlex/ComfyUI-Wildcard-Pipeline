@@ -102,8 +102,18 @@ export interface DerivationAction {
   value: string;
 }
 
+/** A group of tests combined with AND (`all`) or OR (`any`); members may be
+ *  tests or further groups. Schema v7 — see `src/extension/derivation-conditions.ts`. */
+export interface DerivationConditionGroup {
+  match: "all" | "any";
+  conditions: DerivationConditionNode[];
+}
+
+export type DerivationConditionNode = DerivationCondition | DerivationConditionGroup;
+
 export interface DerivationBranch {
-  condition: DerivationCondition;
+  /** One test, or an AND / OR group of them. */
+  condition: DerivationConditionNode;
   action: DerivationAction;
 }
 

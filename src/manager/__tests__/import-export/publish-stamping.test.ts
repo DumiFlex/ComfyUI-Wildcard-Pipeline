@@ -9,6 +9,7 @@ import { parsePayload } from "@/manager/import-export/parse";
 import {
   CONSTRAINT_ONLY_SCHEMA_VERSION,
   CURRENT_SCHEMA_VERSION,
+  DERIVATION_CONDITIONS_SCHEMA_VERSION,
   SP2B_SCHEMA_VERSION,
   SP3_REACH_SCHEMA_VERSION,
   TAG_AXES_SCHEMA_VERSION,
@@ -390,5 +391,54 @@ describe("publish body stamping", () => {
       ],
     } as Record<string, unknown>;
     expect(schemaVersionForPayload(bundle)).toBe(CONSTRAINT_ONLY_SCHEMA_VERSION);
+  });
+
+  // --- Derivation AND / OR: stamp catalog v7 ONLY when a branch groups tests
+  //     or uses `is_empty` / `is_not_empty`. ---
+
+  function derivationRow(condition: unknown): Record<string, unknown> {
+    return {
+      id: "dv-001abc",
+      type: "derivation",
+      name: "d",
+      payload: {
+        rules: [{
+          id: "r1",
+          branches: [{ condition, action: { target_var: "t", mode: "replace", value: "v" } }],
+        }],
+      },
+    };
+  }
+  const test = { var: "mood", op: "equals", value: "calm" };
+
+  it("keeps a single-test derivation at the chain head", () => {
+    expect(schemaVersionForPayload(derivationRow(test))).toBe(CURRENT_SCHEMA_VERSION);
+    expect(schemaVersionForPayload(derivationRow({ ...test, op: "is_set" }))).toBe(CURRENT_SCHEMA_VERSION);
+  });
+
+  it("stamps DERIVATION_CONDITIONS (7) for an AND / OR group", () => {
+    expect(schemaVersionForPayload(derivationRow({ match: "all", conditions: [test, test] })))
+      .toBe(DERIVATION_CONDITIONS_SCHEMA_VERSION);
+    expect(schemaVersionForPayload(derivationRow({ match: "any", conditions: [test] })))
+      .toBe(DERIVATION_CONDITIONS_SCHEMA_VERSION);
+  });
+
+  it("stamps DERIVATION_CONDITIONS (7) for the emptiness ops", () => {
+    expect(schemaVersionForPayload(derivationRow({ ...test, op: "is_empty" })))
+      .toBe(DERIVATION_CONDITIONS_SCHEMA_VERSION);
+    expect(schemaVersionForPayload(derivationRow({ ...test, op: "is_not_empty" })))
+      .toBe(DERIVATION_CONDITIONS_SCHEMA_VERSION);
+  });
+
+  it("stamps DERIVATION_CONDITIONS (7) over an `only` rule in the same bundle", () => {
+    const bundle = {
+      id: "bd-005abc",
+      name: "mixed",
+      children: [
+        withPayload({ exceptions: [{ source_value: "a", target_value: "b", mode: "only", factor: 1 }] }),
+        derivationRow({ match: "any", conditions: [test, test] }),
+      ],
+    } as Record<string, unknown>;
+    expect(schemaVersionForPayload(bundle)).toBe(DERIVATION_CONDITIONS_SCHEMA_VERSION);
   });
 });

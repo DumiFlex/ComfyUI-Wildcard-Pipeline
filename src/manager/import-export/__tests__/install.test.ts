@@ -235,13 +235,50 @@ describe("installEnvelope — natively-supported future versions install as-is",
     expect(payload.matrix).toEqual({ summer: { open: { mode: "only", factor: 1 } } });
   });
 
-  it("rejects a v7 envelope (> MAX_KNOWN) at parse with the future-version error", async () => {
+  it("installs a v7 derivation (AND / OR condition group) without rejecting or migrating", async () => {
+    const condition = {
+      match: "any",
+      conditions: [
+        { var: "mood", op: "equals", value: "calm" },
+        { var: "time", op: "is_empty", value: "" },
+      ],
+    };
     const v7Envelope = {
       schema_version: 7,
-      bundles: [], wildcards: [], fixed_values: [], combines: [], derivations: [], constraints: [], categories: [], templates: [],
+      bundles: [], wildcards: [], fixed_values: [], combines: [], constraints: [], categories: [], templates: [],
+      derivations: [
+        {
+          id: "dvgroup1",
+          type: "derivation",
+          name: "light",
+          payload: {
+            rules: [{
+              id: "r1",
+              branches: [{ condition, action: { target_var: "light", mode: "replace", value: "soft" } }],
+            }],
+          },
+        },
+      ],
     };
     const { importExport, seen } = fakeCommit();
     const result = await installEnvelope({ envelope: v7Envelope }, { importExport });
+
+    expect(result.ok).toBe(true);
+    expect(result.installed.derivation).toBe(1);
+    expect(result.migratedEntityCount).toBe(0);
+    const added = seen[0].adds.find((a) => a.kind === "derivation");
+    if (!added) throw new Error("derivation add not found in commit payload");
+    const rules = (added.entity.payload as { rules: Array<{ branches: Array<{ condition: unknown }> }> }).rules;
+    expect(rules[0].branches[0].condition).toEqual(condition);
+  });
+
+  it("rejects a v8 envelope (> MAX_KNOWN) at parse with the future-version error", async () => {
+    const v8Envelope = {
+      schema_version: 8,
+      bundles: [], wildcards: [], fixed_values: [], combines: [], derivations: [], constraints: [], categories: [], templates: [],
+    };
+    const { importExport, seen } = fakeCommit();
+    const result = await installEnvelope({ envelope: v8Envelope }, { importExport });
 
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("parse_failed");

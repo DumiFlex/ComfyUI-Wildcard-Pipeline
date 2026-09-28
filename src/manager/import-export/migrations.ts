@@ -31,7 +31,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
 /**
  * Highest schema version this runtime can correctly READ + WRITE — distinct
  * from CURRENT_SCHEMA_VERSION (the migration-chain head, which stays 2 because
- * v2→v3 through v5→v6 are no-ops). This is the value advertised to the community
+ * v2→v3 through v6→v7 are no-ops). This is the value advertised to the community
  * publish-gate / boot catalog-probe ("am I new enough to publish?").
  *
  * MAINTENANCE CONTRACT: bump this whenever `schemaVersionForPayload()` learns
@@ -39,7 +39,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  * very shapes this runtime just learned to produce, one version up. The
  * regression test below pins MAX_KNOWN >= the highest content-stamp.
  */
-export const MAX_KNOWN_SCHEMA_VERSION = 6;
+export const MAX_KNOWN_SCHEMA_VERSION = 7;
 
 /**
  * Community catalog version for the SP2b nested multi-pick TEXT grammar
@@ -101,6 +101,21 @@ export const TAG_AXES_SCHEMA_VERSION = 5;
  * present — see `schemaVersionForPayload` / `usesConstraintOnlyRule`.
  */
 export const CONSTRAINT_ONLY_SCHEMA_VERSION = 6;
+
+/**
+ * Community catalog version for derivation AND / OR conditions: a branch whose
+ * `condition` is a group (`{match: "all"|"any", conditions: [...]}`), or a
+ * test using the `is_empty` / `is_not_empty` ops the editor's "exists" switch
+ * has always offered.
+ *
+ * Additive: a single-test branch keeps its old shape, so there is no
+ * `migrateV6ToV7` and `CURRENT_SCHEMA_VERSION` stays 2. The bump exists
+ * because a pre-v7 engine rejects a group (or the two ops) outright, failing
+ * the whole derivation; the v7 stamp makes that extension refuse the pack and
+ * ask for an update instead. Publish stamps THIS version only when the
+ * payload uses one — see `schemaVersionForPayload` / `usesDerivationConditions`.
+ */
+export const DERIVATION_CONDITIONS_SCHEMA_VERSION = 7;
 
 export interface MigrationOk<T> {
   ok: true;

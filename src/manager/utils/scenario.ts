@@ -13,6 +13,7 @@ import type {
   ScenarioValue,
 } from "../api/types";
 import { toIdentifier } from "./slug";
+import { conditionLeaves } from "../../extension/derivation-conditions";
 
 export type StackKind = ModuleType | "bundle";
 
@@ -304,9 +305,11 @@ export function moduleReads(row: PayloadRow): string[] {
   if (row.type === "combine") scan(p.template);
   if (row.type === "derivation") {
     const rules = Array.isArray(p.rules) ? p.rules : [];
-    for (const r of rules as { branches?: { condition?: { var?: unknown }; action?: { value?: unknown } }[]; else?: { action?: { value?: unknown } } }[]) {
+    for (const r of rules as { branches?: { condition?: unknown; action?: { value?: unknown } }[]; else?: { action?: { value?: unknown } } }[]) {
       for (const b of r.branches ?? []) {
-        if (typeof b.condition?.var === "string") found.add(b.condition.var.replace(/^\$/, "").split(".")[0]);
+        for (const t of conditionLeaves<{ var?: unknown }>(b.condition)) {
+          if (typeof t.var === "string") found.add(t.var.replace(/^\$/, "").split(".")[0]);
+        }
         scan(b.action?.value);
       }
       scan(r.else?.action?.value);
