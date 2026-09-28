@@ -51,6 +51,7 @@ onBeforeUnmount(() => {
     <TransitionGroup
       tag="div"
       name="wp-toast"
+      appear
       class="wp-toast-stack"
       :style="{ top: `${stackTop}px`, right: `${stackRight}px` }"
       aria-live="polite"

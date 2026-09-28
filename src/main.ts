@@ -1,14 +1,12 @@
 import { app } from "#comfyui/app";
-import { createApp } from "vue";
 import type { LiteGraphLike } from "./extension/graph";
-import { installClipboardShield } from "./widgets/clipboard-shield";
 
 // ComfyUI's `getCustomWidgets` invokes each factory synchronously and destructures
 // the return value. Returning a Promise from `import()` yields `{ widget: undefined }`
-// and the widget never mounts. Resolve all widget chunks at module load via top-level
-// await so factories can run sync. Vite still emits the chunks separately, so the
-// entry stays small (~0.5 KB gzip) and the heavy `_shared` chunk only fetches once.
-const [
+// and the widget never mounts. So the widget glue is loaded at module load via
+// top-level await, and the factories below can run sync. It all comes from one
+// chunk — see `boot.ts` for why it is one, and why it has to be awaited here.
+const {
   ctxMod,
   dbgMod,
   asmMod,
@@ -19,62 +17,60 @@ const [
   ctxLoopMod,
   seedListMod,
   graphEventsMod,
-  ToastModule,
   graphMod,
   toastStoreMod,
-  badgeMod,
   settingsMod,
   aboutMod,
   topbarMod,
-  PlaygroundModule,
   playgroundStoreMod,
-] = await Promise.all([
-  import("./widgets/context"),
-  import("./widgets/debug"),
-  import("./widgets/assembler"),
-  import("./widgets/templateEditor"),
-  import("./widgets/injector"),
-  import("./widgets/cleaner"),
-  import("./widgets/var_picker"),
-  import("./widgets/context_loop"),
-  import("./widgets/seed_list"),
-  import("./extension/graph-events"),
-  import("./components/shared/Toast.vue"),
-  import("./extension/graph"),
-  import("./components/shared/toast-store"),
-  import("./extension/subgraph-badge"),
-  import("./extension/settings"),
-  import("./extension/about-badges"),
-  import("./extension/topbar"),
-  import("./components/settings/DisplayPlaygroundModal.vue"),
-  import("./components/settings/playground-store"),
-]);
-
-// Webfonts — deliberately NOT awaited above. The module only appends a
-// <link> for @font-face rules, and `font-display: swap` means text renders in
-// the system stack until they land. Nothing about registering a node type
-// depends on a font, so making registration wait on one was pure latency.
-void import("./extension/fonts");
+  installClipboardShield,
+  createApp,
+  watch,
+  loadToast,
+  loadPlayground,
+  loadSubgraphBadge,
+} = await import("./boot");
 
 // Singleton toast container — one Vue app mounted to a body-level div renders
 // every toast pushed via shared/toast-store. Each Context node's Vue app
 // imports the same store module, so toasts surface from anywhere.
-const toastRoot = document.createElement("div");
-toastRoot.id = "wp-toast-root";
-document.body.appendChild(toastRoot);
-createApp(ToastModule.default).mount(toastRoot);
+//
+// Mounted on the first toast rather than at startup: most sessions never show
+// one, and the store queues whatever is pushed while the chunk loads. `appear`
+// on the stack's TransitionGroup keeps that first toast's slide-in.
+let toastMounted = false;
+watch(
+  () => toastStoreMod.toasts.value.length,
+  (count) => {
+    if (toastMounted || count === 0) return;
+    toastMounted = true;
+    void loadToast().then((m) => {
+      const toastRoot = document.createElement("div");
+      toastRoot.id = "wp-toast-root";
+      document.body.appendChild(toastRoot);
+      createApp(m.default).mount(toastRoot);
+    });
+  },
+  { immediate: true },
+);
 
-// Singleton Display Playground modal — same lifecycle pattern as the
-// toast root. The `settings.ts` launcher button flips the reactive
-// `playgroundOpen` ref; this app renders the modal on top of any
-// surface (settings panel, canvas, anywhere). Capture the app
-// reference so the modal can read/write settings via
-// extensionManager.setting.set/get.
-const playgroundRoot = document.createElement("div");
-playgroundRoot.id = "wp-playground-root";
-document.body.appendChild(playgroundRoot);
-createApp(PlaygroundModule.default).mount(playgroundRoot);
+// Singleton Display Playground modal — same lifecycle pattern as the toast
+// root, and likewise mounted the first time the `settings.ts` launcher button
+// flips the reactive `playgroundOpen` ref. The modal renders on top of any
+// surface (settings panel, canvas, anywhere). Hand the store the app now so
+// the modal can read/write settings via extensionManager.setting.set/get.
 playgroundStoreMod.setComfyApp(app);
+let playgroundMounted = false;
+watch(playgroundStoreMod.playgroundOpen, (open) => {
+  if (playgroundMounted || !open) return;
+  playgroundMounted = true;
+  void loadPlayground().then((m) => {
+    const playgroundRoot = document.createElement("div");
+    playgroundRoot.id = "wp-playground-root";
+    document.body.appendChild(playgroundRoot);
+    createApp(m.default).mount(playgroundRoot);
+  });
+});
 
 // Global clipboard shield. WP modals Teleport to <body>, so their editable
 // inputs (the Injector variable-binding field, instance-edit modals, blocklist,
@@ -83,6 +79,19 @@ playgroundStoreMod.setComfyApp(app);
 // A body-level bubble shield is the catch-all: it fires before ComfyUI's
 // document/window handlers, lets the native text op run, and never preventDefaults.
 installClipboardShield(document.body);
+
+// Conflict badge for SubgraphNodes holding WP nodes. It pulls in the conflict
+// scanner, which nothing else on the startup path needs, so it loads the first
+// time the graph actually has a subgraph node.
+type BadgeModule = Awaited<ReturnType<typeof loadSubgraphBadge>>;
+let badgeModPromise: Promise<BadgeModule> | null = null;
+function withBadges(fn: (badgeMod: BadgeModule) => void): void {
+  badgeModPromise ??= loadSubgraphBadge();
+  void badgeModPromise.then(fn);
+}
+function isSubgraphNode(node: unknown): boolean {
+  return (node as { isSubgraphNode?: () => boolean }).isSubgraphNode?.() === true;
+}
 
 // ComfyUI hands us untyped LiteGraph nodes; we only care about the surface
 // the glue files import. Typing the param as the parameter of `create` /
@@ -229,8 +238,12 @@ app.registerExtension({
     graphEventsMod.notifyGraphLoaded();
     // Re-attach badges in case the loaded workflow contained SubgraphNodes
     // that bypassed nodeCreated (loaded path uses different hooks).
+    // Nested subgraph nodes always sit inside a top-level one, so the top
+    // level alone says whether there is anything to badge.
     const root = (app as unknown as { graph?: LiteGraphLike }).graph;
-    if (root) badgeMod.attachAllSubgraphBadges(root);
+    if (root?._nodes?.some(isSubgraphNode)) {
+      withBadges((badgeMod) => badgeMod.attachAllSubgraphBadges(root));
+    }
   },
 
   // Fires for every node when it's instantiated — including SubgraphNodes,
@@ -239,19 +252,17 @@ app.registerExtension({
   // conflict badge so users can spot WP issues nested inside a subgraph
   // without opening it.
   nodeCreated(node: unknown) {
-    const n = node as { isSubgraphNode?: () => boolean };
-    if (!n.isSubgraphNode?.()) return;
+    if (!isSubgraphNode(node)) return;
     const root = (app as unknown as { graph?: LiteGraphLike }).graph;
-    if (root) badgeMod.attachSubgraphBadge(node as Parameters<typeof badgeMod.attachSubgraphBadge>[0], root);
+    if (root) withBadges((badgeMod) => badgeMod.attachSubgraphBadge(node as Parameters<BadgeModule["attachSubgraphBadge"]>[0], root));
   },
 
   // Same intent as nodeCreated but fires for nodes restored from a saved
   // workflow. ComfyUI splits the lifecycle so we cover both paths.
   loadedGraphNode(node: unknown) {
-    const n = node as { isSubgraphNode?: () => boolean };
-    if (!n.isSubgraphNode?.()) return;
+    if (!isSubgraphNode(node)) return;
     const root = (app as unknown as { graph?: LiteGraphLike }).graph;
-    if (root) badgeMod.attachSubgraphBadge(node as Parameters<typeof badgeMod.attachSubgraphBadge>[0], root);
+    if (root) withBadges((badgeMod) => badgeMod.attachSubgraphBadge(node as Parameters<BadgeModule["attachSubgraphBadge"]>[0], root));
   },
 });
 
