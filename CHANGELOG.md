@@ -1,3 +1,17 @@
+## 🎉 Wildcard Pipeline 2.17.2
+
+📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
+
+### Fixes
+
+- **Faster startup.** Opening ComfyUI used to download 43 of the extension's files before the canvas finished loading, even with no Wildcard Pipeline node on it. It now downloads 2 (166 KB → 92 KB gzipped). The toast stack, the Display playground, the template editor and the subgraph conflict badge now load the first time you use them.
+
+
+
+---
+
+**Full changelog:** [v2.17.1…v2.17.2](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/compare/v2.17.1...v2.17.2)
+
 ## 🎉 Wildcard Pipeline 2.17.1
 
 📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
