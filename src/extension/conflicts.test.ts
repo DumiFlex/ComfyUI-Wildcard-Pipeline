@@ -1416,6 +1416,24 @@ describe("scanConflicts — derivation_broken_nested_ref", () => {
     });
   });
 
+  it("scans this node's action value overrides (e.g. a placeholder typed on the canvas)", () => {
+    const d = derivationAction("d1", "ok");
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [{
+        ...d,
+        instance: { ...(d.instance ?? {}), action_value_overrides: { r1: { "0": "a @{3c7e91a2#castle}" } } },
+      }],
+    };
+    const out = scanConflicts(value, ["age"]);
+    expect(out).toContainEqual({
+      moduleId: "d1",
+      variable: "3c7e91a2",
+      type: "derivation_broken_nested_ref",
+      severity: "warning",
+    });
+  });
+
   it("scans the else action value too", () => {
     const value: ContextWidgetValue = {
       version: 1,

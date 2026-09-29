@@ -60,23 +60,19 @@ interface DerivationRule {
   else?: { action?: DerivationAction };
 }
 
-/** `@` refs in a rule (test values, action values and this node's value
- *  overrides) whose target the catalog does not hold, labelled `@name`. Empty
- *  until the catalog has loaded, so a rule never flashes red while it fetches. */
+/** `@` refs in a rule's action values (library and this node's overrides)
+ *  whose target the catalog does not hold, labelled `@name`. Test values are
+ *  compared raw, so they never carry a ref. Empty until the catalog has
+ *  loaded, so a rule never flashes red while it fetches. */
 function ruleBrokenRefs(rule: DerivationRule): string[] {
   const known = props.uuidToName;
   if (known.size === 0) return [];
   const texts: unknown[] = [];
-  for (const b of rule.branches ?? []) {
-    for (const t of conditionLeaves<DerivationCondition>(b.condition)) texts.push(t.value);
-    texts.push(b.action?.value);
-  }
+  for (const b of rule.branches ?? []) texts.push(b.action?.value);
   texts.push(rule.else?.action?.value);
   const inst = props.module.instance as Record<string, unknown> | undefined;
-  for (const key of ["action_value_overrides", "condition_value_overrides"]) {
-    const byRule = (inst?.[key] as Record<string, Record<string, unknown>> | null | undefined)?.[rule.id];
-    if (byRule && typeof byRule === "object") texts.push(...Object.values(byRule));
-  }
+  const byRule = (inst?.action_value_overrides as Record<string, Record<string, unknown>> | null | undefined)?.[rule.id];
+  if (byRule && typeof byRule === "object") texts.push(...Object.values(byRule));
   const out: string[] = [];
   for (const text of texts) {
     if (typeof text !== "string" || !text.includes("@")) continue;

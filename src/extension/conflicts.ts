@@ -911,8 +911,19 @@ export function scanConflicts(
     } else if (m.type === "derivation") {
       // `templatesOf` already extracts every branch + else `action.value`
       // string — the same fields the derivation resolver runs `@{}` refs
-      // through at runtime.
-      brokenRefSources.push({ strings: templatesOf(m), type: "derivation_broken_nested_ref" });
+      // through at runtime. This node's `action_value_overrides` replace
+      // those values at run time, so a ref typed into a canvas override
+      // (a placeholder included) is scanned too.
+      const inst = (m.instance ?? {}) as {
+        action_value_overrides?: Record<string, Record<string, unknown>> | null;
+      };
+      const overrideStrings = Object.values(inst.action_value_overrides ?? {})
+        .flatMap((byBranch) => Object.values(byBranch ?? {}))
+        .filter((v): v is string => typeof v === "string");
+      brokenRefSources.push({
+        strings: [...templatesOf(m), ...overrideStrings],
+        type: "derivation_broken_nested_ref",
+      });
     } else if (m.type === "constraint") {
       const payload = (m.payload ?? {}) as {
         exceptions?: Array<{

@@ -120,20 +120,10 @@ function branchPeek(branch: DerivationBranch): string {
   return `${cvar ? "$" + cvar : "$?"}${more} → ${tvar ? "$" + tvar : "$?"}`;
 }
 
-/** Missing `@` refs anywhere in a branch (its tests' values and its action
- *  value), labelled like the list view's warning so the two agree. */
+/** Missing `@` refs in a branch's action value (the only field that
+ *  resolves refs; test values compare raw), labelled `@name`. */
 function branchBrokenRefs(branch: DerivationBranch): string[] {
-  const texts = [
-    ...conditionLeaves<DerivationCondition>(branch.condition).map((t) => t.value),
-    branch.action.value,
-  ];
-  const out: string[] = [];
-  for (const text of texts) {
-    for (const label of brokenRefLabels(text, props.uuidToName)) {
-      if (!out.includes(label)) out.push(label);
-    }
-  }
-  return out;
+  return brokenRefLabels(branch.action.value, props.uuidToName);
 }
 const elseBrokenRefs = computed(() =>
   brokenRefLabels(rule.value.else?.action.value, props.uuidToName));
