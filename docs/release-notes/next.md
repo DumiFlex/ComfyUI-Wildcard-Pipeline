@@ -1,0 +1,5 @@
+### Features
+
+- **Test Runner baselines: see what an edit changed.** Run a saved scenario, open the new **Compare** tab and choose **Save as baseline**. After you edit a module, run the scenario again and Compare lists every seed whose output changed, with the removed and added words highlighted, plus any variable values and warnings that appeared or went away. Seeds are deterministic, so for an unchanged stack every seed matches, and a real change never gets lost among random ones. A scenario on random seeds can rerun the baseline's own seeds in one click.
+- **Re-run all pinned scenarios at once.** **Re-run all** next to the Pinned heading in the Test Runner runs every pinned scenario as saved. Each one's badge then says whether it still **matches** its baseline or how many outputs **changed**.
+- **See which scenarios use a module.** The wildcard and derivation editors show **In N scenarios** beside the Test Runner button. It opens the Test Runner with the list narrowed to those scenarios.

@@ -20,7 +20,10 @@ from engine.db.repositories import (
 from engine.modules.snapshot import ref_seed_uuids, walk_transitive_refs
 from engine.scenario import (
     DEFAULT_SAMPLE_LIMIT,
+    DEFAULT_TRACK_LIMIT,
     DEFAULT_VALUE_LIMIT,
+    MAX_TRACK_LIMIT,
+    MAX_TRACK_VARS,
     ScenarioError,
     resolve_seeds,
     run_scenario,
@@ -200,6 +203,14 @@ async def run_scenario_route(request: web.Request) -> web.Response:
         seeds = resolve_seeds(body.get("seeds", {"random": True, "count": 100}))
         sample_limit = _bounded_int(body, "sample_limit", DEFAULT_SAMPLE_LIMIT, _MAX_SAMPLE_LIMIT)
         value_limit = _bounded_int(body, "value_limit", DEFAULT_VALUE_LIMIT, _MAX_VALUE_LIMIT)
+        track_limit = _bounded_int(body, "track_limit", DEFAULT_TRACK_LIMIT, MAX_TRACK_LIMIT)
+        track = body.get("track") or []
+        if (
+            not isinstance(track, list)
+            or len(track) > MAX_TRACK_VARS
+            or not all(isinstance(t, str) and t for t in track)
+        ):
+            raise ScenarioError(f"track must be a list of up to {MAX_TRACK_VARS} variable names")
         with db_session(request) as conn:
             modules, layout, missing = _build_stack(conn, stack)
             catalog = _build_catalog(conn, modules)
@@ -212,6 +223,7 @@ async def run_scenario_route(request: web.Request) -> web.Response:
         run_scenario,
         modules, seeds=seeds, catalog=catalog, pins=pins,
         sample_limit=sample_limit, value_limit=value_limit,
+        track=track, track_limit=track_limit,
     )
     result["stack"] = layout
     result["missing"] = missing

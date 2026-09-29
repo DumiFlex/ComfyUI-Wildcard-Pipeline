@@ -23,6 +23,16 @@ import {
   lastRunSummary,
   unsetReads,
 } from "../utils/scenario";
+import {
+  TRACK_LIMIT,
+  baselineSeedSpec,
+  baselineStatus,
+  compareToBaseline,
+  makeBaseline,
+  parseBaseline,
+  trackVars,
+  type ScenarioBaseline,
+} from "../utils/baseline";
 
 export interface ScenarioDraft {
   id: string | null;
@@ -85,6 +95,24 @@ export function useScenarioWorkbench() {
 
   const outputVar = computed(() => draft.value.output_var ?? defaultOutputVar(stackViews.value));
 
+  /** The seeds the current result ran on (a baseline rerun can differ from
+   *  the draft's own spec). */
+  const ranSeeds = ref<ScenarioSeedSpec | null>(null);
+
+  /** The open scenario's stored baseline, if any. */
+  const baseline = computed<ScenarioBaseline | null>(() => {
+    const id = draft.value.id;
+    const row = id ? scenarios.value.find((s) => s.id === id) : undefined;
+    return parseBaseline(row?.baseline);
+  });
+
+  const diff = computed(() =>
+    baseline.value && result.value ? compareToBaseline(baseline.value, result.value) : null,
+  );
+
+  /** Pinned re-run progress, or null when idle. */
+  const rerun = ref<{ done: number; total: number } | null>(null);
+
   async function loadLibrary(): Promise<void> {
     loading.value = true;
     try {
@@ -111,6 +139,7 @@ export function useScenarioWorkbench() {
     draft.value = draftFromRow(row);
     markSaved();
     result.value = null;
+    ranSeeds.value = null;
     runError.value = null;
   }
 
@@ -125,10 +154,29 @@ export function useScenarioWorkbench() {
     draft.value = d;
     markSaved();
     result.value = null;
+    ranSeeds.value = null;
     runError.value = null;
   }
 
-  async function run(): Promise<void> {
+  function runRequest(
+    d: Pick<ScenarioDraft, "stack" | "pins" | "seeds">,
+    out: string | null,
+    base: ScenarioBaseline | null,
+    seeds: ScenarioSeedSpec,
+  ) {
+    return api.testRun({
+      stack: d.stack,
+      pins: d.pins,
+      seeds,
+      sample_limit: SAMPLE_LIMIT,
+      track: trackVars(out, base),
+      track_limit: TRACK_LIMIT,
+    });
+  }
+
+  /** Run the open draft. `seedsOverride` runs other seeds without touching
+   *  the draft (used to rerun a baseline's own seeds). */
+  async function run(seedsOverride?: ScenarioSeedSpec): Promise<void> {
     if (!draft.value.stack.length || running.value) return;
     running.value = true;
     runError.value = null;
@@ -136,17 +184,21 @@ export function useScenarioWorkbench() {
     // pin the run to the draft and scenario that started it.
     const started = draft.value;
     const id = started.id;
+    const base = baseline.value;
+    const seeds = seedsOverride ?? started.seeds;
     try {
-      const res = await api.testRun({
-        stack: started.stack,
-        pins: started.pins,
-        seeds: started.seeds,
-        sample_limit: SAMPLE_LIMIT,
-      });
-      if (draft.value === started) result.value = res;
+      const res = await runRequest(started, outputVar.value, base, seeds);
+      if (draft.value === started) {
+        result.value = res;
+        ranSeeds.value = seeds;
+      }
       if (id) {
         // Persist the rail summary without touching the user's unsaved edits.
-        const row = await api.scenarios.update(id, { last_run: { ...lastRunSummary(res) } });
+        const summary = {
+          ...lastRunSummary(res),
+          baseline: base ? baselineStatus(compareToBaseline(base, res)) : null,
+        };
+        const row = await api.scenarios.update(id, { last_run: summary });
         scenarios.value = scenarios.value.map((s) => (s.id === id ? row : s));
       }
     } catch (e) {
@@ -156,6 +208,83 @@ export function useScenarioWorkbench() {
     } finally {
       running.value = false;
     }
+  }
+
+  /** Store the current result as the open scenario's baseline. */
+  async function setBaseline(): Promise<void> {
+    const id = draft.value.id;
+    const res = result.value;
+    if (!id || !res) return;
+    const snap = makeBaseline(res, outputVar.value, ranSeeds.value ?? draft.value.seeds);
+    try {
+      const row = await api.scenarios.update(id, {
+        baseline: { ...snap },
+        last_run: { ...lastRunSummary(res), baseline: baselineStatus(compareToBaseline(snap, res)) },
+      });
+      scenarios.value = scenarios.value.map((s) => (s.id === id ? row : s));
+      toast.push({ severity: "success", summary: "Baseline saved", detail: "Later runs are compared with this one.", life: 2400 });
+    } catch (e) {
+      toast.push({ severity: "error", summary: "Couldn't save the baseline", detail: String(e), life: 4000 });
+    }
+  }
+
+  async function clearBaseline(): Promise<void> {
+    const id = draft.value.id;
+    if (!id) return;
+    try {
+      const prev = scenarios.value.find((s) => s.id === id)?.last_run ?? null;
+      const row = await api.scenarios.update(id, { baseline: null, last_run: prev ? { ...prev, baseline: null } : null });
+      scenarios.value = scenarios.value.map((s) => (s.id === id ? row : s));
+      toast.push({ severity: "success", summary: "Baseline cleared", life: 1800 });
+    } catch (e) {
+      toast.push({ severity: "error", summary: "Couldn't clear the baseline", detail: String(e), life: 4000 });
+    }
+  }
+
+  /** Rerun the baseline's own seeds (for a scenario on random seeds). */
+  async function runBaselineSeeds(): Promise<void> {
+    if (baseline.value) await run(baselineSeedSpec(baseline.value));
+  }
+
+  /** Re-run every pinned scenario as saved and record how each compares
+   *  with its baseline. A scenario with a baseline reruns the baseline's
+   *  seeds when its own spec is random, so the comparison is seed for seed. */
+  async function rerunPinned(): Promise<{ changed: number; total: number }> {
+    const pinned = scenarios.value.filter((s) => s.is_pinned);
+    let changed = 0;
+    rerun.value = { done: 0, total: pinned.length };
+    try {
+      for (const row of pinned) {
+        const base = parseBaseline(row.baseline);
+        const views = row.stack.map((item) => describeItem(item, modules.value, bundles.value));
+        const out = row.output_var ?? defaultOutputVar(views);
+        const seeds = base && "random" in row.seeds ? baselineSeedSpec(base) : (row.seeds as ScenarioSeedSpec);
+        try {
+          const res = await runRequest(row, out, base, seeds);
+          const status = base ? baselineStatus(compareToBaseline(base, res)) : null;
+          if (status && !status.same) changed++;
+          const updated = await api.scenarios.update(row.id, { last_run: { ...lastRunSummary(res), baseline: status } });
+          scenarios.value = scenarios.value.map((s) => (s.id === row.id ? updated : s));
+          if (draft.value.id === row.id && !dirty.value) {
+            result.value = res;
+            ranSeeds.value = seeds;
+          }
+        } catch (e) {
+          toast.push({ severity: "error", summary: `Couldn't run "${row.name}"`, detail: String(e), life: 4000 });
+        }
+        rerun.value = { done: rerun.value.done + 1, total: pinned.length };
+      }
+    } finally {
+      rerun.value = null;
+    }
+    toast.push({
+      severity: changed ? "warn" : "success",
+      summary: changed
+        ? `${changed} of ${pinned.length} pinned scenario${pinned.length === 1 ? "" : "s"} changed since their baseline`
+        : `Re-ran ${pinned.length} pinned scenario${pinned.length === 1 ? "" : "s"}`,
+      life: 3200,
+    });
+    return { changed, total: pinned.length };
   }
 
   async function save(): Promise<ScenarioRow | null> {
@@ -214,7 +343,8 @@ export function useScenarioWorkbench() {
   return {
     modules, bundles, scenarios, loading,
     draft, dirty, result, running, saving, runError,
-    stackViews, outputVar, unset,
+    stackViews, outputVar, unset, ranSeeds, baseline, diff, rerun,
     loadLibrary, openScenario, newQuickRun, run, save, remove, togglePin,
+    setBaseline, clearBaseline, runBaselineSeeds, rerunPinned,
   };
 }

@@ -431,6 +431,10 @@ export interface ScenarioRunRequest {
   sample_limit?: number;
   /** Distinct values kept per variable (0..5000, default 500); the rest fold into `other`. */
   value_limit?: number;
+  /** Up to 8 variables whose rendered value is returned for each seed (see `tracked`). */
+  track?: string[];
+  /** Seeds `track` covers, from the first (0..2000, default 1000). */
+  track_limit?: number;
 }
 
 /** A multi-pick variable keeps its items so `$name.K` can index it. */
@@ -511,6 +515,9 @@ export interface ScenarioRunResponse {
   stack: ScenarioStackLayout[];
   missing: { kind: "module" | "bundle"; id: string }[];
   pins: Record<string, string>;
+  /** Per-seed values of the requested `track` variables (null when none were
+   *  asked for); `values[name][i]` belongs to `seeds[i]`, null = unset/failed. */
+  tracked?: { seeds: number[]; values: Record<string, (string | null)[]> } | null;
 }
 
 /** A saved Test Runner scenario — GET/POST/PUT /wp/api/test/scenarios. */

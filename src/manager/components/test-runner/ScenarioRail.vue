@@ -15,6 +15,10 @@ const props = defineProps<{
   activeId: string | null;
   /** Name of the open draft when it is an unsaved quick run. */
   quickRunName: string | null;
+  /** Pinned re-run progress, null when idle. */
+  rerun: { done: number; total: number } | null;
+  /** Narrow the list to scenarios whose stack holds this module or bundle. */
+  uses?: { id: string; name: string } | null;
 }>();
 
 const emit = defineEmits<{
@@ -22,12 +26,19 @@ const emit = defineEmits<{
   (e: "new"): void;
   (e: "toggle-pin", row: ScenarioRow): void;
   (e: "delete", row: ScenarioRow): void;
+  (e: "rerun-pinned"): void;
+  (e: "clear-uses"): void;
 }>();
+
+const pinnedCount = computed(() => props.scenarios.filter((s) => s.is_pinned).length);
 
 const filter = ref("");
 const filtered = computed(() => {
   const q = filter.value.trim().toLowerCase();
-  return q ? props.scenarios.filter((s) => s.name.toLowerCase().includes(q)) : props.scenarios;
+  const uses = props.uses?.id;
+  return props.scenarios.filter((s) =>
+    (!q || s.name.toLowerCase().includes(q))
+    && (!uses || s.stack.some((i) => ("module" in i ? i.module : i.bundle) === uses)));
 });
 const pinned = computed(() => filtered.value.filter((s) => s.is_pinned));
 const others = computed(() => filtered.value.filter((s) => !s.is_pinned));
@@ -40,9 +51,22 @@ function lastRun(row: ScenarioRow): LastRunSummary | null {
 function status(row: ScenarioRow): { tone: "ok" | "warn" | "new"; label: string } {
   const lr = lastRun(row);
   if (!lr) return { tone: "new", label: "not run" };
+  if (lr.baseline && !lr.baseline.same) {
+    const n = lr.baseline.changed;
+    return { tone: "warn", label: n ? `${n} changed` : "differs" };
+  }
   if (lr.failed) return { tone: "warn", label: `${lr.failed} failed` };
   if (lr.warnings) return { tone: "warn", label: `${lr.warnings} warning${lr.warnings === 1 ? "" : "s"}` };
+  if (lr.baseline?.same) return { tone: "ok", label: "matches" };
   return { tone: "ok", label: "clean" };
+}
+
+function statusTitle(row: ScenarioRow): string | undefined {
+  const b = lastRun(row)?.baseline;
+  if (!b) return undefined;
+  return b.same
+    ? "The last run matched this scenario's baseline"
+    : `The last run differs from the baseline: ${b.changed} of ${b.compared} compared outputs changed`;
 }
 
 function itemCount(row: ScenarioRow): string {
@@ -66,6 +90,12 @@ function itemCount(row: ScenarioRow): string {
         aria-label="Filter scenarios"
         data-test="scenario-filter"
       >
+      <div v-if="uses" class="wp-trr__uses" data-test="uses-filter">
+        <span>Using <strong>{{ uses.name }}</strong></span>
+        <button type="button" class="wp-trr__act" aria-label="Show all scenarios" @click="emit('clear-uses')">
+          <Icon name="pi-times" :size="ICON_SM" />
+        </button>
+      </div>
     </div>
 
     <ul class="wp-trr__list">
@@ -77,7 +107,21 @@ function itemCount(row: ScenarioRow): string {
       </li>
 
       <template v-for="group in [{ label: 'Pinned', rows: pinned }, { label: pinned.length ? 'Others' : '', rows: others }]" :key="group.label">
-        <li v-if="group.rows.length && group.label" class="wp-trr__group">{{ group.label }}</li>
+        <li v-if="group.rows.length && group.label" class="wp-trr__group">
+          <span>{{ group.label }}</span>
+          <button
+            v-if="group.label === 'Pinned'"
+            type="button"
+            class="wp-trr__rerun"
+            :disabled="rerun !== null"
+            :title="`Run all ${pinnedCount} pinned scenarios as saved and compare each with its baseline`"
+            data-test="rerun-pinned"
+            @click="emit('rerun-pinned')"
+          >
+            <Icon name="pi-refresh" :size="ICON_SM" :class="{ 'wp-trr__spin': rerun }" />
+            {{ rerun ? `Running ${rerun.done + 1} of ${rerun.total}` : "Re-run all" }}
+          </button>
+        </li>
         <li v-for="row in group.rows" :key="row.id" class="wp-trr__item">
           <button
             type="button"
@@ -88,7 +132,7 @@ function itemCount(row: ScenarioRow): string {
           >
             <span class="wp-trr__line">
               <span class="wp-trr__name">{{ row.name }}</span>
-              <span class="wp-trr__pill" :data-tone="status(row).tone">{{ status(row).label }}</span>
+              <span class="wp-trr__pill" :data-tone="status(row).tone" :title="statusTitle(row)" data-test="scenario-status">{{ status(row).label }}</span>
             </span>
             <span class="wp-trr__meta">{{ itemCount(row) }} · {{ seedLabel(row.seeds) }}</span>
           </button>
@@ -115,7 +159,9 @@ function itemCount(row: ScenarioRow): string {
       <li v-if="!scenarios.length" class="wp-trr__empty">
         No saved scenarios yet. Build a stack, run it, then Save to keep it here.
       </li>
-      <li v-else-if="!filtered.length" class="wp-trr__empty">No scenario matches "{{ filter }}".</li>
+      <li v-else-if="!filtered.length" class="wp-trr__empty">
+        {{ filter ? `No scenario matches "${filter}".` : "No saved scenario uses this." }}
+      </li>
     </ul>
   </aside>
 </template>
@@ -139,16 +185,33 @@ function itemCount(row: ScenarioRow): string {
   border: 1px solid var(--wp-border); border-radius: var(--wp-radius-sm);
   padding: var(--wp-space-3) var(--wp-space-4); font-size: var(--wp-text-sm);
 }
+.wp-trr__uses {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--wp-space-3);
+  font-size: var(--wp-text-xs); color: var(--wp-text-muted);
+  background: var(--wp-bg-3); border-radius: var(--wp-radius-sm); padding: var(--wp-space-2) var(--wp-space-2) var(--wp-space-2) var(--wp-space-4);
+}
+.wp-trr__uses strong { color: var(--wp-text); font-weight: var(--wp-weight-medium); }
 .wp-trr__filter:focus-visible { outline: none; border-color: var(--wp-border-focus); }
 .wp-trr__list {
   list-style: none; margin: 0; padding: var(--wp-space-3);
   overflow: auto; display: flex; flex-direction: column; gap: var(--wp-space-1);
 }
 .wp-trr__group {
+  display: flex; justify-content: space-between; align-items: center;
   padding: var(--wp-space-5) var(--wp-space-4) var(--wp-space-2);
   font-size: var(--wp-text-xs); font-weight: var(--wp-weight-semibold);
   letter-spacing: .08em; text-transform: uppercase; color: var(--wp-text-dim);
 }
+.wp-trr__rerun {
+  display: inline-flex; align-items: center; gap: var(--wp-space-2);
+  background: none; border: 0; cursor: pointer; padding: 0;
+  font: var(--wp-weight-medium) var(--wp-text-xs) var(--wp-font-sans, inherit);
+  letter-spacing: normal; text-transform: none; color: var(--wp-accent-text);
+}
+.wp-trr__rerun:disabled { color: var(--wp-text-dim); cursor: default; }
+.wp-trr__rerun:focus-visible { outline: 2px solid var(--wp-border-focus); }
+.wp-trr__spin { animation: wp-trr-spin 1s linear infinite; }
+@keyframes wp-trr-spin { to { transform: rotate(360deg); } }
 .wp-trr__item { position: relative; }
 .wp-trr__row {
   width: 100%; text-align: left; cursor: pointer;

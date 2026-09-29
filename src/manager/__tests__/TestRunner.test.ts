@@ -41,6 +41,7 @@ vi.mock("../api/client", () => {
       error: null,
     })),
     stack: [], missing: [], pins: {},
+    tracked: { seeds: [0, 1], values: { prompt: ["Mira with black hair", "Mira with red hair"] } },
   };
   return {
     api: {
@@ -64,8 +65,15 @@ vi.mock("../api/client", () => {
 import TestRunner from "../views/TestRunner.vue";
 import { api } from "../api/client";
 
-beforeEach(() => {
+beforeEach(async () => {
   setActivePinia(createPinia());
+  // Updates accumulate on the stored row, like the real API.
+  let stored = (await api.scenarios.list()).items[0];
+  vi.mocked(api.scenarios.list).mockClear();
+  vi.mocked(api.scenarios.update).mockImplementation((_id, body) => {
+    stored = { ...stored, ...body } as typeof stored;
+    return Promise.resolve(stored);
+  });
 });
 afterEach(() => {
   vi.clearAllMocks();
@@ -181,6 +189,62 @@ describe("TestRunner.vue", () => {
     await flushPromises();
     expect(wrap.find('[data-test="run-stats"]').exists()).toBe(false);
     expect(api.scenarios.update).toHaveBeenCalledWith("sc000001", { last_run: expect.objectContaining({ runs: 2 }) });
+  });
+
+  it("saves a baseline and lists outputs that changed on the next run", async () => {
+    const wrap = await mountRunner();
+    await wrap.find('[data-test="run-btn"]').trigger("click");
+    await flushPromises();
+    expect(api.testRun).toHaveBeenCalledWith(expect.objectContaining({ track: ["prompt"], track_limit: 1000 }));
+    await wrap.find('[data-test="tab-compare"]').trigger("click");
+    expect(wrap.find('[data-test="compare-empty"]').exists()).toBe(true);
+    await wrap.find('[data-test="set-baseline"]').trigger("click");
+    await flushPromises();
+    expect(api.scenarios.update).toHaveBeenLastCalledWith("sc000001", expect.objectContaining({
+      baseline: expect.objectContaining({ version: 1, seeds: [0, 1], outputs: ["Mira with black hair", "Mira with red hair"] }),
+    }));
+    expect(wrap.find('[data-test="compare-summary"]').text()).toContain("Matches the baseline");
+
+    const base = await (api.testRun as unknown as () => Promise<Record<string, unknown>>)();
+    vi.mocked(api.testRun).mockResolvedValueOnce({
+      ...base,
+      tracked: { seeds: [0, 1], values: { prompt: ["Mira with black hair", "Mira with green hair"] } },
+    } as never);
+    await wrap.find('[data-test="run-btn"]').trigger("click");
+    await flushPromises();
+    expect(wrap.find('[data-test="compare-summary"]').text()).toContain("1 of 2 outputs changed");
+    const row = wrap.find('[data-test="compare-row"]');
+    expect(row.find("del").text()).toBe("red");
+    expect(row.find("ins").text()).toBe("green");
+    expect(api.scenarios.update).toHaveBeenLastCalledWith("sc000001", {
+      last_run: expect.objectContaining({ baseline: { same: false, changed: 1, compared: 2 } }),
+    });
+    expect(wrap.find('[data-test="scenario-status"]').text()).toBe("1 changed");
+  });
+
+  it("re-runs pinned scenarios from the rail", async () => {
+    const wrap = await mountRunner();
+    await wrap.find('[data-test="rerun-pinned"]').trigger("click");
+    await flushPromises();
+    expect(api.testRun).toHaveBeenCalledWith(expect.objectContaining({
+      stack: [{ module: "aabbccdd" }, { module: "cccccccc" }, { module: "dddddddd" }],
+      seeds: { from: 0, count: 2 },
+    }));
+    expect(api.scenarios.update).toHaveBeenCalledWith("sc000001", {
+      last_run: expect.objectContaining({ runs: 2, baseline: null }),
+    });
+    // The open, unedited scenario shows the fresh result.
+    expect(wrap.find('[data-test="run-stats"]').exists()).toBe(true);
+  });
+
+  it("?uses= narrows the rail to scenarios holding that module", async () => {
+    const wrap = await mountRunner({ uses: "cccccccc" });
+    expect(wrap.find('[data-test="uses-filter"]').text()).toContain("Profile");
+    expect(wrap.findAll('[data-test="scenario-row"]')).toHaveLength(1);
+    expect(wrap.find('[data-test="scenario-name"]').text()).toBe("Portrait");
+    const other = await mountRunner({ uses: "99999999" });
+    expect(other.findAll('[data-test="scenario-row"]')).toHaveLength(0);
+    expect(other.text()).toContain("No saved scenario uses this.");
   });
 
   it("deletes a scenario only after confirming", async () => {
