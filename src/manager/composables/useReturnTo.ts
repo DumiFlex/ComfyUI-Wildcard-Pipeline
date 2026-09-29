@@ -14,6 +14,7 @@ export const KNOWN_LIST_PATHS = new Set<string>([
   "/bundles",
   "/all",
   "/categories",
+  "/tags",
   "/dashboard",
   "/import-export",
   "/test",

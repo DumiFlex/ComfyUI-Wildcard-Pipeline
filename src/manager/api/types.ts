@@ -343,6 +343,13 @@ export interface BundleUpdateInput {
   content_rating?: "safe" | "nsfw";
 }
 
+/** Rows changed per kind by a library-tag rename or delete. */
+export interface LibraryTagUpdateCounts {
+  modules: number;
+  bundles: number;
+  templates: number;
+}
+
 export interface TemplateRow {
   id: string;
   name: string;

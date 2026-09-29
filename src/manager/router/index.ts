@@ -31,6 +31,7 @@ const routes: RouteRecordRaw[] = [
       { path: "templates/new", name: "templates-new", component: () => import("../views/TemplateEditor.vue") },
       { path: "templates/:id/edit", name: "templates-edit", component: () => import("../views/TemplateEditor.vue"), props: true },
       { path: "categories", name: "categories", component: () => import("../views/Categories.vue") },
+      { path: "tags", name: "tags", component: () => import("../views/Tags.vue") },
       { path: "import-export", name: "import-export", component: () => import("../views/ImportExport.vue") },
       { path: "test", name: "test", component: () => import("../views/TestRunner.vue") },
       { path: "settings", name: "settings", component: () => import("../views/Settings.vue") },
