@@ -2,6 +2,7 @@
 
 import json
 
+from engine.syntax.types import ListVar
 from wp_nodes.debug_node import WPDebug
 from wp_nodes.types import ContextPayload
 
@@ -54,6 +55,7 @@ class TestWPDebugExecute:
         snapshot = self._parse_snapshot(out)
         assert snapshot == {
             "style": "photo",
+            "__wp_debug_version__": 2,
             "__wp_node_seed__": 42,
         }
 
@@ -91,4 +93,29 @@ class TestWPDebugExecute:
         payload = ContextPayload()
         out = WPDebug.execute(context=payload, wp_viewer=None)
         snapshot = self._parse_snapshot(out)
-        assert snapshot == {}
+        assert snapshot == {"__wp_debug_version__": 2}
+
+    def test_run_detail_keys_surface(self):
+        payload = ContextPayload(
+            context={"outfit": ListVar(["a", "b"], " and "), "scratch": "x"},
+            debug={
+                "__wp_ref_log__": [{"owner": "u1", "uuid": "abcd1234", "depth": 0}],
+                "__wp_nodes__": [{"node_id": "3", "seed": 9}],
+            },
+            internals={
+                "__wp_internal_flags__": {"scratch": True},
+                "__wp_axes__": {"outfit": [{"SHOES": "boots"}, {}]},
+                "__wp_constraint_hits__": {"c1": 2},
+                "__wp_loop_index__": 1,
+            },
+        )
+        snapshot = self._parse_snapshot(WPDebug.execute(context=payload, wp_viewer=None))
+        # A multi-pick renders joined at the top level, with its items kept.
+        assert snapshot["outfit"] == "a and b"
+        assert snapshot["__wp_multi__"] == {"outfit": {"items": ["a", "b"], "sep": " and "}}
+        assert snapshot["__wp_internal_flags__"] == {"scratch": True}
+        assert snapshot["__wp_axes__"] == {"outfit": [{"SHOES": "boots"}, {}]}
+        assert snapshot["__wp_constraint_hits__"] == {"c1": 2}
+        assert snapshot["__wp_loop_index__"] == 1
+        assert snapshot["__wp_ref_log__"][0]["uuid"] == "abcd1234"
+        assert snapshot["__wp_nodes__"] == [{"node_id": "3", "seed": 9}]

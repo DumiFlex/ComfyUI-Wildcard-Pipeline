@@ -21,6 +21,7 @@ import re
 from typing import Any
 
 from engine.modules import build_resolve_ctx
+from engine.modules._detail import module_detail
 from engine.modules._seed import derive_module_rng as _derive_module_rng
 from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
@@ -56,6 +57,38 @@ def _coerce_pick_int(value: Any, default: int) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _weight(o: dict[str, Any]) -> float:
+    try:
+        return max(0.0, float(o.get("weight", 1)))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _explain_pool(detail: dict[str, Any], options: list[dict[str, Any]]) -> None:
+    """Pool size and how many options can still be drawn, for WP Debug."""
+    detail["pool"] = len(options)
+    detail["live"] = sum(1 for o in options if _weight(o) > 0)
+
+
+def _explain_constraints(
+    detail: dict[str, Any], applied: list[tuple[dict[str, Any], dict[str, Any]]],
+) -> None:
+    """The constraints that re-weighted this pick and the source value each
+    one keyed on."""
+    if not applied:
+        return
+    detail["constraints"] = [
+        {
+            "id": c.get("__constraint_library_id__") or "",
+            "uid": c.get("__constraint_module_id__") or "",
+            "name": c.get("__constraint_library_name__") or "",
+            "source": c.get("source_wildcard_id") or "",
+            "source_value": src.get("value") if isinstance(src, dict) else None,
+        }
+        for c, src in applied
+    ]
 
 
 def _pick_weighted(options: list[dict[str, Any]], rng) -> dict[str, Any] | None:
@@ -797,6 +830,9 @@ class WildcardHandler(ModuleHandler):
                 # info regardless of how the source resolved its option.
                 _record_pick(ctx, pinned, payload, pinned_rolled)
                 _record_axes(ctx, binding, pinned_rolled, payload)
+                detail = module_detail(ctx)
+                if detail is not None:
+                    detail.update({"mode": "pinned", "option_id": pinned.get("id")})
                 value = str(pinned.get("value", ""))
                 if not value:
                     return {binding: ""}
@@ -826,6 +862,15 @@ class WildcardHandler(ModuleHandler):
         if enabled is not None:
             allowed = set(enabled)
             options = [o for o in options if o.get("id") in allowed]
+
+        detail = module_detail(ctx)
+        if detail is not None:
+            if isinstance(category_filter, str) and category_filter.strip():
+                detail["filter"] = category_filter.strip()
+            if exclude_null:
+                detail["exclude_null"] = True
+            if not options:
+                detail.update({"pool": 0, "live": 0})
 
         if not options:
             return {binding: ""}
@@ -895,6 +940,9 @@ class WildcardHandler(ModuleHandler):
             )
         if any_constraint_applied:
             warn_excludes_all(options, my_id or "", ctx["__wp_warnings__"])
+        if detail is not None:
+            _explain_pool(detail, options)
+            _explain_constraints(detail, applied_constraints)
 
         # Effective seed selection:
         #   - locked_seed when present → reproducible per-instance
@@ -911,6 +959,8 @@ class WildcardHandler(ModuleHandler):
             # whole run — "green jeans" on frame 1 stays "green jeans".
             _hb = ctx.get("__wp_hold_base_ctx__")
             if isinstance(_hb, dict) and binding in _hb:
+                if detail is not None:
+                    detail["held"] = True
                 return {binding: _hb[binding]}
             chain_seed = int(ctx.get("__wp_node_seed_hold__", ctx.get("__wp_node_seed__", 0)) or 0)
         else:
@@ -983,12 +1033,21 @@ class WildcardHandler(ModuleHandler):
                 for o in picks
             ]
             _record_pick_multi(ctx, picks, sep, payload, rolled_list)
+            if detail is not None:
+                detail["option_ids"] = [o.get("id") for o in picks]
+                detail["range"] = [lo, hi]
+                if independent:
+                    detail["independent"] = True
             _record_axes(ctx, binding, rolled_list, payload)
             return {binding: ListVar(items, sep)}
 
         chosen = _pick_weighted(options, rng)
         if chosen is None:
             return {binding: ""}
+        if detail is not None:
+            total = sum(_weight(o) for o in options)
+            detail["option_id"] = chosen.get("id")
+            detail["chance"] = _weight(chosen) / total if total > 0 else None
 
         # Roll the accepts axes AFTER the option draw (same rng, so a locked
         # seed still reproduces the option) but BEFORE recording the pick, so
