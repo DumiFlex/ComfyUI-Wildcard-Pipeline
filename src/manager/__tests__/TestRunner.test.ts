@@ -159,6 +159,24 @@ describe("TestRunner.vue", () => {
     expect(wrap.find('[data-test="dirty"]').exists()).toBe(false);
   });
 
+  it("clicking a stack card opens its inspector; the switch and Escape don't", async () => {
+    const wrap = await mountRunner();
+    const drawer = () => wrap.find('[data-test="inspector"]');
+    await wrap.findAll('[data-test="stack-toggle"] button')[0].trigger("click");
+    expect(drawer().attributes("data-open")).toBe("false");
+
+    await wrap.findAll('[data-test="stack-card"]')[2].trigger("click");
+    expect(drawer().attributes("data-open")).toBe("true");
+    expect(wrap.find('[data-test="inspect-combine"]').text()).toContain("$name with $hair hair");
+    expect(wrap.find('[data-test="inspect-combine"]').text()).toContain("$hair");
+    expect(wrap.find('[data-test="inspector-no-run"]').exists()).toBe(true);
+    expect(wrap.findAll('[data-test="stack-card"]')[2].attributes("data-active")).toBe("true");
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await flushPromises();
+    expect(drawer().attributes("data-open")).toBe("false");
+  });
+
   it("the Outputs tab picks which variable is the output", async () => {
     const wrap = await mountRunner();
     await wrap.find('[data-test="run-btn"]').trigger("click");

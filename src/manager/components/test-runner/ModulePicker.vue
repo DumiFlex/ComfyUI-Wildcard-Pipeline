@@ -163,7 +163,7 @@ onBeforeUnmount(() => document.removeEventListener("mousedown", onDocDown));
   position: absolute; z-index: 30; top: 100%; left: 0; margin-top: var(--wp-space-3);
   width: min(480px, 92vw);
   background: var(--wp-bg-1); border: 1px solid var(--wp-border-strong);
-  border-radius: var(--wp-radius); box-shadow: 0 20px 40px rgba(0, 0, 0, .45);
+  border-radius: var(--wp-radius); box-shadow: var(--wp-shadow-xl);
   padding: var(--wp-space-5); display: flex; flex-direction: column; gap: var(--wp-space-4);
 }
 .wp-trp__search {
