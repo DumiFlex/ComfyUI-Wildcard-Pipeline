@@ -14,6 +14,8 @@ interface BaseShape {
   category: string | null;
   favorites: boolean;
   tags: string[];
+  /** "any" (default) or "all": how several active tags combine. */
+  tagMode: string;
   sortBy: string;
   /** Content-rating filter shared by every list view (+ All items):
    *  "all" (default) / "sfw" / "nsfw". Client-side over content_rating. */
@@ -31,6 +33,7 @@ export const BASE_LIST_SCHEMA: UrlSchema<BaseShape> = {
   category:  { type: "string-or-null", default: null,           urlKey: "cat" },
   favorites: { type: "bool",           default: false,          urlKey: "fav" },
   tags:      { type: "csv",            default: [],             urlKey: "tag" },
+  tagMode:   { type: "string",         default: "any",          urlKey: "tagmode" },
   sortBy:    { type: "string",         default: "updated-desc", urlKey: "sort" },
   nsfw:      { type: "string",         default: "all",          urlKey: "nsfw" },
   page:      { type: "int",            default: 1 },

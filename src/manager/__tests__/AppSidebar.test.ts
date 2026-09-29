@@ -5,6 +5,9 @@ import { createMemoryHistory, createRouter, type Router } from "vue-router";
 
 import AppSidebar from "../layout/AppSidebar.vue";
 import { useUiStore } from "../stores/uiStore";
+import { useModuleStore } from "../stores/moduleStore";
+import { useTemplateStore } from "../stores/templateStore";
+import type { ModuleRow, TemplateRow } from "../api/types";
 
 function makeRouter(start = "/wildcards"): Router {
   return createRouter({
@@ -19,6 +22,9 @@ function makeRouter(start = "/wildcards"): Router {
       { path: "/derivations", name: "derivations", component: { template: "<div/>" } },
       { path: "/constraints", name: "constraints", component: { template: "<div/>" } },
       { path: "/categories", name: "categories", component: { template: "<div/>" } },
+      { path: "/tags", name: "tags", component: { template: "<div/>" } },
+      { path: "/all", name: "all", component: { template: "<div/>" } },
+      { path: "/templates", name: "templates", component: { template: "<div/>" } },
       { path: "/import-export", name: "import-export", component: { template: "<div/>" } },
       { path: "/test", name: "test", component: { template: "<div/>" } },
       { path: "/community", name: "community", component: { template: "<div/>" } },
@@ -123,5 +129,50 @@ describe("AppSidebar.vue", () => {
     expect(wrap.findAll(".wp-sidebar__section")).toHaveLength(0);
     // Labels also hidden
     expect(wrap.findAll(".wp-nav__label")).toHaveLength(0);
+  });
+
+  describe("Tags", () => {
+    function seedTags() {
+      useModuleStore().catalog = [
+        { id: "m1", type: "wildcard", tags: ["outfit", "nsfw"] },
+        { id: "m2", type: "wildcard", tags: ["outfit"] },
+      ] as unknown as ModuleRow[];
+      useTemplateStore().catalog = [
+        { id: "t1", tags: ["portrait"] },
+      ] as unknown as TemplateRow[];
+    }
+
+    it("is a plain Library entry while the library has no tags", async () => {
+      const { wrap } = await mountSidebar();
+      const item = wrap.find('[data-nav-id="tags"]');
+      expect(item.exists()).toBe(true);
+      expect(item.attributes("aria-expanded")).toBeUndefined();
+    });
+
+    it("opens its tag list on the Tags page itself", async () => {
+      seedTags();
+      const { wrap } = await mountSidebar("/tags");
+      expect(wrap.find('[data-nav-id="tags"]').attributes("aria-expanded")).toBe("true");
+      expect(wrap.findAll(".wp-nav--child")).toHaveLength(3);
+    });
+
+    it("lists the most-used tags with counts, opening a filtered list", async () => {
+      seedTags();
+      const { wrap, router } = await mountSidebar("/all?tag=outfit");
+      const children = wrap.findAll(".wp-nav--child");
+      expect(children.map((c) => c.find(".wp-nav__label").text())).toEqual(["outfit", "nsfw", "portrait"]);
+      expect(children[0].find(".wp-nav__count").text()).toBe("2");
+      // The route filtered to one tag highlights that tag and opens the parent.
+      expect(children[0].attributes("data-active")).toBeDefined();
+
+      await children[1].trigger("click");
+      await flushPromises();
+      expect(router.currentRoute.value.fullPath).toBe("/all?tag=nsfw");
+
+      // A tag carried only by templates opens the Templates list.
+      await children[2].trigger("click");
+      await flushPromises();
+      expect(router.currentRoute.value.fullPath).toBe("/templates?tag=portrait");
+    });
   });
 });

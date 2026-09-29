@@ -29,6 +29,7 @@ import EmptyState from "./ui/EmptyState.vue";
 import { useCommunityUpdateStore } from "../stores/communityUpdateStore";
 import type { UpdateEntry } from "../stores/communityUpdateStore";
 import CommunityUpdateDialog from "./CommunityUpdateDialog.vue";
+import { matchesTags, type TagMatchMode } from "../utils/library-tags";
 
 const communityUpdates = useCommunityUpdateStore();
 const updateDialogEntry = ref<UpdateEntry | null>(null);
@@ -80,6 +81,9 @@ interface Filter {
   favorites?: boolean;
   category?: string | null;
   tags?: string[];
+  /** How several active tags combine: "any" (default) keeps a row carrying
+   *  at least one of them, "all" only rows carrying every one. */
+  tagMode?: string;
   sortBy?: string;
   /** Content-rating filter. Undefined / "all" shows everything; "sfw"
    *  and "nsfw" narrow by the row's content_rating. Client-side — the
@@ -267,6 +271,13 @@ const activeFilterCount = computed(() => {
   return n;
 });
 
+const tagMatchMode = computed<TagMatchMode>(() => (props.filter.tagMode === "all" ? "all" : "any"));
+
+function setTagMatchMode(mode: TagMatchMode) {
+  props.filter.tagMode = mode;
+  emit("fetch");
+}
+
 const hasActiveFilters = computed(
   () => activeFilterCount.value > 0 || !!props.filter.q,
 );
@@ -276,8 +287,9 @@ const filteredItems = computed(() => {
 
   // Client-side tag filter (server has no tag query yet).
   if (props.filter.tags?.length) {
-    const wanted = new Set(props.filter.tags);
-    out = out.filter((m) => (m.tags ?? []).some((t) => wanted.has(t)));
+    const wanted = props.filter.tags;
+    const mode = tagMatchMode.value;
+    out = out.filter((m) => matchesTags(m.tags, wanted, mode));
   }
 
   // Extra (kind-specific) filters.
@@ -315,6 +327,7 @@ watch(
     props.filter.category,
     props.filter.favorites,
     props.filter.tags?.length ?? 0,
+    props.filter.tagMode,
     activeExtras.value.length,
     props.filter.sortBy,
     props.filter.nsfw,
@@ -494,6 +507,7 @@ function clearFilters() {
   props.filter.favorites = false;
   props.filter.category = null;
   props.filter.tags = [];
+  props.filter.tagMode = "any";
   props.filter.nsfw = "all";
   clearExtraActive();
   // Fire `clear` so parents can wipe view-specific URL state that the
@@ -910,6 +924,25 @@ defineExpose({
       >
         {{ t }}
       </Chip>
+      <!-- Only meaningful with two or more tags; one tag reads the same
+           either way. -->
+      <div
+        v-if="(filter.tags?.length ?? 0) >= 2"
+        class="wp-tag-match"
+        role="group"
+        aria-label="Match tags"
+        data-test="tag-match"
+      >
+        <span class="wp-tag-match__label">Match</span>
+        <button
+          v-for="m in (['any', 'all'] as const)" :key="m"
+          type="button"
+          class="wp-tag-match__btn"
+          :aria-pressed="tagMatchMode === m"
+          :data-test="`tag-match-${m}`"
+          @click="setTagMatchMode(m)"
+        >{{ m === "any" ? "Any tag" : "All tags" }}</button>
+      </div>
       <Chip
         v-for="ef in activeExtras" :key="ef.key"
         tone="accent"
@@ -1305,6 +1338,37 @@ defineExpose({
 .wp-active-filters__label {
   font-size: var(--wp-text-xs);
   color: var(--wp-text-dim);
+}
+
+/* Any / All switch for multi-tag filters. Sits inline with the chips. */
+.wp-tag-match {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius-sm);
+  background: var(--wp-bg-2);
+}
+.wp-tag-match__label {
+  font-size: var(--wp-text-xs);
+  color: var(--wp-text-dim);
+  padding: 0 var(--wp-space-2);
+}
+.wp-tag-match__btn {
+  font: inherit;
+  font-size: var(--wp-text-xs);
+  color: var(--wp-text-dim);
+  background: transparent;
+  border: none;
+  border-radius: var(--wp-radius-sm);
+  padding: 2px var(--wp-space-3);
+  cursor: pointer;
+}
+.wp-tag-match__btn:hover { color: var(--wp-text); }
+.wp-tag-match__btn[aria-pressed="true"] {
+  color: var(--wp-text);
+  background: var(--wp-bg-3);
 }
 
 .wp-table__select { width: 32px; padding-right: 0; }
