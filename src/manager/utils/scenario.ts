@@ -251,6 +251,8 @@ export interface LastRunSummary {
   warnings: number;
   elapsed_ms: number;
   ran_at: string;
+  /** How the run compared with the scenario's baseline, when it has one. */
+  baseline?: { same: boolean; changed: number; compared: number } | null;
 }
 
 export function lastRunSummary(result: ScenarioRunResponse, now = new Date()): LastRunSummary {
