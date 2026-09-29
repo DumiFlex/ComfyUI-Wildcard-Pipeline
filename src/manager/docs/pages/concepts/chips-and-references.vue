@@ -18,7 +18,7 @@ const chipStates = [
   },
   {
     term: "Broken",
-    desc: "A red chip with a ? icon: the reference points at a module id that isn't in your library (deleted, or never imported here). Hover shows the name it had, when the reference stored one. Click it to point it at another module. At run time it produces nothing and the run reports an \"Unresolved reference\" warning.",
+    desc: "A red chip with a ? icon: the reference points at a module id that isn't in your library (a placeholder, a deleted module, or one never imported here). Hover shows the name it carries, when the reference stored one. Click it to point it at another module. The editors also outline the field and mark its row (an option, a derivation branch) in red, so you can find it in a long table. At run time it produces nothing and the run reports an \"Unresolved reference\" warning.",
   },
 ];
 </script>
@@ -88,6 +88,14 @@ const chipStates = [
         whatever module later writes <VarToken>$lighting</VarToken>. Until then it renders empty
         and the Assembler marks it as missing, which is a handy to-do marker while you build a
         template ahead of its modules.
+      </p>
+      <p>
+        <b>Module placeholders.</b> The same works for a module you haven't built yet. Type
+        <b>@</b> and the name, e.g. <code>@castle</code>. When no module has that name, the last
+        row of the list is <b>Placeholder @castle</b>. Pick it to insert a red broken chip under
+        that name. The row it sits in is marked red too, and the list view shows its warning
+        triangle, so it can't be forgotten. Once the module exists, click the chip and point it
+        at the module.
       </p>
     </DocSection>
 

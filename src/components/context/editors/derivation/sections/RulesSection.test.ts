@@ -31,7 +31,7 @@ async function expandAndFindRti(
 }
 
 interface DerivationBranch {
-  condition: { var: string; op: string; value: string };
+  condition: { var: string; op: string; value: string } | { match: string; conditions: unknown[] };
   action: { target_var: string; mode: string; value: string };
 }
 interface DerivationRule {
@@ -282,6 +282,47 @@ describe("derivation RulesSection (tier-D accordion + branch table)", () => {
     expect(lastPatch(w).instance?.condition_value_overrides).toEqual({
       r1: { "0": "purple" },
     });
+  });
+
+  // ── AND / OR groups ──────────────────────────────────────────────
+
+  function groupedRule(): DerivationRule {
+    return {
+      id: "r1",
+      branches: [{
+        condition: {
+          match: "all",
+          conditions: [
+            { var: "color", op: "equals", value: "red" },
+            { match: "any", conditions: [
+              { var: "hat", op: "exists", value: "" },
+              { var: "time", op: "equals", value: "night" },
+            ] },
+          ],
+        },
+        action: { target_var: "mood", mode: "replace", value: "warm" },
+      }],
+    };
+  }
+
+  it("summarises a grouped condition with its connectors", () => {
+    const w = mount(RulesSection, { props: { module: makeModule([groupedRule()]) } });
+    const head = w.get('[data-test="rule-summary-r1"]');
+    expect(head.text()).toBe("$color=redAND($hatexistsOR$time=night)→$mood=warm");
+    expect(head.attributes("title")).toBe("$color = red AND ( $hat exists OR $time = night ) → $mood = warm");
+  });
+
+  it("gives each value-taking test of a group its own override field", async () => {
+    const w = mount(RulesSection, { props: { module: makeModule([groupedRule()]) } });
+    // Tests depth-first: color (0), hat (0.1, no value), time (0.2).
+    const input = await expandAndFindRti(w, "r1", "cond-override-r1-0.2");
+    expect(input).toBeDefined();
+    const ids = w.findAllComponents(RichTextInput).map((c) => c.attributes("data-test"));
+    expect(ids).toContain("cond-override-r1-0");
+    expect(ids).not.toContain("cond-override-r1-0.1");
+    input!.vm.$emit("update:modelValue", "dawn");
+    await w.vm.$nextTick();
+    expect(lastPatch(w).instance?.condition_value_overrides).toEqual({ r1: { "0.2": "dawn" } });
   });
 
   // ── Mod-count chip ───────────────────────────────────────────────
@@ -645,5 +686,49 @@ describe("DerivationInstanceModal — forwards viaOptionPairs to RulesSection", 
     // Vue rewraps the prop through reactivity, so identity (toBe) can't hold;
     // structural equality confirms the same map content reached RulesSection.
     expect(rules.props("viaOptionPairs")).toEqual(pairs);
+  });
+});
+
+describe("RulesSection — broken-ref rule marker", () => {
+  const known = new Map([["aabbccdd", "color"]]);
+  function ruleWith(value: string): DerivationRule {
+    return {
+      id: "r1",
+      branches: [{
+        condition: { var: "mood", op: "equals", value: "calm" },
+        action: { target_var: "out", mode: "replace", value },
+      }],
+    };
+  }
+
+  it("marks a rule whose action holds a ref the catalog lacks", () => {
+    const w = mount(RulesSection, {
+      props: { module: makeModule([ruleWith("x @{11223344#castle}")]), uuidToName: known },
+    });
+    expect(w.find('[data-test="rule-card-r1"]').classes()).toContain("rule-card--broken");
+    expect(w.find('[data-test="rule-broken-r1"]').attributes("title")).toContain("@castle");
+  });
+
+  it("marks a rule whose value OVERRIDE holds the broken ref", () => {
+    const w = mount(RulesSection, {
+      props: {
+        module: makeModule([ruleWith("plain")], {
+          action_value_overrides: { r1: { "0": "@{11223344#castle}" } },
+        }),
+        uuidToName: known,
+      },
+    });
+    expect(w.find('[data-test="rule-card-r1"]').classes()).toContain("rule-card--broken");
+  });
+
+  it("stays unmarked for resolved refs and before the catalog loads", () => {
+    const ok = mount(RulesSection, {
+      props: { module: makeModule([ruleWith("@{aabbccdd#color}")]), uuidToName: known },
+    });
+    expect(ok.find(".rule-card--broken").exists()).toBe(false);
+    const loading = mount(RulesSection, {
+      props: { module: makeModule([ruleWith("@{11223344#castle}")]), uuidToName: new Map() },
+    });
+    expect(loading.find(".rule-card--broken").exists()).toBe(false);
   });
 });

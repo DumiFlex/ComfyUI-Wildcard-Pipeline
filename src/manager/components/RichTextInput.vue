@@ -42,6 +42,7 @@ import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
 import { probeAutocomplete, probeModelRef, probeTagWord } from "../utils/autocompleteProbe";
 import { api } from "../api/client";
+import { newShortId } from "../utils/ids";
 import type { ModelKind, ModelSuggestion, TagCategoryName, TagSuggestion } from "../api/types";
 import { loadTagAvailability } from "../utils/tagStatus";
 import {
@@ -522,9 +523,12 @@ const tagLegend = computed(() => {
   const shown = order.filter((c) => present.has(c));
   return shown.length > 1 ? shown : [];
 });
-/** Row count for the ACTIVE mode — keyboard nav must not care which. */
+/** Row count for the ACTIVE mode — keyboard nav must not care which. The
+ *  `@` placeholder row sits after the matches, at index `acItems.length`. */
 const acRowCount = computed(
-  () => (acTrigger.value === "tag" ? wordRows.value.length : acItems.value.length),
+  () => (acTrigger.value === "tag"
+    ? wordRows.value.length
+    : acItems.value.length + (acPlaceholderName.value ? 1 : 0)),
 );
 const tagListAvailable = ref(false);
 const tagHasCategories = ref(false);
@@ -1041,6 +1045,13 @@ function emitValue(v: string): void {
   void nextTick(() => { echoPending = false; });
 }
 
+/** Any ref chip in the field points at nothing (a broken ref or a
+ *  placeholder not yet repointed). Outlines the whole field red, so a long
+ *  value with one red chip scrolled out of view still reads as broken. */
+const hasBrokenRef = computed(() =>
+  atoms.value.some((a) => a.kind === "ref" && !atomIsResolved(a)),
+);
+
 function atomIsResolved(atom: Atom): boolean {
   if (atom.kind === "var") {
     // Vars bind at runtime — a $name not in the static catalog may still
@@ -1246,6 +1257,38 @@ const acMatches = computed(() => {
 });
 
 const acItems = computed(() => acMatches.value.slice(0, AC_MAX_ITEMS));
+
+/**
+ * `@name` for a module that does not exist yet. Offered as the last `@` row
+ * whenever the query is a plain identifier that no library entry is called,
+ * so a user can write against a wildcard they have not built (or imported)
+ * yet and fix it up later. Choosing it inserts `@{<fresh id>#name}`: an
+ * unresolved ref, which renders as the red broken chip carrying `name` and
+ * can be repointed by clicking it. Null when no such row should show.
+ */
+const acPlaceholderName = computed<string | null>(() => {
+  if (!acOpen.value || acTrigger.value !== "@" || !refsEnabled.value) return null;
+  const q = acQuery.value;
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(q)) return null;
+  const lower = q.toLowerCase();
+  for (const name of props.uuidToName.values()) {
+    if (name.toLowerCase() === lower) return null;
+  }
+  return q;
+});
+
+/** A fresh id no library entry uses, so the placeholder stays unresolved
+ *  until the user repoints it. */
+function freshPlaceholderId(): string {
+  let id = newShortId();
+  while (props.uuidToName.has(id)) id = newShortId();
+  return id;
+}
+
+function insertPlaceholderRef(name: string): void {
+  insertChipAtCaret(`@{${freshPlaceholderId()}#${name}}`);
+  acOpen.value = false;
+}
 
 /**
  * Render models for the popover, one per entry in `acItems`.
@@ -2484,9 +2527,10 @@ watch(pickerOpen, (open) => {
 // Only used by Vitest, not user-facing. Exposed via defineExpose so test
 // scripts can drive the autocomplete state machine without faking keyboard
 // events (which are flaky under jsdom).
-function __triggerAutocompleteForTest(trigger: "@" | "$"): void {
+function __triggerAutocompleteForTest(trigger: "@" | "$", query = ""): void {
   acOpen.value = true;
   acTrigger.value = trigger;
+  acQuery.value = query;
 }
 
 function __applyAutocompleteForTest(label: string): void {
@@ -3207,6 +3251,11 @@ function onHostKeydown(ev: KeyboardEvent): void {
       acOpen.value = false;
       return;
     }
+    if (acPlaceholderName.value && acActive.value === acItems.value.length) {
+      ev.preventDefault();
+      insertPlaceholderRef(acPlaceholderName.value);
+      return;
+    }
     if (acItems.value.length > 0) {
       ev.preventDefault();
       applyAutocomplete(acItems.value[acActive.value]);
@@ -3356,6 +3405,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
       disabled ? 'wp-rt--disabled' : null,
       hasMoreBelow ? 'wp-rt--more' : null,
       fill ? 'wp-rt--fill' : null,
+      hasBrokenRef ? 'wp-rt--broken' : null,
     ]"
     :data-focused="focused ? '' : null"
   >
@@ -3658,6 +3708,31 @@ function onHostKeydown(ev: KeyboardEvent): void {
             aria-hidden="true"
           />
         </button>
+        <!-- Reference a module that does not exist yet. Inserts the red broken
+             chip under this name; clicking it later repoints it. -->
+        <button
+          v-if="acPlaceholderName"
+          type="button"
+          class="wp-rt-suggestions__item wp-rt-suggestions__item--placeholder"
+          :data-active="acActive === acItems.length ? '' : null"
+          role="option"
+          :aria-selected="acActive === acItems.length"
+          data-test="suggestion-placeholder"
+          @mousedown.prevent="insertPlaceholderRef(acPlaceholderName)"
+          @mouseenter="acActive = acItems.length"
+        >
+          <span class="wp-rt-suggestions__icon-box wp-rt-suggestions__icon-box--placeholder" aria-hidden="true">
+            <i class="pi pi-plus" />
+          </span>
+          <span class="wp-rt-suggestions__body">
+            <span class="wp-rt-suggestions__label">
+              Placeholder <span class="wp-rt-suggestions__placeholder-name">@{{ acPlaceholderName }}</span>
+            </span>
+            <span class="wp-rt-suggestions__sub">
+              not in the library yet · repoint it later
+            </span>
+          </span>
+        </button>
       </div>
     </Teleport>
 
@@ -3783,6 +3858,9 @@ function onHostKeydown(ev: KeyboardEvent): void {
   border-color: var(--wp-accent-500, #8b5cf6);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 25%, transparent);
   background: var(--wp-bg-1, #11111b);
+}
+.wp-rt--broken:not(.wp-rt--focused) {
+  border-color: color-mix(in srgb, var(--wp-danger, #ef4444) 55%, transparent);
 }
 .wp-rt--disabled {
   opacity: 0.6;
@@ -4218,6 +4296,20 @@ function onHostKeydown(ev: KeyboardEvent): void {
   margin-top: 1px; /* audit-exempt: optical centring on the label's first line box */
   border-radius: var(--wp-radius-sm);
   font-size: 10px;
+}
+/* Placeholder row: set apart from the matches above it, and tinted with the
+   same red the inserted chip will wear so the row previews its result. */
+.wp-rt-suggestions .wp-rt-suggestions__item--placeholder {
+  border-top: 1px solid var(--wp-border-subtle, rgba(255, 255, 255, 0.08));
+  border-radius: 0 0 var(--wp-radius-sm) var(--wp-radius-sm);
+}
+.wp-rt-suggestions__icon-box--placeholder {
+  background: color-mix(in srgb, var(--wp-danger, #ef4444) 15%, transparent);
+  color: var(--wp-danger, #ef4444);
+}
+.wp-rt-suggestions__placeholder-name {
+  color: var(--wp-danger, #ef4444);
+  font-weight: var(--wp-weight-semibold);
 }
 .wp-rt-suggestions__body {
   display: flex;

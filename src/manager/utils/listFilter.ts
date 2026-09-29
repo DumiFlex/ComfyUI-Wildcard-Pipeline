@@ -1,4 +1,5 @@
 import type { ConstraintException, ConstraintMode, DerivationRule } from "../api/types";
+import { conditionLeaves } from "../../extension/derivation-conditions";
 
 /**
  * Search text for the filter bars on the constraint and derivation editors.
@@ -26,7 +27,9 @@ function haystack(parts: (string | undefined)[]): string {
 export function derivationRuleHaystack(rule: DerivationRule): string {
   const parts: (string | undefined)[] = [];
   for (const b of rule.branches ?? []) {
-    parts.push(b.condition?.var, b.condition?.op, b.condition?.value);
+    for (const t of conditionLeaves<{ var?: string; op?: string; value?: string }>(b.condition)) {
+      parts.push(t.var, t.op, t.value);
+    }
     parts.push(b.action?.target_var, b.action?.mode, b.action?.value);
   }
   const els = rule.else?.action;

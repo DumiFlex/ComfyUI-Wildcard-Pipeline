@@ -41,13 +41,17 @@ import {
 } from "../utils/library-suggestions";
 import type { VarProducerLike } from "../components/RefChip.vue";
 import { useCascadeStore } from "../cascade/cascade-store";
+import { DERIVATION_OPS } from "../../components/context/editors/_shared/derivation-ops";
+import { isConditionGroup, simplifyCondition } from "../../extension/derivation-conditions";
 import { useCascadeApply } from "../cascade/useCascadeApply";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
 import PillCountBadge from "../cascade/PillCountBadge.vue";
 import type {
   DerivationAction,
   DerivationBranch,
+  DerivationConditionNode,
   DerivationElse,
+  DerivationOp,
   DerivationPayload,
   DerivationRule,
   ModuleHistoryEntry,
@@ -258,18 +262,34 @@ function migrateRule(raw: unknown): DerivationRule {
 
 function migrateBranch(raw: unknown): DerivationBranch {
   const b = (raw ?? {}) as Partial<DerivationBranch>;
-  const cIn = (b.condition ?? {}) as Record<string, unknown>;
   const aIn = (b.action ?? {}) as Record<string, unknown>;
-  const op = typeof cIn.op === "string" ? cIn.op : "equals";
   return {
-    condition: {
-      var: typeof cIn.var === "string" ? cIn.var : "",
-      op: (op === "equals" || op === "not_equals" || op === "contains" || op === "matches"
-        ? op
-        : "equals") as DerivationBranch["condition"]["op"],
-      value: typeof cIn.value === "string" ? cIn.value : "",
-    },
+    condition: migrateCondition(b.condition),
     action: migrateAction(aIn),
+  };
+}
+
+const KNOWN_OPS: ReadonlySet<string> = new Set(DERIVATION_OPS);
+
+/** Normalise a stored condition: a test keeps every op the engine knows (the
+ *  presence and emptiness ops included), and an AND / OR group keeps its
+ *  members, each normalised the same way. */
+function migrateCondition(raw: unknown, depth = 0): DerivationConditionNode {
+  if (isConditionGroup(raw) && depth < 8) {
+    const kids = Array.isArray(raw.conditions) ? raw.conditions : [];
+    return {
+      match: raw.match === "any" ? "any" : "all",
+      conditions: kids.length
+        ? kids.map((c) => migrateCondition(c, depth + 1))
+        : [migrateCondition(undefined)],
+    };
+  }
+  const cIn = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const op = typeof cIn.op === "string" && KNOWN_OPS.has(cIn.op) ? cIn.op : "equals";
+  return {
+    var: typeof cIn.var === "string" ? cIn.var : "",
+    op: op as DerivationOp,
+    value: typeof cIn.value === "string" ? cIn.value : "",
   };
 }
 
@@ -409,7 +429,14 @@ async function save() {
   setSaveState("saving");
   saving.value = true;
   try {
-    const payload: DerivationPayload = { rules: rules.value };
+    // Save the simplest equivalent condition: a group of one collapses to its
+    // member, so a branch only needs schema v7 when it really combines tests.
+    const payload: DerivationPayload = {
+      rules: rules.value.map((r) => ({
+        ...r,
+        branches: r.branches.map((b) => ({ ...b, condition: simplifyCondition(b.condition) })),
+      })),
+    };
     const newPayload = payload as unknown as Record<string, unknown>;
     if (isEdit.value && props.id) {
       const prev = await moduleStore.get(props.id);

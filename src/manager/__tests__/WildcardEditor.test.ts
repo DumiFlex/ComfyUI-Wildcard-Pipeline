@@ -309,3 +309,31 @@ describe("WildcardEditor — null option", () => {
     wrap.unmount();
   });
 });
+
+describe("WildcardEditor broken-ref rows", () => {
+  it("marks the option row whose value holds a ref that points at nothing", async () => {
+    const other = {
+      id: "aabbccdd", name: "outfit", description: "", category_id: null,
+      tags: [], type: "wildcard", payload: { options: [{ id: "x", value: "coat", weight: 1 }] },
+      version: 1, created_at: "", updated_at: "", is_favorite: false,
+    };
+    apiMod.list.mockResolvedValue({ items: [other], total: 1 });
+    apiMod.get.mockResolvedValue({
+      id: "wc_a", name: "alpha", description: "", category_id: null,
+      tags: [], type: "wildcard",
+      payload: { options: [
+        { id: "o1", value: "red @{aabbccdd#outfit}", weight: 1 },
+        { id: "o2", value: "a @{11223344#castle}", weight: 1 },
+      ] },
+      version: 1, created_at: "", updated_at: "", is_favorite: false,
+    });
+    const wrap = mount(WildcardEditor, {
+      props: { id: "wc_a" },
+      global: { plugins: [makeRouter()] },
+    });
+    await flushPromises();
+    expect(wrap.find('[data-test="wc-opt-row-0"]').classes()).not.toContain("wc-opt-row--broken");
+    expect(wrap.find('[data-test="wc-opt-row-1"]').classes()).toContain("wc-opt-row--broken");
+    expect(wrap.find('[data-test="wc-opt-broken-1"]').text()).toContain("@castle");
+  });
+});

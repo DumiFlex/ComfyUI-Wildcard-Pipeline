@@ -139,4 +139,39 @@ describe("DerivationEditor.vue", () => {
     expect(vm.rules.length).toBe(1);
     expect(vm.rules[0].branches[0].action.target_var).toBe("outfit");
   });
+
+  it("keeps presence ops and AND / OR groups when loading a derivation", async () => {
+    // Loading used to coerce every op outside equals/not_equals/contains/
+    // matches to `equals`, so reopening a rule silently rewrote `exists`.
+    const group = {
+      match: "any",
+      conditions: [
+        { var: "hat", op: "exists", value: "" },
+        { match: "all", conditions: [
+          { var: "time", op: "is_empty", value: "" },
+          { var: "mood", op: "equals", value: "calm" },
+        ] },
+      ],
+    };
+    apiMod.get.mockResolvedValue({
+      id: "dv_b", type: "derivation", name: "Grouped",
+      description: "", category_id: null, tags: [], is_favorite: false,
+      payload: { rules: [
+        { id: "r1", branches: [
+          { condition: { var: "hat", op: "is_set", value: "" },
+            action: { target_var: "a", mode: "replace", value: "1" } },
+          { condition: group, action: { target_var: "b", mode: "replace", value: "2" } },
+        ] },
+      ] },
+      version: 1, created_at: "", updated_at: "",
+    });
+    const wrap = mount(DerivationEditor, {
+      props: { id: "dv_b" },
+      global: { plugins: [makeRouter()] },
+    });
+    await flushPromises();
+    const vm = wrap.vm as unknown as { rules: DerivationRule[] };
+    expect(vm.rules[0].branches[0].condition).toEqual({ var: "hat", op: "is_set", value: "" });
+    expect(vm.rules[0].branches[1].condition).toEqual(group);
+  });
 });

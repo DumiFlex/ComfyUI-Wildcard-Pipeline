@@ -151,6 +151,13 @@ export function lookup(uuid: string): PreviewLookup | undefined {
   return cache.get(uuid);
 }
 
+/** True once the server has CONFIRMED `uuid` does not exist (a 404), as
+ *  opposed to "not fetched yet". Row-level broken markers use this so a row
+ *  does not flash red while its refs are still loading. */
+export function isConfirmedMissing(uuid: string): boolean {
+  return failed.get(uuid)?.permanent === true;
+}
+
 /**
  * Mark every cached snapshot stale so the next `ensure()` refetches it.
  *

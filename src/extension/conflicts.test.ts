@@ -208,7 +208,7 @@ const derivation = (
   id: string,
   rules: Array<{
     branches: Array<{
-      condition: { var: string; op?: string; value?: string };
+      condition: { var: string; op?: string; value?: string } | { match: string; conditions: unknown[] };
       action: { target_var: string; mode?: string; value?: string };
     }>;
     else?: { action: { target_var: string; mode?: string; value?: string } };
@@ -237,6 +237,30 @@ describe("scanConflicts — derivation var/template scanning", () => {
     const out = scanConflicts(value, []);
     expect(out).toEqual([
       { moduleId: "d1", variable: "age", type: "missing_template_variable", severity: "warning" },
+    ]);
+  });
+
+  it("flags a missing variable read by any test of an AND / OR group", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        derivation("d1", [{
+          branches: [{
+            condition: {
+              match: "all",
+              conditions: [
+                { var: "age", op: "equals", value: "30" },
+                { match: "any", conditions: [{ var: "ghost", op: "exists", value: "" }] },
+              ],
+            },
+            action: { target_var: "mood", mode: "replace", value: "calm" },
+          }],
+        }]),
+      ],
+    };
+    const out = scanConflicts(value, ["age"]);
+    expect(out).toEqual([
+      { moduleId: "d1", variable: "ghost", type: "missing_template_variable", severity: "warning" },
     ]);
   });
 
@@ -1387,6 +1411,24 @@ describe("scanConflicts — derivation_broken_nested_ref", () => {
     expect(out).toContainEqual({
       moduleId: "d1",
       variable: "deadbeef",
+      type: "derivation_broken_nested_ref",
+      severity: "warning",
+    });
+  });
+
+  it("scans this node's action value overrides (e.g. a placeholder typed on the canvas)", () => {
+    const d = derivationAction("d1", "ok");
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [{
+        ...d,
+        instance: { ...(d.instance ?? {}), action_value_overrides: { r1: { "0": "a @{3c7e91a2#castle}" } } },
+      }],
+    };
+    const out = scanConflicts(value, ["age"]);
+    expect(out).toContainEqual({
+      moduleId: "d1",
+      variable: "3c7e91a2",
       type: "derivation_broken_nested_ref",
       severity: "warning",
     });
