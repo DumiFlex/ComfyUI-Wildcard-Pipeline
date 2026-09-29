@@ -11,6 +11,8 @@
 - **Inspect any module in a Test Runner scenario.** Click a stack card to see how that module is set up next to what the last run did with it. A wildcard shows each option's share of the weight beside how often it was actually picked, and flags options that never came up. A constraint shows what it links, how far it reaches and how many times it applied. Combines, derivations, fixed values and bundles each get their own view, and **Edit** opens the module's editor.
 - **Test Runner guide in the docs.** Documentation now has a Test Runner page covering scenarios, reading a run, the inspector and baselines.
 
+- **WP Debug explains the run.** The Debug node now has four tabs. **Variables** lists every value with the step that set it. **Trace** groups the steps by Context node, and each step opens to say why it did what it did: which derivation branch fired and the actual value behind every condition, a wildcard's odds and the constraints that re-weighted it, how far a constraint reached, and where a nested `@` pick came from. **Warnings** gives every warning a plain label and links it to its step, and **Raw** keeps the JSON. Derivation rules fold one at a time, and a step can jump to its node on the canvas.
+
 ### Fixes
 
 - **The Context node warns about broken refs in a derivation's canvas overrides.** A ref typed into a value override on the canvas was never checked, so pointing it at a deleted module (or leaving a placeholder there) showed no warning on the node.
