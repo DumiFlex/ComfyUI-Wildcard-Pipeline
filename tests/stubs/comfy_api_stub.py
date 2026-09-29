@@ -301,8 +301,18 @@ class WidgetInput:
         self.advanced = advanced
 
 
+class Hidden:
+    """Mirrors ``io.Hidden`` — the hidden-input names a schema can request."""
+
+    unique_id = "UNIQUE_ID"
+    prompt = "PROMPT"
+    extra_pnginfo = "EXTRA_PNGINFO"
+
+
 class _IONamespace:
     """Mirrors ``comfy_api.latest.io``. Attribute access for types."""
+
+    Hidden = Hidden
 
     ComfyNode = ComfyNode
     Schema = Schema

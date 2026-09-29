@@ -125,6 +125,14 @@ def _stamp_pool_provenance(
             entry["library_option_count"] = len(live_options)
 
 
+def _node_id(cls: type) -> str:
+    """This node's graph id when ComfyUI supplied it (tests call `execute`
+    directly and get "")."""
+    hidden = getattr(cls, "hidden", None)
+    uid = getattr(hidden, "unique_id", None) if hidden is not None else None
+    return str(uid) if uid is not None else ""
+
+
 class WPContext(io.ComfyNode):
     """Context node: runs an ordered list of modules, emits PipelineContext."""
 
@@ -160,6 +168,8 @@ class WPContext(io.ComfyNode):
                 ContextModulesInput.Input("wp_modules", socketless=True),
             ],
             outputs=[PipelineContext.Output("context")],
+            # The node's graph id, so WP Debug can say which Context ran what.
+            hidden=[io.Hidden.unique_id],
             not_idempotent=True,
         )
 
@@ -236,6 +246,10 @@ class WPContext(io.ComfyNode):
                 seed_override=None,
                 loop_index=0,
             )
+        # WP Debug detail: per-module explanations and the nested @{} picks.
+        # Both are `__`-prefixed, so neither reaches the public context.
+        ctx["__wp_explain__"] = True
+        ctx["__wp_ref_log__"] = []
         ctx = PipelineEngine().run(
             module_list,
             ctx=ctx,
@@ -244,7 +258,12 @@ class WPContext(io.ComfyNode):
             loop_index=loop_index,
         )
 
-        payload = build_payload(ctx, upstream_debug=upstream_debug, seed=chain_seed)
+        payload = build_payload(
+            ctx,
+            upstream_debug=upstream_debug,
+            seed=chain_seed,
+            node_id=_node_id(cls),
+        )
         # Emit two seed-tracking values via the UI payload so the
         # frontend `executed` listener (widgets/context.ts) gets
         # authoritative state — works whether the seed was supplied

@@ -19,6 +19,7 @@ import re
 from typing import Any
 
 from engine.modules import build_resolve_ctx
+from engine.modules._detail import module_detail
 from engine.modules._seed import derive_module_rng
 from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
@@ -268,6 +269,32 @@ def _eval_condition(condition: Any, ctx: Any) -> bool:
     return _match_condition(condition, ctx)
 
 
+def _explain_condition(condition: Any, ctx: Any) -> dict[str, Any]:
+    """The condition tree with each test's outcome and the value it read, for
+    the WP Debug node. Evaluates every test, unlike ``_eval_condition``, so a
+    group that short-circuited still shows why each member did or didn't
+    match. Reads only; nothing here writes to ``ctx``."""
+    if is_condition_group(condition):
+        children = [_explain_condition(c, ctx) for c in condition.get("conditions") or []]
+        match = "any" if condition.get("match") == "any" else "all"
+        results = [c["result"] for c in children]
+        return {
+            "match": match,
+            "result": any(results) if match == "any" else all(results),
+            "conditions": children,
+        }
+    if not isinstance(condition, dict):
+        return {"var": "", "op": "", "value": "", "actual": None, "result": False}
+    var = str(condition.get("var", ""))
+    return {
+        "var": var,
+        "op": str(condition.get("op", "")),
+        "value": condition.get("value", ""),
+        "actual": _ctx_get(ctx, var) if _ctx_has(ctx, var) else None,
+        "result": _match_condition(condition, ctx),
+    }
+
+
 def branch_carrier_key(rule_id: str, branch: int | str) -> str:
     """Carrier key for a derivation branch occurrence -- the `option_id` the
     SP3 nested-occurrence model matches a constraint `pick` against. `branch`
@@ -320,6 +347,16 @@ def _apply_action(
         return None
     _ctx_set(ctx, target, result)
     return target, result
+
+
+def _explain_action(action: dict[str, Any], pair: tuple[str, str] | None) -> dict[str, Any]:
+    """What a fired branch did: the variable, how it wrote, and the result."""
+    return {
+        "target": str(action.get("target_var", "")),
+        "mode": str(action.get("mode", "replace")),
+        "value": str(action.get("value", "")),
+        "result": pair[1] if pair is not None else None,
+    }
 
 
 def _validate_condition(condition: Any, where: str, depth: int = 0) -> None:
@@ -506,10 +543,24 @@ class DerivationHandler(ModuleHandler):
             )
 
         out: dict[str, str] = {}
+        # WP Debug: which branch of each rule fired and why (explain runs only).
+        detail = module_detail(ctx)
+        explained: list[dict[str, Any]] | None = [] if detail is not None else None
 
         for rule in rules:
             rule_id = rule.get("id", "")
+            rd: dict[str, Any] | None = None
+            if explained is not None:
+                rd = {
+                    "id": rule_id,
+                    "fired": None,
+                    "branches": [],
+                    "has_else": isinstance(rule.get("else"), dict),
+                }
+                explained.append(rd)
             if rule_id in disabled_rule_ids:
+                if rd is not None:
+                    rd["disabled"] = True
                 continue
 
             applied = False
@@ -518,6 +569,8 @@ class DerivationHandler(ModuleHandler):
                 # even when listed because disabling IF == disabling rule
                 # (the per-rule toggle handles that case cleanly).
                 if bi != 0 and branch_carrier_key(rule_id, bi) in disabled_branch_keys:
+                    if rd is not None:
+                        rd["branches"].append({"index": bi, "disabled": True})
                     continue
 
                 # Condition-value overrides, one per test of the branch.
@@ -526,7 +579,14 @@ class DerivationHandler(ModuleHandler):
                 if isinstance(rule_cond_overrides, dict) and rule_cond_overrides:
                     cond = _with_value_overrides(cond, rule_cond_overrides, bi)
 
-                if _eval_condition(cond, ctx):
+                matched = _eval_condition(cond, ctx)
+                if rd is not None:
+                    rd["branches"].append({
+                        "index": bi,
+                        "matched": matched,
+                        "condition": _explain_condition(cond, ctx),
+                    })
+                if matched:
                     # Action-value override per branch index.
                     action = branch.get("action", {})
                     action_override = (
@@ -544,12 +604,17 @@ class DerivationHandler(ModuleHandler):
                     )
                     if pair is not None:
                         out[pair[0]] = pair[1]
+                    if rd is not None:
+                        rd["fired"] = bi
+                        rd["action"] = _explain_action(action, pair)
                     applied = True
                     break
 
             if not applied:
                 # ELSE skip when listed in disabled_branch_keys.
                 if branch_carrier_key(rule_id, "else") in disabled_branch_keys:
+                    if rd is not None:
+                        rd["else_disabled"] = True
                     continue
                 else_clause = rule.get("else")
                 if isinstance(else_clause, dict):
@@ -569,4 +634,9 @@ class DerivationHandler(ModuleHandler):
                     )
                     if pair is not None:
                         out[pair[0]] = pair[1]
+                    if rd is not None:
+                        rd["fired"] = "else"
+                        rd["action"] = _explain_action(action, pair)
+        if detail is not None:
+            detail["rules"] = explained
         return out
