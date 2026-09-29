@@ -159,8 +159,39 @@ def test_resolve_ref_in_wildcard_surface_picks_option():
 def test_resolve_ref_unknown_uuid_lenient_emits_empty():
     # Use a valid 8-hex-char UUID that isn't in the catalog.
     ctx = _ctx(surface="wildcard", strict=False)
-    assert resolve_text("a @{00000000} b", ctx) == "a  b"
+    assert resolve_text("a @{00000000} b", ctx) == "a b"
     assert any(w["type"] == "unknown_ref" for w in ctx.warnings)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("red @{00000000} dress", "red dress"),
+        ("red, @{00000000}, dress", "red, dress"),
+        ("red,@{00000000},dress", "red,dress"),
+        ("@{00000000} dress", "dress"),
+        ("@{00000000}, dress", "dress"),
+        ("red @{00000000}", "red"),
+        ("red, @{00000000}", "red"),
+        ("red @{00000000} @{00000001} dress", "red dress"),
+        ("red\n@{00000000}\ndress", "red\n\ndress"),
+        ("(@{00000000}:1.2) dress", "(:1.2) dress"),
+        ("@{00000000}", ""),
+        # Only the seam is touched; spacing elsewhere stays as written.
+        ("a  b @{00000000} c", "a  b c"),
+    ],
+)
+def test_resolve_empty_ref_closes_its_gap(text, expected):
+    ctx = _ctx(surface="wildcard", strict=False)
+    assert resolve_text(text, ctx) == expected
+
+
+def test_resolve_empty_option_ref_closes_its_gap():
+    ctx = _ctx(
+        surface="wildcard",
+        _modules={"a4f7b2e1": _wc("a4f7b2e1", "x", [{"value": "", "weight": 1}])},
+    )
+    assert resolve_text("red @{a4f7b2e1} dress", ctx) == "red dress"
 
 
 def test_resolve_ref_unknown_uuid_strict_raises():
@@ -179,7 +210,7 @@ def test_resolve_ref_out_of_surface_lenient_emits_empty(surface):
         strict=False,
         _modules={"a4f7b2e1": _wc("a4f7b2e1", "x")},
     )
-    assert resolve_text("a @{a4f7b2e1} thing", ctx) == "a  thing"
+    assert resolve_text("a @{a4f7b2e1} thing", ctx) == "a thing"
     assert any(w["type"] == "ref_out_of_surface" for w in ctx.warnings)
 
 

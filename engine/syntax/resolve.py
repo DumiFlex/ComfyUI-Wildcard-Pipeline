@@ -43,6 +43,7 @@ def _resolve_tokens(
     visited: tuple[str, ...],
 ) -> str:
     parts: list[str] = []
+    empty_refs: list[int] = []
     for tok in tokens:
         if tok.kind == TokenKind.TEXT:
             parts.append(tok.raw)
@@ -51,7 +52,10 @@ def _resolve_tokens(
         elif tok.kind == TokenKind.VAR:
             parts.append(_resolve_var(tok, ctx))
         elif tok.kind == TokenKind.REF:
-            parts.append(_resolve_ref(tok, ctx, depth, visited))
+            resolved = _resolve_ref(tok, ctx, depth, visited)
+            if not resolved:
+                empty_refs.append(len(parts))
+            parts.append(resolved)
         elif tok.kind == TokenKind.DP_BRACE:
             parts.append(_resolve_inline_pick(tok, ctx, depth, visited))
         elif tok.kind == TokenKind.DP_MULTI:
@@ -63,7 +67,52 @@ def _resolve_tokens(
             raise AssertionError("DP_PIPE should never be top-level")
         else:
             raise AssertionError(f"unknown token kind: {tok.kind}")
-    return "".join(parts)
+    return _join_tidy(parts, empty_refs)
+
+
+_HWS = " \t"
+
+
+def _join_tidy(parts: list[str], empty_refs: list[int]) -> str:
+    """Join resolved parts, closing the gap each empty ``@{}`` ref leaves.
+
+    A ref that resolves to nothing (a placeholder or deleted module, a filter
+    that matched no option, an empty option) used to leave its surroundings
+    behind: ``red @{x} dress`` became ``red  dress`` and ``red, @{x}, dress``
+    became ``red, , dress``. At each such seam this drops one doubled comma,
+    then one side of doubled spaces/tabs, and at the start or end of the text
+    the dangling comma and spaces. Newlines and everything away from the seam
+    are left exactly as written. Mirrored in ``resolveTokens.ts``.
+    """
+    if not empty_refs:
+        return "".join(parts)
+    out = list(parts)
+    for i in empty_refs:
+        left = next((j for j in range(i - 1, -1, -1) if out[j]), None)
+        right = next((j for j in range(i + 1, len(out)) if out[j]), None)
+        if left is None and right is None:
+            continue
+        if left is None:
+            out[right] = _strip_lead(out[right])
+            continue
+        if right is None:
+            out[left] = _strip_trail(out[left])
+            continue
+        if out[left].rstrip(_HWS).endswith(",") and out[right].lstrip(_HWS).startswith(","):
+            out[right] = out[right].lstrip(_HWS)[1:]
+        if out[right] and out[left][-1:] in (" ", "\t") and out[right][0] in _HWS:
+            out[right] = out[right].lstrip(_HWS)
+    return "".join(out)
+
+
+def _strip_lead(text: str) -> str:
+    text = text.lstrip(_HWS)
+    return text[1:].lstrip(_HWS) if text.startswith(",") else text
+
+
+def _strip_trail(text: str) -> str:
+    text = text.rstrip(_HWS)
+    return text[:-1].rstrip(_HWS) if text.endswith(",") else text
 
 
 _VAR_SURFACES_ALLOWED = frozenset(["combine", "derivation", "assembler"])

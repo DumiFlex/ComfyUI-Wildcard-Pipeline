@@ -12,9 +12,13 @@
 - **Test Runner guide in the docs.** Documentation now has a Test Runner page covering scenarios, reading a run, the inspector and baselines.
 - **Tags work as collections.** A module, bundle or template can carry several tags, and now they have a home. The new **Tags** page (under Library in the sidebar) lists every tag with how many items carry it, opens a tag as a filtered list, and renames, merges or deletes one across the whole library in one step. With two or more tags in a list filter, switch between **Any tag** and **All tags**.
 
+- **WP Debug explains the run.** The Debug node now has four tabs. **Variables** lists every value with the step that set it. **Trace** groups the steps by Context node, and each step opens to say why it did what it did: which derivation branch fired and the actual value behind every condition, a wildcard's odds and the constraints that re-weighted it, how far a constraint reached, and where a nested `@` pick came from. **Warnings** gives every warning a plain label and links it to its step, and **Raw** keeps the JSON. Derivation rules fold one at a time, and a step can jump to its node on the canvas.
+
 ### Fixes
 
 - **The Context node warns about broken refs in a derivation's canvas overrides.** A ref typed into a value override on the canvas was never checked, so pointing it at a deleted module (or leaving a placeholder there) showed no warning on the node.
 - **Reopening a derivation no longer changes its presence checks.** The editor rewrote every "exists", "does not exist", "is set" and "is unset" condition to "equals" when you opened a saved derivation, so saving it again changed what it did.
 - **"Exists → is empty" conditions run.** The editor offered it, but the engine rejected the op and the whole derivation failed. The engine now supports `is_empty` and `is_not_empty`.
 - **Test Runner in the light theme.** The closed trace drawer no longer casts a dark shadow down the right edge of the page, and the drawer and module picker shadows now follow the theme.
+- **Long Context chains no longer slow the canvas down.** Every Context node used to re-work its whole upstream chain several times a second, so the cost grew with the square of the chain's length. Nodes now reuse the last result until something upstream actually changes. On a 16-node chain, a round of refreshes went from about 28 ms to under 1 ms.
+- **A reference that resolves to nothing no longer leaves a gap.** A placeholder or deleted module, a filter that matches no option, or an empty option used to leave a double space or a stray comma behind, so `red, @missing, dress` came out as `red, , dress`. It now comes out as `red, dress`, in the run and in the editor previews.
