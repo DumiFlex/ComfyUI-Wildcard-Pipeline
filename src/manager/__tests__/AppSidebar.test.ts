@@ -131,48 +131,19 @@ describe("AppSidebar.vue", () => {
     expect(wrap.findAll(".wp-nav__label")).toHaveLength(0);
   });
 
-  describe("Tags", () => {
-    function seedTags() {
-      useModuleStore().catalog = [
-        { id: "m1", type: "wildcard", tags: ["outfit", "nsfw"] },
-        { id: "m2", type: "wildcard", tags: ["outfit"] },
-      ] as unknown as ModuleRow[];
-      useTemplateStore().catalog = [
-        { id: "t1", tags: ["portrait"] },
-      ] as unknown as TemplateRow[];
-    }
-
-    it("is a plain Library entry while the library has no tags", async () => {
-      const { wrap } = await mountSidebar();
-      const item = wrap.find('[data-nav-id="tags"]');
-      expect(item.exists()).toBe(true);
-      expect(item.attributes("aria-expanded")).toBeUndefined();
-    });
-
-    it("opens its tag list on the Tags page itself", async () => {
-      seedTags();
-      const { wrap } = await mountSidebar("/tags");
-      expect(wrap.find('[data-nav-id="tags"]').attributes("aria-expanded")).toBe("true");
-      expect(wrap.findAll(".wp-nav--child")).toHaveLength(3);
-    });
-
-    it("lists the most-used tags with counts, opening a filtered list", async () => {
-      seedTags();
-      const { wrap, router } = await mountSidebar("/all?tag=outfit");
-      const children = wrap.findAll(".wp-nav--child");
-      expect(children.map((c) => c.find(".wp-nav__label").text())).toEqual(["outfit", "nsfw", "portrait"]);
-      expect(children[0].find(".wp-nav__count").text()).toBe("2");
-      // The route filtered to one tag highlights that tag and opens the parent.
-      expect(children[0].attributes("data-active")).toBeDefined();
-
-      await children[1].trigger("click");
-      await flushPromises();
-      expect(router.currentRoute.value.fullPath).toBe("/all?tag=nsfw");
-
-      // A tag carried only by templates opens the Templates list.
-      await children[2].trigger("click");
-      await flushPromises();
-      expect(router.currentRoute.value.fullPath).toBe("/templates?tag=portrait");
-    });
+  it("has one Tags entry with the number of distinct tags, not a tag list", async () => {
+    useModuleStore().catalog = [
+      { id: "m1", type: "wildcard", tags: ["outfit", "portrait"] },
+      { id: "m2", type: "wildcard", tags: ["outfit"] },
+    ] as unknown as ModuleRow[];
+    useTemplateStore().catalog = [{ id: "t1", tags: ["scene"] }] as unknown as TemplateRow[];
+    const { wrap, router } = await mountSidebar();
+    const item = wrap.find('[data-nav-id="tags"]');
+    expect(item.find(".wp-nav__count").text()).toBe("3");
+    expect(wrap.findAll(".wp-nav--child")).toHaveLength(0);
+    await item.trigger("click");
+    await flushPromises();
+    expect(router.currentRoute.value.path).toBe("/tags");
+    expect(item.attributes("data-active")).toBeDefined();
   });
 });

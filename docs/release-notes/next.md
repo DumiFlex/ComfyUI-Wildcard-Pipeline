@@ -10,7 +10,7 @@
 - **See which scenarios use a module.** The wildcard and derivation editors show **In N scenarios** beside the Test Runner button. It opens the Test Runner with the list narrowed to those scenarios.
 - **Inspect any module in a Test Runner scenario.** Click a stack card to see how that module is set up next to what the last run did with it. A wildcard shows each option's share of the weight beside how often it was actually picked, and flags options that never came up. A constraint shows what it links, how far it reaches and how many times it applied. Combines, derivations, fixed values and bundles each get their own view, and **Edit** opens the module's editor.
 - **Test Runner guide in the docs.** Documentation now has a Test Runner page covering scenarios, reading a run, the inspector and baselines.
-- **Tags work as collections.** A module, bundle or template can carry several tags, and now they have a home. The sidebar lists your most-used tags with counts under **Tags**, and clicking one opens All items filtered to it. The new Tags page lists every tag and renames, merges or deletes one across the whole library in one step. With two or more tags in a list filter, switch between **Any tag** and **All tags**.
+- **Tags work as collections.** A module, bundle or template can carry several tags, and now they have a home. The new **Tags** page (under Library in the sidebar) lists every tag with how many items carry it, opens a tag as a filtered list, and renames, merges or deletes one across the whole library in one step. With two or more tags in a list filter, switch between **Any tag** and **All tags**.
 
 ### Fixes
 

@@ -23,8 +23,6 @@ interface NavItem {
   /** Nested children — when present, the item renders as a
    *  collapsible parent (chevron + click toggles). Sakai-vue style. */
   children?: NavItem[];
-  /** Count badge on a child row (tag children show how many items). */
-  count?: number;
 }
 interface NavSection {
   label: string;
@@ -65,7 +63,7 @@ const SECTIONS: NavSection[] = [
     items: [
       { id: "templates",  label: "Templates",       icon: "pi-file-edit",                to: "/templates"      },
       { id: "categories", label: "Categories",      icon: "pi-bookmark",                 to: "/categories"     },
-      // Children are filled from the library's most-used tags, see `sections`.
+      // A single entry, not a list of tags: a library can hold hundreds.
       { id: "tags",       label: "Tags",            icon: "pi-hashtag",                  to: "/tags"           },
       { id: "io",         label: "Import / Export", icon: "pi-arrow-right-arrow-left",   to: "/import-export"  },
       { id: "test",       label: "Test Runner",     icon: "pi-bolt",                     to: "/test"           },
@@ -89,43 +87,10 @@ const SECTIONS: NavSection[] = [
   },
 ];
 
-/** How many tags the sidebar lists under Tags. The rest are one click away
- *  on the Tags page, which the parent row opens. */
-const SIDEBAR_TAG_LIMIT = 8;
-
-const tagCounts = computed(() =>
-  libraryTagCounts(moduleStore.catalog, bundleStore.catalog, templateStore.catalog),
-);
-
-/** SECTIONS with the Tags row's children filled from the live catalogs:
- *  the most-used tags, each opening All items filtered to it. */
-const sections = computed<NavSection[]>(() => {
-  const children: NavItem[] = tagCounts.value.slice(0, SIDEBAR_TAG_LIMIT).map((c) => ({
-    id: `tag:${c.tag}`,
-    label: c.tag,
-    icon: "pi-hashtag",
-    // Tags only on templates open the Templates list; All items has no templates.
-    to: `${c.modules + c.bundles === 0 ? "/templates" : "/all"}?tag=${encodeURIComponent(c.tag)}`,
-    count: c.total,
-  }));
-  if (!children.length) return SECTIONS;
-  return SECTIONS.map((s) => ({
-    ...s,
-    items: s.items.map((i) => (i.id === "tags" ? { ...i, children } : i)),
-  }));
-});
-
 /** Sidebar item id derived from current route name. Matches prototype mapping. */
 const activeId = computed<string>(() => {
   const name = typeof route.name === "string" ? route.name : "";
   const path = route.path || "";
-
-  // A list filtered to exactly one tag highlights that tag's row.
-  const tagQ = route.query.tag;
-  if ((name === "all" || name === "templates") && typeof tagQ === "string" && tagQ && !tagQ.includes(",")) {
-    const id = `tag:${tagQ}`;
-    if (sections.value.some((s) => s.items.some((i) => i.children?.some((c) => c.id === id)))) return id;
-  }
 
   // Editor route names start with the singular kind, e.g. `wildcards-edit`.
   // We treat any route name that starts with a kind prefix as that kind active.
@@ -167,12 +132,10 @@ function hasActiveChild(parent: NavItem): boolean {
 /** Auto-expand any parent whose child is active. Runs on route change
  *  via `activeId` (which is route-derived). User can still collapse
  *  manually — `toggleParent` mutates the same set. */
-watch([activeId, sections], () => {
-  for (const section of sections.value) {
+watch(activeId, () => {
+  for (const section of SECTIONS) {
     for (const item of section.items) {
-      // Being on the parent's own page opens it too (the Tags page shows
-      // its tag list), and so does the list gaining children after load.
-      if (item.children && (hasActiveChild(item) || activeId.value === item.id)) {
+      if (item.children && hasActiveChild(item)) {
         expandedParents.value.add(item.id);
       }
     }
@@ -211,8 +174,8 @@ const searchQuery = ref("");
 
 const filteredSections = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
-  if (!q) return sections.value;
-  return sections.value.map((s) => ({
+  if (!q) return SECTIONS;
+  return SECTIONS.map((s) => ({
     ...s,
     items: s.items.filter((i) => i.label.toLowerCase().includes(q)),
   })).filter((s) => s.items.length > 0);
@@ -234,7 +197,7 @@ const countByKey = computed<Record<string, number>>(() => {
     bundles:     bundleStore.catalog.length,
     templates:   templateStore.catalog.length,
     categories:  categoryStore.items.length,
-    tags:        tagCounts.value.length,
+    tags:        libraryTagCounts(moduleStore.catalog, bundleStore.catalog, templateStore.catalog).length,
   };
 });
 
@@ -326,7 +289,6 @@ const countByKey = computed<Record<string, number>>(() => {
             >
               <span class="wp-nav__icon"><Icon :name="child.icon" /></span>
               <span class="wp-nav__label">{{ child.label }}</span>
-              <span v-if="child.count !== undefined" class="wp-nav__count">{{ child.count }}</span>
             </button>
           </div>
         </template>
