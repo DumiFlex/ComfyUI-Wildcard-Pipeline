@@ -19,3 +19,4 @@
 - **Reopening a derivation no longer changes its presence checks.** The editor rewrote every "exists", "does not exist", "is set" and "is unset" condition to "equals" when you opened a saved derivation, so saving it again changed what it did.
 - **"Exists → is empty" conditions run.** The editor offered it, but the engine rejected the op and the whole derivation failed. The engine now supports `is_empty` and `is_not_empty`.
 - **Test Runner in the light theme.** The closed trace drawer no longer casts a dark shadow down the right edge of the page, and the drawer and module picker shadows now follow the theme.
+- **Long Context chains no longer slow the canvas down.** Every Context node used to re-work its whole upstream chain several times a second, so the cost grew with the square of the chain's length. Nodes now reuse the last result until something upstream actually changes. On a 16-node chain, a round of refreshes went from about 28 ms to under 1 ms.

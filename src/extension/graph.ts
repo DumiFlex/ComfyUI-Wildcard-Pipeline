@@ -12,7 +12,11 @@ import {
   type InstanceLike,
   type WildcardOption,
 } from "../components/context/editors/wildcard/probability";
-import { ensure as ensurePreviewLookup, lookup as previewLookup } from "./preview-resolver";
+import {
+  ensure as ensurePreviewLookup,
+  lookup as previewLookup,
+  cacheVersion as previewCacheVersion,
+} from "./preview-resolver";
 import { assignCodenames, baseCodename } from "./node-codename";
 import { evalConditionTree } from "./derivation-conditions";
 import type { SeedStrategy } from "../components/shared/seed-derive";
@@ -406,7 +410,7 @@ export function collectUpstreamResolved(
     chain.push(cur.node);
     cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
   }
-  return resolveChainStatic(chain);
+  return resolveChainMemo(chain);
 }
 
 /**
@@ -1254,7 +1258,83 @@ function previewAxisTag(
   return undefined;
 }
 
-function resolveChainStatic(chain: LiteNodeLike[]): Record<string, ResolvedValue> {
+/* ── resolved-chain memo ────────────────────────────────────────────────
+ *
+ * Every Context node, assembler and injector widget re-resolves its WHOLE
+ * upstream chain on each refresh, so a series chain of N Context nodes costs
+ * O(N²) per round of polls — and nearly every one of those polls finds nothing
+ * changed. Remembering the last answer per chain turns an unchanged poll into
+ * a walk plus a few `===` checks.
+ *
+ * Keyed on the chain's nearest upstream node, so two widgets reading the same
+ * chain (a Context node's own pollers, or two nodes fed by the same upstream)
+ * share one entry. The entry is valid only while every input
+ * `resolveChainStatic` reads is unchanged: the chain's nodes in order, their
+ * type and mode, their three widget strings, and the preview-resolver cache
+ * (nested `@{uuid}` refs expand from it; it bumps `cacheVersion` on every
+ * write). Widget strings compare by reference first, so an unedited 294 KB
+ * `wp_modules` value costs a pointer check.
+ *
+ * Callers get a shallow copy because `collectLocalResolvedForModule` writes
+ * sibling bindings into the map it receives.
+ */
+interface ChainMemo {
+  parts: unknown[];
+  version: number;
+  ctx: Record<string, ResolvedValue>;
+  externalRefs: Set<string>;
+}
+const chainMemo = new WeakMap<LiteNodeLike, ChainMemo>();
+let chainMemoEnabled = true;
+
+/** @internal test hook — measure or compare against the unmemoised path. */
+export function _setChainMemoForTests(on: boolean): void {
+  chainMemoEnabled = on;
+}
+
+function chainParts(chain: LiteNodeLike[]): unknown[] {
+  const parts: unknown[] = [];
+  for (const n of chain) {
+    parts.push(
+      n,
+      n.type,
+      n.mode,
+      widgetValue(n, "wp_modules"),
+      widgetValue(n, "wp_rows"),
+      widgetValue(n, "wp_context_loop_config"),
+    );
+  }
+  return parts;
+}
+
+function sameParts(a: unknown[], b: unknown[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+function resolveChainMemo(chain: LiteNodeLike[]): Record<string, ResolvedValue> {
+  if (!chainMemoEnabled || chain.length === 0) return resolveChainStatic(chain);
+  const head = chain[0];
+  const parts = chainParts(chain);
+  const version = previewCacheVersion.value;
+  const hit = chainMemo.get(head);
+  if (hit && hit.version === version && sameParts(hit.parts, parts)) {
+    // Keep the lazy fetch alive: `ensure` is a no-op for fresh entries, but it
+    // retries expired failures and refetches after `markAllStale`.
+    if (hit.externalRefs.size) ensurePreviewLookup(hit.externalRefs);
+    return { ...hit.ctx };
+  }
+  const externalRefs = new Set<string>();
+  const ctx = resolveChainStatic(chain, externalRefs);
+  chainMemo.set(head, { parts, version, ctx: { ...ctx }, externalRefs });
+  return ctx;
+}
+
+function resolveChainStatic(
+  chain: LiteNodeLike[],
+  externalRefs: Set<string> = new Set<string>(),
+): Record<string, ResolvedValue> {
   // First pass: collect every wildcard payload across the whole chain
   // into one `id → payload` catalog so `@{}` refs inside option values
   // can resolve to picked-but-not-yet-walked siblings as well as
@@ -1288,7 +1368,6 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, ResolvedValue
   // `embed-bundle` deliberately doesn't transitively walk. Kick off a
   // lazy fetch through preview-resolver so the *next* poll cycle can
   // expand them; this cycle falls back to the resolver's cache + name.
-  const externalRefs = new Set<string>();
   for (const wc of catalog.values()) {
     for (const opt of wc.options ?? []) {
       const v = opt.value;

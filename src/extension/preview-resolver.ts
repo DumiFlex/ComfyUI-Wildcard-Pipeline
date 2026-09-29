@@ -234,6 +234,7 @@ export function _resetForTests(): void {
   cachedAt.clear();
   inflight.clear();
   failed.clear();
+  cacheVersion.value++;
 }
 
 /** Test seam — directly seed the cache without going through fetch. Stamps
@@ -242,6 +243,7 @@ export function _resetForTests(): void {
 export function _setForTests(uuid: string, entry: PreviewLookup): void {
   cache.set(uuid, entry);
   cachedAt.set(uuid, Date.now());
+  cacheVersion.value++;
 }
 
 /** Test seam — record the server having confirmed a uuid is gone, without
@@ -250,6 +252,7 @@ export function _setForTests(uuid: string, entry: PreviewLookup): void {
  *  entry — the exact shape of the deleted-module bug. */
 export function _tombstoneForTests(uuid: string): void {
   failed.set(uuid, { at: Date.now(), permanent: true });
+  cacheVersion.value++;
 }
 
 interface BundleSnapshot {
