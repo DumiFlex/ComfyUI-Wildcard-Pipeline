@@ -875,9 +875,11 @@ export interface ModuleEntry {
     action_value_overrides?: Record<string, Record<string, string>> | null;
     /**
      * Per-instance condition.value overrides for derivation branches.
-     * Shape: `{ [rule_id]: { [branch_idx]: value } }`. Only IF + ELIF
-     * branches (ELSE has no condition). Engine reads override before
-     * payload value at compare time.
+     * Shape: `{ [rule_id]: { [key]: value } }` where key is the branch
+     * index for a branch's first test and `"{branch}.{k}"` for its k-th
+     * test (depth-first) in an AND / OR group. Only IF + ELIF branches
+     * (ELSE has no condition). Engine reads override before payload
+     * value at compare time.
      */
     condition_value_overrides?: Record<string, Record<string, string>> | null;
     /**

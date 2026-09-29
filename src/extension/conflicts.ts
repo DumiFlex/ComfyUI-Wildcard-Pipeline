@@ -7,6 +7,7 @@ import {
 } from "../widgets/_shared";
 import { varBaseName } from "../widgets/richTokenize";
 import { computePairingsFull, type ChainModule } from "./constraint-pairs";
+import { conditionLeaves } from "./derivation-conditions";
 
 /** Resolve a module's effective var-binding name. Mirrors engine
  *  precedence: per-instance override (`instance.variable_binding`)
@@ -329,11 +330,11 @@ function conditionAxisRefsIn(m: ModuleEntry): AxisRef[] {
   if (m.type !== "derivation") return [];
   const out: AxisRef[] = [];
   const rules = ((m.payload as { rules?: unknown[] } | undefined)?.rules ?? []) as Array<{
-    branches?: Array<{ condition?: { var?: unknown } }>;
+    branches?: Array<{ condition?: unknown }>;
   }>;
   for (const rule of rules) {
-    for (const br of rule.branches ?? []) {
-      const v = br.condition?.var;
+    for (const leaf of (rule.branches ?? []).flatMap((br) => conditionLeaves<{ var?: unknown }>(br.condition))) {
+      const v = leaf.var;
       if (typeof v !== "string") continue;
       const mm = v.match(
         /^([A-Za-z_][A-Za-z0-9_]*)(?:\.(?:\d+\.([A-Za-z_][A-Za-z0-9_]*)|([A-Za-z_][A-Za-z0-9_]*)(?:\.\d+)?))$/,
@@ -387,7 +388,7 @@ function templatesOf(m: ModuleEntry): string[] {
 
 /** Extract bare variable-name reads — names looked up directly against
  *  ctx, not via `$var` template tokens. Currently only derivations:
- *  each branch's `condition.var` is read raw (no `$` prefix) before
+ *  every test in each branch's condition reads its `var` raw (no `$` prefix) before
  *  the runtime compares it to `condition.value`. Static visibility
  *  matters here for the same reason as combine: an unbound condition
  *  read evaluates to "" and silently mis-matches. */
@@ -395,11 +396,11 @@ function varReadsOf(m: ModuleEntry): string[] {
   if (m.type !== "derivation") return [];
   const out: string[] = [];
   const rules = ((m.payload as { rules?: unknown[] } | undefined)?.rules ?? []) as Array<{
-    branches?: Array<{ condition?: { var?: unknown } }>;
+    branches?: Array<{ condition?: unknown }>;
   }>;
   for (const rule of rules) {
-    for (const br of rule.branches ?? []) {
-      const v = br.condition?.var;
+    for (const leaf of (rule.branches ?? []).flatMap((br) => conditionLeaves<{ var?: unknown }>(br.condition))) {
+      const v = leaf.var;
       if (typeof v === "string") {
         const name = varBaseName(v);  // SP2a: `$mood.0` reads base `mood`
         if (name) out.push(name);
@@ -910,8 +911,19 @@ export function scanConflicts(
     } else if (m.type === "derivation") {
       // `templatesOf` already extracts every branch + else `action.value`
       // string — the same fields the derivation resolver runs `@{}` refs
-      // through at runtime.
-      brokenRefSources.push({ strings: templatesOf(m), type: "derivation_broken_nested_ref" });
+      // through at runtime. This node's `action_value_overrides` replace
+      // those values at run time, so a ref typed into a canvas override
+      // (a placeholder included) is scanned too.
+      const inst = (m.instance ?? {}) as {
+        action_value_overrides?: Record<string, Record<string, unknown>> | null;
+      };
+      const overrideStrings = Object.values(inst.action_value_overrides ?? {})
+        .flatMap((byBranch) => Object.values(byBranch ?? {}))
+        .filter((v): v is string => typeof v === "string");
+      brokenRefSources.push({
+        strings: [...templatesOf(m), ...overrideStrings],
+        type: "derivation_broken_nested_ref",
+      });
     } else if (m.type === "constraint") {
       const payload = (m.payload ?? {}) as {
         exceptions?: Array<{

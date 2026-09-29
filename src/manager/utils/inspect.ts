@@ -204,8 +204,14 @@ function inspectCombine(mod: ModuleRow, result: ScenarioRunResponse | null, fixe
   };
 }
 
-function describeCondition(c: unknown): string {
+function describeCondition(c: unknown, nested = false): string {
   const cond = (c ?? {}) as Payload;
+  // An AND / OR group: `{match: "all"|"any", conditions: [...]}`.
+  if (Array.isArray(cond.conditions)) {
+    const parts = cond.conditions.map((x) => describeCondition(x, true));
+    const joined = parts.join(cond.match === "any" ? " OR " : " AND ");
+    return nested && parts.length > 1 ? `(${joined})` : joined;
+  }
   const v = str(cond.var).replace(/^\$/, "");
   const op = str(cond.op).replace(/_/g, " ") || "equals";
   const val = cond.value;

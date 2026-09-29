@@ -619,14 +619,15 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
         <!-- Broken ref. The `@{uuid#name}` syntax preserves the name the
              target had when the reference was written, so the card can say
              WHICH module went missing instead of only that something did.
-             Stated as "was", because presenting a name we can no longer verify
-             as current is how the old card ended up lying. -->
+             It does not claim the module once existed: a placeholder created
+             from the `@` autocomplete is broken on purpose, under a name no
+             module has had yet. -->
         <template v-else-if="!resolved">
           <div class="wp-refchip-pop__count" data-test="refchip-broken">
             not in the library
           </div>
           <div v-if="name" class="wp-refchip-pop__broken" data-test="refchip-broken-name">
-            was “{{ name }}” — deleted, renamed away, or never imported here
+            “{{ name }}”: a placeholder, or deleted, renamed away, or never imported here
           </div>
           <div v-else class="wp-refchip-pop__broken">
             this reference stored no name, so only the id is known

@@ -31,7 +31,14 @@ import type { VarProducerLike } from "../../../../../manager/components/RefChip.
 import { patchInstance } from "../../instance/patch";
 import { varColorClass } from "../../../../shared/var-color";
 import RuleValueChips from "./RuleValueChips.vue";
+import { tokenizeRich } from "../../../../../widgets/richTokenize";
 import PairBadge from "../../../PairBadge.vue";
+import {
+  conditionLeaves,
+  conditionOverrideKey,
+  isConditionGroup,
+  matchWord,
+} from "../../../../../extension/derivation-conditions";
 
 // Async-import the rich-text editor so its chunk stays split + is only
 // pulled in when a derivation instance modal expands a rule. RichTextInput
@@ -45,11 +52,39 @@ const RichTextInput = defineAsyncComponent(
 
 interface DerivationCondition { var?: string; op?: string; value?: string }
 interface DerivationAction { target_var?: string; mode?: string; value?: string }
-interface DerivationBranch { condition?: DerivationCondition; action?: DerivationAction }
+/** `condition` is one test or an AND / OR group of them (schema v7). */
+interface DerivationBranch { condition?: unknown; action?: DerivationAction }
 interface DerivationRule {
   id: string;
   branches?: DerivationBranch[];
   else?: { action?: DerivationAction };
+}
+
+/** `@` refs in a rule's action values (library and this node's overrides)
+ *  whose target the catalog does not hold, labelled `@name`. Test values are
+ *  compared raw, so they never carry a ref. Empty until the catalog has
+ *  loaded, so a rule never flashes red while it fetches. */
+function ruleBrokenRefs(rule: DerivationRule): string[] {
+  const known = props.uuidToName;
+  if (known.size === 0) return [];
+  const texts: unknown[] = [];
+  for (const b of rule.branches ?? []) texts.push(b.action?.value);
+  texts.push(rule.else?.action?.value);
+  const inst = props.module.instance as Record<string, unknown> | undefined;
+  const byRule = (inst?.action_value_overrides as Record<string, Record<string, unknown>> | null | undefined)?.[rule.id];
+  if (byRule && typeof byRule === "object") texts.push(...Object.values(byRule));
+  const out: string[] = [];
+  for (const text of texts) {
+    if (typeof text !== "string" || !text.includes("@")) continue;
+    for (const tok of tokenizeRich(text)) {
+      const uuid = tok.kind === "ref" ? tok.meta?.uuid : undefined;
+      if (!uuid || known.has(uuid)) continue;
+      const name = typeof tok.meta?.name === "string" && tok.meta.name ? tok.meta.name : "";
+      const label = name ? `@${name}` : `@{${uuid}}`;
+      if (!out.includes(label)) out.push(label);
+    }
+  }
+  return out;
 }
 
 const props = withDefaults(
@@ -352,6 +387,8 @@ function opSymbol(op: string | undefined): string {
     case "not_exists": return "absent";
     case "is_set": return "is set";
     case "is_unset": return "is unset";
+    case "is_empty": return "is empty";
+    case "is_not_empty": return "is not empty";
     default: return op ?? "";
   }
 }
@@ -366,7 +403,37 @@ function modeLabel(mode: string | undefined): string {
  *  ignore condition.value). Drives the cond-override input being
  *  rendered or skipped per branch. */
 function opUsesValue(op: string | undefined): boolean {
-  return op !== "exists" && op !== "not_exists" && op !== "is_set" && op !== "is_unset";
+  return op !== "exists" && op !== "not_exists" && op !== "is_set" && op !== "is_unset"
+    && op !== "is_empty" && op !== "is_not_empty";
+}
+
+/** A branch condition as summary tokens: `$a = x AND ($b = y OR $c absent)`. */
+interface CondPart { kind: "var" | "op" | "val" | "join" | "paren"; text: string }
+function condParts(cond: unknown, nested = false): CondPart[] {
+  if (isConditionGroup(cond)) {
+    const kids = Array.isArray(cond.conditions) ? cond.conditions : [];
+    const out: CondPart[] = nested ? [{ kind: "paren", text: "(" }] : [];
+    kids.forEach((child, i) => {
+      if (i > 0) out.push({ kind: "join", text: matchWord(cond.match) });
+      out.push(...condParts(child, true));
+    });
+    if (nested) out.push({ kind: "paren", text: ")" });
+    return out;
+  }
+  const c = (cond ?? {}) as DerivationCondition;
+  const out: CondPart[] = [];
+  if (c.var) out.push({ kind: "var", text: c.var });
+  out.push({ kind: "op", text: opSymbol(c.op) });
+  if (opUsesValue(c.op)) out.push({ kind: "val", text: c.value ?? "" });
+  return out;
+}
+
+/** The tests of a branch that take a value, with their override key. A
+ *  grouped branch gets one override field per such test. */
+function overrideTests(branch: DerivationBranch, bi: number): Array<{ key: string; test: DerivationCondition }> {
+  return conditionLeaves<DerivationCondition>(branch.condition)
+    .map((test, k) => ({ key: conditionOverrideKey(bi, k), test }))
+    .filter(({ test }) => opUsesValue(test.op));
 }
 
 /**
@@ -408,16 +475,16 @@ function clampPreviewValue(value: unknown): string {
  *  the visible summary caps long values, so this is how the user reads the
  *  rest. */
 function branchSummaryText(
-  branch: { condition?: { var?: string; op?: string; value?: string };
+  branch: { condition?: unknown;
             action?: { target_var?: string; mode?: string; value?: string } } | undefined,
 ): string {
   if (!branch) return "";
   const parts: string[] = [];
-  const c = branch.condition;
-  if (c?.var) {
-    parts.push(`$${c.var} ${opSymbol(c.op)}`);
-    if (opUsesValue(c.op) && c.value) parts.push(c.value);
-  }
+  const cond = condParts(branch.condition)
+    .filter((p) => p.kind !== "val" || p.text !== "")
+    .map((p) => (p.kind === "var" ? `$${p.text}` : p.text))
+    .join(" ");
+  if (cond) parts.push(cond);
   const a = branch.action;
   if (a?.target_var) parts.push(`→ $${a.target_var} ${modeLabel(a.mode)} ${a.value ?? ""}`);
   return parts.join(" ").trim();
@@ -455,6 +522,7 @@ function ruleSummaryText(rule: DerivationRule): string {
           'rule-card--open': isExpanded(rule.id),
           'rule-card--dragging': draggingRuleId === rule.id,
           'rule-card--drop-target': dragOverRuleId === rule.id && draggingRuleId !== null && draggingRuleId !== rule.id,
+          'rule-card--broken': ruleBrokenRefs(rule).length > 0,
         }"
         :data-test="`rule-card-${rule.id}`"
         @dragover="(ev) => onRuleDragOver(rule.id, ev)"
@@ -488,6 +556,12 @@ function ruleSummaryText(rule: DerivationRule): string {
           </span>
 
           <span class="rule-head__num" :title="`Rule id ${rule.id}`">Rule {{ ruleIdx + 1 }}</span>
+          <i
+            v-if="ruleBrokenRefs(rule).length"
+            class="pi pi-exclamation-triangle rule-head__broken"
+            :title="`${ruleBrokenRefs(rule).join(', ')} not in the library`"
+            :data-test="`rule-broken-${rule.id}`"
+          />
 
           <span
             class="rule-head__summary"
@@ -495,15 +569,18 @@ function ruleSummaryText(rule: DerivationRule): string {
             :data-test="`rule-summary-${rule.id}`"
           >
             <template v-if="rule.branches && rule.branches.length > 0">
-              <span
-                v-if="rule.branches[0].condition?.var"
-                :class="['rule-tok-var', varColorClass(rule.branches[0].condition.var)]"
-              >${{ rule.branches[0].condition.var }}</span>
-              <span class="rule-tok-op">{{ opSymbol(rule.branches[0].condition?.op) }}</span>
-              <span
-                v-if="opUsesValue(rule.branches[0].condition?.op)"
-                class="rule-tok-val"
-              ><RuleValueChips :value="clampPreviewValue(rule.branches[0].condition?.value)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
+              <template v-for="(part, pi) in condParts(rule.branches[0].condition)" :key="pi">
+                <span
+                  v-if="part.kind === 'var'"
+                  :class="['rule-tok-var', varColorClass(part.text)]"
+                >${{ part.text }}</span>
+                <span
+                  v-else-if="part.kind === 'val'"
+                  class="rule-tok-val"
+                ><RuleValueChips :value="clampPreviewValue(part.text)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
+                <span v-else-if="part.kind === 'join'" class="rule-tok-join">{{ part.text }}</span>
+                <span v-else class="rule-tok-op">{{ part.text }}</span>
+              </template>
               <span class="rule-tok-arrow">→</span>
               <span
                 v-if="rule.branches[0].action?.target_var"
@@ -590,15 +667,18 @@ function ruleSummaryText(rule: DerivationRule): string {
                 {{ bi === 0 ? "IF" : "ELIF" }}
               </span>
               <span class="branch-cell branch-cell--summary" :title="branchSummaryText(branch)">
-                <span
-                  v-if="branch.condition?.var"
-                  :class="['rule-tok-var', varColorClass(branch.condition.var)]"
-                >${{ branch.condition.var }}</span>
-                <span class="rule-tok-op">{{ opSymbol(branch.condition?.op) }}</span>
-                <span
-                  v-if="opUsesValue(branch.condition?.op)"
-                  class="rule-tok-val"
-                ><RuleValueChips :value="clampPreviewValue(branch.condition?.value)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
+                <template v-for="(part, pi) in condParts(branch.condition)" :key="pi">
+                  <span
+                    v-if="part.kind === 'var'"
+                    :class="['rule-tok-var', varColorClass(part.text)]"
+                  >${{ part.text }}</span>
+                  <span
+                    v-else-if="part.kind === 'val'"
+                    class="rule-tok-val"
+                  ><RuleValueChips :value="clampPreviewValue(part.text)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
+                  <span v-else-if="part.kind === 'join'" class="rule-tok-join">{{ part.text }}</span>
+                  <span v-else class="rule-tok-op">{{ part.text }}</span>
+                </template>
                 <span class="rule-tok-arrow">→</span>
                 <span
                   v-if="branch.action?.target_var"
@@ -619,20 +699,31 @@ function ruleSummaryText(rule: DerivationRule): string {
                      NO `@{}` machinery: the engine compares condition.value
                      RAW (never resolves refs/vars there). Matches the SPA
                      DerivationRuleCard condition field. -->
-                <RichTextInput
-                  v-if="opUsesValue(branch.condition?.op)"
-                  surface="derivation"
-                  wrap
-                  :var-suggestions="varSuggestions"                  :var-producers="varProducers"                  graph-aware
-                  :uuid-to-name="uuidToName"
-                  :model-value="getOverride('condition_value_overrides', rule.id, String(bi))"
-                  :placeholder="branch.condition?.value || ''"
-                  class="branch-override-input"
-                  :class="{ 'branch-override-input--mod': getOverride('condition_value_overrides', rule.id, String(bi)) !== '' }"
-                  :data-test="`cond-override-${rule.id}-${bi}`"
-                  :aria-label="`Condition value override for rule ${rule.id} branch ${bi}`"
-                  @update:model-value="(v: string) => onCondOverrideInput(rule.id, String(bi), v)"
-                />
+                <!-- One field per test that takes a value; a grouped branch
+                     labels each with its variable so they can be told apart. -->
+                <span
+                  v-for="{ key, test } in overrideTests(branch, bi)"
+                  :key="key"
+                  class="cond-override"
+                >
+                  <span
+                    v-if="overrideTests(branch, bi).length > 1"
+                    :class="['cond-override__var', 'rule-tok-var', varColorClass(test.var ?? '')]"
+                  >${{ test.var }}</span>
+                  <RichTextInput
+                    surface="derivation"
+                    wrap
+                    :var-suggestions="varSuggestions"                  :var-producers="varProducers"                  graph-aware
+                    :uuid-to-name="uuidToName"
+                    :model-value="getOverride('condition_value_overrides', rule.id, key)"
+                    :placeholder="test.value || ''"
+                    class="branch-override-input"
+                    :class="{ 'branch-override-input--mod': getOverride('condition_value_overrides', rule.id, key) !== '' }"
+                    :data-test="`cond-override-${rule.id}-${key}`"
+                    :aria-label="`Condition value override for rule ${rule.id} branch ${bi}${key === String(bi) ? '' : ' test ' + key}`"
+                    @update:model-value="(v: string) => onCondOverrideInput(rule.id, key, v)"
+                  />
+                </span>
               </span>
               <span class="branch-cell branch-cell--action-override">
                 <!-- action.value override — full `@{}` carrier machinery
@@ -814,6 +905,14 @@ function ruleSummaryText(rule: DerivationRule): string {
   flex-shrink: 0;
 }
 .rule-card--off { opacity: 0.55; }
+.rule-card--broken {
+  border-color: color-mix(in srgb, var(--wp-danger, #ef4444) 55%, transparent);
+  box-shadow: inset 3px 0 0 var(--wp-danger, #ef4444);
+}
+.rule-head__broken {
+  font-size: 10px;
+  color: var(--wp-danger, #ef4444);
+}
 .rule-card--dragging { opacity: 0.5; }
 .rule-card--drop-target {
   /* Visual cue that dropping here will insert the dragged rule
@@ -965,6 +1064,8 @@ function ruleSummaryText(rule: DerivationRule): string {
   font-weight: 600;
 }
 .branch-cell--toggle { justify-content: center; }
+/* Stacks a grouped branch's per-test override fields. */
+.branch-cell--cond-override { flex-direction: column; align-items: stretch; }
 .branch-cell--tag {
   justify-content: flex-start;
   font: 600 9px var(--wp-font-sans);
@@ -1036,4 +1137,22 @@ function ruleSummaryText(rule: DerivationRule): string {
   color: var(--wp-text-dim, var(--wp-text3));
   margin: 0 2px;
 }
+/* AND / OR between the tests of a grouped branch. */
+.rule-tok-join {
+  font: 700 9px var(--wp-font-mono);
+  letter-spacing: 0.06em;
+  color: var(--wp-accent);
+  padding: 0 3px;
+}
+/* A grouped branch stacks one override field per test, each tagged with
+   its variable. */
+.cond-override {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+.cond-override + .cond-override { margin-top: 3px; }
+.cond-override__var { font: 600 9px var(--wp-font-mono); flex: none; }
 </style>

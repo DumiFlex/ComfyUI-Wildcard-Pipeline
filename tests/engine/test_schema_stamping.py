@@ -5,6 +5,7 @@ import pytest
 from engine.migrations import (
     CONSTRAINT_ONLY_SCHEMA_VERSION,
     CURRENT_SCHEMA_VERSION,
+    DERIVATION_CONDITIONS_SCHEMA_VERSION,
     SP2B_SCHEMA_VERSION,
     SP3_REACH_SCHEMA_VERSION,
     TAG_AXES_SCHEMA_VERSION,
@@ -115,3 +116,37 @@ def test_only_rule_outranks_accepts_axis():
         {"type": "wildcard", "payload": {"options": [], "tag_group_kinds": {"g": "accepts"}}},
     ]}
     assert schema_version_for_payload(bundle) == CONSTRAINT_ONLY_SCHEMA_VERSION
+
+
+def _derivation_row(condition):
+    return {"id": "dddddddd", "type": "derivation", "name": "d", "payload": {"rules": [
+        {"id": "r1", "branches": [
+            {"condition": condition,
+             "action": {"target_var": "t", "mode": "replace", "value": "v"}},
+        ]},
+    ]}}
+
+
+_TEST = {"var": "mood", "op": "equals", "value": "calm"}
+
+
+@pytest.mark.parametrize("condition, expected", [
+    (_TEST, CURRENT_SCHEMA_VERSION),
+    ({"var": "mood", "op": "is_set", "value": ""}, CURRENT_SCHEMA_VERSION),
+    ({"var": "mood", "op": "is_empty", "value": ""}, DERIVATION_CONDITIONS_SCHEMA_VERSION),
+    ({"var": "mood", "op": "is_not_empty", "value": ""}, DERIVATION_CONDITIONS_SCHEMA_VERSION),
+    ({"match": "all", "conditions": [_TEST, _TEST]}, DERIVATION_CONDITIONS_SCHEMA_VERSION),
+    ({"match": "any", "conditions": [_TEST]}, DERIVATION_CONDITIONS_SCHEMA_VERSION),
+])
+def test_derivation_conditions(condition, expected):
+    assert schema_version_for_payload(_derivation_row(condition)) == expected
+
+
+def test_derivation_group_outranks_only_rule_inside_a_bundle():
+    only = _constraint_row()
+    only["payload"]["exceptions"] = [{"source_value": "a", "target_value": "b", **_ONLY}]
+    bundle = {"children": [
+        only,
+        _derivation_row({"match": "any", "conditions": [_TEST, _TEST]}),
+    ]}
+    assert schema_version_for_payload(bundle) == DERIVATION_CONDITIONS_SCHEMA_VERSION

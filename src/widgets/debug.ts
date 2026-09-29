@@ -3,12 +3,57 @@ import { app } from "#comfyui/app";
 import { createDomWidgetHost, type MountTargetNode } from "./_shared";
 import { attachThemeDetector } from "../extension/theme-detector";
 import { reactiveFromGraph } from "../extension/reactive";
+import { findRootGraph, type LiteGraphLike, type LiteNodeLike } from "../extension/graph";
+import { baseCodename } from "../extension/node-codename";
 
 const DebugViewer = defineAsyncComponent(() => import("../components/debug/DebugViewer.vue"));
 
 interface DebugNode extends MountTargetNode {
   onExecuted?: (output: { wp_debug_snapshot?: string[] }) => void;
   mode?: number;
+}
+
+interface CanvasLike {
+  graph?: LiteGraphLike;
+  selectNode?: (node: LiteNodeLike) => void;
+  centerOnNode?: (node: LiteNodeLike) => void;
+  setDirty?: (fg: boolean, bg?: boolean) => void;
+}
+
+/** Resolve an execution node id (`"12"`, or `"4:12"` inside subgraph 4)
+ *  against the root graph. */
+function findExecNode(id: string): { node: LiteNodeLike; graph: LiteGraphLike } | null {
+  const start = app.graph as unknown as LiteGraphLike | undefined;
+  if (!start || !id) return null;
+  let graph: LiteGraphLike | undefined = findRootGraph(start);
+  const path = id.split(":");
+  for (let i = 0; graph && i < path.length; i++) {
+    const n = graph.getNodeById(Number(path[i]));
+    if (!n) return null;
+    if (i === path.length - 1) return { node: n, graph };
+    graph = n.subgraph;
+  }
+  return null;
+}
+
+function nodeInfo(id: string): { title: string; codename: string } {
+  const hit = findExecNode(id);
+  if (!hit) return { title: "", codename: "" };
+  const n = hit.node as LiteNodeLike & { title?: string };
+  return {
+    title: typeof n.title === "string" ? n.title : "",
+    codename: n.type === "WP_Context" ? baseCodename(n.id) : "",
+  };
+}
+
+/** Select + centre the node, when it lives in the graph on screen. */
+function focusNode(id: string): void {
+  const hit = findExecNode(id);
+  const canvas = (app as unknown as { canvas?: CanvasLike }).canvas;
+  if (!hit || !canvas || canvas.graph !== hit.graph) return;
+  canvas.selectNode?.(hit.node);
+  canvas.centerOnNode?.(hit.node);
+  canvas.setDirty?.(true, true);
 }
 
 export function create(node: DebugNode, inputName: string) {
@@ -23,7 +68,7 @@ export function create(node: DebugNode, inputName: string) {
   // DebugViewer's `request-min-width` emit updates this when the user
   // switches tabs (trace/picks tabs reveal the filter input which
   // widens the toolbar) or the panel chrome otherwise changes.
-  let dynamicMinWidth = 372;
+  let dynamicMinWidth = 420;
   let host: ReturnType<typeof createDomWidgetHost> | null = null;
   const wrapper: Component = {
     setup() {
@@ -37,6 +82,8 @@ export function create(node: DebugNode, inputName: string) {
         iterationCount: snapshots.value.length,
         iterationIndex: activeIdx.value,
         nodeMode: nodeMode.value,
+        nodeInfo,
+        focusNode,
         "onUpdate:iterationIndex": (next: number) => {
           if (next >= 0 && next < snapshots.value.length) activeIdx.value = next;
         },

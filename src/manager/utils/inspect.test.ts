@@ -115,6 +115,20 @@ describe("inspectItem", () => {
     if (d?.kind === "derivation") expect(d.distributions.map((x) => x.name)).toEqual(["light"]);
   });
 
+  it("spells out AND / OR condition groups", () => {
+    const grouped = mod("abababab", "derivation", "Weather", {
+      rules: [{ branches: [{
+        condition: { match: "all", conditions: [
+          { var: "time", op: "equals", value: "night" },
+          { match: "any", conditions: [{ var: "sky", op: "equals", value: "rain" }, { var: "sky", op: "equals", value: "fog" }] },
+        ] },
+        action: { target_var: "light", mode: "replace", value: "dim" },
+      }] }],
+    });
+    const d = inspectItem(item("derivation", grouped.id), 0, [grouped], [], null);
+    expect(d).toMatchObject({ rules: [{ when: 'if $time equals "night" AND ($sky equals "rain" OR $sky equals "fog")' }] });
+  });
+
   it("lists fixed values and bundle children, nested ones indented", () => {
     expect(inspectItem(item("fixed_values", FIXED.id), 5, MODULES, [], null)).toEqual({
       kind: "fixed_values", values: [{ name: "name", value: "Mira" }],

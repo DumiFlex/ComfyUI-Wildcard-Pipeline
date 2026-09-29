@@ -1,7 +1,10 @@
 """Derivation module resolver — IF/ELIF/ELSE rules over the runtime context.
 
 Each rule has an ordered list of branches (index 0 == IF, the rest == ELIF)
-and an optional ``else`` clause. Rules evaluate independently top-to-bottom:
+and an optional ``else`` clause. A branch ``condition`` is either one test
+(``{var, op, value}``) or a group (``{match: "all"|"any", conditions: [...]}``)
+whose members are tests or further groups, so a branch can AND / OR several
+tests together (schema v7). Rules evaluate independently top-to-bottom:
 the first branch whose condition matches wins; if none match, the ``else``
 action (if any) fires; otherwise the rule is a no-op.
 
@@ -16,6 +19,7 @@ import re
 from typing import Any
 
 from engine.modules import build_resolve_ctx
+from engine.modules._detail import module_detail
 from engine.modules._seed import derive_module_rng
 from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
@@ -34,7 +38,15 @@ _VALID_OPS = {
     # semantics they need — wildcards can pick options with empty
     # values, leaving keys present-but-empty.
     "exists", "not_exists", "is_set", "is_unset",
+    # Emptiness refinements the editor's "exists" switch has always offered.
+    # `is_empty` is "present and empty" (a wildcard that rolled its null
+    # option); `is_not_empty` is "resolved to something non-empty".
+    "is_empty", "is_not_empty",
 }
+_VALID_MATCHES = {"all", "any"}
+# Groups nest; the editor stops at three levels, the cap here only guards a
+# hand-built payload against runaway recursion.
+_MAX_CONDITION_DEPTH = 8
 _VALID_MODES = {"replace", "append", "prepend"}
 
 
@@ -179,6 +191,10 @@ def _match_condition(condition: dict[str, Any], ctx: Any) -> bool:
         return _ctx_has(ctx, var) and _ctx_get(ctx, var) != ""
     if op == "is_unset":
         return not _ctx_has(ctx, var) or _ctx_get(ctx, var) == ""
+    if op == "is_empty":
+        return _ctx_has(ctx, var) and _ctx_get(ctx, var) == ""
+    if op == "is_not_empty":
+        return _ctx_get(ctx, var) != ""
     actual = _ctx_get(ctx, var)
     if op == "equals":
         return actual == value
@@ -192,6 +208,91 @@ def _match_condition(condition: dict[str, Any], ctx: Any) -> bool:
         except re.error:
             return False
     return False
+
+
+def is_condition_group(condition: Any) -> bool:
+    """A group carries ``conditions``; a single test carries ``var``."""
+    return isinstance(condition, dict) and "conditions" in condition
+
+
+def condition_leaves(condition: Any) -> list[dict[str, Any]]:
+    """Every single test in ``condition``, depth-first. The position in this
+    list is the test's override index (see ``condition_override_key``)."""
+    if is_condition_group(condition):
+        out: list[dict[str, Any]] = []
+        for child in condition.get("conditions") or []:
+            out.extend(condition_leaves(child))
+        return out
+    return [condition] if isinstance(condition, dict) else []
+
+
+def condition_override_key(branch_index: int, leaf_index: int) -> str:
+    """Key into ``condition_value_overrides[rule_id]`` for one test of a
+    branch. The first test keeps the bare branch index it always had, so a
+    single-test branch and its saved overrides are unchanged; later tests of a
+    grouped branch append ``.K`` (their depth-first position).
+
+    MUST stay byte-identical to the TS twin ``conditionOverrideKey`` in
+    ``src/extension/derivation-conditions.ts``.
+    """
+    return str(branch_index) if leaf_index == 0 else f"{branch_index}.{leaf_index}"
+
+
+def _with_value_overrides(
+    condition: Any, overrides: dict[str, Any], branch_index: int,
+) -> Any:
+    """Copy of ``condition`` with each test's ``value`` swapped for its
+    instance override, when one is set."""
+    counter = [0]
+
+    def walk(node: Any) -> Any:
+        if is_condition_group(node):
+            return {**node, "conditions": [walk(c) for c in node.get("conditions") or []]}
+        if not isinstance(node, dict):
+            return node
+        key = condition_override_key(branch_index, counter[0])
+        counter[0] += 1
+        override = overrides.get(key)
+        return {**node, "value": override} if isinstance(override, str) else node
+
+    return walk(condition)
+
+
+def _eval_condition(condition: Any, ctx: Any) -> bool:
+    if is_condition_group(condition):
+        children = condition.get("conditions") or []
+        if condition.get("match") == "any":
+            return any(_eval_condition(c, ctx) for c in children)
+        return all(_eval_condition(c, ctx) for c in children)
+    if not isinstance(condition, dict):
+        return False
+    return _match_condition(condition, ctx)
+
+
+def _explain_condition(condition: Any, ctx: Any) -> dict[str, Any]:
+    """The condition tree with each test's outcome and the value it read, for
+    the WP Debug node. Evaluates every test, unlike ``_eval_condition``, so a
+    group that short-circuited still shows why each member did or didn't
+    match. Reads only; nothing here writes to ``ctx``."""
+    if is_condition_group(condition):
+        children = [_explain_condition(c, ctx) for c in condition.get("conditions") or []]
+        match = "any" if condition.get("match") == "any" else "all"
+        results = [c["result"] for c in children]
+        return {
+            "match": match,
+            "result": any(results) if match == "any" else all(results),
+            "conditions": children,
+        }
+    if not isinstance(condition, dict):
+        return {"var": "", "op": "", "value": "", "actual": None, "result": False}
+    var = str(condition.get("var", ""))
+    return {
+        "var": var,
+        "op": str(condition.get("op", "")),
+        "value": condition.get("value", ""),
+        "actual": _ctx_get(ctx, var) if _ctx_has(ctx, var) else None,
+        "result": _match_condition(condition, ctx),
+    }
 
 
 def branch_carrier_key(rule_id: str, branch: int | str) -> str:
@@ -248,9 +349,38 @@ def _apply_action(
     return target, result
 
 
-def _validate_condition(condition: Any, where: str) -> None:
+def _explain_action(action: dict[str, Any], pair: tuple[str, str] | None) -> dict[str, Any]:
+    """What a fired branch did: the variable, how it wrote, and the result."""
+    return {
+        "target": str(action.get("target_var", "")),
+        "mode": str(action.get("mode", "replace")),
+        "value": str(action.get("value", "")),
+        "result": pair[1] if pair is not None else None,
+    }
+
+
+def _validate_condition(condition: Any, where: str, depth: int = 0) -> None:
     if not isinstance(condition, dict):
         raise ValueError(f"derivation {where}.condition must be an object")
+    if is_condition_group(condition):
+        if depth >= _MAX_CONDITION_DEPTH:
+            raise ValueError(
+                f"derivation {where}.condition nests deeper than "
+                f"{_MAX_CONDITION_DEPTH} groups"
+            )
+        if condition.get("match") not in _VALID_MATCHES:
+            raise ValueError(
+                f"derivation {where}.condition.match must be one of "
+                f"{sorted(_VALID_MATCHES)}"
+            )
+        children = condition.get("conditions")
+        if not isinstance(children, list) or not children:
+            raise ValueError(
+                f"derivation {where}.condition.conditions must be a non-empty list"
+            )
+        for ci, child in enumerate(children):
+            _validate_condition(child, f"{where}.condition.conditions[{ci}]", depth + 1)
+        return
     var = condition.get("var")
     if not isinstance(var, str) or not var:
         raise ValueError(f"derivation {where}.condition.var must be a non-empty string")
@@ -413,10 +543,24 @@ class DerivationHandler(ModuleHandler):
             )
 
         out: dict[str, str] = {}
+        # WP Debug: which branch of each rule fired and why (explain runs only).
+        detail = module_detail(ctx)
+        explained: list[dict[str, Any]] | None = [] if detail is not None else None
 
         for rule in rules:
             rule_id = rule.get("id", "")
+            rd: dict[str, Any] | None = None
+            if explained is not None:
+                rd = {
+                    "id": rule_id,
+                    "fired": None,
+                    "branches": [],
+                    "has_else": isinstance(rule.get("else"), dict),
+                }
+                explained.append(rd)
             if rule_id in disabled_rule_ids:
+                if rd is not None:
+                    rd["disabled"] = True
                 continue
 
             applied = False
@@ -425,19 +569,24 @@ class DerivationHandler(ModuleHandler):
                 # even when listed because disabling IF == disabling rule
                 # (the per-rule toggle handles that case cleanly).
                 if bi != 0 and branch_carrier_key(rule_id, bi) in disabled_branch_keys:
+                    if rd is not None:
+                        rd["branches"].append({"index": bi, "disabled": True})
                     continue
 
-                # Condition-value override per branch index.
+                # Condition-value overrides, one per test of the branch.
                 cond = branch.get("condition", {})
-                cond_override = (
-                    cond_overrides.get(rule_id, {}).get(str(bi))
-                    if isinstance(cond_overrides.get(rule_id), dict)
-                    else None
-                )
-                if isinstance(cond_override, str):
-                    cond = {**cond, "value": cond_override}
+                rule_cond_overrides = cond_overrides.get(rule_id)
+                if isinstance(rule_cond_overrides, dict) and rule_cond_overrides:
+                    cond = _with_value_overrides(cond, rule_cond_overrides, bi)
 
-                if _match_condition(cond, ctx):
+                matched = _eval_condition(cond, ctx)
+                if rd is not None:
+                    rd["branches"].append({
+                        "index": bi,
+                        "matched": matched,
+                        "condition": _explain_condition(cond, ctx),
+                    })
+                if matched:
                     # Action-value override per branch index.
                     action = branch.get("action", {})
                     action_override = (
@@ -455,12 +604,17 @@ class DerivationHandler(ModuleHandler):
                     )
                     if pair is not None:
                         out[pair[0]] = pair[1]
+                    if rd is not None:
+                        rd["fired"] = bi
+                        rd["action"] = _explain_action(action, pair)
                     applied = True
                     break
 
             if not applied:
                 # ELSE skip when listed in disabled_branch_keys.
                 if branch_carrier_key(rule_id, "else") in disabled_branch_keys:
+                    if rd is not None:
+                        rd["else_disabled"] = True
                     continue
                 else_clause = rule.get("else")
                 if isinstance(else_clause, dict):
@@ -480,4 +634,9 @@ class DerivationHandler(ModuleHandler):
                     )
                     if pair is not None:
                         out[pair[0]] = pair[1]
+                    if rd is not None:
+                        rd["fired"] = "else"
+                        rd["action"] = _explain_action(action, pair)
+        if detail is not None:
+            detail["rules"] = explained
         return out

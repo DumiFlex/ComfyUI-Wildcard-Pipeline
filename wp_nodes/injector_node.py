@@ -76,6 +76,8 @@ class WPContextInjector(io.ComfyNode):
                 # the user has wired at execute time.
             ],
             outputs=[PipelineContext.Output("context")],
+            # The node's graph id, so WP Debug can group its trace rows.
+            hidden=[io.Hidden.unique_id],
             not_idempotent=True,
             accept_all_inputs=True,
         )
@@ -296,6 +298,11 @@ class WPContextInjector(io.ComfyNode):
             out_internals["__wp_internal_flags__"] = flags
 
         debug = dict(upstream_debug)
+        hidden = getattr(cls, "hidden", None)
+        node_id = getattr(hidden, "unique_id", None) if hidden is not None else None
+        if node_id is not None:
+            for row in traces:
+                row["node_id"] = str(node_id)
         if traces:
             existing_trace = debug.get("__wp_trace__", [])
             debug["__wp_trace__"] = list(existing_trace) + traces

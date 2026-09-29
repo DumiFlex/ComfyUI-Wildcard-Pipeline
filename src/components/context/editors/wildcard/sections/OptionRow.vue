@@ -8,7 +8,7 @@ import {
   type WildcardOption,
 } from "../probability";
 import { splitRefFilter, tokenizeRich, type RichToken } from "../../../../../widgets/richTokenize";
-import { cacheVersion, ensure, lookup } from "../../../../../extension/preview-resolver";
+import { cacheVersion, ensure, isConfirmedMissing, lookup } from "../../../../../extension/preview-resolver";
 import type { PairingBadge } from "../../../../../extension/constraint-pairs";
 import { matches, parse, readsAs } from "@/manager/parsing/subcatFilter";
 import { formatProbability } from "@/manager/utils/percent";
@@ -115,6 +115,17 @@ const tokens = computed<RichToken[]>(() => {
     .filter((u): u is string => typeof u === "string");
   if (uuids.length > 0) ensure(uuids);
   return out;
+});
+
+/** The option carries a ref the server confirmed points at nothing (a
+ *  deleted module, or a placeholder not yet repointed), so the whole row is
+ *  marked. Only confirmed misses count: a ref still loading is not broken. */
+const hasBrokenRef = computed(() => {
+  void cacheVersion.value;
+  return tokens.value.some((t) => {
+    const uuid = t.kind === "ref" ? t.meta?.uuid : undefined;
+    return typeof uuid === "string" && isConfirmedMissing(uuid);
+  });
 });
 
 /** RefChip renders its own `@` prefix, so hand it the bare label. */
@@ -377,7 +388,9 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
       'opt--off': !enabled || nullDisabledInMulti,
       'opt--weighted': overrideWeight,
       'opt--filtered': filteredByCategory,
+      'opt--broken': hasBrokenRef,
     }"
+    :title="hasBrokenRef ? 'References a module that is not in the library' : undefined"
   >
     <span
       class="opt__check"
@@ -554,6 +567,10 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
   cursor: pointer;
 }
 .opt:last-child { border-bottom: none; }
+.opt--broken {
+  background: color-mix(in srgb, var(--wp-danger, #ef4444) 6%, transparent);
+  box-shadow: inset 3px 0 0 var(--wp-danger, #ef4444);
+}
 .opt:hover { background: var(--wp-row-hover, rgba(255, 255, 255, 0.02)); }
 .opt__check {
   width: 14px;
