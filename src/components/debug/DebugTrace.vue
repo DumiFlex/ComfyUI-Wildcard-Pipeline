@@ -90,9 +90,9 @@ function groupLabel(g: TraceGroup): string {
         >
           <span class="wp-dbg-step__order">{{ s.order }}</span>
           <span class="wp-kind-chip wp-dbg-step__kind" :class="`wp-kind-chip--${s.kind === 'unknown' ? 'unknown' : s.kind}`">{{ s.kindLabel }}</span>
-          <span class="wp-dbg-step__title">
+          <span class="wp-dbg-step__title" :title="title(s)">
             <i v-if="pinned.has(s.key)" class="pi pi-star-fill wp-dbg-pin" aria-label="pinned" />
-            {{ title(s) }}
+            <span class="wp-dbg-step__title-text">{{ title(s) }}</span>
             <i v-if="s.internal" class="pi pi-eye-slash wp-dbg-flag" title="Internal: kept out of the prompt" />
             <i v-if="s.seedLocked" class="pi pi-lock wp-dbg-flag" title="Rolled with a locked seed" />
           </span>
@@ -229,11 +229,12 @@ function groupLabel(g: TraceGroup): string {
   color: var(--wp-text);
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   gap: 4px;
 }
+.wp-dbg-step__title-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .wp-dbg-flag { font-size: 9px; color: var(--wp-text-dim); }
 .wp-dbg-pin { font-size: 9px; color: var(--wp-amber, var(--wp-warn)); }
 .wp-dbg-step__sum {
@@ -252,7 +253,9 @@ function groupLabel(g: TraceGroup): string {
   flex: none;
 }
 .wp-dbg-step__arrow { color: var(--wp-text-dim); flex: none; }
-.wp-dbg-step__val { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.wp-dbg-step__val { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The row is a one-line summary; the full value lives in the detail. */
+.wp-dbg-step__val :deep(*) { white-space: nowrap; }
 .wp-dbg-step__empty { font-style: italic; color: var(--wp-text-dim); }
 .wp-dbg-step__more { font: 500 9px/1 var(--wp-font-mono); color: var(--wp-text-dim); flex: none; }
 .wp-dbg-step__badges { display: inline-flex; align-items: center; gap: 4px; }

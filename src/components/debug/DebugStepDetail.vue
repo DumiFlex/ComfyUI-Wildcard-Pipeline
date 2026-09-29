@@ -7,7 +7,7 @@
  *   constraint — source → target, reach, rules, how often it applied
  * plus the step's own warnings and its seed / module id.
  */
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import RichTextPreview from "../../manager/components/RichTextPreview.vue";
 import DebugCondition from "./DebugCondition.vue";
 import type { RawRuleDetail, TraceStep, WarningRow } from "./debug-model";
@@ -47,12 +47,38 @@ function branchLabel(index: number | "else" | null | undefined): string {
   return index === 0 ? "IF" : `ELIF ${index}`;
 }
 
+/** Rules the user folded or opened; everything else follows the default
+ *  (a rule that fired starts open, one that didn't starts folded, and a
+ *  lone rule is always open). */
+const ruleToggles = ref<Map<number, boolean>>(new Map());
+function ruleOpen(rule: RawRuleDetail, ri: number): boolean {
+  const set = ruleToggles.value.get(ri);
+  if (set !== undefined) return set;
+  return (d.value?.rules?.length ?? 0) <= 1 || ruleOutcome(rule).tone === "ok";
+}
+function toggleRule(rule: RawRuleDetail, ri: number): void {
+  const next = new Map(ruleToggles.value);
+  next.set(ri, !ruleOpen(rule, ri));
+  ruleToggles.value = next;
+}
+const allRulesOpen = computed(() => (d.value?.rules ?? []).every((r, i) => ruleOpen(r, i)));
+function setAllRules(open: boolean): void {
+  ruleToggles.value = new Map((d.value?.rules ?? []).map((_, i) => [i, open]));
+}
+
 function ruleOutcome(rule: RawRuleDetail): { text: string; tone: "ok" | "off" | "none" } {
   if (rule.disabled) return { text: "off on this node", tone: "off" };
   if (rule.fired === "else") return { text: "ELSE fired", tone: "ok" };
   if (typeof rule.fired === "number") return { text: `${branchLabel(rule.fired)} fired`, tone: "ok" };
   if (rule.else_disabled) return { text: "nothing matched (ELSE off)", tone: "none" };
   return { text: rule.has_else ? "nothing matched" : "nothing matched, no ELSE", tone: "none" };
+}
+
+/** Replace shows the value written; append/prepend show the piece added
+ *  (a "now" line follows with the joined result). */
+function actionShown(a: { mode?: string; value?: string; result?: string | null }): string {
+  if (a.mode === "append" || a.mode === "prepend") return a.value ?? "";
+  return a.result ?? a.value ?? "";
 }
 
 function modeGlyph(mode: string | undefined): string {
@@ -98,43 +124,76 @@ function modeGlyph(mode: string | undefined): string {
 
     <!-- Derivation -->
     <template v-if="step.kind === 'derivation' && d?.rules">
+      <div v-if="d.rules.length > 1" class="wp-dbg-rules__bar">
+        <span class="wp-dbg-dim">{{ d.rules.length }} rules, {{ d.rules.filter((r) => ruleOutcome(r).tone === "ok").length }} fired</span>
+        <button type="button" class="wp-dbg-linkbtn" data-test="dbg-rules-all" @click="setAllRules(!allRulesOpen)">
+          {{ allRulesOpen ? "Fold all" : "Open all" }}
+        </button>
+      </div>
       <div
         v-for="(rule, ri) in d.rules"
         :key="rule.id || ri"
         class="wp-dbg-rule"
-        :class="`is-${ruleOutcome(rule).tone}`"
+        :class="[`is-${ruleOutcome(rule).tone}`, { 'is-folded': !ruleOpen(rule, ri) }]"
         data-test="dbg-rule"
       >
-        <div class="wp-dbg-rule__head">
+        <button
+          type="button"
+          class="wp-dbg-rule__head"
+          :aria-expanded="ruleOpen(rule, ri)"
+          data-test="dbg-rule-head"
+          @click="toggleRule(rule, ri)"
+        >
+          <i class="pi pi-chevron-right wp-dbg-rule__chev" aria-hidden="true" />
           <span class="wp-dbg-rule__name">Rule {{ ri + 1 }}</span>
           <span class="wp-dbg-rule__outcome" data-test="dbg-rule-outcome">{{ ruleOutcome(rule).text }}</span>
-        </div>
-        <div
-          v-for="b in rule.branches ?? []"
-          :key="b.index"
-          class="wp-dbg-branch"
-          :class="{ 'is-fired': rule.fired === b.index, 'is-off': b.disabled }"
-        >
-          <span class="wp-dbg-branch__tag">{{ branchLabel(b.index ?? 0) }}</span>
-          <div class="wp-dbg-branch__body">
-            <span v-if="b.disabled" class="wp-dbg-dim">off on this node</span>
-            <DebugCondition v-else-if="b.condition" :cond="b.condition" />
+          <span v-if="!ruleOpen(rule, ri) && rule.action" class="wp-dbg-rule__peek">
+            <code>${{ rule.action.target }}</code> {{ modeGlyph(rule.action.mode) }} {{ actionShown(rule.action) }}
+          </span>
+        </button>
+        <template v-if="ruleOpen(rule, ri)">
+          <div
+            v-for="b in rule.branches ?? []"
+            :key="b.index"
+            class="wp-dbg-branch"
+            :class="{ 'is-fired': rule.fired === b.index, 'is-off': b.disabled }"
+          >
+            <span class="wp-dbg-branch__tag">{{ branchLabel(b.index ?? 0) }}</span>
+            <div class="wp-dbg-branch__body">
+              <span v-if="b.disabled" class="wp-dbg-dim">off on this node</span>
+              <DebugCondition v-else-if="b.condition" :cond="b.condition" />
+            </div>
           </div>
-        </div>
-        <div v-if="rule.fired === 'else'" class="wp-dbg-branch is-fired">
-          <span class="wp-dbg-branch__tag">ELSE</span>
-          <div class="wp-dbg-branch__body"><span class="wp-dbg-dim">no branch matched</span></div>
-        </div>
-        <div v-if="rule.action" class="wp-dbg-rule__action" data-test="dbg-rule-action">
-          <code class="wp-dbg-var">${{ rule.action.target }}</code>
-          <span class="wp-dbg-dim">{{ modeGlyph(rule.action.mode) }}</span>
-          <RichTextPreview
-            :value="rule.action.result ?? rule.action.value ?? ''"
-            :uuid-to-name="uuidToName"
-            :uuid-to-kind="uuidToKind"
-            surface="wildcard"
-          />
-        </div>
+          <div v-if="rule.fired === 'else'" class="wp-dbg-branch is-fired">
+            <span class="wp-dbg-branch__tag">ELSE</span>
+            <div class="wp-dbg-branch__body"><span class="wp-dbg-dim">no branch matched</span></div>
+          </div>
+          <div v-if="rule.action" class="wp-dbg-rule__action" data-test="dbg-rule-action">
+            <code class="wp-dbg-var">${{ rule.action.target }}</code>
+            <span class="wp-dbg-dim">{{ modeGlyph(rule.action.mode) }}</span>
+            <RichTextPreview
+              :value="actionShown(rule.action)"
+              :uuid-to-name="uuidToName"
+              :uuid-to-kind="uuidToKind"
+              surface="wildcard"
+            />
+          </div>
+          <div
+            v-if="rule.action && rule.action.mode !== 'replace' && rule.action.result != null"
+            class="wp-dbg-rule__result"
+            data-test="dbg-rule-result"
+          >
+            <span class="wp-dbg-dim">now</span>
+            <code class="wp-dbg-var">${{ rule.action.target }}</code>
+            <span class="wp-dbg-dim">=</span>
+            <RichTextPreview
+              :value="rule.action.result"
+              :uuid-to-name="uuidToName"
+              :uuid-to-kind="uuidToKind"
+              surface="wildcard"
+            />
+          </div>
+        </template>
       </div>
     </template>
     <p v-else-if="step.kind === 'derivation' && step.status === 'ok'" class="wp-dbg-dim wp-dbg-detail__note">
@@ -283,9 +342,39 @@ function modeGlyph(mode: string | undefined): string {
   gap: 3px;
   background: var(--wp-bg-deep, var(--wp-bg));
 }
-.wp-dbg-rule__head { display: flex; align-items: center; gap: 8px; }
+.wp-dbg-rules__bar { display: flex; align-items: center; justify-content: space-between; font-size: 10px; }
+.wp-dbg-linkbtn {
+  all: unset;
+  cursor: pointer;
+  font-size: 10px;
+  color: var(--wp-accent-text, var(--wp-accent));
+}
+.wp-dbg-linkbtn:hover { text-decoration: underline; }
+.wp-dbg-linkbtn:focus-visible { outline: 1px solid var(--wp-accent); outline-offset: 1px; }
+.wp-dbg-rule__head {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  cursor: pointer;
+}
+.wp-dbg-rule__head:focus-visible { outline: 1px solid var(--wp-accent); outline-offset: 2px; }
+.wp-dbg-rule__chev { font-size: 7px; color: var(--wp-text-dim); transition: transform var(--wp-motion-quick, 0.12s) ease; }
+.wp-dbg-rule:not(.is-folded) .wp-dbg-rule__chev { transform: rotate(90deg); }
+.wp-dbg-rule__result { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px; color: var(--wp-text-muted); }
+.wp-dbg-rule__peek {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font: 400 10.5px/1.4 var(--wp-font-mono);
+  color: var(--wp-text-muted);
+}
+.wp-dbg-rule__peek code { color: var(--wp-accent-text, var(--wp-accent)); }
 .wp-dbg-rule__name { font: 600 10px/1.4 var(--wp-font-sans); color: var(--wp-text); }
-.wp-dbg-rule__outcome { font-size: 10px; color: var(--wp-text-dim); }
+.wp-dbg-rule__outcome { font-size: 10px; color: var(--wp-text-dim); flex: none; }
 .wp-dbg-rule.is-ok .wp-dbg-rule__outcome { color: var(--wp-green); }
 .wp-dbg-rule.is-off { opacity: 0.55; }
 .wp-dbg-branch { display: flex; gap: 8px; align-items: flex-start; padding: 1px 0; opacity: 0.8; }

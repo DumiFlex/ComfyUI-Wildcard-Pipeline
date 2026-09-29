@@ -5,10 +5,11 @@
  * way `$name.K` indexes them, and a pick's `accepts` axes show as the
  * `$name.AXIS` reads they answer.
  */
+import { computed } from "vue";
 import RichTextPreview from "../../manager/components/RichTextPreview.vue";
 import type { VarRow } from "./debug-model";
 
-defineProps<{
+const props = defineProps<{
   rows: VarRow[];
   pinned: Set<string>;
   flashed: Set<string>;
@@ -20,10 +21,17 @@ const emit = defineEmits<{
   (e: "goto-step", key: string): void;
   (e: "row-menu", ev: MouseEvent, row: VarRow): void;
 }>();
+
+/** One name column for every row, sized to the longest name (capped;
+ *  longer names wrap) so values line up down the list. */
+const nameWidth = computed(() => {
+  const longest = props.rows.reduce((n, v) => Math.max(n, v.name.length), 0);
+  return `calc(${Math.min(longest + 1, 16)}ch + 26px)`;
+});
 </script>
 
 <template>
-  <div class="wp-dbg-vars" data-test="dbg-vars">
+  <div class="wp-dbg-vars" data-test="dbg-vars" :style="{ '--wp-dbg-name-w': nameWidth }">
     <div
       v-for="v in rows"
       :key="v.name"
@@ -84,7 +92,7 @@ const emit = defineEmits<{
 .wp-dbg-vars { display: flex; flex-direction: column; }
 .wp-dbg-var-row {
   display: grid;
-  grid-template-columns: minmax(90px, max-content) minmax(0, 1fr) auto;
+  grid-template-columns: max(90px, var(--wp-dbg-name-w, 90px)) minmax(0, 1fr) auto;
   column-gap: 12px;
   align-items: start;
   padding: 5px 6px;
@@ -94,7 +102,8 @@ const emit = defineEmits<{
 .wp-dbg-var-row:first-child { border-top: 0; }
 .wp-dbg-var-row:hover { background: var(--wp-row-hover, var(--wp-bg2)); }
 .wp-dbg-var-row.is-ctx { outline: 1px solid var(--wp-accent); outline-offset: -1px; }
-.wp-dbg-var-row__name { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.wp-dbg-var-row__name { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.wp-dbg-var-row__name code { overflow-wrap: anywhere; }
 .wp-dbg-var-row__name code { font: 600 11.5px/1.5 var(--wp-font-mono); color: var(--wp-accent-text, var(--wp-accent)); }
 .wp-dbg-var-row.is-internal .wp-dbg-var-row__name code { color: var(--wp-text-muted); }
 .wp-dbg-flag { font-size: 9px; color: var(--wp-text-dim); }
