@@ -3,7 +3,7 @@ import type {
   BundleCreateInput, BundleListResponse, BundleRow, BundleUpdateInput,
   CategoryCreateInput, CategoryRow,
   DatabaseConfig, DatabaseConfigUpdate,
-  TagStatus, TagSuggestResponse, TagDownloadResult,
+  TagStatus, TagSuggestResponse, TagDownloadResult, LibraryTagUpdateCounts,
   ModelKind, ModelSourceStatus, ModelSuggestResponse,
   DatabaseInfo, MaintenanceOp, MaintenanceResult,
   EmbedBundle,
@@ -266,6 +266,24 @@ export const api = {
      *  added while the server runs is invisible until something asks again. */
     refresh() {
       return request<ModelSourceStatus>("/wp/api/models/refresh", { method: "POST" });
+    },
+  },
+
+  /** Library tags: the free-form labels on modules, bundles and templates.
+   *  Not the prompt-tag autocomplete list under `tags` below. Both calls
+   *  rewrite every row that carries the tag and report how many changed. */
+  libraryTags: {
+    /** Rename `from` to `to` everywhere. When `to` already exists this is a
+     *  merge: rows carrying both keep one copy. */
+    rename(from: string, to: string) {
+      return request<{ updated: LibraryTagUpdateCounts }>("/wp/api/library-tags/rename", {
+        method: "POST", body: JSON.stringify({ from, to }),
+      });
+    },
+    delete(tag: string) {
+      return request<{ updated: LibraryTagUpdateCounts }>("/wp/api/library-tags/delete", {
+        method: "POST", body: JSON.stringify({ tag }),
+      });
     },
   },
 

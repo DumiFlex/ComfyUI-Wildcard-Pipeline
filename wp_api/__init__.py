@@ -16,6 +16,7 @@ from wp_api import cascade as _cascade
 from wp_api import categories as _categories
 from wp_api import database as _database
 from wp_api import import_export as _import_export
+from wp_api import library_tags as _library_tags
 from wp_api import models as _models
 from wp_api import modules as _modules
 from wp_api import preview as _preview
@@ -125,6 +126,7 @@ def register_routes(app: web.Application) -> None:
     _cascade.register(app.router)
     _preview.register(app.router)
     _tags.register(app.router)
+    _library_tags.register(app.router)
     _models.register(app.router)
     # SPA fallback last — broad catch-all `/wp/{path:.*}` must not shadow
     # specific `/wp/api/...` routes. aiohttp resolves more-specific routes

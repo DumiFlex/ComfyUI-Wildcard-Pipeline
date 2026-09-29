@@ -5,6 +5,9 @@ import { createMemoryHistory, createRouter, type Router } from "vue-router";
 
 import AppSidebar from "../layout/AppSidebar.vue";
 import { useUiStore } from "../stores/uiStore";
+import { useModuleStore } from "../stores/moduleStore";
+import { useTemplateStore } from "../stores/templateStore";
+import type { ModuleRow, TemplateRow } from "../api/types";
 
 function makeRouter(start = "/wildcards"): Router {
   return createRouter({
@@ -19,6 +22,9 @@ function makeRouter(start = "/wildcards"): Router {
       { path: "/derivations", name: "derivations", component: { template: "<div/>" } },
       { path: "/constraints", name: "constraints", component: { template: "<div/>" } },
       { path: "/categories", name: "categories", component: { template: "<div/>" } },
+      { path: "/tags", name: "tags", component: { template: "<div/>" } },
+      { path: "/all", name: "all", component: { template: "<div/>" } },
+      { path: "/templates", name: "templates", component: { template: "<div/>" } },
       { path: "/import-export", name: "import-export", component: { template: "<div/>" } },
       { path: "/test", name: "test", component: { template: "<div/>" } },
       { path: "/community", name: "community", component: { template: "<div/>" } },
@@ -123,5 +129,21 @@ describe("AppSidebar.vue", () => {
     expect(wrap.findAll(".wp-sidebar__section")).toHaveLength(0);
     // Labels also hidden
     expect(wrap.findAll(".wp-nav__label")).toHaveLength(0);
+  });
+
+  it("has one Tags entry with the number of distinct tags, not a tag list", async () => {
+    useModuleStore().catalog = [
+      { id: "m1", type: "wildcard", tags: ["outfit", "portrait"] },
+      { id: "m2", type: "wildcard", tags: ["outfit"] },
+    ] as unknown as ModuleRow[];
+    useTemplateStore().catalog = [{ id: "t1", tags: ["scene"] }] as unknown as TemplateRow[];
+    const { wrap, router } = await mountSidebar();
+    const item = wrap.find('[data-nav-id="tags"]');
+    expect(item.find(".wp-nav__count").text()).toBe("3");
+    expect(wrap.findAll(".wp-nav--child")).toHaveLength(0);
+    await item.trigger("click");
+    await flushPromises();
+    expect(router.currentRoute.value.path).toBe("/tags");
+    expect(item.attributes("data-active")).toBeDefined();
   });
 });
