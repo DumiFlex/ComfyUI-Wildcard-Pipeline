@@ -5,16 +5,27 @@
  * in code; per-node manual toggles + blocklist entries are persisted
  * via the widget JSON.
  *
+ * Send-to-negative: the rule list has a second "neg" column (the node's
+ * optional `negative` input is cleaned by it), plus a neg-only "drop
+ * negative tags also in prompt" row.
+ *
  * Tokens: uses canonical `--wp-*` theme variables from
  * src/components/shared/theme.css (and SPA's tokens.css which
  * overrides the same names with the SPA palette).
  */
 import { computed } from "vue";
-import { INTENSITY_TO_RULES, computeEffectiveRules, isPristine } from "./intensity";
+import {
+  INTENSITY_TO_NEG_RULES,
+  INTENSITY_TO_RULES,
+  computeEffectiveNegativeRules,
+  computeEffectiveRules,
+  isPristine,
+} from "./intensity";
 import type {
   CleanerNodeConfig,
   Intensity,
   Mode,
+  NegativeRunReport,
   RuleId,
   RunReport,
 } from "./types";
@@ -28,7 +39,11 @@ const props = withDefaults(defineProps<{
    *  dim overlay so muted/bypassed state matches litegraph's native
    *  title/border dim. */
   nodeMode?: number;
-}>(), { nodeMode: 0 });
+  /** Last run's negative report; null when the run had no negative. */
+  negativeReport?: NegativeRunReport | null;
+  /** Word count of the cleaned negative; null when there was none. */
+  negativeWordCount?: number | null;
+}>(), { nodeMode: 0, negativeReport: null, negativeWordCount: null });
 
 const isSkipped = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
 
@@ -95,6 +110,7 @@ const INTENSITY_TOOLTIPS = {
 const INTENSITIES: Intensity[] = ["gentle", "balanced", "aggressive"];
 
 const effective = computed(() => new Set(computeEffectiveRules(props.modelValue)));
+const effectiveNeg = computed(() => new Set(computeEffectiveNegativeRules(props.modelValue)));
 const pristine = computed(() => isPristine(props.modelValue));
 
 /** Drop any override entry whose value matches the new intensity's
@@ -120,11 +136,42 @@ function patch(next: Partial<CleanerNodeConfig>): void {
   emit("update:modelValue", { ...props.modelValue, ...next });
 }
 
+/** The config with `negative_rules_override` set to `overrides`, or the key
+ *  dropped when nothing diverges (so an untouched column stays absent). */
+function withNegOverrides(
+  base: CleanerNodeConfig,
+  overrides: Partial<Record<RuleId, boolean>>,
+): CleanerNodeConfig {
+  const next = { ...base };
+  if (Object.keys(overrides).length > 0) next.negative_rules_override = overrides;
+  else delete next.negative_rules_override;
+  return next;
+}
+
+/** Neg-column twin of {@link pruneStaleOverrides} (no blocklist baseline). */
+function pruneStaleNegOverrides(
+  overrides: Partial<Record<RuleId, boolean>>,
+  intensity: Intensity,
+): Partial<Record<RuleId, boolean>> {
+  const defaults = new Set(INTENSITY_TO_NEG_RULES[intensity]);
+  const next: Partial<Record<RuleId, boolean>> = {};
+  for (const [rid, on] of Object.entries(overrides) as [RuleId, boolean][]) {
+    if (on !== defaults.has(rid)) next[rid] = on;
+  }
+  return next;
+}
+
 function setIntensity(intensity: Intensity): void {
-  patch({
+  // A preset sets both columns: overrides that now match its default drop.
+  const base: CleanerNodeConfig = {
+    ...props.modelValue,
     intensity,
     rules_override: pruneStaleOverrides(props.modelValue.rules_override, intensity),
-  });
+  };
+  emit("update:modelValue", withNegOverrides(
+    base,
+    pruneStaleNegOverrides(props.modelValue.negative_rules_override ?? {}, intensity),
+  ));
 }
 function setMode(mode: Mode): void { patch({ mode }); }
 
@@ -160,6 +207,68 @@ function toggleRule(rid: RuleId): void {
   }
   patch({ rules_override: overrides });
 }
+
+function negBaseline(rid: RuleId): boolean {
+  return INTENSITY_TO_NEG_RULES[props.modelValue.intensity].includes(rid);
+}
+
+function toggleNegRule(rid: RuleId): void {
+  if (isRuleDisabled(rid)) return;
+  const nextOn = !effectiveNeg.value.has(rid);
+  const overrides = { ...(props.modelValue.negative_rules_override ?? {}) };
+  if (nextOn === negBaseline(rid)) delete overrides[rid];
+  else overrides[rid] = nextOn;
+  emit("update:modelValue", withNegOverrides(props.modelValue, overrides));
+}
+
+function isNegOverridden(rid: RuleId): boolean {
+  const v = props.modelValue.negative_rules_override?.[rid];
+  return v !== undefined && v !== negBaseline(rid);
+}
+
+function toggleDropOverlap(): void {
+  const next = { ...props.modelValue };
+  if (props.modelValue.drop_prompt_overlap) delete next.drop_prompt_overlap;
+  else next.drop_prompt_overlap = true;
+  emit("update:modelValue", next);
+}
+
+function droppedCount(report: RunReport | null | undefined, rids: RuleId[]): number {
+  let n = 0;
+  for (const rid of rids) {
+    const v = (report?.[rid] as Record<string, unknown> | undefined)?.dropped;
+    if (Array.isArray(v)) n += v.length;
+    else if (typeof v === "number") n += v;
+  }
+  return n;
+}
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
+}
+
+/** "last run" lines, shown once a run cleaned a negative. */
+const promptRunLine = computed(() => {
+  const parts = [plural(droppedCount(props.lastRunReport, ["dedupe_exact", "fuzzy_dedupe"]), "duplicate")];
+  const blocked = droppedCount(props.lastRunReport, ["blocklist"]);
+  if (blocked > 0) parts.push(`${blocked} blocklisted`);
+  return `prompt: ${parts.join(", ")}`;
+});
+const negativeRunLine = computed(() => {
+  const r = props.negativeReport;
+  if (!r) return "";
+  const parts = [plural(droppedCount(r, ["dedupe_exact", "fuzzy_dedupe"]), "duplicate")];
+  const blocked = droppedCount(r, ["blocklist"]);
+  if (blocked > 0) parts[0] += `, ${blocked} blocklisted`;
+  const overlap = r.prompt_overlap;
+  if (overlap && overlap.tags.length > 0) {
+    const quoted = overlap.tags.map((t) => `"${t}"`).join(", ");
+    parts.push(
+      `${plural(overlap.tags.length, "tag")} also in prompt${overlap.dropped ? " (dropped)" : ""}: ${quoted}`,
+    );
+  }
+  return `negative: ${parts.join(" · ")}`;
+});
 
 function ruleStat(rid: RuleId): string {
   const stats = props.lastRunReport?.[rid];
@@ -201,7 +310,11 @@ function isOverridden(rid: RuleId): boolean {
       <span
         class="wp-cleaner__counter"
         :title="`${wordCount} words · ${charCount} characters in the cleaned output`"
-      >{{ wordCount }}w · {{ charCount }}c</span>
+      >{{ wordCount }}w · {{ charCount }}c<template v-if="negativeWordCount != null"> · <span
+        class="wp-cleaner__counter-neg"
+        data-test="cleaner-neg-count"
+        :title="`${negativeWordCount} words in the cleaned negative`"
+      >negative {{ negativeWordCount }}</span></template></span>
     </header>
 
     <section class="wp-cleaner__section">
@@ -226,11 +339,14 @@ function isOverridden(rid: RuleId): boolean {
     </section>
 
     <section class="wp-cleaner__section">
-      <span class="wp-cleaner__section-label">RULES</span>
+      <div class="wp-cleaner__rules-head">
+        <span class="wp-cleaner__section-label">RULES</span>
+        <span class="wp-cleaner__col-label">prompt</span>
+        <span class="wp-cleaner__col-label wp-cleaner__col-label--neg">neg</span>
+      </div>
       <div class="wp-cleaner__rules">
+        <div v-for="rule in ALL_RULES" :key="rule.id" class="wp-cleaner__rule-row">
         <button
-          v-for="rule in ALL_RULES"
-          :key="rule.id"
           :data-test="`cleaner-rule-${rule.id}`"
           :class="['wp-cleaner__rule', {
             'is-on': effective.has(rule.id) && !isRuleDisabled(rule.id),
@@ -256,8 +372,45 @@ function isOverridden(rid: RuleId): boolean {
             class="wp-cleaner__rule-stat"
           >{{ ruleStat(rule.id) }}</span>
         </button>
+        <button
+          :data-test="`cleaner-neg-rule-${rule.id}`"
+          :class="['wp-cleaner__neg-toggle', {
+            'is-on': effectiveNeg.has(rule.id) && !isRuleDisabled(rule.id),
+            'is-overridden': isNegOverridden(rule.id) && !isRuleDisabled(rule.id),
+            'is-disabled': isRuleDisabled(rule.id),
+          }]"
+          :title="`${rule.label} on the negative${isRuleDisabled(rule.id) ? ' (disabled in text mode)' : ''}`"
+          :aria-label="`${rule.label} on the negative`"
+          :aria-pressed="effectiveNeg.has(rule.id)"
+          :disabled="isRuleDisabled(rule.id)"
+          @click="toggleNegRule(rule.id)"
+        ><span class="wp-cleaner__rule-dot" /></button>
+        </div>
+        <div class="wp-cleaner__rule-row wp-cleaner__rule-row--overlap">
+          <span
+            class="wp-cleaner__rule wp-cleaner__rule--static"
+            title="Drop negative tags the cleaned prompt also contains (it would be told to draw them and not draw them). Negative only."
+          >
+            <span class="wp-cleaner__rule-dash" aria-hidden="true">–</span>
+            <span class="wp-cleaner__rule-label">drop negative tags also in prompt</span>
+          </span>
+          <button
+            data-test="cleaner-drop-overlap"
+            :class="['wp-cleaner__neg-toggle', { 'is-on': !!modelValue.drop_prompt_overlap }]"
+            title="Drop negative tags also in the prompt"
+            aria-label="drop negative tags also in the prompt"
+            :aria-pressed="!!modelValue.drop_prompt_overlap"
+            @click="toggleDropOverlap"
+          ><span class="wp-cleaner__rule-dot" /></button>
+        </div>
       </div>
     </section>
+
+    <div v-if="negativeReport" class="wp-cleaner__lastrun" data-test="cleaner-last-run">
+      <span class="wp-cleaner__section-label">LAST RUN</span>
+      <span class="wp-cleaner__lastrun-line">{{ promptRunLine }}</span>
+      <span class="wp-cleaner__lastrun-line wp-cleaner__lastrun-line--neg" data-test="cleaner-last-run-neg">{{ negativeRunLine }}</span>
+    </div>
 
     <div class="wp-cleaner__blocklist">
       <button
@@ -373,6 +526,65 @@ function isOverridden(rid: RuleId): boolean {
 }
 
 .wp-cleaner__rules { display: grid; gap: 2px; }
+/* Two columns: the prompt rule button, then the neg-column toggle. */
+.wp-cleaner__rules-head,
+.wp-cleaner__rule-row {
+  display: grid;
+  grid-template-columns: 1fr 30px;
+  align-items: center;
+  gap: 4px;
+}
+.wp-cleaner__rules-head { grid-template-columns: 1fr auto 30px; }
+.wp-cleaner__col-label {
+  font: 600 9px var(--wp-font-sans, sans-serif);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--wp-text-dim, var(--wp-text3));
+  text-align: center;
+}
+.wp-cleaner__col-label--neg { color: var(--wp-danger, #ef4444); }
+.wp-cleaner__neg-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 20px;
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.wp-cleaner__neg-toggle:hover:not(.is-disabled) { background: var(--wp-row-hover, var(--wp-bg2)); }
+.wp-cleaner__neg-toggle.is-on .wp-cleaner__rule-dot { background: var(--wp-danger, #ef4444); }
+.wp-cleaner__neg-toggle.is-overridden .wp-cleaner__rule-dot {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--wp-amber, var(--wp-warn, #fbbf24)) 70%, transparent);
+}
+.wp-cleaner__neg-toggle.is-disabled { opacity: 0.4; cursor: not-allowed; }
+.wp-cleaner__rule-row--overlap {
+  border-top: 1px solid var(--wp-border-soft, var(--wp-border));
+  padding-top: 2px;
+  margin-top: 2px;
+}
+.wp-cleaner__rule--static { cursor: default; }
+.wp-cleaner__rule-dash {
+  width: 8px;
+  text-align: center;
+  color: var(--wp-text-dim, var(--wp-text3));
+}
+.wp-cleaner__counter-neg { color: var(--wp-danger, #ef4444); }
+.wp-cleaner__lastrun {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  background: var(--wp-bg-deep, var(--wp-bg));
+  border: 1px solid var(--wp-border);
+  border-radius: 3px;
+  font: 10px/1.5 var(--wp-font-mono, monospace);
+  color: var(--wp-text-muted, var(--wp-text2));
+}
+.wp-cleaner__lastrun-line { word-break: break-word; }
+.wp-cleaner__lastrun-line--neg { color: var(--wp-danger, #ef4444); }
 .wp-cleaner__rule {
   position: relative;
   display: grid;
