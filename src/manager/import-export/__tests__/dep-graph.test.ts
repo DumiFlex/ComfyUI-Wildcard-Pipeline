@@ -29,6 +29,19 @@ describe("buildDepGraph", () => {
     expect(graph["22222222"]).toEqual([]);
   });
 
+  it("captures @{id} refs inside an option's negative (send-to-negative)", () => {
+    const payload = makePayload({
+      wildcards: [
+        {
+          id: "11111111", name: "x", tags: [],
+          options: [{ value: "wet hair", weight: 1, negative: "dry, @{33333333}" }],
+        },
+        { id: "33333333", name: "z", options: [], tags: [] },
+      ],
+    });
+    expect(buildDepGraph(payload)["11111111"]).toEqual(["33333333"]);
+  });
+
   it("also reads wildcard refs from nested payload.options (import-side shape)", () => {
     // Import payloads carry options under `payload` (mirrors the server's
     // _row_to_module shape). Without the nested-lookup fallback, the

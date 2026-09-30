@@ -17,6 +17,10 @@ export interface LibraryRow {
   id: string;
   name: string;
   value: string;
+  /** Send-to-negative (v8): library content only. Instance
+   *  `values_overrides` never carry one (`shapeValuesPatch` writes
+   *  `{id, name, value}`), so the row shows it read-only. */
+  negative?: string;
 }
 
 export interface DraftRow {

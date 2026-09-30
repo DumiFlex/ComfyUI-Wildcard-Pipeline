@@ -24,6 +24,8 @@ import Button from "../components/ui/Button.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
 import Input from "../components/ui/Input.vue";
 import RichTextInput from "../components/RichTextInput.vue";
+import NegativeField from "../components/NegativeField.vue";
+import { appendNegative, pruneBlankNegatives, setNegative } from "../utils/negatives";
 import BulkAddPanel from "../components/BulkAddPanel.vue";
 import TagPickerMenu from "../components/TagPickerMenu.vue";
 import SelectionToolbar from "../components/SelectionToolbar.vue";
@@ -1600,6 +1602,32 @@ function setWeightSelected(weight: number): void {
   for (const o of selectedOptionList()) o.weight = w;
 }
 
+/* ── Bulk negative (send-to-negative) ─────────────────────────────── */
+
+/** Rows Add / Replace write to: the selection minus the null option. The null
+ *  option CAN carry a negative (edited on its own row), but a bulk phrase meant
+ *  for real options is almost never meant for "nothing was picked". */
+function negativeWritableSelection(): WildcardOption[] {
+  return selectedOptionList().filter((o) => !o.is_null);
+}
+const selectedNegativeCount = computed(
+  () => selectedOptionList().filter((o) => !!o.negative).length,
+);
+const selectedNegativeTargets = computed(() => negativeWritableSelection().length);
+
+function addNegativeToSelected(words: string): void {
+  bulkNote.value = "";
+  for (const o of negativeWritableSelection()) setNegative(o, appendNegative(o.negative, words));
+}
+function replaceNegativeOnSelected(words: string): void {
+  bulkNote.value = "";
+  for (const o of negativeWritableSelection()) setNegative(o, words);
+}
+function clearNegativeOnSelected(): void {
+  bulkNote.value = "";
+  for (const o of selectedOptionList()) setNegative(o, undefined);
+}
+
 /** Bulk-delete checked options. Options referenced by constraints are kept
  *  (those need the per-option cascade review via the single-row trash) and
  *  reported so the deletion stays safe. */
@@ -1641,7 +1669,8 @@ function isUntouchedBlank(o: WildcardOption): boolean {
   return !o.is_null
     && (o.value ?? "").trim() === ""
     && (o.sub_categories ?? []).length === 0
-    && (o.weight === 1 || o.weight === undefined);
+    && (o.weight === 1 || o.weight === undefined)
+    && !o.negative;
 }
 
 function commitBulkAddOptions(parsed: ParsedBulkOption[]): void {
@@ -1663,6 +1692,7 @@ function commitBulkAddOptions(parsed: ParsedBulkOption[]): void {
       value: p.value,
       weight: p.weight,
       sub_categories: subCategories.value.filter((s) => tagSet.has(s)),
+      ...(p.negative ? { negative: p.negative } : {}),
     });
   }
   bulkAddOpen.value = false;
@@ -1775,7 +1805,9 @@ async function save() {
     const serializedGroups = serializeTagGroups();
     const serializedKinds = serializeTagGroupKinds(serializedGroups);
     const payload: WildcardPayload = {
-      options: sortedOptions,
+      // An emptied negative is stored as an ABSENT key (schema v8 stamps
+      // only when a negative is really there).
+      options: pruneBlankNegatives(sortedOptions),
       sub_categories: subCategories.value,
       var_binding: finalBinding,
       ...(serializedGroups ? { tag_groups: serializedGroups } : {}),
@@ -2318,9 +2350,15 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
           :tag-hues="selectedTagHues"
           reorderable
           :move-armed="moveArmed"
+          negatives
+          :negative-count="selectedNegativeCount"
+          :negative-targets="selectedNegativeTargets"
           @apply-tag="applyTagToSelected"
           @remove-tag="removeTagFromSelected"
           @set-weight="setWeightSelected"
+          @negative-add="addNegativeToSelected"
+          @negative-replace="replaceNegativeOnSelected"
+          @negative-clear="clearNegativeOnSelected"
           @move-top="moveSelectedTo({ to: 'top' })"
           @move-bottom="moveSelectedTo({ to: 'bottom' })"
           @move-here="moveArmed = !moveArmed"
@@ -2362,7 +2400,8 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
               'wc-opt-row--dropbefore': dragOver === i && dragFrom !== null && dragFrom !== i,
               'wc-opt-row--cargo': moveArmed && isSelected(o.id),
               'wc-opt-row--landing': moveArmed && !isSelected(o.id),
-              'wc-opt-row--broken': !o.is_null && optionBrokenRefs(o.value).length > 0,
+              'wc-opt-row--broken': (!o.is_null && optionBrokenRefs(o.value).length > 0)
+                || optionBrokenRefs(o.negative ?? '').length > 0,
             }"
             @dragover="onOptDragOver(i, $event)"
             @drop.prevent="onOptDrop(i)"
@@ -2465,6 +2504,25 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                 <i class="pi pi-exclamation-triangle" aria-hidden="true" />
                 <span>{{ optionBrokenRefs(o.value).join(", ") }} not in the library · click the chip to point it at a module</span>
               </div>
+              <!-- Send-to-negative: same grammar as the value (text, {a|b},
+                   @{ref}). The null option may carry one too — "nothing was
+                   picked" can still keep words out of the image. -->
+              <NegativeField
+                :model-value="o.negative"
+                surface="wildcard"
+                label="option"
+                :test-id="`wc-opt-neg-${i}`"
+                :broken-refs="optionBrokenRefs(o.negative ?? '')"
+                :module-id="props.id"
+                :ref-suggestions="wcSuggestions"
+                :uuid-to-name="nameByUuid"
+                :uuid-to-sub-categories="uuidToSubCategories"
+                :uuid-to-option-tag-sets="uuidToOptionTagSets"
+                :uuid-to-tag-groups="uuidToTagGroups"
+                :uuid-to-has-null="uuidToHasNull"
+                :uuid-to-options-count="uuidToOptionsCount"
+                @update:model-value="(v: string | undefined) => setNegative(o, v)"
+              />
             </td>
             <td>
               <span v-if="o.is_null" class="wc-em-dash" aria-hidden="true">—</span>

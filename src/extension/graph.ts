@@ -1704,6 +1704,9 @@ function applyDerivationAction(
   const target = (action.target_var ?? "").replace(/^\$/, "").trim();
   if (!target) return;
   const mode = action.mode ?? "replace";
+  // "Add to negative" (schema v8) files words under the variable's negatives
+  // and never writes the variable — the preview value is unchanged.
+  if (mode === "negative") return;
   const raw = action.value ?? "";
   const newValue = expandValue(raw, ctx, catalog, 0);
   // SP2a: read the existing target value in string form (join a ListVar)
