@@ -6,6 +6,7 @@ from engine.migrations import (
     CONSTRAINT_ONLY_SCHEMA_VERSION,
     CURRENT_SCHEMA_VERSION,
     DERIVATION_CONDITIONS_SCHEMA_VERSION,
+    NEGATIVES_SCHEMA_VERSION,
     SP2B_SCHEMA_VERSION,
     SP3_REACH_SCHEMA_VERSION,
     TAG_AXES_SCHEMA_VERSION,
@@ -150,3 +151,44 @@ def test_derivation_group_outranks_only_rule_inside_a_bundle():
         _derivation_row({"match": "any", "conditions": [_TEST, _TEST]}),
     ]}
     assert schema_version_for_payload(bundle) == DERIVATION_CONDITIONS_SCHEMA_VERSION
+
+
+# ── v8 send-to-negative ────────────────────────────────────────────────
+
+
+def _wildcard_row(negative):
+    opt = {"id": "o1", "value": "red", "weight": 1}
+    if negative is not None:
+        opt["negative"] = negative
+    return {"id": "eeeeeeee", "type": "wildcard", "name": "w",
+            "payload": {"var_binding": "w", "options": [opt]}}
+
+
+@pytest.mark.parametrize("negative, expected", [
+    (None, CURRENT_SCHEMA_VERSION),
+    ("", CURRENT_SCHEMA_VERSION),
+    ("   ", CURRENT_SCHEMA_VERSION),
+    ("blurry", NEGATIVES_SCHEMA_VERSION),
+])
+def test_option_negative(negative, expected):
+    assert schema_version_for_payload(_wildcard_row(negative)) == expected
+
+
+def test_fixed_value_and_combine_negatives():
+    fixed = {"id": "ffffffff", "type": "fixed_values", "name": "f", "payload": {
+        "values": [{"id": "v1", "name": "style", "value": "oil", "negative": "photo"}]}}
+    combine = {"id": "abababab", "type": "combine", "name": "c", "payload": {
+        "template": "$a", "output_var": "c", "negative": "cropped"}}
+    assert schema_version_for_payload(fixed) == NEGATIVES_SCHEMA_VERSION
+    assert schema_version_for_payload(combine) == NEGATIVES_SCHEMA_VERSION
+
+
+def test_add_to_negative_action_and_bundle_child():
+    row = _derivation_row(_TEST)
+    row["payload"]["rules"][0]["branches"][0]["action"]["mode"] = "negative"
+    assert schema_version_for_payload(row) == NEGATIVES_SCHEMA_VERSION
+    bundle = {"children": [
+        _derivation_row({"match": "any", "conditions": [_TEST]}),
+        _wildcard_row("blurry"),
+    ]}
+    assert schema_version_for_payload(bundle) == NEGATIVES_SCHEMA_VERSION

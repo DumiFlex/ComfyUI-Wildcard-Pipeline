@@ -10,7 +10,9 @@ import VarToken from "../../../components/docs/VarToken.vue";
 const ports = [
   { term: "context (in)", desc: "The resolved variable map from any WP Context chain. Required — without it the node has no values to substitute." },
   { term: "template", desc: "Your prompt template. Type free text and insert $variable names wherever you want a wildcard pick or fixed value to appear. The multiline editor supports the full variable syntax." },
-  { term: "prompt (out)", desc: "The fully resolved prompt string. Wire it directly into a CLIP Text Encode, a WP Prompt Cleaner, or any other node that accepts a STRING." },
+  { term: "negative_template", desc: "Optional. The negative template, in the collapsible negative section under the preview. $negatives marks where the collected negative words go; it reads $vars too. Leave it empty to output just the collected words. Like the template, it can be turned into an input and wired from any STRING." },
+  { term: "prompt (out)", desc: "The fully resolved prompt string. Wire it directly into a CLIP Text Encode, a WP Prompt Cleaner, or any other node that accepts a STRING. Stays output 0, so existing links never move." },
+  { term: "negative (out)", desc: "The negative words of every variable the template rendered, filled into the negative template. Wire it into your negative CLIP Text Encode (or the Cleaner's negative input)." },
 ];
 </script>
 
@@ -71,6 +73,35 @@ const ports = [
       </DocCallout>
     </DocSection>
 
+    <DocSection title="The negative output">
+      <p>
+        Options, fixed values, combines and derivations can carry negative words for the variable
+        they set. The <code>negative</code> output collects them, but only for the variables this
+        template actually rendered, so a detailer Assembler that renders just
+        <VarToken>$face</VarToken> never picks up the hair negatives. Internal variables add
+        nothing.
+      </p>
+      <ul>
+        <li>
+          <VarToken>$negatives</VarToken> in the negative template marks where the collected words
+          go, e.g. <code>lowres, bad anatomy, $negatives</code>.
+        </li>
+        <li>An empty negative template outputs just the collected words.</li>
+        <li>A negative template without <VarToken>$negatives</VarToken> gets them appended at the end.</li>
+        <li>
+          Repeated tags are dropped (case-insensitive, and weight wraps like
+          <code>(blurry:1.2)</code> count as the plain tag), including tags already in the negative
+          template. A <VarToken>$var</VarToken> in the negative template adds its text, not its own
+          negatives.
+        </li>
+      </ul>
+      <DocCallout variant="tip">
+        Keep your standing negative (<code>lowres, bad anatomy</code>) in the negative template and
+        let <VarToken>$negatives</VarToken> add the words this run's picks call for. See
+        <b>Negatives</b> for where negative words come from.
+      </DocCallout>
+    </DocSection>
+
     <DocSection title="Save &amp; Load template">
       <p>
         The toolbar buttons let you save the current template to the <b>Templates</b> library
@@ -83,6 +114,7 @@ const ports = [
       <CrossLinks
         :links="[
           { id: 'variable-pipeline', label: 'The $variable pipeline', icon: 'pi pi-share-alt', tone: 'neutral' },
+          { id: 'negatives', label: 'Negatives', icon: 'pi pi-minus-circle', tone: 'neutral' },
           { id: 'wp-context', label: 'WP Context', icon: 'pi pi-sitemap', tone: 'node' },
           { id: 'wp-prompt-cleaner', label: 'WP Prompt Cleaner', icon: 'pi pi-ban', tone: 'node' },
         ]"

@@ -327,13 +327,15 @@ def fix_wildcard_delete(
         changed = False
 
         if t == "wildcard":
+            # `negative` (send-to-negative) holds refs with the same grammar.
             for opt in new_payload.get("options") or []:
-                v = opt.get("value")
-                if isinstance(v, str):
-                    new_v = _strip_whole_ref_in_string(v, wildcard_id)
-                    if new_v != v:
-                        opt["value"] = new_v
-                        changed = True
+                for field in ("value", "negative"):
+                    v = opt.get(field)
+                    if isinstance(v, str):
+                        new_v = _strip_whole_ref_in_string(v, wildcard_id)
+                        if new_v != v:
+                            opt[field] = new_v
+                            changed = True
 
         elif t == "derivation":
             for rule in new_payload.get("rules") or []:
@@ -417,13 +419,15 @@ def fix_subcat_delete(
 
         elif t == "wildcard" and m["id"] != wildcard_id:
             # Strip @{wildcard_id:subcat_name} text refs from option values
+            # `negative` (send-to-negative) holds refs with the same grammar.
             for opt in new_payload.get("options") or []:
-                v = opt.get("value")
-                if isinstance(v, str):
-                    new_v = _strip_subcat_ref_in_string(v, wildcard_id, subcat_name)
-                    if new_v != v:
-                        opt["value"] = new_v
-                        changed = True
+                for field in ("value", "negative"):
+                    v = opt.get(field)
+                    if isinstance(v, str):
+                        new_v = _strip_subcat_ref_in_string(v, wildcard_id, subcat_name)
+                        if new_v != v:
+                            opt[field] = new_v
+                            changed = True
 
         if changed:
             touched.append(_deepcopy_row(m))
@@ -496,13 +500,15 @@ def fix_subcat_rename(
 
         elif t == "wildcard" and m["id"] != wildcard_id:
             # Rewrite @{wildcard_id:old_name} → @{wildcard_id:new_name}
+            # `negative` (send-to-negative) holds refs with the same grammar.
             for opt in new_payload.get("options") or []:
-                v = opt.get("value")
-                if isinstance(v, str):
-                    new_v = _rewrite_subcat_ref_in_string(v, wildcard_id, old_name, new_name)
-                    if new_v != v:
-                        opt["value"] = new_v
-                        changed = True
+                for field in ("value", "negative"):
+                    v = opt.get(field)
+                    if isinstance(v, str):
+                        new_v = _rewrite_subcat_ref_in_string(v, wildcard_id, old_name, new_name)
+                        if new_v != v:
+                            opt[field] = new_v
+                            changed = True
 
         if changed:
             touched.append(_deepcopy_row(m))
@@ -560,13 +566,15 @@ def fix_wildcard_rename_name(
         changed = False
 
         if t == "wildcard":
+            # `negative` (send-to-negative) holds refs with the same grammar.
             for opt in new_payload.get("options") or []:
-                v = opt.get("value")
-                if isinstance(v, str):
-                    new_v = _rewrite_ref_name_in_string(v, wildcard_id, new_name)
-                    if new_v != v:
-                        opt["value"] = new_v
-                        changed = True
+                for field in ("value", "negative"):
+                    v = opt.get(field)
+                    if isinstance(v, str):
+                        new_v = _rewrite_ref_name_in_string(v, wildcard_id, new_name)
+                        if new_v != v:
+                            opt[field] = new_v
+                            changed = True
 
         elif t == "derivation":
             for rule in new_payload.get("rules") or []:
@@ -668,21 +676,25 @@ def fix_combine_output_var_rename(
                 new_payload["output_var"] = new_name
                 changed = True
             # Also rewrite $old in its own template in case it self-references
-            tpl = new_payload.get("template", "")
-            if isinstance(tpl, str):
-                new_tpl = _rewrite_var_in_string(tpl, old_name, new_name)
-                if new_tpl != tpl:
-                    new_payload["template"] = new_tpl
-                    changed = True
+            # The combine's own `negative` reads $vars like its template.
+            for field in ("template", "negative"):
+                tpl = new_payload.get(field, "")
+                if isinstance(tpl, str):
+                    new_tpl = _rewrite_var_in_string(tpl, old_name, new_name)
+                    if new_tpl != tpl:
+                        new_payload[field] = new_tpl
+                        changed = True
 
         elif t == "wildcard":
+            # `negative` (send-to-negative) holds refs with the same grammar.
             for opt in new_payload.get("options") or []:
-                v = opt.get("value")
-                if isinstance(v, str):
-                    new_v = _rewrite_var_in_string(v, old_name, new_name)
-                    if new_v != v:
-                        opt["value"] = new_v
-                        changed = True
+                for field in ("value", "negative"):
+                    v = opt.get(field)
+                    if isinstance(v, str):
+                        new_v = _rewrite_var_in_string(v, old_name, new_name)
+                        if new_v != v:
+                            opt[field] = new_v
+                            changed = True
 
         elif t == "derivation":
             for rule in new_payload.get("rules") or []:
@@ -702,12 +714,14 @@ def fix_combine_output_var_rename(
                                     changed = True
 
         elif t == "combine" and m["id"] != combine_id:
-            tpl = new_payload.get("template", "")
-            if isinstance(tpl, str):
-                new_tpl = _rewrite_var_in_string(tpl, old_name, new_name)
-                if new_tpl != tpl:
-                    new_payload["template"] = new_tpl
-                    changed = True
+            # The combine's own `negative` reads $vars like its template.
+            for field in ("template", "negative"):
+                tpl = new_payload.get(field, "")
+                if isinstance(tpl, str):
+                    new_tpl = _rewrite_var_in_string(tpl, old_name, new_name)
+                    if new_tpl != tpl:
+                        new_payload[field] = new_tpl
+                        changed = True
 
         if changed:
             touched.append(_deepcopy_row(m))

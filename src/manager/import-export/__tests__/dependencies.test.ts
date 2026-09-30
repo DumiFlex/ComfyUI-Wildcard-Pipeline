@@ -79,6 +79,20 @@ describe("listReferencedUuids", () => {
       expect(listReferencedUuids(m)).toEqual(["a1b2c3d4"]);
     });
 
+    it("returns `@{uuid}` refs inside an option's negative (null option included)", () => {
+      const m = mod({
+        id: "11111111",
+        type: "wildcard",
+        payload: {
+          options: [
+            { id: "o1", value: "wet hair", weight: 1, negative: "dry, @{a1b2c3d4}" },
+            { id: "o2", value: "", weight: 1, is_null: true, negative: "@{cccccccc}" },
+          ],
+        },
+      });
+      expect(listReferencedUuids(m)).toEqual(["a1b2c3d4", "cccccccc"]);
+    });
+
     it("dedupes across multiple options + multiple refs", () => {
       const m = mod({
         id: "11111111",
@@ -116,6 +130,23 @@ describe("listReferencedUuids", () => {
         },
       });
       expect(new Set(listReferencedUuids(m))).toEqual(new Set(["aaaaaaaa", "bbbbbbbb"]));
+    });
+
+    it("returns `@{}` refs from an \"Add to negative\" action value", () => {
+      const m = mod({
+        id: "dddd1111",
+        type: "derivation",
+        payload: {
+          rules: [{
+            id: "r1",
+            branches: [{
+              condition: { var: "mood", op: "equals", value: "x" },
+              action: { target_var: "mood", mode: "negative", value: "@{aaaaaaaa}, smiling" },
+            }],
+          }],
+        },
+      });
+      expect(listReferencedUuids(m)).toEqual(["aaaaaaaa"]);
     });
 
     it("handles missing/optional rule shapes without throwing", () => {

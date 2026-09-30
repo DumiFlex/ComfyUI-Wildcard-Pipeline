@@ -16,6 +16,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from engine import negatives
 from engine.modules import build_resolve_ctx
 from engine.modules._seed import derive_module_rng
 from engine.modules.dispatcher import ModuleHandler
@@ -72,6 +73,9 @@ class CombineHandler(ModuleHandler):
         for v in input_vars:
             if not isinstance(v, str):
                 raise ValueError("combine payload.input_vars entries must be strings")
+        neg = payload.get("negative")
+        if neg is not None and not isinstance(neg, str):
+            raise ValueError("combine payload.negative must be a string")
 
     @classmethod
     def resolve(
@@ -107,6 +111,7 @@ class CombineHandler(ModuleHandler):
             # frozen across the whole run, nested refs included.
             _hb = ctx.get("__wp_hold_base_ctx__")
             if isinstance(_hb, dict) and output_var in _hb:
+                negatives.copy_from(ctx, _hb, [output_var])
                 return {output_var: _hb[output_var]}
             chain_seed = int(ctx.get("__wp_node_seed_hold__", ctx.get("__wp_node_seed__", 0)) or 0)
         else:
@@ -122,5 +127,17 @@ class CombineHandler(ModuleHandler):
         # picks up our derived RNG instead of the chain RNG.
         ctx_local = {**ctx, "__wp_rng__": rng}
         resolve_ctx = build_resolve_ctx(ctx_local, surface="combine")
-        result = resolve_text(template, resolve_ctx)
+        with negatives.collecting(resolve_ctx) as col:
+            result = resolve_text(template, resolve_ctx)
+        # Send-to-negative: the phrase carries the negatives of every variable
+        # its template rendered, plus its own (resolved quietly on the
+        # combine's negative stream so its {a|b} never shifts the value's).
+        own = negatives.clean_negative(payload.get("negative"))
+        entries = negatives.entries_for_reads(ctx, col.reads)
+        entries += negatives.own_entries(
+            [own] if own else [], resolve_ctx,
+            negatives.neg_rng(effective_seed, output_var),
+            pick=None, source=output_var,
+        )
+        negatives.set_entries(ctx, output_var, entries)
         return {output_var: result}

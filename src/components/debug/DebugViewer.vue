@@ -122,7 +122,8 @@ const visibleVars = computed<VarRow[]>(() => {
     pinned.value.has(`var:${v.name}`)
     || `$${v.name}`.toLowerCase().includes(q.value)
     || v.value.toLowerCase().includes(q.value)
-    || v.writerName.toLowerCase().includes(q.value),
+    || v.writerName.toLowerCase().includes(q.value)
+    || v.negatives.some((n) => n.text.toLowerCase().includes(q.value)),
   );
 });
 
@@ -220,7 +221,12 @@ const tabText = computed(() => {
   const r = raw.value;
   if (!r) return "";
   switch (activeTab.value) {
-    case "vars": return JSON.stringify(Object.fromEntries(Object.entries(r).filter(([k]) => !k.startsWith("__"))), null, 2);
+    case "vars": {
+      const vars: Record<string, unknown> = Object.fromEntries(Object.entries(r).filter(([k]) => !k.startsWith("__")));
+      // The negatives table belongs with the variables it describes.
+      if (r.__wp_negatives__) vars.__wp_negatives__ = r.__wp_negatives__;
+      return JSON.stringify(vars, null, 2);
+    }
     case "trace": return JSON.stringify(r.__wp_trace__ ?? [], null, 2);
     case "warnings": return JSON.stringify(r.__wp_warnings__ ?? [], null, 2);
     default: return JSON.stringify(r, null, 2);
@@ -433,6 +439,12 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
             :class="{ [`is-${warnTone}`]: t.id === 'warnings' && warnTone }"
           >{{ t.count }}</span>
         </button>
+        <span
+          v-if="activeTab === 'vars' && model.negativeCount"
+          class="wp-dbg-tabs__neg"
+          data-test="dbg-neg-count"
+          title="Variables that carry negative words"
+        >{{ model.negativeCount }} negative{{ model.negativeCount === 1 ? "" : "s" }}</span>
         <div v-if="activeTab !== 'raw'" class="wp-dbg-filter">
           <i class="pi pi-search wp-dbg-filter__icon" aria-hidden="true" />
           <input
@@ -665,6 +677,16 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
 }
 .wp-dbg-tab__badge.is-warning { background: color-mix(in oklab, var(--wp-warn) 22%, transparent); color: var(--wp-warn); }
 .wp-dbg-tab__badge.is-error { background: color-mix(in oklab, var(--wp-red, #e5484d) 22%, transparent); color: var(--wp-red, #e5484d); }
+.wp-dbg-tabs__neg {
+  margin-left: auto;
+  font: 600 9.5px/1 var(--wp-font-mono);
+  padding: 3px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  background: var(--wp-red-bg, color-mix(in oklab, var(--wp-red, #e5484d) 15%, transparent));
+  color: var(--wp-red, #e5484d);
+}
+.wp-dbg-tabs__neg + .wp-dbg-filter { margin-left: 6px; }
 .wp-dbg-tab__badge.is-info { background: color-mix(in oklab, var(--wp-info, var(--wp-accent)) 22%, transparent); color: var(--wp-info, var(--wp-accent)); }
 
 .wp-dbg-filter {

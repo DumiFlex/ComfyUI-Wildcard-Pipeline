@@ -310,4 +310,50 @@ describe("DebugViewer", () => {
     await openTab(w, "raw");
     expect(w.find(".wp-dbg-raw").text()).toContain("__wp_trace__");
   });
+
+  const NEG_RUN = {
+    ...RUN,
+    __wp_negatives__: {
+      sky: [{ text: "sunny", pick: null, source: "sky" }, { text: "blue sky", pick: null, source: "r1:1" }],
+      props: [{ text: "broken umbrella", pick: 0, source: "props" }, { text: "cap", pick: 1, source: "props" }],
+    },
+  };
+
+  it("lists each variable's negatives, its sources and a count", () => {
+    const w = mountRun({}, NEG_RUN);
+    expect(w.find('[data-test="dbg-neg-count"]').text()).toBe("2 negatives");
+    const rows = w.findAll('[data-test="dbg-var"]');
+    const sky = rows.find((r) => r.text().includes("$sky"));
+    const lines = sky?.findAll('[data-test="dbg-var-neg"]') ?? [];
+    expect(lines.map((l) => l.find(".wp-dbg-var-row__neg-text").text())).toEqual(["sunny", "blue sky"]);
+    expect(lines[1].find('[data-test="dbg-var-neg-src"]').text()).toBe("· Lighting");
+    expect(lines[0].find('[data-test="dbg-var-neg-src"]').exists()).toBe(false);
+    const props = rows.find((r) => r.text().includes("$props"));
+    expect(props?.find('[data-test="dbg-var-neg"]').text()).toContain("broken umbrella, cap");
+    expect(props?.find('[data-test="dbg-var-neg-src"]').exists()).toBe(false);
+    expect(mountRun().find('[data-test="dbg-neg-count"]').exists()).toBe(false);
+  });
+
+  it("filters variables by their negative words", async () => {
+    const w = mountRun({}, NEG_RUN);
+    await w.find('[data-test="dbg-filter"]').setValue("umbrella");
+    expect(w.findAll('[data-test="dbg-var"]').map((r) => r.find("code").text())).toEqual(["$props"]);
+  });
+
+  it("shows a write's negative in the trace", async () => {
+    const snap = {
+      ...RUN,
+      __wp_trace__: [{ ...RUN.__wp_trace__[0], writes: [{ variable: "time", value: "night", negative: "daylight" }] }],
+    };
+    const w = mountRun({}, snap);
+    await openTab(w, "trace");
+    await w.find(".wp-dbg-step__row").trigger("click");
+    expect(w.find('[data-test="dbg-step-neg"]').text()).toBe("$timenegative:daylight");
+  });
+
+  it("keeps the negatives table in the raw JSON", async () => {
+    const w = mountRun({}, NEG_RUN);
+    await openTab(w, "raw");
+    expect(w.find(".wp-dbg-raw").text()).toContain("__wp_negatives__");
+  });
 });

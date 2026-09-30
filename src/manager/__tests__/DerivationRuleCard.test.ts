@@ -221,6 +221,24 @@ describe("DerivationRuleCard.vue", () => {
     expect(link.attributes("target")).toBe("_blank");
   });
 
+  it("action mode offers \"Add to negative\"; in that mode the value reads as a negative", () => {
+    const plain = mountCard(makeRule(), 0);
+    const modeSel = plain.find('[data-test="act-mode-0-0"]').findComponent({ name: "Select" });
+    const modes = (modeSel.props("options") as Array<{ value: string; label: string }>);
+    expect(modes.map((o) => o.value)).toEqual(["replace", "append", "prepend", "negative"]);
+    expect(modes[3].label).toBe("Add to negative");
+    expect(plain.find('[data-test="act-neg-hint-0-0"]').exists()).toBe(false);
+
+    const neg = mountCard(makeRule({
+      branches: [{
+        condition: { var: "mood", op: "equals", value: "gloomy" },
+        action: { target_var: "mood", mode: "negative", value: "bright colors" },
+      }],
+    }), 0);
+    expect(neg.get('[data-test="act-neg-hint-0-0"]').text()).toContain("$mood's negative — its value is not changed");
+    expect(neg.findAllComponents(RichTextInput).some((c) => c.classes().includes("dvr-value-input--neg"))).toBe(true);
+  });
+
   it("supported-syntax hint line renders below action value", () => {
     const wrap = mountCard(makeRule(), 0);
     const hint = wrap.find('[data-test="act-hint-0-0"]');

@@ -67,7 +67,12 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
           </div>
           <div v-if="s.error" class="wp-trd__err">{{ s.error }}</div>
           <div v-else-if="s.writes.length" class="wp-trd__writes">
-            <div v-for="(w, j) in s.writes" :key="j"><code>${{ w.variable }}</code> = {{ renderValue(w.value) }}</div>
+            <template v-for="(w, j) in s.writes" :key="j">
+              <div><code>${{ w.variable }}</code> = {{ renderValue(w.value) }}</div>
+              <div v-if="w.negative" class="wp-trd__neg" data-test="trace-neg">
+                <code>${{ w.variable }}</code> <span class="wp-trd__neg-label">negative:</span> {{ w.negative }}
+              </div>
+            </template>
           </div>
           <div v-else class="wp-trd__none">{{ s.type === "constraint" ? "re-weights a later pick, writes nothing" : "no change" }}</div>
           <ul v-if="s.refs?.length" class="wp-trd__refs" aria-label="Nested picks" data-test="trace-refs">
@@ -123,6 +128,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 .wp-trd__status { margin-left: auto; font-size: var(--wp-text-xs); color: var(--wp-text-dim); }
 .wp-trd__writes { font: var(--wp-text-xs)/1.5 var(--wp-font-mono); color: var(--wp-text-muted); word-break: break-word; }
 .wp-trd__writes code { color: var(--wp-accent-text); }
+.wp-trd__neg { color: var(--wp-danger-text); }
+.wp-trd__neg-label { font-weight: var(--wp-weight-semibold); }
 .wp-trd__refs {
   list-style: none; margin: var(--wp-space-1) 0 0; padding: 0;
   display: flex; flex-direction: column; gap: var(--wp-space-1);

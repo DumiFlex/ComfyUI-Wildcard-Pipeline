@@ -3,9 +3,11 @@
  * BulkAddPanel — inline paste-to-add panel for the bulk editor.
  *
  * Two modes:
- *   options — wildcard options, one per line: `value [#tag …] [*N]`
- *             (#tag = sub-category, auto-created if new; *N = weight).
- *   values  — fixed values, one per line: `name = value`
+ *   options — wildcard options, one per line: `value [#tag …] [*N] [-- negative]`
+ *             (#tag = sub-category, auto-created if new; *N = weight;
+ *             ` -- words` = the option's negative, modifiers may trail
+ *             either side).
+ *   values  — fixed values, one per line: `name = value [-- negative]`
  *             (existing names update in place, new names append).
  *
  * Presentational only: parses + previews, emits the reconciled payload on
@@ -64,6 +66,7 @@ const foldedValues = computed<ParsedFixedValue[]>(() => {
 });
 const valuesUpdate = computed(() => foldedValues.value.filter((v) => lowerValues.value.has(v.name.toLowerCase())).length);
 const valuesNew = computed(() => foldedValues.value.length - valuesUpdate.value);
+const valuesWithNegative = computed(() => foldedValues.value.filter((v) => v.negative).length);
 
 const addCount = computed(() =>
   props.mode === "options" ? optionsSummary.value.add.length : foldedValues.value.length,
@@ -88,11 +91,13 @@ function cancel() {
       <template v-if="mode === 'options'">
         One option per line. Append <code>#tag</code> for a sub-category (auto-created if new) and
         <code>*N</code> for a weight — e.g. <code>radiant #warm #vivid *2</code>. A <code>#</code>
-        mid-text stays in the value.
+        mid-text stays in the value. Add <code class="wpc-bulk-panel__neg">-- words</code> to give
+        the option a negative, e.g. <code>strawberry blonde #warm *2 -- strawberry, fruit</code>.
       </template>
       <template v-else>
         One value per line as <code>name = value</code>. Existing names update in place; new names
-        are appended.
+        are appended. Add <code class="wpc-bulk-panel__neg">-- words</code> for a negative, e.g.
+        <code>style = oil painting -- photo, 3d render</code>.
       </template>
     </div>
 
@@ -100,7 +105,7 @@ function cancel() {
       v-model="text"
       class="wp-textarea wpc-bulk-panel__input"
       rows="6"
-      :placeholder="mode === 'options' ? 'serene\nradiant #warm *2\nbrooding #cool' : 'cfg = 4.5\nsteps = 30'"
+      :placeholder="mode === 'options' ? 'serene\nradiant #warm *2\nbrooding #cool -- cheerful' : 'cfg = 4.5\nsteps = 30'"
       aria-label="Bulk paste"
     ></textarea>
 
@@ -110,6 +115,7 @@ function cancel() {
         <span class="wp-chip wp-chip--accent">{{ optionsSummary.add.length }} new</span>
         <span v-if="optionsSummary.tagged" class="wp-chip">{{ optionsSummary.tagged }} tagged</span>
         <span v-if="optionsSummary.weighted" class="wp-chip">{{ optionsSummary.weighted }} weighted</span>
+        <span v-if="optionsSummary.withNegative" class="wp-chip wp-chip--danger">{{ optionsSummary.withNegative }} with negative</span>
         <span v-if="optionsSummary.duplicates" class="wp-chip wp-chip--muted">{{ optionsSummary.duplicates }} duplicate skipped</span>
         <template v-if="optionsSummary.newTags.length">
           <span class="wpc-bulk-panel__sep">·</span>
@@ -120,6 +126,7 @@ function cancel() {
       <template v-else>
         <span class="wp-chip wp-chip--accent">{{ valuesNew }} new</span>
         <span v-if="valuesUpdate" class="wp-chip">{{ valuesUpdate }} updated</span>
+        <span v-if="valuesWithNegative" class="wp-chip wp-chip--danger">{{ valuesWithNegative }} with negative</span>
       </template>
     </div>
 
@@ -155,6 +162,7 @@ function cancel() {
   background: var(--wp-bg-3);
   color: var(--wp-text);
 }
+.wpc-bulk-panel__hint code.wpc-bulk-panel__neg { color: var(--wp-danger); }
 .wpc-bulk-panel__input {
   width: 100%;
   resize: vertical; overscroll-behavior: contain;

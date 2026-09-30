@@ -8,6 +8,7 @@ import {
 import { varBaseName } from "../widgets/richTokenize";
 import { computePairingsFull, type ChainModule } from "./constraint-pairs";
 import { conditionLeaves } from "./derivation-conditions";
+import { NEGATIVES_VAR } from "./assembler-vars";
 
 /** Resolve a module's effective var-binding name. Mirrors engine
  *  precedence: per-instance override (`instance.variable_binding`)
@@ -969,7 +970,16 @@ export function scanConflicts(
   return out;
 }
 
-export function scanTemplateConflicts(template: string, knownVars: string[]): Conflict[] {
+/**
+ * Assembler templates. `negativeTemplate` (send-to-negative) is scanned the
+ * same way, except that `$negatives` is its reserved slot and never missing;
+ * a name already reported from the prompt template is not reported twice.
+ */
+export function scanTemplateConflicts(
+  template: string,
+  knownVars: string[],
+  negativeTemplate = "",
+): Conflict[] {
   const known = new Set(knownVars);
   const out: Conflict[] = [];
   for (const m of template.matchAll(TEMPLATE_VAR)) {
@@ -977,6 +987,13 @@ export function scanTemplateConflicts(template: string, knownVars: string[]): Co
     if (!known.has(v)) {
       out.push({ moduleId: "", variable: v, type: "missing_template_variable", severity: "warning" });
     }
+  }
+  const reported = new Set(out.map((c) => c.variable));
+  for (const m of negativeTemplate.matchAll(TEMPLATE_VAR)) {
+    const v = m[1];
+    if (v === NEGATIVES_VAR || known.has(v) || reported.has(v)) continue;
+    reported.add(v);
+    out.push({ moduleId: "", variable: v, type: "missing_template_variable", severity: "warning" });
   }
   return out;
 }

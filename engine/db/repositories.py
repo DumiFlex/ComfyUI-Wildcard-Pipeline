@@ -908,6 +908,16 @@ class TemplateNotFound(LookupError):
     """Raised when a requested template id does not exist."""
 
 
+def _template_negative(row: sqlite3.Row) -> str | None:
+    """Migration 019's column. NULL = saved before negatives existed (loading
+    leaves the Assembler's negative box alone). Pre-migration fixtures lack
+    the column entirely."""
+    try:
+        return row["negative_template"]
+    except (IndexError, KeyError):
+        return None
+
+
 def _row_to_template(row: sqlite3.Row) -> dict[str, Any]:
     return {
         "id": row["id"],
@@ -917,6 +927,7 @@ def _row_to_template(row: sqlite3.Row) -> dict[str, Any]:
         "tags": json.loads(row["tags"]),
         "is_favorite": bool(row["is_favorite"]),
         "template_string": row["template_string"],
+        "negative_template": _template_negative(row),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
@@ -946,6 +957,7 @@ class TemplateRepository:
         category_id: str | None = None,
         tags: list[str] | None = None,
         is_favorite: bool = False,
+        negative_template: str | None = None,
     ) -> dict[str, Any]:
         tid = self._gen_id()
         now = _now()
@@ -953,12 +965,13 @@ class TemplateRepository:
             self._conn.execute(
                 "INSERT INTO templates("
                 "id, name, description, category_id, tags, "
-                "is_favorite, template_string, created_at, updated_at"
-                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);",
+                "is_favorite, template_string, negative_template, "
+                "created_at, updated_at"
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
                 (
                     tid, name, description, category_id,
                     json.dumps(tags or []), int(is_favorite),
-                    template_string, now, now,
+                    template_string, negative_template, now, now,
                 ),
             )
         return self.get(tid)
@@ -981,6 +994,7 @@ class TemplateRepository:
         tags: list[str] | _Unset = _UNSET,
         template_string: str | _Unset = _UNSET,
         is_favorite: bool | _Unset = _UNSET,
+        negative_template: str | None | _Unset = _UNSET,
     ) -> dict[str, Any]:
         existing = self.get(template_id)
         new = {
@@ -1000,18 +1014,25 @@ class TemplateRepository:
             "is_favorite": (
                 existing["is_favorite"] if isinstance(is_favorite, _Unset) else is_favorite
             ),
+            "negative_template": (
+                existing["negative_template"]
+                if isinstance(negative_template, _Unset)
+                else negative_template
+            ),
         }
         now = _now()
         with self._conn:
             self._conn.execute(
                 "UPDATE templates SET "
                 "name = ?, description = ?, category_id = ?, tags = ?, "
-                "is_favorite = ?, template_string = ?, updated_at = ? "
+                "is_favorite = ?, template_string = ?, negative_template = ?, "
+                "updated_at = ? "
                 "WHERE id = ?;",
                 (
                     new["name"], new["description"], new["category_id"],
                     json.dumps(new["tags"]), int(new["is_favorite"]),
-                    new["template_string"], now, template_id,
+                    new["template_string"], new["negative_template"], now,
+                    template_id,
                 ),
             )
         return self.get(template_id)

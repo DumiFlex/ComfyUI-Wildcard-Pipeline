@@ -12,6 +12,7 @@
     "input_vars": [
       "mood",
       "subject"
-    ]
+    ],
+    "negative": "cropped"
   }
 }

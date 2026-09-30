@@ -13,7 +13,7 @@ import random
 import re
 from typing import Any
 
-from engine import prefs
+from engine import negatives, prefs
 from engine.context import Context
 from engine.modules import Module
 from engine.modules._detail import DETAIL_KEY, EXPLAIN_KEY
@@ -336,6 +336,8 @@ class PipelineEngine:
         ctx.setdefault("__wp_warnings__", [])
         ctx.setdefault("__wp_trace__", [])
         ctx.setdefault("__wp_internal_flags__", {})
+        # Send-to-negative: per-variable negatives (engine/negatives.py).
+        ctx.setdefault(negatives.NEG_KEY, {})
         # `@{uuid}` nesting limit from Settings (engine/prefs.py). setdefault
         # so a caller (or a test) that pinned a limit keeps it; set here
         # rather than per surface so canvas runs, preview and the Test Runner
@@ -626,6 +628,7 @@ class PipelineEngine:
             # binding can match a constraint to its own bundle copy's pick.
             ctx["__wp_current_module_bundle_origin__"] = _module_bundle_origin
             meta = _extract_static_meta(module)
+            ctx.pop(negatives.TOUCHED_KEY, None)
             try:
                 bindings = resolve_module(snapshot, ctx)
             except UnknownModuleType:
@@ -715,6 +718,19 @@ class PipelineEngine:
                     "source": module_type,
                     "overwrite": before is not None and before != value,
                 })
+            # A write replaces the value, so it replaces what the value
+            # carried: bindings the handler gave no negatives lose theirs.
+            negatives.settle_writes(
+                ctx, [v.lstrip("$") for v in (bindings or {})],
+            )
+            # WP Debug's trace shows what each write now carries.
+            for w in writes:
+                texts = [
+                    str(e.get("text", ""))
+                    for e in negatives.get_entries(ctx, w["variable"])
+                ]
+                if texts:
+                    w["negative"] = ", ".join(texts)
 
             # `seed` on the trace entry: the effective seed THIS
             # module rolled with — `instance.locked_seed` if locked,

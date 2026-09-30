@@ -159,7 +159,9 @@ def _resolve_var(tok: Token, ctx: ResolveContext) -> str:
     # way past.
     axis = tok.meta.get("axis")
     if axis:
-        return _resolve_axis(tok, ctx, str(axis))
+        out = _resolve_axis(tok, ctx, str(axis))
+        _note_read(ctx, name, tok.meta.get("index"), out)
+        return out
     value = ctx.get_var(name)
     if value is None:
         _push_warning(
@@ -179,7 +181,27 @@ def _resolve_var(tok: Token, ctx: ResolveContext) -> str:
     # as a 1-element list so `$str.0` == `$str` and `$str.1` == "". The
     # accessor + ListVar-fold contract lives in deref_var_value
     # (engine/syntax/types.py); the derivation + converter reads share it.
-    return deref_var_value(value, tok.meta.get("index"))
+    out = deref_var_value(value, tok.meta.get("index"))
+    _note_read(ctx, name, tok.meta.get("index"), out)
+    return out
+
+
+def _note_read(ctx: ResolveContext, name: str, index: Any, out: str) -> None:
+    """Tell a collecting context (send-to-negative) which binding this read
+    rendered, and which pick. An indexed read that rendered nothing (out of
+    range) carries nothing."""
+    note = getattr(ctx, "note_var_read", None)
+    if not callable(note):
+        return
+    if index is not None and not out:
+        return
+    note(name, index if isinstance(index, int) else None)
+
+
+def _note_ref_negative(ctx: ResolveContext, option: dict | None) -> None:
+    note = getattr(ctx, "note_ref_negative", None)
+    if callable(note) and isinstance(option, dict):
+        note(option)
 
 
 def _resolve_axis(tok: Token, ctx: ResolveContext, axis: str) -> str:
@@ -449,7 +471,9 @@ def _resolve_multi_pick(
             try:
                 parts: list[str] = []
                 id_of = {str(o.get("value", "")): o.get("id") for o in pool}
+                opt_of = {str(o.get("value", "")): o for o in pool}
                 for v in chosen:
+                    _note_ref_negative(ctx, opt_of.get(v))
                     logged = _log_ref_pick(ctx, ref_uuid, id_of.get(v), depth, v)
                     out = _resolve_tokens(
                         tokenize_text(v), ctx, depth=depth + 1,
@@ -740,6 +764,11 @@ def _resolve_ref(
     chosen = _pick_weighted(options, ctx.rng)
     if chosen is None:
         return ""
+
+    # Send-to-negative: the picked option's negative belongs to whatever this
+    # text resolves into (the carrier binding). Noted even for an empty pick,
+    # so a "none" option can still say what it rules out.
+    _note_ref_negative(ctx, chosen)
 
     chosen_value = str(chosen.get("value", ""))
     if not chosen_value:

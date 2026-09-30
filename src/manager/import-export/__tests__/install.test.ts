@@ -272,9 +272,37 @@ describe("installEnvelope — natively-supported future versions install as-is",
     expect(rules[0].branches[0].condition).toEqual(condition);
   });
 
-  it("rejects a v8 envelope (> MAX_KNOWN) at parse with the future-version error", async () => {
+  it("installs a v8 wildcard with option negatives without rejecting or migrating", async () => {
     const v8Envelope = {
       schema_version: 8,
+      bundles: [], fixed_values: [], combines: [], derivations: [], constraints: [], categories: [], templates: [],
+      wildcards: [
+        {
+          id: "wcneg001",
+          type: "wildcard",
+          name: "hair",
+          payload: {
+            var_binding: "hair",
+            options: [{ id: "o1", value: "red hair", weight: 1, negative: "blonde" }],
+          },
+        },
+      ],
+    };
+    const { importExport, seen } = fakeCommit();
+    const result = await installEnvelope({ envelope: v8Envelope }, { importExport });
+
+    expect(result.ok).toBe(true);
+    expect(result.installed.wildcard).toBe(1);
+    expect(result.migratedEntityCount).toBe(0);
+    const added = seen[0].adds.find((a) => a.kind === "wildcard");
+    if (!added) throw new Error("wildcard add not found in commit payload");
+    const opts = (added.entity.payload as { options: Array<{ negative?: string }> }).options;
+    expect(opts[0].negative).toBe("blonde");
+  });
+
+  it("rejects a v9 envelope (> MAX_KNOWN) at parse with the future-version error", async () => {
+    const v8Envelope = {
+      schema_version: 9,
       bundles: [], wildcards: [], fixed_values: [], combines: [], derivations: [], constraints: [], categories: [], templates: [],
     };
     const { importExport, seen } = fakeCommit();

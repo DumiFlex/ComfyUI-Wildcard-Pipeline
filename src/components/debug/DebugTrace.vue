@@ -196,6 +196,19 @@ function groupTooltip(g: TraceGroup): string {
               surface="wildcard"
             />
           </div>
+          <div v-if="s.writes.some((w) => w.negative)" class="wp-dbg-step__negs">
+            <div
+              v-for="(w, wi) in s.writes.filter((x) => x.negative)"
+              :key="wi"
+              class="wp-dbg-step__neg"
+              data-test="dbg-step-neg"
+              title="The negative words this variable carries after this step"
+            >
+              <code>${{ w.variable }}</code>
+              <span class="wp-dbg-step__neg-label">negative:</span>
+              <span class="wp-dbg-step__neg-text">{{ w.negative }}</span>
+            </div>
+          </div>
           <DebugStepDetail
             :step="s"
             :warnings="warningsByStep.get(s.key) ?? []"
@@ -322,6 +335,11 @@ function groupTooltip(g: TraceGroup): string {
 .wp-dbg-step.is-error { box-shadow: inset 2px 0 0 var(--wp-red, #e5484d); }
 .wp-dbg-step__chev { font-size: 8px; color: var(--wp-text-dim); transition: transform var(--wp-motion-quick, 0.12s) ease; }
 .wp-dbg-step.is-open .wp-dbg-step__chev { transform: rotate(90deg); }
+.wp-dbg-step__negs { display: flex; flex-direction: column; gap: 1px; padding: 2px 8px 0 30px; font-size: 11px; }
+.wp-dbg-step__neg { display: flex; flex-wrap: wrap; gap: 5px; align-items: baseline; }
+.wp-dbg-step__neg code { font-family: var(--wp-font-mono); color: var(--wp-accent-text, var(--wp-accent)); }
+.wp-dbg-step__neg-label { font: 600 10px/1.5 var(--wp-font-mono); color: var(--wp-red, #e5484d); }
+.wp-dbg-step__neg-text { color: var(--wp-red, #e5484d); word-break: break-word; }
 .wp-dbg-step__writes, .wp-dbg-step__full {
   display: flex;
   flex-direction: column;

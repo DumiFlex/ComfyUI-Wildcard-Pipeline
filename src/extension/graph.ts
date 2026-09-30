@@ -650,6 +650,46 @@ export function collectUpstreamInjectorBindings(
 }
 
 /**
+ * Send-to-negative: the Negative each upstream `WP_ContextInjector` row sets,
+ * keyed by binding. An injected value replaces the variable, so it replaces
+ * the variable's negatives: `null` means the row set none (the variable
+ * carries nothing from here on), a string is the row's raw negative (its
+ * `$slot`s unrendered, like the preview's `$binding` placeholder value).
+ * Upstream-first, so the nearest injector wins.
+ */
+export function collectUpstreamInjectorNegatives(
+  rootGraph: LiteGraphLike,
+  node: LiteNodeLike,
+): Record<string, string | null> {
+  const parents = buildSubgraphParents(rootGraph);
+  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
+  const chain: LiteNodeLike[] = [];
+  let cur = pipelineUpstreamOf(node, graphOf(node, rootGraph), parents);
+  while (cur && !seen.has(locator(cur.graph, cur.node))) {
+    seen.add(locator(cur.graph, cur.node));
+    chain.push(cur.node);
+    cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
+  }
+  const out: Record<string, string | null> = {};
+  for (let i = chain.length - 1; i >= 0; i--) {
+    const n = chain[i];
+    if (n.type !== "WP_ContextInjector" || isSkippedMode(n)) continue;
+    const inj = parseCached<{
+      version: 1;
+      rows?: Array<{ binding?: string; enabled?: boolean; negative?: string }>;
+    }>(widgetValue(n, "wp_rows"), { version: 1, rows: [] });
+    for (const row of inj.rows ?? []) {
+      if (row.enabled !== true) continue;
+      const binding = (row.binding ?? "").trim();
+      if (!binding) continue;
+      const neg = typeof row.negative === "string" ? row.negative.trim() : "";
+      out[binding] = neg || null;
+    }
+  }
+  return out;
+}
+
+/**
  * Walk upstream from `node` and return the set of every wildcard
  * module's uuid (8-hex `id`) reachable in the chain. Used by the
  * conflict scanner to validate constraint references — a constraint
@@ -1704,6 +1744,9 @@ function applyDerivationAction(
   const target = (action.target_var ?? "").replace(/^\$/, "").trim();
   if (!target) return;
   const mode = action.mode ?? "replace";
+  // "Add to negative" (schema v8) files words under the variable's negatives
+  // and never writes the variable — the preview value is unchanged.
+  if (mode === "negative") return;
   const raw = action.value ?? "";
   const newValue = expandValue(raw, ctx, catalog, 0);
   // SP2a: read the existing target value in string form (join a ListVar)

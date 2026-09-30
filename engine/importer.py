@@ -431,19 +431,28 @@ def _insert_template(
     conn.execute(
         "INSERT INTO templates("
         "id, name, description, category_id, tags, "
-        "is_favorite, template_string, created_at, updated_at"
-        ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?);",
+        "is_favorite, template_string, negative_template, "
+        "created_at, updated_at"
+        ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
         (
             tid, entity["name"], entity.get("description", ""),
             entity.get("category_id"),
             json.dumps(entity.get("tags") or []),
             int(entity.get("is_favorite", False)),
             entity.get("template_string", ""),
+            _negative_template_of(entity),
             entity.get("created_at", now),
             entity.get("updated_at", now),
         ),
     )
     return tid
+
+
+def _negative_template_of(entity: dict[str, Any]) -> str | None:
+    """Migration 019's optional column. Absent (a pack exported before
+    negatives existed) or not a string = NULL."""
+    neg = entity.get("negative_template")
+    return neg if isinstance(neg, str) else None
 
 
 def _update_template(
@@ -452,14 +461,16 @@ def _update_template(
     """UPDATE the templates row identified by `tid` to mirror `content`.
 
     Stamps `updated_at`; no `version` bump (templates have no version
-    column).
+    column). A pack without `negative_template` keeps the row's existing
+    negative (COALESCE) rather than wiping it.
     """
     _require_entity_fields("template", "replace", content, ("name",))
     now = now_iso()
     conn.execute(
         "UPDATE templates SET "
         "name = ?, description = ?, category_id = ?, tags = ?, "
-        "is_favorite = ?, template_string = ?, updated_at = ? "
+        "is_favorite = ?, template_string = ?, "
+        "negative_template = COALESCE(?, negative_template), updated_at = ? "
         "WHERE id = ?;",
         (
             content["name"], content.get("description", ""),
@@ -467,6 +478,7 @@ def _update_template(
             json.dumps(content.get("tags") or []),
             int(content.get("is_favorite", False)),
             content.get("template_string", ""),
+            _negative_template_of(content),
             now, tid,
         ),
     )
@@ -492,9 +504,17 @@ def _fetch_template_row(
         "tags": json.loads(row["tags"]),
         "is_favorite": bool(row["is_favorite"]),
         "template_string": row["template_string"],
+        "negative_template": _row_negative_template(row),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
+
+
+def _row_negative_template(row: sqlite3.Row) -> str | None:
+    try:
+        return row["negative_template"]
+    except (IndexError, KeyError):
+        return None
 
 
 def commit_import(
@@ -816,6 +836,7 @@ def undo_import(
                         "UPDATE templates SET "
                         "name = ?, description = ?, category_id = ?, "
                         "tags = ?, is_favorite = ?, template_string = ?, "
+                        "negative_template = ?, "
                         "created_at = ?, updated_at = ? "
                         "WHERE id = ?;",
                         (
@@ -824,6 +845,7 @@ def undo_import(
                             json.dumps(row["tags"]),
                             int(row["is_favorite"]),
                             row["template_string"],
+                            row.get("negative_template"),
                             row["created_at"], row["updated_at"], rid,
                         ),
                     )

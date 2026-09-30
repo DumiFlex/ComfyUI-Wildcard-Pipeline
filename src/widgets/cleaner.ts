@@ -10,6 +10,7 @@ import { reactiveFromGraph } from "../extension/reactive";
 import {
   emptyCleanerConfig,
   type CleanerNodeConfig,
+  type NegativeRunReport,
   type RunReport,
 } from "../components/cleaner/types";
 
@@ -32,7 +33,8 @@ interface CleanerHostNode extends MountTargetNode {
  * JSON-serialized `CleanerNodeConfig`. The Vue app inside reads/writes
  * through the standard host.setValue / onValueRestored contract.
  *
- * Word + char counts + per-rule report land via the `executed` event —
+ * Word + char counts + per-rule report land via the `executed` event
+ * (plus the negative's report + word count when its input is wired) —
  * wp_nodes/prompt_cleaner.py emits a `ui` payload after every run.
  * Same pattern WP_Context uses for its seed payload.
  *
@@ -47,6 +49,9 @@ export function create(node: CleanerHostNode, inputName: string) {
   const lastRunReport = ref<RunReport | null>(null);
   const wordCount = ref(0);
   const charCount = ref(0);
+  // Send-to-negative: null when the last run had no negative input.
+  const negativeReport = ref<NegativeRunReport | null>(null);
+  const negativeWordCount = ref<number | null>(null);
   const blocklistOpen = ref(false);
 
   const wrapper: Component = {
@@ -74,6 +79,8 @@ export function create(node: CleanerHostNode, inputName: string) {
           wordCount: wordCount.value,
           charCount: charCount.value,
           nodeMode: nodeMode.value,
+          negativeReport: negativeReport.value,
+          negativeWordCount: negativeWordCount.value,
           "onUpdate:modelValue": onUpdate,
           "onOpen-blocklist": () => { blocklistOpen.value = true; },
         }),
@@ -129,6 +136,12 @@ export function create(node: CleanerHostNode, inputName: string) {
     if (typeof w === "number") wordCount.value = w;
     const c = pickFirst(out, "wp_cleaner_char_count");
     if (typeof c === "number") charCount.value = c;
+    // The negative keys ride along only when the `negative` input is wired,
+    // so their absence clears the previous run's negative stats.
+    const nr = pickFirst(out, "wp_cleaner_negative_report");
+    negativeReport.value = nr && typeof nr === "object" ? (nr as NegativeRunReport) : null;
+    const nw = pickFirst(out, "wp_cleaner_negative_word_count");
+    negativeWordCount.value = typeof nw === "number" ? nw : null;
     // Don't requestRelayout — that would override the user's manual
     // height drag. The ResizeObserver still bumps minHeight if content
     // ever needs more room.
@@ -140,4 +153,27 @@ export function create(node: CleanerHostNode, inputName: string) {
   apiObj?.addEventListener("executed", onExecuted);
 
   return host;
+}
+
+interface LegacyValuesNode {
+  widgets?: Array<{ name: string; value: unknown }>;
+}
+
+/**
+ * Workflows saved before the Cleaner's negative box existed serialize two
+ * positional widget values, `[prompt, rulesJson]`. The negative box now sits
+ * between them, so positional restore drops the rules JSON into `negative`
+ * and leaves the rules at their defaults. Put both back. Called from the
+ * node's `onConfigure`, which runs after the positional restore. A workflow
+ * restored by name (`widgets_values_named`) is already right.
+ */
+export function upgradeLegacyValues(node: LegacyValuesNode, info: unknown): void {
+  const i = info as { widgets_values?: unknown; widgets_values_named?: unknown } | null;
+  const values = i?.widgets_values;
+  if (!Array.isArray(values) || values.length !== 2 || i?.widgets_values_named) return;
+  const neg = node.widgets?.find((w) => w.name === "negative");
+  const rules = node.widgets?.find((w) => w.name === "wp_cleaner");
+  if (!neg || !rules) return;
+  neg.value = "";
+  rules.value = values[1];
 }

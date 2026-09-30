@@ -56,6 +56,15 @@ describe("discoverBrokenRefsForImport — wildcard option refs", () => {
     ]);
   });
 
+  it("also flags a dangling @{id} inside an option's negative", () => {
+    const wildcards: ImportedWildcard[] = [
+      { id: "aaaa1111", options: [{ value: "wet hair", weight: 1, negative: "dry, @{deadbeef}" }] },
+    ];
+    const warnings = discoverBrokenRefsForImport(wildcards, [], new Set());
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({ source_field: "options[0].negative", position: "dry, ".length });
+  });
+
   it("emits zero warnings when every ref resolves against the library", () => {
     const wildcards: ImportedWildcard[] = [
       {

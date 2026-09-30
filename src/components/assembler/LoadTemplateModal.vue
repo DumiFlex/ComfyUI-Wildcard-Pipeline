@@ -253,6 +253,12 @@ function pick(row: TemplateRow) {
                 <i v-if="row.is_favorite" class="pi pi-star-fill wp-ltm__row-fav" aria-hidden="true" />
               </span>
               <span class="wp-ltm__row-preview" :title="row.template_string">{{ row.template_string || "(empty)" }}</span>
+              <span
+                v-if="row.negative_template"
+                class="wp-ltm__row-preview wp-ltm__row-preview--neg"
+                data-test="load-tpl-row-neg"
+                :title="row.negative_template"
+              >neg: {{ row.negative_template }}</span>
             </span>
             <span v-if="row.category_id && categoryNameById.get(row.category_id)" class="wp-ltm__row-cat">
               {{ categoryNameById.get(row.category_id) }}
@@ -505,6 +511,7 @@ function pick(row: TemplateRow) {
   color: var(--wp-text-muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.wp-ltm__row-preview--neg { color: color-mix(in srgb, var(--wp-danger) 75%, var(--wp-text-muted)); }
 .wp-ltm__row-cat {
   font-size: 10px;
   color: var(--wp-text-dim);

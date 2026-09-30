@@ -2,8 +2,9 @@
 
 from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 
+from engine import negatives
 from engine.context import strip_internals, with_resolver_tables
-from engine.template import resolve_variables
+from engine.template import resolve_variables, resolve_variables_raw
 from wp_nodes.types import PipelineContext
 
 
@@ -56,12 +57,36 @@ class WPPromptAssembler(io.ComfyNode):
                     # this change load their template unchanged.
                     extra_dict={"widgetType": "WP_TEMPLATE_EDITOR"},
                 ),
+                # Send-to-negative. Declared AFTER `template` so a workflow
+                # saved before it existed still maps its one widget value to
+                # the template; the missing value takes this default.
+                io.String.Input(
+                    "negative_template",
+                    multiline=True,
+                    default="",
+                    optional=True,
+                    placeholder="$negatives",
+                    tooltip=(
+                        "Your negative prompt. $negatives is where the "
+                        "negatives of the variables the prompt used go. "
+                        "Empty = just those words; without $negatives they "
+                        "are added at the end."
+                    ),
+                    # Same editor and same STRING socket as `template`.
+                    extra_dict={"widgetType": "WP_TEMPLATE_EDITOR"},
+                ),
             ],
-            outputs=[io.String.Output("prompt")],
+            # `prompt` stays at index 0 so existing links keep their slot.
+            outputs=[
+                io.String.Output("prompt"),
+                # The negative template filled with the negatives of every
+                # variable the prompt rendered.
+                io.String.Output("negative"),
+            ],
         )
 
     @classmethod
-    def execute(cls, context, template):
+    def execute(cls, context, template, negative_template=""):
         # Build the render context from the socket payload. `context.context`
         # holds user-named vars including those flagged internal (the
         # PIPELINE_CONTEXT socket now propagates internal vars across
@@ -87,8 +112,21 @@ class WPPromptAssembler(io.ComfyNode):
         # identical read resolved one node upstream (the combine surface,
         # which runs before the socket strips the table).
         render_ctx.update(context.internals or {})
-        resolved = resolve_variables(
-            template,
-            with_resolver_tables(strip_internals(render_ctx), render_ctx),
+        resolve_ctx = with_resolver_tables(strip_internals(render_ctx), render_ctx)
+        reads: list = []
+        resolved = resolve_variables(template, resolve_ctx, reads=reads)
+        negative = assemble_negative(
+            render_ctx, reads, negative_template or "",
+            lambda text: resolve_variables_raw(text, resolve_ctx),
         )
-        return io.NodeOutput(resolved)
+        return io.NodeOutput(resolved, negative)
+
+
+def assemble_negative(render_ctx, reads, negative_template, resolve_raw) -> str:
+    """The negative output: the negatives of the variables the positive
+    template rendered (follow usage), deduped tag by tag, placed into the
+    negative template at `$negatives`. Variables in the negative template add
+    their text but never their own negatives."""
+    entries = negatives.entries_for_reads(render_ctx, reads)
+    collected = negatives.join_unique(str(e.get("text", "")) for e in entries)
+    return negatives.render_negative(negative_template, collected, resolve_raw)

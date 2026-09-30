@@ -7,7 +7,7 @@
 import { computed, ref } from "vue";
 import Select from "../ui/Select.vue";
 import type { ScenarioRunResponse } from "../../api/types";
-import { orderByStack, renderValue, segmentOutput, type StackItemView } from "../../utils/scenario";
+import { negativeSegments, orderByStack, renderValue, segmentOutput, type StackItemView } from "../../utils/scenario";
 
 const props = defineProps<{
   result: ScenarioRunResponse;
@@ -46,6 +46,7 @@ const rows = computed(() => {
     .map((s) => ({
       seed: s.seed,
       segments: segmentOutput(renderValue(s.vars[out]), s.vars, out, allowed.value),
+      negative: negativeSegments(s, out, allowed.value),
       warnings: s.warnings.length,
     }));
 });
@@ -105,6 +106,24 @@ const available = computed(() => props.result.samples.filter((s) => !s.error).le
                 <template v-else>{{ seg.text }}</template>
               </template>
               <em v-if="r.segments.length === 1 && !r.segments[0].text" class="wp-tro__empty">(empty)</em>
+              <span
+                v-if="r.negative.length"
+                class="wp-tro__neg"
+                data-test="output-neg"
+                title="Negative words this output carries: what an Assembler rendering it adds to its negative output"
+              >
+                <span class="wp-tro__neg-tag">NEG</span>
+                <template v-for="(seg, i) in r.negative" :key="i">
+                  <template v-if="i > 0">, </template>
+                  <span
+                    v-if="seg.varName"
+                    class="wp-tro__tok"
+                    :class="`var-${colourOf.get(seg.varName) ?? 1}`"
+                    :title="`from $${seg.varName}`"
+                  >{{ seg.text }}</span>
+                  <span v-else class="wp-tro__neg-own">{{ seg.text }}</span>
+                </template>
+              </span>
             </span>
             <span v-if="r.warnings" class="wp-tro__warn">{{ r.warnings }} warning{{ r.warnings === 1 ? "" : "s" }}</span>
           </button>
@@ -142,6 +161,14 @@ const available = computed(() => props.result.samples.filter((s) => !s.error).le
 .wp-tro__text { font-size: var(--wp-text-base); line-height: var(--wp-line-base); word-break: break-word; }
 .wp-tro__tok { border-radius: 3px; padding: 0 2px; background: color-mix(in oklab, currentColor 12%, transparent); } /* audit-exempt: inline token */
 .wp-tro__empty { color: var(--wp-text-dim); }
+.wp-tro__neg { display: block; margin-top: var(--wp-space-2); font: var(--wp-text-sm)/var(--wp-line-base) var(--wp-font-mono); color: var(--wp-text-muted); }
+.wp-tro__neg-tag {
+  display: inline-block; margin-right: var(--wp-space-3); padding: 0 var(--wp-space-2);
+  font: var(--wp-weight-semibold) var(--wp-text-xs) var(--wp-font-mono); letter-spacing: .04em;
+  border-radius: 3px; /* audit-exempt: inline token */
+  background: color-mix(in oklab, var(--wp-danger) 18%, transparent); color: var(--wp-danger-text);
+}
+.wp-tro__neg-own { color: var(--wp-danger-text); }
 .wp-tro__warn { font-size: var(--wp-text-xs); color: var(--wp-warn); white-space: nowrap; }
 .wp-tro__more {
   align-self: flex-start; background: none; border: 0; cursor: pointer; padding: 0;

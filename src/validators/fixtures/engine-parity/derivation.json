@@ -27,8 +27,8 @@
         "else": {
           "action": {
             "target_var": "accent",
-            "mode": "replace",
-            "value": "soft lighting"
+            "mode": "negative",
+            "value": "harsh shadows"
           }
         }
       }

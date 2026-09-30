@@ -82,6 +82,9 @@ function actionShown(a: { mode?: string; value?: string; result?: string | null 
 }
 
 function modeGlyph(mode: string | undefined): string {
+  // "Add to negative" writes no value: it files the text as the target's
+  // negative, so it reads `$x negative: text`, not an assignment.
+  if (mode === "negative") return "negative:";
   if (mode === "append") return "+=";
   if (mode === "prepend") return "=+";
   return "=";
@@ -148,7 +151,9 @@ function modeGlyph(mode: string | undefined): string {
           <span class="wp-dbg-rule__name">Rule {{ ri + 1 }}</span>
           <span class="wp-dbg-rule__outcome" data-test="dbg-rule-outcome">{{ ruleOutcome(rule).text }}</span>
           <span v-if="!ruleOpen(rule, ri) && rule.action" class="wp-dbg-rule__peek">
-            <code>${{ rule.action.target }}</code> {{ modeGlyph(rule.action.mode) }} {{ actionShown(rule.action) }}
+            <code>${{ rule.action.target }}</code>
+            <span :class="{ 'wp-dbg-neg-mode': rule.action.mode === 'negative' }">{{ modeGlyph(rule.action.mode) }}</span>
+            {{ actionShown(rule.action) }}
           </span>
         </button>
         <template v-if="ruleOpen(rule, ri)">
@@ -170,8 +175,12 @@ function modeGlyph(mode: string | undefined): string {
           </div>
           <div v-if="rule.action" class="wp-dbg-rule__action" data-test="dbg-rule-action">
             <code class="wp-dbg-var">${{ rule.action.target }}</code>
-            <span class="wp-dbg-dim">{{ modeGlyph(rule.action.mode) }}</span>
+            <span
+              :class="rule.action.mode === 'negative' ? 'wp-dbg-neg-mode' : 'wp-dbg-dim'"
+              data-test="dbg-rule-mode"
+            >{{ modeGlyph(rule.action.mode) }}</span>
             <RichTextPreview
+              :class="{ 'wp-dbg-neg-text': rule.action.mode === 'negative' }"
               :value="actionShown(rule.action)"
               :uuid-to-name="uuidToName"
               :uuid-to-kind="uuidToKind"
@@ -179,7 +188,7 @@ function modeGlyph(mode: string | undefined): string {
             />
           </div>
           <div
-            v-if="rule.action && rule.action.mode !== 'replace' && rule.action.result != null"
+            v-if="rule.action && rule.action.mode !== 'replace' && rule.action.mode !== 'negative' && rule.action.result != null"
             class="wp-dbg-rule__result"
             data-test="dbg-rule-result"
           >
@@ -398,6 +407,8 @@ function modeGlyph(mode: string | undefined): string {
   border-top: 1px dashed var(--wp-border);
   color: var(--wp-text);
 }
+.wp-dbg-neg-mode { font: 600 10px/1.5 var(--wp-font-mono); color: var(--wp-red, #e5484d); }
+.wp-dbg-neg-text { color: var(--wp-red, #e5484d); }
 .wp-dbg-ref {
   display: flex;
   align-items: baseline;

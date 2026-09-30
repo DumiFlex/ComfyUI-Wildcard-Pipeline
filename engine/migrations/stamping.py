@@ -5,6 +5,9 @@ A payload is stamped with the LOWEST catalog version its features need, so
 an older consumer can still install everything that doesn't use a newer
 feature:
 
+- ``NEGATIVES_SCHEMA_VERSION`` (8): a wildcard option, fixed value or
+  combine carries a non-empty ``negative``, or a derivation action uses the
+  ``negative`` ("Add to negative") mode.
 - ``DERIVATION_CONDITIONS_SCHEMA_VERSION`` (7): a derivation branch groups
   tests with AND / OR, or a test uses ``is_empty`` / ``is_not_empty``.
 - ``CONSTRAINT_ONLY_SCHEMA_VERSION`` (6): a constraint matrix cell,
@@ -31,6 +34,7 @@ from engine.migrations import (
     CONSTRAINT_ONLY_SCHEMA_VERSION,
     CURRENT_SCHEMA_VERSION,
     DERIVATION_CONDITIONS_SCHEMA_VERSION,
+    NEGATIVES_SCHEMA_VERSION,
     SP2B_SCHEMA_VERSION,
     SP3_REACH_SCHEMA_VERSION,
     TAG_AXES_SCHEMA_VERSION,
@@ -165,6 +169,25 @@ def uses_derivation_conditions(node: Any) -> bool:
     )
 
 
+def uses_negatives(node: Any) -> bool:
+    """Any non-empty ``negative`` string, or a derivation action whose mode is
+    ``negative``, at any depth. An empty negative is stored as absent and
+    never needs v8."""
+    if isinstance(node, list):
+        return any(uses_negatives(child) for child in node)
+    if not isinstance(node, dict):
+        return False
+    neg = node.get("negative")
+    if isinstance(neg, str) and neg.strip():
+        return True
+    if node.get("mode") == "negative" and "target_var" in node:
+        return True
+    return any(
+        isinstance(value, (dict, list)) and uses_negatives(value)
+        for value in node.values()
+    )
+
+
 def uses_sp2b_grammar(node: Any) -> bool:
     """Range-count or ``~`` multi-pick anywhere in the serialised payload."""
     text = json.dumps(node, ensure_ascii=False, default=str)
@@ -173,6 +196,8 @@ def uses_sp2b_grammar(node: Any) -> bool:
 
 def schema_version_for_payload(payload: Any) -> int:
     """The lowest catalog version that covers every feature in ``payload``."""
+    if uses_negatives(payload):
+        return NEGATIVES_SCHEMA_VERSION
     if uses_derivation_conditions(payload):
         return DERIVATION_CONDITIONS_SCHEMA_VERSION
     if uses_constraint_only_rule(payload):

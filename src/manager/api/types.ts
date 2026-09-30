@@ -30,6 +30,11 @@ export interface WildcardOption {
    * server-side in `engine/modules/wildcard_handler.py:validate_payload`.
    * See `docs/superpowers/specs/2026-05-24-null-wildcard-option-design.md`. */
   is_null?: boolean;
+  /** Send-to-negative (schema v8): words this option puts in the negative
+   * prompt of any Assembler that renders its variable. Same grammar as
+   * `value` (text, `{a|b}`, `@{ref}`). Library content, never overridden per
+   * instance. An empty negative is stored as absent. */
+  negative?: string;
 }
 
 export interface WildcardPayload {
@@ -67,6 +72,9 @@ export interface CombinePayload {
   template: string;
   output_var: string;
   input_vars: string[];
+  /** Send-to-negative (schema v8): the phrase's own negative, on top of the
+   * negatives of every variable its template reads. `$vars` + `{a|b}`. */
+  negative?: string;
 }
 
 /** Derivation condition operators. The presence-check pair
@@ -88,7 +96,9 @@ export type DerivationOp =
   | "is_unset"
   | "is_empty"
   | "is_not_empty";
-export type DerivationMode = "replace" | "append" | "prepend";
+/** `negative` (schema v8) is "Add to negative": the value is added to the
+ *  target variable's negatives and the variable itself is left alone. */
+export type DerivationMode = "replace" | "append" | "prepend" | "negative";
 
 export interface DerivationCondition {
   var: string;
@@ -358,6 +368,9 @@ export interface TemplateRow {
   tags: string[];
   is_favorite: boolean;
   template_string: string;
+  /** The Assembler's negative box (migration 019). `null`/absent = saved
+   *  before negatives existed: loading leaves the negative box alone. */
+  negative_template?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -370,6 +383,7 @@ export interface TemplateListResponse {
 export interface TemplateCreateInput {
   name: string;
   template_string?: string;
+  negative_template?: string | null;
   description?: string;
   category_id?: string | null;
   tags?: string[];
@@ -379,6 +393,7 @@ export interface TemplateCreateInput {
 export interface TemplateUpdateInput {
   name?: string;
   template_string?: string;
+  negative_template?: string | null;
   description?: string;
   category_id?: string | null;
   tags?: string[];
@@ -457,7 +472,18 @@ export interface ScenarioRunRequest {
 /** A multi-pick variable keeps its items so `$name.K` can index it. */
 export type ScenarioValue = string | { items: string[]; sep: string };
 
-export interface ScenarioTraceWrite { variable: string; value: ScenarioValue; overwrite: boolean }
+export interface ScenarioTraceWrite {
+  variable: string;
+  value: ScenarioValue;
+  overwrite: boolean;
+  /** The joined negatives the variable carries after this write (only when non-empty). */
+  negative?: string;
+}
+
+/** One negative entry filed under a variable (send-to-negative). `source`
+ *  is the binding it came from (or a derivation carrier key / "injector");
+ *  `pick` the multi-pick slot, null for the whole value. */
+export interface ScenarioNegativeEntry { text: string; pick: number | null; source: string }
 
 /** A nested `@{ref}` pick made while a module resolved, in pre-order;
  *  `depth` 0 is a ref written directly in the module's own option. */
@@ -495,6 +521,8 @@ export interface ScenarioSample {
   vars: Record<string, ScenarioValue>;
   trace: ScenarioTraceRow[];
   warnings: ScenarioWarning[];
+  /** Each variable's negatives on this seed; absent from older servers. */
+  negatives?: Record<string, ScenarioNegativeEntry[]>;
   error: string | null;
 }
 
@@ -533,8 +561,14 @@ export interface ScenarioRunResponse {
   missing: { kind: "module" | "bundle"; id: string }[];
   pins: Record<string, string>;
   /** Per-seed values of the requested `track` variables (null when none were
-   *  asked for); `values[name][i]` belongs to `seeds[i]`, null = unset/failed. */
-  tracked?: { seeds: number[]; values: Record<string, (string | null)[]> } | null;
+   *  asked for); `values[name][i]` belongs to `seeds[i]`, null = unset/failed.
+   *  `negatives` is the same per-seed list of each variable's joined negative
+   *  ("" = none); absent from older servers. */
+  tracked?: {
+    seeds: number[];
+    values: Record<string, (string | null)[]>;
+    negatives?: Record<string, (string | null)[]>;
+  } | null;
 }
 
 /** A saved Test Runner scenario — GET/POST/PUT /wp/api/test/scenarios. */

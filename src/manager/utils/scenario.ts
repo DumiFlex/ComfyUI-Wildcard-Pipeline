@@ -8,6 +8,7 @@ import type {
   ModuleRow,
   ModuleType,
   ScenarioRunResponse,
+  ScenarioSample,
   ScenarioSeedSpec,
   ScenarioStackItem,
   ScenarioValue,
@@ -242,6 +243,54 @@ export function segmentOutput(
   }
   if (pos < output.length || !out.length) out.push({ text: output.slice(pos), varName: null });
   return out;
+}
+
+/** Split on commas outside (), [] and {} (mirrors `engine/negatives.py`). */
+function splitTags(text: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let cur = "";
+  for (const ch of text) {
+    if ("([{".includes(ch)) depth++;
+    else if (")]}".includes(ch) && depth > 0) depth--;
+    if (ch === "," && depth === 0) { out.push(cur.trim()); cur = ""; }
+    else cur += ch;
+  }
+  out.push(cur.trim());
+  return out.filter(Boolean);
+}
+
+/** The negative words a variable carried on one seed, as segments tinted by
+ *  the variable each came from (a combine inherits the negatives of the
+ *  variables it read). Repeated tags are dropped, first one wins, like the
+ *  Assembler's join. `allowed` limits tinting to the stack's own bindings;
+ *  the variable's own words stay plain. */
+export function negativeSegments(
+  sample: Pick<ScenarioSample, "negatives">,
+  name: string,
+  allowed: Set<string>,
+): Segment[] {
+  const seen = new Set<string>();
+  const out: Segment[] = [];
+  for (const e of sample.negatives?.[name] ?? []) {
+    const tags = splitTags(e.text ?? "").filter((t) => {
+      const k = t.replace(/\s+/g, " ").toLowerCase();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    if (!tags.length) continue;
+    const varName = e.source && e.source !== name && allowed.has(e.source) ? e.source : null;
+    const last = out[out.length - 1];
+    if (last && last.varName === varName) last.text += `, ${tags.join(", ")}`;
+    else out.push({ text: tags.join(", "), varName });
+  }
+  return out;
+}
+
+/** `negativeSegments` as one line of text ("" when the variable has none). */
+export function negativeText(sample: Pick<ScenarioSample, "negatives">, name: string): string {
+  return negativeSegments(sample, name, new Set()).map((s) => s.text).join(", ");
 }
 
 /** Summary the rail shows for a scenario's latest run; stored on the row. */

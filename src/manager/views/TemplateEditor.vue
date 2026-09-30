@@ -5,8 +5,10 @@
  *   /templates/new       → create-mode
  *   /templates/:id/edit  → edit-mode
  *
- * A template is a single `template_string` ($var tokens) plus identity
- * metadata (name/description/category/tags). Far simpler than the bundle
+ * A template is a single `template_string` ($var tokens), an optional
+ * `negative_template` (the Assembler's negative box, `$negatives` marks
+ * where the variables' negatives go) plus identity metadata
+ * (name/description/category/tags). Far simpler than the bundle
  * editor — no children, color, or cascade.
  */
 import { computed, onMounted, ref } from "vue";
@@ -40,6 +42,11 @@ const description = ref("");
 const categoryId = ref<string | null>(null);
 const tags = ref<string[]>([]);
 const templateString = ref("");
+const negativeTemplate = ref("");
+/** The row's stored negative. `null` = saved before negatives existed; kept
+ *  null on save while the field stays empty, so loading that template still
+ *  leaves the Assembler's negative box alone. */
+const negativeOriginal = ref<string | null>(null);
 
 const loading = ref(false);
 const saving = ref(false);
@@ -51,6 +58,7 @@ function snapshot(): string {
     name: name.value, description: description.value,
     categoryId: categoryId.value, tags: tags.value,
     templateString: templateString.value,
+    negativeTemplate: negativeTemplate.value,
   });
 }
 const dirty = computed(() => snapshot() !== baseline.value);
@@ -66,6 +74,8 @@ onMounted(async () => {
       categoryId.value = row.category_id;
       tags.value = [...row.tags];
       templateString.value = row.template_string;
+      negativeOriginal.value = row.negative_template ?? null;
+      negativeTemplate.value = row.negative_template ?? "";
     }
     baseline.value = snapshot();
   } catch (e) {
@@ -88,9 +98,14 @@ async function save() {
       category_id: categoryId.value,
       tags: [...tags.value],
       template_string: templateString.value,
+      negative_template:
+        negativeTemplate.value === "" && negativeOriginal.value === null && isEdit.value
+          ? null
+          : negativeTemplate.value,
     };
     if (editingId.value) await store.update(editingId.value, body);
     else await store.create(body);
+    negativeOriginal.value = body.negative_template;
     baseline.value = snapshot();
     toast.push({ severity: "success", summary: "Saved", detail: name.value });
     router.push(resolveReturnTo("/templates"));
@@ -146,6 +161,22 @@ function cancel() {
             aria-label="Template"
           />
         </Field>
+        <Field
+          label="Negative template"
+          hint="The Assembler's negative box. $negatives is where the negatives of the variables the template uses go; empty = just those words, no $negatives = they are added at the end."
+        >
+          <RichTextInput
+            v-model="negativeTemplate"
+            class="wp-tpl-editor__neg"
+            surface="assembler"
+            multiline
+            :rows="2"
+            :var-suggestions="['negatives']"
+            placeholder="$negatives"
+            aria-label="Negative template"
+            data-test="tpl-negative"
+          />
+        </Field>
       </Card>
     </template>
   </EditorFrame>
@@ -153,4 +184,7 @@ function cancel() {
 
 <style scoped>
 .wp-tpl-editor__loading { padding: var(--wp-space-6); }
+.wp-tpl-editor__neg {
+  border-color: color-mix(in srgb, var(--wp-danger) 40%, var(--wp-border));
+}
 </style>

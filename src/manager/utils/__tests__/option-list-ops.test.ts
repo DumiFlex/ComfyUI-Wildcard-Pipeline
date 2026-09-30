@@ -19,6 +19,14 @@ describe("optionMatches", () => {
     expect(optionMatches(o, { query: "blue", tags: [] })).toBe(false);
   });
 
+  it("the text query also matches the negative (null option included)", () => {
+    const withNeg: OptionLike = { id: "n", value: "strawberry blonde", negative: "strawberry, fruit" };
+    expect(optionMatches(withNeg, { query: "FRUIT", tags: [] })).toBe(true);
+    expect(optionMatches(withNeg, { query: "citrus", tags: [] })).toBe(false);
+    const nul: OptionLike = { id: "z", value: "", is_null: true, negative: "hat" };
+    expect(optionMatches(nul, { query: "hat", tags: [] })).toBe(true);
+  });
+
   it("ANDs multiple tags — a second filter narrows, it does not widen", () => {
     expect(optionMatches(o, { query: "", tags: ["red", "warm"] })).toBe(true);
     expect(optionMatches(o, { query: "", tags: ["red", "cool"] })).toBe(false);

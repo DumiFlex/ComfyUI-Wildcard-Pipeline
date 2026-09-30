@@ -74,6 +74,13 @@ export interface CreateDomWidgetHostOptions<P extends Record<string, unknown>> {
    * — falsy is what makes it call `addInput(name, spec.type, {widget})`.
    */
   socketed?: boolean;
+  /**
+   * Cap the widget's height at its content height (report `maxHeight` equal
+   * to the measured minimum). For a fixed-size box sharing a node with a
+   * `fillHost` editor: the node's spare height then goes to the editor
+   * instead of leaving a dead band under this box.
+   */
+  fitContent?: boolean;
 }
 
 /** LiteGraph snaps node size to this grid by default. Mirror it when
@@ -214,6 +221,7 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     // Cached number so ComfyUI skips per-frame getComputedStyle (perf hint
     // from LoRA Manager's DOM widget guide).
     getMinHeight: () => minHeight,
+    ...(options.fitContent ? { getMaxHeight: () => minHeight } : {}),
   };
 
   const widget = node.addDOMWidget(widgetName, "wp-dom", host, widgetOpts);
@@ -239,7 +247,11 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     // sees a grid-aligned value. If we returned the raw getter result,
     // litegraph would size to that, then our setSize call below would
     // round to the next grid step — perceived as a two-step resize.
-    widget.computeLayoutSize = () => ({ minWidth: snapToGrid(getter()), minHeight });
+    widget.computeLayoutSize = () => ({
+      minWidth: snapToGrid(getter()),
+      minHeight,
+      ...(options.fitContent ? { maxHeight: minHeight } : {}),
+    });
   }
   // createApp's prop overload requires the second arg's keys to extend the
   // component's prop keys. With componentProps?: P (defaulting to {}), TS
@@ -1153,6 +1165,11 @@ export interface InjectorRow {
    *  inline row template input manages it for general rows. Engine
    *  plumbing lives in wp_nodes/injector_node.py. */
   template?: string | null;
+  /** Send-to-negative: the row's Negative, same `$slot` grammar and scope
+   *  as `template`. The injected value replaces the variable, so this
+   *  replaces the variable's negatives (absent = the variable carries none
+   *  from here on). Stored ABSENT when empty. Engine: injector_node.py. */
+  negative?: string;
   /** Durable copy of the litegraph input pin's custom display label
    *  (the user renamed the socket via its right-click menu). Persisted
    *  here because collapse overwrites `slot.label` with a placeholder

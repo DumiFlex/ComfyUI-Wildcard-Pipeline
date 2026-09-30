@@ -227,7 +227,16 @@ function describeAction(a: unknown): string {
   if (!target) return "no change";
   if (mode === "append") return `$${target} += "${value}"`;
   if (mode === "prepend") return `$${target} = "${value}" + …`;
+  if (mode === "negative") return `negative($${target}) += "${value}"`;
   return `$${target} = "${value}"`;
+}
+
+/** The variable an action WRITES — none for "Add to negative", which files
+ *  words under the variable's negatives and leaves its value alone. */
+function writtenTarget(a: unknown): string {
+  const act = (a ?? {}) as Payload;
+  if (str(act.mode) === "negative") return "";
+  return str(act.target_var).replace(/^\$/, "");
 }
 
 function inspectDerivation(mod: ModuleRow, result: ScenarioRunResponse | null): DerivationInspect {
@@ -238,13 +247,13 @@ function inspectDerivation(mod: ModuleRow, result: ScenarioRunResponse | null): 
     const branches = Array.isArray(r.branches) ? (r.branches as Payload[]) : [];
     branches.forEach((b, i) => {
       rules.push({ when: `${i ? "else if" : "if"} ${describeCondition(b.condition)}`, then: describeAction(b.action) });
-      const t = str((b.action as Payload | undefined)?.target_var).replace(/^\$/, "");
+      const t = writtenTarget(b.action);
       if (t) targets.add(t);
     });
     const els = r.else as Payload | undefined;
     if (els?.action) {
       rules.push({ when: "else", then: describeAction(els.action) });
-      const t = str((els.action as Payload).target_var).replace(/^\$/, "");
+      const t = writtenTarget(els.action);
       if (t) targets.add(t);
     }
   }

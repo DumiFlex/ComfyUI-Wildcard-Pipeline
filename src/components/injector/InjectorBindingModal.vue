@@ -8,6 +8,10 @@
  *   - Template   — optional transform string with `$<slot_name>` refs
  *                  + insert-slot dropdown (autofill on $).
  *
+ * Negative (send-to-negative): an optional second field under Template,
+ * same `$slot` grammar and scope. Stored as the row's `negative` (absent
+ * when empty); it becomes the variable's negatives downstream.
+ *
  * The template is OPTIONAL. When empty/null/whitespace, the engine
  * passes the raw socket value through to `ctx[binding]` as before.
  * When set, the engine substitutes each `$<slot_name>` ref with the
@@ -146,6 +150,9 @@ const insertOptions = computed<InsertOption[]>(() => {
 });
 
 const showInsertMenu = ref(false);
+/** Which field the "+ $slot" menu inserts into. Both fields share one
+ *  teleported menu; it anchors to the button that opened it. */
+const menuTarget = ref<"template" | "negative">("template");
 
 // Draft buffer — mirrors the module InstanceModal pattern. Edits land
 // here while the modal is open; only Save fires the `update` emit
@@ -154,11 +161,13 @@ const showInsertMenu = ref(false);
 // different row without unmount/remount in between.
 const draftBinding = ref<string>(props.row.binding);
 const draftTemplate = ref<string>(props.row.template ?? "");
+const draftNegative = ref<string>(props.row.negative ?? "");
 watch(
   () => props.row._uid,
   () => {
     draftBinding.value = props.row.binding;
     draftTemplate.value = props.row.template ?? "";
+    draftNegative.value = props.row.negative ?? "";
   },
 );
 
@@ -166,6 +175,7 @@ const templateValue = computed(() => draftTemplate.value);
 
 const isDirty = computed(() => {
   if (draftBinding.value !== props.row.binding) return true;
+  if ((props.row.negative ?? "").trim() !== draftNegative.value.trim()) return true;
   const cur = (props.row.template ?? "").trim();
   const next = draftTemplate.value.trim();
   return cur !== next;
@@ -201,17 +211,21 @@ function onResetTemplate(): void {
  * the same list in place.
  */
 function insertSlotRef(slotName: string): void {
-  const current = templateValue.value;
+  const target = menuTarget.value === "negative" ? draftNegative : draftTemplate;
+  const current = target.value;
   const sep = current && !current.endsWith(" ") ? " " : "";
   closeInsertMenu();
-  draftTemplate.value = `${current}${sep}$${slotName}`;
+  target.value = `${current}${sep}$${slotName}`;
 }
 
 function onSave(): void {
   // Whitespace-only template collapses to null so engine treats the
   // row as pass-through (same rule the engine + tokenizer agree on).
   const tpl = draftTemplate.value.trim() === "" ? null : draftTemplate.value;
-  emit("update", { binding: draftBinding.value, template: tpl });
+  // An empty negative is stored ABSENT (the key drops out of the widget
+  // JSON), never as "".
+  const neg = draftNegative.value.trim() === "" ? undefined : draftNegative.value;
+  emit("update", { binding: draftBinding.value, template: tpl, negative: neg });
   emit("close");
 }
 
@@ -224,8 +238,7 @@ interface PreviewToken {
   text: string;
   slotName?: string;
 }
-const previewTokens = computed<PreviewToken[]>(() => {
-  const s = templateValue.value;
+function tokenize(s: string): PreviewToken[] {
   if (!s) return [];
   const knownSlots = new Set(insertOptions.value.map((o) => o.slotName));
   // Socket rows can always ref their own slot even before it's typed
@@ -268,6 +281,19 @@ const previewTokens = computed<PreviewToken[]>(() => {
     i = end;
   }
   return out;
+}
+
+const previewTokens = computed<PreviewToken[]>(() => tokenize(templateValue.value));
+
+/** Send-to-negative. */
+const negativeValue = computed(() => draftNegative.value);
+const negativeTokens = computed<PreviewToken[]>(() => tokenize(draftNegative.value.trim()));
+/** The positive preview line: the template, or (a pass-through socket row)
+ *  the socket value itself. */
+const positivePreviewTokens = computed<PreviewToken[]>(() => {
+  if (templateValue.value) return previewTokens.value;
+  if (isGeneral.value) return [];
+  return [{ kind: "ref", text: `$${props.row.slot_name}`, slotName: props.row.slot_name }];
 });
 
 const refCount = computed(() => previewTokens.value.filter((t) => t.kind === "ref").length);
@@ -282,6 +308,9 @@ const unknownRefCount = computed(() => previewTokens.value.filter((t) => t.kind 
 // autocomplete popover uses) and flips above the button when there's no
 // room below.
 const menuBtnEl = ref<HTMLButtonElement | null>(null);
+const negMenuBtnEl = ref<HTMLButtonElement | null>(null);
+const activeMenuBtn = (): HTMLButtonElement | null =>
+  menuTarget.value === "negative" ? negMenuBtnEl.value : menuBtnEl.value;
 const menuEl = ref<HTMLDivElement | null>(null);
 const menuPos = ref<{ top: number; left: number; flipped: boolean }>({
   top: 0, left: 0, flipped: false,
@@ -290,7 +319,7 @@ const MENU_MAX_H = 220; // keep in sync with `max-height` in _modal-template-ctr
 const MENU_MIN_W = 200;
 
 function positionInsertMenu(): void {
-  const btn = menuBtnEl.value;
+  const btn = activeMenuBtn();
   if (!btn) return;
   const rect = btn.getBoundingClientRect();
   const margin = 8;
@@ -314,7 +343,7 @@ function onDocMouseDown(ev: MouseEvent): void {
   const target = ev.target as Node | null;
   if (!target) return;
   if (menuEl.value?.contains(target)) return;
-  if (menuBtnEl.value?.contains(target)) return;
+  if (activeMenuBtn()?.contains(target)) return;
   closeInsertMenu();
 }
 
@@ -336,9 +365,14 @@ function closeInsertMenu(): void {
   window.removeEventListener("resize", positionInsertMenu);
 }
 
-function toggleInsertMenu(): void {
-  if (showInsertMenu.value) closeInsertMenu();
-  else openInsertMenu();
+function toggleInsertMenu(target: "template" | "negative" = "template"): void {
+  if (showInsertMenu.value && menuTarget.value === target) {
+    closeInsertMenu();
+    return;
+  }
+  closeInsertMenu();
+  menuTarget.value = target;
+  openInsertMenu();
 }
 
 onBeforeUnmount(closeInsertMenu);
@@ -440,7 +474,7 @@ function onKeydown(ev: KeyboardEvent): void {
                 :title="`Insert a reference (${insertOptions.length} available)`"
                 aria-label="Insert reference"
                 :aria-expanded="showInsertMenu"
-                @click="toggleInsertMenu"
+                @click="toggleInsertMenu('template')"
               ><i class="pi pi-plus" aria-hidden="true" /> {{ isGeneral ? "$ref" : "$slot" }}</button>
               <Teleport to="body">
                 <div
@@ -510,23 +544,84 @@ function onKeydown(ev: KeyboardEvent): void {
           </span>
         </div>
 
-        <template v-if="templateValue">
+      </section>
+
+      <section class="ibm__section">
+        <div class="ibm__section-head">
+          <span class="ibm__section-label ibm__section-label--neg">Negative</span>
+          <span class="ibm__section-hint">same {{ isGeneral ? "$ref" : "$slot" }} refs · replaces the variable's negatives</span>
+          <div class="ibm__head-actions">
+            <button
+              v-if="insertOptions.length > 0"
+              ref="negMenuBtnEl"
+              type="button"
+              class="wp-ibm__menu-btn"
+              data-test="ibm-neg-insert-slot"
+              :title="`Insert a reference into the negative (${insertOptions.length} available)`"
+              aria-label="Insert reference into the negative"
+              :aria-expanded="showInsertMenu && menuTarget === 'negative'"
+              @click="toggleInsertMenu('negative')"
+            ><i class="pi pi-plus" aria-hidden="true" /> {{ isGeneral ? "$ref" : "$slot" }}</button>
+          </div>
+        </div>
+        <RichTextInput
+          class="ibm__template ibm__negative"
+          :class="{ 'ibm__negative--set': !!negativeValue.trim() }"
+          data-test="ibm-negative"
+          :model-value="negativeValue"
+          surface="assembler"
+          multiline
+          :rows="2"
+          :var-suggestions="refSuggestionNames"
+          :placeholder="isGeneral ? 'e.g. modern clothing, $input_0 smiling' : `e.g. modern clothing, $${row.slot_name} smiling`"
+          aria-label="Negative"
+          @update:model-value="(v: string) => (draftNegative = v)"
+        />
+        <p class="ibm__neg-note" :class="{ 'ibm__neg-note--warn': row.internal }" data-test="ibm-neg-note">
+          <template v-if="row.internal">
+            This variable is internal, so its negative won't reach any prompt.
+          </template>
+          <template v-else>
+            Used only where an Assembler renders <span class="ibm__neg-var">${{ draftBinding || "…" }}</span>.
+          </template>
+        </p>
+
+        <template v-if="templateValue || negativeValue.trim()">
           <div class="ibm__preview-label">PREVIEW</div>
           <div class="ibm__preview" data-test="ibm-preview">
-            <template v-for="(tok, i) in previewTokens" :key="i">
-              <span v-if="tok.kind === 'text'" class="ibm-tok--text">{{ tok.text }}</span>
-              <span v-else-if="tok.kind === 'escape'" class="ibm-tok--escape">$</span>
-              <span
-                v-else-if="tok.kind === 'ref'"
-                class="ibm-tok--ref"
-                :title="`Substituted with the live value at socket ${tok.slotName}`"
-              >{{ tok.text }}</span>
-              <span
-                v-else
-                class="ibm-tok--ref-unknown"
-                :title="`No row with slot_name '${tok.slotName}' — engine will leave the ref as literal text`"
-              >{{ tok.text }}</span>
-            </template>
+            <div v-if="positivePreviewTokens.length" class="ibm__preview-line">
+              <template v-for="(tok, i) in positivePreviewTokens" :key="i">
+                <span v-if="tok.kind === 'text'" class="ibm-tok--text">{{ tok.text }}</span>
+                <span v-else-if="tok.kind === 'escape'" class="ibm-tok--escape">$</span>
+                <span
+                  v-else-if="tok.kind === 'ref'"
+                  class="ibm-tok--ref"
+                  :title="`Substituted with the live value at socket ${tok.slotName}`"
+                >{{ tok.text }}</span>
+                <span
+                  v-else
+                  class="ibm-tok--ref-unknown"
+                  :title="`No row with slot_name '${tok.slotName}' — engine will leave the ref as literal text`"
+                >{{ tok.text }}</span>
+              </template>
+            </div>
+            <div v-if="negativeTokens.length" class="ibm__preview-line ibm__preview-line--neg" data-test="ibm-preview-neg">
+              <span class="ibm__neg-dash" aria-hidden="true">− </span>
+              <template v-for="(tok, i) in negativeTokens" :key="i">
+                <span v-if="tok.kind === 'text'">{{ tok.text }}</span>
+                <span v-else-if="tok.kind === 'escape'">$</span>
+                <span
+                  v-else-if="tok.kind === 'ref'"
+                  class="ibm-tok--ref"
+                  :title="`Substituted with the live value at socket ${tok.slotName}`"
+                >{{ tok.text }}</span>
+                <span
+                  v-else
+                  class="ibm-tok--ref-unknown"
+                  :title="`No row with slot_name '${tok.slotName}' — engine will leave the ref as literal text`"
+                >{{ tok.text }}</span>
+              </template>
+            </div>
           </div>
         </template>
       </section>
@@ -793,6 +888,23 @@ function onKeydown(ev: KeyboardEvent): void {
   min-height: 28px;
 }
 .ibm-tok--text { color: var(--wp-text); }
+
+/* Send-to-negative field + preview line. */
+.ibm__section-label--neg { color: var(--wp-danger); }
+.ibm__negative { min-height: 40px; }
+.ibm__negative--set {
+  border-color: color-mix(in srgb, var(--wp-danger) 55%, var(--wp-border));
+  background: color-mix(in srgb, var(--wp-danger) 7%, var(--wp-bg-deep, var(--wp-bg)));
+}
+.ibm__neg-note {
+  margin: 6px 0 0;
+  font: 11px var(--wp-font-sans);
+  color: var(--wp-text-dim, var(--wp-text3));
+}
+.ibm__neg-note--warn { color: var(--wp-warn); }
+.ibm__neg-var { font-family: var(--wp-font-mono); color: var(--wp-amber, var(--wp-accent)); }
+.ibm__preview-line--neg { color: var(--wp-danger); }
+.ibm__neg-dash { font-weight: 600; }
 .ibm-tok--escape { color: var(--wp-text-dim, var(--wp-text3)); }
 .ibm-tok--ref {
   color: var(--wp-accent);

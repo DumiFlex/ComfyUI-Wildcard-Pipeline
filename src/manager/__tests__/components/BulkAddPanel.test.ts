@@ -54,6 +54,36 @@ describe("BulkAddPanel.vue — options mode", () => {
   });
 });
 
+describe("BulkAddPanel.vue — negatives", () => {
+  it("counts options with a negative and commits the negative", async () => {
+    const wrap = mount(BulkAddPanel, {
+      props: { mode: "options", existingValues: [], existingTags: ["warm", "cool"] },
+    });
+    await wrap.get("textarea").setValue([
+      "strawberry blonde #warm *2 -- strawberry, fruit",
+      "platinum bob #cool",
+      "jet black -- blue tint #cool",
+    ].join("\n"));
+    expect(wrap.get(".wp-chip--danger").text()).toBe("2 with negative");
+    await wrap.get("button.wp-btn--primary").trigger("click");
+    expect(wrap.emitted("commit-options")![0][0]).toEqual([
+      { value: "strawberry blonde", tags: ["warm"], weight: 2, negative: "strawberry, fruit" },
+      { value: "platinum bob", tags: ["cool"], weight: 1 },
+      { value: "jet black", tags: ["cool"], weight: 1, negative: "blue tint" },
+    ]);
+  });
+
+  it("values mode parses `name = value -- negative`", async () => {
+    const wrap = mount(BulkAddPanel, { props: { mode: "values", existingValues: [] } });
+    await wrap.get("textarea").setValue("style = oil painting -- photo, 3d render");
+    expect(wrap.text()).toContain("1 with negative");
+    await wrap.get("button.wp-btn--primary").trigger("click");
+    expect(wrap.emitted("commit-values")![0][0]).toEqual([
+      { name: "style", value: "oil painting", negative: "photo, 3d render" },
+    ]);
+  });
+});
+
 describe("BulkAddPanel.vue — values mode", () => {
   function mountValues() {
     return mount(BulkAddPanel, {
