@@ -501,6 +501,39 @@ describe("DerivationRuleCard.vue", () => {
       expect(lastRule(wrap).branches[0].condition).toEqual({ match: "any", conditions: [a, b] });
     });
 
+    it("a connector flips only itself, regrouping with AND binding tighter", async () => {
+      const c = { var: "c", op: "equals" as const, value: "3" };
+      const rule = makeRule();
+      rule.branches[0].condition = { match: "all", conditions: [a, b, c] };
+      const wrap = await expanded(rule);
+      await wrap.get('[data-test="cond-match-0-0-2"]').trigger("click");
+      expect(lastRule(wrap).branches[0].condition).toEqual({
+        match: "any",
+        conditions: [{ match: "all", conditions: [a, b] }, c],
+      });
+    });
+
+    it("an OR connector turned AND binds just its two sides", async () => {
+      const c = { var: "c", op: "equals" as const, value: "3" };
+      const rule = makeRule();
+      rule.branches[0].condition = { match: "any", conditions: [a, b, c] };
+      const wrap = await expanded(rule);
+      await wrap.get('[data-test="cond-match-0-0-2"]').trigger("click");
+      expect(lastRule(wrap).branches[0].condition).toEqual({
+        match: "any",
+        conditions: [a, { match: "all", conditions: [b, c] }],
+      });
+    });
+
+    it("flipping a connector inside a nested group back merges it into its parent", async () => {
+      const c = { var: "c", op: "equals" as const, value: "3" };
+      const rule = makeRule();
+      rule.branches[0].condition = { match: "any", conditions: [a, { match: "all", conditions: [b, c] }] };
+      const wrap = await expanded(rule);
+      await wrap.get('[data-test="cond-match-0-0-1.1"]').trigger("click");
+      expect(lastRule(wrap).branches[0].condition).toEqual({ match: "any", conditions: [a, b, c] });
+    });
+
     it("removing down to one test restores the plain single-test shape", async () => {
       const rule = makeRule();
       rule.branches[0].condition = { match: "any", conditions: [a, b] };
