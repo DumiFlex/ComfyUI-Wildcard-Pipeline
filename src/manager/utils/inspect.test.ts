@@ -115,6 +115,17 @@ describe("inspectItem", () => {
     if (d?.kind === "derivation") expect(d.distributions.map((x) => x.name)).toEqual(["light"]);
   });
 
+  it("describes an \"Add to negative\" action without claiming a value write", () => {
+    const neg = mod("acacacac", "derivation", "Mood neg", {
+      rules: [{ branches: [{
+        condition: { var: "mood", op: "equals", value: "gloomy" },
+        action: { target_var: "mood", mode: "negative", value: "bright colors, smiling" },
+      }] }],
+    });
+    const d = inspectItem(item("derivation", neg.id), 0, [neg], [], null);
+    expect(d).toMatchObject({ rules: [{ then: 'negative($mood) += "bright colors, smiling"' }] });
+  });
+
   it("spells out AND / OR condition groups", () => {
     const grouped = mod("abababab", "derivation", "Weather", {
       rules: [{ branches: [{

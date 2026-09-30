@@ -18,6 +18,9 @@ import { axisHueAt } from "../../../../shared/axis-color";
 
 interface OptionFull extends WildcardOption {
   value: string;
+  /** Send-to-negative (v8): library content, read-only here — a negative is
+   *  never overridden per instance. */
+  negative?: string;
 }
 
 const props = withDefaults(
@@ -377,6 +380,10 @@ const allTags = computed<string[]>(() =>
 const visibleTags = computed<string[]>(() =>
   catExpanded.value ? allTags.value : allTags.value.slice(0, CAT_CHIP_LIMIT),
 );
+/** The option's negative, trimmed ("" = none). Shown as a small read-only
+ *  NEG hint; edit it in the library. */
+const negativeText = computed(() => (props.option.negative ?? "").trim());
+
 const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.length);
 </script>
 
@@ -471,6 +478,12 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
         <template v-else>{{ tok.raw }}</template>
       </template>
       </span>
+      <span
+        v-if="negativeText"
+        class="opt__neg"
+        data-test="opt-neg"
+        :title="`Negative: ${negativeText} (edit in the library)`"
+      >NEG</span>
       <span v-if="pairBadges.length > 0" class="opt__pair-badges" data-test="opt-pair-badges">
         <PairBadge
           v-for="p in pairBadges"
@@ -629,6 +642,17 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
   -webkit-line-clamp: 3;
   line-clamp: 3;
   overflow: hidden;
+}
+.opt__neg {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--wp-danger, #ef4444);
+  background: color-mix(in srgb, var(--wp-danger, #ef4444) 14%, transparent);
+  cursor: help;
 }
 .opt__pair-badges {
   flex: 0 0 auto;

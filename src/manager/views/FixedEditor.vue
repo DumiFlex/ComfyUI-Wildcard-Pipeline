@@ -20,6 +20,8 @@ import Button from "../components/ui/Button.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
 import DraftBanner from "../components/DraftBanner.vue";
 import RichTextInput from "../components/RichTextInput.vue";
+import NegativeField from "../components/NegativeField.vue";
+import { pruneBlankNegatives, setNegative } from "../utils/negatives";
 import BulkAddPanel from "../components/BulkAddPanel.vue";
 import BulkDeleteToolbar from "../components/BulkDeleteToolbar.vue";
 import Checkbox from "../components/ui/Checkbox.vue";
@@ -44,7 +46,20 @@ import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
 import PillCountBadge from "../cascade/PillCountBadge.vue";
 import type { ModuleHistoryEntry } from "../api/types";
 
-interface NamedValue { id: string; name: string; value: string; }
+/** `negative` (schema v8, send-to-negative): library content, absent when
+ *  empty. Instance `values_overrides` never carry one. */
+interface NamedValue { id: string; name: string; value: string; negative?: string; }
+
+/** Load one stored row into the editor's shape, keeping a non-blank negative. */
+function toNamedValue(v: NamedValue): NamedValue {
+  const out: NamedValue = {
+    id: v.id,
+    name: (v.name ?? "").replace(/^\$+/, ""),
+    value: v.value ?? "",
+  };
+  setNegative(out, v.negative);
+  return out;
+}
 
 const props = defineProps<{ id?: string }>();
 const router = useRouter();
@@ -194,11 +209,7 @@ onMounted(async () => {
       tags.value = row.tags;
       contentRating.value = row.content_rating ?? "safe";
       const rows = (row.payload as { values?: NamedValue[] }).values ?? [];
-      values.value = rows.map((v) => ({
-        id: v.id,
-        name: (v.name ?? "").replace(/^\$+/, ""),
-        value: v.value ?? "",
-      }));
+      values.value = rows.map(toNamedValue);
       historyEntries.value = readHistory(row.payload);
       recent.push({ id: props.id, kind: "fixed_values", name: name.value });
     } catch {
@@ -242,7 +253,9 @@ const visibleValueRows = computed<{ v: NamedValue; idx: number }[]>(() => {
   const q = fvQuery.value.trim().toLowerCase();
   if (!q) return pairs;
   return pairs.filter(({ v }) =>
-    v.name.toLowerCase().includes(q) || v.value.toLowerCase().includes(q));
+    v.name.toLowerCase().includes(q)
+    || v.value.toLowerCase().includes(q)
+    || (v.negative ?? "").toLowerCase().includes(q));
 });
 
 /** Index of the row being dragged, and the one the drop line sits on. */
@@ -302,7 +315,7 @@ const existingValueNames = computed(() =>
 /** A row the user has not written anything into yet — see the note on the
  *  wildcard editor's equivalent. Both halves empty means scaffolding. */
 function isUntouchedBlankValue(v: NamedValue): boolean {
-  return v.name.trim() === "" && v.value.trim() === "";
+  return v.name.trim() === "" && v.value.trim() === "" && !v.negative;
 }
 
 function commitBulkValues(parsed: ParsedFixedValue[]): void {
@@ -320,9 +333,17 @@ function commitBulkValues(parsed: ParsedFixedValue[]): void {
     const existing = values.value.find((v) => v.name.toLowerCase() === cleanName.toLowerCase());
     if (existing) {
       existing.value = p.value;
+      // A line without ` -- ` leaves an existing negative alone; bulk add
+      // updates what it names and nothing else.
+      if (p.negative) setNegative(existing, p.negative);
       updated += 1;
     } else {
-      values.value.push({ id: `val_${Math.random().toString(16).slice(2, 8)}`, name: cleanName, value: p.value });
+      values.value.push({
+        id: `val_${Math.random().toString(16).slice(2, 8)}`,
+        name: cleanName,
+        value: p.value,
+        ...(p.negative ? { negative: p.negative } : {}),
+      });
       added += 1;
     }
   }
@@ -392,11 +413,7 @@ function applyRestore(entry: ModuleHistoryEntry): void {
   categoryId.value = entry.category_id ?? null;
   tags.value = entry.tags ? [...entry.tags] : [];
   const rows = ((entry.payload ?? {}) as { values?: NamedValue[] }).values ?? [];
-  values.value = rows.map((v) => ({
-    id: v.id,
-    name: (v.name ?? "").replace(/^\$+/, ""),
-    value: v.value ?? "",
-  }));
+  values.value = rows.map(toNamedValue);
   toast.push({
     severity: "info",
     summary: "Version restored",
@@ -422,7 +439,7 @@ async function save() {
   setSaveState("saving");
   saving.value = true;
   try {
-    const payload = { values: values.value } as Record<string, unknown>;
+    const payload = { values: pruneBlankNegatives(values.value) } as Record<string, unknown>;
     if (isEdit.value && props.id) {
       const prev = await moduleStore.get(props.id);
       const nextHistory = appendSnapshot(
@@ -698,6 +715,15 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
                 placeholder="value"
                 :aria-label="`Variable value for row ${idx}`"
                 :data-test="`fv-row-${idx}-value`"
+              />
+              <!-- Send-to-negative: text + {a|b}, like the value (no $vars,
+                   no @{refs}). -->
+              <NegativeField
+                :model-value="v.negative"
+                surface="fixed_values"
+                label="value"
+                :test-id="`fv-row-${idx}-neg`"
+                @update:model-value="(n: string | undefined) => setNegative(v, n)"
               />
             </td>
             <td>

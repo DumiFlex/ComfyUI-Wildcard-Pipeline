@@ -304,7 +304,7 @@ function migrateAction(raw: unknown): DerivationAction {
   const mode = typeof a.mode === "string" ? a.mode : "replace";
   return {
     target_var: target,
-    mode: (mode === "replace" || mode === "append" || mode === "prepend"
+    mode: (mode === "replace" || mode === "append" || mode === "prepend" || mode === "negative"
       ? mode
       : "replace") as DerivationAction["mode"],
     value: typeof a.value === "string" ? a.value : "",

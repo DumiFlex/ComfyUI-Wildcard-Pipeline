@@ -3,8 +3,8 @@
  * SelectionToolbar — bulk-action bar shown in the wildcard editor's bulk mode
  * when ≥1 option row is checked. Acts on ALL checked rows at once.
  *
- * Presentational: emits intents (apply-tag / remove-tag / set-weight / delete /
- * clear); the host editor mutates + tracks dirty. Applying a tag that isn't in
+ * Presentational: emits intents (apply-tag / remove-tag / set-weight /
+ * negative-add / negative-replace / negative-clear / delete / clear); the host editor mutates + tracks dirty. Applying a tag that isn't in
  * `tags` is a new sub-category — emitted via apply-tag too; the host decides to
  * auto-create it (in Ungrouped).
  */
@@ -30,8 +30,22 @@ interface Props {
   presentTags?: string[];
   /** tag → axis hue, so menu chips match the pill/chip colours elsewhere. */
   tagHues?: Record<string, string>;
+  /** Show the Negative menu (send-to-negative). */
+  negatives?: boolean;
+  /** How many of the rows the Negative menu acts on already carry one —
+   *  drives the "2 of 3 already have a negative" line. */
+  negativeCount?: number;
+  /** How many rows Add / Replace reach (the null option is skipped).
+   *  Defaults to `count`. */
+  negativeTargets?: number;
 }
-const props = withDefaults(defineProps<Props>(), { reorderable: false, moveArmed: false });
+const props = withDefaults(defineProps<Props>(), {
+  reorderable: false,
+  moveArmed: false,
+  negatives: false,
+  negativeCount: 0,
+  negativeTargets: undefined,
+});
 
 function hueOf(tag: string): string {
   return props.tagHues?.[tag] ?? UNGROUPED_HUE;
@@ -41,6 +55,12 @@ const emit = defineEmits<{
   (e: "apply-tag", tag: string): void;
   (e: "remove-tag", tag: string): void;
   (e: "set-weight", weight: number): void;
+  /** Negative menu: append `words` to each row's negative with ", ". */
+  (e: "negative-add", words: string): void;
+  /** Negative menu: overwrite each row's negative with `words`. */
+  (e: "negative-replace", words: string): void;
+  /** Negative menu: remove the negative from every selected row. */
+  (e: "negative-clear"): void;
   /** Reordering. Separate from the tag/weight actions because they change
    *  ORDER, not content — and separate from Delete because they are not
    *  destructive. `move-here` arms a placement; the host owns that mode. */
@@ -51,9 +71,11 @@ const emit = defineEmits<{
   (e: "clear"): void;
 }>();
 
-type Menu = "apply" | "remove" | "weight" | null;
+type Menu = "apply" | "remove" | "weight" | "negative" | null;
 const openMenu = ref<Menu>(null);
 const newTag = ref("");
+const negWords = ref("");
+const negTargets = computed(() => props.negativeTargets ?? props.count);
 const weight = ref(1);
 const applyFilter = ref("");
 
@@ -61,6 +83,7 @@ function toggle(menu: Exclude<Menu, null>) {
   openMenu.value = openMenu.value === menu ? null : menu;
   newTag.value = "";
   applyFilter.value = "";
+  negWords.value = "";
 }
 function close() { openMenu.value = null; }
 
@@ -110,6 +133,19 @@ function applyNewTag() {
   close();
 }
 function removeTag(tag: string) { emit("remove-tag", tag); close(); }
+function negativeAdd() {
+  const w = negWords.value.trim();
+  if (!w) return;
+  emit("negative-add", w);
+  close();
+}
+function negativeReplace() {
+  const w = negWords.value.trim();
+  if (!w) return;
+  emit("negative-replace", w);
+  close();
+}
+function negativeClear() { emit("negative-clear"); close(); }
 function applyWeight() {
   const n = Number(weight.value);
   if (!Number.isFinite(n) || n < 0) return;
@@ -196,6 +232,55 @@ function applyWeight() {
             @keydown.esc="close"
           />
           <Button variant="primary" size="sm" @click="applyWeight">Apply</Button>
+        </div>
+      </div>
+
+      <!-- Negative (send-to-negative): add to / replace / clear the selected
+           rows' negatives. The null option is skipped by Add / Replace. -->
+      <div v-if="negatives" class="wpc-seltoolbar__menuwrap">
+        <Button
+          variant="ghost" size="sm" icon="pi-minus" icon-right="pi-chevron-down"
+          class="wpc-seltoolbar__negbtn"
+          data-test="sel-negative"
+          @click="toggle('negative')"
+        >Negative</Button>
+        <div v-if="openMenu === 'negative'" class="wpc-seltoolbar__menu wpc-seltoolbar__menu--neg" role="menu">
+          <div class="wpc-seltoolbar__menuhead">Negative for {{ count }} option{{ count === 1 ? "" : "s" }}</div>
+          <div class="wpc-seltoolbar__negrow">
+            <span class="wpc-seltoolbar__negtag" aria-hidden="true">NEG</span>
+            <input
+              v-model="negWords"
+              class="wp-input wp-input--sm wpc-seltoolbar__neginput"
+              placeholder="words to keep out"
+              aria-label="Negative words"
+              data-test="sel-negative-input"
+              @keydown.enter.prevent="negativeAdd"
+              @keydown.esc="close"
+            />
+          </div>
+          <div class="wpc-seltoolbar__negactions">
+            <Button
+              variant="primary" size="sm" data-test="sel-negative-add"
+              :disabled="!negWords.trim() || negTargets === 0"
+              @click="negativeAdd"
+            >Add to each</Button>
+            <Button
+              variant="secondary" size="sm" data-test="sel-negative-replace"
+              :disabled="!negWords.trim() || negTargets === 0"
+              @click="negativeReplace"
+            >Replace</Button>
+            <span class="wpc-seltoolbar__spacer"></span>
+            <Button
+              variant="ghost" size="sm" data-test="sel-negative-clear"
+              :disabled="negativeCount === 0"
+              @click="negativeClear"
+            >Clear</Button>
+          </div>
+          <p class="wpc-seltoolbar__menunote">
+            <template v-if="negativeCount > 0">{{ negativeCount }} of {{ count }} already have a negative. </template>
+            Add to each appends with a comma; Replace overwrites.
+            <template v-if="negTargets < count"> The null option is skipped.</template>
+          </p>
         </div>
       </div>
     </div>
@@ -321,6 +406,34 @@ function applyWeight() {
   color: var(--wp-accent);
   font-weight: 600;
 }
+.wpc-seltoolbar__menu--neg { min-width: 300px; }
+.wpc-seltoolbar__negbtn { color: var(--wp-danger); }
+.wpc-seltoolbar__menuhead {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--wp-text-muted);
+}
+.wpc-seltoolbar__negrow { display: flex; align-items: center; gap: 6px; }
+.wpc-seltoolbar__negtag {
+  flex: none;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: var(--wp-font-mono, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--wp-danger);
+  background: color-mix(in oklab, var(--wp-danger) 14%, transparent);
+}
+.wpc-seltoolbar__neginput {
+  flex: 1;
+  min-width: 0;
+  border-color: color-mix(in oklab, var(--wp-danger) 45%, transparent);
+}
+.wpc-seltoolbar__negactions { display: flex; align-items: center; gap: 6px; }
+.wpc-seltoolbar__menunote { margin: 0; font-size: 12px; line-height: 1.4; color: var(--wp-text-muted); }
 .wpc-seltoolbar__menuempty { padding: 6px 8px; font-size: 12px; color: var(--wp-text-muted); }
 .wpc-seltoolbar__backdrop {
   position: fixed;
