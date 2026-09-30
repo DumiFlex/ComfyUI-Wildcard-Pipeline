@@ -2,6 +2,7 @@
 import { computed, ref, watch } from "vue";
 import { varColorClass } from "../shared/var-color";
 import { modelSyntaxHtml } from "../../widgets/richTokenize";
+import { buildNegativePreview, type NegativesTable } from "../../extension/negatives";
 import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
 import { kindIcon, type WpKind } from "../shared/kind-icons";
 import {
@@ -42,6 +43,11 @@ const props = defineProps<{
    */
   resolved?: string;
   template: string;
+  /** Send-to-negative: the node's `negative_template` value. */
+  negativeTemplate?: string;
+  /** Each variable's negatives (`{binding: [{text, pick}]}`) from the
+   *  preview run, injector rows already folded in. */
+  negatives?: NegativesTable;
   onInsert?: (token: string) => void;
   /** Strip every occurrence of `$varname` from the template. Wired
    *  to the UNRESOLVED chips so users can one-click drop a name
@@ -255,6 +261,41 @@ const previewTokens = computed<PreviewToken[]>(() => {
 
   return [];
 });
+
+// ---------------------------------------------------------------------------
+// Negative preview (send-to-negative)
+// ---------------------------------------------------------------------------
+
+/** Render text's `$vars` the way the prompt preview does (value, index,
+ *  axis); a variable with no value renders nothing, as in the engine. */
+function renderVarsRaw(text: string): string {
+  const map = props.resolvedMap ?? {};
+  return text.replace(TEMPLATE_VAR_RE, (raw) => {
+    const { base, index, axis } = varAccessorParts(raw);
+    if (axis) {
+      const out = axisText(base, axis, index, raw);
+      return out === raw ? "" : out;
+    }
+    return Object.prototype.hasOwnProperty.call(map, base) ? applyVarAccessor(map[base], index) : "";
+  });
+}
+
+/** What the node's `negative` output will be, built locally from the
+ *  negatives of the variables the PROMPT template uses. */
+const negPreview = computed(() =>
+  buildNegativePreview({
+    template: props.template,
+    negativeTemplate: props.negativeTemplate ?? "",
+    resolved: props.resolvedMap ?? {},
+    negatives: props.negatives ?? {},
+    resolveRaw: renderVarsRaw,
+  }),
+);
+
+/** Only worth a row when there is something to show. */
+const showNegative = computed(
+  () => negPreview.value.text !== "" || (props.negativeTemplate ?? "").trim() !== "",
+);
 
 const isResolved = computed(() => {
   if (props.resolvedMap !== undefined) return Object.keys(props.resolvedMap).length > 0;
@@ -538,6 +579,31 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
         </Transition>
       </div>
 
+      <template v-if="showNegative">
+        <div class="wp-asm-section">
+          <span>negative preview</span>
+          <span
+            v-if="negPreview.fromVars.length"
+            class="wp-asm-section-stat wp-asm-section-stat--neg"
+            data-test="asm-neg-count"
+          >{{ negPreview.fromVars.length }} from variables</span>
+        </div>
+        <div class="wp-asm-preview wp-asm-preview--neg" data-test="asm-neg-preview">
+          <span v-if="!negPreview.text" class="wp-asm-preview__ghost">
+            No negatives: none of the variables the prompt uses carries one.
+          </span>
+          <template v-for="(tag, i) in negPreview.tags" v-else :key="i">
+            <span v-if="i > 0" class="literal">, </span>
+            <span
+              v-if="tag.varName"
+              :class="['res', varColorClass(tag.varName)]"
+              :title="`from $${tag.varName}`"
+            >{{ tag.text }}</span>
+            <span v-else class="literal">{{ tag.text }}</span>
+          </template>
+        </div>
+      </template>
+
       </div>
     </Transition>
 
@@ -586,6 +652,12 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
 }
 .wp-asm-section-stat--warn { color: var(--wp-warn); }
 .wp-asm-section-stat.is-ok { color: var(--wp-green); }
+.wp-asm-section-stat--neg {
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: var(--wp-danger);
+  background: color-mix(in srgb, var(--wp-danger) 14%, transparent);
+}
 
 /* Toolbar buttons (Load / Save / Clear) — sit in the variables
  * section header, centered between the label and the upstream-count
@@ -772,6 +844,12 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
 }
 .wp-asm-preview .literal { color: var(--wp-text); }
 .wp-asm-preview .res { font-weight: 600; }
+/* Negative preview: same frame, negative accent. */
+.wp-asm-preview--neg {
+  border-color: color-mix(in srgb, var(--wp-danger) 35%, var(--wp-border));
+}
+.wp-asm-preview--neg .wp-asm-preview__ghost { font-style: italic; }
+
 /* Tokens wrapper is a block `<div>` (not inline, not display:contents)
  * so the Vue Transition can apply transform/opacity to it. Inline
  * elements ignore transform per CSS spec; `display: contents` makes

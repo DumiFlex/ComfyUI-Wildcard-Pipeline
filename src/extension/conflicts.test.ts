@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { scanConflicts, scanInjectorConflicts } from "./conflicts";
+import { scanConflicts, scanInjectorConflicts, scanTemplateConflicts } from "./conflicts";
 import type { ContextWidgetValue, InjectorRowsValue } from "../widgets/_shared";
 
 function injRow(over: Partial<InjectorRowsValue["rows"][number]> = {}): InjectorRowsValue["rows"][number] {
@@ -1687,5 +1687,24 @@ describe("scanConflicts — unknown_tag_axis", () => {
     };
     const out = scanConflicts(value, []);
     expect(out.filter((c) => c.type === "unknown_tag_axis")).toHaveLength(1);
+  });
+});
+
+describe("scanTemplateConflicts — Assembler negative template", () => {
+  it("reports $vars missing from the negative template, never $negatives", () => {
+    const out = scanTemplateConflicts("$hair", ["hair"], "lowres, not $mood, $negatives");
+    expect(out).toEqual([
+      { moduleId: "", variable: "mood", type: "missing_template_variable", severity: "warning" },
+    ]);
+  });
+
+  it("does not report a name twice across the two templates", () => {
+    const out = scanTemplateConflicts("$ghost", [], "$ghost, $negatives");
+    expect(out.map((c) => c.variable)).toEqual(["ghost"]);
+  });
+
+  it("$negatives in the PROMPT template is still an ordinary missing var", () => {
+    const out = scanTemplateConflicts("$negatives", []);
+    expect(out.map((c) => c.variable)).toEqual(["negatives"]);
   });
 });

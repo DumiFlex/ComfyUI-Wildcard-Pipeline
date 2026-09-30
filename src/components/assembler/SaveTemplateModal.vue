@@ -7,6 +7,10 @@ import { pushToast } from "../shared/toast-store";
 const props = defineProps<{
   open: boolean;
   templateString: string;
+  /** The Assembler's negative box. Saved alongside the prompt template
+   *  (an empty box saves as "", which loading applies; only templates saved
+   *  before negatives existed carry none). */
+  negativeTemplate?: string;
   /** Library identity of the template this assembler loaded, if any.
    *  Pre-fills the name and makes "Update existing" target that exact
    *  row even before the same-name collision map resolves. */
@@ -67,6 +71,7 @@ async function submit(mode: "update" | "new") {
     const body = {
       name: name.value.trim(),
       template_string: props.templateString,
+      negative_template: props.negativeTemplate ?? "",
       description: description.value,
       category_id: categoryId.value,
       tags: tagsParsed.value,
@@ -155,6 +160,14 @@ async function submit(mode: "update" | "new") {
         <div class="wp-stm-field">
           <label class="wp-stm-field__label">Template preview</label>
           <pre class="wp-stm-preview" data-test="save-tpl-preview">{{ templateString || "(empty)" }}</pre>
+        </div>
+
+        <div v-if="negativeTemplate" class="wp-stm-field">
+          <label class="wp-stm-field__label wp-stm-field__label--neg">Negative template</label>
+          <pre
+            class="wp-stm-preview wp-stm-preview--neg"
+            data-test="save-tpl-neg-preview"
+          >{{ negativeTemplate }}</pre>
         </div>
 
         <p v-if="errorMsg" class="wp-stm-error" data-test="save-tpl-error">{{ errorMsg }}</p>
@@ -276,6 +289,10 @@ async function submit(mode: "update" | "new") {
   max-height: 110px;
   color: var(--wp-text-muted, #a1a1ad);
 }
+.wp-stm-preview--neg {
+  border-color: color-mix(in srgb, var(--wp-danger) 40%, var(--wp-border, #2a2a3a));
+}
+.wp-stm-field__label--neg { color: var(--wp-danger); }
 .wp-stm-note {
   display: flex;
   align-items: flex-start;

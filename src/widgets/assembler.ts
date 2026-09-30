@@ -6,6 +6,7 @@ import { attachThemeDetector } from "../extension/theme-detector";
 import {
   collectUpstreamChain,
   collectUpstreamInjectorBindings,
+  collectUpstreamInjectorNegatives,
   collectUpstreamKinds,
   collectUpstreamProducers,
   collectUpstreamResolved,
@@ -17,6 +18,7 @@ import {
 import { reactiveFromGraph } from "../extension/reactive";
 import { pushToast } from "../components/shared/toast-store";
 import { templateInsertAtCaret } from "../extension/_stashes";
+import type { NegativesTable } from "../extension/negatives";
 
 const PREVIEW_SEED = 42;
 
@@ -49,6 +51,22 @@ function templateWidget(node: AssemblerNode): { name: string; value: unknown } |
 function templateOf(node: AssemblerNode): string {
   const w = templateWidget(node);
   return typeof w?.value === "string" ? w.value : "";
+}
+
+/** The `negative_template` widget (send-to-negative). Absent on a node
+ *  built before the input existed. */
+function negativeTemplateWidget(node: AssemblerNode): { name: string; value: unknown } | undefined {
+  return node.widgets?.find((x) => x.name === "negative_template");
+}
+
+function negativeTemplateOf(node: AssemblerNode): string {
+  const w = negativeTemplateWidget(node);
+  return typeof w?.value === "string" ? w.value : "";
+}
+
+function writeNegativeTemplate(node: AssemblerNode, next: string) {
+  const w = negativeTemplateWidget(node);
+  if (w) w.value = next;
 }
 
 /** Library identity of the template currently loaded into this
@@ -107,11 +125,17 @@ interface UpstreamSnapshot {
    *  otherwise injector overrides silently render the SHADOWED
    *  upstream value. */
   injectorKeys: string[];
+  /** Send-to-negative: the negative each upstream injector row sets
+   *  (`null` = the row clears the variable's negatives). */
+  injectorNegatives: Record<string, string | null>;
   template: string;
+  negativeTemplate: string;
 }
 
 function snapshotEqual(a: UpstreamSnapshot, b: UpstreamSnapshot): boolean {
   if (a.template !== b.template) return false;
+  if (a.negativeTemplate !== b.negativeTemplate) return false;
+  if (JSON.stringify(a.injectorNegatives) !== JSON.stringify(b.injectorNegatives)) return false;
   if (a.chainKey !== b.chainKey) return false;
   // Injector bindings live in `fallbackResolved` only — the API
   // resolver only knows WP_Context modules, so `chainKey` misses
@@ -262,6 +286,7 @@ export function mountHelper(node: AssemblerNode) {
       const saveOpen = ref(false);
       const loadOpen = ref(false);
       const saveString = ref("");
+      const saveNegative = ref("");
       // Mirrors node.properties.wp_loaded_template into reactive state so
       // the Save modal's "update existing" target tracks load/save live.
       // Seeded from the persisted ref so it survives workflow reload.
@@ -338,7 +363,9 @@ export function mountHelper(node: AssemblerNode) {
             fallbackResolved,
             varAxes,
             injectorKeys: collectUpstreamInjectorBindings(g, node),
+            injectorNegatives: collectUpstreamInjectorNegatives(g, node),
             template: templateOf(node),
+            negativeTemplate: negativeTemplateOf(node),
           };
         },
         snapshotEqual,
@@ -358,6 +385,8 @@ export function mountHelper(node: AssemblerNode) {
       // The rolled axes from the same preview run, so `$var.AXIS` agrees with
       // the values beside it. Replaced wholesale with each response.
       const apiAxes = ref<Record<string, RolledAxes> | null>(null);
+      // Each variable's negatives from the same preview run (send-to-negative).
+      const apiNegatives = ref<NegativesTable | null>(null);
       const apiKey = ref<string>("");
       // Inflight de-dup so a slow fetch from the previous chain doesn't
       // overwrite a fast fetch from the current one.
@@ -382,6 +411,7 @@ export function mountHelper(node: AssemblerNode) {
           .then((body: {
             resolved?: Record<string, ResolvedValue>;
             axes?: Record<string, RolledAxes>;
+            negatives?: NegativesTable;
           } | null) => {
             // Stale-response guard: if another fetch started after us,
             // drop ours so we don't clobber the newer state.
@@ -399,6 +429,12 @@ export function mountHelper(node: AssemblerNode) {
               const axes = typeof body.axes === "object" && body.axes !== null ? body.axes : {};
               if (JSON.stringify(apiAxes.value) !== JSON.stringify(axes)) {
                 apiAxes.value = axes;
+              }
+              const negs = typeof body.negatives === "object" && body.negatives !== null
+                ? body.negatives
+                : {};
+              if (JSON.stringify(apiNegatives.value) !== JSON.stringify(negs)) {
+                apiNegatives.value = negs;
               }
               apiKey.value = key;
             }
@@ -460,6 +496,16 @@ export function mountHelper(node: AssemblerNode) {
           fresh = fallback;
         }
         const template = snapshot.value.template;
+        const negativeTemplate = snapshot.value.negativeTemplate;
+
+        // Each variable's negatives. The preview run only knows Context
+        // modules; an injector row replaces its variable's negatives, so its
+        // own Negative (or none) wins for the keys it writes.
+        const negatives: NegativesTable = { ...(api ? (apiNegatives.value ?? {}) : {}) };
+        for (const [k, text] of Object.entries(snapshot.value.injectorNegatives)) {
+          if (text) negatives[k] = [{ text, pick: null, source: "injector" }];
+          else delete negatives[k];
+        }
 
         // Compute new-layout props ----------------------------------------
         const upstreamVars = Object.keys(fresh);
@@ -511,6 +557,8 @@ export function mountHelper(node: AssemblerNode) {
             upstreamVars,
             templateVars: templateVarsArr,
             template,
+            negativeTemplate,
+            negatives,
             resolvedMap: fresh,
             varAxes: snapshot.value.varAxes,
             rolledAxes: api ? (apiAxes.value ?? undefined) : undefined,
@@ -534,6 +582,7 @@ export function mountHelper(node: AssemblerNode) {
             },
             onSaveTemplate: () => {
               saveString.value = templateOf(node);
+              saveNegative.value = negativeTemplateOf(node);
               saveOpen.value = true;
             },
             onLoadTemplate: () => {
@@ -548,6 +597,7 @@ export function mountHelper(node: AssemblerNode) {
           h(SaveTemplateModal, {
             open: saveOpen.value,
             templateString: saveString.value,
+            negativeTemplate: saveNegative.value,
             loadedRef: loadedRef.value,
             onClose: () => { saveOpen.value = false; },
             onSaved: (row: { id: string; name: string }) => {
@@ -561,17 +611,30 @@ export function mountHelper(node: AssemblerNode) {
           h(LoadTemplateModal, {
             open: loadOpen.value,
             onClose: () => { loadOpen.value = false; },
-            onPick: (row: { id: string; name: string; template_string: string }) => {
+            onPick: (row: {
+              id: string;
+              name: string;
+              template_string: string;
+              negative_template?: string | null;
+            }) => {
               const applyLoad = () => {
                 writeTemplate(node, row.template_string);
+                // A template saved before negatives existed carries none:
+                // leave the negative box as it is rather than blanking it.
+                if (typeof row.negative_template === "string") {
+                  writeNegativeTemplate(node, row.negative_template);
+                }
                 const ref = { id: row.id, name: row.name };
                 setLoadedTemplateRef(node, ref);
                 loadedRef.value = ref;
                 pushToast(`Loaded template “${row.name}”`, { severity: "success" });
               };
               // Confirm only when overwriting non-empty work; loading
-              // onto an empty template applies immediately.
-              if (templateOf(node).trim()) {
+              // onto an empty template applies immediately. The negative box
+              // counts only when the loaded row would overwrite it.
+              const negativeAtRisk =
+                typeof row.negative_template === "string" && negativeTemplateOf(node).trim() !== "";
+              if (templateOf(node).trim() || negativeAtRisk) {
                 askConfirm({
                   title: "Replace the current template?",
                   body: "The assembler's current template will be overwritten by the one you loaded.",

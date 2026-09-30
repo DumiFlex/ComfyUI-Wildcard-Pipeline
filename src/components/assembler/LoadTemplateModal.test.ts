@@ -65,6 +65,23 @@ describe("LoadTemplateModal", () => {
     expect(w.find('[data-test="load-tpl-filter-trigger"]').exists()).toBe(true);
   });
 
+  it("shows a saved negative under the template", async () => {
+    const { api } = await import("../../manager/api/client");
+    (api.templates.list as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      items: [{
+        id: "n1", name: "neg", description: "", category_id: null, tags: [],
+        is_favorite: false, template_string: "$x", negative_template: "lowres, $negatives",
+        created_at: "", updated_at: "",
+      }],
+      total: 1,
+    });
+    const w = mount(LoadTemplateModal, { props: { open: true }, ...stubs });
+    await flushPromises();
+    expect(w.find('[data-test="load-tpl-row-neg"]').text()).toBe("neg: lowres, $negatives");
+    await w.find('[data-test="load-tpl-row"]').trigger("click");
+    expect(w.emitted("pick")?.[0]?.[0]).toMatchObject({ negative_template: "lowres, $negatives" });
+  });
+
   it("shows empty state when none", async () => {
     const { api } = await import("../../manager/api/client");
     (api.templates.list as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ items: [], total: 0 });

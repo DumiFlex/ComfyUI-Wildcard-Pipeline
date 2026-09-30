@@ -494,3 +494,36 @@ describe("AssemblerHelper $var.AXIS preview (tag axes)", () => {
     expect(preview({ template: "$outfit.SHOES", rolledAxes })).toBe("boots");
   });
 });
+
+describe("AssemblerHelper negative preview", () => {
+  const base = {
+    upstreamVars: ["hair", "mood"],
+    resolvedMap: { hair: "red hair", mood: "happy" },
+    negatives: {
+      hair: [{ text: "blonde, lowres", pick: null }],
+      mood: [{ text: "sad", pick: null }],
+    },
+  };
+
+  it("builds the line from the variables the prompt uses, at $negatives", () => {
+    const wrapper = mount(AssemblerHelper, {
+      props: { ...base, template: "$hair", negativeTemplate: "lowres, not $mood, $negatives" },
+    });
+    const line = wrapper.find('[data-test="asm-neg-preview"]');
+    // $mood is only in the NEGATIVE template: its value, never its negatives.
+    expect(line.text()).toBe("lowres, not happy, blonde");
+    expect(wrapper.find('[data-test="asm-neg-count"]').text()).toBe("1 from variables");
+    expect(line.find(`.${varColorClass("hair")}`).text()).toBe("blonde");
+  });
+
+  it("empty negative template is just the words; hidden when nothing to show", () => {
+    const shown = mount(AssemblerHelper, {
+      props: { ...base, template: "$hair, $mood", negativeTemplate: "" },
+    });
+    expect(shown.find('[data-test="asm-neg-preview"]').text()).toBe("blonde, lowres, sad");
+    const hidden = mount(AssemblerHelper, {
+      props: { ...base, template: "a portrait", negativeTemplate: "" },
+    });
+    expect(hidden.find('[data-test="asm-neg-preview"]').exists()).toBe(false);
+  });
+});
