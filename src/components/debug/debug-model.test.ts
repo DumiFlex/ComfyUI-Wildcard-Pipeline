@@ -3,6 +3,7 @@ import {
   WARNING_LABELS,
   buildModel,
   formatValue,
+  negativeLines,
   parseSnapshot,
   reachLabel,
   stepSearchText,
@@ -192,5 +193,57 @@ describe("helpers", () => {
     expect(text).toContain("mood picker");
     expect(text).toContain("$mood");
     expect(text).toContain("calm");
+  });
+});
+
+describe("negatives", () => {
+  const snap = {
+    hair: "strawberry blonde",
+    mood: "gloomy",
+    look: "gloomy strawberry blonde",
+    face: "green eyes",
+    __wp_trace__: [
+      wc("hair0001", "hair", "strawberry blonde"),
+      wc("mood0001", "mood", "gloomy"),
+      {
+        id: "der00001", _uid: "der00001u", type: "derivation", status: "ok", name: "Mood rules", writes: [],
+        detail: { rules: [{ id: "r1", fired: 0, branches: [], action: { target: "mood", mode: "negative", value: "smiling", result: null } }] },
+      },
+    ],
+    __wp_negatives__: {
+      hair: [{ text: "strawberry", pick: 0, source: "hair" }, { text: "fruit", pick: 1, source: "hair" }],
+      mood: [{ text: "bright colors", pick: null, source: "mood" }, { text: "smiling", pick: null, source: "r1:0" }],
+      look: [{ text: "strawberry", pick: null, source: "hair" }],
+      face: [{ text: "deformed eyes", pick: null, source: "injector" }],
+    },
+  };
+
+  it("joins a variable's own entries and names other sources", () => {
+    const m = buildModel(snap);
+    const neg = (name: string) => m.variables.find((v) => v.name === name)?.negatives;
+    expect(neg("hair")).toEqual([{ text: "strawberry, fruit", source: "" }]);
+    expect(neg("mood")).toEqual([{ text: "bright colors", source: "" }, { text: "smiling", source: "Mood rules" }]);
+    expect(neg("look")).toEqual([{ text: "strawberry", source: "$hair" }]);
+    expect(neg("face")).toEqual([{ text: "deformed eyes", source: "Injector" }]);
+    expect(m.negativeCount).toBe(4);
+  });
+
+  it("is empty for a snapshot without the table", () => {
+    const m = buildModel({ a: "1", __wp_trace__: [wc("aaaa0000", "a", "1")] });
+    expect(m.variables[0].negatives).toEqual([]);
+    expect(m.negativeCount).toBe(0);
+  });
+
+  it("skips blank and malformed entries", () => {
+    expect(negativeLines("x", [{ text: "  " }, "junk", { text: "ok", source: "x" }])).toEqual([{ text: "ok", source: "" }]);
+    expect(negativeLines("x", "not a list")).toEqual([]);
+  });
+
+  it("carries a write's negative onto the step", () => {
+    const m = buildModel({
+      __wp_trace__: [wc("hair0001", "hair", "red hair", { writes: [{ variable: "hair", value: "red hair", negative: "blonde" }] })],
+    });
+    expect(m.steps[0].writes[0].negative).toBe("blonde");
+    expect(buildModel({ __wp_trace__: [wc("a", "b", "c")] }).steps[0].writes[0].negative).toBe("");
   });
 });
