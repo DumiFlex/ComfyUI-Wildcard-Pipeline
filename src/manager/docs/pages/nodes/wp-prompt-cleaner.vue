@@ -9,7 +9,7 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
 const ports = [
   { term: "prompt (in)", desc: "The text to clean. Typically from a WP Prompt Assembler, but works with any STRING source." },
   { term: "cleaner widget", desc: "Configure the cleaning rules: pick a mode, set an intensity preset, toggle individual rules on or off, and manage the blocklist. The widget also shows run-stats after each execution." },
-  { term: "negative (in)", desc: "Optional. A negative prompt to clean alongside the prompt — typically the Assembler's negative output. Wire-only; left unwired, the negative output is empty." },
+  { term: "negative (in)", desc: "Optional. A negative prompt to clean alongside the prompt — type it in the box or wire one in, typically the Assembler's negative output. Left empty, the negative output is empty." },
   { term: "prompt (out)", desc: "The cleaned text, ready to wire into a CLIP Text Encode or any other text consumer. Stays output 0." },
   { term: "negative (out)", desc: "The cleaned negative, using the negative column's rules. Wire it into your negative CLIP Text Encode." },
 ];

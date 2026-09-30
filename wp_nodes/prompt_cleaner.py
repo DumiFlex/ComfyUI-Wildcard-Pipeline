@@ -9,7 +9,7 @@ Slots:
 
 Output:
   - prompt   : STRING
-  - negative : STRING ("" when the negative input is unwired)
+  - negative : STRING ("" when the negative input is empty)
 
 No PIPELINE_CONTEXT input — all rules operate on the prompt string +
 widget config alone. The node parses the widget JSON, runs
@@ -61,18 +61,29 @@ class WPPromptCleaner(io.ComfyNode):
                         "duplicates, blocklist — apply on top."
                     ),
                 ),
-                CleanerWidgetInput.Input("wp_cleaner", socketless=True, default="{}"),
-                # Send-to-negative: one node cleans both prompts. Optional and
-                # declared last so existing workflows keep their layout.
+                # Send-to-negative: one node cleans both prompts. Declared
+                # right after `prompt` so the boxes read prompt, negative,
+                # rules. Workflows saved before this carry two positional
+                # widget values; `upgradeLegacyValues` (src/widgets/cleaner.ts)
+                # moves the rules JSON back where it belongs on load.
+                # A text box (like `prompt`) so the node also works on its
+                # own: type or paste a negative, or wire one in.
                 io.String.Input(
                     "negative",
                     optional=True,
-                    force_input=True,
+                    multiline=True,
+                    default="",
                     tooltip=(
-                        "Optional negative prompt, e.g. an Assembler's "
-                        "negative output. Cleaned by the rules' negative "
-                        "column."
+                        "Optional negative prompt. Type it here or wire one "
+                        "in (e.g. an Assembler's negative output). Cleaned "
+                        "by the rules' negative column; left empty, the "
+                        "negative output is empty."
                     ),
+                ),
+                # Optional (execute defaults it) only so it sorts after `negative`:
+                # the frontend lays out required inputs before optional ones.
+                CleanerWidgetInput.Input(
+                    "wp_cleaner", socketless=True, default="{}", optional=True,
                 ),
             ],
             # `prompt` stays at index 0 so existing links keep their slot.
@@ -92,7 +103,7 @@ class WPPromptCleaner(io.ComfyNode):
             "wp_cleaner_char_count": [count_chars(text)],
         }
         neg_text = ""
-        if isinstance(negative, str):
+        if isinstance(negative, str) and negative.strip():
             neg = cleaner.run_negative(negative, cfg, prompt=text)
             neg_text = neg["text"]
             ui_payload["wp_cleaner_negative_report"] = [neg["report"]]

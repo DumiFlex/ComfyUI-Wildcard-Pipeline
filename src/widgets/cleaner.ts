@@ -154,3 +154,26 @@ export function create(node: CleanerHostNode, inputName: string) {
 
   return host;
 }
+
+interface LegacyValuesNode {
+  widgets?: Array<{ name: string; value: unknown }>;
+}
+
+/**
+ * Workflows saved before the Cleaner's negative box existed serialize two
+ * positional widget values, `[prompt, rulesJson]`. The negative box now sits
+ * between them, so positional restore drops the rules JSON into `negative`
+ * and leaves the rules at their defaults. Put both back. Called from the
+ * node's `onConfigure`, which runs after the positional restore. A workflow
+ * restored by name (`widgets_values_named`) is already right.
+ */
+export function upgradeLegacyValues(node: LegacyValuesNode, info: unknown): void {
+  const i = info as { widgets_values?: unknown; widgets_values_named?: unknown } | null;
+  const values = i?.widgets_values;
+  if (!Array.isArray(values) || values.length !== 2 || i?.widgets_values_named) return;
+  const neg = node.widgets?.find((w) => w.name === "negative");
+  const rules = node.widgets?.find((w) => w.name === "wp_cleaner");
+  if (!neg || !rules) return;
+  neg.value = "";
+  rules.value = values[1];
+}

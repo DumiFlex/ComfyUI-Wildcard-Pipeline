@@ -222,6 +222,15 @@ app.registerExtension({
   },
 
   beforeRegisterNodeDef(nodeType: unknown, nodeData: NodeData) {
+    if (nodeData.name === "WP_PromptCleaner") {
+      const ct = nodeType as { prototype: { onConfigure?: (this: unknown, info: unknown) => void } };
+      const origConfigure = ct.prototype.onConfigure;
+      ct.prototype.onConfigure = function (this: unknown, info: unknown) {
+        origConfigure?.call(this, info);
+        cleanerMod.upgradeLegacyValues(this as Parameters<typeof cleanerMod.upgradeLegacyValues>[0], info);
+      };
+      return;
+    }
     if (nodeData.name !== "WP_PromptAssembler") return;
     const nt = nodeType as NodeType;
     const orig = nt.prototype.onNodeCreated;
