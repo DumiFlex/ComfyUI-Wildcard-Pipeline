@@ -79,14 +79,19 @@ const instanceOptions = [
       <p>
         A branch can check more than one thing. Click <b>+ Condition</b> under a test to add
         another; the connector between them reads <b>AND</b> (every test must match) and one click
-        flips it to <b>OR</b> (any test may match). The connector applies to the whole list, so a
-        list is either all AND or all OR.
+        flips it to <b>OR</b> (any test may match).
       </p>
       <p>
-        To mix the two, click <b>+ Group</b>. A group is a boxed list of its own with the opposite
-        connector, so IF <VarToken>$time</VarToken> equals "night" AND (<VarToken>$weather</VarToken>
-        equals "rain" OR <VarToken>$weather</VarToken> equals "fog") is one test plus a group of two.
-        Groups nest up to three levels deep.
+        Each connector flips on its own, and AND binds tighter than OR, the way it reads. Turn the
+        second connector of "a AND b AND c" to OR and you get (a AND b) OR c: the tests still joined
+        by AND are drawn as a boxed group, so the page always shows what runs. Flip it back and the
+        box goes away.
+      </p>
+      <p>
+        You can also build the box yourself with <b>+ Group</b>. A group is a boxed list of its own
+        with the opposite connector, so IF <VarToken>$time</VarToken> equals "night" AND
+        (<VarToken>$weather</VarToken> equals "rain" OR <VarToken>$weather</VarToken> equals "fog")
+        is one test plus a group of two. <b>+ Group</b> nests up to three levels deep.
       </p>
       <DocCallout variant="tip">
         Removing tests until one is left turns the branch back into a plain single test, so a
