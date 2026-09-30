@@ -2,10 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { app } from "#comfyui/app";
 import { focusNode } from "./debug";
 
-type Node = { id: number; type: string; graph?: unknown; subgraph?: unknown; flags?: { collapsed?: boolean }; collapse?: () => void };
+type Node = { id: number | string; type: string; graph?: unknown; subgraph?: unknown; flags?: { collapsed?: boolean }; collapse?: () => void };
 
-function graphOf(nodes: Node[], id?: string) {
-  const g = { id, getNodeById: (n: number) => nodes.find((x) => x.id === n) ?? null };
+type Id = number | string;
+function graphOf(nodes: Array<Node & { id: Id }>, id?: string) {
+  // Same lookup as litegraph: an object keyed by the id as given.
+  const byId: Record<string, Node> = {};
+  for (const n of nodes) byId[String(n.id)] = n;
+  const g = { id, getNodeById: (n: Id) => (Object.prototype.hasOwnProperty.call(byId, n) ? byId[n] : null) };
   for (const n of nodes) n.graph = g;
   return g;
 }
@@ -60,6 +64,15 @@ describe("debug widget: show node", () => {
     expect(canvas.setGraph).toHaveBeenCalledWith(root);
     vi.runAllTimers();
     expect(canvas.centerOnNode).toHaveBeenCalledWith(rootCtx);
+  });
+
+  it("finds nodes whose ids are text, not numbers", () => {
+    const named: Node = { id: "wpctx", type: "WP_Context" };
+    const g = graphOf([named]);
+    holder.graph = g;
+    canvas.graph = g;
+    focusNode("wpctx");
+    expect(canvas.centerOnNode).toHaveBeenCalledWith(named);
   });
 
   it("does nothing for an id that is not in the workflow", () => {

@@ -34,7 +34,12 @@ function findExecNode(id: string): { node: LiteNodeLike; graph: LiteGraphLike } 
   let graph: LiteGraphLike | undefined = findRootGraph(start);
   const path = id.split(":");
   for (let i = 0; graph && i < path.length; i++) {
-    const n = graph.getNodeById(Number(path[i]));
+    // Node ids can be text ("wpctx") in hand-written or converted workflows;
+    // litegraph keys its node map by the id as given, so look up the raw
+    // string first and fall back to the number.
+    const raw = path[i];
+    const n: LiteNodeLike | null = graph.getNodeById(raw as unknown as number)
+      ?? (/^\d+$/.test(raw) ? graph.getNodeById(Number(raw)) : null);
     if (!n) return null;
     if (i === path.length - 1) return { node: n, graph };
     graph = n.subgraph;
