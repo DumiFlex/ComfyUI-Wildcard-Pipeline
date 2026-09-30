@@ -1,8 +1,10 @@
 import { defineStore } from "pinia";
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
+import { useUiStore, type DensityMode } from "./uiStore";
 
 /**
- * Runtime tweaks store — accent palette, density, sidebar mode.
+ * Runtime tweaks store — accent palette and sidebar mode. Density is a
+ * pass-through to the ui store so the panel and Settings share one value.
  *
  * Lets the user A/B different look-and-feel options without rebuilding.
  * Overrides apply via inline CSS variables on `<html>` and persist to
@@ -13,7 +15,7 @@ import { ref, watch } from "vue";
  */
 
 export type AccentName  = "violet" | "indigo" | "teal" | "rose" | "amber" | "custom";
-export type Density     = "compact" | "comfortable" | "cozy";
+export type Density     = DensityMode;
 export type SidebarMode = "expanded" | "collapsed";
 
 const STORAGE_KEY = "wp-tweaks-v1";
@@ -169,15 +171,10 @@ export function paletteFromHex(hex: string): Record<string, string> {
   return out;
 }
 
-const DENSITY_HEIGHT: Record<Density, string> = {
-  compact:     "32px",
-  comfortable: "38px",
-  cozy:        "44px",
-};
-
 interface PersistedShape {
   accent?: AccentName;
   customHex?: string;
+  /** Legacy — density now lives in the ui store, which reads this once. */
   density?: Density;
   sidebarMode?: SidebarMode;
 }
@@ -210,7 +207,10 @@ export const useTweaksStore = defineStore("tweaks", () => {
 
   const accent      = ref<AccentName>(stored.accent ?? "violet");
   const customHex   = ref<string>(stored.customHex ?? DEFAULT_CUSTOM_HEX);
-  const density     = ref<Density>(stored.density ?? "comfortable");
+  // Density moved to the ui store (one setting, shown on the Settings page
+  // and here). This panel still offers it as a quick control.
+  const ui = useUiStore();
+  const density     = computed<Density>(() => ui.density);
   const sidebarMode = ref<SidebarMode>(stored.sidebarMode ?? "expanded");
   const panelOpen   = ref<boolean>(false);
 
@@ -240,21 +240,6 @@ export const useTweaksStore = defineStore("tweaks", () => {
     root.removeAttribute("data-accent");
   }
 
-  function applyDensity(d: Density) {
-    if (!hasDocument()) return;
-    const root = document.documentElement;
-    const h = DENSITY_HEIGHT[d];
-    root.style.setProperty("--wp-input-h", h);
-    root.style.setProperty("--wp-btn-h", h);
-  }
-
-  function clearDensity() {
-    if (!hasDocument()) return;
-    const root = document.documentElement;
-    root.style.removeProperty("--wp-input-h");
-    root.style.removeProperty("--wp-btn-h");
-  }
-
   function setAccent(name: AccentName) {
     accent.value = name;
     applyAccent(name);
@@ -266,8 +251,7 @@ export const useTweaksStore = defineStore("tweaks", () => {
   }
 
   function setDensity(d: Density) {
-    density.value = d;
-    applyDensity(d);
+    ui.setDensity(d);
   }
 
   function setSidebarMode(mode: SidebarMode) {
@@ -285,10 +269,9 @@ export const useTweaksStore = defineStore("tweaks", () => {
   function reset() {
     accent.value = "violet";
     customHex.value = DEFAULT_CUSTOM_HEX;
-    density.value = "comfortable";
+    ui.setDensity("comfortable");
     sidebarMode.value = "expanded";
     clearAccent();
-    clearDensity();
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch {
@@ -299,14 +282,16 @@ export const useTweaksStore = defineStore("tweaks", () => {
   /** Apply persisted overrides on app boot. Idempotent. */
   function initialize() {
     applyAccent(accent.value);
-    applyDensity(density.value);
+    // Re-applies (and, for a value still only in the legacy tweaks blob,
+    // persists under the ui store's own key).
+    ui.setDensity(ui.density);
   }
 
   // Persist on every change to a tracked field.
   watch(
-    [accent, customHex, density, sidebarMode],
-    ([a, c, d, s]) => {
-      writeStored({ accent: a, customHex: c, density: d, sidebarMode: s });
+    [accent, customHex, sidebarMode],
+    ([a, c, s]) => {
+      writeStored({ accent: a, customHex: c, sidebarMode: s });
     },
   );
 

@@ -990,3 +990,20 @@ describe("a11y settings", () => {
     expect(document.body.classList.contains("wp-a11y-no-motion")).toBe(true);
   });
 });
+
+describe("settings catalog matches the registered settings", () => {
+  it("every catalog entry is registered with the same name, type, default and options", async () => {
+    const { buildSettings } = await import("./settings");
+    const { CANVAS_SETTINGS } = await import("./settings-catalog");
+    const registered = new Map(buildSettings({}).map((s) => [s.id, s]));
+    for (const meta of CANVAS_SETTINGS) {
+      const reg = registered.get(meta.id);
+      expect(reg, meta.id).toBeDefined();
+      expect(reg?.name).toBe(meta.name);
+      expect(reg?.type).toBe(meta.type);
+      expect(reg?.defaultValue).toBe(meta.defaultValue);
+      expect(reg?.tooltip).toBe(meta.tooltip);
+      expect(reg?.options).toEqual(meta.options);
+    }
+  });
+});

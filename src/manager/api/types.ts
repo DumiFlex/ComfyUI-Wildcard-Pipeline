@@ -715,6 +715,41 @@ export interface DatabaseConfigUpdate {
   pending_move?: PendingMove | null;
 }
 
+/* ── Backups + server settings ───────────────────────────────────────── */
+
+export type BackupReason = "manual" | "daily" | "pre-migration" | "pre-restore";
+
+export interface BackupEntry {
+  name: string;
+  size: number;
+  /** ISO timestamp (UTC). */
+  created_at: string;
+  reason: BackupReason;
+}
+
+export interface BackupList {
+  dir: string;
+  backups: BackupEntry[];
+  /** Backup name staged to replace the database on the next ComfyUI start. */
+  pending_restore: string | null;
+}
+
+export interface ServerSettings {
+  /** How deep nested @{uuid} references resolve at run time (1–32). */
+  max_ref_depth: number;
+  backups: {
+    enabled: boolean;
+    /** Automatic backups kept; manual ones are never pruned. */
+    keep: number;
+    daily: boolean;
+  };
+}
+
+export interface ServerSettingsPatch {
+  max_ref_depth?: number;
+  backups?: Partial<ServerSettings["backups"]>;
+}
+
 /* ── Tag autocomplete ─────────────────────────────────────────────────── */
 
 /** Danbooru's numeric tag categories. `null` when the installed file is the
