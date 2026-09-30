@@ -3,6 +3,7 @@ import {
   collectDownstreamNestedReachUuids,
   collectDownstreamWildcardUuids,
   collectLocalResolvedForModule,
+  collectUpstreamInjectorNegatives,
   collectUpstreamProducers,
   collectUpstreamRenderableVariables,
   collectUpstreamResolved,
@@ -249,6 +250,31 @@ describe("collectUpstreamProducers", () => {
     const pov = ctxWriting(2, "Other", "unused", 100);
     const out = collectUpstreamProducers(chain([inj, pov], { 100: { origin_id: 1, target_id: 2 } }), pov);
     expect(out.test.nodeLabel).toBe("Scene inputs");
+  });
+
+  it("collectUpstreamInjectorNegatives: a row's negative, or null when it sets none", () => {
+    const inj: LiteNodeLike = {
+      id: 1,
+      type: "WP_ContextInjector",
+      outputs: [{ name: "context", links: [100], type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "wp_rows",
+        value: JSON.stringify({
+          version: 1,
+          rows: [
+            { binding: "character", enabled: true, negative: " modern clothing " },
+            { binding: "plain", enabled: true },
+            { binding: "off", enabled: false, negative: "x" },
+          ],
+        }),
+      }],
+    };
+    const pov = ctxWriting(2, "Other", "unused", 100);
+    const g = chain([inj, pov], { 100: { origin_id: 1, target_id: 2 } });
+    expect(collectUpstreamInjectorNegatives(g, pov)).toEqual({
+      character: "modern clothing",
+      plain: null,
+    });
   });
 
   it("attributes the loop's iteration vars, including the _total pair", () => {

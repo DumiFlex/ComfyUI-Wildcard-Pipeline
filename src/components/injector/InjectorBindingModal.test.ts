@@ -308,6 +308,18 @@ describe("InjectorBindingModal — general (template) row", () => {
     expect(last.template).toBe("prefix $test");
   });
 
+  it("a click outside the insert menu closes it (negative field)", async () => {
+    const w = mountModal(InjectorBindingModal, {
+      props: { row: generalRow(), references: ["input_0"] },
+    });
+    await w.find('[data-test="ibm-neg-insert-slot"]').trigger("click");
+    await nextTick();
+    expect(menuItem("input_0")).not.toBeNull();
+    document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    await nextTick();
+    expect(menuItem("input_0")).toBeNull();
+  });
+
   it("a click outside the insert menu closes it", async () => {
     // The menu had no outside-click dismissal at all — once open, the only
     // way out was picking an item or closing the whole modal.
@@ -334,5 +346,78 @@ describe("InjectorBindingModal — general (template) row", () => {
     await w.find('[data-test="ibm-overlay"]').trigger("keydown", { key: "Escape" });
     expect(menuItem("input_0")).toBeNull();
     expect(w.emitted("cancel")).toBeUndefined();
+  });
+});
+
+describe("InjectorBindingModal — Negative field (send-to-negative)", () => {
+  /** The second RichTextInput is the Negative field. */
+  function negField(w: any) {
+    return w.findAllComponents(RichTextInputStub)[1];
+  }
+  async function typeNegative(w: any, value: string): Promise<void> {
+    negField(w).vm.$emit("update:modelValue", value);
+    await w.vm.$nextTick();
+  }
+  function lastUpdate(w: any): Partial<InjectorRow> {
+    const updates = w.emitted("update")!;
+    return updates[updates.length - 1][0] as Partial<InjectorRow>;
+  }
+
+  it("socket row: shows the saved negative, same $slot suggestions as the template", () => {
+    const w = mountModal(InjectorBindingModal, {
+      props: { row: makeRow({ negative: "modern clothing, $input_0 smiling" }) },
+    });
+    expect(negField(w).props("modelValue")).toBe("modern clothing, $input_0 smiling");
+    expect(negField(w).props("varSuggestions")).toEqual(["input_0"]);
+    expect(negField(w).props("surface")).toBe("assembler");
+  });
+
+  it("Save stores the negative; an emptied one is stored absent", async () => {
+    const w = mountModal(InjectorBindingModal, { props: { row: makeRow() } });
+    await typeNegative(w, "modern clothing");
+    await w.find('[data-test="ibm-save"]').trigger("click");
+    expect(lastUpdate(w).negative).toBe("modern clothing");
+
+    const w2 = mountModal(InjectorBindingModal, { props: { row: makeRow({ negative: "x" }) } });
+    await typeNegative(w2, "   ");
+    await w2.find('[data-test="ibm-save"]').trigger("click");
+    const patch = lastUpdate(w2);
+    expect(patch.negative).toBeUndefined();
+    expect(JSON.parse(JSON.stringify({ ...makeRow({ negative: "x" }), ...patch }))).not.toHaveProperty("negative");
+  });
+
+  it("editing only the negative makes the modal dirty", async () => {
+    const w = mountModal(InjectorBindingModal, { props: { row: makeRow() } });
+    const save = w.find<HTMLButtonElement>('[data-test="ibm-save"]');
+    expect(save.element.disabled).toBe(true);
+    await typeNegative(w, "blurry");
+    expect(save.element.disabled).toBe(false);
+  });
+
+  it("the $slot menu inserts into the negative when opened from it", async () => {
+    const w = mountModal(InjectorBindingModal, {
+      props: { row: makeRow({ kind: "general", slot_name: "", template: "$input_0" }), references: ["input_0"] },
+    });
+    await typeNegative(w, "no");
+    await w.find('[data-test="ibm-neg-insert-slot"]').trigger("click");
+    await nextTick();
+    await clickMenuItem("input_0");
+    expect(negField(w).props("modelValue")).toBe("no $input_0");
+    expect(templateValue(w)).toBe("$input_0");
+  });
+
+  it("preview shows the rendered negative line under the value", async () => {
+    const w = mountModal(InjectorBindingModal, { props: { row: makeRow({ template: "a knight named $input_0" }) } });
+    await typeNegative(w, "modern clothing, $input_0 smiling");
+    const neg = w.find('[data-test="ibm-preview-neg"]');
+    expect(neg.text()).toContain("modern clothing, $input_0 smiling");
+    expect(neg.find(".ibm-tok--ref").text()).toBe("$input_0");
+  });
+
+  it("an internal row says the negative reaches no prompt", () => {
+    const shown = mountModal(InjectorBindingModal, { props: { row: makeRow({ binding: "character" }) } });
+    expect(shown.find('[data-test="ibm-neg-note"]').text()).toContain("$character");
+    const internal = mountModal(InjectorBindingModal, { props: { row: makeRow({ internal: true }) } });
+    expect(internal.find('[data-test="ibm-neg-note"]').text()).toContain("won't reach any prompt");
   });
 });

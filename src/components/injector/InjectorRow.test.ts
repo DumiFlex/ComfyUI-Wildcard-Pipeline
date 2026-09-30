@@ -296,6 +296,21 @@ describe("InjectorRow — collapse / summary (Phase 5)", () => {
     const w2 = mount(InjectorRow, { props: { row: makeRow({ template: null }) } });
     expect(w2.find('[data-test="inj-row-tpl-badge"]').exists()).toBe(false);
   });
+
+  it("NEG badge sits next to the template badge when the row has a negative", () => {
+    const w = mount(InjectorRow, {
+      props: { row: makeRow({ template: "a knight named $input_0", negative: "modern clothing" }) },
+    });
+    expect(w.find('[data-test="inj-row-tpl-badge"]').exists()).toBe(true);
+    const neg = w.find('[data-test="inj-row-neg-badge"]');
+    expect(neg.text()).toBe("neg");
+    expect(neg.attributes("title")).toContain("modern clothing");
+    // A pass-through row can carry a negative too.
+    const pass = mount(InjectorRow, { props: { row: makeRow({ negative: "blurry" }) } });
+    expect(pass.find('[data-test="inj-row-neg-badge"]').exists()).toBe(true);
+    const none = mount(InjectorRow, { props: { row: makeRow({ negative: "  " }) } });
+    expect(none.find('[data-test="inj-row-neg-badge"]').exists()).toBe(false);
+  });
 });
 
 describe("InjectorRow — general (template) row", () => {

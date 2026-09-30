@@ -1165,6 +1165,11 @@ export interface InjectorRow {
    *  inline row template input manages it for general rows. Engine
    *  plumbing lives in wp_nodes/injector_node.py. */
   template?: string | null;
+  /** Send-to-negative: the row's Negative, same `$slot` grammar and scope
+   *  as `template`. The injected value replaces the variable, so this
+   *  replaces the variable's negatives (absent = the variable carries none
+   *  from here on). Stored ABSENT when empty. Engine: injector_node.py. */
+  negative?: string;
   /** Durable copy of the litegraph input pin's custom display label
    *  (the user renamed the socket via its right-click menu). Persisted
    *  here because collapse overwrites `slot.label` with a placeholder
