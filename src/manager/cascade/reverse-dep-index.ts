@@ -121,32 +121,35 @@ export function buildIndex(lib: LibraryFixture): ReverseDepIndex {
     const options = (payload.options as Array<Record<string, unknown>>) || [];
 
     for (const option of options) {
-      const value = option.value as string;
-      if (typeof value === "string") {
-        const refs = extractRefs(value);
-        for (const ref of refs) {
-          const incomingRef: IncomingRef = {
-            from_kind: "wildcard",
-            from_id: wildcard.id,
-            from_name: wildcard.name,
-            ref_path: value,
-          };
-          pushRef(idx.toEntity, ref.uuid, incomingRef);
-          for (const sc of ref.subcats) {
-            pushRef(idx.toSubcat, `${ref.uuid}:${sc}`, incomingRef);
+      // An option's `negative` (send-to-negative) holds refs too; the engine
+      // cascade rewrites both fields, so both count as incoming refs.
+      for (const value of [option.value, option.negative]) {
+        if (typeof value === "string") {
+          const refs = extractRefs(value);
+          for (const ref of refs) {
+            const incomingRef: IncomingRef = {
+              from_kind: "wildcard",
+              from_id: wildcard.id,
+              from_name: wildcard.name,
+              ref_path: value,
+            };
+            pushRef(idx.toEntity, ref.uuid, incomingRef);
+            for (const sc of ref.subcats) {
+              pushRef(idx.toSubcat, `${ref.uuid}:${sc}`, incomingRef);
+            }
           }
-        }
 
-        const vars = extractVars(value);
-        for (const varName of vars) {
-          const varRef: IncomingRef = {
-            from_kind: "wildcard",
-            from_id: wildcard.id,
-            from_name: wildcard.name,
-            ref_path: value,
-          };
-          pushRef(idx.toCombineVar, varName, varRef);
-          pushRef(idx.toFixedValueName, varName, varRef);
+          const vars = extractVars(value);
+          for (const varName of vars) {
+            const varRef: IncomingRef = {
+              from_kind: "wildcard",
+              from_id: wildcard.id,
+              from_name: wildcard.name,
+              ref_path: value,
+            };
+            pushRef(idx.toCombineVar, varName, varRef);
+            pushRef(idx.toFixedValueName, varName, varRef);
+          }
         }
       }
     }

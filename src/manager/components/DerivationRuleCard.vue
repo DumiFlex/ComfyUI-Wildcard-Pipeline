@@ -144,7 +144,17 @@ const MODE_OPTIONS: Array<{ label: string; value: DerivationMode }> = [
   { label: "Replace", value: "replace" },
   { label: "Append", value: "append" },
   { label: "Prepend", value: "prepend" },
+  // Send-to-negative (schema v8): the value goes to the target variable's
+  // negatives; the variable itself is not written.
+  { label: "Add to negative", value: "negative" },
 ];
+
+/** Placeholder for an action value, by mode. */
+function valuePlaceholder(mode: DerivationMode): string {
+  return mode === "negative"
+    ? "Words to add to this variable's negative"
+    : "The new / appended / prepended value";
+}
 
 /** Single-line hint shown below the action value input, listing the
  *  syntax the engine resolves on the derivation surface
@@ -411,14 +421,19 @@ const branchCount = computed(() => rule.value.branches.length);
             :uuid-to-option-tag-sets="uuidToOptionTagSets"
             :uuid-to-tag-groups="uuidToTagGroups"
             class="dvr-value-input"
-            placeholder="The new / appended / prepended value"
+            :class="{ 'dvr-value-input--neg': branch.action.mode === 'negative' }"
+            :placeholder="valuePlaceholder(branch.action.mode)"
             :aria-label="`Action value for rule ${ruleNumber} branch ${bi + 1}`"
             :data-test="`act-value-${index}-${bi}`"
             @update:model-value="(v) => onActionValue(bi, v)"
           />
         </div>
         <div class="dvr-hint" :data-test="`act-hint-${index}-${bi}`">
-          {{ SUPPORTED_SYNTAX_HINT }}
+          <span
+            v-if="branch.action.mode === 'negative'"
+            class="dvr-hint--neg"
+            :data-test="`act-neg-hint-${index}-${bi}`"
+          >Adds to {{ branch.action.target_var ? "$" + branch.action.target_var : "the variable" }}'s negative — its value is not changed. </span>{{ SUPPORTED_SYNTAX_HINT }}
         </div>
         </div>
       </div>
@@ -506,14 +521,19 @@ const branchCount = computed(() => rule.value.branches.length);
             :uuid-to-option-tag-sets="uuidToOptionTagSets"
             :uuid-to-tag-groups="uuidToTagGroups"
             class="dvr-value-input"
-            placeholder="The new / appended / prepended value"
+            :class="{ 'dvr-value-input--neg': rule.else.action.mode === 'negative' }"
+            :placeholder="valuePlaceholder(rule.else.action.mode)"
             :aria-label="`ELSE action value for rule ${ruleNumber}`"
             :data-test="`else-value-${index}`"
             @update:model-value="(v) => onElseValue(v)"
           />
         </div>
         <div class="dvr-hint" :data-test="`else-hint-${index}`">
-          {{ SUPPORTED_SYNTAX_HINT }}
+          <span
+            v-if="rule.else.action.mode === 'negative'"
+            class="dvr-hint--neg"
+            :data-test="`else-neg-hint-${index}`"
+          >Adds to {{ rule.else.action.target_var ? "$" + rule.else.action.target_var : "the variable" }}'s negative — its value is not changed. </span>{{ SUPPORTED_SYNTAX_HINT }}
         </div>
         </div>
       </div>
@@ -602,6 +622,11 @@ const branchCount = computed(() => rule.value.branches.length);
   border-color: color-mix(in srgb, var(--wp-danger, #ef4444) 55%, transparent);
   box-shadow: inset 3px 0 0 var(--wp-danger, #ef4444);
 }
+.dvr-value-input--neg.wp-rt:not(.wp-rt--focused) {
+  border-color: color-mix(in oklab, var(--wp-danger, #ef4444) 45%, transparent);
+  background: color-mix(in oklab, var(--wp-danger, #ef4444) 7%, var(--wp-bg-2));
+}
+.dvr-hint--neg { color: var(--wp-danger, #ef4444); }
 .dvr-broken-mark {
   display: inline-flex;
   align-items: center;

@@ -195,7 +195,20 @@ function validateWildcard(
     issues.push({ severity: "warn", message: "No options - resolves to empty string" });
   }
   for (const [i, o] of opts.entries()) {
-    const opt = o as { value?: unknown; is_null?: unknown };
+    const opt = o as { value?: unknown; is_null?: unknown; negative?: unknown };
+    // Send-to-negative (v8): refs inside an option's negative resolve too
+    // (quietly), so a missing one is as broken as one in the value. Checked
+    // before the null-option skip — the null option may carry a negative.
+    if (typeof opt.negative === "string") {
+      for (const ref of extractRefs(opt.negative)) {
+        if (!idx.byId.has(ref.uuid)) {
+          issues.push({
+            severity: "error",
+            message: `Option ${i + 1} negative: missing ref ${missingRefLabel(ref)}`,
+          });
+        }
+      }
+    }
     // Null option intentionally has value === "". Skip the empty-value
     // warning for it — see
     // docs/superpowers/specs/2026-05-24-null-wildcard-option-design.md.

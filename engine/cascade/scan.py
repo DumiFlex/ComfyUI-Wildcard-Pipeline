@@ -67,11 +67,15 @@ def _scan_wildcard_delete(conn: sqlite3.Connection, wildcard_id: str) -> list[di
         if t == "wildcard":
             opts = p.get("options") or []
             for idx, opt in enumerate(opts):
-                v = opt.get("value")
-                if not isinstance(v, str):
-                    continue
-                if any(m.group(1) == wildcard_id for m in _REF_REGEX.finditer(v)):
-                    out.append(_ref_entry("wildcard", m, f"options[{idx}].value"))
+                hit = next((
+                    f for f in ("value", "negative")
+                    if isinstance(opt.get(f), str) and any(
+                        r.group(1) == wildcard_id
+                        for r in _REF_REGEX.finditer(opt[f])
+                    )
+                ), None)
+                if hit:
+                    out.append(_ref_entry("wildcard", m, f"options[{idx}].{hit}"))
                     break
             continue
 
@@ -150,9 +154,10 @@ def _scan_subcat(
         if m["type"] == "wildcard" and m["id"] != wildcard_id:
             opts = (m.get("payload") or {}).get("options") or []
             for idx, opt in enumerate(opts):
-                v = opt.get("value")
-                if not isinstance(v, str):
-                    continue
+                v = " ".join(
+                    opt[f] for f in ("value", "negative")
+                    if isinstance(opt.get(f), str)
+                )
                 # SP1: `sub` is the raw `:expr` segment (the 4-segment regex
                 # already split `!null` into the null group). A boolean filter
                 # like `warm or cold` references multiple tags, so parse it and
@@ -221,9 +226,12 @@ def _scan_combine_output_var(
             continue
 
         if t == "combine":
-            tpl = p.get("template", "")
-            if isinstance(tpl, str) and var_name in _VAR_REGEX.findall(tpl):
-                out.append(_ref_entry("combine", m, "payload.template"))
+            # A combine's own `negative` reads $vars like its template.
+            for field in ("template", "negative"):
+                tpl = p.get(field, "")
+                if isinstance(tpl, str) and var_name in _VAR_REGEX.findall(tpl):
+                    out.append(_ref_entry("combine", m, f"payload.{field}"))
+                    break
             continue
 
     return out

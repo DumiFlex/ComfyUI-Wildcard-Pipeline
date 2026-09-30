@@ -396,6 +396,9 @@ function opSymbol(op: string | undefined): string {
 function modeLabel(mode: string | undefined): string {
   if (mode === "append") return "+=";
   if (mode === "prepend") return "=+";
+  // Send-to-negative: the value is filed under the variable's negatives;
+  // the variable itself is not written.
+  if (mode === "negative") return "neg +=";
   return "=";
 }
 
@@ -586,7 +589,7 @@ function ruleSummaryText(rule: DerivationRule): string {
                 v-if="rule.branches[0].action?.target_var"
                 :class="['rule-tok-var', varColorClass(rule.branches[0].action.target_var)]"
               >${{ rule.branches[0].action.target_var }}</span>
-              <span class="rule-tok-op">{{ modeLabel(rule.branches[0].action?.mode) }}</span>
+              <span class="rule-tok-op" :class="{ 'rule-tok-op--neg': rule.branches[0].action?.mode === 'negative' }" :title="rule.branches[0].action?.mode === 'negative' ? 'Add to negative — the variable is not changed' : undefined">{{ modeLabel(rule.branches[0].action?.mode) }}</span>
               <span class="rule-tok-val"><RuleValueChips :value="clampPreviewValue(rule.branches[0].action?.value)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
               <!-- Inline ↪#N constraint-pair badge — rendered when this
                    derivation is a constraint carrier through the IF branch's
@@ -684,7 +687,7 @@ function ruleSummaryText(rule: DerivationRule): string {
                   v-if="branch.action?.target_var"
                   :class="['rule-tok-var', varColorClass(branch.action.target_var)]"
                 >${{ branch.action.target_var }}</span>
-                <span class="rule-tok-op">{{ modeLabel(branch.action?.mode) }}</span>
+                <span class="rule-tok-op" :class="{ 'rule-tok-op--neg': branch.action?.mode === 'negative' }" :title="branch.action?.mode === 'negative' ? 'Add to negative — the variable is not changed' : undefined">{{ modeLabel(branch.action?.mode) }}</span>
                 <span class="rule-tok-val"><RuleValueChips :value="clampPreviewValue(branch.action?.value)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
                 <PairBadge
                   v-for="p in pairBadgesFor(rule.id, bi)"
@@ -783,7 +786,7 @@ function ruleSummaryText(rule: DerivationRule): string {
                   v-if="rule.else.action?.target_var"
                   :class="['rule-tok-var', varColorClass(rule.else.action.target_var)]"
                 >${{ rule.else.action.target_var }}</span>
-                <span class="rule-tok-op">{{ modeLabel(rule.else.action?.mode) }}</span>
+                <span class="rule-tok-op" :class="{ 'rule-tok-op--neg': rule.else.action?.mode === 'negative' }" :title="rule.else.action?.mode === 'negative' ? 'Add to negative — the variable is not changed' : undefined">{{ modeLabel(rule.else.action?.mode) }}</span>
                 <span class="rule-tok-val"><RuleValueChips :value="clampPreviewValue(rule.else.action?.value)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
                 <PairBadge
                   v-for="p in pairBadgesFor(rule.id, 'else')"
@@ -1122,6 +1125,7 @@ function ruleSummaryText(rule: DerivationRule): string {
 
 /* Token coloring (re-used from prior list rendering) */
 .rule-tok-var { font-weight: 600; }
+.rule-tok-op--neg { color: var(--wp-danger, #ef4444); }
 .rule-tok-op {
   color: var(--wp-text-dim, var(--wp-text3));
   font-weight: 600;

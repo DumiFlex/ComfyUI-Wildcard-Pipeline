@@ -17,6 +17,7 @@ Lifts arbitrary ComfyUI outputs into named `$variable` bindings on the PipelineC
 2. Each connected slot adds a row. Type the variable name (e.g. `style`).
 3. Optionally tick **internal** to hide it from the assembled prompt while keeping it readable by Combine / Derivation rules.
 4. Optionally write a template (`"I love $input_0"`) — the slot's raw value substitutes `$<slot_name>` before being written to ctx.
+5. Optionally write a **Negative** (row Edit panel, under Template) with the same `$slot` grammar. It replaces the variable's negative words and reaches only Assemblers that render the variable. Template rows take one too.
 
 ## Tips
 

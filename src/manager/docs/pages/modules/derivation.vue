@@ -21,6 +21,7 @@ const actionModes = [
   { term: "Replace", desc: "Overwrite the variable's current value entirely with the action text." },
   { term: "Append", desc: "Add the action text to the end of the variable's current value." },
   { term: "Prepend", desc: "Insert the action text before the variable's current value." },
+  { term: "Add to negative", desc: "Leave the variable's text alone and add the action text to its negative words, so they follow the variable into any Assembler that renders it. The value takes $vars, @{refs} and {a|b}; refs resolve quietly and never change a pick." },
 ];
 
 const instanceOptions = [
@@ -97,6 +98,14 @@ const instanceOptions = [
 
     <DocSection title="Action modes">
       <DocKeyList :items="actionModes" />
+      <DocCallout variant="tip">
+        Negatives travel with the value. Replace swaps the variable's negatives for those of the
+        variables its new text read; Append and Prepend keep the old ones and add. For example,
+        IF <VarToken>$mood</VarToken> equals "gloomy" → Add to negative "bright colors, smiling"
+        keeps smiles out of every image that renders <VarToken>$mood</VarToken>. A derivation that
+        uses Add to negative is shared as schema 8, which older versions refuse with a request to
+        update.
+      </DocCallout>
     </DocSection>
 
     <DocSection title="Nested references in actions">
@@ -158,6 +167,7 @@ const instanceOptions = [
           { id: 'wildcard', label: 'Wildcard', icon: 'pi pi-sparkles', tone: 'wildcard' },
           { id: 'combine', label: 'Combine', icon: 'pi pi-link', tone: 'combine' },
           { id: 'variable-pipeline', label: 'The $variable pipeline', icon: 'pi pi-share-alt', tone: 'neutral' },
+          { id: 'negatives', label: 'Negatives', icon: 'pi pi-minus-circle', tone: 'neutral' },
           { id: 'wp-context', label: 'WP Context', icon: 'pi pi-sitemap', tone: 'node' },
         ]"
       />

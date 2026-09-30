@@ -15,7 +15,8 @@
  *     `target_wildcard_id`), each an 8-hex `ModuleRow.id`. Taken verbatim
  *     (skipping null/empty/whitespace) — same as `dep-graph.ts`.
  *   - nested `@{uuid}` tokens inside resolvable string values (wildcard
- *     option values, derivation action values, constraint exception
+ *     option values AND option negatives, derivation action values —
+ *     including "Add to negative" actions — constraint exception
  *     strings). Scanned with the SAME `REF_TOKEN_RE` the conflict scanner
  *     uses (`@\{[0-9a-f]{8}…\}`) — one shared 8-hex token regex, never a
  *     forked copy. Combine templates are intentionally NOT scanned: the
@@ -94,7 +95,13 @@ export function listReferencedUuids(module: ReferencingModule): string[] {
     }
     case "wildcard": {
       const wp = payload as Partial<WildcardPayload>;
-      for (const opt of wp.options ?? []) collectNestedRefs(opt?.value, refs);
+      for (const opt of wp.options ?? []) {
+        collectNestedRefs(opt?.value, refs);
+        // Send-to-negative (v8): an option's negative shares the value's
+        // grammar, so its `@{}` refs are dependencies too — the engine
+        // resolves them (quietly) and a download without them breaks.
+        collectNestedRefs(opt?.negative, refs);
+      }
       break;
     }
     case "derivation": {

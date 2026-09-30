@@ -897,6 +897,18 @@ describe("collectUpstreamResolved derivation condition groups", () => {
     expect(collectUpstreamResolved(groupGraph({ var: "time", op: "is_not_empty", value: "" }), asm).light).toBe("soft");
     expect(collectUpstreamResolved(groupGraph({ var: "time", op: "is_empty", value: "" }), asm).light).toBe("hard");
   });
+
+  it("an \"Add to negative\" action leaves the variable's value alone", () => {
+    const g = groupGraph(mood);
+    const ctxNode = g._nodes[0];
+    const mods = JSON.parse(String(ctxNode.widgets![0].value));
+    mods.modules[2].payload.rules[0].branches[0].action = {
+      target_var: "mood", mode: "negative", value: "bright colors",
+    };
+    ctxNode.widgets![0].value = JSON.stringify(mods);
+    const out = collectUpstreamResolved(g, asm);
+    expect(out.mood).toBe("calm");
+  });
 });
 
 describe("collectUpstreamResolved nested @{uuid} fallback", () => {

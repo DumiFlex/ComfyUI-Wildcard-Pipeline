@@ -22,6 +22,17 @@ describe("OptionRow", () => {
     expect(chip.text().toLowerCase()).toBe("warm");
   });
 
+  it("shows a read-only NEG hint only when the option carries a negative", () => {
+    const plain = mount(OptionRow, { props: { option: baseOption, allOptions, instance: {} } });
+    expect(plain.find('[data-test="opt-neg"]').exists()).toBe(false);
+    const opt = { ...baseOption, negative: "strawberry, fruit" };
+    const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
+    const hint = w.get('[data-test="opt-neg"]');
+    expect(hint.text()).toBe("NEG");
+    expect(hint.attributes("title")).toContain("strawberry, fruit");
+    expect(hint.element.tagName).toBe("SPAN");
+  });
+
   it("renders multiple category chips for a multi-tag option", () => {
     const opt = { id: "m", value: "lynx", weight: 1, sub_categories: ["feline", "warm"] };
     const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });

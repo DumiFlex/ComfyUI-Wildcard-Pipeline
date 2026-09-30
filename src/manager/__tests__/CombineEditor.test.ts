@@ -147,4 +147,54 @@ describe("CombineEditor.vue", () => {
     // Header count reflects the dedup'd $var count.
     expect(wrap.text()).toContain("Detected inputs (2)");
   });
+
+  it("Negative: saved when set, absent when blank; Carries lists library negatives", async () => {
+    apiMod.list.mockResolvedValue({
+      items: [{
+        id: "aaaaaaaa", name: "Hair", description: "", category_id: null, tags: [], type: "wildcard",
+        payload: { var_binding: "hair", options: [{ id: "o1", value: "strawberry blonde", weight: 1, negative: "strawberry, fruit" }] },
+        version: 1, created_at: "", updated_at: "", is_favorite: false,
+      }],
+      total: 1,
+    });
+    apiMod.create.mockResolvedValue({
+      id: "cb_new", name: "Scene", description: "", category_id: null, tags: [], type: "combine",
+      payload: {}, version: 1, created_at: "", updated_at: "", is_favorite: false,
+    });
+    const wrap = mount(CombineEditor, { global: { plugins: [makeRouter()] } });
+    await flushPromises();
+    await wrap.find('[data-test="identity-name"]').setValue("Scene");
+    const [template, negative] = wrap.findAllComponents(RichTextInput);
+    template.vm.$emit("update:modelValue", "$hair hair, standing");
+    await flushPromises();
+    expect(wrap.get('[data-test="cb-carries"]').text()).toContain("strawberry, fruit");
+    expect(wrap.get('[data-test="cb-carries"]').text()).toContain("from $hair");
+
+    negative.vm.$emit("update:modelValue", "cropped, out of frame");
+    await flushPromises();
+    expect(wrap.get('[data-test="cb-carries"]').text()).toContain("own");
+    await wrap.find('[data-test="save-btn"]').trigger("click");
+    await flushPromises();
+    const arg = apiMod.create.mock.calls[0][0] as { payload: { negative?: string } };
+    expect(arg.payload.negative).toBe("cropped, out of frame");
+  });
+
+  it("a blank Negative is not written to the payload", async () => {
+    apiMod.create.mockResolvedValue({
+      id: "cb_new", name: "Scene", description: "", category_id: null, tags: [], type: "combine",
+      payload: {}, version: 1, created_at: "", updated_at: "", is_favorite: false,
+    });
+    const wrap = mount(CombineEditor, { global: { plugins: [makeRouter()] } });
+    await flushPromises();
+    await wrap.find('[data-test="identity-name"]').setValue("Scene");
+    const [template, negative] = wrap.findAllComponents(RichTextInput);
+    template.vm.$emit("update:modelValue", "$x");
+    negative.vm.$emit("update:modelValue", "   ");
+    await flushPromises();
+    expect(wrap.find('[data-test="cb-carries"]').exists()).toBe(false);
+    await wrap.find('[data-test="save-btn"]').trigger("click");
+    await flushPromises();
+    const arg = apiMod.create.mock.calls[0][0] as { payload: Record<string, unknown> };
+    expect("negative" in arg.payload).toBe(false);
+  });
 });

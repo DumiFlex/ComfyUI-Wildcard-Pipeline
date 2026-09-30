@@ -472,7 +472,18 @@ export interface ScenarioRunRequest {
 /** A multi-pick variable keeps its items so `$name.K` can index it. */
 export type ScenarioValue = string | { items: string[]; sep: string };
 
-export interface ScenarioTraceWrite { variable: string; value: ScenarioValue; overwrite: boolean }
+export interface ScenarioTraceWrite {
+  variable: string;
+  value: ScenarioValue;
+  overwrite: boolean;
+  /** The joined negatives the variable carries after this write (only when non-empty). */
+  negative?: string;
+}
+
+/** One negative entry filed under a variable (send-to-negative). `source`
+ *  is the binding it came from (or a derivation carrier key / "injector");
+ *  `pick` the multi-pick slot, null for the whole value. */
+export interface ScenarioNegativeEntry { text: string; pick: number | null; source: string }
 
 /** A nested `@{ref}` pick made while a module resolved, in pre-order;
  *  `depth` 0 is a ref written directly in the module's own option. */
@@ -510,6 +521,8 @@ export interface ScenarioSample {
   vars: Record<string, ScenarioValue>;
   trace: ScenarioTraceRow[];
   warnings: ScenarioWarning[];
+  /** Each variable's negatives on this seed; absent from older servers. */
+  negatives?: Record<string, ScenarioNegativeEntry[]>;
   error: string | null;
 }
 
@@ -548,8 +561,14 @@ export interface ScenarioRunResponse {
   missing: { kind: "module" | "bundle"; id: string }[];
   pins: Record<string, string>;
   /** Per-seed values of the requested `track` variables (null when none were
-   *  asked for); `values[name][i]` belongs to `seeds[i]`, null = unset/failed. */
-  tracked?: { seeds: number[]; values: Record<string, (string | null)[]> } | null;
+   *  asked for); `values[name][i]` belongs to `seeds[i]`, null = unset/failed.
+   *  `negatives` is the same per-seed list of each variable's joined negative
+   *  ("" = none); absent from older servers. */
+  tracked?: {
+    seeds: number[];
+    values: Record<string, (string | null)[]>;
+    negatives?: Record<string, (string | null)[]>;
+  } | null;
 }
 
 /** A saved Test Runner scenario — GET/POST/PUT /wp/api/test/scenarios. */

@@ -52,4 +52,26 @@ describe("DebugStepDetail derivation rules", () => {
     expect(w.find('[data-test="dbg-rule-action"]').text()).toContain(", rain");
     expect(w.find('[data-test="dbg-rule-result"]').text()).toContain("glow, rain");
   });
+
+  it("shows an Add to negative action as `negative:` with no result line", () => {
+    const model = buildModel({
+      __wp_trace__: [{
+        id: "d0000002", type: "derivation", status: "ok", name: "Mood rules", writes: [],
+        detail: { rules: [{
+          id: "r1", fired: 0, has_else: false,
+          branches: [{ index: 0, matched: true, condition: leaf("night", true) }],
+          action: { target: "mood", mode: "negative", value: "smiling", result: null },
+        }] },
+      }],
+    });
+    const w = mount(DebugStepDetail, {
+      props: { step: model.steps[0], warnings: [], uuidToName: new Map(), uuidToKind: new Map(), canFocus: false },
+    });
+    const action = w.find('[data-test="dbg-rule-action"]');
+    expect(action.find('[data-test="dbg-rule-mode"]').text()).toBe("negative:");
+    expect(action.find('[data-test="dbg-rule-mode"]').classes()).toContain("wp-dbg-neg-mode");
+    expect(action.text()).toContain("smiling");
+    expect(action.text()).not.toContain("=");
+    expect(w.find('[data-test="dbg-rule-result"]').exists()).toBe(false);
+  });
 });

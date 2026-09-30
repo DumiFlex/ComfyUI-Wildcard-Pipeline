@@ -1,7 +1,7 @@
 /**
  * Outgoing-direction dependency graph computed from a parsed payload.
  *
- *   - Wildcard option value `@{id}` refs → outgoing edge
+ *   - Wildcard option value + option negative `@{id}` refs → outgoing edge
  *   - Bundle children[].id (for bundle-typed children, tier-2 refs) → outgoing edge
  *   - Constraint payload.source_wildcard_id + payload.target_wildcard_id → outgoing edges
  *
@@ -46,14 +46,19 @@ export function buildDepGraph(payload: RawPayload): DepGraph {
     // Without the fallback, the Import side's "Requires N" amber chip
     // never fires because every wildcard reports zero outgoing edges.
     const topLevelOptions =
-      (w as { options?: Array<{ value: string }> }).options;
+      (w as { options?: Array<{ value: string; negative?: unknown }> }).options;
     const nestedOptions =
-      (w as { payload?: { options?: Array<{ value: string }> } }).payload?.options;
+      (w as { payload?: { options?: Array<{ value: string; negative?: unknown }> } }).payload?.options;
     const options = topLevelOptions ?? nestedOptions ?? [];
     for (const opt of options) {
       // Guard against malformed payloads where opt.value may be null,
       // undefined, or non-string. The cast above asserts `string` but does
       // not enforce it, so skip non-string values defensively.
+      // An option's negative (send-to-negative, v8) shares the value's
+      // grammar; its `@{}` refs are dependencies too.
+      if (typeof opt?.negative === "string") {
+        for (const ref of extractRefsFromText(opt.negative)) edges.add(ref);
+      }
       if (typeof opt?.value !== "string") continue;
       for (const ref of extractRefsFromText(opt.value)) edges.add(ref);
     }
