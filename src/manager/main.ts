@@ -6,6 +6,7 @@ import "./styles/rich-text.css";
 import "./styles/tailwind.css";
 import App from "./App.vue";
 import router from "./router";
+import { installStartPage } from "./router/start-page";
 import { useUiStore } from "./stores/uiStore";
 import { useTweaksStore } from "./stores/tweaksStore";
 import { api as managerApi } from "./api/client";
@@ -32,6 +33,7 @@ useUiStore(pinia).initializeTheme();
 // Apply persisted runtime tweaks (accent palette, density) before mount so
 // CSS-var overrides land before the first paint and we don't flash defaults.
 useTweaksStore(pinia).initialize();
+installStartPage(router, __APP_VERSION__);
 app.mount("#app");
 
 /* ────────────────────────────────────────────────────────────────

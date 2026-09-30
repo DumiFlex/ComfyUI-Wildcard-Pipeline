@@ -95,15 +95,16 @@ describe("tweaksStore — reset", () => {
     expect(tweaks.accent).toBe("violet");
     expect(tweaks.density).toBe("comfortable");
     expect(document.documentElement.style.getPropertyValue("--wp-accent-500")).toBe("");
-    expect(document.documentElement.style.getPropertyValue("--wp-input-h")).toBe("");
+    // Density is the ui store's now; reset puts it back to comfortable.
+    expect(document.documentElement.style.getPropertyValue("--wp-input-h")).toBe("38px");
     // Watcher writes the post-reset state, so the key may exist with the
     // default snapshot; only assert it doesn't carry the prior amber accent.
     const raw = localStorage.getItem("wp-tweaks-v1");
     if (raw) {
       const parsed = JSON.parse(raw);
       expect(parsed.accent).toBe("violet");
-      expect(parsed.density).toBe("comfortable");
     }
+    expect(localStorage.getItem("wp-density-mode")).toBe("comfortable");
   });
 });
 

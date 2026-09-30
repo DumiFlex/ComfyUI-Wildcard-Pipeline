@@ -18,7 +18,9 @@ import { describe, expect, it } from "vitest";
 const read = (rel: string) =>
   readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
-const settingsSrc = read("../../../extension/settings.ts");
+// Ids live in settings-catalog.ts (plain data the manager also reads) and are
+// registered by settings.ts; read both so either spelling site is covered.
+const settingsSrc = read("../../../extension/settings.ts") + read("../../../extension/settings-catalog.ts");
 const playgroundSrc = read("../DisplayPlaygroundModal.vue");
 const storeSrc = read("../playground-store.ts");
 

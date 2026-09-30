@@ -1,15 +1,16 @@
 <script setup lang="ts">
 /**
- * Database card — read-only info (path/file/counts/schema) + maintenance
- * ops (VACUUM, integrity, ANALYZE, migrate). Each op runs through the
+ * Database card — a stats strip up top, then the reference detail
+ * (path/file/counts/schema) and the maintenance ops (VACUUM, integrity,
+ * ANALYZE, migrate) folded away underneath. Each op runs through the
  * three-phase MaintenanceOpModal. While `runningOp` is set, all other
- * op buttons are disabled to prevent concurrent runs.
+ * op buttons are disabled to prevent concurrent runs. The location picker
+ * lives beside this card on the Library & data section.
  */
 import { computed, onMounted, ref } from "vue";
 import Button from "../ui/Button.vue";
 import Card from "../ui/Card.vue";
 import Icon from "../ui/Icon.vue";
-import LocationSection from "./LocationSection.vue";
 import MaintenanceOpModal from "./MaintenanceOpModal.vue";
 import ConfirmDialog from "../../../components/shared/ConfirmDialog.vue";
 import { useDatabaseStore } from "../../stores/databaseStore";
@@ -112,6 +113,10 @@ function formatBytes(n: number): string {
   return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
+const totalRows = computed(() =>
+  store.info ? Object.values(store.info.counts).reduce((n, c) => n + (Number(c) || 0), 0) : 0,
+);
+
 function formatDate(iso: string): string {
   if (!iso) return "—";
   try {
@@ -152,41 +157,51 @@ onMounted(() => {
     </div>
 
     <div v-else-if="store.info">
-      <section class="wp-db__section">
-        <h3 class="wp-db__section-title">File</h3>
-        <dl class="wp-db__rows">
-          <div class="wp-db__row"><dt>Path</dt><dd class="wp-mono">{{ store.info.path }}</dd></div>
-          <div class="wp-db__row"><dt>Source</dt><dd><span class="wp-db__chip">{{ store.info.source }}</span></dd></div>
-          <div class="wp-db__row"><dt>Size</dt><dd>{{ formatBytes(store.info.size_bytes) }}</dd></div>
-          <div class="wp-db__row"><dt>Last modified</dt><dd>{{ formatDate(store.info.mtime_iso) }}</dd></div>
-        </dl>
-      </section>
+      <div class="wp-db__stats" data-test="database-stats">
+        <div class="wp-db__stat"><b>{{ formatBytes(store.info.size_bytes) }}</b><span>on disk</span></div>
+        <div class="wp-db__stat"><b>{{ totalRows.toLocaleString() }}</b><span>library rows</span></div>
+        <div class="wp-db__stat"><b>v{{ store.info.migration.current_version }}</b><span>schema · {{ store.info.pragma.journal_mode }}</span></div>
+        <div class="wp-db__stat"><b>{{ formatDate(store.info.mtime_iso) }}</b><span>last modified</span></div>
+      </div>
 
-      <LocationSection />
+      <!-- Reference detail most people never need. <details> rather than v-if
+           so it is still in the page for search-in-page and tests. -->
+      <details class="wp-db__details">
+        <summary>File, row counts and schema</summary>
+        <section class="wp-db__section">
+          <h3 class="wp-db__section-title">File</h3>
+          <dl class="wp-db__rows">
+            <div class="wp-db__row"><dt>Path</dt><dd class="wp-mono">{{ store.info.path }}</dd></div>
+            <div class="wp-db__row"><dt>Source</dt><dd><span class="wp-db__chip">{{ store.info.source }}</span></dd></div>
+            <div class="wp-db__row"><dt>Size</dt><dd>{{ formatBytes(store.info.size_bytes) }}</dd></div>
+            <div class="wp-db__row"><dt>Last modified</dt><dd>{{ formatDate(store.info.mtime_iso) }}</dd></div>
+          </dl>
+        </section>
 
-      <section class="wp-db__section">
-        <h3 class="wp-db__section-title">Row counts</h3>
-        <dl class="wp-db__rows wp-db__rows--grid">
-          <div class="wp-db__row" v-for="[kind, n] in Object.entries(store.info.counts)" :key="kind">
-            <dt>{{ kind }}</dt><dd>{{ n }}</dd>
-          </div>
-        </dl>
-      </section>
+        <section class="wp-db__section">
+          <h3 class="wp-db__section-title">Row counts</h3>
+          <dl class="wp-db__rows wp-db__rows--grid">
+            <div class="wp-db__row" v-for="[kind, n] in Object.entries(store.info.counts)" :key="kind">
+              <dt>{{ kind }}</dt><dd>{{ n }}</dd>
+            </div>
+          </dl>
+        </section>
 
-      <section class="wp-db__section">
-        <h3 class="wp-db__section-title">Schema</h3>
-        <dl class="wp-db__rows">
-          <div class="wp-db__row"><dt>Migration version</dt><dd>v{{ store.info.migration.current_version }}</dd></div>
-          <div class="wp-db__row"><dt>Journal mode</dt><dd>{{ store.info.pragma.journal_mode }}</dd></div>
-          <div class="wp-db__row"><dt>Foreign keys</dt><dd>{{ store.info.pragma.foreign_keys ? "on" : "off" }}</dd></div>
-          <div class="wp-db__row"><dt>Page size</dt><dd>{{ store.info.pragma.page_size }} B</dd></div>
-          <div class="wp-db__row"><dt>Page count</dt><dd>{{ store.info.pragma.page_count }}</dd></div>
-          <div class="wp-db__row"><dt>Free pages</dt><dd>{{ store.info.pragma.freelist_count }}</dd></div>
-        </dl>
-      </section>
+        <section class="wp-db__section">
+          <h3 class="wp-db__section-title">Schema</h3>
+          <dl class="wp-db__rows">
+            <div class="wp-db__row"><dt>Migration version</dt><dd>v{{ store.info.migration.current_version }}</dd></div>
+            <div class="wp-db__row"><dt>Journal mode</dt><dd>{{ store.info.pragma.journal_mode }}</dd></div>
+            <div class="wp-db__row"><dt>Foreign keys</dt><dd>{{ store.info.pragma.foreign_keys ? "on" : "off" }}</dd></div>
+            <div class="wp-db__row"><dt>Page size</dt><dd>{{ store.info.pragma.page_size }} B</dd></div>
+            <div class="wp-db__row"><dt>Page count</dt><dd>{{ store.info.pragma.page_count }}</dd></div>
+            <div class="wp-db__row"><dt>Free pages</dt><dd>{{ store.info.pragma.freelist_count }}</dd></div>
+          </dl>
+        </section>
+      </details>
 
-      <section class="wp-db__section">
-        <h3 class="wp-db__section-title">Maintenance</h3>
+      <details id="db-maintenance" class="wp-db__details" data-setting="db-maintenance">
+        <summary>Maintenance</summary>
         <div class="wp-db__ops">
           <div v-for="spec in OPS" :key="spec.op" class="wp-db__op-row">
             <div class="wp-db__op-info">
@@ -204,7 +219,7 @@ onMounted(() => {
             <div class="wp-db__op-info">
               <p class="wp-db__op-name"><Icon name="pi-power-off" />Restart ComfyUI</p>
               <p class="wp-db__op-desc">
-                Restart the host process via ComfyUI Manager. Required to apply pending DB moves.
+                Restart the host process via ComfyUI Manager. Needed to apply a pending move or restore.
               </p>
             </div>
             <Button
@@ -217,7 +232,7 @@ onMounted(() => {
             >Restart</Button>
           </div>
         </div>
-      </section>
+      </details>
     </div>
 
     <MaintenanceOpModal
@@ -247,6 +262,36 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.wp-db__stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--wp-space-4);
+  margin-bottom: var(--wp-space-5);
+}
+.wp-db__stat {
+  background: var(--wp-bg-3);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius);
+  padding: var(--wp-space-4) var(--wp-space-5);
+  min-width: 0;
+}
+.wp-db__stat b { display: block; font-size: 15px; color: var(--wp-text); overflow-wrap: anywhere; }
+.wp-db__stat span { font-size: 11.5px; color: var(--wp-text-dim); }
+@media (max-width: 720px) { .wp-db__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.wp-db__details {
+  border-top: 1px solid var(--wp-border);
+  padding: var(--wp-space-4) 0;
+}
+.wp-db__details:last-child { padding-bottom: 0; }
+.wp-db__details > summary {
+  cursor: pointer;
+  font-size: var(--wp-text-sm);
+  font-weight: 600;
+  color: var(--wp-text-muted);
+  list-style-position: inside;
+}
+.wp-db__details > summary:hover { color: var(--wp-text); }
+.wp-db__details[open] > summary { margin-bottom: var(--wp-space-5); }
 .wp-db__section { margin-bottom: var(--wp-space-6); }
 .wp-db__section:last-child { margin-bottom: 0; }
 .wp-db__section-title {

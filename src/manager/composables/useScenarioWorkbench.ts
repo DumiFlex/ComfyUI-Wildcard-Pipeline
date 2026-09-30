@@ -16,8 +16,8 @@ import type {
   ScenarioStackItem,
 } from "../api/types";
 import { useToast } from "./useToast";
+import { readTestRunnerDefaults } from "../stores/uiStore";
 import {
-  DEFAULT_SEEDS,
   defaultOutputVar,
   describeItem,
   lastRunSummary,
@@ -48,8 +48,14 @@ export interface ScenarioDraft {
 /** Samples returned in full per run; counts always cover every seed. */
 export const SAMPLE_LIMIT = 200;
 
+/** Seeds a new scenario starts with: Settings › Test Runner, else 0..99. */
+function defaultSeeds(): ScenarioSeedSpec {
+  const d = readTestRunnerDefaults();
+  return d.mode === "random" ? { random: true, count: d.count } : { from: d.from, count: d.count };
+}
+
 function emptyDraft(name = "Quick run"): ScenarioDraft {
-  return { id: null, name, is_pinned: false, stack: [], pins: {}, seeds: { ...DEFAULT_SEEDS }, output_var: null };
+  return { id: null, name, is_pinned: false, stack: [], pins: {}, seeds: defaultSeeds(), output_var: null };
 }
 
 function draftFromRow(row: ScenarioRow): ScenarioDraft {

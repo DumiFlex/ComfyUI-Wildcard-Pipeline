@@ -3,6 +3,7 @@ import type {
   BundleCreateInput, BundleListResponse, BundleRow, BundleUpdateInput,
   CategoryCreateInput, CategoryRow,
   DatabaseConfig, DatabaseConfigUpdate,
+  BackupEntry, BackupList, ServerSettings, ServerSettingsPatch,
   TagStatus, TagSuggestResponse, TagDownloadResult, LibraryTagUpdateCounts,
   ModelKind, ModelSourceStatus, ModelSuggestResponse,
   DatabaseInfo, MaintenanceOp, MaintenanceResult,
@@ -342,6 +343,37 @@ export const api = {
     clearPendingMove() {
       return request<DatabaseConfig>("/wp/api/database/config/pending-move", {
         method: "DELETE",
+      });
+    },
+    backups() {
+      return request<BackupList>("/wp/api/database/backups", { method: "GET" });
+    },
+    createBackup() {
+      return request<BackupEntry>("/wp/api/database/backups", { method: "POST" });
+    },
+    deleteBackup(name: string) {
+      return request<void>(`/wp/api/database/backups/${encodeURIComponent(name)}`, { method: "DELETE" });
+    },
+    stageRestore(name: string) {
+      return request<{ pending_restore: string }>("/wp/api/database/backups/restore", {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      });
+    },
+    cancelRestore() {
+      return request<void>("/wp/api/database/backups/restore", { method: "DELETE" });
+    },
+  },
+  /** Server-side preferences: the ones the engine or the server itself acts
+   *  on (ref recursion limit, backups), shared by every browser. */
+  serverSettings: {
+    get() {
+      return request<ServerSettings>("/wp/api/settings", { method: "GET" });
+    },
+    update(patch: ServerSettingsPatch) {
+      return request<ServerSettings>("/wp/api/settings", {
+        method: "PUT",
+        body: JSON.stringify(patch),
       });
     },
   },
