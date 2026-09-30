@@ -8,7 +8,7 @@ import {
 import { varBaseName } from "../widgets/richTokenize";
 import { computePairingsFull, type ChainModule } from "./constraint-pairs";
 import { conditionLeaves } from "./derivation-conditions";
-import { NEGATIVES_VAR } from "./negatives";
+import { NEGATIVES_VAR } from "./assembler-vars";
 
 /** Resolve a module's effective var-binding name. Mirrors engine
  *  precedence: per-instance override (`instance.variable_binding`)

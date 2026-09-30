@@ -19,6 +19,7 @@
  * Pure module: no DOM, no graph.
  */
 import { applyVarAccessor, varAccessorParts, type ResolvedValue } from "../widgets/richTokenize";
+import { NEGATIVES_VAR } from "./assembler-vars";
 
 export interface NegativeEntry {
   text: string;
@@ -32,8 +33,9 @@ export type NegativesTable = Record<string, NegativeEntry[]>;
 
 /** The reserved slot in the Assembler's negative template. */
 export const NEGATIVES_SLOT = "$negatives";
-/** Its bare name, for `$` suggestion lists and missing-var scans. */
-export const NEGATIVES_VAR = "negatives";
+/** Its bare name, for `$` suggestion lists and missing-var scans. Lives in
+ *  the small startup-side module; re-exported here for convenience. */
+export { NEGATIVES_VAR, missingAssemblerVars } from "./assembler-vars";
 
 const WEIGHT_WRAP = /^\(+\s*(.*?)\s*(?::\s*[0-9.]+)?\s*\)+$/;
 const SLOT_RE = /\$negatives(?![A-Za-z0-9_])/;
@@ -229,33 +231,6 @@ export function buildNegativePreview(opts: {
     return varName ? { text: t, varName } : { text: t };
   });
   return { text, tags, fromVars: [...fromVars] };
-}
-
-const BARE_VAR_RE = /(?<!\$)\$([A-Za-z_][A-Za-z0-9_]*)/g;
-
-/**
- * `$vars` an Assembler's templates use that nothing upstream provides: the
- * prompt template's first, then the negative template's, each once.
- * `$negatives` is reserved in the negative template and never missing;
- * engine `__` names are never reported. Used by the pre-run check.
- */
-export function missingAssemblerVars(
-  template: string,
-  negativeTemplate: string,
-  known: Iterable<string>,
-): string[] {
-  const have = new Set(known);
-  const out: string[] = [];
-  const scan = (text: string, reserved: ReadonlySet<string>) => {
-    for (const m of (text ?? "").matchAll(BARE_VAR_RE)) {
-      const name = m[1];
-      if (name.startsWith("__") || reserved.has(name) || have.has(name) || out.includes(name)) continue;
-      out.push(name);
-    }
-  };
-  scan(template, new Set());
-  scan(negativeTemplate, new Set([NEGATIVES_VAR]));
-  return out;
 }
 
 /** The `$vars` a negative template reads, minus the reserved slot. */

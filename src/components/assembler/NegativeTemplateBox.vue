@@ -79,11 +79,9 @@ const summary = computed(() => {
   </div>
 </template>
 
-<style>
-@import "../shared/theme.css";
-</style>
-
 <style scoped>
+/* Tokens (`--wp-*`) resolve from the theme the Assembler helper already
+   loads; not @imported here so this chunk stays small (bundle gate). */
 .wp-negbox {
   display: flex;
   flex-direction: column;

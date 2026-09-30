@@ -18,7 +18,7 @@ const {
   seedListMod,
   graphEventsMod,
   graphMod,
-  negativesMod,
+  assemblerVarsMod,
   toastStoreMod,
   settingsMod,
   aboutMod,
@@ -471,7 +471,7 @@ if (typeof origQueuePrompt === "function") {
         // (`$negatives` is its reserved slot, never missing).
         const negTmpl = textOf("negative_template");
         if (!tmpl && !negTmpl) continue;
-        const missing = negativesMod.missingAssemblerVars(
+        const missing = assemblerVarsMod.missingAssemblerVars(
           tmpl,
           negTmpl,
           graphMod.collectUpstreamVariables(graph, node),

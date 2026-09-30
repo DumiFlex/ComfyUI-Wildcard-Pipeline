@@ -40,7 +40,7 @@ import {
   type VarProducer,
 } from "../extension/graph";
 import { reactiveFromGraph, stringArrayEqual } from "../extension/reactive";
-import { NEGATIVES_VAR } from "../extension/negatives";
+import { NEGATIVES_VAR } from "../extension/assembler-vars";
 
 type EditorNode = LiteNodeLike & MountTargetNode;
 
