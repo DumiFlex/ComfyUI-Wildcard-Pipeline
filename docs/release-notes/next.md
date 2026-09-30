@@ -16,6 +16,7 @@
 
 ### Fixes
 
+- **WP Debug's "show node" jumps to nodes inside subgraphs.** When the Context node that ran a step sat in a subgraph (or back at the root while you were inside one), the button did nothing. It now opens that graph, then selects and centres the node.
 - **The Context node warns about broken refs in a derivation's canvas overrides.** A ref typed into a value override on the canvas was never checked, so pointing it at a deleted module (or leaving a placeholder there) showed no warning on the node.
 - **Reopening a derivation no longer changes its presence checks.** The editor rewrote every "exists", "does not exist", "is set" and "is unset" condition to "equals" when you opened a saved derivation, so saving it again changed what it did.
 - **"Exists → is empty" conditions run.** The editor offered it, but the engine rejected the op and the whole derivation failed. The engine now supports `is_empty` and `is_not_empty`.

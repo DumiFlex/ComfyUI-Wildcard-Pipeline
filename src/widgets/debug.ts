@@ -15,9 +15,15 @@ interface DebugNode extends MountTargetNode {
 
 interface CanvasLike {
   graph?: LiteGraphLike;
+  setGraph?: (graph: LiteGraphLike) => void;
   selectNode?: (node: LiteNodeLike) => void;
   centerOnNode?: (node: LiteNodeLike) => void;
   setDirty?: (fg: boolean, bg?: boolean) => void;
+}
+
+interface CollapsibleNode {
+  flags?: { collapsed?: boolean };
+  collapse?: (force?: boolean) => void;
 }
 
 /** Resolve an execution node id (`"12"`, or `"4:12"` inside subgraph 4)
@@ -46,14 +52,30 @@ function nodeInfo(id: string): { title: string; codename: string } {
   };
 }
 
-/** Select + centre the node, when it lives in the graph on screen. */
-function focusNode(id: string): void {
+/** Select + centre the node. A node in another graph than the one on screen
+ *  (inside a subgraph, or back out at the root) opens that graph first, the
+ *  same way the breadcrumb does. */
+export function focusNode(id: string): void {
   const hit = findExecNode(id);
   const canvas = (app as unknown as { canvas?: CanvasLike }).canvas;
-  if (!hit || !canvas || canvas.graph !== hit.graph) return;
-  canvas.selectNode?.(hit.node);
-  canvas.centerOnNode?.(hit.node);
-  canvas.setDirty?.(true, true);
+  if (!hit || !canvas) return;
+  const node = hit.node;
+  const show = (): void => {
+    const c = node as unknown as CollapsibleNode;
+    if (c.flags?.collapsed && typeof c.collapse === "function") c.collapse(true);
+    canvas.selectNode?.(node);
+    canvas.centerOnNode?.(node);
+    canvas.setDirty?.(true, true);
+  };
+  if (canvas.graph === hit.graph) {
+    show();
+    return;
+  }
+  if (typeof canvas.setGraph !== "function") return;
+  canvas.setGraph(hit.graph);
+  // Opening a graph restores the viewport ComfyUI last saved for it, a tick
+  // later; centre after that or the restore pans straight back.
+  setTimeout(show, 50);
 }
 
 export function create(node: DebugNode, inputName: string) {
