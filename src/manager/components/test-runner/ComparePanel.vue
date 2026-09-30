@@ -40,6 +40,7 @@ const rows = computed(() =>
   (props.diff?.changed ?? []).slice(0, limit.value).map((c) => ({
     ...c,
     segments: wordDiff(c.before ?? "", c.after ?? ""),
+    negSegments: c.negative ? wordDiff(c.negative.before, c.negative.after) : null,
   })),
 );
 
@@ -102,6 +103,11 @@ function fmtPct(n: number): string {
         <Button size="sm" :disabled="running" data-test="run-baseline-seeds" @click="emit('run-baseline-seeds')">Run the baseline's seeds</Button>
       </p>
 
+      <p v-if="diff.negativeNotRecorded" class="wp-trc__note" data-test="compare-neg-missing">
+        Negative not recorded: this baseline was saved before negatives were tracked, so they aren't compared.
+        Use this run as the baseline to compare them from now on.
+      </p>
+
       <section v-if="diff.changed.length" class="wp-trc__sec" aria-label="Changed outputs">
         <h3>Changed outputs</h3>
         <ol class="wp-trc__list">
@@ -123,6 +129,16 @@ function fmtPct(n: number): string {
                 </template>
                 <em v-if="r.before === null" class="wp-trc__dim"> (was not set)</em>
                 <em v-if="r.after === null" class="wp-trc__dim"> (now not set)</em>
+                <span v-if="r.negSegments" class="wp-trc__neg" data-test="compare-neg">
+                  <span class="wp-trc__neg-tag">NEG</span>
+                  <template v-for="(seg, i) in r.negSegments" :key="i">
+                    <del v-if="seg.kind === 'del'">{{ seg.text }}</del>
+                    <ins v-else-if="seg.kind === 'add'">{{ seg.text }}</ins>
+                    <template v-else>{{ seg.text }}</template>
+                  </template>
+                  <em v-if="!r.negative?.before" class="wp-trc__dim"> (had none)</em>
+                  <em v-if="!r.negative?.after" class="wp-trc__dim"> (now none)</em>
+                </span>
               </span>
             </component>
           </li>
@@ -217,6 +233,13 @@ button.wp-trc__row:hover { border-color: var(--wp-border-strong); }
 .wp-trc del { margin-right: .25em; background: color-mix(in oklab, var(--wp-danger) 18%, transparent); color: var(--wp-danger-text); text-decoration: line-through; }
 .wp-trc ins { background: color-mix(in oklab, var(--wp-success) 18%, transparent); color: var(--wp-success); }
 .wp-trc__dim { color: var(--wp-text-dim); font-style: normal; }
+.wp-trc__neg { display: block; margin-top: var(--wp-space-2); font: var(--wp-text-sm)/var(--wp-line-base) var(--wp-font-mono); color: var(--wp-text-muted); }
+.wp-trc__neg-tag {
+  display: inline-block; margin-right: var(--wp-space-3); padding: 0 var(--wp-space-2);
+  font: var(--wp-weight-semibold) var(--wp-text-xs) var(--wp-font-mono); letter-spacing: .04em;
+  border-radius: 3px; /* audit-exempt: inline token */
+  background: color-mix(in oklab, var(--wp-danger) 18%, transparent); color: var(--wp-danger-text);
+}
 .wp-trc__more {
   align-self: flex-start; background: none; border: 0; cursor: pointer; padding: 0;
   color: var(--wp-accent-text); font-size: var(--wp-text-sm);

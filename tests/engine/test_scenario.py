@@ -271,4 +271,68 @@ def test_a_failed_seed_tracks_none(monkeypatch):
         raise RuntimeError("bad")
     monkeypatch.setattr(PipelineEngine, "run", boom)
     out = run_scenario([COLOR], seeds=[3], track=["color"])
-    assert out["tracked"] == {"seeds": [3], "values": {"color": [None]}}
+    assert out["tracked"] == {
+        "seeds": [3], "values": {"color": [None]}, "negatives": {"color": [None]},
+    }
+    assert out["samples"][0]["negatives"] == {}
+
+
+# ── negatives (send-to-negative) ──────────────────────────────────────
+
+NEG_HAIR = _wildcard("h0000001", "hair", [
+    {"id": "o_blonde", "value": "strawberry blonde", "weight": 1, "negative": "strawberry, fruit"},
+])
+NEG_MOOD = _wildcard("m0000001", "mood", [
+    {"id": "o_gloomy", "value": "gloomy", "weight": 1, "negative": "smiling"},
+])
+
+
+def test_samples_carry_each_variables_negatives():
+    stack = [NEG_HAIR, NEG_MOOD, _combine("d0000001", "$hair, $mood", "look")]
+    out = run_scenario(stack, seeds=[1])
+    negs = out["samples"][0]["negatives"]
+    assert [e["text"] for e in negs["hair"]] == ["strawberry, fruit"]
+    assert negs["hair"][0]["source"] == "hair"
+    # The combine inherits the negatives of the variables it read, and each
+    # entry keeps the binding it came from.
+    assert [(e["text"], e["source"]) for e in negs["look"]] == [
+        ("strawberry, fruit", "hair"), ("smiling", "mood"),
+    ]
+
+
+def test_a_variable_without_negatives_is_left_out():
+    out = run_scenario([COLOR], seeds=[1])
+    assert out["samples"][0]["negatives"] == {}
+
+
+def test_tracked_negatives_join_and_dedupe_per_seed():
+    stack = [NEG_HAIR, _combine("d0000001", "$hair $hair", "look"), COLOR]
+    out = run_scenario(stack, seeds=[1, 2], track=["look", "color", "missing"])
+    assert out["tracked"]["negatives"]["look"] == ["strawberry, fruit", "strawberry, fruit"]
+    assert out["tracked"]["negatives"]["color"] == ["", ""]
+    assert out["tracked"]["negatives"]["missing"] == [None, None]
+
+
+def test_negatives_do_not_change_values():
+    plain = _wildcard("h0000001", "hair", [
+        {"id": "a", "value": "red", "weight": 1}, {"id": "b", "value": "blue", "weight": 1},
+    ])
+    with_neg = _wildcard("h0000001", "hair", [
+        {"id": "a", "value": "red", "weight": 1, "negative": "{pale|dark}"},
+        {"id": "b", "value": "blue", "weight": 1, "negative": "green"},
+    ])
+    seeds = list(range(20))
+    a = run_scenario([plain], seeds=seeds)
+    b = run_scenario([with_neg], seeds=seeds)
+    assert [s["vars"] for s in a["samples"]] == [s["vars"] for s in b["samples"]]
+
+
+def test_trace_writes_pass_a_negative_through():
+    from engine.scenario import _slim_trace
+
+    rows = _slim_trace([{"writes": [
+        {"variable": "hair", "value": "red", "negative": "blonde"},
+        {"variable": "mood", "value": "calm"},
+    ]}], {})
+    assert rows[0]["writes"][0]["negative"] == "blonde"
+    assert "negative" not in rows[0]["writes"][1]

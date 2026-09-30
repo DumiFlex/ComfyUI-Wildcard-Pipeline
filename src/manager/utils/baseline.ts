@@ -5,7 +5,8 @@
  *
  * A baseline keeps the output variable's value for each of the first
  * `TRACK_LIMIT` seeds (seed N is deterministic, so the same stack gives the
- * same value), the value distribution of every variable, and the warnings.
+ * same value) with its negative words, the value distribution of every
+ * variable, and the warnings.
  * It lives in the scenario row's opaque `baseline` column.
  */
 import type { ScenarioRunResponse, ScenarioSeedSpec } from "../api/types";
@@ -34,6 +35,9 @@ export interface ScenarioBaseline {
   failed: number;
   output_var: string | null;
   outputs: (string | null)[];
+  /** The output's negative words per tracked seed ("" = none, null = unset).
+   *  Absent from baselines saved before send-to-negative. */
+  negatives?: (string | null)[];
   variables: Record<string, BaselineVariable>;
   warnings: { type: string; message: string; count: number }[];
 }
@@ -62,6 +66,7 @@ export function makeBaseline(
   now = new Date(),
 ): ScenarioBaseline {
   const tracked = result.tracked;
+  const negatives = tracked && outputVar ? tracked.negatives?.[outputVar] : undefined;
   const variables: Record<string, BaselineVariable> = {};
   for (const [name, v] of Object.entries(result.variables)) {
     const ranked = Object.entries(v.counts).sort((a, b) => b[1] - a[1]);
@@ -81,12 +86,20 @@ export function makeBaseline(
     failed: result.failed,
     output_var: outputVar,
     outputs: tracked && outputVar ? [...(tracked.values[outputVar] ?? [])] : [],
+    ...(negatives ? { negatives: [...negatives] } : {}),
     variables,
     warnings: result.warnings.map((w) => ({ type: w.type, message: w.message, count: w.count })),
   };
 }
 
-export interface OutputChange { seed: number; before: string | null; after: string | null }
+export interface OutputChange {
+  seed: number;
+  before: string | null;
+  after: string | null;
+  /** Set only when both runs recorded the output's negative on this seed
+   *  and it differs. */
+  negative?: { before: string; after: string };
+}
 
 export interface VariableChange {
   name: string;
@@ -109,6 +122,9 @@ export interface BaselineDiff {
    *  differ by chance, so they're left out. */
   seedsMatch: boolean;
   changed: OutputChange[];
+  /** The baseline predates negatives, so they aren't compared until it is
+   *  saved again. */
+  negativeNotRecorded: boolean;
   variables: VariableChange[];
   warningsAdded: { type: string; message: string; count: number }[];
   warningsGone: { type: string; message: string; count: number }[];
@@ -152,6 +168,12 @@ export function compareToBaseline(baseline: ScenarioBaseline, result: ScenarioRu
   const tracked = result.tracked;
   const values = outputVar && tracked ? tracked.values[outputVar] : undefined;
   if (tracked && values) tracked.seeds.forEach((seed, i) => now.set(seed, values[i] ?? null));
+  // Negatives are compared only where both sides recorded one: a baseline
+  // saved before send-to-negative (or a run from an older server) has none.
+  const nowNeg = new Map<number, string | null>();
+  const negValues = outputVar && tracked ? tracked.negatives?.[outputVar] : undefined;
+  if (tracked && negValues) tracked.seeds.forEach((seed, i) => nowNeg.set(seed, negValues[i] ?? null));
+  const baseNeg = Array.isArray(baseline.negatives) ? baseline.negatives : null;
 
   const changed: OutputChange[] = [];
   let compared = 0;
@@ -160,7 +182,10 @@ export function compareToBaseline(baseline: ScenarioBaseline, result: ScenarioRu
     compared++;
     const before = baseline.outputs[i] ?? null;
     const after = now.get(seed) ?? null;
-    if (before !== after) changed.push({ seed, before, after });
+    const nb = baseNeg ? baseNeg[i] : null;
+    const na = nowNeg.get(seed);
+    const negative = typeof nb === "string" && typeof na === "string" && nb !== na ? { before: nb, after: na } : undefined;
+    if (before !== after || negative) changed.push({ seed, before, after, ...(negative ? { negative } : {}) });
   });
 
   const seedsMatch = compared === baseline.seeds.length && result.runs === baseline.runs;
@@ -184,6 +209,7 @@ export function compareToBaseline(baseline: ScenarioBaseline, result: ScenarioRu
     uncovered: baseline.seeds.length - compared,
     seedsMatch,
     changed,
+    negativeNotRecorded: !baseNeg && !!negValues,
     variables,
     warningsAdded,
     warningsGone,

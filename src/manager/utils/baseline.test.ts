@@ -117,6 +117,39 @@ describe("compareToBaseline", () => {
   });
 });
 
+describe("baseline negatives", () => {
+  const withNeg = (outputs: string[], negs: (string | null)[]) =>
+    run(outputs, { tracked: { seeds: outputs.map((_, i) => i), values: { scene: outputs }, negatives: { scene: negs } } });
+
+  it("keeps the output's negative per seed, and leaves it out when the run had none", () => {
+    const b = makeBaseline(withNeg(["a", "b"], ["blurry", ""]), "scene", { from: 0, count: 2 }, NOW);
+    expect(b.negatives).toEqual(["blurry", ""]);
+    expect("negatives" in makeBaseline(run(["a"]), "scene", { from: 0, count: 1 }, NOW)).toBe(false);
+  });
+
+  it("reports a seed whose negative changed even when the output didn't", () => {
+    const base = makeBaseline(withNeg(["a", "b"], ["blurry", ""]), "scene", { from: 0, count: 2 }, NOW);
+    const d = compareToBaseline(base, withNeg(["a", "b"], ["blurry, grainy", ""]));
+    expect(d.changed).toEqual([{ seed: 0, before: "a", after: "a", negative: { before: "blurry", after: "blurry, grainy" } }]);
+    expect(d.same).toBe(false);
+    expect(d.negativeNotRecorded).toBe(false);
+    expect(compareToBaseline(base, withNeg(["a", "b"], ["blurry", ""])).same).toBe(true);
+  });
+
+  it("only compares negatives both sides recorded", () => {
+    const old = makeBaseline(run(["a", "b"]), "scene", { from: 0, count: 2 }, NOW);
+    const d = compareToBaseline(old, withNeg(["a", "b"], ["blurry", ""]));
+    expect(d.changed).toEqual([]);
+    expect(d.same).toBe(true);
+    expect(d.negativeNotRecorded).toBe(true);
+    // A run from an older server has no negatives: nothing to say.
+    const base = makeBaseline(withNeg(["a", "b"], ["blurry", ""]), "scene", { from: 0, count: 2 }, NOW);
+    expect(compareToBaseline(base, run(["a", "b"]))).toMatchObject({ changed: [], negativeNotRecorded: false });
+    // An unset seed (null) is compared by its output alone.
+    expect(compareToBaseline(base, withNeg(["a", "b"], [null, ""])).changed).toEqual([]);
+  });
+});
+
 describe("wordDiff", () => {
   it("marks changed words", () => {
     expect(wordDiff("a blue hat, outdoors", "a green hat, outdoors")).toEqual([
