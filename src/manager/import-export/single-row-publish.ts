@@ -31,6 +31,7 @@ import {
   CONSTRAINT_ONLY_SCHEMA_VERSION,
   CURRENT_SCHEMA_VERSION,
   DERIVATION_CONDITIONS_SCHEMA_VERSION,
+  NEGATIVES_SCHEMA_VERSION,
   SP2B_SCHEMA_VERSION,
   SP3_REACH_SCHEMA_VERSION,
   TAG_AXES_SCHEMA_VERSION,
@@ -214,8 +215,29 @@ export function usesDerivationConditions(node: unknown): boolean {
 }
 
 /**
+ * Walk `node` (object/array, any depth) looking for a non-empty `negative`
+ * string or a derivation action whose mode is `negative`. An empty negative
+ * is stored as absent and never needs v8. Mirror of
+ * `engine/migrations/stamping.py:uses_negatives`.
+ */
+export function usesNegatives(node: unknown): boolean {
+  if (Array.isArray(node)) return node.some((child) => usesNegatives(child));
+  if (!isPlainObject(node)) return false;
+  const neg = node.negative;
+  if (typeof neg === "string" && neg.trim() !== "") return true;
+  if (node.mode === "negative" && "target_var" in node) return true;
+  for (const value of Object.values(node)) {
+    if (value && typeof value === "object" && usesNegatives(value)) return true;
+  }
+  return false;
+}
+
+/**
  * Choose the community catalog `schema_version` to stamp for a payload — the
  * MAX version any feature in the payload requires:
+ *   - `NEGATIVES_SCHEMA_VERSION` (8) when ANY option, fixed value or combine
+ *     carries a non-empty `negative`, or a derivation action uses the
+ *     `negative` mode (`usesNegatives`).
  *   - `DERIVATION_CONDITIONS_SCHEMA_VERSION` (7) when ANY derivation branch
  *     groups tests with AND / OR or uses `is_empty` / `is_not_empty`
  *     (`usesDerivationConditions`).
@@ -238,6 +260,7 @@ export function usesDerivationConditions(node: unknown): boolean {
  * doesn't actually use a newer feature.
  */
 export function schemaVersionForPayload(payload: Record<string, unknown>): number {
+  if (usesNegatives(payload)) return NEGATIVES_SCHEMA_VERSION;
   if (usesDerivationConditions(payload)) return DERIVATION_CONDITIONS_SCHEMA_VERSION;
   if (usesConstraintOnlyRule(payload)) return CONSTRAINT_ONLY_SCHEMA_VERSION;
   if (usesAcceptsTagAxis(payload)) return TAG_AXES_SCHEMA_VERSION;

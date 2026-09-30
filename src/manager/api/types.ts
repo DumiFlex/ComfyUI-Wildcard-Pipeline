@@ -30,6 +30,11 @@ export interface WildcardOption {
    * server-side in `engine/modules/wildcard_handler.py:validate_payload`.
    * See `docs/superpowers/specs/2026-05-24-null-wildcard-option-design.md`. */
   is_null?: boolean;
+  /** Send-to-negative (schema v8): words this option puts in the negative
+   * prompt of any Assembler that renders its variable. Same grammar as
+   * `value` (text, `{a|b}`, `@{ref}`). Library content, never overridden per
+   * instance. An empty negative is stored as absent. */
+  negative?: string;
 }
 
 export interface WildcardPayload {
@@ -67,6 +72,9 @@ export interface CombinePayload {
   template: string;
   output_var: string;
   input_vars: string[];
+  /** Send-to-negative (schema v8): the phrase's own negative, on top of the
+   * negatives of every variable its template reads. `$vars` + `{a|b}`. */
+  negative?: string;
 }
 
 /** Derivation condition operators. The presence-check pair
@@ -88,7 +96,9 @@ export type DerivationOp =
   | "is_unset"
   | "is_empty"
   | "is_not_empty";
-export type DerivationMode = "replace" | "append" | "prepend";
+/** `negative` (schema v8) is "Add to negative": the value is added to the
+ *  target variable's negatives and the variable itself is left alone. */
+export type DerivationMode = "replace" | "append" | "prepend" | "negative";
 
 export interface DerivationCondition {
   var: string;
