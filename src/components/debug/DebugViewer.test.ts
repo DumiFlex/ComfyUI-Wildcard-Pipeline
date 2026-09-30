@@ -234,6 +234,41 @@ describe("DebugViewer", () => {
     w.unmount();
   });
 
+  it("an opened step repeats a value the row cut off, even a short one", async () => {
+    const snap = {
+      __wp_debug_version__: 2,
+      a: "short but clipped",
+      __wp_trace__: [{
+        id: "fv000001", type: "fixed_values", status: "ok", node_id: "1",
+        writes: [{ variable: "a", value: "short but clipped" }],
+      }],
+    };
+    const w = mountRun({}, snap);
+    await openTab(w, "trace");
+    const val = w.find('[data-step-key="0"] .wp-dbg-step__val').element as HTMLElement;
+    Object.defineProperty(val, "scrollWidth", { configurable: true, value: 300 });
+    Object.defineProperty(val, "clientWidth", { configurable: true, value: 120 });
+    await w.find('[data-step-key="0"] .wp-dbg-step__row').trigger("click");
+    await flushPromises();
+    expect(w.find('[data-test="dbg-full-value"]').text()).toContain("short but clipped");
+  });
+
+  it("an opened step does not repeat a short value that fits", async () => {
+    const snap = {
+      __wp_debug_version__: 2,
+      a: "fits",
+      __wp_trace__: [{
+        id: "fv000001", type: "fixed_values", status: "ok", node_id: "1",
+        writes: [{ variable: "a", value: "fits" }],
+      }],
+    };
+    const w = mountRun({}, snap);
+    await openTab(w, "trace");
+    await w.find('[data-step-key="0"] .wp-dbg-step__row').trigger("click");
+    await flushPromises();
+    expect(w.find('[data-test="dbg-full-value"]').exists()).toBe(false);
+  });
+
   it("tells the user an old snapshot has less to show", async () => {
     const old = { a: "1", __wp_trace__: [{ id: "x", type: "wildcard", status: "ok", writes: [{ variable: "a", value: "1" }] }] };
     const w = mountRun({}, old);

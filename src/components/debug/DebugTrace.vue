@@ -4,6 +4,7 @@
  * Context node that ran it. A row says what the step wrote; clicking it
  * opens DebugStepDetail with the reasons.
  */
+import { nextTick, ref, watch } from "vue";
 import RichTextPreview from "../../manager/components/RichTextPreview.vue";
 import DebugStepDetail from "./DebugStepDetail.vue";
 import type { NodeInfo, TraceGroup, TraceStep, WarningRow } from "./debug-model";
@@ -29,6 +30,30 @@ const emit = defineEmits<{
   (e: "focus-node", nodeId: string): void;
 }>();
 
+// Open rows whose one-line value is cut off in the row. Their detail repeats
+// the value in full; a value that already fits isn't repeated.
+const root = ref<HTMLElement | null>(null);
+const clipped = ref<Set<string>>(new Set());
+watch(
+  () => [props.expanded, props.groups],
+  async () => {
+    await nextTick();
+    const next = new Set<string>();
+    for (const key of props.expanded) {
+      const val = root.value?.querySelector<HTMLElement>(`[data-step-key="${key}"] .wp-dbg-step__val`);
+      if (val && val.scrollWidth > val.clientWidth + 1) next.add(key);
+    }
+    clipped.value = next;
+  },
+  { immediate: true },
+);
+
+/** Show a single value again in full under the row: always when it is long,
+ *  and whenever the row had to cut it off (a narrow node clips short ones). */
+function showFullValue(s: TraceStep): boolean {
+  return s.writes.length === 1 && (s.writes[0].value.length > 60 || clipped.value.has(s.key));
+}
+
 function title(s: TraceStep): string {
   if (s.name) return s.name;
   if (s.kind === "constraint") return "constraint";
@@ -47,7 +72,7 @@ function groupLabel(g: TraceGroup): string {
 </script>
 
 <template>
-  <div class="wp-dbg-trace" data-test="dbg-trace">
+  <div ref="root" class="wp-dbg-trace" data-test="dbg-trace">
     <section v-for="(g, gi) in groups" :key="`${g.nodeId}:${gi}`" class="wp-dbg-group">
       <header v-if="showGroupHeads" class="wp-dbg-group__head" data-test="dbg-group-head">
         <span class="wp-dbg-group__title">{{ groupLabel(g) }}</span>
@@ -151,7 +176,7 @@ function groupLabel(g: TraceGroup): string {
               <span v-if="w.overwrite" class="wp-dbg-step__more" title="Replaced an earlier value">↻</span>
             </div>
           </div>
-          <div v-else-if="s.writes.length === 1 && s.writes[0].value.length > 60" class="wp-dbg-step__full">
+          <div v-else-if="showFullValue(s)" class="wp-dbg-step__full" data-test="dbg-full-value">
             <RichTextPreview
               :value="s.writes[0].value"
               :uuid-to-name="uuidToName"
