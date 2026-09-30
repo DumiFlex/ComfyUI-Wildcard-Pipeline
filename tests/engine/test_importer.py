@@ -643,6 +643,32 @@ def test_undo_restores_replaced_template(wp_db):
     assert restored["is_favorite"] is False
 
 
+def test_template_negative_template_passes_through_import(wp_db):
+    """Migration 019: an added template keeps its negative, an old pack's
+    template (no field) lands NULL, and a replace without the field keeps
+    the row's negative. Undo restores the pre-replace value."""
+    entity = {**_template_entity("tneg0001"), "negative_template": "lowres, $negatives"}
+    old = _template_entity("tneg0002")
+    assert commit_import(wp_db, {
+        "adds": [{"kind": "template", "entity": entity}, {"kind": "template", "entity": old}],
+        "replaces": [], "renames": [],
+    })["ok"] is True
+    repo = TemplateRepository(wp_db)
+    assert repo.get("tneg0001")["negative_template"] == "lowres, $negatives"
+    assert repo.get("tneg0002")["negative_template"] is None
+
+    new_content = {"name": "renamed", "template_string": "$b"}
+    result = commit_import(wp_db, {
+        "adds": [],
+        "replaces": [{"kind": "template", "id": "tneg0001", "new_content": new_content}],
+        "renames": [],
+    })
+    assert repo.get("tneg0001")["negative_template"] == "lowres, $negatives"
+    repo.update("tneg0001", negative_template="changed")
+    undo_import(wp_db, result["undo_id"])
+    assert repo.get("tneg0001")["negative_template"] == "lowres, $negatives"
+
+
 def test_undo_reverses_rename(wp_db):
     """Undo of a rename deletes the row inserted at new_id; old_id was
     never created in the first place, so the DB ends up empty."""

@@ -61,3 +61,30 @@ async def test_delete(wp_client):
     assert resp.status == 200
     assert (await resp.json())["deleted"] == created["id"]
     assert (await wp_client.get(f"/wp/api/templates/{created['id']}")).status == 404
+
+
+async def test_negative_template_create_update_and_null(wp_client):
+    """Migration 019: both boxes saved; null = "no negative saved"."""
+    old = await (await wp_client.post(
+        "/wp/api/templates", json={"name": "old", "template_string": "$x"},
+    )).json()
+    assert old["negative_template"] is None
+    created = await (await wp_client.post(
+        "/wp/api/templates",
+        json={"name": "n", "template_string": "$x", "negative_template": "lowres, $negatives"},
+    )).json()
+    assert created["negative_template"] == "lowres, $negatives"
+    tid = created["id"]
+    upd = await wp_client.put(f"/wp/api/templates/{tid}", json={"negative_template": ""})
+    assert (await upd.json())["negative_template"] == ""
+    # Not named = left alone.
+    upd = await wp_client.put(f"/wp/api/templates/{tid}", json={"name": "n2"})
+    assert (await upd.json())["negative_template"] == ""
+
+
+async def test_negative_template_must_be_string_or_null(wp_client):
+    resp = await wp_client.post(
+        "/wp/api/templates",
+        json={"name": "x", "template_string": "$x", "negative_template": 3},
+    )
+    assert resp.status == 400

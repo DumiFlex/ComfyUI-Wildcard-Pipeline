@@ -10,6 +10,8 @@ def test_templates_table_created(wp_db):
     assert cols == {
         "id", "name", "description", "category_id", "tags",
         "is_favorite", "template_string", "created_at", "updated_at",
+        # 019_template_negative
+        "negative_template",
     }
 
 

@@ -368,6 +368,9 @@ export interface TemplateRow {
   tags: string[];
   is_favorite: boolean;
   template_string: string;
+  /** The Assembler's negative box (migration 019). `null`/absent = saved
+   *  before negatives existed: loading leaves the negative box alone. */
+  negative_template?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -380,6 +383,7 @@ export interface TemplateListResponse {
 export interface TemplateCreateInput {
   name: string;
   template_string?: string;
+  negative_template?: string | null;
   description?: string;
   category_id?: string | null;
   tags?: string[];
@@ -389,6 +393,7 @@ export interface TemplateCreateInput {
 export interface TemplateUpdateInput {
   name?: string;
   template_string?: string;
+  negative_template?: string | null;
   description?: string;
   category_id?: string | null;
   tags?: string[];
