@@ -479,5 +479,30 @@ describe("publish body stamping", () => {
       .rules[0].branches[0]);
     branch.action = { ...branch.action, mode: "negative" };
     expect(schemaVersionForPayload(row)).toBe(NEGATIVES_SCHEMA_VERSION);
+    branch.action = { ...branch.action, mode: "negative_replace" };
+    expect(schemaVersionForPayload(row)).toBe(NEGATIVES_SCHEMA_VERSION);
+  });
+
+  it("stamps NEGATIVES (8) for a branch with more than one action", () => {
+    const row = derivationRow(test);
+    const branch = ((row.payload as { rules: { branches: Record<string, unknown>[] }[] })
+      .rules[0].branches[0]);
+    branch.extra_actions = [];
+    expect(schemaVersionForPayload(row)).toBe(CURRENT_SCHEMA_VERSION);
+    branch.extra_actions = [{ target_var: "u", mode: "replace", value: "w" }];
+    expect(schemaVersionForPayload(row)).toBe(NEGATIVES_SCHEMA_VERSION);
+  });
+
+  it.each([
+    ["$pose", CURRENT_SCHEMA_VERSION],
+    ["$pose.negx", CURRENT_SCHEMA_VERSION],
+    ["$pose.neg", NEGATIVES_SCHEMA_VERSION],
+    ["a $pose.1.neg b", NEGATIVES_SCHEMA_VERSION],
+    ["$pose.neg.0", NEGATIVES_SCHEMA_VERSION],
+  ])("stamps %s in text as %i", (template, want) => {
+    expect(schemaVersionForPayload({
+      id: "cb-001abc", type: "combine", name: "c",
+      payload: { template, output_var: "c" },
+    })).toBe(want);
   });
 });

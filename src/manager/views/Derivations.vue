@@ -30,7 +30,7 @@ import type {
 } from "../api/types";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useDeleteConfirm } from "../composables/useDeleteConfirm";
-import { isConditionGroup, matchWord } from "../../extension/derivation-conditions";
+import { clauseActions, isConditionGroup, matchWord } from "../../extension/derivation-conditions";
 import { VALUE_DISABLED_OPS } from "../../components/context/editors/_shared/derivation-ops";
 
 const route = useRoute();
@@ -174,6 +174,13 @@ function condTokens(c: DerivationConditionNode | undefined, nested = false): Con
   if (!VALUE_DISABLED_OPS.has(t.op)) out.push({ kind: "str", text: `"${t.value ?? ""}"` });
   return out;
 }
+/** Every action of a branch or else clause (THEN ... AND ...), as shown. */
+function actViews(clause: unknown): Array<{ verb: string; target: string; value: string }> {
+  return clauseActions<DerivationAction>(clause)
+    .map((a) => actView(a))
+    .filter((v): v is { verb: string; target: string; value: string } => v !== null);
+}
+
 function actView(a: DerivationAction | undefined): { verb: string; target: string; value: string } | null {
   if (!a) return null;
   return { verb: actionVerb(a.mode), target: a.target_var, value: a.value ?? "" };
@@ -348,16 +355,18 @@ function actView(a: DerivationAction | undefined): { verb: string; target: strin
             <span v-else>&nbsp;<em class="wp-dim">always</em></span>
             <span class="wp-token-com"> · </span>
             <span class="wp-token-key">THEN</span>
-            <template v-if="actView(b.action)">
-              <span>&nbsp;{{ actView(b.action)!.verb }} {{ actView(b.action)!.target }}</span>
-              <span v-if="actView(b.action)!.value" class="wp-token-str">&nbsp;"{{ actView(b.action)!.value }}"</span>
+            <template v-for="(av, ai) in actViews(b)" :key="ai">
+              <span v-if="ai > 0" class="wp-token-key">&nbsp;AND</span>
+              <span>&nbsp;{{ av.verb }} {{ av.target }}</span>
+              <span v-if="av.value" class="wp-token-str">&nbsp;"{{ av.value }}"</span>
             </template>
           </div>
           <div v-if="rule.else" class="wp-rule-branch">
             <span class="wp-token-key">ELSE</span>
-            <template v-if="actView(rule.else.action)">
-              <span>&nbsp;{{ actView(rule.else.action)!.verb }} {{ actView(rule.else.action)!.target }}</span>
-              <span v-if="actView(rule.else.action)!.value" class="wp-token-str">&nbsp;"{{ actView(rule.else.action)!.value }}"</span>
+            <template v-for="(av, ai) in actViews(rule.else)" :key="ai">
+              <span v-if="ai > 0" class="wp-token-key">&nbsp;AND</span>
+              <span>&nbsp;{{ av.verb }} {{ av.target }}</span>
+              <span v-if="av.value" class="wp-token-str">&nbsp;"{{ av.value }}"</span>
             </template>
           </div>
         </div>

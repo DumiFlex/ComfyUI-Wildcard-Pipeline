@@ -211,6 +211,20 @@ export function varRows(
     const base = dot > 0 ? name.slice(0, dot) : name;
     const axisName = dot > 0 ? name.slice(dot + 1) : "";
     const p = producers?.get(base);
+    // `$name.neg` / `$name.K.neg`: the variable's negatives, not an axis.
+    if (/(^|\.)neg$/.test(axisName)) {
+      return {
+        token: name,
+        label: name,
+        icon: "pi pi-minus-circle",
+        kind: "neg",
+        facts: ["its negatives"],
+        producer: undefined,
+        badge: undefined,
+        internal: p?.internal === true,
+        isAxis: true,
+      };
+    }
     if (axisName) {
       const axis = (p?.axes ?? []).find((a) => a.axis === axisName);
       return {

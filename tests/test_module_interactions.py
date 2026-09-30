@@ -298,6 +298,27 @@ class TestInstanceOverrides:
         ], seed=1)
         assert ctx["color"] == ""
 
+    def test_fixed_enabled_options_keys_rows_without_ids_by_index(self):
+        """Rows without ids are toggled by `#<index>`, one at a time."""
+        ctx = _run([
+            _fixed("fv", [
+                {"name": "quality", "value": "masterpiece"},
+                {"name": "negative", "value": "lowres"},
+            ], enabled_options=["#1"]),
+        ])
+        assert "quality" not in ctx
+        assert ctx["negative"] == "lowres"
+
+    def test_fixed_enabled_options_duplicate_ids_fall_back_to_index(self):
+        ctx = _run([
+            _fixed("fv", [
+                {"id": "v", "name": "a", "value": "1"},
+                {"id": "v", "name": "b", "value": "2"},
+            ], enabled_options=["v"]),
+        ])
+        assert ctx["a"] == "1"
+        assert "b" not in ctx
+
     def test_combine_template_override_replaces_payload(self):
         """instance.template_override wins over payload.template."""
         ctx = _run([

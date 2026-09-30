@@ -74,4 +74,29 @@ describe("DebugStepDetail derivation rules", () => {
     expect(action.text()).not.toContain("=");
     expect(w.find('[data-test="dbg-rule-result"]').exists()).toBe(false);
   });
+
+  it("shows every action a branch ran, later ones under `and`", () => {
+    const pose = { target: "pose", mode: "replace", value: "headshot", result: "headshot" };
+    const neg = { target: "pose", mode: "negative", value: "extra arms", result: null };
+    const model = buildModel({
+      __wp_trace__: [{
+        id: "d0000003", type: "derivation", status: "ok", name: "Tier rules",
+        writes: [{ variable: "pose", value: "headshot" }],
+        detail: { rules: [{
+          id: "r1", fired: 0, has_else: false,
+          branches: [{ index: 0, matched: true, condition: leaf("night", true) }],
+          action: pose,
+          actions: [pose, neg],
+        }] },
+      }],
+    });
+    const w = mount(DebugStepDetail, {
+      props: { step: model.steps[0], warnings: [], uuidToName: new Map(), uuidToKind: new Map(), canFocus: false },
+    });
+    const rows = w.findAll('[data-test="dbg-rule-action"]');
+    expect(rows).toHaveLength(2);
+    expect(rows[0].find('[data-test="dbg-rule-and"]').exists()).toBe(false);
+    expect(rows[1].find('[data-test="dbg-rule-and"]').text()).toBe("and");
+    expect(rows[1].text()).toContain("extra arms");
+  });
 });

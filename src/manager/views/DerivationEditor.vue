@@ -42,7 +42,7 @@ import {
 import type { VarProducerLike } from "../components/RefChip.vue";
 import { useCascadeStore } from "../cascade/cascade-store";
 import { DERIVATION_OPS } from "../../components/context/editors/_shared/derivation-ops";
-import { isConditionGroup, simplifyCondition } from "../../extension/derivation-conditions";
+import { isConditionGroup, isNegativeMode, simplifyCondition } from "../../extension/derivation-conditions";
 import { useCascadeApply } from "../cascade/useCascadeApply";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
 import PillCountBadge from "../cascade/PillCountBadge.vue";
@@ -256,17 +256,29 @@ function migrateRule(raw: unknown): DerivationRule {
       ? migrateAction(wrapped)
       : migrateAction(r.else as Partial<DerivationAction>);
     out.else = { action };
+    const extra = migrateExtraActions((r.else as Partial<DerivationElse>).extra_actions);
+    if (extra) out.else.extra_actions = extra;
   }
   return out;
+}
+
+/** THEN ... AND ...: keep a clause's extra actions, each normalised; absent
+ *  when there are none so a one-action clause keeps its plain shape. */
+function migrateExtraActions(raw: unknown): DerivationAction[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  return raw.map((a) => migrateAction(a));
 }
 
 function migrateBranch(raw: unknown): DerivationBranch {
   const b = (raw ?? {}) as Partial<DerivationBranch>;
   const aIn = (b.action ?? {}) as Record<string, unknown>;
-  return {
+  const out: DerivationBranch = {
     condition: migrateCondition(b.condition),
     action: migrateAction(aIn),
   };
+  const extra = migrateExtraActions(b.extra_actions);
+  if (extra) out.extra_actions = extra;
+  return out;
 }
 
 const KNOWN_OPS: ReadonlySet<string> = new Set(DERIVATION_OPS);
@@ -304,7 +316,7 @@ function migrateAction(raw: unknown): DerivationAction {
   const mode = typeof a.mode === "string" ? a.mode : "replace";
   return {
     target_var: target,
-    mode: (mode === "replace" || mode === "append" || mode === "prepend" || mode === "negative"
+    mode: (mode === "replace" || mode === "append" || mode === "prepend" || isNegativeMode(mode)
       ? mode
       : "replace") as DerivationAction["mode"],
     value: typeof a.value === "string" ? a.value : "",

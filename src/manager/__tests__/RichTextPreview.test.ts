@@ -187,4 +187,12 @@ describe("RichTextPreview", () => {
     expect(scaf.length).toBeGreaterThan(0);
     expect(scaf.some((s) => s.classes().includes("wp-rt-block-scaf--alt"))).toBe(true);
   });
+
+  it("keeps a var chip's accessor: `.AXIS`, and `.neg` in negative red", () => {
+    const w = mount(RichTextPreview, { props: { value: "$outfit.SHOES and $pose.0.neg" } });
+    const chips = w.findAll(".wp-refchip");
+    expect(chips[0].text()).toContain("$outfit.SHOES");
+    expect(chips[1].text()).toContain("$pose.0.neg");
+    expect(chips[1].find(".wp-refchip__accessor--neg").exists()).toBe(true);
+  });
 });

@@ -33,5 +33,8 @@
    sync with the SPA copy. */
 .wp-rt .wp-rt-var__accessor,
 .wp-rt-preview .wp-rt-var__accessor { color: var(--wp-axis, #fbbf24); font-weight: 600; }
+/* `.neg` reads the variable's negatives: negative red, not the axis amber. */
+.wp-rt .wp-rt-var__accessor--neg,
+.wp-rt-preview .wp-rt-var__accessor--neg { color: var(--wp-danger, #ef4444); }
 .wp-rt .wp-rt-var__index,
 .wp-rt-preview .wp-rt-var__index { opacity: 0.6; font-weight: 600; }

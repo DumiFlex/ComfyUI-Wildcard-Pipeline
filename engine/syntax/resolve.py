@@ -158,6 +158,11 @@ def _resolve_var(tok: Token, ctx: ResolveContext) -> str:
     # nothing bound `$outfit` itself, and must not raise `unknown_var` on the
     # way past.
     axis = tok.meta.get("axis")
+    if axis == NEG_ACCESSOR:
+        # `$name.neg` reads the variable's negatives. Not a read of the
+        # variable itself: it carries no negatives along (that would echo
+        # them) and does not count as rendering `$name`.
+        return _resolve_negative(tok, ctx)
     if axis:
         out = _resolve_axis(tok, ctx, str(axis))
         _note_read(ctx, name, tok.meta.get("index"), out)
@@ -184,6 +189,36 @@ def _resolve_var(tok: Token, ctx: ResolveContext) -> str:
     out = deref_var_value(value, tok.meta.get("index"))
     _note_read(ctx, name, tok.meta.get("index"), out)
     return out
+
+
+#: The accessor that reads a variable's negatives (`$name.neg`,
+#: `$name.K.neg`). Reserved: an `accepts` tag group cannot use this name.
+NEG_ACCESSOR = "neg"
+
+
+def _resolve_negative(tok: Token, ctx: ResolveContext) -> str:
+    """Render `$name.neg` / `$name.K.neg`: the negatives filed for `name`
+    (all of them, or pick K's plus the whole-value ones), tag-deduped.
+
+    A variable with no negatives renders empty without a warning, since most
+    variables have none. Only an unbound name that also has none warns."""
+    name = str(tok.meta.get("name", ""))
+    index = tok.meta.get("index")
+    getter = getattr(ctx, "get_negative", None)
+    got = getter(name, index if isinstance(index, int) else None) if callable(getter) else None
+    if got is None and ctx.get_var(name) is None:
+        _push_warning(
+            ctx,
+            type="unknown_var",
+            severity="warn",
+            module_id="",
+            source_field="",
+            position=tok.start,
+            token_index=None,
+            detail={"name": name, "surface": ctx.surface},
+            message=f"Unknown variable ${name}",
+        )
+    return got or ""
 
 
 def _note_read(ctx: ResolveContext, name: str, index: Any, out: str) -> None:

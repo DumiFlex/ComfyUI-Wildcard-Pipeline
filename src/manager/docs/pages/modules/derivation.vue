@@ -22,6 +22,7 @@ const actionModes = [
   { term: "Append", desc: "Add the action text to the end of the variable's current value." },
   { term: "Prepend", desc: "Insert the action text before the variable's current value." },
   { term: "Add to negative", desc: "Leave the variable's text alone and add the action text to its negative words, so they follow the variable into any Assembler that renders it. The value takes $vars, @{refs} and {a|b}; refs resolve quietly and never change a pick." },
+  { term: "Replace negative", desc: "Like Add to negative, but the action text becomes the variable's only negative words: whatever it carried before is dropped. The variable's own text is still left alone." },
 ];
 
 const instanceOptions = [
@@ -110,6 +111,21 @@ const instanceOptions = [
         keeps smiles out of every image that renders <VarToken>$mood</VarToken>. A derivation that
         uses Add to negative is shared as schema 8, which older versions refuse with a request to
         update.
+      </DocCallout>
+    </DocSection>
+
+    <DocSection title="Several actions in one branch">
+      <p>
+        Click <b>+ And</b> under a branch's action to add another. The actions run in order when the
+        branch fires, and each one sees what the one before it wrote. For example, IF
+        <VarToken>$tier</VarToken> equals "warmup" THEN <VarToken>$pose</VarToken> Replace
+        <VarToken>$pose_portrait</VarToken> AND <VarToken>$pose</VarToken> Add to negative
+        <VarToken>$pose_portrait.neg</VarToken>. The ELSE branch works the same way. On the canvas,
+        each action gets its own value override.
+      </p>
+      <DocCallout variant="tip">
+        A branch with more than one action is shared as schema 8, which older versions refuse with a
+        request to update.
       </DocCallout>
     </DocSection>
 

@@ -28,6 +28,7 @@ import {
   type TargetSelect,
 } from "../../../../../extension/constraint-pairs";
 import WpCheck from "../../../../shared/WpCheck.vue";
+import { clauseActions } from "../../../../../extension/derivation-conditions";
 
 type PickEntry = NonNullable<TargetSelect["picks"]>[number];
 
@@ -148,12 +149,11 @@ const lookup = computed<(uuid: string) => string[]>(() => {
         }>;
       };
       for (const r of Array.isArray(p.rules) ? p.rules : []) {
-        for (const b of Array.isArray(r?.branches) ? r.branches : []) {
-          const v = b?.action?.value;
-          if (typeof v === "string") values.push(v);
+        for (const clause of [...(Array.isArray(r?.branches) ? r.branches : []), r?.else]) {
+          for (const a of clauseActions<{ value?: unknown }>(clause)) {
+            if (typeof a.value === "string") values.push(a.value);
+          }
         }
-        const elseV = r?.else?.action?.value;
-        if (typeof elseV === "string") values.push(elseV);
       }
     } else {
       const opts = (m.payload as { options?: Array<{ value?: string }> }).options;

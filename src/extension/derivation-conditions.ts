@@ -138,3 +138,63 @@ export function flipConnector<L>(group: ConditionGroup<L>, index: number): Condi
 export function matchWord(match: unknown): "AND" | "OR" {
   return match === "any" ? "OR" : "AND";
 }
+
+/** Every action a branch or `else` clause runs, in order: its `action`, then
+ *  its `extra_actions` (THEN ... AND ..., schema v8). Tolerant of junk.
+ *  Mirrors the engine's `clause_actions`. */
+export function clauseActions<A = { target_var?: string; mode?: string; value?: string }>(
+  clause: unknown,
+): A[] {
+  if (!clause || typeof clause !== "object") return [];
+  const c = clause as { action?: unknown; extra_actions?: unknown };
+  const all = [c.action, ...(Array.isArray(c.extra_actions) ? c.extra_actions : [])];
+  return all.filter((a): a is A => !!a && typeof a === "object" && !Array.isArray(a));
+}
+
+/** `clause` with its actions replaced by `actions` (first → `action`, the
+ *  rest → `extra_actions`, dropped when there are none so a one-action branch
+ *  keeps the plain shape it always had). */
+export function withClauseActions<C extends { action: A; extra_actions?: A[] }, A>(
+  clause: C,
+  actions: readonly A[],
+): C {
+  const [first, ...rest] = actions;
+  const next = { ...clause, action: first ?? clause.action };
+  if (rest.length > 0) next.extra_actions = [...rest];
+  else delete next.extra_actions;
+  return next;
+}
+
+/** Key into `action_value_overrides[rule_id]` for one action of a branch
+ *  (`branch` is the index or `"else"`). The first action keeps the bare key it
+ *  always had; later ones append `.K`. Byte-identical to the engine's
+ *  `action_override_key`. */
+export function actionOverrideKey(branch: number | "else", actionIndex: number): string {
+  return actionIndex === 0 ? String(branch) : `${branch}.${actionIndex}`;
+}
+
+/** Every distinct variable a derivation can write: each action of each branch
+ *  and of the else clause (THEN ... AND ...). Which branch fires isn't
+ *  knowable statically, so all of them count. */
+export function derivationTargets(payload: unknown): string[] {
+  const rules = (payload as { rules?: unknown } | null)?.rules;
+  const out: string[] = [];
+  if (!Array.isArray(rules)) return out;
+  for (const rule of rules as Array<{ branches?: unknown; else?: unknown }>) {
+    const clauses = [...(Array.isArray(rule?.branches) ? rule.branches : []), rule?.else];
+    for (const clause of clauses) {
+      for (const a of clauseActions<{ target_var?: string }>(clause)) {
+        const name = (a.target_var ?? "").replace(/^\$/, "").trim();
+        if (name && !out.includes(name)) out.push(name);
+      }
+    }
+  }
+  return out;
+}
+
+/** Whether a derivation action mode files its value under the target's
+ *  negatives instead of writing the variable (schema v8): `negative` ("Add to
+ *  negative") or `negative_replace` ("Replace negative"). */
+export function isNegativeMode(mode: unknown): boolean {
+  return mode === "negative" || mode === "negative_replace";
+}

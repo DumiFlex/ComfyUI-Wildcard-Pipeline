@@ -6,6 +6,7 @@ import {
   rowOverrideKind,
   rowEnabled,
   shapeValuesPatch,
+  withRowKeys,
   type DraftRow,
   type LibraryRow,
 } from "../defaults";
@@ -15,11 +16,12 @@ const props = defineProps<{ module: ModuleEntry }>();
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
 
 const payload = computed(() => (props.module.payload ?? {}) as { values?: LibraryRow[] });
-const libraryRows = computed<LibraryRow[]>(() => payload.value.values ?? []);
+// Keyed rows: a row without a usable id gets `#<index>` (see withRowKeys).
+const libraryRows = computed<LibraryRow[]>(() => withRowKeys(payload.value.values ?? []));
 const instance = computed(() => props.module.instance ?? {});
 const overrides = computed<LibraryRow[] | null>(() => {
   const ov = instance.value.values_overrides;
-  return Array.isArray(ov) ? (ov as LibraryRow[]) : null;
+  return Array.isArray(ov) ? withRowKeys(ov as LibraryRow[]) : null;
 });
 const enabledOptions = computed(() =>
   Array.isArray(instance.value.enabled_options) ? instance.value.enabled_options : null,

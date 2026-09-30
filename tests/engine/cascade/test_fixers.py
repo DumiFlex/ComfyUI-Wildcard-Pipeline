@@ -540,3 +540,37 @@ def test_fix_combine_output_var_rename_rewrites_combine_negative(wp_db):
                                 "negative": "not $mood"})
     fix_combine_output_var_rename(wp_db, cb["id"], "mood", "tone")
     assert mod.get(other["id"])["payload"]["negative"] == "not $tone"
+
+
+def test_combine_rename_rewrites_every_derivation_action(wp_db):
+    """The real derivation shape: each branch's `action` + `extra_actions`
+    and the else clause's, targets and value text (`$mood.neg` included)."""
+    mod = ModuleRepository(wp_db)
+    cb = mod.create(
+        type="combine", name="cb", description="", category_id=None, tags=[],
+        payload={"template": "$a", "output_var": "mood"},
+    )
+    deriv = mod.create(
+        type="derivation", name="d", description="", category_id=None, tags=[],
+        payload={"rules": [{
+            "id": "r1",
+            "branches": [{
+                "condition": {"var": "x", "op": "exists", "value": ""},
+                "action": {"target_var": "mood", "mode": "replace", "value": "a"},
+                "extra_actions": [
+                    {"target_var": "pose", "mode": "negative", "value": "$mood.neg"},
+                ],
+            }],
+            "else": {
+                "action": {"target_var": "y", "mode": "replace", "value": "$mood"},
+            },
+        }]},
+    )
+
+    fix_combine_output_var_rename(wp_db, cb["id"], "mood", "tone")
+
+    rule = mod.get(deriv["id"])["payload"]["rules"][0]
+    branch = rule["branches"][0]
+    assert branch["action"]["target_var"] == "tone"
+    assert branch["extra_actions"][0]["value"] == "$tone.neg"
+    assert rule["else"]["action"]["value"] == "$tone"

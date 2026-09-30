@@ -553,10 +553,15 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
       >{{ accessorIndex }}</span><span
         v-if="accessorAxis"
         class="wp-refchip__accessor"
-        :class="{ 'wp-refchip__accessor--unknown': axisKnown === false }"
-        :title="axisKnown === false
-          ? `No '${axis}' axis on this variable — is that tag group marked 'accepts'?`
-          : undefined"
+        :class="{
+          'wp-refchip__accessor--unknown': axisKnown === false && axis !== 'neg',
+          'wp-refchip__accessor--neg': axis === 'neg',
+        }"
+        :title="axis === 'neg'
+          ? 'This variable\'s negatives'
+          : axisKnown === false
+            ? `No '${axis}' axis on this variable — is that tag group marked 'accepts'?`
+            : undefined"
       >{{ accessorAxis }}</span></span>
     <!-- The pool this ref resolves against came from THIS node's own module
          snapshot, not the library. That changes what the ref will actually
@@ -777,6 +782,11 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
 .wp-refchip__accessor {
   color: var(--wp-axis, #fbbf24);
   font-weight: var(--wp-weight-semibold);
+}
+
+/* `.neg` reads the variable's negatives, not a tag: the negative red. */
+.wp-refchip__accessor--neg {
+  color: var(--wp-danger, #ef4444);
 }
 
 /* The pick-index segment (`.0`). Deliberately UNaccented — it shares the

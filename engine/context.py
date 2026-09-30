@@ -26,7 +26,7 @@ Context = dict[str, Any]
 #: anything enumerating it (the assembler's variables panel, debug views) would
 #: list `$__wp_axes__` as a user variable. Callers that need accessor syntax
 #: re-attach them to their own local dict via `with_resolver_tables`.
-RESOLVER_TABLES = ("__wp_axes__", "__wp_picks__")
+RESOLVER_TABLES = ("__wp_axes__", "__wp_picks__", "__wp_negatives__")
 
 
 def with_resolver_tables(

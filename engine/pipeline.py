@@ -196,30 +196,31 @@ def _extract_static_meta(
             if b:
                 meta["binding"] = b
     elif m_type == "derivation":
-        # Derivation can write to MULTIPLE target_vars (one per branch
-        # `action.target_var`, plus the `else.action.target_var`).
-        # Collect every declared target so the disabled-derivation row
-        # shows all of them in the debug viewer instead of a uuid.
+        # Derivation can write to MULTIPLE target_vars (every action of
+        # every branch, plus the else clause's; a clause runs `action` then
+        # its `extra_actions`). Collect every declared target so the
+        # disabled-derivation row shows all of them in the debug viewer
+        # instead of a uuid.
         seen_targets: list[str] = []
         rules = payload.get("rules")
         if isinstance(rules, list):
             for rule in rules:
                 if not isinstance(rule, dict):
                     continue
-                for branch in rule.get("branches", []) or []:
-                    if not isinstance(branch, dict):
-                        continue
-                    action = branch.get("action")
-                    if isinstance(action, dict):
-                        target = action.get("target_var")
-                        if isinstance(target, str):
-                            target = target.lstrip("$").strip()
-                            if target and target not in seen_targets:
-                                seen_targets.append(target)
-                else_block = rule.get("else")
-                if isinstance(else_block, dict):
-                    action = else_block.get("action")
-                    if isinstance(action, dict):
+                clauses = [
+                    b for b in rule.get("branches", []) or []
+                    if isinstance(b, dict)
+                ]
+                if isinstance(rule.get("else"), dict):
+                    clauses.append(rule["else"])
+                for clause in clauses:
+                    extra = clause.get("extra_actions")
+                    actions = [clause.get("action")] + (
+                        extra if isinstance(extra, list) else []
+                    )
+                    for action in actions:
+                        if not isinstance(action, dict):
+                            continue
                         target = action.get("target_var")
                         if isinstance(target, str):
                             target = target.lstrip("$").strip()

@@ -72,6 +72,7 @@ import CascadeRenameDialog from "../cascade/CascadeRenameDialog.vue";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { ResolveWarning } from "../utils/resolveTokens";
 import { brokenRefLabels } from "../utils/validateModule";
+import { NEG_ACCESSOR } from "../../widgets/richTokenize";
 
 const props = defineProps<{ id?: string }>();
 const router = useRouter();
@@ -559,6 +560,15 @@ function renameGroup(oldAxis: string, nextAxis: string): boolean {
   // grammar cannot parse used to demote it to classify without a word, which
   // quietly broke every `$var.AXIS` read of it. Refuse instead, the same way
   // `toggleGroupKind` refuses to promote such a name.
+  if (tagGroupKinds.value[oldAxis] === "accepts" && trimmed === NEG_ACCESSOR) {
+    toast.push({
+      severity: "warn",
+      summary: `"${oldAxis}" keeps its name`,
+      detail: `$var.${NEG_ACCESSOR} reads a variable's negatives, so an accepts group can't be called "${NEG_ACCESSOR}".`,
+      life: 6000,
+    });
+    return false;
+  }
   if (tagGroupKinds.value[oldAxis] === "accepts" && !AXIS_IDENT.test(trimmed)) {
     toast.push({
       severity: "warn",
@@ -919,6 +929,15 @@ function toggleGroupKind(axis: string): void {
   if (next[axis] === "accepts") {
     delete next[axis];
     tagGroupKinds.value = next;
+    return;
+  }
+  if (axis === NEG_ACCESSOR) {
+    toast.push({
+      severity: "warn",
+      summary: `Rename "${axis}" first`,
+      detail: `$var.${NEG_ACCESSOR} reads a variable's negatives, so an accepts group can't be called "${NEG_ACCESSOR}".`,
+      life: 6000,
+    });
     return;
   }
   if (!AXIS_IDENT.test(axis)) {

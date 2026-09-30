@@ -232,8 +232,18 @@ def test_add_to_negative_writes_no_value():
     assert trace["writes"] == []
 
 
+def test_replace_negative_drops_the_old_negatives_and_writes_no_value():
+    ctx = _run([_wc("hair", [_opt(0, "red hair", "blonde")]),
+                _deriv("negative_replace", "short hair")])
+    assert ctx["hair"] == "red hair"
+    assert _texts(ctx, "hair") == ["short hair"]
+    trace = [t for t in ctx["__wp_trace__"] if t["type"] == "derivation"][0]
+    assert trace["writes"] == []
+
+
 def test_derivation_validates_negative_mode():
     DerivationHandler.validate_payload(_deriv("negative", "x")["payload"])
+    DerivationHandler.validate_payload(_deriv("negative_replace", "x")["payload"])
     with pytest.raises(ValueError):
         DerivationHandler.validate_payload(_deriv("sideways", "x")["payload"])
 
@@ -350,3 +360,137 @@ def test_trace_writes_carry_the_negative():
     ctx = _run([_wc("hair", [_opt(0, "red hair", "blonde")])])
     write = ctx["__wp_trace__"][0]["writes"][0]
     assert write["negative"] == "blonde"
+
+
+# ── multi-action THEN + `$name.neg` ─────────────────────────────────────
+
+
+def _deriv_multi(actions, else_actions=None):
+    first, *rest = actions
+    branch = {
+        "condition": {"var": "tier", "op": "equals", "value": "warmup"},
+        "action": first,
+    }
+    if rest:
+        branch["extra_actions"] = rest
+    rule = {"id": "r1", "branches": [branch]}
+    if else_actions:
+        e_first, *e_rest = else_actions
+        rule["else"] = {"action": e_first, **({"extra_actions": e_rest} if e_rest else {})}
+    return {"type": "derivation", "id": "d1", "payload": {"rules": [rule]}}
+
+
+def _act(target, mode, value):
+    return {"target_var": target, "mode": mode, "value": value}
+
+
+def test_branch_runs_every_action_in_order():
+    ctx = _run([
+        _wc("tier", [_opt(0, "warmup")]),
+        _wc("pose", [_opt(0, "standing", "sitting")]),
+        _wc("pose_portrait", [_opt(0, "headshot", "full body")]),
+        _deriv_multi([
+            _act("pose", "replace", "$pose_portrait"),
+            _act("pose", "negative", "extra arms"),
+            _act("mood", "replace", "calm $pose"),
+        ]),
+    ])
+    assert ctx["pose"] == "headshot"
+    # Replace carried pose_portrait's negatives, then the AND added one.
+    assert _texts(ctx, "pose") == ["full body", "extra arms"]
+    # A later action reads the value an earlier one wrote.
+    assert ctx["mood"] == "calm headshot"
+
+
+def test_else_clause_runs_its_extra_actions():
+    ctx = _run([
+        _wc("tier", [_opt(0, "final")]),
+        _deriv_multi(
+            [_act("pose", "replace", "x")],
+            else_actions=[_act("a", "replace", "one"), _act("b", "replace", "two")],
+        ),
+    ])
+    assert ctx["a"] == "one"
+    assert ctx["b"] == "two"
+
+
+def test_extra_action_value_override_uses_dotted_key():
+    mod = _deriv_multi([
+        _act("a", "replace", "lib-a"), _act("b", "replace", "lib-b"),
+    ])
+    mod["instance"] = {"action_value_overrides": {"r1": {"0.1": "over-b"}}}
+    ctx = _run([_wc("tier", [_opt(0, "warmup")]), mod])
+    assert ctx["a"] == "lib-a"
+    assert ctx["b"] == "over-b"
+
+
+def test_extra_actions_validate():
+    ok = _deriv_multi([_act("a", "replace", "x"), _act("b", "negative", "y")])
+    DerivationHandler.validate_payload(ok["payload"])
+    bad = _deriv_multi([_act("a", "replace", "x"), _act("b", "sideways", "y")])
+    with pytest.raises(ValueError):
+        DerivationHandler.validate_payload(bad["payload"])
+    bad["payload"]["rules"][0]["branches"][0]["extra_actions"] = "nope"
+    with pytest.raises(ValueError):
+        DerivationHandler.validate_payload(bad["payload"])
+
+
+def test_disabled_derivation_lists_extra_action_targets():
+    from engine.pipeline import _extract_static_meta  # noqa: PLC0415
+
+    mod = _deriv_multi([_act("a", "replace", "x"), _act("b", "negative", "y")])
+    assert _extract_static_meta(mod).get("bindings") == ["a", "b"]
+
+
+def test_neg_accessor_reads_a_variables_negatives():
+    ctx = _run([
+        _wc("pose_portrait", [_opt(0, "headshot", "full body, lowres")]),
+        _wc("pose", [_opt(0, "standing", "sitting")]),
+        {"type": "combine", "payload": {
+            "output_var": "echo", "template": "[$pose_portrait.neg]"}},
+        _deriv_multi([_act("pose", "negative", "$pose_portrait.neg")]),
+    ], tier="warmup")
+    assert ctx["echo"] == "[full body, lowres]"
+    # Reading `.neg` is not a read of the variable: nothing is inherited.
+    assert _texts(ctx, "echo") == []
+    assert _texts(ctx, "pose") == ["sitting", "full body, lowres"]
+
+
+def test_neg_accessor_per_pick():
+    ctx = _run([
+        _wc("props", [
+            _opt(0, "sword", "broken sword"), _opt(1, "shield", "cracked shield"),
+        ], pick_min=2, pick_max=2),
+        {"type": "combine", "payload": {
+            "output_var": "out", "template": "$props.0.neg | $props.neg.1 | $props.neg"}},
+    ])
+    first, second, both = ctx["out"].split(" | ")
+    assert {first, second} == {"broken sword", "cracked shield"}
+    assert first != second
+    assert set(both.split(", ")) == {"broken sword", "cracked shield"}
+
+
+def test_neg_accessor_on_a_variable_without_negatives_is_quiet():
+    ctx = _run([
+        _wc("hair", [_opt(0, "red hair")]),
+        {"type": "combine", "payload": {"output_var": "o", "template": "a$hair.neg"}},
+    ])
+    assert ctx["o"] == "a"
+    assert not [w for w in ctx["__wp_warnings__"] if w.get("type") == "unknown_tag_axis"]
+
+
+def test_neg_accessor_in_the_assembler_and_conditions():
+    ctx = _run([
+        _wc("hair", [_opt(0, "red hair", "blonde")]),
+        {"type": "derivation", "id": "d2", "payload": {"rules": [{
+            "id": "r1", "branches": [{
+                "condition": {"var": "hair.neg", "op": "contains", "value": "blonde"},
+                "action": _act("flag", "replace", "yes"),
+            }]}]}},
+    ])
+    assert ctx["flag"] == "yes"
+    prompt, neg = _assemble(ctx, "$flag", "$hair.neg")
+    assert prompt == "yes"
+    # `$hair.neg` in the negative template renders; `$hair` was not rendered
+    # in the prompt, so its negatives are not collected a second time.
+    assert neg == "blonde"

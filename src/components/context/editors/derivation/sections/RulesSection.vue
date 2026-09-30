@@ -34,7 +34,9 @@ import RuleValueChips from "./RuleValueChips.vue";
 import { tokenizeRich } from "../../../../../widgets/richTokenize";
 import PairBadge from "../../../PairBadge.vue";
 import {
-  conditionLeaves,
+  actionOverrideKey,
+  clauseActions,
+  isNegativeMode,
   conditionOverrideKey,
   isConditionGroup,
   matchWord,
@@ -53,11 +55,27 @@ const RichTextInput = defineAsyncComponent(
 interface DerivationCondition { var?: string; op?: string; value?: string }
 interface DerivationAction { target_var?: string; mode?: string; value?: string }
 /** `condition` is one test or an AND / OR group of them (schema v7). */
-interface DerivationBranch { condition?: unknown; action?: DerivationAction }
+interface DerivationBranch { condition?: unknown; action?: DerivationAction; extra_actions?: DerivationAction[] }
+interface DerivationElse { action?: DerivationAction; extra_actions?: DerivationAction[] }
 interface DerivationRule {
   id: string;
   branches?: DerivationBranch[];
-  else?: { action?: DerivationAction };
+  else?: DerivationElse;
+}
+
+/** A clause's actions in run order: `action`, then `extra_actions`
+ *  (THEN ... AND ...). */
+function acts(clause: DerivationBranch | DerivationElse | undefined): DerivationAction[] {
+  return clauseActions<DerivationAction>(clause);
+}
+
+/** One override field per action of a clause, keyed the way the engine reads
+ *  `action_value_overrides` (the first action keeps the bare branch key). */
+function actionOverrides(
+  clause: DerivationBranch | DerivationElse | undefined,
+  branch: number | "else",
+): Array<{ key: string; action: DerivationAction }> {
+  return acts(clause).map((action, ai) => ({ key: actionOverrideKey(branch, ai), action }));
 }
 
 /** `@` refs in a rule's action values (library and this node's overrides)
@@ -68,8 +86,9 @@ function ruleBrokenRefs(rule: DerivationRule): string[] {
   const known = props.uuidToName;
   if (known.size === 0) return [];
   const texts: unknown[] = [];
-  for (const b of rule.branches ?? []) texts.push(b.action?.value);
-  texts.push(rule.else?.action?.value);
+  for (const clause of [...(rule.branches ?? []), rule.else]) {
+    for (const a of acts(clause)) texts.push(a.value);
+  }
   const inst = props.module.instance as Record<string, unknown> | undefined;
   const byRule = (inst?.action_value_overrides as Record<string, Record<string, unknown>> | null | undefined)?.[rule.id];
   if (byRule && typeof byRule === "object") texts.push(...Object.values(byRule));
@@ -399,7 +418,16 @@ function modeLabel(mode: string | undefined): string {
   // Send-to-negative: the value is filed under the variable's negatives;
   // the variable itself is not written.
   if (mode === "negative") return "neg +=";
+  if (mode === "negative_replace") return "neg =";
   return "=";
+}
+
+/** Hover text for a negative action's mode, which reads as an odd assignment
+ *  without it. */
+function modeTitle(mode: string | undefined): string | undefined {
+  if (mode === "negative") return "Add to negative — the variable is not changed";
+  if (mode === "negative_replace") return "Replace negative — the variable is not changed";
+  return undefined;
 }
 
 /** Whether the op needs a value field at all (presence-check ops
@@ -429,14 +457,6 @@ function condParts(cond: unknown, nested = false): CondPart[] {
   out.push({ kind: "op", text: opSymbol(c.op) });
   if (opUsesValue(c.op)) out.push({ kind: "val", text: c.value ?? "" });
   return out;
-}
-
-/** The tests of a branch that take a value, with their override key. A
- *  grouped branch gets one override field per such test. */
-function overrideTests(branch: DerivationBranch, bi: number): Array<{ key: string; test: DerivationCondition }> {
-  return conditionLeaves<DerivationCondition>(branch.condition)
-    .map((test, k) => ({ key: conditionOverrideKey(bi, k), test }))
-    .filter(({ test }) => opUsesValue(test.op));
 }
 
 /**
@@ -478,8 +498,7 @@ function clampPreviewValue(value: unknown): string {
  *  the visible summary caps long values, so this is how the user reads the
  *  rest. */
 function branchSummaryText(
-  branch: { condition?: unknown;
-            action?: { target_var?: string; mode?: string; value?: string } } | undefined,
+  branch: { condition?: unknown; action?: DerivationAction; extra_actions?: DerivationAction[] } | undefined,
 ): string {
   if (!branch) return "";
   const parts: string[] = [];
@@ -488,8 +507,10 @@ function branchSummaryText(
     .map((p) => (p.kind === "var" ? `$${p.text}` : p.text))
     .join(" ");
   if (cond) parts.push(cond);
-  const a = branch.action;
-  if (a?.target_var) parts.push(`→ $${a.target_var} ${modeLabel(a.mode)} ${a.value ?? ""}`);
+  const then = acts(branch)
+    .filter((a) => a.target_var)
+    .map((a) => `$${a.target_var} ${modeLabel(a.mode)} ${a.value ?? ""}`.trim());
+  if (then.length) parts.push(`→ ${then.join(" AND ")}`);
   return parts.join(" ").trim();
 }
 
@@ -500,6 +521,53 @@ function ruleSummaryText(rule: DerivationRule): string {
   const n = rule.branches?.length ?? 0;
   return n > 1 ? `${head}  (+${n - 1} more branch${n - 1 === 1 ? "" : "es"})` : head;
 }
+
+/** A rule's clauses in order — IF, each ELIF, then ELSE — so the body renders
+ *  them as one run of branch cards. `bi` is the engine branch index (or
+ *  `"else"`), which every toggle / override key is built from. */
+interface ClauseView { bi: number | "else"; clause: DerivationBranch | DerivationElse; hasCondition: boolean }
+function clausesOf(rule: DerivationRule): ClauseView[] {
+  const out: ClauseView[] = (rule.branches ?? []).map((clause, bi) => ({ bi, clause, hasCondition: true }));
+  if (rule.else) out.push({ bi: "else", clause: rule.else, hasCondition: false });
+  return out;
+}
+
+function clauseTag(bi: number | "else"): "IF" | "ELIF" | "ELSE" {
+  return bi === "else" ? "ELSE" : bi === 0 ? "IF" : "ELIF";
+}
+
+/**
+ * A branch condition as the rows of its WHEN block: one row per test, a
+ * connector row (AND / OR) between siblings, and a header row ("ANY of" /
+ * "ALL of") opening each nested group, whose rows sit one `depth` deeper.
+ * Tests are numbered in the same depth-first order as `conditionLeaves`, so
+ * each carries the override key the engine reads.
+ */
+interface CondRow { kind: "test" | "join" | "group"; depth: number; text: string; test?: DerivationCondition; key?: string }
+function condRows(cond: unknown, bi: number): CondRow[] {
+  const out: CondRow[] = [];
+  let leaf = 0;
+  const walk = (node: unknown, depth: number, top: boolean): void => {
+    if (isConditionGroup(node)) {
+      const kids = Array.isArray(node.conditions) ? node.conditions : [];
+      let d = depth;
+      if (!top) {
+        out.push({ kind: "group", depth, text: node.match === "any" ? "ANY of" : "ALL of" });
+        d = depth + 1;
+      }
+      kids.forEach((child, i) => {
+        if (i > 0) out.push({ kind: "join", depth: d, text: matchWord(node.match) });
+        walk(child, d, false);
+      });
+      return;
+    }
+    if (!node || typeof node !== "object" || Array.isArray(node)) return;
+    const test = node as DerivationCondition;
+    out.push({ kind: "test", depth, text: "", test, key: conditionOverrideKey(bi, leaf++) });
+  };
+  walk(cond, 0, true);
+  return out;
+}
 </script>
 
 <template>
@@ -507,7 +575,7 @@ function ruleSummaryText(rule: DerivationRule): string {
     <div class="rules__head">
       <span class="rules__label">Rules</span>
       <span class="rules__hint" data-test="rules-spa-hint">
-        Click a rule to expand · toggle branches · override values · edit logic in SPA
+        Click a rule to expand · grey text is the library, type in a field to override it on this node · edit logic in the library
       </span>
     </div>
 
@@ -585,12 +653,15 @@ function ruleSummaryText(rule: DerivationRule): string {
                 <span v-else class="rule-tok-op">{{ part.text }}</span>
               </template>
               <span class="rule-tok-arrow">→</span>
-              <span
-                v-if="rule.branches[0].action?.target_var"
-                :class="['rule-tok-var', varColorClass(rule.branches[0].action.target_var)]"
-              >${{ rule.branches[0].action.target_var }}</span>
-              <span class="rule-tok-op" :class="{ 'rule-tok-op--neg': rule.branches[0].action?.mode === 'negative' }" :title="rule.branches[0].action?.mode === 'negative' ? 'Add to negative — the variable is not changed' : undefined">{{ modeLabel(rule.branches[0].action?.mode) }}</span>
-              <span class="rule-tok-val"><RuleValueChips :value="clampPreviewValue(rule.branches[0].action?.value)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
+              <template v-for="(a, ai) in acts(rule.branches[0])" :key="ai">
+                <span v-if="ai > 0" class="rule-tok-join">AND</span>
+                <span
+                  v-if="a.target_var"
+                  :class="['rule-tok-var', varColorClass(a.target_var)]"
+                >${{ a.target_var }}</span>
+                <span class="rule-tok-op" :class="{ 'rule-tok-op--neg': isNegativeMode(a.mode) }" :title="modeTitle(a.mode)">{{ modeLabel(a.mode) }}</span>
+                <span class="rule-tok-val"><RuleValueChips :value="clampPreviewValue(a.value)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
+              </template>
               <!-- Inline ↪#N constraint-pair badge — rendered when this
                    derivation is a constraint carrier through the IF branch's
                    nested `@{uuid}` ref. Mirrors OptionRow's per-option badge
@@ -624,203 +695,181 @@ function ruleSummaryText(rule: DerivationRule): string {
           >⋮⋮</span>
         </button>
 
-        <!-- Expanded body — branch table -->
+        <!-- Expanded body — one card per clause (IF / ELIF / ELSE), each a
+             WHEN block (one row per test, AND / OR between them, nested
+             groups indented) and a THEN block (one row per action). Every
+             value is a full-width field: empty shows the library value as a
+             ghost, typing overrides it on this node only. -->
         <div
           v-if="isExpanded(rule.id)"
           class="rule-body"
           :data-test="`rule-body-${rule.id}`"
         >
-          <div class="branch-table">
-            <div class="branch-row branch-row--head">
-              <span class="branch-cell branch-cell--head">on</span>
-              <span class="branch-cell branch-cell--head">tag</span>
-              <span class="branch-cell branch-cell--head">summary</span>
-              <span class="branch-cell branch-cell--head">condition override</span>
-              <span class="branch-cell branch-cell--head">action override</span>
-            </div>
-
-            <!-- IF + ELIF branch rows -->
-            <div
-              v-for="(branch, bi) in rule.branches"
-              :key="bi"
-              class="branch-row"
-              :class="{
-                'branch-row--off': bi !== 0 && !isBranchEnabled(rule.id, bi),
-              }"
-              :data-test="`branch-row-${rule.id}-${bi}`"
-            >
-              <span class="branch-cell branch-cell--toggle">
-                <!-- IF (bi=0) gets no checkbox — disabling IF would be
-                     redundant with the per-rule toggle. Placeholder
-                     keeps the column aligned. -->
-                <span
-                  v-if="bi !== 0"
-                  class="branch-toggle"
-                  :class="{ 'branch-toggle--on': isBranchEnabled(rule.id, bi) }"
-                  :data-test="`branch-toggle-${rule.id}-${bi}`"
-                  role="switch"
-                  :aria-checked="isBranchEnabled(rule.id, bi)"
-                  :aria-label="isBranchEnabled(rule.id, bi) ? `Disable branch ${bi}` : `Enable branch ${bi}`"
-                  @click="toggleBranch(rule.id, bi)"
-                >
-                  <i :class="['pi', isBranchEnabled(rule.id, bi) ? 'pi-check' : 'pi-times']" aria-hidden="true" />
-                </span>
-              </span>
-              <span class="branch-cell branch-cell--tag" :data-kind="bi === 0 ? 'if' : 'elif'">
-                {{ bi === 0 ? "IF" : "ELIF" }}
-              </span>
-              <span class="branch-cell branch-cell--summary" :title="branchSummaryText(branch)">
-                <template v-for="(part, pi) in condParts(branch.condition)" :key="pi">
-                  <span
-                    v-if="part.kind === 'var'"
-                    :class="['rule-tok-var', varColorClass(part.text)]"
-                  >${{ part.text }}</span>
-                  <span
-                    v-else-if="part.kind === 'val'"
-                    class="rule-tok-val"
-                  ><RuleValueChips :value="clampPreviewValue(part.text)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
-                  <span v-else-if="part.kind === 'join'" class="rule-tok-join">{{ part.text }}</span>
-                  <span v-else class="rule-tok-op">{{ part.text }}</span>
-                </template>
-                <span class="rule-tok-arrow">→</span>
-                <span
-                  v-if="branch.action?.target_var"
-                  :class="['rule-tok-var', varColorClass(branch.action.target_var)]"
-                >${{ branch.action.target_var }}</span>
-                <span class="rule-tok-op" :class="{ 'rule-tok-op--neg': branch.action?.mode === 'negative' }" :title="branch.action?.mode === 'negative' ? 'Add to negative — the variable is not changed' : undefined">{{ modeLabel(branch.action?.mode) }}</span>
-                <span class="rule-tok-val"><RuleValueChips :value="clampPreviewValue(branch.action?.value)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
-                <PairBadge
-                  v-for="p in pairBadgesFor(rule.id, bi)"
-                  :key="`${p.number}-${p.targetUuid}`"
-                  :pair="p"
-                  variant="option"
-                />
-              </span>
-              <span class="branch-cell branch-cell--cond-override">
-                <!-- condition.value override — RichTextInput on the
-                     `derivation` surface gives `$var` chips/autocomplete, but
-                     NO `@{}` machinery: the engine compares condition.value
-                     RAW (never resolves refs/vars there). Matches the SPA
-                     DerivationRuleCard condition field. -->
-                <!-- One field per test that takes a value; a grouped branch
-                     labels each with its variable so they can be told apart. -->
-                <span
-                  v-for="{ key, test } in overrideTests(branch, bi)"
-                  :key="key"
-                  class="cond-override"
-                >
-                  <span
-                    v-if="overrideTests(branch, bi).length > 1"
-                    :class="['cond-override__var', 'rule-tok-var', varColorClass(test.var ?? '')]"
-                  >${{ test.var }}</span>
-                  <RichTextInput
-                    surface="derivation"
-                    wrap
-                    :var-suggestions="varSuggestions"                  :var-producers="varProducers"                  graph-aware
-                    :uuid-to-name="uuidToName"
-                    :model-value="getOverride('condition_value_overrides', rule.id, key)"
-                    :placeholder="test.value || ''"
-                    class="branch-override-input"
-                    :class="{ 'branch-override-input--mod': getOverride('condition_value_overrides', rule.id, key) !== '' }"
-                    :data-test="`cond-override-${rule.id}-${key}`"
-                    :aria-label="`Condition value override for rule ${rule.id} branch ${bi}${key === String(bi) ? '' : ' test ' + key}`"
-                    @update:model-value="(v: string) => onCondOverrideInput(rule.id, key, v)"
-                  />
-                </span>
-              </span>
-              <span class="branch-cell branch-cell--action-override">
-                <!-- action.value override — full `@{}` carrier machinery
-                     (allow-nested-refs + the six ref-data maps): the engine
-                     resolves `@{}` here post-Layer-A. Matches the SPA
-                     DerivationRuleCard action field. -->
-                <RichTextInput
-                  surface="derivation"
-                  allow-nested-refs
-                  wrap
-                  :var-suggestions="varSuggestions"                  :var-producers="varProducers"                  graph-aware
-                  :ref-suggestions="refSuggestions"
-                  :uuid-to-name="uuidToName"
-                  :uuid-to-sub-categories="uuidToSubCategories"
-                  :uuid-to-has-null="uuidToHasNull"
-                  :uuid-to-options-count="uuidToOptionsCount"
-                  :uuid-to-option-tag-sets="uuidToOptionTagSets"
-                  :uuid-to-tag-groups="uuidToTagGroups"
-                  :model-value="getOverride('action_value_overrides', rule.id, String(bi))"
-                  :placeholder="branch.action?.value || ''"
-                  class="branch-override-input"
-                  :class="{ 'branch-override-input--mod': getOverride('action_value_overrides', rule.id, String(bi)) !== '' }"
-                  :data-test="`action-override-${rule.id}-${bi}`"
-                  :aria-label="`Action value override for rule ${rule.id} branch ${bi}`"
-                  @update:model-value="(v: string) => onActionOverrideInput(rule.id, String(bi), v)"
-                />
-              </span>
-            </div>
-
-            <!-- ELSE row (when present) -->
-            <div
-              v-if="rule.else"
-              class="branch-row"
-              :class="{ 'branch-row--off': !isBranchEnabled(rule.id, 'else') }"
-              :data-test="`branch-row-${rule.id}-else`"
-            >
-              <span class="branch-cell branch-cell--toggle">
-                <span
-                  class="branch-toggle"
-                  :class="{ 'branch-toggle--on': isBranchEnabled(rule.id, 'else') }"
-                  :data-test="`branch-toggle-${rule.id}-else`"
-                  role="switch"
-                  :aria-checked="isBranchEnabled(rule.id, 'else')"
-                  :aria-label="isBranchEnabled(rule.id, 'else') ? 'Disable ELSE branch' : 'Enable ELSE branch'"
-                  @click="toggleBranch(rule.id, 'else')"
-                >
-                  <i :class="['pi', isBranchEnabled(rule.id, 'else') ? 'pi-check' : 'pi-times']" aria-hidden="true" />
-                </span>
-              </span>
-              <span class="branch-cell branch-cell--tag" data-kind="else">ELSE</span>
+          <div
+            v-for="{ bi, clause, hasCondition } in clausesOf(rule)"
+            :key="bi"
+            class="br"
+            :class="{ 'br--off': bi !== 0 && !isBranchEnabled(rule.id, bi) }"
+            :data-kind="clauseTag(bi).toLowerCase()"
+            :data-test="`branch-row-${rule.id}-${bi}`"
+          >
+            <div class="br__head">
+              <!-- IF gets no toggle: disabling it is the rule toggle. -->
               <span
-                class="branch-cell branch-cell--summary"
-                :title="branchSummaryText({ action: rule.else.action })"
+                v-if="bi !== 0"
+                class="branch-toggle"
+                :class="{ 'branch-toggle--on': isBranchEnabled(rule.id, bi) }"
+                :data-test="`branch-toggle-${rule.id}-${bi}`"
+                role="switch"
+                :aria-checked="isBranchEnabled(rule.id, bi)"
+                :aria-label="`${isBranchEnabled(rule.id, bi) ? 'Disable' : 'Enable'} ${clauseTag(bi)} branch${bi === 'else' ? '' : ' ' + bi}`"
+                @click="toggleBranch(rule.id, bi)"
               >
-                <span class="rule-tok-arrow">→</span>
-                <span
-                  v-if="rule.else.action?.target_var"
-                  :class="['rule-tok-var', varColorClass(rule.else.action.target_var)]"
-                >${{ rule.else.action.target_var }}</span>
-                <span class="rule-tok-op" :class="{ 'rule-tok-op--neg': rule.else.action?.mode === 'negative' }" :title="rule.else.action?.mode === 'negative' ? 'Add to negative — the variable is not changed' : undefined">{{ modeLabel(rule.else.action?.mode) }}</span>
-                <span class="rule-tok-val"><RuleValueChips :value="clampPreviewValue(rule.else.action?.value)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
-                <PairBadge
-                  v-for="p in pairBadgesFor(rule.id, 'else')"
-                  :key="`${p.number}-${p.targetUuid}`"
-                  :pair="p"
-                  variant="option"
-                />
+                <i :class="['pi', isBranchEnabled(rule.id, bi) ? 'pi-check' : 'pi-times']" aria-hidden="true" />
               </span>
-              <!-- ELSE has no condition → no condition override cell -->
-              <span class="branch-cell branch-cell--cond-override"></span>
-              <span class="branch-cell branch-cell--action-override">
-                <!-- ELSE action.value override — full `@{}` carrier machinery,
-                     same as the IF/ELIF action field. -->
-                <RichTextInput
-                  surface="derivation"
-                  allow-nested-refs
-                  wrap
-                  :var-suggestions="varSuggestions"                  :var-producers="varProducers"                  graph-aware
-                  :ref-suggestions="refSuggestions"
-                  :uuid-to-name="uuidToName"
-                  :uuid-to-sub-categories="uuidToSubCategories"
-                  :uuid-to-has-null="uuidToHasNull"
-                  :uuid-to-options-count="uuidToOptionsCount"
-                  :uuid-to-option-tag-sets="uuidToOptionTagSets"
-                  :uuid-to-tag-groups="uuidToTagGroups"
-                  :model-value="getOverride('action_value_overrides', rule.id, 'else')"
-                  :placeholder="rule.else.action?.value || ''"
-                  class="branch-override-input"
-                  :class="{ 'branch-override-input--mod': getOverride('action_value_overrides', rule.id, 'else') !== '' }"
-                  :data-test="`action-override-${rule.id}-else`"
-                  :aria-label="`ELSE action value override for rule ${rule.id}`"
-                  @update:model-value="(v: string) => onActionOverrideInput(rule.id, 'else', v)"
-                />
-              </span>
+              <span class="br__tag" :data-kind="clauseTag(bi).toLowerCase()">{{ clauseTag(bi) }}</span>
+              <span v-if="bi === 0 && clausesOf(rule).length > 1" class="br__hint">first match wins</span>
+              <span v-else-if="bi === 'else'" class="br__hint">when nothing above matched</span>
+              <PairBadge
+                v-for="p in pairBadgesFor(rule.id, bi)"
+                :key="`${p.number}-${p.targetUuid}`"
+                :pair="p"
+                variant="option"
+              />
+            </div>
+
+            <div v-if="hasCondition && typeof bi === 'number'" class="br__blk">
+              <span class="br__lbl">When</span>
+              <div class="br__rows">
+                <template v-for="(row, ri) in condRows((clause as DerivationBranch).condition, bi)" :key="ri">
+                  <div v-if="row.kind === 'test' && row.test && row.key" class="br__row">
+                    <span v-for="g in row.depth" :key="g" class="br__guide" aria-hidden="true" />
+                    <span class="br__lhs">
+                      <span :class="['rule-tok-var', varColorClass(row.test.var ?? '')]">${{ row.test.var }}</span>
+                      <span class="rule-tok-op">{{ opSymbol(row.test.op) }}</span>
+                    </span>
+                    <!-- condition.value override — `$var` chips, but NO `@{}`
+                         machinery: the engine compares condition.value RAW. -->
+                    <div
+                      v-if="opUsesValue(row.test.op)"
+                      class="fld"
+                      :class="{ 'fld--mod': getOverride('condition_value_overrides', rule.id, row.key) !== '' }"
+                    >
+                      <div class="fld__stack">
+                        <RichTextInput
+                          surface="derivation"
+                          wrap
+                          :var-suggestions="varSuggestions"
+                          :var-producers="varProducers"
+                          graph-aware
+                          :uuid-to-name="uuidToName"
+                          :model-value="getOverride('condition_value_overrides', rule.id, row.key)"
+                          :placeholder="row.test.value || ''"
+                          class="fld__input"
+                          :data-test="`cond-override-${rule.id}-${row.key}`"
+                          :aria-label="`Condition value override for rule ${rule.id} branch ${bi}${row.key === String(bi) ? '' : ' test ' + row.key}`"
+                          @update:model-value="(v: string) => onCondOverrideInput(rule.id, String(row.key), v)"
+                        />
+                        <span
+                          v-if="getOverride('condition_value_overrides', rule.id, row.key) === ''"
+                          class="fld__ghost"
+                          aria-hidden="true"
+                        ><RuleValueChips :value="row.test.value ?? ''" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
+                      </div>
+                      <div
+                        v-if="getOverride('condition_value_overrides', rule.id, row.key) !== ''"
+                        class="fld__lib"
+                      >
+                        <span class="fld__lib-label">library</span>
+                        <RuleValueChips :value="row.test.value ?? ''" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware />
+                        <button
+                          type="button"
+                          class="fld__reset"
+                          :data-test="`cond-reset-${rule.id}-${row.key}`"
+                          @click="onCondOverrideInput(rule.id, String(row.key), '')"
+                        >↺ Use library</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else-if="row.kind === 'group'" class="br__row br__row--conn">
+                    <span v-for="g in row.depth" :key="g" class="br__guide" aria-hidden="true" />
+                    <span class="br__group">{{ row.text }}</span>
+                  </div>
+                  <div v-else class="br__row br__row--conn">
+                    <span v-for="g in row.depth" :key="g" class="br__guide" aria-hidden="true" />
+                    <span class="rule-tok-join" :class="{ 'rule-tok-join--or': row.text === 'OR' }">{{ row.text }}</span>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <div class="br__blk">
+              <span class="br__lbl">Then</span>
+              <div class="br__rows">
+                <template v-for="({ key, action }, ai) in actionOverrides(clause, bi)" :key="key">
+                  <div v-if="ai > 0" class="br__row br__row--conn">
+                    <span class="rule-tok-join">AND</span>
+                  </div>
+                  <div class="br__row">
+                    <span class="br__lhs">
+                      <span
+                        v-if="action.target_var"
+                        :class="['rule-tok-var', varColorClass(action.target_var)]"
+                      >${{ action.target_var }}</span>
+                      <span
+                        class="rule-tok-op"
+                        :class="{ 'rule-tok-op--neg': isNegativeMode(action.mode) }"
+                        :title="modeTitle(action.mode)"
+                      >{{ modeLabel(action.mode) }}</span>
+                    </span>
+                    <!-- action.value override — full `@{}` carrier machinery:
+                         the engine resolves `@{}` here. -->
+                    <div
+                      class="fld"
+                      :class="{ 'fld--mod': getOverride('action_value_overrides', rule.id, key) !== '' }"
+                    >
+                      <div class="fld__stack">
+                        <RichTextInput
+                          surface="derivation"
+                          allow-nested-refs
+                          wrap
+                          :var-suggestions="varSuggestions"
+                          :var-producers="varProducers"
+                          graph-aware
+                          :ref-suggestions="refSuggestions"
+                          :uuid-to-name="uuidToName"
+                          :uuid-to-sub-categories="uuidToSubCategories"
+                          :uuid-to-has-null="uuidToHasNull"
+                          :uuid-to-options-count="uuidToOptionsCount"
+                          :uuid-to-option-tag-sets="uuidToOptionTagSets"
+                          :uuid-to-tag-groups="uuidToTagGroups"
+                          :model-value="getOverride('action_value_overrides', rule.id, key)"
+                          :placeholder="action.value || ''"
+                          class="fld__input"
+                          :data-test="`action-override-${rule.id}-${key}`"
+                          :aria-label="`${bi === 'else' ? 'ELSE action' : 'Action'} value override for rule ${rule.id}${bi === 'else' ? '' : ' branch ' + bi}${ai === 0 ? '' : ' action ' + key}`"
+                          @update:model-value="(v: string) => onActionOverrideInput(rule.id, key, v)"
+                        />
+                        <span
+                          v-if="getOverride('action_value_overrides', rule.id, key) === ''"
+                          class="fld__ghost"
+                          aria-hidden="true"
+                        ><RuleValueChips :value="action.value ?? ''" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
+                      </div>
+                      <div v-if="getOverride('action_value_overrides', rule.id, key) !== ''" class="fld__lib">
+                        <span class="fld__lib-label">library</span>
+                        <RuleValueChips :value="action.value ?? ''" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware />
+                        <button
+                          type="button"
+                          class="fld__reset"
+                          :data-test="`action-reset-${rule.id}-${key}`"
+                          @click="onActionOverrideInput(rule.id, key, '')"
+                        >↺ Use library</button>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </div>
             </div>
           </div>
         </div>
@@ -1014,71 +1063,102 @@ function ruleSummaryText(rule: DerivationRule): string {
   padding: 0 2px;
 }
 
-/* Body — branch table */
+/* Body — one card per clause */
 .rule-body {
-  padding: 8px 10px;
-  background: var(--wp-bg-deep, var(--wp-bg));
-}
-.branch-table {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 8px;
+  padding: 10px;
+  background: var(--wp-bg-deep, var(--wp-bg));
 }
-.branch-row {
-  display: grid;
-  grid-template-columns: 28px 38px 1fr 1fr 1fr;
-  gap: 6px;
-  align-items: center;
-  padding: 4px 6px;
-  font: 11px var(--wp-font-mono);
-  border-bottom: 1px dashed var(--wp-border-soft, var(--wp-border));
+.br {
+  border: 1px solid var(--wp-border-soft, var(--wp-border));
+  border-left: 3px solid var(--wp-kind-derivation, #fbbf24);
+  border-radius: 4px;
+  background: var(--wp-bg);
+  padding: 8px 10px;
 }
-.branch-row:last-child { border-bottom: 0; }
-.branch-row--head {
-  font: 600 9px var(--wp-font-sans);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--wp-text-dim, var(--wp-text3));
-  border-bottom: 1px solid var(--wp-border);
-  margin-bottom: 2px;
-  padding-bottom: 4px;
+.br[data-kind="elif"] { border-left-color: var(--wp-info, #60a5fa); }
+.br[data-kind="else"] {
+  border-left-color: var(--wp-warn, var(--wp-status-modified, #f59e0b));
+  border-style: dashed;
+  border-left-style: solid;
 }
-.branch-row--off {
-  opacity: 0.5;
-}
-.branch-row--off .branch-cell--summary {
-  flex-wrap: wrap;
-}
-.branch-cell {
-  min-width: 0;
+.br--off { opacity: 0.5; }
+.br__head {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
+  margin-bottom: 4px;
 }
-/* Same treatment as the rule head, for the same reason: this is a per-branch
-   PREVIEW column, and one long action value stretched its row until the branch
-   table stopped being a table. Single line + real ellipsis + `title` on hover;
-   the override inputs beside it hold the full value and scroll. */
-.branch-cell--summary {
-  flex-wrap: wrap;
+.br__tag {
+  font: 700 9px var(--wp-font-mono);
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 3px;
 }
-.branch-cell--head {
+.br__tag[data-kind="if"] {
+  color: var(--wp-kind-derivation, #fbbf24);
+  background: color-mix(in srgb, var(--wp-kind-derivation, #fbbf24) 18%, transparent);
+}
+.br__tag[data-kind="elif"] {
+  color: var(--wp-info, #60a5fa);
+  background: color-mix(in srgb, var(--wp-info, #60a5fa) 18%, transparent);
+}
+.br__tag[data-kind="else"] {
+  color: var(--wp-warn, var(--wp-status-modified, #f59e0b));
+  background: color-mix(in srgb, var(--wp-warn, var(--wp-status-modified, #f59e0b)) 18%, transparent);
+}
+.br__hint {
+  font: 400 10px var(--wp-font-sans);
   color: var(--wp-text-dim, var(--wp-text3));
-  font-weight: 600;
 }
-.branch-cell--toggle { justify-content: center; }
-/* Stacks a grouped branch's per-test override fields. */
-.branch-cell--cond-override { flex-direction: column; align-items: stretch; }
-.branch-cell--tag {
-  justify-content: flex-start;
+/* WHEN / THEN: a narrow label column, then the rows. */
+.br__blk {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 8px;
+  margin-top: 6px;
+}
+.br__lbl {
   font: 600 9px var(--wp-font-sans);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.1em;
+  color: var(--wp-text-dim, var(--wp-text3));
+  text-align: right;
+  padding-top: 8px;
 }
-.branch-cell--tag[data-kind="if"] { color: var(--wp-kind-derivation, #fbbf24); }
-.branch-cell--tag[data-kind="elif"] { color: var(--wp-info, #60a5fa); }
-.branch-cell--tag[data-kind="else"] { color: var(--wp-warn, var(--wp-status-modified, #f59e0b)); }
-
+.br__rows { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+/* One test or action: its `$var op` on the left, its value field taking the
+   rest of the width, so a long value wraps across the whole card. */
+.br__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  font: 11px var(--wp-font-mono);
+}
+.br__row--conn { align-items: center; min-height: 14px; }
+.br__lhs {
+  flex: 0 0 auto;
+  width: 9.5rem;
+  max-width: 40%;
+  padding-top: 6px;
+  overflow-wrap: anywhere;
+}
+/* One per nesting level: the rule down the left marks the group's rows. */
+.br__guide {
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: 10px;
+  margin-left: 2px;
+  border-left: 2px solid color-mix(in srgb, var(--wp-info, #60a5fa) 45%, transparent);
+}
+.br__group {
+  font: 600 9px var(--wp-font-sans);
+  letter-spacing: 0.06em;
+  color: var(--wp-info, #60a5fa);
+}
 .branch-toggle {
   width: 16px;
   height: 16px;
@@ -1099,29 +1179,56 @@ function ruleSummaryText(rule: DerivationRule): string {
 }
 .branch-toggle .pi { font-size: 8px; }
 
-/* The override fields are now RichTextInput hosts (atomic-chip editors)
- * rather than bare `<input>`s — RichTextInput supplies its own `.wp-rt`
- * border / background / padding / mono font. We only own the grid-cell
- * sizing here + the `--mod` accent (same minimal approach combine's
- * TemplateSection uses with `.wp-tpl__input--mod`). The `:deep()` rules
- * tighten the embedded host to the compact 10px branch-table scale so the
- * canvas override field doesn't tower over the summary row. */
-.branch-override-input {
-  width: 100%;
-  min-width: 0;
+/* A value field: the RichTextInput, with the library value laid over it as a
+ * ghost while the field is empty (chips and all, where a plain placeholder
+ * would show raw `@{uuid}`). Both sit in one grid cell, so the field grows to
+ * fit whichever is taller and a long library value is never clipped. Once
+ * overridden, the field turns accent and the library value moves underneath. */
+.fld { flex: 1 1 auto; min-width: 0; }
+.fld__stack { display: grid; }
+.fld__stack > * { grid-area: 1 / 1; min-width: 0; }
+.fld__input :deep(.wp-rt) { height: 100%; font: 11px var(--wp-font-mono); }
+.fld__input :deep(.wp-rt__host) { min-height: 100%; padding: 5px 8px; }
+.fld__stack :deep(.wp-rt__host--empty)::before { content: none; }
+.fld__ghost {
+  position: relative;
+  z-index: 1;
+  align-self: start;
+  padding: 6px 9px;
+  font: 11px var(--wp-font-mono);
+  line-height: 1.6;
+  opacity: 0.55;
+  pointer-events: none;
+  overflow-wrap: anywhere;
 }
-.branch-override-input :deep(.wp-rt) {
-  font: 10px var(--wp-font-mono);
-  border-style: dashed;
-}
-.branch-override-input :deep(.wp-rt__host) {
-  padding: 3px 6px;
-}
-.branch-override-input--mod :deep(.wp-rt) {
-  border-style: solid;
+.fld--mod :deep(.wp-rt) {
   border-color: var(--wp-accent);
-  background: color-mix(in srgb, var(--wp-accent) 6%, var(--wp-bg2));
+  background: color-mix(in srgb, var(--wp-accent) 7%, var(--wp-bg2));
 }
+.fld__lib {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+  font: 10px var(--wp-font-mono);
+  color: var(--wp-text-dim, var(--wp-text3));
+}
+.fld__lib-label {
+  font: 600 9px var(--wp-font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.fld__reset {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: 10px var(--wp-font-sans);
+  color: var(--wp-accent);
+  cursor: pointer;
+}
+.fld__reset:hover { text-decoration: underline; }
 
 /* Token coloring (re-used from prior list rendering) */
 .rule-tok-var { font-weight: 600; }
@@ -1148,15 +1255,5 @@ function ruleSummaryText(rule: DerivationRule): string {
   color: var(--wp-accent);
   padding: 0 3px;
 }
-/* A grouped branch stacks one override field per test, each tagged with
-   its variable. */
-.cond-override {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
-  min-width: 0;
-}
-.cond-override + .cond-override { margin-top: 3px; }
-.cond-override__var { font: 600 9px var(--wp-font-mono); flex: none; }
+.rule-tok-join--or { color: var(--wp-info, #60a5fa); }
 </style>

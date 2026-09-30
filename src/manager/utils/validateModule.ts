@@ -21,7 +21,7 @@ import type { BundleRow, ModuleRow } from "../api/types";
 import { tokenizeRich, varBaseName, type RichToken } from "../../widgets/richTokenize";
 import { validateExpression } from "../parsing/subcatFilter";
 import { isValidVariableName } from "../validation/names";
-import { conditionLeaves } from "../../extension/derivation-conditions";
+import { clauseActions, conditionLeaves } from "../../extension/derivation-conditions";
 
 /** A produced-var NAME must be a clean `$varname` identifier
  *  (`[A-Za-z_][A-Za-z0-9_]*`). Anything else — a comma, space, or other
@@ -386,8 +386,8 @@ function validateDerivation(
           }
         }
       }
-      const actionValue = b.action?.value;
-      if (typeof actionValue === "string") {
+      for (const actionValue of clauseActions(b).map((a) => a.value)) {
+        if (typeof actionValue !== "string") continue;
         for (const ref of extractRefs(actionValue)) {
           if (!idx.byId.has(ref.uuid)) {
             const label = missingRefLabel(ref);

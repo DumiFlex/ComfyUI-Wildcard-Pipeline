@@ -18,7 +18,7 @@ import {
   cacheVersion as previewCacheVersion,
 } from "./preview-resolver";
 import { assignCodenames, baseCodename } from "./node-codename";
-import { evalConditionTree } from "./derivation-conditions";
+import { clauseActions, derivationTargets, evalConditionTree, isNegativeMode } from "./derivation-conditions";
 import type { SeedStrategy } from "../components/shared/seed-derive";
 
 // ── Subgraph boundary primer ────────────────────────────────────────────
@@ -936,19 +936,9 @@ export function collectUpstreamKinds(
         // the assembler's pre-run "unresolved $var" scan from false-
         // flagging derivation outputs and lets the chip strip render
         // its kind icon.
-        const dp = (m.payload ?? {}) as { rules?: Array<{
-          branches?: Array<{ action?: { target_var?: string } }>;
-          else?: { action?: { target_var?: string } };
-        }> };
-        for (const rule of dp.rules ?? []) {
-          for (const branch of rule.branches ?? []) {
-            const name = (branch.action?.target_var ?? "").replace(/^\$/, "").trim();
-            if (name) kinds[name] = "derivation";
-            if (name) flagInternal(name, !!m.instance?.internal);
-          }
-          const elseName = (rule.else?.action?.target_var ?? "").replace(/^\$/, "").trim();
-          if (elseName) kinds[elseName] = "derivation";
-          if (elseName) flagInternal(elseName, !!m.instance?.internal);
+        for (const name of derivationTargets(m.payload)) {
+          kinds[name] = "derivation";
+          flagInternal(name, !!m.instance?.internal);
         }
         continue;
       }
@@ -1194,16 +1184,7 @@ export function collectUpstreamProducers(
       if (m.type === "derivation") {
         // Which branch fires isn't knowable statically, so every reachable
         // target_var counts as a possible write.
-        const dp = (m.payload ?? {}) as { rules?: Array<{
-          branches?: Array<{ action?: { target_var?: string } }>;
-          else?: { action?: { target_var?: string } };
-        }> };
-        for (const rule of dp.rules ?? []) {
-          for (const branch of rule.branches ?? []) {
-            write((branch.action?.target_var ?? "").replace(/^\$/, "").trim(), base, writerKey);
-          }
-          write((rule.else?.action?.target_var ?? "").replace(/^\$/, "").trim(), base, writerKey);
-        }
+        for (const name of derivationTargets(m.payload)) write(name, base, writerKey);
         continue;
       }
 
@@ -1691,13 +1672,13 @@ function writeBindings(
       let applied = false;
       for (const branch of rule.branches ?? []) {
         if (evalConditionTree<DerivationTest>(branch.condition, (t) => matchDerivationCondition(t, ctx))) {
-          applyDerivationAction(branch.action, ctx, catalog);
+          for (const a of clauseActions<DerivationActionLike>(branch)) applyDerivationAction(a, ctx, catalog);
           applied = true;
           break;
         }
       }
       if (!applied && rule.else) {
-        applyDerivationAction(rule.else.action, ctx, catalog);
+        for (const a of clauseActions<DerivationActionLike>(rule.else)) applyDerivationAction(a, ctx, catalog);
       }
     }
     return;
@@ -1706,6 +1687,8 @@ function writeBindings(
 }
 
 type DerivationTest = { var?: string; op?: string; value?: string };
+type DerivationActionLike = { target_var?: string; mode?: string; value?: string };
+
 
 function matchDerivationCondition(
   cond: DerivationTest | undefined,
@@ -1744,9 +1727,10 @@ function applyDerivationAction(
   const target = (action.target_var ?? "").replace(/^\$/, "").trim();
   if (!target) return;
   const mode = action.mode ?? "replace";
-  // "Add to negative" (schema v8) files words under the variable's negatives
-  // and never writes the variable — the preview value is unchanged.
-  if (mode === "negative") return;
+  // "Add to negative" / "Replace negative" (schema v8) file words under the
+  // variable's negatives and never write the variable — the preview value is
+  // unchanged.
+  if (isNegativeMode(mode)) return;
   const raw = action.value ?? "";
   const newValue = expandValue(raw, ctx, catalog, 0);
   // SP2a: read the existing target value in string form (join a ListVar)
@@ -1784,6 +1768,9 @@ function expandValue(
       // "a white t-shirt and denim skirt.SHOES" — the accessor looked broken
       // in exactly the editor meant to teach it.
       if (axis == null) return base;
+      // `$name.neg` reads the variable's negatives, which the static preview
+      // doesn't track: render nothing rather than a stray accessor.
+      if (axis === "neg") return "";
       const tag = previewAxisTag(catalog, name, axis);
       return tag ?? full;
     },

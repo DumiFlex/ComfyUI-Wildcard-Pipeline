@@ -17,7 +17,7 @@ import re
 import sqlite3
 from typing import Any
 
-from engine.cascade.fixers import collect_tags
+from engine.cascade.fixers import collect_tags, derivation_actions
 from engine.db.repositories import ModuleRepository
 
 # 4-segment ref: ``@{8hex [#name] [:expr] [!null]}`` — uuid + optional
@@ -80,29 +80,15 @@ def _scan_wildcard_delete(conn: sqlite3.Connection, wildcard_id: str) -> list[di
             continue
 
         if t == "derivation":
-            found = False
-            rules = p.get("rules") or []
-            for ri, rule in enumerate(rules):
-                if found:
+            for path, action in derivation_actions(p):
+                if any(
+                    isinstance(v, str) and any(
+                        r.group(1) == wildcard_id for r in _REF_REGEX.finditer(v)
+                    )
+                    for v in action.values()
+                ):
+                    out.append(_ref_entry("derivation", m, path))
                     break
-                for bi, branch in enumerate(rule.get("branches") or []):
-                    if found:
-                        break
-                    for ai, action in enumerate(branch.get("actions") or []):
-                        if not isinstance(action, dict):
-                            continue
-                        for v in action.values():
-                            if isinstance(v, str) and any(
-                                m.group(1) == wildcard_id for m in _REF_REGEX.finditer(v)
-                            ):
-                                out.append(_ref_entry(
-                                    "derivation", m,
-                                    f"rules[{ri}].branches[{bi}].actions[{ai}]",
-                                ))
-                                found = True
-                                break
-                        if found:
-                            break
             continue
 
     # Bundles intentionally excluded from the wildcard-delete impact
@@ -194,35 +180,21 @@ def _scan_combine_output_var(
             continue
 
         if t == "derivation":
-            found = False
-            for ri, rule in enumerate(p.get("rules") or []):
-                if found:
-                    break
-                for bi, branch in enumerate(rule.get("branches") or []):
-                    if found:
+            for path, action in derivation_actions(p):
+                hit = None
+                for k, v in action.items():
+                    # The variable read in a string value (`$name`,
+                    # `$name.neg`, ...) or named as the action's target.
+                    if isinstance(v, str) and var_name in _VAR_REGEX.findall(v):
+                        hit = f"{path}.{k}"
                         break
-                    for ai, action in enumerate(branch.get("actions") or []):
-                        if not isinstance(action, dict):
-                            continue
-                        for k, v in action.items():
-                            # Match as variable ref in a string value
-                            if isinstance(v, str) and var_name in _VAR_REGEX.findall(v):
-                                out.append(_ref_entry(
-                                    "derivation", m,
-                                    f"rules[{ri}].branches[{bi}].actions[{ai}].{k}",
-                                ))
-                                found = True
-                                break
-                            # Or match as the explicit set_var target
-                            if k == "set_var" and v == var_name:
-                                out.append(_ref_entry(
-                                    "derivation", m,
-                                    f"rules[{ri}].branches[{bi}].actions[{ai}].set_var",
-                                ))
-                                found = True
-                                break
-                        if found:
-                            break
+                    if k in ("set_var", "target_var") and isinstance(v, str) \
+                            and v.lstrip("$") == var_name:
+                        hit = f"{path}.{k}"
+                        break
+                if hit:
+                    out.append(_ref_entry("derivation", m, hit))
+                    break
             continue
 
         if t == "combine":

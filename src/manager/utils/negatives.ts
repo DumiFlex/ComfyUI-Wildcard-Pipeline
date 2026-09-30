@@ -1,4 +1,5 @@
 import { toIdentifier } from "./slug";
+import { clauseActions, isNegativeMode } from "../../extension/derivation-conditions";
 
 /**
  * Send-to-negative (schema v8) helpers shared by the library editors.
@@ -115,12 +116,10 @@ export function libraryVarNegatives(
     } else if (m.type === "derivation") {
       for (const rule of asArray(p.rules)) {
         const r = asRecord(rule);
-        const actions = [
-          ...asArray(r.branches).map((b) => asRecord(asRecord(b).action)),
-          asRecord(asRecord(r.else).action),
-        ];
+        const actions = [...asArray(r.branches), r.else]
+          .flatMap((c) => clauseActions<Record<string, unknown>>(c));
         for (const a of actions) {
-          if (a.mode === "negative" && strip$(a.target_var) === want) pushText(texts, a.value);
+          if (isNegativeMode(a.mode) && strip$(a.target_var) === want) pushText(texts, a.value);
         }
       }
     } else {
