@@ -5,10 +5,16 @@ Drops duplicate tags, strips orphan punctuation, filters blocklisted words. Oper
 ## Inputs
 
 - **prompt** — STRING from any source (typically a WP Prompt Assembler).
+- **negative** — optional STRING (wire-only), e.g. the Assembler's negative output.
 
-## Output
+## Outputs
 
 - **prompt** — the cleaned STRING.
+- **negative** — the cleaned negative (empty when the negative input is unwired).
+
+## Cleaning the negative
+
+The RULES list has a second checkbox column for the negative. Its defaults: whitespace, punctuation and tag dedupe on (gentle: whitespace only); fuzzy dedupe and blocklist off, since near-duplicates in a negative are usually deliberate and blocklisted words often belong there. **Drop negative tags also in prompt** (off by default) removes a negative tag the prompt also asks for; either way the run stats name the overlap.
 
 ## How to use
 

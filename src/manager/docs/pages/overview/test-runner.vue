@@ -65,8 +65,8 @@ import VarToken from "../../../components/docs/VarToken.vue";
       <DocKeyList
         :items="[
           { term: 'Variables', desc: 'Every $variable and how often it took each value, with values that never changed listed once as constants.' },
-          { term: 'Outputs', desc: 'The output for the first seeds, tinted by which variable wrote each part.' },
-          { term: 'Samples', desc: 'One row per seed with every variable; filter by seed or value.' },
+          { term: 'Outputs', desc: 'The output for the first seeds, tinted by which variable wrote each part, with a NEG line for the negative words it carries.' },
+          { term: 'Samples', desc: 'One row per seed with every variable (and the output\'s negative, when there is one); filter by seed or value.' },
           { term: 'Warnings', desc: 'Runtime warnings grouped by kind, with the seeds that raised them, and any runs that failed.' },
           { term: 'Compare', desc: 'What changed since the saved baseline. See below.' },
         ]"
@@ -102,6 +102,8 @@ import VarToken from "../../../components/docs/VarToken.vue";
         output for each seed (the first 1,000), plus every variable's spread and the warnings. Edit your modules, run
         again, and the tab lists each seed whose output changed (with the changed words marked),
         values that appeared or disappeared, shares that moved, and warnings that came or went.
+        A seed whose negative changed is listed too; a baseline saved before negatives existed says
+        <em>negative not recorded</em> until you save it again.
       </p>
       <p>
         <b>Re-run all</b> in the rail's Pinned header runs every pinned scenario against its

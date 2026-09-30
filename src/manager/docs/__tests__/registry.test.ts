@@ -37,6 +37,12 @@ describe("docs registry", () => {
     }
   });
 
+  it("searching for negatives finds the Negatives page", () => {
+    for (const q of ["negative", "$negatives", "add to negative"]) {
+      expect(searchPages(q).some((p) => p.id === "negatives"), q).toBe(true);
+    }
+  });
+
   it("toneVar maps tones to css vars; bundle + neutral are muted", () => {
     expect(toneVar("node")).toContain("--wp-node");
     expect(toneVar("wildcard")).toContain("--wp-kind-wildcard");
