@@ -15,6 +15,9 @@ export interface RawWrite {
   variable?: string;
   value?: unknown;
   overwrite?: boolean;
+  /** The joined negatives the variable carries after this write (only
+   *  present when non-empty). */
+  negative?: string;
 }
 
 export interface RawCondition {
@@ -108,6 +111,8 @@ export interface StepWrite {
   variable: string;
   value: string;
   overwrite: boolean;
+  /** Negative words the variable carries after this write ("" = none). */
+  negative: string;
 }
 
 export interface RefRow {
@@ -193,6 +198,22 @@ export interface VarRow {
   writeCount: number;
   /** Set by an upstream node's pass-through, not by any traced module. */
   fromUpstream: boolean;
+  /** The variable's negative words (send-to-negative), grouped by where
+   *  they came from. `source` is "" when the variable's own module set
+   *  them, else a readable name (a derivation's module, `$other`, Injector). */
+  negatives: NegativeLine[];
+}
+
+export interface NegativeLine {
+  text: string;
+  source: string;
+}
+
+/** One `__wp_negatives__` entry as the engine files it. */
+export interface RawNegativeEntry {
+  text?: string;
+  pick?: number | null;
+  source?: string;
 }
 
 export interface WarningRow {
@@ -216,6 +237,8 @@ export interface DebugModel {
   seed: string;
   loopIndex: number | null;
   counts: { info: number; warning: number; error: number };
+  /** How many variables carry negative words. */
+  negativeCount: number;
   /** module uuid → variable (or display) name, from the trace. */
   names: Record<string, string>;
   /** module uuid → engine type, from the trace. */
@@ -390,6 +413,39 @@ function warningDetailText(type: string, detail: Record<string, unknown>): strin
   return "";
 }
 
+/** Readable name for a negative entry's `source`. The engine files an
+ *  option / fixed / combine negative under its own binding, a derivation's
+ *  under the fired branch's carrier key (`rule_id:branch`), an Injector
+ *  row's under "injector", and inherited entries keep the binding they came
+ *  from. "" means "the variable's own module". */
+function negativeSourceLabel(variable: string, source: string, carriers: Map<string, string>): string {
+  if (!source || source === variable) return "";
+  const carrier = carriers.get(source);
+  if (carrier) return carrier;
+  if (source === "injector") return "Injector";
+  if (source === "derivation") return "derivation";
+  return `$${source}`;
+}
+
+/** A variable's negative entries as display lines: texts joined per
+ *  source (multi-pick entries of one option read as one line). */
+export function negativeLines(
+  variable: string,
+  entries: unknown,
+  carriers: Map<string, string> = new Map(),
+): NegativeLine[] {
+  const out: NegativeLine[] = [];
+  for (const raw of asList<RawNegativeEntry>(entries)) {
+    const text = str(asRecord(raw).text).trim();
+    if (!text) continue;
+    const source = negativeSourceLabel(variable, str(asRecord(raw).source), carriers);
+    const last = out[out.length - 1];
+    if (last && last.source === source) last.text = `${last.text}, ${text}`;
+    else out.push({ text, source });
+  }
+  return out;
+}
+
 // ── Build ───────────────────────────────────────────────────────────────
 
 export function buildModel(snap: Record<string, unknown>): DebugModel {
@@ -454,9 +510,10 @@ export function buildModel(snap: Record<string, unknown>): DebugModel {
       variable: str(w.variable),
       value: formatValue(w.value),
       overwrite: !!w.overwrite,
+      negative: str(w.negative).trim(),
     }));
     if (kind === "injector" && t.binding) {
-      writes.push({ variable: t.binding, value: formatValue(t.value), overwrite: false });
+      writes.push({ variable: t.binding, value: formatValue(t.value), overwrite: false, negative: "" });
     }
     const declared = writes.length
       ? writes.map((w) => w.variable)
@@ -586,6 +643,18 @@ export function buildModel(snap: Record<string, unknown>): DebugModel {
     const tags = asList<string>(asRecord(p).sub_categories).filter((x) => typeof x === "string");
     if (name && tags.length) tagsByVar.set(name, tags);
   }
+  // Derivation carrier keys (`rule_id:branch`) → the module that fired them,
+  // so an "Add to negative" entry names its derivation.
+  const negTable = asRecord(snap.__wp_negatives__);
+  const carriers = new Map<string, string>();
+  for (const s of steps) {
+    if (s.kind !== "derivation") continue;
+    for (const r of s.detail?.rules ?? []) {
+      if (r.id && r.fired != null && !carriers.has(`${r.id}:${r.fired}`)) {
+        carriers.set(`${r.id}:${r.fired}`, s.name || "derivation");
+      }
+    }
+  }
   const variables: VarRow[] = [];
   for (const [name, value] of Object.entries(snap)) {
     if (name.startsWith("__")) continue;
@@ -619,6 +688,7 @@ export function buildModel(snap: Record<string, unknown>): DebugModel {
       writerName: writer?.name ?? "",
       writeCount: writeCount.get(name) ?? 0,
       fromUpstream: !writer,
+      negatives: negativeLines(name, negTable[name], carriers),
     });
   }
 
@@ -636,6 +706,7 @@ export function buildModel(snap: Record<string, unknown>): DebugModel {
     seed: typeof seedRaw === "number" || typeof seedRaw === "string" ? String(seedRaw) : "",
     loopIndex: typeof loopRaw === "number" ? loopRaw : null,
     counts,
+    negativeCount: variables.filter((v) => v.negatives.length > 0).length,
     names,
     kinds,
   };

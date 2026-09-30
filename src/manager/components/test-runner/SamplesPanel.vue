@@ -5,7 +5,7 @@
  */
 import { computed, ref } from "vue";
 import type { ScenarioRunResponse } from "../../api/types";
-import { orderByStack, renderValue, type StackItemView } from "../../utils/scenario";
+import { negativeText, orderByStack, renderValue, type StackItemView } from "../../utils/scenario";
 
 const props = defineProps<{
   result: ScenarioRunResponse;
@@ -32,16 +32,26 @@ const columns = computed(() => {
   return out ? [...ordered, out] : ordered;
 });
 
+/** The output's negative words get their own column when any seed has some. */
+const negColumn = computed(() => {
+  const out = props.outputVar;
+  return !!out && props.result.samples.some((s) => (s.negatives?.[out]?.length ?? 0) > 0);
+});
+
 const rows = computed(() => {
   const q = filter.value.trim().toLowerCase();
+  const out = props.outputVar;
   return props.result.samples
     .map((s) => ({
       seed: s.seed,
       error: s.error,
       warnings: s.warnings.length,
       cells: columns.value.map((c) => renderValue(s.vars[c])),
+      negative: negColumn.value && out ? negativeText(s, out) : "",
     }))
-    .filter((r) => !q || String(r.seed).includes(q) || r.cells.some((c) => c.toLowerCase().includes(q)));
+    .filter((r) => !q || String(r.seed).includes(q)
+      || r.cells.some((c) => c.toLowerCase().includes(q))
+      || r.negative.toLowerCase().includes(q));
 });
 </script>
 
@@ -66,6 +76,7 @@ const rows = computed(() => {
           <tr>
             <th>Seed</th>
             <th v-for="c in columns" :key="c" :data-output="c === outputVar ? 'true' : 'false'"><code>${{ c }}</code></th>
+            <th v-if="negColumn" class="wp-trsm__neg-head" data-test="samples-neg-head" :title="`Negative words $${outputVar} carries`">Negative</th>
             <th>Warnings</th>
           </tr>
         </thead>
@@ -80,7 +91,7 @@ const rows = computed(() => {
             @keydown.enter="emit('open', r.seed)"
           >
             <td class="wp-trsm__seed">{{ r.seed }}</td>
-            <td v-if="r.error" :colspan="Math.max(1, columns.length)" class="wp-trsm__err">{{ r.error }}</td>
+            <td v-if="r.error" :colspan="Math.max(1, columns.length + (negColumn ? 1 : 0))" class="wp-trsm__err">{{ r.error }}</td>
             <template v-else>
               <td
                 v-for="(cell, i) in r.cells"
@@ -88,6 +99,7 @@ const rows = computed(() => {
                 :title="cell"
                 :data-output="columns[i] === outputVar ? 'true' : 'false'"
               >{{ cell }}</td>
+              <td v-if="negColumn" class="wp-trsm__neg" :title="r.negative" data-test="sample-neg">{{ r.negative }}</td>
             </template>
             <td :class="{ 'wp-trsm__warn': r.warnings }">{{ r.warnings }}</td>
           </tr>
@@ -128,4 +140,6 @@ tbody tr:focus-visible { outline: 2px solid var(--wp-border-focus); outline-offs
 .wp-trsm__none { margin: 0; font-size: var(--wp-text-sm); color: var(--wp-text-muted); }
 .wp-trsm__warn { color: var(--wp-warn); }
 .wp-trsm__err { color: var(--wp-danger-text); }
+.wp-trsm__neg { color: var(--wp-danger-text); max-width: 320px; }
+th.wp-trsm__neg-head { color: var(--wp-danger-text); }
 </style>

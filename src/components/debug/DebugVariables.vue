@@ -65,6 +65,17 @@ const nameWidth = computed(() => {
           surface="wildcard"
         />
         <span v-else class="wp-dbg-var-row__empty">empty</span>
+        <div
+          v-for="(n, i) in v.negatives"
+          :key="`neg-${i}`"
+          class="wp-dbg-var-row__neg"
+          data-test="dbg-var-neg"
+          title="Negative words: an Assembler that renders this variable adds them to its negative output"
+        >
+          <span class="wp-dbg-var-row__neg-mark" aria-hidden="true">−</span>
+          <span class="wp-dbg-var-row__neg-text">{{ n.text }}</span>
+          <span v-if="n.source" class="wp-dbg-var-row__neg-src" data-test="dbg-var-neg-src">· {{ n.source }}</span>
+        </div>
         <div v-if="v.axes.length || v.tags.length" class="wp-dbg-var-row__extra">
           <span v-for="a in v.axes" :key="a.axis" class="wp-dbg-var-row__axis" data-test="dbg-var-axis" :title="`$${v.name}.${a.axis}`">
             <code>.{{ a.axis }}</code> {{ a.value || "—" }}
@@ -114,6 +125,10 @@ const nameWidth = computed(() => {
 .wp-dbg-var-row__items { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 1px; }
 .wp-dbg-var-row__items li { display: flex; gap: 6px; align-items: baseline; }
 .wp-dbg-var-row__idx { font: 500 9.5px/1 var(--wp-font-mono); color: var(--wp-text-dim); min-width: 16px; }
+.wp-dbg-var-row__neg { display: flex; gap: 5px; align-items: baseline; font: 500 10.5px/1.5 var(--wp-font-mono); }
+.wp-dbg-var-row__neg-mark, .wp-dbg-var-row__neg-text { color: var(--wp-red, #e5484d); }
+.wp-dbg-var-row__neg-text { min-width: 0; overflow-wrap: anywhere; }
+.wp-dbg-var-row__neg-src { flex: none; color: var(--wp-text-dim); font-family: var(--wp-font-sans); }
 .wp-dbg-var-row__extra { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
 .wp-dbg-var-row__axis, .wp-dbg-var-row__tag {
   font-size: 10px;
