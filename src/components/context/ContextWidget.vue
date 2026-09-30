@@ -6197,6 +6197,12 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
  * size to 12 to match Module density. */
 .wp-row-type-icon { color: var(--wp-kind-wildcard); }
 .wp-row-type-icon .pi { font-size: 12px; }
+/* The bare rules above tie with row-primitives.css's grey default, and that
+ * file is copied into several lazy chunks: whichever chunk injects last wins,
+ * so opening a modal or adding an Injector turned wildcard icons grey. The
+ * [data-kind] selectors below outrank it whatever the load order. */
+.wp-module[data-kind="wildcard"]     .wp-row-type-icon { color: var(--wp-kind-wildcard); }
+.wp-module .wp-row-type-icon .pi { font-size: 12px; }
 .wp-module[data-kind="combine"]      .wp-row-type-icon { color: var(--wp-kind-combine); }
 .wp-module[data-kind="derivation"]   .wp-row-type-icon { color: var(--wp-kind-derivation); }
 .wp-module[data-kind="constraint"]   .wp-row-type-icon { color: var(--wp-kind-constraint); }

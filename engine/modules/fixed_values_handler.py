@@ -140,7 +140,8 @@ class FixedValuesHandler(ModuleHandler):
         enabled = instance.get("enabled_options")
         if enabled is not None:
             allowed = set(enabled)
-            values = [v for v in values if v.get("id") in allowed]
+            keys = _row_keys(values)
+            values = [v for v, k in zip(values, keys, strict=True) if k in allowed]
 
         # Syntax-aware emission path. When ctx is missing required keys
         # for build_resolve_ctx (legacy callers passing None / minimal
@@ -207,6 +208,21 @@ class FixedValuesHandler(ModuleHandler):
                 [own] if own else [], resolve_ctx, n_rng, pick=None, source=name,
             ))
         return out_resolved
+
+
+def _row_keys(values: list[Any]) -> list[str]:
+    """The key each row is toggled by: its ``id``, or ``#<index>`` when the id
+    is missing, blank or repeats an earlier row's. Imported packs can carry
+    rows without ids. Mirrors ``withRowKeys`` in
+    src/components/context/editors/fixed-values/defaults.ts."""
+    seen: set[str] = set()
+    keys: list[str] = []
+    for i, v in enumerate(values):
+        rid = v.get("id") if isinstance(v, dict) else None
+        key = rid if isinstance(rid, str) and rid.strip() and rid not in seen else f"#{i}"
+        seen.add(key)
+        keys.append(key)
+    return keys
 
 
 def _ctx_supports_resolve(ctx: Any) -> bool:
