@@ -513,3 +513,30 @@ def test_fix_category_delete_nulls_category_id(wp_db):
         and d.get("remove_ref", {}).get("kind") == "category"
         for d in diff
     )
+
+
+def test_fix_wildcard_delete_strips_refs_in_negatives(wp_db):
+    """Send-to-negative: an option's `negative` holds refs too, so the
+    delete cleanup strips them there as well."""
+    mod = ModuleRepository(wp_db)
+    wc = mod.create(type="wildcard", name="x", description="", category_id=None, tags=[],
+                    payload={"options": []})
+    ref = "@{" + wc["id"] + "}"
+    host = mod.create(
+        type="wildcard", name="host", description="", category_id=None, tags=[],
+        payload={"options": [{"id": "o1", "value": "red", "weight": 1,
+                              "negative": "blurry " + ref + " noise"}]},
+    )
+    fix_wildcard_delete(wp_db, wc["id"], [host["id"]])
+    assert mod.get(host["id"])["payload"]["options"][0]["negative"] == "blurry noise"
+
+
+def test_fix_combine_output_var_rename_rewrites_combine_negative(wp_db):
+    mod = ModuleRepository(wp_db)
+    cb = mod.create(type="combine", name="cb", description="", category_id=None, tags=[],
+                    payload={"template": "$a", "output_var": "mood"})
+    other = mod.create(type="combine", name="o", description="", category_id=None, tags=[],
+                       payload={"template": "$b", "output_var": "scene",
+                                "negative": "not $mood"})
+    fix_combine_output_var_rename(wp_db, cb["id"], "mood", "tone")
+    assert mod.get(other["id"])["payload"]["negative"] == "not $tone"
