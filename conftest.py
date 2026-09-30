@@ -40,3 +40,17 @@ def wp_db(tmp_path):
         yield conn
     finally:
         conn.close()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_wp_settings(tmp_path, monkeypatch):
+    """Keep every test off the real settings file and the backup scheduler.
+
+    `PipelineEngine.run` reads `engine/prefs.py` on every run and `migrate`
+    consults it before upgrading a DB, so without this a test could read — or
+    a Settings API test write — the developer's real `settings.json`.
+    `register_routes` starts the daily backup thread; tests that want it call
+    `engine.db.backups.start_daily_scheduler` directly.
+    """
+    monkeypatch.setenv("WP_SETTINGS_PATH", str(tmp_path / "wp-settings.json"))
+    monkeypatch.setattr("wp_api._start_backups", lambda: None)

@@ -174,6 +174,23 @@ def assert_schema_compatible(conn: sqlite3.Connection) -> None:
             )
 
 
+def _backup_if_upgrading(conn: sqlite3.Connection, applied: int) -> None:
+    """Snapshot an existing library before this build changes its schema.
+
+    Only when there is something to lose AND something about to change: a
+    fresh database (``applied == 0``) has no data, an up-to-date one has no
+    pending step, and an in-memory one has no file. `backup_before_migration`
+    swallows its own failures — a backup problem never blocks a migration.
+    """
+    if applied <= 0:
+        return
+    if not any(version > applied for version, _ in _discover()):
+        return
+    from engine.db.backups import backup_before_migration
+
+    backup_before_migration(conn)
+
+
 def migrate(conn: sqlite3.Connection) -> None:
     """Apply all pending migrations. Safe to call repeatedly.
 
@@ -182,6 +199,7 @@ def migrate(conn: sqlite3.Connection) -> None:
     """
     assert_schema_compatible(conn)
     applied = current_version(conn)
+    _backup_if_upgrading(conn, applied)
     for version, mig_file in _discover():
         if version <= applied:
             continue

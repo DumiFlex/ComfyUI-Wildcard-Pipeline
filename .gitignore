@@ -68,6 +68,7 @@ Thumbs.db
 
 # DB location control — per-contributor sidecar config + root-location DB dir
 db-config.json
+wp-settings.json
 /db/
 .tmp-check/
 
