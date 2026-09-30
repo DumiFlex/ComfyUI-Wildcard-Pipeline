@@ -42,7 +42,7 @@ import {
 import type { VarProducerLike } from "../components/RefChip.vue";
 import { useCascadeStore } from "../cascade/cascade-store";
 import { DERIVATION_OPS } from "../../components/context/editors/_shared/derivation-ops";
-import { isConditionGroup, simplifyCondition } from "../../extension/derivation-conditions";
+import { isConditionGroup, isNegativeMode, simplifyCondition } from "../../extension/derivation-conditions";
 import { useCascadeApply } from "../cascade/useCascadeApply";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
 import PillCountBadge from "../cascade/PillCountBadge.vue";
@@ -316,7 +316,7 @@ function migrateAction(raw: unknown): DerivationAction {
   const mode = typeof a.mode === "string" ? a.mode : "replace";
   return {
     target_var: target,
-    mode: (mode === "replace" || mode === "append" || mode === "prepend" || mode === "negative"
+    mode: (mode === "replace" || mode === "append" || mode === "prepend" || isNegativeMode(mode)
       ? mode
       : "replace") as DerivationAction["mode"],
     value: typeof a.value === "string" ? a.value : "",

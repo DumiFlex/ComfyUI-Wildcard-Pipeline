@@ -54,7 +54,10 @@ _MISSING = object()
 _MAX_CONDITION_DEPTH = 8
 # `negative` (schema v8, send-to-negative): "Add to negative" — the value is
 # added to the target variable's negatives; the variable itself is untouched.
-_VALID_MODES = {"replace", "append", "prepend", "negative"}
+# `negative_replace` (also v8): "Replace negative" — the value becomes the
+# variable's only negative, dropping what it carried.
+NEGATIVE_MODES = {"negative", "negative_replace"}
+_VALID_MODES = {"replace", "append", "prepend", *NEGATIVE_MODES}
 
 
 def _ctx_get_raw(ctx: Any, name: str) -> Any:
@@ -337,7 +340,7 @@ def _apply_action(
     neg_key: str | None = None,
 ) -> tuple[str, str | None] | None:
     """Run one action. Returns (target, new value), with value None for an
-    "Add to negative" action (it writes no value), or None when it did
+    "Add to negative" / "Replace negative" action (it writes no value), or None when it did
     nothing. `neg_seed` + `neg_key` key the action's negative stream
     (`neg_key` defaults to the carrier key)."""
     target = action.get("target_var", "")
@@ -348,12 +351,12 @@ def _apply_action(
     n_rng = negatives.neg_rng(
         neg_seed or 0, f"derivation::{neg_key or carrier_key or target}",
     )
-    if mode == "negative":
+    if mode in NEGATIVE_MODES:
         text = negatives.quiet_resolve(raw_value, resolve_ctx, n_rng)
         negatives.set_entries(
             ctx, target,
             [{"text": text, "pick": None, "source": carrier_key or "derivation"}],
-            add=True,
+            add=mode == "negative",
         )
         return target, None
     col = negatives.Collector()

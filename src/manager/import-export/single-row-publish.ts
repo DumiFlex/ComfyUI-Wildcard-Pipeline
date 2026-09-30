@@ -38,6 +38,7 @@ import {
 } from "./migrations";
 import { getValidator, type ModuleSubtype } from "@/validators";
 import { version as ENGINE_VERSION } from "../../../package.json";
+import { isNegativeMode } from "../../extension/derivation-conditions";
 
 export interface PublishablePayload {
   /** Engine-row shape ready to ship: `{id, type?, name, payload|children, …}` */
@@ -230,7 +231,7 @@ export function usesNegatives(node: unknown): boolean {
   if (!isPlainObject(node)) return false;
   const neg = node.negative;
   if (typeof neg === "string" && neg.trim() !== "") return true;
-  if (node.mode === "negative" && "target_var" in node) return true;
+  if (isNegativeMode(node.mode) && "target_var" in node) return true;
   if (Array.isArray(node.extra_actions) && node.extra_actions.length > 0) return true;
   for (const value of Object.values(node)) {
     if (typeof value === "string" && NEG_ACCESSOR_RE.test(value)) return true;

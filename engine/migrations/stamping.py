@@ -186,7 +186,7 @@ def uses_negatives(node: Any) -> bool:
     neg = node.get("negative")
     if isinstance(neg, str) and neg.strip():
         return True
-    if node.get("mode") == "negative" and "target_var" in node:
+    if node.get("mode") in ("negative", "negative_replace") and "target_var" in node:
         return True
     extra = node.get("extra_actions")
     if isinstance(extra, list) and extra:

@@ -22,6 +22,7 @@ const actionModes = [
   { term: "Append", desc: "Add the action text to the end of the variable's current value." },
   { term: "Prepend", desc: "Insert the action text before the variable's current value." },
   { term: "Add to negative", desc: "Leave the variable's text alone and add the action text to its negative words, so they follow the variable into any Assembler that renders it. The value takes $vars, @{refs} and {a|b}; refs resolve quietly and never change a pick." },
+  { term: "Replace negative", desc: "Like Add to negative, but the action text becomes the variable's only negative words: whatever it carried before is dropped. The variable's own text is still left alone." },
 ];
 
 const instanceOptions = [

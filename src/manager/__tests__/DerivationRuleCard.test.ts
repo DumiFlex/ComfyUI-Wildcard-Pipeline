@@ -226,8 +226,9 @@ describe("DerivationRuleCard.vue", () => {
     const plain = mountCard(makeRule(), 0);
     const modeSel = plain.find('[data-test="act-mode-0-0"]').findComponent({ name: "Select" });
     const modes = (modeSel.props("options") as Array<{ value: string; label: string }>);
-    expect(modes.map((o) => o.value)).toEqual(["replace", "append", "prepend", "negative"]);
+    expect(modes.map((o) => o.value)).toEqual(["replace", "append", "prepend", "negative", "negative_replace"]);
     expect(modes[3].label).toBe("Add to negative");
+    expect(modes[4].label).toBe("Replace negative");
     expect(plain.find('[data-test="act-neg-hint-0-0"]').exists()).toBe(false);
 
     const neg = mountCard(makeRule({
@@ -238,6 +239,14 @@ describe("DerivationRuleCard.vue", () => {
     }), 0);
     expect(neg.get('[data-test="act-neg-hint-0-0"]').text()).toContain("$mood's negative — its value is not changed");
     expect(neg.findAllComponents(RichTextInput).some((c) => c.classes().includes("dvr-value-input--neg"))).toBe(true);
+
+    const swap = mountCard(makeRule({
+      branches: [{
+        condition: { var: "mood", op: "equals", value: "gloomy" },
+        action: { target_var: "mood", mode: "negative_replace", value: "bright colors" },
+      }],
+    }), 0);
+    expect(swap.get('[data-test="act-neg-hint-0-0"]').text()).toContain("Replaces $mood's negative");
   });
 
   it("supported-syntax hint line renders below action value", () => {

@@ -18,7 +18,7 @@ import {
   cacheVersion as previewCacheVersion,
 } from "./preview-resolver";
 import { assignCodenames, baseCodename } from "./node-codename";
-import { clauseActions, derivationTargets, evalConditionTree } from "./derivation-conditions";
+import { clauseActions, derivationTargets, evalConditionTree, isNegativeMode } from "./derivation-conditions";
 import type { SeedStrategy } from "../components/shared/seed-derive";
 
 // ── Subgraph boundary primer ────────────────────────────────────────────
@@ -1727,9 +1727,10 @@ function applyDerivationAction(
   const target = (action.target_var ?? "").replace(/^\$/, "").trim();
   if (!target) return;
   const mode = action.mode ?? "replace";
-  // "Add to negative" (schema v8) files words under the variable's negatives
-  // and never writes the variable — the preview value is unchanged.
-  if (mode === "negative") return;
+  // "Add to negative" / "Replace negative" (schema v8) file words under the
+  // variable's negatives and never write the variable — the preview value is
+  // unchanged.
+  if (isNegativeMode(mode)) return;
   const raw = action.value ?? "";
   const newValue = expandValue(raw, ctx, catalog, 0);
   // SP2a: read the existing target value in string form (join a ListVar)

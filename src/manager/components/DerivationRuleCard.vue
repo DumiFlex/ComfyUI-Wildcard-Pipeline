@@ -16,7 +16,7 @@ import type {
   DerivationRule,
 } from "../api/types";
 import DerivationConditionEditor from "./DerivationConditionEditor.vue";
-import { clauseActions, conditionLeaves, withClauseActions } from "../../extension/derivation-conditions";
+import { clauseActions, conditionLeaves, isNegativeMode, withClauseActions } from "../../extension/derivation-conditions";
 import { brokenRefLabels } from "../utils/validateModule";
 
 interface Props {
@@ -161,11 +161,15 @@ const MODE_OPTIONS: Array<{ label: string; value: DerivationMode }> = [
   // Send-to-negative (schema v8): the value goes to the target variable's
   // negatives; the variable itself is not written.
   { label: "Add to negative", value: "negative" },
+  // Also v8: the value becomes the variable's only negative.
+  { label: "Replace negative", value: "negative_replace" },
 ];
 
 /** Placeholder for an action value, by mode. */
 function valuePlaceholder(mode: DerivationMode): string {
-  return mode === "negative"
+  return mode === "negative_replace"
+    ? "Words to use as this variable's whole negative"
+    : mode === "negative"
     ? "Words to add to this variable's negative"
     : "The new / appended / prepended value";
 }
@@ -444,7 +448,7 @@ const branchCount = computed(() => rule.value.branches.length);
             :uuid-to-option-tag-sets="uuidToOptionTagSets"
             :uuid-to-tag-groups="uuidToTagGroups"
             class="dvr-value-input"
-            :class="{ 'dvr-value-input--neg': act.mode === 'negative' }"
+            :class="{ 'dvr-value-input--neg': isNegativeMode(act.mode) }"
             :placeholder="valuePlaceholder(act.mode)"
             :aria-label="`Action value for rule ${ruleNumber} branch ${bi + 1}${ai ? ` (action ${ai + 1})` : ''}`"
             :data-test="actTid(`act-value-${index}-${bi}`, ai)"
@@ -453,10 +457,10 @@ const branchCount = computed(() => rule.value.branches.length);
         </div>
         <div class="dvr-hint" :data-test="actTid(`act-hint-${index}-${bi}`, ai)">
           <span
-            v-if="act.mode === 'negative'"
+            v-if="isNegativeMode(act.mode)"
             class="dvr-hint--neg"
             :data-test="actTid(`act-neg-hint-${index}-${bi}`, ai)"
-          >Adds to {{ act.target_var ? "$" + act.target_var : "the variable" }}'s negative — its value is not changed. </span>{{ SUPPORTED_SYNTAX_HINT }}
+          >{{ act.mode === 'negative_replace' ? 'Replaces' : 'Adds to' }} {{ act.target_var ? "$" + act.target_var : "the variable" }}'s negative — its value is not changed. </span>{{ SUPPORTED_SYNTAX_HINT }}
         </div>
         </div>
         <button
@@ -571,7 +575,7 @@ const branchCount = computed(() => rule.value.branches.length);
             :uuid-to-option-tag-sets="uuidToOptionTagSets"
             :uuid-to-tag-groups="uuidToTagGroups"
             class="dvr-value-input"
-            :class="{ 'dvr-value-input--neg': act.mode === 'negative' }"
+            :class="{ 'dvr-value-input--neg': isNegativeMode(act.mode) }"
             :placeholder="valuePlaceholder(act.mode)"
             :aria-label="`ELSE action value for rule ${ruleNumber}${ai ? ` (action ${ai + 1})` : ''}`"
             :data-test="actTid(`else-value-${index}`, ai)"
@@ -580,10 +584,10 @@ const branchCount = computed(() => rule.value.branches.length);
         </div>
         <div class="dvr-hint" :data-test="actTid(`else-hint-${index}`, ai)">
           <span
-            v-if="act.mode === 'negative'"
+            v-if="isNegativeMode(act.mode)"
             class="dvr-hint--neg"
             :data-test="actTid(`else-neg-hint-${index}`, ai)"
-          >Adds to {{ act.target_var ? "$" + act.target_var : "the variable" }}'s negative — its value is not changed. </span>{{ SUPPORTED_SYNTAX_HINT }}
+          >{{ act.mode === 'negative_replace' ? 'Replaces' : 'Adds to' }} {{ act.target_var ? "$" + act.target_var : "the variable" }}'s negative — its value is not changed. </span>{{ SUPPORTED_SYNTAX_HINT }}
         </div>
         </div>
         <button

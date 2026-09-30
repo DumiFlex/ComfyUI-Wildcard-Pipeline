@@ -232,8 +232,18 @@ def test_add_to_negative_writes_no_value():
     assert trace["writes"] == []
 
 
+def test_replace_negative_drops_the_old_negatives_and_writes_no_value():
+    ctx = _run([_wc("hair", [_opt(0, "red hair", "blonde")]),
+                _deriv("negative_replace", "short hair")])
+    assert ctx["hair"] == "red hair"
+    assert _texts(ctx, "hair") == ["short hair"]
+    trace = [t for t in ctx["__wp_trace__"] if t["type"] == "derivation"][0]
+    assert trace["writes"] == []
+
+
 def test_derivation_validates_negative_mode():
     DerivationHandler.validate_payload(_deriv("negative", "x")["payload"])
+    DerivationHandler.validate_payload(_deriv("negative_replace", "x")["payload"])
     with pytest.raises(ValueError):
         DerivationHandler.validate_payload(_deriv("sideways", "x")["payload"])
 

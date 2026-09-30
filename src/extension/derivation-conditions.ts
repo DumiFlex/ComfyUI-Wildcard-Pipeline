@@ -191,3 +191,10 @@ export function derivationTargets(payload: unknown): string[] {
   }
   return out;
 }
+
+/** Whether a derivation action mode files its value under the target's
+ *  negatives instead of writing the variable (schema v8): `negative` ("Add to
+ *  negative") or `negative_replace` ("Replace negative"). */
+export function isNegativeMode(mode: unknown): boolean {
+  return mode === "negative" || mode === "negative_replace";
+}

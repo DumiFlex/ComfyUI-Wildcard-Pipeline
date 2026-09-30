@@ -11,6 +11,7 @@ import { computed, ref } from "vue";
 import RichTextPreview from "../../manager/components/RichTextPreview.vue";
 import DebugCondition from "./DebugCondition.vue";
 import { ruleActions, type RawRuleDetail, type TraceStep, type WarningRow } from "./debug-model";
+import { isNegativeMode } from "../../extension/derivation-conditions";
 
 const props = defineProps<{
   step: TraceStep;
@@ -85,6 +86,7 @@ function modeGlyph(mode: string | undefined): string {
   // "Add to negative" writes no value: it files the text as the target's
   // negative, so it reads `$x negative: text`, not an assignment.
   if (mode === "negative") return "negative:";
+  if (mode === "negative_replace") return "negative =";
   if (mode === "append") return "+=";
   if (mode === "prepend") return "=+";
   return "=";
@@ -152,7 +154,7 @@ function modeGlyph(mode: string | undefined): string {
           <span class="wp-dbg-rule__outcome" data-test="dbg-rule-outcome">{{ ruleOutcome(rule).text }}</span>
           <span v-if="!ruleOpen(rule, ri) && rule.action" class="wp-dbg-rule__peek">
             <code>${{ rule.action.target }}</code>
-            <span :class="{ 'wp-dbg-neg-mode': rule.action.mode === 'negative' }">{{ modeGlyph(rule.action.mode) }}</span>
+            <span :class="{ 'wp-dbg-neg-mode': isNegativeMode(rule.action.mode) }">{{ modeGlyph(rule.action.mode) }}</span>
             {{ actionShown(rule.action) }}
             <span v-if="ruleActions(rule).length > 1" class="wp-dbg-dim">+{{ ruleActions(rule).length - 1 }}</span>
           </span>
@@ -179,11 +181,11 @@ function modeGlyph(mode: string | undefined): string {
             <span v-if="ai > 0" class="wp-dbg-and" data-test="dbg-rule-and">and</span>
             <code class="wp-dbg-var">${{ act.target }}</code>
             <span
-              :class="act.mode === 'negative' ? 'wp-dbg-neg-mode' : 'wp-dbg-dim'"
+              :class="isNegativeMode(act.mode) ? 'wp-dbg-neg-mode' : 'wp-dbg-dim'"
               data-test="dbg-rule-mode"
             >{{ modeGlyph(act.mode) }}</span>
             <RichTextPreview
-              :class="{ 'wp-dbg-neg-text': act.mode === 'negative' }"
+              :class="{ 'wp-dbg-neg-text': isNegativeMode(act.mode) }"
               :value="actionShown(act)"
               :uuid-to-name="uuidToName"
               :uuid-to-kind="uuidToKind"
@@ -191,7 +193,7 @@ function modeGlyph(mode: string | undefined): string {
             />
           </div>
           <div
-            v-if="act.mode !== 'replace' && act.mode !== 'negative' && act.result != null"
+            v-if="act.mode !== 'replace' && !isNegativeMode(act.mode) && act.result != null"
             class="wp-dbg-rule__result"
             data-test="dbg-rule-result"
           >

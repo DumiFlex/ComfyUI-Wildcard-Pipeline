@@ -349,6 +349,50 @@ describe("derivation RulesSection (tier-D accordion + branch table)", () => {
     expect(lastPatch(w).instance?.condition_value_overrides).toEqual({ r1: { "0.2": "dawn" } });
   });
 
+  it("lays a grouped condition out as rows: connectors, and the nested group indented under its header", async () => {
+    const w = mount(RulesSection, { props: { module: makeModule([groupedRule()]) } });
+    await w.find('[data-test="rule-head-r1"]').trigger("click");
+    await flushPromises();
+    const rows = w.get('[data-test="branch-row-r1-0"]').findAll(".br__row");
+    const texts = rows.map((r) => (r.find(".br__lhs").exists() ? r.get(".br__lhs") : r).text().replace(/\s+/g, ""));
+    expect(texts.slice(0, 6)).toEqual(["$color=", "AND", "ANYof", "$hatexists", "OR", "$time="]);
+    // The nested group's rows carry one guide per level; the top level none.
+    expect(rows[0].findAll(".br__guide")).toHaveLength(0);
+    expect(rows[3].findAll(".br__guide")).toHaveLength(1);
+  });
+
+  it("shows the library value as a ghost until overridden, then under the field with a reset", async () => {
+    const w = mount(RulesSection, {
+      props: { module: makeModule([makeRule()], { action_value_overrides: { r1: { "0": "hot" } } }) },
+    });
+    await w.find('[data-test="rule-head-r1"]').trigger("click");
+    await flushPromises();
+    const fields = w.findAll(".fld");
+    // Condition: not overridden, so the library value is a ghost in the field.
+    expect(fields[0].classes()).not.toContain("fld--mod");
+    expect(fields[0].find(".fld__ghost").text()).toContain("red");
+    expect(fields[0].find(".fld__lib").exists()).toBe(false);
+    // Action: overridden, so it lights up and the library value moves below.
+    expect(fields[1].classes()).toContain("fld--mod");
+    expect(fields[1].find(".fld__ghost").exists()).toBe(false);
+    expect(fields[1].get(".fld__lib").text()).toContain("warm");
+    await w.get('[data-test="action-reset-r1-0"]').trigger("click");
+    expect(lastPatch(w).instance?.action_value_overrides).toBeNull();
+  });
+
+  it("labels a Replace negative action", async () => {
+    const w = mount(RulesSection, {
+      props: { module: makeModule([makeRule({ branches: [{
+        condition: { var: "color", op: "equals", value: "red" },
+        action: { target_var: "mood", mode: "negative_replace", value: "smiling" },
+      }] })]) },
+    });
+    const op = w.get('[data-test="rule-summary-r1"]').findAll(".rule-tok-op--neg");
+    expect(op).toHaveLength(1);
+    expect(op[0].text()).toBe("neg =");
+    expect(op[0].attributes("title")).toContain("Replace negative");
+  });
+
   // ── Mod-count chip ───────────────────────────────────────────────
 
   it("mod-count chip hidden when no overrides on rule", () => {

@@ -479,6 +479,8 @@ describe("publish body stamping", () => {
       .rules[0].branches[0]);
     branch.action = { ...branch.action, mode: "negative" };
     expect(schemaVersionForPayload(row)).toBe(NEGATIVES_SCHEMA_VERSION);
+    branch.action = { ...branch.action, mode: "negative_replace" };
+    expect(schemaVersionForPayload(row)).toBe(NEGATIVES_SCHEMA_VERSION);
   });
 
   it("stamps NEGATIVES (8) for a branch with more than one action", () => {

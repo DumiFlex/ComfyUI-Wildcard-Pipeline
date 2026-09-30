@@ -187,6 +187,8 @@ def test_add_to_negative_action_and_bundle_child():
     row = _derivation_row(_TEST)
     row["payload"]["rules"][0]["branches"][0]["action"]["mode"] = "negative"
     assert schema_version_for_payload(row) == NEGATIVES_SCHEMA_VERSION
+    row["payload"]["rules"][0]["branches"][0]["action"]["mode"] = "negative_replace"
+    assert schema_version_for_payload(row) == NEGATIVES_SCHEMA_VERSION
     bundle = {"children": [
         _derivation_row({"match": "any", "conditions": [_TEST]}),
         _wildcard_row("blurry"),

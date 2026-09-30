@@ -97,8 +97,10 @@ export type DerivationOp =
   | "is_empty"
   | "is_not_empty";
 /** `negative` (schema v8) is "Add to negative": the value is added to the
- *  target variable's negatives and the variable itself is left alone. */
-export type DerivationMode = "replace" | "append" | "prepend" | "negative";
+ *  target variable's negatives and the variable itself is left alone.
+ *  `negative_replace` (v8) is "Replace negative": the value becomes the
+ *  variable's only negative. */
+export type DerivationMode = "replace" | "append" | "prepend" | "negative" | "negative_replace";
 
 export interface DerivationCondition {
   var: string;

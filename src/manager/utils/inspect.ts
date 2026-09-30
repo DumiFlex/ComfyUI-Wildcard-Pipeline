@@ -7,7 +7,7 @@
  */
 import type { BundleRow, ModuleRow, ScenarioRunResponse } from "../api/types";
 import { moduleBinding } from "./scenario";
-import { clauseActions } from "../../extension/derivation-conditions";
+import { clauseActions, isNegativeMode } from "../../extension/derivation-conditions";
 
 /** Values listed per variable distribution. */
 export const INSPECT_VALUE_LIMIT = 8;
@@ -229,14 +229,16 @@ function describeAction(a: unknown): string {
   if (mode === "append") return `$${target} += "${value}"`;
   if (mode === "prepend") return `$${target} = "${value}" + …`;
   if (mode === "negative") return `negative($${target}) += "${value}"`;
+  if (mode === "negative_replace") return `negative($${target}) = "${value}"`;
   return `$${target} = "${value}"`;
 }
 
-/** The variable an action WRITES — none for "Add to negative", which files
- *  words under the variable's negatives and leaves its value alone. */
+/** The variable an action WRITES — none for "Add to negative" / "Replace
+ *  negative", which file words under the variable's negatives and leave its
+ *  value alone. */
 function writtenTarget(a: unknown): string {
   const act = (a ?? {}) as Payload;
-  if (str(act.mode) === "negative") return "";
+  if (isNegativeMode(act.mode)) return "";
   return str(act.target_var).replace(/^\$/, "");
 }
 
