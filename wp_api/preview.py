@@ -18,7 +18,8 @@ with `id`, `type`, `enabled`, `payload`, `entries`, `instance`, ...
 
 Returns:
     {"resolved": {<name>: <value>, ...},
-     "axes": {<binding>: {<AXIS>: <tag>} | [{<AXIS>: <tag>}, ...], ...}}
+     "axes": {<binding>: {<AXIS>: <tag>} | [{<AXIS>: <tag>}, ...], ...},
+     "negatives": {<binding>: [{"text", "pick", "source"}, ...], ...}}
 
 Empty chain or any malformed step → empty resolved map (never 500).
 """
@@ -176,9 +177,13 @@ async def resolve_preview(request: web.Request) -> web.Response:
     # without it the preview could only guess `$var.AXIS` from the wildcard's
     # tag list — printing "sandals" beside an option that carries no shoes.
     axes = ctx.get("__wp_axes__")
+    # Send-to-negative: each variable's negatives, so the Assembler preview
+    # can build its negative locally from whatever its template uses.
+    negs = ctx.get("__wp_negatives__")
     return json_ok({
         "resolved": _jsonify_resolved(strip_internals(ctx)),
         "axes": axes if isinstance(axes, dict) else {},
+        "negatives": negs if isinstance(negs, dict) else {},
     })
 
 

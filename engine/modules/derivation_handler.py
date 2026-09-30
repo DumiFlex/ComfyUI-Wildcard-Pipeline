@@ -18,6 +18,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from engine import negatives
 from engine.modules import build_resolve_ctx
 from engine.modules._detail import module_detail
 from engine.modules._seed import derive_module_rng
@@ -47,7 +48,9 @@ _VALID_MATCHES = {"all", "any"}
 # Groups nest; the editor stops at three levels, the cap here only guards a
 # hand-built payload against runaway recursion.
 _MAX_CONDITION_DEPTH = 8
-_VALID_MODES = {"replace", "append", "prepend"}
+# `negative` (schema v8, send-to-negative): "Add to negative" — the value is
+# added to the target variable's negatives; the variable itself is untouched.
+_VALID_MODES = {"replace", "append", "prepend", "negative"}
 
 
 def _ctx_get_raw(ctx: Any, name: str) -> Any:
@@ -312,12 +315,28 @@ def _apply_action(
     ctx: Any,
     resolve_ctx: Any,
     carrier_key: str | None = None,
-) -> tuple[str, str] | None:
+    neg_seed: int | None = None,
+) -> tuple[str, str | None] | None:
+    """Run one action. Returns (target, new value), with value None for an
+    "Add to negative" action (it writes no value), or None when it did
+    nothing. `neg_seed` keys the action's negative stream."""
     target = action.get("target_var", "")
     if not target:
         return None
     mode = action.get("mode", "replace")
     raw_value = str(action.get("value", ""))
+    n_rng = negatives.neg_rng(
+        neg_seed or 0, f"derivation::{carrier_key or target}",
+    )
+    if mode == "negative":
+        text = negatives.quiet_resolve(raw_value, resolve_ctx, n_rng)
+        negatives.set_entries(
+            ctx, target,
+            [{"text": text, "pick": None, "source": carrier_key or "derivation"}],
+            add=True,
+        )
+        return target, None
+    col = negatives.Collector()
     # Stamp this derivation instance as the CARRIER of any `@{}` in the action
     # value, keyed by the branch key (`${rule_id}:${bi}` / `${rule_id}:else`) —
     # the `option_id` the SP3 nested-occurrence model matches a `pick` against.
@@ -332,24 +351,37 @@ def _apply_action(
         prev = get_carrier()
         set_carrier(module_uid, carrier_key)
         try:
-            new_value = resolve_text(raw_value, resolve_ctx)
+            with negatives.collecting(resolve_ctx) as col:
+                new_value = resolve_text(raw_value, resolve_ctx)
         finally:
             set_carrier(*prev)
     else:
-        new_value = resolve_text(raw_value, resolve_ctx)
+        with negatives.collecting(resolve_ctx) as col:
+            new_value = resolve_text(raw_value, resolve_ctx)
+    if mode not in ("replace", "append", "prepend"):
+        return None
+    # The written text carries the negatives of the variables it read and of
+    # the options its refs picked. Replace swaps the target's negatives for
+    # those; append / prepend keep the old ones and add.
+    entries = negatives.entries_for_reads(ctx, col.reads)
+    entries += negatives.own_entries(
+        col.ref_negatives, resolve_ctx, n_rng,
+        pick=None, source=carrier_key or "derivation",
+    )
+    negatives.set_entries(ctx, target, entries, add=mode != "replace")
     if mode == "replace":
         result = new_value
     elif mode == "append":
         result = _ctx_get(ctx, target) + new_value
-    elif mode == "prepend":
-        result = new_value + _ctx_get(ctx, target)
     else:
-        return None
+        result = new_value + _ctx_get(ctx, target)
     _ctx_set(ctx, target, result)
     return target, result
 
 
-def _explain_action(action: dict[str, Any], pair: tuple[str, str] | None) -> dict[str, Any]:
+def _explain_action(
+    action: dict[str, Any], pair: tuple[str, str | None] | None,
+) -> dict[str, Any]:
     """What a fired branch did: the variable, how it wrote, and the result."""
     return {
         "target": str(action.get("target_var", "")),
@@ -601,8 +633,9 @@ class DerivationHandler(ModuleHandler):
                         action, ctx,
                         _branch_resolve_ctx(branch_carrier_key(rule_id, bi)),
                         carrier_key=branch_carrier_key(rule_id, bi),
+                        neg_seed=effective_seed,
                     )
-                    if pair is not None:
+                    if pair is not None and pair[1] is not None:
                         out[pair[0]] = pair[1]
                     if rd is not None:
                         rd["fired"] = bi
@@ -631,8 +664,9 @@ class DerivationHandler(ModuleHandler):
                         action, ctx,
                         _branch_resolve_ctx(branch_carrier_key(rule_id, "else")),
                         carrier_key=branch_carrier_key(rule_id, "else"),
+                        neg_seed=effective_seed,
                     )
-                    if pair is not None:
+                    if pair is not None and pair[1] is not None:
                         out[pair[0]] = pair[1]
                     if rd is not None:
                         rd["fired"] = "else"

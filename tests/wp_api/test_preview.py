@@ -5,7 +5,7 @@ async def test_preview_empty_chain_returns_empty(wp_client):
     resp = await wp_client.post("/wp/api/preview/resolve", json={"chain": []})
     assert resp.status == 200
     body = await resp.json()
-    assert body == {"resolved": {}, "axes": {}}
+    assert body == {"resolved": {}, "axes": {}, "negatives": {}}
 
 
 async def test_preview_resolves_fixed_values_module(wp_client):
@@ -192,3 +192,27 @@ async def test_preview_returns_the_rolled_accepts_axes(wp_client):
     assert body["resolved"]["outfit"] == "jeans"
     assert body["axes"]["outfit"] == {"SHOES": "boots"}
     assert body["axes"]["hat"] == {}
+
+
+async def test_preview_returns_each_variables_negatives(wp_client):
+    """Send-to-negative: the Assembler builds its negative preview locally
+    from the variables its template uses, so the table rides along."""
+    chain = [[{
+        "id": "abcdef03",
+        "type": "wildcard",
+        "enabled": True,
+        "meta": {"name": "hair"},
+        "entries": [],
+        "payload": {
+            "var_binding": "hair",
+            "options": [{"id": "o1", "value": "red hair", "weight": 1,
+                         "negative": "blonde"}],
+        },
+    }]]
+    resp = await wp_client.post(
+        "/wp/api/preview/resolve", json={"chain": chain, "seed": 42},
+    )
+    body = await resp.json()
+    assert body["negatives"]["hair"] == [
+        {"text": "blonde", "pick": None, "source": "hair"},
+    ]

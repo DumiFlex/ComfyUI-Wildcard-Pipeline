@@ -62,6 +62,23 @@ class _RuntimeResolveContext:
     # stack uid of the module whose resolve this frame belongs to.
     _ref_log: list[dict[str, Any]] | None = None
     _ref_owner: str | None = None
+    # Send-to-negative collectors (engine/negatives.py `collecting`). None =
+    # not collecting. `_reads` gets one (name, index) per `$var` read the
+    # text rendered; `_ref_negs` gets the `negative` of every option a nested
+    # `@{ref}` picked. A quiet (negative-side) resolve leaves both None.
+    _reads: list[tuple[str, Any]] | None = None
+    _ref_negs: list[str] | None = None
+
+    def note_var_read(self, name: str, index: Any) -> None:
+        if self._reads is not None:
+            self._reads.append((name, index))
+
+    def note_ref_negative(self, option: dict[str, Any]) -> None:
+        if self._ref_negs is None:
+            return
+        neg = option.get("negative")
+        if isinstance(neg, str) and neg.strip():
+            self._ref_negs.append(neg.strip())
 
     def log_ref(self, entry: dict[str, Any]) -> dict[str, Any] | None:
         """Append one nested-ref pick to the ref log, tagged with the

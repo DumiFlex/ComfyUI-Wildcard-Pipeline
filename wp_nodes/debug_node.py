@@ -49,6 +49,7 @@ class WPDebug(io.ComfyNode):
         #   __wp_internal_flags__           variables marked internal
         #   __wp_axes__                     rolled accepts-axis tags
         #   __wp_constraint_hits__          targets each constraint reached
+        #   __wp_negatives__                each variable's negative words
         #   __wp_multi__                    multi-pick variables' items
         #   __wp_node_seed__ / __wp_loop_index__
         # `__wp_debug_version__` lets the viewer tell this shape from a
@@ -71,6 +72,7 @@ class WPDebug(io.ComfyNode):
             "__wp_internal_flags__",
             "__wp_axes__",
             "__wp_constraint_hits__",
+            "__wp_negatives__",
         ):
             if internals.get(key):
                 flat[key] = internals[key]

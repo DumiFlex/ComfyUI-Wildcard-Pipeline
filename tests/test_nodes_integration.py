@@ -52,7 +52,7 @@ def test_chain_of_two_context_nodes_into_assembler():
         context=downstream,
         template="A $style $subject in the $location",
     )
-    assert assembled.values == ("A painted knight in the forest",)
+    assert assembled.values == ("A painted knight in the forest", "")
 
 
 def test_debug_node_snapshots_downstream_context():

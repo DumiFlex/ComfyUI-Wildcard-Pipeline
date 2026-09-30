@@ -5,8 +5,11 @@ Slots:
   - cleaner  : WP_CLEANER widget (config JSON: mode, intensity,
                  rules_override, blocklist)
 
+  - negative : STRING (optional) — cleaned by the rule list's negative column
+
 Output:
   - prompt   : STRING
+  - negative : STRING ("" when the negative input is unwired)
 
 No PIPELINE_CONTEXT input — all rules operate on the prompt string +
 widget config alone. The node parses the widget JSON, runs
@@ -59,19 +62,39 @@ class WPPromptCleaner(io.ComfyNode):
                     ),
                 ),
                 CleanerWidgetInput.Input("wp_cleaner", socketless=True, default="{}"),
+                # Send-to-negative: one node cleans both prompts. Optional and
+                # declared last so existing workflows keep their layout.
+                io.String.Input(
+                    "negative",
+                    optional=True,
+                    force_input=True,
+                    tooltip=(
+                        "Optional negative prompt, e.g. an Assembler's "
+                        "negative output. Cleaned by the rules' negative "
+                        "column."
+                    ),
+                ),
             ],
-            outputs=[io.String.Output("prompt")],
+            # `prompt` stays at index 0 so existing links keep their slot.
+            outputs=[io.String.Output("prompt"), io.String.Output("negative")],
             not_idempotent=True,
         )
 
     @classmethod
-    def execute(cls, prompt, wp_cleaner="{}"):
+    def execute(cls, prompt, wp_cleaner="{}", negative=None):
         cfg = _parse_config(wp_cleaner)
-        result = PromptCleaner().run(prompt, cfg)
+        cleaner = PromptCleaner()
+        result = cleaner.run(prompt, cfg)
         text = result["text"]
         ui_payload = {
             "wp_cleaner_report": [result["report"]],
             "wp_cleaner_word_count": [count_words(text)],
             "wp_cleaner_char_count": [count_chars(text)],
         }
-        return io.NodeOutput(text, ui=ui_payload)
+        neg_text = ""
+        if isinstance(negative, str):
+            neg = cleaner.run_negative(negative, cfg, prompt=text)
+            neg_text = neg["text"]
+            ui_payload["wp_cleaner_negative_report"] = [neg["report"]]
+            ui_payload["wp_cleaner_negative_word_count"] = [count_words(neg_text)]
+        return io.NodeOutput(text, neg_text, ui=ui_payload)

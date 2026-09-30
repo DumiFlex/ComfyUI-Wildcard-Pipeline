@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from engine import negatives
 from engine.modules import build_resolve_ctx
 from engine.syntax import resolve_text
 
@@ -17,13 +18,32 @@ _COMMA_GAP = re.compile(r",\s*,")
 _TRIM_PUNCT = re.compile(r"\s+([,.;:!?])")
 
 
-def resolve_variables(template: str, ctx: dict[str, Any]) -> str:
+def resolve_variables(
+    template: str,
+    ctx: dict[str, Any],
+    *,
+    reads: list[tuple[str, Any]] | None = None,
+) -> str:
     """Resolve `$var` / `@{uuid}` / `{a|b|c}` / `{N$$sep$$...}` against ctx.
 
     Surface defaults to "assembler" (matches wp_nodes/assembler_node.py
     usage). For a different surface, call resolve_text directly with a
     custom ResolveContext.
+
+    `reads`, when given, receives one `(name, index)` per `$var` the
+    template rendered — what send-to-negative collects negatives from.
     """
+    return tidy_prompt(resolve_variables_raw(template, ctx, reads=reads))
+
+
+def resolve_variables_raw(
+    template: str,
+    ctx: dict[str, Any],
+    *,
+    reads: list[tuple[str, Any]] | None = None,
+) -> str:
+    """`resolve_variables` without the whitespace cleanup, for callers that
+    splice several resolved pieces together before tidying once."""
     if not template:
         return ""
 
@@ -34,10 +54,17 @@ def resolve_variables(template: str, ctx: dict[str, Any]) -> str:
     ctx.setdefault("__wp_warnings__", [])
 
     rctx = build_resolve_ctx(ctx, surface="assembler")
-    out = resolve_text(template, rctx)
+    if reads is None:
+        return resolve_text(template, rctx)
+    with negatives.collecting(rctx) as col:
+        out = resolve_text(template, rctx)
+    reads.extend(col.reads)
+    return out
 
-    # Whitespace cleanup post-pass (preserves the original API's behavior
-    # for templates that drop missing variables)
+
+def tidy_prompt(out: str) -> str:
+    """Whitespace cleanup post-pass (preserves the original API's behavior
+    for templates that drop missing variables)."""
     out = _WS_RUN.sub(" ", out)
     out = _COMMA_GAP.sub(",", out)
     out = _TRIM_PUNCT.sub(r"\1", out)

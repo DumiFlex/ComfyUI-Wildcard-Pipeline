@@ -107,14 +107,15 @@ def test_defaults_missing_arrays_to_empty():
 # Mirror of the TS `migrateImportEnvelope` fork. A payload at
 # CURRENT < v <= MAX_KNOWN (v3 = text-grammar only; v4 = additive
 # `target_select`; v5 = additive `accepts` tag axes; v6 = the constraint
-# `only` rule; v7 = derivation AND / OR condition groups) is shape-compatible with
+# `only` rule; v7 = derivation AND / OR condition groups; v8 = send-to-negative
+# `negative` text) is shape-compatible with
 # v2 and natively handled at runtime, so the engine's commit-side re-validate must accept it AS-IS:
 # not rejected, not migrated (the while-loop bound stays CURRENT so there is
 # nothing to do), schema_version preserved. Only v > MAX_KNOWN rejects.
 
 
-def test_max_known_schema_version_is_7():
-    assert MAX_KNOWN_SCHEMA_VERSION == 7
+def test_max_known_schema_version_is_8():
+    assert MAX_KNOWN_SCHEMA_VERSION == 8
 
 
 def test_v3_payload_passes_through_unchanged():
@@ -214,6 +215,23 @@ def test_v7_condition_group_payload_passes_through_unchanged():
     assert result["migrated_entity_count"] == 0
     branch = result["migrated"]["derivations"][0]["payload"]["rules"][0]["branches"][0]
     assert branch["condition"] == condition
+
+
+def test_v8_negative_payload_passes_through_unchanged():
+    payload = {
+        "schema_version": 8,
+        **EMPTY_7,
+        "wildcards": [
+            {"id": "wcneg", "payload": {"options": [
+                {"id": "o", "value": "red hair", "weight": 1, "negative": "blonde"}]}}
+        ],
+    }
+    result = migrate_payload(payload)
+    assert result["ok"] is True
+    assert result["migrated"]["schema_version"] == 8
+    assert result["migrated_entity_count"] == 0
+    opt = result["migrated"]["wildcards"][0]["payload"]["options"][0]
+    assert opt["negative"] == "blonde"
 
 
 def test_v2_still_migrates_from_older_version():

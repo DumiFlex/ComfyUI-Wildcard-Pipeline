@@ -380,6 +380,10 @@ _CROSS_NODE_INTERNAL_KEYS = (
     # the flag map alongside picks/constraints so the next node's
     # PromptAssembler can call `strip_internals` and re-apply the filter.
     "__wp_internal_flags__",
+    # Send-to-negative: per-variable negatives (engine/negatives.py). A
+    # variable read in a later node's Assembler must bring the negatives it
+    # was rolled with, wherever it was rolled.
+    "__wp_negatives__",
     # Loop bookkeeping from WP_ContextLoop. These reach the FIRST
     # WP_Context (direct ContextLoop child) via the payload internals,
     # but were dropped at that node's output boundary — so a SECOND,
