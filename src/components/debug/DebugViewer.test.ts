@@ -129,14 +129,21 @@ describe("DebugViewer", () => {
     expect(step.find('[data-test="dbg-rule"]').exists()).toBe(true);
   });
 
-  it("groups the trace by Context node with its title and codename", async () => {
+  it("groups the trace by Context node, named by its codename", async () => {
     const nodeInfo = vi.fn((id: string) => ({ title: id === "1" ? "Scene" : "Details", codename: `code-${id}` }));
     const w = mountRun({ nodeInfo });
     await openTab(w, "trace");
     const heads = w.findAll('[data-test="dbg-group-head"]');
-    expect(heads.map((h) => h.text().replace(/\s+/g, ""))).toEqual([
-      "Scenecode-1#1seed3", "Detailscode-2#2seed7",
-    ]);
+    expect(heads.map((h) => h.text().replace(/\s+/g, ""))).toEqual(["code-1seed3", "code-2seed7"]);
+    expect(heads[0].get('[data-test="dbg-group-title"]').attributes("title")).toBe("Scene · node id 1");
+  });
+
+  it("names a node without a codename by its title, and a missing one by its id", async () => {
+    const nodeInfo = vi.fn((id: string) => ({ title: id === "1" ? "WP Context Injector" : "", codename: "" }));
+    const w = mountRun({ nodeInfo });
+    await openTab(w, "trace");
+    const titles = w.findAll('[data-test="dbg-group-title"]').map((t) => t.text());
+    expect(titles).toEqual(["WP Context Injector", "Node 2"]);
   });
 
   it("explains a derivation: which branch fired and each test's result", async () => {

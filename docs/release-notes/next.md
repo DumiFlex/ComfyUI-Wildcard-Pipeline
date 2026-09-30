@@ -17,7 +17,7 @@
 ### Fixes
 
 - **WP Debug shows a cut-off value in full when you open its step.** A trace row fits its value on one line, and opening the step only repeated it in full when it was over 60 characters, so a shorter value cut off by a narrow node stayed cut off. Opening the step now shows any value the row had to cut.
-- **WP Debug's "show node" works again.** It did nothing in workflows whose node ids are text (like `wpctx`) rather than numbers, and for nodes in a subgraph (or back at the root while you were inside one). It now finds the node, opens its graph if needed, then selects and centres it. Trace headers also show those nodes' titles instead of "Node wpctx".
+- **WP Debug's "show node" works again.** It did nothing in workflows whose node ids are text (like `wpctx`) rather than numbers, and for nodes in a subgraph (or back at the root while you were inside one). It now finds the node, opens its graph if needed, then selects and centres it. Trace headers now name a Context node by its codename (the `navy-dove` shown on the node), with its title and graph id in the tooltip.
 - **The Context node warns about broken refs in a derivation's canvas overrides.** A ref typed into a value override on the canvas was never checked, so pointing it at a deleted module (or leaving a placeholder there) showed no warning on the node.
 - **Reopening a derivation no longer changes its presence checks.** The editor rewrote every "exists", "does not exist", "is set" and "is unset" condition to "equals" when you opened a saved derivation, so saving it again changed what it did.
 - **"Exists → is empty" conditions run.** The editor offered it, but the engine rejected the op and the whole derivation failed. The engine now supports `is_empty` and `is_not_empty`.

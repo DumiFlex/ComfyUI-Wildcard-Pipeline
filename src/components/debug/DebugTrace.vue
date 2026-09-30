@@ -65,9 +65,18 @@ function refName(uuid: string): string {
   return props.uuidToName.get(uuid) ?? uuid.slice(0, 8);
 }
 
+/** A Context node goes by its codename (the name on the node itself); other
+ *  nodes by their title. The graph id is only a fallback for a node that is
+ *  no longer on the canvas, and otherwise lives in the tooltip. */
 function groupLabel(g: TraceGroup): string {
   if (!g.nodeId) return "Chain";
-  return props.nodeInfo(g.nodeId).title || `Node ${g.nodeId}`;
+  const info = props.nodeInfo(g.nodeId);
+  return info.codename || info.title || `Node ${g.nodeId}`;
+}
+function groupTooltip(g: TraceGroup): string {
+  if (!g.nodeId) return "";
+  const info = props.nodeInfo(g.nodeId);
+  return [info.codename ? info.title : "", `node id ${g.nodeId}`].filter(Boolean).join(" · ");
 }
 </script>
 
@@ -75,9 +84,12 @@ function groupLabel(g: TraceGroup): string {
   <div ref="root" class="wp-dbg-trace" data-test="dbg-trace">
     <section v-for="(g, gi) in groups" :key="`${g.nodeId}:${gi}`" class="wp-dbg-group">
       <header v-if="showGroupHeads" class="wp-dbg-group__head" data-test="dbg-group-head">
-        <span class="wp-dbg-group__title">{{ groupLabel(g) }}</span>
-        <span v-if="g.nodeId && nodeInfo(g.nodeId).codename" class="wp-dbg-group__codename" title="This node's codename">{{ nodeInfo(g.nodeId).codename }}</span>
-        <span v-if="g.nodeId" class="wp-dbg-group__id">#{{ g.nodeId }}</span>
+        <span
+          class="wp-dbg-group__title"
+          :class="{ 'wp-dbg-group__title--codename': !!(g.nodeId && nodeInfo(g.nodeId).codename) }"
+          :title="groupTooltip(g)"
+          data-test="dbg-group-title"
+        >{{ groupLabel(g) }}</span>
         <span v-if="g.seed" class="wp-dbg-group__seed" title="Chain seed this node ran with">seed {{ g.seed }}</span>
         <button
           v-if="canFocus && g.nodeId"
@@ -212,13 +224,12 @@ function groupLabel(g: TraceGroup): string {
   color: var(--wp-text-dim);
 }
 .wp-dbg-group__title { font: 600 11px/1.4 var(--wp-font-sans); color: var(--wp-text); }
-.wp-dbg-group__id, .wp-dbg-group__seed { font-family: var(--wp-font-mono); }
-.wp-dbg-group__codename {
-  font: 500 10px/1.5 var(--wp-font-mono);
-  padding: 0 6px;
+.wp-dbg-group__seed { font-family: var(--wp-font-mono); }
+.wp-dbg-group__title--codename {
+  font: 600 10.5px/1.5 var(--wp-font-mono);
+  padding: 0 7px;
   border-radius: 999px;
   border: 1px solid var(--wp-border);
-  color: var(--wp-text-muted);
 }
 .wp-dbg-group__focus {
   margin-left: auto;
