@@ -62,6 +62,44 @@ class _RuntimeResolveContext:
     # stack uid of the module whose resolve this frame belongs to.
     _ref_log: list[dict[str, Any]] | None = None
     _ref_owner: str | None = None
+    # Send-to-negative collectors (engine/negatives.py `collecting`). None =
+    # not collecting. `_reads` gets one (name, index) per `$var` read the
+    # text rendered; `_ref_negs` gets the `negative` of every option a nested
+    # `@{ref}` picked. A quiet (negative-side) resolve leaves both None.
+    _reads: list[tuple[str, Any]] | None = None
+    _ref_negs: list[str] | None = None
+
+    # The run's negatives table (`ctx["__wp_negatives__"]`), by reference so
+    # a `$name.neg` read sees negatives filed earlier in the same module.
+    _negs: dict[str, Any] | None = None
+
+    def get_negative(self, name: str, index: int | None) -> str | None:
+        """`name`'s negatives as one line (tag-deduped), or None when it has
+        none. `index` narrows to pick K's entries plus the whole-value ones,
+        like `$name.K` carries."""
+        from engine import negatives  # noqa: PLC0415 - import cycle
+
+        rows = self._negs.get(name) if isinstance(self._negs, dict) else None
+        if not isinstance(rows, list):
+            return None
+        texts = [
+            str(e.get("text", "")) for e in rows
+            if isinstance(e, dict)
+            and (index is None or e.get("pick") is None or e.get("pick") == index)
+        ]
+        joined = negatives.join_unique(texts)
+        return joined or None
+
+    def note_var_read(self, name: str, index: Any) -> None:
+        if self._reads is not None:
+            self._reads.append((name, index))
+
+    def note_ref_negative(self, option: dict[str, Any]) -> None:
+        if self._ref_negs is None:
+            return
+        neg = option.get("negative")
+        if isinstance(neg, str) and neg.strip():
+            self._ref_negs.append(neg.strip())
 
     def log_ref(self, entry: dict[str, Any]) -> dict[str, Any] | None:
         """Append one nested-ref pick to the ref log, tagged with the
@@ -193,6 +231,7 @@ def build_resolve_ctx(
     axis_decl = ctx.get("__wp_axis_decl__")
     hits = ctx.setdefault("__wp_constraint_hits__", {})
     ref_log = ctx.get("__wp_ref_log__")
+    negs = ctx.get("__wp_negatives__")
     return _RuntimeResolveContext(  # type: ignore[return-value]
         rng=ctx["__wp_rng__"],
         max_ref_depth=int(ctx.get("__wp_max_ref_depth__", 8)),
@@ -220,6 +259,7 @@ def build_resolve_ctx(
         _axis_decl=axis_decl if isinstance(axis_decl, dict) else {},
         _ref_log=ref_log if isinstance(ref_log, list) else None,
         _ref_owner=ctx.get("__wp_current_module_uid__"),
+        _negs=negs if isinstance(negs, dict) else None,
     )
 
 

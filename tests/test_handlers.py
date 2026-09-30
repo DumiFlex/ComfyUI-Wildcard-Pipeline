@@ -80,5 +80,5 @@ def test_combine_handler_ref_emits_empty_with_warning():
         },
     }
     out = CombineHandler.resolve(payload, {}, ctx)
-    assert out["result"] == "x  y"
+    assert out["result"] == "x y"
     assert any(w["type"] == "ref_out_of_surface" for w in ctx["__wp_warnings__"])

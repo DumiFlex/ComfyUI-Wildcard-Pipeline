@@ -67,8 +67,26 @@ describe("resolveTokens — ref", () => {
   it("unknown ref lenient emits empty + warning", () => {
     const ctx = makeCtx({ strict: false });
     const out = resolveTokens("a @{00000000} b", ctx);
-    expect(out).toBe("a  b");
+    expect(out).toBe("a b");
     expect(ctx.warnings.find((w) => w.type === "unknown_ref")).toBeDefined();
+  });
+
+  // Same table as tests/syntax/test_resolve.py::test_resolve_empty_ref_closes_its_gap.
+  it.each([
+    ["red @{00000000} dress", "red dress"],
+    ["red, @{00000000}, dress", "red, dress"],
+    ["red,@{00000000},dress", "red,dress"],
+    ["@{00000000} dress", "dress"],
+    ["@{00000000}, dress", "dress"],
+    ["red @{00000000}", "red"],
+    ["red, @{00000000}", "red"],
+    ["red @{00000000} @{00000001} dress", "red dress"],
+    ["red\n@{00000000}\ndress", "red\n\ndress"],
+    ["(@{00000000}:1.2) dress", "(:1.2) dress"],
+    ["@{00000000}", ""],
+    ["a  b @{00000000} c", "a  b c"],
+  ])("empty ref closes its gap: %j", (text, expected) => {
+    expect(resolveTokens(text, makeCtx())).toBe(expected);
   });
 
   it("ref out of surface lenient emits empty", () => {
@@ -76,7 +94,7 @@ describe("resolveTokens — ref", () => {
       surface: "combine",
       modules: { a4f7b2e1: wcModule("a4f7b2e1", "color") },
     });
-    expect(resolveTokens("a @{a4f7b2e1} b", ctx)).toBe("a  b");
+    expect(resolveTokens("a @{a4f7b2e1} b", ctx)).toBe("a b");
     expect(ctx.warnings.find((w) => w.type === "ref_out_of_surface")).toBeDefined();
   });
 

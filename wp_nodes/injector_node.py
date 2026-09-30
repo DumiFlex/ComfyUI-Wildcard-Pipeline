@@ -11,6 +11,7 @@ from typing import Any
 
 from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 
+from engine import negatives
 from wp_nodes.types import InjectorRowsInput, PipelineContext
 
 _BINDING_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]*$")
@@ -76,6 +77,8 @@ class WPContextInjector(io.ComfyNode):
                 # the user has wired at execute time.
             ],
             outputs=[PipelineContext.Output("context")],
+            # The node's graph id, so WP Debug can group its trace rows.
+            hidden=[io.Hidden.unique_id],
             not_idempotent=True,
             accept_all_inputs=True,
         )
@@ -129,6 +132,30 @@ class WPContextInjector(io.ComfyNode):
             internal_keys.update(existing_internal)
 
         rows_list = parsed.get("rows", []) if isinstance(parsed, dict) else []
+
+        # Send-to-negative: an injected value replaces the variable, so it
+        # replaces what the variable carried. A row's own Negative (same
+        # `$slot` grammar as its template) becomes the new negatives.
+        neg_table: dict[str, list] = {
+            k: list(v)
+            for k, v in (upstream_internals.get(negatives.NEG_KEY) or {}).items()
+            if isinstance(v, list)
+        }
+
+        def _file_row_negative(
+            binding_name: str, row: dict, slots: dict[str, Any],
+        ) -> None:
+            raw = row.get("negative")
+            text = (
+                _render_template(raw.strip(), slots).strip()
+                if isinstance(raw, str) and raw.strip() else ""
+            )
+            if text:
+                neg_table[binding_name] = [
+                    {"text": text, "pick": None, "source": "injector"},
+                ]
+            else:
+                neg_table.pop(binding_name, None)
 
         def _emit_trace(
             binding_name: str, stored_val: Any, trace_kind: str, is_internal: bool
@@ -240,6 +267,11 @@ class WPContextInjector(io.ComfyNode):
                 stored = _render_template(template_str, own_slot)
                 trace_type = "str(template)"
             ctx[stripped] = stored
+            _file_row_negative(
+                stripped, row,
+                {slot_name: slot_values.get(slot_name, "")}
+                if isinstance(slot_name, str) else {},
+            )
             is_internal = bool(row.get("internal", False))
             if is_internal:
                 internal_keys.add(stripped)
@@ -274,6 +306,7 @@ class WPContextInjector(io.ComfyNode):
             merged.update(slot_values)
             stored = _render_template(template_str, merged)
             ctx[stripped] = stored
+            _file_row_negative(stripped, row, merged)
             is_internal = bool(row.get("internal", False))
             if is_internal:
                 internal_keys.add(stripped)
@@ -289,6 +322,9 @@ class WPContextInjector(io.ComfyNode):
         # prompt. Writing only `__wp_internal_keys__` above left the toggle
         # cosmetic: nothing downstream stripped on it.
         out_internals = dict(upstream_internals)
+        if neg_table or negatives.NEG_KEY in out_internals:
+            out_internals[negatives.NEG_KEY] = neg_table
+            ctx[negatives.NEG_KEY] = neg_table
         if internal_keys:
             flags = dict(out_internals.get("__wp_internal_flags__") or {})
             for name in internal_keys:
@@ -296,6 +332,11 @@ class WPContextInjector(io.ComfyNode):
             out_internals["__wp_internal_flags__"] = flags
 
         debug = dict(upstream_debug)
+        hidden = getattr(cls, "hidden", None)
+        node_id = getattr(hidden, "unique_id", None) if hidden is not None else None
+        if node_id is not None:
+            for row in traces:
+                row["node_id"] = str(node_id)
         if traces:
             existing_trace = debug.get("__wp_trace__", [])
             debug["__wp_trace__"] = list(existing_trace) + traces

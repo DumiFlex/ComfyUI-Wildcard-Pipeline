@@ -5,6 +5,8 @@ import {
   describeItem,
   lastRunSummary,
   moduleBinding,
+  negativeSegments,
+  negativeText,
   orderByStack,
   renderValue,
   searchText,
@@ -145,6 +147,31 @@ describe("segmentOutput", () => {
   it("leaves short or absent values plain", () => {
     expect(segmentOutput("ab", { x: "ab" }, "p", new Set(["x"]))).toEqual([{ text: "ab", varName: null }]);
     expect(segmentOutput("", {}, "p", new Set())).toEqual([{ text: "", varName: null }]);
+  });
+});
+
+describe("negativeSegments / negativeText", () => {
+  const sample = {
+    negatives: {
+      look: [
+        { text: "strawberry, fruit", pick: null, source: "hair" },
+        { text: "bright colors, Fruit", pick: null, source: "mood" },
+        { text: "(blurry:1.2), low quality", pick: null, source: "look" },
+        { text: "draft", pick: null, source: "scratch" },
+      ],
+    },
+  };
+  it("tints each part by the variable it came from and drops repeated tags", () => {
+    expect(negativeSegments(sample, "look", new Set(["hair", "mood"]))).toEqual([
+      { text: "strawberry, fruit", varName: "hair" },
+      { text: "bright colors", varName: "mood" },
+      { text: "(blurry:1.2), low quality, draft", varName: null },
+    ]);
+  });
+  it("joins to one line, empty when the variable has none", () => {
+    expect(negativeText(sample, "look")).toBe("strawberry, fruit, bright colors, (blurry:1.2), low quality, draft");
+    expect(negativeText(sample, "other")).toBe("");
+    expect(negativeText({}, "look")).toBe("");
   });
 });
 

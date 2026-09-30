@@ -78,3 +78,84 @@ describe("CleanerWidget", () => {
   });
 
 });
+
+describe("CleanerWidget — neg column (send-to-negative)", () => {
+  function lastEmit(w: ReturnType<typeof mount>): CleanerNodeConfig {
+    const emits = w.emitted("update:modelValue") ?? [];
+    return emits[emits.length - 1][0] as CleanerNodeConfig;
+  }
+
+  it("neg toggles default from the preset: fuzzy dedupe + blocklist off", () => {
+    const w = mount(CleanerWidget, {
+      props: makeProps({ intensity: "aggressive", blocklist: { kind: "list", entries: ["x"] } }),
+    });
+    const on = (rid: string) => w.find(`[data-test="cleaner-neg-rule-${rid}"]`).classes().includes("is-on");
+    expect(on("whitespace")).toBe(true);
+    expect(on("dedupe_exact")).toBe(true);
+    expect(on("fuzzy_dedupe")).toBe(false);
+    expect(on("blocklist")).toBe(false);
+    // The prompt column still has both on under aggressive + entries.
+    expect(w.find('[data-test="cleaner-rule-fuzzy_dedupe"]').classes()).toContain("is-on");
+  });
+
+  it("a neg toggle stores negative_rules_override only when it differs, and marks CUSTOM", async () => {
+    const w = mount(CleanerWidget, { props: makeProps() });
+    await w.find('[data-test="cleaner-neg-rule-fuzzy_dedupe"]').trigger("click");
+    const next = lastEmit(w);
+    expect(next.negative_rules_override).toEqual({ fuzzy_dedupe: true });
+    expect(next.rules_override).toEqual({});
+
+    const custom = mount(CleanerWidget, { props: makeProps({ negative_rules_override: { fuzzy_dedupe: true } }) });
+    expect(custom.find('[data-test="cleaner-custom-badge"]').classes()).not.toContain("is-hidden");
+    // Toggling back to the default drops the key entirely.
+    await custom.find('[data-test="cleaner-neg-rule-fuzzy_dedupe"]').trigger("click");
+    expect(lastEmit(custom)).not.toHaveProperty("negative_rules_override");
+  });
+
+  it("a preset prunes neg overrides that match its default", async () => {
+    const w = mount(CleanerWidget, {
+      props: makeProps({ intensity: "gentle", negative_rules_override: { dedupe_exact: true } }),
+    });
+    await w.find('[data-test="cleaner-intensity-balanced"]').trigger("click");
+    const next = lastEmit(w);
+    expect(next.intensity).toBe("balanced");
+    expect(next).not.toHaveProperty("negative_rules_override");
+  });
+
+  it("drop-overlap row is off by default and stored only when on", async () => {
+    const w = mount(CleanerWidget, { props: makeProps() });
+    const btn = w.find('[data-test="cleaner-drop-overlap"]');
+    expect(btn.classes()).not.toContain("is-on");
+    await btn.trigger("click");
+    expect(lastEmit(w).drop_prompt_overlap).toBe(true);
+    const on = mount(CleanerWidget, { props: makeProps({ drop_prompt_overlap: true }) });
+    await on.find('[data-test="cleaner-drop-overlap"]').trigger("click");
+    expect(lastEmit(on)).not.toHaveProperty("drop_prompt_overlap");
+  });
+
+  it("last run shows a negative line and the counter a negative count", () => {
+    const w = mount(CleanerWidget, {
+      props: makeProps({}, {
+        lastRunReport: { dedupe_exact: { dropped: ["a", "b"] }, blocklist: { dropped: ["c"] } },
+        wordCount: 42,
+        charCount: 187,
+        negativeReport: {
+          dedupe_exact: { dropped: ["x", "y", "z"] },
+          prompt_overlap: { tags: ["red"], dropped: false },
+        },
+        negativeWordCount: 11,
+      }),
+    });
+    expect(w.find('[data-test="cleaner-neg-count"]').text()).toBe("negative 11");
+    expect(w.find('[data-test="cleaner-last-run"]').text()).toContain("prompt: 2 duplicates, 1 blocklisted");
+    expect(w.find('[data-test="cleaner-last-run-neg"]').text()).toBe(
+      'negative: 3 duplicates · 1 tag also in prompt: "red"',
+    );
+  });
+
+  it("no negative report = no last-run block and no negative count", () => {
+    const w = mount(CleanerWidget, { props: makeProps() });
+    expect(w.find('[data-test="cleaner-last-run"]').exists()).toBe(false);
+    expect(w.find('[data-test="cleaner-neg-count"]').exists()).toBe(false);
+  });
+});

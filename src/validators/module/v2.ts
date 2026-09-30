@@ -29,12 +29,32 @@ export const wildcardV2 = moduleRowBase.extend({
       weight: z.number(),
       sub_categories: z.array(z.string()).optional(),
       is_null: z.boolean().optional(),
+      // Send-to-negative (catalog v8, additive): listed so a shared option's
+      // negative survives the strict round-trip instead of being stripped.
+      negative: z.string().optional(),
     })),
   }),
 }).strict();
 
-// Unchanged shapes for v2 (SP1 only touches the wildcard subtype).
-export const fixedValuesV2 = fixedValuesV1;
-export const combineV2 = combineV1;
+// v8 send-to-negative adds an optional `negative` to fixed values and to the
+// combine payload; otherwise the v1 shapes carry over unchanged.
+export const fixedValuesV2 = fixedValuesV1.extend({
+  payload: z.object({
+    values: z.array(z.object({
+      id: z.string(),
+      name: z.string(),
+      value: z.string(),
+      negative: z.string().optional(),
+    })),
+  }),
+}).strict();
+export const combineV2 = combineV1.extend({
+  payload: z.object({
+    template: z.string(),
+    output_var: z.string(),
+    input_vars: z.array(z.string()).optional(),
+    negative: z.string().optional(),
+  }),
+}).strict();
 export const derivationV2 = derivationV1;
 export const constraintV2 = constraintV1;

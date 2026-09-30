@@ -41,6 +41,33 @@ from engine.syntax.subcat_filter import ParseError as _ParseError
 from engine.syntax.subcat_filter import parse as _parse_subcat
 from engine.syntax.subcat_filter import reads_as as _reads_as
 
+
+def derivation_actions(payload: Any) -> list[tuple[str, dict[str, Any]]]:
+    """Every action dict of a derivation payload with its path: each branch's
+    ``action`` and ``extra_actions`` (THEN ... AND ...), the ``else`` clause's
+    too, and the legacy ``actions`` list older rows may still carry. The
+    dicts are the payload's own, so a fixer can rewrite them in place."""
+    out: list[tuple[str, dict[str, Any]]] = []
+    rules = payload.get("rules") if isinstance(payload, dict) else None
+    for ri, rule in enumerate(rules if isinstance(rules, list) else []):
+        if not isinstance(rule, dict):
+            continue
+        clauses: list[tuple[str, Any]] = [
+            (f"rules[{ri}].branches[{bi}]", b)
+            for bi, b in enumerate(rule.get("branches") or [])
+        ]
+        clauses.append((f"rules[{ri}].else", rule.get("else")))
+        for where, clause in clauses:
+            if not isinstance(clause, dict):
+                continue
+            if isinstance(clause.get("action"), dict):
+                out.append((f"{where}.action", clause["action"]))
+            for key in ("extra_actions", "actions"):
+                for ai, action in enumerate(clause.get(key) or []):
+                    if isinstance(action, dict):
+                        out.append((f"{where}.{key}[{ai}]", action))
+    return out
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
@@ -327,26 +354,24 @@ def fix_wildcard_delete(
         changed = False
 
         if t == "wildcard":
+            # `negative` (send-to-negative) holds refs with the same grammar.
             for opt in new_payload.get("options") or []:
-                v = opt.get("value")
-                if isinstance(v, str):
-                    new_v = _strip_whole_ref_in_string(v, wildcard_id)
-                    if new_v != v:
-                        opt["value"] = new_v
-                        changed = True
+                for field in ("value", "negative"):
+                    v = opt.get(field)
+                    if isinstance(v, str):
+                        new_v = _strip_whole_ref_in_string(v, wildcard_id)
+                        if new_v != v:
+                            opt[field] = new_v
+                            changed = True
 
         elif t == "derivation":
-            for rule in new_payload.get("rules") or []:
-                for branch in rule.get("branches") or []:
-                    for action in branch.get("actions") or []:
-                        if not isinstance(action, dict):
-                            continue
-                        for k, v in list(action.items()):
-                            if isinstance(v, str):
-                                new_v = _strip_whole_ref_in_string(v, wildcard_id)
-                                if new_v != v:
-                                    action[k] = new_v
-                                    changed = True
+            for _path, action in derivation_actions(new_payload):
+                for k, v in list(action.items()):
+                    if isinstance(v, str):
+                        new_v = _strip_whole_ref_in_string(v, wildcard_id)
+                        if new_v != v:
+                            action[k] = new_v
+                            changed = True
 
         if changed:
             touched.append(_deepcopy_row(m))
@@ -417,13 +442,15 @@ def fix_subcat_delete(
 
         elif t == "wildcard" and m["id"] != wildcard_id:
             # Strip @{wildcard_id:subcat_name} text refs from option values
+            # `negative` (send-to-negative) holds refs with the same grammar.
             for opt in new_payload.get("options") or []:
-                v = opt.get("value")
-                if isinstance(v, str):
-                    new_v = _strip_subcat_ref_in_string(v, wildcard_id, subcat_name)
-                    if new_v != v:
-                        opt["value"] = new_v
-                        changed = True
+                for field in ("value", "negative"):
+                    v = opt.get(field)
+                    if isinstance(v, str):
+                        new_v = _strip_subcat_ref_in_string(v, wildcard_id, subcat_name)
+                        if new_v != v:
+                            opt[field] = new_v
+                            changed = True
 
         if changed:
             touched.append(_deepcopy_row(m))
@@ -496,13 +523,15 @@ def fix_subcat_rename(
 
         elif t == "wildcard" and m["id"] != wildcard_id:
             # Rewrite @{wildcard_id:old_name} → @{wildcard_id:new_name}
+            # `negative` (send-to-negative) holds refs with the same grammar.
             for opt in new_payload.get("options") or []:
-                v = opt.get("value")
-                if isinstance(v, str):
-                    new_v = _rewrite_subcat_ref_in_string(v, wildcard_id, old_name, new_name)
-                    if new_v != v:
-                        opt["value"] = new_v
-                        changed = True
+                for field in ("value", "negative"):
+                    v = opt.get(field)
+                    if isinstance(v, str):
+                        new_v = _rewrite_subcat_ref_in_string(v, wildcard_id, old_name, new_name)
+                        if new_v != v:
+                            opt[field] = new_v
+                            changed = True
 
         if changed:
             touched.append(_deepcopy_row(m))
@@ -560,26 +589,24 @@ def fix_wildcard_rename_name(
         changed = False
 
         if t == "wildcard":
+            # `negative` (send-to-negative) holds refs with the same grammar.
             for opt in new_payload.get("options") or []:
-                v = opt.get("value")
-                if isinstance(v, str):
-                    new_v = _rewrite_ref_name_in_string(v, wildcard_id, new_name)
-                    if new_v != v:
-                        opt["value"] = new_v
-                        changed = True
+                for field in ("value", "negative"):
+                    v = opt.get(field)
+                    if isinstance(v, str):
+                        new_v = _rewrite_ref_name_in_string(v, wildcard_id, new_name)
+                        if new_v != v:
+                            opt[field] = new_v
+                            changed = True
 
         elif t == "derivation":
-            for rule in new_payload.get("rules") or []:
-                for branch in rule.get("branches") or []:
-                    for action in branch.get("actions") or []:
-                        if not isinstance(action, dict):
-                            continue
-                        for k, v in list(action.items()):
-                            if isinstance(v, str):
-                                new_v = _rewrite_ref_name_in_string(v, wildcard_id, new_name)
-                                if new_v != v:
-                                    action[k] = new_v
-                                    changed = True
+            for _path, action in derivation_actions(new_payload):
+                for k, v in list(action.items()):
+                    if isinstance(v, str):
+                        new_v = _rewrite_ref_name_in_string(v, wildcard_id, new_name)
+                        if new_v != v:
+                            action[k] = new_v
+                            changed = True
 
         if changed:
             touched.append(_deepcopy_row(m))
@@ -668,46 +695,51 @@ def fix_combine_output_var_rename(
                 new_payload["output_var"] = new_name
                 changed = True
             # Also rewrite $old in its own template in case it self-references
-            tpl = new_payload.get("template", "")
-            if isinstance(tpl, str):
-                new_tpl = _rewrite_var_in_string(tpl, old_name, new_name)
-                if new_tpl != tpl:
-                    new_payload["template"] = new_tpl
-                    changed = True
-
-        elif t == "wildcard":
-            for opt in new_payload.get("options") or []:
-                v = opt.get("value")
-                if isinstance(v, str):
-                    new_v = _rewrite_var_in_string(v, old_name, new_name)
-                    if new_v != v:
-                        opt["value"] = new_v
+            # The combine's own `negative` reads $vars like its template.
+            for field in ("template", "negative"):
+                tpl = new_payload.get(field, "")
+                if isinstance(tpl, str):
+                    new_tpl = _rewrite_var_in_string(tpl, old_name, new_name)
+                    if new_tpl != tpl:
+                        new_payload[field] = new_tpl
                         changed = True
 
+        elif t == "wildcard":
+            # `negative` (send-to-negative) holds refs with the same grammar.
+            for opt in new_payload.get("options") or []:
+                for field in ("value", "negative"):
+                    v = opt.get(field)
+                    if isinstance(v, str):
+                        new_v = _rewrite_var_in_string(v, old_name, new_name)
+                        if new_v != v:
+                            opt[field] = new_v
+                            changed = True
+
         elif t == "derivation":
-            for rule in new_payload.get("rules") or []:
-                for branch in rule.get("branches") or []:
-                    for action in branch.get("actions") or []:
-                        if not isinstance(action, dict):
-                            continue
-                        for k in list(action.keys()):
-                            v = action[k]
-                            if k == "set_var" and v == old_name:
-                                action[k] = new_name
-                                changed = True
-                            elif isinstance(v, str):
-                                new_v = _rewrite_var_in_string(v, old_name, new_name)
-                                if new_v != v:
-                                    action[k] = new_v
-                                    changed = True
+            for _path, action in derivation_actions(new_payload):
+                for k in list(action.keys()):
+                    v = action[k]
+                    # `target_var` names the variable bare (no `$`); the
+                    # legacy `set_var` did too.
+                    if k in ("set_var", "target_var") and isinstance(v, str) \
+                            and v.lstrip("$") == old_name:
+                        action[k] = new_name
+                        changed = True
+                    elif isinstance(v, str):
+                        new_v = _rewrite_var_in_string(v, old_name, new_name)
+                        if new_v != v:
+                            action[k] = new_v
+                            changed = True
 
         elif t == "combine" and m["id"] != combine_id:
-            tpl = new_payload.get("template", "")
-            if isinstance(tpl, str):
-                new_tpl = _rewrite_var_in_string(tpl, old_name, new_name)
-                if new_tpl != tpl:
-                    new_payload["template"] = new_tpl
-                    changed = True
+            # The combine's own `negative` reads $vars like its template.
+            for field in ("template", "negative"):
+                tpl = new_payload.get(field, "")
+                if isinstance(tpl, str):
+                    new_tpl = _rewrite_var_in_string(tpl, old_name, new_name)
+                    if new_tpl != tpl:
+                        new_payload[field] = new_tpl
+                        changed = True
 
         if changed:
             touched.append(_deepcopy_row(m))

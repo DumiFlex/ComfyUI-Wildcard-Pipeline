@@ -10,7 +10,10 @@ one real ``PipelineEngine.run`` per seed and a summary of what came out:
   - per-wildcard option pick counts (by option id, before expansion),
   - per-constraint downstream hit totals,
   - engine warnings grouped by (type, message) with the seeds they fired on,
-  - the first ``sample_limit`` samples in full, each with its trace.
+  - the first ``sample_limit`` samples in full, each with its trace and
+    each variable's negatives (send-to-negative),
+  - optionally, the rendered value of a few ``track`` variables for each of
+    the first ``track_limit`` seeds (what a stored baseline compares against).
 
 Every seed is a real chain seed: the same seed on a canvas Context node holding
 the same modules produces the same values. That is the point of running here
@@ -27,6 +30,7 @@ import time
 from collections import Counter
 from typing import Any
 
+from engine import negatives as neg
 from engine.context import strip_engine_internals
 from engine.pipeline import PipelineEngine
 from engine.syntax.types import ListVar
@@ -37,6 +41,9 @@ DEFAULT_VALUE_LIMIT = 500
 # Seeds that survive a round-trip through JavaScript numbers (2**53 - 1).
 _MAX_SEED = 2**53 - 1
 _WARNING_SEED_LIMIT = 20
+MAX_TRACK_VARS = 8
+DEFAULT_TRACK_LIMIT = 1000
+MAX_TRACK_LIMIT = 2000
 
 
 class ScenarioError(ValueError):
@@ -108,6 +115,32 @@ def _json_value(value: Any) -> Any:
     return value if isinstance(value, (str, int, float, bool)) or value is None else str(value)
 
 
+def _sample_negatives(ctx: Any, names: Any) -> dict[str, list[dict[str, Any]]]:
+    """Each public variable's negative entries (send-to-negative), as the
+    engine filed them: ``{binding: [{text, pick, source}]}``. Variables
+    without negatives are left out."""
+    out: dict[str, list[dict[str, Any]]] = {}
+    for name in names:
+        rows = [
+            {
+                "text": str(e.get("text", "")),
+                "pick": e.get("pick"),
+                "source": str(e.get("source") or ""),
+            }
+            for e in neg.get_entries(ctx, name)
+            if str(e.get("text", "")).strip()
+        ]
+        if rows:
+            out[name] = rows
+    return out
+
+
+def _joined_negative(ctx: Any, name: str) -> str:
+    """A variable's negatives as the one line an Assembler rendering only
+    ``$name`` would emit (tag-level dedupe)."""
+    return neg.join_unique(str(e.get("text", "")) for e in neg.get_entries(ctx, name))
+
+
 def _refs_by_owner(log: Any) -> dict[str, list[dict[str, Any]]]:
     """Group the engine's nested-ref log by the stack uid whose resolve made
     each pick, keeping pre-order so `depth` draws the tree."""
@@ -144,11 +177,16 @@ def _slim_trace(
         writes = []
         for w in row.get("writes") or []:
             if isinstance(w, dict):
-                writes.append({
+                write = {
                     "variable": w.get("variable"),
                     "value": _json_value(w.get("value")),
                     "overwrite": bool(w.get("overwrite", False)),
-                })
+                }
+                # The negatives the variable carries after this write (the
+                # engine only stamps it when non-empty).
+                if isinstance(w.get("negative"), str) and w["negative"]:
+                    write["negative"] = w["negative"]
+                writes.append(write)
         out.append({
             "id": row.get("id", ""),
             "_uid": row.get("_uid", ""),
@@ -197,6 +235,8 @@ def run_scenario(
     pins: dict[str, str] | None = None,
     sample_limit: int = DEFAULT_SAMPLE_LIMIT,
     value_limit: int = DEFAULT_VALUE_LIMIT,
+    track: list[str] | None = None,
+    track_limit: int = DEFAULT_TRACK_LIMIT,
 ) -> dict[str, Any]:
     """Run ``modules`` once per seed and summarise the results.
 
@@ -206,6 +246,11 @@ def run_scenario(
 
     A seed whose run raises is recorded as a failed sample (and counted in
     ``failed``) rather than aborting the whole scenario.
+
+    ``track`` names variables whose rendered value is recorded per seed, for
+    the first ``track_limit`` seeds, under ``tracked``: ``{"seeds": [...],
+    "values": {name: [value or None, ...]}}``. ``None`` means the variable
+    wasn't set on that seed (or the seed failed).
     """
     catalog = catalog or {}
     pins = {str(k): str(v) for k, v in (pins or {}).items()}
@@ -226,6 +271,22 @@ def run_scenario(
     internal_vars: set[str] = set()
     samples: list[dict[str, Any]] = []
     failed = 0
+    track = [str(t).lstrip("$") for t in (track or [])][:MAX_TRACK_VARS]
+    tracked_seeds: list[int] = []
+    tracked: dict[str, list[str | None]] = {name: [] for name in track}
+    tracked_neg: dict[str, list[str | None]] = {name: [] for name in track}
+
+    def record(seed: int, resolved: dict[str, Any] | None, run_ctx: Any = None) -> None:
+        if not track or len(tracked_seeds) >= track_limit:
+            return
+        tracked_seeds.append(seed)
+        for name in track:
+            if resolved is None or name not in resolved:
+                tracked[name].append(None)
+                tracked_neg[name].append(None)
+            else:
+                tracked[name].append(_render(resolved[name]))
+                tracked_neg[name].append(_joined_negative(run_ctx, name))
 
     started = time.perf_counter()
     for seed in seeds:
@@ -240,14 +301,17 @@ def run_scenario(
             ctx = PipelineEngine().run(copy.deepcopy(modules), ctx=ctx, seed=seed)
         except Exception as exc:  # noqa: BLE001 - one bad seed must not sink the run
             failed += 1
+            record(seed, None)
             if len(samples) < sample_limit:
                 samples.append({
                     "seed": seed, "vars": {}, "trace": [], "warnings": [],
+                    "negatives": {},
                     "error": f"{type(exc).__name__}: {exc}",
                 })
             continue
 
         resolved = strip_engine_internals(ctx)
+        record(seed, resolved, ctx)
         flags = ctx.get("__wp_internal_flags__")
         if isinstance(flags, dict):
             internal_vars.update(k for k, v in flags.items() if v)
@@ -300,6 +364,7 @@ def run_scenario(
                     ctx.get("__wp_trace__"), names, _refs_by_owner(ctx.get("__wp_ref_log__")),
                 ),
                 "warnings": sample_warnings,
+                "negatives": _sample_negatives(ctx, resolved.keys()),
                 "error": None,
             })
     elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
@@ -325,4 +390,8 @@ def run_scenario(
         "constraint_hits": dict(constraint_hits),
         "warnings": sorted(warnings.values(), key=lambda g: -g["count"]),
         "samples": samples,
+        "tracked": (
+            {"seeds": tracked_seeds, "values": tracked, "negatives": tracked_neg}
+            if track else None
+        ),
     }

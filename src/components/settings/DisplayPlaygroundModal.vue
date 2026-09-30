@@ -82,6 +82,8 @@ const tagAutocomplete = ref<boolean>(false);
 const loraAutocomplete = ref<boolean>(false);
 const embeddingAutocomplete = ref<boolean>(false);
 const autocompleteSeparator = ref<boolean>(false);
+const autocompleteMaxSuggestions = ref<string>("20");
+const autocompleteMinChars = ref<string>("3");
 const toastLifetime = ref<ToastLifetime>("default");
 const suppressInfoToasts = ref<boolean>(false);
 const newModuleDisabled = ref<boolean>(false);
@@ -111,6 +113,8 @@ function syncFromStore(): void {
   loraAutocomplete.value = getSettingValue("loraAutocomplete") === true;
   embeddingAutocomplete.value = getSettingValue("embeddingAutocomplete") === true;
   autocompleteSeparator.value = getSettingValue("autocompleteSeparator") === true;
+  autocompleteMaxSuggestions.value = asString(getSettingValue("autocompleteMaxSuggestions"), "20");
+  autocompleteMinChars.value = asString(getSettingValue("autocompleteMinChars"), "3");
   toastLifetime.value = asString(getSettingValue("toastLifetime"), "default") as ToastLifetime;
   suppressInfoToasts.value = asBool(getSettingValue("suppressInfoToasts"), false);
   newModuleDisabled.value = asBool(getSettingValue("newModuleDisabled"), false);
@@ -144,6 +148,8 @@ watch(tagAutocomplete, (v) => applySetting("tagAutocomplete", v));
 watch(loraAutocomplete, (v) => applySetting("loraAutocomplete", v));
 watch(embeddingAutocomplete, (v) => applySetting("embeddingAutocomplete", v));
 watch(autocompleteSeparator, (v) => applySetting("autocompleteSeparator", v));
+watch(autocompleteMaxSuggestions, (v) => applySetting("autocompleteMaxSuggestions", v));
+watch(autocompleteMinChars, (v) => applySetting("autocompleteMinChars", v));
 watch(toastLifetime, (v) => applySetting("toastLifetime", v));
 watch(suppressInfoToasts, (v) => applySetting("suppressInfoToasts", v));
 watch(newModuleDisabled, (v) => applySetting("newModuleDisabled", v));
@@ -168,6 +174,8 @@ interface Defaults {
   loraAutocomplete: boolean;
   embeddingAutocomplete: boolean;
   autocompleteSeparator: boolean;
+  autocompleteMaxSuggestions: string;
+  autocompleteMinChars: string;
   toastLifetime: ToastLifetime;
   suppressInfoToasts: boolean;
   newModuleDisabled: boolean;
@@ -193,6 +201,8 @@ const defaults: Defaults = {
   loraAutocomplete: false,
   embeddingAutocomplete: false,
   autocompleteSeparator: false,
+  autocompleteMaxSuggestions: "20",
+  autocompleteMinChars: "3",
   toastLifetime: "default",
   suppressInfoToasts: false,
   newModuleDisabled: false,
@@ -413,6 +423,24 @@ onBeforeUnmount(() => {
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Append ", " after a completion</span>
                 <input v-model="autocompleteSeparator" type="checkbox" class="wp-pg__check">
+              </label>
+              <label class="wp-pg__row">
+                <span class="wp-pg__row-label">Autocomplete: max suggestions</span>
+                <select v-model="autocompleteMaxSuggestions" class="wp-pg__select">
+                  <option value="5">5</option>
+                  <option value="10">10</option>
+                  <option value="20">20 (default)</option>
+                  <option value="40">40</option>
+                </select>
+              </label>
+              <label class="wp-pg__row">
+                <span class="wp-pg__row-label">Autocomplete: minimum characters</span>
+                <select v-model="autocompleteMinChars" class="wp-pg__select">
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3 (default)</option>
+                  <option value="4">4</option>
+                </select>
               </label>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Validation strictness</span>

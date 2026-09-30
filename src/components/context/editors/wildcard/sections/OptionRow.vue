@@ -8,7 +8,7 @@ import {
   type WildcardOption,
 } from "../probability";
 import { splitRefFilter, tokenizeRich, type RichToken } from "../../../../../widgets/richTokenize";
-import { cacheVersion, ensure, lookup } from "../../../../../extension/preview-resolver";
+import { cacheVersion, ensure, isConfirmedMissing, lookup } from "../../../../../extension/preview-resolver";
 import type { PairingBadge } from "../../../../../extension/constraint-pairs";
 import { matches, parse, readsAs } from "@/manager/parsing/subcatFilter";
 import { formatProbability } from "@/manager/utils/percent";
@@ -18,6 +18,9 @@ import { axisHueAt } from "../../../../shared/axis-color";
 
 interface OptionFull extends WildcardOption {
   value: string;
+  /** Send-to-negative (v8): library content, read-only here — a negative is
+   *  never overridden per instance. */
+  negative?: string;
 }
 
 const props = withDefaults(
@@ -115,6 +118,17 @@ const tokens = computed<RichToken[]>(() => {
     .filter((u): u is string => typeof u === "string");
   if (uuids.length > 0) ensure(uuids);
   return out;
+});
+
+/** The option carries a ref the server confirmed points at nothing (a
+ *  deleted module, or a placeholder not yet repointed), so the whole row is
+ *  marked. Only confirmed misses count: a ref still loading is not broken. */
+const hasBrokenRef = computed(() => {
+  void cacheVersion.value;
+  return tokens.value.some((t) => {
+    const uuid = t.kind === "ref" ? t.meta?.uuid : undefined;
+    return typeof uuid === "string" && isConfirmedMissing(uuid);
+  });
 });
 
 /** RefChip renders its own `@` prefix, so hand it the bare label. */
@@ -366,6 +380,10 @@ const allTags = computed<string[]>(() =>
 const visibleTags = computed<string[]>(() =>
   catExpanded.value ? allTags.value : allTags.value.slice(0, CAT_CHIP_LIMIT),
 );
+/** The option's negative, trimmed ("" = none). Shown as a small read-only
+ *  NEG hint; edit it in the library. */
+const negativeText = computed(() => (props.option.negative ?? "").trim());
+
 const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.length);
 </script>
 
@@ -377,7 +395,9 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
       'opt--off': !enabled || nullDisabledInMulti,
       'opt--weighted': overrideWeight,
       'opt--filtered': filteredByCategory,
+      'opt--broken': hasBrokenRef,
     }"
+    :title="hasBrokenRef ? 'References a module that is not in the library' : undefined"
   >
     <span
       class="opt__check"
@@ -458,6 +478,12 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
         <template v-else>{{ tok.raw }}</template>
       </template>
       </span>
+      <span
+        v-if="negativeText"
+        class="opt__neg"
+        data-test="opt-neg"
+        :title="`Negative: ${negativeText} (edit in the library)`"
+      >NEG</span>
       <span v-if="pairBadges.length > 0" class="opt__pair-badges" data-test="opt-pair-badges">
         <PairBadge
           v-for="p in pairBadges"
@@ -554,6 +580,10 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
   cursor: pointer;
 }
 .opt:last-child { border-bottom: none; }
+.opt--broken {
+  background: color-mix(in srgb, var(--wp-danger, #ef4444) 6%, transparent);
+  box-shadow: inset 3px 0 0 var(--wp-danger, #ef4444);
+}
 .opt:hover { background: var(--wp-row-hover, rgba(255, 255, 255, 0.02)); }
 .opt__check {
   width: 14px;
@@ -612,6 +642,17 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
   -webkit-line-clamp: 3;
   line-clamp: 3;
   overflow: hidden;
+}
+.opt__neg {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--wp-danger, #ef4444);
+  background: color-mix(in srgb, var(--wp-danger, #ef4444) 14%, transparent);
+  cursor: help;
 }
 .opt__pair-badges {
   flex: 0 0 auto;

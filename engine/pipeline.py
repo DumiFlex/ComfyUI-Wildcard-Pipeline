@@ -13,8 +13,10 @@ import random
 import re
 from typing import Any
 
+from engine import negatives, prefs
 from engine.context import Context
 from engine.modules import Module
+from engine.modules._detail import DETAIL_KEY, EXPLAIN_KEY
 from engine.modules.dispatcher import UnknownModuleType, resolve_module
 from engine.modules.snapshot import coerce_legacy_module
 
@@ -194,30 +196,31 @@ def _extract_static_meta(
             if b:
                 meta["binding"] = b
     elif m_type == "derivation":
-        # Derivation can write to MULTIPLE target_vars (one per branch
-        # `action.target_var`, plus the `else.action.target_var`).
-        # Collect every declared target so the disabled-derivation row
-        # shows all of them in the debug viewer instead of a uuid.
+        # Derivation can write to MULTIPLE target_vars (every action of
+        # every branch, plus the else clause's; a clause runs `action` then
+        # its `extra_actions`). Collect every declared target so the
+        # disabled-derivation row shows all of them in the debug viewer
+        # instead of a uuid.
         seen_targets: list[str] = []
         rules = payload.get("rules")
         if isinstance(rules, list):
             for rule in rules:
                 if not isinstance(rule, dict):
                     continue
-                for branch in rule.get("branches", []) or []:
-                    if not isinstance(branch, dict):
-                        continue
-                    action = branch.get("action")
-                    if isinstance(action, dict):
-                        target = action.get("target_var")
-                        if isinstance(target, str):
-                            target = target.lstrip("$").strip()
-                            if target and target not in seen_targets:
-                                seen_targets.append(target)
-                else_block = rule.get("else")
-                if isinstance(else_block, dict):
-                    action = else_block.get("action")
-                    if isinstance(action, dict):
+                clauses = [
+                    b for b in rule.get("branches", []) or []
+                    if isinstance(b, dict)
+                ]
+                if isinstance(rule.get("else"), dict):
+                    clauses.append(rule["else"])
+                for clause in clauses:
+                    extra = clause.get("extra_actions")
+                    actions = [clause.get("action")] + (
+                        extra if isinstance(extra, list) else []
+                    )
+                    for action in actions:
+                        if not isinstance(action, dict):
+                            continue
                         target = action.get("target_var")
                         if isinstance(target, str):
                             target = target.lstrip("$").strip()
@@ -274,6 +277,46 @@ def _module_binding(module: object) -> str | None:
     return None
 
 
+def _display_name(module: object, fallback: str) -> str:
+    """The name a user knows a module by: the stack row's `name`, else its
+    library `meta.name`."""
+    meta = module.get("meta") if isinstance(module, dict) else getattr(module, "meta", None)
+    if isinstance(meta, dict):
+        name = meta.get("name")
+        if isinstance(name, str) and name:
+            return fallback or name
+    return fallback
+
+
+def _finish_module(
+    ctx: dict[str, Any],
+    warn_mark: int,
+    module_id: str,
+    module_uid: str,
+    name: str,
+) -> dict[str, Any]:
+    """Explain-mode extras for one module's trace row.
+
+    Stamps every warning the module raised with its owner (resolver warnings
+    such as `unknown_ref` carry no module id of their own) and returns the
+    fields the trace row gains: the display name and whatever the handler put
+    in its detail sink. Only called when the run asked to explain itself.
+    """
+    warnings = ctx.get("__wp_warnings__")
+    if isinstance(warnings, list):
+        for w in warnings[warn_mark:]:
+            if isinstance(w, dict) and not w.get("owner_uid"):
+                w["owner_id"] = module_id
+                w["owner_uid"] = module_uid or module_id
+    extras: dict[str, Any] = {}
+    if name:
+        extras["name"] = name
+    detail = ctx.pop(DETAIL_KEY, None)
+    if isinstance(detail, dict) and detail:
+        extras["detail"] = detail
+    return extras
+
+
 class PipelineEngine:
     """Runs an ordered list of modules against a context dict."""
 
@@ -294,12 +337,23 @@ class PipelineEngine:
         ctx.setdefault("__wp_warnings__", [])
         ctx.setdefault("__wp_trace__", [])
         ctx.setdefault("__wp_internal_flags__", {})
+        # Send-to-negative: per-variable negatives (engine/negatives.py).
+        ctx.setdefault(negatives.NEG_KEY, {})
+        # `@{uuid}` nesting limit from Settings (engine/prefs.py). setdefault
+        # so a caller (or a test) that pinned a limit keeps it; set here
+        # rather than per surface so canvas runs, preview and the Test Runner
+        # all honor the same value. `__`-prefixed, so it never crosses a
+        # socket — each node re-reads it at its own run.
+        ctx.setdefault("__wp_max_ref_depth__", prefs.max_ref_depth())
         # SP3 reach selector: per-constraint firing count keyed by
         # `__constraint_module_id__`. Drives first/next/all/pick
         # coverage in apply_constraints_for_target + the never_applied /
         # partial_reach finalisation below. Replaces the pre-SP3
         # one-shot consumed-set.
         ctx.setdefault("__wp_constraint_hits__", {})
+        # Canvas runs ask for per-module detail (derivation branch results,
+        # pick odds, ...) for the WP Debug node; see engine/modules/_detail.py.
+        _explain = bool(ctx.get(EXPLAIN_KEY))
 
         # "Hold the value" base pass. A module on seed_scope=hold must resolve
         # to its frame-0 (loop_index=0) value on EVERY iteration — INCLUDING
@@ -421,6 +475,11 @@ class PipelineEngine:
                 _module_name = getattr(module, "name", "") or ""
                 _module_bundle_origin = getattr(module, "bundle_origin", "") or ""
 
+            _warn_mark = len(ctx["__wp_warnings__"])
+            if _explain:
+                _module_name = _display_name(module, _module_name)
+                ctx[DETAIL_KEY] = {}
+
             _k = int(ctx.get("__wp_loop_index__", 0))
             # Per-frame enable override. `frame_enabled[str(k)]` overrides the
             # base `enabled` flag for frame k in EITHER direction: a base-off
@@ -470,6 +529,9 @@ class PipelineEngine:
                     "writes": [],
                     "error": None,
                     **meta,
+                    **(_finish_module(
+                        ctx, _warn_mark, _module_id, _module_uid, _module_name,
+                    ) if _explain else {}),
                 })
                 continue
 
@@ -530,6 +592,9 @@ class PipelineEngine:
                     "writes": [],
                     "error": {"type": type(e).__name__, "message": str(e)},
                     **meta,
+                    **(_finish_module(
+                        ctx, _warn_mark, _module_id, _module_uid, _module_name,
+                    ) if _explain else {}),
                 })
                 continue
 
@@ -564,6 +629,7 @@ class PipelineEngine:
             # binding can match a constraint to its own bundle copy's pick.
             ctx["__wp_current_module_bundle_origin__"] = _module_bundle_origin
             meta = _extract_static_meta(module)
+            ctx.pop(negatives.TOUCHED_KEY, None)
             try:
                 bindings = resolve_module(snapshot, ctx)
             except UnknownModuleType:
@@ -581,6 +647,9 @@ class PipelineEngine:
                     "writes": [],
                     "error": None,
                     **meta,
+                    **(_finish_module(
+                        ctx, _warn_mark, _module_id, _module_uid, _module_name,
+                    ) if _explain else {}),
                 })
                 continue
             except Exception as e:
@@ -612,6 +681,9 @@ class PipelineEngine:
                     "writes": [],
                     "error": {"type": type(e).__name__, "message": str(e)},
                     **meta,
+                    **(_finish_module(
+                        ctx, _warn_mark, _module_id, _module_uid, _module_name,
+                    ) if _explain else {}),
                 })
                 continue
 
@@ -647,6 +719,19 @@ class PipelineEngine:
                     "source": module_type,
                     "overwrite": before is not None and before != value,
                 })
+            # A write replaces the value, so it replaces what the value
+            # carried: bindings the handler gave no negatives lose theirs.
+            negatives.settle_writes(
+                ctx, [v.lstrip("$") for v in (bindings or {})],
+            )
+            # WP Debug's trace shows what each write now carries.
+            for w in writes:
+                texts = [
+                    str(e.get("text", ""))
+                    for e in negatives.get_entries(ctx, w["variable"])
+                ]
+                if texts:
+                    w["negative"] = ", ".join(texts)
 
             # `seed` on the trace entry: the effective seed THIS
             # module rolled with — `instance.locked_seed` if locked,
@@ -669,6 +754,9 @@ class PipelineEngine:
                 "error": None,
                 "seed": effective_seed,
                 **meta,
+                **(_finish_module(
+                        ctx, _warn_mark, _module_id, _module_uid, _module_name,
+                    ) if _explain else {}),
             })
 
         # Drop the active-module markers so they don't leak into the
@@ -679,6 +767,7 @@ class PipelineEngine:
         ctx.pop("__wp_current_module_uid__", None)
         ctx.pop("__wp_current_module_name__", None)
         ctx.pop("__wp_current_module_bundle_origin__", None)
+        ctx.pop(DETAIL_KEY, None)
 
         # SP3 reach selector finalisation: emit `constraint_never_applied`
         # for every registered constraint whose selector covered ZERO

@@ -13,7 +13,7 @@ const conditionOps = [
   { term: "equals / not equals", desc: "Matches when the variable's value is (or isn't) exactly the text you provide. Case-sensitive." },
   { term: "contains", desc: "Matches when the variable's value includes the text you provide somewhere inside it." },
   { term: "matches", desc: "Matches using a regular expression — for flexible pattern-based conditions." },
-  { term: "exists / not exists", desc: "Matches when the variable is present in the Context (or absent), regardless of its value." },
+  { term: "exists / not exists", desc: "Matches when the variable is present in the Context (or absent), regardless of its value. Under exists, a switch narrows it: any, is empty (present but empty, e.g. a wildcard that rolled its null option) or has value." },
   { term: "is set / is unset", desc: "is set matches when the variable is present and non-empty; is unset matches when it's absent or empty." },
 ];
 
@@ -21,12 +21,14 @@ const actionModes = [
   { term: "Replace", desc: "Overwrite the variable's current value entirely with the action text." },
   { term: "Append", desc: "Add the action text to the end of the variable's current value." },
   { term: "Prepend", desc: "Insert the action text before the variable's current value." },
+  { term: "Add to negative", desc: "Leave the variable's text alone and add the action text to its negative words, so they follow the variable into any Assembler that renders it. The value takes $vars, @{refs} and {a|b}; refs resolve quietly and never change a pick." },
+  { term: "Replace negative", desc: "Like Add to negative, but the action text becomes the variable's only negative words: whatever it carried before is dropped. The variable's own text is still left alone." },
 ];
 
 const instanceOptions = [
   { term: "Disable a rule", desc: "Skip one of the top-level IF/ELIF/ELSE rules for this use without removing it from the library entry." },
   { term: "Disable a branch", desc: "Skip a specific IF, ELIF, or ELSE branch within a rule for this use." },
-  { term: "Value override", desc: "Replace the text that a specific branch action writes, for this use only." },
+  { term: "Value override", desc: "Replace the text that a specific branch action writes, or the value a condition compares against, for this use only. A branch that combines tests gets one condition field per test." },
   { term: "Rule order", desc: "Reorder the rules for this use without changing the shared library entry." },
 ];
 </script>
@@ -75,8 +77,56 @@ const instanceOptions = [
       <DocKeyList :items="conditionOps" />
     </DocSection>
 
+    <DocSection title="Combining tests with AND / OR">
+      <p>
+        A branch can check more than one thing. Click <b>+ Condition</b> under a test to add
+        another; the connector between them reads <b>AND</b> (every test must match) and one click
+        flips it to <b>OR</b> (any test may match).
+      </p>
+      <p>
+        Each connector flips on its own, and AND binds tighter than OR, the way it reads. Turn the
+        second connector of "a AND b AND c" to OR and you get (a AND b) OR c: the tests still joined
+        by AND are drawn as a boxed group, so the page always shows what runs. Flip it back and the
+        box goes away.
+      </p>
+      <p>
+        You can also build the box yourself with <b>+ Group</b>. A group is a boxed list of its own
+        with the opposite connector, so IF <VarToken>$time</VarToken> equals "night" AND
+        (<VarToken>$weather</VarToken> equals "rain" OR <VarToken>$weather</VarToken> equals "fog")
+        is one test plus a group of two. <b>+ Group</b> nests up to three levels deep.
+      </p>
+      <DocCallout variant="tip">
+        Removing tests until one is left turns the branch back into a plain single test, so a
+        derivation only needs the newer format when it really combines tests. An older Wildcard
+        Pipeline refuses a shared pack that does and asks for an update.
+      </DocCallout>
+    </DocSection>
+
     <DocSection title="Action modes">
       <DocKeyList :items="actionModes" />
+      <DocCallout variant="tip">
+        Negatives travel with the value. Replace swaps the variable's negatives for those of the
+        variables its new text read; Append and Prepend keep the old ones and add. For example,
+        IF <VarToken>$mood</VarToken> equals "gloomy" → Add to negative "bright colors, smiling"
+        keeps smiles out of every image that renders <VarToken>$mood</VarToken>. A derivation that
+        uses Add to negative is shared as schema 8, which older versions refuse with a request to
+        update.
+      </DocCallout>
+    </DocSection>
+
+    <DocSection title="Several actions in one branch">
+      <p>
+        Click <b>+ And</b> under a branch's action to add another. The actions run in order when the
+        branch fires, and each one sees what the one before it wrote. For example, IF
+        <VarToken>$tier</VarToken> equals "warmup" THEN <VarToken>$pose</VarToken> Replace
+        <VarToken>$pose_portrait</VarToken> AND <VarToken>$pose</VarToken> Add to negative
+        <VarToken>$pose_portrait.neg</VarToken>. The ELSE branch works the same way. On the canvas,
+        each action gets its own value override.
+      </p>
+      <DocCallout variant="tip">
+        A branch with more than one action is shared as schema 8, which older versions refuse with a
+        request to update.
+      </DocCallout>
     </DocSection>
 
     <DocSection title="Nested references in actions">
@@ -138,6 +188,7 @@ const instanceOptions = [
           { id: 'wildcard', label: 'Wildcard', icon: 'pi pi-sparkles', tone: 'wildcard' },
           { id: 'combine', label: 'Combine', icon: 'pi pi-link', tone: 'combine' },
           { id: 'variable-pipeline', label: 'The $variable pipeline', icon: 'pi pi-share-alt', tone: 'neutral' },
+          { id: 'negatives', label: 'Negatives', icon: 'pi pi-minus-circle', tone: 'neutral' },
           { id: 'wp-context', label: 'WP Context', icon: 'pi pi-sitemap', tone: 'node' },
         ]"
       />

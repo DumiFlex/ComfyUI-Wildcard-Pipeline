@@ -5,6 +5,8 @@ import pytest
 from engine.migrations import (
     CONSTRAINT_ONLY_SCHEMA_VERSION,
     CURRENT_SCHEMA_VERSION,
+    DERIVATION_CONDITIONS_SCHEMA_VERSION,
+    NEGATIVES_SCHEMA_VERSION,
     SP2B_SCHEMA_VERSION,
     SP3_REACH_SCHEMA_VERSION,
     TAG_AXES_SCHEMA_VERSION,
@@ -115,3 +117,102 @@ def test_only_rule_outranks_accepts_axis():
         {"type": "wildcard", "payload": {"options": [], "tag_group_kinds": {"g": "accepts"}}},
     ]}
     assert schema_version_for_payload(bundle) == CONSTRAINT_ONLY_SCHEMA_VERSION
+
+
+def _derivation_row(condition):
+    return {"id": "dddddddd", "type": "derivation", "name": "d", "payload": {"rules": [
+        {"id": "r1", "branches": [
+            {"condition": condition,
+             "action": {"target_var": "t", "mode": "replace", "value": "v"}},
+        ]},
+    ]}}
+
+
+_TEST = {"var": "mood", "op": "equals", "value": "calm"}
+
+
+@pytest.mark.parametrize("condition, expected", [
+    (_TEST, CURRENT_SCHEMA_VERSION),
+    ({"var": "mood", "op": "is_set", "value": ""}, CURRENT_SCHEMA_VERSION),
+    ({"var": "mood", "op": "is_empty", "value": ""}, DERIVATION_CONDITIONS_SCHEMA_VERSION),
+    ({"var": "mood", "op": "is_not_empty", "value": ""}, DERIVATION_CONDITIONS_SCHEMA_VERSION),
+    ({"match": "all", "conditions": [_TEST, _TEST]}, DERIVATION_CONDITIONS_SCHEMA_VERSION),
+    ({"match": "any", "conditions": [_TEST]}, DERIVATION_CONDITIONS_SCHEMA_VERSION),
+])
+def test_derivation_conditions(condition, expected):
+    assert schema_version_for_payload(_derivation_row(condition)) == expected
+
+
+def test_derivation_group_outranks_only_rule_inside_a_bundle():
+    only = _constraint_row()
+    only["payload"]["exceptions"] = [{"source_value": "a", "target_value": "b", **_ONLY}]
+    bundle = {"children": [
+        only,
+        _derivation_row({"match": "any", "conditions": [_TEST, _TEST]}),
+    ]}
+    assert schema_version_for_payload(bundle) == DERIVATION_CONDITIONS_SCHEMA_VERSION
+
+
+# ── v8 send-to-negative ────────────────────────────────────────────────
+
+
+def _wildcard_row(negative):
+    opt = {"id": "o1", "value": "red", "weight": 1}
+    if negative is not None:
+        opt["negative"] = negative
+    return {"id": "eeeeeeee", "type": "wildcard", "name": "w",
+            "payload": {"var_binding": "w", "options": [opt]}}
+
+
+@pytest.mark.parametrize("negative, expected", [
+    (None, CURRENT_SCHEMA_VERSION),
+    ("", CURRENT_SCHEMA_VERSION),
+    ("   ", CURRENT_SCHEMA_VERSION),
+    ("blurry", NEGATIVES_SCHEMA_VERSION),
+])
+def test_option_negative(negative, expected):
+    assert schema_version_for_payload(_wildcard_row(negative)) == expected
+
+
+def test_fixed_value_and_combine_negatives():
+    fixed = {"id": "ffffffff", "type": "fixed_values", "name": "f", "payload": {
+        "values": [{"id": "v1", "name": "style", "value": "oil", "negative": "photo"}]}}
+    combine = {"id": "abababab", "type": "combine", "name": "c", "payload": {
+        "template": "$a", "output_var": "c", "negative": "cropped"}}
+    assert schema_version_for_payload(fixed) == NEGATIVES_SCHEMA_VERSION
+    assert schema_version_for_payload(combine) == NEGATIVES_SCHEMA_VERSION
+
+
+def test_add_to_negative_action_and_bundle_child():
+    row = _derivation_row(_TEST)
+    row["payload"]["rules"][0]["branches"][0]["action"]["mode"] = "negative"
+    assert schema_version_for_payload(row) == NEGATIVES_SCHEMA_VERSION
+    row["payload"]["rules"][0]["branches"][0]["action"]["mode"] = "negative_replace"
+    assert schema_version_for_payload(row) == NEGATIVES_SCHEMA_VERSION
+    bundle = {"children": [
+        _derivation_row({"match": "any", "conditions": [_TEST]}),
+        _wildcard_row("blurry"),
+    ]}
+    assert schema_version_for_payload(bundle) == NEGATIVES_SCHEMA_VERSION
+
+
+def test_extra_actions_need_v8():
+    row = _derivation_row(_TEST)
+    branch = row["payload"]["rules"][0]["branches"][0]
+    branch["extra_actions"] = []
+    assert schema_version_for_payload(row) == CURRENT_SCHEMA_VERSION
+    branch["extra_actions"] = [{"target_var": "u", "mode": "replace", "value": "w"}]
+    assert schema_version_for_payload(row) == NEGATIVES_SCHEMA_VERSION
+
+
+@pytest.mark.parametrize("template, expected", [
+    ("$pose", CURRENT_SCHEMA_VERSION),
+    ("$pose.negx", CURRENT_SCHEMA_VERSION),
+    ("$pose.neg", NEGATIVES_SCHEMA_VERSION),
+    ("a $pose.1.neg b", NEGATIVES_SCHEMA_VERSION),
+    ("$pose.neg.0", NEGATIVES_SCHEMA_VERSION),
+])
+def test_neg_accessor_text(template, expected):
+    combine = {"id": "abababab", "type": "combine", "name": "c", "payload": {
+        "template": template, "output_var": "c"}}
+    assert schema_version_for_payload(combine) == expected

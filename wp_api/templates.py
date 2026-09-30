@@ -1,7 +1,8 @@
 """Templates CRUD — reusable PromptAssembler template strings.
 
 Mirrors wp_api/bundles.py. A template is a plain ``template_string``
-($var tokens) plus library metadata (name/description/category/tags/
+($var tokens), an optional ``negative_template`` (the Assembler's negative
+box, migration 019) plus library metadata (name/description/category/tags/
 favorite). No children/color/payload_hash/version (templates can't
 drift — see engine/db/migrations_sql/012_templates.sql).
 """
@@ -17,8 +18,18 @@ from wp_api._validators import validate_body_size, validate_meta
 
 _UPDATABLE_FIELDS = (
     "name", "description", "category_id", "tags",
-    "template_string", "is_favorite",
+    "template_string", "is_favorite", "negative_template",
 )
+
+
+def _negative_template_error(body: dict) -> str | None:
+    """`negative_template` (migration 019) is a string or null. Null means
+    "no negative saved": loading leaves the Assembler's negative box alone."""
+    if "negative_template" in body:
+        neg = body["negative_template"]
+        if neg is not None and not isinstance(neg, str):
+            return "negative_template must be a string or null"
+    return None
 
 
 def _auto_suffix_template_name(repo: TemplateRepository, name: str) -> str:
@@ -71,7 +82,7 @@ async def create_template(request: web.Request) -> web.Response:
         return json_error("body must be a JSON object", status=400)
     if "name" not in body or not str(body.get("name", "")).strip():
         return json_error("missing field: name", status=400)
-    err = validate_meta(body)
+    err = validate_meta(body) or _negative_template_error(body)
     if err is not None:
         return json_error(err, status=400)
     try:
@@ -85,6 +96,7 @@ async def create_template(request: web.Request) -> web.Response:
                 category_id=body.get("category_id"),
                 tags=body.get("tags", []),
                 is_favorite=bool(body.get("is_favorite", False)),
+                negative_template=body.get("negative_template"),
             )
     except ValueError as e:
         return json_error(str(e), status=400)
@@ -114,7 +126,7 @@ async def update_template(request: web.Request) -> web.Response:
         return json_error("invalid JSON body", status=400)
     if not isinstance(body, dict):
         return json_error("body must be a JSON object", status=400)
-    err = validate_meta(body)
+    err = validate_meta(body) or _negative_template_error(body)
     if err is not None:
         return json_error(err, status=400)
     patch = {k: body[k] for k in _UPDATABLE_FIELDS if k in body}

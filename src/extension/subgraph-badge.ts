@@ -200,9 +200,10 @@ function collectInnerConflicts(rootGraph: LiteGraphLike, subgraph: LiteGraphLike
       out.push(...scanConflicts(v, upstream));
     } else if (node.type === "WP_PromptAssembler") {
       const tmpl = widgetValue(node, "template");
-      if (!tmpl) continue;
+      const negTmpl = widgetValue(node, "negative_template");
+      if (!tmpl && !negTmpl) continue;
       const upstream = collectUpstreamVariables(rootGraph, node);
-      out.push(...scanTemplateConflicts(tmpl, upstream));
+      out.push(...scanTemplateConflicts(tmpl, upstream, negTmpl));
     }
   }
   return out;

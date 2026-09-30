@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { BundleRow, ModuleRow } from "../../api/types";
 import {
+  brokenRefLabels,
   validateBundle,
   validateModule,
   worstSeverity,
@@ -354,5 +355,19 @@ describe("worstSeverity", () => {
       { severity: "warn", message: "a" },
       { severity: "warn", message: "b" },
     ])).toBe("warn");
+  });
+});
+
+describe("brokenRefLabels", () => {
+  const known = new Set(["aabbccdd"]);
+  it("labels each missing ref once, by cached name or bare id", () => {
+    expect(brokenRefLabels(
+      "@{11223344#castle} and @{aabbccdd#outfit} and @{11223344#castle} @{55667788}",
+      known,
+    )).toEqual(["@castle", "@{55667788}"]);
+  });
+  it("returns nothing for text without refs", () => {
+    expect(brokenRefLabels("plain $var text", known)).toEqual([]);
+    expect(brokenRefLabels(undefined, known)).toEqual([]);
   });
 });

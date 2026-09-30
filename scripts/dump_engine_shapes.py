@@ -67,7 +67,10 @@ _SAMPLES: dict[str, tuple[type, dict]] = {
             "tag_groups": {"TEXTURE": ["soft", "bold"]},
             "tag_group_kinds": {"TEXTURE": "accepts"},
             "options": [
-                {"id": "opt00001", "value": "serene", "weight": 1, "sub_categories": ["soft"]},
+                # `negative` (send-to-negative, v8) must survive the
+                # strict validator like the value does.
+                {"id": "opt00001", "value": "serene", "weight": 1, "sub_categories": ["soft"],
+                 "negative": "angry, tense"},
                 # Null option: the is_null contract. Must round-trip
                 # through the validator or install rebuilds it as an
                 # invalid empty-value option.
@@ -77,11 +80,13 @@ _SAMPLES: dict[str, tuple[type, dict]] = {
     ),
     "fixed_values": (
         FixedValuesHandler,
-        {"values": [{"id": "val00001", "name": "style", "value": "oil painting"}]},
+        {"values": [{"id": "val00001", "name": "style", "value": "oil painting",
+                     "negative": "photo, 3d render"}]},
     ),
     "combine": (
         CombineHandler,
-        {"template": "$mood $subject", "output_var": "scene", "input_vars": ["mood", "subject"]},
+        {"template": "$mood $subject", "output_var": "scene", "input_vars": ["mood", "subject"],
+         "negative": "cropped"},
     ),
     "derivation": (
         DerivationHandler,
@@ -98,12 +103,20 @@ _SAMPLES: dict[str, tuple[type, dict]] = {
                                 "target_var": "accent", "mode": "replace",
                                 "value": "cinematic lighting",
                             },
+                            # THEN ... AND ... (v8): runs after `action`.
+                            "extra_actions": [
+                                {
+                                    "target_var": "accent", "mode": "negative",
+                                    "value": "$mood.neg",
+                                },
+                            ],
                         },
                     ],
                     "else": {
+                        # "Add to negative" (v8): writes no value.
                         "action": {
-                            "target_var": "accent", "mode": "replace",
-                            "value": "soft lighting",
+                            "target_var": "accent", "mode": "negative",
+                            "value": "harsh shadows",
                         },
                     },
                 },

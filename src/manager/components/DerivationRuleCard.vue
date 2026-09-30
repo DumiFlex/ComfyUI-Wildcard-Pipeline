@@ -10,17 +10,14 @@ import VarAutocompleteInput from "./VarAutocompleteInput.vue";
 import type {
   DerivationAction,
   DerivationBranch,
+  DerivationCondition,
   DerivationElse,
   DerivationMode,
-  DerivationOp,
   DerivationRule,
 } from "../api/types";
-import {
-  OP_LABELS,
-  OP_TOOLTIPS,
-  OP_PLACEHOLDERS,
-  VALUE_DISABLED_OPS,
-} from "../../components/context/editors/_shared/derivation-ops";
+import DerivationConditionEditor from "./DerivationConditionEditor.vue";
+import { clauseActions, conditionLeaves, isNegativeMode, withClauseActions } from "../../extension/derivation-conditions";
+import { brokenRefLabels } from "../utils/validateModule";
 
 interface Props {
   modelValue: DerivationRule;
@@ -113,9 +110,43 @@ function collapseAllBranches(): void {
 function expandAllBranches(): void {
   collapsedBranches.value = new Set();
 }
-/** Compact `$cond → $target` peek for a collapsed branch head. */
-function branchPeek(cvar: string, tvar: string): string {
-  return `${cvar ? "$" + cvar : "$?"} → ${tvar ? "$" + tvar : "$?"}`;
+/** Compact `$cond → $target` peek for a collapsed branch head. A grouped
+ *  condition names its first test and counts the rest (`$a +2 → $b`). */
+function branchPeek(branch: DerivationBranch): string {
+  const tests = conditionLeaves<DerivationCondition>(branch.condition);
+  const cvar = tests[0]?.var ?? "";
+  const more = tests.length > 1 ? ` +${tests.length - 1}` : "";
+  return `${cvar ? "$" + cvar : "$?"}${more} → ${targetsPeek(branch)}`;
+}
+
+/** The targets of a clause's actions, `$a, $b` (THEN ... AND ...). */
+function targetsPeek(clause: DerivationBranch | DerivationElse): string {
+  return clauseActions<DerivationAction>(clause)
+    .map((a) => (a.target_var ? "$" + a.target_var : "$?"))
+    .join(", ");
+}
+
+/** Missing `@` refs in a clause's action values (the only fields that
+ *  resolve refs; test values compare raw), labelled `@name`. */
+function clauseBrokenRefs(clause: DerivationBranch | DerivationElse | undefined): string[] {
+  const out: string[] = [];
+  for (const a of clauseActions<DerivationAction>(clause)) {
+    for (const label of brokenRefLabels(a.value, props.uuidToName)) {
+      if (!out.includes(label)) out.push(label);
+    }
+  }
+  return out;
+}
+function branchBrokenRefs(branch: DerivationBranch): string[] {
+  return clauseBrokenRefs(branch);
+}
+const elseBrokenRefs = computed(() => clauseBrokenRefs(rule.value.else));
+const ruleHasBrokenRef = computed(() =>
+  elseBrokenRefs.value.length > 0
+  || rule.value.branches.some((b) => branchBrokenRefs(b).length > 0));
+
+function brokenTitle(labels: string[]): string {
+  return `${labels.join(", ")} not in the library. Click the red chip to point it at a module.`;
 }
 
 const emit = defineEmits<{
@@ -123,93 +154,24 @@ const emit = defineEmits<{
   remove: [];
 }>();
 
-// Op dropdown lists the 6 visible base ops. Emptiness refinement
-// (`is_empty` / `is_set`) is surfaced via a segmented switch shown
-// only when `exists` is selected — three positions:
-//   • "any"       → bare `exists` (key in ctx, value irrelevant)
-//   • "is empty"  → `is_empty`  (key in ctx AND value === "")
-//   • "has value" → `is_set`    (key in ctx AND value !== "")
-// This three-state design lets users distinguish "did this wildcard
-// run?" from "did it run and resolve to the null option?" from "did
-// it run and produce a value?" — all three are useful conditions
-// when null wildcard options are in play.
-const VISIBLE_OPS: DerivationOp[] = [
-  "equals", "not_equals", "contains", "matches", "exists", "not_exists",
-];
-const OP_OPTIONS: Array<{ label: string; value: DerivationOp; title: string }> =
-  VISIBLE_OPS.map((op) => ({
-    label: OP_LABELS[op],
-    value: op,
-    title: OP_TOOLTIPS[op],
-  }));
-
-/** UI-displayed base op for the dropdown. Collapses the refinement
- *  variants of `exists` (is_set / is_empty) and `not_exists`
- *  (is_unset / is_not_empty) onto their base presence op so the
- *  dropdown stays at 6 options. The segmented switch captures the
- *  refinement separately. */
-function displayedOp(op: DerivationOp): DerivationOp {
-  if (op === "is_set" || op === "is_empty") return "exists";
-  if (op === "is_unset" || op === "is_not_empty") return "not_exists";
-  return op;
-}
-
-/** Three states for the value-emptiness refinement, surfaced as a
- *  segmented switch when the displayed op is `exists`. */
-type EmptinessRefinement = "any" | "empty" | "value";
-
-function emptinessFor(op: DerivationOp): EmptinessRefinement {
-  if (op === "is_empty") return "empty";
-  if (op === "is_set" || op === "is_not_empty") return "value";
-  return "any";
-}
-
-/** Compose the storage op from base + refinement. Inverse of
- *  `displayedOp` + `emptinessFor`. */
-function composeOp(base: DerivationOp, refinement: EmptinessRefinement): DerivationOp {
-  if (base === "exists") {
-    if (refinement === "empty") return "is_empty";
-    if (refinement === "value") return "is_set";
-    return "exists";
-  }
-  if (base === "not_exists") {
-    // not_exists refinement isn't surfaced in the UI — the var being
-    // absent dominates any value-emptiness question. Bare not_exists.
-    return "not_exists";
-  }
-  return base;
-}
-
-/** True when the segmented switch should render. Refinement only
- *  applies to `exists` (when the var IS in ctx, asking "is its value
- *  empty or full?" is meaningful). Hidden for `not_exists` since the
- *  var being absent means there's no value to refine over. */
-function supportsRefinement(op: DerivationOp): boolean {
-  return displayedOp(op) === "exists";
-}
-
 const MODE_OPTIONS: Array<{ label: string; value: DerivationMode }> = [
   { label: "Replace", value: "replace" },
   { label: "Append", value: "append" },
   { label: "Prepend", value: "prepend" },
+  // Send-to-negative (schema v8): the value goes to the target variable's
+  // negatives; the variable itself is not written.
+  { label: "Add to negative", value: "negative" },
+  // Also v8: the value becomes the variable's only negative.
+  { label: "Replace negative", value: "negative_replace" },
 ];
 
-/** Whether the condition-value input should be disabled for this op.
- *  Presence-check ops (`exists`/`not_exists`/`is_set`/`is_unset`) read
- *  no value — engine ignores `condition.value` for these. UI grays
- *  the field + sets `disabled` so users see at a glance that no value
- *  is needed. Payload value persists on toggle so flipping back to
- *  `equals` restores the user's typed value. */
-function isValueDisabled(op: DerivationOp): boolean {
-  return VALUE_DISABLED_OPS.has(op);
-}
-
-/** Operator-specific placeholder for the condition-value input —
- *  `30` for equals, `^a.*z$` for matches, "no value needed" for
- *  presence ops. From the shared registry so the example matches
- *  the op's tooltip semantics. */
-function placeholderFor(op: DerivationOp): string {
-  return OP_PLACEHOLDERS[op] ?? "value";
+/** Placeholder for an action value, by mode. */
+function valuePlaceholder(mode: DerivationMode): string {
+  return mode === "negative_replace"
+    ? "Words to use as this variable's whole negative"
+    : mode === "negative"
+    ? "Words to add to this variable's negative"
+    : "The new / appended / prepended value";
 }
 
 /** Single-line hint shown below the action value input, listing the
@@ -219,11 +181,6 @@ function placeholderFor(op: DerivationOp): string {
  *  post-Layer-A (engine/syntax/resolve.py). Kept in one place so the wording
  *  stays consistent across the rule + ELSE action blocks. */
 const SUPPORTED_SYNTAX_HINT = "Supports $var · @{wildcard} · {a|b|c} · $$ · {N$$sep$$...}";
-
-/** Open a regex tester in a new tab when the user clicks the [?]
- *  affordance next to a `matches`-op condition value. Python flavor
- *  matches the engine's `re.search` impl. */
-const REGEX_HELP_URL = "https://regex101.com/?flavor=python";
 
 function blankAction(): DerivationAction {
   return { target_var: "", mode: "replace", value: "" };
@@ -253,12 +210,6 @@ function setCondition(bi: number, condition: DerivationBranch["condition"]) {
   setBranch(bi, { ...branch, condition });
 }
 
-function setAction(bi: number, action: DerivationAction) {
-  const branch = rule.value.branches[bi];
-  if (!branch) return;
-  setBranch(bi, { ...branch, action });
-}
-
 function addBranch() {
   patch({ branches: [...rule.value.branches, blankBranch()] });
 }
@@ -279,53 +230,37 @@ function removeElse() {
   emit("update:modelValue", next);
 }
 
-function setElseAction(action: DerivationAction) {
-  const elseClause: DerivationElse = { action };
-  patch({ else: elseClause });
-}
+/* ── Actions (THEN ... AND ...) ──────────────────────────────────────────
+ * A clause is a branch (keyed by its index) or the ELSE (key -1). It runs its
+ * `action`, then each `extra_actions` entry, in order. */
+type ClauseKey = number;
 
-function onConditionVar(bi: number, value: string) {
-  const branch = rule.value.branches[bi];
-  if (!branch) return;
-  setCondition(bi, { ...branch.condition, var: value });
+function clauseAt(key: ClauseKey): DerivationBranch | DerivationElse | undefined {
+  return key === -1 ? rule.value.else : rule.value.branches[key];
 }
-function onConditionOp(bi: number, value: DerivationOp) {
-  const branch = rule.value.branches[bi];
-  if (!branch) return;
-  setCondition(bi, { ...branch.condition, op: value });
+function actionsOf(key: ClauseKey): DerivationAction[] {
+  return clauseActions<DerivationAction>(clauseAt(key));
 }
-function onConditionValue(bi: number, value: string) {
-  const branch = rule.value.branches[bi];
-  if (!branch) return;
-  setCondition(bi, { ...branch.condition, value });
+function setActions(key: ClauseKey, actions: DerivationAction[]): void {
+  const clause = clauseAt(key);
+  if (!clause || actions.length === 0) return;
+  if (key === -1) patch({ else: withClauseActions(clause as DerivationElse, actions) });
+  else setBranch(key, withClauseActions(clause as DerivationBranch, actions));
 }
-function onActionTarget(bi: number, value: string) {
-  const branch = rule.value.branches[bi];
-  if (!branch) return;
-  setAction(bi, { ...branch.action, target_var: value });
+function patchAction(key: ClauseKey, ai: number, next: Partial<DerivationAction>): void {
+  setActions(key, actionsOf(key).map((a, i) => (i === ai ? { ...a, ...next } : a)));
 }
-function onActionMode(bi: number, value: DerivationMode) {
-  const branch = rule.value.branches[bi];
-  if (!branch) return;
-  setAction(bi, { ...branch.action, mode: value });
+function addAction(key: ClauseKey): void {
+  setActions(key, [...actionsOf(key), blankAction()]);
 }
-function onActionValue(bi: number, value: string) {
-  const branch = rule.value.branches[bi];
-  if (!branch) return;
-  setAction(bi, { ...branch.action, value });
+function removeAction(key: ClauseKey, ai: number): void {
+  if (ai === 0) return; // the first action is the THEN itself
+  setActions(key, actionsOf(key).filter((_, i) => i !== ai));
 }
-
-function onElseTarget(value: string) {
-  const cur = rule.value.else?.action ?? blankAction();
-  setElseAction({ ...cur, target_var: value });
-}
-function onElseMode(value: DerivationMode) {
-  const cur = rule.value.else?.action ?? blankAction();
-  setElseAction({ ...cur, mode: value });
-}
-function onElseValue(value: string) {
-  const cur = rule.value.else?.action ?? blankAction();
-  setElseAction({ ...cur, value });
+/** Test id for one action's control: the first action keeps the id it always
+ *  had, later ones append `-K`. */
+function actTid(base: string, ai: number): string {
+  return ai === 0 ? base : `${base}-${ai}`;
 }
 
 const ruleNumber = computed(() => props.index + 1);
@@ -347,6 +282,12 @@ const branchCount = computed(() => rule.value.branches.length);
         {{ branchCount }} branch{{ branchCount === 1 ? "" : "es" }}
         <span v-if="rule.else"> + ELSE</span>
       </span>
+      <i
+        v-if="ruleHasBrokenRef"
+        class="pi pi-exclamation-triangle dvr-broken-mark"
+        title="A branch in this rule references a module that is not in the library"
+        :data-test="`rule-broken-${index}`"
+      />
       <span class="spacer" />
       <!-- Inline per-rule collapse/expand of THIS rule's conditions. Only
            useful when the rule card itself is open. -->
@@ -383,6 +324,7 @@ const branchCount = computed(() => rule.value.branches.length);
         v-for="(branch, bi) in rule.branches"
         :key="bi"
         class="branch"
+        :class="{ 'branch--broken': branchBrokenRefs(branch).length > 0 }"
         :data-kind="bi === 0 ? 'if' : 'elif'"
         :data-test="`branch-${index}-${bi}`"
       >
@@ -409,8 +351,14 @@ const branchCount = computed(() => rule.value.branches.length);
             v-if="isBranchCollapsed(bi)"
             class="branch-peek"
             :data-test="`branch-peek-${index}-${bi}`"
-          >{{ branchPeek(branch.condition.var, branch.action.target_var) }}</span>
+          >{{ branchPeek(branch) }}</span>
           <span class="spacer" />
+          <span
+            v-if="branchBrokenRefs(branch).length"
+            class="dvr-broken-mark"
+            :title="brokenTitle(branchBrokenRefs(branch))"
+            :data-test="`branch-broken-${index}-${bi}`"
+          ><i class="pi pi-exclamation-triangle" aria-hidden="true" /> {{ branchBrokenRefs(branch).join(", ") }}</span>
           <Button
             v-if="bi > 0"
             icon="pi-times"
@@ -428,137 +376,66 @@ const branchCount = computed(() => rule.value.branches.length);
              reads "When $age equals". Row 2 = condition value below
              with explicit "value" label. Same for THEN. Halves the
              vertical space of the prior stacked layout. -->
-        <div
-          class="dvr-grid"
-          :class="{ 'dvr-grid--has-tick': supportsRefinement(branch.condition.op) }"
-        >
-          <span class="dvr-label">When</span>
-          <div
-            class="dvr-var-wrap"
-            :data-test="`cond-var-wrap-${index}-${bi}`"
-          >
-            <span class="dvr-prefix">$</span>
-            <VarAutocompleteInput
-              :model-value="branch.condition.var"
-              :suggestions="varSuggestions"
-              placeholder="variable"
-              :aria-label="`Condition variable for rule ${ruleNumber} branch ${bi + 1}`"
-              :data-test="`cond-var-${index}-${bi}`"
-              @update:model-value="(v) => onConditionVar(bi, v)"
-            />
-          </div>
-          <span class="dvr-label">is</span>
-          <div class="dvr-op-cell">
-            <Select
-              :model-value="displayedOp(branch.condition.op)"
-              :options="OP_OPTIONS"
-              class="dvr-op"
-              :data-test="`cond-op-${index}-${bi}`"
-              :aria-label="`Condition operator for rule ${ruleNumber} branch ${bi + 1}`"
-              @update:model-value="(v) => onConditionOp(bi, v as DerivationOp)"
-            />
-            <div
-              v-if="supportsRefinement(branch.condition.op)"
-              class="dvr-refinement"
-              :data-test="`cond-refinement-${index}-${bi}`"
-              role="radiogroup"
-              aria-label="Variable value refinement"
-            >
-              <button
-                type="button"
-                class="dvr-refinement__btn"
-                :class="{ 'dvr-refinement__btn--active': emptinessFor(branch.condition.op) === 'any' }"
-                :aria-pressed="emptinessFor(branch.condition.op) === 'any'"
-                :data-test="`cond-refinement-any-${index}-${bi}`"
-                title="Just check that the variable is set in the context (value irrelevant)"
-                @click="onConditionOp(bi, composeOp('exists', 'any'))"
-              >any</button>
-              <button
-                type="button"
-                class="dvr-refinement__btn"
-                :class="{ 'dvr-refinement__btn--active': emptinessFor(branch.condition.op) === 'empty' }"
-                :aria-pressed="emptinessFor(branch.condition.op) === 'empty'"
-                :data-test="`cond-refinement-empty-${index}-${bi}`"
-                title="Variable is set AND its value is empty (e.g. wildcard rolled the null option)"
-                @click="onConditionOp(bi, composeOp('exists', 'empty'))"
-              >∅ is empty</button>
-              <button
-                type="button"
-                class="dvr-refinement__btn"
-                :class="{ 'dvr-refinement__btn--active': emptinessFor(branch.condition.op) === 'value' }"
-                :aria-pressed="emptinessFor(branch.condition.op) === 'value'"
-                :data-test="`cond-refinement-value-${index}-${bi}`"
-                title="Variable is set AND its value is non-empty"
-                @click="onConditionOp(bi, composeOp('exists', 'value'))"
-              >✓ has value</button>
-            </div>
-          </div>
-        </div>
-        <div class="dvr-value-row">
-          <span class="dvr-label">value</span>
-          <div class="dvr-value-cell">
-            <RichTextInput
-              :model-value="branch.condition.value"
-              surface="derivation"              :var-producers="varProducers"
-              wrap
-              :var-suggestions="varSuggestions"
-              :uuid-to-name="uuidToName"
-              :placeholder="placeholderFor(branch.condition.op)"
-              :disabled="isValueDisabled(branch.condition.op)"
-              class="dvr-value-input"
-              :class="{ 'dvr-value-input--disabled': isValueDisabled(branch.condition.op) }"
-              :aria-label="`Condition value for rule ${ruleNumber} branch ${bi + 1}`"
-              :data-test="`cond-value-${index}-${bi}`"
-              @update:model-value="(v) => onConditionValue(bi, v)"
-            />
-            <a
-              v-if="branch.condition.op === 'matches'"
-              class="dvr-regex-help"
-              :href="REGEX_HELP_URL"
-              target="_blank"
-              rel="noopener"
-              :data-test="`cond-regex-help-${index}-${bi}`"
-              aria-label="Regex help — opens regex101.com"
-              title="Python regex (re.search) — open regex101.com to test patterns"
-            >
-              <i class="pi pi-question-circle" aria-hidden="true" />
-            </a>
-          </div>
-        </div>
+        <!-- WHEN: one test, or an AND / OR group of them. -->
+        <DerivationConditionEditor
+          :model-value="branch.condition"
+          :test-base="`${index}-${bi}`"
+          :a11y-name="`rule ${ruleNumber} branch ${bi + 1}`"
+          :var-suggestions="varSuggestions"
+          :var-producers="varProducers"
+          :uuid-to-name="uuidToName"
+          @update:model-value="(v) => setCondition(bi, v)"
+        />
 
-        <!-- THEN var + mode on row 1, action value below. -->
+        <!-- THEN var + mode on row 1, action value below. Each extra action
+             (THEN ... AND ...) repeats the block under an AND label. -->
+        <div
+          v-for="(act, ai) in actionsOf(bi)"
+          :key="ai"
+          class="dvr-action"
+          :class="{ 'dvr-action--and': ai > 0 }"
+          :data-test="actTid(`act-block-${index}-${bi}`, ai)"
+        >
         <div class="dvr-grid dvr-grid--then">
-          <span class="dvr-label">Then</span>
-          <div
-            class="dvr-var-wrap"
-            :data-test="`act-var-wrap-${index}-${bi}`"
-          >
+          <span class="dvr-label" :class="{ 'dvr-label--and': ai > 0 }">{{ ai === 0 ? "Then" : "And" }}</span>
+          <div class="dvr-var-wrap">
             <span class="dvr-prefix">$</span>
             <VarAutocompleteInput
-              :model-value="branch.action.target_var"
+              :model-value="act.target_var"
               :suggestions="varSuggestions"
               placeholder="target_var"
               input-color="var(--wp-success, #34d399)"
-              :aria-label="`Action target variable for rule ${ruleNumber} branch ${bi + 1}`"
-              :data-test="`act-target-${index}-${bi}`"
-              @update:model-value="(v) => onActionTarget(bi, v)"
+              :aria-label="`Action target variable for rule ${ruleNumber} branch ${bi + 1}${ai ? ` (action ${ai + 1})` : ''}`"
+              :data-test="actTid(`act-target-${index}-${bi}`, ai)"
+              @update:model-value="(v) => patchAction(bi, ai, { target_var: v })"
             />
           </div>
           <span class="dvr-label">action</span>
-          <Select
-            :model-value="branch.action.mode"
-            :options="MODE_OPTIONS"
-            class="dvr-op"
-            :data-test="`act-mode-${index}-${bi}`"
-            :aria-label="`Action mode for rule ${ruleNumber} branch ${bi + 1}`"
-            @update:model-value="(v) => onActionMode(bi, v as DerivationMode)"
-          />
+          <div class="dvr-mode-cell">
+            <Select
+              :model-value="act.mode"
+              :options="MODE_OPTIONS"
+              class="dvr-op"
+              :data-test="actTid(`act-mode-${index}-${bi}`, ai)"
+              :aria-label="`Action mode for rule ${ruleNumber} branch ${bi + 1}${ai ? ` (action ${ai + 1})` : ''}`"
+              @update:model-value="(v) => patchAction(bi, ai, { mode: v as DerivationMode })"
+            />
+            <Button
+              v-if="ai > 0"
+              icon="pi-times"
+              variant="ghost"
+              size="sm"
+              :aria-label="`Remove action ${ai + 1} from the action list of rule ${ruleNumber} branch ${bi + 1}`"
+              :data-test="`act-remove-${index}-${bi}-${ai}`"
+              @click="removeAction(bi, ai)"
+            />
+          </div>
         </div>
         <div class="dvr-value-row">
           <span class="dvr-label">value</span>
           <!-- no module-id here: derivation warnings clear at the editor level -->
           <RichTextInput
-            :model-value="branch.action.value"
+            :model-value="act.value"
             surface="derivation"            :var-producers="varProducers"
             wrap
             allow-nested-refs
@@ -571,20 +448,38 @@ const branchCount = computed(() => rule.value.branches.length);
             :uuid-to-option-tag-sets="uuidToOptionTagSets"
             :uuid-to-tag-groups="uuidToTagGroups"
             class="dvr-value-input"
-            placeholder="The new / appended / prepended value"
-            :aria-label="`Action value for rule ${ruleNumber} branch ${bi + 1}`"
-            :data-test="`act-value-${index}-${bi}`"
-            @update:model-value="(v) => onActionValue(bi, v)"
+            :class="{ 'dvr-value-input--neg': isNegativeMode(act.mode) }"
+            :placeholder="valuePlaceholder(act.mode)"
+            :aria-label="`Action value for rule ${ruleNumber} branch ${bi + 1}${ai ? ` (action ${ai + 1})` : ''}`"
+            :data-test="actTid(`act-value-${index}-${bi}`, ai)"
+            @update:model-value="(v) => patchAction(bi, ai, { value: v })"
           />
         </div>
-        <div class="dvr-hint" :data-test="`act-hint-${index}-${bi}`">
-          {{ SUPPORTED_SYNTAX_HINT }}
+        <div class="dvr-hint" :data-test="actTid(`act-hint-${index}-${bi}`, ai)">
+          <span
+            v-if="isNegativeMode(act.mode)"
+            class="dvr-hint--neg"
+            :data-test="actTid(`act-neg-hint-${index}-${bi}`, ai)"
+          >{{ act.mode === 'negative_replace' ? 'Replaces' : 'Adds to' }} {{ act.target_var ? "$" + act.target_var : "the variable" }}'s negative — its value is not changed. </span>{{ SUPPORTED_SYNTAX_HINT }}
         </div>
+        </div>
+        <button
+          type="button"
+          class="dvr-add-action"
+          :data-test="`act-add-${index}-${bi}`"
+          @click="addAction(bi)"
+        ><i class="pi pi-plus" aria-hidden="true" /> And</button>
         </div>
       </div>
 
       <!-- ELSE branch -->
-      <div v-if="rule.else" class="branch branch--else" data-kind="else" :data-test="`branch-else-${index}`">
+      <div
+        v-if="rule.else"
+        class="branch branch--else"
+        :class="{ 'branch--broken': elseBrokenRefs.length > 0 }"
+        data-kind="else"
+        :data-test="`branch-else-${index}`"
+      >
         <div class="branch-head" @click="onBranchHeadClick($event, -1)">
           <button
             type="button"
@@ -601,8 +496,14 @@ const branchCount = computed(() => rule.value.branches.length);
             v-if="isBranchCollapsed(-1)"
             class="branch-peek"
             :data-test="`branch-peek-else-${index}`"
-          >→ {{ rule.else.action.target_var ? "$" + rule.else.action.target_var : "$?" }}</span>
+          >→ {{ targetsPeek(rule.else) }}</span>
           <span class="spacer" />
+          <span
+            v-if="elseBrokenRefs.length"
+            class="dvr-broken-mark"
+            :title="brokenTitle(elseBrokenRefs)"
+            :data-test="`branch-broken-else-${index}`"
+          ><i class="pi pi-exclamation-triangle" aria-hidden="true" /> {{ elseBrokenRefs.join(", ") }}</span>
           <Button
             icon="pi-times"
             variant="ghost"
@@ -613,35 +514,55 @@ const branchCount = computed(() => rule.value.branches.length);
           />
         </div>
         <div v-show="!isBranchCollapsed(-1)" class="branch-body">
+        <!-- THEN var + mode on row 1, action value below. Each extra action
+             (THEN ... AND ...) repeats the block under an AND label. -->
+        <div
+          v-for="(act, ai) in actionsOf(-1)"
+          :key="ai"
+          class="dvr-action"
+          :class="{ 'dvr-action--and': ai > 0 }"
+          :data-test="actTid(`else-block-${index}`, ai)"
+        >
         <div class="dvr-grid dvr-grid--then">
-          <span class="dvr-label">Then</span>
-          <div class="dvr-var-wrap" :data-test="`else-var-wrap-${index}`">
+          <span class="dvr-label" :class="{ 'dvr-label--and': ai > 0 }">{{ ai === 0 ? "Then" : "And" }}</span>
+          <div class="dvr-var-wrap">
             <span class="dvr-prefix">$</span>
             <VarAutocompleteInput
-              :model-value="rule.else.action.target_var"
+              :model-value="act.target_var"
               :suggestions="varSuggestions"
               placeholder="target_var"
               input-color="var(--wp-success, #34d399)"
-              :aria-label="`ELSE action target variable for rule ${ruleNumber}`"
-              :data-test="`else-target-${index}`"
-              @update:model-value="(v) => onElseTarget(v)"
+              :aria-label="`ELSE action target variable for rule ${ruleNumber}${ai ? ` (action ${ai + 1})` : ''}`"
+              :data-test="actTid(`else-target-${index}`, ai)"
+              @update:model-value="(v) => patchAction(-1, ai, { target_var: v })"
             />
           </div>
           <span class="dvr-label">action</span>
-          <Select
-            :model-value="rule.else.action.mode"
-            :options="MODE_OPTIONS"
-            class="dvr-op"
-            :data-test="`else-mode-${index}`"
-            :aria-label="`ELSE action mode for rule ${ruleNumber}`"
-            @update:model-value="(v) => onElseMode(v as DerivationMode)"
-          />
+          <div class="dvr-mode-cell">
+            <Select
+              :model-value="act.mode"
+              :options="MODE_OPTIONS"
+              class="dvr-op"
+              :data-test="actTid(`else-mode-${index}`, ai)"
+              :aria-label="`ELSE action mode for rule ${ruleNumber}${ai ? ` (action ${ai + 1})` : ''}`"
+              @update:model-value="(v) => patchAction(-1, ai, { mode: v as DerivationMode })"
+            />
+            <Button
+              v-if="ai > 0"
+              icon="pi-times"
+              variant="ghost"
+              size="sm"
+              :aria-label="`Remove action ${ai + 1} from the ELSE of rule ${ruleNumber}`"
+              :data-test="`else-remove-${index}-${ai}`"
+              @click="removeAction(-1, ai)"
+            />
+          </div>
         </div>
         <div class="dvr-value-row">
           <span class="dvr-label">value</span>
           <!-- no module-id here: derivation warnings clear at the editor level -->
           <RichTextInput
-            :model-value="rule.else.action.value"
+            :model-value="act.value"
             surface="derivation"            :var-producers="varProducers"
             wrap
             allow-nested-refs
@@ -654,15 +575,27 @@ const branchCount = computed(() => rule.value.branches.length);
             :uuid-to-option-tag-sets="uuidToOptionTagSets"
             :uuid-to-tag-groups="uuidToTagGroups"
             class="dvr-value-input"
-            placeholder="The new / appended / prepended value"
-            :aria-label="`ELSE action value for rule ${ruleNumber}`"
-            :data-test="`else-value-${index}`"
-            @update:model-value="(v) => onElseValue(v)"
+            :class="{ 'dvr-value-input--neg': isNegativeMode(act.mode) }"
+            :placeholder="valuePlaceholder(act.mode)"
+            :aria-label="`ELSE action value for rule ${ruleNumber}${ai ? ` (action ${ai + 1})` : ''}`"
+            :data-test="actTid(`else-value-${index}`, ai)"
+            @update:model-value="(v) => patchAction(-1, ai, { value: v })"
           />
         </div>
-        <div class="dvr-hint" :data-test="`else-hint-${index}`">
-          {{ SUPPORTED_SYNTAX_HINT }}
+        <div class="dvr-hint" :data-test="actTid(`else-hint-${index}`, ai)">
+          <span
+            v-if="isNegativeMode(act.mode)"
+            class="dvr-hint--neg"
+            :data-test="actTid(`else-neg-hint-${index}`, ai)"
+          >{{ act.mode === 'negative_replace' ? 'Replaces' : 'Adds to' }} {{ act.target_var ? "$" + act.target_var : "the variable" }}'s negative — its value is not changed. </span>{{ SUPPORTED_SYNTAX_HINT }}
         </div>
+        </div>
+        <button
+          type="button"
+          class="dvr-add-action"
+          :data-test="`else-add-action-${index}`"
+          @click="addAction(-1)"
+        ><i class="pi pi-plus" aria-hidden="true" /> And</button>
         </div>
       </div>
     </div>
@@ -745,6 +678,52 @@ const branchCount = computed(() => rule.value.branches.length);
 .branch--else {
   border-style: dashed;
 }
+/* A branch holding a ref that points at nothing. */
+.branch--broken {
+  border-color: color-mix(in srgb, var(--wp-danger, #ef4444) 55%, transparent);
+  box-shadow: inset 3px 0 0 var(--wp-danger, #ef4444);
+}
+.dvr-value-input--neg.wp-rt:not(.wp-rt--focused) {
+  border-color: color-mix(in oklab, var(--wp-danger, #ef4444) 45%, transparent);
+  background: color-mix(in oklab, var(--wp-danger, #ef4444) 7%, var(--wp-bg-2));
+}
+.dvr-hint--neg { color: var(--wp-danger, #ef4444); }
+/* THEN ... AND ...: each action is a block; later ones sit under an AND. */
+.dvr-action {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wp-space-4);
+}
+.dvr-action--and {
+  padding-top: var(--wp-space-4);
+  border-top: 1px dashed var(--wp-border, #2c2c34);
+}
+.dvr-label--and { color: var(--wp-kind-derivation, #fbbf24); font-weight: 600; }
+.dvr-mode-cell { display: flex; align-items: center; gap: var(--wp-space-2); min-width: 0; }
+.dvr-mode-cell .dvr-op { flex: 1; min-width: 0; }
+.dvr-add-action {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wp-space-2);
+  padding: 2px var(--wp-space-4); /* audit-exempt: compact inline add chip */
+  border: 1px dashed var(--wp-border, #2c2c34);
+  border-radius: var(--wp-radius-sm);
+  background: transparent;
+  color: var(--wp-text-muted);
+  font: inherit;
+  font-size: var(--wp-text-xs);
+  cursor: pointer;
+}
+.dvr-add-action:hover { color: var(--wp-text); border-color: var(--wp-kind-derivation, #fbbf24); }
+.dvr-add-action:focus-visible { outline: none; box-shadow: var(--wp-focus-ring); }
+.dvr-broken-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wp-space-2);
+  font-size: var(--wp-text-xs);
+  color: var(--wp-danger, #ef4444);
+}
 
 .branch-head {
   display: flex;
@@ -812,186 +791,6 @@ const branchCount = computed(() => rule.value.branches.length);
   color: var(--wp-warn, #f59e0b);
 }
 
-/* Compact grid layout (Proposal B, 2026-05-09 cycle).
- *
- * Row 1 puts the var input and operator on a single row so the prose
- * reads naturally: "When $age equals". Row 2 places the comparison
- * value below with an explicit "value" label — previously the
- * condition value had no label, leaving users guessing what the
- * field meant. Same shape repeats for THEN target + action.
- *
- * Grid columns:
- *   - 60px: row label ("When" / "Then" / "value")
- *   - 1fr:  var-input wrap (or value input on row 2)
- *   - 60px: in-line connective label ("is" / "action")
- *   - 1fr:  op / mode select
- */
-.dvr-grid {
-  display: grid;
-  grid-template-columns: 60px 1fr 60px 1fr;
-  gap: var(--wp-space-3) var(--wp-space-4);
-  align-items: center;
-  margin-bottom: var(--wp-space-2);
-}
-.dvr-grid--then {
-  margin-top: var(--wp-space-5);
-}
-.dvr-value-row {
-  display: grid;
-  grid-template-columns: 60px 1fr;
-  gap: var(--wp-space-4);
-  align-items: center;
-  margin-bottom: var(--wp-space-2);
-}
-.dvr-label {
-  font-size: 10px; /* audit-exempt: micro grid row-label — below scale floor */
-  color: var(--wp-text-muted, #9ca3af);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-weight: 600;
-  text-align: right;
-}
-/* `$` prefix wrapper — matches the fixed_values + identity-section idiom
- * (see src/components/context/editors/wildcard/sections/IdentitySection.vue).
- * The prefix sits in its own column with a divider; focus shifts the
- * whole wrap's border to `--wp-accent`. */
-.dvr-var-wrap {
-  display: flex;
-  align-items: stretch;
-  background: var(--wp-bg-2, #161616);
-  border: 1px solid var(--wp-border, #3a3a3a);
-  border-radius: var(--wp-radius-sm);
-  overflow: hidden;
-}
-.dvr-var-wrap:focus-within {
-  border-color: var(--wp-accent, #6366f1);
-}
-.dvr-prefix {
-  display: flex;
-  align-items: center;
-  padding: 0 9px; /* audit-exempt: 9px compact prefix inset */
-  background: var(--wp-bg-3, #2a2a2a);
-  color: var(--wp-text-muted, #9ca3af);
-  border-right: 1px solid var(--wp-border, #3a3a3a);
-  font: 11px var(--wp-font-mono, ui-monospace, monospace); /* audit-exempt: font-shorthand — out of audit scope; awaiting font-shorthand parser */
-}
-.dvr-var-input {
-  flex: 1;
-  background: transparent;
-  border: 0;
-  padding: var(--wp-space-3) var(--wp-space-5);
-  color: var(--wp-kind-derivation, #fbbf24);
-  font: 600 11px var(--wp-font-mono, ui-monospace, monospace); /* audit-exempt: font-shorthand — out of audit scope; awaiting font-shorthand parser */
-  min-width: 0;
-}
-.dvr-var-input:focus {
-  outline: none;
-}
-.dvr-var-input--target {
-  /* Target var color = green so condition (amber) and action (green)
-   * read distinctly even when both are mono-styled. */
-  color: var(--wp-success, #34d399);
-}
-.dvr-op {
-  /* Select dropdown trigger — let the existing Select styling handle
-   * the visual; just ensure it stretches into its grid column. */
-  min-width: 0;
-}
-.dvr-op-cell {
-  /* Wraps the op Select + the optional "must have value" tick. The
-   * tick is absolute-positioned below the Select so its presence
-   * doesn't change the grid row height — toggling on/off used to
-   * push the VALUE row up/down because the cell grew taller when
-   * the tick wrapped onto a second line. Now the cell reserves a
-   * single line for the Select and the tick floats over the gap
-   * before the VALUE row. */
-  position: relative;
-  min-width: 0;
-}
-/* Segmented refinement switch — shown under the `exists` op only.
- * Three positions (any / is empty / has value) compose into the
- * stored op (exists / is_empty / is_set). */
-.dvr-refinement {
-  position: absolute;
-  top: calc(100% + var(--wp-space-2));
-  right: 0;
-  display: inline-flex;
-  gap: 0;
-  font: 9px var(--wp-font-sans, sans-serif);
-  white-space: nowrap;
-  z-index: 1;
-  border-radius: 4px;
-  overflow: hidden;
-  border: 1px solid var(--wp-border, #2a2d35);
-  background: color-mix(in srgb, var(--wp-text) 2%, transparent);
-}
-.dvr-refinement__btn {
-  padding: 2px 7px;
-  background: transparent;
-  border: 0;
-  border-right: 1px solid var(--wp-border, #2a2d35);
-  color: var(--wp-text-muted, #9ca3af);
-  cursor: pointer;
-  font: inherit;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  transition: background 0.12s, color 0.12s;
-}
-.dvr-refinement__btn:last-child { border-right: 0; }
-.dvr-refinement__btn:hover {
-  background: color-mix(in srgb, var(--wp-accent, #6366f1) 12%, transparent);
-  color: var(--wp-text, #fff);
-}
-.dvr-refinement__btn--active {
-  background: color-mix(in srgb, var(--wp-accent, #6366f1) 30%, transparent);
-  color: var(--wp-text, #fff);
-}
-/* Reserve space for the tick under the op cell when it's rendered.
- * Without this, the absolute-positioned tick would overlap the
- * VALUE row beneath. Bumps the value-row's top margin only when the
- * grid has the `--has-tick` modifier set by the template. */
-.dvr-grid--has-tick + .dvr-value-row {
-  margin-top: var(--wp-space-6);
-}
-.dvr-value-cell {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-3);
-}
-.dvr-value-input {
-  flex: 1;
-  min-width: 0;
-}
-.dvr-value-input--disabled {
-  opacity: 0.45;
-  filter: grayscale(0.6);
-  pointer-events: none;
-}
-.dvr-regex-help {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text-muted, #9ca3af);
-  background: var(--wp-bg-3, #2a2a2a);
-  border: 1px solid var(--wp-border, #3a3a3a);
-  text-decoration: none;
-}
-.dvr-regex-help:hover {
-  color: var(--wp-accent, #6366f1);
-  border-color: color-mix(in oklab, var(--wp-accent, #6366f1) 40%, transparent);
-}
-.dvr-regex-help .pi { font-size: var(--wp-text-xs); }
-.dvr-hint {
-  margin-top: 3px; /* audit-exempt: 3px hairline nudge */
-  margin-left: 68px; /* audit-exempt: 68px = 60px label col + 4+4px gap; aligns under value input column */
-  font: 10px var(--wp-font-sans, sans-serif); /* audit-exempt: font-shorthand — out of audit scope; awaiting font-shorthand parser */
-  color: var(--wp-text-muted, #9ca3af);
-  font-style: italic;
-}
-
 .addbar {
   display: flex;
   gap: var(--wp-space-3);
@@ -999,3 +798,5 @@ const branchCount = computed(() => rule.value.branches.length);
   padding-left: var(--wp-space-5);
 }
 </style>
+
+<style scoped src="./derivation-rule-grid.css"></style>

@@ -12,8 +12,13 @@ import {
   type InstanceLike,
   type WildcardOption,
 } from "../components/context/editors/wildcard/probability";
-import { ensure as ensurePreviewLookup, lookup as previewLookup } from "./preview-resolver";
+import {
+  ensure as ensurePreviewLookup,
+  lookup as previewLookup,
+  cacheVersion as previewCacheVersion,
+} from "./preview-resolver";
 import { assignCodenames, baseCodename } from "./node-codename";
+import { clauseActions, derivationTargets, evalConditionTree, isNegativeMode } from "./derivation-conditions";
 import type { SeedStrategy } from "../components/shared/seed-derive";
 
 // ── Subgraph boundary primer ────────────────────────────────────────────
@@ -405,7 +410,7 @@ export function collectUpstreamResolved(
     chain.push(cur.node);
     cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
   }
-  return resolveChainStatic(chain);
+  return resolveChainMemo(chain);
 }
 
 /**
@@ -642,6 +647,46 @@ export function collectUpstreamInjectorBindings(
     }
   }
   return [...out];
+}
+
+/**
+ * Send-to-negative: the Negative each upstream `WP_ContextInjector` row sets,
+ * keyed by binding. An injected value replaces the variable, so it replaces
+ * the variable's negatives: `null` means the row set none (the variable
+ * carries nothing from here on), a string is the row's raw negative (its
+ * `$slot`s unrendered, like the preview's `$binding` placeholder value).
+ * Upstream-first, so the nearest injector wins.
+ */
+export function collectUpstreamInjectorNegatives(
+  rootGraph: LiteGraphLike,
+  node: LiteNodeLike,
+): Record<string, string | null> {
+  const parents = buildSubgraphParents(rootGraph);
+  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
+  const chain: LiteNodeLike[] = [];
+  let cur = pipelineUpstreamOf(node, graphOf(node, rootGraph), parents);
+  while (cur && !seen.has(locator(cur.graph, cur.node))) {
+    seen.add(locator(cur.graph, cur.node));
+    chain.push(cur.node);
+    cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
+  }
+  const out: Record<string, string | null> = {};
+  for (let i = chain.length - 1; i >= 0; i--) {
+    const n = chain[i];
+    if (n.type !== "WP_ContextInjector" || isSkippedMode(n)) continue;
+    const inj = parseCached<{
+      version: 1;
+      rows?: Array<{ binding?: string; enabled?: boolean; negative?: string }>;
+    }>(widgetValue(n, "wp_rows"), { version: 1, rows: [] });
+    for (const row of inj.rows ?? []) {
+      if (row.enabled !== true) continue;
+      const binding = (row.binding ?? "").trim();
+      if (!binding) continue;
+      const neg = typeof row.negative === "string" ? row.negative.trim() : "";
+      out[binding] = neg || null;
+    }
+  }
+  return out;
 }
 
 /**
@@ -891,19 +936,9 @@ export function collectUpstreamKinds(
         // the assembler's pre-run "unresolved $var" scan from false-
         // flagging derivation outputs and lets the chip strip render
         // its kind icon.
-        const dp = (m.payload ?? {}) as { rules?: Array<{
-          branches?: Array<{ action?: { target_var?: string } }>;
-          else?: { action?: { target_var?: string } };
-        }> };
-        for (const rule of dp.rules ?? []) {
-          for (const branch of rule.branches ?? []) {
-            const name = (branch.action?.target_var ?? "").replace(/^\$/, "").trim();
-            if (name) kinds[name] = "derivation";
-            if (name) flagInternal(name, !!m.instance?.internal);
-          }
-          const elseName = (rule.else?.action?.target_var ?? "").replace(/^\$/, "").trim();
-          if (elseName) kinds[elseName] = "derivation";
-          if (elseName) flagInternal(elseName, !!m.instance?.internal);
+        for (const name of derivationTargets(m.payload)) {
+          kinds[name] = "derivation";
+          flagInternal(name, !!m.instance?.internal);
         }
         continue;
       }
@@ -1149,16 +1184,7 @@ export function collectUpstreamProducers(
       if (m.type === "derivation") {
         // Which branch fires isn't knowable statically, so every reachable
         // target_var counts as a possible write.
-        const dp = (m.payload ?? {}) as { rules?: Array<{
-          branches?: Array<{ action?: { target_var?: string } }>;
-          else?: { action?: { target_var?: string } };
-        }> };
-        for (const rule of dp.rules ?? []) {
-          for (const branch of rule.branches ?? []) {
-            write((branch.action?.target_var ?? "").replace(/^\$/, "").trim(), base, writerKey);
-          }
-          write((rule.else?.action?.target_var ?? "").replace(/^\$/, "").trim(), base, writerKey);
-        }
+        for (const name of derivationTargets(m.payload)) write(name, base, writerKey);
         continue;
       }
 
@@ -1253,7 +1279,83 @@ function previewAxisTag(
   return undefined;
 }
 
-function resolveChainStatic(chain: LiteNodeLike[]): Record<string, ResolvedValue> {
+/* ── resolved-chain memo ────────────────────────────────────────────────
+ *
+ * Every Context node, assembler and injector widget re-resolves its WHOLE
+ * upstream chain on each refresh, so a series chain of N Context nodes costs
+ * O(N²) per round of polls — and nearly every one of those polls finds nothing
+ * changed. Remembering the last answer per chain turns an unchanged poll into
+ * a walk plus a few `===` checks.
+ *
+ * Keyed on the chain's nearest upstream node, so two widgets reading the same
+ * chain (a Context node's own pollers, or two nodes fed by the same upstream)
+ * share one entry. The entry is valid only while every input
+ * `resolveChainStatic` reads is unchanged: the chain's nodes in order, their
+ * type and mode, their three widget strings, and the preview-resolver cache
+ * (nested `@{uuid}` refs expand from it; it bumps `cacheVersion` on every
+ * write). Widget strings compare by reference first, so an unedited 294 KB
+ * `wp_modules` value costs a pointer check.
+ *
+ * Callers get a shallow copy because `collectLocalResolvedForModule` writes
+ * sibling bindings into the map it receives.
+ */
+interface ChainMemo {
+  parts: unknown[];
+  version: number;
+  ctx: Record<string, ResolvedValue>;
+  externalRefs: Set<string>;
+}
+const chainMemo = new WeakMap<LiteNodeLike, ChainMemo>();
+let chainMemoEnabled = true;
+
+/** @internal test hook — measure or compare against the unmemoised path. */
+export function _setChainMemoForTests(on: boolean): void {
+  chainMemoEnabled = on;
+}
+
+function chainParts(chain: LiteNodeLike[]): unknown[] {
+  const parts: unknown[] = [];
+  for (const n of chain) {
+    parts.push(
+      n,
+      n.type,
+      n.mode,
+      widgetValue(n, "wp_modules"),
+      widgetValue(n, "wp_rows"),
+      widgetValue(n, "wp_context_loop_config"),
+    );
+  }
+  return parts;
+}
+
+function sameParts(a: unknown[], b: unknown[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+function resolveChainMemo(chain: LiteNodeLike[]): Record<string, ResolvedValue> {
+  if (!chainMemoEnabled || chain.length === 0) return resolveChainStatic(chain);
+  const head = chain[0];
+  const parts = chainParts(chain);
+  const version = previewCacheVersion.value;
+  const hit = chainMemo.get(head);
+  if (hit && hit.version === version && sameParts(hit.parts, parts)) {
+    // Keep the lazy fetch alive: `ensure` is a no-op for fresh entries, but it
+    // retries expired failures and refetches after `markAllStale`.
+    if (hit.externalRefs.size) ensurePreviewLookup(hit.externalRefs);
+    return { ...hit.ctx };
+  }
+  const externalRefs = new Set<string>();
+  const ctx = resolveChainStatic(chain, externalRefs);
+  chainMemo.set(head, { parts, version, ctx: { ...ctx }, externalRefs });
+  return ctx;
+}
+
+function resolveChainStatic(
+  chain: LiteNodeLike[],
+  externalRefs: Set<string> = new Set<string>(),
+): Record<string, ResolvedValue> {
   // First pass: collect every wildcard payload across the whole chain
   // into one `id → payload` catalog so `@{}` refs inside option values
   // can resolve to picked-but-not-yet-walked siblings as well as
@@ -1287,7 +1389,6 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, ResolvedValue
   // `embed-bundle` deliberately doesn't transitively walk. Kick off a
   // lazy fetch through preview-resolver so the *next* poll cycle can
   // expand them; this cycle falls back to the resolver's cache + name.
-  const externalRefs = new Set<string>();
   for (const wc of catalog.values()) {
     for (const opt of wc.options ?? []) {
       const v = opt.value;
@@ -1562,7 +1663,7 @@ function writeBindings(
     // derivation outputs.
     const dp = (m.payload ?? {}) as { rules?: Array<{
       branches?: Array<{
-        condition?: { var?: string; op?: string; value?: string };
+        condition?: unknown;
         action?: { target_var?: string; mode?: string; value?: string };
       }>;
       else?: { action?: { target_var?: string; mode?: string; value?: string } };
@@ -1570,14 +1671,14 @@ function writeBindings(
     for (const rule of dp.rules ?? []) {
       let applied = false;
       for (const branch of rule.branches ?? []) {
-        if (matchDerivationCondition(branch.condition, ctx)) {
-          applyDerivationAction(branch.action, ctx, catalog);
+        if (evalConditionTree<DerivationTest>(branch.condition, (t) => matchDerivationCondition(t, ctx))) {
+          for (const a of clauseActions<DerivationActionLike>(branch)) applyDerivationAction(a, ctx, catalog);
           applied = true;
           break;
         }
       }
       if (!applied && rule.else) {
-        applyDerivationAction(rule.else.action, ctx, catalog);
+        for (const a of clauseActions<DerivationActionLike>(rule.else)) applyDerivationAction(a, ctx, catalog);
       }
     }
     return;
@@ -1585,8 +1686,12 @@ function writeBindings(
   // constraint / pipeline: no static binding for preview.
 }
 
+type DerivationTest = { var?: string; op?: string; value?: string };
+type DerivationActionLike = { target_var?: string; mode?: string; value?: string };
+
+
 function matchDerivationCondition(
-  cond: { var?: string; op?: string; value?: string } | undefined,
+  cond: DerivationTest | undefined,
   ctx: Record<string, ResolvedValue>,
 ): boolean {
   if (!cond) return false;
@@ -1602,6 +1707,8 @@ function matchDerivationCondition(
   if (op === "not_exists") return !(varName in ctx);
   if (op === "is_set") return varName in ctx && actual !== "";
   if (op === "is_unset") return !(varName in ctx) || actual === "";
+  if (op === "is_empty") return varName in ctx && actual === "";
+  if (op === "is_not_empty") return actual !== "";
   if (op === "equals") return actual === value;
   if (op === "not_equals") return actual !== value;
   if (op === "contains") return actual.includes(value);
@@ -1620,6 +1727,10 @@ function applyDerivationAction(
   const target = (action.target_var ?? "").replace(/^\$/, "").trim();
   if (!target) return;
   const mode = action.mode ?? "replace";
+  // "Add to negative" / "Replace negative" (schema v8) file words under the
+  // variable's negatives and never write the variable — the preview value is
+  // unchanged.
+  if (isNegativeMode(mode)) return;
   const raw = action.value ?? "";
   const newValue = expandValue(raw, ctx, catalog, 0);
   // SP2a: read the existing target value in string form (join a ListVar)
@@ -1657,6 +1768,9 @@ function expandValue(
       // "a white t-shirt and denim skirt.SHOES" — the accessor looked broken
       // in exactly the editor meant to teach it.
       if (axis == null) return base;
+      // `$name.neg` reads the variable's negatives, which the static preview
+      // doesn't track: render nothing rather than a stray accessor.
+      if (axis === "neg") return "";
       const tag = previewAxisTag(catalog, name, axis);
       return tag ?? full;
     },

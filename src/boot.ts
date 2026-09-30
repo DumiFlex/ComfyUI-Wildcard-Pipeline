@@ -39,6 +39,7 @@ export * as ctxLoopMod from "./widgets/context_loop";
 export * as seedListMod from "./widgets/seed_list";
 export * as graphEventsMod from "./extension/graph-events";
 export * as graphMod from "./extension/graph";
+export * as assemblerVarsMod from "./extension/assembler-vars";
 export * as toastStoreMod from "./components/shared/toast-store";
 export * as settingsMod from "./extension/settings";
 export * as aboutMod from "./extension/about-badges";

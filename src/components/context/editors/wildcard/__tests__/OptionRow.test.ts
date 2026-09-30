@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { mount } from "@vue/test-utils";
 import OptionRow from "../sections/OptionRow.vue";
-import { _resetForTests, _setForTests } from "@/extension/preview-resolver";
+import { _resetForTests, _setForTests, _tombstoneForTests } from "@/extension/preview-resolver";
 
 const baseOption = { id: "o1", value: "red", weight: 1, sub_categories: ["warm"] };
 const allOptions = [
@@ -20,6 +20,17 @@ describe("OptionRow", () => {
     const chip = w.find('[data-test="opt-cat-warm"]');
     expect(chip.exists()).toBe(true);
     expect(chip.text().toLowerCase()).toBe("warm");
+  });
+
+  it("shows a read-only NEG hint only when the option carries a negative", () => {
+    const plain = mount(OptionRow, { props: { option: baseOption, allOptions, instance: {} } });
+    expect(plain.find('[data-test="opt-neg"]').exists()).toBe(false);
+    const opt = { ...baseOption, negative: "strawberry, fruit" };
+    const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
+    const hint = w.get('[data-test="opt-neg"]');
+    expect(hint.text()).toBe("NEG");
+    expect(hint.attributes("title")).toContain("strawberry, fruit");
+    expect(hint.element.tagName).toBe("SPAN");
   });
 
   it("renders multiple category chips for a multi-tag option", () => {
@@ -417,5 +428,22 @@ describe("OptionRow", () => {
     // Not over-gated: a real (enabled, non-null) option keeps its checked
     // glyph even while a sibling null row is locked out of the multi pool.
     expect(w.find('[data-test="opt-check"]').classes()).toContain("opt__check--on");
+  });
+});
+
+describe("OptionRow — broken-ref row marker", () => {
+  beforeEach(() => _resetForTests());
+
+  it("marks the row once the server confirms the ref's module is missing", () => {
+    _tombstoneForTests("11223344");
+    const opt = { id: "p", value: "a @{11223344#castle}", weight: 1, sub_categories: [] };
+    const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
+    expect(w.find(".opt").classes()).toContain("opt--broken");
+  });
+
+  it("does not mark a row whose ref is merely still loading", () => {
+    const opt = { id: "p", value: "a @{11223344#castle}", weight: 1, sub_categories: [] };
+    const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
+    expect(w.find(".opt").classes()).not.toContain("opt--broken");
   });
 });

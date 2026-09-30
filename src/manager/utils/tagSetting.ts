@@ -132,3 +132,56 @@ export function completionSourceEnabled(source: CompletionSource): boolean {
 export function tagAutocompleteEnabled(): boolean {
   return completionSourceEnabled("tag");
 }
+
+function canvasValue(id: string): unknown {
+  const app = (globalThis as { app?: ComfySettingHost }).app;
+  const get = app?.extensionManager?.setting?.get;
+  if (typeof get !== "function") return undefined;   // not on the canvas
+  try {
+    return get(id);
+  } catch {
+    return undefined;
+  }
+}
+
+function spaValue(storageKey: string): string | null {
+  try {
+    return localStorage.getItem(storageKey);
+  } catch {
+    return null;
+  }
+}
+
+/** Canvas id and SPA storage key per numeric completion limit, with the
+ *  value used when neither host has one and the range a stored value is
+ *  clamped into (a hand-edited localStorage must not produce a 0 or 10 000
+ *  row popup). */
+const LIMITS = {
+  maxSuggestions: {
+    canvas: "wildcardPipeline.behavior.autocompleteMaxSuggestions",
+    storage: "wp-autocomplete-max-suggestions",
+    fallback: 20, min: 1, max: 100,
+  },
+  minChars: {
+    canvas: "wildcardPipeline.behavior.autocompleteMinChars",
+    storage: "wp-autocomplete-min-chars",
+    fallback: 3, min: 1, max: 10,
+  },
+} as const;
+
+export type CompletionLimit = keyof typeof LIMITS;
+
+/** SPA storage key for a limit — the manager's Settings page writes it. */
+export function completionLimitStorageKey(limit: CompletionLimit): string {
+  return LIMITS[limit].storage;
+}
+
+/** The limit in effect on the host this editor runs in. */
+export function completionLimit(limit: CompletionLimit): number {
+  const spec = LIMITS[limit];
+  const canvas = canvasValue(spec.canvas);
+  const raw = canvas === undefined ? spaValue(spec.storage) : canvas;
+  const n = typeof raw === "number" ? raw : parseInt(String(raw ?? ""), 10);
+  if (!Number.isFinite(n)) return spec.fallback;
+  return Math.min(spec.max, Math.max(spec.min, Math.round(n)));
+}

@@ -314,7 +314,7 @@ def test_resolve_at_ref_unknown_ref_emits_empty():
     out = WildcardHandler.resolve(
         payload, instance={"variable_binding": "$y"}, ctx=ctx,
     )
-    assert out == {"$y": "before  after"}
+    assert out == {"$y": "before after"}
     # A warning should have been pushed for the unknown ref
     assert any(w.get("type") == "unknown_ref" for w in ctx["__wp_warnings__"])
 

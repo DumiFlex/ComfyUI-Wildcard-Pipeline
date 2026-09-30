@@ -8,11 +8,13 @@ import type {
   ModuleRow,
   ModuleType,
   ScenarioRunResponse,
+  ScenarioSample,
   ScenarioSeedSpec,
   ScenarioStackItem,
   ScenarioValue,
 } from "../api/types";
 import { toIdentifier } from "./slug";
+import { clauseActions, conditionLeaves, derivationTargets } from "../../extension/derivation-conditions";
 
 export type StackKind = ModuleType | "bundle";
 
@@ -53,10 +55,12 @@ export function moduleBinding(mod: Pick<ModuleRow, "type" | "name" | "payload">)
   if (mod.type === "combine") return str(p.output_var);
   if (mod.type === "derivation") {
     const rules = Array.isArray(p.rules) ? p.rules : [];
-    for (const r of rules as { branches?: { action?: { target_var?: unknown } }[] }[]) {
+    for (const r of rules as { branches?: unknown[] }[]) {
       for (const b of r.branches ?? []) {
-        const t = str(b.action?.target_var);
-        if (t) return t;
+        for (const a of clauseActions<{ target_var?: unknown }>(b)) {
+          const t = str(a.target_var);
+          if (t) return t;
+        }
       }
     }
   }
@@ -243,6 +247,54 @@ export function segmentOutput(
   return out;
 }
 
+/** Split on commas outside (), [] and {} (mirrors `engine/negatives.py`). */
+function splitTags(text: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let cur = "";
+  for (const ch of text) {
+    if ("([{".includes(ch)) depth++;
+    else if (")]}".includes(ch) && depth > 0) depth--;
+    if (ch === "," && depth === 0) { out.push(cur.trim()); cur = ""; }
+    else cur += ch;
+  }
+  out.push(cur.trim());
+  return out.filter(Boolean);
+}
+
+/** The negative words a variable carried on one seed, as segments tinted by
+ *  the variable each came from (a combine inherits the negatives of the
+ *  variables it read). Repeated tags are dropped, first one wins, like the
+ *  Assembler's join. `allowed` limits tinting to the stack's own bindings;
+ *  the variable's own words stay plain. */
+export function negativeSegments(
+  sample: Pick<ScenarioSample, "negatives">,
+  name: string,
+  allowed: Set<string>,
+): Segment[] {
+  const seen = new Set<string>();
+  const out: Segment[] = [];
+  for (const e of sample.negatives?.[name] ?? []) {
+    const tags = splitTags(e.text ?? "").filter((t) => {
+      const k = t.replace(/\s+/g, " ").toLowerCase();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    if (!tags.length) continue;
+    const varName = e.source && e.source !== name && allowed.has(e.source) ? e.source : null;
+    const last = out[out.length - 1];
+    if (last && last.varName === varName) last.text += `, ${tags.join(", ")}`;
+    else out.push({ text: tags.join(", "), varName });
+  }
+  return out;
+}
+
+/** `negativeSegments` as one line of text ("" when the variable has none). */
+export function negativeText(sample: Pick<ScenarioSample, "negatives">, name: string): string {
+  return negativeSegments(sample, name, new Set()).map((s) => s.text).join(", ");
+}
+
 /** Summary the rail shows for a scenario's latest run; stored on the row. */
 export interface LastRunSummary {
   runs: number;
@@ -250,6 +302,8 @@ export interface LastRunSummary {
   warnings: number;
   elapsed_ms: number;
   ran_at: string;
+  /** How the run compared with the scenario's baseline, when it has one. */
+  baseline?: { same: boolean; changed: number; compared: number } | null;
 }
 
 export function lastRunSummary(result: ScenarioRunResponse, now = new Date()): LastRunSummary {
@@ -304,12 +358,14 @@ export function moduleReads(row: PayloadRow): string[] {
   if (row.type === "combine") scan(p.template);
   if (row.type === "derivation") {
     const rules = Array.isArray(p.rules) ? p.rules : [];
-    for (const r of rules as { branches?: { condition?: { var?: unknown }; action?: { value?: unknown } }[]; else?: { action?: { value?: unknown } } }[]) {
+    for (const r of rules as { branches?: { condition?: unknown }[]; else?: unknown }[]) {
       for (const b of r.branches ?? []) {
-        if (typeof b.condition?.var === "string") found.add(b.condition.var.replace(/^\$/, "").split(".")[0]);
-        scan(b.action?.value);
+        for (const t of conditionLeaves<{ var?: unknown }>(b.condition)) {
+          if (typeof t.var === "string") found.add(t.var.replace(/^\$/, "").split(".")[0]);
+        }
+        for (const a of clauseActions<{ value?: unknown }>(b)) scan(a.value);
       }
-      scan(r.else?.action?.value);
+      for (const a of clauseActions<{ value?: unknown }>(r.else)) scan(a.value);
     }
   }
   return [...found];
@@ -325,13 +381,7 @@ export function moduleWrites(row: PayloadRow): string[] {
       .filter(Boolean);
   }
   if (row.type === "derivation") {
-    const out = new Set<string>();
-    const rules = Array.isArray(p.rules) ? p.rules : [];
-    for (const r of rules as { branches?: { action?: { target_var?: unknown } }[]; else?: { action?: { target_var?: unknown } } }[]) {
-      for (const b of r.branches ?? []) if (typeof b.action?.target_var === "string") out.add(b.action.target_var.replace(/^\$/, ""));
-      if (typeof r.else?.action?.target_var === "string") out.add(r.else.action.target_var.replace(/^\$/, ""));
-    }
-    return [...out];
+    return derivationTargets(p);
   }
   const b = moduleBinding({ type: row.type as ModuleType, name: String(row.name ?? ""), payload: row.payload as ModuleRow["payload"] });
   return b ? [b] : [];

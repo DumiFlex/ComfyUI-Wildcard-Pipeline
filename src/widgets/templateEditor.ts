@@ -19,8 +19,14 @@
  *      is preloaded by `main.ts` (through `boot.ts`) like every other widget
  *      glue file. The editor itself stays lazy, as every other widget's SFC
  *      does, so a canvas with no assembler never downloads it.
+ *
+ * Send-to-negative: the node's `negative_template` input carries the same
+ * `widgetType`, so `create` runs for it too and picks its variant from
+ * `inputName` (see {@link editorVariant}). The negative box is collapsible,
+ * offers the reserved `$negatives` slot, and keeps its socket like the prompt
+ * template does.
  */
-import { computed, defineAsyncComponent, h, ref, type Component } from "vue";
+import { computed, defineAsyncComponent, h, nextTick, ref, type Component } from "vue";
 import { app } from "#comfyui/app";
 import { createDomWidgetHost, type MountTargetNode } from "./_shared";
 import { attachThemeDetector } from "../extension/theme-detector";
@@ -34,12 +40,69 @@ import {
   type VarProducer,
 } from "../extension/graph";
 import { reactiveFromGraph, stringArrayEqual } from "../extension/reactive";
+import { NEGATIVES_VAR } from "../extension/assembler-vars";
 
 type EditorNode = LiteNodeLike & MountTargetNode;
 
 const RichTextInput = defineAsyncComponent(() => import("../manager/components/RichTextInput.vue"));
+const NegativeTemplateBox = defineAsyncComponent(() => import("../components/assembler/NegativeTemplateBox.vue"));
 
 const PLACEHOLDER = "A $style portrait of $subject";
+
+/** The Assembler input that holds the negative template. */
+export const NEGATIVE_TEMPLATE_INPUT = "negative_template";
+/** `node.properties` key persisting the negative box's open/closed state. */
+export const NEGATIVE_COLLAPSED_PROP = "wp_negative_collapsed";
+
+/** Heights of the negative box (px, on the LiteGraph 10px grid). They match
+ *  the fixed heights in `NegativeTemplateBox.vue`. */
+const NEG_BOX_COLLAPSED_H = 30;
+const NEG_BOX_OPEN_H = 100;
+
+export interface EditorVariant {
+  negative: boolean;
+  ariaLabel: string;
+  placeholder: string;
+  /** Names offered on top of the upstream ones (never flagged unknown). */
+  reservedVars: string[];
+}
+
+/** Which editor an input gets. Anything but `negative_template` is the
+ *  prompt template, so a renamed or future input degrades to the known one. */
+export function editorVariant(inputName: string): EditorVariant {
+  if (inputName === NEGATIVE_TEMPLATE_INPUT) {
+    return {
+      negative: true,
+      ariaLabel: "Negative template",
+      placeholder: "$negatives",
+      reservedVars: [NEGATIVES_VAR],
+    };
+  }
+  return { negative: false, ariaLabel: "Prompt template", placeholder: PLACEHOLDER, reservedVars: [] };
+}
+
+/** Whether the negative box starts collapsed: the saved choice when there is
+ *  one, else collapsed exactly when the box is empty. */
+export function initialNegativeCollapsed(
+  properties: Record<string, unknown> | undefined,
+  value: string,
+): boolean {
+  const saved = properties?.[NEGATIVE_COLLAPSED_PROP];
+  if (typeof saved === "boolean") return saved;
+  return !value.trim();
+}
+
+/** Hover card for `$negatives`: it is filled by this Assembler, not written
+ *  by anything upstream. */
+function reservedProducer(node: EditorNode): VarProducer {
+  return {
+    kind: "negatives",
+    nodeId: String((node as { id?: unknown }).id ?? ""),
+    nodeLabel: "this Assembler",
+    moduleName: "negatives of the variables the prompt uses",
+    shadowed: 0,
+  };
+}
 
 export function create(node: EditorNode, inputName: string) {
   // Mirrors ComfyUI's stored value into something Vue tracks. `host.setValue`
@@ -48,6 +111,14 @@ export function create(node: EditorNode, inputName: string) {
   const model = ref("");
 
   const editorRef = ref<{ insertTextAtCaret?: (t: string) => void } | null>(null);
+  const variant = editorVariant(inputName);
+  const nodeProps = (): Record<string, unknown> => {
+    const n = node as { properties?: Record<string, unknown> };
+    if (!n.properties) n.properties = {};
+    return n.properties;
+  };
+  // Set once the stored value is known (below), before the first render.
+  const collapsed = ref(false);
 
   const wrapper: Component = {
     setup() {
@@ -101,9 +172,34 @@ export function create(node: EditorNode, inputName: string) {
       const varProducers = computed(() => {
         void varNames.value;
         const g = rootGraph();
-        if (!g) return new Map<string, VarProducer>();
-        return new Map(Object.entries(collectUpstreamProducers(g, node)));
+        const map = g
+          ? new Map(Object.entries(collectUpstreamProducers(g, node)))
+          : new Map<string, VarProducer>();
+        for (const name of variant.reservedVars) map.set(name, reservedProducer(node));
+        return map;
       });
+      // Reserved names lead the list and are never "unknown".
+      const suggestions = computed(() =>
+        variant.reservedVars.length
+          ? [...variant.reservedVars, ...varNames.value.filter((v) => !variant.reservedVars.includes(v))]
+          : varNames.value,
+      );
+
+      if (variant.negative) {
+        return () =>
+          h(NegativeTemplateBox, {
+            modelValue: model.value,
+            collapsed: collapsed.value,
+            linked: linkDriven.value,
+            varSuggestions: suggestions.value,
+            varProducers: varProducers.value,
+            "onUpdate:modelValue": (v: string) => {
+              model.value = v;
+              editorHost.setValue(v);
+            },
+            onToggle: () => toggleCollapsed(),
+          });
+      }
 
       return () =>
         h(RichTextInput, {
@@ -127,7 +223,7 @@ export function create(node: EditorNode, inputName: string) {
           // upstream writes this" — actionable — rather than "this host
           // cannot know", which is the SPA's situation.
           graphAware: true,
-          ariaLabel: "Prompt template",
+          ariaLabel: variant.ariaLabel,
           "onUpdate:modelValue": (v: string) => {
             model.value = v;
             editorHost.setValue(v);
@@ -136,7 +232,45 @@ export function create(node: EditorNode, inputName: string) {
     },
   };
 
-  const editorHost = createDomWidgetHost(node, inputName, wrapper, {
+  /** Open/close the negative box and move the node's height by exactly the
+   *  box's change, so a node the user sized keeps its prompt editor size. */
+  function toggleCollapsed(): void {
+    const sized = node as unknown as {
+      size?: number[];
+      computeSize?: () => number[];
+      setSize?: (s: number[]) => void;
+      setDirtyCanvas?: (a: boolean, b: boolean) => void;
+    };
+    const startH = sized.size?.[1];
+    const next = !collapsed.value;
+    collapsed.value = next;
+    nodeProps()[NEGATIVE_COLLAPSED_PROP] = next;
+    const delta = next ? NEG_BOX_COLLAPSED_H - NEG_BOX_OPEN_H : NEG_BOX_OPEN_H - NEG_BOX_COLLAPSED_H;
+    // After the DOM settles AND the host's ResizeObserver has re-measured the
+    // box (it updates the minimum the node's computeSize reports).
+    void nextTick(() => {
+      setTimeout(() => {
+        if (startH == null || !sized.size || !sized.setSize) return;
+        const min = sized.computeSize?.()?.[1] ?? 0;
+        sized.setSize([sized.size[0], Math.max(min, startH + delta)]);
+        sized.setDirtyCanvas?.(true, true);
+      }, 50);
+    });
+  }
+
+  const editorHost = variant.negative
+    ? createDomWidgetHost(node, inputName, wrapper, {
+        // Keeps its socket like the prompt template: a STRING link can drive
+        // the negative too.
+        socketed: true,
+        minHeight: NEG_BOX_COLLAPSED_H,
+        minWidth: 300,
+        // Content-sized (the box's height is fixed per state) and capped at
+        // that size, so spare node height flows to the prompt editor.
+        fitContent: true,
+        onValueRestored: (v: string) => { model.value = v; },
+      })
+    : createDomWidgetHost(node, inputName, wrapper, {
     // The one widget on the node that keeps its socket — see the file
     // header. Without this the template input could no longer be driven
     // by another node's STRING output.
@@ -167,13 +301,20 @@ export function create(node: EditorNode, inputName: string) {
   });
 
   model.value = editorHost.getValue();
+  collapsed.value = initialNegativeCollapsed(
+    (node as { properties?: Record<string, unknown> }).properties,
+    model.value,
+  );
   attachThemeDetector(editorHost.widget.element, app);
 
   // Published for the assembler helper's chip strip, which is a different
-  // widget and has no other way to insert at this editor's caret.
-  templateInsertAtCaret.set(node, (token: string) => {
-    editorRef.value?.insertTextAtCaret?.(token);
-  });
+  // widget and has no other way to insert at this editor's caret. The chips
+  // insert into the PROMPT template only.
+  if (!variant.negative) {
+    templateInsertAtCaret.set(node, (token: string) => {
+      editorRef.value?.insertTextAtCaret?.(token);
+    });
+  }
 
   // ComfyUI destructures `{widget, minHeight}` off whatever the factory
   // returns, so hand back the whole host — same contract every other WP

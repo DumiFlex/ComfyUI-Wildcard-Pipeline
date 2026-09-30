@@ -3,7 +3,8 @@ import type {
   BundleCreateInput, BundleListResponse, BundleRow, BundleUpdateInput,
   CategoryCreateInput, CategoryRow,
   DatabaseConfig, DatabaseConfigUpdate,
-  TagStatus, TagSuggestResponse, TagDownloadResult,
+  BackupEntry, BackupList, ServerSettings, ServerSettingsPatch,
+  TagStatus, TagSuggestResponse, TagDownloadResult, LibraryTagUpdateCounts,
   ModelKind, ModelSourceStatus, ModelSuggestResponse,
   DatabaseInfo, MaintenanceOp, MaintenanceResult,
   EmbedBundle,
@@ -269,6 +270,24 @@ export const api = {
     },
   },
 
+  /** Library tags: the free-form labels on modules, bundles and templates.
+   *  Not the prompt-tag autocomplete list under `tags` below. Both calls
+   *  rewrite every row that carries the tag and report how many changed. */
+  libraryTags: {
+    /** Rename `from` to `to` everywhere. When `to` already exists this is a
+     *  merge: rows carrying both keep one copy. */
+    rename(from: string, to: string) {
+      return request<{ updated: LibraryTagUpdateCounts }>("/wp/api/library-tags/rename", {
+        method: "POST", body: JSON.stringify({ from, to }),
+      });
+    },
+    delete(tag: string) {
+      return request<{ updated: LibraryTagUpdateCounts }>("/wp/api/library-tags/delete", {
+        method: "POST", body: JSON.stringify({ tag }),
+      });
+    },
+  },
+
   tags: {
     /** Whether a tag list is installed, and what it contains. Drives Settings:
      *  the toggle is meaningless without a file, so "off" and "impossible"
@@ -324,6 +343,37 @@ export const api = {
     clearPendingMove() {
       return request<DatabaseConfig>("/wp/api/database/config/pending-move", {
         method: "DELETE",
+      });
+    },
+    backups() {
+      return request<BackupList>("/wp/api/database/backups", { method: "GET" });
+    },
+    createBackup() {
+      return request<BackupEntry>("/wp/api/database/backups", { method: "POST" });
+    },
+    deleteBackup(name: string) {
+      return request<void>(`/wp/api/database/backups/${encodeURIComponent(name)}`, { method: "DELETE" });
+    },
+    stageRestore(name: string) {
+      return request<{ pending_restore: string }>("/wp/api/database/backups/restore", {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      });
+    },
+    cancelRestore() {
+      return request<void>("/wp/api/database/backups/restore", { method: "DELETE" });
+    },
+  },
+  /** Server-side preferences: the ones the engine or the server itself acts
+   *  on (ref recursion limit, backups), shared by every browser. */
+  serverSettings: {
+    get() {
+      return request<ServerSettings>("/wp/api/settings", { method: "GET" });
+    },
+    update(patch: ServerSettingsPatch) {
+      return request<ServerSettings>("/wp/api/settings", {
+        method: "PUT",
+        body: JSON.stringify(patch),
       });
     },
   },

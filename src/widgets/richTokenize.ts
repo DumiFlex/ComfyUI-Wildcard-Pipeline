@@ -88,6 +88,11 @@ export function varBaseName(raw: string): string {
  *  stripped a TRAILING index, so `$outfit.0.SHOES` yielded axis "0.SHOES",
  *  matched no declared axis, and painted a valid reference with the
  *  unknown-axis warning. Mirrors `engine/syntax/tokenize.py:_VAR_RE`. */
+/** The accessor that reads a variable's negatives (`$pose.neg`,
+ *  `$pose.0.neg`) — send-to-negative. Reserved: no `accepts` tag group may use
+ *  this name. Mirrors `NEG_ACCESSOR` in `engine/syntax/resolve.py`. */
+export const NEG_ACCESSOR = "neg";
+
 export function varAccessorParts(
   raw: string,
 ): { base: string; index?: number; axis?: string } {
@@ -642,7 +647,7 @@ export function inlineTokenHtml(
           ? `<span class="wp-rt-var__index">.${parts.index}</span>`
           : "";
         const axisHtml = parts.axis
-          ? `<span class="wp-rt-var__accessor">.${escapeHtml(parts.axis)}</span>`
+          ? `<span class="wp-rt-var__accessor${parts.axis === NEG_ACCESSOR ? " wp-rt-var__accessor--neg" : ""}">.${escapeHtml(parts.axis)}</span>`
           : "";
         // Fallback: an accessor the grammar did not recognise stays one plain
         // tail span rather than vanishing.

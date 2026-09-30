@@ -33,6 +33,18 @@ async function typeValue(w: any, v: string): Promise<void> {
 const lib: LibraryRow = { id: "v1", name: "lens", value: "85mm" };
 const plainDraft: DraftRow = { id: "v1", name: "lens", value: "85mm", enabled: true, libraryId: "v1" };
 
+describe("ValueRow — library negative", () => {
+  it("shows the library row's negative read-only; nothing when there is none", () => {
+    const none = mount(ValueRow, { props: { row: plainDraft, library: lib }, global: { stubs: globalStubs } });
+    expect(none.find('[data-test="row-neg"]').exists()).toBe(false);
+    const w = mount(ValueRow, {
+      props: { row: plainDraft, library: { ...lib, negative: "fisheye" } },
+      global: { stubs: globalStubs },
+    });
+    expect(w.get('[data-test="row-neg"]').text()).toBe("NEG fisheye");
+  });
+});
+
 describe("ValueRow", () => {
   it("renders $-prefixed name + value inputs", () => {
     const w = mount(ValueRow, { props: { row: plainDraft, library: lib }, global: { stubs: globalStubs } });

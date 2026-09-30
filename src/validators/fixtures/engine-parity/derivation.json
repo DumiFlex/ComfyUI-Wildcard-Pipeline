@@ -21,14 +21,21 @@
               "target_var": "accent",
               "mode": "replace",
               "value": "cinematic lighting"
-            }
+            },
+            "extra_actions": [
+              {
+                "target_var": "accent",
+                "mode": "negative",
+                "value": "$mood.neg"
+              }
+            ]
           }
         ],
         "else": {
           "action": {
             "target_var": "accent",
-            "mode": "replace",
-            "value": "soft lighting"
+            "mode": "negative",
+            "value": "harsh shadows"
           }
         }
       }

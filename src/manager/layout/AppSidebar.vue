@@ -8,6 +8,7 @@ import { useBundleStore } from "../stores/bundleStore";
 import { useTemplateStore } from "../stores/templateStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { GITHUB_REPO } from "../config/links";
+import { libraryTagCounts } from "../utils/library-tags";
 
 interface NavItem {
   id: string;
@@ -62,6 +63,8 @@ const SECTIONS: NavSection[] = [
     items: [
       { id: "templates",  label: "Templates",       icon: "pi-file-edit",                to: "/templates"      },
       { id: "categories", label: "Categories",      icon: "pi-bookmark",                 to: "/categories"     },
+      // A single entry, not a list of tags: a library can hold hundreds.
+      { id: "tags",       label: "Tags",            icon: "pi-hashtag",                  to: "/tags"           },
       { id: "io",         label: "Import / Export", icon: "pi-arrow-right-arrow-left",   to: "/import-export"  },
       { id: "test",       label: "Test Runner",     icon: "pi-bolt",                     to: "/test"           },
     ],
@@ -100,6 +103,7 @@ const activeId = computed<string>(() => {
     ["bundles", "bundles"],
     ["templates", "templates"],
     ["categories", "categories"],
+    ["tags", "tags"],
     ["import-export", "io"],
     ["test", "test"],
     ["documentation", "documentation"],
@@ -193,6 +197,7 @@ const countByKey = computed<Record<string, number>>(() => {
     bundles:     bundleStore.catalog.length,
     templates:   templateStore.catalog.length,
     categories:  categoryStore.items.length,
+    tags:        libraryTagCounts(moduleStore.catalog, bundleStore.catalog, templateStore.catalog).length,
   };
 });
 

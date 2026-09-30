@@ -13,12 +13,15 @@ export interface OptionLike {
   value?: string;
   sub_categories?: string[] | null;
   is_null?: boolean;
+  /** Send-to-negative text; the text filter matches it too. */
+  negative?: string;
 }
 
 /* ------------------------------------------------------------------ filter */
 
 export interface OptionFilter {
-  /** Case-insensitive substring, matched against the option's value. */
+  /** Case-insensitive substring, matched against the option's value or its
+   *  negative. */
   query: string;
   /** Tags that must ALL be present. Empty = no tag constraint. */
   tags: readonly string[];
@@ -36,12 +39,19 @@ export function filterIsActive(f: OptionFilter): boolean {
  * direction people expect from adding a second filter; OR would widen the
  * result as you add constraints, which reads as the control being broken.
  *
+ * The text query matches the value OR the negative, so searching "fruit"
+ * finds the option whose negative keeps fruit out.
+ *
  * The null option carries no value and no tags, so any active filter excludes
- * it. That is correct: it cannot match.
+ * it unless the query matches a negative it carries.
  */
 export function optionMatches(o: OptionLike, f: OptionFilter): boolean {
   const q = f.query.trim().toLowerCase();
-  if (q && !(o.value ?? "").toLowerCase().includes(q)) return false;
+  if (
+    q &&
+    !(o.value ?? "").toLowerCase().includes(q) &&
+    !(o.negative ?? "").toLowerCase().includes(q)
+  ) return false;
   if (f.tags.length > 0) {
     const own = new Set(o.sub_categories ?? []);
     for (const t of f.tags) if (!own.has(t)) return false;

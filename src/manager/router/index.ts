@@ -1,12 +1,13 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router";
 import AppLayout from "../layout/AppLayout.vue";
+import { startPagePath } from "./start-page";
 
 const routes: RouteRecordRaw[] = [
   {
     path: "/",
     component: AppLayout,
     children: [
-      { path: "", redirect: "/dashboard" },
+      { path: "", redirect: () => startPagePath() },
       { path: "dashboard", name: "dashboard", component: () => import("../views/Dashboard.vue") },
       { path: "all", name: "all", component: () => import("../views/AllItems.vue") },
       { path: "wildcards", name: "wildcards", component: () => import("../views/Wildcards.vue") },
@@ -31,9 +32,10 @@ const routes: RouteRecordRaw[] = [
       { path: "templates/new", name: "templates-new", component: () => import("../views/TemplateEditor.vue") },
       { path: "templates/:id/edit", name: "templates-edit", component: () => import("../views/TemplateEditor.vue"), props: true },
       { path: "categories", name: "categories", component: () => import("../views/Categories.vue") },
+      { path: "tags", name: "tags", component: () => import("../views/Tags.vue") },
       { path: "import-export", name: "import-export", component: () => import("../views/ImportExport.vue") },
       { path: "test", name: "test", component: () => import("../views/TestRunner.vue") },
-      { path: "settings", name: "settings", component: () => import("../views/Settings.vue") },
+      { path: "settings/:section?", name: "settings", component: () => import("../views/Settings.vue"), props: true },
       { path: "whats-new", name: "whats-new", component: () => import("../views/WhatsNew.vue") },
       // Both docs routes render the same Docs.vue. They share a `layoutKey`
       // so AppLayout's keyed <RouterView> does NOT remount the view when

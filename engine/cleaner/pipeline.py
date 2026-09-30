@@ -31,8 +31,23 @@ INTENSITY_TO_RULES: dict[str, list[RuleId]] = {
 }
 
 
-def _effective_rules(intensity: str, overrides: dict[str, bool]) -> set[RuleId]:
-    base: set[RuleId] = set(INTENSITY_TO_RULES.get(intensity, INTENSITY_TO_RULES["balanced"]))
+#: Send-to-negative: the negative column's defaults per preset. Fuzzy dedupe
+#: stays off (near-duplicates in a negative, "bad hand" / "bad hands", are
+#: usually deliberate) and the blocklist never auto-enables (it keeps words
+#: OUT of the prompt, and those are often the words a negative names).
+INTENSITY_TO_NEG_RULES: dict[str, list[RuleId]] = {
+    "gentle": ["whitespace"],
+    "balanced": ["whitespace", "punctuation", "dedupe_exact"],
+    "aggressive": ["whitespace", "punctuation", "dedupe_exact"],
+}
+
+
+def _effective_rules(
+    intensity: str,
+    overrides: dict[str, bool],
+    table: dict[str, list[RuleId]] = INTENSITY_TO_RULES,
+) -> set[RuleId]:
+    base: set[RuleId] = set(table.get(intensity, table["balanced"]))
     for rule_id, enabled in overrides.items():
         if enabled:
             base.add(rule_id)  # type: ignore[arg-type]
@@ -69,4 +84,46 @@ class PromptCleaner:
             result = fn(out, mode, cfg)
             out = result["text"]
             report[rule_id] = result["stats"]
+        return {"text": out, "report": report}
+
+    def run_negative(
+        self,
+        text: str,
+        config: dict[str, Any] | None = None,
+        prompt: str = "",
+    ) -> dict[str, Any]:
+        """Clean the negative with the negative column's rules.
+
+        `negative_rules_override` is the column's per-rule toggles; the
+        blocklist entries are shared with the prompt column. The report
+        always names tags the negative shares with `prompt` (the model is
+        told to draw them and not draw them); `drop_prompt_overlap` removes
+        them from the negative.
+        """
+        cfg = config or {}
+        mode = cfg.get("mode", "tags")
+        intensity = cfg.get("intensity", "balanced")
+        overrides: dict[str, bool] = dict(cfg.get("negative_rules_override") or {})
+        active = _effective_rules(intensity, overrides, INTENSITY_TO_NEG_RULES)
+        out = text
+        report: dict[str, Any] = {}
+        for rule_id, fn in RULE_REGISTRY:
+            if rule_id not in active:
+                continue
+            result = fn(out, mode, cfg)
+            out = result["text"]
+            report[rule_id] = result["stats"]
+
+        from engine.negatives import split_tags, tag_key  # noqa: PLC0415
+
+        prompt_keys = {tag_key(t) for t in split_tags(prompt)}
+        tags = split_tags(out)
+        overlap = [t for t in tags if tag_key(t) in prompt_keys]
+        if overlap:
+            report["prompt_overlap"] = {
+                "tags": overlap,
+                "dropped": bool(cfg.get("drop_prompt_overlap")),
+            }
+            if cfg.get("drop_prompt_overlap"):
+                out = ", ".join(t for t in tags if tag_key(t) not in prompt_keys)
         return {"text": out, "report": report}

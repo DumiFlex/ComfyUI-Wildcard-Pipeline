@@ -7,10 +7,10 @@ import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 
 const tabs = [
-  { term: "Snapshot", desc: "Every $variable and its resolved value at this point in the chain — the quickest way to check that your wildcards rolled what you expected." },
-  { term: "Trace", desc: "A per-module history of which values each module wrote. Use this when a variable has the wrong value and you need to see which module set it last." },
-  { term: "Picks", desc: "Exactly what each wildcard rolled on this run — useful for reproducing a result or understanding which option was chosen." },
+  { term: "Variables", desc: "Every $variable and its resolved value at this point in the chain, with the step that set it — the quickest way to check that your wildcards rolled what you expected. A variable's negative words sit under its value in red, naming the module they came from when it isn't the variable's own, and the tab bar counts the variables that carry negatives." },
+  { term: "Trace", desc: "Every step in run order, grouped by Context node. Open a step to see why it did what it did: a wildcard's odds and the constraints that re-weighted it, which derivation branch fired (an Add to negative action reads “negative: …”), and the negative each write left on its variable." },
   { term: "Warnings", desc: "Runtime notices: missing variables referenced in templates, constraints that never fired, invalid bindings, and similar issues. Check here first when something looks off." },
+  { term: "Raw", desc: "The whole snapshot as JSON, including the negatives table. The download button saves it." },
 ];
 </script>
 

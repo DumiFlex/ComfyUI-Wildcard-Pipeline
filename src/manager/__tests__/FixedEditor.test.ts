@@ -128,4 +128,31 @@ describe("FixedEditor.vue", () => {
     const call = apiMod.create.mock.calls[0]?.[0] as { payload: { values: { name: string; value: string }[] } };
     expect(call.payload.values.some((v) => v.name === "focal_length" && v.value === "85mm")).toBe(true);
   });
+
+  it("keeps a value's negative through load + save and drops a cleared one", async () => {
+    apiMod.get.mockResolvedValue({
+      id: "fv_a", name: "Style", description: "", category_id: null,
+      tags: [], type: "fixed_values",
+      payload: { values: [
+        { id: "v1", name: "style", value: "oil painting", negative: "photo, 3d render" },
+        { id: "v2", name: "lens", value: "85mm", negative: "fisheye" },
+      ] },
+      version: 1, created_at: "", updated_at: "", is_favorite: false,
+    });
+    apiMod.update.mockImplementation((_id: string, body: { payload: Record<string, unknown> }) => Promise.resolve({
+      id: "fv_a", type: "fixed_values", name: "Style", description: "", category_id: null, tags: [],
+      is_favorite: false, payload: body.payload, version: 2, created_at: "", updated_at: "",
+    }));
+    const wrap = mount(FixedEditor, { props: { id: "fv_a" }, global: { plugins: [makeRouter()] } });
+    await flushPromises();
+    expect(wrap.find('[data-test="fv-row-0-neg"] .wp-negfield__tag').exists()).toBe(true);
+    await wrap.find('[data-test="fv-row-1-neg-clear"]').trigger("click");
+    await flushPromises();
+    expect(wrap.find('[data-test="fv-row-1-neg-add"]').exists()).toBe(true);
+    await wrap.find('[data-test="save-btn"]').trigger("click");
+    await flushPromises();
+    const upd = apiMod.update.mock.calls[0]?.[1] as { payload: { values: Array<Record<string, unknown>> } };
+    expect(upd.payload.values[0].negative).toBe("photo, 3d render");
+    expect("negative" in upd.payload.values[1]).toBe(false);
+  });
 });

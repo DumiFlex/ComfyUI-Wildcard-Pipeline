@@ -42,6 +42,7 @@
 
 import { varColorIndex } from "../components/shared/var-color";
 import type { TargetSelect } from "../widgets/_shared";
+import { clauseActions } from "./derivation-conditions";
 
 export type { TargetSelect };
 
@@ -313,12 +314,15 @@ function refBearingEntries(carrier: ChainModule): Array<{ id: string; value: str
     for (const r of Array.isArray(p.rules) ? p.rules : []) {
       const ruleId = String(r?.id ?? "");
       const branches = Array.isArray(r?.branches) ? r.branches : [];
+      // Every action of a branch shares the branch's carrier key.
       branches.forEach((b, bi) => {
-        const v = b?.action?.value;
-        if (typeof v === "string") out.push({ id: branchKey(ruleId, bi), value: v });
+        for (const a of clauseActions<{ value?: unknown }>(b)) {
+          if (typeof a.value === "string") out.push({ id: branchKey(ruleId, bi), value: a.value });
+        }
       });
-      const elseV = r?.else?.action?.value;
-      if (typeof elseV === "string") out.push({ id: branchKey(ruleId, "else"), value: elseV });
+      for (const a of clauseActions<{ value?: unknown }>(r?.else)) {
+        if (typeof a.value === "string") out.push({ id: branchKey(ruleId, "else"), value: a.value });
+      }
     }
     return out;
   }

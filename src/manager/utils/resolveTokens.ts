@@ -73,6 +73,7 @@ function resolveTokenList(
   visited: string[],
 ): string {
   const parts: string[] = [];
+  const emptyRefs: number[] = [];
   for (const tok of tokens) {
     switch (tok.kind) {
       case "text":
@@ -84,9 +85,12 @@ function resolveTokenList(
       case "var":
         parts.push(resolveVar(tok, ctx));
         break;
-      case "ref":
-        parts.push(resolveRef(tok, ctx, depth, visited));
+      case "ref": {
+        const resolved = resolveRef(tok, ctx, depth, visited);
+        if (!resolved) emptyRefs.push(parts.length);
+        parts.push(resolved);
         break;
+      }
       case "dp-brace":
         parts.push(resolveInlinePick(tok, ctx, depth, visited));
         break;
@@ -98,7 +102,53 @@ function resolveTokenList(
         throw new Error(`unknown token kind: ${tok.kind}`);
     }
   }
-  return parts.join("");
+  return joinTidy(parts, emptyRefs);
+}
+
+const isHws = (ch: string | undefined): boolean => ch === " " || ch === "\t";
+const lstripHws = (s: string): string => s.replace(/^[ \t]+/, "");
+const rstripHws = (s: string): string => s.replace(/[ \t]+$/, "");
+
+/**
+ * Join resolved parts, closing the gap each empty `@{}` ref leaves.
+ *
+ * A ref that resolves to nothing (a placeholder or deleted module, a filter
+ * that matched no option, an empty option) used to leave its surroundings
+ * behind: `red @{x} dress` became `red  dress` and `red, @{x}, dress` became
+ * `red, , dress`. At each such seam this drops one doubled comma, then one
+ * side of doubled spaces/tabs, and at the start or end of the text the
+ * dangling comma and spaces. Newlines and everything away from the seam are
+ * left exactly as written. Mirrors `_join_tidy` in `engine/syntax/resolve.py`.
+ */
+function joinTidy(parts: string[], emptyRefs: number[]): string {
+  if (emptyRefs.length === 0) return parts.join("");
+  const out = [...parts];
+  for (const i of emptyRefs) {
+    let left = -1;
+    for (let j = i - 1; j >= 0; j--) if (out[j]) { left = j; break; }
+    let right = -1;
+    for (let j = i + 1; j < out.length; j++) if (out[j]) { right = j; break; }
+    if (left < 0 && right < 0) continue;
+    if (left < 0) { out[right] = stripLead(out[right]); continue; }
+    if (right < 0) { out[left] = stripTrail(out[left]); continue; }
+    if (rstripHws(out[left]).endsWith(",") && lstripHws(out[right]).startsWith(",")) {
+      out[right] = lstripHws(out[right]).slice(1);
+    }
+    if (out[right] && isHws(out[left][out[left].length - 1]) && isHws(out[right][0])) {
+      out[right] = lstripHws(out[right]);
+    }
+  }
+  return out.join("");
+}
+
+function stripLead(text: string): string {
+  const t = lstripHws(text);
+  return t.startsWith(",") ? lstripHws(t.slice(1)) : t;
+}
+
+function stripTrail(text: string): string {
+  const t = rstripHws(text);
+  return t.endsWith(",") ? rstripHws(t.slice(0, -1)) : t;
 }
 
 function resolveVar(tok: RichToken, ctx: ResolveContext): string {

@@ -88,6 +88,43 @@ describe("SelectionToolbar.vue", () => {
     expect(wrap.find(".wpc-seltoolbar__menuempty").exists()).toBe(true);
   });
 
+  describe("Negative menu", () => {
+    function mountNeg(extra: Record<string, unknown> = {}) {
+      return mount(SelectionToolbar, {
+        props: { count: 3, tags: [], negatives: true, negativeCount: 2, ...extra },
+      });
+    }
+
+    it("is hidden unless the host opts in", () => {
+      expect(mountBar().find("[data-test='sel-negative']").exists()).toBe(false);
+      expect(mountNeg().find("[data-test='sel-negative']").exists()).toBe(true);
+    });
+
+    it("Add to each / Replace emit the typed words; Clear emits no words", async () => {
+      const wrap = mountNeg();
+      await wrap.get("[data-test='sel-negative']").trigger("click");
+      expect(wrap.text()).toContain("2 of 3 already have a negative");
+      await wrap.get("[data-test='sel-negative-input']").setValue("  fruit ");
+      await wrap.get("[data-test='sel-negative-add']").trigger("click");
+      expect(wrap.emitted("negative-add")![0]).toEqual(["fruit"]);
+
+      await wrap.get("[data-test='sel-negative']").trigger("click");
+      await wrap.get("[data-test='sel-negative-input']").setValue("blurry");
+      await wrap.get("[data-test='sel-negative-replace']").trigger("click");
+      expect(wrap.emitted("negative-replace")![0]).toEqual(["blurry"]);
+
+      await wrap.get("[data-test='sel-negative']").trigger("click");
+      await wrap.get("[data-test='sel-negative-clear']").trigger("click");
+      expect(wrap.emitted("negative-clear")).toHaveLength(1);
+    });
+
+    it("says the null option is skipped when it is in the selection", async () => {
+      const wrap = mountNeg({ negativeTargets: 2 });
+      await wrap.get("[data-test='sel-negative']").trigger("click");
+      expect(wrap.text()).toContain("The null option is skipped.");
+    });
+  });
+
   it("menu chips carry their tag's axis hue as --chip-hue", async () => {
     const wrap = mount(SelectionToolbar, {
       props: {

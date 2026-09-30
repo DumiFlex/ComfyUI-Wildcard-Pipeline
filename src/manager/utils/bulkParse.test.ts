@@ -88,3 +88,62 @@ describe("parseBulkFixedValues", () => {
     expect(parseBulkFixedValues(" = orphan")).toEqual([]);
   });
 });
+
+describe("negatives ( -- words)", () => {
+  it("the first ` -- ` splits off the negative", () => {
+    expect(parseBulkOptionLine("strawberry blonde -- strawberry, fruit")).toEqual({
+      value: "strawberry blonde", tags: [], weight: 1, negative: "strawberry, fruit",
+    });
+  });
+  it("modifiers may trail the value side", () => {
+    expect(parseBulkOptionLine("strawberry blonde #warm *2 -- strawberry, fruit")).toEqual({
+      value: "strawberry blonde", tags: ["warm"], weight: 2, negative: "strawberry, fruit",
+    });
+  });
+  it("modifiers may trail the negative side", () => {
+    expect(parseBulkOptionLine("jet black -- blue tint #cool")).toEqual({
+      value: "jet black", tags: ["cool"], weight: 1, negative: "blue tint",
+    });
+  });
+  it("modifiers on both sides merge, de-duped", () => {
+    expect(parseBulkOptionLine("jet black #cool -- blue tint #cool #dark *3")).toEqual({
+      value: "jet black", tags: ["cool", "dark"], weight: 3, negative: "blue tint",
+    });
+  });
+  it("only the FIRST ` -- ` splits; later ones stay in the negative", () => {
+    expect(parseBulkOptionLine("a -- b -- c")).toEqual({ value: "a", tags: [], weight: 1, negative: "b -- c" });
+  });
+  it("`--` without surrounding whitespace is part of the value", () => {
+    expect(parseBulkOptionLine("well--known")).toEqual({ value: "well--known", tags: [], weight: 1 });
+  });
+  it("an empty negative is dropped (no key)", () => {
+    expect(parseBulkOptionLine("serene -- ")).toEqual({ value: "serene", tags: [], weight: 1 });
+    expect(parseBulkOptionLine("serene -- #warm")).toEqual({ value: "serene", tags: ["warm"], weight: 1 });
+  });
+  it("a line with only a negative has no value → null", () => {
+    expect(parseBulkOptionLine("#warm -- fruit")).toBeNull();
+  });
+  it("a negative keeps {a|b} and @{ref} text verbatim", () => {
+    expect(parseBulkOptionLine("x -- {dry|arid}, @{abcd1234}")?.negative).toBe("{dry|arid}, @{abcd1234}");
+  });
+  it("summarize counts options with a negative", () => {
+    const parsed = parseBulkOptions([
+      "strawberry blonde #warm *2 -- strawberry, fruit",
+      "platinum bob #cool",
+      "ginger curls #warm -- orange fruit",
+      "jet black -- blue tint #cool",
+    ].join("\n"));
+    const s = summarizeBulkOptions(parsed, new Set(), new Set(["warm", "cool"]));
+    expect(s.add).toHaveLength(4);
+    expect(s.withNegative).toBe(3);
+    expect(s.tagged).toBe(4);
+    expect(s.weighted).toBe(1);
+  });
+  it("fixed values: `name = value -- negative`", () => {
+    expect(parseBulkFixedValues("style = oil painting -- photo, 3d render\nlens = 85mm\nx = a=b -- ")).toEqual([
+      { name: "style", value: "oil painting", negative: "photo, 3d render" },
+      { name: "lens", value: "85mm" },
+      { name: "x", value: "a=b" },
+    ]);
+  });
+});

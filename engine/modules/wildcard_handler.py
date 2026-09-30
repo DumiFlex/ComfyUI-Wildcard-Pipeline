@@ -20,7 +20,9 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from engine import negatives
 from engine.modules import build_resolve_ctx
+from engine.modules._detail import module_detail
 from engine.modules._seed import derive_module_rng as _derive_module_rng
 from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
@@ -56,6 +58,38 @@ def _coerce_pick_int(value: Any, default: int) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _weight(o: dict[str, Any]) -> float:
+    try:
+        return max(0.0, float(o.get("weight", 1)))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _explain_pool(detail: dict[str, Any], options: list[dict[str, Any]]) -> None:
+    """Pool size and how many options can still be drawn, for WP Debug."""
+    detail["pool"] = len(options)
+    detail["live"] = sum(1 for o in options if _weight(o) > 0)
+
+
+def _explain_constraints(
+    detail: dict[str, Any], applied: list[tuple[dict[str, Any], dict[str, Any]]],
+) -> None:
+    """The constraints that re-weighted this pick and the source value each
+    one keyed on."""
+    if not applied:
+        return
+    detail["constraints"] = [
+        {
+            "id": c.get("__constraint_library_id__") or "",
+            "uid": c.get("__constraint_module_id__") or "",
+            "name": c.get("__constraint_library_name__") or "",
+            "source": c.get("source_wildcard_id") or "",
+            "source_value": src.get("value") if isinstance(src, dict) else None,
+        }
+        for c, src in applied
+    ]
 
 
 def _pick_weighted(options: list[dict[str, Any]], rng) -> dict[str, Any] | None:
@@ -537,6 +571,32 @@ def _record_pick_multi(
     bucket[module_id] = entry
 
 
+def _file_negatives(
+    ctx: Any,
+    binding: str,
+    resolve_ctx: Any,
+    seed: int,
+    picks: list[tuple[dict[str, Any], list[str], int | None]],
+) -> None:
+    """File the negatives of this roll under `binding`.
+
+    Each pick contributes its option's own `negative` plus the negatives of
+    the options its nested `@{ref}`s picked, resolved quietly on the
+    binding's negative stream so the positive picks never shift. `slot` is
+    the multi-pick index (None for a single pick)."""
+    if not isinstance(ctx, dict):
+        return
+    rng = negatives.neg_rng(seed, binding)
+    entries: list[dict[str, Any]] = []
+    for opt, ref_negs, slot in picks:
+        own = negatives.clean_negative(opt.get("negative"))
+        texts = ([own] if own else []) + list(ref_negs)
+        entries += negatives.own_entries(
+            texts, resolve_ctx, rng, pick=slot, source=binding,
+        )
+    negatives.set_entries(ctx, binding, entries)
+
+
 class WildcardHandler(ModuleHandler):
     type_id = "wildcard"
 
@@ -700,6 +760,13 @@ class WildcardHandler(ModuleHandler):
                         f"wildcard payload.options[{i}].value must be a "
                         f"non-empty string (use is_null=True for the null option)"
                     )
+            # Send-to-negative (schema v8): optional words this option puts
+            # in the negative prompt of any Assembler that renders it.
+            neg = opt.get("negative")
+            if neg is not None and not isinstance(neg, str):
+                raise ValueError(
+                    f"wildcard payload.options[{i}].negative must be a string"
+                )
             weight = opt.get("weight", 1)
             if not isinstance(weight, (int, float)) or isinstance(weight, bool):
                 raise ValueError(
@@ -797,11 +864,19 @@ class WildcardHandler(ModuleHandler):
                 # info regardless of how the source resolved its option.
                 _record_pick(ctx, pinned, payload, pinned_rolled)
                 _record_axes(ctx, binding, pinned_rolled, payload)
+                detail = module_detail(ctx)
+                if detail is not None:
+                    detail.update({"mode": "pinned", "option_id": pinned.get("id")})
                 value = str(pinned.get("value", ""))
-                if not value:
-                    return {binding: ""}
                 resolve_ctx = build_resolve_ctx(ctx, surface="wildcard")
-                return {binding: resolve_text(value, resolve_ctx)}
+                with negatives.collecting(resolve_ctx) as col:
+                    out_value = resolve_text(value, resolve_ctx) if value else ""
+                _file_negatives(
+                    ctx, binding, resolve_ctx,
+                    int(ctx.get("__wp_node_seed__", 0) or 0),
+                    [(pinned, col.ref_negatives, None)],
+                )
+                return {binding: out_value}
             # else: pinned target is missing — fall through to random.
 
         # `category_filter` narrows the option pool to entries whose tag
@@ -826,6 +901,15 @@ class WildcardHandler(ModuleHandler):
         if enabled is not None:
             allowed = set(enabled)
             options = [o for o in options if o.get("id") in allowed]
+
+        detail = module_detail(ctx)
+        if detail is not None:
+            if isinstance(category_filter, str) and category_filter.strip():
+                detail["filter"] = category_filter.strip()
+            if exclude_null:
+                detail["exclude_null"] = True
+            if not options:
+                detail.update({"pool": 0, "live": 0})
 
         if not options:
             return {binding: ""}
@@ -895,6 +979,9 @@ class WildcardHandler(ModuleHandler):
             )
         if any_constraint_applied:
             warn_excludes_all(options, my_id or "", ctx["__wp_warnings__"])
+        if detail is not None:
+            _explain_pool(detail, options)
+            _explain_constraints(detail, applied_constraints)
 
         # Effective seed selection:
         #   - locked_seed when present → reproducible per-instance
@@ -911,6 +998,9 @@ class WildcardHandler(ModuleHandler):
             # whole run — "green jeans" on frame 1 stays "green jeans".
             _hb = ctx.get("__wp_hold_base_ctx__")
             if isinstance(_hb, dict) and binding in _hb:
+                if detail is not None:
+                    detail["held"] = True
+                negatives.copy_from(ctx, _hb, [binding])
                 return {binding: _hb[binding]}
             chain_seed = int(ctx.get("__wp_node_seed_hold__", ctx.get("__wp_node_seed__", 0)) or 0)
         else:
@@ -957,14 +1047,18 @@ class WildcardHandler(ModuleHandler):
             if not isinstance(sep, str):
                 sep = ", "
             items: list[str] = []
+            neg_picks: list[tuple[dict[str, Any], list[str], int | None]] = []
             saved_rng_multi = ctx.get("__wp_rng__")
             ctx["__wp_rng__"] = rng
             try:
                 multi_ctx = build_resolve_ctx(ctx, surface="wildcard")
-                for opt in picks:
-                    items.append(resolve_text(str(opt.get("value", "")), multi_ctx))
+                for slot, opt in enumerate(picks):
+                    with negatives.collecting(multi_ctx) as col:
+                        items.append(resolve_text(str(opt.get("value", "")), multi_ctx))
+                    neg_picks.append((opt, col.ref_negatives, slot))
             finally:
                 ctx["__wp_rng__"] = saved_rng_multi
+            _file_negatives(ctx, binding, multi_ctx, effective_seed, neg_picks)
             # One roll per pick, in pick order, so `$outfit.SHOES` mirrors the
             # shape of `$outfit` and `$outfit.1.SHOES` lines up with `$outfit.1`.
             # Each pick's accepts menu is first restricted to the tags the fired
@@ -983,12 +1077,21 @@ class WildcardHandler(ModuleHandler):
                 for o in picks
             ]
             _record_pick_multi(ctx, picks, sep, payload, rolled_list)
+            if detail is not None:
+                detail["option_ids"] = [o.get("id") for o in picks]
+                detail["range"] = [lo, hi]
+                if independent:
+                    detail["independent"] = True
             _record_axes(ctx, binding, rolled_list, payload)
             return {binding: ListVar(items, sep)}
 
         chosen = _pick_weighted(options, rng)
         if chosen is None:
             return {binding: ""}
+        if detail is not None:
+            total = sum(_weight(o) for o in options)
+            detail["option_id"] = chosen.get("id")
+            detail["chance"] = _weight(chosen) / total if total > 0 else None
 
         # Roll the accepts axes AFTER the option draw (same rng, so a locked
         # seed still reproduces the option) but BEFORE recording the pick, so
@@ -1013,7 +1116,12 @@ class WildcardHandler(ModuleHandler):
 
         value = str(chosen.get("value", ""))
         if not value:
-            # Empty / null pick — no ref to resolve.
+            # Empty / null pick — no ref to resolve. Its own negative (a
+            # "none" option that rules something out) still files.
+            _file_negatives(
+                ctx, binding, build_resolve_ctx(ctx, surface="wildcard"),
+                effective_seed, [(chosen, [], None)],
+            )
             return {binding: ""}
 
         # Swap `ctx['__wp_rng__']` to the per-module rng for the
@@ -1046,8 +1154,13 @@ class WildcardHandler(ModuleHandler):
                 set_carrier(
                     ctx.get("__wp_current_module_uid__"), chosen.get("id"),
                 )
-            resolved = resolve_text(value, resolve_ctx)
+            with negatives.collecting(resolve_ctx) as col:
+                resolved = resolve_text(value, resolve_ctx)
         finally:
             ctx["__wp_rng__"] = saved_rng
+        _file_negatives(
+            ctx, binding, resolve_ctx, effective_seed,
+            [(chosen, col.ref_negatives, None)],
+        )
 
         return {binding: resolved}

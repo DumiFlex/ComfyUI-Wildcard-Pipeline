@@ -4,6 +4,7 @@ import {
   rowOverrideKind,
   rowEnabled,
   shapeValuesPatch,
+  withRowKeys,
   type LibraryRow,
   type DraftRow,
 } from "./defaults";
@@ -99,3 +100,13 @@ describe("defaults helpers", () => {
     });
   });
 });
+
+describe("withRowKeys", () => {
+  it("keeps real ids and keys missing, blank or repeated ids by index", () => {
+    const rows = withRowKeys([
+      { id: "a", name: "x" }, { name: "y" }, { id: "  ", name: "z" }, { id: "a", name: "w" },
+    ]);
+    expect(rows.map((r) => r.id)).toEqual(["a", "#1", "#2", "#3"]);
+  });
+});
+

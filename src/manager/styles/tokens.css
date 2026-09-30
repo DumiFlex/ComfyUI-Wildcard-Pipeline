@@ -2952,10 +2952,25 @@ input, textarea, select { font: inherit; }
   --wp-accent-900: #78350f;
 }
 
-/* Compact density — applied to <html> by uiStore.setDensity("compact").
- * Comfortable is the default (--wp-density: 1 in :root); only compact needs an override. */
+/* Density — applied to <html> by uiStore.setDensity(). Comfortable is the
+ * default (--wp-density: 1 in :root). The store also sets control heights. */
 html.wp-density-compact {
   --wp-density: 0.85;
+}
+html.wp-density-cozy {
+  --wp-density: 1.12;
+}
+
+/* Motion — Settings › Appearance. "Reduce" stops animations and transitions
+ * whatever the OS says; "Auto" leaves the prefers-reduced-motion rules above
+ * in charge. */
+html.wp-reduce-motion *,
+html.wp-reduce-motion *::before,
+html.wp-reduce-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
 }
 
 /* ---------- Brand gradient utility ---------- */

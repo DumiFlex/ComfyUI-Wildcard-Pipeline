@@ -11,7 +11,8 @@
       {
         "id": "val00001",
         "name": "style",
-        "value": "oil painting"
+        "value": "oil painting",
+        "negative": "photo, 3d render"
       }
     ]
   }

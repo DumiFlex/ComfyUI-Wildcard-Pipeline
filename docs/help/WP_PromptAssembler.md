@@ -6,10 +6,21 @@ Fill-in-the-blank prompt template. Anywhere you write `$variable`, the assembler
 
 - **context** — `PIPELINE_CONTEXT` from any WP node.
 - **template** — your prompt text. Use `$varname` to reference bound values.
+- **negative_template** — optional negative template (collapsible section under the preview). `$negatives` marks where the collected negative words go; it reads `$vars` too.
 
-## Output
+## Outputs
 
 - **prompt** — the resolved STRING. Feed into CLIP encoders, WP Prompt Cleaner, etc.
+- **negative** — the negative words of every variable the template rendered, filled into the negative template. Feed into your negative CLIP encoder.
+
+## Negative output
+
+Wildcard options, fixed values, combines, derivation "Add to negative" actions and Injector rows can carry negative words for the variable they set. The negative output only takes the words of variables this template actually rendered, so a detailer Assembler that renders just `$face` gets only the face words. Internal variables add nothing.
+
+- `lowres, bad anatomy, $negatives` puts the collected words at the slot.
+- An empty negative template outputs just the collected words.
+- A negative template without `$negatives` gets them appended at the end.
+- Repeated tags are dropped (case-insensitive, `(blurry:1.2)` counts as `blurry`), including tags already in the negative template.
 
 ## How to use
 

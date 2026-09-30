@@ -248,3 +248,16 @@ describe("ValuesSection", () => {
     expect(html).toContain("tpl-tok--var-error");
   });
 });
+
+describe("ValuesSection — rows without ids", () => {
+  it("toggles only the clicked row when library rows have no ids", async () => {
+    const mod = makeModule({
+      payload: { values: [{ name: "quality", value: "masterpiece" }, { name: "negative", value: "lowres" }] },
+    });
+    const w = mount(ValuesSection, { props: { module: mod } });
+    w.findAllComponents({ name: "ValueRow" })[0].vm.$emit("toggle", "#0");
+    const patch = w.emitted("update")![0][0] as { instance: { enabled_options: string[] } };
+    expect(patch.instance.enabled_options).toEqual(["#1"]);
+  });
+});
+

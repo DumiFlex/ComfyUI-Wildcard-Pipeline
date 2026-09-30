@@ -96,6 +96,8 @@ class _Slot:
     # Input() raises TypeError on any node that supplies them.
     tooltip: str | None = None
     display_name: str | None = None
+    # Real V3 `Input(force_input=...)`: render as a socket, never a widget.
+    force_input: bool = False
     # Merged verbatim into the input spec dict by `Input.as_dict`, AFTER
     # every field the V3 classes know about. That ordering is why the
     # assembler's `template` uses it to carry `widgetType`: unlike the
@@ -301,8 +303,18 @@ class WidgetInput:
         self.advanced = advanced
 
 
+class Hidden:
+    """Mirrors ``io.Hidden`` — the hidden-input names a schema can request."""
+
+    unique_id = "UNIQUE_ID"
+    prompt = "PROMPT"
+    extra_pnginfo = "EXTRA_PNGINFO"
+
+
 class _IONamespace:
     """Mirrors ``comfy_api.latest.io``. Attribute access for types."""
+
+    Hidden = Hidden
 
     ComfyNode = ComfyNode
     Schema = Schema

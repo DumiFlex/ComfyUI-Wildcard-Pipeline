@@ -1,4 +1,4 @@
-"""Sidecar config for DB location preference + pending move state.
+"""Sidecar config for DB location preference + pending move/restore state.
 
 Lives at ``<plugin>/db-config.json`` so the resolver can read it BEFORE
 opening any DB connection (chicken-and-egg: the preference about where
@@ -35,6 +35,11 @@ class PendingMove(TypedDict, total=False):
 class DbConfig(TypedDict, total=False):
     preference: Preference
     pending_move: dict[str, str]  # {"from": "...", "to": "...", "mode": "..."}
+    # {"from": "<absolute backup path>"} — a restore staged from Settings,
+    # executed by `engine/db/backups.py:execute_pending_restore` at the next
+    # start, before any connection opens (a live SQLite file can't safely be
+    # swapped out from under open connections).
+    pending_restore: dict[str, str]
 
 
 def _read_raw(path: Path) -> dict[str, Any]:
@@ -73,6 +78,11 @@ def load(path: Path | None = None) -> DbConfig:
         if (isinstance(mode, str) and mode in _VALID_MODES
                 and isinstance(src, str) and isinstance(dst, str)):
             out["pending_move"] = {"from": src, "to": dst, "mode": mode}
+    pr = raw.get("pending_restore")
+    if isinstance(pr, dict):
+        src = pr.get("from")
+        if isinstance(src, str) and src:
+            out["pending_restore"] = {"from": src}
     return out
 
 
@@ -87,6 +97,9 @@ def save(config: DbConfig, path: Path | None = None) -> None:
     pm = config.get("pending_move")
     if isinstance(pm, dict) and {"from", "to", "mode"} <= pm.keys():
         out["pending_move"] = {"from": pm["from"], "to": pm["to"], "mode": pm["mode"]}
+    pr = config.get("pending_restore")
+    if isinstance(pr, dict) and isinstance(pr.get("from"), str) and pr["from"]:
+        out["pending_restore"] = {"from": pr["from"]}
     fd, tmp_str = tempfile.mkstemp(prefix=".db-config-", dir=str(path.parent))
     tmp_path = Path(tmp_str)
     try:
@@ -104,6 +117,27 @@ def clear_pending_move(path: Path | None = None) -> None:
     cfg = load(path)
     if "pending_move" in cfg:
         cfg.pop("pending_move", None)
+        save(cfg, path)
+
+
+def set_pending_restore(backup_path: Path, path: Path | None = None) -> None:
+    """Stage a restore from ``backup_path``; preserves the other fields.
+
+    Callers validate the path (it must be a file in the backups dir) — this
+    layer only persists it.
+    """
+    path = _resolve_sidecar(path)
+    cfg = load(path)
+    cfg["pending_restore"] = {"from": str(backup_path)}
+    save(cfg, path)
+
+
+def clear_pending_restore(path: Path | None = None) -> None:
+    """Remove just the pending_restore field; preserve everything else."""
+    path = _resolve_sidecar(path)
+    cfg = load(path)
+    if "pending_restore" in cfg:
+        cfg.pop("pending_restore", None)
         save(cfg, path)
 
 

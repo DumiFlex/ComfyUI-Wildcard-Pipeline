@@ -22,6 +22,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from engine import negatives
 from engine.modules import build_resolve_ctx
 from engine.modules._seed import derive_module_rng
 from engine.modules.dispatcher import ModuleHandler
@@ -84,6 +85,11 @@ class FixedValuesHandler(ModuleHandler):
                 raise ValueError(
                     f"fixed_values payload.values[{i}].value must be a string"
                 )
+            neg = v.get("negative")
+            if neg is not None and not isinstance(neg, str):
+                raise ValueError(
+                    f"fixed_values payload.values[{i}].negative must be a string"
+                )
 
     @classmethod
     def resolve(
@@ -134,7 +140,8 @@ class FixedValuesHandler(ModuleHandler):
         enabled = instance.get("enabled_options")
         if enabled is not None:
             allowed = set(enabled)
-            values = [v for v in values if v.get("id") in allowed]
+            keys = _row_keys(values)
+            values = [v for v, k in zip(values, keys, strict=True) if k in allowed]
 
         # Syntax-aware emission path. When ctx is missing required keys
         # for build_resolve_ctx (legacy callers passing None / minimal
@@ -158,6 +165,7 @@ class FixedValuesHandler(ModuleHandler):
             if isinstance(_hb, dict):
                 _names = [n for n in ((v.get("name") or "").strip() for v in values) if n]
                 if _names and all(n in _hb for n in _names):
+                    negatives.copy_from(ctx, _hb, _names)
                     return {n: _hb[n] for n in _names}
             chain_seed = int(
                 ctx.get("__wp_node_seed_hold__", ctx.get("__wp_node_seed__", 0)) or 0
@@ -179,6 +187,14 @@ class FixedValuesHandler(ModuleHandler):
         ctx_local = {**ctx, "__wp_rng__": rng}
         resolve_ctx = build_resolve_ctx(ctx_local, surface="fixed_values")
 
+        # Negatives are library content, like the value itself: an instance
+        # override list can re-word values but never re-words a negative, so
+        # look each one up on the library row (by id, then by name).
+        lib_rows = [v for v in payload.get("values", []) if isinstance(v, dict)]
+        lib_by_id = {v.get("id"): v for v in lib_rows if v.get("id")}
+        lib_by_name = {(v.get("name") or "").strip(): v for v in lib_rows}
+        n_rng = negatives.neg_rng(effective_seed, module_key)
+
         out_resolved: dict[str, str] = {}
         for v in values:
             name = (v.get("name") or "").strip()
@@ -186,7 +202,27 @@ class FixedValuesHandler(ModuleHandler):
                 continue
             raw = str(v.get("value", ""))
             out_resolved[name] = resolve_text(raw, resolve_ctx)
+            lib = lib_by_id.get(v.get("id")) or lib_by_name.get(name) or {}
+            own = negatives.clean_negative(lib.get("negative"))
+            negatives.set_entries(ctx, name, negatives.own_entries(
+                [own] if own else [], resolve_ctx, n_rng, pick=None, source=name,
+            ))
         return out_resolved
+
+
+def _row_keys(values: list[Any]) -> list[str]:
+    """The key each row is toggled by: its ``id``, or ``#<index>`` when the id
+    is missing, blank or repeats an earlier row's. Imported packs can carry
+    rows without ids. Mirrors ``withRowKeys`` in
+    src/components/context/editors/fixed-values/defaults.ts."""
+    seen: set[str] = set()
+    keys: list[str] = []
+    for i, v in enumerate(values):
+        rid = v.get("id") if isinstance(v, dict) else None
+        key = rid if isinstance(rid, str) and rid.strip() and rid not in seen else f"#{i}"
+        seen.add(key)
+        keys.append(key)
+    return keys
 
 
 def _ctx_supports_resolve(ctx: Any) -> bool:

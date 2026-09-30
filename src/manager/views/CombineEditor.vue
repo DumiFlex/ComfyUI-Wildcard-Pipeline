@@ -7,6 +7,10 @@
  *  2. Template + output ($output_var input + RichTextInput multiline)
  *  3. Detected inputs chip list
  *  4. Live preview
+ *
+ * Send-to-negative (schema v8): an optional Negative field ($vars + {a|b})
+ * plus a read-only "Carries" line listing the negatives the phrase inherits
+ * from the $vars its template reads, looked up in the library.
  */
 import { computed, onMounted, ref, watch } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
@@ -23,6 +27,8 @@ import Field from "../components/ui/Field.vue";
 import Chip from "../components/ui/Chip.vue";
 import RichTextInput from "../components/RichTextInput.vue";
 import RichTextPreview from "../components/RichTextPreview.vue";
+import NegativeField from "../components/NegativeField.vue";
+import { isBlankNegative, libraryVarNegatives, type VarNegativeSource } from "../utils/negatives";
 import { tokenizeRich } from "../../widgets/richTokenize";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useToast } from "../composables/useToast";
@@ -207,6 +213,8 @@ const categoryId = ref<string | null>(null);
 const tags = ref<string[]>([]);
 const contentRating = ref<"safe" | "nsfw">("safe");
 const template = ref("");
+/** The phrase's own negative; "" = none (stored as an absent key). */
+const negative = ref("");
 const outputVar = ref("");
 const outputVarTouched = ref(false);
 const outputVarError = ref("");
@@ -237,6 +245,7 @@ function snapshot(): string {
     categoryId: categoryId.value,
     tags: tags.value,
     template: template.value,
+    negative: negative.value,
     outputVar: outputVar.value,
   });
 }
@@ -262,6 +271,7 @@ function applyDraft(): void {
       categoryId: string | null;
       tags: string[];
       template: string;
+      negative?: string;
       outputVar: string;
     };
     name.value = parsed.name;
@@ -269,6 +279,7 @@ function applyDraft(): void {
     categoryId.value = parsed.categoryId;
     tags.value = parsed.tags;
     template.value = parsed.template;
+    negative.value = parsed.negative ?? "";
     outputVar.value = parsed.outputVar;
     outputVarTouched.value = true;
   } catch {
@@ -344,6 +355,41 @@ const detected = computed<string[]>(() => {
   return out;
 });
 
+/**
+ * What the phrase brings into the negative prompt: for each `$var` the
+ * TEMPLATE reads (in template order), the negatives library modules file under
+ * that name, plus the combine's own. `$vars` inside the negative field add
+ * their text but not their negatives, so only template vars are walked.
+ *
+ * The editor has no roll to read, so this is the library's view — "could ride
+ * along" — and a wildcard whose options differ is summarised by count.
+ */
+interface CarriedNegative {
+  key: string;
+  varName: string;
+  text: string;
+  /** Hover text: which module files it, and every text when summarised. */
+  title: string;
+}
+const carries = computed<CarriedNegative[]>(() => {
+  const out: CarriedNegative[] = [];
+  for (const v of detected.value) {
+    const sources: VarNegativeSource[] = libraryVarNegatives(moduleStore.catalog, v, props.id);
+    for (const src of sources) {
+      const summarised = src.kind === "wildcard" && src.texts.length > 1;
+      out.push({
+        key: `${v}:${src.moduleId}`,
+        varName: v,
+        text: summarised
+          ? `${src.optionsWithNegative ?? src.texts.length} of ${src.optionCount ?? "?"} options`
+          : src.texts[0],
+        title: `${src.moduleName} (${src.kind.replace("_", " ")})${summarised ? ": " + src.texts.join(" · ") : ""}`,
+      });
+    }
+  }
+  return out;
+});
+
 onMounted(async () => {
   await Promise.all([categoryStore.fetchAll(), moduleStore.fetchCatalog()]);
   if (props.id) {
@@ -356,6 +402,7 @@ onMounted(async () => {
       contentRating.value = row.content_rating ?? "safe";
       const p = row.payload as Partial<CombinePayload>;
       template.value = p.template ?? "";
+      negative.value = p.negative ?? "";
       const o = (p.output_var ?? "").replace(/^\$+/, "");
       if (o.trim()) {
         outputVar.value = o;
@@ -381,6 +428,7 @@ function applyRestore(entry: ModuleHistoryEntry): void {
   tags.value = entry.tags ? [...entry.tags] : [];
   const p = (entry.payload ?? {}) as Partial<CombinePayload>;
   template.value = p.template ?? "";
+  negative.value = p.negative ?? "";
   const o = (p.output_var ?? "").replace(/^\$+/, "");
   if (o.trim()) {
     outputVar.value = o;
@@ -417,6 +465,8 @@ async function save() {
       template: template.value,
       output_var: finalOutput,
       input_vars: [...detected.value],
+      // Empty negative → absent key, so v8 is stamped only when it is used.
+      ...(isBlankNegative(negative.value) ? {} : { negative: negative.value }),
     };
     const newPayload = payload as unknown as Record<string, unknown>;
     if (isEdit.value && props.id) {
@@ -605,6 +655,41 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
             aria-label="Combine template"
           />
         </Field>
+        <Field
+          label="Negative"
+          hint="Words this phrase puts in the Assembler's negative output, on top of what its $vars carry. $name and {a|b} work here."
+        >
+          <NegativeField
+            :model-value="negative || undefined"
+            label="combine"
+            test-id="cb-negative"
+            always-open
+            placeholder="cropped, out of frame"
+            :module-id="props.id"
+            :var-suggestions="varSuggestions"
+            :var-producers="varProducers"
+            :uuid-to-name="uuidToName"
+            @update:model-value="(v: string | undefined) => (negative = v ?? '')"
+          />
+        </Field>
+      </div>
+      <div
+        v-if="carries.length || negative.trim()"
+        class="cb-carries"
+        data-test="cb-carries"
+      >
+        <div class="wp-field__label cb-detected__label">Carries</div>
+        <div class="cb-carries__list">
+          <span v-for="c in carries" :key="c.key" class="cb-carries__item" :title="c.title">
+            <span class="cb-carries__text">{{ c.text }}</span>
+            <span class="cb-carries__from">from ${{ c.varName }}</span>
+          </span>
+          <span v-if="negative.trim()" class="cb-carries__item">
+            <span class="cb-carries__text">{{ negative.trim() }}</span>
+            <span class="cb-carries__from">own</span>
+          </span>
+        </div>
+        <p class="cb-carries__hint">From the library — which words ride along depends on what each $var rolls.</p>
       </div>
       <div class="cb-detected">
         <div class="wp-field__label cb-detected__label">Detected inputs ({{ detected.length }})</div>
@@ -705,6 +790,34 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
   flex-wrap: wrap;
 }
 .cb-detected__warn { color: var(--wp-warn); margin-left: var(--wp-space-2); }
+.cb-carries {
+  margin-top: var(--wp-space-5);
+}
+.cb-carries__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--wp-space-2) var(--wp-space-4);
+  padding: var(--wp-space-3);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius);
+  background: var(--wp-bg-2);
+  font-family: var(--wp-font-mono, monospace);
+  font-size: var(--wp-text-sm);
+}
+.cb-carries__item { display: inline-flex; align-items: baseline; gap: var(--wp-space-2); }
+.cb-carries__text {
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--wp-danger);
+  background: color-mix(in oklab, var(--wp-danger) 12%, transparent);
+}
+.cb-carries__from { color: var(--wp-text-muted); font-size: var(--wp-text-xs); }
+.cb-carries__hint {
+  margin: var(--wp-space-2) 0 0;
+  font-size: var(--wp-text-xs);
+  color: var(--wp-text-muted);
+}
 .cb-preview__row {
   margin-top: var(--wp-space-2);
   margin-bottom: var(--wp-space-4);

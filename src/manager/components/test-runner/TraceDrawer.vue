@@ -67,7 +67,12 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
           </div>
           <div v-if="s.error" class="wp-trd__err">{{ s.error }}</div>
           <div v-else-if="s.writes.length" class="wp-trd__writes">
-            <div v-for="(w, j) in s.writes" :key="j"><code>${{ w.variable }}</code> = {{ renderValue(w.value) }}</div>
+            <template v-for="(w, j) in s.writes" :key="j">
+              <div><code>${{ w.variable }}</code> = {{ renderValue(w.value) }}</div>
+              <div v-if="w.negative" class="wp-trd__neg" data-test="trace-neg">
+                <code>${{ w.variable }}</code> <span class="wp-trd__neg-label">negative:</span> {{ w.negative }}
+              </div>
+            </template>
           </div>
           <div v-else class="wp-trd__none">{{ s.type === "constraint" ? "re-weights a later pick, writes nothing" : "no change" }}</div>
           <ul v-if="s.refs?.length" class="wp-trd__refs" aria-label="Nested picks" data-test="trace-refs">
@@ -95,11 +100,13 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 .wp-trd {
   position: fixed; top: 0; right: 0; bottom: 0; z-index: 40;
   width: min(460px, 100vw); background: var(--wp-bg-1);
-  border-left: 1px solid var(--wp-border-strong); box-shadow: -20px 0 40px rgba(0, 0, 0, .4);
-  transform: translateX(100%); transition: transform .2s ease;
+  border-left: 1px solid var(--wp-border-strong);
+  /* Off-canvas while closed, with no shadow bleeding back on screen. */
+  transform: translateX(100%); visibility: hidden;
+  transition: transform .2s ease, visibility 0s linear .2s;
   display: flex; flex-direction: column; overflow: auto;
 }
-.wp-trd[data-open="true"] { transform: none; }
+.wp-trd[data-open="true"] { transform: none; visibility: visible; box-shadow: var(--wp-shadow-xl); transition: transform .2s ease; }
 .wp-trd__head {
   position: sticky; top: 0; background: var(--wp-bg-1);
   display: flex; align-items: center; gap: var(--wp-space-3);
@@ -121,6 +128,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 .wp-trd__status { margin-left: auto; font-size: var(--wp-text-xs); color: var(--wp-text-dim); }
 .wp-trd__writes { font: var(--wp-text-xs)/1.5 var(--wp-font-mono); color: var(--wp-text-muted); word-break: break-word; }
 .wp-trd__writes code { color: var(--wp-accent-text); }
+.wp-trd__neg { color: var(--wp-danger-text); }
+.wp-trd__neg-label { font-weight: var(--wp-weight-semibold); }
 .wp-trd__refs {
   list-style: none; margin: var(--wp-space-1) 0 0; padding: 0;
   display: flex; flex-direction: column; gap: var(--wp-space-1);

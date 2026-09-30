@@ -18,6 +18,10 @@ const terms = [
     desc: "A label on a wildcard option — e.g. \"warm\", \"sneakers\". An option can carry several. Tags filter the pool and drive constraint matrices, and can be grouped into named groups; they are editor-only unless a group is marked accepts.",
   },
   {
+    term: "Library tag",
+    desc: "A label on a whole module, bundle or template — e.g. \"outfit\", \"portrait\". An item can carry several, so a tag works as a collection: the sidebar lists the most-used ones and the Tags page renames, merges or deletes them. Library tags only organise your library; they never change what a pipeline picks. Not the same as a wildcard option's sub-categories.",
+  },
+  {
     term: "Axis (accepts group)",
     desc: "A tag group marked accepts: its tags are alternatives the option offers, and exactly one is rolled per pick. Read it anywhere with $var.AXIS (e.g. $outfit.SHOES). A constraint from an accepts source keys on that single rolled tag, and an accepts target agrees with it under a diagonal.",
   },

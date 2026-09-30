@@ -15,10 +15,11 @@ interface ResetItem {
 }
 
 const RESET_ITEMS: ResetItem[] = [
-  { label: "Theme",                    hint: "dark / light / auto" },
-  { label: "Density",                  hint: "comfortable / compact" },
-  { label: "Wildcard ref depth",       hint: "@{uuid} recursion limit" },
-  { label: "Accent palette tweaks",    hint: "topbar tweaks panel" },
+  { label: "Look",                     hint: "theme, accent, density, motion, sidebar" },
+  { label: "Start page",               hint: "and the last page visited" },
+  { label: "Editing",                  hint: "empty tag groups, sub-categories panel" },
+  { label: "Autocomplete",             hint: "sources, separator, limits" },
+  { label: "Test Runner defaults",     hint: "seed mode, first seed, count" },
   { label: "List filters and sort",    hint: "Wildcards / Combines / etc." },
   { label: "Recently opened items",    hint: "sidebar recents" },
   { label: "Starter onboarding state", hint: "first-run helpers" },
@@ -52,7 +53,8 @@ function cancelReset(): void { confirmOpen.value = false; }
     <p class="wp-bp__hint">
       These per-device preferences live in your browser's
       <span class="wp-mono">localStorage</span>. Resetting clears them on
-      this device only — modules, categories, and other data remain untouched.
+      this device only — modules, categories, and other data remain untouched,
+      and so do the canvas and server settings.
     </p>
 
     <p class="wp-bp__heading">Reset will clear:</p>

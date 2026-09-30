@@ -101,6 +101,12 @@ const hasTemplate = computed(() => {
   return typeof t === "string" && t.trim().length > 0;
 });
 
+/** Send-to-negative: the row carries a Negative. */
+const hasNegative = computed(() => {
+  const n = props.row.negative;
+  return typeof n === "string" && n.trim().length > 0;
+});
+
 const summaryTitle = computed(() => {
   if (isGeneral.value) {
     if (isEmpty.value) return "Template row — type a variable name to write the composed value into ctx";
@@ -305,6 +311,14 @@ function onDragEnd(): void {
             ? 'Template row — composed after socket rows from sockets + socket-row variables'
             : 'Template active — engine substitutes $slot_name refs before writing to ctx'"
         >tpl</span>
+        <span
+          v-if="hasNegative"
+          class="wp-inj-summary__tpl-badge wp-inj-summary__neg-badge"
+          data-test="inj-row-neg-badge"
+          :title="row.internal
+            ? `Negative: ${row.negative} (internal variable, so it reaches no prompt)`
+            : `Negative: ${row.negative} (goes where an Assembler renders $${row.binding})`"
+        >neg</span>
       </div>
     </div>
   </div>
@@ -643,6 +657,12 @@ function onDragEnd(): void {
   border-radius: 2px;
   background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
   color: var(--wp-accent);
+}
+
+/* Send-to-negative badge: same pill, danger tint. */
+.wp-inj-summary__neg-badge {
+  background: color-mix(in srgb, var(--wp-danger) 18%, transparent);
+  color: var(--wp-danger);
 }
 
 /* ── General-template rows ──────────────────────────────────────────

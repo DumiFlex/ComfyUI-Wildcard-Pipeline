@@ -23,6 +23,7 @@ const rowKinds = [
 const rowOptions = [
   { term: "Binding name", desc: "The $variable name that downstream modules and the Assembler will see. Use letters, digits, and underscores; must start with a letter." },
   { term: "Template", desc: "On a socket row: leave blank to write the raw socket value as-is, or wrap just that socket (e.g. prefix $input_0). On a template row: required — compose from any input or socket-row variable (e.g. $input_0 by $test). Use $$ for a literal dollar sign." },
+  { term: "Negative", desc: "Optional, on both row kinds, under Template in the row's edit panel. Negative words for this $variable, written with the same $slot grammar as the template, so a wired string (say, the negative an LLM node writes) can feed it. They replace whatever negatives the variable carried before, and reach only Assemblers that render the variable. A row with a negative shows a NEG badge." },
   { term: "Internal", desc: "Tick this to make the variable available to Combine and Derivation modules downstream but keep it out of the assembled prompt text. Works on both row kinds." },
 ];
 </script>
@@ -98,6 +99,12 @@ const rowOptions = [
         inputs. A socket row's own template can only use its own socket.
       </DocCallout>
       <DocCallout variant="tip">
+        A row's negative follows the usual rule: it only reaches an Assembler that renders the
+        row's variable. An internal row, or a boolean that only feeds a derivation, never adds to
+        a negative output. Injector rows live in the workflow, so a negative here needs no
+        library schema bump.
+      </DocCallout>
+      <DocCallout variant="tip">
         The injector is best suited for STRING, INT, and FLOAT values. Complex types like
         IMAGE or LATENT are stored as their text representation, which is rarely useful in a
         prompt.
@@ -109,6 +116,7 @@ const rowOptions = [
         :links="[
           { id: 'wp-context', label: 'WP Context', icon: 'pi pi-sitemap', tone: 'node' },
           { id: 'wp-prompt-assembler', label: 'WP Prompt Assembler', icon: 'pi pi-align-left', tone: 'node' },
+          { id: 'negatives', label: 'Negatives', icon: 'pi pi-minus-circle', tone: 'neutral' },
         ]"
       />
     </DocSection>

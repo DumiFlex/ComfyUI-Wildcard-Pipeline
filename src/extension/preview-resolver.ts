@@ -151,6 +151,13 @@ export function lookup(uuid: string): PreviewLookup | undefined {
   return cache.get(uuid);
 }
 
+/** True once the server has CONFIRMED `uuid` does not exist (a 404), as
+ *  opposed to "not fetched yet". Row-level broken markers use this so a row
+ *  does not flash red while its refs are still loading. */
+export function isConfirmedMissing(uuid: string): boolean {
+  return failed.get(uuid)?.permanent === true;
+}
+
 /**
  * Mark every cached snapshot stale so the next `ensure()` refetches it.
  *
@@ -227,6 +234,7 @@ export function _resetForTests(): void {
   cachedAt.clear();
   inflight.clear();
   failed.clear();
+  cacheVersion.value++;
 }
 
 /** Test seam — directly seed the cache without going through fetch. Stamps
@@ -235,6 +243,7 @@ export function _resetForTests(): void {
 export function _setForTests(uuid: string, entry: PreviewLookup): void {
   cache.set(uuid, entry);
   cachedAt.set(uuid, Date.now());
+  cacheVersion.value++;
 }
 
 /** Test seam — record the server having confirmed a uuid is gone, without
@@ -243,6 +252,7 @@ export function _setForTests(uuid: string, entry: PreviewLookup): void {
  *  entry — the exact shape of the deleted-module bug. */
 export function _tombstoneForTests(uuid: string): void {
   failed.set(uuid, { at: Date.now(), permanent: true });
+  cacheVersion.value++;
 }
 
 interface BundleSnapshot {

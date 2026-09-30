@@ -30,6 +30,11 @@ export interface WildcardOption {
    * server-side in `engine/modules/wildcard_handler.py:validate_payload`.
    * See `docs/superpowers/specs/2026-05-24-null-wildcard-option-design.md`. */
   is_null?: boolean;
+  /** Send-to-negative (schema v8): words this option puts in the negative
+   * prompt of any Assembler that renders its variable. Same grammar as
+   * `value` (text, `{a|b}`, `@{ref}`). Library content, never overridden per
+   * instance. An empty negative is stored as absent. */
+  negative?: string;
 }
 
 export interface WildcardPayload {
@@ -67,6 +72,9 @@ export interface CombinePayload {
   template: string;
   output_var: string;
   input_vars: string[];
+  /** Send-to-negative (schema v8): the phrase's own negative, on top of the
+   * negatives of every variable its template reads. `$vars` + `{a|b}`. */
+  negative?: string;
 }
 
 /** Derivation condition operators. The presence-check pair
@@ -88,7 +96,11 @@ export type DerivationOp =
   | "is_unset"
   | "is_empty"
   | "is_not_empty";
-export type DerivationMode = "replace" | "append" | "prepend";
+/** `negative` (schema v8) is "Add to negative": the value is added to the
+ *  target variable's negatives and the variable itself is left alone.
+ *  `negative_replace` (v8) is "Replace negative": the value becomes the
+ *  variable's only negative. */
+export type DerivationMode = "replace" | "append" | "prepend" | "negative" | "negative_replace";
 
 export interface DerivationCondition {
   var: string;
@@ -102,9 +114,22 @@ export interface DerivationAction {
   value: string;
 }
 
+/** A group of tests combined with AND (`all`) or OR (`any`); members may be
+ *  tests or further groups. Schema v7 — see `src/extension/derivation-conditions.ts`. */
+export interface DerivationConditionGroup {
+  match: "all" | "any";
+  conditions: DerivationConditionNode[];
+}
+
+export type DerivationConditionNode = DerivationCondition | DerivationConditionGroup;
+
 export interface DerivationBranch {
-  condition: DerivationCondition;
+  /** One test, or an AND / OR group of them. */
+  condition: DerivationConditionNode;
   action: DerivationAction;
+  /** THEN ... AND ... (schema v8): actions that run, in order, after
+   *  `action`. Absent (never `[]`) when the branch has one action. */
+  extra_actions?: DerivationAction[];
 }
 
 /**
@@ -113,6 +138,7 @@ export interface DerivationBranch {
  */
 export interface DerivationElse {
   action: DerivationAction;
+  extra_actions?: DerivationAction[];
 }
 
 export interface DerivationRule {
@@ -333,6 +359,13 @@ export interface BundleUpdateInput {
   content_rating?: "safe" | "nsfw";
 }
 
+/** Rows changed per kind by a library-tag rename or delete. */
+export interface LibraryTagUpdateCounts {
+  modules: number;
+  bundles: number;
+  templates: number;
+}
+
 export interface TemplateRow {
   id: string;
   name: string;
@@ -341,6 +374,9 @@ export interface TemplateRow {
   tags: string[];
   is_favorite: boolean;
   template_string: string;
+  /** The Assembler's negative box (migration 019). `null`/absent = saved
+   *  before negatives existed: loading leaves the negative box alone. */
+  negative_template?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -353,6 +389,7 @@ export interface TemplateListResponse {
 export interface TemplateCreateInput {
   name: string;
   template_string?: string;
+  negative_template?: string | null;
   description?: string;
   category_id?: string | null;
   tags?: string[];
@@ -362,6 +399,7 @@ export interface TemplateCreateInput {
 export interface TemplateUpdateInput {
   name?: string;
   template_string?: string;
+  negative_template?: string | null;
   description?: string;
   category_id?: string | null;
   tags?: string[];
@@ -431,12 +469,27 @@ export interface ScenarioRunRequest {
   sample_limit?: number;
   /** Distinct values kept per variable (0..5000, default 500); the rest fold into `other`. */
   value_limit?: number;
+  /** Up to 8 variables whose rendered value is returned for each seed (see `tracked`). */
+  track?: string[];
+  /** Seeds `track` covers, from the first (0..2000, default 1000). */
+  track_limit?: number;
 }
 
 /** A multi-pick variable keeps its items so `$name.K` can index it. */
 export type ScenarioValue = string | { items: string[]; sep: string };
 
-export interface ScenarioTraceWrite { variable: string; value: ScenarioValue; overwrite: boolean }
+export interface ScenarioTraceWrite {
+  variable: string;
+  value: ScenarioValue;
+  overwrite: boolean;
+  /** The joined negatives the variable carries after this write (only when non-empty). */
+  negative?: string;
+}
+
+/** One negative entry filed under a variable (send-to-negative). `source`
+ *  is the binding it came from (or a derivation carrier key / "injector");
+ *  `pick` the multi-pick slot, null for the whole value. */
+export interface ScenarioNegativeEntry { text: string; pick: number | null; source: string }
 
 /** A nested `@{ref}` pick made while a module resolved, in pre-order;
  *  `depth` 0 is a ref written directly in the module's own option. */
@@ -474,6 +527,8 @@ export interface ScenarioSample {
   vars: Record<string, ScenarioValue>;
   trace: ScenarioTraceRow[];
   warnings: ScenarioWarning[];
+  /** Each variable's negatives on this seed; absent from older servers. */
+  negatives?: Record<string, ScenarioNegativeEntry[]>;
   error: string | null;
 }
 
@@ -511,6 +566,15 @@ export interface ScenarioRunResponse {
   stack: ScenarioStackLayout[];
   missing: { kind: "module" | "bundle"; id: string }[];
   pins: Record<string, string>;
+  /** Per-seed values of the requested `track` variables (null when none were
+   *  asked for); `values[name][i]` belongs to `seeds[i]`, null = unset/failed.
+   *  `negatives` is the same per-seed list of each variable's joined negative
+   *  ("" = none); absent from older servers. */
+  tracked?: {
+    seeds: number[];
+    values: Record<string, (string | null)[]>;
+    negatives?: Record<string, (string | null)[]>;
+  } | null;
 }
 
 /** A saved Test Runner scenario — GET/POST/PUT /wp/api/test/scenarios. */
@@ -689,6 +753,41 @@ export interface DatabaseConfigUpdate {
   preference?: DatabasePreference | null;
   /** Omit to leave unchanged; pass `null` to explicitly clear. */
   pending_move?: PendingMove | null;
+}
+
+/* ── Backups + server settings ───────────────────────────────────────── */
+
+export type BackupReason = "manual" | "daily" | "pre-migration" | "pre-restore";
+
+export interface BackupEntry {
+  name: string;
+  size: number;
+  /** ISO timestamp (UTC). */
+  created_at: string;
+  reason: BackupReason;
+}
+
+export interface BackupList {
+  dir: string;
+  backups: BackupEntry[];
+  /** Backup name staged to replace the database on the next ComfyUI start. */
+  pending_restore: string | null;
+}
+
+export interface ServerSettings {
+  /** How deep nested @{uuid} references resolve at run time (1–32). */
+  max_ref_depth: number;
+  backups: {
+    enabled: boolean;
+    /** Automatic backups kept; manual ones are never pruned. */
+    keep: number;
+    daily: boolean;
+  };
+}
+
+export interface ServerSettingsPatch {
+  max_ref_depth?: number;
+  backups?: Partial<ServerSettings["backups"]>;
 }
 
 /* ── Tag autocomplete ─────────────────────────────────────────────────── */

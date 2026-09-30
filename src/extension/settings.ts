@@ -21,6 +21,44 @@ import "../components/shared/rich-text-canvas.css";
 import { pushToast } from "../components/shared/toast-store";
 import { notifyCompletionSettingsChanged } from "../manager/utils/tagSetting";
 import { openPlayground } from "../components/settings/playground-store";
+import {
+  SETTING_ID_REDUCE_MOTION,
+  SETTING_ID_HIGH_CONTRAST,
+  SETTING_ID_DENSITY,
+  SETTING_ID_DECORATION,
+  SETTING_ID_INDICATOR,
+  SETTING_ID_BORDER,
+  SETTING_ID_COLLAPSED,
+  SETTING_ID_FOCUS,
+  SETTING_ID_KIND_STYLE,
+  SETTING_ID_COLLAPSE_MODE,
+  SETTING_ID_COLOR_INTENSITY,
+  SETTING_ID_VALIDATION,
+  SETTING_ID_TOAST_LIFETIME,
+  SETTING_ID_SUPPRESS_INFO,
+  SETTING_ID_NEW_DISABLED,
+  SETTING_ID_CONFIRM_DESTRUCTIVE_BUNDLE,
+  SETTING_ID_BUNDLE_MASTER_OFF_BEHAVIOR,
+  SETTING_ID_BUNDLE_COLLAPSED,
+  MOTION_OPTIONS,
+  CONTRAST_OPTIONS,
+  DENSITY_OPTIONS,
+  DECORATION_OPTIONS,
+  INDICATOR_OPTIONS,
+  KIND_STYLE_OPTIONS,
+  VALIDATION_OPTIONS,
+  TOAST_LIFETIME_OPTIONS,
+  COLLAPSE_MODE_OPTIONS,
+  COLOR_INTENSITY_OPTIONS,
+  BUNDLE_MASTER_OFF_OPTIONS,
+  SETTING_ID_AC_MAX_SUGGESTIONS,
+  SETTING_ID_AC_MIN_CHARS,
+  AC_MAX_SUGGESTIONS_OPTIONS,
+  AC_MIN_CHARS_OPTIONS,
+  CANVAS_SETTINGS_CHANNEL,
+  type CanvasSettingMessage,
+} from "./settings-catalog";
+
 
 export type A11yMode = "auto" | "on" | "off";
 export type Density = "comfortable" | "compact" | "minimal";
@@ -193,86 +231,6 @@ export interface ComfySetting {
   category?: string[];
   onChange?: (newVal: unknown, oldVal: unknown) => void;
 }
-
-const SETTING_ID_REDUCE_MOTION = "wildcardPipeline.a11y.reduceMotion";
-const SETTING_ID_HIGH_CONTRAST = "wildcardPipeline.a11y.contrast";
-const SETTING_ID_DENSITY = "wildcardPipeline.display.density";
-const SETTING_ID_DECORATION = "wildcardPipeline.display.decoration";
-const SETTING_ID_INDICATOR = "wildcardPipeline.display.indicatorStyle";
-const SETTING_ID_BORDER = "wildcardPipeline.display.borderHighlight";
-const SETTING_ID_COLLAPSED = "wildcardPipeline.display.collapsedByDefault";
-const SETTING_ID_FOCUS = "wildcardPipeline.display.focusMode";
-const SETTING_ID_KIND_STYLE = "wildcardPipeline.display.kindStyle";
-const SETTING_ID_COLLAPSE_MODE = "wildcardPipeline.display.collapseMode";
-const SETTING_ID_COLOR_INTENSITY = "wildcardPipeline.display.colorIntensity";
-
-const SETTING_ID_VALIDATION = "wildcardPipeline.behavior.validation";
-const SETTING_ID_TOAST_LIFETIME = "wildcardPipeline.behavior.toastLifetime";
-const SETTING_ID_SUPPRESS_INFO = "wildcardPipeline.behavior.suppressInfoToasts";
-const SETTING_ID_NEW_DISABLED = "wildcardPipeline.behavior.newModuleDisabled";
-const SETTING_ID_CONFIRM_DESTRUCTIVE_BUNDLE = "wildcardPipeline.behavior.confirmDestructiveBundle";
-const SETTING_ID_BUNDLE_MASTER_OFF_BEHAVIOR = "wildcardPipeline.behavior.bundleMasterOffBehavior";
-const SETTING_ID_BUNDLE_COLLAPSED = "wildcardPipeline.display.bundleCollapsedByDefault";
-
-const MOTION_OPTIONS = [
-  { text: "Match system (prefers-reduced-motion)", value: "auto" },
-  { text: "Always reduce", value: "on" },
-  { text: "Always allow", value: "off" },
-];
-
-const CONTRAST_OPTIONS = [
-  { text: "Match system (prefers-contrast)", value: "auto" },
-  { text: "High contrast", value: "on" },
-  { text: "Standard", value: "off" },
-];
-
-const DENSITY_OPTIONS = [
-  { text: "Comfortable (default)", value: "comfortable" },
-  { text: "Compact", value: "compact" },
-  { text: "Minimal", value: "minimal" },
-];
-
-const DECORATION_OPTIONS = [
-  { text: "Full (default)", value: "full" },
-  { text: "Minimal", value: "minimal" },
-  { text: "Off (flat)", value: "off" },
-];
-
-const INDICATOR_OPTIONS = [
-  { text: "Badge (default)", value: "badge" },
-  { text: "Dot (compact)", value: "dot" },
-  { text: "Both (verbose)", value: "both" },
-];
-
-const KIND_STYLE_OPTIONS = [
-  { text: "Chip (default)", value: "chip" },
-  { text: "Icon (compact)", value: "icon" },
-  { text: "Both (verbose)", value: "both" },
-];
-
-const VALIDATION_OPTIONS = [
-  { text: "Strict (show all conflicts)", value: "strict" },
-  { text: "Relaxed (hide info-level overrides)", value: "relaxed" },
-  { text: "Permissive (scanner off — no warnings)", value: "permissive" },
-];
-
-const TOAST_LIFETIME_OPTIONS = [
-  { text: "Short (3 s)", value: "short" },
-  { text: "Default (5 s)", value: "default" },
-  { text: "Long (10 s)", value: "long" },
-  { text: "Sticky (no auto-dismiss)", value: "sticky" },
-];
-
-const COLLAPSE_MODE_OPTIONS = [
-  { text: "Independent (default)", value: "independent" },
-  { text: "Accordion (expanding one collapses siblings)", value: "accordion" },
-];
-
-const COLOR_INTENSITY_OPTIONS = [
-  { text: "Muted (low saturation)", value: "muted" },
-  { text: "Standard (default)", value: "standard" },
-  { text: "Vivid (high saturation)", value: "vivid" },
-];
 
 interface ExtensionManager {
   setting?: { get(id: string): unknown };
@@ -710,6 +668,36 @@ export function applyDisplayPrefs(app: AppLike): void {
  * without requiring a page reload (e.g. user toggles "Reduce motion" in
  * macOS System Settings while ComfyUI is open).
  */
+interface SettingWriter {
+  extensionManager?: { setting?: { set?: (id: string, value: unknown) => unknown } };
+}
+
+/**
+ * Apply canvas settings the manager's Settings page changes, live.
+ *
+ * The manager is another tab on the same origin, so a BroadcastChannel reaches
+ * every open canvas. Writing through ComfyUI's own store (rather than only
+ * the settings API the manager also calls) fires the same `onChange` the
+ * settings panel would, so markers and toasts update without a reload. Only
+ * our own `wildcardPipeline.*` ids are accepted.
+ */
+export function listenForManagerSettings(app: SettingWriter): () => void {
+  if (typeof BroadcastChannel === "undefined") return () => {};
+  const channel = new BroadcastChannel(CANVAS_SETTINGS_CHANNEL);
+  channel.onmessage = (event: MessageEvent<CanvasSettingMessage>) => {
+    const msg = event.data;
+    if (!msg || typeof msg.id !== "string" || !msg.id.startsWith("wildcardPipeline.")) return;
+    const set = app.extensionManager?.setting?.set;
+    if (typeof set !== "function") return;
+    try {
+      void set(msg.id, msg.value);
+    } catch {
+      /* a rejected write leaves the old value, which is what the panel shows */
+    }
+  };
+  return () => channel.close();
+}
+
 export function watchA11ySystemPrefs(): () => void {
   const motionMQ = window.matchMedia?.("(prefers-reduced-motion: reduce)");
   const contrastMQ = window.matchMedia?.("(prefers-contrast: more)");
@@ -985,6 +973,28 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
         + "can be typed straight away. Never applied inside a <lora:…> or "
         + "embedding:… reference, where a comma would end the reference.",
       category: ["Wildcard Pipeline", "7. Runtime behavior", "Autocomplete separator"],
+      onChange: () => notifyCompletionSettingsChanged(),
+    },
+    {
+      id: SETTING_ID_AC_MAX_SUGGESTIONS,
+      name: "Autocomplete: max suggestions",
+      type: "combo",
+      options: AC_MAX_SUGGESTIONS_OPTIONS,
+      defaultValue: "20",
+      tooltip: "How many tag suggestions the popup lists at most.",
+      category: ["Wildcard Pipeline", "7. Runtime behavior", "Autocomplete max suggestions"],
+      onChange: () => notifyCompletionSettingsChanged(),
+    },
+    {
+      id: SETTING_ID_AC_MIN_CHARS,
+      name: "Autocomplete: minimum characters",
+      type: "combo",
+      options: AC_MIN_CHARS_OPTIONS,
+      defaultValue: "3",
+      tooltip:
+        "Letters typed before tag suggestions appear. Lower shows them sooner, "
+        + "at the cost of a popup on almost every keystroke.",
+      category: ["Wildcard Pipeline", "7. Runtime behavior", "Autocomplete minimum characters"],
       onChange: () => notifyCompletionSettingsChanged(),
     },
     // Visual axes — sizing, embellishment, identity
@@ -1379,10 +1389,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       id: SETTING_ID_BUNDLE_MASTER_OFF_BEHAVIOR,
       name: "Bundle master toggle: clear behavior",
       type: "combo",
-      options: [
-        { text: "Preserve manual (recommended)", value: "preserve-manual" },
-        { text: "Cascade — clear everyone", value: "cascade-all" },
-      ],
+      options: BUNDLE_MASTER_OFF_OPTIONS,
       defaultValue: "preserve-manual",
       tooltip:
         "What the bundle master ON->OFF click clears. " +

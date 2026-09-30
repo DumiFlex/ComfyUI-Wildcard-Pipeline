@@ -162,3 +162,24 @@ async def test_default_seeds_are_random(wp_client):
     body = await resp.json()
     assert body["runs"] == 100
     assert len({s["seed"] for s in body["samples"]}) == 100
+
+
+async def test_track_returns_per_seed_values(wp_client):
+    color, *_ = _seed_library()
+    resp = await wp_client.post("/wp/api/test/run", json={
+        "stack": [{"module": color["id"]}],
+        "seeds": {"from": 0, "count": 4},
+        "track": ["color"], "track_limit": 2,
+    })
+    body = await resp.json()
+    assert body["tracked"]["seeds"] == [0, 1]
+    assert all(v in ("red", "blue") for v in body["tracked"]["values"]["color"])
+
+
+async def test_bad_track_is_rejected(wp_client):
+    color, *_ = _seed_library()
+    for bad in ({"track": "color"}, {"track": [""]}, {"track": ["a"] * 9}, {"track_limit": 5000}):
+        resp = await wp_client.post("/wp/api/test/run", json={
+            "stack": [{"module": color["id"]}], "seeds": {"from": 0, "count": 1}, **bad,
+        })
+        assert resp.status == 400

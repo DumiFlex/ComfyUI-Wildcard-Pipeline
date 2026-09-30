@@ -9,6 +9,8 @@ import { parsePayload } from "@/manager/import-export/parse";
 import {
   CONSTRAINT_ONLY_SCHEMA_VERSION,
   CURRENT_SCHEMA_VERSION,
+  DERIVATION_CONDITIONS_SCHEMA_VERSION,
+  NEGATIVES_SCHEMA_VERSION,
   SP2B_SCHEMA_VERSION,
   SP3_REACH_SCHEMA_VERSION,
   TAG_AXES_SCHEMA_VERSION,
@@ -295,6 +297,9 @@ describe("publish body stamping", () => {
     };
     if (kinds === undefined) delete row.payload.tag_group_kinds;
     else row.payload.tag_group_kinds = kinds;
+    // The parity fixture also carries a v8 `negative`; drop it so these cases
+    // measure the axis stamp alone.
+    for (const opt of row.payload.options as Record<string, unknown>[]) delete opt.negative;
     return row as unknown as Record<string, unknown>;
   }
 
@@ -390,5 +395,114 @@ describe("publish body stamping", () => {
       ],
     } as Record<string, unknown>;
     expect(schemaVersionForPayload(bundle)).toBe(CONSTRAINT_ONLY_SCHEMA_VERSION);
+  });
+
+  // --- Derivation AND / OR: stamp catalog v7 ONLY when a branch groups tests
+  //     or uses `is_empty` / `is_not_empty`. ---
+
+  function derivationRow(condition: unknown): Record<string, unknown> {
+    return {
+      id: "dv-001abc",
+      type: "derivation",
+      name: "d",
+      payload: {
+        rules: [{
+          id: "r1",
+          branches: [{ condition, action: { target_var: "t", mode: "replace", value: "v" } }],
+        }],
+      },
+    };
+  }
+  const test = { var: "mood", op: "equals", value: "calm" };
+
+  it("keeps a single-test derivation at the chain head", () => {
+    expect(schemaVersionForPayload(derivationRow(test))).toBe(CURRENT_SCHEMA_VERSION);
+    expect(schemaVersionForPayload(derivationRow({ ...test, op: "is_set" }))).toBe(CURRENT_SCHEMA_VERSION);
+  });
+
+  it("stamps DERIVATION_CONDITIONS (7) for an AND / OR group", () => {
+    expect(schemaVersionForPayload(derivationRow({ match: "all", conditions: [test, test] })))
+      .toBe(DERIVATION_CONDITIONS_SCHEMA_VERSION);
+    expect(schemaVersionForPayload(derivationRow({ match: "any", conditions: [test] })))
+      .toBe(DERIVATION_CONDITIONS_SCHEMA_VERSION);
+  });
+
+  it("stamps DERIVATION_CONDITIONS (7) for the emptiness ops", () => {
+    expect(schemaVersionForPayload(derivationRow({ ...test, op: "is_empty" })))
+      .toBe(DERIVATION_CONDITIONS_SCHEMA_VERSION);
+    expect(schemaVersionForPayload(derivationRow({ ...test, op: "is_not_empty" })))
+      .toBe(DERIVATION_CONDITIONS_SCHEMA_VERSION);
+  });
+
+  it("stamps DERIVATION_CONDITIONS (7) over an `only` rule in the same bundle", () => {
+    const bundle = {
+      id: "bd-005abc",
+      name: "mixed",
+      children: [
+        withPayload({ exceptions: [{ source_value: "a", target_value: "b", mode: "only", factor: 1 }] }),
+        derivationRow({ match: "any", conditions: [test, test] }),
+      ],
+    } as Record<string, unknown>;
+    expect(schemaVersionForPayload(bundle)).toBe(DERIVATION_CONDITIONS_SCHEMA_VERSION);
+  });
+
+  // --- Send-to-negative: stamp catalog v8 ONLY when a negative is really
+  //     there (an empty one is stored as absent). ---
+
+  function wildcardRow(negative?: string): Record<string, unknown> {
+    const opt: Record<string, unknown> = { id: "o1", value: "red", weight: 1 };
+    if (negative !== undefined) opt.negative = negative;
+    return { id: "wc-001abc", type: "wildcard", name: "w", payload: { var_binding: "w", options: [opt] } };
+  }
+
+  it("keeps an option without a negative (or an empty one) at the chain head", () => {
+    expect(schemaVersionForPayload(wildcardRow())).toBe(CURRENT_SCHEMA_VERSION);
+    expect(schemaVersionForPayload(wildcardRow(""))).toBe(CURRENT_SCHEMA_VERSION);
+    expect(schemaVersionForPayload(wildcardRow("  "))).toBe(CURRENT_SCHEMA_VERSION);
+  });
+
+  it("stamps NEGATIVES (8) for option, fixed value and combine negatives", () => {
+    expect(schemaVersionForPayload(wildcardRow("blurry"))).toBe(NEGATIVES_SCHEMA_VERSION);
+    expect(schemaVersionForPayload({
+      id: "fv-001abc", type: "fixed_values", name: "f",
+      payload: { values: [{ id: "v1", name: "style", value: "oil", negative: "photo" }] },
+    })).toBe(NEGATIVES_SCHEMA_VERSION);
+    expect(schemaVersionForPayload({
+      id: "cb-001abc", type: "combine", name: "c",
+      payload: { template: "$a", output_var: "c", negative: "cropped" },
+    })).toBe(NEGATIVES_SCHEMA_VERSION);
+  });
+
+  it("stamps NEGATIVES (8) for an Add to negative action, over a v7 group", () => {
+    const row = derivationRow({ match: "any", conditions: [test, test] });
+    const branch = ((row.payload as { rules: { branches: { action: Record<string, unknown> }[] }[] })
+      .rules[0].branches[0]);
+    branch.action = { ...branch.action, mode: "negative" };
+    expect(schemaVersionForPayload(row)).toBe(NEGATIVES_SCHEMA_VERSION);
+    branch.action = { ...branch.action, mode: "negative_replace" };
+    expect(schemaVersionForPayload(row)).toBe(NEGATIVES_SCHEMA_VERSION);
+  });
+
+  it("stamps NEGATIVES (8) for a branch with more than one action", () => {
+    const row = derivationRow(test);
+    const branch = ((row.payload as { rules: { branches: Record<string, unknown>[] }[] })
+      .rules[0].branches[0]);
+    branch.extra_actions = [];
+    expect(schemaVersionForPayload(row)).toBe(CURRENT_SCHEMA_VERSION);
+    branch.extra_actions = [{ target_var: "u", mode: "replace", value: "w" }];
+    expect(schemaVersionForPayload(row)).toBe(NEGATIVES_SCHEMA_VERSION);
+  });
+
+  it.each([
+    ["$pose", CURRENT_SCHEMA_VERSION],
+    ["$pose.negx", CURRENT_SCHEMA_VERSION],
+    ["$pose.neg", NEGATIVES_SCHEMA_VERSION],
+    ["a $pose.1.neg b", NEGATIVES_SCHEMA_VERSION],
+    ["$pose.neg.0", NEGATIVES_SCHEMA_VERSION],
+  ])("stamps %s in text as %i", (template, want) => {
+    expect(schemaVersionForPayload({
+      id: "cb-001abc", type: "combine", name: "c",
+      payload: { template, output_var: "c" },
+    })).toBe(want);
   });
 });

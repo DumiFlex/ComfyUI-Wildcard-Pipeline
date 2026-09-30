@@ -243,6 +243,7 @@ function renderTextAtom(atom: TextAtom): string {
         :kind="'var'"
         :name="atom.name"
         :index="atom.index"
+        :axis="atom.axis"
         :sub-categories="[]"
         :resolved="atomIsResolved(atom)"
         :producer="varProducers.get(atom.name)"

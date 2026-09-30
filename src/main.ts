@@ -18,6 +18,7 @@ const {
   seedListMod,
   graphEventsMod,
   graphMod,
+  assemblerVarsMod,
   toastStoreMod,
   settingsMod,
   aboutMod,
@@ -122,6 +123,7 @@ const settings = settingsMod.buildSettings(app);
 settingsMod.applyA11yClasses(app);
 settingsMod.applyDisplayPrefs(app);
 settingsMod.watchA11ySystemPrefs();
+settingsMod.listenForManagerSettings(app);
 // Wire the toast store to read its default lifeMs + suppress-info
 // filter from the settings store. Setter pattern avoids the circular
 // import that would form if toast-store imported from settings
@@ -220,6 +222,15 @@ app.registerExtension({
   },
 
   beforeRegisterNodeDef(nodeType: unknown, nodeData: NodeData) {
+    if (nodeData.name === "WP_PromptCleaner") {
+      const ct = nodeType as { prototype: { onConfigure?: (this: unknown, info: unknown) => void } };
+      const origConfigure = ct.prototype.onConfigure;
+      ct.prototype.onConfigure = function (this: unknown, info: unknown) {
+        origConfigure?.call(this, info);
+        cleanerMod.upgradeLegacyValues(this as Parameters<typeof cleanerMod.upgradeLegacyValues>[0], info);
+      };
+      return;
+    }
     if (nodeData.name !== "WP_PromptAssembler") return;
     const nt = nodeType as NodeType;
     const orig = nt.prototype.onNodeCreated;
@@ -267,8 +278,8 @@ app.registerExtension({
 });
 
 // Pre-run validation — when the user queues a prompt, scan every
-// WP_PromptAssembler in the graph for $vars in its template that no
-// upstream Context provides. One toast per offending assembler with a
+// WP_PromptAssembler in the graph for $vars in its template (or its
+// negative template) that no upstream Context provides. One toast per offending assembler with a
 // Focus button that scrolls + selects that node, so users with several
 // assemblers can jump straight to the broken one (the runtime drops
 // missing vars cleanly anyway, this just nudges them to fix the wire).
@@ -450,7 +461,6 @@ if (typeof origQueuePrompt === "function") {
       // widgets/context.ts). That fires after queue submit but
       // BEFORE control_after_generate rotates the value, capturing
       // exactly the seed that's about to run.
-      const TEMPLATE_VAR = /(?<!\$)\$([A-Za-z_][A-Za-z0-9_]*)/g;
       // walkAllNodes recurses into nested subgraphs so assemblers inside a
       // subgraph still get their templates scanned. collectUpstreamVariables
       // crosses boundaries the other direction.
@@ -462,17 +472,22 @@ if (typeof origQueuePrompt === "function") {
         // LGraphNode; missing/0 = ALWAYS (normal execution).
         const mode = (node as { mode?: number }).mode;
         if (mode === 2 || mode === 4) continue;
-        const w = node.widgets?.find((x: { name: string; value: unknown }) => x.name === "template");
-        const tmpl = typeof w?.value === "string" ? w.value : "";
-        if (!tmpl) continue;
-        const upstream = new Set(graphMod.collectUpstreamVariables(graph, node));
-        const missing = new Set<string>();
-        for (const m of tmpl.matchAll(TEMPLATE_VAR)) {
-          const name = m[1];
-          if (!name.startsWith("__") && !upstream.has(name)) missing.add(name);
-        }
-        if (missing.size === 0) continue;
-        const list = [...missing].map((v) => `$${v}`).join(", ");
+        const textOf = (name: string): string => {
+          const w = node.widgets?.find((x: { name: string; value: unknown }) => x.name === name);
+          return typeof w?.value === "string" ? w.value : "";
+        };
+        const tmpl = textOf("template");
+        // Send-to-negative: the negative template's `$vars` render too
+        // (`$negatives` is its reserved slot, never missing).
+        const negTmpl = textOf("negative_template");
+        if (!tmpl && !negTmpl) continue;
+        const missing = assemblerVarsMod.missingAssemblerVars(
+          tmpl,
+          negTmpl,
+          graphMod.collectUpstreamVariables(graph, node),
+        );
+        if (missing.length === 0) continue;
+        const list = missing.map((v) => `$${v}`).join(", ");
         // Capture node by closure — the Focus action calls into
         // app.canvas at click time, not push time, so the reference
         // stays live even if the graph is re-rendered.

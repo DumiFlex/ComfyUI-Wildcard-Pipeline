@@ -7,6 +7,8 @@ import {
 } from "../widgets/_shared";
 import { varBaseName } from "../widgets/richTokenize";
 import { computePairingsFull, type ChainModule } from "./constraint-pairs";
+import { clauseActions, conditionLeaves, derivationTargets } from "./derivation-conditions";
+import { NEGATIVES_VAR } from "./assembler-vars";
 
 /** Resolve a module's effective var-binding name. Mirrors engine
  *  precedence: per-instance override (`instance.variable_binding`)
@@ -91,20 +93,7 @@ function writesOf(m: ModuleEntry): string[] {
     // same module also collapse here — at runtime they're sequential
     // mutations on one var, not "two modules fighting." Multi-MODULE
     // dup detection still works via the outer `written` set.
-    const seen = new Set<string>();
-    const rules = (p.rules ?? []) as Array<{
-      branches?: Array<{ action?: { target_var?: string } }>;
-      else?: { action?: { target_var?: string } };
-    }>;
-    for (const rule of rules) {
-      for (const br of rule.branches ?? []) {
-        const t = (br.action?.target_var ?? "").replace(/^\$/, "").trim();
-        if (t) seen.add(t);
-      }
-      const e = (rule.else?.action?.target_var ?? "").replace(/^\$/, "").trim();
-      if (e) seen.add(e);
-    }
-    out.push(...seen);
+    out.push(...derivationTargets(p));
   }
   return out;
 }
@@ -329,11 +318,11 @@ function conditionAxisRefsIn(m: ModuleEntry): AxisRef[] {
   if (m.type !== "derivation") return [];
   const out: AxisRef[] = [];
   const rules = ((m.payload as { rules?: unknown[] } | undefined)?.rules ?? []) as Array<{
-    branches?: Array<{ condition?: { var?: unknown } }>;
+    branches?: Array<{ condition?: unknown }>;
   }>;
   for (const rule of rules) {
-    for (const br of rule.branches ?? []) {
-      const v = br.condition?.var;
+    for (const leaf of (rule.branches ?? []).flatMap((br) => conditionLeaves<{ var?: unknown }>(br.condition))) {
+      const v = leaf.var;
       if (typeof v !== "string") continue;
       const mm = v.match(
         /^([A-Za-z_][A-Za-z0-9_]*)(?:\.(?:\d+\.([A-Za-z_][A-Za-z0-9_]*)|([A-Za-z_][A-Za-z0-9_]*)(?:\.\d+)?))$/,
@@ -369,16 +358,16 @@ function templatesOf(m: ModuleEntry): string[] {
   if (m.type === "derivation") {
     const out: string[] = [];
     const rules = ((m.payload as { rules?: unknown[] } | undefined)?.rules ?? []) as Array<{
-      branches?: Array<{ action?: { value?: unknown } }>;
-      else?: { action?: { value?: unknown } };
+      branches?: unknown[];
+      else?: unknown;
     }>;
     for (const rule of rules) {
-      for (const br of rule.branches ?? []) {
-        const v = br.action?.value;
-        if (typeof v === "string" && v) out.push(v);
+      // Every action of every branch + else (THEN ... AND ...).
+      for (const clause of [...(rule.branches ?? []), rule.else]) {
+        for (const a of clauseActions<{ value?: unknown }>(clause)) {
+          if (typeof a.value === "string" && a.value) out.push(a.value);
+        }
       }
-      const ev = rule.else?.action?.value;
-      if (typeof ev === "string" && ev) out.push(ev);
     }
     return out;
   }
@@ -387,7 +376,7 @@ function templatesOf(m: ModuleEntry): string[] {
 
 /** Extract bare variable-name reads — names looked up directly against
  *  ctx, not via `$var` template tokens. Currently only derivations:
- *  each branch's `condition.var` is read raw (no `$` prefix) before
+ *  every test in each branch's condition reads its `var` raw (no `$` prefix) before
  *  the runtime compares it to `condition.value`. Static visibility
  *  matters here for the same reason as combine: an unbound condition
  *  read evaluates to "" and silently mis-matches. */
@@ -395,11 +384,11 @@ function varReadsOf(m: ModuleEntry): string[] {
   if (m.type !== "derivation") return [];
   const out: string[] = [];
   const rules = ((m.payload as { rules?: unknown[] } | undefined)?.rules ?? []) as Array<{
-    branches?: Array<{ condition?: { var?: unknown } }>;
+    branches?: Array<{ condition?: unknown }>;
   }>;
   for (const rule of rules) {
-    for (const br of rule.branches ?? []) {
-      const v = br.condition?.var;
+    for (const leaf of (rule.branches ?? []).flatMap((br) => conditionLeaves<{ var?: unknown }>(br.condition))) {
+      const v = leaf.var;
       if (typeof v === "string") {
         const name = varBaseName(v);  // SP2a: `$mood.0` reads base `mood`
         if (name) out.push(name);
@@ -910,8 +899,19 @@ export function scanConflicts(
     } else if (m.type === "derivation") {
       // `templatesOf` already extracts every branch + else `action.value`
       // string — the same fields the derivation resolver runs `@{}` refs
-      // through at runtime.
-      brokenRefSources.push({ strings: templatesOf(m), type: "derivation_broken_nested_ref" });
+      // through at runtime. This node's `action_value_overrides` replace
+      // those values at run time, so a ref typed into a canvas override
+      // (a placeholder included) is scanned too.
+      const inst = (m.instance ?? {}) as {
+        action_value_overrides?: Record<string, Record<string, unknown>> | null;
+      };
+      const overrideStrings = Object.values(inst.action_value_overrides ?? {})
+        .flatMap((byBranch) => Object.values(byBranch ?? {}))
+        .filter((v): v is string => typeof v === "string");
+      brokenRefSources.push({
+        strings: [...templatesOf(m), ...overrideStrings],
+        type: "derivation_broken_nested_ref",
+      });
     } else if (m.type === "constraint") {
       const payload = (m.payload ?? {}) as {
         exceptions?: Array<{
@@ -957,7 +957,16 @@ export function scanConflicts(
   return out;
 }
 
-export function scanTemplateConflicts(template: string, knownVars: string[]): Conflict[] {
+/**
+ * Assembler templates. `negativeTemplate` (send-to-negative) is scanned the
+ * same way, except that `$negatives` is its reserved slot and never missing;
+ * a name already reported from the prompt template is not reported twice.
+ */
+export function scanTemplateConflicts(
+  template: string,
+  knownVars: string[],
+  negativeTemplate = "",
+): Conflict[] {
   const known = new Set(knownVars);
   const out: Conflict[] = [];
   for (const m of template.matchAll(TEMPLATE_VAR)) {
@@ -965,6 +974,13 @@ export function scanTemplateConflicts(template: string, knownVars: string[]): Co
     if (!known.has(v)) {
       out.push({ moduleId: "", variable: v, type: "missing_template_variable", severity: "warning" });
     }
+  }
+  const reported = new Set(out.map((c) => c.variable));
+  for (const m of negativeTemplate.matchAll(TEMPLATE_VAR)) {
+    const v = m[1];
+    if (v === NEGATIVES_VAR || known.has(v) || reported.has(v)) continue;
+    reported.add(v);
+    out.push({ moduleId: "", variable: v, type: "missing_template_variable", severity: "warning" });
   }
   return out;
 }

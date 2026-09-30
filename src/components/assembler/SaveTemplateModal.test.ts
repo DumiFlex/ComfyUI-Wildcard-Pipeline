@@ -93,4 +93,34 @@ describe("SaveTemplateModal", () => {
     expect(api.templates.create).toHaveBeenCalled();
     expect(api.templates.update).not.toHaveBeenCalled();
   });
+
+  it("stores both boxes; an empty negative box saves as an empty string", async () => {
+    const { api } = await import("../../manager/api/client");
+    const create = api.templates.create as ReturnType<typeof vi.fn>;
+    create.mockClear();
+    const w = mount(SaveTemplateModal, {
+      props: { open: true, templateString: "$a", negativeTemplate: "lowres, $negatives" },
+      ...stubs,
+    });
+    await flushPromises();
+    expect(w.find('[data-test="save-tpl-neg-preview"]').text()).toBe("lowres, $negatives");
+    const input = w.find<HTMLInputElement>('[data-test="save-tpl-name"]');
+    input.element.value = "both";
+    await input.trigger("input");
+    await w.find('[data-test="save-tpl-submit"]').trigger("click");
+    await flushPromises();
+    expect(create).toHaveBeenLastCalledWith(expect.objectContaining({
+      template_string: "$a", negative_template: "lowres, $negatives",
+    }));
+
+    const w2 = mount(SaveTemplateModal, { props: { open: true, templateString: "$a" }, ...stubs });
+    await flushPromises();
+    expect(w2.find('[data-test="save-tpl-neg-preview"]').exists()).toBe(false);
+    const input2 = w2.find<HTMLInputElement>('[data-test="save-tpl-name"]');
+    input2.element.value = "blank";
+    await input2.trigger("input");
+    await w2.find('[data-test="save-tpl-submit"]').trigger("click");
+    await flushPromises();
+    expect(create).toHaveBeenLastCalledWith(expect.objectContaining({ negative_template: "" }));
+  });
 });

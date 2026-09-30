@@ -24,6 +24,8 @@ import Button from "../components/ui/Button.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
 import Input from "../components/ui/Input.vue";
 import RichTextInput from "../components/RichTextInput.vue";
+import NegativeField from "../components/NegativeField.vue";
+import { appendNegative, pruneBlankNegatives, setNegative } from "../utils/negatives";
 import BulkAddPanel from "../components/BulkAddPanel.vue";
 import TagPickerMenu from "../components/TagPickerMenu.vue";
 import SelectionToolbar from "../components/SelectionToolbar.vue";
@@ -69,6 +71,8 @@ import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
 import CascadeRenameDialog from "../cascade/CascadeRenameDialog.vue";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { ResolveWarning } from "../utils/resolveTokens";
+import { brokenRefLabels } from "../utils/validateModule";
+import { NEG_ACCESSOR } from "../../widgets/richTokenize";
 
 const props = defineProps<{ id?: string }>();
 const router = useRouter();
@@ -286,6 +290,13 @@ const wcSuggestions = computed<string[]>(
 // template + `wcSuggestions` sort key are untouched.
 const refData = computed(() => buildWildcardRefData(moduleStore.catalog));
 const nameByUuid = computed(() => refData.value.uuidToName);
+/** Missing `@` refs per option value — the same test the chips use, so a row
+ *  is marked exactly when it shows a red chip. */
+function optionBrokenRefs(value: string): string[] {
+  // Nothing is known until the catalog loads; do not paint every ref red then.
+  if (nameByUuid.value.size === 0) return [];
+  return brokenRefLabels(value, nameByUuid.value);
+}
 const uuidToSubCategories = computed(() => refData.value.uuidToSubCategories);
 const uuidToOptionsCount = computed(() => refData.value.uuidToOptionsCount);
 const uuidToHasNull = computed(() => refData.value.uuidToHasNull);
@@ -549,6 +560,15 @@ function renameGroup(oldAxis: string, nextAxis: string): boolean {
   // grammar cannot parse used to demote it to classify without a word, which
   // quietly broke every `$var.AXIS` read of it. Refuse instead, the same way
   // `toggleGroupKind` refuses to promote such a name.
+  if (tagGroupKinds.value[oldAxis] === "accepts" && trimmed === NEG_ACCESSOR) {
+    toast.push({
+      severity: "warn",
+      summary: `"${oldAxis}" keeps its name`,
+      detail: `$var.${NEG_ACCESSOR} reads a variable's negatives, so an accepts group can't be called "${NEG_ACCESSOR}".`,
+      life: 6000,
+    });
+    return false;
+  }
   if (tagGroupKinds.value[oldAxis] === "accepts" && !AXIS_IDENT.test(trimmed)) {
     toast.push({
       severity: "warn",
@@ -909,6 +929,15 @@ function toggleGroupKind(axis: string): void {
   if (next[axis] === "accepts") {
     delete next[axis];
     tagGroupKinds.value = next;
+    return;
+  }
+  if (axis === NEG_ACCESSOR) {
+    toast.push({
+      severity: "warn",
+      summary: `Rename "${axis}" first`,
+      detail: `$var.${NEG_ACCESSOR} reads a variable's negatives, so an accepts group can't be called "${NEG_ACCESSOR}".`,
+      life: 6000,
+    });
     return;
   }
   if (!AXIS_IDENT.test(axis)) {
@@ -1592,6 +1621,32 @@ function setWeightSelected(weight: number): void {
   for (const o of selectedOptionList()) o.weight = w;
 }
 
+/* ── Bulk negative (send-to-negative) ─────────────────────────────── */
+
+/** Rows Add / Replace write to: the selection minus the null option. The null
+ *  option CAN carry a negative (edited on its own row), but a bulk phrase meant
+ *  for real options is almost never meant for "nothing was picked". */
+function negativeWritableSelection(): WildcardOption[] {
+  return selectedOptionList().filter((o) => !o.is_null);
+}
+const selectedNegativeCount = computed(
+  () => selectedOptionList().filter((o) => !!o.negative).length,
+);
+const selectedNegativeTargets = computed(() => negativeWritableSelection().length);
+
+function addNegativeToSelected(words: string): void {
+  bulkNote.value = "";
+  for (const o of negativeWritableSelection()) setNegative(o, appendNegative(o.negative, words));
+}
+function replaceNegativeOnSelected(words: string): void {
+  bulkNote.value = "";
+  for (const o of negativeWritableSelection()) setNegative(o, words);
+}
+function clearNegativeOnSelected(): void {
+  bulkNote.value = "";
+  for (const o of selectedOptionList()) setNegative(o, undefined);
+}
+
 /** Bulk-delete checked options. Options referenced by constraints are kept
  *  (those need the per-option cascade review via the single-row trash) and
  *  reported so the deletion stays safe. */
@@ -1633,7 +1688,8 @@ function isUntouchedBlank(o: WildcardOption): boolean {
   return !o.is_null
     && (o.value ?? "").trim() === ""
     && (o.sub_categories ?? []).length === 0
-    && (o.weight === 1 || o.weight === undefined);
+    && (o.weight === 1 || o.weight === undefined)
+    && !o.negative;
 }
 
 function commitBulkAddOptions(parsed: ParsedBulkOption[]): void {
@@ -1655,6 +1711,7 @@ function commitBulkAddOptions(parsed: ParsedBulkOption[]): void {
       value: p.value,
       weight: p.weight,
       sub_categories: subCategories.value.filter((s) => tagSet.has(s)),
+      ...(p.negative ? { negative: p.negative } : {}),
     });
   }
   bulkAddOpen.value = false;
@@ -1767,7 +1824,9 @@ async function save() {
     const serializedGroups = serializeTagGroups();
     const serializedKinds = serializeTagGroupKinds(serializedGroups);
     const payload: WildcardPayload = {
-      options: sortedOptions,
+      // An emptied negative is stored as an ABSENT key (schema v8 stamps
+      // only when a negative is really there).
+      options: pruneBlankNegatives(sortedOptions),
       sub_categories: subCategories.value,
       var_binding: finalBinding,
       ...(serializedGroups ? { tag_groups: serializedGroups } : {}),
@@ -2310,9 +2369,15 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
           :tag-hues="selectedTagHues"
           reorderable
           :move-armed="moveArmed"
+          negatives
+          :negative-count="selectedNegativeCount"
+          :negative-targets="selectedNegativeTargets"
           @apply-tag="applyTagToSelected"
           @remove-tag="removeTagFromSelected"
           @set-weight="setWeightSelected"
+          @negative-add="addNegativeToSelected"
+          @negative-replace="replaceNegativeOnSelected"
+          @negative-clear="clearNegativeOnSelected"
           @move-top="moveSelectedTo({ to: 'top' })"
           @move-bottom="moveSelectedTo({ to: 'bottom' })"
           @move-here="moveArmed = !moveArmed"
@@ -2354,6 +2419,8 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
               'wc-opt-row--dropbefore': dragOver === i && dragFrom !== null && dragFrom !== i,
               'wc-opt-row--cargo': moveArmed && isSelected(o.id),
               'wc-opt-row--landing': moveArmed && !isSelected(o.id),
+              'wc-opt-row--broken': (!o.is_null && optionBrokenRefs(o.value).length > 0)
+                || optionBrokenRefs(o.negative ?? '').length > 0,
             }"
             @dragover="onOptDragOver(i, $event)"
             @drop.prevent="onOptDrop(i)"
@@ -2447,6 +2514,33 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                 :uuid-to-options-count="uuidToOptionsCount"
                 placeholder="value (type @ for nested wildcards · {a|b|c} for inline choices)"
                 aria-label="Option value"
+              />
+              <div
+                v-if="!o.is_null && optionBrokenRefs(o.value).length"
+                class="wc-broken-note"
+                :data-test="`wc-opt-broken-${i}`"
+              >
+                <i class="pi pi-exclamation-triangle" aria-hidden="true" />
+                <span>{{ optionBrokenRefs(o.value).join(", ") }} not in the library · click the chip to point it at a module</span>
+              </div>
+              <!-- Send-to-negative: same grammar as the value (text, {a|b},
+                   @{ref}). The null option may carry one too — "nothing was
+                   picked" can still keep words out of the image. -->
+              <NegativeField
+                :model-value="o.negative"
+                surface="wildcard"
+                label="option"
+                :test-id="`wc-opt-neg-${i}`"
+                :broken-refs="optionBrokenRefs(o.negative ?? '')"
+                :module-id="props.id"
+                :ref-suggestions="wcSuggestions"
+                :uuid-to-name="nameByUuid"
+                :uuid-to-sub-categories="uuidToSubCategories"
+                :uuid-to-option-tag-sets="uuidToOptionTagSets"
+                :uuid-to-tag-groups="uuidToTagGroups"
+                :uuid-to-has-null="uuidToHasNull"
+                :uuid-to-options-count="uuidToOptionsCount"
+                @update:model-value="(v: string | undefined) => setNegative(o, v)"
               />
             </td>
             <td>
@@ -2694,6 +2788,22 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
 }
 .wc-opt-row--null {
   background: color-mix(in srgb, var(--wp-text) 2%, transparent);
+}
+/* An option holding a ref that points at nothing: red rail on the leading
+   cell plus a faint wash, so the row is findable in a long table. */
+.wc-opt-row--broken > td {
+  background: color-mix(in srgb, var(--wp-danger, #ef4444) 6%, transparent);
+}
+.wc-opt-row--broken > td:first-child {
+  box-shadow: inset 3px 0 0 var(--wp-danger, #ef4444);
+}
+.wc-broken-note {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-2);
+  margin-top: var(--wp-space-2);
+  font-size: var(--wp-text-xs);
+  color: var(--wp-danger, #ef4444);
 }
 
 /* ── Sub-category group boxes (H1) ───────────────────────────────── */

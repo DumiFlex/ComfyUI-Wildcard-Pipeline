@@ -1,11 +1,16 @@
 """Derivation module resolver — IF/ELIF/ELSE rules over the runtime context.
 
 Each rule has an ordered list of branches (index 0 == IF, the rest == ELIF)
-and an optional ``else`` clause. Rules evaluate independently top-to-bottom:
+and an optional ``else`` clause. A branch ``condition`` is either one test
+(``{var, op, value}``) or a group (``{match: "all"|"any", conditions: [...]}``)
+whose members are tests or further groups, so a branch can AND / OR several
+tests together (schema v7). Rules evaluate independently top-to-bottom:
 the first branch whose condition matches wins; if none match, the ``else``
 action (if any) fires; otherwise the rule is a no-op.
 
-Actions mutate the runtime context directly. Multiple rules can target the
+A branch (and the ``else`` clause) runs its ``action`` and then, in order,
+each entry of its optional ``extra_actions`` list (schema v8): "THEN ... AND
+...". Actions mutate the runtime context directly. Multiple rules can target the
 same variable; later rules see earlier mutations. Action ``value`` strings
 are resolved through resolve_text with surface="derivation" so $var tokens
 and {a|b|c} picks work inside derivation action values.
@@ -15,10 +20,13 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from engine import negatives
 from engine.modules import build_resolve_ctx
+from engine.modules._detail import module_detail
 from engine.modules._seed import derive_module_rng
 from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
+from engine.syntax.resolve import NEG_ACCESSOR
 from engine.syntax.types import (
     deref_var_value,
     parse_var_reference,
@@ -34,8 +42,22 @@ _VALID_OPS = {
     # semantics they need — wildcards can pick options with empty
     # values, leaving keys present-but-empty.
     "exists", "not_exists", "is_set", "is_unset",
+    # Emptiness refinements the editor's "exists" switch has always offered.
+    # `is_empty` is "present and empty" (a wildcard that rolled its null
+    # option); `is_not_empty` is "resolved to something non-empty".
+    "is_empty", "is_not_empty",
 }
-_VALID_MODES = {"replace", "append", "prepend"}
+_VALID_MATCHES = {"all", "any"}
+_MISSING = object()
+# Groups nest; the editor stops at three levels, the cap here only guards a
+# hand-built payload against runaway recursion.
+_MAX_CONDITION_DEPTH = 8
+# `negative` (schema v8, send-to-negative): "Add to negative" — the value is
+# added to the target variable's negatives; the variable itself is untouched.
+# `negative_replace` (also v8): "Replace negative" — the value becomes the
+# variable's only negative, dropping what it carried.
+NEGATIVE_MODES = {"negative", "negative_replace"}
+_VALID_MODES = {"replace", "append", "prepend", *NEGATIVE_MODES}
 
 
 def _ctx_get_raw(ctx: Any, name: str) -> Any:
@@ -95,9 +117,21 @@ def _ctx_get(ctx: Any, name: str) -> str:
     `$mood.0` splits to base `mood` + index 0. The fold/accessor contract lives
     in deref_var_value; the axis contract in `_ctx_axis`."""
     base, index, axis = parse_var_reference(name)
+    if axis == NEG_ACCESSOR:
+        return _ctx_negative(ctx, base, index)
     if axis:
         return _ctx_axis(ctx, base, axis, index)
     return deref_var_value(_ctx_get_raw(ctx, base), index)
+
+
+def _ctx_negative(ctx: Any, base: str, index: int | None) -> str:
+    """`$name.neg` in a condition: the variable's negatives as one line,
+    read the same way the resolver renders them."""
+    texts = [
+        str(e.get("text", "")) for e in negatives.get_entries(ctx, base)
+        if index is None or e.get("pick") is None or e.get("pick") == index
+    ]
+    return negatives.join_unique(texts)
 
 
 def _ctx_has(ctx: Any, name: str) -> bool:
@@ -113,6 +147,8 @@ def _ctx_has(ctx: Any, name: str) -> bool:
     if ctx is None:
         return False
     base, _index, axis = parse_var_reference(name)
+    if axis == NEG_ACCESSOR:
+        return bool(_ctx_negative(ctx, base, _index))
     if axis:
         # An axis is present when the binding actually rolled it. Checked
         # against the axes bucket, not ctx: `$outfit.SHOES` can exist while
@@ -179,6 +215,10 @@ def _match_condition(condition: dict[str, Any], ctx: Any) -> bool:
         return _ctx_has(ctx, var) and _ctx_get(ctx, var) != ""
     if op == "is_unset":
         return not _ctx_has(ctx, var) or _ctx_get(ctx, var) == ""
+    if op == "is_empty":
+        return _ctx_has(ctx, var) and _ctx_get(ctx, var) == ""
+    if op == "is_not_empty":
+        return _ctx_get(ctx, var) != ""
     actual = _ctx_get(ctx, var)
     if op == "equals":
         return actual == value
@@ -192,6 +232,91 @@ def _match_condition(condition: dict[str, Any], ctx: Any) -> bool:
         except re.error:
             return False
     return False
+
+
+def is_condition_group(condition: Any) -> bool:
+    """A group carries ``conditions``; a single test carries ``var``."""
+    return isinstance(condition, dict) and "conditions" in condition
+
+
+def condition_leaves(condition: Any) -> list[dict[str, Any]]:
+    """Every single test in ``condition``, depth-first. The position in this
+    list is the test's override index (see ``condition_override_key``)."""
+    if is_condition_group(condition):
+        out: list[dict[str, Any]] = []
+        for child in condition.get("conditions") or []:
+            out.extend(condition_leaves(child))
+        return out
+    return [condition] if isinstance(condition, dict) else []
+
+
+def condition_override_key(branch_index: int, leaf_index: int) -> str:
+    """Key into ``condition_value_overrides[rule_id]`` for one test of a
+    branch. The first test keeps the bare branch index it always had, so a
+    single-test branch and its saved overrides are unchanged; later tests of a
+    grouped branch append ``.K`` (their depth-first position).
+
+    MUST stay byte-identical to the TS twin ``conditionOverrideKey`` in
+    ``src/extension/derivation-conditions.ts``.
+    """
+    return str(branch_index) if leaf_index == 0 else f"{branch_index}.{leaf_index}"
+
+
+def _with_value_overrides(
+    condition: Any, overrides: dict[str, Any], branch_index: int,
+) -> Any:
+    """Copy of ``condition`` with each test's ``value`` swapped for its
+    instance override, when one is set."""
+    counter = [0]
+
+    def walk(node: Any) -> Any:
+        if is_condition_group(node):
+            return {**node, "conditions": [walk(c) for c in node.get("conditions") or []]}
+        if not isinstance(node, dict):
+            return node
+        key = condition_override_key(branch_index, counter[0])
+        counter[0] += 1
+        override = overrides.get(key)
+        return {**node, "value": override} if isinstance(override, str) else node
+
+    return walk(condition)
+
+
+def _eval_condition(condition: Any, ctx: Any) -> bool:
+    if is_condition_group(condition):
+        children = condition.get("conditions") or []
+        if condition.get("match") == "any":
+            return any(_eval_condition(c, ctx) for c in children)
+        return all(_eval_condition(c, ctx) for c in children)
+    if not isinstance(condition, dict):
+        return False
+    return _match_condition(condition, ctx)
+
+
+def _explain_condition(condition: Any, ctx: Any) -> dict[str, Any]:
+    """The condition tree with each test's outcome and the value it read, for
+    the WP Debug node. Evaluates every test, unlike ``_eval_condition``, so a
+    group that short-circuited still shows why each member did or didn't
+    match. Reads only; nothing here writes to ``ctx``."""
+    if is_condition_group(condition):
+        children = [_explain_condition(c, ctx) for c in condition.get("conditions") or []]
+        match = "any" if condition.get("match") == "any" else "all"
+        results = [c["result"] for c in children]
+        return {
+            "match": match,
+            "result": any(results) if match == "any" else all(results),
+            "conditions": children,
+        }
+    if not isinstance(condition, dict):
+        return {"var": "", "op": "", "value": "", "actual": None, "result": False}
+    var = str(condition.get("var", ""))
+    return {
+        "var": var,
+        "op": str(condition.get("op", "")),
+        "value": condition.get("value", ""),
+        "actual": _ctx_get(ctx, var) if _ctx_has(ctx, var) else None,
+        "result": _match_condition(condition, ctx),
+    }
 
 
 def branch_carrier_key(rule_id: str, branch: int | str) -> str:
@@ -211,12 +336,30 @@ def _apply_action(
     ctx: Any,
     resolve_ctx: Any,
     carrier_key: str | None = None,
-) -> tuple[str, str] | None:
+    neg_seed: int | None = None,
+    neg_key: str | None = None,
+) -> tuple[str, str | None] | None:
+    """Run one action. Returns (target, new value), with value None for an
+    "Add to negative" / "Replace negative" action (it writes no value), or None when it did
+    nothing. `neg_seed` + `neg_key` key the action's negative stream
+    (`neg_key` defaults to the carrier key)."""
     target = action.get("target_var", "")
     if not target:
         return None
     mode = action.get("mode", "replace")
     raw_value = str(action.get("value", ""))
+    n_rng = negatives.neg_rng(
+        neg_seed or 0, f"derivation::{neg_key or carrier_key or target}",
+    )
+    if mode in NEGATIVE_MODES:
+        text = negatives.quiet_resolve(raw_value, resolve_ctx, n_rng)
+        negatives.set_entries(
+            ctx, target,
+            [{"text": text, "pick": None, "source": carrier_key or "derivation"}],
+            add=mode == "negative",
+        )
+        return target, None
+    col = negatives.Collector()
     # Stamp this derivation instance as the CARRIER of any `@{}` in the action
     # value, keyed by the branch key (`${rule_id}:${bi}` / `${rule_id}:else`) —
     # the `option_id` the SP3 nested-occurrence model matches a `pick` against.
@@ -231,26 +374,91 @@ def _apply_action(
         prev = get_carrier()
         set_carrier(module_uid, carrier_key)
         try:
-            new_value = resolve_text(raw_value, resolve_ctx)
+            with negatives.collecting(resolve_ctx) as col:
+                new_value = resolve_text(raw_value, resolve_ctx)
         finally:
             set_carrier(*prev)
     else:
-        new_value = resolve_text(raw_value, resolve_ctx)
+        with negatives.collecting(resolve_ctx) as col:
+            new_value = resolve_text(raw_value, resolve_ctx)
+    if mode not in ("replace", "append", "prepend"):
+        return None
+    # The written text carries the negatives of the variables it read and of
+    # the options its refs picked. Replace swaps the target's negatives for
+    # those; append / prepend keep the old ones and add.
+    entries = negatives.entries_for_reads(ctx, col.reads)
+    entries += negatives.own_entries(
+        col.ref_negatives, resolve_ctx, n_rng,
+        pick=None, source=carrier_key or "derivation",
+    )
+    negatives.set_entries(ctx, target, entries, add=mode != "replace")
     if mode == "replace":
         result = new_value
     elif mode == "append":
         result = _ctx_get(ctx, target) + new_value
-    elif mode == "prepend":
-        result = new_value + _ctx_get(ctx, target)
     else:
-        return None
+        result = new_value + _ctx_get(ctx, target)
     _ctx_set(ctx, target, result)
     return target, result
 
 
-def _validate_condition(condition: Any, where: str) -> None:
+def clause_actions(clause: Any) -> list[dict[str, Any]]:
+    """Every action a branch or ``else`` clause runs, in order: its ``action``
+    then its ``extra_actions``. Non-dict entries are skipped."""
+    if not isinstance(clause, dict):
+        return []
+    out = [clause.get("action")]
+    extra = clause.get("extra_actions")
+    if isinstance(extra, list):
+        out.extend(extra)
+    return [a for a in out if isinstance(a, dict)]
+
+
+def action_override_key(branch: int | str, action_index: int) -> str:
+    """Key into ``action_value_overrides[rule_id]`` for one action of a branch
+    (``branch`` is the index or ``"else"``). The first action keeps the bare
+    key it always had; later ones append ``.K``.
+
+    MUST stay byte-identical to the TS twin ``actionOverrideKey`` in
+    ``src/extension/derivation-conditions.ts``.
+    """
+    return str(branch) if action_index == 0 else f"{branch}.{action_index}"
+
+
+def _explain_action(
+    action: dict[str, Any], pair: tuple[str, str | None] | None,
+) -> dict[str, Any]:
+    """What a fired branch did: the variable, how it wrote, and the result."""
+    return {
+        "target": str(action.get("target_var", "")),
+        "mode": str(action.get("mode", "replace")),
+        "value": str(action.get("value", "")),
+        "result": pair[1] if pair is not None else None,
+    }
+
+
+def _validate_condition(condition: Any, where: str, depth: int = 0) -> None:
     if not isinstance(condition, dict):
         raise ValueError(f"derivation {where}.condition must be an object")
+    if is_condition_group(condition):
+        if depth >= _MAX_CONDITION_DEPTH:
+            raise ValueError(
+                f"derivation {where}.condition nests deeper than "
+                f"{_MAX_CONDITION_DEPTH} groups"
+            )
+        if condition.get("match") not in _VALID_MATCHES:
+            raise ValueError(
+                f"derivation {where}.condition.match must be one of "
+                f"{sorted(_VALID_MATCHES)}"
+            )
+        children = condition.get("conditions")
+        if not isinstance(children, list) or not children:
+            raise ValueError(
+                f"derivation {where}.condition.conditions must be a non-empty list"
+            )
+        for ci, child in enumerate(children):
+            _validate_condition(child, f"{where}.condition.conditions[{ci}]", depth + 1)
+        return
     var = condition.get("var")
     if not isinstance(var, str) or not var:
         raise ValueError(f"derivation {where}.condition.var must be a non-empty string")
@@ -278,6 +486,16 @@ def _validate_action(action: Any, where: str) -> None:
         )
     if not isinstance(action.get("value", ""), str):
         raise ValueError(f"derivation {where}.action.value must be a string")
+
+
+def _validate_extra_actions(clause: dict[str, Any], where: str) -> None:
+    extra = clause.get("extra_actions")
+    if extra is None:
+        return
+    if not isinstance(extra, list):
+        raise ValueError(f"derivation {where}.extra_actions must be a list")
+    for ai, action in enumerate(extra):
+        _validate_action(action, f"{where}.extra_actions[{ai}]")
 
 
 class DerivationHandler(ModuleHandler):
@@ -323,6 +541,7 @@ class DerivationHandler(ModuleHandler):
                     branch.get("condition"), f"rules[{ri}].branches[{bi}]"
                 )
                 _validate_action(branch.get("action"), f"rules[{ri}].branches[{bi}]")
+                _validate_extra_actions(branch, f"rules[{ri}].branches[{bi}]")
             else_clause = rule.get("else")
             if else_clause is not None:
                 if not isinstance(else_clause, dict):
@@ -330,6 +549,7 @@ class DerivationHandler(ModuleHandler):
                         f"derivation payload.rules[{ri}].else must be an object"
                     )
                 _validate_action(else_clause.get("action"), f"rules[{ri}].else")
+                _validate_extra_actions(else_clause, f"rules[{ri}].else")
 
     @classmethod
     def resolve(
@@ -413,10 +633,76 @@ class DerivationHandler(ModuleHandler):
             )
 
         out: dict[str, str] = {}
+        # WP Debug: which branch of each rule fired and why (explain runs only).
+        detail = module_detail(ctx)
+        explained: list[dict[str, Any]] | None = [] if detail is not None else None
+
+        def run_clause(
+            rule_id: str, key: int | str, clause: dict[str, Any],
+            rd: dict[str, Any] | None,
+        ) -> None:
+            """Run a fired branch's (or the else clause's) actions in order.
+            Each action sees the writes of the ones before it. Action-value
+            overrides are keyed per action (``action_override_key``)."""
+            carrier = branch_carrier_key(rule_id, key)
+            rule_overrides = action_overrides.get(rule_id)
+            b_ctx = _branch_resolve_ctx(carrier)
+            shown: list[dict[str, Any]] = []
+            saved: dict[str, Any] = {}
+            for ai, action in enumerate(clause_actions(clause)):
+                override = (
+                    rule_overrides.get(action_override_key(key, ai))
+                    if isinstance(rule_overrides, dict) else None
+                )
+                if isinstance(override, str):
+                    action = {**action, "value": override}
+                # Later actions key their negative stream apart so two
+                # "Add to negative" actions on one branch never share rolls.
+                pair = _apply_action(
+                    action, ctx, b_ctx,
+                    carrier_key=carrier,
+                    neg_seed=effective_seed,
+                    neg_key=carrier if ai == 0 else f"{carrier}.{ai}",
+                )
+                if pair is not None and pair[1] is not None:
+                    out[pair[0]] = pair[1]
+                    # The next action of this branch reads what this one
+                    # wrote. Scoped to the branch (restored below) so rules
+                    # keep resolving their values exactly as before.
+                    vars_view = getattr(b_ctx, "_vars", None)
+                    if isinstance(vars_view, dict):
+                        base = split_var_accessor(pair[0])[0]
+                        if base not in saved:
+                            saved[base] = vars_view.get(base, _MISSING)
+                        vars_view[base] = pair[1]
+                shown.append(_explain_action(action, pair))
+            vars_view = getattr(b_ctx, "_vars", None)
+            if isinstance(vars_view, dict):
+                for base, prev in saved.items():
+                    if prev is _MISSING:
+                        vars_view.pop(base, None)
+                    else:
+                        vars_view[base] = prev
+            if rd is not None:
+                rd["fired"] = key
+                if shown:
+                    rd["action"] = shown[0]
+                    rd["actions"] = shown
 
         for rule in rules:
             rule_id = rule.get("id", "")
+            rd: dict[str, Any] | None = None
+            if explained is not None:
+                rd = {
+                    "id": rule_id,
+                    "fired": None,
+                    "branches": [],
+                    "has_else": isinstance(rule.get("else"), dict),
+                }
+                explained.append(rd)
             if rule_id in disabled_rule_ids:
+                if rd is not None:
+                    rd["disabled"] = True
                 continue
 
             applied = False
@@ -425,59 +711,37 @@ class DerivationHandler(ModuleHandler):
                 # even when listed because disabling IF == disabling rule
                 # (the per-rule toggle handles that case cleanly).
                 if bi != 0 and branch_carrier_key(rule_id, bi) in disabled_branch_keys:
+                    if rd is not None:
+                        rd["branches"].append({"index": bi, "disabled": True})
                     continue
 
-                # Condition-value override per branch index.
+                # Condition-value overrides, one per test of the branch.
                 cond = branch.get("condition", {})
-                cond_override = (
-                    cond_overrides.get(rule_id, {}).get(str(bi))
-                    if isinstance(cond_overrides.get(rule_id), dict)
-                    else None
-                )
-                if isinstance(cond_override, str):
-                    cond = {**cond, "value": cond_override}
+                rule_cond_overrides = cond_overrides.get(rule_id)
+                if isinstance(rule_cond_overrides, dict) and rule_cond_overrides:
+                    cond = _with_value_overrides(cond, rule_cond_overrides, bi)
 
-                if _match_condition(cond, ctx):
-                    # Action-value override per branch index.
-                    action = branch.get("action", {})
-                    action_override = (
-                        action_overrides.get(rule_id, {}).get(str(bi))
-                        if isinstance(action_overrides.get(rule_id), dict)
-                        else None
-                    )
-                    if isinstance(action_override, str):
-                        action = {**action, "value": action_override}
-
-                    pair = _apply_action(
-                        action, ctx,
-                        _branch_resolve_ctx(branch_carrier_key(rule_id, bi)),
-                        carrier_key=branch_carrier_key(rule_id, bi),
-                    )
-                    if pair is not None:
-                        out[pair[0]] = pair[1]
+                matched = _eval_condition(cond, ctx)
+                if rd is not None:
+                    rd["branches"].append({
+                        "index": bi,
+                        "matched": matched,
+                        "condition": _explain_condition(cond, ctx),
+                    })
+                if matched:
+                    run_clause(rule_id, bi, branch, rd)
                     applied = True
                     break
 
             if not applied:
                 # ELSE skip when listed in disabled_branch_keys.
                 if branch_carrier_key(rule_id, "else") in disabled_branch_keys:
+                    if rd is not None:
+                        rd["else_disabled"] = True
                     continue
                 else_clause = rule.get("else")
                 if isinstance(else_clause, dict):
-                    action = else_clause.get("action", {})
-                    # ELSE action-value override under `else` key.
-                    action_override = (
-                        action_overrides.get(rule_id, {}).get("else")
-                        if isinstance(action_overrides.get(rule_id), dict)
-                        else None
-                    )
-                    if isinstance(action_override, str):
-                        action = {**action, "value": action_override}
-                    pair = _apply_action(
-                        action, ctx,
-                        _branch_resolve_ctx(branch_carrier_key(rule_id, "else")),
-                        carrier_key=branch_carrier_key(rule_id, "else"),
-                    )
-                    if pair is not None:
-                        out[pair[0]] = pair[1]
+                    run_clause(rule_id, "else", else_clause, rd)
+        if detail is not None:
+            detail["rules"] = explained
         return out

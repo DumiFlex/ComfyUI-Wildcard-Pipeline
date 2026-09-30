@@ -43,6 +43,7 @@ def _resolve_tokens(
     visited: tuple[str, ...],
 ) -> str:
     parts: list[str] = []
+    empty_refs: list[int] = []
     for tok in tokens:
         if tok.kind == TokenKind.TEXT:
             parts.append(tok.raw)
@@ -51,7 +52,10 @@ def _resolve_tokens(
         elif tok.kind == TokenKind.VAR:
             parts.append(_resolve_var(tok, ctx))
         elif tok.kind == TokenKind.REF:
-            parts.append(_resolve_ref(tok, ctx, depth, visited))
+            resolved = _resolve_ref(tok, ctx, depth, visited)
+            if not resolved:
+                empty_refs.append(len(parts))
+            parts.append(resolved)
         elif tok.kind == TokenKind.DP_BRACE:
             parts.append(_resolve_inline_pick(tok, ctx, depth, visited))
         elif tok.kind == TokenKind.DP_MULTI:
@@ -63,7 +67,52 @@ def _resolve_tokens(
             raise AssertionError("DP_PIPE should never be top-level")
         else:
             raise AssertionError(f"unknown token kind: {tok.kind}")
-    return "".join(parts)
+    return _join_tidy(parts, empty_refs)
+
+
+_HWS = " \t"
+
+
+def _join_tidy(parts: list[str], empty_refs: list[int]) -> str:
+    """Join resolved parts, closing the gap each empty ``@{}`` ref leaves.
+
+    A ref that resolves to nothing (a placeholder or deleted module, a filter
+    that matched no option, an empty option) used to leave its surroundings
+    behind: ``red @{x} dress`` became ``red  dress`` and ``red, @{x}, dress``
+    became ``red, , dress``. At each such seam this drops one doubled comma,
+    then one side of doubled spaces/tabs, and at the start or end of the text
+    the dangling comma and spaces. Newlines and everything away from the seam
+    are left exactly as written. Mirrored in ``resolveTokens.ts``.
+    """
+    if not empty_refs:
+        return "".join(parts)
+    out = list(parts)
+    for i in empty_refs:
+        left = next((j for j in range(i - 1, -1, -1) if out[j]), None)
+        right = next((j for j in range(i + 1, len(out)) if out[j]), None)
+        if left is None and right is None:
+            continue
+        if left is None:
+            out[right] = _strip_lead(out[right])
+            continue
+        if right is None:
+            out[left] = _strip_trail(out[left])
+            continue
+        if out[left].rstrip(_HWS).endswith(",") and out[right].lstrip(_HWS).startswith(","):
+            out[right] = out[right].lstrip(_HWS)[1:]
+        if out[right] and out[left][-1:] in (" ", "\t") and out[right][0] in _HWS:
+            out[right] = out[right].lstrip(_HWS)
+    return "".join(out)
+
+
+def _strip_lead(text: str) -> str:
+    text = text.lstrip(_HWS)
+    return text[1:].lstrip(_HWS) if text.startswith(",") else text
+
+
+def _strip_trail(text: str) -> str:
+    text = text.rstrip(_HWS)
+    return text[:-1].rstrip(_HWS) if text.endswith(",") else text
 
 
 _VAR_SURFACES_ALLOWED = frozenset(["combine", "derivation", "assembler"])
@@ -109,8 +158,15 @@ def _resolve_var(tok: Token, ctx: ResolveContext) -> str:
     # nothing bound `$outfit` itself, and must not raise `unknown_var` on the
     # way past.
     axis = tok.meta.get("axis")
+    if axis == NEG_ACCESSOR:
+        # `$name.neg` reads the variable's negatives. Not a read of the
+        # variable itself: it carries no negatives along (that would echo
+        # them) and does not count as rendering `$name`.
+        return _resolve_negative(tok, ctx)
     if axis:
-        return _resolve_axis(tok, ctx, str(axis))
+        out = _resolve_axis(tok, ctx, str(axis))
+        _note_read(ctx, name, tok.meta.get("index"), out)
+        return out
     value = ctx.get_var(name)
     if value is None:
         _push_warning(
@@ -130,7 +186,57 @@ def _resolve_var(tok: Token, ctx: ResolveContext) -> str:
     # as a 1-element list so `$str.0` == `$str` and `$str.1` == "". The
     # accessor + ListVar-fold contract lives in deref_var_value
     # (engine/syntax/types.py); the derivation + converter reads share it.
-    return deref_var_value(value, tok.meta.get("index"))
+    out = deref_var_value(value, tok.meta.get("index"))
+    _note_read(ctx, name, tok.meta.get("index"), out)
+    return out
+
+
+#: The accessor that reads a variable's negatives (`$name.neg`,
+#: `$name.K.neg`). Reserved: an `accepts` tag group cannot use this name.
+NEG_ACCESSOR = "neg"
+
+
+def _resolve_negative(tok: Token, ctx: ResolveContext) -> str:
+    """Render `$name.neg` / `$name.K.neg`: the negatives filed for `name`
+    (all of them, or pick K's plus the whole-value ones), tag-deduped.
+
+    A variable with no negatives renders empty without a warning, since most
+    variables have none. Only an unbound name that also has none warns."""
+    name = str(tok.meta.get("name", ""))
+    index = tok.meta.get("index")
+    getter = getattr(ctx, "get_negative", None)
+    got = getter(name, index if isinstance(index, int) else None) if callable(getter) else None
+    if got is None and ctx.get_var(name) is None:
+        _push_warning(
+            ctx,
+            type="unknown_var",
+            severity="warn",
+            module_id="",
+            source_field="",
+            position=tok.start,
+            token_index=None,
+            detail={"name": name, "surface": ctx.surface},
+            message=f"Unknown variable ${name}",
+        )
+    return got or ""
+
+
+def _note_read(ctx: ResolveContext, name: str, index: Any, out: str) -> None:
+    """Tell a collecting context (send-to-negative) which binding this read
+    rendered, and which pick. An indexed read that rendered nothing (out of
+    range) carries nothing."""
+    note = getattr(ctx, "note_var_read", None)
+    if not callable(note):
+        return
+    if index is not None and not out:
+        return
+    note(name, index if isinstance(index, int) else None)
+
+
+def _note_ref_negative(ctx: ResolveContext, option: dict | None) -> None:
+    note = getattr(ctx, "note_ref_negative", None)
+    if callable(note) and isinstance(option, dict):
+        note(option)
 
 
 def _resolve_axis(tok: Token, ctx: ResolveContext, axis: str) -> str:
@@ -400,7 +506,9 @@ def _resolve_multi_pick(
             try:
                 parts: list[str] = []
                 id_of = {str(o.get("value", "")): o.get("id") for o in pool}
+                opt_of = {str(o.get("value", "")): o for o in pool}
                 for v in chosen:
+                    _note_ref_negative(ctx, opt_of.get(v))
                     logged = _log_ref_pick(ctx, ref_uuid, id_of.get(v), depth, v)
                     out = _resolve_tokens(
                         tokenize_text(v), ctx, depth=depth + 1,
@@ -691,6 +799,11 @@ def _resolve_ref(
     chosen = _pick_weighted(options, ctx.rng)
     if chosen is None:
         return ""
+
+    # Send-to-negative: the picked option's negative belongs to whatever this
+    # text resolves into (the carrier binding). Noted even for an empty pick,
+    # so a "none" option can still say what it rules out.
+    _note_ref_negative(ctx, chosen)
 
     chosen_value = str(chosen.get("value", ""))
     if not chosen_value:

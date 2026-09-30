@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { scanConflicts, scanInjectorConflicts } from "./conflicts";
+import { scanConflicts, scanInjectorConflicts, scanTemplateConflicts } from "./conflicts";
 import type { ContextWidgetValue, InjectorRowsValue } from "../widgets/_shared";
 
 function injRow(over: Partial<InjectorRowsValue["rows"][number]> = {}): InjectorRowsValue["rows"][number] {
@@ -208,7 +208,7 @@ const derivation = (
   id: string,
   rules: Array<{
     branches: Array<{
-      condition: { var: string; op?: string; value?: string };
+      condition: { var: string; op?: string; value?: string } | { match: string; conditions: unknown[] };
       action: { target_var: string; mode?: string; value?: string };
     }>;
     else?: { action: { target_var: string; mode?: string; value?: string } };
@@ -237,6 +237,30 @@ describe("scanConflicts — derivation var/template scanning", () => {
     const out = scanConflicts(value, []);
     expect(out).toEqual([
       { moduleId: "d1", variable: "age", type: "missing_template_variable", severity: "warning" },
+    ]);
+  });
+
+  it("flags a missing variable read by any test of an AND / OR group", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        derivation("d1", [{
+          branches: [{
+            condition: {
+              match: "all",
+              conditions: [
+                { var: "age", op: "equals", value: "30" },
+                { match: "any", conditions: [{ var: "ghost", op: "exists", value: "" }] },
+              ],
+            },
+            action: { target_var: "mood", mode: "replace", value: "calm" },
+          }],
+        }]),
+      ],
+    };
+    const out = scanConflicts(value, ["age"]);
+    expect(out).toEqual([
+      { moduleId: "d1", variable: "ghost", type: "missing_template_variable", severity: "warning" },
     ]);
   });
 
@@ -1392,6 +1416,24 @@ describe("scanConflicts — derivation_broken_nested_ref", () => {
     });
   });
 
+  it("scans this node's action value overrides (e.g. a placeholder typed on the canvas)", () => {
+    const d = derivationAction("d1", "ok");
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [{
+        ...d,
+        instance: { ...(d.instance ?? {}), action_value_overrides: { r1: { "0": "a @{3c7e91a2#castle}" } } },
+      }],
+    };
+    const out = scanConflicts(value, ["age"]);
+    expect(out).toContainEqual({
+      moduleId: "d1",
+      variable: "3c7e91a2",
+      type: "derivation_broken_nested_ref",
+      severity: "warning",
+    });
+  });
+
   it("scans the else action value too", () => {
     const value: ContextWidgetValue = {
       version: 1,
@@ -1645,5 +1687,24 @@ describe("scanConflicts — unknown_tag_axis", () => {
     };
     const out = scanConflicts(value, []);
     expect(out.filter((c) => c.type === "unknown_tag_axis")).toHaveLength(1);
+  });
+});
+
+describe("scanTemplateConflicts — Assembler negative template", () => {
+  it("reports $vars missing from the negative template, never $negatives", () => {
+    const out = scanTemplateConflicts("$hair", ["hair"], "lowres, not $mood, $negatives");
+    expect(out).toEqual([
+      { moduleId: "", variable: "mood", type: "missing_template_variable", severity: "warning" },
+    ]);
+  });
+
+  it("does not report a name twice across the two templates", () => {
+    const out = scanTemplateConflicts("$ghost", [], "$ghost, $negatives");
+    expect(out.map((c) => c.variable)).toEqual(["ghost"]);
+  });
+
+  it("$negatives in the PROMPT template is still an ordinary missing var", () => {
+    const out = scanTemplateConflicts("$negatives", []);
+    expect(out.map((c) => c.variable)).toEqual(["negatives"]);
   });
 });

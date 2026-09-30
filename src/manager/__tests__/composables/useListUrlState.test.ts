@@ -67,9 +67,9 @@ describe("useListUrlState", () => {
     expect(state.filters).toEqual(["a", "b"]);
   });
 
-  it("BASE_LIST_SCHEMA exposes the canonical 8 base fields", () => {
+  it("BASE_LIST_SCHEMA exposes the canonical 9 base fields", () => {
     expect(Object.keys(BASE_LIST_SCHEMA).sort()).toEqual(
-      ["category", "favorites", "nsfw", "page", "pageSize", "q", "sortBy", "tags"].sort(),
+      ["category", "favorites", "nsfw", "page", "pageSize", "q", "sortBy", "tagMode", "tags"].sort(),
     );
     expect(BASE_LIST_SCHEMA.category.urlKey).toBe("cat");
     expect(BASE_LIST_SCHEMA.pageSize.urlKey).toBe("ps");
@@ -78,5 +78,7 @@ describe("useListUrlState", () => {
     expect(BASE_LIST_SCHEMA.sortBy.urlKey).toBe("sort");
     expect(BASE_LIST_SCHEMA.nsfw.urlKey).toBe("nsfw");
     expect(BASE_LIST_SCHEMA.nsfw.default).toBe("all");
+    expect(BASE_LIST_SCHEMA.tagMode.urlKey).toBe("tagmode");
+    expect(BASE_LIST_SCHEMA.tagMode.default).toBe("any");
   });
 });

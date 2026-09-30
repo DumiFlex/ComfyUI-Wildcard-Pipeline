@@ -553,10 +553,15 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
       >{{ accessorIndex }}</span><span
         v-if="accessorAxis"
         class="wp-refchip__accessor"
-        :class="{ 'wp-refchip__accessor--unknown': axisKnown === false }"
-        :title="axisKnown === false
-          ? `No '${axis}' axis on this variable — is that tag group marked 'accepts'?`
-          : undefined"
+        :class="{
+          'wp-refchip__accessor--unknown': axisKnown === false && axis !== 'neg',
+          'wp-refchip__accessor--neg': axis === 'neg',
+        }"
+        :title="axis === 'neg'
+          ? 'This variable\'s negatives'
+          : axisKnown === false
+            ? `No '${axis}' axis on this variable — is that tag group marked 'accepts'?`
+            : undefined"
       >{{ accessorAxis }}</span></span>
     <!-- The pool this ref resolves against came from THIS node's own module
          snapshot, not the library. That changes what the ref will actually
@@ -619,14 +624,15 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
         <!-- Broken ref. The `@{uuid#name}` syntax preserves the name the
              target had when the reference was written, so the card can say
              WHICH module went missing instead of only that something did.
-             Stated as "was", because presenting a name we can no longer verify
-             as current is how the old card ended up lying. -->
+             It does not claim the module once existed: a placeholder created
+             from the `@` autocomplete is broken on purpose, under a name no
+             module has had yet. -->
         <template v-else-if="!resolved">
           <div class="wp-refchip-pop__count" data-test="refchip-broken">
             not in the library
           </div>
           <div v-if="name" class="wp-refchip-pop__broken" data-test="refchip-broken-name">
-            was “{{ name }}” — deleted, renamed away, or never imported here
+            “{{ name }}”: a placeholder, or deleted, renamed away, or never imported here
           </div>
           <div v-else class="wp-refchip-pop__broken">
             this reference stored no name, so only the id is known
@@ -776,6 +782,11 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
 .wp-refchip__accessor {
   color: var(--wp-axis, #fbbf24);
   font-weight: var(--wp-weight-semibold);
+}
+
+/* `.neg` reads the variable's negatives, not a tag: the negative red. */
+.wp-refchip__accessor--neg {
+  color: var(--wp-danger, #ef4444);
 }
 
 /* The pick-index segment (`.0`). Deliberately UNaccented — it shares the

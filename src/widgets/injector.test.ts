@@ -256,6 +256,18 @@ describe("reorderInjectorRows", () => {
     expect(next[1].internal).toBe(false);
   });
 
+  it("a row's template and negative move with it on reorder", () => {
+    const rows = [
+      makeRow({ slot_name: "input_0", binding: "a" }),
+      makeRow({ slot_name: "input_1", binding: "b", template: "x $input_1", negative: "no $input_1" }),
+    ];
+    const next = reorderInjectorRows(rows, 1, 0);
+    expect(next[0].binding).toBe("b");
+    expect(next[0].template).toBe("x $input_1");
+    expect(next[0].negative).toBe("no $input_1");
+    expect(next[1].negative).toBeUndefined();
+  });
+
   it("slot_label stays with the socket position, not the dragged row", () => {
     // input_0 labelled "test 1", input_1 default (no label), input_2 "test 2".
     // Swap the input_1 row up past the test-2 row: the row landing on socket

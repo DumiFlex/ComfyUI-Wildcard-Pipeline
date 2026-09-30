@@ -1,285 +1,266 @@
 <script setup lang="ts">
 /**
- * Settings — port of `SettingsScreen` in
- * `docs/design-handoff/wildcard-pipeline/project/screens/utilities.jsx`.
- * About / Theme / Display / Browser preferences / Database / Wildcard
- * cards using the local ui/* primitives. The legacy inline Storage card
- * has been split into BrowserPrefsCard (per-device localStorage reset
- * with dot-prefix fix) and DatabaseCard (server-side SQLite info +
- * maintenance ops).
+ * Settings — a section nav on the left (with search), one section at a time
+ * on the right. The page used to be a single ~3,500px column of cards; now
+ * each section is short enough to take in at a glance, and search reaches any
+ * setting by name.
+ *
+ * The section is part of the URL (`/settings/<section>`, `#<setting>` for a
+ * search hit), so links, the command palette and the back button all work.
+ * Every row a search can land on is listed in `settings-index.ts`.
  */
-import { computed } from "vue";
-
-import Card from "../components/ui/Card.vue";
-import Field from "../components/ui/Field.vue";
+import { computed, nextTick, ref, watch, type Component } from "vue";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import Icon from "../components/ui/Icon.vue";
-import Input from "../components/ui/Input.vue";
-import Toggle from "../components/ui/Toggle.vue";
-import Select from "../components/ui/Select.vue";
-import type { SelectOption } from "../components/ui/select-types";
-import Button from "../components/ui/Button.vue";
-import BrowserPrefsCard from "../components/settings/BrowserPrefsCard.vue";
-import DatabaseCard from "../components/settings/DatabaseCard.vue";
-import TagAutocompleteCard from "../components/settings/TagAutocompleteCard.vue";
-import ModelSourcesCard from "../components/settings/ModelSourcesCard.vue";
-import { useUiStore, type ThemeMode } from "../stores/uiStore";
-import { useReleaseCheck } from "../composables/useReleaseCheck";
-import { GITHUB_REPO } from "../config/links";
+import GeneralSection from "../components/settings/sections/GeneralSection.vue";
+import AppearanceSection from "../components/settings/sections/AppearanceSection.vue";
+import EditingSection from "../components/settings/sections/EditingSection.vue";
+import AutocompleteSection from "../components/settings/sections/AutocompleteSection.vue";
+import CanvasSection from "../components/settings/sections/CanvasSection.vue";
+import TestRunnerSection from "../components/settings/sections/TestRunnerSection.vue";
+import LibrarySection from "../components/settings/sections/LibrarySection.vue";
+import AdvancedSection from "../components/settings/sections/AdvancedSection.vue";
+import {
+  SECTIONS,
+  isSectionId,
+  searchSettings,
+  type SectionId,
+  type SettingEntry,
+} from "../components/settings/settings-index";
 
-const uiStore = useUiStore();
+const props = defineProps<{ section?: string }>();
 
-const { latestVersion, hasUpdate, lastChecked, checking, checkNow } = useReleaseCheck();
+const route = useRoute();
+const router = useRouter();
 
-const updateStatus = computed(() =>
-  hasUpdate.value && latestVersion.value
-    ? `Update v${latestVersion.value} available`
-    : "Up to date",
-);
-const lastCheckedLabel = computed(() => {
-  if (!lastChecked.value) return "never checked";
-  const then = new Date(lastChecked.value).getTime();
-  if (Number.isNaN(then)) return "never checked";
-  const mins = Math.round((Date.now() - then) / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins} min ago`;
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs} h ago`;
-  return `${Math.round(hrs / 24)} d ago`;
-});
+const COMPONENTS: Record<SectionId, Component> = {
+  general: GeneralSection,
+  appearance: AppearanceSection,
+  editing: EditingSection,
+  autocomplete: AutocompleteSection,
+  canvas: CanvasSection,
+  "test-runner": TestRunnerSection,
+  library: LibrarySection,
+  advanced: AdvancedSection,
+};
 
-const repoUrl = GITHUB_REPO;
-// Build-time injected via vite `define` (see vite.config.mts) — source
-// of truth is package.json, which semantic-release stamps on every
-// release. Keeps the About card from drifting from the published
-// version (we shipped 1.7.0 with `1.4.x-dev` hardcoded here pre-fix).
-const appVersion = __APP_VERSION__;
-const appLicense = __APP_LICENSE__;
+const active = computed<SectionId>(() => (isSectionId(props.section) ? props.section : "general"));
+const activeDef = computed(() => SECTIONS.find((s) => s.id === active.value) ?? SECTIONS[0]);
 
-interface ThemeOption { value: ThemeMode; label: string; icon: string }
-const THEMES: ThemeOption[] = [
-  { value: "dark",  label: "Dark",  icon: "pi-moon" },
-  { value: "light", label: "Light", icon: "pi-sun" },
-  { value: "auto",  label: "Auto",  icon: "pi-desktop" },
-];
+const query = ref("");
+const results = computed<SettingEntry[]>(() => searchSettings(query.value));
+const searching = computed(() => query.value.trim().length > 0);
 
-function setTheme(mode: ThemeMode) {
-  uiStore.setThemeMode(mode);
+function sectionLabel(id: SectionId): string {
+  return SECTIONS.find((s) => s.id === id)?.label ?? id;
 }
 
-const SUBCAT_DEFAULT_OPTIONS: SelectOption[] = [
-  { value: "populated", label: "Expanded when it has groups" },
-  { value: "always", label: "Always expanded" },
-  { value: "never", label: "Always collapsed" },
-];
+function openResult(e: SettingEntry): void {
+  query.value = "";
+  void router.push({ name: "settings", params: { section: e.section }, hash: `#${e.key}` });
+}
+
+function onSearchKey(ev: KeyboardEvent): void {
+  if (ev.key === "Enter" && results.value[0]) openResult(results.value[0]);
+  if (ev.key === "Escape") query.value = "";
+}
+
+/** Bring a search target into view once its section has rendered. Sections
+ *  load their data asynchronously, so retry briefly until the row exists. */
+async function revealHash(): Promise<void> {
+  const id = route.hash.slice(1);
+  if (!id) return;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    await nextTick();
+    const el = document.getElementById(id);
+    if (el) {
+      if (el instanceof HTMLDetailsElement) el.open = true;
+      el.scrollIntoView?.({ block: "center", behavior: "smooth" });
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
+
+watch(() => [active.value, route.hash], () => { void revealHash(); }, { immediate: true });
 </script>
 
 <template>
   <div class="wp-page wp-settings">
-    <div class="wp-page__header">
-      <div class="wp-page__title-wrap">
-        <h1 class="wp-page__title">Settings</h1>
-        <p class="wp-page__subtitle">
-          Application preferences. Stored locally.
-        </p>
-      </div>
-    </div>
-
-    <Card title="About">
-      <div class="wp-settings__about">
-        <span class="wp-dim">Version</span><span class="wp-mono">{{ appVersion }}</span>
-        <span class="wp-dim">License</span><span class="wp-mono">{{ appLicense }}</span>
-        <span class="wp-dim">Repository</span>
-        <a
-          class="wp-settings__link wp-mono"
-          :href="repoUrl"
-          target="_blank"
-          rel="noopener"
+    <aside class="wp-settings__nav" aria-label="Settings sections">
+      <h1 class="wp-settings__title">Settings</h1>
+      <div class="wp-settings__search">
+        <Icon name="pi-search" />
+        <input
+          v-model="query"
+          type="search"
+          placeholder="Search settings"
+          aria-label="Search settings"
+          data-test="settings-search"
+          @keydown="onSearchKey"
         >
-          <Icon name="pi-github" /> {{ repoUrl }}
-        </a>
       </div>
-    </Card>
-
-    <Card title="Editing">
-      <Field
-        label="Keep empty tag groups"
-        hint="A group with no tags in it normally disappears when you save the wildcard. Turn this on to keep the empty box so you can fill it later."
-      >
-        <Toggle
-          :model-value="uiStore.keepEmptyTagGroups"
-          label="Keep empty groups"
-          data-test="settings-keep-empty-groups"
-          @update:model-value="uiStore.setKeepEmptyTagGroups($event)"
-        />
-      </Field>
-      <Field
-        label="Sub-categories panel"
-        hint="Whether the sub-categories / axes panel opens on its own when you edit a wildcard. 'Expanded when it has groups' opens it only for wildcards that already have some."
-      >
-        <Select
-          :model-value="uiStore.subcatDefault"
-          :options="SUBCAT_DEFAULT_OPTIONS"
-          aria-label="Sub-categories panel default"
-          data-test="settings-subcat-default"
-          @update:model-value="(v) => uiStore.setSubcatDefault(v as 'populated' | 'always' | 'never')"
-        />
-      </Field>
-    </Card>
-
-    <TagAutocompleteCard />
-    <ModelSourcesCard />
-
-    <Card title="Updates">
-      <Field
-        label="Check for updates on launch"
-        hint="Look for a newer release when the manager opens. Turn off to check only manually."
-      >
-        <Toggle
-          :model-value="uiStore.checkOnLaunch"
-          label="Check on launch"
-          data-test="settings-check-on-launch"
-          @update:model-value="uiStore.setCheckOnLaunch($event)"
-        />
-      </Field>
-      <div class="wp-settings__update-row">
-        <div>
-          <p class="wp-settings__update-status" data-test="settings-update-status">{{ updateStatus }}</p>
-          <p class="wp-dim wp-settings__update-sub">Last checked · {{ lastCheckedLabel }}</p>
-        </div>
-        <Button
-          variant="secondary"
-          :loading="checking"
-          data-test="settings-check-now"
-          @click="checkNow"
-        >Check now</Button>
-      </div>
-    </Card>
-
-    <Card title="Theme">
-      <p class="wp-dim wp-settings__hint">
-        Choose dark, light, or follow the OS preference.
-      </p>
-      <div class="wp-settings__radio" role="radiogroup" aria-label="Theme">
-        <button
-          v-for="t in THEMES"
-          :key="t.value"
-          type="button"
-          class="wp-settings__chip"
-          role="radio"
-          :aria-checked="uiStore.themeMode === t.value"
-          :data-active="uiStore.themeMode === t.value ? 'true' : 'false'"
-          :data-test="`settings-theme-${t.value}`"
-          @click="setTheme(t.value)"
+      <nav class="wp-settings__sections">
+        <RouterLink
+          v-for="s in SECTIONS"
+          :key="s.id"
+          :to="{ name: 'settings', params: { section: s.id } }"
+          class="wp-settings__section-link"
+          :data-active="!searching && s.id === active ? 'true' : 'false'"
+          :aria-current="!searching && s.id === active ? 'page' : undefined"
+          :data-test="`settings-nav-${s.id}`"
         >
-          <Icon :name="t.icon" /> {{ t.label }}
-        </button>
-      </div>
-    </Card>
+          <Icon :name="s.icon" />{{ s.label }}
+        </RouterLink>
+      </nav>
+    </aside>
 
-    <Card title="Display">
-      <Field
-        label="Density"
-        hint="Compact reduces spacing for long lists."
-      >
-        <Toggle
-          :model-value="uiStore.density === 'compact'"
-          label="Compact mode"
-          data-test="settings-density-compact"
-          @update:model-value="uiStore.setDensity($event ? 'compact' : 'comfortable')"
-        />
-      </Field>
-    </Card>
-
-    <BrowserPrefsCard />
-
-    <DatabaseCard />
-
-    <Card title="Wildcard">
-      <Field
-        label="Ref recursion limit"
-        hint="How deep nested @{uuid} references can resolve. Range: 1–32. Default: 8."
-        for="wildcard-max-ref-depth"
-      >
-        <Input
-          id="wildcard-max-ref-depth"
-          v-model.number="uiStore.maxRefDepth"
-          type="number"
-          data-test="settings-wildcard-max-ref-depth"
-          :aria-label="'Wildcard ref recursion limit'"
-          :min="1"
-          :max="32"
-          :step="1"
-          @blur="(e) => {
-            const target = e.target as HTMLInputElement;
-            const val = parseInt(target.value, 10);
-            if (!isNaN(val)) {
-              uiStore.setMaxRefDepth(val);
-            }
-          }"
-        />
-      </Field>
-    </Card>
+    <main class="wp-settings__main">
+      <template v-if="searching">
+        <header class="wp-settings__head">
+          <h2 class="wp-settings__h2">
+            {{ results.length }} {{ results.length === 1 ? "result" : "results" }} for “{{ query.trim() }}”
+          </h2>
+          <p class="wp-settings__blurb">Enter opens the first one.</p>
+        </header>
+        <ul v-if="results.length" class="wp-settings__results" data-test="settings-results">
+          <li v-for="r in results" :key="r.key">
+            <button type="button" class="wp-settings__result" :data-test="`settings-result-${r.key}`" @click="openResult(r)">
+              <span class="wp-settings__result-where">{{ sectionLabel(r.section) }}</span>
+              <span class="wp-settings__result-label">{{ r.label }}</span>
+              <span class="wp-settings__result-hint">{{ r.hint }}</span>
+            </button>
+          </li>
+        </ul>
+        <p v-else class="wp-settings__blurb">Nothing matches. Try a shorter word.</p>
+      </template>
+      <template v-else>
+        <header class="wp-settings__head">
+          <h2 class="wp-settings__h2">{{ activeDef.label }}</h2>
+          <p class="wp-settings__blurb">{{ activeDef.blurb }}</p>
+        </header>
+        <component :is="COMPONENTS[active]" :key="active" />
+      </template>
+    </main>
   </div>
 </template>
 
 <style scoped>
-.wp-settings { max-width: 720px; }
-
-.wp-settings__about {
+.wp-settings {
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: var(--wp-space-3) var(--wp-space-6);
-  font-size: var(--wp-text-sm);
-  align-items: center;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: var(--wp-space-8, 32px);
+  align-items: start;
+  max-width: 1080px;
 }
-.wp-settings__link {
-  color: var(--wp-accent-text);
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--wp-space-3);
+.wp-settings__nav {
+  position: sticky;
+  top: var(--wp-space-6);
 }
-.wp-settings__link:hover { color: var(--wp-text); }
-
-.wp-settings__hint {
-  font-size: var(--wp-text-sm);
-  margin: 0 0 var(--wp-space-5);
-}
-
-.wp-settings__update-row {
+.wp-settings__title { font-size: 20px; margin: 0 0 var(--wp-space-5); }
+.wp-settings__search {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--wp-space-4);
-  margin-top: var(--wp-space-4);
-}
-.wp-settings__update-status { margin: 0; font-size: var(--wp-text-sm); color: var(--wp-text); font-weight: 600; }
-.wp-settings__update-sub { margin: 2px 0 0; font-size: var(--wp-text-sm); }
-
-.wp-settings__radio {
-  display: inline-flex;
   gap: var(--wp-space-3);
-}
-.wp-settings__chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--wp-space-3);
-  padding: 7px var(--wp-space-5); /* audit-exempt: 7px vertical hairline keeps chip height */
-  border-radius: var(--wp-radius);
-  border: 1px solid var(--wp-border);
   background: var(--wp-bg-2);
-  color: var(--wp-text-muted);
+  border: 1px solid var(--wp-border-strong, var(--wp-border));
+  border-radius: var(--wp-radius);
+  padding: 0 var(--wp-space-4);
+  color: var(--wp-text-dim);
+  margin-bottom: var(--wp-space-5);
+}
+.wp-settings__search:focus-within { border-color: var(--wp-accent-500); }
+.wp-settings__search input {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  border: 0;
+  background: transparent;
+  color: var(--wp-text);
+  font: inherit;
   font-size: var(--wp-text-sm);
-  font-weight: 500;
+  outline: none;
+}
+.wp-settings__sections { display: flex; flex-direction: column; gap: 2px; }
+.wp-settings__section-link {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-4);
+  padding: 7px var(--wp-space-4);
+  border-radius: var(--wp-radius);
+  color: var(--wp-text-muted);
+  text-decoration: none;
+  font-size: var(--wp-text-sm);
+}
+.wp-settings__section-link:hover { color: var(--wp-text); background: var(--wp-bg-3); }
+.wp-settings__section-link[data-active="true"] {
+  background: color-mix(in oklab, var(--wp-accent-500) 18%, transparent);
+  color: var(--wp-accent-text);
+  font-weight: 600;
+}
+.wp-settings__main { min-width: 0; max-width: 780px; }
+.wp-settings__head { margin-bottom: var(--wp-space-6); }
+.wp-settings__h2 { font-size: 18px; margin: 0; }
+.wp-settings__blurb { margin: 4px 0 0; font-size: var(--wp-text-sm); color: var(--wp-text-dim); }
+.wp-settings__results { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--wp-space-3); }
+.wp-settings__result {
+  width: 100%;
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  padding: var(--wp-space-4) var(--wp-space-5);
+  background: var(--wp-bg-2);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius-lg, 10px);
+  color: inherit;
+  font: inherit;
   cursor: pointer;
 }
-.wp-settings__chip:hover {
-  color: var(--wp-text);
-  border-color: var(--wp-border-strong);
+.wp-settings__result:hover { border-color: var(--wp-accent-500); }
+.wp-settings__result-where { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--wp-text-dim); }
+.wp-settings__result-label { font-weight: 600; font-size: var(--wp-text-sm); }
+.wp-settings__result-hint { font-size: 12px; color: var(--wp-text-dim); }
+
+@media (max-width: 860px) {
+  .wp-settings { grid-template-columns: minmax(0, 1fr); gap: var(--wp-space-5); }
+  .wp-settings__nav { position: static; }
+  .wp-settings__sections { flex-direction: row; flex-wrap: wrap; }
 }
-.wp-settings__chip[data-active="true"] {
-  background: color-mix(in oklab, var(--wp-accent-500) 18%, transparent);
-  border-color: var(--wp-accent-500);
+</style>
+
+<style>
+/* Shared by every Settings section (they are separate SFCs, so scoped styles
+ * cannot reach across). Prefixed, per the extension's CSS isolation rule. */
+.wp-set-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  line-height: 1.6;
+  padding: 1px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--wp-border-strong, var(--wp-border));
+  color: var(--wp-text-muted);
+  white-space: nowrap;
+}
+.wp-set-pill::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.8;
+}
+.wp-set-pill[data-tone="ok"] { color: var(--wp-success); border-color: color-mix(in oklab, var(--wp-success) 40%, transparent); }
+.wp-set-pill[data-tone="warn"] { color: var(--wp-warn); border-color: color-mix(in oklab, var(--wp-warn) 40%, transparent); }
+.wp-set-error { margin: 0 0 var(--wp-space-5); font-size: var(--wp-text-sm); color: var(--wp-danger, #f87171); }
+.wp-set-callout {
+  margin: 0 0 var(--wp-space-6);
+  padding: var(--wp-space-4) var(--wp-space-5);
+  font-size: var(--wp-text-sm);
   color: var(--wp-accent-text);
+  background: color-mix(in oklab, var(--wp-accent-500) 10%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-accent-500) 35%, transparent);
+  border-radius: var(--wp-radius);
 }
 </style>

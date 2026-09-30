@@ -30,12 +30,15 @@ import {
 import {
   CONSTRAINT_ONLY_SCHEMA_VERSION,
   CURRENT_SCHEMA_VERSION,
+  DERIVATION_CONDITIONS_SCHEMA_VERSION,
+  NEGATIVES_SCHEMA_VERSION,
   SP2B_SCHEMA_VERSION,
   SP3_REACH_SCHEMA_VERSION,
   TAG_AXES_SCHEMA_VERSION,
 } from "./migrations";
 import { getValidator, type ModuleSubtype } from "@/validators";
 import { version as ENGINE_VERSION } from "../../../package.json";
+import { isNegativeMode } from "../../extension/derivation-conditions";
 
 export interface PublishablePayload {
   /** Engine-row shape ready to ship: `{id, type?, name, payload|children, …}` */
@@ -182,9 +185,71 @@ export function usesConstraintOnlyRule(node: unknown): boolean {
   return false;
 }
 
+const V7_CONDITION_OPS: ReadonlySet<unknown> = new Set(["is_empty", "is_not_empty"]);
+
+function isV7Condition(cond: unknown): boolean {
+  if (!isPlainObject(cond)) return false;
+  if ("conditions" in cond) return true;
+  return V7_CONDITION_OPS.has(cond.op);
+}
+
+/**
+ * Walk `node` (object/array, any depth) looking for a derivation branch whose
+ * `condition` is an AND / OR group or a test using `is_empty` /
+ * `is_not_empty`. Mirror of
+ * `engine/migrations/stamping.py:uses_derivation_conditions`.
+ */
+export function usesDerivationConditions(node: unknown): boolean {
+  if (Array.isArray(node)) {
+    return node.some((child) => usesDerivationConditions(child));
+  }
+  if (!isPlainObject(node)) return false;
+  const branches = node.branches;
+  if (Array.isArray(branches)
+    && branches.some((b) => isPlainObject(b) && isV7Condition(b.condition))) {
+    return true;
+  }
+  for (const value of Object.values(node)) {
+    if (value && typeof value === "object" && usesDerivationConditions(value)) return true;
+  }
+  return false;
+}
+
+/** `$name.neg`, `$name.K.neg` (and `$name.neg.K`): reads a variable's
+ *  negatives. Mirror of the engine's `_NEG_ACCESSOR_RE`. */
+const NEG_ACCESSOR_RE = /\$[A-Za-z_][A-Za-z0-9_]*(?:\.\d+)?\.neg(?![A-Za-z0-9_])/;
+
+/**
+ * Walk `node` (object/array, any depth) looking for a non-empty `negative`
+ * string, a derivation action whose mode is `negative`, a derivation clause
+ * with more than one action (`extra_actions`), or text reading `$name.neg`.
+ * An empty negative is stored as absent and never needs v8. Mirror of
+ * `engine/migrations/stamping.py:uses_negatives`.
+ */
+export function usesNegatives(node: unknown): boolean {
+  if (Array.isArray(node)) return node.some((child) => usesNegatives(child));
+  if (!isPlainObject(node)) return false;
+  const neg = node.negative;
+  if (typeof neg === "string" && neg.trim() !== "") return true;
+  if (isNegativeMode(node.mode) && "target_var" in node) return true;
+  if (Array.isArray(node.extra_actions) && node.extra_actions.length > 0) return true;
+  for (const value of Object.values(node)) {
+    if (typeof value === "string" && NEG_ACCESSOR_RE.test(value)) return true;
+    if (value && typeof value === "object" && usesNegatives(value)) return true;
+  }
+  return false;
+}
+
 /**
  * Choose the community catalog `schema_version` to stamp for a payload — the
  * MAX version any feature in the payload requires:
+ *   - `NEGATIVES_SCHEMA_VERSION` (8) when ANY option, fixed value or combine
+ *     carries a non-empty `negative`, a derivation action uses the
+ *     `negative` mode, a derivation clause runs several actions, or text
+ *     reads `$name.neg` (`usesNegatives`).
+ *   - `DERIVATION_CONDITIONS_SCHEMA_VERSION` (7) when ANY derivation branch
+ *     groups tests with AND / OR or uses `is_empty` / `is_not_empty`
+ *     (`usesDerivationConditions`).
  *   - `CONSTRAINT_ONLY_SCHEMA_VERSION` (6) when ANY constraint rule uses the
  *     `only` mode (`usesConstraintOnlyRule`).
  *   - `TAG_AXES_SCHEMA_VERSION` (5) when ANY wildcard marks a tag group
@@ -204,6 +269,8 @@ export function usesConstraintOnlyRule(node: unknown): boolean {
  * doesn't actually use a newer feature.
  */
 export function schemaVersionForPayload(payload: Record<string, unknown>): number {
+  if (usesNegatives(payload)) return NEGATIVES_SCHEMA_VERSION;
+  if (usesDerivationConditions(payload)) return DERIVATION_CONDITIONS_SCHEMA_VERSION;
   if (usesConstraintOnlyRule(payload)) return CONSTRAINT_ONLY_SCHEMA_VERSION;
   if (usesAcceptsTagAxis(payload)) return TAG_AXES_SCHEMA_VERSION;
   if (usesTargetSelectReach(payload)) return SP3_REACH_SCHEMA_VERSION;

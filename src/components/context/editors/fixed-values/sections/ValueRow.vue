@@ -22,6 +22,9 @@ const props = defineProps<{
 const valueTokens = computed<PreviewToken[]>(() =>
   tokenize(props.row.value, "fixed_values"),
 );
+/** The library row's negative ("" = none), shown as a read-only hint. */
+const negativeText = computed(() => (props.library?.negative ?? "").trim());
+
 const hasNonTextToken = computed(() =>
   valueTokens.value.some((t) => t.kind !== "text"),
 );
@@ -183,6 +186,12 @@ function onDelete(): void {
           @update:model-value="(v: string) => emit('update', props.row.id, { value: v })"
         />
       </span>
+      <span
+        v-if="negativeText"
+        class="row__neg"
+        data-test="row-neg"
+        :title="`Negative from the library — edit it there`"
+      ><span class="row__neg-tag">NEG</span> {{ negativeText }}</span>
       <span
         v-if="hasNonTextToken"
         class="row__value-preview"
@@ -369,6 +378,23 @@ function onDelete(): void {
   display: flex;
   flex-direction: column;
   min-width: 0;
+}
+.row__neg {
+  margin-top: 3px;
+  font: 10px/1.4 var(--wp-font-mono);
+  color: var(--wp-text-muted, var(--wp-text2));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.row__neg-tag {
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--wp-danger, #ef4444);
+  background: color-mix(in srgb, var(--wp-danger, #ef4444) 14%, transparent);
 }
 .row__value-cell--mod .row__value-wrap { border-color: var(--wp-accent); }
 .row__value-preview {

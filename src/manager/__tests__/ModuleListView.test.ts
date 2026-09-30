@@ -18,6 +18,7 @@ interface Filter {
   favorites?: boolean;
   category?: string | null;
   tags?: string[];
+  tagMode?: string;
   sortBy?: string;
 }
 
@@ -167,6 +168,29 @@ describe("ModuleListView.vue", () => {
     await favChip.find(".wp-chip__close").trigger("click");
     await flushPromises();
     expect(filter.favorites).toBe(false);
+  });
+
+  it("tag filter matches any tag by default and all tags when switched", async () => {
+    const items: Row[] = [
+      { id: "a", name: "A", updated_at: "2025-01-03T00:00:00Z", tags: ["outfit", "nsfw"] },
+      { id: "b", name: "B", updated_at: "2025-01-02T00:00:00Z", tags: ["outfit"] },
+      { id: "c", name: "C", updated_at: "2025-01-01T00:00:00Z", tags: ["scene"] },
+    ];
+    const { wrap, filter } = mountView({ items, filter: { tags: ["outfit", "nsfw"] } });
+    await flushPromises();
+    const shownIds = () => wrap.findAll(".wp-test-edit").map((b) => b.attributes("data-id"));
+    expect(shownIds()).toEqual(["a", "b"]);
+
+    await wrap.find('[data-test="tag-match-all"]').trigger("click");
+    await flushPromises();
+    expect(filter.tagMode).toBe("all");
+    expect(shownIds()).toEqual(["a"]);
+  });
+
+  it("hides the Any/All switch with fewer than two tags", async () => {
+    const { wrap } = mountView({ items: makeItems(3), filter: { tags: ["even"] } });
+    await flushPromises();
+    expect(wrap.find('[data-test="tag-match"]').exists()).toBe(false);
   });
 
   it("expansion toggles when chevron clicked", async () => {

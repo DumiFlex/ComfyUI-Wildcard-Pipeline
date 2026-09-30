@@ -40,7 +40,7 @@ import type { ResolveWarning } from "../utils/resolveTokens";
  */
 export interface ImportedWildcard {
   id: string;
-  options?: Array<{ value: unknown; weight?: number }>;
+  options?: Array<{ value: unknown; weight?: number; negative?: unknown }>;
 }
 
 /**
@@ -76,30 +76,35 @@ export function discoverBrokenRefsForImport(
     const options = w.options ?? [];
     for (let optIdx = 0; optIdx < options.length; optIdx++) {
       const opt = options[optIdx];
-      // Defensive: malformed payloads may carry non-string `value`
-      // (null, number, missing). Same guard pattern as
-      // `dep-graph.ts:extractRefsFromText` (Task 17 fix).
-      if (typeof opt?.value !== "string") continue;
-      REF_REGEX.lastIndex = 0;
-      let m: RegExpExecArray | null;
-      while ((m = REF_REGEX.exec(opt.value)) !== null) {
-        const target = m[1];
-        // The single capture group is non-optional in REF_REGEX, so a
-        // successful match always yields a string here. The runtime
-        // guard keeps the lint clean without resorting to a non-null
-        // assertion.
-        if (target === undefined) continue;
-        if (libraryIds.has(target)) continue;
-        warnings.push({
-          type: "broken_ref_on_import",
-          severity: "warn",
-          module_id: w.id,
-          source_field: `options[${optIdx}].value`,
-          position: m.index,
-          token_index: null,
-          detail: { target_id: target },
-          message: `Reference @{${target}} not found in library`,
-        });
+      // Scan the value and (send-to-negative, v8) the option's negative,
+      // which shares the value's `@{}` grammar.
+      const fields: Array<[string, unknown]> = [["value", opt?.value], ["negative", opt?.negative]];
+      for (const [field, text] of fields) {
+        // Defensive: malformed payloads may carry non-string `value`
+        // (null, number, missing). Same guard pattern as
+        // `dep-graph.ts:extractRefsFromText` (Task 17 fix).
+        if (typeof text !== "string") continue;
+        REF_REGEX.lastIndex = 0;
+        let m: RegExpExecArray | null;
+        while ((m = REF_REGEX.exec(text)) !== null) {
+          const target = m[1];
+          // The single capture group is non-optional in REF_REGEX, so a
+          // successful match always yields a string here. The runtime
+          // guard keeps the lint clean without resorting to a non-null
+          // assertion.
+          if (target === undefined) continue;
+          if (libraryIds.has(target)) continue;
+          warnings.push({
+            type: "broken_ref_on_import",
+            severity: "warn",
+            module_id: w.id,
+            source_field: `options[${optIdx}].${field}`,
+            position: m.index,
+            token_index: null,
+            detail: { target_id: target },
+            message: `Reference @{${target}} not found in library`,
+          });
+        }
       }
     }
   }

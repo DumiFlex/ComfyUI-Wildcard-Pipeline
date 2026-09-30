@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { INTENSITY_TO_RULES, computeEffectiveRules, isPristine } from "./intensity";
+import {
+  INTENSITY_TO_NEG_RULES,
+  INTENSITY_TO_RULES,
+  computeEffectiveNegativeRules,
+  computeEffectiveRules,
+  isPristine,
+} from "./intensity";
 import { emptyCleanerConfig, type CleanerNodeConfig } from "./types";
 
 describe("intensity helpers", () => {
@@ -70,6 +76,32 @@ describe("intensity helpers", () => {
       blocklist: { kind: "list", entries: ["x"] },
       rules_override: { blocklist: true },
     })).toBe(true);
+  });
+
+  it("INTENSITY_TO_NEG_RULES mirrors the Python pipeline's negative column", () => {
+    expect(INTENSITY_TO_NEG_RULES).toEqual({
+      gentle: ["whitespace"],
+      balanced: ["whitespace", "punctuation", "dedupe_exact"],
+      aggressive: ["whitespace", "punctuation", "dedupe_exact"],
+    });
+  });
+
+  it("neg column: preset defaults + overrides, never auto-enables the blocklist", () => {
+    const cfg: CleanerNodeConfig = {
+      ...emptyCleanerConfig(),
+      intensity: "aggressive",
+      blocklist: { kind: "list", entries: ["x"] },
+    };
+    expect(computeEffectiveNegativeRules(cfg)).toEqual(["whitespace", "punctuation", "dedupe_exact"]);
+    expect(computeEffectiveNegativeRules({
+      ...cfg, negative_rules_override: { dedupe_exact: false, fuzzy_dedupe: true },
+    })).toEqual(["whitespace", "punctuation", "fuzzy_dedupe"]);
+  });
+
+  it("isPristine false when the neg column diverges from its preset", () => {
+    expect(isPristine({ ...emptyCleanerConfig(), negative_rules_override: { fuzzy_dedupe: true } })).toBe(false);
+    // Matching the neg default is not a modification.
+    expect(isPristine({ ...emptyCleanerConfig(), negative_rules_override: { whitespace: true } })).toBe(true);
   });
 
   it("rules sorted by registry order regardless of toggle order", () => {

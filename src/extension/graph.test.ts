@@ -3,6 +3,7 @@ import {
   collectDownstreamNestedReachUuids,
   collectDownstreamWildcardUuids,
   collectLocalResolvedForModule,
+  collectUpstreamInjectorNegatives,
   collectUpstreamProducers,
   collectUpstreamRenderableVariables,
   collectUpstreamResolved,
@@ -249,6 +250,31 @@ describe("collectUpstreamProducers", () => {
     const pov = ctxWriting(2, "Other", "unused", 100);
     const out = collectUpstreamProducers(chain([inj, pov], { 100: { origin_id: 1, target_id: 2 } }), pov);
     expect(out.test.nodeLabel).toBe("Scene inputs");
+  });
+
+  it("collectUpstreamInjectorNegatives: a row's negative, or null when it sets none", () => {
+    const inj: LiteNodeLike = {
+      id: 1,
+      type: "WP_ContextInjector",
+      outputs: [{ name: "context", links: [100], type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "wp_rows",
+        value: JSON.stringify({
+          version: 1,
+          rows: [
+            { binding: "character", enabled: true, negative: " modern clothing " },
+            { binding: "plain", enabled: true },
+            { binding: "off", enabled: false, negative: "x" },
+          ],
+        }),
+      }],
+    };
+    const pov = ctxWriting(2, "Other", "unused", 100);
+    const g = chain([inj, pov], { 100: { origin_id: 1, target_id: 2 } });
+    expect(collectUpstreamInjectorNegatives(g, pov)).toEqual({
+      character: "modern clothing",
+      plain: null,
+    });
   });
 
   it("attributes the loop's iteration vars, including the _total pair", () => {
@@ -823,6 +849,65 @@ describe("collectUpstreamResolved axis reads", () => {
       id: 2, type: "WP_PromptAssembler", inputs: [{ name: "context", link: 100 }],
     });
     expect(out.scene).toBe("wearing a white t-shirt");
+  });
+});
+
+describe("collectUpstreamResolved derivation condition groups", () => {
+  beforeEach(() => _resetForTests());
+
+  /** `$mood` = calm and `$time` = night upstream, then a derivation whose one
+   *  branch tests them with the given condition and writes `$light`. */
+  function groupGraph(condition: unknown) {
+    const ctx = fakeWildcardContextNode(1, [
+      { id: "aaaaaaaa", binding: "$mood", options: [{ value: "calm" }] },
+      { id: "cccccccc", binding: "$time", options: [{ value: "night" }] },
+    ]);
+    const mods = JSON.parse(String(ctx.widgets![0].value));
+    mods.modules.push({
+      id: "bbbbbbbb", type: "derivation", enabled: true, meta: { name: "" }, entries: [],
+      payload: { rules: [{
+        id: "r1",
+        branches: [{ condition, action: { target_var: "light", mode: "replace", value: "soft" } }],
+        else: { action: { target_var: "light", mode: "replace", value: "hard" } },
+      }] },
+    });
+    ctx.widgets![0].value = JSON.stringify(mods);
+    const asm: LiteNodeLike = {
+      id: 2, type: "WP_PromptAssembler", inputs: [{ name: "context", link: 100 }],
+    };
+    return {
+      _nodes: [ctx, asm],
+      links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id: number) => ({ 1: ctx, 2: asm } as Record<number, LiteNodeLike>)[id] ?? null,
+    } as LiteGraphLike;
+  }
+  const asm: LiteNodeLike = { id: 2, type: "WP_PromptAssembler", inputs: [{ name: "context", link: 100 }] };
+  const mood = { var: "mood", op: "equals", value: "calm" };
+  const day = { var: "time", op: "equals", value: "day" };
+
+  it("AND needs every test", () => {
+    expect(collectUpstreamResolved(groupGraph({ match: "all", conditions: [mood, day] }), asm).light).toBe("hard");
+  });
+
+  it("OR needs any test", () => {
+    expect(collectUpstreamResolved(groupGraph({ match: "any", conditions: [mood, day] }), asm).light).toBe("soft");
+  });
+
+  it("previews the emptiness ops", () => {
+    expect(collectUpstreamResolved(groupGraph({ var: "time", op: "is_not_empty", value: "" }), asm).light).toBe("soft");
+    expect(collectUpstreamResolved(groupGraph({ var: "time", op: "is_empty", value: "" }), asm).light).toBe("hard");
+  });
+
+  it("an \"Add to negative\" action leaves the variable's value alone", () => {
+    const g = groupGraph(mood);
+    const ctxNode = g._nodes[0];
+    const mods = JSON.parse(String(ctxNode.widgets![0].value));
+    mods.modules[2].payload.rules[0].branches[0].action = {
+      target_var: "mood", mode: "negative", value: "bright colors",
+    };
+    ctxNode.widgets![0].value = JSON.stringify(mods);
+    const out = collectUpstreamResolved(g, asm);
+    expect(out.mood).toBe("calm");
   });
 });
 

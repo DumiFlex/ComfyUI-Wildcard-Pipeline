@@ -96,3 +96,62 @@ def test_intensity_map():
     assert INTENSITY_TO_RULES["aggressive"] == [
         "whitespace", "punctuation", "dedupe_exact", "fuzzy_dedupe",
     ]
+
+
+# ── send-to-negative: the negative column ───────────────────────────────
+
+
+def test_negative_column_defaults_skip_fuzzy_and_blocklist():
+    cfg = {"intensity": "aggressive", "blocklist": {"entries": ["gun"]}}
+    out = PromptCleaner().run_negative("bad hand,  bad hands, gun, gun", cfg)
+    # exact dedupe on, fuzzy dedupe off, blocklist off
+    assert out["text"] == "bad hand, bad hands, gun"
+    assert "fuzzy_dedupe" not in out["report"]
+    assert "blocklist" not in out["report"]
+
+
+def test_negative_column_overrides_are_their_own():
+    cfg = {"rules_override": {"dedupe_exact": False},
+           "negative_rules_override": {"dedupe_exact": True}}
+    assert PromptCleaner().run("a, a", cfg)["text"] == "a, a"
+    assert PromptCleaner().run_negative("a, a", cfg)["text"] == "a"
+
+
+def test_prompt_overlap_is_reported_and_optionally_dropped():
+    cleaner = PromptCleaner()
+    kept = cleaner.run_negative("red, blurry", {}, prompt="Red hair, red")
+    assert kept["text"] == "red, blurry"
+    assert kept["report"]["prompt_overlap"] == {"tags": ["red"], "dropped": False}
+    dropped = cleaner.run_negative(
+        "red, blurry", {"drop_prompt_overlap": True}, prompt="red hair, red",
+    )
+    assert dropped["text"] == "blurry"
+    assert dropped["report"]["prompt_overlap"]["dropped"] is True
+
+
+def test_node_negative_output_is_empty_when_left_empty():
+    from wp_nodes.prompt_cleaner import WPPromptCleaner
+
+    out = WPPromptCleaner.execute("a,  b", "{}")
+    assert out.values[1] == ""
+    out2 = WPPromptCleaner.execute("a, b", "{}", negative="x,  x, a")
+    assert out2.values[1] == "x, a"
+    assert out2.ui["wp_cleaner_negative_report"][0]["prompt_overlap"]["tags"] == ["a"]
+    # An empty box (the default) cleans nothing and reports nothing.
+    out3 = WPPromptCleaner.execute("a, b", "{}", negative="  ")
+    assert out3.values[1] == ""
+    assert "wp_cleaner_negative_report" not in out3.ui
+
+
+def test_node_negative_is_a_text_box():
+    from wp_nodes.prompt_cleaner import WPPromptCleaner
+
+    schema = WPPromptCleaner.define_schema()
+    neg = next(i for i in schema.inputs if i.name == "negative")
+    assert neg.multiline is True
+    assert not getattr(neg, "force_input", False)
+    # Box order on the node: prompt, negative, then the rules panel. The
+    # frontend lays out required inputs before optional ones, so the rules
+    # widget is optional too.
+    assert [i.name for i in schema.inputs] == ["prompt", "negative", "wp_cleaner"]
+    assert all(i.optional for i in schema.inputs[1:])

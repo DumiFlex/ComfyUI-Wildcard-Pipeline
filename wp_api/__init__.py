@@ -8,6 +8,7 @@ from pathlib import Path
 
 from aiohttp import web
 
+from engine.db import backups as _db_backups
 from engine.db.connection import get_connection
 from engine.db.migrations import migrate
 from engine.db.pending_move import execute_pending_move
@@ -16,10 +17,12 @@ from wp_api import cascade as _cascade
 from wp_api import categories as _categories
 from wp_api import database as _database
 from wp_api import import_export as _import_export
+from wp_api import library_tags as _library_tags
 from wp_api import models as _models
 from wp_api import modules as _modules
 from wp_api import preview as _preview
 from wp_api import scenarios as _scenarios
+from wp_api import settings as _settings
 from wp_api import spa as _spa
 from wp_api import tags as _tags
 from wp_api import templates as _templates
@@ -88,6 +91,19 @@ def _ensure_db_migrated() -> None:
         conn.close()
 
 
+def _start_backups() -> None:
+    """Daily backup check now, then hourly on a daemon thread.
+
+    After migration, so the first daily snapshot is of the upgraded schema
+    (the pre-migration one already covers the old). Its own function so the
+    API test fixtures can stub it out instead of snapshotting every tmp DB.
+    """
+    try:
+        _db_backups.start_daily_scheduler()
+    except Exception:  # noqa: BLE001 - never crash ComfyUI over backups
+        logger.exception("wildcard-pipeline: backup scheduler failed to start")
+
+
 def register_routes(app: web.Application) -> None:
     """Mount all /wp + /wp/api/* routes on the given app."""
     # Pending-move runs FIRST: the file operation must complete before
@@ -98,10 +114,18 @@ def register_routes(app: web.Application) -> None:
         execute_pending_move()
     except Exception:  # noqa: BLE001 - never crash ComfyUI on pending-move failure
         logger.exception("wildcard-pipeline: pending db move failed")
+    # Staged restore runs right after the move (which may have changed where
+    # the live DB is) and still before any connection opens. It swallows its
+    # own failures; the try is belt and braces.
+    try:
+        _db_backups.execute_pending_restore()
+    except Exception:  # noqa: BLE001 - never crash ComfyUI on restore failure
+        logger.exception("wildcard-pipeline: pending db restore failed")
     try:
         _ensure_db_migrated()
     except Exception:  # noqa: BLE001 - never crash ComfyUI on migration failure
         logger.exception("wildcard-pipeline: db migration failed")
+    _start_backups()
 
     # Tag every response with the process startup id so the SPA can
     # detect a ComfyUI restart and prompt the user to refresh stale tabs.
@@ -119,12 +143,14 @@ def register_routes(app: web.Application) -> None:
     _templates.register(app.router)
     _categories.register(app.router)
     _database.register(app.router)
+    _settings.register(app.router)
     _test_runner.register(app.router)
     _scenarios.register(app.router)
     _import_export.register(app.router)
     _cascade.register(app.router)
     _preview.register(app.router)
     _tags.register(app.router)
+    _library_tags.register(app.router)
     _models.register(app.router)
     # SPA fallback last — broad catch-all `/wp/{path:.*}` must not shadow
     # specific `/wp/api/...` routes. aiohttp resolves more-specific routes

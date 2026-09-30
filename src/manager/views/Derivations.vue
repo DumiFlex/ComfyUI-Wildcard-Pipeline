@@ -22,12 +22,16 @@ import type {
   CategoryRow,
   DerivationAction,
   DerivationCondition,
+  DerivationConditionGroup,
+  DerivationConditionNode,
   DerivationPayload,
   DerivationRule,
   ModuleRow,
 } from "../api/types";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useDeleteConfirm } from "../composables/useDeleteConfirm";
+import { clauseActions, isConditionGroup, matchWord } from "../../extension/derivation-conditions";
+import { VALUE_DISABLED_OPS } from "../../components/context/editors/_shared/derivation-ops";
 
 const route = useRoute();
 const router = useRouter();
@@ -147,11 +151,36 @@ function actionVerb(mode: string | undefined): string {
   return VERB[mode ?? ""] ?? (mode ?? "?");
 }
 
-interface CondView { var?: string; op?: string; value?: string; }
-function condView(c: DerivationCondition | undefined): CondView | null {
-  if (!c) return null;
-  return { var: c.var, op: c.op, value: c.value };
+/** A condition as display tokens. A group reads inline with its connector and
+ *  parentheses around nested groups: `$a equals "x" AND ($b … OR $c …)`. */
+interface CondToken { kind: "var" | "op" | "str" | "join" | "paren"; text: string }
+function condTokens(c: DerivationConditionNode | undefined, nested = false): CondToken[] {
+  if (!c) return [];
+  if (isConditionGroup(c)) {
+    const g = c as DerivationConditionGroup;
+    const out: CondToken[] = nested ? [{ kind: "paren", text: "(" }] : [];
+    g.conditions.forEach((child, i) => {
+      if (i > 0) out.push({ kind: "join", text: matchWord(g.match) });
+      out.push(...condTokens(child, true));
+    });
+    if (nested) out.push({ kind: "paren", text: ")" });
+    return out;
+  }
+  const t = c as DerivationCondition;
+  const out: CondToken[] = [
+    { kind: "var", text: `$${(t.var ?? "").replace(/^\$/, "") || "?"}` },
+    { kind: "op", text: t.op },
+  ];
+  if (!VALUE_DISABLED_OPS.has(t.op)) out.push({ kind: "str", text: `"${t.value ?? ""}"` });
+  return out;
 }
+/** Every action of a branch or else clause (THEN ... AND ...), as shown. */
+function actViews(clause: unknown): Array<{ verb: string; target: string; value: string }> {
+  return clauseActions<DerivationAction>(clause)
+    .map((a) => actView(a))
+    .filter((v): v is { verb: string; target: string; value: string } => v !== null);
+}
+
 function actView(a: DerivationAction | undefined): { verb: string; target: string; value: string } | null {
   if (!a) return null;
   return { verb: actionVerb(a.mode), target: a.target_var, value: a.value ?? "" };
@@ -312,24 +341,32 @@ function actView(a: DerivationAction | undefined): { verb: string; target: strin
           <div class="wp-token-com wp-rule-block__head"># rule {{ ri + 1 }}</div>
           <div v-for="(b, bi) in rule.branches ?? []" :key="bi" class="wp-rule-branch">
             <span class="wp-token-key">{{ bi === 0 ? "IF" : "ELIF" }}</span>
-            <template v-if="condView(b.condition)">
-              <span class="wp-token-var">&nbsp;${{ (condView(b.condition)!.var ?? '').replace(/^\$/, '') || "?" }}</span>
-              <span>&nbsp;{{ condView(b.condition)!.op }}</span>
-              <span class="wp-token-str">&nbsp;"{{ condView(b.condition)!.value }}"</span>
+            <template v-if="condTokens(b.condition).length">
+              <span
+                v-for="(tok, ti) in condTokens(b.condition)"
+                :key="ti"
+                :class="{
+                  'wp-token-var': tok.kind === 'var',
+                  'wp-token-str': tok.kind === 'str',
+                  'wp-token-key': tok.kind === 'join',
+                }"
+              >&nbsp;{{ tok.text }}</span>
             </template>
             <span v-else>&nbsp;<em class="wp-dim">always</em></span>
             <span class="wp-token-com"> · </span>
             <span class="wp-token-key">THEN</span>
-            <template v-if="actView(b.action)">
-              <span>&nbsp;{{ actView(b.action)!.verb }} {{ actView(b.action)!.target }}</span>
-              <span v-if="actView(b.action)!.value" class="wp-token-str">&nbsp;"{{ actView(b.action)!.value }}"</span>
+            <template v-for="(av, ai) in actViews(b)" :key="ai">
+              <span v-if="ai > 0" class="wp-token-key">&nbsp;AND</span>
+              <span>&nbsp;{{ av.verb }} {{ av.target }}</span>
+              <span v-if="av.value" class="wp-token-str">&nbsp;"{{ av.value }}"</span>
             </template>
           </div>
           <div v-if="rule.else" class="wp-rule-branch">
             <span class="wp-token-key">ELSE</span>
-            <template v-if="actView(rule.else.action)">
-              <span>&nbsp;{{ actView(rule.else.action)!.verb }} {{ actView(rule.else.action)!.target }}</span>
-              <span v-if="actView(rule.else.action)!.value" class="wp-token-str">&nbsp;"{{ actView(rule.else.action)!.value }}"</span>
+            <template v-for="(av, ai) in actViews(rule.else)" :key="ai">
+              <span v-if="ai > 0" class="wp-token-key">&nbsp;AND</span>
+              <span>&nbsp;{{ av.verb }} {{ av.target }}</span>
+              <span v-if="av.value" class="wp-token-str">&nbsp;"{{ av.value }}"</span>
             </template>
           </div>
         </div>

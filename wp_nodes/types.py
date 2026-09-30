@@ -380,6 +380,10 @@ _CROSS_NODE_INTERNAL_KEYS = (
     # the flag map alongside picks/constraints so the next node's
     # PromptAssembler can call `strip_internals` and re-apply the filter.
     "__wp_internal_flags__",
+    # Send-to-negative: per-variable negatives (engine/negatives.py). A
+    # variable read in a later node's Assembler must bring the negatives it
+    # was rolled with, wherever it was rolled.
+    "__wp_negatives__",
     # Loop bookkeeping from WP_ContextLoop. These reach the FIRST
     # WP_Context (direct ContextLoop child) via the payload internals,
     # but were dropped at that node's output boundary — so a SECOND,
@@ -402,6 +406,7 @@ def build_payload(
     ctx: dict[str, Any],
     upstream_debug: dict[str, Any],
     seed: int,
+    node_id: str = "",
 ) -> ContextPayload:
     """Construct the socket-boundary payload. Strips internals from
     `context`, but carries the cross-node-internal subset on the
@@ -422,6 +427,15 @@ def build_payload(
     upstream_warnings = upstream_debug.get("__wp_warnings__", [])
     this_trace = ctx.get("__wp_trace__", [])
     this_warnings = ctx.get("__wp_warnings__", [])
+    this_refs = ctx.get("__wp_ref_log__")
+    # Tag this node's rows with its graph id so WP Debug can group a chain's
+    # trace by the Context that ran it. Injector rows carry the same key.
+    if node_id:
+        for rows in (this_trace, this_warnings, this_refs):
+            if isinstance(rows, list):
+                for row in rows:
+                    if isinstance(row, dict):
+                        row.setdefault("node_id", node_id)
     # Dedup constraint finalisation warnings across the cross-node
     # accumulator. Even with __wp_constraint_hits__ now propagating
     # cross-node (so downstream knows what upstream applied), every
@@ -456,6 +470,12 @@ def build_payload(
             "node_seed": seed,
             "__wp_trace__": list(upstream_trace) + list(this_trace),
             "__wp_warnings__": deduped,
+            # Nested @{} picks (engine `__wp_ref_log__`) and one row per
+            # Context node in the chain, accumulated like the trace.
+            "__wp_ref_log__": list(upstream_debug.get("__wp_ref_log__") or [])
+            + (list(this_refs) if isinstance(this_refs, list) else []),
+            "__wp_nodes__": list(upstream_debug.get("__wp_nodes__") or [])
+            + [{"node_id": node_id, "seed": seed}],
         },
         internals=internals,
     )

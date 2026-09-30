@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from engine.modules._detail import module_detail
 from engine.modules._keys import decode_key, encode_key
 from engine.modules.dispatcher import ModuleHandler
 
@@ -570,4 +571,17 @@ class ConstraintHandler(ModuleHandler):
             "__constraint_bundle_origin__": bundle_origin,
         }
         _ctx_set_constraint(ctx, meta)
+        detail = module_detail(ctx)
+        if detail is not None:
+            cells = [c for row in matrix.values() for c in row.values()]
+            detail.update({
+                "uid": module_id or "",
+                "reach": ts,
+                "cells": len(cells),
+                "exceptions": len(exceptions),
+                "only": any(
+                    isinstance(r, dict) and r.get("mode") == "only"
+                    for r in (*cells, *exceptions)
+                ),
+            })
         return {}

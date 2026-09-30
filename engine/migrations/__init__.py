@@ -16,9 +16,11 @@ CURRENT_SCHEMA_VERSION = 2
 
 # Highest schema version this runtime can natively READ + WRITE — distinct
 # from CURRENT_SCHEMA_VERSION (the migration-chain head, which stays 2 because
-# v2->v3 through v5->v6 are no-ops). v3 is the SP2b text-grammar bump (shape-
+# v2->v3 through v6->v7 are no-ops). v3 is the SP2b text-grammar bump (shape-
 # identical to v2), v4 is the additive `target_select` constraint reach, v5
-# is the additive `accepts` tag-axis kind and v6 the constraint `only` rule;
+# is the additive `accepts` tag-axis kind, v6 the constraint `only` rule and
+# v7 derivation AND/OR condition groups plus the `is_empty`/`is_not_empty` ops,
+# v8 send-to-negative (`negative` text + the derivation `negative` mode);
 # all are handled natively, so a
 # payload at CURRENT < v <= MAX_KNOWN installs AS-IS with no migration.
 # Mirror of TS `MAX_KNOWN_SCHEMA_VERSION` in
@@ -27,7 +29,7 @@ CURRENT_SCHEMA_VERSION = 2
 # MAINTENANCE CONTRACT: bump this whenever the TS `schemaVersionForPayload()`
 # learns to stamp a new (higher) version — otherwise this commit-side
 # re-validate will reject the very shapes the runtime just learned to produce.
-MAX_KNOWN_SCHEMA_VERSION = 6
+MAX_KNOWN_SCHEMA_VERSION = 8
 
 # Feature stamps (mirror of the TS constants beside MAX_KNOWN). Each is the
 # catalog version a payload needs once it uses that feature; see
@@ -36,6 +38,11 @@ SP2B_SCHEMA_VERSION = 3  # range count / `~` flag in a `{N$$…}` multi-pick
 SP3_REACH_SCHEMA_VERSION = 4  # non-default constraint `target_select`
 TAG_AXES_SCHEMA_VERSION = 5  # wildcard `tag_group_kinds` with an `accepts` group
 CONSTRAINT_ONLY_SCHEMA_VERSION = 6  # constraint rule with mode `only`
+# derivation condition group (AND / OR) or an `is_empty` / `is_not_empty` test
+DERIVATION_CONDITIONS_SCHEMA_VERSION = 7
+# send-to-negative: a non-empty `negative` on a wildcard option, fixed value or
+# combine, or a derivation action with mode `negative`
+NEGATIVES_SCHEMA_VERSION = 8
 
 _CHAIN = {
     0: migrate_v0_to_v1,

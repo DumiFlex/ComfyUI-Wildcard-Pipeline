@@ -17,6 +17,10 @@ export interface LibraryRow {
   id: string;
   name: string;
   value: string;
+  /** Send-to-negative (v8): library content only. Instance
+   *  `values_overrides` never carry one (`shapeValuesPatch` writes
+   *  `{id, name, value}`), so the row shows it read-only. */
+  negative?: string;
 }
 
 export interface DraftRow {
@@ -52,6 +56,22 @@ export function rowOverrideKind(
   if (nameDiff) return "name";
   if (valueDiff) return "value";
   return "none";
+}
+
+/**
+ * The key a row is toggled and matched by: its `id`, or `#<index>` when the
+ * id is missing, blank or already used by an earlier row. Library rows from
+ * an imported pack can lack ids; keyed by a shared `undefined`, toggling one
+ * row toggled them all. Mirrored by `_row_key` in
+ * engine/modules/fixed_values_handler.py — change both together.
+ */
+export function withRowKeys<T extends { id?: unknown }>(rows: readonly T[]): Array<T & { id: string }> {
+  const seen = new Set<string>();
+  return rows.map((r, i) => {
+    const own = typeof r.id === "string" && r.id.trim() !== "" && !seen.has(r.id) ? r.id : `#${i}`;
+    seen.add(own);
+    return { ...r, id: own };
+  });
 }
 
 export function rowEnabled(
