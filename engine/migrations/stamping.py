@@ -6,8 +6,10 @@ an older consumer can still install everything that doesn't use a newer
 feature:
 
 - ``NEGATIVES_SCHEMA_VERSION`` (8): a wildcard option, fixed value or
-  combine carries a non-empty ``negative``, or a derivation action uses the
-  ``negative`` ("Add to negative") mode.
+  combine carries a non-empty ``negative``, a derivation action uses the
+  ``negative`` ("Add to negative") mode, a derivation branch runs more than
+  one action (``extra_actions``), or text reads a variable's negatives
+  (``$name.neg``).
 - ``DERIVATION_CONDITIONS_SCHEMA_VERSION`` (7): a derivation branch groups
   tests with AND / OR, or a test uses ``is_empty`` / ``is_not_empty``.
 - ``CONSTRAINT_ONLY_SCHEMA_VERSION`` (6): a constraint matrix cell,
@@ -43,6 +45,10 @@ from engine.migrations import (
 # SP2b nested-multi-pick marker: a `{N$$…}` whose count is a range (`N-M`)
 # or carries the `~` flag. A plain fixed-count `{N$$…}` predates SP2b.
 _SP2B_MARKER_RE = re.compile(r"\{\d+(?:-\d+~?|~)\$\$")
+# `$name.neg`, `$name.K.neg` (and `$name.neg.K`): reads a variable's negatives.
+_NEG_ACCESSOR_RE = re.compile(
+    r"\$[A-Za-z_][A-Za-z0-9_]*(?:\.\d+)?\.neg(?![A-Za-z0-9_])"
+)
 
 
 def _is_number(value: Any) -> bool:
@@ -182,8 +188,12 @@ def uses_negatives(node: Any) -> bool:
         return True
     if node.get("mode") == "negative" and "target_var" in node:
         return True
+    extra = node.get("extra_actions")
+    if isinstance(extra, list) and extra:
+        return True
     return any(
-        isinstance(value, (dict, list)) and uses_negatives(value)
+        (isinstance(value, (dict, list)) and uses_negatives(value))
+        or (isinstance(value, str) and _NEG_ACCESSOR_RE.search(value) is not None)
         for value in node.values()
     )
 

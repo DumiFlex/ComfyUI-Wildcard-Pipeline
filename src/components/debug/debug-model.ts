@@ -42,7 +42,18 @@ export interface RawRuleDetail {
     disabled?: boolean;
     condition?: RawCondition;
   }>;
-  action?: { target?: string; mode?: string; value?: string; result?: string | null };
+  action?: RawRuleAction;
+  /** Every action the fired clause ran, in order (THEN ... AND ...). The
+   *  first is also `action`; older engines send only `action`. */
+  actions?: RawRuleAction[];
+}
+
+export interface RawRuleAction { target?: string; mode?: string; value?: string; result?: string | null }
+
+/** The actions a fired rule ran, from either engine shape. */
+export function ruleActions(rule: RawRuleDetail): RawRuleAction[] {
+  if (Array.isArray(rule.actions) && rule.actions.length) return rule.actions;
+  return rule.action ? [rule.action] : [];
 }
 
 export interface RawDetail {

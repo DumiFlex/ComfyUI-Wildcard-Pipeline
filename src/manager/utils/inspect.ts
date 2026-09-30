@@ -7,6 +7,7 @@
  */
 import type { BundleRow, ModuleRow, ScenarioRunResponse } from "../api/types";
 import { moduleBinding } from "./scenario";
+import { clauseActions } from "../../extension/derivation-conditions";
 
 /** Values listed per variable distribution. */
 export const INSPECT_VALUE_LIMIT = 8;
@@ -245,16 +246,22 @@ function inspectDerivation(mod: ModuleRow, result: ScenarioRunResponse | null): 
   const targets = new Set<string>();
   for (const r of (Array.isArray(p.rules) ? p.rules : []) as Payload[]) {
     const branches = Array.isArray(r.branches) ? (r.branches as Payload[]) : [];
+    // A clause's actions read as one THEN: "a; b; c" (THEN ... AND ...).
+    const then = (clause: unknown) => clauseActions(clause).map(describeAction).join("; ");
+    const collect = (clause: unknown) => {
+      for (const a of clauseActions(clause)) {
+        const t = writtenTarget(a);
+        if (t) targets.add(t);
+      }
+    };
     branches.forEach((b, i) => {
-      rules.push({ when: `${i ? "else if" : "if"} ${describeCondition(b.condition)}`, then: describeAction(b.action) });
-      const t = writtenTarget(b.action);
-      if (t) targets.add(t);
+      rules.push({ when: `${i ? "else if" : "if"} ${describeCondition(b.condition)}`, then: then(b) });
+      collect(b);
     });
     const els = r.else as Payload | undefined;
     if (els?.action) {
-      rules.push({ when: "else", then: describeAction(els.action) });
-      const t = writtenTarget(els.action);
-      if (t) targets.add(t);
+      rules.push({ when: "else", then: then(els) });
+      collect(els);
     }
   }
   return {

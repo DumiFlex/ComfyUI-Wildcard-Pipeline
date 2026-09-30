@@ -192,3 +192,25 @@ def test_add_to_negative_action_and_bundle_child():
         _wildcard_row("blurry"),
     ]}
     assert schema_version_for_payload(bundle) == NEGATIVES_SCHEMA_VERSION
+
+
+def test_extra_actions_need_v8():
+    row = _derivation_row(_TEST)
+    branch = row["payload"]["rules"][0]["branches"][0]
+    branch["extra_actions"] = []
+    assert schema_version_for_payload(row) == CURRENT_SCHEMA_VERSION
+    branch["extra_actions"] = [{"target_var": "u", "mode": "replace", "value": "w"}]
+    assert schema_version_for_payload(row) == NEGATIVES_SCHEMA_VERSION
+
+
+@pytest.mark.parametrize("template, expected", [
+    ("$pose", CURRENT_SCHEMA_VERSION),
+    ("$pose.negx", CURRENT_SCHEMA_VERSION),
+    ("$pose.neg", NEGATIVES_SCHEMA_VERSION),
+    ("a $pose.1.neg b", NEGATIVES_SCHEMA_VERSION),
+    ("$pose.neg.0", NEGATIVES_SCHEMA_VERSION),
+])
+def test_neg_accessor_text(template, expected):
+    combine = {"id": "abababab", "type": "combine", "name": "c", "payload": {
+        "template": template, "output_var": "c"}}
+    assert schema_version_for_payload(combine) == expected

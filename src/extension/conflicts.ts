@@ -7,7 +7,7 @@ import {
 } from "../widgets/_shared";
 import { varBaseName } from "../widgets/richTokenize";
 import { computePairingsFull, type ChainModule } from "./constraint-pairs";
-import { conditionLeaves } from "./derivation-conditions";
+import { clauseActions, conditionLeaves, derivationTargets } from "./derivation-conditions";
 import { NEGATIVES_VAR } from "./assembler-vars";
 
 /** Resolve a module's effective var-binding name. Mirrors engine
@@ -93,20 +93,7 @@ function writesOf(m: ModuleEntry): string[] {
     // same module also collapse here — at runtime they're sequential
     // mutations on one var, not "two modules fighting." Multi-MODULE
     // dup detection still works via the outer `written` set.
-    const seen = new Set<string>();
-    const rules = (p.rules ?? []) as Array<{
-      branches?: Array<{ action?: { target_var?: string } }>;
-      else?: { action?: { target_var?: string } };
-    }>;
-    for (const rule of rules) {
-      for (const br of rule.branches ?? []) {
-        const t = (br.action?.target_var ?? "").replace(/^\$/, "").trim();
-        if (t) seen.add(t);
-      }
-      const e = (rule.else?.action?.target_var ?? "").replace(/^\$/, "").trim();
-      if (e) seen.add(e);
-    }
-    out.push(...seen);
+    out.push(...derivationTargets(p));
   }
   return out;
 }
@@ -371,16 +358,16 @@ function templatesOf(m: ModuleEntry): string[] {
   if (m.type === "derivation") {
     const out: string[] = [];
     const rules = ((m.payload as { rules?: unknown[] } | undefined)?.rules ?? []) as Array<{
-      branches?: Array<{ action?: { value?: unknown } }>;
-      else?: { action?: { value?: unknown } };
+      branches?: unknown[];
+      else?: unknown;
     }>;
     for (const rule of rules) {
-      for (const br of rule.branches ?? []) {
-        const v = br.action?.value;
-        if (typeof v === "string" && v) out.push(v);
+      // Every action of every branch + else (THEN ... AND ...).
+      for (const clause of [...(rule.branches ?? []), rule.else]) {
+        for (const a of clauseActions<{ value?: unknown }>(clause)) {
+          if (typeof a.value === "string" && a.value) out.push(a.value);
+        }
       }
-      const ev = rule.else?.action?.value;
-      if (typeof ev === "string" && ev) out.push(ev);
     }
     return out;
   }

@@ -125,6 +125,9 @@ export interface DerivationBranch {
   /** One test, or an AND / OR group of them. */
   condition: DerivationConditionNode;
   action: DerivationAction;
+  /** THEN ... AND ... (schema v8): actions that run, in order, after
+   *  `action`. Absent (never `[]`) when the branch has one action. */
+  extra_actions?: DerivationAction[];
 }
 
 /**
@@ -133,6 +136,7 @@ export interface DerivationBranch {
  */
 export interface DerivationElse {
   action: DerivationAction;
+  extra_actions?: DerivationAction[];
 }
 
 export interface DerivationRule {

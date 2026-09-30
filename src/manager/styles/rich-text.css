@@ -50,6 +50,9 @@
   color: var(--wp-axis, #fbbf24);
   font-weight: 600;
 }
+/* `.neg` reads the variable's negatives: negative red, not the axis amber. */
+.wp-rt .wp-rt-var__accessor--neg,
+.wp-rt-preview .wp-rt-var__accessor--neg { color: var(--wp-danger, #ef4444); }
 
 /* The pick-INDEX tail (`.0`). Deliberately unaccented — it keeps the variable's
    own colour, dimmed — so amber stays reserved for the axis. A pick index is

@@ -214,10 +214,15 @@ export function usesDerivationConditions(node: unknown): boolean {
   return false;
 }
 
+/** `$name.neg`, `$name.K.neg` (and `$name.neg.K`): reads a variable's
+ *  negatives. Mirror of the engine's `_NEG_ACCESSOR_RE`. */
+const NEG_ACCESSOR_RE = /\$[A-Za-z_][A-Za-z0-9_]*(?:\.\d+)?\.neg(?![A-Za-z0-9_])/;
+
 /**
  * Walk `node` (object/array, any depth) looking for a non-empty `negative`
- * string or a derivation action whose mode is `negative`. An empty negative
- * is stored as absent and never needs v8. Mirror of
+ * string, a derivation action whose mode is `negative`, a derivation clause
+ * with more than one action (`extra_actions`), or text reading `$name.neg`.
+ * An empty negative is stored as absent and never needs v8. Mirror of
  * `engine/migrations/stamping.py:uses_negatives`.
  */
 export function usesNegatives(node: unknown): boolean {
@@ -226,7 +231,9 @@ export function usesNegatives(node: unknown): boolean {
   const neg = node.negative;
   if (typeof neg === "string" && neg.trim() !== "") return true;
   if (node.mode === "negative" && "target_var" in node) return true;
+  if (Array.isArray(node.extra_actions) && node.extra_actions.length > 0) return true;
   for (const value of Object.values(node)) {
+    if (typeof value === "string" && NEG_ACCESSOR_RE.test(value)) return true;
     if (value && typeof value === "object" && usesNegatives(value)) return true;
   }
   return false;
@@ -236,8 +243,9 @@ export function usesNegatives(node: unknown): boolean {
  * Choose the community catalog `schema_version` to stamp for a payload — the
  * MAX version any feature in the payload requires:
  *   - `NEGATIVES_SCHEMA_VERSION` (8) when ANY option, fixed value or combine
- *     carries a non-empty `negative`, or a derivation action uses the
- *     `negative` mode (`usesNegatives`).
+ *     carries a non-empty `negative`, a derivation action uses the
+ *     `negative` mode, a derivation clause runs several actions, or text
+ *     reads `$name.neg` (`usesNegatives`).
  *   - `DERIVATION_CONDITIONS_SCHEMA_VERSION` (7) when ANY derivation branch
  *     groups tests with AND / OR or uses `is_empty` / `is_not_empty`
  *     (`usesDerivationConditions`).

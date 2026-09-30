@@ -14,7 +14,7 @@ import type {
   ScenarioValue,
 } from "../api/types";
 import { toIdentifier } from "./slug";
-import { conditionLeaves } from "../../extension/derivation-conditions";
+import { clauseActions, conditionLeaves, derivationTargets } from "../../extension/derivation-conditions";
 
 export type StackKind = ModuleType | "bundle";
 
@@ -55,10 +55,12 @@ export function moduleBinding(mod: Pick<ModuleRow, "type" | "name" | "payload">)
   if (mod.type === "combine") return str(p.output_var);
   if (mod.type === "derivation") {
     const rules = Array.isArray(p.rules) ? p.rules : [];
-    for (const r of rules as { branches?: { action?: { target_var?: unknown } }[] }[]) {
+    for (const r of rules as { branches?: unknown[] }[]) {
       for (const b of r.branches ?? []) {
-        const t = str(b.action?.target_var);
-        if (t) return t;
+        for (const a of clauseActions<{ target_var?: unknown }>(b)) {
+          const t = str(a.target_var);
+          if (t) return t;
+        }
       }
     }
   }
@@ -356,14 +358,14 @@ export function moduleReads(row: PayloadRow): string[] {
   if (row.type === "combine") scan(p.template);
   if (row.type === "derivation") {
     const rules = Array.isArray(p.rules) ? p.rules : [];
-    for (const r of rules as { branches?: { condition?: unknown; action?: { value?: unknown } }[]; else?: { action?: { value?: unknown } } }[]) {
+    for (const r of rules as { branches?: { condition?: unknown }[]; else?: unknown }[]) {
       for (const b of r.branches ?? []) {
         for (const t of conditionLeaves<{ var?: unknown }>(b.condition)) {
           if (typeof t.var === "string") found.add(t.var.replace(/^\$/, "").split(".")[0]);
         }
-        scan(b.action?.value);
+        for (const a of clauseActions<{ value?: unknown }>(b)) scan(a.value);
       }
-      scan(r.else?.action?.value);
+      for (const a of clauseActions<{ value?: unknown }>(r.else)) scan(a.value);
     }
   }
   return [...found];
@@ -379,13 +381,7 @@ export function moduleWrites(row: PayloadRow): string[] {
       .filter(Boolean);
   }
   if (row.type === "derivation") {
-    const out = new Set<string>();
-    const rules = Array.isArray(p.rules) ? p.rules : [];
-    for (const r of rules as { branches?: { action?: { target_var?: unknown } }[]; else?: { action?: { target_var?: unknown } } }[]) {
-      for (const b of r.branches ?? []) if (typeof b.action?.target_var === "string") out.add(b.action.target_var.replace(/^\$/, ""));
-      if (typeof r.else?.action?.target_var === "string") out.add(r.else.action.target_var.replace(/^\$/, ""));
-    }
-    return [...out];
+    return derivationTargets(p);
   }
   const b = moduleBinding({ type: row.type as ModuleType, name: String(row.name ?? ""), payload: row.payload as ModuleRow["payload"] });
   return b ? [b] : [];

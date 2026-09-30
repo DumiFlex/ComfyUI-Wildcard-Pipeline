@@ -41,6 +41,33 @@ from engine.syntax.subcat_filter import ParseError as _ParseError
 from engine.syntax.subcat_filter import parse as _parse_subcat
 from engine.syntax.subcat_filter import reads_as as _reads_as
 
+
+def derivation_actions(payload: Any) -> list[tuple[str, dict[str, Any]]]:
+    """Every action dict of a derivation payload with its path: each branch's
+    ``action`` and ``extra_actions`` (THEN ... AND ...), the ``else`` clause's
+    too, and the legacy ``actions`` list older rows may still carry. The
+    dicts are the payload's own, so a fixer can rewrite them in place."""
+    out: list[tuple[str, dict[str, Any]]] = []
+    rules = payload.get("rules") if isinstance(payload, dict) else None
+    for ri, rule in enumerate(rules if isinstance(rules, list) else []):
+        if not isinstance(rule, dict):
+            continue
+        clauses: list[tuple[str, Any]] = [
+            (f"rules[{ri}].branches[{bi}]", b)
+            for bi, b in enumerate(rule.get("branches") or [])
+        ]
+        clauses.append((f"rules[{ri}].else", rule.get("else")))
+        for where, clause in clauses:
+            if not isinstance(clause, dict):
+                continue
+            if isinstance(clause.get("action"), dict):
+                out.append((f"{where}.action", clause["action"]))
+            for key in ("extra_actions", "actions"):
+                for ai, action in enumerate(clause.get(key) or []):
+                    if isinstance(action, dict):
+                        out.append((f"{where}.{key}[{ai}]", action))
+    return out
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
@@ -338,17 +365,13 @@ def fix_wildcard_delete(
                             changed = True
 
         elif t == "derivation":
-            for rule in new_payload.get("rules") or []:
-                for branch in rule.get("branches") or []:
-                    for action in branch.get("actions") or []:
-                        if not isinstance(action, dict):
-                            continue
-                        for k, v in list(action.items()):
-                            if isinstance(v, str):
-                                new_v = _strip_whole_ref_in_string(v, wildcard_id)
-                                if new_v != v:
-                                    action[k] = new_v
-                                    changed = True
+            for _path, action in derivation_actions(new_payload):
+                for k, v in list(action.items()):
+                    if isinstance(v, str):
+                        new_v = _strip_whole_ref_in_string(v, wildcard_id)
+                        if new_v != v:
+                            action[k] = new_v
+                            changed = True
 
         if changed:
             touched.append(_deepcopy_row(m))
@@ -577,17 +600,13 @@ def fix_wildcard_rename_name(
                             changed = True
 
         elif t == "derivation":
-            for rule in new_payload.get("rules") or []:
-                for branch in rule.get("branches") or []:
-                    for action in branch.get("actions") or []:
-                        if not isinstance(action, dict):
-                            continue
-                        for k, v in list(action.items()):
-                            if isinstance(v, str):
-                                new_v = _rewrite_ref_name_in_string(v, wildcard_id, new_name)
-                                if new_v != v:
-                                    action[k] = new_v
-                                    changed = True
+            for _path, action in derivation_actions(new_payload):
+                for k, v in list(action.items()):
+                    if isinstance(v, str):
+                        new_v = _rewrite_ref_name_in_string(v, wildcard_id, new_name)
+                        if new_v != v:
+                            action[k] = new_v
+                            changed = True
 
         if changed:
             touched.append(_deepcopy_row(m))
@@ -697,21 +716,20 @@ def fix_combine_output_var_rename(
                             changed = True
 
         elif t == "derivation":
-            for rule in new_payload.get("rules") or []:
-                for branch in rule.get("branches") or []:
-                    for action in branch.get("actions") or []:
-                        if not isinstance(action, dict):
-                            continue
-                        for k in list(action.keys()):
-                            v = action[k]
-                            if k == "set_var" and v == old_name:
-                                action[k] = new_name
-                                changed = True
-                            elif isinstance(v, str):
-                                new_v = _rewrite_var_in_string(v, old_name, new_name)
-                                if new_v != v:
-                                    action[k] = new_v
-                                    changed = True
+            for _path, action in derivation_actions(new_payload):
+                for k in list(action.keys()):
+                    v = action[k]
+                    # `target_var` names the variable bare (no `$`); the
+                    # legacy `set_var` did too.
+                    if k in ("set_var", "target_var") and isinstance(v, str) \
+                            and v.lstrip("$") == old_name:
+                        action[k] = new_name
+                        changed = True
+                    elif isinstance(v, str):
+                        new_v = _rewrite_var_in_string(v, old_name, new_name)
+                        if new_v != v:
+                            action[k] = new_v
+                            changed = True
 
         elif t == "combine" and m["id"] != combine_id:
             # The combine's own `negative` reads $vars like its template.

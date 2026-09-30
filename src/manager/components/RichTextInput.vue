@@ -31,7 +31,7 @@ import {
   type TextAtom,
 } from "./atomicEditorModel";
 import {
-  escapeHtml, inlineTokenHtml, splitRefFilter, tokenizeRich, varAccessorParts, varBaseName,
+  escapeHtml, inlineTokenHtml, NEG_ACCESSOR, splitRefFilter, tokenizeRich, varAccessorParts, varBaseName,
 } from "../../widgets/richTokenize";
 import RefChip, { type VarProducerLike } from "./RefChip.vue";
 import SubcategoryFilterPicker from "./SubcategoryFilterPicker.vue";
@@ -958,6 +958,8 @@ function textAtomHtml(text: string): string {
  */
 function axisKnownFor(atom: Atom): boolean | undefined {
   if (atom.kind !== "var" || !atom.axis) return undefined;
+  // `.neg` is not an axis: every variable has negatives to read.
+  if (atom.axis === NEG_ACCESSOR) return true;
   const axes = props.varProducers?.get(atom.name)?.axes;
   if (!axes || axes.length === 0) return undefined;
   return axes.some((a) => a.axis === atom.axis);
@@ -973,7 +975,7 @@ function varSpanAttrs(name: string): string {
   // declared, so a perfectly valid index-first reference got the unknown-axis
   // warning. That is the wavy underline the assembler template showed.
   const { base, axis = "" } = varAccessorParts(name);
-  if (props.graphAware && axis) {
+  if (props.graphAware && axis && axis !== NEG_ACCESSOR) {
     // The base resolves but the axis does not: the engine renders that as an
     // empty string, so without a mark the only symptom is a missing word.
     // Only claimed when the producer declares SOME axes — see `axisKnownFor`
@@ -1240,9 +1242,15 @@ const acMatches = computed(() => {
     const idx = m ? `.${m[1]}` : "";
     const frag = (m ? m[2] : rest).toLowerCase();
     const axes = props.varProducers?.get(base)?.axes ?? [];
-    return axes
+    const out = axes
       .filter((a) => a.axis.toLowerCase().includes(frag))
       .map((a) => `${base}${idx}.${a.axis}`);
+    // `.neg` reads the variable's negatives (send-to-negative). Every known
+    // variable has it; it is offered last, after the variable's own axes.
+    if (NEG_ACCESSOR.includes(frag) && (props.varSuggestions.includes(base) || axes.length)) {
+      out.push(`${base}${idx}.${NEG_ACCESSOR}`);
+    }
+    return out;
   }
   // `$` pool carries each variable's `accepts` axes as `name.AXIS` entries,
   // directly after the variable they belong to. Query matching is unchanged:

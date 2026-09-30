@@ -8,7 +8,9 @@ tests together (schema v7). Rules evaluate independently top-to-bottom:
 the first branch whose condition matches wins; if none match, the ``else``
 action (if any) fires; otherwise the rule is a no-op.
 
-Actions mutate the runtime context directly. Multiple rules can target the
+A branch (and the ``else`` clause) runs its ``action`` and then, in order,
+each entry of its optional ``extra_actions`` list (schema v8): "THEN ... AND
+...". Actions mutate the runtime context directly. Multiple rules can target the
 same variable; later rules see earlier mutations. Action ``value`` strings
 are resolved through resolve_text with surface="derivation" so $var tokens
 and {a|b|c} picks work inside derivation action values.
@@ -24,6 +26,7 @@ from engine.modules._detail import module_detail
 from engine.modules._seed import derive_module_rng
 from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
+from engine.syntax.resolve import NEG_ACCESSOR
 from engine.syntax.types import (
     deref_var_value,
     parse_var_reference,
@@ -45,6 +48,7 @@ _VALID_OPS = {
     "is_empty", "is_not_empty",
 }
 _VALID_MATCHES = {"all", "any"}
+_MISSING = object()
 # Groups nest; the editor stops at three levels, the cap here only guards a
 # hand-built payload against runaway recursion.
 _MAX_CONDITION_DEPTH = 8
@@ -110,9 +114,21 @@ def _ctx_get(ctx: Any, name: str) -> str:
     `$mood.0` splits to base `mood` + index 0. The fold/accessor contract lives
     in deref_var_value; the axis contract in `_ctx_axis`."""
     base, index, axis = parse_var_reference(name)
+    if axis == NEG_ACCESSOR:
+        return _ctx_negative(ctx, base, index)
     if axis:
         return _ctx_axis(ctx, base, axis, index)
     return deref_var_value(_ctx_get_raw(ctx, base), index)
+
+
+def _ctx_negative(ctx: Any, base: str, index: int | None) -> str:
+    """`$name.neg` in a condition: the variable's negatives as one line,
+    read the same way the resolver renders them."""
+    texts = [
+        str(e.get("text", "")) for e in negatives.get_entries(ctx, base)
+        if index is None or e.get("pick") is None or e.get("pick") == index
+    ]
+    return negatives.join_unique(texts)
 
 
 def _ctx_has(ctx: Any, name: str) -> bool:
@@ -128,6 +144,8 @@ def _ctx_has(ctx: Any, name: str) -> bool:
     if ctx is None:
         return False
     base, _index, axis = parse_var_reference(name)
+    if axis == NEG_ACCESSOR:
+        return bool(_ctx_negative(ctx, base, _index))
     if axis:
         # An axis is present when the binding actually rolled it. Checked
         # against the axes bucket, not ctx: `$outfit.SHOES` can exist while
@@ -316,17 +334,19 @@ def _apply_action(
     resolve_ctx: Any,
     carrier_key: str | None = None,
     neg_seed: int | None = None,
+    neg_key: str | None = None,
 ) -> tuple[str, str | None] | None:
     """Run one action. Returns (target, new value), with value None for an
     "Add to negative" action (it writes no value), or None when it did
-    nothing. `neg_seed` keys the action's negative stream."""
+    nothing. `neg_seed` + `neg_key` key the action's negative stream
+    (`neg_key` defaults to the carrier key)."""
     target = action.get("target_var", "")
     if not target:
         return None
     mode = action.get("mode", "replace")
     raw_value = str(action.get("value", ""))
     n_rng = negatives.neg_rng(
-        neg_seed or 0, f"derivation::{carrier_key or target}",
+        neg_seed or 0, f"derivation::{neg_key or carrier_key or target}",
     )
     if mode == "negative":
         text = negatives.quiet_resolve(raw_value, resolve_ctx, n_rng)
@@ -377,6 +397,29 @@ def _apply_action(
         result = new_value + _ctx_get(ctx, target)
     _ctx_set(ctx, target, result)
     return target, result
+
+
+def clause_actions(clause: Any) -> list[dict[str, Any]]:
+    """Every action a branch or ``else`` clause runs, in order: its ``action``
+    then its ``extra_actions``. Non-dict entries are skipped."""
+    if not isinstance(clause, dict):
+        return []
+    out = [clause.get("action")]
+    extra = clause.get("extra_actions")
+    if isinstance(extra, list):
+        out.extend(extra)
+    return [a for a in out if isinstance(a, dict)]
+
+
+def action_override_key(branch: int | str, action_index: int) -> str:
+    """Key into ``action_value_overrides[rule_id]`` for one action of a branch
+    (``branch`` is the index or ``"else"``). The first action keeps the bare
+    key it always had; later ones append ``.K``.
+
+    MUST stay byte-identical to the TS twin ``actionOverrideKey`` in
+    ``src/extension/derivation-conditions.ts``.
+    """
+    return str(branch) if action_index == 0 else f"{branch}.{action_index}"
 
 
 def _explain_action(
@@ -442,6 +485,16 @@ def _validate_action(action: Any, where: str) -> None:
         raise ValueError(f"derivation {where}.action.value must be a string")
 
 
+def _validate_extra_actions(clause: dict[str, Any], where: str) -> None:
+    extra = clause.get("extra_actions")
+    if extra is None:
+        return
+    if not isinstance(extra, list):
+        raise ValueError(f"derivation {where}.extra_actions must be a list")
+    for ai, action in enumerate(extra):
+        _validate_action(action, f"{where}.extra_actions[{ai}]")
+
+
 class DerivationHandler(ModuleHandler):
     """IF / ELIF / ELSE rule evaluator that mutates ctx."""
 
@@ -485,6 +538,7 @@ class DerivationHandler(ModuleHandler):
                     branch.get("condition"), f"rules[{ri}].branches[{bi}]"
                 )
                 _validate_action(branch.get("action"), f"rules[{ri}].branches[{bi}]")
+                _validate_extra_actions(branch, f"rules[{ri}].branches[{bi}]")
             else_clause = rule.get("else")
             if else_clause is not None:
                 if not isinstance(else_clause, dict):
@@ -492,6 +546,7 @@ class DerivationHandler(ModuleHandler):
                         f"derivation payload.rules[{ri}].else must be an object"
                     )
                 _validate_action(else_clause.get("action"), f"rules[{ri}].else")
+                _validate_extra_actions(else_clause, f"rules[{ri}].else")
 
     @classmethod
     def resolve(
@@ -579,6 +634,58 @@ class DerivationHandler(ModuleHandler):
         detail = module_detail(ctx)
         explained: list[dict[str, Any]] | None = [] if detail is not None else None
 
+        def run_clause(
+            rule_id: str, key: int | str, clause: dict[str, Any],
+            rd: dict[str, Any] | None,
+        ) -> None:
+            """Run a fired branch's (or the else clause's) actions in order.
+            Each action sees the writes of the ones before it. Action-value
+            overrides are keyed per action (``action_override_key``)."""
+            carrier = branch_carrier_key(rule_id, key)
+            rule_overrides = action_overrides.get(rule_id)
+            b_ctx = _branch_resolve_ctx(carrier)
+            shown: list[dict[str, Any]] = []
+            saved: dict[str, Any] = {}
+            for ai, action in enumerate(clause_actions(clause)):
+                override = (
+                    rule_overrides.get(action_override_key(key, ai))
+                    if isinstance(rule_overrides, dict) else None
+                )
+                if isinstance(override, str):
+                    action = {**action, "value": override}
+                # Later actions key their negative stream apart so two
+                # "Add to negative" actions on one branch never share rolls.
+                pair = _apply_action(
+                    action, ctx, b_ctx,
+                    carrier_key=carrier,
+                    neg_seed=effective_seed,
+                    neg_key=carrier if ai == 0 else f"{carrier}.{ai}",
+                )
+                if pair is not None and pair[1] is not None:
+                    out[pair[0]] = pair[1]
+                    # The next action of this branch reads what this one
+                    # wrote. Scoped to the branch (restored below) so rules
+                    # keep resolving their values exactly as before.
+                    vars_view = getattr(b_ctx, "_vars", None)
+                    if isinstance(vars_view, dict):
+                        base = split_var_accessor(pair[0])[0]
+                        if base not in saved:
+                            saved[base] = vars_view.get(base, _MISSING)
+                        vars_view[base] = pair[1]
+                shown.append(_explain_action(action, pair))
+            vars_view = getattr(b_ctx, "_vars", None)
+            if isinstance(vars_view, dict):
+                for base, prev in saved.items():
+                    if prev is _MISSING:
+                        vars_view.pop(base, None)
+                    else:
+                        vars_view[base] = prev
+            if rd is not None:
+                rd["fired"] = key
+                if shown:
+                    rd["action"] = shown[0]
+                    rd["actions"] = shown
+
         for rule in rules:
             rule_id = rule.get("id", "")
             rd: dict[str, Any] | None = None
@@ -619,27 +726,7 @@ class DerivationHandler(ModuleHandler):
                         "condition": _explain_condition(cond, ctx),
                     })
                 if matched:
-                    # Action-value override per branch index.
-                    action = branch.get("action", {})
-                    action_override = (
-                        action_overrides.get(rule_id, {}).get(str(bi))
-                        if isinstance(action_overrides.get(rule_id), dict)
-                        else None
-                    )
-                    if isinstance(action_override, str):
-                        action = {**action, "value": action_override}
-
-                    pair = _apply_action(
-                        action, ctx,
-                        _branch_resolve_ctx(branch_carrier_key(rule_id, bi)),
-                        carrier_key=branch_carrier_key(rule_id, bi),
-                        neg_seed=effective_seed,
-                    )
-                    if pair is not None and pair[1] is not None:
-                        out[pair[0]] = pair[1]
-                    if rd is not None:
-                        rd["fired"] = bi
-                        rd["action"] = _explain_action(action, pair)
+                    run_clause(rule_id, bi, branch, rd)
                     applied = True
                     break
 
@@ -651,26 +738,7 @@ class DerivationHandler(ModuleHandler):
                     continue
                 else_clause = rule.get("else")
                 if isinstance(else_clause, dict):
-                    action = else_clause.get("action", {})
-                    # ELSE action-value override under `else` key.
-                    action_override = (
-                        action_overrides.get(rule_id, {}).get("else")
-                        if isinstance(action_overrides.get(rule_id), dict)
-                        else None
-                    )
-                    if isinstance(action_override, str):
-                        action = {**action, "value": action_override}
-                    pair = _apply_action(
-                        action, ctx,
-                        _branch_resolve_ctx(branch_carrier_key(rule_id, "else")),
-                        carrier_key=branch_carrier_key(rule_id, "else"),
-                        neg_seed=effective_seed,
-                    )
-                    if pair is not None and pair[1] is not None:
-                        out[pair[0]] = pair[1]
-                    if rd is not None:
-                        rd["fired"] = "else"
-                        rd["action"] = _explain_action(action, pair)
+                    run_clause(rule_id, "else", else_clause, rd)
         if detail is not None:
             detail["rules"] = explained
         return out

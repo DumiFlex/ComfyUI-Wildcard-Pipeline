@@ -10,7 +10,7 @@
 import { computed, ref } from "vue";
 import RichTextPreview from "../../manager/components/RichTextPreview.vue";
 import DebugCondition from "./DebugCondition.vue";
-import type { RawRuleDetail, TraceStep, WarningRow } from "./debug-model";
+import { ruleActions, type RawRuleDetail, type TraceStep, type WarningRow } from "./debug-model";
 
 const props = defineProps<{
   step: TraceStep;
@@ -154,6 +154,7 @@ function modeGlyph(mode: string | undefined): string {
             <code>${{ rule.action.target }}</code>
             <span :class="{ 'wp-dbg-neg-mode': rule.action.mode === 'negative' }">{{ modeGlyph(rule.action.mode) }}</span>
             {{ actionShown(rule.action) }}
+            <span v-if="ruleActions(rule).length > 1" class="wp-dbg-dim">+{{ ruleActions(rule).length - 1 }}</span>
           </span>
         </button>
         <template v-if="ruleOpen(rule, ri)">
@@ -173,35 +174,38 @@ function modeGlyph(mode: string | undefined): string {
             <span class="wp-dbg-branch__tag">ELSE</span>
             <div class="wp-dbg-branch__body"><span class="wp-dbg-dim">no branch matched</span></div>
           </div>
-          <div v-if="rule.action" class="wp-dbg-rule__action" data-test="dbg-rule-action">
-            <code class="wp-dbg-var">${{ rule.action.target }}</code>
+          <template v-for="(act, ai) in ruleActions(rule)" :key="ai">
+          <div class="wp-dbg-rule__action" data-test="dbg-rule-action">
+            <span v-if="ai > 0" class="wp-dbg-and" data-test="dbg-rule-and">and</span>
+            <code class="wp-dbg-var">${{ act.target }}</code>
             <span
-              :class="rule.action.mode === 'negative' ? 'wp-dbg-neg-mode' : 'wp-dbg-dim'"
+              :class="act.mode === 'negative' ? 'wp-dbg-neg-mode' : 'wp-dbg-dim'"
               data-test="dbg-rule-mode"
-            >{{ modeGlyph(rule.action.mode) }}</span>
+            >{{ modeGlyph(act.mode) }}</span>
             <RichTextPreview
-              :class="{ 'wp-dbg-neg-text': rule.action.mode === 'negative' }"
-              :value="actionShown(rule.action)"
+              :class="{ 'wp-dbg-neg-text': act.mode === 'negative' }"
+              :value="actionShown(act)"
               :uuid-to-name="uuidToName"
               :uuid-to-kind="uuidToKind"
               surface="wildcard"
             />
           </div>
           <div
-            v-if="rule.action && rule.action.mode !== 'replace' && rule.action.mode !== 'negative' && rule.action.result != null"
+            v-if="act.mode !== 'replace' && act.mode !== 'negative' && act.result != null"
             class="wp-dbg-rule__result"
             data-test="dbg-rule-result"
           >
             <span class="wp-dbg-dim">now</span>
-            <code class="wp-dbg-var">${{ rule.action.target }}</code>
+            <code class="wp-dbg-var">${{ act.target }}</code>
             <span class="wp-dbg-dim">=</span>
             <RichTextPreview
-              :value="rule.action.result"
+              :value="act.result"
               :uuid-to-name="uuidToName"
               :uuid-to-kind="uuidToKind"
               surface="wildcard"
             />
           </div>
+          </template>
         </template>
       </div>
     </template>
@@ -407,6 +411,8 @@ function modeGlyph(mode: string | undefined): string {
   border-top: 1px dashed var(--wp-border);
   color: var(--wp-text);
 }
+/* A later action of the same clause (THEN ... AND ...). */
+.wp-dbg-and { font: 600 9px/1.5 var(--wp-font-sans); text-transform: uppercase; color: var(--wp-kind-derivation); }
 .wp-dbg-neg-mode { font: 600 10px/1.5 var(--wp-font-mono); color: var(--wp-red, #e5484d); }
 .wp-dbg-neg-text { color: var(--wp-red, #e5484d); }
 .wp-dbg-ref {

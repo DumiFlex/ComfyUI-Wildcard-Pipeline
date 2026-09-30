@@ -27,6 +27,7 @@
  */
 
 import { REF_TOKEN_RE } from "../../extension/conflicts";
+import { clauseActions } from "../../extension/derivation-conditions";
 import type {
   BundleRow,
   ConstraintException,
@@ -107,10 +108,10 @@ export function listReferencedUuids(module: ReferencingModule): string[] {
     case "derivation": {
       const dp = payload as Partial<DerivationPayload>;
       for (const rule of dp.rules ?? []) {
-        for (const branch of rule?.branches ?? []) {
-          collectNestedRefs(branch?.action?.value, refs);
+        // Every action of every branch + else (THEN ... AND ...).
+        for (const clause of [...(rule?.branches ?? []), rule?.else]) {
+          for (const a of clauseActions(clause)) collectNestedRefs(a.value, refs);
         }
-        collectNestedRefs(rule?.else?.action?.value, refs);
       }
       break;
     }

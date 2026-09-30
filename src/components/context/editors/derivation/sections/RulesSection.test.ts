@@ -257,6 +257,30 @@ describe("derivation RulesSection (tier-D accordion + branch table)", () => {
     expect(lastPatch(w).instance?.action_value_overrides).toBeNull();
   });
 
+  // ── THEN ... AND ...: one override per action ───────────────────
+
+  it("gives each extra action its own override keyed `bi.K` / `else.K`", async () => {
+    const rule = makeRule({
+      else: { action: { target_var: "a", mode: "replace", value: "1" } },
+    }) as DerivationRule & {
+      branches: Array<DerivationBranch & { extra_actions?: unknown[] }>;
+      else: { action: unknown; extra_actions?: unknown[] };
+    };
+    rule.branches[0].extra_actions = [{ target_var: "pose", mode: "negative", value: "extra arms" }];
+    rule.else.extra_actions = [{ target_var: "b", mode: "replace", value: "2" }];
+    const w = mount(RulesSection, { props: { module: makeModule([rule]) } });
+    const extra = await expandAndFindRti(w, "r1", "action-override-r1-0.1");
+    expect(extra!.props("placeholder")).toBe("extra arms");
+    extra!.vm.$emit("update:modelValue", "four arms");
+    await w.vm.$nextTick();
+    expect(lastPatch(w).instance?.action_value_overrides).toEqual({ r1: { "0.1": "four arms" } });
+    const elseExtra = w.findAllComponents(RichTextInput)
+      .find((c) => c.attributes("data-test") === "action-override-r1-else.1");
+    expect(elseExtra!.props("placeholder")).toBe("2");
+    // The summary reads every action, joined with AND.
+    expect(w.find('[data-test="branch-row-r1-0"]').text()).toMatch(/\$mood\s*=.*AND\s*\$pose\s*neg \+=/s);
+  });
+
   // ── Condition.value override ─────────────────────────────────────
 
   it("IF + ELIF rows have condition.value override input; ELSE does NOT", async () => {

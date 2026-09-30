@@ -2,6 +2,7 @@ import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 import DerivationRuleCard from "../components/DerivationRuleCard.vue";
 import RichTextInput from "../components/RichTextInput.vue";
+import Select from "../components/ui/Select.vue";
 import type { DerivationCondition, DerivationRule } from "../api/types";
 
 function makeRule(overrides: Partial<DerivationRule> = {}): DerivationRule {
@@ -645,5 +646,57 @@ describe("DerivationRuleCard — broken refs", () => {
     }));
     expect(wrap.find(".branch--broken").exists()).toBe(false);
     expect(wrap.find('[data-test="rule-broken-0"]').exists()).toBe(false);
+  });
+
+  // THEN ... AND ...: a clause runs `action` then `extra_actions`.
+  function lastRule(wrap: ReturnType<typeof mountCard>): DerivationRule {
+    const events = wrap.emitted("update:modelValue") ?? [];
+    return events[events.length - 1]?.[0] as DerivationRule;
+  }
+
+  it("adds an AND action to a branch and saves it as extra_actions", async () => {
+    const wrap = mountCard(makeRule());
+    await wrap.find('[data-test="act-add-0-0"]').trigger("click");
+    const next = lastRule(wrap);
+    expect(next.branches[0].action.target_var).toBe("out");
+    expect(next.branches[0].extra_actions).toEqual([
+      { target_var: "", mode: "replace", value: "" },
+    ]);
+  });
+
+  it("renders each extra action under an AND and removes it back to one action", async () => {
+    const rule = makeRule();
+    rule.branches[0].extra_actions = [{ target_var: "pose", mode: "negative", value: "extra arms" }];
+    const wrap = mountCard(rule);
+    await wrap.find('[data-test="toggle-branch-0-0"]').trigger("click");
+    expect(wrap.find('[data-test="act-block-0-0-1"]').text()).toContain("And");
+    expect(wrap.find('[data-test="act-neg-hint-0-0-1"]').text()).toContain("$pose");
+    await wrap.find('[data-test="act-remove-0-0-1"]').trigger("click");
+    const next = lastRule(wrap);
+    expect("extra_actions" in next.branches[0]).toBe(false);
+  });
+
+  it("edits the ELSE's extra action in place", async () => {
+    const rule = makeRule({
+      else: {
+        action: { target_var: "a", mode: "replace", value: "1" },
+        extra_actions: [{ target_var: "b", mode: "replace", value: "2" }],
+      },
+    });
+    const wrap = mountCard(rule);
+    await wrap.find('[data-test="toggle-branch-else-0"]').trigger("click");
+    wrap.findAllComponents(Select)
+      .find((c) => c.attributes("data-test") === "else-mode-0-1")!
+      .vm.$emit("update:modelValue", "append");
+    const next = lastRule(wrap);
+    expect(next.else?.action.mode).toBe("replace");
+    expect(next.else?.extra_actions?.[0].mode).toBe("append");
+  });
+
+  it("peeks every target of a collapsed branch", () => {
+    const rule = makeRule();
+    rule.branches[0].extra_actions = [{ target_var: "pose", mode: "negative", value: "x" }];
+    const wrap = mountCard(rule);
+    expect(wrap.find('[data-test="branch-peek-0-0"]').text()).toBe("$x → $out, $pose");
   });
 });

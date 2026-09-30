@@ -311,3 +311,46 @@ describe("the host swap must not read as the user leaving the field", () => {
     wrap.unmount();
   });
 });
+
+describe("`$var.neg` — a variable's negatives", () => {
+  it("is never flagged as an unknown axis and reads in negative red", async () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "$outfit.neg $shoes.0.neg",
+        varSuggestions: ["outfit", "shoes"],
+        varProducers: PRODUCERS,   // `outfit` declares SHOES + EXPOSES, not neg
+        graphAware: true,
+      },
+      attachTo: document.body,
+    });
+    await nextTick();
+    const html = (wrap.find(".wp-rt__host").element as HTMLElement).innerHTML;
+    expect(html).not.toContain("wp-refchip__accessor--unknown");
+    expect(html.match(/wp-refchip__accessor--neg/g)?.length).toBe(2);
+    wrap.unmount();
+  });
+
+  it("is offered after the dot, after the variable's own axes", async () => {
+    const wrap = mountEditor();
+    await (wrap.vm as unknown as {
+      __triggerAutocompleteForTest: (t: "@" | "$", q?: string) => Promise<void>;
+    }).__triggerAutocompleteForTest("$", "outfit.");
+    await flushPromises();
+    const labels = [...document.querySelectorAll(".wp-rt-suggestions__label")]
+      .map((n) => (n.textContent ?? "").trim());
+    expect(labels).toEqual(["$outfit.SHOES", "$outfit.EXPOSES", "$outfit.neg"]);
+    wrap.unmount();
+  });
+
+  it("is offered for a variable with no axes too", async () => {
+    const wrap = mountEditor();
+    await (wrap.vm as unknown as {
+      __triggerAutocompleteForTest: (t: "@" | "$", q?: string) => Promise<void>;
+    }).__triggerAutocompleteForTest("$", "shoes.ne");
+    await flushPromises();
+    const labels = [...document.querySelectorAll(".wp-rt-suggestions__label")]
+      .map((n) => (n.textContent ?? "").trim());
+    expect(labels).toEqual(["$shoes.neg"]);
+    wrap.unmount();
+  });
+});

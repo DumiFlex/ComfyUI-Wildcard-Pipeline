@@ -11,7 +11,7 @@ const sources = [
   { term: "Wildcard option", desc: "Each option has an optional Negative line under its value. When that option is picked, its words attach to the wildcard's $variable. A multi-pick attaches each picked option's words to its own pick. The null option has no negative." },
   { term: "Fixed value", desc: "Each value has the same Negative line. A fixed value always applies, so its negative travels with the variable wherever it is used. Handy for style presets: $style brings “photo, 3d render” along with it." },
   { term: "Combine", desc: "A combine carries the negatives of every variable its template read, with no setup. On top of that it has one optional Negative of its own, for words that belong to the phrase as a whole." },
-  { term: "Derivation “Add to negative”", desc: "A fourth action next to Replace, Append and Prepend. It leaves the target variable's text alone and adds the value to that variable's negatives, so a rule like “when $mood is gloomy, add ‘smiling’” follows $mood wherever it goes." },
+  { term: "Derivation “Add to negative”", desc: "A fourth action next to Replace, Append and Prepend. It leaves the target variable's text alone and adds the value to that variable's negatives, so a rule like “when $mood is gloomy, add ‘smiling’” follows $mood wherever it goes. With + And, one branch can replace a variable and add to its negative in the same step." },
   { term: "Context Injector row", desc: "Socket rows and template rows can carry a Negative, written with the same $slot grammar as the row template. It replaces whatever negatives the variable carried before, so injecting $character over a picked one swaps the pick's negative for the row's." },
 ];
 
@@ -20,6 +20,7 @@ const rules = [
   { term: "Index and axis accessors", desc: "$props.0 carries only the first pick's negative. Bare $props and $props.AXIS carry every pick's." },
   { term: "Internal variables add nothing", desc: "An internal variable never renders in a prompt, so its negatives never reach a negative output, even though they are kept for downstream modules that read it." },
   { term: "Variables in the negative template", desc: "A $var you write in the Assembler's negative template adds its text, not its own negatives." },
+  { term: "Reading a variable's negatives: $name.neg", desc: "$pose.neg is the negative words $pose carries at that point in the chain, and $props.1.neg only pick 1's. It works wherever $vars do: hand one variable's negatives to another with “Add to negative” and the value $pose_portrait.neg, use it in a combine or the Assembler's negative template, or test it in a condition. Reading .neg is not a use of $pose, so it never pulls $pose's words in a second time." },
 ];
 </script>
 

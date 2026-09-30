@@ -103,6 +103,13 @@ _SAMPLES: dict[str, tuple[type, dict]] = {
                                 "target_var": "accent", "mode": "replace",
                                 "value": "cinematic lighting",
                             },
+                            # THEN ... AND ... (v8): runs after `action`.
+                            "extra_actions": [
+                                {
+                                    "target_var": "accent", "mode": "negative",
+                                    "value": "$mood.neg",
+                                },
+                            ],
                         },
                     ],
                     "else": {

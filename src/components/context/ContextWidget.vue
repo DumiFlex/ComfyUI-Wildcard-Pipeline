@@ -11,6 +11,7 @@ import { type ResolvedValue } from "../../widgets/richTokenize";
 import { scanConflicts, labelFor as conflictLabelFor, shortConflictLabel, type Conflict } from "../../extension/conflicts";
 import type { ChainModule, PairingBadge, RowPairings } from "../../extension/constraint-pairs";
 import { baseCodename } from "../../extension/node-codename";
+import { derivationTargets } from "../../extension/derivation-conditions";
 import {
   getCollapseMode,
   getCollapsedByDefault,
@@ -902,10 +903,7 @@ const siblingVarInfo = computed<{
         for (const v of p.values ?? []) add(v.name);
       }
     } else if (m.type === "derivation") {
-      for (const rule of p.rules ?? []) {
-        for (const br of rule.branches ?? []) add(br.action?.target_var);
-        add(rule.else?.action?.target_var);
-      }
+      for (const name of derivationTargets(p)) add(name);
     }
   }
   owner = null;

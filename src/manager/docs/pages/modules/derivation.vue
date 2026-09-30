@@ -113,6 +113,21 @@ const instanceOptions = [
       </DocCallout>
     </DocSection>
 
+    <DocSection title="Several actions in one branch">
+      <p>
+        Click <b>+ And</b> under a branch's action to add another. The actions run in order when the
+        branch fires, and each one sees what the one before it wrote. For example, IF
+        <VarToken>$tier</VarToken> equals "warmup" THEN <VarToken>$pose</VarToken> Replace
+        <VarToken>$pose_portrait</VarToken> AND <VarToken>$pose</VarToken> Add to negative
+        <VarToken>$pose_portrait.neg</VarToken>. The ELSE branch works the same way. On the canvas,
+        each action gets its own value override.
+      </p>
+      <DocCallout variant="tip">
+        A branch with more than one action is shared as schema 8, which older versions refuse with a
+        request to update.
+      </DocCallout>
+    </DocSection>
+
     <DocSection title="Nested references in actions">
       <p>
         An action's value isn't limited to plain text. When a rule fires, its action value is fully

@@ -34,6 +34,8 @@ import RuleValueChips from "./RuleValueChips.vue";
 import { tokenizeRich } from "../../../../../widgets/richTokenize";
 import PairBadge from "../../../PairBadge.vue";
 import {
+  actionOverrideKey,
+  clauseActions,
   conditionLeaves,
   conditionOverrideKey,
   isConditionGroup,
@@ -53,11 +55,27 @@ const RichTextInput = defineAsyncComponent(
 interface DerivationCondition { var?: string; op?: string; value?: string }
 interface DerivationAction { target_var?: string; mode?: string; value?: string }
 /** `condition` is one test or an AND / OR group of them (schema v7). */
-interface DerivationBranch { condition?: unknown; action?: DerivationAction }
+interface DerivationBranch { condition?: unknown; action?: DerivationAction; extra_actions?: DerivationAction[] }
+interface DerivationElse { action?: DerivationAction; extra_actions?: DerivationAction[] }
 interface DerivationRule {
   id: string;
   branches?: DerivationBranch[];
-  else?: { action?: DerivationAction };
+  else?: DerivationElse;
+}
+
+/** A clause's actions in run order: `action`, then `extra_actions`
+ *  (THEN ... AND ...). */
+function acts(clause: DerivationBranch | DerivationElse | undefined): DerivationAction[] {
+  return clauseActions<DerivationAction>(clause);
+}
+
+/** One override field per action of a clause, keyed the way the engine reads
+ *  `action_value_overrides` (the first action keeps the bare branch key). */
+function actionOverrides(
+  clause: DerivationBranch | DerivationElse | undefined,
+  branch: number | "else",
+): Array<{ key: string; action: DerivationAction }> {
+  return acts(clause).map((action, ai) => ({ key: actionOverrideKey(branch, ai), action }));
 }
 
 /** `@` refs in a rule's action values (library and this node's overrides)
@@ -68,8 +86,9 @@ function ruleBrokenRefs(rule: DerivationRule): string[] {
   const known = props.uuidToName;
   if (known.size === 0) return [];
   const texts: unknown[] = [];
-  for (const b of rule.branches ?? []) texts.push(b.action?.value);
-  texts.push(rule.else?.action?.value);
+  for (const clause of [...(rule.branches ?? []), rule.else]) {
+    for (const a of acts(clause)) texts.push(a.value);
+  }
   const inst = props.module.instance as Record<string, unknown> | undefined;
   const byRule = (inst?.action_value_overrides as Record<string, Record<string, unknown>> | null | undefined)?.[rule.id];
   if (byRule && typeof byRule === "object") texts.push(...Object.values(byRule));
@@ -478,8 +497,7 @@ function clampPreviewValue(value: unknown): string {
  *  the visible summary caps long values, so this is how the user reads the
  *  rest. */
 function branchSummaryText(
-  branch: { condition?: unknown;
-            action?: { target_var?: string; mode?: string; value?: string } } | undefined,
+  branch: { condition?: unknown; action?: DerivationAction; extra_actions?: DerivationAction[] } | undefined,
 ): string {
   if (!branch) return "";
   const parts: string[] = [];
@@ -488,8 +506,10 @@ function branchSummaryText(
     .map((p) => (p.kind === "var" ? `$${p.text}` : p.text))
     .join(" ");
   if (cond) parts.push(cond);
-  const a = branch.action;
-  if (a?.target_var) parts.push(`→ $${a.target_var} ${modeLabel(a.mode)} ${a.value ?? ""}`);
+  const then = acts(branch)
+    .filter((a) => a.target_var)
+    .map((a) => `$${a.target_var} ${modeLabel(a.mode)} ${a.value ?? ""}`.trim());
+  if (then.length) parts.push(`→ ${then.join(" AND ")}`);
   return parts.join(" ").trim();
 }
 
@@ -585,12 +605,15 @@ function ruleSummaryText(rule: DerivationRule): string {
                 <span v-else class="rule-tok-op">{{ part.text }}</span>
               </template>
               <span class="rule-tok-arrow">→</span>
-              <span
-                v-if="rule.branches[0].action?.target_var"
-                :class="['rule-tok-var', varColorClass(rule.branches[0].action.target_var)]"
-              >${{ rule.branches[0].action.target_var }}</span>
-              <span class="rule-tok-op" :class="{ 'rule-tok-op--neg': rule.branches[0].action?.mode === 'negative' }" :title="rule.branches[0].action?.mode === 'negative' ? 'Add to negative — the variable is not changed' : undefined">{{ modeLabel(rule.branches[0].action?.mode) }}</span>
-              <span class="rule-tok-val"><RuleValueChips :value="clampPreviewValue(rule.branches[0].action?.value)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
+              <template v-for="(a, ai) in acts(rule.branches[0])" :key="ai">
+                <span v-if="ai > 0" class="rule-tok-join">AND</span>
+                <span
+                  v-if="a.target_var"
+                  :class="['rule-tok-var', varColorClass(a.target_var)]"
+                >${{ a.target_var }}</span>
+                <span class="rule-tok-op" :class="{ 'rule-tok-op--neg': a.mode === 'negative' }" :title="a.mode === 'negative' ? 'Add to negative — the variable is not changed' : undefined">{{ modeLabel(a.mode) }}</span>
+                <span class="rule-tok-val"><RuleValueChips :value="clampPreviewValue(a.value)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
+              </template>
               <!-- Inline ↪#N constraint-pair badge — rendered when this
                    derivation is a constraint carrier through the IF branch's
                    nested `@{uuid}` ref. Mirrors OptionRow's per-option badge
@@ -683,12 +706,15 @@ function ruleSummaryText(rule: DerivationRule): string {
                   <span v-else class="rule-tok-op">{{ part.text }}</span>
                 </template>
                 <span class="rule-tok-arrow">→</span>
-                <span
-                  v-if="branch.action?.target_var"
-                  :class="['rule-tok-var', varColorClass(branch.action.target_var)]"
-                >${{ branch.action.target_var }}</span>
-                <span class="rule-tok-op" :class="{ 'rule-tok-op--neg': branch.action?.mode === 'negative' }" :title="branch.action?.mode === 'negative' ? 'Add to negative — the variable is not changed' : undefined">{{ modeLabel(branch.action?.mode) }}</span>
-                <span class="rule-tok-val"><RuleValueChips :value="clampPreviewValue(branch.action?.value)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
+                <template v-for="(a, ai) in acts(branch)" :key="ai">
+                  <span v-if="ai > 0" class="rule-tok-join">AND</span>
+                  <span
+                    v-if="a.target_var"
+                    :class="['rule-tok-var', varColorClass(a.target_var)]"
+                  >${{ a.target_var }}</span>
+                  <span class="rule-tok-op" :class="{ 'rule-tok-op--neg': a.mode === 'negative' }" :title="a.mode === 'negative' ? 'Add to negative — the variable is not changed' : undefined">{{ modeLabel(a.mode) }}</span>
+                  <span class="rule-tok-val"><RuleValueChips :value="clampPreviewValue(a.value)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
+                </template>
                 <PairBadge
                   v-for="p in pairBadgesFor(rule.id, bi)"
                   :key="`${p.number}-${p.targetUuid}`"
@@ -733,26 +759,40 @@ function ruleSummaryText(rule: DerivationRule): string {
                      (allow-nested-refs + the six ref-data maps): the engine
                      resolves `@{}` here post-Layer-A. Matches the SPA
                      DerivationRuleCard action field. -->
-                <RichTextInput
-                  surface="derivation"
-                  allow-nested-refs
-                  wrap
-                  :var-suggestions="varSuggestions"                  :var-producers="varProducers"                  graph-aware
-                  :ref-suggestions="refSuggestions"
-                  :uuid-to-name="uuidToName"
-                  :uuid-to-sub-categories="uuidToSubCategories"
-                  :uuid-to-has-null="uuidToHasNull"
-                  :uuid-to-options-count="uuidToOptionsCount"
-                  :uuid-to-option-tag-sets="uuidToOptionTagSets"
-                  :uuid-to-tag-groups="uuidToTagGroups"
-                  :model-value="getOverride('action_value_overrides', rule.id, String(bi))"
-                  :placeholder="branch.action?.value || ''"
-                  class="branch-override-input"
-                  :class="{ 'branch-override-input--mod': getOverride('action_value_overrides', rule.id, String(bi)) !== '' }"
-                  :data-test="`action-override-${rule.id}-${bi}`"
-                  :aria-label="`Action value override for rule ${rule.id} branch ${bi}`"
-                  @update:model-value="(v: string) => onActionOverrideInput(rule.id, String(bi), v)"
-                />
+                <!-- One field per action (THEN ... AND ...); several are labelled
+                     with their target so they can be told apart. -->
+                <span
+                  v-for="{ key, action } in actionOverrides(branch, bi)"
+                  :key="key"
+                  class="cond-override"
+                >
+                  <span
+                    v-if="acts(branch).length > 1"
+                    :class="['cond-override__var', 'rule-tok-var', varColorClass(action.target_var ?? '')]"
+                  >${{ action.target_var }}</span>
+                  <RichTextInput
+                    surface="derivation"
+                    allow-nested-refs
+                    wrap
+                    :var-suggestions="varSuggestions"
+                    :var-producers="varProducers"
+                    graph-aware
+                    :ref-suggestions="refSuggestions"
+                    :uuid-to-name="uuidToName"
+                    :uuid-to-sub-categories="uuidToSubCategories"
+                    :uuid-to-has-null="uuidToHasNull"
+                    :uuid-to-options-count="uuidToOptionsCount"
+                    :uuid-to-option-tag-sets="uuidToOptionTagSets"
+                    :uuid-to-tag-groups="uuidToTagGroups"
+                    :model-value="getOverride('action_value_overrides', rule.id, key)"
+                    :placeholder="action.value || ''"
+                    class="branch-override-input"
+                    :class="{ 'branch-override-input--mod': getOverride('action_value_overrides', rule.id, key) !== '' }"
+                    :data-test="`action-override-${rule.id}-${key}`"
+                    :aria-label="`Action value override for rule ${rule.id} branch ${bi}${key === String(bi) ? '' : ' action ' + key}`"
+                    @update:model-value="(v: string) => onActionOverrideInput(rule.id, key, v)"
+                  />
+                </span>
               </span>
             </div>
 
@@ -779,15 +819,18 @@ function ruleSummaryText(rule: DerivationRule): string {
               <span class="branch-cell branch-cell--tag" data-kind="else">ELSE</span>
               <span
                 class="branch-cell branch-cell--summary"
-                :title="branchSummaryText({ action: rule.else.action })"
+                :title="branchSummaryText(rule.else)"
               >
                 <span class="rule-tok-arrow">→</span>
-                <span
-                  v-if="rule.else.action?.target_var"
-                  :class="['rule-tok-var', varColorClass(rule.else.action.target_var)]"
-                >${{ rule.else.action.target_var }}</span>
-                <span class="rule-tok-op" :class="{ 'rule-tok-op--neg': rule.else.action?.mode === 'negative' }" :title="rule.else.action?.mode === 'negative' ? 'Add to negative — the variable is not changed' : undefined">{{ modeLabel(rule.else.action?.mode) }}</span>
-                <span class="rule-tok-val"><RuleValueChips :value="clampPreviewValue(rule.else.action?.value)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
+                <template v-for="(a, ai) in acts(rule.else)" :key="ai">
+                  <span v-if="ai > 0" class="rule-tok-join">AND</span>
+                  <span
+                    v-if="a.target_var"
+                    :class="['rule-tok-var', varColorClass(a.target_var)]"
+                  >${{ a.target_var }}</span>
+                  <span class="rule-tok-op" :class="{ 'rule-tok-op--neg': a.mode === 'negative' }" :title="a.mode === 'negative' ? 'Add to negative — the variable is not changed' : undefined">{{ modeLabel(a.mode) }}</span>
+                  <span class="rule-tok-val"><RuleValueChips :value="clampPreviewValue(a.value)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
+                </template>
                 <PairBadge
                   v-for="p in pairBadgesFor(rule.id, 'else')"
                   :key="`${p.number}-${p.targetUuid}`"
@@ -800,26 +843,40 @@ function ruleSummaryText(rule: DerivationRule): string {
               <span class="branch-cell branch-cell--action-override">
                 <!-- ELSE action.value override — full `@{}` carrier machinery,
                      same as the IF/ELIF action field. -->
-                <RichTextInput
-                  surface="derivation"
-                  allow-nested-refs
-                  wrap
-                  :var-suggestions="varSuggestions"                  :var-producers="varProducers"                  graph-aware
-                  :ref-suggestions="refSuggestions"
-                  :uuid-to-name="uuidToName"
-                  :uuid-to-sub-categories="uuidToSubCategories"
-                  :uuid-to-has-null="uuidToHasNull"
-                  :uuid-to-options-count="uuidToOptionsCount"
-                  :uuid-to-option-tag-sets="uuidToOptionTagSets"
-                  :uuid-to-tag-groups="uuidToTagGroups"
-                  :model-value="getOverride('action_value_overrides', rule.id, 'else')"
-                  :placeholder="rule.else.action?.value || ''"
-                  class="branch-override-input"
-                  :class="{ 'branch-override-input--mod': getOverride('action_value_overrides', rule.id, 'else') !== '' }"
-                  :data-test="`action-override-${rule.id}-else`"
-                  :aria-label="`ELSE action value override for rule ${rule.id}`"
-                  @update:model-value="(v: string) => onActionOverrideInput(rule.id, 'else', v)"
-                />
+                <!-- One field per action (THEN ... AND ...); several are labelled
+                     with their target so they can be told apart. -->
+                <span
+                  v-for="{ key, action } in actionOverrides(rule.else, 'else')"
+                  :key="key"
+                  class="cond-override"
+                >
+                  <span
+                    v-if="acts(rule.else).length > 1"
+                    :class="['cond-override__var', 'rule-tok-var', varColorClass(action.target_var ?? '')]"
+                  >${{ action.target_var }}</span>
+                  <RichTextInput
+                    surface="derivation"
+                    allow-nested-refs
+                    wrap
+                    :var-suggestions="varSuggestions"
+                    :var-producers="varProducers"
+                    graph-aware
+                    :ref-suggestions="refSuggestions"
+                    :uuid-to-name="uuidToName"
+                    :uuid-to-sub-categories="uuidToSubCategories"
+                    :uuid-to-has-null="uuidToHasNull"
+                    :uuid-to-options-count="uuidToOptionsCount"
+                    :uuid-to-option-tag-sets="uuidToOptionTagSets"
+                    :uuid-to-tag-groups="uuidToTagGroups"
+                    :model-value="getOverride('action_value_overrides', rule.id, key)"
+                    :placeholder="action.value || ''"
+                    class="branch-override-input"
+                    :class="{ 'branch-override-input--mod': getOverride('action_value_overrides', rule.id, key) !== '' }"
+                    :data-test="`action-override-${rule.id}-${key}`"
+                    :aria-label="`ELSE action value override for rule ${rule.id}${key === 'else' ? '' : ' action ' + key}`"
+                    @update:model-value="(v: string) => onActionOverrideInput(rule.id, key, v)"
+                  />
+                </span>
               </span>
             </div>
           </div>
@@ -1067,8 +1124,10 @@ function ruleSummaryText(rule: DerivationRule): string {
   font-weight: 600;
 }
 .branch-cell--toggle { justify-content: center; }
-/* Stacks a grouped branch's per-test override fields. */
-.branch-cell--cond-override { flex-direction: column; align-items: stretch; }
+/* Stacks a grouped branch's per-test override fields, and a multi-action
+   branch's per-action ones. */
+.branch-cell--cond-override,
+.branch-cell--action-override { flex-direction: column; align-items: stretch; }
 .branch-cell--tag {
   justify-content: flex-start;
   font: 600 9px var(--wp-font-sans);
