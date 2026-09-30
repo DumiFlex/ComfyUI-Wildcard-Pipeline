@@ -4,6 +4,7 @@
  * Context node that ran it. A row says what the step wrote; clicking it
  * opens DebugStepDetail with the reasons.
  */
+import { nextTick, ref, watch } from "vue";
 import RichTextPreview from "../../manager/components/RichTextPreview.vue";
 import DebugStepDetail from "./DebugStepDetail.vue";
 import type { NodeInfo, TraceGroup, TraceStep, WarningRow } from "./debug-model";
@@ -29,6 +30,30 @@ const emit = defineEmits<{
   (e: "focus-node", nodeId: string): void;
 }>();
 
+// Open rows whose one-line value is cut off in the row. Their detail repeats
+// the value in full; a value that already fits isn't repeated.
+const root = ref<HTMLElement | null>(null);
+const clipped = ref<Set<string>>(new Set());
+watch(
+  () => [props.expanded, props.groups],
+  async () => {
+    await nextTick();
+    const next = new Set<string>();
+    for (const key of props.expanded) {
+      const val = root.value?.querySelector<HTMLElement>(`[data-step-key="${key}"] .wp-dbg-step__val`);
+      if (val && val.scrollWidth > val.clientWidth + 1) next.add(key);
+    }
+    clipped.value = next;
+  },
+  { immediate: true },
+);
+
+/** Show a single value again in full under the row: always when it is long,
+ *  and whenever the row had to cut it off (a narrow node clips short ones). */
+function showFullValue(s: TraceStep): boolean {
+  return s.writes.length === 1 && (s.writes[0].value.length > 60 || clipped.value.has(s.key));
+}
+
 function title(s: TraceStep): string {
   if (s.name) return s.name;
   if (s.kind === "constraint") return "constraint";
@@ -40,19 +65,31 @@ function refName(uuid: string): string {
   return props.uuidToName.get(uuid) ?? uuid.slice(0, 8);
 }
 
+/** A Context node goes by its codename (the name on the node itself); other
+ *  nodes by their title. The graph id is only a fallback for a node that is
+ *  no longer on the canvas, and otherwise lives in the tooltip. */
 function groupLabel(g: TraceGroup): string {
   if (!g.nodeId) return "Chain";
-  return props.nodeInfo(g.nodeId).title || `Node ${g.nodeId}`;
+  const info = props.nodeInfo(g.nodeId);
+  return info.codename || info.title || `Node ${g.nodeId}`;
+}
+function groupTooltip(g: TraceGroup): string {
+  if (!g.nodeId) return "";
+  const info = props.nodeInfo(g.nodeId);
+  return [info.codename ? info.title : "", `node id ${g.nodeId}`].filter(Boolean).join(" · ");
 }
 </script>
 
 <template>
-  <div class="wp-dbg-trace" data-test="dbg-trace">
+  <div ref="root" class="wp-dbg-trace" data-test="dbg-trace">
     <section v-for="(g, gi) in groups" :key="`${g.nodeId}:${gi}`" class="wp-dbg-group">
       <header v-if="showGroupHeads" class="wp-dbg-group__head" data-test="dbg-group-head">
-        <span class="wp-dbg-group__title">{{ groupLabel(g) }}</span>
-        <span v-if="g.nodeId && nodeInfo(g.nodeId).codename" class="wp-dbg-group__codename" title="This node's codename">{{ nodeInfo(g.nodeId).codename }}</span>
-        <span v-if="g.nodeId" class="wp-dbg-group__id">#{{ g.nodeId }}</span>
+        <span
+          class="wp-dbg-group__title"
+          :class="{ 'wp-dbg-group__title--codename': !!(g.nodeId && nodeInfo(g.nodeId).codename) }"
+          :title="groupTooltip(g)"
+          data-test="dbg-group-title"
+        >{{ groupLabel(g) }}</span>
         <span v-if="g.seed" class="wp-dbg-group__seed" title="Chain seed this node ran with">seed {{ g.seed }}</span>
         <button
           v-if="canFocus && g.nodeId"
@@ -151,7 +188,7 @@ function groupLabel(g: TraceGroup): string {
               <span v-if="w.overwrite" class="wp-dbg-step__more" title="Replaced an earlier value">↻</span>
             </div>
           </div>
-          <div v-else-if="s.writes.length === 1 && s.writes[0].value.length > 60" class="wp-dbg-step__full">
+          <div v-else-if="showFullValue(s)" class="wp-dbg-step__full" data-test="dbg-full-value">
             <RichTextPreview
               :value="s.writes[0].value"
               :uuid-to-name="uuidToName"
@@ -200,13 +237,12 @@ function groupLabel(g: TraceGroup): string {
   color: var(--wp-text-dim);
 }
 .wp-dbg-group__title { font: 600 11px/1.4 var(--wp-font-sans); color: var(--wp-text); }
-.wp-dbg-group__id, .wp-dbg-group__seed { font-family: var(--wp-font-mono); }
-.wp-dbg-group__codename {
-  font: 500 10px/1.5 var(--wp-font-mono);
-  padding: 0 6px;
+.wp-dbg-group__seed { font-family: var(--wp-font-mono); }
+.wp-dbg-group__title--codename {
+  font: 600 10.5px/1.5 var(--wp-font-mono);
+  padding: 0 7px;
   border-radius: 999px;
   border: 1px solid var(--wp-border);
-  color: var(--wp-text-muted);
 }
 .wp-dbg-group__focus {
   margin-left: auto;

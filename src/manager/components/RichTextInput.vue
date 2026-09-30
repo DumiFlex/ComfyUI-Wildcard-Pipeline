@@ -47,6 +47,7 @@ import type { ModelKind, ModelSuggestion, TagCategoryName, TagSuggestion } from 
 import { loadTagAvailability } from "../utils/tagStatus";
 import {
   autocompleteSeparatorEnabled,
+  completionLimit,
   completionSettingsVersion,
   completionSourceEnabled as sourceOn,
 } from "../utils/tagSetting";
@@ -434,7 +435,7 @@ type WordRow =
  *  section is what actually makes the others reachable.
  *
  *  Only applied when there IS something to protect: a query matching nothing
- *  but tags still gets the full twenty. */
+ *  but tags still gets the full list (the "max suggestions" setting). */
 const TAGS_WHEN_MODELS_MATCH = 6;
 
 const wordRows = computed<WordRow[]>(() => {
@@ -579,9 +580,9 @@ function scheduleTagFetch(query: string): void {
       ];
 
     void Promise.allSettled([
-      wantTags ? api.tags.suggest(query, 20) : Promise.resolve(null),
+      wantTags ? api.tags.suggest(query, completionLimit("maxSuggestions")) : Promise.resolve(null),
       kinds.length > 0
-        ? api.models.suggest(query, kinds, 8, refKind.value !== null)
+        ? api.models.suggest(query, kinds, Math.min(8, completionLimit("maxSuggestions")), refKind.value !== null)
         : Promise.resolve(null),
     ]).then(([tagRes, modelRes]) => {
       // Stale-response guard: a newer keystroke already scheduled its own
@@ -1453,7 +1454,7 @@ function refreshAutocompleteFromHost(): void {
         return;
       }
       refKind.value = null;
-      const word = probeTagWord(rawText, rawCaret);
+      const word = probeTagWord(rawText, rawCaret, completionLimit("minChars"));
       if (word && !triggerIsInsideChip(word.start)) {
         acOpen.value = true;
         acStart.value = word.start;

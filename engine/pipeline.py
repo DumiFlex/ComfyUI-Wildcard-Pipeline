@@ -13,7 +13,7 @@ import random
 import re
 from typing import Any
 
-from engine import negatives
+from engine import negatives, prefs
 from engine.context import Context
 from engine.modules import Module
 from engine.modules._detail import DETAIL_KEY, EXPLAIN_KEY
@@ -338,6 +338,12 @@ class PipelineEngine:
         ctx.setdefault("__wp_internal_flags__", {})
         # Send-to-negative: per-variable negatives (engine/negatives.py).
         ctx.setdefault(negatives.NEG_KEY, {})
+        # `@{uuid}` nesting limit from Settings (engine/prefs.py). setdefault
+        # so a caller (or a test) that pinned a limit keeps it; set here
+        # rather than per surface so canvas runs, preview and the Test Runner
+        # all honor the same value. `__`-prefixed, so it never crosses a
+        # socket — each node re-reads it at its own run.
+        ctx.setdefault("__wp_max_ref_depth__", prefs.max_ref_depth())
         # SP3 reach selector: per-constraint firing count keyed by
         # `__constraint_module_id__`. Drives first/next/all/pick
         # coverage in apply_constraints_for_target + the never_applied /

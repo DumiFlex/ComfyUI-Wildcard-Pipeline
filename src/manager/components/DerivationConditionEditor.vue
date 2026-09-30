@@ -4,10 +4,12 @@
  *
  * A branch condition is one test or a group (`{match, conditions}`); this
  * component always shows it as a group so adding a second test is one click.
- * The group's connector (AND = `all`, OR = `any`) sits between its members and
- * toggles for the whole group, so a group never mixes the two: mixing needs a
- * nested group, which renders boxed and recursively (up to
- * MAX_EDITOR_GROUP_DEPTH levels).
+ * A group's connector (AND = `all`, OR = `any`) sits between its members, and
+ * a group never mixes the two. Clicking ONE connector flips just that one: the
+ * members are regrouped the way the mixed row reads, AND binding tighter than
+ * OR (`flipConnector`), so the tests that now share an AND show up boxed as a
+ * nested group. Nested groups render recursively; + Group offers nesting up to
+ * MAX_EDITOR_GROUP_DEPTH levels.
  *
  * At the root, a group of one member is emitted as that member, so a branch
  * that only ever had one test keeps the plain shape (and the v2 schema stamp).
@@ -24,8 +26,10 @@ import type {
 } from "../api/types";
 import {
   MAX_EDITOR_GROUP_DEPTH,
+  flipConnector,
   isConditionGroup,
   matchWord,
+  simplifyCondition,
 } from "../../extension/derivation-conditions";
 
 defineOptions({ name: "DerivationConditionEditor" });
@@ -69,20 +73,35 @@ function blankTest(): DerivationCondition {
   return { var: "", op: "equals", value: "" };
 }
 
-function emitGroup(next: DerivationConditionGroup): void {
+function emitNode(next: DerivationConditionNode): void {
   if (props.depth === 0) {
-    emit("update:modelValue", next.conditions.length === 1 ? next.conditions[0] : next);
+    emit("update:modelValue", next);
     return;
   }
-  if (next.conditions.length === 0) {
+  if (isConditionGroup(next) && next.conditions.length === 0) {
     emit("remove");
     return;
   }
   emit("update:modelValue", next);
 }
+function emitGroup(next: DerivationConditionGroup): void {
+  if (props.depth === 0 && next.conditions.length === 1) {
+    emitNode(next.conditions[0]);
+    return;
+  }
+  emitNode(next);
+}
 
+/** A child that comes back with this group's own connector (a flipped
+ *  connector inside it) merges into this group rather than nesting. */
 function setChild(i: number, node: DerivationConditionNode): void {
-  emitGroup({ ...group.value, conditions: group.value.conditions.map((c, j) => (j === i ? node : c)) });
+  const merged = isConditionGroup(node) && node.match === group.value.match
+    ? node.conditions
+    : [node];
+  emitGroup({
+    ...group.value,
+    conditions: group.value.conditions.flatMap((c, j) => (j === i ? merged : [c])),
+  });
 }
 function removeChild(i: number): void {
   emitGroup({ ...group.value, conditions: group.value.conditions.filter((_, j) => j !== i) });
@@ -99,8 +118,11 @@ function addGroup(): void {
   };
   emitGroup({ ...group.value, conditions: [...group.value.conditions, inner] });
 }
-function toggleMatch(): void {
-  emitGroup({ ...group.value, match: group.value.match === "any" ? "all" : "any" });
+/** Flip only the connector in front of member `i`. A nested group whose
+ *  result is a single member (or a group) hands that to its parent. */
+function flipAt(i: number): void {
+  const next = flipConnector(group.value, i) as DerivationConditionNode;
+  emitNode(props.depth === 0 ? next : simplifyCondition(next));
 }
 
 function childPath(i: number): string {
@@ -118,8 +140,8 @@ function childAria(i: number): string {
 
 const matchTitle = computed(() =>
   group.value.match === "any"
-    ? "OR: the branch fires when ANY of these tests match. Click for AND."
-    : "AND: the branch fires only when ALL of these tests match. Click for OR.",
+    ? "OR: either side can match. Click to make just this one AND (AND binds tighter, so its two sides get boxed together)."
+    : "AND: both sides must match. Click to make just this one OR (the AND runs on either side get boxed).",
 );
 
 /** A member can go unless it is the root's only one. */
@@ -157,7 +179,7 @@ const canRemove = computed(() => props.depth > 0 || group.value.conditions.lengt
           :data-match="group.match"
           :title="matchTitle"
           :data-test="`cond-match-${childTestId(i)}`"
-          @click="toggleMatch"
+          @click="flipAt(i)"
         >{{ matchWord(group.match) }}</button>
       </div>
 
@@ -192,7 +214,7 @@ const canRemove = computed(() => props.depth > 0 || group.value.conditions.lengt
             :data-match="group.match"
             :title="matchTitle"
             :data-test="`cond-match-${childTestId(i)}`"
-            @click="toggleMatch"
+            @click="flipAt(i)"
           >{{ matchWord(group.match) }}</button>
         </template>
         <template v-if="canRemove" #actions>
@@ -261,8 +283,8 @@ const canRemove = computed(() => props.depth > 0 || group.value.conditions.lengt
   grid-template-columns: 60px 1fr;
   justify-items: end;
 }
-/* AND / OR connector. Clicking flips the whole group, so every connector in a
-   group always reads the same. */
+/* AND / OR connector. Clicking flips just this one; the members regroup (see
+   flipConnector) so every connector left in a group still reads the same. */
 .dvc-match {
   font-family: var(--wp-font-mono, ui-monospace, monospace);
   font-size: 10px; /* audit-exempt: micro connector pill, matches branch tags */

@@ -123,6 +123,7 @@ const settings = settingsMod.buildSettings(app);
 settingsMod.applyA11yClasses(app);
 settingsMod.applyDisplayPrefs(app);
 settingsMod.watchA11ySystemPrefs();
+settingsMod.listenForManagerSettings(app);
 // Wire the toast store to read its default lifeMs + suppress-info
 // filter from the settings store. Setter pattern avoids the circular
 // import that would form if toast-store imported from settings

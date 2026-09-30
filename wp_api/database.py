@@ -1,6 +1,8 @@
-"""/wp/api/database/* — read-only info + maintenance dispatch + location config."""
+"""/wp/api/database/* — read-only info + maintenance dispatch + location config
++ backups (list / create / delete / staged restore)."""
 from __future__ import annotations
 
+import asyncio
 import json as _json
 import os
 from pathlib import Path
@@ -8,6 +10,7 @@ from typing import Any
 
 from aiohttp import web
 
+from engine.db import backups as db_backups
 from engine.db import config as db_config
 from engine.db.connection import (
     global_location_path,
@@ -216,9 +219,72 @@ async def delete_pending_move(request: web.Request) -> web.Response:
     return json_ok(_build_config_response())
 
 
+# ── backups ─────────────────────────────────────────────────────────
+
+
+def _live_db_path() -> Path:
+    return resolve_db_path_with_source()[0]
+
+
+async def list_backups(request: web.Request) -> web.Response:
+    db_path = _live_db_path()
+    return json_ok({
+        "dir": str(db_backups.backups_dir(db_path)),
+        "backups": db_backups.list_backups(db_path),
+        "pending_restore": db_backups.pending_restore_name(db_path),
+    })
+
+
+async def create_backup(request: web.Request) -> web.Response:
+    """Manual backup. Allowed even with automatic backups switched off —
+    that switch governs what WE do unasked, not what the user asks for."""
+    db_path = _live_db_path()
+    try:
+        # The online backup copies the whole file; keep it off the event loop.
+        entry = await asyncio.to_thread(db_backups.create_backup, db_path, "manual")
+    except FileNotFoundError:
+        return json_error(f"database {db_path} does not exist", status=409)
+    return json_ok(entry, status=201)
+
+
+async def delete_backup(request: web.Request) -> web.Response:
+    try:
+        db_backups.delete_backup(_live_db_path(), request.match_info["name"])
+    except db_backups.BackupNotFound:
+        return json_error("backup not found", status=404)
+    return web.Response(status=204)
+
+
+async def stage_restore(request: web.Request) -> web.Response:
+    try:
+        body = await request.json()
+    except _json.JSONDecodeError:
+        return json_error("invalid JSON body", status=400)
+    if not isinstance(body, dict) or not isinstance(body.get("name"), str):
+        return json_error("body must be an object with a string 'name'", status=400)
+    try:
+        path = db_backups.stage_restore(_live_db_path(), body["name"])
+    except db_backups.BackupNotFound:
+        return json_error("backup not found", status=404)
+    return json_ok({"pending_restore": path.name})
+
+
+async def cancel_restore(request: web.Request) -> web.Response:
+    db_backups.cancel_restore()
+    return json_ok({"pending_restore": None})
+
+
 def register(router: web.UrlDispatcher) -> None:
     router.add_get("/wp/api/database/info", get_info)
     router.add_post("/wp/api/database/maintenance", run_maintenance)
     router.add_get("/wp/api/database/config", get_config)
     router.add_put("/wp/api/database/config", put_config)
     router.add_delete("/wp/api/database/config/pending-move", delete_pending_move)
+    router.add_get("/wp/api/database/backups", list_backups)
+    router.add_post("/wp/api/database/backups", create_backup)
+    # The static `/restore` routes go before `/{name}` so DELETE on the
+    # restore path cancels the restore rather than looking for a backup
+    # called "restore" (which the name pattern would reject anyway).
+    router.add_post("/wp/api/database/backups/restore", stage_restore)
+    router.add_delete("/wp/api/database/backups/restore", cancel_restore)
+    router.add_delete("/wp/api/database/backups/{name}", delete_backup)

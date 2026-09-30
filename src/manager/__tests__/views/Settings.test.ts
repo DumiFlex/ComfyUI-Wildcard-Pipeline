@@ -5,6 +5,7 @@ import { ref } from "vue";
 
 import Settings from "../../views/Settings.vue";
 import * as releaseCheck from "../../composables/useReleaseCheck";
+import { settingsRouter } from "../helpers/settingsRouter";
 import { useUiStore } from "../../stores/uiStore";
 
 (globalThis as unknown as { __APP_VERSION__: string }).__APP_VERSION__ = "2.9.0";
@@ -33,15 +34,17 @@ beforeEach(() => {
   } as ReturnType<typeof releaseCheck.useReleaseCheck>);
 });
 
-function mountSettings() {
+async function mountSettings() {
+  const router = await settingsRouter("general");
   return mount(Settings, {
-    global: { stubs: { Icon: true, BrowserPrefsCard: true, DatabaseCard: true } },
+    props: { section: "general" },
+    global: { plugins: [router], stubs: { Icon: true, BrowserPrefsCard: true, DatabaseCard: true } },
   });
 }
 
-describe("Settings Updates card", () => {
+describe("Settings › General › Updates", () => {
   it("toggling check-on-launch calls setCheckOnLaunch", async () => {
-    const wrap = mountSettings();
+    const wrap = await mountSettings();
     const ui = useUiStore();
     const spy = vi.spyOn(ui, "setCheckOnLaunch");
     // The Toggle's clickable control is an inner <button role="switch">;
@@ -51,14 +54,14 @@ describe("Settings Updates card", () => {
   });
 
   it("Check now button calls checkNow", async () => {
-    const wrap = mountSettings();
+    const wrap = await mountSettings();
     await wrap.get('[data-test="settings-check-now"]').trigger("click");
     await flushPromises();
     expect(checkNow).toHaveBeenCalled();
   });
 
-  it("shows an update-available status line", () => {
-    const wrap = mountSettings();
+  it("shows an update-available status line", async () => {
+    const wrap = await mountSettings();
     expect(wrap.get('[data-test="settings-update-status"]').text()).toContain("2.10.0");
   });
 });

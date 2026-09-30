@@ -67,15 +67,71 @@ export function evalConditionTree<L>(
 
 /** Collapse redundant nesting so what the editor saves stays the simplest
  *  equivalent shape: a group of one member becomes that member (a lone test
- *  goes back to the plain v2 shape), and empty groups vanish. */
+ *  goes back to the plain v2 shape), empty groups vanish, and a group inside a
+ *  group with the same connector merges into it (`a AND (b AND c)` is
+ *  `a AND b AND c`). Test order, and so every override key, is unchanged. */
 export function simplifyCondition<L>(node: ConditionNode<L>): ConditionNode<L> {
   if (!isConditionGroup(node)) return node;
   const g = node as ConditionGroup<L>;
+  const match: ConditionMatch = g.match === "any" ? "any" : "all";
   const kids = g.conditions
     .map((c) => simplifyCondition(c))
-    .filter((c) => !isConditionGroup(c) || (c as ConditionGroup<L>).conditions.length > 0);
+    .filter((c) => !isConditionGroup(c) || (c as ConditionGroup<L>).conditions.length > 0)
+    .flatMap((c) =>
+      isConditionGroup(c) && (c as ConditionGroup<L>).match === match
+        ? (c as ConditionGroup<L>).conditions
+        : [c]);
   if (kids.length === 1) return kids[0];
-  return { match: g.match === "any" ? "any" : "all", conditions: kids };
+  return { match, conditions: kids };
+}
+
+/** Engine cap on group nesting (`_MAX_CONDITION_DEPTH` in the handler). */
+const ENGINE_MAX_GROUP_DEPTH = 8;
+
+function groupDepth(node: unknown): number {
+  if (!isConditionGroup(node)) return 0;
+  const kids = Array.isArray(node.conditions) ? node.conditions : [];
+  return 1 + Math.max(0, ...kids.map(groupDepth));
+}
+
+/**
+ * Flip ONE connector of a group: the one in front of member `index`. Every
+ * connector of a group is the same word, so the members are regrouped the
+ * way the mixed row reads, with AND binding tighter than OR:
+ *
+ * - `a AND b AND c`, second connector to OR → `(a AND b) OR c`
+ * - `a OR b OR c`, second connector to AND → `a OR (b AND c)`
+ *
+ * Flipping the same connector back undoes it. Test order (and so every
+ * override key) is kept. Returns the group unchanged when the index has no
+ * connector or the result would nest past the engine's cap.
+ */
+export function flipConnector<L>(group: ConditionGroup<L>, index: number): ConditionNode<L> {
+  const kids = group.conditions;
+  if (index < 1 || index >= kids.length) return group;
+  let next: ConditionNode<L>;
+  if (group.match === "any") {
+    // OR → AND: the two members around this connector become one AND run.
+    next = {
+      match: "any",
+      conditions: [
+        ...kids.slice(0, index - 1),
+        { match: "all", conditions: [kids[index - 1], kids[index]] },
+        ...kids.slice(index + 1),
+      ],
+    };
+  } else {
+    // AND → OR: split the AND run at this connector.
+    next = {
+      match: "any",
+      conditions: [
+        { match: "all", conditions: kids.slice(0, index) },
+        { match: "all", conditions: kids.slice(index) },
+      ],
+    };
+  }
+  next = simplifyCondition(next);
+  return groupDepth(next) > ENGINE_MAX_GROUP_DEPTH ? group : next;
 }
 
 /** Short connector word for display. */

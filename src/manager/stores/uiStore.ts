@@ -4,8 +4,25 @@ import { computed, ref, watch } from "vue";
 /** User-selected theme mode. `"auto"` follows the OS `prefers-color-scheme`. */
 export type ThemeMode = "dark" | "light" | "auto";
 
-/** Spacing/height density mode. `"comfortable"` is the default (multiplier 1). */
-export type DensityMode = "comfortable" | "compact";
+/** Spacing/height density mode. `"comfortable"` is the default (multiplier 1).
+ *  One setting for the whole manager: it used to be split between a
+ *  compact/comfortable toggle here and a three-way control in the Tweaks panel
+ *  that only changed control heights, so the two could disagree. */
+export type DensityMode = "compact" | "comfortable" | "cozy";
+
+/** Where the manager opens. `"last"` reopens the last page visited. */
+export type StartPage = "dashboard" | "last" | "all" | "wildcards" | "test";
+
+/** Manager animations. `"auto"` follows the OS `prefers-reduced-motion`;
+ *  `"reduce"` turns them off on this device whatever the OS says. */
+export type MotionMode = "auto" | "reduce";
+
+/** Test Runner seed default for a new scenario. */
+export interface TestRunnerDefaults {
+  mode: "range" | "random";
+  from: number;
+  count: number;
+}
 
 /** When the wildcard editor's sub-category panel opens on load.
  *  `"populated"` (default) expands it only when the wildcard already has groups;
@@ -18,6 +35,16 @@ const STORAGE_KEY_MAX_REF_DEPTH = "wp-wildcard-max-ref-depth";
 const STORAGE_KEY_CHECK_ON_LAUNCH = "wp-update-check-on-launch";
 const STORAGE_KEY_KEEP_EMPTY_GROUPS = "wp-keep-empty-tag-groups";
 const STORAGE_KEY_SUBCAT_DEFAULT = "wp-subcat-default";
+const STORAGE_KEY_SIDEBAR_COLLAPSED = "wp-sidebar-collapsed";
+const STORAGE_KEY_START_PAGE = "wp-start-page";
+export const STORAGE_KEY_LAST_ROUTE = "wp-last-route";
+const STORAGE_KEY_MOTION = "wp-motion";
+const STORAGE_KEY_WHATS_NEW = "wp-whats-new-after-update";
+export const STORAGE_KEY_LAST_SEEN_VERSION = "wp-last-seen-version";
+export const STORAGE_KEY_TEST_RUNNER_DEFAULTS = "wp-test-runner-defaults";
+/** Pre-merge home of density and the sidebar state (Tweaks panel). Read once
+ *  as a fallback so nobody's choice resets when the settings moved. */
+const LEGACY_TWEAKS_KEY = "wp-tweaks-v1";
 import { notifyCompletionSettingsChanged } from "../utils/tagSetting";
 
 const STORAGE_KEY_TAG_AUTOCOMPLETE = "wp-tag-autocomplete";
@@ -51,15 +78,86 @@ function readStoredTheme(): ThemeMode {
   return "dark";
 }
 
+function readLegacyTweaks(): { density?: unknown; sidebarMode?: unknown } {
+  try {
+    const raw = localStorage.getItem(LEGACY_TWEAKS_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === "object" ? parsed as { density?: unknown; sidebarMode?: unknown } : {};
+  } catch {
+    return {};
+  }
+}
+
+function isDensity(v: unknown): v is DensityMode {
+  return v === "compact" || v === "comfortable" || v === "cozy";
+}
+
 function readStoredDensity(): DensityMode {
   try {
     const v = localStorage.getItem(STORAGE_KEY_DENSITY);
-    if (v === "comfortable" || v === "compact") return v;
+    if (isDensity(v)) return v;
   } catch {
     /* localStorage unavailable */
   }
-  return "comfortable";
+  const legacy = readLegacyTweaks().density;
+  return isDensity(legacy) ? legacy : "comfortable";
 }
+
+function readStoredSidebarCollapsed(): boolean {
+  try {
+    const v = localStorage.getItem(STORAGE_KEY_SIDEBAR_COLLAPSED);
+    if (v === "1") return true;
+    if (v === "0") return false;
+  } catch {
+    /* localStorage unavailable */
+  }
+  return readLegacyTweaks().sidebarMode === "collapsed";
+}
+
+function readStoredEnum<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
+  try {
+    const v = localStorage.getItem(key);
+    if (v !== null && (allowed as readonly string[]).includes(v)) return v as T;
+  } catch {
+    /* localStorage unavailable */
+  }
+  return fallback;
+}
+
+export const START_PAGES: readonly StartPage[] = ["dashboard", "last", "all", "wildcards", "test"];
+const MOTION_MODES: readonly MotionMode[] = ["auto", "reduce"];
+
+export const DEFAULT_TEST_RUNNER: TestRunnerDefaults = { mode: "range", from: 0, count: 100 };
+export const MAX_TEST_RUNNER_SEEDS = 10_000;
+
+/** Clamp anything that looks like Test Runner defaults into a valid shape. */
+export function normalizeTestRunnerDefaults(raw: unknown): TestRunnerDefaults {
+  const o = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+  const num = (v: unknown, fb: number) => (typeof v === "number" && Number.isFinite(v) ? Math.round(v) : fb);
+  return {
+    mode: o.mode === "random" ? "random" : "range",
+    from: Math.max(0, num(o.from, DEFAULT_TEST_RUNNER.from)),
+    count: Math.min(MAX_TEST_RUNNER_SEEDS, Math.max(1, num(o.count, DEFAULT_TEST_RUNNER.count))),
+  };
+}
+
+/** Test Runner defaults as stored — read directly so the workbench composable
+ *  does not need the store (it also runs in tests without Pinia). */
+export function readTestRunnerDefaults(): TestRunnerDefaults {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_TEST_RUNNER_DEFAULTS);
+    return normalizeTestRunnerDefaults(raw ? JSON.parse(raw) : null);
+  } catch {
+    return { ...DEFAULT_TEST_RUNNER };
+  }
+}
+
+/** Control heights per density (the values the Tweaks panel always set). */
+const DENSITY_CONTROL_H: Record<DensityMode, string> = {
+  compact: "32px",
+  comfortable: "38px",
+  cozy: "44px",
+};
 
 /**
  * Whether an axis with no tags in it survives a save.
@@ -141,7 +239,11 @@ function systemPrefersDark(): boolean {
 export const useUiStore = defineStore("ui", () => {
   const themeMode = ref<ThemeMode>(readStoredTheme());
   const density = ref<DensityMode>(readStoredDensity());
-  const sidebarCollapsed = ref(false);
+  const sidebarCollapsed = ref(readStoredSidebarCollapsed());
+  const startPage = ref<StartPage>(readStoredEnum(STORAGE_KEY_START_PAGE, START_PAGES, "dashboard"));
+  const motion = ref<MotionMode>(readStoredEnum(STORAGE_KEY_MOTION, MOTION_MODES, "auto"));
+  const whatsNewAfterUpdate = ref<boolean>(readStoredEnum(STORAGE_KEY_WHATS_NEW, ["1", "0"] as const, "1") === "1");
+  const testRunnerDefaults = ref<TestRunnerDefaults>(readTestRunnerDefaults());
   const maxRefDepth = ref<number>(readStoredMaxRefDepth());
   const checkOnLaunch = ref<boolean>(readStoredCheckOnLaunch());
   const keepEmptyTagGroups = ref<boolean>(readStoredKeepEmptyGroups());
@@ -225,6 +327,37 @@ export const useUiStore = defineStore("ui", () => {
   function applyDensityToDocument(mode: DensityMode): void {
     const html = document.documentElement;
     html.classList.toggle("wp-density-compact", mode === "compact");
+    html.classList.toggle("wp-density-cozy", mode === "cozy");
+    const h = DENSITY_CONTROL_H[mode];
+    html.style.setProperty("--wp-input-h", h);
+    html.style.setProperty("--wp-btn-h", h);
+  }
+
+  function applyMotionToDocument(mode: MotionMode): void {
+    const html = document.documentElement;
+    html.classList.toggle("wp-reduce-motion", mode === "reduce");
+  }
+
+  function setMotion(mode: MotionMode): void {
+    motion.value = mode;
+    try { localStorage.setItem(STORAGE_KEY_MOTION, mode); } catch { /* ignore */ }
+    applyMotionToDocument(mode);
+  }
+
+  function setStartPage(page: StartPage): void {
+    startPage.value = page;
+    try { localStorage.setItem(STORAGE_KEY_START_PAGE, page); } catch { /* ignore */ }
+  }
+
+  function setWhatsNewAfterUpdate(v: boolean): void {
+    whatsNewAfterUpdate.value = v;
+    try { localStorage.setItem(STORAGE_KEY_WHATS_NEW, v ? "1" : "0"); } catch { /* ignore */ }
+  }
+
+  function setTestRunnerDefaults(patch: Partial<TestRunnerDefaults>): void {
+    const next = normalizeTestRunnerDefaults({ ...testRunnerDefaults.value, ...patch });
+    testRunnerDefaults.value = next;
+    try { localStorage.setItem(STORAGE_KEY_TEST_RUNNER_DEFAULTS, JSON.stringify(next)); } catch { /* ignore */ }
   }
 
   function setDensity(mode: DensityMode): void {
@@ -234,13 +367,15 @@ export const useUiStore = defineStore("ui", () => {
   }
 
   function toggleDensity(): void {
-    setDensity(density.value === "comfortable" ? "compact" : "comfortable");
+    setDensity(density.value === "compact" ? "comfortable" : "compact");
   }
 
+  /** Local mirror of the server-side limit (`useServerSettings` owns the
+   *  real value, which runs read). Not persisted here any more: the old
+   *  localStorage copy was read by nothing, and is migrated to the server
+   *  once. */
   function setMaxRefDepth(depth: number) {
-    const clamped = Math.max(MIN_MAX_REF_DEPTH, Math.min(MAX_MAX_REF_DEPTH, Math.floor(depth)));
-    maxRefDepth.value = clamped;
-    try { localStorage.setItem(STORAGE_KEY_MAX_REF_DEPTH, String(clamped)); } catch { /* ignore */ }
+    maxRefDepth.value = Math.max(MIN_MAX_REF_DEPTH, Math.min(MAX_MAX_REF_DEPTH, Math.floor(depth)));
   }
 
   /** Cycle dark → light → auto → dark. */
@@ -255,6 +390,7 @@ export const useUiStore = defineStore("ui", () => {
   function initializeTheme() {
     applyThemeToDocument(resolvedTheme.value);
     applyDensityToDocument(density.value);
+    applyMotionToDocument(motion.value);
     // React to OS theme changes when in auto mode.
     if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
       const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -266,8 +402,13 @@ export const useUiStore = defineStore("ui", () => {
     watch(resolvedTheme, (m) => applyThemeToDocument(m));
   }
 
+  function setSidebarCollapsed(v: boolean): void {
+    sidebarCollapsed.value = v;
+    try { localStorage.setItem(STORAGE_KEY_SIDEBAR_COLLAPSED, v ? "1" : "0"); } catch { /* ignore */ }
+  }
+
   function toggleSidebar() {
-    sidebarCollapsed.value = !sidebarCollapsed.value;
+    setSidebarCollapsed(!sidebarCollapsed.value);
   }
 
   function setCheckOnLaunch(v: boolean): void {
@@ -280,6 +421,15 @@ export const useUiStore = defineStore("ui", () => {
     resolvedTheme,
     density,
     sidebarCollapsed,
+    setSidebarCollapsed,
+    startPage,
+    setStartPage,
+    motion,
+    setMotion,
+    whatsNewAfterUpdate,
+    setWhatsNewAfterUpdate,
+    testRunnerDefaults,
+    setTestRunnerDefaults,
     maxRefDepth,
     checkOnLaunch,
     keepEmptyTagGroups,

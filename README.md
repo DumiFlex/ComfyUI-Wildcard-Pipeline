@@ -4,7 +4,7 @@
 </h1>
 
 <p align="center">
-  <em>Modular procedural prompt generation for ComfyUI — wildcards, constraints, derivations, loops, and a persistent module library.</em>
+  <em>Random prompts for ComfyUI that actually make sense together.</em>
 </p>
 
 <p align="center">
@@ -16,163 +16,133 @@
 </p>
 
 <p align="center">
-  <img src="public/images/docs/flow-intro.svg" alt="Wildcard, Fixed Values, Combine, Derivation and Constraint modules resolve inside WP Context, which emits named $variables that fill the WP Prompt Assembler template, which CLIP Encode turns into conditioning" />
+  <img src="public/images/docs/flow-intro.svg" alt="Modules resolve inside WP Context, which emits named $variables that fill the WP Prompt Assembler template, which CLIP Encode turns into conditioning" />
 </p>
 
-## What it does
+Plain wildcards pick every part of a prompt on its own, so you get a snowy beach
+at noon under the stars. Wildcard Pipeline builds the prompt step by step, and
+each step can see what the earlier ones picked. If the weather comes out as rain,
+the mood can lean gloomy and the lighting can follow. Every Generate gives you a
+fresh prompt that still hangs together.
 
-Stock ComfyUI prompt nodes either take a single literal string or pick from a flat wildcard file. **Wildcard Pipeline** lets each module read what the previous modules picked — so `$mood` reacts to `$weather` via a constraint, a `combine` interpolates `$style $subject` into `$scene`, a derivation flips `$accent` based on `$mood`, and your final prompt is a coherent multi-element composition instead of a Frankenstein concatenation.
+## Install
 
-**One Generate. One coherent prompt. Re-roll until you stop laughing.**
+- **ComfyUI Manager (recommended):** search for **Wildcard Pipeline** by
+  **dumiflex**, click **Install** and restart ComfyUI.
+- **By hand:** download the zip from the
+  [latest release](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/releases/latest),
+  unzip it into `ComfyUI/custom_nodes/` and restart ComfyUI.
 
-## Highlights
+<details>
+<summary>Installing from source</summary>
 
-- **Module stack inside a Context node** — drop in `wildcard`, `fixed_values`, `combine`, `derivation`, `constraint`, `bundle` modules and they each publish a `$variable` to the chain.
-- **Constraints with carriers** — re-weight downstream wildcards based on what upstream picked. Matrix + per-option exceptions. Carrier-via-nested-ref so a constraint can reach a wildcard nested inside another wildcard's option.
-- **Loops + per-iteration seeds** — `WP Context Loop` runs your whole chain N times from a single Generate; `WP Seed List` pairs N unique sampler seeds with the N prompts so every output is distinct.
-- **Persistent library** — a manager SPA backed by SQLite stores reusable modules, frozen bundles, prompt templates, and a category tree. Browse / edit / fork / push from the canvas.
-- **Inspector** — `WP Debug` shows the post-run snapshot, per-module trace, per-wildcard picks, and the conflict-scanner warnings.
-- **Type-coercion helpers** — `WP Var → Int / Float / Bool` parse typed values out of any `$variable` so wildcards can drive image width, step count, sampler cfg, conditional switches.
-- **Works on both renderers** — the legacy canvas and ComfyUI's Nodes 2.0 Vue renderer, including switching between them with a workflow already open.
+A git clone has no built frontend, so you need Node.js and pnpm:
 
-## Installation
+```bash
+cd ComfyUI/custom_nodes
+git clone https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline
+cd ComfyUI-Wildcard-Pipeline
+pnpm install
+pnpm build
+```
 
-### ComfyUI Manager (recommended)
-
-1. Open the **ComfyUI Manager** in your browser.
-2. Search for **Wildcard Pipeline** by **dumiflex**.
-3. Click **Install** and restart ComfyUI.
-
-### Manual installation
-
-1. Navigate to your ComfyUI `custom_nodes` directory.
-2. Clone the repository:
-
-   ```bash
-   git clone https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline
-   ```
-
-3. Install the Python dependencies:
-
-   ```bash
-   pip install -e .
-   ```
-
-4. Build the frontend assets (requires Node.js and pnpm):
-
-   ```bash
-   pnpm install
-   pnpm run build
-   ```
-
-5. Restart ComfyUI.
+</details>
 
 ## Quick start
 
-1. Open the Wildcard Pipeline manager (sidebar → **Wildcards** → **+ New**). Name `subject`, variable binding `$subject`, three options: `a cat`, `a dog`, `a fox` at weight 1 each. Save.
-2. On the canvas, drop `WP Context` → `WP Prompt Assembler` → `CLIP Text Encode` → `KSampler`. Add your wildcard to the context. Type `a $subject` into the assembler template. Queue.
+1. Open the **Wildcard Pipeline** manager from the ComfyUI sidebar and create a
+   wildcard called `subject` with three options: `a cat`, `a dog`, `a fox`.
+2. On the canvas, chain **WP Context** → **WP Prompt Assembler** →
+   **CLIP Text Encode**. Add your wildcard to the Context node and type
+   `a photo of $subject` into the Assembler.
+3. Queue a few times. Each run picks a new subject.
 
-Each Generate rolls a fresh subject. Full walkthrough: [Quick Start wiki page](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start).
+The [Quick Start wiki page](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start)
+walks through a fuller example.
 
-## The nodes
+## How it works
+
+You stack **modules** inside a **WP Context** node. Each module sets one or more
+`$variables`, and the **WP Prompt Assembler** drops them into your template.
+
+| Module | What it does |
+|---|---|
+| **Wildcard** | Picks one option from a weighted list. |
+| **Fixed Values** | Sets variables to values you choose, like a style or quality tags. |
+| **Combine** | Builds one variable out of others, e.g. `$style $subject`. |
+| **Derivation** | If/else rules: "if `$weather` is rain AND `$time` is night, set `$lighting` to neon". Conditions can be grouped with AND / OR. |
+| **Constraint** | Makes an earlier pick change the odds of a later one, or rule options out entirely. |
+| **Bundle** | A saved group of modules you can drop in as one piece. |
+
+Options can point at other modules with `@name`, so a wildcard can nest another
+one. If the module you want doesn't exist yet, pick **Placeholder** from the `@`
+list and connect it later.
+
+### Nodes
 
 | Node | What it does |
 |---|---|
-| `WP Context` | Holds a module stack, emits a resolved `$variable` context. |
-| `WP Context Loop` | Runs the downstream chain N times in one click; emits per-iteration `$iteration` + `$iteration_total`. |
-| `WP Context Injector` | Lifts any ComfyUI node output (multiline String, INT, etc.) into a named `$variable`. |
-| `WP Seed List` | Emits a list of N derived seeds — one per loop iteration — so every (prompt, seed) pair is unique. |
-| `WP Prompt Assembler` | Fills `$var` placeholders in a template string. Supports `{a\|b\|c}` inline picks + missing-var detection. |
-| `WP Prompt Cleaner` | Rule-based prompt cleanup: whitespace, punctuation, exact + fuzzy dedupe, blocklist. |
-| `WP Debug` | Read-only inspector — Snapshot / Trace / Picks / Warnings tabs. |
-| `WP Var → Int / Float / Bool` | Parse typed values out of any `$variable` to drive ComfyUI INT / FLOAT / BOOLEAN inputs. |
+| **WP Context** | Holds your module stack and outputs the picked variables. Chain several together. |
+| **WP Prompt Assembler** | Fills `$variables` in a template. Also supports inline `{a\|b\|c}` picks. |
+| **WP Context Loop** + **WP Seed List** | Run the whole chain N times from one Generate, each with its own prompt and seed. |
+| **WP Context Injector** | Turns any ComfyUI output (text, a number) into a `$variable`. |
+| **WP Prompt Cleaner** | Tidies the final prompt: spacing, stray commas, duplicates, a blocklist. |
+| **WP Debug** | Shows what happened during a run (see below). |
+| **WP Var → Int / Float / Bool** | Use a variable to drive a number or switch, like image size or steps. |
 
-Full node reference: [Nodes wiki page](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Nodes).
+Most nodes have a help page in ComfyUI's node info panel, and the
+[wiki](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) covers
+[nodes](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Nodes),
+[modules](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Modules) and
+[concepts](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Concepts)
+in depth.
 
-## The modules
+## The manager
 
-| Module | Writes | Role |
-|---|---|---|
-| **Wildcard** | `$<name>` | Weighted random pick from a pool. The core building block. |
-| **Fixed Values** | `$<name>` (× N) | Static `name → value` bindings — style, quality boosters, negative-prompt fragments. |
-| **Combine** | `$<name>` | Templated string that interpolates earlier `$vars` into a single output `$var`. |
-| **Derivation** | `$<name>` | IF / ELIF / ELSE rules that read picked `$vars` and rewrite others. |
-| **Constraint** | *(none)* | One-shot re-weight of a downstream wildcard's pool based on an upstream pick. |
-| **Bundle** | *(group)* | Frozen group of modules — drop into any Context as a reusable unit. |
-| **Template** | *(asm side)* | Saved Prompt Assembler template string in the library. |
-
-Full module reference: [Modules wiki page](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Modules).
-
-## Looping a chain — one click, N coherent prompts
+Open it from the ComfyUI sidebar. It's where your modules live between workflows.
 
 <p align="center">
-  <img src="public/images/docs/flow-loop.svg" alt="WP Context Loop drives WP Context and the Prompt Assembler; CLIP Encode turns each prompt into conditioning for KSampler, while WP Seed List supplies the matching seed directly" />
+  <img src="public/images/docs/spa_manager.png" alt="Wildcard Pipeline manager dashboard with module counts, quick create buttons and recently opened items" />
 </p>
 
-Drop `WP Context Loop` before your `WP Context` and pair it with `WP Seed List` for distinct sampler seeds. Both lists fan out in lockstep so iteration N's prompt always pairs with seed N. Each iteration carries its own `$iteration` / `$iteration_total` for in-template labelling (`frame 1 of 4 — a fox`). See [Concepts → Seeds and loops](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Concepts#seeds-and-loops).
+- **Library:** create, edit and search your modules, bundles and prompt
+  templates. The **Tags** page groups them into collections, and you can rename
+  or merge a tag across the whole library.
+- **Test Runner:** try a set of modules over many seeds without generating
+  images. See how often each option comes up and which rules fired, save a
+  baseline, and after an edit see exactly which outputs changed.
+- **Community:** browse and install modules other people have shared, and
+  publish your own.
+- **Import / Export:** move modules between machines as JSON files.
+- **Documentation:** the full guide, built into the app.
 
-## The manager (SPA)
+## Checking a run
 
-A dedicated single-page app for browsing + editing the library. Open it from the ComfyUI sidebar.
+Connect **WP Debug** to a Context node and generate. It shows:
 
-<p align="center">
-  <img src="public/images/docs/spa_manager.png" alt="Wildcard Pipeline manager — Dashboard view with module counts, Quick Create row, and a list of recently opened library entries" />
-</p>
+- **Variables:** every value, and which step set it.
+- **Trace:** each step, and why it did what it did: which derivation rule fired,
+  a wildcard's odds and what re-weighted them, where a nested pick came from.
+- **Warnings:** anything that went wrong, linked to the step that caused it.
+- **Raw:** the underlying data, for bug reports.
 
-- **Library** — wildcards / fixed values / combines / derivations / constraints / bundles / templates / categories. Filter, search, bulk-tag, favorite.
-- **Test Runner** — resolve any module against the engine N times and inspect per-rule fire rates / per-option pick rates.
-- **Import / Export** — versioned JSON exports with conflict resolution (rename / overwrite / skip per row).
-- **Cascade impact dialog** — deleting a module shows you every bundle + constraint + combine that references it before you confirm.
-- **Documentation tab** — full in-app docs covering every node + module + concept, with worked examples.
+## Help
 
-## Inspecting a run
+- [Discord](https://discord.gg/BFYR9WQdVR) for questions and sharing what you made
+- [Discussions](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/discussions) for ideas and longer questions
+- [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues) for bugs and feature requests
 
-Wire a `WP Debug` node off any Context output. After Generate it fills with a tabbed snapshot of what flowed through that point:
+## Privacy
 
-- **Snapshot** — final `$variable → value` map.
-- **Trace** — per-module execution log: what each ran, what it wrote, where the seed came from.
-- **Picks** — which wildcard option was picked, its weight, its sub-category.
-- **Warnings** — runtime warnings (constraint never fired, missing variable, etc.).
-
-See [Nodes → WP Debug](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Nodes#wp-debug).
-
-## Documentation
-
-- 📖 **[GitHub Wiki](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki)** — Home / Quick Start / Nodes / Modules / Concepts
-- 🖥️ **In-app docs** — sidebar → Documentation tab inside the manager SPA (every concept, every module, every node, with worked examples)
-- 💬 **[Discord](https://discord.gg/BFYR9WQdVR)** — chat, show-and-tell, fastest path to a response
-- 💭 **[GitHub Discussions](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/discussions)** — long-form questions, ideas, design threads
-- 🐛 **[Issue tracker](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)** — bug reports + feature requests
-
-## Network access
-
-This extension works entirely offline. It makes **one** outbound request, and only when you ask for it:
-
-| What | When | Where to |
-| --- | --- | --- |
-| Booru tag list for the optional value autocomplete | Only when you click **Download** in Settings → Tag autocomplete | `github.com` → `objects.githubusercontent.com`, our own release asset |
-
-Nothing is fetched at startup, on a schedule, or as a side effect of anything else. Delete the file and the feature simply turns off. The update check in Settings talks to the GitHub releases API on the same terms — you can switch it off, and it never runs without you.
-
-Because ComfyUI serves its API without authentication, that download endpoint is deliberately built with nothing to steer:
-
-- **The URL is a constant.** There is no URL parameter — the request body is ignored — so it cannot be pointed at your internal network or a cloud metadata address.
-- **Redirects are checked at every hop** against a fixed host list, because GitHub serves release assets via a CDN. A redirect anywhere else is refused mid-chain.
-- **The destination is computed server-side** from ComfyUI's user directory plus a fixed filename. No caller input reaches the path, and a symlink sitting at that path is refused rather than followed.
-- **The response is size-capped while streaming**, so a hostile or corrupted reply cannot fill your disk. `Content-Length` is checked but never trusted alone.
-- **One download at a time**, so the endpoint cannot be used to start many large fetches at once.
-- **The file is parsed before it replaces anything.** A reply that is not a readable tag list leaves your existing one untouched, and the final move is atomic.
-
-The reasoning is kept next to the code in [`wp_api/_tag_download.py`](wp_api/_tag_download.py), and each restriction has a test in [`tests/wp_api/test_tag_download.py`](tests/wp_api/test_tag_download.py).
-
-## Status
-
-Active development. Versioned releases with [semantic-release](https://github.com/semantic-release/semantic-release) — every merged commit on `main` either ships a release or stays as `next` until the next breaking / feature change rolls one. Bundle-size + test gates run on every branch push and PR.
+Everything runs locally. The extension only goes online to check for updates
+(you can turn this off in Settings), when you open the Community page, or when
+you choose to download the optional tag list for autocomplete. Details are in
+[docs/network-access.md](docs/network-access.md).
 
 ## Contributing
 
-PRs welcome. See [CONTRIBUTING.md](./.github/CONTRIBUTING.md) for the dev loop (`pnpm install` → `pnpm dev` for the extension watcher, `pnpm test` for vitest, `pytest` for the engine, `ruff check .` for lint).
+PRs are welcome. [CONTRIBUTING.md](.github/CONTRIBUTING.md) explains the dev setup.
 
 ## License
 
-[GPL-3.0-or-later](./LICENSE). Free to use, modify, fork. If you ship modifications, ship the source too.
+[GPL-3.0-or-later](LICENSE)
