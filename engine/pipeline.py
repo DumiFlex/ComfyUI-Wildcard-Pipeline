@@ -717,6 +717,14 @@ class PipelineEngine:
             negatives.settle_writes(
                 ctx, [v.lstrip("$") for v in (bindings or {})],
             )
+            # WP Debug's trace shows what each write now carries.
+            for w in writes:
+                texts = [
+                    str(e.get("text", ""))
+                    for e in negatives.get_entries(ctx, w["variable"])
+                ]
+                if texts:
+                    w["negative"] = ", ".join(texts)
 
             # `seed` on the trace entry: the effective seed THIS
             # module rolled with — `instance.locked_seed` if locked,

@@ -344,3 +344,9 @@ def test_injector_row_negative_replaces_the_variables_negatives():
     assert [e["text"] for e in table["other"]] == ["keep"]
     # Upstream payload untouched.
     assert upstream.internals[negatives.NEG_KEY]["character"][0]["text"] == "hat"
+
+
+def test_trace_writes_carry_the_negative():
+    ctx = _run([_wc("hair", [_opt(0, "red hair", "blonde")])])
+    write = ctx["__wp_trace__"][0]["writes"][0]
+    assert write["negative"] == "blonde"
