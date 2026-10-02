@@ -1,0 +1,3 @@
+### Features
+
+- **Give a wildcard a fallback for when constraints rule everything out.** Hover an option's probability in the wildcard editor and click **set as fallback**. That option is never rolled. It's used only when nothing else is left to pick, so a hair wildcard whose constraints exclude every colour can say "hair" instead of nothing. It also kicks in when a filter or zero weights leave no option. One fallback per wildcard, it works for nested `@{}` picks too, and WP Debug and the Test Runner note "Fallback used" where it took over. Untick it on a node to keep the empty result there. Shared wildcards with a fallback are stamped schema 9, so older versions refuse them and ask for an update.

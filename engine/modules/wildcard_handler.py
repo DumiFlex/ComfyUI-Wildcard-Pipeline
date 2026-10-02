@@ -717,6 +717,7 @@ class WildcardHandler(ModuleHandler):
 
         seen_ids: set[str] = set()
         null_count = 0
+        fallback_count = 0
         for i, opt in enumerate(options):
             if not isinstance(opt, dict):
                 raise ValueError(f"wildcard payload.options[{i}] must be an object")
@@ -767,6 +768,20 @@ class WildcardHandler(ModuleHandler):
                 raise ValueError(
                     f"wildcard payload.options[{i}].negative must be a string"
                 )
+            # Fallback (schema v9): the one option used when nothing else is
+            # left to pick. Stored only as `true`; absent means not.
+            fb = opt.get("fallback")
+            if fb is not None and not isinstance(fb, bool):
+                raise ValueError(
+                    f"wildcard payload.options[{i}].fallback must be a boolean"
+                )
+            if fb:
+                if is_null:
+                    raise ValueError(
+                        f"wildcard payload.options[{i}] null option "
+                        f"{opt_id!r} can't be the fallback"
+                    )
+                fallback_count += 1
             weight = opt.get("weight", 1)
             if not isinstance(weight, (int, float)) or isinstance(weight, bool):
                 raise ValueError(
@@ -796,6 +811,11 @@ class WildcardHandler(ModuleHandler):
             raise ValueError(
                 f"wildcard payload may have at most one null option "
                 f"(found {null_count})"
+            )
+        if fallback_count > 1:
+            raise ValueError(
+                f"wildcard payload may have at most one fallback option "
+                f"(found {fallback_count})"
             )
         binding = payload.get("var_binding")
         if binding is not None:
@@ -902,16 +922,26 @@ class WildcardHandler(ModuleHandler):
             allowed = set(enabled)
             options = [o for o in options if o.get("id") in allowed]
 
+        # Schema v9 fallback: the flagged option leaves the draw pool here
+        # (after the node's filters + toggles, before weights + constraints)
+        # and comes back only when nothing else is left to pick.
+        from engine.modules._fallback import (
+            fallback_warning,
+            pool_is_dead,
+            split_fallback,
+        )
+        options, fallback = split_fallback(options)
+
         detail = module_detail(ctx)
         if detail is not None:
             if isinstance(category_filter, str) and category_filter.strip():
                 detail["filter"] = category_filter.strip()
             if exclude_null:
                 detail["exclude_null"] = True
-            if not options:
+            if not options and fallback is None:
                 detail.update({"pool": 0, "live": 0})
 
-        if not options:
+        if not options and fallback is None:
             return {binding: ""}
 
         # Per-instance weight overrides — replaces (not multiplies) the
@@ -950,7 +980,7 @@ class WildcardHandler(ModuleHandler):
         # those constraints allow, so `$source.AXIS` == `$target.AXIS` under a
         # diagonal (A). Empty when nothing constrains this instance.
         applied_constraints: list[tuple[dict[str, Any], dict[str, Any]]] = []
-        if my_id:
+        if my_id and options:
             constraints = ctx.get("__wp_constraints__") if ctx is not None else None
             picks = ctx.get("__wp_picks__") if ctx is not None else None
             # SP3 reach selector: thread the ctx-resident per-constraint
@@ -977,11 +1007,19 @@ class WildcardHandler(ModuleHandler):
                 # the allowed member by `_restrict_menus_by_constraints`.
                 target_axes=_accepts_axes(payload),
             )
-        if any_constraint_applied:
+        if any_constraint_applied and fallback is None:
             warn_excludes_all(options, my_id or "", ctx["__wp_warnings__"])
         if detail is not None:
             _explain_pool(detail, options)
             _explain_constraints(detail, applied_constraints)
+        use_fallback = fallback is not None and pool_is_dead(options)
+        if use_fallback:
+            assert fallback is not None
+            ctx["__wp_warnings__"].append(fallback_warning(
+                my_id or "", fallback, constrained=any_constraint_applied,
+            ))
+            if detail is not None:
+                detail["fallback"] = True
 
         # Effective seed selection:
         #   - locked_seed when present → reproducible per-instance
@@ -1030,7 +1068,11 @@ class WildcardHandler(ModuleHandler):
             weights = [max(0.0, float(o.get("weight", 1))) for o in pool]
             pool_n = len(pool)
             independent = bool(instance.get("pick_independent", False))
-            if independent:
+            if use_fallback:
+                # One fallback, never repeated: it stands in for the whole
+                # pick, so a `2-3` range doesn't render "hair, hair".
+                picks = [fallback] if hi > 0 else []
+            elif independent:
                 # SP2c: independent multi-pick draws WITH replacement (repeats
                 # allowed), mirroring the inline `~` flag — so the count is the
                 # requested range and is NOT clamped to the pool size.
@@ -1085,13 +1127,20 @@ class WildcardHandler(ModuleHandler):
             _record_axes(ctx, binding, rolled_list, payload)
             return {binding: ListVar(items, sep)}
 
-        chosen = _pick_weighted(options, rng)
+        # The fallback is taken without a draw, so no rng is consumed where
+        # the pre-v9 path returned empty.
+        chosen = fallback if use_fallback else _pick_weighted(options, rng)
         if chosen is None:
             return {binding: ""}
         if detail is not None:
             total = sum(_weight(o) for o in options)
             detail["option_id"] = chosen.get("id")
-            detail["chance"] = _weight(chosen) / total if total > 0 else None
+            # No draw happened for a fallback, so there is no chance to show
+            # (Debug reads `fallback` instead).
+            detail["chance"] = (
+                None if use_fallback
+                else _weight(chosen) / total if total > 0 else None
+            )
 
         # Roll the accepts axes AFTER the option draw (same rng, so a locked
         # seed still reproduces the option) but BEFORE recording the pick, so

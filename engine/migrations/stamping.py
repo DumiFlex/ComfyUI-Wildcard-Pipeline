@@ -5,6 +5,8 @@ A payload is stamped with the LOWEST catalog version its features need, so
 an older consumer can still install everything that doesn't use a newer
 feature:
 
+- ``FALLBACK_SCHEMA_VERSION`` (9): a wildcard option is flagged
+  ``fallback: true`` (used only when nothing else is left to pick).
 - ``NEGATIVES_SCHEMA_VERSION`` (8): a wildcard option, fixed value or
   combine carries a non-empty ``negative``, a derivation action uses the
   ``negative`` ("Add to negative") mode, a derivation branch runs more than
@@ -36,6 +38,7 @@ from engine.migrations import (
     CONSTRAINT_ONLY_SCHEMA_VERSION,
     CURRENT_SCHEMA_VERSION,
     DERIVATION_CONDITIONS_SCHEMA_VERSION,
+    FALLBACK_SCHEMA_VERSION,
     NEGATIVES_SCHEMA_VERSION,
     SP2B_SCHEMA_VERSION,
     SP3_REACH_SCHEMA_VERSION,
@@ -198,6 +201,21 @@ def uses_negatives(node: Any) -> bool:
     )
 
 
+def uses_fallback_option(node: Any) -> bool:
+    """Any wildcard option flagged ``fallback: true`` at any depth (library
+    payload, bundle child or a node's own copy)."""
+    if isinstance(node, list):
+        return any(uses_fallback_option(child) for child in node)
+    if not isinstance(node, dict):
+        return False
+    if node.get("fallback") is True and "value" in node:
+        return True
+    return any(
+        isinstance(value, (dict, list)) and uses_fallback_option(value)
+        for value in node.values()
+    )
+
+
 def uses_sp2b_grammar(node: Any) -> bool:
     """Range-count or ``~`` multi-pick anywhere in the serialised payload."""
     text = json.dumps(node, ensure_ascii=False, default=str)
@@ -206,6 +224,8 @@ def uses_sp2b_grammar(node: Any) -> bool:
 
 def schema_version_for_payload(payload: Any) -> int:
     """The lowest catalog version that covers every feature in ``payload``."""
+    if uses_fallback_option(payload):
+        return FALLBACK_SCHEMA_VERSION
     if uses_negatives(payload):
         return NEGATIVES_SCHEMA_VERSION
     if uses_derivation_conditions(payload):

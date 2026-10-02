@@ -16,9 +16,10 @@ const tagGroupKinds = [
 
 const optionFields = [
   { term: "Value", desc: 'The text that goes into the prompt when this option is picked — for example, "a cat", "a dog", or "a fox".' },
-  { term: "Weight", desc: "How likely this option is to be chosen relative to the others. A weight of 2 is twice as likely as a weight of 1. Set to 0 to disable without deleting — and if every option ends up at 0, whether you set them or a constraint excluded them, the wildcard resolves to nothing rather than quietly using the first one." },
+  { term: "Weight", desc: "How likely this option is to be chosen relative to the others. A weight of 2 is twice as likely as a weight of 1. Set to 0 to disable without deleting — and if every option ends up at 0, whether you set them or a constraint excluded them, the wildcard resolves to nothing (or to its fallback, below) rather than quietly using the first one." },
   { term: "Sub-categories", desc: 'Zero or more labels on an option (e.g. "feline", "warm") — an option can carry several at once. They group options in the editor, form the Constraint matrix axes, power bulk selection, and back the per-use category filter below. Tags can be organised into axes (e.g. species, temperature) so the editor shows grouped pills.' },
   { term: "Null option", desc: 'Marks this option as the "no pick" result — the wildcard resolves to an empty string. At most one option per wildcard can be a null option.' },
+  { term: "Fallback", desc: 'Hover an option\'s probability and click "set as fallback". The fallback is never rolled: it is used only when nothing else is left to pick, because constraints (an Only rule included) excluded every other option, a filter left none, or every weight is 0. Without one the wildcard resolves to nothing in that case. One per wildcard; the null option can\'t be the fallback. Turning the fallback off for one use (its checkbox on the node) keeps the empty result there. WP Debug and the Test Runner say "Fallback used" when it kicks in. Shared wildcards with a fallback are stamped schema 9.' },
 ];
 
 const instanceOptions = [
