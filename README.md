@@ -13,6 +13,7 @@
   <a href="https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/DumiFlex/ComfyUI-Wildcard-Pipeline"></a>
   <a href="https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki"><img alt="Wiki" src="https://img.shields.io/badge/docs-wiki-blue"></a>
   <a href="https://discord.gg/BFYR9WQdVR"><img alt="Discord" src="https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white"></a>
+  <a href="https://wp.dumiflex.dev"><img alt="Community" src="https://img.shields.io/badge/community-modules-8A63D2"></a>
 </p>
 
 <p align="center">
@@ -111,8 +112,8 @@ Open it from the ComfyUI sidebar. It's where your modules live between workflows
 - **Test Runner:** try a set of modules over many seeds without generating
   images. See how often each option comes up and which rules fired, save a
   baseline, and after an edit see exactly which outputs changed.
-- **Community:** browse and install modules other people have shared, and
-  publish your own.
+- **Community:** browse and install modules other people have shared on the
+  [community site](https://wp.dumiflex.dev), and publish your own.
 - **Import / Export:** move modules between machines as JSON files.
 - **Documentation:** the full guide, built into the app.
 
@@ -126,11 +127,15 @@ Connect **WP Debug** to a Context node and generate. It shows:
 - **Warnings:** anything that went wrong, linked to the step that caused it.
 - **Raw:** the underlying data, for bug reports.
 
-## Help
+## Help and sharing
 
-- [Discord](https://discord.gg/BFYR9WQdVR) for questions and sharing what you made
-- [Discussions](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/discussions) for ideas and longer questions
-- [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues) for bugs and feature requests
+[Discord](https://discord.gg/BFYR9WQdVR) is the place for all of it: there are
+channels for questions, bug reports, feature requests and showing what you made.
+You can also report bugs on [GitHub Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues).
+
+Made something you like? Post your images and workflows on Discord, and publish
+your modules on the [community site](https://wp.dumiflex.dev) so others can
+install them from the manager's **Community** page.
 
 ## Privacy
 
