@@ -661,15 +661,15 @@ def ref_option_pool(tok: Token, ctx: ResolveContext) -> list[dict]:
             return []
 
     # Schema v9 fallback (engine/modules/_fallback.py): the flagged option
-    # sits out the draw and returns as the whole pool when nothing else is
-    # left after the constraints below.
-    from engine.modules._fallback import fallback_warning, pool_is_dead, split_fallback
-    options, fallback = split_fallback(options)
+    # rolls normally and returns as the whole pool when the constraints below
+    # leave nothing to pick.
+    from engine.modules._fallback import fallback_warning, find_fallback, pool_is_dead
+    fallback = find_fallback(options)
     any_applied = False
 
     get_constraints = getattr(ctx, "get_constraints", None)
     get_picks = getattr(ctx, "get_picks", None)
-    if options and callable(get_constraints) and callable(get_picks):
+    if callable(get_constraints) and callable(get_picks):
         constraints = get_constraints()
         if constraints:
             from engine.modules._constraints import (

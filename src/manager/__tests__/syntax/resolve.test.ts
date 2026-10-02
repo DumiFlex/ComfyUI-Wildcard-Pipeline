@@ -156,24 +156,26 @@ describe("resolveTokens — fallback option (v9)", () => {
     type: "wildcard", var_binding: "hair", options,
   });
 
-  it("never rolls the fallback while another option is live", () => {
+  it("rolls the fallback like any other option", () => {
+    const seen = new Set<string>();
     for (let seed = 0; seed < 30; seed++) {
       const ctx = makeCtx({
         rngSeed: seed,
         modules: { a4f7b2e1: mod([
           { value: "red", weight: 1 },
-          { value: "hair", weight: 50, fallback: true },
+          { value: "hair", weight: 1, fallback: true },
         ]) },
       });
-      expect(resolveTokens("@{a4f7b2e1}", ctx)).toBe("red");
+      seen.add(resolveTokens("@{a4f7b2e1}", ctx));
     }
+    expect([...seen].sort()).toEqual(["hair", "red"]);
   });
 
-  it("uses the fallback when every other weight is 0", () => {
+  it("uses the fallback when every weight is 0", () => {
     const ctx = makeCtx({
       modules: { a4f7b2e1: mod([
         { value: "red", weight: 0 },
-        { value: "hair", weight: 1, fallback: true },
+        { value: "hair", weight: 0, fallback: true },
       ]) },
     });
     expect(resolveTokens("@{a4f7b2e1}", ctx)).toBe("hair");

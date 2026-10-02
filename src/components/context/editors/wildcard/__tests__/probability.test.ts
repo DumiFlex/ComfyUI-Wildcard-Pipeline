@@ -155,13 +155,13 @@ describe("probabilityFor", () => {
 });
 
 describe("fallback option (v9)", () => {
-  it("takes no share and doesn't dilute the others", () => {
+  it("gets its normal share like any option", () => {
     const a = opt([], { id: "a", weight: 1 });
     const b = opt([], { id: "b", weight: 3 });
     const fb = opt([], { id: "fb", weight: 4, fallback: true });
     const all = [a, b, fb];
-    expect(probabilityFor(fb, all, {})).toBe(0);
-    expect(probabilityFor(a, all, {})).toBe(0.25);
-    expect(probabilityFor(b, all, {})).toBe(0.75);
+    expect(probabilityFor(fb, all, {})).toBe(0.5);
+    expect(probabilityFor(a, all, {})).toBe(0.125);
+    expect(probabilityFor(b, all, {})).toBe(0.375);
   });
 });

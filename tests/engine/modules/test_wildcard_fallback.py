@@ -1,5 +1,5 @@
-"""Wildcard fallback option (schema v9): one option flagged ``fallback`` is
-reserved for when nothing else is left to pick."""
+"""Wildcard fallback option (schema v9): one option flagged ``fallback`` rolls
+normally and is also used when nothing else is left to pick."""
 import random
 
 import pytest
@@ -28,7 +28,10 @@ def _shoes(*, fallback=True, extra_weight=1):
         {"id": "t2", "value": "boots", "weight": extra_weight, "sub_categories": ["casual"]},
     ]
     if fallback:
-        options.append({"id": "fb", "value": "shoes", "weight": 1, "fallback": True})
+        options.append({
+            "id": "fb", "value": "shoes", "weight": 1, "fallback": True,
+            "sub_categories": ["casual"],
+        })
     return {"options": options, "sub_categories": ["casual"], "var_binding": "shoes"}
 
 
@@ -86,31 +89,52 @@ def test_without_a_fallback_the_old_empty_result_and_warning_stand():
     assert "fallback_used" not in _types(out)
 
 
-@pytest.mark.parametrize("seed", range(40))
-def test_fallback_never_rolls_while_anything_is_live(seed):
-    ctx = _ctx()
-    ctx["__wp_node_seed__"] = seed
-    out = WildcardHandler.resolve(_shoes(), {"variable_binding": "shoes"}, ctx)
-    assert out["shoes"] in {"sneakers", "boots"}
-    assert ctx["__wp_warnings__"] == []
+def test_fallback_rolls_like_a_normal_option():
+    seen = set()
+    for seed in range(60):
+        ctx = _ctx()
+        ctx["__wp_node_seed__"] = seed
+        out = WildcardHandler.resolve(_shoes(), {"variable_binding": "shoes"}, ctx)
+        seen.add(out["shoes"])
+        assert ctx["__wp_warnings__"] == []
+    assert seen == {"sneakers", "boots", "shoes"}
 
 
-def test_fallback_keeps_normal_picks_identical_to_no_fallback():
+def test_flagging_an_option_never_changes_a_normal_pick():
     for seed in range(20):
         a, b = _ctx(), _ctx()
         a["__wp_node_seed__"] = b["__wp_node_seed__"] = seed
-        with_fb = WildcardHandler.resolve(_shoes(), {"variable_binding": "shoes"}, a)
-        without = WildcardHandler.resolve(
-            _shoes(fallback=False), {"variable_binding": "shoes"}, b,
-        )
-        assert with_fb == without
+        flagged = WildcardHandler.resolve(_shoes(), {"variable_binding": "shoes"}, a)
+        plain = _shoes()
+        del plain["options"][2]["fallback"]
+        unflagged = WildcardHandler.resolve(plain, {"variable_binding": "shoes"}, b)
+        assert flagged == unflagged
+
+
+def test_fallback_the_constraint_allows_is_a_normal_pick():
+    payload = _shoes()
+    del payload["options"][2]["sub_categories"]
+    out = PipelineEngine().run(_chain(payload), seed=1)
+    assert out["shoes"] == "shoes"
+    assert "fallback_used" not in _types(out)
+    assert "constraint_excludes_all_options" not in _types(out)
+
+
+def test_fallback_weighted_zero_only_stands_in():
+    for seed in range(20):
+        ctx = _ctx()
+        ctx["__wp_node_seed__"] = seed
+        payload = _shoes()
+        payload["options"][2]["weight"] = 0
+        out = WildcardHandler.resolve(payload, {"variable_binding": "shoes"}, ctx)
+        assert out["shoes"] in {"sneakers", "boots"}
 
 
 def test_all_weights_zero_uses_the_fallback():
     ctx = _ctx()
-    out = WildcardHandler.resolve(
-        _shoes(extra_weight=0), {"variable_binding": "shoes"}, ctx,
-    )
+    payload = _shoes(extra_weight=0)
+    payload["options"][2]["weight"] = 0
+    out = WildcardHandler.resolve(payload, {"variable_binding": "shoes"}, ctx)
     assert out == {"shoes": "shoes"}
     note = ctx["__wp_warnings__"][0]
     assert note["type"] == "fallback_used"
@@ -161,7 +185,10 @@ def _nested_ctx(fallback=True):
         {"id": "no", "value": "blue", "weight": 1, "sub_categories": ["bad"]},
     ]
     if fallback:
-        options.append({"id": "fb", "value": "plain", "weight": 1, "fallback": True})
+        options.append({
+            "id": "fb", "value": "plain", "weight": 1, "fallback": True,
+            "sub_categories": ["bad"],
+        })
     return {
         "__wp_rng__": random.Random(1),
         "__wp_warnings__": [],
