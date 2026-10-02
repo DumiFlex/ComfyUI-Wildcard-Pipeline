@@ -29,7 +29,7 @@ CURRENT_SCHEMA_VERSION = 2
 # MAINTENANCE CONTRACT: bump this whenever the TS `schemaVersionForPayload()`
 # learns to stamp a new (higher) version — otherwise this commit-side
 # re-validate will reject the very shapes the runtime just learned to produce.
-MAX_KNOWN_SCHEMA_VERSION = 8
+MAX_KNOWN_SCHEMA_VERSION = 9
 
 # Feature stamps (mirror of the TS constants beside MAX_KNOWN). Each is the
 # catalog version a payload needs once it uses that feature; see
@@ -43,6 +43,8 @@ DERIVATION_CONDITIONS_SCHEMA_VERSION = 7
 # send-to-negative: a non-empty `negative` on a wildcard option, fixed value or
 # combine, or a derivation action with mode `negative`
 NEGATIVES_SCHEMA_VERSION = 8
+# wildcard fallback option: an option flagged `fallback: true`
+FALLBACK_SCHEMA_VERSION = 9
 
 _CHAIN = {
     0: migrate_v0_to_v1,

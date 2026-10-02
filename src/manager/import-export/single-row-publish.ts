@@ -31,6 +31,7 @@ import {
   CONSTRAINT_ONLY_SCHEMA_VERSION,
   CURRENT_SCHEMA_VERSION,
   DERIVATION_CONDITIONS_SCHEMA_VERSION,
+  FALLBACK_SCHEMA_VERSION,
   NEGATIVES_SCHEMA_VERSION,
   SP2B_SCHEMA_VERSION,
   SP3_REACH_SCHEMA_VERSION,
@@ -241,8 +242,26 @@ export function usesNegatives(node: unknown): boolean {
 }
 
 /**
+ * True when ANY wildcard option (library payload, bundle child or a node's
+ * own copy) is flagged as the fallback. Only `true` counts; the flag is
+ * stored as absent otherwise. Mirror of
+ * `engine/migrations/stamping.py:uses_fallback_option`.
+ */
+export function usesFallbackOption(node: unknown): boolean {
+  if (Array.isArray(node)) return node.some((child) => usesFallbackOption(child));
+  if (!isPlainObject(node)) return false;
+  if (node.fallback === true && "value" in node) return true;
+  for (const value of Object.values(node)) {
+    if (value && typeof value === "object" && usesFallbackOption(value)) return true;
+  }
+  return false;
+}
+
+/**
  * Choose the community catalog `schema_version` to stamp for a payload — the
  * MAX version any feature in the payload requires:
+ *   - `FALLBACK_SCHEMA_VERSION` (9) when ANY wildcard option is flagged as
+ *     the fallback (`usesFallbackOption`).
  *   - `NEGATIVES_SCHEMA_VERSION` (8) when ANY option, fixed value or combine
  *     carries a non-empty `negative`, a derivation action uses the
  *     `negative` mode, a derivation clause runs several actions, or text
@@ -269,6 +288,7 @@ export function usesNegatives(node: unknown): boolean {
  * doesn't actually use a newer feature.
  */
 export function schemaVersionForPayload(payload: Record<string, unknown>): number {
+  if (usesFallbackOption(payload)) return FALLBACK_SCHEMA_VERSION;
   if (usesNegatives(payload)) return NEGATIVES_SCHEMA_VERSION;
   if (usesDerivationConditions(payload)) return DERIVATION_CONDITIONS_SCHEMA_VERSION;
   if (usesConstraintOnlyRule(payload)) return CONSTRAINT_ONLY_SCHEMA_VERSION;

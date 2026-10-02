@@ -6,6 +6,7 @@ from engine.migrations import (
     CONSTRAINT_ONLY_SCHEMA_VERSION,
     CURRENT_SCHEMA_VERSION,
     DERIVATION_CONDITIONS_SCHEMA_VERSION,
+    FALLBACK_SCHEMA_VERSION,
     NEGATIVES_SCHEMA_VERSION,
     SP2B_SCHEMA_VERSION,
     SP3_REACH_SCHEMA_VERSION,
@@ -216,3 +217,19 @@ def test_neg_accessor_text(template, expected):
     combine = {"id": "abababab", "type": "combine", "name": "c", "payload": {
         "template": template, "output_var": "c"}}
     assert schema_version_for_payload(combine) == expected
+
+
+def test_fallback_option_needs_v9():
+    row = _wildcard_row(None)
+    assert schema_version_for_payload(row) == CURRENT_SCHEMA_VERSION
+    row["payload"]["options"][0]["fallback"] = False
+    assert schema_version_for_payload(row) == CURRENT_SCHEMA_VERSION
+    row["payload"]["options"][0]["fallback"] = True
+    assert schema_version_for_payload(row) == FALLBACK_SCHEMA_VERSION
+    # Wins over a v8 negative on the same option, and is found in a bundle
+    # child or a node's own option copy.
+    row["payload"]["options"][0]["negative"] = "blurry"
+    assert schema_version_for_payload(row) == FALLBACK_SCHEMA_VERSION
+    assert schema_version_for_payload({"children": [row]}) == FALLBACK_SCHEMA_VERSION
+    instance = {"instance": {"options": [{"id": "o1", "value": "x", "fallback": True}]}}
+    assert schema_version_for_payload(instance) == FALLBACK_SCHEMA_VERSION

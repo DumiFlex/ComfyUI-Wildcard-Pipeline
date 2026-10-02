@@ -10,6 +10,7 @@ import {
   CONSTRAINT_ONLY_SCHEMA_VERSION,
   CURRENT_SCHEMA_VERSION,
   DERIVATION_CONDITIONS_SCHEMA_VERSION,
+  FALLBACK_SCHEMA_VERSION,
   NEGATIVES_SCHEMA_VERSION,
   SP2B_SCHEMA_VERSION,
   SP3_REACH_SCHEMA_VERSION,
@@ -297,9 +298,12 @@ describe("publish body stamping", () => {
     };
     if (kinds === undefined) delete row.payload.tag_group_kinds;
     else row.payload.tag_group_kinds = kinds;
-    // The parity fixture also carries a v8 `negative`; drop it so these cases
-    // measure the axis stamp alone.
-    for (const opt of row.payload.options as Record<string, unknown>[]) delete opt.negative;
+    // The parity fixture also carries a v8 `negative` and a v9 `fallback`;
+    // drop them so these cases measure the axis stamp alone.
+    for (const opt of row.payload.options as Record<string, unknown>[]) {
+      delete opt.negative;
+      delete opt.fallback;
+    }
     return row as unknown as Record<string, unknown>;
   }
 
@@ -504,5 +508,32 @@ describe("publish body stamping", () => {
       id: "cb-001abc", type: "combine", name: "c",
       payload: { template, output_var: "c" },
     })).toBe(want);
+  });
+});
+
+describe("schemaVersionForPayload — wildcard fallback option (v9)", () => {
+  function row(opt: Record<string, unknown>): Record<string, unknown> {
+    return {
+      id: "wc-001abc", type: "wildcard", name: "w",
+      payload: { var_binding: "w", options: [{ id: "o1", value: "red", weight: 1, ...opt }] },
+    };
+  }
+
+  it("stays at the chain head without a flagged option", () => {
+    expect(schemaVersionForPayload(row({}))).toBe(CURRENT_SCHEMA_VERSION);
+    expect(schemaVersionForPayload(row({ fallback: false }))).toBe(CURRENT_SCHEMA_VERSION);
+  });
+
+  it("stamps FALLBACK (9), over a v8 negative, in a bundle child or a node copy", () => {
+    expect(schemaVersionForPayload(row({ fallback: true }))).toBe(FALLBACK_SCHEMA_VERSION);
+    expect(schemaVersionForPayload(row({ fallback: true, negative: "blurry" }))).toBe(
+      FALLBACK_SCHEMA_VERSION,
+    );
+    expect(schemaVersionForPayload({ children: [row({ fallback: true })] })).toBe(
+      FALLBACK_SCHEMA_VERSION,
+    );
+    expect(schemaVersionForPayload({
+      instance: { options: [{ id: "o1", value: "x", fallback: true }] },
+    })).toBe(FALLBACK_SCHEMA_VERSION);
   });
 });

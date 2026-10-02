@@ -257,7 +257,12 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // and would have passed unnoticed. It does not fit under 420 KB. The 17 KB of
 // headroom left is deliberate — enough for ordinary work, not enough to hide a
 // whole asset class coming back.
-const TOTAL_LIMIT = 420 * 1024;     // 420 KB
+// RAISED 420 -> 424 KB on 2026-10-02 for the wildcard fallback option (canvas
+// badge + Debug note): dev sat at 429,971 bytes, 109 under the gate, and the
+// feature needed ~200. Approved by the maintainer ("you are allowed to
+// increase the bundle budget if necessary"). 4 KB leaves room for a few more
+// small features while a re-inlined font (~90 KB) still trips the gate.
+const TOTAL_LIMIT = 424 * 1024;     // 424 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

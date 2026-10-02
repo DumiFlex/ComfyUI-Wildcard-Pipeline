@@ -108,14 +108,14 @@ def test_defaults_missing_arrays_to_empty():
 # CURRENT < v <= MAX_KNOWN (v3 = text-grammar only; v4 = additive
 # `target_select`; v5 = additive `accepts` tag axes; v6 = the constraint
 # `only` rule; v7 = derivation AND / OR condition groups; v8 = send-to-negative
-# `negative` text) is shape-compatible with
+# `negative` text; v9 = the wildcard `fallback` option flag) is shape-compatible with
 # v2 and natively handled at runtime, so the engine's commit-side re-validate must accept it AS-IS:
 # not rejected, not migrated (the while-loop bound stays CURRENT so there is
 # nothing to do), schema_version preserved. Only v > MAX_KNOWN rejects.
 
 
-def test_max_known_schema_version_is_8():
-    assert MAX_KNOWN_SCHEMA_VERSION == 8
+def test_max_known_schema_version_is_9():
+    assert MAX_KNOWN_SCHEMA_VERSION == 9
 
 
 def test_v3_payload_passes_through_unchanged():

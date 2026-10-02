@@ -32,6 +32,10 @@ export const wildcardV2 = moduleRowBase.extend({
       // Send-to-negative (catalog v8, additive): listed so a shared option's
       // negative survives the strict round-trip instead of being stripped.
       negative: z.string().optional(),
+      // Fallback (catalog v9, additive): the one option used only when
+      // nothing else is left to pick. Kept so the strict round-trip
+      // doesn't turn it back into an ordinary option.
+      fallback: z.boolean().optional(),
     })),
   }),
 }).strict();
