@@ -209,13 +209,12 @@ function resolveRef(
     return "";
   }
 
-  // Schema v9 fallback: sits out the draw, used only when nothing else is
-  // live (engine/modules/_fallback.py).
+  // Schema v9 fallback: rolls normally, and is also taken (without a draw)
+  // when nothing is live (engine/modules/_fallback.py).
   const all = module.options ?? [];
   const fallback = all.find((o) => o.fallback === true);
-  const pool = fallback ? all.filter((o) => o.fallback !== true) : all;
-  const live = pool.some((o) => Math.max(0, Number(o.weight) || 0) > 0);
-  const chosen = fallback && !live ? fallback : pickWeighted(pool, ctx.rng);
+  const live = all.some((o) => Math.max(0, Number(o.weight) || 0) > 0);
+  const chosen = fallback && !live ? fallback : pickWeighted(all, ctx.rng);
   if (!chosen) return "";
   const chosenValue = String(chosen.value ?? "");
   if (!chosenValue) return "";

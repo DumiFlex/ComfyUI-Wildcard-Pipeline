@@ -922,15 +922,15 @@ class WildcardHandler(ModuleHandler):
             allowed = set(enabled)
             options = [o for o in options if o.get("id") in allowed]
 
-        # Schema v9 fallback: the flagged option leaves the draw pool here
-        # (after the node's filters + toggles, before weights + constraints)
-        # and comes back only when nothing else is left to pick.
+        # Schema v9 fallback: the flagged option stays in the draw pool and
+        # is also taken when weights + constraints leave nothing to pick. Found
+        # after the node's filters + toggles, so a toggled-off one is gone.
         from engine.modules._fallback import (
             fallback_warning,
+            find_fallback,
             pool_is_dead,
-            split_fallback,
         )
-        options, fallback = split_fallback(options)
+        fallback = find_fallback(options)
 
         detail = module_detail(ctx)
         if detail is not None:
@@ -938,10 +938,10 @@ class WildcardHandler(ModuleHandler):
                 detail["filter"] = category_filter.strip()
             if exclude_null:
                 detail["exclude_null"] = True
-            if not options and fallback is None:
+            if not options:
                 detail.update({"pool": 0, "live": 0})
 
-        if not options and fallback is None:
+        if not options:
             return {binding: ""}
 
         # Per-instance weight overrides — replaces (not multiplies) the
@@ -980,7 +980,7 @@ class WildcardHandler(ModuleHandler):
         # those constraints allow, so `$source.AXIS` == `$target.AXIS` under a
         # diagonal (A). Empty when nothing constrains this instance.
         applied_constraints: list[tuple[dict[str, Any], dict[str, Any]]] = []
-        if my_id and options:
+        if my_id:
             constraints = ctx.get("__wp_constraints__") if ctx is not None else None
             picks = ctx.get("__wp_picks__") if ctx is not None else None
             # SP3 reach selector: thread the ctx-resident per-constraint

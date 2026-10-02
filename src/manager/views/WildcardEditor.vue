@@ -841,18 +841,12 @@ function toggleOptionTag(o: WildcardOption, tag: string): void {
   o.sub_categories = subCategories.value.filter((t) => current.has(t));
 }
 
-// The fallback option sits out normal draws (engine/modules/_fallback.py), so
-// it takes no share of the probability and its weight doesn't dilute others.
 const totalWeight = computed(() => {
-  const sum = options.value.reduce(
-    (acc, o) => acc + (o.fallback ? 0 : Number(o.weight) || 0),
-    0,
-  );
+  const sum = options.value.reduce((acc, o) => acc + (Number(o.weight) || 0), 0);
   return sum > 0 ? sum : 1;
 });
 
 function probabilityFor(o: WildcardOption): number {
-  if (o.fallback) return 0;
   return ((Number(o.weight) || 0) / totalWeight.value) * 100;
 }
 
@@ -2494,8 +2488,6 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                 size="sm"
                 min="0.01"
                 step="0.1"
-                :disabled="o.fallback || undefined"
-                :title="o.fallback ? 'The fallback is never rolled, so its weight does nothing' : undefined"
                 aria-label="Option weight"
                 @update:model-value="(v) => {
                   // Clamp to >0 — weight 0 or negative never picks
@@ -2629,36 +2621,36 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
               </div>
             </td>
             <td>
-              <span
-                v-if="o.fallback"
-                class="wc-fallback-chip"
-                :data-test="`wc-opt-fallback-chip-${i}`"
-                title="Never rolled. Used only when constraints, filters or weights leave nothing else to pick."
-              >
-                <i class="pi pi-shield" aria-hidden="true" />
-                <span>fallback</span>
-              </span>
-              <div v-else class="opt-prob">
+              <div class="opt-prob">
                 <div class="opt-prob__bar">
                   <div class="opt-prob__fill" :style="{ width: probabilityFor(o) + '%' }" />
                 </div>
                 <span class="opt-prob__value wp-mono">{{ formatProbability(probabilityFor(o)) }}</span>
               </div>
               <!-- One fallback per wildcard: setting it here moves the flag
-                   off any other option. Hover-revealed like the grip so the
-                   resting table looks unchanged. -->
-              <button
-                v-if="!o.is_null"
-                type="button"
-                class="wc-fallback-toggle"
-                :class="{ 'wc-fallback-toggle--on': o.fallback }"
-                :aria-pressed="o.fallback ? 'true' : 'false'"
-                :data-test="`wc-opt-fallback-${i}`"
-                :title="o.fallback
-                  ? 'Make this an ordinary option again'
-                  : 'Use this option only when every other option is ruled out'"
-                @click.stop="toggleFallback(o)"
-              >{{ o.fallback ? "unset fallback" : "set as fallback" }}</button>
+                   off any other option. The toggle is hover-revealed like
+                   the grip so the resting table looks unchanged. -->
+              <div v-if="!o.is_null" class="wc-fallback-line">
+                <span
+                  v-if="o.fallback"
+                  class="wc-fallback-chip"
+                  :data-test="`wc-opt-fallback-chip-${i}`"
+                  title="Rolls normally, and is also used when constraints or weights leave nothing else to pick."
+                >
+                  <i class="pi pi-shield" aria-hidden="true" />
+                  <span>fallback</span>
+                </span>
+                <button
+                  type="button"
+                  class="wc-fallback-toggle"
+                  :aria-pressed="o.fallback ? 'true' : 'false'"
+                  :data-test="`wc-opt-fallback-${i}`"
+                  :title="o.fallback
+                    ? 'Make this an ordinary option again'
+                    : 'Also use this option when every option is ruled out'"
+                  @click.stop="toggleFallback(o)"
+                >{{ o.fallback ? "unset" : "set as fallback" }}</button>
+              </div>
             </td>
             <td>
               <Button
@@ -2822,13 +2814,19 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
   font-size: var(--wp-text-sm);
 }
 .wc-null-chip .pi { font-size: 12px; }
-/* Fallback option: reserved for when nothing else is left to pick, so the
-   probability cell names its role instead of showing a share. */
+/* Fallback option: rolls normally and also stands in when nothing else is
+   left to pick, so the chip sits under its probability. */
+.wc-fallback-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
 .wc-fallback-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 9px;
+  gap: 4px;
+  padding: 1px 6px;
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
   border-radius: 4px;
   background: color-mix(in oklab, var(--wp-accent-500) 12%, transparent);
@@ -2837,10 +2835,8 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
   font-size: var(--wp-text-xs, 11px);
   font-weight: 600;
 }
-.wc-fallback-chip .pi { font-size: 11px; }
+.wc-fallback-chip .pi { font-size: 10px; }
 .wc-fallback-toggle {
-  display: block;
-  margin-top: 4px;
   padding: 0;
   border: none;
   background: none;
@@ -2852,8 +2848,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
   transition: opacity .12s, color .12s;
 }
 tr:hover .wc-fallback-toggle,
-.wc-fallback-toggle:focus-visible,
-.wc-fallback-toggle--on { opacity: 0.8; }
+.wc-fallback-toggle:focus-visible { opacity: 0.8; }
 .wc-fallback-toggle:hover { opacity: 1; color: var(--wp-accent-500); text-decoration: underline; }
 .wc-opt-row--fallback > td { background: color-mix(in oklab, var(--wp-accent-500) 4%, transparent); }
 .wc-em-dash {

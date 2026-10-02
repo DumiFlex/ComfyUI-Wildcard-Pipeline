@@ -11,8 +11,6 @@
  *     Empty/null/absent = no filter. See the multi-tag boolean-filter design
  *     `docs/superpowers/specs/2026-06-06-wildcard-multi-subcategory-boolean-filter-design.md`.
  *   - `option_weights[id]` overrides library `option.weight`, else fall back to 1.0
- *   - the `fallback` option (schema v9) never takes part in a draw, so it
- *     has no share and its weight doesn't dilute the others
  *
  * See: docs/superpowers/specs/2026-05-08-instance-overrides-v2-design.md §8.3
  */
@@ -30,7 +28,8 @@ export interface WildcardOption {
    *  resolve to empty string. See spec
    *  `docs/superpowers/specs/2026-05-24-null-wildcard-option-design.md`. */
   is_null?: boolean;
-  /** Schema v9: used only when nothing else is left to pick. */
+  /** Schema v9: rolls normally, and is also used when nothing else is left
+   *  to pick (so it needs no special share here). */
   fallback?: boolean;
 }
 
@@ -80,9 +79,9 @@ export function probabilityFor(
   instance: InstanceLike,
   multiActive = false,
 ): number {
-  if (option.fallback || !isEnabled(option, instance, multiActive)) return 0;
+  if (!isEnabled(option, instance, multiActive)) return 0;
   const totalEnabledWeight = allOptions
-    .filter((o) => !o.fallback && isEnabled(o, instance, multiActive))
+    .filter((o) => isEnabled(o, instance, multiActive))
     .reduce((sum, o) => sum + effectiveWeight(o, instance), 0);
   if (totalEnabledWeight === 0) return 0;
   return effectiveWeight(option, instance) / totalEnabledWeight;

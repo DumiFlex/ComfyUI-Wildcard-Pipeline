@@ -134,7 +134,7 @@ export const NEGATIVES_SCHEMA_VERSION = 8;
 
 /**
  * Community catalog version for the wildcard fallback option: an option
- * flagged `fallback: true` sits out normal draws and is used only when
+ * flagged `fallback: true` rolls normally and is also used when
  * nothing else is left to pick (constraints excluded everything, or every
  * weight is 0).
  *
