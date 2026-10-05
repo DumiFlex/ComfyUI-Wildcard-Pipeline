@@ -15,7 +15,7 @@ export type SectionId =
 export interface SectionDef { id: SectionId; label: string; icon: string; blurb: string }
 
 export const SECTIONS: SectionDef[] = [
-  { id: "general", label: "General", icon: "pi-info-circle", blurb: "Version, updates and what's new." },
+  { id: "general", label: "General", icon: "pi-info-circle", blurb: "Version, updates, what's new and privacy." },
   { id: "appearance", label: "Appearance", icon: "pi-palette", blurb: "How the manager looks on this device." },
   { id: "editing", label: "Editing", icon: "pi-pencil", blurb: "How the module editors behave." },
   { id: "autocomplete", label: "Autocomplete", icon: "pi-bolt", blurb: "Suggestions while you type option values." },
