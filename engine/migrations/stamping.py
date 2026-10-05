@@ -6,7 +6,7 @@ an older consumer can still install everything that doesn't use a newer
 feature:
 
 - ``FALLBACK_SCHEMA_VERSION`` (9): a wildcard option is flagged
-  ``fallback: true`` (used only when nothing else is left to pick).
+  ``fallback: true`` (also used when nothing else is left to pick).
 - ``NEGATIVES_SCHEMA_VERSION`` (8): a wildcard option, fixed value or
   combine carries a non-empty ``negative``, a derivation action uses the
   ``negative`` ("Add to negative") mode, a derivation branch runs more than

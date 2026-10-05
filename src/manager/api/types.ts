@@ -36,8 +36,8 @@ export interface WildcardOption {
    * instance. An empty negative is stored as absent. */
   negative?: string;
   /** Fallback (schema v9): at most one non-null option per wildcard. It
-   * sits out normal draws and is used only when nothing else is left to
-   * pick (constraints excluded every option, or every weight is 0). Stored
+   * rolls normally and is also used when nothing else is left to pick
+   * (constraints excluded every option, or every weight is 0). Stored
    * only as `true`; absent otherwise. See `engine/modules/_fallback.py`. */
   fallback?: boolean;
 }

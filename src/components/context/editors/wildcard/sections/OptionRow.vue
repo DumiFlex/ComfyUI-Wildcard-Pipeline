@@ -487,7 +487,7 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
       <span
         v-if="option.fallback"
         class="opt__neg opt__neg--fb"
-        title="Used only when nothing else is left"
+        title="Rolls normally, and is also used when nothing else is left"
       >FALLBACK</span>
       <span v-if="pairBadges.length > 0" class="opt__pair-badges" data-test="opt-pair-badges">
         <PairBadge
@@ -502,7 +502,7 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
       <span class="opt__prob-bar" aria-hidden="true">
         <span :style="{ width: `${Math.round(probability * 100)}%` }" />
       </span>
-      <span class="opt__prob-pct" data-test="opt-prob-pct">{{ option.fallback ? "—" : fmtPct(probability) }}</span>
+      <span class="opt__prob-pct" data-test="opt-prob-pct">{{ fmtPct(probability) }}</span>
     </span>
     <span class="opt__weight-wrap" :class="{ 'opt__weight-wrap--off': !enabled }">
       <input

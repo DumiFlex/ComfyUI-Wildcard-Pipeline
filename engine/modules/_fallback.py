@@ -1,16 +1,17 @@
 """Wildcard fallback option (schema v9).
 
-A wildcard may mark one non-null option ``fallback: true``. That option is
-reserved: it never takes part in a normal weighted draw, and is used only
-when nothing else is left to pick — every other option was excluded by a
-constraint (an Only rule included), filtered out, or weighted 0. Without a
-fallback such a wildcard binds an empty string, which is what it did before
-v9 and still does.
+A wildcard may mark one non-null option ``fallback: true``. That option rolls
+like any other (its weight, the node's filters + toggles and constraints all
+apply), and is ALSO taken, without an rng draw, when nothing is left to pick:
+every option, the fallback included, was excluded by a constraint (an Only
+rule included) or weighted 0. Without a fallback such a wildcard binds an
+empty string, which is what it did before v9 and still does. Flagging an
+option never changes a normal draw. A fallback weighted 0 is only ever used
+as the fallback.
 
 Shared by the top-level wildcard handler and the nested ``@{uuid}`` resolver
-so both surfaces agree. Constraints and weights never apply to the fallback;
-the node's own filters and option toggles do (it is an ordinary option until
-the pool is split here, after them).
+so both surfaces agree. The node's filters + toggles decide whether the
+fallback is available at all (``find_fallback`` runs after them).
 """
 from __future__ import annotations
 
@@ -27,20 +28,10 @@ def is_fallback(option: Any) -> bool:
     )
 
 
-def split_fallback(
-    options: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
-    """Split ``options`` into (draw pool, fallback). Every flagged option
-    leaves the pool; the first one is the fallback (validation allows one)."""
-    pool: list[dict[str, Any]] = []
-    fallback: dict[str, Any] | None = None
-    for o in options:
-        if is_fallback(o):
-            if fallback is None:
-                fallback = o
-            continue
-        pool.append(o)
-    return pool, fallback
+def find_fallback(options: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The first flagged option in ``options`` (validation allows one), as it
+    was before weights + constraints. It stays in the draw pool."""
+    return next((o for o in options if is_fallback(o)), None)
 
 
 def pool_is_dead(options: list[dict[str, Any]]) -> bool:
