@@ -399,6 +399,11 @@ _CROSS_NODE_INTERNAL_KEYS = (
     "__wp_loop_index__",
     "__wp_seed_override__",
     "__wp_loop_seeds__",
+    # Sweep mode (engine/sweep.py): this frame's {uid: option_id} pins and
+    # the "hold other picks" flag, carried so every Context in the chain
+    # pins its own swept wildcards and holds the rest.
+    "__wp_pin_overrides__",
+    "__wp_sweep_hold__",
 )
 
 

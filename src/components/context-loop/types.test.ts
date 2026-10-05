@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   emptyContextLoopConfig,
+  emptySweepConfig,
   parseContextLoopConfig,
   serializeContextLoopConfig,
   type ContextLoopConfig,
@@ -32,6 +33,7 @@ describe("parseContextLoopConfig", () => {
       total_internal: false,
       seed_locks: {},
       bypass_frames: [],
+      sweep: emptySweepConfig(),
     };
     expect(parseContextLoopConfig(JSON.stringify(cfg))).toEqual(cfg);
   });
@@ -46,6 +48,7 @@ describe("parseContextLoopConfig", () => {
       total_internal: true,
       seed_locks: {},
       bypass_frames: [],
+      sweep: emptySweepConfig(),
     };
     expect(parseContextLoopConfig(JSON.stringify(cfg))).toEqual(cfg);
   });
@@ -71,6 +74,7 @@ describe("parseContextLoopConfig", () => {
       total_internal: true,
       seed_locks: {},
       bypass_frames: [],
+      sweep: emptySweepConfig(),
     };
     const round = parseContextLoopConfig(serializeContextLoopConfig(cfg));
     expect(round).toEqual(cfg);

@@ -13,7 +13,9 @@
  * pushes via `host.setValue` so ComfyUI's widget value matches.
  */
 import { computed, ref } from "vue";
-import type { ContextLoopConfig, LoopStrategy } from "./types";
+import { sweepFrameCount, type ContextLoopConfig, type LoopStrategy, type SweepConfig } from "./types";
+import { collectSweepCandidates, sweepSourcesFromRaw, type SweepSourceRaw } from "./sweep-candidates";
+import SweepModal from "./SweepModal.vue";
 import SeedListModal from "../shared/SeedListModal.vue";
 import { deriveLoopSeeds } from "../shared/seed-derive";
 import { pushToast } from "../shared/toast-store";
@@ -34,8 +36,11 @@ const props = withDefaults(
      *  executed `loop_seeds` UI payload by the host glue. Drives the seed
      *  modal's per-frame "lock previous" button. Null until a run lands. */
     previousSeeds?: number[] | null;
+    /** Downstream Context nodes (id + module JSON) the Sweep section
+     *  draws its wildcards from. */
+    sweepSources?: SweepSourceRaw[];
   }>(),
-  { nodeMode: 0, baseSeed: 0, count: 1, previousSeeds: null },
+  { nodeMode: 0, baseSeed: 0, count: 1, previousSeeds: null, sweepSources: () => [] },
 );
 
 const emit = defineEmits<{ "update:modelValue": [next: ContextLoopConfig] }>();
@@ -138,6 +143,18 @@ function toggleFrameBypass(i: number): void {
   onBypassFrames([...next].sort((a, b) => a - b));
 }
 
+const sweepCandidates = computed(() =>
+  collectSweepCandidates(sweepSourcesFromRaw(props.sweepSources)),
+);
+
+const sweepOpen = ref(false);
+/** Frames the sweep will run, or null when it is not driving the loop. */
+const sweepFrames = computed(() => sweepFrameCount(props.modelValue));
+
+function onSweep(next: SweepConfig): void {
+  emit("update:modelValue", { ...props.modelValue, sweep: next });
+}
+
 function pickStrategy(s: LoopStrategy): void {
   if (props.modelValue.strategy === s) return;
   emit("update:modelValue", { ...props.modelValue, strategy: s });
@@ -209,6 +226,21 @@ function toggleTotalInternal(): void {
       <svg class="wp-loop__seedbtn-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6" /></svg>
     </button>
 
+    <button
+      type="button"
+      class="wp-loop__seedbtn wp-loop__sweepbtn"
+      data-test="loop-sweep-btn"
+      title="Run every combination of the wildcards you pick, one frame each."
+      @click="sweepOpen = true"
+    >
+      <span class="wp-loop__seedbtn-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /></svg></span>
+      Sweep combinations
+      <span class="wp-loop__seedbtn-fill" />
+      <span v-if="sweepFrames != null" class="wp-loop__seedbtn-badge" data-test="loop-sweep-badge">{{ sweepFrames }} {{ sweepFrames === 1 ? "frame" : "frames" }}</span>
+      <span v-else-if="modelValue.sweep.enabled" class="wp-loop__seedbtn-badge wp-loop__seedbtn-badge--dim" data-test="loop-sweep-badge">on</span>
+      <svg class="wp-loop__seedbtn-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6" /></svg>
+    </button>
+
     <!-- `base` is not a frame: it has no seed to lock and nothing to bypass,
          so it takes no modifiers. -->
     <FrameChips
@@ -225,6 +257,7 @@ function toggleTotalInternal(): void {
       @toggle-lock="toggleFrameLock"
       @toggle-bypass="toggleFrameBypass"
     />
+
 
     <div
       class="wp-loop__row"
@@ -299,6 +332,15 @@ function toggleTotalInternal(): void {
         <span class="wp-loop__switch-thumb" />
       </button>
     </div>
+
+    <SweepModal
+      v-if="sweepOpen"
+      :model-value="modelValue.sweep"
+      :candidates="sweepCandidates"
+      :loop-bypassed="modelValue.bypass"
+      @update:model-value="onSweep"
+      @close="sweepOpen = false"
+    />
 
     <SeedListModal v-if="seedsOpen" :node-name="'WP Context Loop'" :base-seed="baseSeed"
       :count="count" :strategy="modelValue.strategy" :seed-locks="modelValue.seed_locks ?? {}"
@@ -450,6 +492,8 @@ function toggleTotalInternal(): void {
   opacity: 0.45;
   pointer-events: none;
 }
+
+.wp-loop__seedbtn-badge--dim { opacity: .6; }
 
 /* Mute / bypass dim — same convention as WP_VarTo* and WP_Cleaner. */
 .wp-loop--muted { opacity: 0.45; pointer-events: none; }

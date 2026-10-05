@@ -8,7 +8,8 @@
  * canonical serialised form on every SFC update so ComfyUI's widget
  * state matches what `execute()` sees.
  */
-import { defineAsyncComponent, h, ref, type Component } from "vue";
+import { defineAsyncComponent, h, ref, watch, type Component } from "vue";
+import { app } from "#comfyui/app";
 import { createDomWidgetHost, type DomWidgetHost, type MountTargetNode } from "./_shared";
 import { attachLoopSeedsCapture } from "./_seed-capture";
 import { reactiveFromGraph } from "../extension/reactive";
@@ -16,9 +17,17 @@ import {
   emptyContextLoopConfig,
   parseContextLoopConfig,
   serializeContextLoopConfig,
+  sweepFrameCount,
   type ContextLoopConfig,
 } from "../components/context-loop/types";
-import type { LiteNodeLike } from "../extension/graph";
+import type { SweepSourceRaw } from "../components/context-loop/sweep-candidates";
+import { assignCodenames, baseCodename } from "../extension/node-codename";
+import {
+  collectDownstreamContextNodes,
+  findRootGraph,
+  type LiteGraphLike,
+  type LiteNodeLike,
+} from "../extension/graph";
 
 const ContextLoopWidget = defineAsyncComponent(
   () => import("../components/context-loop/ContextLoopWidget.vue"),
@@ -89,6 +98,49 @@ export function create(node: ContextLoopHostNode, inputName: string) {
     Object.is,
   );
 
+  // Sweep mode: the WP_Context nodes downstream of this loop, as
+  // (codename, raw module JSON) pairs. Re-walked on graph edits + the poll, so a
+  // wildcard added to a Context shows up in the "Sweep a wildcard" list
+  // without a reload. The SFC parses these into candidates, which keeps
+  // that code in its lazy chunk instead of boot.
+  const sweepSources = reactiveFromGraph<SweepSourceRaw[]>(
+    node,
+    () => {
+      const startGraph =
+        (node as unknown as { graph?: LiteGraphLike }).graph
+        ?? (app.graph as unknown as LiteGraphLike | undefined);
+      if (!startGraph) return [];
+      const downstream = collectDownstreamContextNodes(findRootGraph(startGraph), node);
+      const names = assignCodenames(downstream.map((n) => n.id));
+      return downstream.map((n) => {
+        const w = (n.widgets ?? []).find((x) => x.name === "wp_modules");
+        return {
+          label: names.get(String(n.id)) ?? baseCodename(n.id),
+          raw: typeof w?.value === "string" ? w.value : "",
+        };
+      });
+    },
+    (a, b) =>
+      a.length === b.length && a.every((x, i) => x.label === b[i].label && x.raw === b[i].raw),
+  );
+
+  // While a sweep is on, the frame count comes from the combinations, so
+  // keep the stock `count` widget in step: the frame chips, seed list and
+  // Seed List node all read it. The Python node recomputes the same number
+  // from the config, so a stale widget can't change what runs.
+  watch(
+    [() => sweepFrameCount(config.value), count],
+    ([frames, current]) => {
+      if (frames == null || frames === current) return;
+      const w = (node.widgets ?? []).find((x) => x.name === "count");
+      if (!w) return;
+      w.value = frames;
+      (node as unknown as { setDirtyCanvas?: (fg: boolean, bg: boolean) => void })
+        .setDirtyCanvas?.(true, true);
+    },
+    { immediate: true },
+  );
+
   let host: DomWidgetHost | null = null;
 
   const wrapper: Component = {
@@ -106,6 +158,7 @@ export function create(node: ContextLoopHostNode, inputName: string) {
           baseSeed: baseSeed.value,
           count: count.value,
           previousSeeds: previousSeeds.value,
+          sweepSources: sweepSources.value,
           "onUpdate:modelValue": onUpdate,
           chipsCollapsed: chipsCollapsed.value,
           "onUpdate:chipsCollapsed": onChipsCollapsed,

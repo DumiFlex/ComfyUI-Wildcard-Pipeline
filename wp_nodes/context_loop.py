@@ -14,6 +14,7 @@ import json
 from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 
 from engine.seed_derive import apply_seed_locks, derive_loop_seeds
+from engine.sweep import HOLD_KEY, PIN_KEY, parse_sweep, sweep_frames, sweep_total
 from wp_nodes.types import (
     ContextLoopConfigInput,
     ContextLoopWidgetInput,
@@ -41,6 +42,7 @@ def _parse_config(raw: str) -> dict[str, object]:
         "total_internal": True,
         "seed_locks": {},
         "bypass_frames": [],
+        "sweep": parse_sweep(None),
     }
     if not raw or not isinstance(raw, str):
         return defaults
@@ -84,6 +86,7 @@ def _parse_config(raw: str) -> dict[str, object]:
             if n >= 0:
                 frames.add(n)
     out["bypass_frames"] = sorted(frames)
+    out["sweep"] = parse_sweep(parsed.get("sweep"))
     return out
 
 
@@ -179,6 +182,15 @@ class WPContextLoop(io.ComfyNode):
         # one) so kept frame N always draws `derived[N]`.
         has_override = override_seed
         configured_count = max(1, int(count))
+        # Sweep mode: one frame per combination of the chosen wildcards'
+        # options, capped at the sweep limit. The combination count replaces
+        # `count` (the widget keeps `count` in step, but the config is the
+        # authority so an API-queued workflow still sweeps correctly).
+        sweep = cfg["sweep"]
+        sweep_pins: list[dict[str, str]] = []
+        if sweep["enabled"] and sweep["axes"] and not bypass:
+            sweep_pins = sweep_frames(sweep["axes"], sweep["limit"])
+            configured_count = len(sweep_pins)
         if bypass:
             total_count = 1
             kept = [0]
@@ -217,6 +229,9 @@ class WPContextLoop(io.ComfyNode):
             "base_seed": int(seed),
             "override_seed": has_override,
         }
+        if sweep_pins:
+            # Combinations before the limit, so a UI can say "64 of 120".
+            loop_config_payload["sweep_total"] = sweep_total(sweep["axes"])
 
         # Build the internal-flags map once — same across iterations
         # (per-iteration values differ but their internal-ness doesn't).
@@ -253,6 +268,9 @@ class WPContextLoop(io.ComfyNode):
             # widget seeds). WP_Debug renders this only when present.
             if has_override:
                 internals["__wp_loop_seeds__"] = list(derived)
+            if sweep_pins:
+                internals[PIN_KEY] = dict(sweep_pins[idx])
+                internals[HOLD_KEY] = bool(sweep["hold_others"])
             if internal_flags:
                 # Merge by-value so successive iterations don't share
                 # the same dict reference; downstream WP_Context copies

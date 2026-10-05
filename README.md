@@ -85,7 +85,7 @@ list and connect it later.
 |---|---|
 | **WP Context** | Holds your module stack and outputs the picked variables. Chain several together. |
 | **WP Prompt Assembler** | Fills `$variables` in a template. Also supports inline `{a\|b\|c}` picks. |
-| **WP Context Loop** + **WP Seed List** | Run the whole chain N times from one Generate, each with its own prompt and seed. |
+| **WP Context Loop** + **WP Seed List** | Run the whole chain N times from one Generate, each with its own prompt and seed, or sweep every combination of chosen wildcard options. |
 | **WP Context Injector** | Turns any ComfyUI output (text, a number) into a `$variable`. |
 | **WP Prompt Cleaner** | Tidies the final prompt: spacing, stray commas, duplicates, a blocklist. |
 | **WP Debug** | Shows what happened during a run (see below). |
