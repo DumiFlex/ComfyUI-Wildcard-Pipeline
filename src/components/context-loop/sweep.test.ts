@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
 import SweepPanel from "./SweepPanel.vue";
 import ContextLoopWidget from "./ContextLoopWidget.vue";
+import SweepModal from "./SweepModal.vue";
 import {
   emptyContextLoopConfig,
   emptySweepConfig,
@@ -192,21 +193,52 @@ describe("SweepPanel", () => {
 });
 
 describe("ContextLoopWidget sweep wiring", () => {
-  it("builds candidates from the raw downstream nodes", async () => {
+  it("parses the raw downstream nodes", () => {
     const raw = JSON.stringify({ version: 1, modules: [wildcard("u1", "hair", ["red", "blue"])] });
     const [src] = sweepSourcesFromRaw([{ label: "amber-fox", raw }]);
     expect(src.value.modules[0]._uid).toBe("u1");
     expect(sweepSourcesFromRaw([{ label: "x", raw: "{bad" }])[0].value.modules).toEqual([]);
-    const cfg = { ...emptyContextLoopConfig(), sweep: on() };
-    const w = mount(ContextLoopWidget, { props: { modelValue: cfg, sweepSources: [{ label: "amber-fox", raw }] } });
-    expect(w.find('[data-test="sweep-add"]').text()).toContain("$hair");
   });
 
-  it("writes the sweep back into the loop config", async () => {
-    const w = mount(ContextLoopWidget, { props: { modelValue: emptyContextLoopConfig() } });
-    await w.find('[data-test="sweep-toggle"]').trigger("click");
+  it("keeps the sweep off the node and opens it in a modal", async () => {
+    const raw = JSON.stringify({ version: 1, modules: [wildcard("u1", "hair", ["red", "blue"])] });
+    const w = mount(ContextLoopWidget, {
+      props: { modelValue: emptyContextLoopConfig(), sweepSources: [{ label: "amber-fox", raw }] },
+      global: { stubs: { teleport: true } },
+    });
+    expect(w.find('[data-test="sweep-toggle"]').exists()).toBe(false);
+    expect(w.find('[data-test="loop-sweep-badge"]').exists()).toBe(false);
+    await w.find('[data-test="loop-sweep-btn"]').trigger("click");
+    const modal = w.findComponent(SweepModal);
+    expect(modal.exists()).toBe(true);
+    await modal.find('[data-test="sweep-toggle"]').trigger("click");
     const cfg = w.emitted("update:modelValue")?.[0]?.[0] as { sweep: SweepConfig; strategy: string };
     expect(cfg.sweep.enabled).toBe(true);
     expect(cfg.strategy).toBe("hash_index");
+    await modal.find('[data-test="sweep-modal-done"]').trigger("click");
+    expect(w.findComponent(SweepModal).exists()).toBe(false);
+  });
+
+  it("shows the frame count on the node button", () => {
+    const axes = [{ uid: "u1", option_ids: ["h0", "h1", "h2"] }, { uid: "u2", option_ids: ["m0", "m1"] }];
+    const cfg = { ...emptyContextLoopConfig(), sweep: on(axes) };
+    const w = mount(ContextLoopWidget, { props: { modelValue: cfg } });
+    expect(w.find('[data-test="loop-sweep-badge"]').text()).toBe("6 frames");
+  });
+});
+
+describe("SweepModal", () => {
+  it("previews frames in run order with option names", () => {
+    const axes = [{ uid: "u1", option_ids: ["h0", "h2"] }, { uid: "u2", option_ids: ["m0", "m1"] }];
+    const w = mount(SweepModal, { props: { modelValue: on(axes), candidates: CANDS }, global: { stubs: { teleport: true } } });
+    const rows = w.findAll(".wp-swm__frame").map((r) => r.text());
+    expect(rows).toEqual(["#1red · calm", "#2red · sad", "#3green · calm", "#4green · sad"]);
+  });
+
+  it("summarises frames past the preview cap", () => {
+    const ids = Array.from({ length: 50 }, (_, i) => `x${i}`);
+    const w = mount(SweepModal, { props: { modelValue: on([{ uid: "zz", option_ids: ids }]) }, global: { stubs: { teleport: true } } });
+    expect(w.findAll(".wp-swm__frame")).toHaveLength(40);
+    expect(w.find(".wp-swm__frame-more").text()).toContain("10 more");
   });
 });

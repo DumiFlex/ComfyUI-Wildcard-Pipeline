@@ -67,12 +67,13 @@ const controls = [
 
     <DocSection title="Sweep combinations">
       <p>
-        Turn on <b>Sweep combinations</b> to compare options side by side instead of rolling them.
-        Pick one or more wildcards from the WP Context nodes after the loop, choose which of their
+        Open <b>Sweep combinations</b> from the loop node and switch it on to compare options side
+        by side instead of rolling them. Pick one or more wildcards from the WP Context nodes after the loop, choose which of their
         options to include, and the loop runs <em>every combination</em>, one frame each. Sweep
         <VarToken>$hair</VarToken> (3 options) against <VarToken>$mood</VarToken> (2 options) and a
-        single Generate makes 6 frames: red + calm, red + sad, blue + calm, and so on. The panel
-        shows the total before you run, and the count follows it.
+        single Generate makes 6 frames: red + calm, red + sad, blue + calm, and so on. The menu
+        shows the total and lists every frame before you run, the node's button shows the frame
+        count, and the count widget follows it.
       </p>
       <ul>
         <li>
