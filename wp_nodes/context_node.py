@@ -246,6 +246,11 @@ class WPContext(io.ComfyNode):
                 seed_override=None,
                 loop_index=0,
             )
+        # Sweep mode with "hold other picks": every frame rolls the
+        # non-swept modules on the frame-0 seed, so only the swept
+        # wildcards (pinned per frame) change across the grid.
+        if upstream_internals.get("__wp_sweep_hold__") is True:
+            chain_seed = hold_seed
         # WP Debug detail: per-module explanations and the nested @{} picks.
         # Both are `__`-prefixed, so neither reaches the public context.
         ctx["__wp_explain__"] = True

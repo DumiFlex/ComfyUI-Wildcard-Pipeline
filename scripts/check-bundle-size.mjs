@@ -262,7 +262,11 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // feature needed ~200. Approved by the maintainer ("you are allowed to
 // increase the bundle budget if necessary"). 4 KB leaves room for a few more
 // small features while a re-inlined font (~90 KB) still trips the gate.
-const TOTAL_LIMIT = 424 * 1024;     // 424 KB
+// RAISED 424 -> 428 KB on 2026-10-05 for Context Loop sweep mode (Sweep
+// panel in the loop widget chunk, downstream-wildcard walk in boot): dev sat
+// at 430,134 bytes and the feature adds ~4.8 KB. The maintainer treats this
+// budget as a guide to raise when a needed feature does not fit.
+const TOTAL_LIMIT = 428 * 1024;     // 428 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

@@ -8,6 +8,78 @@
 
 export type LoopStrategy = "sequential" | "hash_index" | "prime_stride";
 
+/** One swept wildcard: a downstream wildcard instance (`_uid`) and the
+ *  option ids the sweep walks. `label` is display-only, kept so an axis
+ *  whose wildcard has since been removed still reads as something. */
+export interface SweepAxis {
+  uid: string;
+  option_ids: string[];
+  label?: string;
+}
+
+/** Sweep mode: run every combination of the axes' options, one frame each,
+ *  capped at `limit`. Python mirror: `engine/sweep.py:parse_sweep`. */
+export interface SweepConfig {
+  enabled: boolean;
+  limit: number;
+  /** Roll every unswept module on the frame-0 seed so only the swept
+   *  wildcards change from frame to frame. */
+  hold_others: boolean;
+  axes: SweepAxis[];
+}
+
+export const SWEEP_DEFAULT_LIMIT = 64;
+export const SWEEP_MAX_LIMIT = 999;
+
+export function emptySweepConfig(): SweepConfig {
+  return { enabled: false, limit: SWEEP_DEFAULT_LIMIT, hold_others: true, axes: [] };
+}
+
+/** Recovery-friendly parse, identical to the Python `parse_sweep`: axes
+ *  without a uid or option ids are dropped, a repeated uid keeps its first
+ *  axis, option ids are deduped in order. */
+export function parseSweep(raw: unknown): SweepConfig {
+  const out = emptySweepConfig();
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  const obj = raw as Record<string, unknown>;
+  out.enabled = obj.enabled === true;
+  if (typeof obj.limit === "number" && Number.isInteger(obj.limit)) {
+    out.limit = Math.min(SWEEP_MAX_LIMIT, Math.max(1, obj.limit));
+  }
+  if (typeof obj.hold_others === "boolean") out.hold_others = obj.hold_others;
+  const seen = new Set<string>();
+  for (const a of Array.isArray(obj.axes) ? obj.axes : []) {
+    if (!a || typeof a !== "object" || Array.isArray(a)) continue;
+    const axis = a as Record<string, unknown>;
+    const uid = axis.uid;
+    if (typeof uid !== "string" || !uid || seen.has(uid)) continue;
+    const ids: string[] = [];
+    for (const id of Array.isArray(axis.option_ids) ? axis.option_ids : []) {
+      if (typeof id === "string" && id && !ids.includes(id)) ids.push(id);
+    }
+    if (!ids.length) continue;
+    seen.add(uid);
+    const clean: SweepAxis = { uid, option_ids: ids };
+    if (typeof axis.label === "string" && axis.label) clean.label = axis.label;
+    out.axes.push(clean);
+  }
+  return out;
+}
+
+/** Combinations before the limit (1 with no axes). */
+export function sweepTotal(axes: readonly SweepAxis[]): number {
+  return axes.reduce((n, a) => n * a.option_ids.length, 1);
+}
+
+/** Frames the loop emits for this sweep, or null when the sweep is off,
+ *  has no axes, or the whole loop is bypassed (the Python node then
+ *  falls back to `count`). */
+export function sweepFrameCount(cfg: ContextLoopConfig): number | null {
+  const s = cfg.sweep;
+  if (!s.enabled || !s.axes.length || cfg.bypass) return null;
+  return Math.min(sweepTotal(s.axes), s.limit);
+}
+
 export interface ContextLoopConfig {
   strategy: LoopStrategy;
   override_seed: boolean;
@@ -27,6 +99,8 @@ export interface ContextLoopConfig {
    *  Sorted, deduped, non-negative. Out-of-range (>= count) entries are
    *  kept and re-apply if count grows. Empty by default. */
   bypass_frames: number[];
+  /** Sweep mode; see `SweepConfig`. Off by default. */
+  sweep: SweepConfig;
 }
 
 const STRATEGIES = new Set<LoopStrategy>(["sequential", "hash_index", "prime_stride"]);
@@ -41,6 +115,7 @@ export function emptyContextLoopConfig(): ContextLoopConfig {
     total_internal: true,
     seed_locks: {},
     bypass_frames: [],
+    sweep: emptySweepConfig(),
   };
 }
 
@@ -88,6 +163,7 @@ export function parseContextLoopConfig(raw: string | null | undefined): ContextL
     }
     out.bypass_frames = [...frames].sort((a, b) => a - b);
   }
+  out.sweep = parseSweep(obj.sweep);
   return out;
 }
 

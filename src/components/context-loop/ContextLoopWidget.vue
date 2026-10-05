@@ -13,7 +13,9 @@
  * pushes via `host.setValue` so ComfyUI's widget value matches.
  */
 import { computed, ref } from "vue";
-import type { ContextLoopConfig, LoopStrategy } from "./types";
+import type { ContextLoopConfig, LoopStrategy, SweepConfig } from "./types";
+import { collectSweepCandidates, sweepSourcesFromRaw, type SweepSourceRaw } from "./sweep-candidates";
+import SweepPanel from "./SweepPanel.vue";
 import SeedListModal from "../shared/SeedListModal.vue";
 import { deriveLoopSeeds } from "../shared/seed-derive";
 import { pushToast } from "../shared/toast-store";
@@ -34,8 +36,11 @@ const props = withDefaults(
      *  executed `loop_seeds` UI payload by the host glue. Drives the seed
      *  modal's per-frame "lock previous" button. Null until a run lands. */
     previousSeeds?: number[] | null;
+    /** Downstream Context nodes (id + module JSON) the Sweep section
+     *  draws its wildcards from. */
+    sweepSources?: SweepSourceRaw[];
   }>(),
-  { nodeMode: 0, baseSeed: 0, count: 1, previousSeeds: null },
+  { nodeMode: 0, baseSeed: 0, count: 1, previousSeeds: null, sweepSources: () => [] },
 );
 
 const emit = defineEmits<{ "update:modelValue": [next: ContextLoopConfig] }>();
@@ -138,6 +143,14 @@ function toggleFrameBypass(i: number): void {
   onBypassFrames([...next].sort((a, b) => a - b));
 }
 
+const sweepCandidates = computed(() =>
+  collectSweepCandidates(sweepSourcesFromRaw(props.sweepSources)),
+);
+
+function onSweep(next: SweepConfig): void {
+  emit("update:modelValue", { ...props.modelValue, sweep: next });
+}
+
 function pickStrategy(s: LoopStrategy): void {
   if (props.modelValue.strategy === s) return;
   emit("update:modelValue", { ...props.modelValue, strategy: s });
@@ -224,6 +237,14 @@ function toggleTotalInternal(): void {
       @select="setFrame"
       @toggle-lock="toggleFrameLock"
       @toggle-bypass="toggleFrameBypass"
+    />
+
+    <SweepPanel
+      class="wp-loop__sweep"
+      :model-value="modelValue.sweep"
+      :candidates="sweepCandidates"
+      :loop-bypassed="modelValue.bypass"
+      @update:model-value="onSweep"
     />
 
     <div
@@ -450,6 +471,8 @@ function toggleTotalInternal(): void {
   opacity: 0.45;
   pointer-events: none;
 }
+
+.wp-loop--bypass-on .wp-loop__sweep { opacity: 0.45; pointer-events: none; }
 
 /* Mute / bypass dim — same convention as WP_VarTo* and WP_Cleaner. */
 .wp-loop--muted { opacity: 0.45; pointer-events: none; }
