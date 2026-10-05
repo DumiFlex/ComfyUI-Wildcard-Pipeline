@@ -38,6 +38,7 @@ const STATIC_ENTRIES: SettingEntry[] = [
   { key: "check-on-launch", section: "general", label: "Check for updates on launch", hint: "Look for a newer release when the manager opens.", keywords: "update release" },
   { key: "check-now", section: "general", label: "Check for updates now", hint: "Ask GitHub for the latest release.", keywords: "update release" },
   { key: "whats-new", section: "general", label: "Open What's new after an update", hint: "Show the release notes once, the first time the manager opens on a new version.", keywords: "changelog release notes" },
+  { key: "usage-stats", section: "general", label: "Share anonymous usage stats", hint: "Let the Community tab count page views, installs and publishes on the community site.", keywords: "privacy telemetry analytics tracking community" },
 
   { key: "theme", section: "appearance", label: "Theme", hint: "Dark, light, or follow the system.", keywords: "dark light mode color scheme" },
   { key: "accent", section: "appearance", label: "Accent color", hint: "The highlight color used for buttons, links and selection.", keywords: "colour palette purple custom hex" },

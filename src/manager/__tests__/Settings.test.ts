@@ -116,6 +116,22 @@ describe("Settings layout", () => {
   });
 });
 
+describe("Settings › General", () => {
+  it("usage stats default on and the toggle remembers off", async () => {
+    const { wrap } = await mountAt("general");
+    const store = useUiStore();
+    const toggle = wrap.get('[data-test="settings-usage-stats"]').get("button");
+    expect(store.usageStats).toBe(true);
+    expect(toggle.attributes("aria-checked")).toBe("true");
+    await toggle.trigger("click");
+    expect(store.usageStats).toBe(false);
+    expect(localStorage.getItem("wp-usage-stats")).toBe("0");
+    setActivePinia(createPinia());
+    expect(useUiStore().usageStats).toBe(false);
+    wrap.unmount();
+  });
+});
+
 describe("Settings › Appearance", () => {
   it("theme segments swap uiStore.themeMode and mark the active one", async () => {
     const { wrap } = await mountAt("appearance");

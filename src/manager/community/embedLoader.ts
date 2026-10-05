@@ -49,6 +49,9 @@ export interface EmbedMountOptions {
     clear(): Promise<void>;
   };
   theme?: "auto" | "dark" | "light";
+  /** Anonymous usage pings from the embed; `false` turns them off. Older
+   *  community embeds ignore it (and send none). */
+  analytics?: boolean;
   onNavigate?: (target: EmbedNavigateTarget) => void;
   onClose?: () => void;
   onUnauthenticated?: () => void;

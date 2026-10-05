@@ -82,6 +82,21 @@ const appLicense = __APP_LICENSE__;
       />
     </SettingRow>
   </SettingGroup>
+
+  <SettingGroup title="Privacy">
+    <SettingRow
+      label="Share anonymous usage stats"
+      hint="The Community tab tells the community site which pages you open and when you install, publish or sign in. No cookies, no account details. Do Not Track also turns it off."
+      setting-key="usage-stats"
+    >
+      <Toggle
+        :model-value="ui.usageStats"
+        aria-label="Share anonymous usage stats"
+        data-test="settings-usage-stats"
+        @update:model-value="ui.setUsageStats($event)"
+      />
+    </SettingRow>
+  </SettingGroup>
 </template>
 
 <style scoped>
