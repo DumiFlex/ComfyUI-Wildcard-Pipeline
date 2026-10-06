@@ -55,10 +55,13 @@ async def test_converted_payload_commits(wp_client):
     resp = await wp_client.post("/wp/api/import/wildcard-files", data=_form([
         ("animals/cats.txt", b"tabby\n"),
         ("animals/dogs.txt", b"pug\n"),
-        ("pets.txt", b"__animals/*__\n"),
+        ("scenes/field.txt", b"__animals/*__ in a field\n"),
+        ("scenes/nap.txt", b"__animals/cats__ asleep\n"),
+        ("pets.txt", b"__animals/dogs__\n"),
     ]))
     payload = (await resp.json())["payload"]
-    assert [b["name"] for b in payload["bundles"]] == ["Imported wildcards", "animals"]
+    # Only the entry points (nothing references them) are bundled.
+    assert [b["name"] for b in payload["bundles"]] == ["Imported wildcards", "scenes"]
     adds = [{"kind": "category", "entity": c} for c in payload["categories"]]
     adds += [{"kind": "wildcard", "entity": w} for w in payload["wildcards"]]
     adds += [{"kind": "bundle", "entity": b} for b in payload["bundles"]]
@@ -66,15 +69,14 @@ async def test_converted_payload_commits(wp_client):
     assert commit.status == 200, await commit.text()
     listed = await wp_client.get("/wp/api/modules?type=wildcard&limit=50")
     names = {m["name"] for m in (await listed.json())["items"]}
-    assert {"animals/cats", "animals/dogs", "animals/*", "pets"} <= names
+    assert {"animals/cats", "animals/dogs", "animals/*", "scenes/field", "pets"} <= names
     outer_id = payload["bundles"][0]["id"]
     got = await wp_client.get(f"/wp/api/bundles/{outer_id}")
     outer = await got.json()
     # The inner bundle reference expands to its wildcards on read.
     inner = next(c for c in outer["children"] if c["type"] == "bundle")
-    assert [c["meta"]["name"] for c in inner["children"]] == [
-        "animals/cats", "animals/dogs", "animals/*",
-    ]
+    assert [c["meta"]["name"] for c in inner["children"]] == ["scenes/field", "scenes/nap"]
+    assert [c["type"] for c in outer["children"]] == ["bundle", "wildcard"]
 
 
 async def test_rejects_uploads_without_wildcard_files(wp_client):

@@ -62,9 +62,11 @@ def test_names_are_paths_from_the_common_root(pack):
 def test_txt_lines_comments_weights_and_duplicates(pack):
     cats = _by_name(pack)["animals/cats"]
     # BOM + CRLF handled, `#` lines and blank lines skipped, inline comment
-    # cut, `2::` read as a weight, the repeated `tabby` dropped.
+    # cut, `2::` read as a weight, the repeated `tabby` folded into its
+    # weight (two lines, two tickets) and the `#` lines kept as the description.
     assert _values(cats) == ["tabby", "siamese", "maine coon"]
-    assert [o["weight"] for o in cats["payload"]["options"]] == [1, 1, 2]
+    assert [o["weight"] for o in cats["payload"]["options"]] == [2, 1, 2]
+    assert cats["description"] == "Imported from animals/cats.txt\n\ncats"
     assert cats["payload"]["var_binding"] == "cats"
     notes = _notes(pack)
     assert notes["inline_comment"] == 1
@@ -113,21 +115,21 @@ def test_references_variants_and_variables(pack):
     outfit, cats = rows["ppp/outfit"]["id"], rows["animals/cats"]["id"]
     look = _values(rows["ppp/look"])
     assert f"@{{{outfit}#ppp/outfit:formal}}" in look
-    assert f"{{2$$ and $$@{{{outfit}#ppp/outfit}}|@{{{outfit}#ppp/outfit}}}}" in look
+    # Multi-pick over one ref draws different values, like the source.
+    assert f"{{2$$ and $$@{{{outfit}#ppp/outfit}}}}" in look
     assert "{red|@blue|green}" in look           # `~` sampler mark dropped
     assert "{2$$, $$a|b|c}" in look              # default separator added
     assert "{1-2$$, $$x|y|z}" in look            # open lower bound
     assert "{1-2~$$ / $$p|q}" in look            # `r` → `~`, open upper bound
     assert "solo" in look                        # single-branch braces
-    assert "$color hat" in look                  # DP variable read
+    assert "${color:red} hat" in look            # DP variables stay as text
     assert "costs $5 or $$total" in look         # literal `$name` escaped
     assert "__missing/thing__" in look           # unresolved stays as text
     # Impact `3#__cats__` resolves by unique suffix.
-    assert any(v.startswith("{3$$, $$@{" + cats) for v in look)
+    assert f"{{3$$, $$@{{{cats}#animals/cats}}}}" in look
     notes = _notes(pack)
     assert notes["unresolved_reference"] == 1
-    assert notes["variable_read_mapped"] == 1
-    assert notes["variable_kept_as_text"] == 1
+    assert notes["variable_kept_as_text"] == 2
 
 
 def test_globs_and_parent_keys_become_one_weighted_group(pack):
@@ -255,34 +257,83 @@ def test_read_zip_skips_junk_and_unsafe_paths():
     assert [f.path for f in files] == ["pack/colors.txt"]
 
 
-def test_pack_and_folder_bundles(pack):
-    bundles = {b["name"]: b for b in pack["payload"]["bundles"]}
-    assert set(bundles) == {"Imported wildcards", "animals", "ppp", "styles"}
-    outer = bundles["Imported wildcards"]
-    assert [c["type"] for c in outer["children"]] == ["bundle"] * 3
-    assert {c["id"] for c in outer["children"]} == {
-        bundles[n]["id"] for n in ("animals", "ppp", "styles")
-    }
-    animals = bundles["animals"]
+def _plan(result: dict) -> dict[str, dict]:
+    return {p["name"]: p for p in result["report"]["plan"]}
+
+
+def test_plan_roles_follow_the_reference_graph(pack):
+    plan = _plan(pack)
+    assert plan["animals/cats"]["role"] == "vocabulary"
+    assert plan["animals/dogs"]["role"] == "composition"  # in the animals/* group
+    assert plan["ppp/outfit"]["role"] == "composition"    # ppp/look uses it
+    assert plan["ppp/look"]["role"] == "entry"            # nothing uses it
+    assert plan["animals/*"]["role"] == "group"
+    assert plan["animals/cats"]["referenced_by"] == 4
+    assert plan["ppp/look"]["domain"] == "ppp"
+
+
+def test_plan_fidelity_comes_from_the_notes(pack):
+    plan = _plan(pack)
+    assert plan["animals/cats"]["fidelity"] == "exact"
+    assert plan["ppp/outfit"]["fidelity"] == "lossy"  # if-condition dropped
+    assert plan["ppp/look"]["fidelity"] == "lossy"    # ${…} kept as text
+    kinds = {n["kind"] for n in plan["ppp/look"]["notes"]}
+    assert {"variable_kept_as_text", "unresolved_reference"} <= kinds
+    close = convert_files([SourceFile("a.yaml", b"a:\n  - \"'Picker'$$\"\n  - x\n")])
+    assert _plan(close)["a"]["fidelity"] == "close"
+
+
+def test_bundles_hold_entry_points_only():
+    files = [
+        SourceFile("clothes/top.txt", b"shirt\ncoat\n"),
+        SourceFile("clothes/outfit.txt", b"a __clothes/top__\n"),
+        SourceFile("places/city.txt", b"paris\n"),
+        SourceFile("places/scene.txt", b"in __places/city__\n"),
+        SourceFile("intro.txt", b"__clothes/outfit__ __places/scene__\n"),
+        SourceFile("loose.txt", b"x __clothes/top__\n"),
+    ]
+    result = convert_files(files, pack_name="My pack")
+    bundles = {b["name"]: b for b in result["payload"]["bundles"]}
+    # clothes/outfit and places/scene are used by intro, so only the two
+    # loose files are entry points: no folder bundles, one pack bundle.
+    assert set(bundles) == {"My pack"}
+    names = [c["meta"]["name"] for c in bundles["My pack"]["children"]]
+    assert names == ["intro", "loose"]
+    leaf = bundles["My pack"]["children"][0]
     # Leaf children are frozen widget snapshots, like the bundle editor's.
-    names = [c["meta"]["name"] for c in animals["children"]]
-    assert names == ["animals/cats", "animals/dogs", "animals/*"]
-    leaf = animals["children"][0]
     assert leaf["type"] == "wildcard" and leaf["enabled"] is True
-    assert leaf["payload"] == _by_name(pack)["animals/cats"]["payload"]
-    assert pack["report"]["bundles"] == 4
+    assert leaf["payload"] == _by_name(result)["intro"]["payload"]
+
+    split = convert_files(files[:4] + [SourceFile("places/trip.txt", b"__places/scene__\n")])
+    bundles = {b["name"]: b for b in split["payload"]["bundles"]}
+    assert set(bundles) == {"Imported wildcards", "clothes", "places"}
+    assert [c["type"] for c in bundles["Imported wildcards"]["children"]] == ["bundle"] * 2
+    assert [c["meta"]["name"] for c in bundles["places"]["children"]] == ["places/trip"]
 
 
-def test_bundles_can_be_skipped_and_single_folders_need_no_pack():
-    files = [SourceFile("pack.yaml", b"only:\n  a: [x]\n  b: [y]\n")]
-    single = convert_files(files)
-    assert [b["name"] for b in single["payload"]["bundles"]] == ["only"]
-    loose = convert_files([SourceFile("a.txt", b"x\n"), SourceFile("sub/b.txt", b"y\n")],
-                          pack_name="My pack")
-    outer = loose["payload"]["bundles"][0]
-    assert outer["name"] == "My pack"
-    assert [c["type"] for c in outer["children"]] == ["bundle", "wildcard"]
-    assert convert_files(files, make_bundles=False)["payload"]["bundles"] == []
+def test_bundles_can_be_skipped_and_flat_packs_need_none(pack):
+    # Only ppp/look is an entry point, so its folder bundle stands alone.
+    assert [b["name"] for b in pack["payload"]["bundles"]] == ["ppp"]
+    assert pack["report"]["bundles"] == 1
+    flat = convert_files([SourceFile("a.txt", b"x\n"), SourceFile("sub/b.txt", b"y\n")])
+    assert flat["payload"]["bundles"] == []
+    assert convert_files(_pack(), make_bundles=False)["payload"]["bundles"] == []
+
+
+def test_multi_line_yaml_values_drop_comments_into_the_description():
+    text = (
+        b"tpl:\n"
+        b"  portrait:\n"
+        b"    - |\n"
+        b"      # Usage: __tpl/portrait(figure=a knight)__\n"
+        b"      a portrait of a person,\n"
+        b"      soft light\n"
+    )
+    result = convert_files([SourceFile("t.yaml", text)])
+    row = _by_name(result)["tpl/portrait"]
+    assert _values(row) == ["a portrait of a person, soft light"]
+    assert row["description"].endswith("Usage: __tpl/portrait(figure=a knight)__")
+    assert "template_args_dropped" not in _notes(result)
 
 
 def test_rows_carry_the_fingerprint_the_library_will_store(pack):

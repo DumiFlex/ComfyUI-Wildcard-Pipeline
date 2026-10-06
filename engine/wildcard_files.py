@@ -54,6 +54,7 @@ MAX_FILE_BYTES = 32 * 1024 * 1024
 # characters can't appear in them (mirrors wp_api REF_GRAMMAR_FORBIDDEN_CHARS).
 _NAME_FORBIDDEN = re.compile(r"[{}:#@,!]")
 _MAX_NAME_LEN = 200
+_MAX_DESCRIPTION_LEN = 2000
 _MAX_IDENT_LEN = 64
 
 _IGNORED_PARTS = frozenset({"__MACOSX", ".git", ".svn", "node_modules"})
@@ -106,13 +107,27 @@ _REF_RE = re.compile(
 
 # Dynamic Prompts variables: `${name}`, `${name:default}`, `${name=value}`,
 # `${name?=!value}`. Only the first two are reads.
-_DP_VAR_RE = re.compile(r"\$\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:(:)([^{}]*))?\}")
 
 _WP_REF_START = re.compile(r"@\{[0-9a-f]{8}")
 _INLINE_COMMENT_RE = re.compile(r"\s+#.*$")
 
-# The report keeps at most this many examples per note kind.
+# The report keeps at most this many examples per note kind, and this
+# many notes per wildcard in the plan.
 _MAX_EXAMPLES = 8
+_MAX_WILDCARD_NOTES = 6
+
+# How faithfully a wildcard came across, from the notes it raised.
+# Lossy: some text no longer renders as it did in the source tool.
+# Close: same outputs, but a setting or a label didn't carry over.
+_LOSSY_KINDS = frozenset({
+    "condition_dropped", "unresolved_reference", "template_args_dropped",
+    "variable_kept_as_text", "wrap_kept_as_text", "filter_dropped",
+    "command_dropped",
+})
+_CLOSE_KINDS = frozenset({
+    "default_params_dropped", "label_dropped", "extra_else_dropped",
+    "inline_else_dropped", "multi_pick_range_capped",
+})
 
 
 @dataclass
@@ -132,6 +147,8 @@ class _Wildcard:
     name: str = ""
     options: list[dict[str, Any]] = field(default_factory=list)
     sub_categories: list[str] = field(default_factory=list)
+    # `#` comment lines from the source, kept as the module description.
+    comments: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -150,12 +167,19 @@ class _Report:
     def __init__(self) -> None:
         self.files: list[dict[str, Any]] = []
         self._notes: dict[str, dict[str, Any]] = {}
+        # Per wildcard, for the plan: every kind it raised, a few details.
+        self.by_wildcard: dict[str, list[dict[str, str]]] = {}
+        self.kinds_by_wildcard: dict[str, set[str]] = {}
 
     def note(self, kind: str, wildcard: str, detail: str) -> None:
         row = self._notes.setdefault(kind, {"kind": kind, "count": 0, "examples": []})
         row["count"] += 1
         if len(row["examples"]) < _MAX_EXAMPLES:
             row["examples"].append({"wildcard": wildcard, "detail": detail[:200]})
+        self.kinds_by_wildcard.setdefault(wildcard, set()).add(kind)
+        mine = self.by_wildcard.setdefault(wildcard, [])
+        if len(mine) < _MAX_WILDCARD_NOTES:
+            mine.append({"kind": kind, "detail": detail[:200]})
 
     def notes(self) -> list[dict[str, Any]]:
         return list(self._notes.values())
@@ -234,7 +258,9 @@ def _load_structured(text: str, ext: str) -> Any:
     # BaseLoader keeps every scalar a string: the default loaders turn
     # `yes`, `no`, `on`, `off` into booleans and `1.10` into 1.1, which
     # would quietly corrupt word lists.
-    return _yaml.load(text, Loader=_yaml.BaseLoader)  # noqa: S506 - BaseLoader builds no objects
+    # The C loader (libyaml) is ~20x faster on big packs; same output.
+    loader = getattr(_yaml, "CBaseLoader", _yaml.BaseLoader)
+    return _yaml.load(text, Loader=loader)  # noqa: S506 - BaseLoader builds no objects
 
 
 def _collect(
@@ -263,16 +289,20 @@ def _collect(
             text = _decode(f.data)
             if ext == ".txt":
                 lines = []
+                comments: list[str] = []
                 for line in text.split("\n"):
                     s = line.strip()
-                    if not s or s.startswith("#"):
+                    if s.startswith("#"):
+                        comments.append(s.lstrip("#").strip())
+                        continue
+                    if not s:
                         continue
                     stripped = _INLINE_COMMENT_RE.sub("", s)
                     if stripped != s:
                         report.note("inline_comment", stem_path, s)
                     if stripped:
                         lines.append(stripped)
-                found.append(_Wildcard(stem_path, rel, lines))
+                found.append(_Wildcard(stem_path, rel, lines, comments=[c for c in comments if c]))
                 entry["wildcards"] = 1
                 continue
             data = _load_structured(text, ext)
@@ -365,6 +395,12 @@ class _Ctx:
     groups: dict[str, _Group]
     all_wildcards: list[_Wildcard]
     current: str = ""
+    # Reference graph, by normalised path: what each wildcard points at
+    # (imported wildcards and group patterns), and how many refs it has
+    # in total (library refs included).
+    edges: dict[str, set[str]] = field(default_factory=dict)
+    ref_counts: dict[str, int] = field(default_factory=dict)
+    comments: dict[str, list[str]] = field(default_factory=dict)
 
 
 def convert_files(
@@ -458,8 +494,12 @@ def convert_files(
         if not wc.options:
             report.note("empty_wildcard", wc.path, "no usable values")
             continue
+        description = f"Imported from {wc.source}"
+        comments = wc.comments + ctx.comments.get(wc.path, [])
+        if comments:
+            description += "\n\n" + "\n".join(comments)
         rows.append(_module_row(
-            wc.id, wc.name, f"Imported from {wc.source}",
+            wc.id, wc.name, description[:_MAX_DESCRIPTION_LEN],
             category_for(wc.path), tags,
             {
                 "var_binding": _ident(wc.path.split("/")[-1]),
@@ -496,7 +536,10 @@ def convert_files(
 
     group_ids = {g.id for g in ctx.groups.values()}
     group_rows = sum(1 for r in rows if r["id"] in group_ids)
-    bundles = _build_bundles(rows, used_ids, tags, pack_name) if make_bundles else []
+    plan = _plan(rows, wildcards, ctx)
+    entry_ids = {p["id"] for p in plan if p["role"] == "entry"}
+    entries = [r for r in rows if r["id"] in entry_ids]
+    bundles = _build_bundles(entries, used_ids, tags, pack_name) if make_bundles else []
     payload = {
         "schema_version": 2,
         "bundles": bundles,
@@ -523,8 +566,71 @@ def convert_files(
             "groups": group_rows,
             "options": sum(len(r["payload"]["options"]) for r in rows),
             "bundles": len(bundles),
+            "plan": plan,
         },
     }
+
+
+def _plan(
+    rows: list[dict[str, Any]], wildcards: list[_Wildcard], ctx: _Ctx,
+) -> list[dict[str, Any]]:
+    """One entry per imported row: its role in the pack and how
+    faithfully it came across.
+
+    Roles: ``vocabulary`` (a plain list, no references), ``composition``
+    (references other wildcards and is referenced itself), ``entry``
+    (references others and nothing in the pack references it: what a
+    user drops on a Context) and ``group`` (generated for a glob or a
+    parent key).
+    """
+    by_id = {w.id: w for w in wildcards}
+    referenced: dict[str, int] = {}
+    for targets in ctx.edges.values():
+        for t in targets:
+            referenced[t] = referenced.get(t, 0) + 1
+    group_by_id = {g.id: g for g in ctx.groups.values()}
+    for g in ctx.groups.values():
+        for m in g.members:
+            key = _norm(m.path)
+            referenced[key] = referenced.get(key, 0) + 1
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        wc = by_id.get(row["id"])
+        grp = group_by_id.get(row["id"])
+        if grp is not None:
+            path, key = grp.display, grp.pattern
+            role, refs = "group", len(row["payload"]["options"])
+        elif wc is not None:
+            path, key = wc.path, _norm(wc.path)
+            refs = ctx.ref_counts.get(key, 0)
+            if refs == 0:
+                role = "vocabulary"
+            elif referenced.get(key):
+                role = "composition"
+            else:
+                role = "entry"
+        else:  # pragma: no cover - every row comes from one of the two
+            continue
+        kinds = ctx.report.kinds_by_wildcard.get(path, set())
+        if kinds & _LOSSY_KINDS:
+            fidelity = "lossy"
+        elif kinds & _CLOSE_KINDS:
+            fidelity = "close"
+        else:
+            fidelity = "exact"
+        out.append({
+            "id": row["id"],
+            "name": row["name"],
+            "domain": path.split("/", 1)[0] if "/" in path else "",
+            "role": role,
+            "options": len(row["payload"]["options"]),
+            "refs": refs,
+            "referenced_by": referenced.get(key, 0),
+            "fidelity": fidelity,
+            "notes": ctx.report.by_wildcard.get(path, []),
+            "source": wc.source if wc is not None else "",
+        })
+    return out
 
 
 def _child_snapshot(row: dict[str, Any]) -> dict[str, Any]:
@@ -563,12 +669,17 @@ def _build_bundles(
     rows: list[dict[str, Any]], used_ids: set[str], tags: list[str],
     pack_name: str | None,
 ) -> list[dict[str, Any]]:
-    """One bundle per top folder, inside one pack bundle.
+    """One bundle per top folder, inside one pack bundle. ``rows`` are the
+    entry points only: vocabulary stays in the library, where the entry
+    points reach it by reference, so dropping a bundle rolls the prompts
+    the pack was written to make, not every list in it.
 
     Wildcards with no folder sit directly in the pack bundle. When
     everything lives under a single folder, that folder's bundle is the
     only one: a pack bundle around one bundle adds nothing.
     """
+    if not rows:
+        return []
     folders: dict[str, list[dict[str, Any]]] = {}
     loose: list[dict[str, Any]] = []
     for row in rows:
@@ -640,7 +751,7 @@ def _convert_wildcard(wc: _Wildcard, ctx: _Ctx) -> None:
         first = items.pop(0)
         if not (isinstance(first, dict) and set(first) <= {"description"}):
             ctx.report.note("default_params_dropped", wc.path, _short(first))
-    seen_values: set[str] = set()
+    seen_values: dict[str, dict[str, Any]] = {}
     tags: dict[str, None] = {}
     fallback_used = False
     for idx, item in enumerate(items):
@@ -651,9 +762,13 @@ def _convert_wildcard(wc: _Wildcard, ctx: _Ctx) -> None:
         if not value.strip():
             continue
         if value in seen_values:
+            # Each copy of a line is one more ticket in the source draw:
+            # fold it into the weight so the odds stay the same.
+            prev = seen_values[value]
+            total = prev["weight"] + weight
+            prev["weight"] = int(total) if float(total).is_integer() else total
             ctx.report.note("duplicate_value", wc.path, _readable(value))
             continue
-        seen_values.add(value)
         opt: dict[str, Any] = {
             "id": _short_hash(wc.path, str(idx)),
             "value": value,
@@ -674,6 +789,7 @@ def _convert_wildcard(wc: _Wildcard, ctx: _Ctx) -> None:
             else:
                 opt["fallback"] = True
                 fallback_used = True
+        seen_values[value] = opt
         wc.options.append(opt)
     # Option ids come from the position in the file; keep them unique if a
     # pathological file still collides on the 8-char hash.
@@ -728,7 +844,7 @@ def _parse_choice(item: Any, ctx: _Ctx) -> tuple[str, float, list[str], bool] | 
             ctx.report.note("unsupported_item", ctx.current, _short(item))
             return None
         else:
-            text = str(content)
+            text = _join_lines(str(content), ctx)
             if _truthy(item.get("command")):
                 text = _include(text, ctx)
             else:
@@ -740,7 +856,7 @@ def _parse_choice(item: Any, ctx: _Ctx) -> tuple[str, float, list[str], bool] | 
         if item.get("if"):
             ctx.report.note("condition_dropped", ctx.current, f"if {item['if']}")
         return (text, weight, [str(x) for x in labels], _truthy(item.get("else")))
-    raw = str(item)
+    raw = _join_lines(str(item), ctx)
     weight: float = 1
     labels: list[str] = []
     is_else = False
@@ -755,6 +871,29 @@ def _parse_choice(item: Any, ctx: _Ctx) -> tuple[str, float, list[str], bool] | 
     if command:
         return (_include(raw, ctx), weight, labels, is_else)
     return (convert_text(raw, ctx), weight, labels, is_else)
+
+
+def _join_lines(text: str, ctx: _Ctx) -> str:
+    """A multi-line YAML value (prompt templates use them) → one line.
+
+    Dynamic Prompts drops `#` comment lines and joins the rest; the
+    comments usually explain the template, so they go to the module
+    description instead of the prompt.
+    """
+    if "\n" not in text:
+        return text
+    kept: list[str] = []
+    for line in text.split("\n"):
+        s = line.strip()
+        if not s:
+            continue
+        if s.startswith("#"):
+            comment = s.lstrip("#").strip()
+            if comment:
+                ctx.comments.setdefault(ctx.current, []).append(comment)
+            continue
+        kept.append(s)
+    return " ".join(kept)
 
 
 def _parse_options(head: str, ctx: _Ctx) -> tuple[float, list[str], bool, bool] | None:
@@ -962,16 +1101,15 @@ def _convert_branch(branch: str, ctx: _Ctx) -> str:
 
 
 def _dp_variable(raw: str, ctx: _Ctx) -> str:
-    m = _DP_VAR_RE.fullmatch(raw)
-    if m is None:
-        # Assignment `${x=…}` / `${x?=…}`: no inline equivalent; keep the
-        # text so the user can see it and rebuild it as a Context variable.
-        ctx.report.note("variable_kept_as_text", ctx.current, raw)
-        return raw
-    if m.group(2):
-        ctx.report.note("variable_default_dropped", ctx.current, raw)
-    ctx.report.note("variable_read_mapped", ctx.current, f"{raw} -> ${m.group(1)}")
-    return f"${m.group(1)}"
+    """Dynamic Prompts variables (`${x}`, `${x:default}`, `${x=…}`).
+
+    A wildcard can't read a variable (it is a producer, so `$x` would
+    print literally and warn every run), and assignments have no inline
+    equivalent. Keep the text, which the engine leaves alone, and flag it
+    so the user rebuilds the logic with a Combine.
+    """
+    ctx.report.note("variable_kept_as_text", ctx.current, raw)
+    return raw
 
 
 def _reference(m: re.Match[str], ctx: _Ctx) -> str:
@@ -1009,16 +1147,33 @@ def _reference(m: re.Match[str], ctx: _Ctx) -> str:
             if "-" in rng:
                 a, b = rng.split("-", 1)
                 lo = int(a) if a else 1
-                hi = int(b) if b else max(lo, 3)
+                if b:
+                    hi = int(b)
+                else:
+                    # Open range: up to every value. A pick over one ref
+                    # never takes more unique values than the target has,
+                    # so its size is a safe ceiling.
+                    hi = max(lo, _pool_size(name, ctx))
+                    if repeat:
+                        ctx.report.note("multi_pick_range_capped", ctx.current, raw)
             elif rng:
                 lo = hi = int(rng)
     if hi <= 1 and lo <= 1:
         return ref
-    ctx.report.note("multi_pick_reference_approximated", ctx.current, raw)
+    # `{N$$sep$$@{x}}` draws N different values of x, which is exactly
+    # what the source does; `~` allows repeats like the `r` flag.
     rng_txt = str(lo) if lo == hi else f"{lo}-{hi}"
     sep_txt = sep if sep is not None else ", "
-    branches = "|".join([ref] * max(lo, hi))
-    return "{" + rng_txt + ("~" if repeat else "") + "$$" + sep_txt + "$$" + branches + "}"
+    return "{" + rng_txt + ("~" if repeat else "") + "$$" + sep_txt + "$$" + ref + "}"
+
+
+def _pool_size(name: str, ctx: _Ctx) -> int:
+    key = _norm(name)
+    wc = ctx.by_path.get(key)
+    if wc is not None:
+        return max(1, len(wc.items))
+    members = [w for w in ctx.all_wildcards if fnmatch.fnmatchcase(_norm(w.path), key)]
+    return max(1, sum(len(w.items) for w in members)) if members else 3
 
 
 def _filter_expr(filt: str, raw: str, ctx: _Ctx) -> str:
@@ -1049,6 +1204,20 @@ def _filter_expr(filt: str, raw: str, ctx: _Ctx) -> str:
 
 
 def _resolve_target(name: str, ctx: _Ctx) -> str | None:
+    target = _find_target(name, ctx)
+    if target is not None:
+        cur = _norm(ctx.current)
+        ctx.ref_counts[cur] = ctx.ref_counts.get(cur, 0) + 1
+    return target
+
+
+def _edge(target: str, ctx: _Ctx) -> None:
+    cur = _norm(ctx.current)
+    if target != cur:  # a list that names itself is still unreferenced
+        ctx.edges.setdefault(cur, set()).add(target)
+
+
+def _find_target(name: str, ctx: _Ctx) -> str | None:
     key = _norm(name)
     if "*" in key:
         return _group_ref(key, name, ctx)
@@ -1060,6 +1229,7 @@ def _resolve_target(name: str, ctx: _Ctx) -> str | None:
         if len(hits) == 1:
             wc = hits[0]
     if wc is not None:
+        _edge(_norm(wc.path), ctx)
         return f"@{{{wc.id}#{wc.name}}}"
     lib = ctx.library.get(key) or ctx.library.get(_display_name(name).lower())
     if lib is not None:
@@ -1080,6 +1250,7 @@ def _group_ref(pattern: str, display: str, ctx: _Ctx) -> str | None:
         if not members:
             return None
         ctx.groups[pattern] = _Group(pattern, members, display)
+    _edge(pattern, ctx)
     return f"\x00group:{pattern}\x00"
 
 
