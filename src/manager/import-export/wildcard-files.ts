@@ -33,6 +33,29 @@ export interface WildcardNote {
   examples: Array<{ wildcard: string; detail: string }>;
 }
 
+/** What a wildcard is for in its pack, from the reference graph. */
+export type PlanRole = "entry" | "composition" | "vocabulary" | "group";
+
+/** How faithfully it came across, from the notes it raised. */
+export type PlanFidelity = "exact" | "close" | "lossy";
+
+/** One imported row in the conversion plan. */
+export interface PlanItem {
+  id: string;
+  name: string;
+  /** Top folder or YAML key; empty for loose files. */
+  domain: string;
+  role: PlanRole;
+  options: number;
+  /** References it makes (members, for a group). */
+  refs: number;
+  /** Wildcards in the pack that reference it. */
+  referenced_by: number;
+  fidelity: PlanFidelity;
+  notes: Array<{ kind: string; detail: string }>;
+  source: string;
+}
+
 export interface WildcardFilesReport {
   files: WildcardFileEntry[];
   notes: WildcardNote[];
@@ -40,6 +63,7 @@ export interface WildcardFilesReport {
   groups: number;
   options: number;
   bundles: number;
+  plan: PlanItem[];
 }
 
 export interface WildcardFilesResult {
@@ -54,7 +78,7 @@ export interface WildcardImportOptions {
   category?: string;
   /** Report paths of files to leave out. */
   exclude?: string[];
-  /** File the wildcards into a pack bundle with one bundle per top
+  /** File the entry points into a pack bundle with one bundle per top
    *  folder. On unless set to false. */
   bundles?: boolean;
   /** Name of the pack bundle. */
@@ -182,7 +206,7 @@ export function suggestPackTag(sources: WildcardSource[]): string {
 /** Plain-language label for each report note kind. */
 const NOTE_TEXT: Record<string, string> = {
   inline_comment: "Text after # was treated as a comment and removed",
-  duplicate_value: "Repeated values were dropped",
+  duplicate_value: "Repeated values became one option with a higher weight",
   duplicate_wildcard: "Wildcards defined twice kept their first file",
   empty_wildcard: "Empty wildcards were skipped",
   default_params_dropped: "Wildcard default settings (count, separator, prefix/suffix) were dropped",
@@ -194,11 +218,9 @@ const NOTE_TEXT: Record<string, string> = {
   command_dropped: "PPP commands other than include were dropped",
   unresolved_reference: "References to wildcards that weren't found stay as plain text",
   template_args_dropped: "Template arguments like __name(var=value)__ were dropped",
-  variable_read_mapped: "${name} became the variable $name; set it with a Context",
-  variable_default_dropped: "Variable defaults like ${name:value} were dropped",
-  variable_kept_as_text: "Variable assignments like ${name=value} stay as plain text",
+  variable_kept_as_text: "Variables like ${name} stay as plain text: wildcards can't read variables, so rebuild that part with a Combine",
   wrap_kept_as_text: "Wrap commands %{…} stay as plain text",
-  multi_pick_reference_approximated: "Multi-pick references like __2$$name__ became {2$$, $$…} (repeats possible)",
+  multi_pick_range_capped: "Open-ended repeating picks like __r2-$$name__ were capped at the list size",
   filter_dropped: "Some reference filters couldn't be kept",
 };
 
@@ -210,11 +232,87 @@ export function describeNote(kind: string): string {
  *  so the user should look. The rest are housekeeping. */
 const ATTENTION = new Set([
   "condition_dropped", "unresolved_reference", "template_args_dropped",
-  "variable_read_mapped", "variable_default_dropped", "variable_kept_as_text",
-  "wrap_kept_as_text", "multi_pick_reference_approximated", "filter_dropped",
+  "variable_kept_as_text",
+  "wrap_kept_as_text", "filter_dropped",
   "default_params_dropped", "command_dropped",
 ]);
 
 export function noteNeedsAttention(kind: string): boolean {
   return ATTENTION.has(kind);
+}
+
+export const ROLE_LABEL: Record<PlanRole, string> = {
+  entry: "Entry point",
+  composition: "Composition",
+  vocabulary: "Vocabulary",
+  group: "Group",
+};
+
+export const ROLE_HINT: Record<PlanRole, string> = {
+  entry: "Builds a prompt from other wildcards and nothing else uses it. These go into bundles.",
+  composition: "Builds on other wildcards and is used by one. Reached through references.",
+  vocabulary: "A plain list of values. Stays in the library, reached through references.",
+  group: "Made for a glob or folder reference: picks from every matching wildcard.",
+};
+
+export const FIDELITY_LABEL: Record<PlanFidelity, string> = {
+  exact: "Exact",
+  close: "Close",
+  lossy: "Needs a look",
+};
+
+export const PLAN_ROLES: PlanRole[] = ["entry", "composition", "vocabulary", "group"];
+export const PLAN_FIDELITIES: PlanFidelity[] = ["exact", "close", "lossy"];
+
+export interface PlanSummary {
+  roles: Record<PlanRole, number>;
+  fidelity: Record<PlanFidelity, number>;
+  /** Domains in order of size, loose files ("") last. */
+  domains: Array<{ name: string; count: number; entries: number; lossy: number }>;
+}
+
+export function summarizePlan(plan: PlanItem[]): PlanSummary {
+  const roles: Record<PlanRole, number> = { entry: 0, composition: 0, vocabulary: 0, group: 0 };
+  const fidelity: Record<PlanFidelity, number> = { exact: 0, close: 0, lossy: 0 };
+  const byDomain = new Map<string, { name: string; count: number; entries: number; lossy: number }>();
+  for (const item of plan) {
+    roles[item.role] += 1;
+    fidelity[item.fidelity] += 1;
+    let d = byDomain.get(item.domain);
+    if (!d) {
+      d = { name: item.domain, count: 0, entries: 0, lossy: 0 };
+      byDomain.set(item.domain, d);
+    }
+    d.count += 1;
+    if (item.role === "entry") d.entries += 1;
+    if (item.fidelity === "lossy") d.lossy += 1;
+  }
+  const domains = [...byDomain.values()].sort((a, b) =>
+    Number(a.name === "") - Number(b.name === "") || b.count - a.count || a.name.localeCompare(b.name));
+  return { roles, fidelity, domains };
+}
+
+export interface PlanFilter {
+  /** `null` for every domain. */
+  domain: string | null;
+  roles: Set<PlanRole>;
+  fidelities: Set<PlanFidelity>;
+  query: string;
+}
+
+/** Plan rows matching the filter. Entry points first, then the rows
+ *  that need a look, then by name, so the parts a user acts on lead. */
+export function filterPlan(plan: PlanItem[], f: PlanFilter): PlanItem[] {
+  const q = f.query.trim().toLowerCase();
+  const order: Record<PlanRole, number> = { entry: 0, composition: 1, group: 2, vocabulary: 3 };
+  return plan
+    .filter((p) =>
+      (f.domain === null || p.domain === f.domain)
+      && (f.roles.size === 0 || f.roles.has(p.role))
+      && (f.fidelities.size === 0 || f.fidelities.has(p.fidelity))
+      && (!q || p.name.toLowerCase().includes(q)))
+    .sort((a, b) =>
+      order[a.role] - order[b.role]
+      || Number(b.fidelity === "lossy") - Number(a.fidelity === "lossy")
+      || a.name.localeCompare(b.name));
 }

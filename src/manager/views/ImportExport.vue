@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import Button from "../components/ui/Button.vue";
 import Icon from "../components/ui/Icon.vue";
 import { useToast } from "../composables/useToast";
@@ -11,6 +12,8 @@ import { useCategoryStore } from "../stores/categoryStore";
 import { api, ApiError } from "../api/client";
 import ExportTab from "../import-export/ExportTab.vue";
 import ImportTab from "../import-export/ImportTab.vue";
+import PackConverter from "../import-export/PackConverter.vue";
+import type { WildcardSource } from "../import-export/wildcard-files";
 import ImportPicker from "../import-export/ImportPicker.vue";
 import ConflictModal from "../import-export/ConflictModal.vue";
 import {
@@ -53,7 +56,8 @@ import type { RawPayload } from "../import-export/migrations";
 import type { IntegrityWarning } from "../import-export/parse";
 import { newShortId } from "../utils/ids";
 
-type Mode = "export" | "import";
+type Mode = "export" | "import" | "packs";
+const MODES: readonly Mode[] = ["export", "import", "packs"];
 
 const toast = useToast();
 const moduleStore = useModuleStore();
@@ -61,7 +65,23 @@ const bundleStore = useBundleStore();
 const templateStore = useTemplateStore();
 const categoryStore = useCategoryStore();
 
-const mode = ref<Mode>("export");
+// Optional: unit tests mount this view without a router.
+const route = useRoute() as ReturnType<typeof useRoute> | undefined;
+const router = useRouter() as ReturnType<typeof useRouter> | undefined;
+
+function modeFromQuery(): Mode {
+  const tab = route?.query.tab;
+  return typeof tab === "string" && (MODES as readonly string[]).includes(tab) ? tab as Mode : "export";
+}
+
+// `?tab=packs` deep-links the Wildcard packs tab (docs + sidebar link).
+const mode = ref<Mode>(modeFromQuery());
+watch(() => route?.query.tab, () => { mode.value = modeFromQuery(); });
+
+/** A pack dropped on the Import tab, handed to the Wildcard packs tab. */
+const incomingPack = ref<WildcardSource[] | null>(null);
+/** Bumped after a commit so the converter starts fresh. */
+const packKey = ref(0);
 
 // ---------- Source library state (fetched once on mount) ----------
 // Powers the collision detector + broken-ref walker. Modules + bundles
@@ -131,7 +151,16 @@ async function onRefresh() {
 }
 
 function setMode(next: Mode) {
+  if (next !== mode.value) clearImport();
   mode.value = next;
+  if (route && router) {
+    void router.replace({ query: { ...route.query, tab: next === "export" ? undefined : next } });
+  }
+}
+
+function onWildcardFilesDropped(sources: WildcardSource[]): void {
+  incomingPack.value = sources;
+  setMode("packs");
 }
 
 // ---------- Import tab — 7-bucket parse + picker + commit ----------
@@ -762,6 +791,10 @@ async function runCommit(resolution: {
     pendingSelection.value = [];
     batchConflicts.value = [];
     perItemIssues.value = [];
+    if (mode.value === "packs") {
+      incomingPack.value = null;
+      packKey.value += 1;
+    }
   } catch (err) {
     const message = err instanceof ApiError
       ? `${err.status}: ${err.message}`
@@ -853,6 +886,15 @@ function clearImport() {
       >
         <Icon name="pi-upload" /> Import
       </button>
+      <button
+        type="button" role="tab" class="wp-tab"
+        :data-active="mode === 'packs' ? 'true' : 'false'"
+        :aria-selected="mode === 'packs'"
+        data-test="io-tab-packs"
+        @click="setMode('packs')"
+      >
+        <Icon name="pi-sitemap" /> Wildcard packs
+      </button>
     </div>
 
     <!-- Export tab — 7-bucket picker, POST /wp/api/export/build -->
@@ -866,14 +908,25 @@ function clearImport() {
 
     <!-- Import tab — 7-bucket parse + picker + commit orchestrator -->
     <div
-      v-else-if="mode === 'import'"
+      v-else
       class="wp-io-import-pane"
-      data-test="io-import-pane"
+      :data-test="mode === 'packs' ? 'io-packs-pane' : 'io-import-pane'"
     >
+      <!-- Wildcard packs: review the conversion plan, then the same picker. -->
+      <PackConverter
+        v-if="mode === 'packs'"
+        :key="packKey"
+        :payload-loaded="importState !== null"
+        :incoming="incomingPack"
+        @payload-ready="onImportPayloadReady"
+        @back="clearImport"
+      />
       <ImportTab
+        v-else
         :payload-loaded="importState !== null"
         @payload-ready="onImportPayloadReady"
         @replace-requested="clearImport"
+        @wildcard-files="onWildcardFilesDropped"
       />
       <ImportPicker
         v-if="importState"
@@ -882,6 +935,7 @@ function clearImport() {
         :migrated-entity-count="importState.migratedCount"
         :integrity-warnings="importState.integrityWarnings"
         :library-rows="libraryRowsForPicker"
+        :select-all="mode === 'packs'"
         data-test="io-import-picker"
         @selection-ready="onImportSelectionReady"
       />

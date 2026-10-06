@@ -34,12 +34,15 @@ const instanceOptions = [
 
 const importRules = [
   { term: "One wildcard per list", desc: "Each wildcard becomes its own module, named by its path the way __name__ finds it: animals/cats.txt becomes animals/cats, and a YAML key clothing: { tops: [...] } becomes clothing/tops. Its variable is the last part ($cats, $tops)." },
-  { term: "Category and tag", desc: "Each wildcard goes in a category named after its top folder (or YAML top key), unless you type one category for all. Every module also gets the library tag, which starts as the pack's name, so the whole pack sits together on the Tags page." },
-  { term: "Bundles", desc: "With Bundle name ticked (the default) the import also builds bundles: one per top folder or YAML top key holding its wildcards, and one pack bundle holding those. Drop the pack bundle on a Context to get every wildcard in one go, or a folder bundle for part of it. Untick it to import wildcards only." },
+  { term: "Roles", desc: "The review sorts every wildcard by what it does in the pack. Entry points build a prompt from other wildcards and nothing else uses them: these are what you drop on a Context. Compositions build on other wildcards and are used by one. Vocabulary is a plain list. Groups are made for globs and folder references." },
+  { term: "Carries over", desc: "Each wildcard is marked Exact, Close (same outputs, but a setting or label didn't carry over) or Needs a look (some text no longer renders as it did, like a dropped if-condition). Open a row to see why." },
+  { term: "Domains", desc: "The top folders (or YAML top keys) of the pack. Pick one to review it on its own. Each wildcard goes in a category named after its domain, unless you type one category for all." },
+  { term: "Library tag", desc: "Every module gets the library tag, which starts as the pack's name, so the whole pack sits together on the Tags page." },
+  { term: "Bundles", desc: "With Bundle the entry points ticked (the default) the entry points go into one bundle per domain, inside one pack bundle. Lists stay in the library, where the entry points reach them through references, so dropping a bundle rolls the prompts the pack was written to make, not every list. A pack of plain lists gets no bundles." },
   { term: "References", desc: "__other__ references become @{} chips that point at the imported wildcard. A glob like __animals/*__, or a parent key like __clothing__ in Impact packs, becomes a group wildcard that picks one of the matching wildcards, weighted by how many options each has. PPP filters such as __colors'warm'__ become a category filter on the chip." },
-  { term: "Choice syntax", desc: "{a|b}, weights like {2::a|b} and multi-pick like {2$$a|b|c} keep working. Open ranges like {-2$$a|b} get their missing end filled in, samplers like {~a|b} pick at random, and the default separator is a comma." },
-  { term: "Weights, labels and fallbacks", desc: "Weighted lines (3::text), PPP labels ('summer, casual'::text) and PPP's else choice carry over as option weights, sub-categories and the wildcard's fallback." },
-  { term: "Comments and encoding", desc: "Lines starting with # are skipped, as is text after a # with a space before it (so C# survives). Files saved as UTF-8 or Windows-1252 both read correctly, and repeated values are dropped." },
+  { term: "Choice syntax", desc: "{a|b}, weights like {2::a|b} and multi-pick like {2$$a|b|c} keep working, and so does __2$$name__: it picks two different values of name. Open ranges like {-2$$a|b} get their missing end filled in, samplers like {~a|b} pick at random, and the default separator is a comma." },
+  { term: "Weights, labels and fallbacks", desc: "Weighted lines (3::text), PPP labels ('summer, casual'::text) and PPP's else choice carry over as option weights, sub-categories and the wildcard's fallback. A line written twice becomes one option with twice the weight, so the odds stay the same." },
+  { term: "Comments and encoding", desc: "Lines starting with # are skipped and kept as the module's description, as is the # text inside multi-line YAML prompts. Text after a # with a space before it is cut (so C# survives). Files saved as UTF-8 or Windows-1252 both read correctly." },
 ];
 </script>
 
@@ -183,31 +186,34 @@ const importRules = [
       />
     </DocSection>
 
-    <DocSection title="Importing wildcard files">
+    <DocSection title="Importing wildcard packs">
       <p>
-        Coming from A1111 or Forge? Open <b>Import / Export → Import</b> and pick
-        <b>Wildcard files…</b> or <b>Wildcard folder…</b>, or drop files on the import area.
-        It reads Dynamic Prompts, Prompt Post-Processor (PPP) and Impact Pack wildcards:
-        <code>.txt</code> lists, <code>.yaml</code> / <code>.yml</code> and <code>.json</code>
-        files, and <code>.zip</code> packs of them.
+        Coming from A1111 or Forge? Open <b>Import / Export → Wildcard packs</b> and choose a folder,
+        files or a <code>.zip</code>, or drop them on the page. It reads Dynamic Prompts,
+        Prompt Post-Processor (PPP) and Impact Pack wildcards: <code>.txt</code> lists,
+        <code>.yaml</code> / <code>.yml</code> and <code>.json</code> files, and <code>.zip</code>
+        packs of them. Dropping a pack on the Import tab opens it here too.
+      </p>
+      <p>
+        You go through three steps: load the pack, review the plan, then pick what to import with
+        the usual import picker (everything starts selected).
       </p>
       <DocKeyList :items="importRules" />
       <DocImage
         src="images/docs/wildcard-import.png"
-        ratio="1040 / 670"
-        caption="A four-file pack loaded on the Import tab: 7 wildcards and 1 group with 36 options, filed into 4 bundles. Library tag, category and bundle name sit above the file list (each file can be left out), then the conversion notes, with the ones worth checking marked and the first opened to show the options it touched."
+        ratio="1148 / 695"
+        caption="Billions of Wildcards in review: 2,641 wildcards and 128 groups. The tiles count each role and filter the list when clicked; the bar shows how much carries over exactly. Domains sit on the left, import settings, files and conversion notes on the right."
       />
       <p>
-        After conversion the usual import picker opens, so you can still choose what to bring in.
         Importing the same pack again finds the wildcards you already have instead of adding copies.
       </p>
       <DocCallout variant="warn">
-        <b>What doesn't carry over.</b> Things the pipeline handles differently are listed under <b>Conversion notes</b> with the
-        wildcards they touched. PPP <code>if</code> conditions are removed (the choice stays),
-        <code>${name}</code> becomes the variable <VarToken>$name</VarToken> (set it with a
-        Fixed Values module), variable assignments and defaults stay as text, and a reference to a
-        wildcard the pack doesn't contain stays as plain text. Multi-pick references like
-        <code>__2$$name__</code> become a two-pick group that may repeat.
+        <b>What doesn't carry over.</b> Rows marked <b>Needs a look</b> list what changed. PPP
+        <code>if</code> conditions are removed (the choice stays). Dynamic Prompts variables like
+        <code>${name}</code> stay as plain text, because a wildcard can't read a variable: rebuild
+        that part with a Combine, which can. Template arguments like
+        <code>__name(var=value)__</code> are dropped, and a reference to a wildcard the pack doesn't
+        contain stays as plain text.
       </DocCallout>
     </DocSection>
 

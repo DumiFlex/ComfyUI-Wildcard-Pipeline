@@ -120,7 +120,7 @@ export const DOC_PAGES: DocPageMeta[] = [
     ...page(() => import("./pages/nodes/wp-var-to-bool.vue")) },
   // Modules
   { id: "wildcard", title: "Wildcard", group: "modules", icon: "pi pi-sparkles", tone: "wildcard",
-    blurb: "Weighted random pick that sets one $var.", keywords: ["random", "weight", "option", "import", "dynamic prompts", "ppp", "yaml", "a1111", "forge"],
+    blurb: "Weighted random pick that sets one $var.", keywords: ["random", "weight", "option", "import", "dynamic prompts", "ppp", "yaml", "a1111", "forge", "wildcard packs", "impact pack"],
     ...page(() => import("./pages/modules/wildcard.vue")) },
   { id: "fixed-values", title: "Fixed Values", group: "modules", icon: "pi pi-tag", tone: "fixed_values",
     blurb: "Assign explicit name = value bindings.", keywords: ["fixed", "constant"],

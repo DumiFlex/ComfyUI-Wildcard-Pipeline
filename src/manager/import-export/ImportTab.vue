@@ -9,6 +9,9 @@
  *   2. Clipboard paste — opens a textarea modal-style block. User
  *      pastes raw JSON, hits Parse, same pipeline.
  *
+ * Wildcard files (Dynamic Prompts / PPP / Impact Pack) dropped here are
+ * handed to the Wildcard packs tab via `wildcard-files`.
+ *
  * Both paths feed `parsePayload` (see ./parse.ts), which runs JSON
  * shape → migration chain → fingerprint integrity verify. On success
  * we emit `payload-ready` with the migrated payload, the total
@@ -29,18 +32,9 @@
 import { computed, ref } from "vue";
 import { parsePayload, type IntegrityWarning } from "./parse";
 import type { RawPayload } from "./migrations";
-import { api } from "../api/client";
-import WildcardFilesPanel from "./WildcardFilesPanel.vue";
 import {
-  buildWildcardForm,
   looksLikeWpExport,
   sourcesFromDrop,
-  sourcesFromFileList,
-  suggestPackName,
-  suggestPackTag,
-  WILDCARD_FILE_ACCEPT,
-  type WildcardFilesReport,
-  type WildcardImportOptions,
   type WildcardSource,
 } from "./wildcard-files";
 
@@ -74,14 +68,14 @@ const emit = defineEmits<{
    * next render (its own `payloadLoaded` prop flips back to false).
    */
   (e: "replace-requested"): void;
+  /** Wildcard files were dropped (or the user asked for the pack
+   *  converter): the host switches to the Wildcard packs tab. */
+  (e: "wildcard-files", sources: WildcardSource[]): void;
 }>();
 
 const pasteOpen = ref<boolean>(false);
 const pasteText = ref<string>("");
 const errorMsg = ref<string>("");
-/** Parse failures read "Invalid payload — …"; wildcard conversion errors
- *  are already full sentences from the server. */
-const errorIsPayload = ref<boolean>(true);
 const migrationNote = ref<string>("");
 const fileInput = ref<HTMLInputElement | null>(null);
 
@@ -91,7 +85,7 @@ const fileInput = ref<HTMLInputElement | null>(null);
  * Reset to `null` on every fresh entry so the bar never shows a stale
  * source for a payload that the parent forgot to clear.
  */
-const lastSource = ref<"file" | "paste" | "wildcards" | null>(null);
+const lastSource = ref<"file" | "paste" | null>(null);
 
 /**
  * Total entity count of the last successfully-parsed payload. Mirrors
@@ -100,74 +94,9 @@ const lastSource = ref<"file" | "paste" | "wildcards" | null>(null);
  */
 const lastEntityCount = ref<number>(0);
 
-const fileSourceLabel = computed<string>(() => {
-  if (lastSource.value === "paste") return "From paste";
-  if (lastSource.value === "wildcards") return "From wildcard files";
-  return "From file";
-});
-
-// ---------- Wildcard files (Dynamic Prompts / PPP / Impact Pack) ----------
-// The server converts them into an ordinary import payload; we keep the
-// uploaded files so the panel can re-run the conversion with a file left
-// out or a different tag / category.
-const wildcardInput = ref<HTMLInputElement | null>(null);
-const wildcardFolderInput = ref<HTMLInputElement | null>(null);
-const wcSources = ref<WildcardSource[]>([]);
-const wcOptions = ref<WildcardImportOptions>({});
-const wcReport = ref<WildcardFilesReport | null>(null);
-const wcBusy = ref(false);
-
-async function convertWildcards(
-  sources: WildcardSource[],
-  opts: WildcardImportOptions,
-): Promise<void> {
-  if (sources.length === 0) {
-    errorIsPayload.value = false;
-    errorMsg.value = "no wildcard files found (.txt, .yaml, .yml, .json or a .zip of them)";
-    return;
-  }
-  wcBusy.value = true;
-  errorMsg.value = "";
-  errorIsPayload.value = false;
-  try {
-    const result = await api.importExport.wildcardFiles(buildWildcardForm(sources, opts));
-    wcSources.value = sources;
-    wcOptions.value = opts;
-    wcReport.value = result.report;
-    handleParse(JSON.stringify(result.payload), "wildcards");
-  } catch (err) {
-    errorMsg.value = err instanceof Error ? err.message : String(err);
-  } finally {
-    wcBusy.value = false;
-  }
-}
-
-function startWildcards(sources: WildcardSource[]): Promise<void> {
-  return convertWildcards(sources, {
-    packTag: suggestPackTag(sources),
-    packName: suggestPackName(sources),
-    bundles: true,
-  });
-}
-
-function onWildcardApply(opts: WildcardImportOptions): void {
-  void convertWildcards(wcSources.value, opts);
-}
-
-async function onWildcardPick(ev: Event): Promise<void> {
-  const target = ev.target as HTMLInputElement;
-  const files = target.files ? Array.from(target.files) : [];
-  target.value = "";
-  if (files.length > 0) await startWildcards(sourcesFromFileList(files));
-}
-
-function pickWildcardFiles(): void {
-  wildcardInput.value?.click();
-}
-
-function pickWildcardFolder(): void {
-  wildcardFolderInput.value?.click();
-}
+const fileSourceLabel = computed<string>(() =>
+  lastSource.value === "paste" ? "From paste" : "From file",
+);
 
 /** Read a picked/dropped file and feed its text into the parse pipeline.
  *  Shared by the file-input and the drag-and-drop path. */
@@ -231,7 +160,7 @@ async function onDrop(ev: DragEvent): Promise<void> {
     }
   }
   if (sources.length > 0) {
-    await startWildcards(sources);
+    emit("wildcard-files", sources);
     return;
   }
   // Anything else falls through to parsePayload, which rejects it with a
@@ -272,9 +201,6 @@ function onReplaceFile(): void {
   migrationNote.value = "";
   lastSource.value = null;
   lastEntityCount.value = 0;
-  wcSources.value = [];
-  wcReport.value = null;
-  wcOptions.value = {};
   emit("replace-requested");
 }
 
@@ -297,9 +223,8 @@ function payloadEntityCount(payload: RawPayload): number {
   );
 }
 
-function handleParse(raw: string, source: "file" | "paste" | "wildcards"): void {
+function handleParse(raw: string, source: "file" | "paste"): void {
   const result = parsePayload(raw);
-  errorIsPayload.value = true;
   if (!result.ok) {
     errorMsg.value = result.reason;
     migrationNote.value = "";
@@ -309,10 +234,6 @@ function handleParse(raw: string, source: "file" | "paste" | "wildcards"): void 
   pasteOpen.value = false;
   pasteText.value = "";
   lastSource.value = source;
-  if (source !== "wildcards") {
-    wcReport.value = null;
-    wcSources.value = [];
-  }
   lastEntityCount.value = payloadEntityCount(result.payload);
 
   // The payload always lands as CURRENT_SCHEMA_VERSION after parse,
@@ -361,22 +282,10 @@ function handleParse(raw: string, source: "file" | "paste" | "wildcards"): void 
         >Replace file…</button>
       </div>
       <div
-        v-if="migrationNote && lastSource !== 'wildcards'"
+        v-if="migrationNote"
         class="wp-import-tab__note"
         data-test="import-tab-migration-note"
       >{{ migrationNote }}</div>
-      <WildcardFilesPanel
-        v-if="lastSource === 'wildcards' && wcReport"
-        :report="wcReport"
-        :options="wcOptions"
-        :busy="wcBusy"
-        @apply="onWildcardApply"
-      />
-      <div
-        v-if="errorMsg"
-        class="wp-import-tab__error"
-        role="alert"
-      >{{ errorMsg }}</div>
     </template>
 
     <!-- Default (full) UI — pick / paste affordances, paste pane,
@@ -385,9 +294,13 @@ function handleParse(raw: string, source: "file" | "paste" | "wildcards"): void 
     <template v-else>
       <p class="wp-import-tab__lead">
         Import a Wildcard Pipeline export file or paste an export payload below.
-        Wildcard files from Dynamic Prompts, Prompt-PostProcessor or the Impact Pack
-        (<code>.txt</code>, <code>.yaml</code>, <code>.json</code>, a folder or a
-        <code>.zip</code>) work too.
+        For Dynamic Prompts, Prompt-PostProcessor or Impact Pack wildcards, use
+        <button
+          type="button"
+          class="wp-import-tab__link"
+          data-test="import-open-packs"
+          @click="emit('wildcard-files', [])"
+        >Wildcard packs</button>.
       </p>
 
       <div
@@ -422,48 +335,11 @@ function handleParse(raw: string, source: "file" | "paste" | "wildcards"): void 
             data-test="import-paste-btn"
             @click="openPaste"
           >Paste JSON…</button>
-          <span class="wp-import-tab__divider" aria-hidden="true" />
-          <button
-            type="button"
-            class="wp-import-tab__btn"
-            :disabled="wcBusy"
-            data-test="import-wildcard-files-btn"
-            @click="pickWildcardFiles"
-          >Wildcard files…</button>
-          <button
-            type="button"
-            class="wp-import-tab__btn"
-            :disabled="wcBusy"
-            data-test="import-wildcard-folder-btn"
-            @click="pickWildcardFolder"
-          >Wildcard folder…</button>
-          <input
-            ref="wildcardInput"
-            type="file"
-            multiple
-            :accept="WILDCARD_FILE_ACCEPT"
-            class="wp-import-tab__file-hidden"
-            aria-hidden="true"
-            tabindex="-1"
-            data-test="import-wildcard-files-input"
-            @change="onWildcardPick"
-          />
-          <input
-            ref="wildcardFolderInput"
-            type="file"
-            webkitdirectory
-            class="wp-import-tab__file-hidden"
-            aria-hidden="true"
-            tabindex="-1"
-            data-test="import-wildcard-folder-input"
-            @change="onWildcardPick"
-          />
         </div>
         <p class="wp-import-tab__drophint" aria-hidden="true">
           <i class="pi pi-download" />
-          <span v-if="wcBusy">Converting wildcard files…</span>
-          <span v-else-if="isDragging">Drop to import</span>
-          <span v-else>or drag &amp; drop an export, wildcard files, a folder or a <code>.zip</code> here</span>
+          <span v-if="isDragging">Drop to import</span>
+          <span v-else>or drag &amp; drop a <code>.json</code> export, or a wildcard pack, here</span>
         </p>
       </div>
 
@@ -509,7 +385,7 @@ function handleParse(raw: string, source: "file" | "paste" | "wildcards"): void 
         class="wp-import-tab__error"
         role="alert"
         data-test="import-tab-error"
-      >{{ errorIsPayload ? "Invalid payload — " : "" }}{{ errorMsg }}</div>
+      >Invalid payload — {{ errorMsg }}</div>
 
       <div
         v-if="migrationNote"
@@ -536,18 +412,14 @@ function handleParse(raw: string, source: "file" | "paste" | "wildcards"): void 
   color: var(--wp-text-muted);
   font-size: var(--wp-text-sm);
 }
-.wp-import-tab__lead code {
-  font-family: var(--wp-font-mono, monospace);
-  font-size: var(--wp-text-xs);
-}
-.wp-import-tab__divider {
-  width: 1px;
-  align-self: stretch;
-  background: var(--wp-border);
-}
-.wp-import-tab__btn:disabled {
-  opacity: 0.5;
-  cursor: default;
+.wp-import-tab__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--wp-accent-text);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 /* Drag-and-drop target wrapping the pick/paste buttons. The whole area

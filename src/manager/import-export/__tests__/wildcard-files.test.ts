@@ -7,17 +7,28 @@ vi.mock("../../api/client", () => ({
 }));
 
 import ImportTab from "../ImportTab.vue";
-import WildcardFilesPanel from "../WildcardFilesPanel.vue";
+import PackConverter from "../PackConverter.vue";
 import {
   buildWildcardForm,
   describeNote,
+  filterPlan,
   isWildcardFileName,
   looksLikeWpExport,
   sourcesFromFileList,
   suggestPackName,
   suggestPackTag,
+  summarizePlan,
+  type PlanItem,
   type WildcardFilesResult,
 } from "../wildcard-files";
+
+function item(over: Partial<PlanItem>): PlanItem {
+  return {
+    id: "abcd1234", name: "animals/cats", domain: "animals", role: "vocabulary",
+    options: 1, refs: 0, referenced_by: 1, fidelity: "exact", notes: [], source: "animals/cats.txt",
+    ...over,
+  };
+}
 
 function result(): WildcardFilesResult {
   return {
@@ -41,6 +52,10 @@ function result(): WildcardFilesResult {
         { kind: "condition_dropped", count: 1, examples: [{ wildcard: "animals/cats", detail: "if _is_sdxl" }] },
       ],
       wildcards: 1, groups: 0, options: 1, bundles: 0,
+      plan: [
+        item({ fidelity: "lossy", notes: [{ kind: "condition_dropped", detail: "if _is_sdxl" }] }),
+        item({ id: "11111111", name: "scenes/intro", domain: "scenes", role: "entry", refs: 2, referenced_by: 0 }),
+      ],
     },
   };
 }
@@ -92,89 +107,139 @@ describe("wildcard-files helpers", () => {
   });
 });
 
-describe("ImportTab wildcard files", () => {
-  beforeEach(() => {
-    wildcardFiles.mockReset();
-    wildcardFiles.mockResolvedValue(result());
+describe("plan helpers", () => {
+  const plan = [
+    item({ name: "b/list" , domain: "b" }),
+    item({ name: "a/intro", domain: "a", role: "entry" }),
+    item({ name: "a/list", domain: "a", fidelity: "lossy" }),
+    item({ name: "loose", domain: "" }),
+  ];
+
+  it("counts roles, fidelity and domains, loose files last", () => {
+    const s = summarizePlan(plan);
+    expect(s.roles).toEqual({ entry: 1, composition: 0, vocabulary: 3, group: 0 });
+    expect(s.fidelity).toEqual({ exact: 3, close: 0, lossy: 1 });
+    expect(s.domains.map((d) => [d.name, d.count, d.entries, d.lossy])).toEqual([
+      ["a", 2, 1, 1], ["b", 1, 0, 0], ["", 1, 0, 0],
+    ]);
   });
 
-  it("converts dropped wildcard files and shows the report", async () => {
+  it("filters by domain, role, fidelity and name, entry points first", () => {
+    const all = { domain: null, roles: new Set<never>(), fidelities: new Set<never>(), query: "" };
+    expect(filterPlan(plan, all).map((p) => p.name)).toEqual(["a/intro", "a/list", "b/list", "loose"]);
+    expect(filterPlan(plan, { ...all, domain: "a" })).toHaveLength(2);
+    expect(filterPlan(plan, { ...all, roles: new Set(["entry"] as const) }).map((p) => p.name)).toEqual(["a/intro"]);
+    expect(filterPlan(plan, { ...all, fidelities: new Set(["lossy"] as const) }).map((p) => p.name)).toEqual(["a/list"]);
+    expect(filterPlan(plan, { ...all, query: "LOOSE" })).toHaveLength(1);
+  });
+});
+
+describe("ImportTab hands wildcard packs off", () => {
+  beforeEach(() => {
+    wildcardFiles.mockReset();
+  });
+
+  it("emits dropped wildcard files instead of converting them", async () => {
     const wrap = mount(ImportTab, { props: { payloadLoaded: false } });
     await wrap.find("[data-test='import-dropzone']").trigger("drop", {
       dataTransfer: { files: [file("cats.txt"), file("dogs.yaml")] },
     });
     await flushPromises();
-    expect(wildcardFiles).toHaveBeenCalledTimes(1);
-    const meta = JSON.parse(String((wildcardFiles.mock.calls[0][0] as FormData).get("meta")));
-    expect(meta.paths).toEqual(["cats.txt", "dogs.yaml"]);
-    expect(meta.bundles).toBe(true);
-    const emitted = wrap.emitted("payload-ready");
-    expect(emitted).toBeTruthy();
-    await wrap.setProps({ payloadLoaded: true });
-    expect(wrap.text()).toContain("From wildcard files");
-    expect(wrap.find("[data-test='wildcard-files-panel']").exists()).toBe(true);
+    expect(wildcardFiles).not.toHaveBeenCalled();
+    const sources = wrap.emitted("wildcard-files")?.[0]?.[0] as Array<{ path: string }>;
+    expect(sources.map((s) => s.path)).toEqual(["cats.txt", "dogs.yaml"]);
   });
 
-  it("treats a dropped Dynamic Prompts JSON file as wildcards, not an export", async () => {
+  it("treats a dropped Dynamic Prompts JSON file as a pack, not an export", async () => {
     const wrap = mount(ImportTab);
     await wrap.find("[data-test='import-dropzone']").trigger("drop", {
       dataTransfer: { files: [file("colors.json", JSON.stringify({ colors: ["red"] }))] },
     });
     await flushPromises();
-    expect(wildcardFiles).toHaveBeenCalledTimes(1);
+    expect(wrap.emitted("wildcard-files")).toHaveLength(1);
+    expect(wrap.emitted("payload-ready")).toBeFalsy();
   });
 
-  it("shows the server's error without the payload prefix", async () => {
-    wildcardFiles.mockRejectedValueOnce(new Error("pack.zip: File is not a zip file"));
+  it("links to the Wildcard packs tab", async () => {
     const wrap = mount(ImportTab);
-    await wrap.find("[data-test='import-dropzone']").trigger("drop", {
-      dataTransfer: { files: [file("pack.zip")] },
-    });
-    await flushPromises();
-    const err = wrap.find("[data-test='import-tab-error']");
-    expect(err.text()).toBe("pack.zip: File is not a zip file");
+    await wrap.find("[data-test='import-open-packs']").trigger("click");
+    expect(wrap.emitted("wildcard-files")?.[0]?.[0]).toEqual([]);
+  });
+});
+
+describe("PackConverter", () => {
+  beforeEach(() => {
+    wildcardFiles.mockReset();
+    wildcardFiles.mockResolvedValue(result());
   });
 
-  it("re-runs the conversion with a file left out", async () => {
-    const wrap = mount(ImportTab, { props: { payloadLoaded: false } });
-    await wrap.find("[data-test='import-dropzone']").trigger("drop", {
-      dataTransfer: { files: [file("cats.txt")] },
+  async function loaded() {
+    const wrap = mount(PackConverter, {
+      props: { incoming: [{ path: "My Pack/animals/cats.txt", file: file("cats.txt") }] },
     });
     await flushPromises();
-    await wrap.setProps({ payloadLoaded: true });
-    const panel = wrap.findComponent(WildcardFilesPanel);
-    const boxes = panel.findAll("input[type='checkbox']");
-    // [bundles toggle, files...]; the second file is the duplicate copy.
-    await boxes[boxes.length - 1].setValue(false);
-    await panel.find("[data-test='wildcard-files-apply']").trigger("click");
+    return wrap;
+  }
+
+  it("starts on the drop zone", () => {
+    const wrap = mount(PackConverter);
+    expect(wrap.find("[data-test='pack-dropzone']").exists()).toBe(true);
+    expect(wrap.find("[aria-current='step']").text()).toContain("Load pack");
+  });
+
+  it("converts a pack handed over and shows the plan", async () => {
+    const wrap = await loaded();
+    expect(wildcardFiles).toHaveBeenCalledTimes(1);
+    const meta = JSON.parse(String((wildcardFiles.mock.calls[0][0] as FormData).get("meta")));
+    expect(meta).toMatchObject({ pack_name: "My Pack", pack_tag: "my-pack", bundles: true });
+    expect(wrap.find("[aria-current='step']").text()).toContain("Review plan");
+    const rows = wrap.findAll("[data-test='pack-row']");
+    // Entry points lead.
+    expect(rows.map((r) => r.find(".wp-pack__name").text())).toEqual(["scenes/intro", "animals/cats"]);
+    expect(wrap.find("[data-test='pack-stat-entry']").text()).toContain("1");
+  });
+
+  it("filters by role and domain, and expands a row's notes", async () => {
+    const wrap = await loaded();
+    await wrap.find("[data-test='pack-stat-entry']").trigger("click");
+    expect(wrap.findAll("[data-test='pack-row']")).toHaveLength(1);
+    await wrap.find("[data-test='pack-stat-entry']").trigger("click");
+    const animals = wrap.findAll("[data-test='pack-domains'] button").find((b) => b.text().startsWith("animals"));
+    await animals?.trigger("click");
+    const rows = wrap.findAll("[data-test='pack-row']");
+    expect(rows).toHaveLength(1);
+    await rows[0].trigger("click");
+    expect(wrap.text()).toContain("if _is_sdxl");
+  });
+
+  it("re-runs the conversion when settings change, then continues", async () => {
+    const wrap = await loaded();
+    const apply = wrap.find("[data-test='pack-apply']");
+    expect(apply.attributes("disabled")).toBeDefined();
+    await wrap.find("[data-test='pack-files-toggle']").trigger("click");
+    const boxes = wrap.findAll("[data-test='pack-files'] input[type='checkbox']");
+    await boxes[1].setValue(false);
+    expect(wrap.find("[data-test='pack-continue']").attributes("disabled")).toBeDefined();
+    await apply.trigger("click");
     await flushPromises();
     expect(wildcardFiles).toHaveBeenCalledTimes(2);
     const meta = JSON.parse(String((wildcardFiles.mock.calls[1][0] as FormData).get("meta")));
     expect(meta.exclude).toEqual(["old/cats.txt"]);
-  });
-});
-
-describe("WildcardFilesPanel", () => {
-  it("lists notes that need attention first and expands examples", async () => {
-    const wrap = mount(WildcardFilesPanel, {
-      props: { report: result().report, options: { bundles: true } },
-    });
-    const rows = wrap.findAll(".wp-wcf__note-row");
-    expect(rows[0].text()).toContain("if-conditions");
-    await rows[0].trigger("click");
-    expect(wrap.text()).toContain("if _is_sdxl");
-    expect(wrap.text()).toContain("already defined by another file");
+    await wrap.find("[data-test='pack-continue']").trigger("click");
+    expect(wrap.emitted("payload-ready")).toHaveLength(1);
   });
 
-  it("keeps Apply disabled until something changes", async () => {
-    const wrap = mount(WildcardFilesPanel, {
-      props: { report: result().report, options: { packTag: "a", bundles: true } },
-    });
-    const apply = wrap.find("[data-test='wildcard-files-apply']");
-    expect(apply.attributes("disabled")).toBeDefined();
-    await wrap.find("[data-test='wildcard-files-tag']").setValue("b");
-    expect(apply.attributes("disabled")).toBeUndefined();
-    await apply.trigger("click");
-    expect(wrap.emitted("apply")?.[0]?.[0]).toMatchObject({ packTag: "b", bundles: true });
+  it("folds into a bar once the picker shows, with a way back", async () => {
+    const wrap = await loaded();
+    await wrap.setProps({ payloadLoaded: true });
+    expect(wrap.find("[data-test='pack-loaded']").text()).toContain("My Pack");
+    await wrap.find("[data-test='pack-back']").trigger("click");
+    expect(wrap.emitted("back")).toHaveLength(1);
+  });
+
+  it("shows the server's error", async () => {
+    wildcardFiles.mockRejectedValueOnce(new Error("pack.zip: File is not a zip file"));
+    const wrap = await loaded();
+    expect(wrap.find("[data-test='pack-error']").text()).toBe("pack.zip: File is not a zip file");
   });
 });
