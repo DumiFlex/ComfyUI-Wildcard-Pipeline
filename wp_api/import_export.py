@@ -7,6 +7,7 @@ from engine.exporter import build_export_payload
 from engine.importer import commit_import, get_undo_entry, undo_import
 from wp_api._helpers import db_session, json_error, json_ok
 from wp_api._validators import (
+    MAX_IMPORT_BODY_BYTES,
     validate_body_size,
     validate_wildcard_name,
     validate_wildcard_subcats,
@@ -132,9 +133,10 @@ async def import_commit(request: web.Request) -> web.Response:
     {...}}`` (200). Contract violations and DB-layer errors return
     ``{"error": str}`` with status 400; the engine already wraps raw
     sqlite errors as ``"database integrity violation"`` so no internals
-    leak. The 5 MB body cap is the same as every other write endpoint.
+    leak. The body cap is 64 MB (MAX_IMPORT_BODY_BYTES) so a converted
+    wildcard pack fits in one commit.
     """
-    err = validate_body_size(request.content_length)
+    err = validate_body_size(request.content_length, MAX_IMPORT_BODY_BYTES)
     if err is not None:
         return json_error(err, status=400)
     try:

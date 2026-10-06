@@ -305,6 +305,18 @@ describe("ImportPicker.vue", () => {
     expect(leafCb.attributes("aria-checked")).toBe("true");
   });
 
+  it("selectAll starts with every entity picked (a reviewed wildcard pack)", async () => {
+    const payload = makePayload({
+      wildcards: [{ id: "w1", name: "a" }, { id: "w2", name: "b" }],
+      bundles: [{ id: "b1", name: "pack", children: [] }],
+    });
+    const wrap = mount(ImportPicker, {
+      props: { payload, migratedEntityCount: 0, integrityWarnings: [], selectAll: true },
+    });
+    await flushPromises();
+    expect(wrap.get('[data-test="import-picker-selected-count"]').text()).toContain("3 of 3");
+  });
+
   it("Continue button is disabled with empty selection and emits selection-ready when clicked with picks", async () => {
     const payload = makePayload({
       wildcards: [{ id: "w1", name: "a" }, { id: "w2", name: "b" }],

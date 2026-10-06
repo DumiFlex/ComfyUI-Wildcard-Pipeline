@@ -113,6 +113,9 @@ interface Props {
    * mounting the picker in isolation), no collision badges are produced.
    */
   libraryRows?: Map<string, LibraryRow>;
+  /** Start with everything selected (a converted wildcard pack, which the
+   *  user already reviewed). */
+  selectAll?: boolean;
 }
 
 const props = defineProps<Props>();
@@ -270,6 +273,17 @@ const selected = ref<Set<string>>(new Set());
 let seeded = false;
 watchEffect(() => {
   if (seeded) return;
+  if (props.selectAll) {
+    const all = new Set<string>();
+    for (const b of BUCKETS) {
+      for (const e of entitiesForBucket(b.key)) {
+        if (typeof e.id === "string" && e.id.length > 0) all.add(e.id);
+      }
+    }
+    selected.value = all;
+    seeded = true;
+    return;
+  }
   if (totalEntityCount.value !== 1) return;
   for (const b of BUCKETS) {
     const arr = entitiesForBucket(b.key);
