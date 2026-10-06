@@ -13,7 +13,7 @@ from typing import Any
 from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 
 from engine import model_info, negatives
-from wp_nodes.types import PipelineContext
+from wp_nodes.types import ModelInfoWidgetInput, PipelineContext
 
 
 def _config_class_name(model: Any) -> str:
@@ -61,44 +61,13 @@ class WPModelInfo(io.ComfyNode):
                         "BEFORE it, or the graph loops."
                     ),
                 ),
-                io.String.Input(
-                    "model_name",
-                    default="",
-                    tooltip=(
-                        "Checkpoint file name. Leave empty to read it from "
-                        "the loader the model comes from."
-                    ),
-                ),
-                io.String.Input(
-                    "variant_rules",
-                    default=model_info.DEFAULT_VARIANT_RULES,
-                    multiline=True,
-                    tooltip=(
-                        "One 'variant: pattern' per line. The first pattern "
-                        "found in the file name sets $model_variant "
-                        "(case-insensitive, | separates alternatives)."
-                    ),
-                ),
-                io.String.Input(
-                    "family_override",
-                    default="",
-                    tooltip="Use this instead of the detected family.",
-                ),
-                io.String.Input(
-                    "variant_override",
-                    default="",
-                    tooltip=(
-                        "Use this instead of the detected variant, e.g. to "
-                        "try your pony rules without switching checkpoint."
-                    ),
+                # Detected values, pins and the variant rules all live in one
+                # DOM widget (src/components/model-info/ModelInfoWidget.vue).
+                ModelInfoWidgetInput.Input(
+                    "wp_model_info", socketless=True, default="", optional=True,
                 ),
             ],
-            outputs=[
-                PipelineContext.Output("context"),
-                io.String.Output("model_family"),
-                io.String.Output("model_variant"),
-                io.String.Output("model_name"),
-            ],
+            outputs=[PipelineContext.Output("context")],
             hidden=[io.Hidden.unique_id, io.Hidden.prompt],
             not_idempotent=True,
         )
@@ -108,11 +77,9 @@ class WPModelInfo(io.ComfyNode):
         cls,
         upstream: PipelineContext | None = None,
         model: Any = None,
-        model_name: str = "",
-        variant_rules: str = model_info.DEFAULT_VARIANT_RULES,
-        family_override: str = "",
-        variant_override: str = "",
+        wp_model_info: str = "",
     ):
+        cfg = model_info.parse_config(wp_model_info)
         upstream_ctx: dict = upstream.context if upstream is not None else {}
         upstream_debug: dict = upstream.debug if upstream is not None else {}
         upstream_internals: dict = upstream.internals if upstream is not None else {}
@@ -123,13 +90,13 @@ class WPModelInfo(io.ComfyNode):
 
         warnings: list[dict] = []
 
-        file_name = (model_name or "").strip()
-        name_source = "input"
+        file_name = cfg.name
+        name_source = "pinned" if file_name else "loader"
         if not file_name and model is not None:
             file_name = model_info.find_checkpoint_name(prompt, node_id)
             name_source = "loader"
 
-        rules, problems = model_info.parse_variant_rules(variant_rules)
+        rules, problems = model_info.compile_variant_rules(cfg.rules)
         for problem in problems:
             warnings.append({
                 "type": "model_info_bad_rule",
@@ -137,18 +104,18 @@ class WPModelInfo(io.ComfyNode):
                 "message": f"WP Model Info skipped a variant rule: {problem}",
             })
 
-        family = (family_override or "").strip() or model_info.family_from_config_name(
+        family = cfg.family or model_info.family_from_config_name(
             _config_class_name(model),
         )
         stem = model_info.model_stem(file_name)
-        variant = (variant_override or "").strip() or model_info.detect_variant(stem, rules)
+        variant = cfg.variant or model_info.detect_variant(stem, rules)
 
         if model is None and not file_name and not family and not variant:
             warnings.append({
                 "type": "model_info_nothing_detected",
                 "severity": "warn",
                 "message": (
-                    "WP Model Info has no model wired and no model_name, so "
+                    "WP Model Info has no model wired and nothing pinned, so "
                     "the model variables are empty."
                 ),
             })
@@ -178,8 +145,8 @@ class WPModelInfo(io.ComfyNode):
             }
 
         sources = {
-            model_info.FAMILY_VAR: "override" if (family_override or "").strip() else "model",
-            model_info.VARIANT_VAR: "override" if (variant_override or "").strip() else "rules",
+            model_info.FAMILY_VAR: "pinned" if cfg.family else "model",
+            model_info.VARIANT_VAR: "pinned" if cfg.variant else "rules",
             model_info.NAME_VAR: name_source,
         }
         traces = [
@@ -201,9 +168,15 @@ class WPModelInfo(io.ComfyNode):
         if warnings:
             debug["__wp_warnings__"] = list(debug.get("__wp_warnings__", [])) + warnings
 
+        # What the widget shows under DETECTED until the next run: the family
+        # is only knowable here, and the rest confirms the canvas preview.
+        detected = {
+            "family": family,
+            "variant": variant,
+            "name": stem,
+            "sources": {k.removeprefix("model_"): v for k, v in sources.items()},
+        }
         return io.NodeOutput(
             PipelineContext.Type(context=ctx, debug=debug, internals=out_internals),
-            family,
-            variant,
-            stem,
+            ui={"wp_model_info": [detected]},
         )

@@ -37,6 +37,7 @@ export * as cleanerMod from "./widgets/cleaner";
 export * as varPickerMod from "./widgets/var_picker";
 export * as ctxLoopMod from "./widgets/context_loop";
 export * as seedListMod from "./widgets/seed_list";
+export * as modelInfoMod from "./widgets/model_info";
 export * as graphEventsMod from "./extension/graph-events";
 export * as graphMod from "./extension/graph";
 export * as assemblerVarsMod from "./extension/assembler-vars";

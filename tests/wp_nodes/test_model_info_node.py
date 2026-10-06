@@ -1,4 +1,5 @@
 """Node-level tests for WP_ModelInfo."""
+import json
 from types import SimpleNamespace
 
 from wp_nodes.model_info_node import WPModelInfo
@@ -24,61 +25,85 @@ PROMPT = {
 }
 
 
-def _run(monkeypatch=None, prompt=PROMPT, node_id="9", **kwargs):
+def _run(prompt=PROMPT, node_id="9", config=None, **kwargs):
     WPModelInfo.hidden = SimpleNamespace(unique_id=node_id, prompt=prompt)
+    if config is not None:
+        kwargs["wp_model_info"] = json.dumps(config)
     try:
         return WPModelInfo.execute(**kwargs)
     finally:
         del WPModelInfo.hidden
 
 
+def _vars(out):
+    ctx = out.values[0].context
+    return ctx["model_family"], ctx["model_variant"], ctx["model_name"]
+
+
 def test_schema():
     s = WPModelInfo.define_schema()
     assert s.node_id == "WP_ModelInfo"
     assert s.category == "wildcard-pipeline"
-    assert [o.name for o in s.outputs] == [
-        "context", "model_family", "model_variant", "model_name",
-    ]
+    assert [o.name for o in s.outputs] == ["context"]
+    assert [i.name for i in s.inputs] == ["upstream", "model", "wp_model_info"]
 
 
 def test_detects_family_variant_and_name_from_loader():
     out = _run(model=_model(SDXL))
-    payload, family, variant, name = out.values
-    assert (family, variant, name) == ("sdxl", "pony", "ponyDiffusionV6XL")
-    assert payload.context["model_family"] == "sdxl"
-    assert payload.context["model_variant"] == "pony"
-    assert payload.context["model_name"] == "ponyDiffusionV6XL"
+    payload = out.values[0]
+    assert _vars(out) == ("sdxl", "pony", "ponyDiffusionV6XL")
     trace = payload.debug["__wp_trace__"]
     assert [t["binding"] for t in trace] == ["model_family", "model_variant", "model_name"]
+    assert [t["type"] for t in trace] == ["model", "rules", "loader"]
     assert all(t["node"] == "WP_ModelInfo" and t["node_id"] == "9" for t in trace)
 
 
-def test_model_name_input_wins_over_loader():
-    out = _run(model=_model(Flux), model_name="illustriousXL_v01.safetensors")
-    _, family, variant, name = out.values
-    assert (family, variant, name) == ("flux", "illustrious", "illustriousXL_v01")
+def test_reports_detected_values_to_the_widget():
+    out = _run(model=_model(SDXL))
+    assert out.ui == {"wp_model_info": [{
+        "family": "sdxl", "variant": "pony", "name": "ponyDiffusionV6XL",
+        "sources": {"family": "model", "variant": "rules", "name": "loader"},
+    }]}
 
 
-def test_overrides():
-    out = _run(model=_model(SDXL), family_override=" sd15 ", variant_override="illustrious")
-    _, family, variant, _ = out.values
-    assert (family, variant) == ("sd15", "illustrious")
+def test_empty_or_broken_config_uses_shipped_rules():
+    for raw in ("", "{", "[]", json.dumps({"family": "x"})):
+        out = _run(model=_model(SDXL), wp_model_info=raw)
+        assert _vars(out)[1] == "pony"
+
+
+def test_pinned_name_wins_over_loader():
+    out = _run(model=_model(Flux), config={"name": "illustriousXL_v01.safetensors"})
+    assert _vars(out) == ("flux", "illustrious", "illustriousXL_v01")
+    assert out.ui["wp_model_info"][0]["sources"]["name"] == "pinned"
+
+
+def test_pins():
+    out = _run(model=_model(SDXL), config={"family": " sd15 ", "variant": "illustrious"})
+    assert _vars(out)[:2] == ("sd15", "illustrious")
 
 
 def test_custom_rules_and_bad_rule_warning():
-    out = _run(model=_model(SDXL), variant_rules="mine: diffusion\nbad: (")
-    payload, _, variant, _ = out.values
-    assert variant == "mine"
-    warns = payload.debug["__wp_warnings__"]
+    rules = [
+        {"variant": "mine", "pattern": "diffusion"},
+        {"variant": "bad", "pattern": "("},
+        {"variant": "", "pattern": ""},
+    ]
+    out = _run(model=_model(SDXL), config={"rules": rules})
+    assert _vars(out)[1] == "mine"
+    warns = out.values[0].debug["__wp_warnings__"]
     assert [w["type"] for w in warns] == ["model_info_bad_rule"]
+
+
+def test_empty_rules_list_means_no_rules():
+    out = _run(model=_model(SDXL), config={"rules": []})
+    assert _vars(out)[1] == ""
 
 
 def test_nothing_wired_warns_and_writes_empty_values():
     out = _run()
-    payload, family, variant, name = out.values
-    assert (family, variant, name) == ("", "", "")
-    assert payload.context["model_variant"] == ""
-    assert payload.debug["__wp_warnings__"][0]["type"] == "model_info_nothing_detected"
+    assert _vars(out) == ("", "", "")
+    assert out.values[0].debug["__wp_warnings__"][0]["type"] == "model_info_nothing_detected"
 
 
 def test_extends_upstream_and_clears_shadowed_negatives_and_flags():

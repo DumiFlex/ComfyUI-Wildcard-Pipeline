@@ -6,8 +6,11 @@ import {
   loaderFileName,
   modelInfoPreviewModule,
   modelStem,
-  parseVariantRules,
+  compileVariantRules,
+  parseModelInfoConfig,
+  recordModelInfoRun,
   staticModelValues,
+  type VariantRuleRow,
 } from "./model-info";
 import {
   collectUpstreamChain,
@@ -20,11 +23,11 @@ import {
   type LiteNodeLike,
 } from "./graph";
 
-const rulesOf = (t: string | null) => parseVariantRules(t ?? DEFAULT_VARIANT_RULES);
+const rulesOf = (rows: VariantRuleRow[] | null) => compileVariantRules(rows ?? DEFAULT_VARIANT_RULES);
 
 describe("model-info corpus (shared with engine/model_info.py)", () => {
   it("default rules match the engine's", () => {
-    expect(DEFAULT_VARIANT_RULES).toBe(corpus.default_rules);
+    expect(DEFAULT_VARIANT_RULES).toEqual(corpus.default_rules);
   });
   for (const c of corpus.variants) {
     it(`variant of ${c.name || "(empty)"} = ${c.variant || "(none)"}`, () => {
@@ -44,7 +47,7 @@ describe("model-info corpus (shared with engine/model_info.py)", () => {
 });
 
 /** Loader(1) → LoRA(2) → ModelInfo(3) → Context(4). */
-function graph(opts: { ckpt?: string; info?: Record<string, string>; noModel?: boolean } = {}) {
+function graph(opts: { ckpt?: string; info?: Record<string, unknown>; noModel?: boolean } = {}) {
   const nodes: LiteNodeLike[] = [];
   const g = {
     _nodes: nodes,
@@ -70,8 +73,7 @@ function graph(opts: { ckpt?: string; info?: Record<string, string>; noModel?: b
     id: 3, type: "WP_ModelInfo", graph: g,
     inputs: [{ name: "upstream", link: null }, { name: "model", link: opts.noModel ? null : 11 }],
     outputs: [{ name: "context", links: [12], type: "PIPELINE_CONTEXT" }],
-    widgets: Object.entries({ model_name: "", family_override: "", variant_override: "", ...opts.info })
-      .map(([name, value]) => ({ name, value })),
+    widgets: [{ name: "wp_model_info", value: opts.info ? JSON.stringify(opts.info) : "" }],
   };
   const ctx: LiteNodeLike = {
     id: 4, type: "WP_Context", graph: g,
@@ -94,15 +96,26 @@ describe("model-info on the canvas", () => {
     });
   });
 
-  it("typed name and overrides win", () => {
-    const { info } = graph({
-      info: { model_name: "waiIllustrious.safetensors", family_override: "sdxl" },
-    });
+  it("pins win", () => {
+    const { info } = graph({ info: { name: "waiIllustrious.safetensors", family: "sdxl" } });
     expect(staticModelValues(info)).toEqual({
       model_family: "sdxl", model_variant: "illustrious", model_name: "waiIllustrious",
     });
-    const { info: forced } = graph({ info: { variant_override: "noobai" } });
+    const { info: forced } = graph({ info: { variant: "noobai" } });
     expect(staticModelValues(forced).model_variant).toBe("noobai");
+  });
+
+  it("custom rules apply, and an empty list matches nothing", () => {
+    const { info } = graph({ info: { rules: [{ variant: "mine", pattern: "diffusion" }] } });
+    expect(staticModelValues(info).model_variant).toBe("mine");
+    const { info: none } = graph({ info: { rules: [] } });
+    expect(staticModelValues(none).model_variant).toBe("");
+  });
+
+  it("the family comes from the last run until pinned", () => {
+    const { info } = graph();
+    recordModelInfoRun(info, { family: "sdxl", variant: "pony", name: "x", sources: {} });
+    expect(staticModelValues(info).model_family).toBe("sdxl");
   });
 
   it("no model wired: placeholders, and the preview module leaves them out", () => {
@@ -130,7 +143,7 @@ describe("model-info on the canvas", () => {
   });
 
   it("the preview chain carries a model step only when asked", () => {
-    const { g, ctx } = graph({ info: { family_override: "sdxl" } });
+    const { g, ctx } = graph({ info: { family: "sdxl" } });
     expect(collectUpstreamChain(g, ctx)).toEqual([]);
     const steps = collectUpstreamChain(g, ctx, { modelSteps: true });
     expect(steps).toHaveLength(1);
@@ -147,5 +160,26 @@ describe("model-info on the canvas", () => {
     const loader = g.getNodeById(1)!;
     loader.widgets![0].value = "illustriousXL.safetensors";
     expect(collectUpstreamResolved(g, ctx).model_variant).toBe("illustrious");
+  });
+});
+
+describe("parseModelInfoConfig (mirrors engine parse_config)", () => {
+  it("falls back to the shipped rules", () => {
+    for (const raw of ["", "{", "[]", 3, null, JSON.stringify({ family: "x" })]) {
+      expect(parseModelInfoConfig(raw).rules).toEqual(DEFAULT_VARIANT_RULES);
+    }
+  });
+  it("keeps rows and trims pins", () => {
+    const cfg = parseModelInfoConfig(JSON.stringify({
+      rules: [{ variant: "x", pattern: "y" }, 3], family: " f ", name: 5,
+    }));
+    expect(cfg.rules).toEqual([{ variant: "x", pattern: "y" }]);
+    expect([cfg.family, cfg.variant, cfg.name]).toEqual(["f", "", ""]);
+  });
+  it("marks the rows with problems", () => {
+    const { problemRows } = compileVariantRules([
+      { variant: "a", pattern: "" }, { variant: "", pattern: "" }, { variant: "b", pattern: "(" },
+    ]);
+    expect(problemRows).toEqual([0, 2]);
   });
 });

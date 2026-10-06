@@ -1,6 +1,23 @@
 {
   "_comment": "Shared by engine/model_info.py and src/extension/model-info.ts. rules: null means the shipped DEFAULT_VARIANT_RULES.",
-  "default_rules": "# variant: pattern (first match wins, case-insensitive)\nnoobai: noob\npony: pony|pdxl\nillustrious: illustrious|ilxl\nanimagine: animagine",
+  "default_rules": [
+    {
+      "variant": "noobai",
+      "pattern": "noob"
+    },
+    {
+      "variant": "pony",
+      "pattern": "pony|pdxl"
+    },
+    {
+      "variant": "illustrious",
+      "pattern": "illustrious|ilxl"
+    },
+    {
+      "variant": "animagine",
+      "pattern": "animagine"
+    }
+  ],
   "variants": [
     {
       "rules": null,
@@ -53,24 +70,67 @@
       "variant": ""
     },
     {
-      "rules": "# mine\nreal: juggernaut|realvis\n\nbroken line\nbad: (unclosed\npony: pony",
+      "rules": [
+        {
+          "variant": "real",
+          "pattern": "juggernaut|realvis"
+        },
+        {
+          "variant": "broken line",
+          "pattern": ""
+        },
+        {
+          "variant": "bad",
+          "pattern": "(unclosed"
+        },
+        {
+          "variant": "pony",
+          "pattern": "pony"
+        }
+      ],
       "name": "juggernautXL_v9",
       "variant": "real"
     },
     {
-      "rules": "first: xl\nsecond: juggernaut",
+      "rules": [
+        {
+          "variant": "first",
+          "pattern": "xl"
+        },
+        {
+          "variant": "second",
+          "pattern": "juggernaut"
+        }
+      ],
       "name": "juggernautXL",
       "variant": "first"
     },
     {
-      "rules": "",
+      "rules": [],
       "name": "ponyDiffusionV6XL",
       "variant": ""
     }
   ],
   "problems": [
     {
-      "rules": "# mine\nreal: juggernaut|realvis\n\nbroken line\nbad: (unclosed\npony: pony",
+      "rules": [
+        {
+          "variant": "real",
+          "pattern": "juggernaut|realvis"
+        },
+        {
+          "variant": "broken line",
+          "pattern": ""
+        },
+        {
+          "variant": "bad",
+          "pattern": "(unclosed"
+        },
+        {
+          "variant": "pony",
+          "pattern": "pony"
+        }
+      ],
       "count": 2
     },
     {
@@ -78,7 +138,24 @@
       "count": 0
     },
     {
-      "rules": "a:\n: b\nok: c",
+      "rules": [
+        {
+          "variant": "a",
+          "pattern": ""
+        },
+        {
+          "variant": "",
+          "pattern": "b"
+        },
+        {
+          "variant": "",
+          "pattern": "  "
+        },
+        {
+          "variant": "ok",
+          "pattern": "c"
+        }
+      ],
       "count": 2
     }
   ],

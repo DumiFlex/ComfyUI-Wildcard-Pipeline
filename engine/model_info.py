@@ -16,6 +16,7 @@ Keep the two in step.
 """
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -26,16 +27,15 @@ VARIANT_VAR = "model_variant"
 NAME_VAR = "model_name"
 MODEL_VARS = (FAMILY_VAR, VARIANT_VAR, NAME_VAR)
 
-#: Shipped variant rules. One ``variant: pattern`` per line, first match wins,
+#: Shipped variant rules, as the node's rule rows: first match wins,
 #: case-insensitive, matched anywhere in the file name. NoobAI sits above
 #: Illustrious because NoobAI files often mention both.
-DEFAULT_VARIANT_RULES = "\n".join([
-    "# variant: pattern (first match wins, case-insensitive)",
-    "noobai: noob",
-    "pony: pony|pdxl",
-    "illustrious: illustrious|ilxl",
-    "animagine: animagine",
-])
+DEFAULT_VARIANT_RULES: tuple[dict[str, str], ...] = (
+    {"variant": "noobai", "pattern": "noob"},
+    {"variant": "pony", "pattern": "pony|pdxl"},
+    {"variant": "illustrious", "pattern": "illustrious|ilxl"},
+    {"variant": "animagine", "pattern": "animagine"},
+)
 
 # Config class name (``model.model.model_config``'s class) → family. Checked
 # as prefixes, longest first, so ``SDXLRefiner`` lands before ``SDXL``.
@@ -96,23 +96,27 @@ class VariantRule:
     regex: re.Pattern[str]
 
 
-def parse_variant_rules(text: str) -> tuple[list[VariantRule], list[str]]:
-    """Parse the rules text. Returns ``(rules, problems)``.
+def compile_variant_rules(rows: Any) -> tuple[list[VariantRule], list[str]]:
+    """Compile the node's rule rows. Returns ``(rules, problems)``.
 
-    Blank lines and ``#`` comments are skipped. A line without ``:`` or with a
-    pattern that does not compile is reported in ``problems`` and skipped, so
-    one typo never stops the other rules from working.
+    A row with neither field filled is an unfinished row and is skipped
+    quietly. A row missing one field, or with a pattern that does not
+    compile, is reported in ``problems`` and skipped, so one typo never
+    stops the other rules from working.
     """
     rules: list[VariantRule] = []
     problems: list[str] = []
-    for raw in (text or "").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#"):
+    for row in rows if isinstance(rows, (list, tuple)) else ():
+        if not isinstance(row, dict):
             continue
-        variant, sep, pattern = line.partition(":")
-        variant, pattern = variant.strip(), pattern.strip()
-        if not sep or not variant or not pattern:
-            problems.append(f"not a 'variant: pattern' line: {line!r}")
+        variant = str(row.get("variant") or "").strip()
+        pattern = str(row.get("pattern") or "").strip()
+        if not variant and not pattern:
+            continue
+        if not variant or not pattern:
+            problems.append(
+                f"rule {variant or pattern!r} needs both a variant and a pattern",
+            )
             continue
         try:
             regex = re.compile(pattern, re.IGNORECASE)
@@ -121,6 +125,40 @@ def parse_variant_rules(text: str) -> tuple[list[VariantRule], list[str]]:
             continue
         rules.append(VariantRule(variant, pattern, regex))
     return rules, problems
+
+
+@dataclass(frozen=True)
+class ModelInfoConfig:
+    """The node's widget state. Empty pins mean "detect it"."""
+
+    rules: tuple[dict[str, str], ...]
+    family: str = ""
+    variant: str = ""
+    name: str = ""
+
+
+def parse_config(raw: Any) -> ModelInfoConfig:
+    """Read the ``wp_model_info`` widget JSON. Anything unreadable, or a
+    config without a ``rules`` list, gets the shipped rules."""
+    data: Any = raw
+    if isinstance(raw, str):
+        try:
+            data = json.loads(raw) if raw.strip() else {}
+        except ValueError:
+            data = {}
+    if not isinstance(data, dict):
+        data = {}
+    rows = data.get("rules")
+    rules = (
+        tuple(r for r in rows if isinstance(r, dict))
+        if isinstance(rows, list) else DEFAULT_VARIANT_RULES
+    )
+
+    def pin(key: str) -> str:
+        v = data.get(key)
+        return v.strip() if isinstance(v, str) else ""
+
+    return ModelInfoConfig(rules, pin("family"), pin("variant"), pin("name"))
 
 
 def detect_variant(name: str, rules: list[VariantRule]) -> str:

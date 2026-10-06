@@ -4,8 +4,8 @@
  * The node writes `$model_family`, `$model_variant` and `$model_name` at run
  * time. The canvas can't see the loaded model, but it CAN read the loader's
  * file-name widget, so the variant and name preview real values here; the
- * family (from the model's architecture) is only known after a run unless the
- * user overrides it, and previews as a `$model_family` placeholder.
+ * family (from the model's architecture) comes from the last run unless the
+ * user pins it, and previews as a `$model_family` placeholder before that.
  *
  * Variant rules mirror the engine via `tests/fixtures/model-variant-corpus.json`.
  */
@@ -15,50 +15,100 @@ export const MODEL_FAMILY_VAR = "model_family";
 export const MODEL_VARIANT_VAR = "model_variant";
 export const MODEL_NAME_VAR = "model_name";
 export const MODEL_VARS = [MODEL_FAMILY_VAR, MODEL_VARIANT_VAR, MODEL_NAME_VAR] as const;
+/** The node's one widget: rules + pins as JSON. */
+export const CONFIG_WIDGET = "wp_model_info";
+
+export interface VariantRuleRow {
+  variant: string;
+  pattern: string;
+}
 
 /** Must equal `engine/model_info.py::DEFAULT_VARIANT_RULES`. */
-export const DEFAULT_VARIANT_RULES = [
-  "# variant: pattern (first match wins, case-insensitive)",
-  "noobai: noob",
-  "pony: pony|pdxl",
-  "illustrious: illustrious|ilxl",
-  "animagine: animagine",
-].join("\n");
+export const DEFAULT_VARIANT_RULES: readonly VariantRuleRow[] = [
+  { variant: "noobai", pattern: "noob" },
+  { variant: "pony", pattern: "pony|pdxl" },
+  { variant: "illustrious", pattern: "illustrious|ilxl" },
+  { variant: "animagine", pattern: "animagine" },
+];
 
 export interface VariantRule {
   variant: string;
   pattern: string;
   regex: RegExp;
+  /** Index of the row it came from, so the widget can light that row. */
+  row: number;
 }
 
-/** Parse the rules text the same way the engine does: blank lines and `#`
- *  comments skipped, bad lines reported and skipped. */
-export function parseVariantRules(text: string): { rules: VariantRule[]; problems: string[] } {
+/** Compile the rule rows the same way the engine does: a row with neither
+ *  field is unfinished and skipped quietly; a half-filled row or a bad
+ *  pattern is reported and skipped. `problemRows` holds their indexes. */
+export function compileVariantRules(rows: readonly VariantRuleRow[]): {
+  rules: VariantRule[];
+  problems: string[];
+  problemRows: number[];
+} {
   const rules: VariantRule[] = [];
   const problems: string[] = [];
-  for (const raw of (text ?? "").split(/\r?\n/)) {
-    const line = raw.trim();
-    if (!line || line.startsWith("#")) continue;
-    const at = line.indexOf(":");
-    const variant = at >= 0 ? line.slice(0, at).trim() : "";
-    const pattern = at >= 0 ? line.slice(at + 1).trim() : "";
-    if (at < 0 || !variant || !pattern) {
-      problems.push(`not a 'variant: pattern' line: ${line}`);
-      continue;
+  const problemRows: number[] = [];
+  rows.forEach((r, row) => {
+    const variant = (r?.variant ?? "").trim();
+    const pattern = (r?.pattern ?? "").trim();
+    if (!variant && !pattern) return;
+    if (!variant || !pattern) {
+      problems.push(`rule '${variant || pattern}' needs both a variant and a pattern`);
+      problemRows.push(row);
+      return;
     }
     try {
-      rules.push({ variant, pattern, regex: new RegExp(pattern, "i") });
+      rules.push({ variant, pattern, regex: new RegExp(pattern, "i"), row });
     } catch (e) {
       problems.push(`bad pattern for ${variant}: ${e instanceof Error ? e.message : String(e)}`);
+      problemRows.push(row);
     }
+  });
+  return { rules, problems, problemRows };
+}
+
+/** The node's widget state (`wp_model_info`). Empty pins mean "detect it".
+ *  Mirrors `engine/model_info.py::parse_config`. */
+export interface ModelInfoConfig {
+  version: 1;
+  rules: VariantRuleRow[];
+  family: string;
+  variant: string;
+  name: string;
+}
+
+export function defaultModelInfoConfig(): ModelInfoConfig {
+  return { version: 1, rules: DEFAULT_VARIANT_RULES.map((r) => ({ ...r })), family: "", variant: "", name: "" };
+}
+
+export function parseModelInfoConfig(raw: unknown): ModelInfoConfig {
+  let data: unknown = raw;
+  if (typeof raw === "string") {
+    try { data = raw.trim() ? JSON.parse(raw) : {}; } catch { data = {}; }
   }
-  return { rules, problems };
+  const d = (data && typeof data === "object" && !Array.isArray(data) ? data : {}) as Record<string, unknown>;
+  const rows = Array.isArray(d.rules)
+    ? d.rules
+      .filter((r): r is Record<string, unknown> => !!r && typeof r === "object")
+      .map((r) => ({
+        variant: typeof r.variant === "string" ? r.variant : "",
+        pattern: typeof r.pattern === "string" ? r.pattern : "",
+      }))
+    : DEFAULT_VARIANT_RULES.map((r) => ({ ...r }));
+  const pin = (k: string) => (typeof d[k] === "string" ? (d[k] as string).trim() : "");
+  return { version: 1, rules: rows, family: pin("family"), variant: pin("variant"), name: pin("name") };
+}
+
+/** First rule whose pattern occurs in `name`, or null. */
+export function matchRule(name: string, rules: VariantRule[]): VariantRule | null {
+  if (!name) return null;
+  return rules.find((r) => r.regex.test(name)) ?? null;
 }
 
 export function detectVariant(name: string, rules: VariantRule[]): string {
-  if (!name) return "";
-  for (const r of rules) if (r.regex.test(name)) return r.variant;
-  return "";
+  return matchRule(name, rules)?.variant ?? "";
 }
 
 /** `SDXL\pony\ponyDiffusionV6XL.safetensors` → `ponyDiffusionV6XL`. */
@@ -120,19 +170,37 @@ export interface StaticModelInfo {
   name: string | null;
 }
 
+/** What the last run reported, per node (the widget glue records it from the
+ *  `executed` event). Only the family needs it: the canvas can't see the
+ *  loaded model, so until a run the family is unknown unless pinned. */
+export interface ModelInfoRun {
+  family: string;
+  variant: string;
+  name: string;
+  sources: Partial<Record<"family" | "variant" | "name", string>>;
+}
+const lastRuns = new WeakMap<object, ModelInfoRun>();
+export function recordModelInfoRun(node: object, run: ModelInfoRun): void {
+  lastRuns.set(node, run);
+}
+export function lastModelInfoRun(node: object): ModelInfoRun | null {
+  return lastRuns.get(node) ?? null;
+}
+
+export function readModelInfoConfig(node: NodeLike): ModelInfoConfig {
+  return parseModelInfoConfig(node.widgets?.find((x) => x.name === CONFIG_WIDGET)?.value);
+}
+
 /** What the node would write, as far as the canvas can tell. `null` = only
  *  known at run time. */
 export function staticModelInfo(node: NodeLike, graph?: GraphLike): StaticModelInfo {
-  const familyOverride = stringWidget(node, "family_override").trim();
-  const variantOverride = stringWidget(node, "variant_override").trim();
-  const typed = stringWidget(node, "model_name").trim();
-  const rulesWidget = node.widgets?.find((x) => x.name === "variant_rules");
-  const rulesText = typeof rulesWidget?.value === "string" ? rulesWidget.value : DEFAULT_VARIANT_RULES;
-  const file = typed || loaderFileName(node, graph);
+  const cfg = readModelInfoConfig(node);
+  const file = cfg.name || loaderFileName(node, graph);
   const name = file ? modelStem(file) : null;
-  const variant = variantOverride
-    || (name !== null ? detectVariant(name, parseVariantRules(rulesText).rules) : null);
-  return { family: familyOverride || null, variant, name };
+  const variant = cfg.variant
+    || (name !== null ? detectVariant(name, compileVariantRules(cfg.rules).rules) : null);
+  const family = cfg.family || lastModelInfoRun(node)?.family || null;
+  return { family, variant, name };
 }
 
 /** Preview values for the three variables: real where known, `$name`

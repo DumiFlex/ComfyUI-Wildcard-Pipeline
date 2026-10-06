@@ -11,8 +11,8 @@ CORPUS = json.loads(
 )
 
 
-def _rules(text):
-    return mi.parse_variant_rules(mi.DEFAULT_VARIANT_RULES if text is None else text)
+def _rules(rows):
+    return mi.compile_variant_rules(mi.DEFAULT_VARIANT_RULES if rows is None else rows)
 
 
 @pytest.mark.parametrize("case", CORPUS["variants"], ids=lambda c: c["name"] or "empty")
@@ -92,5 +92,15 @@ def test_find_checkpoint_name_survives_cycle():
 
 
 def test_default_rules_match_corpus():
-    # The TS mirror asserts the same string, so the two can't drift apart.
-    assert mi.DEFAULT_VARIANT_RULES == CORPUS["default_rules"]
+    # The TS mirror asserts the same rows, so the two can't drift apart.
+    assert list(mi.DEFAULT_VARIANT_RULES) == CORPUS["default_rules"]
+
+
+def test_parse_config():
+    raw = {"rules": [{"variant": "x", "pattern": "y"}, 3], "family": " f ", "name": 5}
+    cfg = mi.parse_config(json.dumps(raw))
+    assert cfg.rules == ({"variant": "x", "pattern": "y"},)
+    assert (cfg.family, cfg.variant, cfg.name) == ("f", "", "")
+    assert mi.parse_config("").rules == mi.DEFAULT_VARIANT_RULES
+    assert mi.parse_config("nope").rules == mi.DEFAULT_VARIANT_RULES
+    assert mi.parse_config({"rules": []}).rules == ()

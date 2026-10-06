@@ -12,14 +12,16 @@ Pony and Illustrious are both SDXL underneath, so only the file name can tell th
 
 - **upstream** *(optional)*: an existing Context to extend. Only nodes **after** Model Info see its variables, so put it first in the chain.
 - **model** *(optional)*: the MODEL from your checkpoint loader. Gives the family, and the node follows the wire back to the loader to read its file name (through LoRA loaders and other model patches).
-- **model_name**: type or wire a file name here to use it instead of the loader's.
-- **variant_rules**: one `variant: pattern` per line. The first pattern found in the file name sets `$model_variant`. Case-insensitive, `|` separates alternatives, `#` starts a comment.
-- **family_override** / **variant_override**: use these instead of what was detected, for example to try your Pony rules without switching checkpoint.
 
-## Outputs
+## The widget
 
-- **context**: the upstream Context plus the three variables.
-- **model_family**, **model_variant**, **model_name**: the same values as plain strings, for non-WP nodes.
+- **Detected** shows the three values and where each comes from. The variant and name update as soon as you change the loader's checkpoint; the family needs the loaded model, so it shows after the first run.
+- Click the **pin** on a row to use your own value instead, for example a file name when no model is wired, or a variant to try your Pony rules without switching checkpoint. Click it again to go back to detection.
+- **Variant rules** are `variant` + `pattern` rows. The first pattern found in the file name sets `$model_variant`, and its row lights up. Case-insensitive, `|` separates alternatives. A broken row is outlined in red and skipped (WP Debug says why). **Reset** puts the shipped rules back.
+
+## Output
+
+- **context**: the upstream Context plus the three variables. To use a value outside the pipeline, put it in an Assembler template (for example `$model_variant` in a file-name prefix).
 
 ## How to use
 
@@ -31,4 +33,4 @@ Pony and Illustrious are both SDXL underneath, so only the file name can tell th
 
 - If a node that loads LoRAs from the prompt sits on the model, take MODEL from **before** it, or the graph loops.
 - A wildcard set to **Match variable** uses its fallback option when no option matches; without one it rolls as usual and WP Debug says why.
-- WP Debug's trace shows each value and where it came from (model, loader, rules, input or override).
+- WP Debug's trace shows each value and where it came from (model, loader, rules or pinned).

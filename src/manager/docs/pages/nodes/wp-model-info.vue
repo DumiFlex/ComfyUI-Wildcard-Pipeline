@@ -16,11 +16,10 @@ const vars = [
 const ports = [
   { term: "upstream (in)", desc: "An existing Context to extend. Only nodes after Model Info see its variables, so it usually goes first." },
   { term: "model (in)", desc: "The MODEL from your checkpoint loader. Gives the family, and the node follows the wire back to the loader for the file name, stepping over LoRA loaders and other model patches." },
-  { term: "model_name", desc: "Type or wire a file name to use instead of the loader's. Also lets the node work with no model wired." },
-  { term: "variant_rules", desc: "One “variant: pattern” per line. The first pattern found in the file name sets $model_variant. Case-insensitive; | separates alternatives; # starts a comment. A line that doesn't parse is skipped with a WP Debug warning." },
-  { term: "family_override / variant_override", desc: "Use these instead of what was detected, for example to try your Pony rules without switching checkpoint." },
-  { term: "context (out)", desc: "The upstream Context plus the three variables." },
-  { term: "model_family / model_variant / model_name (out)", desc: "The same values as plain strings, for nodes outside the pipeline." },
+  { term: "Detected", desc: "The three values and where each comes from. Variant and name update as soon as you change the loader's checkpoint; the family shows after the first run." },
+  { term: "Pin", desc: "Use your own value for a row instead of the detected one: a file name when no model is wired, or a variant to try your Pony rules without switching checkpoint. Click it again to go back to detection." },
+  { term: "Variant rules", desc: "Variant + pattern rows. The first pattern found in the file name sets $model_variant and its row lights up. Case-insensitive; | separates alternatives. A broken row is outlined in red and skipped with a WP Debug warning. Reset puts the shipped rules back." },
+  { term: "context (out)", desc: "The upstream Context plus the three variables. To use a value outside the pipeline, put it in an Assembler template." },
 ];
 </script>
 
@@ -65,7 +64,7 @@ const ports = [
       </DocCallout>
     </DocSection>
 
-    <DocSection title="Ports &amp; settings">
+    <DocSection title="Ports &amp; widget">
       <DocKeyList :items="ports" />
     </DocSection>
 
@@ -102,7 +101,7 @@ const ports = [
         The canvas previews <VarToken>$model_variant</VarToken> and
         <VarToken>$model_name</VarToken> from the loader's file name straight away.
         <VarToken>$model_family</VarToken> needs the loaded model, so it previews as a placeholder
-        until a run (or set family_override).
+        until the first run (or pin it).
       </DocCallout>
       <DocCallout variant="tip">
         Model Info changes nothing in your library, so shared modules that branch on

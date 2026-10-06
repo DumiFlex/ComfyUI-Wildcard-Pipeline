@@ -75,7 +75,7 @@ def _constraint() -> dict:
 
 
 def _model_info(name: str):
-    return WPModelInfo.execute(model_name=name).values[0]
+    return WPModelInfo.execute(wp_model_info=json.dumps({"name": name})).values[0]
 
 
 def test_model_variant_drives_constraint_across_nodes():
