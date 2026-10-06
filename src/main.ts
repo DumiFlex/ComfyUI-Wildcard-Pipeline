@@ -26,6 +26,7 @@ const {
   topbarMod,
   playgroundStoreMod,
   installClipboardShield,
+  dimWidgetsWhileSkipped,
   createApp,
   watch,
   loadToast,
@@ -233,6 +234,14 @@ app.registerExtension({
         origConfigure?.call(this, info);
         cleanerMod.upgradeLegacyValues(this as Parameters<typeof cleanerMod.upgradeLegacyValues>[0], info);
       };
+      // The prompt + negative boxes are ComfyUI's own textareas, which stay
+      // bright on a bypassed node while the rules widget below them dims.
+      const cn = nodeType as { prototype: { onNodeCreated?: (this: CleanerCreateNode, ...args: unknown[]) => void } };
+      const origCreated = cn.prototype.onNodeCreated;
+      cn.prototype.onNodeCreated = function (this: CleanerCreateNode, ...args: unknown[]) {
+        origCreated?.apply(this, args);
+        dimWidgetsWhileSkipped(this, ["prompt", "negative"]);
+      };
       return;
     }
     if (nodeData.name !== "WP_PromptAssembler") return;
@@ -241,6 +250,7 @@ app.registerExtension({
     nt.prototype.onNodeCreated = function (this: AssemblerHelperNode, ...args: unknown[]) {
       orig?.apply(this, args);
       asmMod.mountHelper(this);
+      dimWidgetsWhileSkipped(this, ["template", "negative_template"]);
     };
   },
 

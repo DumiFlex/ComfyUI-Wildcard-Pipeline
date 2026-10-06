@@ -47,6 +47,7 @@ export * as aboutMod from "./extension/about-badges";
 export * as topbarMod from "./extension/topbar";
 export * as playgroundStoreMod from "./components/settings/playground-store";
 export { installClipboardShield } from "./widgets/clipboard-shield";
+export { dimWidgetsWhileSkipped } from "./extension/reactive";
 export { createApp, watch } from "vue";
 
 // Off the startup path, but imported from here rather than from `main.ts`: a

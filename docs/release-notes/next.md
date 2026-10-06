@@ -9,5 +9,7 @@
 
 ### Fixes
 
+- **Bypassed and muted Assemblers and Prompt Cleaners now dim their text boxes too.** The prompt and negative boxes used to stay bright while the rest of the node dimmed.
+- **The Sweep Limit field no longer hides its number under the arrows.** It now has the same small up/down arrows as the seed fields.
 - **Importing modules together with their categories now works.** A JSON import that brought in a new category along with the modules filed under it could fail with "database integrity violation". Modules whose category merges into one you already have by name now land in that category.
 - **Import / Export sees your whole library.** With more than 1000 modules, the Export list and the Import duplicate check only looked at the first 1000, so re-importing a big pack showed everything past that as changed.

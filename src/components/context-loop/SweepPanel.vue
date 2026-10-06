@@ -66,10 +66,14 @@ function toggleHold(): void {
   patch({ hold_others: !props.modelValue.hold_others });
 }
 
+function setLimit(n: number): void {
+  patch({ limit: Math.min(SWEEP_MAX_LIMIT, Math.max(1, n)) });
+}
+
 function onLimit(ev: Event): void {
   const n = Math.round(Number((ev.target as HTMLInputElement).value));
   if (!Number.isFinite(n)) return;
-  patch({ limit: Math.min(SWEEP_MAX_LIMIT, Math.max(1, n)) });
+  setLimit(n);
 }
 
 function addAxis(ev: Event): void {
@@ -230,16 +234,24 @@ function moveAxis(uid: string, dir: -1 | 1): void {
 
       <div class="wp-sweep__row">
         <span class="wp-sweep__row-label">Limit</span>
-        <input
-          type="number"
-          class="wp-sweep__limit"
-          min="1"
-          :max="SWEEP_MAX_LIMIT"
-          :value="modelValue.limit"
-          data-test="sweep-limit"
-          aria-label="Most frames a sweep runs"
-          @change="onLimit"
-        />
+        <span class="wp-sweep__limit-wrap">
+          <input
+            type="number"
+            class="wp-sweep__limit"
+            min="1"
+            :max="SWEEP_MAX_LIMIT"
+            :value="modelValue.limit"
+            data-test="sweep-limit"
+            aria-label="Most frames a sweep runs"
+            @change="onLimit"
+          />
+          <span class="wp-sweep__spin">
+            <button type="button" class="wp-sweep__spin-btn" tabindex="-1" aria-label="Increase limit" data-test="sweep-limit-up" @click="setLimit(modelValue.limit + 1)">
+              <svg width="6" height="4" viewBox="0 0 8 5"><path d="M0 5 L4 0 L8 5 Z" fill="currentColor" /></svg></button>
+            <button type="button" class="wp-sweep__spin-btn" tabindex="-1" aria-label="Decrease limit" data-test="sweep-limit-down" @click="setLimit(modelValue.limit - 1)">
+              <svg width="6" height="4" viewBox="0 0 8 5"><path d="M0 0 L4 5 L8 0 Z" fill="currentColor" /></svg></button>
+          </span>
+        </span>
       </div>
       <div class="wp-sweep__row" :title="HOLD_TOOLTIP">
         <span class="wp-sweep__row-label">Hold other picks</span>
@@ -341,7 +353,7 @@ function moveAxis(uid: string, dir: -1 | 1): void {
   color: var(--wp-text);
 }
 
-.wp-sweep__add, .wp-sweep__limit {
+.wp-sweep__add, .wp-sweep__limit-wrap {
   background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
   border: 1px solid var(--wp-border, #353841);
   border-radius: 3px;
@@ -349,5 +361,15 @@ function moveAxis(uid: string, dir: -1 | 1): void {
   font: 10.5px var(--wp-font-sans, sans-serif);
 }
 .wp-sweep__add { width: 100%; padding: 4px 5px; cursor: pointer; }
-.wp-sweep__limit { width: 64px; padding: 2px 5px; text-align: right; font-family: var(--wp-font-mono, monospace); }
+/* Custom ± arrows, same as the seed rows (SeedLockRow): the native spinner
+ * sat on top of the right-aligned value. */
+.wp-sweep__limit-wrap { display: inline-flex; align-items: stretch; width: 64px; height: 20px; overflow: hidden; }
+.wp-sweep__limit-wrap:focus-within { border-color: var(--wp-accent); }
+.wp-sweep__limit { flex: 1; min-width: 0; background: transparent; border: 0; padding: 0 5px; color: inherit; font: 10.5px var(--wp-font-mono, monospace); text-align: right; -moz-appearance: textfield; appearance: textfield; }
+.wp-sweep__limit:focus { outline: none; }
+.wp-sweep__limit::-webkit-outer-spin-button, .wp-sweep__limit::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.wp-sweep__spin { display: flex; flex-direction: column; width: 14px; flex-shrink: 0; border-left: 1px solid var(--wp-border, #353841); background: rgba(99,102,241,.04); }
+.wp-sweep__spin-btn { flex: 1; display: flex; align-items: center; justify-content: center; background: transparent; border: 0; padding: 0; color: var(--wp-text-dim, #7a7d88); cursor: pointer; line-height: 0; }
+.wp-sweep__spin-btn + .wp-sweep__spin-btn { border-top: 1px solid var(--wp-border, #353841); }
+.wp-sweep__spin-btn:hover { color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,.12); }
 </style>
