@@ -825,6 +825,13 @@ export interface ModuleEntry {
      */
     pinned_option_id?: string | null;
     /**
+     * Model-aware pipelines: pick the option whose text equals this
+     * variable's value (bare name, e.g. `model_variant`), else the fallback
+     * option, else roll. Lets a wildcard act as a constraint source driven
+     * by WP Model Info. Absent when unset.
+     */
+    match_variable?: string | null;
+    /**
      * Lock — derives a stable per-instance RNG seed from
      * `(locked_seed, var_binding)` so the wildcard's pick stays the
      * same across runs even when the Context node's seed rotates.

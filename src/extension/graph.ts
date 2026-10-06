@@ -18,6 +18,7 @@ import {
   cacheVersion as previewCacheVersion,
 } from "./preview-resolver";
 import { assignCodenames, baseCodename } from "./node-codename";
+import { MODEL_INFO_NODE, MODEL_VARS, modelInfoPreviewModule, staticModelValues } from "./model-info";
 import { clauseActions, derivationTargets, evalConditionTree, isNegativeMode } from "./derivation-conditions";
 import type { SeedStrategy } from "../components/shared/seed-derive";
 
@@ -634,6 +635,12 @@ export function collectUpstreamInjectorBindings(
   }
   const out = new Set<string>();
   for (const n of chain) {
+    if (n.type === MODEL_INFO_NODE && !isSkippedMode(n)) {
+      // Model Info writes at run time, like an injector row: the static
+      // fallback holds the truth for these keys.
+      for (const v of MODEL_VARS) out.add(v);
+      continue;
+    }
     if (n.type !== "WP_ContextInjector") continue;
     if (isSkippedMode(n)) continue;
     const inj = parseCached<{
@@ -673,6 +680,11 @@ export function collectUpstreamInjectorNegatives(
   const out: Record<string, string | null> = {};
   for (let i = chain.length - 1; i >= 0; i--) {
     const n = chain[i];
+    if (n.type === MODEL_INFO_NODE && !isSkippedMode(n)) {
+      // A write replaces the variable's negatives; Model Info sets none.
+      for (const v of MODEL_VARS) out[v] = null;
+      continue;
+    }
     if (n.type !== "WP_ContextInjector" || isSkippedMode(n)) continue;
     const inj = parseCached<{
       version: 1;
@@ -749,6 +761,11 @@ export function collectUpstreamWildcardUuids(
 export function collectUpstreamChain(
   rootGraph: LiteGraphLike,
   node: LiteNodeLike,
+  /** `modelSteps`: also emit a one-module step per WP_ModelInfo node carrying
+   *  its known values, so a server preview's derivations can branch on
+   *  `$model_variant`. Off by default: other callers zip steps with the
+   *  chain's Context nodes by index. */
+  opts: { modelSteps?: boolean } = {},
 ): unknown[][] {
   const parents = buildSubgraphParents(rootGraph);
   const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
@@ -768,6 +785,10 @@ export function collectUpstreamChain(
   const upstreamFirst = [...chain].reverse();
   const out: unknown[][] = [];
   for (const n of upstreamFirst) {
+    if (opts.modelSteps && n.type === MODEL_INFO_NODE && !isSkippedMode(n)) {
+      out.push([modelInfoPreviewModule(n)]);
+      continue;
+    }
     if (n.type !== "WP_Context") continue;
     if (isSkippedMode(n)) continue;
     const v = parseCached<ContextWidgetValue>(
@@ -861,6 +882,13 @@ export function collectUpstreamKinds(
         if (!b) continue;
         kinds[b] = "injector";
         flagInternal(b, row.internal === true);
+      }
+      continue;
+    }
+    if (n.type === MODEL_INFO_NODE) {
+      for (const v of MODEL_VARS) {
+        kinds[v] = "model";
+        flagInternal(v, false);
       }
       continue;
     }
@@ -985,7 +1013,7 @@ export interface VarAxis {
 }
 
 export interface VarProducer {
-  /** "wildcard" | "fixed_values" | "combine" | "derivation" | "injector" | "loop" */
+  /** "wildcard" | "fixed_values" | "combine" | "derivation" | "injector" | "loop" | "model" */
   kind: string;
   /** Litegraph node id of the winning writer. */
   nodeId: string;
@@ -1047,6 +1075,7 @@ export function collectUpstreamProducers(
     }
     const title = typeof n.title === "string" ? n.title.trim() : "";
     if (title) return title;
+    if (n.type === MODEL_INFO_NODE) return "Model Info";
     return n.type === "WP_ContextInjector" ? "Context Injector" : "Context Loop";
   };
 
@@ -1118,6 +1147,11 @@ export function collectUpstreamProducers(
           kind: "injector", nodeId, nodeLabel, internal: row.internal === true,
         });
       }
+      continue;
+    }
+
+    if (n.type === MODEL_INFO_NODE) {
+      for (const v of MODEL_VARS) write(v, { kind: "model", nodeId, nodeLabel });
       continue;
     }
 
@@ -1324,6 +1358,9 @@ function chainParts(chain: LiteNodeLike[]): unknown[] {
       widgetValue(n, "wp_rows"),
       widgetValue(n, "wp_context_loop_config"),
     );
+    // Model Info's preview reads ANOTHER node (the loader's file name), so
+    // its own widgets alone can't key the memo.
+    if (n.type === MODEL_INFO_NODE) parts.push(JSON.stringify(staticModelValues(n)));
   }
   return parts;
 }
@@ -1442,6 +1479,15 @@ function resolveChainStatic(
         ctx[binding] = `$${binding}`;
         if (row.internal === true) internalKeys.add(binding);
         else internalKeys.delete(binding);
+      }
+      continue;
+    }
+    if (n.type === MODEL_INFO_NODE) {
+      // Real variant/name from the loader's file-name widget; family is a
+      // `$model_family` placeholder until overridden (needs the loaded model).
+      for (const [k, v] of Object.entries(staticModelValues(n))) {
+        ctx[k] = v;
+        internalKeys.delete(k);
       }
       continue;
     }
@@ -1593,6 +1639,7 @@ function writeBindings(
     if (binding && options.length > 0) {
       const inst = (m.instance ?? {}) as {
         pick_min?: unknown; pick_max?: unknown; pick_separator?: unknown;
+        match_variable?: unknown;
       };
       const coerce = (v: unknown, dflt: number): number => {
         if (v == null) return dflt;
@@ -1602,7 +1649,22 @@ function writeBindings(
       const lo = coerce(inst.pick_min, 1);
       const hi = Math.max(lo, coerce(inst.pick_max, lo));
       if (lo === 1 && hi === 1) {
-        ctx[binding] = expandValue(String(options[0].value ?? ""), ctx, catalog, 0);
+        // "Match variable" (engine `_match_variable_option`): the option
+        // whose text equals the variable, else the fallback, else option 0.
+        const matchVar = typeof inst.match_variable === "string"
+          ? inst.match_variable.replace(/^\$/, "").trim()
+          : "";
+        let chosen = options[0];
+        if (matchVar) {
+          const raw = ctx[matchVar];
+          const wanted = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+          chosen = (wanted
+            ? options.find((o) => !o.is_null && String(o.value ?? "").trim().toLowerCase() === wanted)
+            : undefined)
+            ?? options.find((o) => (o as { fallback?: boolean }).fallback === true)
+            ?? options[0];
+        }
+        ctx[binding] = expandValue(String(chosen.value ?? ""), ctx, catalog, 0);
       } else {
         // SP2a multi-pick: the static resolver isn't seed-faithful (the engine
         // rolls N at random), so show a representative join of the first N

@@ -266,7 +266,11 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // panel in the loop widget chunk, downstream-wildcard walk in boot): dev sat
 // at 430,134 bytes and the feature adds ~4.8 KB. The maintainer treats this
 // budget as a guide to raise when a needed feature does not fit.
-const TOTAL_LIMIT = 428 * 1024;     // 428 KB
+// RAISED 428 -> 432 KB on 2026-10-06 for model-aware pipelines (WP Model Info
+// walker branches + variant rules in boot, Match variable control in the
+// wildcard modal chunk, LoRA by model preset): the feature adds ~1.8 KB and
+// tipped dev 1 KB over. Same "guide, not a cap" rule as above.
+const TOTAL_LIMIT = 432 * 1024;     // 432 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

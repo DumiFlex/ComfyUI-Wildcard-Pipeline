@@ -1,0 +1,111 @@
+{
+  "_comment": "Shared by engine/model_info.py and src/extension/model-info.ts. rules: null means the shipped DEFAULT_VARIANT_RULES.",
+  "default_rules": "# variant: pattern (first match wins, case-insensitive)\nnoobai: noob\npony: pony|pdxl\nillustrious: illustrious|ilxl\nanimagine: animagine",
+  "variants": [
+    {
+      "rules": null,
+      "name": "ponyDiffusionV6XL_v6StartWithThisOne",
+      "variant": "pony"
+    },
+    {
+      "rules": null,
+      "name": "autismmixSDXL_autismmixPony",
+      "variant": "pony"
+    },
+    {
+      "rules": null,
+      "name": "cyberrealisticPDXL_v40",
+      "variant": "pony"
+    },
+    {
+      "rules": null,
+      "name": "waiNSFWIllustrious_v140",
+      "variant": "illustrious"
+    },
+    {
+      "rules": null,
+      "name": "ILXL_base",
+      "variant": "illustrious"
+    },
+    {
+      "rules": null,
+      "name": "noobaiXLNAIXL_vPred10Version",
+      "variant": "noobai"
+    },
+    {
+      "rules": null,
+      "name": "NoobAI-illustrious-mix",
+      "variant": "noobai"
+    },
+    {
+      "rules": null,
+      "name": "animagineXL40_v4Opt",
+      "variant": "animagine"
+    },
+    {
+      "rules": null,
+      "name": "juggernautXL_ragnarokBy",
+      "variant": ""
+    },
+    {
+      "rules": null,
+      "name": "",
+      "variant": ""
+    },
+    {
+      "rules": "# mine\nreal: juggernaut|realvis\n\nbroken line\nbad: (unclosed\npony: pony",
+      "name": "juggernautXL_v9",
+      "variant": "real"
+    },
+    {
+      "rules": "first: xl\nsecond: juggernaut",
+      "name": "juggernautXL",
+      "variant": "first"
+    },
+    {
+      "rules": "",
+      "name": "ponyDiffusionV6XL",
+      "variant": ""
+    }
+  ],
+  "problems": [
+    {
+      "rules": "# mine\nreal: juggernaut|realvis\n\nbroken line\nbad: (unclosed\npony: pony",
+      "count": 2
+    },
+    {
+      "rules": null,
+      "count": 0
+    },
+    {
+      "rules": "a:\n: b\nok: c",
+      "count": 2
+    }
+  ],
+  "stems": [
+    {
+      "path": "SDXL\\pony\\ponyDiffusionV6XL.safetensors",
+      "stem": "ponyDiffusionV6XL"
+    },
+    {
+      "path": "flux/flux1-dev-fp8.safetensors",
+      "stem": "flux1-dev-fp8"
+    },
+    {
+      "path": "model.ckpt",
+      "stem": "model"
+    },
+    {
+      "path": ".hidden",
+      "stem": ".hidden"
+    },
+    {
+      "path": "noext",
+      "stem": "noext"
+    },
+    {
+      "path": "",
+      "stem": ""
+    }
+  ]
+}

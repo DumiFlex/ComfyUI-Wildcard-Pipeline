@@ -3054,6 +3054,7 @@ function isModified(m: ModuleEntry): boolean {
       if (nonEmptyObj(inst.option_weights)) return true;
       if (inst.mode && inst.mode !== "random") return true;
       if (inst.pinned_option_id) return true;
+      if (typeof inst.match_variable === "string" && inst.match_variable.trim() !== "") return true;
       // `category_filter` is a STRING expr — the old `nonEmptyArr()` test
       // never matched it, so toggling the pool filter never lit the dot.
       if (typeof inst.category_filter === "string" && inst.category_filter.trim() !== "") return true;
@@ -3309,6 +3310,9 @@ function modifiedTooltip(m: ModuleEntry): string {
   switch (m.type) {
     case "wildcard":
       if (inst.mode === "pinned") bits.push("pinned");
+      if (typeof inst.match_variable === "string" && inst.match_variable.trim()) {
+        bits.push(`matches $${inst.match_variable.trim()}`);
+      }
       else if (inst.mode === "subcategory") bits.push("subset");
       if (inst.category_filter) {
         bits.push(`cats: ${inst.category_filter}`);

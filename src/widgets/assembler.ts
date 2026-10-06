@@ -189,6 +189,7 @@ const RELEVANT_INSTANCE_KEYS = new Set([
   "pick_independent",
   "mode",
   "pinned_option_id",
+  "match_variable",
   "locked_seed",
   "internal",
   // combine v2 (2026-05-08 syntax-parity cycle):
@@ -328,7 +329,7 @@ export function mountHelper(node: AssemblerNode) {
             (node as unknown as { graph?: LiteGraphLike }).graph
             ?? (app.graph as unknown as LiteGraphLike);
           const g = findRootGraph(startGraph);
-          const chain = collectUpstreamChain(g, node);
+          const chain = collectUpstreamChain(g, node, { modelSteps: true });
           // `collectUpstreamResolved` now returns the full ctx,
           // including user-flagged internal vars (engine commit a345bd4
           // propagates them across socket boundaries; only the prompt
