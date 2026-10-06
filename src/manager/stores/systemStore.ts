@@ -1,8 +1,12 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 
+import { MANAGER_ROUTES, type ManagerFlavor } from "../utils/comfy-manager-api";
+
 /**
- * Detects + drives the ComfyUI Manager `/manager/reboot` endpoint.
+ * Detects + drives the ComfyUI Manager reboot endpoint: `/manager/reboot`
+ * on the legacy custom node, `/v2/manager/reboot` on the Manager built into
+ * ComfyUI (see `utils/comfy-manager-api.ts`).
  *
  * Detection: a single GET probe at `/manager/version` (a harmless
  * read-only endpoint Manager exposes for build identification). Used
@@ -32,14 +36,24 @@ export const useSystemStore = defineStore("system", () => {
   const restarting = ref(false);
   const restartError = ref<string | null>(null);
 
+  /** Which Manager answered the probe; picks the reboot route. */
+  let flavor: ManagerFlavor = "v3";
+
   async function detectRestartCapability(): Promise<void> {
     if (canRestart.value !== null) return;  // probe once per session
-    try {
-      const resp = await fetch("/manager/version", { method: "GET" });
-      canRestart.value = resp.ok;
-    } catch {
-      canRestart.value = false;
+    for (const f of ["v3", "v4"] as const) {
+      try {
+        const resp = await fetch(MANAGER_ROUTES[f].version, { method: "GET" });
+        if (resp.ok) {
+          flavor = f;
+          canRestart.value = true;
+          return;
+        }
+      } catch {
+        /* try the next Manager */
+      }
     }
+    canRestart.value = false;
   }
 
   const RESTART_HEAD_START_MS = 2000;
@@ -65,7 +79,7 @@ export const useSystemStore = defineStore("system", () => {
     restarting.value = true;
     restartError.value = null;
     try {
-      await fetch("/manager/reboot", { method: "POST" });
+      await fetch(MANAGER_ROUTES[flavor].reboot, { method: "POST" });
     } catch {
       /* expected — connection drops as server shuts down */
     }

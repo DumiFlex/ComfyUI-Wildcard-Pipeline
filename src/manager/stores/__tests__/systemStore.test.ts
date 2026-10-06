@@ -27,15 +27,41 @@ describe("systemStore", () => {
     expect(store.canRestart).toBe(true);
   });
 
+  it("detectRestartCapability finds the Manager built into ComfyUI and reboots through /v2", async () => {
+    const reloadMock = vi.fn();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...window.location, reload: reloadMock },
+    });
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url === "/manager/version") return Promise.resolve(new Response("", { status: 404 }));
+      if (url === "/v2/manager/version") return Promise.resolve(new Response("", { status: 200 }));
+      if (url === "/v2/manager/reboot") return Promise.reject(new Error("connection dropped"));
+      if (url === "/wp/api/database/config") return Promise.resolve(new Response("{}", { status: 200 }));
+      return Promise.reject(new Error("unexpected url " + url));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const store = useSystemStore();
+    await store.detectRestartCapability();
+    expect(store.canRestart).toBe(true);
+
+    const p = store.restart();
+    await vi.advanceTimersByTimeAsync(3000);
+    await p;
+    expect(fetchMock).toHaveBeenCalledWith("/v2/manager/reboot", { method: "POST" });
+    expect(fetchMock).not.toHaveBeenCalledWith("/manager/reboot", expect.anything());
+    expect(reloadMock).toHaveBeenCalled();
+  });
+
   it("detectRestartCapability sets canRestart=false on 404", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(new Response("", { status: 404 })));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 404 })));
     const store = useSystemStore();
     await store.detectRestartCapability();
     expect(store.canRestart).toBe(false);
   });
 
   it("detectRestartCapability sets canRestart=false on network error", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValueOnce(new Error("net")));
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("net")));
     const store = useSystemStore();
     await store.detectRestartCapability();
     expect(store.canRestart).toBe(false);

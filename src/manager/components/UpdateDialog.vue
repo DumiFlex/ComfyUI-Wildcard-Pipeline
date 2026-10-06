@@ -19,7 +19,7 @@ const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ (e: "close"): void }>();
 
 const { current, latestVersion, severity, releaseBody, releaseUrl } = useReleaseCheck();
-const { phase, errorKind, runUpdate, reboot, probe, managerUiUrl } = useComfyManagerUpdate();
+const { phase, errorKind, errorMessage, runUpdate, reboot, probe, managerUiUrl } = useComfyManagerUpdate();
 
 const availability = ref<ManagerAvailability | null>(null);
 
@@ -108,8 +108,15 @@ function onUpdateNow(): void {
         <p class="wpc-upd__fallback-body">
           {{ errorKind === "forbidden"
             ? "ComfyUI Manager blocked the in-app update (its security level). Update it from the Manager UI, or pull manually:"
-            : "Automatic update isn't available here. Update from the ComfyUI Manager UI, or pull manually:" }}
+            : errorKind === "not_applied"
+              ? "The update didn't apply. Update from the ComfyUI Manager UI, or pull manually:"
+              : "Automatic update isn't available here. Update from the ComfyUI Manager UI, or pull manually:" }}
         </p>
+        <p
+          v-if="phase === 'error' && errorMessage"
+          class="wpc-upd__fallback-body wpc-upd__error"
+          data-test="update-error"
+        >{{ errorMessage }}</p>
         <a class="wpc-upd__manager-link" :href="managerUiUrl" target="_blank" rel="noopener">Open ComfyUI Manager</a>
         <pre class="wpc-upd__cmd"><code>cd custom_nodes/ComfyUI-Wildcard-Pipeline
 git pull
@@ -120,7 +127,7 @@ git pull
         Update staged. Restart ComfyUI to apply.
       </p>
       <p v-else-if="phase === 'restarting'" class="wpc-upd__staged" data-test="update-restarting">
-        Restarting ComfyUI… reopen the browser tab in a moment.
+        Restarting ComfyUI… this page reloads once it is back.
       </p>
     </div>
 
@@ -168,6 +175,7 @@ git pull
 .wpc-upd__fallback-title { font-weight: 700; color: var(--wp-text); margin: 0; }
 .wpc-upd__more { margin: var(--wp-space-2) 0 0; font-size: var(--wp-text-xs); color: var(--wp-text-dim); }
 .wpc-upd__fallback-body { font-size: var(--wp-text-sm); color: var(--wp-text-muted); margin: 0; }
+.wpc-upd__error { color: var(--wp-warn, #f59e0b); }
 .wpc-upd__manager-link { font-size: var(--wp-text-sm); color: var(--wp-accent-text); text-decoration: none; }
 .wpc-upd__cmd { background: var(--wp-bg-1); border: 1px solid var(--wp-border); border-radius: var(--wp-radius); padding: var(--wp-space-3); font-size: var(--wp-text-sm); overflow-x: auto; margin: 0; }
 .wpc-upd__staged { font-size: var(--wp-text-sm); color: var(--wp-accent-text); margin: 0; }
