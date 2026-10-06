@@ -9,6 +9,7 @@ import {
 } from "../../widgets/_shared";
 import { type ResolvedValue } from "../../widgets/richTokenize";
 import { scanConflicts, labelFor as conflictLabelFor, shortConflictLabel, type Conflict } from "../../extension/conflicts";
+import { computeConstraintDeadEnds } from "../../extension/constraint-dead-ends";
 import type { ChainModule, PairingBadge, RowPairings } from "../../extension/constraint-pairs";
 import { baseCodename } from "../../extension/node-codename";
 import { derivationTargets } from "../../extension/derivation-conditions";
@@ -2224,6 +2225,20 @@ watch(() => props.initialJson, (raw) => {
   value.value = next.value;
 });
 
+// Constraints that can leave a target with nothing to pick (no fallback).
+// Cross-node: reads the flattened chain + reach coverage, keyed back to this
+// node's `_uid`s. Its own computed so a conflict-free edit elsewhere in the
+// widget doesn't redo the option × option walk.
+const deadEndsByUid = computed<Map<string, string[]>>(() => {
+  const out = new Map<string, string[]>();
+  if (!props.chainModules?.length || !props.pairings?.size) return out;
+  const prefix = `${props.nodeId}#`;
+  for (const [rowKey, d] of computeConstraintDeadEnds(props.chainModules, props.pairings)) {
+    if (rowKey.startsWith(prefix)) out.set(rowKey.slice(prefix.length), d.sourceValues);
+  }
+  return out;
+});
+
 const conflicts = computed<Conflict[]>(() => {
   // scanConflicts internally skips per-module via isModuleEffectivelyEnabled
   // (handles both child.enabled=false AND bundle.enabled=false). Passing the
@@ -2253,6 +2268,7 @@ const conflicts = computed<Conflict[]>(() => {
     // Live-library uuids — a nested @{} ref to any of these resolves at run
     // time (DB-expanded catalog), so it must not read as a broken ref.
     new Set(Object.keys(libraryHashes.value ?? {})),
+    deadEndsByUid.value,
   );
   // Filter by user's validation-strictness preference. The accessor
   // reads from the same module-level state map the panel onChange
@@ -2354,6 +2370,9 @@ function conflictTooltip(id: string): string {
     if (c.type.startsWith("constraint_")) {
       const name = lookupSiblingName(c.variable);
       const display = name ?? c.variable;
+      if (c.type === "constraint_excludes_all" && c.detail) {
+        return `${conflictLabelFor(c.type)}: $${display} when the source picks ${c.detail}`;
+      }
       return `${conflictLabelFor(c.type)}: $${display}`;
     }
     return `${conflictLabelFor(c.type)}: $${c.variable}`;

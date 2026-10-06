@@ -138,13 +138,38 @@ export function pairingMapEqual(
   return true;
 }
 
+/** The extra fields `computeConstraintDeadEnds` depends on. Constraints
+ *  are small; for wildcards only weights, tags and the fallback flag. */
+function deadEndSig(m: ChainModule): string {
+  const p = m.payload as {
+    options?: Array<{ weight?: unknown; fallback?: unknown; sub_categories?: unknown }>;
+    matrix?: unknown;
+    exceptions?: unknown;
+    source_wildcard_id?: unknown;
+    target_wildcard_id?: unknown;
+    tag_group_kinds?: unknown;
+  };
+  const head = `${m.enabled === false ? 0 : 1}|${m.instance ? JSON.stringify(m.instance) : ""}`;
+  if (m.type === "constraint") {
+    return `${head}|${JSON.stringify([p.source_wildcard_id, p.target_wildcard_id, p.matrix, p.exceptions])}`;
+  }
+  if (m.type !== "wildcard" || !Array.isArray(p.options)) return head;
+  const opts = p.options
+    .map((o) => `${String(o?.weight ?? "")}${o?.fallback === true ? "!" : ""}:${
+      Array.isArray(o?.sub_categories) ? o.sub_categories.join(",") : ""}`)
+    .join(";");
+  return `${head}|${opts}|${p.tag_group_kinds ? JSON.stringify(p.tag_group_kinds) : ""}`;
+}
+
 /** Per-entry fingerprint for the cross-node chain gate. Only the fields
  *  the constraint modal reads off a `ChainModule` participate — id, type,
  *  display name, and the wildcard-resolution payload bits (var_binding,
  *  sub_categories, option values + ids). Cheaper + more churn-stable than
  *  deep-equal on the whole payload, while still flipping when an edit the
  *  modal can observe lands. Mirrors the gating discipline the other
- *  chain-derived polls use. */
+ *  chain-derived polls use. The `deadEndSig` part covers what the
+ *  constraint dead-end check reads (weights, fallback, tags, matrix,
+ *  instance overrides), so an edit in another node re-checks it. */
 function chainModuleSig(m: ChainModule): string {
   const p = m.payload as {
     var_binding?: unknown;
@@ -163,6 +188,7 @@ function chainModuleSig(m: ChainModule): string {
     typeof p.var_binding === "string" ? p.var_binding : "",
     subs,
     opts,
+    deadEndSig(m),
   ].join("");
 }
 

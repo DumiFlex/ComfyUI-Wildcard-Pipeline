@@ -136,6 +136,8 @@ export function collectFullChainModules(
         payload: effectiveChainPayload(m),
         displayName: m.meta?.name,
         nodeLabel,
+        instance: (m.instance ?? null) as Record<string, unknown> | null,
+        enabled: m.enabled !== false,
       });
     }
   }
@@ -150,6 +152,8 @@ export function collectFullChainModules(
       payload: effectiveChainPayload(m),
       displayName: m.meta?.name,
       nodeLabel: ownLabel,
+      instance: (m.instance ?? null) as Record<string, unknown> | null,
+      enabled: m.enabled !== false,
     });
   }
 
@@ -164,6 +168,8 @@ export function collectFullChainModules(
         payload: effectiveChainPayload(m),
         displayName: m.meta?.name,
         nodeLabel,
+        instance: (m.instance ?? null) as Record<string, unknown> | null,
+        enabled: m.enabled !== false,
       });
     }
   }

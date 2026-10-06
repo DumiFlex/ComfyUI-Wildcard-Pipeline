@@ -209,6 +209,13 @@ const reachModes = [
         doing nothing. Separately, a constraint that reaches fewer instances than a Next N / Pick
         selector asked for is noted as a partial reach.
       </DocCallout>
+      <DocCallout variant="warn">
+        A constraint can also rule out <em>every</em> option of its target for some source value
+        (each one excluded, shut out by an Only rule, or weighted 0). If the target has no fallback
+        it would come out empty, so the constraint row gets a <b>rules out all</b> badge before you
+        run; hover it to see which source values do it. Allow an option for those values, or mark
+        one of the target's options as its fallback.
+      </DocCallout>
       <DocCallout variant="tip">
         You can still add multiple Constraint modules for the same source→target pair — one per
         distinct rule — and give each its own reach. Stack position plus each module's reach decide

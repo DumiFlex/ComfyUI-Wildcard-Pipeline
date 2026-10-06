@@ -145,6 +145,10 @@ export type ConflictType =
   | "constraint_source_missing"
   | "constraint_target_missing"
   | "constraint_orphan_source"   // no source instance upstream
+  // Some source pick gives every live target option weight 0 and the target
+  // has no fallback, so the target binds nothing (`constraint-dead-ends.ts`).
+  // Mirrors the runtime `constraint_excludes_all_options` warning, before a run.
+  | "constraint_excludes_all"
   | "constraint_orphan_target"   // SP3 reach model: this constraint's
                                   //  `target_select` reach covers ZERO
                                   //  reachable downstream target instances.
@@ -168,6 +172,9 @@ export interface Conflict {
   variable: string;
   type: ConflictType;
   severity: Severity;
+  /** Optional extra for the tooltip (e.g. the source values behind a
+   *  `constraint_excludes_all`). */
+  detail?: string;
 }
 
 /** Canonical label per ConflictType. Use this everywhere conflict text
@@ -188,6 +195,7 @@ export function labelFor(type: ConflictType): string {
   if (type === "constraint_target_missing") return "target missing";
   if (type === "constraint_orphan_source") return "source missing — no upstream instance";
   if (type === "constraint_orphan_target") return "target missing — no available instance downstream";
+  if (type === "constraint_excludes_all") return "can rule out every option of the target, and it has no fallback";
   if (type === "injector_binding_missing") return "no binding";
   if (type === "wildcard_broken_nested_ref") return "broken ref";
   if (type === "derivation_broken_nested_ref") return "broken ref";
@@ -209,6 +217,7 @@ export function shortConflictLabel(type: ConflictType): string {
     case "constraint_target_missing":   return "tgt missing";
     case "constraint_orphan_source":    return "no src upstream";
     case "constraint_orphan_target":    return "no tgt downstream";
+    case "constraint_excludes_all":     return "rules out all";
     case "injector_binding_missing":    return "no binding";
     case "wildcard_broken_nested_ref":  return "broken ref";
     case "derivation_broken_nested_ref": return "broken ref";
@@ -492,6 +501,10 @@ export function scanConflicts(
   // Constraint TARGET reachability deliberately stays chain-only (a constraint
   // needs a downstream instance to re-weight — library presence isn't enough).
   knownLibraryUuids: ReadonlySet<string> = new Set(),
+  // Per-constraint `_uid` → source values that leave a covered target with
+  // nothing to pick (`computeConstraintDeadEnds`, cross-node). Empty map =
+  // no `constraint_excludes_all` checks (e.g. the subgraph-badge path).
+  deadEndsByUid: ReadonlyMap<string, readonly string[]> = new Map(),
 ): Conflict[] {
   const upstream = new Set(upstreamVars);
   const upstreamUuids = new Set(upstreamWildcardUuids);
@@ -874,6 +887,17 @@ export function scanConflicts(
             type: "constraint_orphan_target",
             severity: "warning",
           });
+        } else {
+          const dead = deadEndsByUid.get((m._uid ?? m.id) as string);
+          if (dead && dead.length) {
+            out.push({
+              moduleId: m._uid ?? m.id,
+              variable: tgtId,
+              type: "constraint_excludes_all",
+              severity: "warning",
+              detail: dead.join(", "),
+            });
+          }
         }
       }
     }
