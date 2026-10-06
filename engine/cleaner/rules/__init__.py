@@ -12,14 +12,21 @@ from collections.abc import Callable
 from engine.cleaner.rules import (
     blocklist,
     dedupe,
+    lora,
     punctuation,
+    syntax,
     whitespace,
 )
 from engine.cleaner.types import RuleId, RuleResult
 
 ApplyFn = Callable[[str, str, dict], RuleResult]
 
+# The bracket and LoRA rules run first: the commas and spaces they leave
+# behind are then tidied by whitespace / punctuation in the same run.
 RULE_REGISTRY: list[tuple[RuleId, ApplyFn]] = [
+    ("empty_groups", syntax.apply_empty_groups),
+    ("merge_weights", syntax.apply_merge_weights),
+    ("lora_spacing", lora.apply),
     ("whitespace", whitespace.apply),
     ("punctuation", punctuation.apply),
     ("dedupe_exact", dedupe.apply_exact),

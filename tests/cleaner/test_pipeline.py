@@ -12,7 +12,9 @@ def test_gentle_runs_only_whitespace():
 def test_balanced_runs_default_rules():
     out = PromptCleaner().run("foo, foo, bar", {"mode": "tags", "intensity": "balanced"})
     assert out["text"] == "foo, bar"
-    assert set(out["report"].keys()) == {"whitespace", "punctuation", "dedupe_exact"}
+    assert set(out["report"].keys()) == {
+        "empty_groups", "lora_spacing", "whitespace", "punctuation", "dedupe_exact",
+    }
 
 
 def test_aggressive_runs_all_non_blocklist_rules():
@@ -93,9 +95,38 @@ def test_count_chars_basic():
 
 def test_intensity_map():
     assert set(INTENSITY_TO_RULES.keys()) == {"gentle", "balanced", "aggressive"}
+    assert INTENSITY_TO_RULES["gentle"] == ["whitespace"]
+    assert INTENSITY_TO_RULES["balanced"] == [
+        "empty_groups", "lora_spacing", "whitespace", "punctuation", "dedupe_exact",
+    ]
     assert INTENSITY_TO_RULES["aggressive"] == [
+        "empty_groups", "merge_weights", "lora_spacing",
         "whitespace", "punctuation", "dedupe_exact", "fuzzy_dedupe",
     ]
+
+
+def test_registry_runs_bracket_rules_before_whitespace():
+    from engine.cleaner.rules import RULE_REGISTRY
+
+    order = [rid for rid, _ in RULE_REGISTRY]
+    assert order[:4] == ["empty_groups", "merge_weights", "lora_spacing", "whitespace"]
+
+
+def test_balanced_cleans_empty_groups_and_lora_spacing_but_keeps_weights():
+    out = PromptCleaner().run(
+        "red (), ((a:1.1):1.2), girl<lora:x : 0.8>",
+        {"mode": "tags", "intensity": "balanced"},
+    )
+    assert out["text"] == "red, ((a:1.1):1.2), girl <lora:x:0.8>"
+
+
+def test_aggressive_merges_weights_too():
+    out = PromptCleaner().run(
+        "red (), ((a:1.1):1.2), (:1.3)",
+        {"mode": "text", "intensity": "aggressive"},
+    )
+    assert out["text"] == "red, (a:1.32)"
+    assert out["report"]["merge_weights"] == {"merged": 1}
 
 
 # ── send-to-negative: the negative column ───────────────────────────────

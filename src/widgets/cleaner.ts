@@ -97,7 +97,7 @@ export function create(node: CleanerHostNode, inputName: string) {
   const host = createDomWidgetHost(node, inputName, wrapper, {
     initialValue: serializeWidgetJson(config.value),
     // Initial floor sized to fit the typical content footprint (header +
-    // intensity segment + 5 rule rows + blocklist button). ResizeObserver
+    // intensity segment + rule rows + blocklist button). ResizeObserver
     // grows the host above this when content asks for more, but
     // autoHeight stays OFF so the user's manual drag-taller persists
     // across workflow runs (default delta-check policy).

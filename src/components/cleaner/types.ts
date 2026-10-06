@@ -1,5 +1,8 @@
 /** Canonical rule ids. Must stay in sync with engine/cleaner/types.py:RuleId. */
 export type RuleId =
+  | "empty_groups"
+  | "merge_weights"
+  | "lora_spacing"
   | "whitespace"
   | "punctuation"
   | "dedupe_exact"

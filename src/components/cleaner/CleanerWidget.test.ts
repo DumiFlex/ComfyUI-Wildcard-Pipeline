@@ -21,7 +21,7 @@ describe("CleanerWidget", () => {
     expect(w.find('[data-test="cleaner-intensity-gentle"]').exists()).toBe(true);
     expect(w.find('[data-test="cleaner-intensity-balanced"]').exists()).toBe(true);
     expect(w.find('[data-test="cleaner-intensity-aggressive"]').exists()).toBe(true);
-    expect(w.findAll('[data-test^="cleaner-rule-"]:not([data-test$="-stat"])')).toHaveLength(5);
+    expect(w.findAll('[data-test^="cleaner-rule-"]:not([data-test$="-stat"])')).toHaveLength(8);
   });
 
   it("CUSTOM badge marked visible when modified", () => {
@@ -62,6 +62,29 @@ describe("CleanerWidget", () => {
     });
     expect(w.find('[data-test="cleaner-rule-whitespace-stat"]').text()).toContain("3");
     expect(w.find('[data-test="cleaner-rule-dedupe_exact-stat"]').text()).toContain("1");
+  });
+
+  it("shows counts for the bracket and LoRA rules", () => {
+    const w = mount(CleanerWidget, {
+      props: makeProps({ intensity: "aggressive" }, {
+        lastRunReport: {
+          empty_groups: { removed: 2 },
+          merge_weights: { merged: 1 },
+          lora_spacing: { tidied: 4 },
+        },
+      }),
+    });
+    expect(w.find('[data-test="cleaner-rule-empty_groups-stat"]').text()).toBe("2");
+    expect(w.find('[data-test="cleaner-rule-merge_weights-stat"]').text()).toBe("1");
+    expect(w.find('[data-test="cleaner-rule-lora_spacing-stat"]').text()).toBe("4");
+  });
+
+  it("merge weights is off on balanced and on for aggressive", () => {
+    const balanced = mount(CleanerWidget, { props: makeProps() });
+    expect(balanced.find('[data-test="cleaner-rule-merge_weights"]').classes()).not.toContain("is-on");
+    expect(balanced.find('[data-test="cleaner-rule-empty_groups"]').classes()).toContain("is-on");
+    const aggressive = mount(CleanerWidget, { props: makeProps({ intensity: "aggressive" }) });
+    expect(aggressive.find('[data-test="cleaner-rule-merge_weights"]').classes()).toContain("is-on");
   });
 
   it("blocklist button shows entry count when populated", () => {
