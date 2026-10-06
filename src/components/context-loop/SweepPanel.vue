@@ -349,5 +349,6 @@ function moveAxis(uid: string, dir: -1 | 1): void {
   font: 10.5px var(--wp-font-sans, sans-serif);
 }
 .wp-sweep__add { width: 100%; padding: 4px 5px; cursor: pointer; }
-.wp-sweep__limit { width: 64px; padding: 2px 5px; text-align: right; font-family: var(--wp-font-mono, monospace); }
+.wp-sweep__limit { width: 64px; padding: 2px 5px; text-align: right; font-family: var(--wp-font-mono, monospace); -moz-appearance: textfield; appearance: textfield; }
+.wp-sweep__limit::-webkit-outer-spin-button, .wp-sweep__limit::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 </style>
