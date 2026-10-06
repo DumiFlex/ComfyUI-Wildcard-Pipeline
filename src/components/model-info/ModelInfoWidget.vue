@@ -194,9 +194,10 @@ function resetRules(): void {
             :data-test="`mi-value-${row.key}`"
           >{{ row.value || row.hint }}</span>
           <span class="wp-mi__source" :class="{ 'is-pinned': isPinned(row.key) }">{{ row.source }}</span>
+          <span class="wp-mi__actions">
           <button
             type="button"
-            class="wp-mi__pin wp-mi__globe"
+            class="wp-btn--icon-sm wp-btn--accent"
             :class="{ 'is-active': isInternal(row.key) }"
             :title="isInternal(row.key) ? `Internal: hidden from the Assembler. Click to show ${row.variable}` : `Shown in the Assembler. Click to hide ${row.variable}`"
             :aria-pressed="isInternal(row.key)"
@@ -205,13 +206,14 @@ function resetRules(): void {
           ><i class="pi pi-globe" aria-hidden="true" /></button>
           <button
             type="button"
-            class="wp-mi__pin"
-            :class="{ 'is-active': isPinned(row.key) }"
+            class="wp-btn--icon-sm wp-btn--warn"
+            :class="{ 'is-locked': isPinned(row.key) }"
             :title="isPinned(row.key) ? 'Unpin: detect it again' : `Pin ${row.variable} to a value of your own`"
             :aria-pressed="isPinned(row.key)"
             :data-test="`mi-pin-${row.key}`"
             @click="startPin(row)"
           ><i class="pi pi-thumbtack" aria-hidden="true" /></button>
+          </span>
         </div>
       </div>
     </section>
@@ -262,11 +264,11 @@ function resetRules(): void {
           >
           <button
             type="button"
-            class="wp-mi__rule-remove"
+            class="wp-btn--icon-sm wp-btn--danger"
             title="Remove this rule"
             :data-test="`mi-rule-remove-${i}`"
             @click="removeRule(i)"
-          ><i class="pi pi-times" aria-hidden="true" /></button>
+          ><i class="pi pi-trash" aria-hidden="true" /></button>
         </div>
         <div v-if="modelValue.rules.length === 0" class="wp-mi__ghost">
           No rules, so $model_variant stays empty unless pinned.
@@ -280,7 +282,10 @@ function resetRules(): void {
 </template>
 
 <style scoped>
-/* Same flat layout and tokens as the Cleaner / Seed List widgets. */
+/* Icon buttons come from the shared row primitives, same as the Injector
+   and module rows. Layout and tokens follow the Cleaner / Seed List. */
+@import "../shared/row-primitives.css";
+
 .wp-mi {
   display: flex;
   flex-direction: column;
@@ -328,7 +333,7 @@ function resetRules(): void {
 }
 .wp-mi__var {
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) auto 20px 20px;
+  grid-template-columns: 52px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 8px;
   min-height: 22px;
@@ -336,6 +341,8 @@ function resetRules(): void {
   border-radius: 3px;
 }
 .wp-mi__var:hover { background: var(--wp-row-hover, var(--wp-bg2)); }
+/* Same 1px spacing as the Injector's row actions. */
+.wp-mi__actions { display: flex; gap: 1px; }
 .wp-mi__var-name {
   font: 10px var(--wp-font-sans, sans-serif);
   color: var(--wp-text-muted, var(--wp-text2));
@@ -371,26 +378,6 @@ function resetRules(): void {
   white-space: nowrap;
 }
 .wp-mi__source.is-pinned { color: var(--wp-amber, var(--wp-warn, #fbbf24)); }
-.wp-mi__pin {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  background: transparent;
-  border: 0;
-  border-radius: 3px;
-  color: var(--wp-text-dim, var(--wp-text3));
-  cursor: pointer;
-  opacity: 0.55;
-}
-.wp-mi__var:hover .wp-mi__pin { opacity: 1; }
-.wp-mi__pin:hover { color: var(--wp-text); background: var(--wp-bg2, rgba(255, 255, 255, 0.06)); }
-.wp-mi__pin.is-active { opacity: 1; color: var(--wp-amber, var(--wp-warn, #fbbf24)); }
-/* Same accent "globe on = internal" read as the Injector rows. */
-.wp-mi__globe.is-active { color: var(--wp-accent-text, var(--wp-accent)); }
-.wp-mi__pin .pi { font-size: 10px; }
-
 /* VARIANT RULES */
 .wp-mi__rules { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; }
 .wp-mi__rule {
@@ -426,23 +413,6 @@ function resetRules(): void {
 .wp-mi__rule-pattern:focus { border-color: var(--wp-accent); }
 .wp-mi__rule.is-problem .wp-mi__rule-variant,
 .wp-mi__rule.is-problem .wp-mi__rule-pattern { border-color: var(--wp-danger, #ef4444); }
-.wp-mi__rule-remove {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  background: transparent;
-  border: 0;
-  border-radius: 3px;
-  color: var(--wp-text-dim, var(--wp-text3));
-  cursor: pointer;
-  opacity: 0;
-}
-.wp-mi__rule:hover .wp-mi__rule-remove,
-.wp-mi__rule-remove:focus-visible { opacity: 1; }
-.wp-mi__rule-remove:hover { color: var(--wp-danger, #ef4444); }
-.wp-mi__rule-remove .pi { font-size: 9px; }
 .wp-mi__ghost {
   padding: 6px 4px;
   font-size: 10px;

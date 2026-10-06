@@ -73,6 +73,14 @@ class WPModelInfo(io.ComfyNode):
         )
 
     @classmethod
+    def fingerprint_inputs(cls, **kwargs):
+        """Always run. The node is cheap, and a cached run sends no UI payload,
+        so the widget's family would read "after a run" after every run whose
+        inputs matched the last one. NaN never equals itself, so the cache
+        never matches."""
+        return float("nan")
+
+    @classmethod
     def execute(
         cls,
         upstream: PipelineContext | None = None,

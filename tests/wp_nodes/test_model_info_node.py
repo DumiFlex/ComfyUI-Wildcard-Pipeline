@@ -48,6 +48,11 @@ def test_schema():
     assert [i.name for i in s.inputs] == ["upstream", "model", "wp_model_info"]
 
 
+def test_never_cached():
+    fp = WPModelInfo.fingerprint_inputs()
+    assert fp != fp  # NaN, so ComfyUI re-runs it and the widget hears the result
+
+
 def test_detects_family_variant_and_name_from_loader():
     out = _run(model=_model(SDXL))
     payload = out.values[0]
