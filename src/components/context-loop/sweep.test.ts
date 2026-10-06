@@ -180,6 +180,11 @@ describe("SweepPanel", () => {
     (lim.element as HTMLInputElement).value = "5000";
     await lim.trigger("change");
     expect(lastEmit(w).limit).toBe(999);
+    await w.find('[data-test="sweep-limit-up"]').trigger("click");
+    expect(lastEmit(w).limit).toBe(65);
+    await w.setProps({ modelValue: { ...on([]), limit: 1 } });
+    await w.find('[data-test="sweep-limit-down"]').trigger("click");
+    expect(lastEmit(w).limit).toBe(1);
     await w.find('[data-test="sweep-hold-toggle"]').trigger("click");
     expect(lastEmit(w).hold_others).toBe(false);
   });
