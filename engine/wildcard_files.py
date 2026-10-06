@@ -126,8 +126,25 @@ _LOSSY_KINDS = frozenset({
 })
 _CLOSE_KINDS = frozenset({
     "default_params_dropped", "label_dropped", "extra_else_dropped",
-    "inline_else_dropped", "multi_pick_range_capped",
+    "inline_else_dropped", "multi_pick_range_capped", "merged_fallback_dropped",
 })
+
+# Merging: a folder of small related lists (hair/colors/red.txt,
+# hair/colors/blonde.txt, …) becomes ONE wildcard whose options carry the
+# list names as tags, like a hand-built wildcard with tag groups. A folder
+# merges when it holds at least two lists, at most this many options in
+# total and at most this many folder levels below it.
+MERGE_MAX_OPTIONS = 1000
+MERGE_MAX_DEPTH = 3
+
+_GENDER_TAGS = frozenset({
+    "male", "female", "man", "woman", "men", "women", "boy", "girl", "boys",
+    "girls", "masculine", "feminine", "unisex", "neutral", "androgynous",
+})
+
+# `@{id#name}` / `@{id#name:expr}` as the converter writes them. Names
+# never hold `}` or `:` (_NAME_FORBIDDEN), so the match can't overrun.
+_OWN_REF_RE = re.compile(r"@\{([0-9a-f]{8})#([^}:]*)(?::([^}]*))?\}")
 
 
 @dataclass
@@ -158,6 +175,22 @@ class _Group:
     display: str
     id: str = ""
     name: str = ""
+
+
+@dataclass
+class _Merge:
+    """Lists folded into one tagged wildcard. ``root`` is the folder's
+    display path; each member's options carry one tag per path segment
+    below it (``female/footwear`` → ``female``, ``footwear``), and
+    ``expr`` is the filter that picks exactly that member's options."""
+
+    root: str
+    members: list[_Wildcard]
+    id: str = ""
+    name: str = ""
+    expr: dict[str, str] = field(default_factory=dict)
+    member_tags: dict[str, list[str]] = field(default_factory=dict)
+    tag_groups: dict[str, list[str]] = field(default_factory=dict)
 
 
 class _Report:
@@ -412,6 +445,8 @@ def convert_files(
     exclude: set[str] | None = None,
     make_bundles: bool = True,
     pack_name: str | None = None,
+    merge: bool = True,
+    keep_separate: set[str] | None = None,
 ) -> dict[str, Any]:
     """Convert wildcard files into ``{"payload": envelope, "report": …}``.
 
@@ -422,7 +457,10 @@ def convert_files(
     ``exclude`` lists file paths (as the report names them) to leave out.
     ``make_bundles`` also files the wildcards into bundles: one inner
     bundle per top folder (or top YAML key), inside one pack bundle named
-    ``pack_name`` — our one level of bundle nesting.
+    ``pack_name`` — our one level of bundle nesting. ``merge`` folds
+    folders of related lists into one tagged wildcard each (see
+    :func:`_choose_merges`); ``keep_separate`` lists folders (as the plan
+    names them) whose lists stay one wildcard each.
     """
     report = _Report()
     wildcards: list[_Wildcard] = []
@@ -462,13 +500,39 @@ def convert_files(
         grp.id = _unique_id(_short_hash("group", grp.pattern), used_ids)
         grp.name = _display_name(grp.display)
 
+    merges = _choose_merges(wildcards, ctx, keep_separate or set()) if merge else []
+    for m in merges:
+        m.id = _unique_id(_short_hash("merge", _norm(m.root)), used_ids)
+        m.name = _display_name(m.root)
+        _tag_merge(m, ctx)
+    retarget = {_norm(w.path): (m, m.expr[_norm(w.path)]) for m in merges for w in m.members}
+    collapsed = _collapse_groups(merges, ctx)
+
     # Options are converted before group ids exist; patch the placeholders.
-    placeholders = {f"\x00group:{p}\x00": g for p, g in ctx.groups.items()}
+    placeholders = {
+        f"\x00group:{p}\x00": collapsed.get(p) or f"@{{{g.id}#{g.name}}}"
+        for p, g in ctx.groups.items()
+    }
+    by_id = {w.id: _norm(w.path) for w in wildcards}
+
+    def point(value: str) -> str:
+        """Re-aim a reference to a merged list at the merged wildcard,
+        filtered by the list's tag."""
+        def sub(mm: re.Match[str]) -> str:
+            hit = retarget.get(by_id.get(mm.group(1), ""))
+            if hit is None:
+                return mm.group(0)
+            m, own = hit
+            expr = own if not mm.group(3) else f"{own} and ({mm.group(3)})"
+            return f"@{{{m.id}#{m.name}:{expr}}}"
+        return _OWN_REF_RE.sub(sub, value) if retarget else value
+
     for wc in wildcards:
         for opt in wc.options:
             if "\x00group:" in opt["value"]:
-                for ph, grp in placeholders.items():
-                    opt["value"] = opt["value"].replace(ph, f"@{{{grp.id}#{grp.name}}}")
+                for ph, ref in placeholders.items():
+                    opt["value"] = opt["value"].replace(ph, ref)
+            opt["value"] = point(opt["value"])
 
     categories: dict[str, dict[str, Any]] = {}
 
@@ -494,6 +558,8 @@ def convert_files(
         if not wc.options:
             report.note("empty_wildcard", wc.path, "no usable values")
             continue
+        if _norm(wc.path) in retarget:
+            continue
         description = f"Imported from {wc.source}"
         comments = wc.comments + ctx.comments.get(wc.path, [])
         if comments:
@@ -507,13 +573,19 @@ def convert_files(
                 "options": wc.options,
             },
         ))
+    for m in merges:
+        rows.append(_merge_row(m, category_for(m.members[0].path), tags, ctx))
     kept = {r["id"] for r in rows}
     for grp in ctx.groups.values():
-        members = [m for m in grp.members if m.id in kept]
+        if grp.pattern in collapsed:
+            continue
+        members = [
+            m for m in grp.members if m.id in kept or _norm(m.path) in retarget
+        ]
         options = [
             {
                 "id": _short_hash(grp.pattern, m.id),
-                "value": f"@{{{m.id}#{m.name}}}",
+                "value": point(f"@{{{m.id}#{m.name}}}"),
                 # Weight by pool size so the odds match the source tool,
                 # which flattens every matched file into one list.
                 "weight": max(1, sum(1 for o in m.options if not o.get("is_null"))),
@@ -536,7 +608,7 @@ def convert_files(
 
     group_ids = {g.id for g in ctx.groups.values()}
     group_rows = sum(1 for r in rows if r["id"] in group_ids)
-    plan = _plan(rows, wildcards, ctx)
+    plan = _plan(rows, wildcards, ctx, merges, collapsed)
     entry_ids = {p["id"] for p in plan if p["role"] == "entry"}
     entries = [r for r in rows if r["id"] in entry_ids]
     bundles = _build_bundles(entries, used_ids, tags, pack_name) if make_bundles else []
@@ -566,6 +638,8 @@ def convert_files(
             "groups": group_rows,
             "options": sum(len(r["payload"]["options"]) for r in rows),
             "bundles": len(bundles),
+            "merged": len(merges),
+            "merged_lists": sum(len(m.members) for m in merges),
             "plan": plan,
         },
     }
@@ -573,6 +647,7 @@ def convert_files(
 
 def _plan(
     rows: list[dict[str, Any]], wildcards: list[_Wildcard], ctx: _Ctx,
+    merges: list[_Merge] | None = None, collapsed: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """One entry per imported row: its role in the pack and how
     faithfully it came across.
@@ -581,22 +656,21 @@ def _plan(
     (references other wildcards and is referenced itself), ``entry``
     (references others and nothing in the pack references it: what a
     user drops on a Context) and ``group`` (generated for a glob or a
-    parent key).
+    parent key). A merged wildcard takes the role its lists add up to
+    and lists them in ``merged_from``.
     """
     by_id = {w.id: w for w in wildcards}
-    referenced: dict[str, int] = {}
-    for targets in ctx.edges.values():
-        for t in targets:
-            referenced[t] = referenced.get(t, 0) + 1
+    referenced = _referenced(ctx)
     group_by_id = {g.id: g for g in ctx.groups.values()}
-    for g in ctx.groups.values():
-        for m in g.members:
-            key = _norm(m.path)
-            referenced[key] = referenced.get(key, 0) + 1
+    merge_by_id = {m.id: m for m in merges or []}
     out: list[dict[str, Any]] = []
     for row in rows:
         wc = by_id.get(row["id"])
         grp = group_by_id.get(row["id"])
+        mrg = merge_by_id.get(row["id"])
+        if mrg is not None:
+            out.append(_merge_plan(row, mrg, ctx, referenced, collapsed or {}))
+            continue
         if grp is not None:
             path, key = grp.display, grp.pattern
             role, refs = "group", len(row["payload"]["options"])
@@ -631,6 +705,345 @@ def _plan(
             "source": wc.source if wc is not None else "",
         })
     return out
+
+
+def _merge_plan(
+    row: dict[str, Any], m: _Merge, ctx: _Ctx, referenced: dict[str, int],
+    collapsed: dict[str, str],
+) -> dict[str, Any]:
+    keys = {_norm(w.path) for w in m.members}
+    refs = sum(ctx.ref_counts.get(k, 0) for k in keys)
+    inside = sum(
+        1 for src, targets in ctx.edges.items() if src in keys
+        for t in targets if t in keys
+    )
+    from_groups = sum(
+        referenced.get(p, 0) for p, ref in collapsed.items() if f"@{{{m.id}#" in ref
+    )
+    by_ref = sum(referenced.get(k, 0) for k in keys) - inside + from_groups
+    if refs == 0:
+        role = "vocabulary"
+    elif by_ref:
+        role = "composition"
+    else:
+        role = "entry"
+    kinds: set[str] = set()
+    notes: list[dict[str, str]] = []
+    for w in m.members:
+        kinds |= ctx.report.kinds_by_wildcard.get(w.path, set())
+        for n in ctx.report.by_wildcard.get(w.path, []):
+            if len(notes) < _MAX_WILDCARD_NOTES:
+                rel = w.path[len(m.root) + 1:]
+                notes.append({"kind": n["kind"], "detail": f"{rel}: {n['detail']}"})
+    fidelity = (
+        "lossy" if kinds & _LOSSY_KINDS else "close" if kinds & _CLOSE_KINDS else "exact"
+    )
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "domain": m.root.split("/", 1)[0] if "/" in m.root else "",
+        "role": role,
+        "options": len(row["payload"]["options"]),
+        "refs": refs,
+        "referenced_by": by_ref,
+        "fidelity": fidelity,
+        "notes": notes,
+        "source": m.members[0].source,
+        "merge_root": m.root,
+        "merged_from": [
+            {
+                "name": w.path[len(m.root) + 1:],
+                "tag": m.expr[_norm(w.path)],
+                "options": len(w.options),
+            }
+            for w in m.members
+        ],
+        "tag_groups": [
+            {"name": g, "tags": len(t)} for g, t in m.tag_groups.items()
+        ],
+    }
+
+
+def _referenced(ctx: _Ctx) -> dict[str, int]:
+    """How many references point at each wildcard (by normalised path)
+    or group pattern; membership of a group counts as one."""
+    out: dict[str, int] = {}
+    for targets in ctx.edges.values():
+        for t in targets:
+            out[t] = out.get(t, 0) + 1
+    for g in ctx.groups.values():
+        for m in g.members:
+            key = _norm(m.path)
+            out[key] = out.get(key, 0) + 1
+    return out
+
+
+def _choose_merges(
+    wildcards: list[_Wildcard], ctx: _Ctx, keep_separate: set[str],
+) -> list[_Merge]:
+    """Pick the folders whose lists become one tagged wildcard.
+
+    Walks each top folder downwards and merges the highest folder that
+    holds at least two lists, at most :data:`MERGE_MAX_OPTIONS` options
+    and at most :data:`MERGE_MAX_DEPTH` levels; a folder too big for that
+    is split into its subfolders, and the lists sitting directly in it
+    merge on their own. Left out: entry points (what a user drops on a
+    Context, so they stay one module each), lists that reference
+    themselves, folders that are also a list's name, and any folder in
+    ``keep_separate`` (with everything below it).
+    """
+    referenced = _referenced(ctx)
+    blocked = {_norm(k) for k in keep_separate if k.strip()}
+    names = {_norm(w.path) for w in wildcards}
+
+    def eligible(w: _Wildcard) -> bool:
+        key = _norm(w.path)
+        if not w.options or "/" not in key:
+            return False
+        if any(key.startswith(b + "/") or key == b for b in blocked):
+            return False
+        if ctx.ref_counts.get(key, 0) and not referenced.get(key):
+            return False  # an entry point
+        own = f"@{{{w.id}#"
+        return not any(own in o["value"] for o in w.options)
+
+    tree: dict[str, list[_Wildcard]] = {}
+    for w in wildcards:
+        if not eligible(w):
+            continue
+        parts = _norm(w.path).split("/")
+        for i in range(1, len(parts)):
+            tree.setdefault("/".join(parts[:i]), []).append(w)
+
+    merges: list[_Merge] = []
+    done: set[str] = set()
+
+    def depth(w: _Wildcard) -> int:
+        return _norm(w.path).count("/") + 1
+
+    def take(node: str, lists: list[_Wildcard]) -> None:
+        # Start at the deepest folder the lists share: a level every
+        # list has in common would be a tag on every option.
+        segs = lists[0].path.replace("\\", "/").strip("/").split("/")
+        keys = [_norm(w.path).split("/") for w in lists]
+        n = node.count("/") + 1
+        while all(len(k) > n + 1 and k[n] == keys[0][n] for k in keys):
+            if "/".join(keys[0][: n + 1]) in names:
+                break
+            n += 1
+        root = "/".join(segs[:n])
+        merges.append(_Merge(root=root, members=list(lists)))
+        done.update(_norm(w.path) for w in lists)
+
+    def visit(node: str) -> None:
+        lists = [w for w in tree.get(node, []) if _norm(w.path) not in done]
+        if len(lists) < 2:
+            return
+        base = node.count("/") + 1
+        levels = max(depth(w) - base for w in lists)
+        total = sum(len(w.options) for w in lists)
+        mergeable = node not in names and node not in blocked
+        if mergeable and levels <= MERGE_MAX_DEPTH and total <= MERGE_MAX_OPTIONS:
+            take(node, lists)
+            return
+        for child in sorted({
+            "/".join(_norm(w.path).split("/")[: base + 1]) for w in lists
+        }):
+            if child in tree:
+                visit(child)
+        direct = [w for w in lists if depth(w) == base + 1 and _norm(w.path) not in done]
+        if (
+            mergeable and len(direct) >= 2
+            and sum(len(w.options) for w in direct) <= MERGE_MAX_OPTIONS
+        ):
+            take(node, direct)
+
+    for top in sorted({k.split("/", 1)[0] for k in tree}):
+        visit(top)
+    return _break_cycles(merges, ctx)
+
+
+def _break_cycles(merges: list[_Merge], ctx: _Ctx) -> list[_Merge]:
+    """A merged wildcard that reaches itself through references would be
+    flagged as a cycle and render nothing. Take the lists that reference
+    other wildcards out of any merge that sits on a loop (plain lists
+    have no outgoing references, so what remains can't loop) and drop
+    merges left with fewer than two lists."""
+    while True:
+        succ = _merge_graph(merges, ctx)
+        changed = False
+        for i, m in enumerate(merges):
+            if _loops(succ, f"m:{i}"):
+                m.members = [w for w in m.members if not ctx.edges.get(_norm(w.path))]
+                changed = True
+        merges = [m for m in merges if len(m.members) >= 2]
+        if not changed:
+            return merges
+
+
+def _merge_graph(merges: list[_Merge], ctx: _Ctx) -> dict[str, set[str]]:
+    """The reference graph with each merge as one node (``m:<index>``)
+    and each group as ``g:<pattern>``."""
+    owner = {_norm(w.path): i for i, m in enumerate(merges) for w in m.members}
+
+    def node(key: str) -> str:
+        if key in ctx.groups:
+            return "g:" + key
+        return f"m:{owner[key]}" if key in owner else key
+
+    succ: dict[str, set[str]] = {}
+    for src, targets in ctx.edges.items():
+        succ.setdefault(node(src), set()).update(node(t) for t in targets)
+    for pattern, g in ctx.groups.items():
+        succ.setdefault("g:" + pattern, set()).update(node(_norm(w.path)) for w in g.members)
+    return succ
+
+
+def _loops(succ: dict[str, set[str]], start: str) -> bool:
+    stack, seen = list(succ.get(start, ())), set()
+    while stack:
+        cur = stack.pop()
+        if cur == start:
+            return True
+        if cur in seen:
+            continue
+        seen.add(cur)
+        stack.extend(succ.get(cur, ()))
+    return False
+
+
+def _tag_merge(m: _Merge, ctx: _Ctx) -> None:
+    """Tag every option with the path segments of its list below the
+    merge root, one tag group per level.
+
+    Segments with the same name at the same level share a tag, so
+    ``female/footwear`` and ``male/footwear`` give two axes (gender ×
+    garment) instead of two unrelated tags, and a list is picked by the
+    AND of its tags. Two things would let one list's filter also match
+    another's options, so they get a tag of their own: a name used at
+    two levels (the deeper one is suffixed with its level) and a list
+    that is also a folder (its own options get ``<name>_list``). A tag
+    that would clash with one of the lists' own labels is suffixed too.
+    """
+    base = m.root.count("/") + 1
+    labels = {t.lower() for w in m.members for o in w.options for t in o["sub_categories"]}
+    rels = {
+        _norm(w.path): w.path.replace("\\", "/").strip("/").split("/")[base:]
+        for w in m.members
+    }
+    folders = {"/".join(r[:i]).lower() for r in rels.values() for i in range(1, len(r))}
+    taken: dict[str, int] = {}  # tag (lowercase) → the level that owns it
+    by_level: dict[int, dict[str, None]] = {}
+
+    def claim(raw: str, level: int) -> str:
+        tag = _slug_tag(raw) or "list"
+        for candidate in (tag, f"{tag}_{level}"):
+            low = candidate.lower()
+            if low not in labels and taken.get(low, level) == level:
+                taken[low] = level
+                return candidate
+        n = 2
+        while f"{tag}_{level}_{n}".lower() in taken or f"{tag}_{level}_{n}".lower() in labels:
+            n += 1
+        taken[f"{tag}_{level}_{n}".lower()] = level
+        return f"{tag}_{level}_{n}"
+
+    order = sorted(rels.items(), key=lambda kv: (len(kv[1]), [x.lower() for x in kv[1]]))
+    for key, rel in order:
+        tags: list[str] = []
+        for i, seg in enumerate(rel, start=1):
+            raw = seg
+            if i == len(rel) and "/".join(rel).lower() in folders:
+                raw = f"{seg}_list"
+            tag = claim(raw, i)
+            tags.append(tag)
+            by_level.setdefault(i, {})[tag] = None
+        m.member_tags[key] = tags
+        m.expr[key] = " and ".join(tags)
+
+    last = m.root.split("/")[-1]
+    named = 0
+    for level in sorted(by_level):
+        members = list(by_level[level])
+        if all(t.lower().removesuffix("_list") in _GENDER_TAGS for t in members):
+            name = "gender"
+        else:
+            named += 1
+            name = last if named == 1 else f"{last} ({named})"
+        while name in m.tag_groups:
+            name += "+"
+        m.tag_groups[name] = members
+
+
+def _collapse_groups(merges: list[_Merge], ctx: _Ctx) -> dict[str, str]:
+    """A group whose lists all sit in one merged wildcard becomes a
+    reference to that wildcard: plain when it covers every list, else
+    filtered by the tags its lists share (or, for a few lists, by each
+    list's own filter)."""
+    owner = {_norm(w.path): m for m in merges for w in m.members}
+    out: dict[str, str] = {}
+    for pattern, g in ctx.groups.items():
+        keys = [_norm(w.path) for w in g.members if w.options]
+        if not keys or any(owner.get(k) is not owner.get(keys[0]) for k in keys):
+            continue
+        m = owner.get(keys[0])
+        if m is None:
+            continue
+        want = set(keys)
+        if want == set(m.member_tags):
+            out[pattern] = f"@{{{m.id}#{m.name}}}"
+            continue
+        common = set.intersection(*(set(m.member_tags[k]) for k in keys))
+        hits = {k for k, tags in m.member_tags.items() if common <= set(tags)}
+        expr = None
+        if common and hits == want:
+            expr = " and ".join(t for t in m.member_tags[keys[0]] if t in common)
+        elif len(want) <= 8:
+            expr = " or ".join(f"({m.expr[k]})" if " " in m.expr[k] else m.expr[k] for k in keys)
+        if expr is not None:
+            out[pattern] = f"@{{{m.id}#{m.name}:{expr}}}"
+    return out
+
+
+def _merge_row(
+    m: _Merge, category_id: str | None, tags: list[str], ctx: _Ctx,
+) -> dict[str, Any]:
+    options: list[dict[str, Any]] = []
+    used: set[str] = set()
+    registry: dict[str, None] = {t: None for g in m.tag_groups.values() for t in g}
+    has_fallback = False
+    for w in m.members:
+        mine = m.member_tags[_norm(w.path)]
+        for o in w.options:
+            opt = dict(o)
+            opt["id"] = _unique_id(o["id"], used)
+            opt["sub_categories"] = mine + [t for t in o["sub_categories"] if t not in mine]
+            for t in o["sub_categories"]:
+                registry[t] = None
+            if opt.get("fallback"):
+                if has_fallback:
+                    del opt["fallback"]
+                    ctx.report.note(
+                        "merged_fallback_dropped", w.path,
+                        f"{_readable(o['value'])} (the merged wildcard keeps one fallback)",
+                    )
+                has_fallback = True
+            options.append(opt)
+    description = (
+        f"Merged from {len(m.members)} lists under {m.root}/ (imported). "
+        "Each option is tagged with the folders and list it came from, so "
+        f"filtering by those tags (for example {next(iter(m.expr.values()))}) "
+        "draws from one list."
+    )
+    return _module_row(
+        m.id, m.name, description[:_MAX_DESCRIPTION_LEN], category_id, tags,
+        {
+            "var_binding": _ident(m.root.split("/")[-1]),
+            "sub_categories": list(registry),
+            "tag_groups": m.tag_groups,
+            "options": options,
+        },
+    )
 
 
 def _child_snapshot(row: dict[str, Any]) -> dict[str, Any]:

@@ -97,7 +97,10 @@ describe("wildcard-files helpers", () => {
     const meta = JSON.parse(String(form.get("meta")));
     expect(meta).toEqual({
       paths: ["x/a.txt"], pack_tag: "pack", exclude: ["x/b.txt"], bundles: false, pack_name: "Pack",
+      merge: true, keep_separate: [],
     });
+    const off = JSON.parse(String(buildWildcardForm([], { merge: false, keepSeparate: ["hair"] }).get("meta")));
+    expect(off).toMatchObject({ merge: false, keep_separate: ["hair"] });
     expect(form.getAll("file")).toHaveLength(1);
   });
 
@@ -131,6 +134,15 @@ describe("plan helpers", () => {
     expect(filterPlan(plan, { ...all, roles: new Set(["entry"] as const) }).map((p) => p.name)).toEqual(["a/intro"]);
     expect(filterPlan(plan, { ...all, fidelities: new Set(["lossy"] as const) }).map((p) => p.name)).toEqual(["a/list"]);
     expect(filterPlan(plan, { ...all, query: "LOOSE" })).toHaveLength(1);
+  });
+
+  it("finds a merged wildcard by the name of a list inside it", () => {
+    const merged = item({
+      name: "hair/colors", merge_root: "hair/colors",
+      merged_from: [{ name: "warm/red", tag: "red", options: 2 }],
+    });
+    const all = { domain: null, roles: new Set<never>(), fidelities: new Set<never>(), query: "warm/r" };
+    expect(filterPlan([...plan, merged], all).map((p) => p.name)).toEqual(["hair/colors"]);
   });
 });
 
@@ -227,6 +239,42 @@ describe("PackConverter", () => {
     expect(meta.exclude).toEqual(["old/cats.txt"]);
     await wrap.find("[data-test='pack-continue']").trigger("click");
     expect(wrap.emitted("payload-ready")).toHaveLength(1);
+  });
+
+  it("shows merged wildcards and splits one back into lists", async () => {
+    const merged = result();
+    merged.report.merged = 1;
+    merged.report.merged_lists = 2;
+    merged.report.plan.push(item({
+      id: "22222222", name: "hair/colors", domain: "hair", options: 4,
+      merge_root: "hair/colors",
+      merged_from: [
+        { name: "warm/red", tag: "warm and red", options: 2 },
+        { name: "dark", tag: "dark", options: 2 },
+      ],
+      tag_groups: [{ name: "colors", tags: 2 }, { name: "colors (2)", tags: 1 }],
+    }));
+    wildcardFiles.mockResolvedValue(merged);
+    const wrap = await loaded();
+    expect(wrap.find("[data-test='pack-summary']").text()).toContain("2 lists were merged into 1 tagged wildcard");
+    expect(wrap.find("[data-test='pack-merged-chip']").text()).toBe("2 lists");
+    await wrap.find("[data-test='pack-merged-only']").trigger("click");
+    const rows = wrap.findAll("[data-test='pack-row']");
+    expect(rows).toHaveLength(1);
+    await rows[0].trigger("click");
+    const detail = wrap.find("[data-test='pack-merge-detail']");
+    expect(detail.text()).toContain("colors (2)");
+    expect(detail.findAll(".wp-pack__member-tag").map((t) => t.text())).toEqual(["warm + red", "dark"]);
+    await wrap.find("[data-test='pack-keep-separate']").trigger("click");
+    await flushPromises();
+    expect(wildcardFiles).toHaveBeenCalledTimes(2);
+    const meta = JSON.parse(String((wildcardFiles.mock.calls[1][0] as FormData).get("meta")));
+    expect(meta).toMatchObject({ merge: true, keep_separate: ["hair/colors"] });
+    expect(wrap.find("[data-test='pack-kept']").text()).toContain("hair/colors/");
+    await wrap.find("[data-test='pack-kept'] button").trigger("click");
+    await flushPromises();
+    const again = JSON.parse(String((wildcardFiles.mock.calls[2][0] as FormData).get("meta")));
+    expect(again.keep_separate).toEqual([]);
   });
 
   it("folds into a bar once the picker shows, with a way back", async () => {

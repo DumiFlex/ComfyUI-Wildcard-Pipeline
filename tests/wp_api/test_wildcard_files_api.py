@@ -69,7 +69,10 @@ async def test_converted_payload_commits(wp_client):
     assert commit.status == 200, await commit.text()
     listed = await wp_client.get("/wp/api/modules?type=wildcard&limit=50")
     names = {m["name"] for m in (await listed.json())["items"]}
-    assert {"animals/cats", "animals/dogs", "animals/*", "scenes/field", "pets"} <= names
+    # animals/cats + animals/dogs merged into one tagged "animals" wildcard;
+    # the animals/* glob became a plain reference to it.
+    assert {"animals", "scenes/field", "pets"} <= names
+    assert not names & {"animals/cats", "animals/dogs", "animals/*"}
     outer_id = payload["bundles"][0]["id"]
     got = await wp_client.get(f"/wp/api/bundles/{outer_id}")
     outer = await got.json()
@@ -77,6 +80,21 @@ async def test_converted_payload_commits(wp_client):
     inner = next(c for c in outer["children"] if c["type"] == "bundle")
     assert [c["meta"]["name"] for c in inner["children"]] == ["scenes/field", "scenes/nap"]
     assert [c["type"] for c in outer["children"]] == ["bundle", "wildcard"]
+
+
+async def test_merging_can_be_turned_off_or_skipped_per_folder(wp_client):
+    files = [
+        ("hair/red.txt", b"red\n"), ("hair/blonde.txt", b"blonde\n"),
+        ("eyes/blue.txt", b"blue\n"), ("eyes/green.txt", b"green\n"),
+    ]
+
+    async def names(**meta) -> set[str]:
+        resp = await wp_client.post("/wp/api/import/wildcard-files", data=_form(files, **meta))
+        return {r["name"] for r in (await resp.json())["payload"]["wildcards"]}
+
+    assert await names() == {"hair", "eyes"}
+    assert await names(merge=False) == {"hair/red", "hair/blonde", "eyes/blue", "eyes/green"}
+    assert await names(keep_separate=["hair"]) == {"hair/red", "hair/blonde", "eyes"}
 
 
 async def test_rejects_uploads_without_wildcard_files(wp_client):

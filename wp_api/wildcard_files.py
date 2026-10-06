@@ -85,6 +85,8 @@ async def convert_wildcard_files(request: web.Request) -> web.Response:
     category = meta.get("category") if isinstance(meta.get("category"), str) else None
     make_bundles = meta.get("bundles") is not False
     pack_name = meta.get("pack_name") if isinstance(meta.get("pack_name"), str) else None
+    merge = meta.get("merge") is not False
+    keep_separate = {p for p in meta.get("keep_separate") or [] if isinstance(p, str)}
 
     files: list[SourceFile] = []
     for i, (filename, data) in enumerate(blobs):
@@ -117,6 +119,8 @@ async def convert_wildcard_files(request: web.Request) -> web.Response:
         exclude=exclude,
         make_bundles=make_bundles,
         pack_name=(pack_name or pack_tag or "").strip() or None,
+        merge=merge,
+        keep_separate=keep_separate,
     ))
     return json_ok(result)
 

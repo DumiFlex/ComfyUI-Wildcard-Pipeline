@@ -54,6 +54,13 @@ export interface PlanItem {
   fidelity: PlanFidelity;
   notes: Array<{ kind: string; detail: string }>;
   source: string;
+  /** Set when several lists were merged into this one tagged wildcard:
+   *  the folder they came from (what `keepSeparate` takes) … */
+  merge_root?: string;
+  /** … each list, by its path under that folder, with its tag … */
+  merged_from?: Array<{ name: string; tag: string; options: number }>;
+  /** … and the tag groups the folder levels became. */
+  tag_groups?: Array<{ name: string; tags: number }>;
 }
 
 export interface WildcardFilesReport {
@@ -63,6 +70,9 @@ export interface WildcardFilesReport {
   groups: number;
   options: number;
   bundles: number;
+  /** Merged wildcards, and how many lists went into them. */
+  merged?: number;
+  merged_lists?: number;
   plan: PlanItem[];
 }
 
@@ -83,6 +93,11 @@ export interface WildcardImportOptions {
   bundles?: boolean;
   /** Name of the pack bundle. */
   packName?: string;
+  /** Fold folders of related lists into one tagged wildcard each. On
+   *  unless set to false. */
+  merge?: boolean;
+  /** Folders (a plan row's `merge_root`) whose lists stay separate. */
+  keepSeparate?: string[];
 }
 
 export function isWildcardFileName(name: string): boolean {
@@ -180,6 +195,8 @@ export function buildWildcardForm(
     exclude: opts.exclude ?? [],
     bundles: opts.bundles !== false,
     pack_name: opts.packName?.trim() || undefined,
+    merge: opts.merge !== false,
+    keep_separate: opts.keepSeparate ?? [],
   }));
   for (const s of sources) form.append("file", s.file, s.file.name);
   return form;
@@ -222,6 +239,7 @@ const NOTE_TEXT: Record<string, string> = {
   wrap_kept_as_text: "Wrap commands %{…} stay as plain text",
   multi_pick_range_capped: "Open-ended repeating picks like __r2-$$name__ were capped at the list size",
   filter_dropped: "Some reference filters couldn't be kept",
+  merged_fallback_dropped: "A merged wildcard keeps one fallback: the other lists' else choices became normal options",
 };
 
 export function describeNote(kind: string): string {
@@ -310,7 +328,8 @@ export function filterPlan(plan: PlanItem[], f: PlanFilter): PlanItem[] {
       (f.domain === null || p.domain === f.domain)
       && (f.roles.size === 0 || f.roles.has(p.role))
       && (f.fidelities.size === 0 || f.fidelities.has(p.fidelity))
-      && (!q || p.name.toLowerCase().includes(q)))
+      && (!q || p.name.toLowerCase().includes(q)
+        || (p.merged_from ?? []).some((m) => m.name.toLowerCase().includes(q))))
     .sort((a, b) =>
       order[a.role] - order[b.role]
       || Number(b.fidelity === "lossy") - Number(a.fidelity === "lossy")

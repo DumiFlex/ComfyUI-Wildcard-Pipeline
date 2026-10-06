@@ -11,7 +11,14 @@ import pytest
 from engine.modules import build_resolve_ctx
 from engine.modules.wildcard_handler import WildcardHandler
 from engine.syntax.resolve import resolve_text
-from engine.wildcard_files import SourceFile, convert_files, read_zip
+from engine.wildcard_files import SourceFile, read_zip
+from engine.wildcard_files import convert_files as _convert
+
+
+def convert_files(files: list[SourceFile], **kw) -> dict:
+    """List-per-wildcard conversion; the merge tests call ``_convert``."""
+    kw.setdefault("merge", False)
+    return _convert(files, **kw)
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "wildcard_files"
 
@@ -343,3 +350,168 @@ def test_rows_carry_the_fingerprint_the_library_will_store(pack):
     for row in pack["payload"]["wildcards"]:
         assert row["payload_hash"] == payload_hash(row["payload"])
         assert row["snapshot_fingerprint"] == module_fingerprint(row)
+
+
+# ---------------------------------------------------------------------------
+# Merging related lists into one tagged wildcard
+# ---------------------------------------------------------------------------
+
+
+def _hair_pack() -> list[SourceFile]:
+    return [
+        SourceFile("hair/colors/warm/red.txt", b"red\nauburn\n"),
+        SourceFile("hair/colors/warm/blonde.txt", b"blonde\nstrawberry blonde\n"),
+        SourceFile("hair/colors/cool/ash.txt", b"ash grey\n"),
+        SourceFile("hair/colors/dark.txt", b"'deep'::black\nbrown\n"),
+        SourceFile("look.txt", b"__hair/colors/warm/red__ hair\n__hair/colors/dark'deep'__\n"),
+    ]
+
+
+def _resolver(result: dict, seed: int = 1):
+    catalog = {r["id"]: r["payload"] for r in result["payload"]["wildcards"]}
+    ctx = {
+        "__wp_rng__": random.Random(seed),
+        "__wp_warnings__": [],
+        "__wp_catalog__": catalog,
+        "__wp_max_ref_depth__": 8,
+    }
+    return build_resolve_ctx(ctx, surface="wildcard"), ctx
+
+
+def test_a_folder_of_lists_merges_into_one_tagged_wildcard():
+    result = _convert(_hair_pack())
+    rows = _by_name(result)
+    assert set(rows) == {"hair/colors", "look"}
+    merged = rows["hair/colors"]
+    WildcardHandler.validate_payload(merged["payload"])
+    tags = {o["value"]: o["sub_categories"] for o in merged["payload"]["options"]}
+    assert tags["auburn"] == ["warm", "red"]
+    assert tags["ash grey"] == ["cool", "ash"]
+    assert tags["black"] == ["dark", "deep"]  # the PPP label rides along
+    assert merged["payload"]["tag_groups"] == {
+        "colors": ["dark", "cool", "warm"],
+        "colors (2)": ["ash", "blonde", "red"],
+    }
+    assert merged["payload"]["var_binding"] == "colors"
+    assert result["report"]["merged"] == 1
+    assert result["report"]["merged_lists"] == 4
+    plan = {p["name"]: p for p in result["report"]["plan"]}
+    assert plan["hair/colors"]["merge_root"] == "hair/colors"
+    assert {m["name"]: m["tag"] for m in plan["hair/colors"]["merged_from"]} == {
+        "warm/red": "warm and red", "warm/blonde": "warm and blonde",
+        "cool/ash": "cool and ash", "dark": "dark",
+    }
+    assert plan["hair/colors"]["role"] == "vocabulary"
+    assert plan["hair/colors"]["referenced_by"] == 2
+
+
+def test_references_to_a_merged_list_draw_only_from_that_list():
+    result = _convert(_hair_pack())
+    merged = _by_name(result)["hair/colors"]
+    look = _values(_by_name(result)["look"])
+    assert look == [
+        f"@{{{merged['id']}#hair/colors:warm and red}} hair",
+        f"@{{{merged['id']}#hair/colors:dark and (deep)}}",
+    ]
+    for seed in range(20):
+        rctx, ctx = _resolver(result, seed)
+        assert resolve_text(look[0], rctx) in {"red hair", "auburn hair"}
+        assert resolve_text(look[1], rctx) == "black"
+        assert not ctx["__wp_warnings__"]
+
+
+def test_a_glob_over_a_merged_folder_becomes_a_filtered_reference():
+    files = _hair_pack() + [
+        SourceFile("pick.txt", b"__hair/colors/warm/*__\n__hair/colors/**__\n"),
+    ]
+    result = _convert(files)
+    merged = _by_name(result)["hair/colors"]
+    assert _values(_by_name(result)["pick"]) == [
+        f"@{{{merged['id']}#hair/colors:warm}}",
+        f"@{{{merged['id']}#hair/colors}}",
+    ]
+    assert result["report"]["groups"] == 0
+
+
+def test_keep_separate_leaves_a_folder_as_one_wildcard_per_list():
+    result = _convert(_hair_pack(), keep_separate={"hair/colors"})
+    assert result["report"]["merged"] == 0
+    assert "hair/colors/warm/red" in _by_name(result)
+    assert _convert(_hair_pack(), merge=False)["report"]["merged"] == 0
+
+
+def test_lists_that_reference_each_other_stay_apart():
+    # A merged wildcard can't reference itself (the engine stops it as a
+    # cycle), so the list that points into the merge is taken out of it.
+    files = [
+        SourceFile("pets/cats.txt", b"tabby\n"),
+        SourceFile("pets/dogs.txt", b"collie\n__pets/cats__ friend\n"),
+        SourceFile("pets/birds.txt", b"crow\n"),
+        SourceFile("zoo.txt", b"__pets/dogs__\n"),
+    ]
+    result = _convert(files)
+    rows = _by_name(result)
+    assert set(rows) == {"pets", "pets/dogs", "zoo"}
+    merged = rows["pets"]
+    assert _values(rows["pets/dogs"])[1] == f"@{{{merged['id']}#pets:cats}} friend"
+    for seed in range(10):
+        rctx, ctx = _resolver(result, seed)
+        resolve_text(_values(rows["zoo"])[0], rctx)
+        assert not any(w.get("kind") == "cycle_detected" for w in ctx["__wp_warnings__"])
+
+
+def test_merged_tags_never_collide_with_labels_or_each_other():
+    files = [
+        SourceFile("c/red.txt", b"'red'::crimson\n"),
+        SourceFile("c/a/red.txt", b"rose\n"),
+        SourceFile("c/a/else.txt", b"one\n"),
+        SourceFile("other.txt", b"v\n"),
+    ]
+    result = _convert(files)
+    row = _by_name(result)["c"]
+    WildcardHandler.validate_payload(row["payload"])
+    tags = {o["value"]: o["sub_categories"] for o in row["payload"]["options"]}
+    assert tags["crimson"][-1] == "red"  # the label
+    assert tags["crimson"][0] not in {"red"}
+    assert tags["rose"][1] not in {"red", tags["crimson"][0]}
+
+
+def test_the_same_list_name_in_sibling_folders_shares_a_tag():
+    # female/footwear + male/footwear: two axes (gender × garment), each
+    # list picked by the AND of its tags, like a hand-built wildcard.
+    files = [
+        SourceFile(f"clothes/{g}/{part}.txt", f"{g} {part} a\n{g} {part} b\n".encode())
+        for g in ("female", "male") for part in ("footwear", "headwear")
+    ] + [
+        SourceFile("clothes/female.txt", b"dress\n"),  # a list that is also a folder
+        SourceFile("outfit.txt", b"__clothes/male/footwear__\n__clothes/female__\n"),
+    ]
+    result = _convert(files)
+    row = _by_name(result)["clothes"]
+    WildcardHandler.validate_payload(row["payload"])
+    assert row["payload"]["tag_groups"] == {
+        "gender": ["female_list", "female", "male"],
+        "clothes": ["footwear", "headwear"],
+    }
+    outfit = _values(_by_name(result)["outfit"])
+    assert outfit == [
+        f"@{{{row['id']}#clothes:male and footwear}}",
+        f"@{{{row['id']}#clothes:female_list}}",
+    ]
+    for seed in range(20):
+        rctx, _ = _resolver(result, seed)
+        assert resolve_text(outfit[0], rctx) in {"male footwear a", "male footwear b"}
+        assert resolve_text(outfit[1], rctx) == "dress"
+
+
+def test_each_top_folder_merges_on_its_own():
+    files = [
+        SourceFile(f"pack/{d}/{n}.txt", f"{d} {n} a\n{d} {n} b\n".encode())
+        for d in ("eyes", "hats", "shoes") for n in ("one", "two", "three")
+    ]
+    result = _convert(files)
+    assert sorted(_by_name(result)) == ["eyes", "hats", "shoes"]
+    assert result["report"]["merged_lists"] == 9
+    assert _by_name(result)["eyes"]["payload"]["tag_groups"] == {
+        "eyes": ["one", "three", "two"],
+    }

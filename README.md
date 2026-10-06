@@ -118,9 +118,10 @@ Open it from the ComfyUI sidebar. It's where your modules live between workflows
 - **Import / Export:** move modules between machines as JSON files, or bring in
   wildcard packs from A1111 or Forge on the **Wildcard packs** tab. Dynamic Prompts,
   PPP and Impact Pack `.txt`, `.yaml` and `.json` files (or a `.zip` of them) become
-  one wildcard per list, with `__references__` turned into links. You review the plan
-  first (each wildcard's role and how exactly it carries over), and the pack's entry
-  points are filed into bundles per folder.
+  wildcards, with `__references__` turned into links. A folder of related lists merges
+  into one wildcard whose options are tagged by list, with a tag group per folder level.
+  You review the plan first (each wildcard's role, what was merged and how exactly it
+  carries over), and the pack's entry points are filed into bundles per folder.
 - **Documentation:** the full guide, built into the app.
 
 ## Checking a run
