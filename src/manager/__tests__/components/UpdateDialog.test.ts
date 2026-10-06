@@ -100,6 +100,19 @@ describe("UpdateDialog", () => {
     expect(wrap.find('[data-test="update-fallback"]').exists()).toBe(true);
   });
 
+  it("says the update didn't apply and shows why", async () => {
+    stubRelease();
+    stubManager({
+      phase: ref("error"),
+      errorKind: ref("not_applied"),
+      errorMessage: ref("ComfyUI restarted, but Wildcard Pipeline is still v2.9.0."),
+    });
+    const wrap = mountDialog();
+    await flushPromises();
+    expect(wrap.get('[data-test="update-fallback"]').text()).toContain("didn't apply");
+    expect(wrap.get('[data-test="update-error"]').text()).toContain("still v2.9.0");
+  });
+
   it("emits close from the Later button", async () => {
     stubRelease();
     stubManager();

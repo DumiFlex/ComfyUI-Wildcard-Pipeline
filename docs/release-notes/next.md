@@ -10,6 +10,7 @@
 
 ### Fixes
 
+- **Update Now works with the Manager built into ComfyUI.** It only knew the older ComfyUI-Manager custom node, so with the built-in Manager it fell back to "update manually", and the Restart button in Settings was missing. After **Restart ComfyUI** the page now waits for ComfyUI to come back and reloads itself, so it never keeps showing the old version. If ComfyUI comes back still on the old version, the dialog says the update didn't apply instead of claiming success.
 - **Bypassed and muted Assemblers and Prompt Cleaners now dim their text boxes too.** The prompt and negative boxes used to stay bright while the rest of the node dimmed.
 - **The Sweep Limit field no longer hides its number under the arrows.** It now has the same small up/down arrows as the seed fields.
 - **Importing modules together with their categories now works.** A JSON import that brought in a new category along with the modules filed under it could fail with "database integrity violation". Modules whose category merges into one you already have by name now land in that category.
