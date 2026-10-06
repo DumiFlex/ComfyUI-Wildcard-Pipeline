@@ -27,6 +27,7 @@ from wp_api import spa as _spa
 from wp_api import tags as _tags
 from wp_api import templates as _templates
 from wp_api import test_runner as _test_runner
+from wp_api import wildcard_files as _wildcard_files
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +148,7 @@ def register_routes(app: web.Application) -> None:
     _test_runner.register(app.router)
     _scenarios.register(app.router)
     _import_export.register(app.router)
+    _wildcard_files.register(app.router)
     _cascade.register(app.router)
     _preview.register(app.router)
     _tags.register(app.router)

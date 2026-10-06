@@ -1,0 +1,13 @@
+# Dynamic Prompts style tree; the file name is dropped from the paths
+art:
+  painters:
+    - Rembrandt
+    - { text: Vermeer, weight: 3 }
+    - "2::Monet"
+  moods:
+    - yes
+    - no
+    - on
+    - "1.10"
+  single: one value
+  empty:

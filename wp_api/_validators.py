@@ -29,6 +29,9 @@ MAX_TEMPLATE_LEN = 8000
 # upper bound — enough headroom for unusual library entries without
 # letting a 50k-option DoS slip through.
 MAX_BODY_BYTES = 5 * 1024 * 1024
+# Import commits carry a whole library at once; a converted wildcard pack
+# (the Dynamic Prompts collections are ~7 MB) is far past the 5 MB cap.
+MAX_IMPORT_BODY_BYTES = 64 * 1024 * 1024
 
 # Identifier rule: Python-style ident, no leading underscore-underscore
 # (those collide with the engine's `__wp_*__` internal-key convention —
@@ -148,16 +151,19 @@ def validate_meta(body: dict[str, Any]) -> str | None:
     return None
 
 
-def validate_body_size(content_length: int | None) -> str | None:
+def validate_body_size(
+    content_length: int | None, limit: int = MAX_BODY_BYTES,
+) -> str | None:
     """Reject requests whose ``Content-Length`` exceeds the API cap.
 
     Pre-flight guard; the aiohttp ``client_max_size`` setting backs
     this up at the transport layer, but we want a clean ``400`` JSON
-    error instead of aiohttp's stock 413 HTML.
+    error instead of aiohttp's stock 413 HTML. ``limit`` lets the bulk
+    import routes accept a whole wildcard pack.
     """
-    if content_length is not None and content_length > MAX_BODY_BYTES:
+    if content_length is not None and content_length > limit:
         return (
             f"request body too large ({content_length} bytes); "
-            f"limit is {MAX_BODY_BYTES} bytes"
+            f"limit is {limit} bytes"
         )
     return None

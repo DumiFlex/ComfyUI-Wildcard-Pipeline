@@ -1,0 +1,26 @@
+ppp:
+  outfit:
+    - "r1-2'Outfit picker'$$, $$"
+    - "'casual,summer'4::t-shirt"
+    - "'formal'::suit"
+    - { labels: ["formal", "winter"], weight: 2, content: coat }
+    - "5 if _is_sdxl::hoodie"
+    - "else::plain clothes"
+    - - scarf
+      - gloves
+    - "%::include animals/cats"
+  look:
+    - __ppp/outfit'formal'__
+    - __2$$ and $$ppp/outfit__
+    - "{~red|@blue|green}"
+    - "{2$$a|b|c}"
+    - "{-2$$x|y|z}"
+    - "{r1-$$ / $$p|q}"
+    - "{solo}"
+    - ${color:red} hat
+    - ${mood=!{happy|sad}} face
+    - "costs $5 or $total"
+    - __animals/*__
+    - __animals__
+    - __missing/thing__
+    - 3#__cats__

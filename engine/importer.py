@@ -359,6 +359,27 @@ def _bundle_exists(conn: sqlite3.Connection, bid: str) -> bool:
     return row is not None
 
 
+def _follow_category(
+    conn: sqlite3.Connection, entity: dict[str, Any], cat_map: dict[str, str],
+) -> dict[str, Any]:
+    """Point an entity's ``category_id`` at where its category landed.
+
+    A category merged into an existing one by name keeps the existing id,
+    so members carrying the incoming id follow it. An id that names no
+    category at all (not imported, not in the library) becomes ``None``
+    rather than failing the whole commit on the foreign key.
+    """
+    cid = entity.get("category_id")
+    if not isinstance(cid, str) or not cid:
+        return entity
+    target = cat_map.get(cid, cid)
+    if target == cid and _category_id_exists(conn, cid):
+        return entity
+    out = dict(entity)
+    out["category_id"] = target if _category_id_exists(conn, target) else None
+    return out
+
+
 def _category_id_exists(conn: sqlite3.Connection, cid: str) -> bool:
     row = conn.execute(
         "SELECT 1 FROM module_categories WHERE id = ?;", (cid,),
@@ -531,6 +552,16 @@ def commit_import(
     ``with conn:`` block, and the import_undo row is NOT inserted.
     """
     adds = list(payload.get("adds") or [])
+    # Categories go in first: modules, bundles and templates point at them
+    # by id (a foreign key), so a category listed after its members would
+    # fail the insert.
+    adds = (
+        [op for op in adds if isinstance(op, dict) and op.get("kind") == "category"]
+        + [op for op in adds if not (isinstance(op, dict) and op.get("kind") == "category")]
+    )
+    # Incoming category id -> the id it landed on (its own, or the existing
+    # category it merged into by name).
+    cat_map: dict[str, str] = {}
     replaces = list(payload.get("replaces") or [])
     renames = list(payload.get("renames") or [])
 
@@ -566,7 +597,9 @@ def commit_import(
                         (name,),
                     ).fetchone()
                     if existing is not None:
-                        # Skip — nothing to undo.
+                        # Skip — nothing to undo. Members follow the merge.
+                        if entity.get("id"):
+                            cat_map[entity["id"]] = existing[0]
                         continue
                     cid = entity.get("id") or name.lower()
                     if _category_id_exists(conn, cid):
@@ -585,8 +618,11 @@ def commit_import(
                         ),
                     )
                     imported_records.append({"kind": "category", "id": cid})
+                    if entity.get("id"):
+                        cat_map[entity["id"]] = cid
 
                 elif kind == "bundle":
+                    entity = _follow_category(conn, entity, cat_map)
                     _require_entity_fields(
                         "bundle", "add", entity, ("id", "name"),
                     )
@@ -599,6 +635,7 @@ def commit_import(
                     imported_records.append({"kind": "bundle", "id": bid})
 
                 elif kind == "template":
+                    entity = _follow_category(conn, entity, cat_map)
                     _require_entity_fields(
                         "template", "add", entity, ("id", "name"),
                     )
@@ -611,6 +648,7 @@ def commit_import(
                     imported_records.append({"kind": "template", "id": tid})
 
                 elif _is_module_kind(kind or ""):
+                    entity = _follow_category(conn, entity, cat_map)
                     _require_entity_fields(
                         kind, "add", entity, ("id", "name"),  # type: ignore[arg-type]
                     )
@@ -632,7 +670,7 @@ def commit_import(
             for op in replaces:
                 kind = op.get("kind")
                 rid = op.get("id")
-                new_content = op.get("new_content") or {}
+                new_content = _follow_category(conn, op.get("new_content") or {}, cat_map)
                 if not rid:
                     raise _ImporterContractError(
                         f"{kind} replace missing 'id' field",
@@ -673,7 +711,7 @@ def commit_import(
                 kind = op.get("kind")
                 old_id = op.get("old_id")
                 new_id = op.get("new_id")
-                content = op.get("content") or {}
+                content = _follow_category(conn, op.get("content") or {}, cat_map)
                 if not new_id:
                     raise _ImporterContractError(
                         f"{kind} rename missing 'new_id' field",
