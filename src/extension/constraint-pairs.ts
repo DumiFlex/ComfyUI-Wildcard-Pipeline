@@ -136,6 +136,11 @@ export interface ChainModule {
    *  in. Purely additive / presentation-only; the pairing math never reads
    *  it. Optional — tests + legacy callers may omit. */
   nodeLabel?: string;
+  /** The row's per-instance overrides (`ModuleEntry.instance`) and its own
+   *  enabled flag. Read only by the constraint dead-end check
+   *  (`constraint-dead-ends.ts`); the pairing math ignores both. */
+  instance?: Record<string, unknown> | null;
+  enabled?: boolean;
 }
 
 /** When a pair lands on a wildcard that doesn't match the target uuid

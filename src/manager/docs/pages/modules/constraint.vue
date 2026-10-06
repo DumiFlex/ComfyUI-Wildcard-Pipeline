@@ -99,6 +99,13 @@ const reachModes = [
         it, or you picked rows that aren't downstream — the editor flags it
         <VarToken>constraint_orphan_target</VarToken> so the dead pairing doesn't fail silently.
       </DocCallout>
+      <DocCallout variant="warn">
+        A constraint can also rule out <em>every</em> option of its target for some source value
+        (each one excluded, shut out by an Only rule, or weighted 0). If the target has no fallback
+        it would come out empty, so the constraint row gets a <b>rules out all</b> badge before you
+        run; hover it to see which source values do it. Allow an option for those values, or mark
+        one of the target's options as its fallback.
+      </DocCallout>
     </DocSection>
 
     <DocSection title="Reattach a broken axis">

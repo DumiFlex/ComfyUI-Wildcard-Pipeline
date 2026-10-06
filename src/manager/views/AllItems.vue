@@ -231,9 +231,11 @@ async function fetchAll() {
   loading.value = true;
   try {
     await loadErr.run(async () => {
+      // No limit: the list pages client-side, and a single pack import
+      // can add ~1000 wildcards on its own.
       const [modRes, bunRes] = await Promise.all([
-        api.modules.list({ limit: 1000 }),
-        api.bundles.list({ limit: 1000 }),
+        api.modules.list(),
+        api.bundles.list(),
       ]);
       localModules.value = modRes.items;
       localBundles.value = bunRes.items;

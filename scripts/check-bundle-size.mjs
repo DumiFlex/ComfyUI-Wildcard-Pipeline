@@ -272,7 +272,11 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // buttons, Match variable control in the wildcard modal chunk, LoRA by model
 // preset): the feature adds ~6 KB and tipped dev ~3.2 KB over. Same "guide,
 // not a cap" rule as above.
-const TOTAL_LIMIT = 436 * 1024;     // 436 KB
+// RAISED 436 -> 440 KB on 2026-10-06 for the constraint "rules out all"
+// warning (the constraint factor math and wildcard pool helpers now reach the
+// ContextWidget chunk): dev sat at 446,313 of 446,464 bytes and the check adds
+// ~2.2 KB. Same "guide, not a cap" rule as above.
+const TOTAL_LIMIT = 440 * 1024;     // 440 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;
