@@ -477,6 +477,44 @@ def _record_axes(
         decl[binding] = list(_accepts_axes(payload))
 
 
+def _match_variable_option(
+    ctx: Any, options: list[dict[str, Any]], var_name: str,
+) -> tuple[dict[str, Any] | None, str]:
+    """Option for a ``match_variable`` instance, and how it was chosen
+    (``"match_variable"`` or ``"match_fallback"``). ``(None, "")`` means roll
+    normally; a ``match_variable_no_match`` warning says why."""
+    from engine.modules._fallback import find_fallback
+
+    name = var_name[1:] if var_name.startswith("$") else var_name
+    raw = ctx.get(name) if ctx is not None else None
+    wanted = "" if raw is None else str(raw).strip().lower()
+    if wanted:
+        for o in options:
+            if o.get("value") is None:
+                continue
+            if str(o.get("value", "")).strip().lower() == wanted:
+                return o, "match_variable"
+    fallback = find_fallback(options)
+    if fallback is not None:
+        return fallback, "match_fallback"
+    if ctx is not None and isinstance(ctx.get("__wp_warnings__"), list):
+        module_id = ctx.get("__wp_current_module_id__") or ""
+        ctx["__wp_warnings__"].append({
+            "type": "match_variable_no_match",
+            "severity": "warn",
+            "module_id": module_id,
+            "source_field": "",
+            "position": 0,
+            "token_index": None,
+            "detail": {"variable": name, "value": "" if raw is None else str(raw)},
+            "message": (
+                f"no option equals ${name} ({'' if raw is None else str(raw)!r}) "
+                "and none is marked fallback; rolled normally"
+            ),
+        })
+    return None, ""
+
+
 def _record_pick(
     ctx: Any,
     chosen: dict[str, Any],
@@ -863,41 +901,52 @@ class WildcardHandler(ModuleHandler):
         # has since removed. Honors enabled_options + weights normally
         # in every other mode.
         mode = instance.get("mode")
+        pinned: dict[str, Any] | None = None
+        pin_mode = "pinned"
         if mode == "pinned":
             pinned_id = instance.get("pinned_option_id")
             pinned = next((o for o in options if o.get("id") == pinned_id), None)
-            if pinned is not None:
-                # A pinned option still rolls its axes: pinning fixes WHICH
-                # option fires, not which of the shoes it accepts. Roll BEFORE
-                # recording so the pick carries the single rolled winner (the
-                # constraint source-view a downstream target reads), same as the
-                # random path. Pinned bypasses this wildcard's own constraint
-                # application, so there's nothing to restrict the roll against.
-                pinned_rolled = _roll_axes(
-                    _axis_menus(payload, pinned.get("sub_categories")),
-                    _derive_module_rng(
-                        int(ctx.get("__wp_node_seed__", 0) or 0), f"{binding}::axes",
-                    ),
-                )
-                # Track the pinned pick the same way as a random pick —
-                # downstream constraint-aware wildcards need source
-                # info regardless of how the source resolved its option.
-                _record_pick(ctx, pinned, payload, pinned_rolled)
-                _record_axes(ctx, binding, pinned_rolled, payload)
-                detail = module_detail(ctx)
-                if detail is not None:
-                    detail.update({"mode": "pinned", "option_id": pinned.get("id")})
-                value = str(pinned.get("value", ""))
-                resolve_ctx = build_resolve_ctx(ctx, surface="wildcard")
-                with negatives.collecting(resolve_ctx) as col:
-                    out_value = resolve_text(value, resolve_ctx) if value else ""
-                _file_negatives(
-                    ctx, binding, resolve_ctx,
-                    int(ctx.get("__wp_node_seed__", 0) or 0),
-                    [(pinned, col.ref_negatives, None)],
-                )
-                return {binding: out_value}
-            # else: pinned target is missing — fall through to random.
+        # `match_variable`: take the option whose text equals another
+        # variable's value (case-insensitive), e.g. `$model_variant` from WP
+        # Model Info, so this wildcard's pick can drive constraints. No match →
+        # the fallback option if one is flagged, else a normal roll + warning.
+        match_var = instance.get("match_variable")
+        if pinned is None and isinstance(match_var, str) and match_var.strip():
+            pinned, pin_mode = _match_variable_option(ctx, options, match_var.strip())
+        if pinned is not None:
+            # A pinned option still rolls its axes: pinning fixes WHICH
+            # option fires, not which of the shoes it accepts. Roll BEFORE
+            # recording so the pick carries the single rolled winner (the
+            # constraint source-view a downstream target reads), same as the
+            # random path. Pinned bypasses this wildcard's own constraint
+            # application, so there's nothing to restrict the roll against.
+            pinned_rolled = _roll_axes(
+                _axis_menus(payload, pinned.get("sub_categories")),
+                _derive_module_rng(
+                    int(ctx.get("__wp_node_seed__", 0) or 0), f"{binding}::axes",
+                ),
+            )
+            # Track the pinned pick the same way as a random pick —
+            # downstream constraint-aware wildcards need source
+            # info regardless of how the source resolved its option.
+            _record_pick(ctx, pinned, payload, pinned_rolled)
+            _record_axes(ctx, binding, pinned_rolled, payload)
+            detail = module_detail(ctx)
+            if detail is not None:
+                detail.update({"mode": pin_mode, "option_id": pinned.get("id")})
+                if pin_mode != "pinned":
+                    detail["match_variable"] = match_var.strip()
+            value = str(pinned.get("value", ""))
+            resolve_ctx = build_resolve_ctx(ctx, surface="wildcard")
+            with negatives.collecting(resolve_ctx) as col:
+                out_value = resolve_text(value, resolve_ctx) if value else ""
+            _file_negatives(
+                ctx, binding, resolve_ctx,
+                int(ctx.get("__wp_node_seed__", 0) or 0),
+                [(pinned, col.ref_negatives, None)],
+            )
+            return {binding: out_value}
+        # else: nothing pinned or matched — fall through to random.
 
         # `category_filter` narrows the option pool to entries whose tag
         # set (`sub_categories`) satisfies a boolean expression

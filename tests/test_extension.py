@@ -33,6 +33,7 @@ def test_entrypoint_exposes_all_node_classes():
         "WP_ContextInjector",
         "WP_ContextLoop",
         "WP_Debug",
+        "WP_ModelInfo",
         "WP_PromptAssembler",
         "WP_PromptCleaner",
         "WP_SeedList",

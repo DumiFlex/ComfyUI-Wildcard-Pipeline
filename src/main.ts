@@ -13,6 +13,7 @@ const {
   tmplMod,
   injMod,
   cleanerMod,
+  modelInfoMod,
   varPickerMod,
   ctxLoopMod,
   seedListMod,
@@ -101,6 +102,7 @@ type ContextCreateNode = Parameters<typeof ctxMod.create>[0];
 type DebugCreateNode = Parameters<typeof dbgMod.create>[0];
 type InjectorCreateNode = Parameters<typeof injMod.create>[0];
 type CleanerCreateNode = Parameters<typeof cleanerMod.create>[0];
+type ModelInfoCreateNode = Parameters<typeof modelInfoMod.create>[0];
 type VarPickerCreateNode = Parameters<typeof varPickerMod.create>[0];
 type CtxLoopCreateNode = Parameters<typeof ctxLoopMod.create>[0];
 type SeedListCreateNode = Parameters<typeof seedListMod.create>[0];
@@ -211,6 +213,8 @@ app.registerExtension({
         ctxLoopMod.create(node, inputName),
       WP_SEED_LIST_CONFIG: (node: SeedListCreateNode, inputName: string) =>
         seedListMod.create(node, inputName),
+      WP_MODEL_INFO: (node: ModelInfoCreateNode, inputName: string) =>
+        modelInfoMod.create(node, inputName),
       // The assembler's `template`. Unlike every other entry here, this key
       // is NOT the input's socket type — the socket stays STRING so links
       // still work, and the node ships `widgetType` in the input spec's

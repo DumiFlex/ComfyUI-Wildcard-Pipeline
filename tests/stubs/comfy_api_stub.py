@@ -131,6 +131,7 @@ Int = _IOType("INT")
 Float = _IOType("FLOAT")
 Boolean = _IOType("BOOLEAN")
 String = _IOType("STRING")
+Model = _IOType("MODEL")
 AnyType = _IOType("*")
 
 
@@ -323,6 +324,7 @@ class _IONamespace:
     Float = Float
     Boolean = Boolean
     String = String
+    Model = Model
     Combo = Combo
     AnyType = AnyType
     Autogrow = _Autogrow

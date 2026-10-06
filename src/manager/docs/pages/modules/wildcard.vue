@@ -28,6 +28,7 @@ const instanceOptions = [
   { term: "Pinned mode", desc: "Locks to one specific option regardless of seed. Use this to hold an element steady across a batch while everything else varies." },
   { term: "Category filter", desc: 'A boolean sub-category expression — "and / or / not", parentheses, and comma as shorthand for "or" (e.g. "feline and warm, not lynx") — that narrows the pool to matching options before the pick. Build it from grouped pills or type it in the advanced editor; it never applies to the null option.' },
   { term: "Exclude null", desc: "Drops the null option for this use, so the wildcard always resolves to real text. Only shown when the wildcard actually has a null option to exclude." },
+  { term: "Match variable", desc: "Under Runtime in the node settings. Instead of rolling, pick the option whose text equals a variable's value (ignoring case), e.g. model_variant from WP Model Info. No match uses the fallback option; without one the wildcard rolls as usual and WP Debug notes it. This is how a variable drives a constraint: the matched pick is a normal source pick." },
   { term: "Locked seed", desc: "Freezes this wildcard's pick across every loop iteration — every iteration in the batch gets the same result. Useful for holding one element constant (e.g. the art style) while letting other wildcards vary." },
 ];
 </script>
@@ -158,6 +159,12 @@ const instanceOptions = [
         option weights — for example, making "stormy" more likely when the subject was "ocean".
         The constraint must sit <em>after</em> the source wildcard and <em>before</em> this
         wildcard in the stack. See the Constraint page for the full picture.
+      </p>
+      <p>
+        Constraints read picks, not variables. To steer one from a variable (the loaded
+        checkpoint, an injected value), give the source wildcard options that spell the
+        variable's values and set <b>Match variable</b> on it. See WP Model Info for a worked
+        example.
       </p>
       <DocImage
         src="images/docs/wildcard-constraint-order.png"

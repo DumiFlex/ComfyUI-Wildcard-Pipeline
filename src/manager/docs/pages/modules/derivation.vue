@@ -166,6 +166,16 @@ const instanceOptions = [
       </p>
     </DocSection>
 
+    <DocSection title="LoRA by model">
+      <p>
+        The <b>LoRA by model</b> button in the editor adds a ready-made rule for use with the
+        WP Model Info node: if <VarToken>$model_variant</VarToken> is pony it sets
+        <VarToken>$loras</VarToken> to a Pony LoRA tag, if illustrious to an Illustrious one, and
+        otherwise to nothing. Replace the placeholder LoRA names with yours, add a branch per
+        variant you use, and put <VarToken>$loras</VarToken> in your Assembler template.
+      </p>
+    </DocSection>
+
     <DocSection title="Per-use options">
       <p>
         When you add a Derivation to a Context you can tune which rules are active for that use:

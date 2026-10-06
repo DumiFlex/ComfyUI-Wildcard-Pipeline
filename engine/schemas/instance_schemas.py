@@ -51,6 +51,10 @@ INSTANCE_SCHEMAS: dict[str, dict[str, InstanceFieldType]] = {
         # SP2c: multi-pick draws WITH replacement (repeats allowed) when true,
         # without (unique) when false/absent. Mirrors the inline `~` flag.
         "pick_independent": "boolean",
+        # Model-aware pipelines: take the option whose text equals this
+        # variable's value (e.g. `model_variant`), else the fallback, else
+        # roll. Instance-local; makes the wildcard a constraint source.
+        "match_variable": "string",
         # `mode` and `pinned_option_id` removed in v2 — resolve mode is
         # implicit in pool state. Engine handler still reads them when
         # present in legacy snapshots; the schema validator now flags
