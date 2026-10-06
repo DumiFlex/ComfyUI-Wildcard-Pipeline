@@ -17,9 +17,10 @@ const ports = [
   { term: "upstream (in)", desc: "An existing Context to extend. Only nodes after Model Info see its variables, so it usually goes first." },
   { term: "model (in)", desc: "The MODEL from your checkpoint loader. Gives the family, and the node follows the wire back to the loader for the file name, stepping over LoRA loaders and other model patches." },
   { term: "Detected", desc: "The three values and where each comes from. Variant and name update as soon as you change the loader's checkpoint; the family shows after the first run." },
+  { term: "Globe", desc: "Whether the Assembler can use the variable. All three start internal: later rules read them, but the Assembler leaves them out of the prompt and its variable chips. Click the globe to use one in the Assembler." },
   { term: "Pin", desc: "Use your own value for a row instead of the detected one: a file name when no model is wired, or a variant to try your Pony rules without switching checkpoint. Click it again to go back to detection." },
   { term: "Variant rules", desc: "Variant + pattern rows. The first pattern found in the file name sets $model_variant and its row lights up. Case-insensitive; | separates alternatives. A broken row is outlined in red and skipped with a WP Debug warning. Reset puts the shipped rules back." },
-  { term: "context (out)", desc: "The upstream Context plus the three variables. To use a value outside the pipeline, put it in an Assembler template." },
+  { term: "context (out)", desc: "The upstream Context plus the three variables. To use a value outside the pipeline, turn its globe off and put it in an Assembler template." },
 ];
 </script>
 

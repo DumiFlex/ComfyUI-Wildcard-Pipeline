@@ -79,4 +79,11 @@ describe("ModelInfoWidget", () => {
     });
     expect(w.find('[data-test="mi-rule-0"]').classes()).toContain("is-problem");
   });
+
+  it("rows start internal; the globe shows a variable in the Assembler", async () => {
+    const w = mk({ loaderName: PONY });
+    expect(w.find('[data-test="mi-internal-variant"]').classes()).toContain("is-active");
+    await w.find('[data-test="mi-internal-variant"]').trigger("click");
+    expect(lastEmit(w).internal).toEqual({ family: true, variant: false, name: true });
+  });
 });

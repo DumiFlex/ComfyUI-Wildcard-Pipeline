@@ -4,7 +4,7 @@ import {
   DEFAULT_VARIANT_RULES,
   detectVariant,
   loaderFileName,
-  modelInfoPreviewModule,
+  modelInfoPreviewModules,
   modelStem,
   compileVariantRules,
   parseModelInfoConfig,
@@ -19,6 +19,8 @@ import {
   collectUpstreamKinds,
   collectUpstreamProducers,
   collectUpstreamResolved,
+  collectUpstreamRenderableVariables,
+  internalVarNames,
   type LiteGraphLike,
   type LiteNodeLike,
 } from "./graph";
@@ -123,7 +125,8 @@ describe("model-info on the canvas", () => {
     expect(staticModelValues(info)).toEqual({
       model_family: "$model_family", model_variant: "$model_variant", model_name: "$model_name",
     });
-    expect(modelInfoPreviewModule(info).entries).toEqual([]);
+    expect(modelInfoPreviewModules(info)).toHaveLength(1);
+    expect(modelInfoPreviewModules(info)[0].entries).toEqual([]);
   });
 
   it("walkers see the three variables downstream", () => {
@@ -143,15 +146,33 @@ describe("model-info on the canvas", () => {
   });
 
   it("the preview chain carries a model step only when asked", () => {
-    const { g, ctx } = graph({ info: { family: "sdxl" } });
+    const { g, ctx } = graph({ info: { family: "sdxl", internal: { variant: false } } });
     expect(collectUpstreamChain(g, ctx)).toEqual([]);
     const steps = collectUpstreamChain(g, ctx, { modelSteps: true });
     expect(steps).toHaveLength(1);
-    expect((steps[0][0] as { entries: unknown[] }).entries).toEqual([
+    const [shown, hidden] = steps[0] as { entries: unknown[]; instance?: unknown }[];
+    expect(shown.entries).toEqual([{ variable_name: "model_variant", value: "pony" }]);
+    expect(hidden.instance).toEqual({ internal: true });
+    expect(hidden.entries).toEqual([
       { variable_name: "model_family", value: "sdxl" },
-      { variable_name: "model_variant", value: "pony" },
       { variable_name: "model_name", value: "ponyDiffusionV6XL" },
     ]);
+  });
+
+  it("all three are internal by default; a shown one loses the flag", () => {
+    const { g, ctx } = graph();
+    expect(JSON.parse(collectUpstreamKinds(g, ctx).__wp_internal_flags__)).toEqual({
+      model_family: true, model_variant: true, model_name: true,
+    });
+    expect(collectUpstreamProducers(g, ctx).model_variant.internal).toBe(true);
+    const { g: g2, ctx: ctx2 } = graph({ info: { internal: { variant: false } } });
+    expect(JSON.parse(collectUpstreamKinds(g2, ctx2).__wp_internal_flags__)).toEqual({
+      model_family: true, model_name: true,
+    });
+    expect(collectUpstreamProducers(g2, ctx2).model_variant.internal).toBe(false);
+    expect([...internalVarNames(collectUpstreamResolved(g2, ctx2))].sort())
+      .toEqual(["model_family", "model_name"]);
+    expect(collectUpstreamRenderableVariables(g2, ctx2)).toContain("model_variant");
   });
 
   it("the memo notices a checkpoint switch on the loader", () => {
@@ -175,6 +196,9 @@ describe("parseModelInfoConfig (mirrors engine parse_config)", () => {
     }));
     expect(cfg.rules).toEqual([{ variant: "x", pattern: "y" }]);
     expect([cfg.family, cfg.variant, cfg.name]).toEqual(["f", "", ""]);
+    expect(cfg.internal).toEqual({ family: true, variant: true, name: true });
+    expect(parseModelInfoConfig({ internal: { name: false, family: "no" } }).internal)
+      .toEqual({ family: true, variant: true, name: false });
   });
   it("marks the rows with problems", () => {
     const { problemRows } = compileVariantRules([

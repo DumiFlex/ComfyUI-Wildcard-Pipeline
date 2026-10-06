@@ -136,13 +136,17 @@ class WPModelInfo(io.ComfyNode):
             out_internals[negatives.NEG_KEY] = {
                 k: v for k, v in neg_table.items() if k not in values
             }
-        # A previous writer may have flagged one of these names internal; this
-        # write is public, so the closest writer wins (last-write-wins).
-        flags = out_internals.get("__wp_internal_flags__")
-        if isinstance(flags, dict) and any(k in flags for k in values):
-            out_internals["__wp_internal_flags__"] = {
-                k: v for k, v in flags.items() if k not in values
-            }
+        # Internal-ness is last-write-wins like the value: this write decides
+        # it for all three names, flagging the ones the widget marks internal
+        # and clearing any flag an earlier writer left on the others.
+        internal_vars = {f"model_{k}" for k in cfg.internal}
+        flags = {
+            k: v for k, v in (out_internals.get("__wp_internal_flags__") or {}).items()
+            if k not in values
+        }
+        flags.update({k: True for k in values if k in internal_vars})
+        if flags or "__wp_internal_flags__" in out_internals:
+            out_internals["__wp_internal_flags__"] = flags
 
         sources = {
             model_info.FAMILY_VAR: "pinned" if cfg.family else "model",
@@ -153,7 +157,7 @@ class WPModelInfo(io.ComfyNode):
             {
                 "node": "WP_ModelInfo",
                 "binding": name,
-                "internal": False,
+                "internal": name in internal_vars,
                 "type": sources[name],
                 "value": value,
             }

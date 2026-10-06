@@ -18,7 +18,7 @@ import {
   cacheVersion as previewCacheVersion,
 } from "./preview-resolver";
 import { assignCodenames, baseCodename } from "./node-codename";
-import { MODEL_INFO_NODE, MODEL_VARS, modelInfoPreviewModule, staticModelValues } from "./model-info";
+import { MODEL_INFO_NODE, MODEL_VARS, internalModelVars, modelInfoPreviewModules, staticModelValues } from "./model-info";
 import { clauseActions, derivationTargets, evalConditionTree, isNegativeMode } from "./derivation-conditions";
 import type { SeedStrategy } from "../components/shared/seed-derive";
 
@@ -786,7 +786,7 @@ export function collectUpstreamChain(
   const out: unknown[][] = [];
   for (const n of upstreamFirst) {
     if (opts.modelSteps && n.type === MODEL_INFO_NODE && !isSkippedMode(n)) {
-      out.push([modelInfoPreviewModule(n)]);
+      out.push(modelInfoPreviewModules(n));
       continue;
     }
     if (n.type !== "WP_Context") continue;
@@ -886,9 +886,10 @@ export function collectUpstreamKinds(
       continue;
     }
     if (n.type === MODEL_INFO_NODE) {
+      const internal = internalModelVars(n);
       for (const v of MODEL_VARS) {
         kinds[v] = "model";
-        flagInternal(v, false);
+        flagInternal(v, internal.has(v));
       }
       continue;
     }
@@ -1151,7 +1152,8 @@ export function collectUpstreamProducers(
     }
 
     if (n.type === MODEL_INFO_NODE) {
-      for (const v of MODEL_VARS) write(v, { kind: "model", nodeId, nodeLabel });
+      const internal = internalModelVars(n);
+      for (const v of MODEL_VARS) write(v, { kind: "model", nodeId, nodeLabel, internal: internal.has(v) });
       continue;
     }
 
@@ -1360,7 +1362,9 @@ function chainParts(chain: LiteNodeLike[]): unknown[] {
     );
     // Model Info's preview reads ANOTHER node (the loader's file name), so
     // its own widgets alone can't key the memo.
-    if (n.type === MODEL_INFO_NODE) parts.push(JSON.stringify(staticModelValues(n)));
+    if (n.type === MODEL_INFO_NODE) {
+      parts.push(JSON.stringify(staticModelValues(n)), [...internalModelVars(n)].join(","));
+    }
   }
   return parts;
 }
@@ -1484,10 +1488,12 @@ function resolveChainStatic(
     }
     if (n.type === MODEL_INFO_NODE) {
       // Real variant/name from the loader's file-name widget; family is a
-      // `$model_family` placeholder until overridden (needs the loaded model).
+      // `$model_family` placeholder until pinned or run (needs the loaded model).
+      const internal = internalModelVars(n);
       for (const [k, v] of Object.entries(staticModelValues(n))) {
         ctx[k] = v;
-        internalKeys.delete(k);
+        if (internal.has(k)) internalKeys.add(k);
+        else internalKeys.delete(k);
       }
       continue;
     }

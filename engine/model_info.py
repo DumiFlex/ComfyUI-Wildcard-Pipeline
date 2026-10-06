@@ -135,6 +135,10 @@ class ModelInfoConfig:
     family: str = ""
     variant: str = ""
     name: str = ""
+    #: Short keys (``family`` / ``variant`` / ``name``) flagged internal: the
+    #: variable still reaches later rules, but the Assembler leaves it out.
+    #: All three are internal unless the widget says ``false``.
+    internal: frozenset[str] = frozenset(("family", "variant", "name"))
 
 
 def parse_config(raw: Any) -> ModelInfoConfig:
@@ -158,7 +162,12 @@ def parse_config(raw: Any) -> ModelInfoConfig:
         v = data.get(key)
         return v.strip() if isinstance(v, str) else ""
 
-    return ModelInfoConfig(rules, pin("family"), pin("variant"), pin("name"))
+    flags = data.get("internal")
+    internal = frozenset(
+        k for k in ("family", "variant", "name")
+        if not (isinstance(flags, dict) and flags.get(k) is False)
+    )
+    return ModelInfoConfig(rules, pin("family"), pin("variant"), pin("name"), internal)
 
 
 def detect_variant(name: str, rules: list[VariantRule]) -> str:

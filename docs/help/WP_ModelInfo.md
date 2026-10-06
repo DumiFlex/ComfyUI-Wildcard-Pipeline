@@ -16,12 +16,13 @@ Pony and Illustrious are both SDXL underneath, so only the file name can tell th
 ## The widget
 
 - **Detected** shows the three values and where each comes from. The variant and name update as soon as you change the loader's checkpoint; the family needs the loaded model, so it shows after the first run.
+- The **globe** on a row decides whether the Assembler can use that variable. All three start internal: later rules read them, but the Assembler leaves them out of the prompt and its variable chips. Click the globe to use one in the Assembler, for example `$model_variant` in a file-name prefix.
 - Click the **pin** on a row to use your own value instead, for example a file name when no model is wired, or a variant to try your Pony rules without switching checkpoint. Click it again to go back to detection.
 - **Variant rules** are `variant` + `pattern` rows. The first pattern found in the file name sets `$model_variant`, and its row lights up. Case-insensitive, `|` separates alternatives. A broken row is outlined in red and skipped (WP Debug says why). **Reset** puts the shipped rules back.
 
 ## Output
 
-- **context**: the upstream Context plus the three variables. To use a value outside the pipeline, put it in an Assembler template (for example `$model_variant` in a file-name prefix).
+- **context**: the upstream Context plus the three variables. To use a value outside the pipeline, turn its globe off and put it in an Assembler template.
 
 ## How to use
 

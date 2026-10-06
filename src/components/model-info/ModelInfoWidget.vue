@@ -120,6 +120,18 @@ function showsInput(k: Key): boolean {
   return isPinned(k) || editing.value === k;
 }
 
+/* ── internal (hidden from the Assembler) ─────────────────────────────── */
+
+function isInternal(k: Key): boolean {
+  return props.modelValue.internal[k];
+}
+function toggleInternal(k: Key): void {
+  emit("update:modelValue", {
+    ...props.modelValue,
+    internal: { ...props.modelValue.internal, [k]: !isInternal(k) },
+  });
+}
+
 /* ── rules ────────────────────────────────────────────────────────────── */
 
 const isDefaultRules = computed(() =>
@@ -182,6 +194,15 @@ function resetRules(): void {
             :data-test="`mi-value-${row.key}`"
           >{{ row.value || row.hint }}</span>
           <span class="wp-mi__source" :class="{ 'is-pinned': isPinned(row.key) }">{{ row.source }}</span>
+          <button
+            type="button"
+            class="wp-mi__pin wp-mi__globe"
+            :class="{ 'is-active': isInternal(row.key) }"
+            :title="isInternal(row.key) ? `Internal: hidden from the Assembler. Click to show ${row.variable}` : `Shown in the Assembler. Click to hide ${row.variable}`"
+            :aria-pressed="isInternal(row.key)"
+            :data-test="`mi-internal-${row.key}`"
+            @click="toggleInternal(row.key)"
+          ><i class="pi pi-globe" aria-hidden="true" /></button>
           <button
             type="button"
             class="wp-mi__pin"
@@ -307,7 +328,7 @@ function resetRules(): void {
 }
 .wp-mi__var {
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) auto 22px;
+  grid-template-columns: 52px minmax(0, 1fr) auto 20px 20px;
   align-items: center;
   gap: 8px;
   min-height: 22px;
@@ -366,6 +387,8 @@ function resetRules(): void {
 .wp-mi__var:hover .wp-mi__pin { opacity: 1; }
 .wp-mi__pin:hover { color: var(--wp-text); background: var(--wp-bg2, rgba(255, 255, 255, 0.06)); }
 .wp-mi__pin.is-active { opacity: 1; color: var(--wp-amber, var(--wp-warn, #fbbf24)); }
+/* Same accent "globe on = internal" read as the Injector rows. */
+.wp-mi__globe.is-active { color: var(--wp-accent-text, var(--wp-accent)); }
 .wp-mi__pin .pi { font-size: 10px; }
 
 /* VARIANT RULES */

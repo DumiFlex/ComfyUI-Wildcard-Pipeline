@@ -71,16 +71,30 @@ export function compileVariantRules(rows: readonly VariantRuleRow[]): {
 
 /** The node's widget state (`wp_model_info`). Empty pins mean "detect it".
  *  Mirrors `engine/model_info.py::parse_config`. */
+export type ModelInfoKey = "family" | "variant" | "name";
+export const MODEL_INFO_KEYS: readonly ModelInfoKey[] = ["family", "variant", "name"];
+
 export interface ModelInfoConfig {
   version: 1;
   rules: VariantRuleRow[];
   family: string;
   variant: string;
   name: string;
+  /** Rows flagged internal: the variable still reaches later rules, but the
+   *  Assembler leaves it out (same as an Injector row's globe). Internal by
+   *  default; a row shown in the Assembler is stored as `false`. */
+  internal: Record<ModelInfoKey, boolean>;
 }
 
 export function defaultModelInfoConfig(): ModelInfoConfig {
-  return { version: 1, rules: DEFAULT_VARIANT_RULES.map((r) => ({ ...r })), family: "", variant: "", name: "" };
+  return {
+    version: 1,
+    rules: DEFAULT_VARIANT_RULES.map((r) => ({ ...r })),
+    family: "",
+    variant: "",
+    name: "",
+    internal: { family: true, variant: true, name: true },
+  };
 }
 
 export function parseModelInfoConfig(raw: unknown): ModelInfoConfig {
@@ -98,7 +112,12 @@ export function parseModelInfoConfig(raw: unknown): ModelInfoConfig {
       }))
     : DEFAULT_VARIANT_RULES.map((r) => ({ ...r }));
   const pin = (k: string) => (typeof d[k] === "string" ? (d[k] as string).trim() : "");
-  return { version: 1, rules: rows, family: pin("family"), variant: pin("variant"), name: pin("name") };
+  const flags = d.internal && typeof d.internal === "object" ? (d.internal as Record<string, unknown>) : {};
+  const internal = { family: true, variant: true, name: true };
+  for (const k of MODEL_INFO_KEYS) if (flags[k] === false) internal[k] = false;
+  return {
+    version: 1, rules: rows, family: pin("family"), variant: pin("variant"), name: pin("name"), internal,
+  };
 }
 
 /** First rule whose pattern occurs in `name`, or null. */
@@ -193,6 +212,12 @@ export function readModelInfoConfig(node: NodeLike): ModelInfoConfig {
 
 /** What the node would write, as far as the canvas can tell. `null` = only
  *  known at run time. */
+/** Variable names (`model_family`, …) this node marks internal. */
+export function internalModelVars(node: NodeLike): Set<string> {
+  const flags = readModelInfoConfig(node).internal;
+  return new Set(MODEL_INFO_KEYS.filter((k) => flags[k]).map((k) => `model_${k}`));
+}
+
 export function staticModelInfo(node: NodeLike, graph?: GraphLike): StaticModelInfo {
   const cfg = readModelInfoConfig(node);
   const file = cfg.name || loaderFileName(node, graph);
@@ -214,21 +239,34 @@ export function staticModelValues(node: NodeLike, graph?: GraphLike): Record<str
   };
 }
 
-/** A fixed_values module (legacy `entries` shape the engine still reads)
- *  holding the values the canvas knows, for the server preview chain. Unknown
- *  values are left out rather than sent as placeholders, so a derivation
- *  condition never matches the literal text `$model_family`. */
-export function modelInfoPreviewModule(node: NodeLike, graph?: GraphLike): Record<string, unknown> {
+/** fixed_values modules (legacy `entries` shape the engine still reads)
+ *  holding the values the canvas knows, for the server preview chain: one for
+ *  the public variables and one, flagged internal, for the rest, so the
+ *  preview hides them like a run would. Unknown values are left out rather
+ *  than sent as placeholders, so a derivation condition never matches the
+ *  literal text `$model_family`. */
+export function modelInfoPreviewModules(node: NodeLike, graph?: GraphLike): Record<string, unknown>[] {
   const info = staticModelInfo(node, graph);
-  const entries: { variable_name: string; value: string }[] = [];
-  if (info.family !== null) entries.push({ variable_name: MODEL_FAMILY_VAR, value: info.family });
-  if (info.variant !== null) entries.push({ variable_name: MODEL_VARIANT_VAR, value: info.variant });
-  if (info.name !== null) entries.push({ variable_name: MODEL_NAME_VAR, value: info.name });
-  return {
-    id: "0de1f0ff",
-    type: "fixed_values",
-    enabled: true,
-    meta: { name: "WP Model Info" },
-    entries,
-  };
+  const internal = internalModelVars(node);
+  const known: [string, string | null][] = [
+    [MODEL_FAMILY_VAR, info.family],
+    [MODEL_VARIANT_VAR, info.variant],
+    [MODEL_NAME_VAR, info.name],
+  ];
+  const entriesFor = (hidden: boolean) => known
+    .filter(([k, v]) => v !== null && internal.has(k) === hidden)
+    .map(([k, v]) => ({ variable_name: k, value: v as string }));
+  const out: Record<string, unknown>[] = [{
+    id: "0de1f0ff", type: "fixed_values", enabled: true,
+    meta: { name: "WP Model Info" }, entries: entriesFor(false),
+  }];
+  const hidden = entriesFor(true);
+  if (hidden.length > 0) {
+    out.push({
+      id: "0de1f0fe", type: "fixed_values", enabled: true,
+      meta: { name: "WP Model Info (internal)" }, entries: hidden,
+      instance: { internal: true },
+    });
+  }
+  return out;
 }

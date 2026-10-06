@@ -121,8 +121,47 @@ def test_extends_upstream_and_clears_shadowed_negatives_and_flags():
     assert payload.context["hair"] == "red"
     assert payload.context["model_variant"] == "pony"
     assert payload.internals["__wp_negatives__"] == {"hair": [{"text": "y"}]}
-    assert payload.internals["__wp_internal_flags__"] == {"hair": True}
+    assert payload.internals["__wp_internal_flags__"] == {
+        "hair": True, "model_family": True, "model_variant": True, "model_name": True,
+    }
     assert payload.internals["__wp_picks__"] == {"abcd1234": {"value": "red"}}
     assert len(payload.debug["__wp_trace__"]) == 4
     # Upstream payload untouched.
     assert "model_variant" in upstream.internals["__wp_negatives__"]
+
+
+def test_all_three_are_internal_by_default():
+    out = _run(model=_model(SDXL))
+    assert out.values[0].internals["__wp_internal_flags__"] == {
+        "model_family": True, "model_variant": True, "model_name": True,
+    }
+
+
+def test_internal_flags_follow_the_widget():
+    upstream = ContextPayload(
+        context={}, debug={},
+        internals={"__wp_internal_flags__": {"model_name": True, "hair": True}},
+    )
+    out = _run(
+        upstream=upstream, model=_model(SDXL),
+        config={"internal": {"family": True, "name": False}},
+    )
+    payload = out.values[0]
+    assert payload.internals["__wp_internal_flags__"] == {
+        "hair": True, "model_family": True, "model_variant": True,
+    }
+    # Internal variables still reach later rules.
+    assert payload.context["model_variant"] == "pony"
+    trace = {t["binding"]: t["internal"] for t in payload.debug["__wp_trace__"]}
+    assert trace == {"model_family": True, "model_variant": True, "model_name": False}
+
+
+def test_internal_variables_stay_out_of_the_assembler():
+    from wp_nodes.assembler_node import WPPromptAssembler
+
+    out = _run(model=_model(SDXL), config={"internal": {"family": False}})
+    res = WPPromptAssembler.execute(
+        context=out.values[0], template="[$model_family] [$model_variant]",
+    )
+    assert res.values[0].startswith("[sdxl] [")
+    assert "pony" not in res.values[0]
