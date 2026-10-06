@@ -16,9 +16,15 @@ const ports = [
 
 const presets = [
   { term: "Gentle", desc: "Whitespace normalization only — collapses extra spaces, strips leading/trailing gaps. Safest option when you want minimal changes." },
-  { term: "Balanced", desc: "Adds punctuation cleanup and exact tag deduplication on top of gentle. Good default for most prompt workflows." },
-  { term: "Aggressive", desc: "Also enables fuzzy deduplication, which catches near-duplicate tags that differ by pluralisation or minor spelling. May occasionally merge things you intended to keep separate." },
+  { term: "Balanced", desc: "Adds empty-group removal, LoRA tag spacing, punctuation cleanup and exact tag deduplication on top of gentle. None of these change what the prompt means. Good default for most prompt workflows." },
+  { term: "Aggressive", desc: "Also merges nested weights and enables fuzzy deduplication, which catches near-duplicate tags that differ by pluralisation or minor spelling. May occasionally merge things you intended to keep separate." },
   { term: "Custom", desc: "No preset — a Custom badge lights up when your per-rule toggles diverge from the active preset level." },
+];
+
+const syntaxRules = [
+  { term: "Empty groups", desc: "Removes brackets with nothing inside: (), [], ( , ), (:1.2), and groups left empty once those go. red (), dress becomes red, dress. The usual source is a weighted ref that resolved to nothing: (@{hat}:1.2) becomes (:1.2). On from Balanced." },
+  { term: "Merge weights", desc: "Folds stacked weights into one group by multiplying them, as ComfyUI does (a bare ( ) counts as 1.1): ((a:1.1):1.2) becomes (a:1.32), (((a))) becomes (a:1.33), and (a:1.0) becomes plain a. Only merges when the inner group is everything inside the outer one, rounds to 2 decimals, and never touches [ ]. On in Aggressive." },
+  { term: "LoRA spacing", desc: "Tidies <lora:…> tags (and lyco, locon, hypernet, <embedding:…>): < lora : x : 0.8 > becomes <lora:x:0.8>, and girl<lora:x:1> becomes girl <lora:x:1>. Spaces inside a file name stay. On from Balanced." },
 ];
 </script>
 
@@ -34,8 +40,9 @@ const presets = [
     <DocSection title="What it's for">
       <p>
         Wire any prompt string — typically from a <b>WP Prompt Assembler</b> — into the
-        Cleaner and it applies a configurable set of rules: whitespace normalization, tag
-        deduplication, fuzzy matching, and an optional blocklist. The cleaned text comes out
+        Cleaner and it applies a configurable set of rules: whitespace normalization, prompt
+        syntax tidying (empty groups, nested weights, LoRA tags), tag deduplication, fuzzy
+        matching, and an optional blocklist. The cleaned text comes out
         the other side ready to wire into a CLIP Text Encode. It works on text alone and
         needs no Context connection.
       </p>
@@ -64,12 +71,24 @@ const presets = [
       <DocKeyList :items="presets" />
     </DocSection>
 
+    <DocSection title="Prompt syntax rules">
+      <p>
+        Three rules read the prompt the way ComfyUI does. They work in both modes and run
+        first, so the commas and spaces they leave behind are tidied in the same run.
+      </p>
+      <DocKeyList :items="syntaxRules" />
+      <DocCallout variant="tip">
+        Escaped <code>\(</code> <code>\)</code> stay literal, LoRA and embedding names are never
+        edited, and if the brackets don't balance the bracket rules leave the prompt exactly as
+        written.
+      </DocCallout>
+    </DocSection>
+
     <DocSection title="Cleaning the negative">
       <p>
         With a negative wired in, one Cleaner cleans both prompts. The rule list gets a second
-        column of checkboxes for the negative, with its own defaults: whitespace, punctuation and
-        tag dedupe are on (the Gentle preset turns on whitespace only), while fuzzy dedupe and the
-        blocklist are off. Near-duplicates in a negative ("bad hands", "bad hand") are usually
+        column of checkboxes for the negative, with its own defaults: the same as the prompt
+        column's, except fuzzy dedupe and the blocklist are off. Near-duplicates in a negative ("bad hands", "bad hand") are usually
         deliberate, and the blocklist's words are often exactly what belongs in a negative.
         Presets set both columns; changing a negative checkbox marks the preset as custom.
       </p>

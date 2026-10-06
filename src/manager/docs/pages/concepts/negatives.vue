@@ -123,8 +123,8 @@ const rules = [
       <p>
         <b>WP Prompt Cleaner</b> takes an optional <code>negative</code> input and returns a cleaned
         <code>negative</code> output beside the prompt. Its rule list has a second column for the
-        negative: whitespace, punctuation and tag dedupe are on by default, fuzzy dedupe and the
-        blocklist are off. The extra rule <b>Drop negative tags also in prompt</b> (off by default)
+        negative: it follows the prompt column's preset, except fuzzy dedupe and the blocklist are
+        off. The extra rule <b>Drop negative tags also in prompt</b> (off by default)
         removes a tag from the negative when the prompt asks for it too; either way the report
         names the overlap.
       </p>

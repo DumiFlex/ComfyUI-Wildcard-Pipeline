@@ -1,6 +1,6 @@
 # WP Prompt Cleaner
 
-Drops duplicate tags, strips orphan punctuation, filters blocklisted words. Operates on the prompt string alone — no context input needed.
+Drops duplicate tags, strips orphan punctuation, removes empty `()` groups, merges nested weights, tidies LoRA tags and filters blocklisted words. Operates on the prompt string alone — no context input needed.
 
 ## Inputs
 
@@ -14,7 +14,7 @@ Drops duplicate tags, strips orphan punctuation, filters blocklisted words. Oper
 
 ## Cleaning the negative
 
-The RULES list has a second checkbox column for the negative. Its defaults: whitespace, punctuation and tag dedupe on (gentle: whitespace only); fuzzy dedupe and blocklist off, since near-duplicates in a negative are usually deliberate and blocklisted words often belong there. **Drop negative tags also in prompt** (off by default) removes a negative tag the prompt also asks for; either way the run stats name the overlap.
+The RULES list has a second checkbox column for the negative. Its defaults match the prompt column's (gentle: whitespace only), except fuzzy dedupe and blocklist off, since near-duplicates in a negative are usually deliberate and blocklisted words often belong there. **Drop negative tags also in prompt** (off by default) removes a negative tag the prompt also asks for; either way the run stats name the overlap.
 
 ## How to use
 
@@ -33,10 +33,20 @@ The RULES list has a second checkbox column for the negative. Its defaults: whit
 | Preset | Rules |
 |---|---|
 | gentle | whitespace |
-| balanced | whitespace, punctuation, tag dedupe |
-| aggressive | whitespace, punctuation, tag dedupe, fuzzy dedupe |
+| balanced | empty groups, LoRA spacing, whitespace, punctuation, tag dedupe |
+| aggressive | empty groups, merge weights, LoRA spacing, whitespace, punctuation, tag dedupe, fuzzy dedupe |
 
 Blocklist auto-enables when its entries are non-empty.
+
+## Prompt syntax rules
+
+These read the prompt the way ComfyUI does, and work in both modes.
+
+- **empty groups** — removes brackets with nothing inside: `()`, `[]`, `( , )`, `(:1.2)`, and groups left empty once those go. `red (), dress` → `red, dress`. The usual source is a weighted ref that resolved to nothing: `(@{hat}:1.2)` → `(:1.2)`.
+- **merge weights** — folds stacked weights into one group by multiplying them, as ComfyUI does (a bare `( )` counts as 1.1): `((a:1.1):1.2)` → `(a:1.32)`, `(((a)))` → `(a:1.33)`. A weight of 1 is unwrapped: `(a:1.0)` → `a`. Only merges when the inner group is everything inside the outer one (`((a:1.1), b:1.2)` stays), and rounds to 2 decimals. `[ ]` is not a weight in ComfyUI, so it's never merged.
+- **LoRA spacing** — `< lora : x : 0.8 >` → `<lora:x:0.8>`, `girl<lora:x:1>smile` → `girl <lora:x:1> smile`. Also covers lyco, locon, hypernet and `<embedding:…>`. Spaces inside a file name stay.
+
+Escaped `\(` `\)` are literal and left alone, LoRA and embedding names are never edited, and if the brackets don't balance the bracket rules leave the prompt exactly as written.
 
 ## Blocklist
 

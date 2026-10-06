@@ -9,6 +9,9 @@ from __future__ import annotations
 from typing import Any, Literal, TypedDict
 
 RuleId = Literal[
+    "empty_groups",
+    "merge_weights",
+    "lora_spacing",
     "whitespace",
     "punctuation",
     "dedupe_exact",
