@@ -1,4 +1,5 @@
 import type { CommitOk, CommitPayload } from "../import-export/commit";
+import type { WildcardFilesResult } from "../import-export/wildcard-files";
 import type {
   BundleCreateInput, BundleListResponse, BundleRow, BundleUpdateInput,
   CategoryCreateInput, CategoryRow,
@@ -62,7 +63,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     ...(init.headers as Record<string, string> | undefined ?? {}),
   };
-  if (init.body !== undefined) headers["content-type"] = "application/json";
+  // FormData sets its own multipart boundary header.
+  if (init.body !== undefined && !(init.body instanceof FormData)) {
+    headers["content-type"] = "application/json";
+  }
   const resp = await fetch(path, { ...init, headers });
   checkStartupId(resp);
   if (resp.status === 204) return undefined as T;
@@ -468,6 +472,17 @@ export const api = {
       return request<{ ok: true }>("/wp/api/import/undo", {
         method: "POST",
         body: JSON.stringify({ undo_entry_id: undoEntryId }),
+      });
+    },
+    /**
+     * POST /wp/api/import/wildcard-files — convert Dynamic Prompts / PPP /
+     * Impact Pack wildcard files (built by `buildWildcardForm`) into an
+     * import payload plus a report. Writes nothing; the payload goes
+     * through the normal picker + commit.
+     */
+    wildcardFiles(form: FormData) {
+      return request<WildcardFilesResult>("/wp/api/import/wildcard-files", {
+        method: "POST", body: form,
       });
     },
   },

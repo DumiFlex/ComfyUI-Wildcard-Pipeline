@@ -31,6 +31,16 @@ const instanceOptions = [
   { term: "Match variable", desc: "Under Runtime in the node settings. Instead of rolling, pick the option whose text equals a variable's value (ignoring case), e.g. model_variant from WP Model Info. No match uses the fallback option; without one the wildcard rolls as usual and WP Debug notes it. This is how a variable drives a constraint: the matched pick is a normal source pick." },
   { term: "Locked seed", desc: "Freezes this wildcard's pick across every loop iteration — every iteration in the batch gets the same result. Useful for holding one element constant (e.g. the art style) while letting other wildcards vary." },
 ];
+
+const importRules = [
+  { term: "One wildcard per list", desc: "Each wildcard becomes its own module, named by its path the way __name__ finds it: animals/cats.txt becomes animals/cats, and a YAML key clothing: { tops: [...] } becomes clothing/tops. Its variable is the last part ($cats, $tops)." },
+  { term: "Category and tag", desc: "Each wildcard goes in a category named after its top folder (or YAML top key), unless you type one category for all. Every module also gets the library tag, which starts as the pack's name, so the whole pack sits together on the Tags page." },
+  { term: "Bundles", desc: "With Bundle name ticked (the default) the import also builds bundles: one per top folder or YAML top key holding its wildcards, and one pack bundle holding those. Drop the pack bundle on a Context to get every wildcard in one go, or a folder bundle for part of it. Untick it to import wildcards only." },
+  { term: "References", desc: "__other__ references become @{} chips that point at the imported wildcard. A glob like __animals/*__, or a parent key like __clothing__ in Impact packs, becomes a group wildcard that picks one of the matching wildcards, weighted by how many options each has. PPP filters such as __colors'warm'__ become a category filter on the chip." },
+  { term: "Choice syntax", desc: "{a|b}, weights like {2::a|b} and multi-pick like {2$$a|b|c} keep working. Open ranges like {-2$$a|b} get their missing end filled in, samplers like {~a|b} pick at random, and the default separator is a comma." },
+  { term: "Weights, labels and fallbacks", desc: "Weighted lines (3::text), PPP labels ('summer, casual'::text) and PPP's else choice carry over as option weights, sub-categories and the wildcard's fallback." },
+  { term: "Comments and encoding", desc: "Lines starting with # are skipped, as is text after a # with a space before it (so C# survives). Files saved as UTF-8 or Windows-1252 both read correctly, and repeated values are dropped." },
+];
 </script>
 
 <template>
@@ -171,6 +181,34 @@ const instanceOptions = [
         ratio="16 / 6"
         caption="A WP Context node showing the canonical source → constraint → target stack: Starter subject ($subject · 4 options), Starter pairing (#1 $subject → $mood · 2×2 matrix), Starter mood ($mood · 4 options). The pink left-border on the constraint + target row visually pairs them; the constraint claims the first instance of $mood downstream of itself."
       />
+    </DocSection>
+
+    <DocSection title="Importing wildcard files">
+      <p>
+        Coming from A1111 or Forge? Open <b>Import / Export → Import</b> and pick
+        <b>Wildcard files…</b> or <b>Wildcard folder…</b>, or drop files on the import area.
+        It reads Dynamic Prompts, Prompt Post-Processor (PPP) and Impact Pack wildcards:
+        <code>.txt</code> lists, <code>.yaml</code> / <code>.yml</code> and <code>.json</code>
+        files, and <code>.zip</code> packs of them.
+      </p>
+      <DocKeyList :items="importRules" />
+      <DocImage
+        src="images/docs/wildcard-import.png"
+        ratio="1040 / 670"
+        caption="A four-file pack loaded on the Import tab: 7 wildcards and 1 group with 36 options, filed into 4 bundles. Library tag, category and bundle name sit above the file list (each file can be left out), then the conversion notes, with the ones worth checking marked and the first opened to show the options it touched."
+      />
+      <p>
+        After conversion the usual import picker opens, so you can still choose what to bring in.
+        Importing the same pack again finds the wildcards you already have instead of adding copies.
+      </p>
+      <DocCallout variant="warn">
+        <b>What doesn't carry over.</b> Things the pipeline handles differently are listed under <b>Conversion notes</b> with the
+        wildcards they touched. PPP <code>if</code> conditions are removed (the choice stays),
+        <code>${name}</code> becomes the variable <VarToken>$name</VarToken> (set it with a
+        Fixed Values module), variable assignments and defaults stay as text, and a reference to a
+        wildcard the pack doesn't contain stays as plain text. Multi-pick references like
+        <code>__2$$name__</code> become a two-pick group that may repeat.
+      </DocCallout>
     </DocSection>
 
     <DocSection title="Try it">

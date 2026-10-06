@@ -95,9 +95,9 @@ async function loadLibrary() {
   refreshing.value = true;
   try {
     const [mods, buns, tmpls] = await Promise.all([
-      api.modules.list({ limit: 1000 }),
-      api.bundles.list({ limit: 1000 }),
-      api.templates.list({ limit: 1000 }),
+      api.modules.list(),
+      api.bundles.list(),
+      api.templates.list(),
     ]);
     localModules.value = mods.items as unknown as LibraryModule[];
     localBundles.value = buns.items as unknown as LibraryBundle[];

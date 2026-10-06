@@ -115,7 +115,10 @@ Open it from the ComfyUI sidebar. It's where your modules live between workflows
   baseline, and after an edit see exactly which outputs changed.
 - **Community:** browse and install modules other people have shared on the
   [community site](https://wp.dumiflex.dev/?utm_source=github&utm_medium=readme), and publish your own.
-- **Import / Export:** move modules between machines as JSON files.
+- **Import / Export:** move modules between machines as JSON files, or bring in
+  wildcard files from A1111 or Forge. Dynamic Prompts, PPP and Impact Pack `.txt`,
+  `.yaml` and `.json` files (or a `.zip` of them) become one wildcard per list,
+  with `__references__` turned into links, and are filed into bundles per folder.
 - **Documentation:** the full guide, built into the app.
 
 ## Checking a run
