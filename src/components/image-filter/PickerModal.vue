@@ -372,7 +372,9 @@ const fitStyle = computed(() => {
   if (!fit.value) return undefined;
   const card = multiFrame.value;
   const size = fitTileSize(total.value, aspect.value, {
-    ...bodySize.value, gap: 10, extraW: card ? 18 : 0, extraH: card ? 36 : 0,
+    // A card adds padding, border and its label; tiles add a 2px border.
+    // Leave a few px of slack so rounding never wraps a row.
+    ...bodySize.value, gap: 10, extraW: card ? 26 : 8, extraH: card ? 42 : 8,
   });
   return { "--wp-ifp-tile": `${size}px` };
 });
@@ -719,7 +721,7 @@ const fitStyle = computed(() => {
 
 .wp-ifp__body { overflow-y: auto; padding: 12px 14px; flex: 1; min-height: 0; display: flex; flex-wrap: wrap; gap: 10px; align-content: flex-start; }
 .wp-ifp.is-fit { height: 90vh; }
-.wp-ifp__body.is-fit { align-content: center; justify-content: center; }
+.wp-ifp__body.is-fit { align-content: safe center; justify-content: safe center; }
 .wp-ifp__body.is-fit .wp-ifp__frame.is-flat .wp-ifp__tiles { justify-content: center; }
 .wp-ifp__body.is-grid { display: flex; flex-direction: column; flex-wrap: nowrap; padding: 0; overflow: hidden; }
 .wp-ifp__frame { display: flex; flex-direction: column; gap: 4px; padding: 6px; border-radius: 5px; background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); --wp-ifp-tile: 150px; }
