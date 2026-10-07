@@ -10,3 +10,9 @@ export const currentFrame = ref<number | null>(null);
 export function setFrame(frame: number | null): void {
   currentFrame.value = frame;
 }
+
+/** Back to base when the cursor sits on a frame past `count` (the count went
+ *  down, or a sweep now runs fewer combinations). */
+export function clampFrame(count: number): void {
+  if (currentFrame.value !== null && currentFrame.value >= count) currentFrame.value = null;
+}

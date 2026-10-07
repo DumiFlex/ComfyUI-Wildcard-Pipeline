@@ -12,14 +12,14 @@
  * host glue (`src/widgets/context_loop.ts`) serializes to JSON and
  * pushes via `host.setValue` so ComfyUI's widget value matches.
  */
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { remapSweepFrames, sweepFrameCount, type ContextLoopConfig, type LoopStrategy, type SweepConfig } from "./types";
 import { collectSweepCandidates, sweepSourcesFromRaw, type SweepSourceRaw } from "./sweep-candidates";
 import SweepModal from "./SweepModal.vue";
 import SeedListModal from "../shared/SeedListModal.vue";
 import { deriveLoopSeeds } from "../shared/seed-derive";
 import { pushToast } from "../shared/toast-store";
-import { currentFrame, setFrame } from "./frame-cursor";
+import { clampFrame, currentFrame, setFrame } from "./frame-cursor";
 import FrameChips from "../shared/FrameChips.vue";
 
 const props = withDefaults(
@@ -147,12 +147,18 @@ const sweepCandidates = computed(() =>
   collectSweepCandidates(sweepSourcesFromRaw(props.sweepSources)),
 );
 
+// Fewer frames than the one being edited: back to base.
+watch(() => Math.max(1, props.count ?? 1), (n) => clampFrame(n));
+
 const sweepOpen = ref(false);
 /** Frames the sweep will run, or null when it is not driving the loop. */
 const sweepFrames = computed(() => sweepFrameCount(props.modelValue));
 
 function onSweep(next: SweepConfig): void {
   const cfg = { ...props.modelValue, sweep: next };
+  // A sweep edit reorders the frames, so the frame being edited is not the
+  // same frame any more: go back to base.
+  setFrame(null);
   emit("update:modelValue", remapSweepFrames(props.modelValue, cfg, Math.max(1, props.count ?? 1)));
 }
 
