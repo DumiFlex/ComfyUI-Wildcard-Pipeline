@@ -12,6 +12,7 @@
  */
 import { ref, shallowRef } from "vue";
 import { parsePickRequest, type PickAnswer, type PickRequest } from "../components/image-filter/types";
+import { shouldPlayImageFilterSound } from "./settings";
 
 export interface WaitingRequest extends PickRequest {
   /** Browser clock when it arrived; the countdown runs from here so a server
@@ -88,6 +89,41 @@ export async function submitAnswer(
   return ok;
 }
 
+let audio: AudioContext | null = null;
+
+/**
+ * A short two-note chime, synthesised so there is no sound file to ship.
+ * Plays when a node starts waiting, so a user in another tab hears it. Turned
+ * off by the "Image Filter sound" setting. Browsers only allow audio after the
+ * page has had a click, which the Run button always provides.
+ */
+export function playReadyChime(): void {
+  if (!shouldPlayImageFilterSound()) return;
+  try {
+    const Ctx = globalThis.AudioContext;
+    if (!Ctx) return;
+    audio ??= new Ctx();
+    const ctx = audio;
+    void ctx.resume?.().catch(() => undefined);
+    const start = ctx.currentTime + 0.02;
+    [659.25, 880].forEach((freq, i) => {
+      const t = start + i * 0.14;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.5);
+    });
+  } catch {
+    // No audio device or blocked: the picker still opens.
+  }
+}
+
 interface ApiLike {
   addEventListener: (name: string, fn: (e: Event) => void) => void;
 }
@@ -102,6 +138,7 @@ export function installImageFilter(
   api: ApiLike | undefined,
   mountPicker: () => void,
   doFetch: typeof fetch = fetch,
+  chime: () => void = playReadyChime,
 ): void {
   if (installed || !api) return;
   installed = true;
@@ -112,7 +149,9 @@ export function installImageFilter(
     mountPicker();
   };
   api.addEventListener("wp-image-filter", (e: Event) => {
-    if (addRequest((e as CustomEvent).detail)) ensureMounted();
+    if (!addRequest((e as CustomEvent).detail)) return;
+    ensureMounted();
+    chime();
   });
   api.addEventListener("wp-image-filter-done", (e: Event) => {
     const token = ((e as CustomEvent).detail as { token?: unknown } | undefined)?.token;
@@ -140,4 +179,5 @@ export function _resetImageFilterForTests(): void {
   waiting.value = [];
   lastRequestByNode.value = new Map();
   drafts.clear();
+  audio = null;
 }

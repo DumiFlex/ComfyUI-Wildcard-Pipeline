@@ -37,6 +37,7 @@ import {
   SETTING_ID_TOAST_LIFETIME,
   SETTING_ID_SUPPRESS_INFO,
   SETTING_ID_NEW_DISABLED,
+  SETTING_ID_IMAGE_FILTER_SOUND,
   SETTING_ID_CONFIRM_DESTRUCTIVE_BUNDLE,
   SETTING_ID_BUNDLE_MASTER_OFF_BEHAVIOR,
   SETTING_ID_BUNDLE_COLLAPSED,
@@ -265,6 +266,8 @@ const state = reactive<{
   toastLifetime: ToastLifetime;
   suppressInfoToasts: boolean;
   newModuleDisabled: boolean;
+  /** Chime when WP Image Filter starts waiting (default on). */
+  imageFilterSound: boolean;
   collapseMode: CollapseMode;
   colorIntensity: ColorIntensity;
   /** When true, destructive bundle ops (remove / reset-to-library /
@@ -302,6 +305,7 @@ const state = reactive<{
   toastLifetime: "default",
   suppressInfoToasts: false,
   newModuleDisabled: false,
+  imageFilterSound: true,
   collapseMode: "independent",
   colorIntensity: "standard",
   confirmDestructiveBundle: true,
@@ -365,6 +369,7 @@ export function _resetDisplayStateForTesting(): void {
   state.toastLifetime = "default";
   state.suppressInfoToasts = false;
   state.newModuleDisabled = false;
+  state.imageFilterSound = true;
   state.collapseMode = "independent";
   state.colorIntensity = "standard";
   // Tests default to skipping the confirm dialog so the existing
@@ -422,6 +427,11 @@ export function getToastLifetimeMs(): number {
  * warning + error severities, which always render. */
 export function shouldSuppressInfoToasts(): boolean {
   return state.suppressInfoToasts;
+}
+
+/** Whether WP Image Filter chimes when it starts waiting for a pick. */
+export function shouldPlayImageFilterSound(): boolean {
+  return state.imageFilterSound;
 }
 
 /**
@@ -646,6 +656,7 @@ export function applyDisplayPrefs(app: AppLike): void {
   state.toastLifetime = asToastLifetime(app.extensionManager?.setting?.get(SETTING_ID_TOAST_LIFETIME), "default");
   state.suppressInfoToasts = app.extensionManager?.setting?.get(SETTING_ID_SUPPRESS_INFO) === true;
   state.newModuleDisabled = app.extensionManager?.setting?.get(SETTING_ID_NEW_DISABLED) === true;
+  state.imageFilterSound = app.extensionManager?.setting?.get(SETTING_ID_IMAGE_FILTER_SOUND) !== false;
   state.confirmDestructiveBundle =
     app.extensionManager?.setting?.get(SETTING_ID_CONFIRM_DESTRUCTIVE_BUNDLE) !== false;
   state.bundleMasterOffBehavior = asBundleMasterOffBehavior(
@@ -1338,6 +1349,17 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
             singletonKey: "wp-suppress-info",
           });
         }
+      },
+    },
+    {
+      id: SETTING_ID_IMAGE_FILTER_SOUND,
+      name: "Image Filter sound",
+      type: "boolean",
+      defaultValue: true,
+      tooltip: "Play a short chime when WP Image Filter is waiting for your pick, so you hear it from another tab.",
+      category: ["Wildcard Pipeline", "7. Runtime behavior", "Image Filter sound"],
+      onChange: (newVal) => {
+        state.imageFilterSound = newVal !== false;
       },
     },
     {

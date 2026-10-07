@@ -77,6 +77,10 @@ const settings = [
         <b>Keep all</b> sends everything on. <b>Stop branch</b> stops the nodes after this one;
         the rest of the run finishes normally. Cancelling the run closes the picker.
       </p>
+      <DocCallout variant="tip">
+        A short chime plays when the picker opens, so you hear it from another tab. Turn it off
+        with <b>Image Filter sound</b> in Settings.
+      </DocCallout>
     </DocSection>
 
     <DocSection title="Settings on the node">

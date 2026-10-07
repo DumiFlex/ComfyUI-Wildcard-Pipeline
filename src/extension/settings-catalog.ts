@@ -29,6 +29,7 @@ export const SETTING_ID_VALIDATION = "wildcardPipeline.behavior.validation";
 export const SETTING_ID_TOAST_LIFETIME = "wildcardPipeline.behavior.toastLifetime";
 export const SETTING_ID_SUPPRESS_INFO = "wildcardPipeline.behavior.suppressInfoToasts";
 export const SETTING_ID_NEW_DISABLED = "wildcardPipeline.behavior.newModuleDisabled";
+export const SETTING_ID_IMAGE_FILTER_SOUND = "wildcardPipeline.behavior.imageFilterSound";
 export const SETTING_ID_CONFIRM_DESTRUCTIVE_BUNDLE = "wildcardPipeline.behavior.confirmDestructiveBundle";
 export const SETTING_ID_BUNDLE_MASTER_OFF_BEHAVIOR = "wildcardPipeline.behavior.bundleMasterOffBehavior";
 export const SETTING_ID_BUNDLE_COLLAPSED = "wildcardPipeline.display.bundleCollapsedByDefault";
@@ -167,6 +168,8 @@ export const CANVAS_SETTINGS: CanvasSettingMeta[] = [
     tooltip: "How long status toasts stay on screen before auto-dismissing.", group: "feedback" },
   { id: SETTING_ID_SUPPRESS_INFO, name: "Suppress info-severity toasts", type: "boolean", defaultValue: false,
     tooltip: "When on, info toasts (status confirmations) are filtered out. Warnings + errors still show.", group: "feedback" },
+  { id: SETTING_ID_IMAGE_FILTER_SOUND, name: "Image Filter sound", type: "boolean", defaultValue: true,
+    tooltip: "Play a short chime when WP Image Filter is waiting for your pick, so you hear it from another tab.", group: "feedback" },
   { id: SETTING_ID_REDUCE_MOTION, name: "Reduce motion", type: "combo", options: MOTION_OPTIONS, defaultValue: "auto",
     tooltip: "Disables Wildcard Pipeline animations. Match system honors prefers-reduced-motion.", group: "accessibility" },
   { id: SETTING_ID_HIGH_CONTRAST, name: "Contrast", type: "combo", options: CONTRAST_OPTIONS, defaultValue: "auto",

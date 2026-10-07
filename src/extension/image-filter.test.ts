@@ -1,9 +1,12 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { _resetDisplayStateForTesting, applyDisplayPrefs } from "./settings";
+import { SETTING_ID_IMAGE_FILTER_SOUND } from "./settings-catalog";
 import {
   _resetImageFilterForTests,
   addRequest,
   installImageFilter,
   lastRequestByNode,
+  playReadyChime,
   secondsLeft,
   submitAnswer,
   waiting,
@@ -75,10 +78,56 @@ describe("installImageFilter", () => {
     expect(waiting.value).toEqual([]);
   });
 
-  it("shows requests that were already waiting when the page loaded", async () => {
+  it("shows requests that were already waiting when the page loaded, without a chime", async () => {
     const mount = vi.fn();
-    installImageFilter(new FakeApi(), mount, vi.fn(() => okJson({ pending: [req("old")] })) as unknown as typeof fetch);
+    const chime = vi.fn();
+    installImageFilter(new FakeApi(), mount, vi.fn(() => okJson({ pending: [req("old")] })) as unknown as typeof fetch, chime);
     await vi.waitFor(() => expect(waiting.value.map((r) => r.token)).toEqual(["old"]));
     expect(mount).toHaveBeenCalledTimes(1);
+    expect(chime).not.toHaveBeenCalled();
+  });
+
+  it("chimes once per new request, not for a repeat of the same one", () => {
+    const api = new FakeApi();
+    const chime = vi.fn();
+    installImageFilter(api, vi.fn(), vi.fn(() => okJson({ pending: [] })) as unknown as typeof fetch, chime);
+    api.fire("wp-image-filter", req("a"));
+    api.fire("wp-image-filter", req("a"));
+    api.fire("wp-image-filter", req("b"));
+    expect(chime).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("playReadyChime", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    _resetDisplayStateForTesting();
+  });
+
+  function fakeAudio() {
+    const started: number[] = [];
+    const node = () => ({ connect: (n: unknown) => n });
+    class Ctx {
+      currentTime = 0;
+      destination = {};
+      resume = () => Promise.resolve();
+      createGain = () => ({ ...node(), gain: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() } });
+      createOscillator = () => ({ ...node(), type: "", frequency: { value: 0 }, start: (t: number) => started.push(t), stop: vi.fn() });
+    }
+    vi.stubGlobal("AudioContext", Ctx);
+    return started;
+  }
+
+  it("plays two notes when the setting is on", () => {
+    const started = fakeAudio();
+    playReadyChime();
+    expect(started).toHaveLength(2);
+  });
+
+  it("stays silent when the setting is off", () => {
+    const started = fakeAudio();
+    applyDisplayPrefs({ extensionManager: { setting: { get: (id: string) => (id === SETTING_ID_IMAGE_FILTER_SOUND ? false : undefined) } } });
+    playReadyChime();
+    expect(started).toHaveLength(0);
   });
 });

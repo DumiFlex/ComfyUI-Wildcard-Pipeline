@@ -58,6 +58,7 @@ export type BehaviorKey =
   | "validation"
   | "toastLifetime"
   | "suppressInfoToasts"
+  | "imageFilterSound"
   | "newModuleDisabled"
   | "confirmDestructiveBundle"
   | "bundleMasterOffBehavior"
@@ -75,6 +76,7 @@ const BEHAVIOR_KEYS = new Set<string>([
   "validation",
   "toastLifetime",
   "suppressInfoToasts",
+  "imageFilterSound",
   "newModuleDisabled",
   "confirmDestructiveBundle",
   "bundleMasterOffBehavior",

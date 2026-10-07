@@ -21,6 +21,7 @@ A Context Loop (or any list) makes one **frame** per iteration. Lists line up by
 - Click an image to pick it. Click a frame's label to pick the whole frame. Ctrl+A picks everything.
 - **Space** zooms the image under the mouse. In the zoom, ←/→ move and ↑ picks.
 - **Enter** or **Keep N picked** sends the picks on. **Keep all** sends everything. **Stop branch** stops the nodes after this one; the rest of the run finishes normally.
+- A short chime plays when the picker opens, so you hear it from another tab. Turn it off under **Settings → Wildcard Pipeline → Runtime behavior → Image Filter sound**.
 - **Escape** or the − button tucks the picker away. A "waiting" pill stays at the bottom of the screen and reopens it with your picks still there.
 
 ## Settings on the node

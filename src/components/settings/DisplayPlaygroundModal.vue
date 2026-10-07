@@ -86,6 +86,7 @@ const autocompleteMaxSuggestions = ref<string>("20");
 const autocompleteMinChars = ref<string>("3");
 const toastLifetime = ref<ToastLifetime>("default");
 const suppressInfoToasts = ref<boolean>(false);
+const imageFilterSound = ref<boolean>(true);
 const newModuleDisabled = ref<boolean>(false);
 const confirmDestructiveBundle = ref<boolean>(true);
 const bundleMasterOffBehavior = ref<BundleMasterOffBehavior>("preserve-manual");
@@ -117,6 +118,7 @@ function syncFromStore(): void {
   autocompleteMinChars.value = asString(getSettingValue("autocompleteMinChars"), "3");
   toastLifetime.value = asString(getSettingValue("toastLifetime"), "default") as ToastLifetime;
   suppressInfoToasts.value = asBool(getSettingValue("suppressInfoToasts"), false);
+  imageFilterSound.value = asBool(getSettingValue("imageFilterSound"), true);
   newModuleDisabled.value = asBool(getSettingValue("newModuleDisabled"), false);
   confirmDestructiveBundle.value = asBool(getSettingValue("confirmDestructiveBundle"), true);
   bundleMasterOffBehavior.value = asString(
@@ -152,6 +154,7 @@ watch(autocompleteMaxSuggestions, (v) => applySetting("autocompleteMaxSuggestion
 watch(autocompleteMinChars, (v) => applySetting("autocompleteMinChars", v));
 watch(toastLifetime, (v) => applySetting("toastLifetime", v));
 watch(suppressInfoToasts, (v) => applySetting("suppressInfoToasts", v));
+watch(imageFilterSound, (v) => applySetting("imageFilterSound", v));
 watch(newModuleDisabled, (v) => applySetting("newModuleDisabled", v));
 watch(confirmDestructiveBundle, (v) => applySetting("confirmDestructiveBundle", v));
 watch(bundleMasterOffBehavior, (v) => applySetting("bundleMasterOffBehavior", v));
@@ -178,6 +181,7 @@ interface Defaults {
   autocompleteMinChars: string;
   toastLifetime: ToastLifetime;
   suppressInfoToasts: boolean;
+  imageFilterSound: boolean;
   newModuleDisabled: boolean;
   confirmDestructiveBundle: boolean;
   bundleMasterOffBehavior: BundleMasterOffBehavior;
@@ -205,6 +209,7 @@ const defaults: Defaults = {
   autocompleteMinChars: "3",
   toastLifetime: "default",
   suppressInfoToasts: false,
+  imageFilterSound: true,
   newModuleDisabled: false,
   confirmDestructiveBundle: true,
   bundleMasterOffBehavior: "preserve-manual",
@@ -462,6 +467,10 @@ onBeforeUnmount(() => {
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Suppress info toasts</span>
                 <WpCheck v-model="suppressInfoToasts" aria-label="Suppress info toasts" />
+              </div>
+              <div class="wp-pg__row wp-pg__row--switch">
+                <span class="wp-pg__row-label">Image Filter sound</span>
+                <WpCheck v-model="imageFilterSound" aria-label="Image Filter sound" />
               </div>
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">New modules start disabled</span>
