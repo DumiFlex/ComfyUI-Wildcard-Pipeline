@@ -10,7 +10,7 @@ import { CANVAS_SETTINGS } from "../../../extension/settings-catalog";
 
 export type SectionId =
   | "general" | "appearance" | "editing" | "autocomplete"
-  | "canvas" | "test-runner" | "library" | "advanced";
+  | "canvas" | "test-runner" | "ai" | "library" | "advanced";
 
 export interface SectionDef { id: SectionId; label: string; icon: string; blurb: string }
 
@@ -21,6 +21,7 @@ export const SECTIONS: SectionDef[] = [
   { id: "autocomplete", label: "Autocomplete", icon: "pi-bolt", blurb: "Suggestions while you type option values." },
   { id: "canvas", label: "Canvas", icon: "pi-sitemap", blurb: "The nodes on the ComfyUI canvas, and how runs resolve." },
   { id: "test-runner", label: "Test Runner", icon: "pi-play", blurb: "What a new Test Runner scenario starts with." },
+  { id: "ai", label: "AI assistant", icon: "pi-microchip-ai", blurb: "Use your own model (Claude, OpenAI or a local server) to draft modules." },
   { id: "library", label: "Library & data", icon: "pi-database", blurb: "Your module database, backups and maintenance." },
   { id: "advanced", label: "Advanced", icon: "pi-cog", blurb: "Move settings between machines, or start over." },
 ];
@@ -63,6 +64,13 @@ const STATIC_ENTRIES: SettingEntry[] = [
   { key: "tr-from", section: "test-runner", label: "First seed", hint: "Where a consecutive range starts.", keywords: "seed fixed start" },
   { key: "tr-count", section: "test-runner", label: "Number of seeds", hint: "How many prompts a run makes.", keywords: "samples count runs" },
 
+  { key: "ai-enabled", section: "ai", label: "Turn on the AI assistant", hint: "Adds Draft with AI to the editors, using a model you already have.", keywords: "llm claude openai ollama lm studio llama gpt assistant" },
+  { key: "ai-provider", section: "ai", label: "Provider", hint: "Who runs the model.", keywords: "claude anthropic openai ollama lm studio llama.cpp local cloud" },
+  { key: "ai-address", section: "ai", label: "Server address", hint: "Where the model server answers.", keywords: "url base endpoint host port" },
+  { key: "ai-key", section: "ai", label: "API key", hint: "Saved on the ComfyUI machine and never shown again.", keywords: "token secret credential" },
+  { key: "ai-model", section: "ai", label: "Model", hint: "Which model the assistant uses.", keywords: "llm qwen gemma claude gpt" },
+  { key: "ai-unload", section: "ai", label: "Unload the model after", hint: "Free the GPU for ComfyUI after a short idle.", keywords: "vram gpu keep alive ttl memory" },
+  { key: "ai-test", section: "ai", label: "Test connection", hint: "Check the server answers and the model returns JSON.", keywords: "check ping" },
   { key: "db-summary", section: "library", label: "Database", hint: "File, size and what is in it.", keywords: "sqlite file size rows" },
   { key: "backups-auto", section: "library", label: "Automatic backups", hint: "Copy the database before every migration and once a day.", keywords: "backup restore snapshot" },
   { key: "backups-keep", section: "library", label: "Backups to keep", hint: "Older automatic backups are deleted.", keywords: "backup retention" },
