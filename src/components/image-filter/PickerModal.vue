@@ -762,8 +762,10 @@ const fitStyle = computed(() => {
 .wp-ifp__refine.is-wide { width: 360px; }
 .wp-ifp__details { display: flex; flex-direction: column; gap: 6px; padding-bottom: 10px; margin-bottom: 4px; border-bottom: 1px solid var(--wp-border); }
 /* Many variables scroll inside the list so Refine stays in view; long names
- * and values are cut (full text on hover). */
-.wp-ifp__values { display: grid; grid-template-columns: minmax(0, max-content) minmax(0, 1fr); gap: 3px 12px; margin: 0; max-height: 210px; overflow-y: auto; font: 11px var(--wp-font-mono, monospace); }
+ * and values are cut (full text on hover). Rows are max-content: an `auto`
+ * row may shrink to the cells' minimum, which is 0 for overflow-hidden cells,
+ * so a capped list squashed every row to a sliver. */
+.wp-ifp__values { display: grid; grid-template-columns: minmax(0, max-content) minmax(0, 1fr); grid-auto-rows: max-content; gap: 3px 12px; margin: 0; max-height: 210px; flex-shrink: 0; overflow-y: auto; font: 11px var(--wp-font-mono, monospace); }
 .wp-ifp__values dt { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-ifp__values dt.is-swept { color: color-mix(in srgb, var(--wp-ifp-hue) 85%, #fff); font-weight: 600; }
 .wp-ifp__values dd { margin: 0; color: var(--wp-text); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
