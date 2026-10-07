@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
-  draftEdits, dropDraftEdits, editsFor, readZoomPref, saveDraftEdits, withMask, withText, writeZoomPref,
+  draftEdits, dropDraftEdits, editsFor, fitTileSize, readZoomPref, saveDraftEdits, withMask, withText, writeZoomPref,
 } from "./picker-state";
 
 describe("picker edits", () => {
@@ -46,5 +46,22 @@ describe("zoom preference", () => {
     expect(readZoomPref()).toBe(true);
     writeZoomPref(false);
     expect(readZoomPref()).toBe(false);
+  });
+});
+
+describe("fitTileSize", () => {
+  const box = { width: 1000, height: 600, gap: 10, extraW: 0, extraH: 0 };
+  it("lets a few square images fill the space", () => {
+    expect(fitTileSize(1, 1, box)).toBe(600);
+    // 3 squares: one row of three, each (1000 - 20) / 3.
+    expect(fitTileSize(3, 1, box)).toBe(327);
+  });
+  it("uses the images' shape: portraits are bounded by height", () => {
+    // 2 portraits (h/w 1.5): side by side, 600 tall each.
+    expect(fitTileSize(2, 1.5, box)).toBe(600);
+  });
+  it("never goes below the small tile size", () => {
+    expect(fitTileSize(500, 1, box)).toBe(80);
+    expect(fitTileSize(0, 1, box)).toBe(200);
   });
 });

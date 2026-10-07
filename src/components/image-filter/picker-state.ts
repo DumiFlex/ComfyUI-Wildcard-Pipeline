@@ -67,6 +67,7 @@ export function editsFor(all: PickEdits, keys: readonly string[]): PickEdits | u
 
 const ZOOM_KEY = "wp-image-filter-zoom";
 const DETAILS_KEY = "wp-image-filter-details";
+const FIT_KEY = "wp-image-filter-fit";
 
 function readFlag(key: string): boolean {
   try {
@@ -91,3 +92,34 @@ export const writeZoomPref = (on: boolean): void => writeFlag(ZOOM_KEY, on);
 /** Whether the zoom shows the Details panel (values, frame images). */
 export const readDetailsPref = (): boolean => readFlag(DETAILS_KEY);
 export const writeDetailsPref = (on: boolean): void => writeFlag(DETAILS_KEY, on);
+/** Whether the overview scales the images up to fill the picker. */
+export const readFitPref = (): boolean => readFlag(FIT_KEY);
+export const writeFitPref = (on: boolean): void => writeFlag(FIT_KEY, on);
+
+export interface FitBox {
+  /** Space for the images (px). */
+  width: number;
+  height: number;
+  /** Gap between cells and what each cell adds around its image (frame card). */
+  gap: number;
+  extraW: number;
+  extraH: number;
+}
+
+/** The largest square bound (the tile's max width = max height) that lays
+ *  `count` images of height/width `aspect` out in `box` without scrolling,
+ *  over every column count. Clamped to 80..1600. */
+export function fitTileSize(count: number, aspect: number, box: FitBox): number {
+  if (count <= 0 || box.width <= 0 || box.height <= 0) return 200;
+  const a = aspect > 0 && Number.isFinite(aspect) ? aspect : 1;
+  const wPer = Math.min(1, 1 / a);
+  const hPer = Math.min(1, a);
+  let best = 0;
+  for (let cols = 1; cols <= count; cols++) {
+    const rows = Math.ceil(count / cols);
+    const w = (box.width - box.gap * (cols - 1)) / cols - box.extraW;
+    const h = (box.height - box.gap * (rows - 1)) / rows - box.extraH;
+    best = Math.max(best, Math.min(w / wPer, h / hPer));
+  }
+  return Math.round(Math.min(1600, Math.max(80, best)));
+}

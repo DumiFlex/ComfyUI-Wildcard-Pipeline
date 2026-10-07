@@ -227,6 +227,21 @@ describe("PickerModal", () => {
     expect(again.find('[data-test="image-filter-details"]').exists()).toBe(true);
   });
 
+  it("Fit (button or F) scales the overview's images and is remembered", async () => {
+    const w = mk(request([3]));
+    await w.vm.$nextTick();
+    expect(w.find('[data-test="image-filter-frame-0"]').attributes("style")).toBeUndefined();
+    await w.find('[data-test="image-filter-fit"]').trigger("click");
+    expect(w.find('[data-test="image-filter-picker"]').classes()).toContain("is-fit");
+    expect(w.find('[data-test="image-filter-frame-0"]').attributes("style")).toContain("--wp-ifp-tile");
+    w.unmount();
+    const again = mk(request([3]));
+    await again.vm.$nextTick();
+    expect(again.find('[data-test="image-filter-picker"]').classes()).toContain("is-fit");
+    await again.find('[data-test="image-filter-picker"]').trigger("keydown", { key: "f" });
+    expect(again.find('[data-test="image-filter-picker"]').classes()).not.toContain("is-fit");
+  });
+
   it("frame captions show the loop number and hover shows seed and prompt", () => {
     const w = mk(request([1, 1], { labels: [{ loop_index: 4, seed: 77, positive: "red hat" }, { loop_index: 5 }] }));
     const label = w.find('[data-test="image-filter-frame-0"] .wp-ifp__frame-label');

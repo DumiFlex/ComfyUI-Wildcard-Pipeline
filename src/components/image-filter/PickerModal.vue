@@ -23,8 +23,8 @@ import { editLoopConfig } from "../../widgets/context_loop";
 import { pushToast } from "../shared/toast-store";
 import { defaultGridLayout, findLoop, frameParts, loopEdit, sweepGrid, type GridLayout } from "./picker-loop";
 import {
-  draftEdits, dropDraftEdits, editsFor, hasEdit, readDetailsPref, readZoomPref, saveDraftEdits,
-  withMask, withText, writeDetailsPref, writeZoomPref,
+  draftEdits, dropDraftEdits, editsFor, fitTileSize, hasEdit, readDetailsPref, readFitPref, readZoomPref,
+  saveDraftEdits, withMask, withText, writeDetailsPref, writeFitPref, writeZoomPref,
 } from "./picker-state";
 import { axisHueAt } from "../shared/axis-color";
 import { frameValues, promptRuns, valuesText } from "./picker-details";
@@ -329,6 +329,9 @@ function onKey(ev: KeyboardEvent): void {
   } else if (zoomed && (ev.key === "c" || ev.key === "C") && !ev.ctrlKey && !ev.metaKey) {
     ev.preventDefault();
     togglePin();
+  } else if (!zoomed && !showGrid.value && (ev.key === "f" || ev.key === "F") && !ev.ctrlKey && !ev.metaKey) {
+    ev.preventDefault();
+    fit.value = !fit.value;
   } else if (zoomed && (ev.key === "i" || ev.key === "I") && !ev.ctrlKey && !ev.metaKey) {
     ev.preventDefault();
     details.value = !details.value;
@@ -341,11 +344,43 @@ function onKey(ev: KeyboardEvent): void {
 function indexOf(frame: number, image: number): number {
   return cells.value.findIndex((c) => c.frame === frame && c.image === image);
 }
+
+/* ── fit: scale the overview so the images fill the picker ────────────── */
+
+const fit = ref(readFitPref());
+watch(fit, (on) => writeFitPref(on));
+const body = ref<HTMLElement | null>(null);
+const bodySize = ref({ width: 0, height: 0 });
+const aspect = ref(1);
+let observer: ResizeObserver | null = null;
+watch(body, (el) => {
+  observer?.disconnect();
+  if (!el || typeof ResizeObserver === "undefined") return;
+  observer = new ResizeObserver(() => {
+    bodySize.value = { width: el.clientWidth - 28, height: el.clientHeight - 24 };
+  });
+  observer.observe(el);
+});
+onBeforeUnmount(() => observer?.disconnect());
+watch(() => frames.value[0]?.[0], (first) => {
+  if (!first || typeof Image === "undefined") return;
+  const img = new Image();
+  img.onload = () => { if (img.naturalWidth) aspect.value = img.naturalHeight / img.naturalWidth; };
+  img.src = viewUrl(first);
+}, { immediate: true });
+const fitStyle = computed(() => {
+  if (!fit.value) return undefined;
+  const card = multiFrame.value;
+  const size = fitTileSize(total.value, aspect.value, {
+    ...bodySize.value, gap: 10, extraW: card ? 18 : 0, extraH: card ? 36 : 0,
+  });
+  return { "--wp-ifp-tile": `${size}px` };
+});
 </script>
 
 <template>
   <ModalShell :visible="true" @close="onClose" @keydown="onKey">
-    <div class="wp-ifp" data-test="image-filter-picker" tabindex="-1">
+    <div class="wp-ifp" :class="{ 'is-fit': fit && !zoomCell && !showGrid }" data-test="image-filter-picker" tabindex="-1">
       <div class="wp-ifp__head">
         <span class="wp-ifp__head-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4 2v-8z" /></svg></span>
         <div class="wp-ifp__title-block">
@@ -371,6 +406,19 @@ function indexOf(frame: number, image: number): number {
         >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5" /><path v-if="zoomCell" d="M20 20l-4.5-4.5M7.5 10.5h6" /><path v-else d="M20 20l-4.5-4.5M10.5 7.5v6M7.5 10.5h6" /></svg>
           {{ zoomCell ? "Back to all" : "Zoom & refine" }}
+        </button>
+        <button
+          v-if="!zoomCell && !showGrid"
+          type="button"
+          class="wp-ifp__zoom-btn"
+          :class="{ 'is-on': fit }"
+          :aria-pressed="fit"
+          title="Make the images as big as the picker allows (F)"
+          data-test="image-filter-fit"
+          @click="fit = !fit"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
+          Fit
         </button>
         <div v-if="grid && !zoomCell" class="wp-ifp__seg" role="group" aria-label="Layout">
           <button type="button" :class="{ 'is-on': view === 'grid' }" data-test="image-filter-view-grid" @click="view = 'grid'">Grid</button>
@@ -569,12 +617,13 @@ function indexOf(frame: number, image: number): number {
         />
       </div>
 
-      <div v-else class="wp-ifp__body" :class="{ 'is-flat': !multiFrame }">
+      <div v-else ref="body" class="wp-ifp__body" :class="{ 'is-flat': !multiFrame, 'is-fit': fit }">
         <section
           v-for="(imgs, f) in frames"
           :key="f"
           class="wp-ifp__frame"
           :class="{ 'is-flat': !multiFrame }"
+          :style="fitStyle"
           :data-test="`image-filter-frame-${f}`"
           :title="multiFrame ? `${frameTooltip(f)}\nClick the image to pick it, the frame around it to zoom in.` : undefined"
           @click="multiFrame && setZoom(indexOf(f, 0))"
@@ -669,6 +718,9 @@ function indexOf(frame: number, image: number): number {
 .wp-ifp__seg--full button { flex: 1; }
 
 .wp-ifp__body { overflow-y: auto; padding: 12px 14px; flex: 1; min-height: 0; display: flex; flex-wrap: wrap; gap: 10px; align-content: flex-start; }
+.wp-ifp.is-fit { height: 90vh; }
+.wp-ifp__body.is-fit { align-content: center; justify-content: center; }
+.wp-ifp__body.is-fit .wp-ifp__frame.is-flat .wp-ifp__tiles { justify-content: center; }
 .wp-ifp__body.is-grid { display: flex; flex-direction: column; flex-wrap: nowrap; padding: 0; overflow: hidden; }
 .wp-ifp__frame { display: flex; flex-direction: column; gap: 4px; padding: 6px; border-radius: 5px; background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); --wp-ifp-tile: 150px; }
 .wp-ifp__frame.is-flat { padding: 0; background: transparent; border: 0; width: 100%; --wp-ifp-tile: 200px; }
