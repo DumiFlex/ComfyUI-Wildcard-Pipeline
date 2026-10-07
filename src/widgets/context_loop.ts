@@ -15,6 +15,7 @@ import { attachLoopSeedsCapture } from "./_seed-capture";
 import { reactiveFromGraph } from "../extension/reactive";
 import {
   emptyContextLoopConfig,
+  keepFramesWithin,
   parseContextLoopConfig,
   serializeContextLoopConfig,
   sweepFrameCount,
@@ -130,16 +131,28 @@ export function create(node: ContextLoopHostNode, inputName: string) {
   // from the config, so a stale widget can't change what runs.
   watch(
     [() => sweepFrameCount(config.value), count],
-    ([frames, current]) => {
-      if (frames == null || frames === current) return;
+    ([frames]) => {
       const w = (node.widgets ?? []).find((x) => x.name === "count");
-      if (!w) return;
-      w.value = frames;
-      (node as unknown as { setDirtyCanvas?: (fg: boolean, bg: boolean) => void })
-        .setDirtyCanvas?.(true, true);
+      if (w && syncCountToSweep(w, frames)) {
+        (node as unknown as { setDirtyCanvas?: (fg: boolean, bg: boolean) => void })
+          .setDirtyCanvas?.(true, true);
+      }
     },
     { immediate: true },
   );
+
+  // Lowering the count by hand drops seed locks and bypassed frames past it,
+  // so raising it again starts those frames fresh. Only the user's edit
+  // (the widget callback) does this, never a workflow load.
+  const countWidget = (node.widgets ?? []).find((x) => x.name === "count");
+  if (countWidget) {
+    onCountEdited(countWidget, (n) => {
+      const next = keepFramesWithin(config.value, n);
+      if (next === config.value) return;
+      config.value = next;
+      host?.setValue(serializeContextLoopConfig(next));
+    });
+  }
 
   let host: DomWidgetHost | null = null;
 
@@ -166,6 +179,14 @@ export function create(node: ContextLoopHostNode, inputName: string) {
     },
   };
 
+  loopEditors.set(node, (edit) => {
+    const next = edit(config.value);
+    config.value = next;
+    host?.setValue(serializeContextLoopConfig(next));
+    (node as unknown as { setDirtyCanvas?: (fg: boolean, bg: boolean) => void })
+      .setDirtyCanvas?.(true, true);
+  });
+
   host = createDomWidgetHost(node, inputName, wrapper, {
     initialValue: serializeContextLoopConfig(config.value),
     onValueRestored: (raw: string) => {
@@ -184,4 +205,51 @@ export function create(node: ContextLoopHostNode, inputName: string) {
   attachLoopSeedsCapture(node);
 
   return host;
+}
+
+/**
+ * Keep the stock `count` widget in step with a sweep: while a sweep sets the
+ * frame count (`frames` not null) the widget shows it and is locked, since
+ * typing a count there would do nothing. Returns true when the widget changed.
+ */
+export function syncCountToSweep(
+  w: { value?: unknown; disabled?: boolean },
+  frames: number | null,
+): boolean {
+  const locked = frames != null;
+  const changed = !!w.disabled !== locked || (locked && w.value !== frames);
+  w.disabled = locked;
+  if (locked) w.value = frames;
+  return changed;
+}
+
+type LoopEdit = (cfg: ContextLoopConfig) => ContextLoopConfig;
+
+/** Per-node config editors, so other UI (the Image Filter picker) can change a
+ *  loop's settings the same way its own widget does. */
+const loopEditors = new WeakMap<object, (edit: LoopEdit) => void>();
+
+/** Apply `edit` to a Context Loop node's config; false when the node has no
+ *  loop widget (not a loop, or not built yet). */
+export function editLoopConfig(node: object, edit: LoopEdit): boolean {
+  const apply = loopEditors.get(node);
+  if (!apply) return false;
+  apply(edit);
+  return true;
+}
+
+/** Call `onChange` with the new count after the user edits the count widget
+ *  (its callback; a workflow load sets the value without it). Chains the
+ *  widget's own callback. */
+export function onCountEdited(
+  w: { value?: unknown; callback?: (...args: never[]) => unknown },
+  onChange: (count: number) => void,
+): void {
+  const original = w.callback as ((...args: unknown[]) => unknown) | undefined;
+  w.callback = function (this: unknown, ...args: unknown[]) {
+    const r = original?.apply(this, args);
+    const n = Number(w.value);
+    if (Number.isInteger(n) && n >= 1) onChange(n);
+    return r;
+  } as typeof w.callback;
 }

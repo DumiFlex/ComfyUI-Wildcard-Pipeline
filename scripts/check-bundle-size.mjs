@@ -276,7 +276,17 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // warning (the constraint factor math and wildcard pool helpers now reach the
 // ContextWidget chunk): dev sat at 446,313 of 446,464 bytes and the check adds
 // ~2.2 KB. Same "guide, not a cap" rule as above.
-const TOTAL_LIMIT = 440 * 1024;     // 440 KB
+// RAISED 440 -> 452 KB on 2026-10-07 for WP Image Filter (pick-and-pass
+// node): its picker modal (~7.6 KB) and node widget (~3.4 KB) are lazy
+// chunks, plus ~1.5 KB of event + widget glue in boot. dev sat at 448,610
+// bytes. Same "guide, not a cap" rule as above.
+// RAISED 452 -> 464 KB on 2026-10-07 for the Image Filter refine step
+// (frame labels, sweep grid, compare, prompt edits, mask painter, Send to
+// Loop): the picker chunk grows ~8 KB and stays lazy. The branch sat at
+// 462,555 bytes before it. Same "guide, not a cap" rule as above.
+// RAISED 464 -> 468 KB on 2026-10-07 for the zoom's Details panel and the
+// frame-click zoom (lazy picker chunk); the branch sat at 476,239 bytes.
+const TOTAL_LIMIT = 468 * 1024;     // 468 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

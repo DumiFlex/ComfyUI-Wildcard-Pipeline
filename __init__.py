@@ -90,6 +90,7 @@ from wp_nodes.assembler_node import WPPromptAssembler
 from wp_nodes.context_loop import WPContextLoop
 from wp_nodes.context_node import WPContext
 from wp_nodes.debug_node import WPDebug
+from wp_nodes.image_filter_node import WPImageFilter
 from wp_nodes.injector_node import WPContextInjector
 from wp_nodes.model_info_node import WPModelInfo
 from wp_nodes.prompt_cleaner import WPPromptCleaner
@@ -110,6 +111,7 @@ class WildcardPipelineExtension(ComfyExtension):
             WPDebug,
             WPContextInjector,
             WPModelInfo,
+            WPImageFilter,
             WPPromptCleaner,
             WPSeedList,
             WPVarToInt,

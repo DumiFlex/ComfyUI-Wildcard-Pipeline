@@ -303,4 +303,13 @@ describe("ContextLoopWidget frame chip modifier-clicks", () => {
     expect(t).toMatch(/unlock/i);
     expect(t).toMatch(/re-enable/i);
   });
+
+  it("goes back to base when the edited frame no longer exists", async () => {
+    const w = mount(ContextLoopWidget, { props: { modelValue: emptyContextLoopConfig(), count: 6 } });
+    currentFrame.value = 4;
+    await w.setProps({ count: 5 });
+    expect(currentFrame.value).toBe(4);
+    await w.setProps({ count: 3 });
+    expect(currentFrame.value).toBeNull();
+  });
 });

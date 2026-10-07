@@ -57,7 +57,8 @@ export function parseSweep(raw: unknown): SweepConfig {
     for (const id of Array.isArray(axis.option_ids) ? axis.option_ids : []) {
       if (typeof id === "string" && id && !ids.includes(id)) ids.push(id);
     }
-    if (!ids.length) continue;
+    // An axis with nothing ticked is kept (cleared to pick a few by hand)
+    // but sweeps nothing: see `liveAxes`.
     seen.add(uid);
     const clean: SweepAxis = { uid, option_ids: ids };
     if (typeof axis.label === "string" && axis.label) clean.label = axis.label;
@@ -66,9 +67,14 @@ export function parseSweep(raw: unknown): SweepConfig {
   return out;
 }
 
+/** The axes with at least one option ticked; only these sweep. */
+export function liveAxes(axes: readonly SweepAxis[]): SweepAxis[] {
+  return axes.filter((a) => a.option_ids.length > 0);
+}
+
 /** Combinations before the limit (1 with no axes). */
 export function sweepTotal(axes: readonly SweepAxis[]): number {
-  return axes.reduce((n, a) => n * a.option_ids.length, 1);
+  return liveAxes(axes).reduce((n, a) => n * a.option_ids.length, 1);
 }
 
 /** Frames the loop emits for this sweep, or null when the sweep is off,
@@ -76,8 +82,50 @@ export function sweepTotal(axes: readonly SweepAxis[]): number {
  *  falls back to `count`). */
 export function sweepFrameCount(cfg: ContextLoopConfig): number | null {
   const s = cfg.sweep;
-  if (!s.enabled || !s.axes.length || cfg.bypass) return null;
+  if (!s.enabled || !liveAxes(s.axes).length || cfg.bypass) return null;
   return Math.min(sweepTotal(s.axes), s.limit);
+}
+
+/** Drop seed locks and bypassed frames at or past `count`, so raising the
+ *  count again starts those frames fresh. Returns `cfg` when nothing changed. */
+export function keepFramesWithin(cfg: ContextLoopConfig, count: number): ContextLoopConfig {
+  const locks = Object.entries(cfg.seed_locks).filter(([k]) => Number(k) < count);
+  const bypass = cfg.bypass_frames.filter((i) => i < count);
+  if (locks.length === Object.keys(cfg.seed_locks).length && bypass.length === cfg.bypass_frames.length) return cfg;
+  return { ...cfg, seed_locks: Object.fromEntries(locks), bypass_frames: bypass };
+}
+
+/** Each frame's combination as a key, in run order (mirrors `sweep_frames`). */
+function sweepCombos(cfg: ContextLoopConfig): string[] | null {
+  const frames = sweepFrameCount(cfg);
+  if (frames === null) return null;
+  let combos = [""];
+  for (const a of liveAxes(cfg.sweep.axes)) {
+    combos = combos.flatMap((c) => a.option_ids.map((id) => `${c}${a.uid}=${id};`));
+  }
+  return combos.slice(0, frames);
+}
+
+/** After a sweep edit, keep each seed lock / bypass on the combination it
+ *  was set for: it moves with that combination, or goes when the
+ *  combination no longer runs. Without a sweep on both sides, frames past
+ *  the new frame count are dropped. */
+export function remapSweepFrames(prev: ContextLoopConfig, next: ContextLoopConfig, count: number): ContextLoopConfig {
+  const before = sweepCombos(prev);
+  const after = sweepCombos(next);
+  if (!before || !after) return keepFramesWithin(next, after?.length ?? count);
+  const at = new Map(after.map((c, i) => [c, i]));
+  const move = (i: number): number | undefined => {
+    const c = before[i];
+    return c === undefined ? undefined : at.get(c);
+  };
+  const locks: Record<string, number> = {};
+  for (const [k, seed] of Object.entries(next.seed_locks)) {
+    const to = move(Number(k));
+    if (to !== undefined) locks[String(to)] = seed;
+  }
+  const bypass = next.bypass_frames.map(move).filter((i): i is number => i !== undefined);
+  return { ...next, seed_locks: locks, bypass_frames: [...new Set(bypass)].sort((a, b) => a - b) };
 }
 
 export interface ContextLoopConfig {
@@ -96,8 +144,9 @@ export interface ContextLoopConfig {
    *  indices re-derive from base+strategy. Empty by default. */
   seed_locks: Record<string, number>;
   /** 0-based iteration indices to bypass (skip generation + overrides).
-   *  Sorted, deduped, non-negative. Out-of-range (>= count) entries are
-   *  kept and re-apply if count grows. Empty by default. */
+   *  Sorted, deduped, non-negative. Lowering the count drops entries past
+   *  it, and a sweep change moves them with their combination
+   *  (`keepFramesWithin`, `remapSweepFrames`). Empty by default. */
   bypass_frames: number[];
   /** Sweep mode; see `SweepConfig`. Off by default. */
   sweep: SweepConfig;

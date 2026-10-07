@@ -58,7 +58,7 @@ describe("parseSweep", () => {
       enabled: true,
       limit: 999,
       hold_others: false,
-      axes: [{ uid: "a1", option_ids: ["x", "y"], label: "hair" }],
+      axes: [{ uid: "a1", option_ids: ["x", "y"], label: "hair" }, { uid: "b2", option_ids: [] }],
     });
     expect(parseSweep({ limit: 0 }).limit).toBe(1);
     expect(parseSweep({ limit: 2.5 }).limit).toBe(64);
@@ -161,15 +161,25 @@ describe("SweepPanel", () => {
     expect(capped.find('[data-test="sweep-total"]').text()).toContain("the limit runs the first 4");
   });
 
-  it("toggles options in wildcard order and never empties an axis", async () => {
+  it("toggles options in wildcard order; none clears an axis, all fills it", async () => {
     const w = mount(SweepPanel, { props: { modelValue: on([{ uid: "u1", option_ids: ["h1"] }]), candidates: CANDS } });
     await w.find('[data-test="sweep-axis-u1"] .wp-sweep__axis-name').trigger("click");
     await w.find('[data-test="sweep-opt-h0"]').trigger("click");
     expect(lastEmit(w).axes[0].option_ids).toEqual(["h0", "h1"]);
-    await w.setProps({ modelValue: on([{ uid: "u1", option_ids: ["h1"] }]) });
-    const before = (w.emitted("update:modelValue") ?? []).length;
+    await w.find('[data-test="sweep-none"]').trigger("click");
+    expect(lastEmit(w).axes[0].option_ids).toEqual([]);
+    await w.setProps({ modelValue: on([{ uid: "u1", option_ids: [] }]) });
+    expect(w.find('[data-test="sweep-total"]').text()).toContain("Tick at least one option");
     await w.find('[data-test="sweep-opt-h1"]').trigger("click");
-    expect((w.emitted("update:modelValue") ?? []).length).toBe(before);
+    expect(lastEmit(w).axes[0].option_ids).toEqual(["h1"]);
+    await w.find('[data-test="sweep-all"]').trigger("click");
+    expect(lastEmit(w).axes[0].option_ids).toEqual(CANDS[0].options.map((o) => o.id));
+  });
+
+  it("an empty axis doesn't count toward the frames", () => {
+    const cfg = parseContextLoopConfig(JSON.stringify({ sweep: { enabled: true, axes: [{ uid: "a", option_ids: [] }] } }));
+    expect(sweepFrameCount(cfg)).toBeNull();
+    expect(sweepTotal([{ uid: "a", option_ids: [] }, { uid: "b", option_ids: ["1", "2", "3"] }])).toBe(3);
   });
 
   it("removes an axis, edits the limit and the hold switch", async () => {

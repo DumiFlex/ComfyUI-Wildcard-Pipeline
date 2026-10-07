@@ -9,7 +9,7 @@
 import { computed } from "vue";
 import ModalShell from "../shared/ModalShell.vue";
 import SweepPanel from "./SweepPanel.vue";
-import { sweepTotal, type SweepConfig } from "./types";
+import { liveAxes, sweepTotal, type SweepConfig } from "./types";
 import type { SweepCandidate } from "./sweep-candidates";
 
 const props = withDefaults(
@@ -34,7 +34,7 @@ const frameCount = computed(() => Math.min(total.value, props.modelValue.limit))
 
 /** Option text per axis, in the axis's order (unknown ids keep their id). */
 const axisLabels = computed(() =>
-  props.modelValue.axes.map((a) => {
+  liveAxes(props.modelValue.axes).map((a) => {
     const c = props.candidates.find((x) => x.uid === a.uid);
     return a.option_ids.map((id) => c?.options.find((o) => o.id === id)?.label || id);
   }),
@@ -42,7 +42,7 @@ const axisLabels = computed(() =>
 
 /** Row-major, last axis fastest: the same order the engine runs. */
 const preview = computed(() => {
-  if (!props.modelValue.enabled || !props.modelValue.axes.length) return [];
+  if (!props.modelValue.enabled || !axisLabels.value.length) return [];
   const labels = axisLabels.value;
   const n = Math.min(frameCount.value, PREVIEW_MAX);
   const rows: string[][] = [];
