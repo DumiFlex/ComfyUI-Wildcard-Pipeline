@@ -319,12 +319,16 @@ const off = computed(() => !config.value?.enabled);
 
     <SettingGroup title="Suggested local models" note="Uncensored builds that don't refuse NSFW words. Pull one with Ollama (ollama pull <name>) or load the same model in LM Studio.">
       <table class="wp-ai-set__models" data-test="ai-suggested-models">
-        <thead><tr><th>GPU memory</th><th>Model</th><th>Good for</th></tr></thead>
+        <thead><tr><th>GPU memory</th><th>Model</th><th>Good for</th><th>Get it</th></tr></thead>
         <tbody>
           <tr v-for="m in SUGGESTED_LOCAL_MODELS" :key="m.name">
             <td>{{ m.vram }}</td>
             <td><code>{{ m.name }}</code></td>
             <td>{{ m.goodFor }}</td>
+            <td class="wp-ai-set__links">
+              <a :href="m.ollamaUrl" target="_blank" rel="noopener noreferrer" data-test="ai-model-ollama">Ollama</a>
+              <a :href="m.hfUrl" target="_blank" rel="noopener noreferrer" data-test="ai-model-hf">Hugging Face</a>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -359,5 +363,9 @@ const off = computed(() => !config.value?.enabled);
   border-top: 1px solid var(--wp-border);
   color: var(--wp-text-muted);
 }
+.wp-ai-set__links { white-space: nowrap; }
+.wp-ai-set__links a { color: var(--wp-accent); text-decoration: none; }
+.wp-ai-set__links a:hover { text-decoration: underline; }
+.wp-ai-set__links a + a { margin-left: var(--wp-space-4); }
 .wp-ai-set__models code { font-family: var(--wp-font-mono); font-size: 12px; color: var(--wp-text); }
 </style>

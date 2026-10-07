@@ -2,6 +2,7 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryHistory, createRouter } from "vue-router";
 import AiSection from "../sections/AiSection.vue";
+import { SUGGESTED_LOCAL_MODELS } from "../ai-models";
 import { api } from "../../../api/client";
 import { _resetAiConfigForTests } from "../../../composables/useAiConfig";
 import type { AiConfig } from "../../../api/types";
@@ -45,6 +46,15 @@ describe("Settings › AI assistant", () => {
     expect(w.get('[data-test="ai-test"]').attributes("disabled")).toBeDefined();
     expect(w.get('[data-test="ai-privacy"]').text()).toContain("Stays on your machine");
     expect(w.get('[data-test="ai-suggested-models"]').text()).toContain("abliterated");
+    const ollama = w.findAll('[data-test="ai-model-ollama"]');
+    const hf = w.findAll('[data-test="ai-model-hf"]');
+    expect(ollama.length).toBe(SUGGESTED_LOCAL_MODELS.length);
+    expect(hf.length).toBe(SUGGESTED_LOCAL_MODELS.length);
+    for (const a of [...ollama, ...hf]) {
+      expect(a.attributes("href")).toMatch(/^https:\/\/(ollama\.com\/huihui_ai|huggingface\.co\/huihui-ai)\//);
+      expect(a.attributes("target")).toBe("_blank");
+      expect(a.attributes("rel")).toContain("noopener");
+    }
     expect(api.ai.models).not.toHaveBeenCalled();
   });
 

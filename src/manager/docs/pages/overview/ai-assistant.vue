@@ -67,11 +67,16 @@ import { SUGGESTED_LOCAL_MODELS } from "../../../components/settings/ai-models";
       <p>
         Hosted models (Claude, OpenAI) give the best results but may refuse explicit content.
         These uncensored local builds write NSFW lists without refusing. Install one in Ollama
-        with <code>ollama pull</code> and the name below.
+        with <code>ollama pull</code> and the name below, or download it from Hugging Face for
+        LM Studio or llama.cpp.
       </p>
-      <DocKeyList
-        :items="SUGGESTED_LOCAL_MODELS.map((m) => ({ term: m.name, desc: `${m.vram} GPU · ${m.goodFor}` }))"
-      />
+      <ul class="wp-doc-ai-models">
+        <li v-for="m in SUGGESTED_LOCAL_MODELS" :key="m.name">
+          <code>{{ m.name }}</code> ({{ m.vram }} GPU): {{ m.goodFor }}.
+          <a :href="m.ollamaUrl" target="_blank" rel="noopener noreferrer">Ollama</a> ·
+          <a :href="m.hfUrl" target="_blank" rel="noopener noreferrer">Hugging Face</a>
+        </li>
+      </ul>
     </DocSection>
 
     <DocSection title="Privacy">
@@ -95,3 +100,10 @@ import { SUGGESTED_LOCAL_MODELS } from "../../../components/settings/ai-models";
     </DocSection>
   </DocPage>
 </template>
+
+<style scoped>
+.wp-doc-ai-models { list-style: disc; padding-left: 20px; }
+.wp-doc-ai-models li { margin: 4px 0; }
+.wp-doc-ai-models a { color: var(--wp-accent); text-decoration: none; white-space: nowrap; }
+.wp-doc-ai-models a:hover { text-decoration: underline; }
+</style>
