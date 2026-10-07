@@ -26,6 +26,7 @@ from typing import Any
 from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 
 from engine import image_filter as f
+from engine.syntax.types import deref_var_value
 from wp_nodes.types import ImageFilterWidgetInput, PipelineContext
 
 logger = logging.getLogger(__name__)
@@ -80,6 +81,10 @@ def _save_previews(images: list[Any]) -> list[list[dict[str, str]]]:
 #: Longest prompt text sent to the picker per frame (it is shown and edited
 #: there; anything longer is cut, and an untouched prompt is never sent back).
 _MAX_LABEL_TEXT = 20_000
+#: The zoom's Details panel lists the frame's variables; cap what one label
+#: carries so a huge context can't bloat the websocket message.
+_MAX_LABEL_VARS = 80
+_MAX_VAR_TEXT = 300
 
 
 def _frame_seed(internals: dict[str, Any]) -> int | None:
@@ -96,14 +101,35 @@ def _frame_seed(internals: dict[str, Any]) -> int | None:
     return None
 
 
+def _frame_vars(ctx: Any) -> dict[str, str]:
+    """The frame's resolved `$variables` as text, for the zoom's Details panel."""
+    values = getattr(ctx, "context", None)
+    out: dict[str, str] = {}
+    if not isinstance(values, dict):
+        return out
+    for name, raw in values.items():
+        if not isinstance(name, str) or name.startswith("__"):
+            continue
+        try:
+            text = deref_var_value(raw, None)
+        except Exception:  # noqa: BLE001 - a value we can't render is just skipped
+            continue
+        if isinstance(text, str) and text.strip():
+            out[name] = text[:_MAX_VAR_TEXT]
+            if len(out) >= _MAX_LABEL_VARS:
+                break
+    return out
+
+
 def _frame_labels(
     contexts: list[Any] | None,
     positive_text: list[Any] | None,
     negative_text: list[Any] | None,
     frames: int,
 ) -> list[dict[str, Any]]:
-    """Per-frame label data for the picker: loop index, sweep pins, seed and
-    the frame's prompt texts (shown on hover and editable in zoom)."""
+    """Per-frame label data for the picker: loop index, sweep pins, seed,
+    variables and the frame's prompt texts (shown on hover and editable in
+    zoom)."""
     labels: list[dict[str, Any]] = []
     for ctx, pos, neg in zip(
         f.align(contexts, frames),
@@ -121,6 +147,9 @@ def _frame_labels(
         seed = _frame_seed(internals)
         if seed is not None:
             label["seed"] = seed
+        frame_vars = _frame_vars(ctx)
+        if frame_vars:
+            label["vars"] = frame_vars
         if isinstance(pos, str):
             label["positive"] = pos[:_MAX_LABEL_TEXT]
         if isinstance(neg, str):

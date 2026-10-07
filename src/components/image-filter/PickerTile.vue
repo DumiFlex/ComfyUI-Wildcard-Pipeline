@@ -19,8 +19,8 @@ defineEmits<{ toggle: []; zoom: []; hover: [on: boolean] }>();
     :class="{ 'is-picked': picked }"
     :aria-pressed="picked"
     :data-test="testId"
-    @click="$emit('toggle')"
-    @dblclick="$emit('zoom')"
+    @click.stop="$emit('toggle')"
+    @dblclick.stop="$emit('zoom')"
     @mouseenter="$emit('hover', true)"
     @mouseleave="$emit('hover', false)"
   >

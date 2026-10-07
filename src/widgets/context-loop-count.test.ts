@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { syncCountToSweep } from "./context_loop";
+import { onCountEdited, syncCountToSweep } from "./context_loop";
 
 describe("count widget follows the sweep", () => {
   it("shows the sweep's frame count and locks the widget", () => {
@@ -14,5 +14,19 @@ describe("count widget follows the sweep", () => {
     expect(syncCountToSweep(w, null)).toBe(true);
     expect(w).toEqual({ value: 9, disabled: false });
     expect(syncCountToSweep(w, null)).toBe(false);
+  });
+});
+
+describe("editing the count", () => {
+  it("reports the new count after the widget's own callback", () => {
+    const calls: string[] = [];
+    const w: { value?: unknown; callback?: (...args: never[]) => unknown } = {
+      value: 6,
+      callback: () => { calls.push("own"); },
+    };
+    onCountEdited(w, (n) => calls.push(`count ${n}`));
+    w.value = 3;
+    w.callback?.();
+    expect(calls).toEqual(["own", "count 3"]);
   });
 });

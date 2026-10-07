@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   emptyContextLoopConfig,
   emptySweepConfig,
+  keepFramesWithin,
+  remapSweepFrames,
   parseContextLoopConfig,
   serializeContextLoopConfig,
   type ContextLoopConfig,
@@ -113,5 +115,36 @@ describe("bypass_frames parse", () => {
   it("malformed collapses to empty", () => {
     expect(parseContextLoopConfig('{"bypass_frames":"nope"}').bypass_frames).toEqual([]);
     expect(parseContextLoopConfig("not json").bypass_frames).toEqual([]);
+  });
+});
+
+describe("frame locks follow count and sweep edits", () => {
+  const base = () => ({ ...emptyContextLoopConfig(), seed_locks: { "1": 11, "4": 44 }, bypass_frames: [2, 5] });
+  const sweep = (opts: string[][], limit = 64) => ({
+    enabled: true, limit, hold_others: true,
+    axes: opts.map((ids, i) => ({ uid: `u${i}`, option_ids: ids })),
+  });
+
+  it("lowering the count drops locks and bypasses past it", () => {
+    const cfg = base();
+    expect(keepFramesWithin(cfg, 3)).toMatchObject({ seed_locks: { "1": 11 }, bypass_frames: [2] });
+    expect(keepFramesWithin(cfg, 9)).toBe(cfg);
+  });
+
+  it("a sweep edit moves locks with their combination and drops gone ones", () => {
+    // a×(x,y): frames ax, ay, bx, by. Lock "by" (3), bypass "ay" (1).
+    const prev = { ...emptyContextLoopConfig(), sweep: sweep([["a", "b"], ["x", "y"]]), seed_locks: { "3": 7 }, bypass_frames: [1] };
+    // Add option z: ax ay az bx by bz -> "by" is now 4, "ay" stays 1.
+    const added = remapSweepFrames(prev, { ...prev, sweep: sweep([["a", "b"], ["x", "y", "z"]]) }, 1);
+    expect(added).toMatchObject({ seed_locks: { "4": 7 }, bypass_frames: [1] });
+    // Drop y: ax bx -> both gone.
+    const dropped = remapSweepFrames(prev, { ...prev, sweep: sweep([["a", "b"], ["x"]]) }, 1);
+    expect(dropped).toMatchObject({ seed_locks: {}, bypass_frames: [] });
+  });
+
+  it("turning the sweep off keeps only frames within the count", () => {
+    const prev = { ...emptyContextLoopConfig(), sweep: sweep([["a", "b"], ["x", "y"]]), seed_locks: { "3": 7, "0": 1 }, bypass_frames: [1] };
+    const off = remapSweepFrames(prev, { ...prev, sweep: { ...prev.sweep, enabled: false } }, 2);
+    expect(off).toMatchObject({ seed_locks: { "0": 1 }, bypass_frames: [1] });
   });
 });

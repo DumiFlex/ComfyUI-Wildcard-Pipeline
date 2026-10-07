@@ -13,7 +13,7 @@
  * pushes via `host.setValue` so ComfyUI's widget value matches.
  */
 import { computed, ref } from "vue";
-import { sweepFrameCount, type ContextLoopConfig, type LoopStrategy, type SweepConfig } from "./types";
+import { remapSweepFrames, sweepFrameCount, type ContextLoopConfig, type LoopStrategy, type SweepConfig } from "./types";
 import { collectSweepCandidates, sweepSourcesFromRaw, type SweepSourceRaw } from "./sweep-candidates";
 import SweepModal from "./SweepModal.vue";
 import SeedListModal from "../shared/SeedListModal.vue";
@@ -152,7 +152,8 @@ const sweepOpen = ref(false);
 const sweepFrames = computed(() => sweepFrameCount(props.modelValue));
 
 function onSweep(next: SweepConfig): void {
-  emit("update:modelValue", { ...props.modelValue, sweep: next });
+  const cfg = { ...props.modelValue, sweep: next };
+  emit("update:modelValue", remapSweepFrames(props.modelValue, cfg, Math.max(1, props.count ?? 1)));
 }
 
 function pickStrategy(s: LoopStrategy): void {

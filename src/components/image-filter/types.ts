@@ -66,6 +66,8 @@ export interface FrameLabel {
   pins?: Record<string, string>;
   /** The seed the Context Loop gave this frame. */
   seed?: number;
+  /** The frame's `$variables` as text (zoom Details panel). */
+  vars?: Record<string, string>;
   /** The frame's prompt texts, when wired into the filter. */
   positive?: string;
   negative?: string;

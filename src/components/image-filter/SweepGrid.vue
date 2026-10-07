@@ -74,7 +74,7 @@ function isEdited(key: string): boolean {
         <span v-for="a in grid.splitAxes" :key="a.axis" class="wp-ifg__name" :style="hue(a.axis)">{{ a.name }}</span>
       </span>
       <span class="wp-ifg__spacer" />
-      <span class="wp-ifg__hint">Click a row, column or group name to pick all of it.</span>
+      <span class="wp-ifg__hint">Click a row, column or group name to pick all of it, a frame&apos;s border to zoom in.</span>
     </div>
 
     <div class="wp-ifg__groups" :class="{ 'is-split': split }">
@@ -120,7 +120,13 @@ function isEdited(key: string): boolean {
               @click="emit('toggleFrames', rowFrames(g.cells, ri))"
             >{{ r }}</button>
             <div v-for="(f, ci) in g.cells[ri]" :key="`${ri}-${ci}`" class="wp-ifg__cell">
-              <div v-if="f >= 0" class="wp-ifg__tiles" :data-test="`image-filter-frame-${f}`" :title="tooltip(f)">
+              <div
+                v-if="f >= 0"
+                class="wp-ifg__tiles"
+                :data-test="`image-filter-frame-${f}`"
+                :title="`${tooltip(f)}\nClick the image to pick it, the frame around it to zoom in.`"
+                @click="emit('zoom', f, 0)"
+              >
                 <PickerTile
                   v-for="(img, i) in frames[f]"
                   :key="i"
@@ -172,6 +178,7 @@ button.wp-ifg__chip { cursor: pointer; }
 button.wp-ifg__chip:hover { background: color-mix(in srgb, var(--wp-ifg-hue) 32%, transparent); }
 .wp-ifg__row { justify-self: end; }
 .wp-ifg__cell { display: flex; justify-content: center; }
-.wp-ifg__tiles { display: flex; gap: 4px; }
+.wp-ifg__tiles { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--wp-border); border-radius: 5px; background: var(--wp-bg-deep, var(--wp-bg)); cursor: zoom-in; }
+.wp-ifg__tiles:hover { border-color: var(--wp-accent); }
 .wp-ifg__empty { color: var(--wp-text-dim, var(--wp-text3)); }
 </style>

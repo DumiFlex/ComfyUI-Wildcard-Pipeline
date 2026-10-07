@@ -15,6 +15,7 @@ import { attachLoopSeedsCapture } from "./_seed-capture";
 import { reactiveFromGraph } from "../extension/reactive";
 import {
   emptyContextLoopConfig,
+  keepFramesWithin,
   parseContextLoopConfig,
   serializeContextLoopConfig,
   sweepFrameCount,
@@ -140,6 +141,19 @@ export function create(node: ContextLoopHostNode, inputName: string) {
     { immediate: true },
   );
 
+  // Lowering the count by hand drops seed locks and bypassed frames past it,
+  // so raising it again starts those frames fresh. Only the user's edit
+  // (the widget callback) does this, never a workflow load.
+  const countWidget = (node.widgets ?? []).find((x) => x.name === "count");
+  if (countWidget) {
+    onCountEdited(countWidget, (n) => {
+      const next = keepFramesWithin(config.value, n);
+      if (next === config.value) return;
+      config.value = next;
+      host?.setValue(serializeContextLoopConfig(next));
+    });
+  }
+
   let host: DomWidgetHost | null = null;
 
   const wrapper: Component = {
@@ -222,4 +236,20 @@ export function editLoopConfig(node: object, edit: LoopEdit): boolean {
   if (!apply) return false;
   apply(edit);
   return true;
+}
+
+/** Call `onChange` with the new count after the user edits the count widget
+ *  (its callback; a workflow load sets the value without it). Chains the
+ *  widget's own callback. */
+export function onCountEdited(
+  w: { value?: unknown; callback?: (...args: never[]) => unknown },
+  onChange: (count: number) => void,
+): void {
+  const original = w.callback as ((...args: unknown[]) => unknown) | undefined;
+  w.callback = function (this: unknown, ...args: unknown[]) {
+    const r = original?.apply(this, args);
+    const n = Number(w.value);
+    if (Number.isInteger(n) && n >= 1) onChange(n);
+    return r;
+  } as typeof w.callback;
 }

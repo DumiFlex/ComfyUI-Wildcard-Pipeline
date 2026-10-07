@@ -19,9 +19,11 @@ A Context Loop (or any list) makes one **frame** per iteration. Lists line up by
 
 ## The picker
 
-- Click an image to pick it. Click a frame's label to pick the whole frame. Ctrl+A picks everything.
-- **Space** zooms the image under the mouse, or leaves the zoom. In the zoom, ←/→ move and ↑ picks. The picker remembers: leave it zoomed and the next one opens zoomed.
+- Click an image to pick it. Ctrl+A picks everything; a frame with several images has an **all** button that picks the frame.
+- Click the frame around an image (its border or its label) to zoom in, where you can compare, edit the prompt and paint a mask. **Zoom & refine** in the header, or **Space**, opens and leaves the zoom too (Space zooms the image under the mouse). In the zoom, ←/→ move and ↑ picks. The picker remembers: leave it zoomed and the next one opens zoomed.
+- **I** or **Details** (in the zoom) adds a Details panel for power users: the frame's variable values (swept ones first, in their grid colour; **Copy** copies them), its seed, the other images of the frame with **Pick whole frame**, and the positive prompt with each value marked where it landed (click it to edit). Everything else in the zoom still works, and the picker remembers whether Details was on.
 - **C** (in the zoom) pins the image; step to another and a slider compares the two. **C** again stops.
+- **Fit** (or **F**) in the header makes the images as big as the picker allows, so a handful of images fill the screen. The picker remembers it.
 - **Enter** or **Keep N picked** sends the picks on. **Keep all** sends everything. **Stop branch** stops the nodes after this one; the rest of the run finishes normally.
 - A short chime plays when the picker opens, and the tab title starts with **● Pick images** while something waits. Turn the chime off under **Settings → Wildcard Pipeline → Runtime behavior → Image Filter sound**. Turn on **Image Filter desktop notification** there to also get a system notification while the tab is in the background.
 - **Escape** or the − button tucks the picker away. A "waiting" pill stays at the bottom of the screen and reopens it with your picks still there.
