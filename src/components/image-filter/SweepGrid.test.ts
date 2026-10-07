@@ -44,4 +44,12 @@ describe("SweepGrid", () => {
     await w.find('[data-test="image-filter-grid-swap"]').trigger("click");
     expect(w.emitted("update:layout")).toEqual([[{ rows: 2, cols: 1 }], [{ rows: 1, cols: 0 }]]);
   });
+
+  it("clicking a frame's border zooms it; clicking its image only picks", async () => {
+    const w = mk();
+    await w.find('[data-test="image-filter-tile-3-0"]').trigger("click");
+    await w.find('[data-test="image-filter-frame-3"]').trigger("click");
+    expect(w.emitted("toggle")).toEqual([["3:0"]]);
+    expect(w.emitted("zoom")).toEqual([[3, 0]]);
+  });
 });

@@ -161,6 +161,12 @@ function setZoom(index: number | null): void {
     painting.value = false;
   }
 }
+/** Space / the header Zoom button: leave the zoom, or open it on `at` (else the first picked image). */
+function toggleZoom(at: number | null = null): void {
+  if (zoomIndex.value !== null) setZoom(null);
+  else if (at !== null) setZoom(at);
+  else if (total.value) setZoom(Math.max(0, cells.value.findIndex((c) => picked.value.has(c.key))));
+}
 function step(delta: number): void {
   if (zoomIndex.value === null || total.value === 0) return;
   zoomIndex.value = (zoomIndex.value + delta + total.value) % total.value;
@@ -278,9 +284,7 @@ function onKey(ev: KeyboardEvent): void {
   const zoomed = zoomIndex.value !== null;
   if (ev.key === " ") {
     ev.preventDefault();
-    if (zoomed) setZoom(null);
-    else if (hovered.value !== null) setZoom(hovered.value);
-    else if (total.value) setZoom(0);
+    toggleZoom(hovered.value);
   } else if (ev.key === "Enter") {
     ev.preventDefault();
     keepPicked();
@@ -324,9 +328,21 @@ function indexOf(frame: number, image: number): number {
           <div class="wp-ifp__sub">
             <template v-if="multiFrame">{{ frames.length }} frames, {{ total }} images.</template>
             <template v-else>{{ total }} {{ total === 1 ? "image" : "images" }}.</template>
-            Click to pick, <kbd>Space</kbd> to zoom, <kbd>Enter</kbd> to keep the picks.
+            Click an image to pick it. <template v-if="multiFrame">Click its frame or </template><template v-else>Use </template><b>Zoom &amp; refine</b> (<kbd>Space</kbd>) to compare, edit its prompt or paint a mask. <kbd>Enter</kbd> keeps the picks.
           </div>
         </div>
+        <button
+          type="button"
+          class="wp-ifp__zoom-btn"
+          :class="{ 'is-on': zoomCell }"
+          :aria-pressed="!!zoomCell"
+          title="Zoom in to compare, edit the prompt or paint a mask (Space)"
+          data-test="image-filter-zoom-toggle"
+          @click="toggleZoom()"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5" /><path v-if="zoomCell" d="M20 20l-4.5-4.5M7.5 10.5h6" /><path v-else d="M20 20l-4.5-4.5M10.5 7.5v6M7.5 10.5h6" /></svg>
+          {{ zoomCell ? "Back to all" : "Zoom & refine" }}
+        </button>
         <div v-if="grid && !zoomCell" class="wp-ifp__seg" role="group" aria-label="Layout">
           <button type="button" :class="{ 'is-on': view === 'grid' }" data-test="image-filter-view-grid" @click="view = 'grid'">Grid</button>
           <button type="button" :class="{ 'is-on': view === 'frames' }" data-test="image-filter-view-frames" @click="view = 'frames'">Frames</button>
@@ -473,18 +489,23 @@ function indexOf(frame: number, image: number): number {
           class="wp-ifp__frame"
           :class="{ 'is-flat': !multiFrame }"
           :data-test="`image-filter-frame-${f}`"
+          :title="multiFrame ? `${frameTooltip(f)}\nClick the image to pick it, the frame around it to zoom in.` : undefined"
+          @click="multiFrame && setZoom(indexOf(f, 0))"
         >
-          <button
-            v-if="multiFrame"
-            type="button"
-            class="wp-ifp__frame-label"
-            :title="frameTooltip(f)"
-            @click="toggleFrame(f)"
-          >
-            <template v-for="(part, pi) in frameParts(labels[f], f, axes)" :key="pi">
-              <span v-if="pi > 0" class="wp-ifp__sep">·</span><span :class="{ 'wp-ifp__opt': pi > 0 }">{{ part }}</span>
-            </template>
-          </button>
+          <div v-if="multiFrame" class="wp-ifp__frame-head">
+            <span class="wp-ifp__frame-label">
+              <template v-for="(part, pi) in frameParts(labels[f], f, axes)" :key="pi">
+                <span v-if="pi > 0" class="wp-ifp__sep">·</span><span :class="{ 'wp-ifp__opt': pi > 0 }">{{ part }}</span>
+              </template>
+            </span>
+            <button
+              v-if="imgs.length > 1"
+              type="button"
+              class="wp-ifp__frame-all"
+              title="Pick or clear every image of this frame"
+              @click.stop="toggleFrame(f)"
+            >all</button>
+          </div>
           <div class="wp-ifp__tiles">
             <PickerTile
               v-for="(img, i) in imgs"
@@ -549,6 +570,10 @@ function indexOf(frame: number, image: number): number {
 .wp-ifp__icon-btn { background: transparent; border: 0; color: var(--wp-text-dim, var(--wp-text3)); cursor: pointer; padding: 4px; display: flex; }
 .wp-ifp__icon-btn:hover { color: var(--wp-text); }
 
+.wp-ifp__zoom-btn { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border: 1px solid var(--wp-border); border-radius: 4px; background: var(--wp-bg3); color: var(--wp-text); font: 11px var(--wp-font-sans); cursor: pointer; white-space: nowrap; }
+.wp-ifp__zoom-btn:hover { border-color: var(--wp-accent); }
+.wp-ifp__zoom-btn.is-on { background: color-mix(in srgb, var(--wp-accent) 25%, var(--wp-bg3)); border-color: var(--wp-accent); }
+.wp-ifp__sub b { font-weight: 600; color: var(--wp-text-muted, var(--wp-text2)); }
 .wp-ifp__seg { display: inline-flex; border: 1px solid var(--wp-border); border-radius: 4px; overflow: hidden; }
 .wp-ifp__seg button { padding: 3px 9px; border: 0; background: var(--wp-bg3); color: var(--wp-text-muted, var(--wp-text2)); font: 11px var(--wp-font-sans); cursor: pointer; }
 .wp-ifp__seg button + button { border-left: 1px solid var(--wp-border); }
@@ -560,8 +585,13 @@ function indexOf(frame: number, image: number): number {
 .wp-ifp__body.is-grid { display: flex; flex-direction: column; flex-wrap: nowrap; padding: 0; overflow: hidden; }
 .wp-ifp__frame { display: flex; flex-direction: column; gap: 4px; padding: 6px; border-radius: 5px; background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); --wp-ifp-tile: 150px; }
 .wp-ifp__frame.is-flat { padding: 0; background: transparent; border: 0; width: 100%; --wp-ifp-tile: 200px; }
-.wp-ifp__frame-label { align-self: flex-start; max-width: 100%; background: transparent; border: 0; padding: 0 2px; font: 10px var(--wp-font-mono, monospace); color: var(--wp-text-dim, var(--wp-text3)); cursor: pointer; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.wp-ifp__frame-label:hover { color: var(--wp-accent-text, var(--wp-accent)); }
+.wp-ifp__frame:not(.is-flat) { cursor: zoom-in; }
+.wp-ifp__frame:not(.is-flat):hover { border-color: var(--wp-accent, #4a8cff); }
+.wp-ifp__frame:not(.is-flat):hover .wp-ifp__frame-label { color: var(--wp-accent-text, var(--wp-accent)); }
+.wp-ifp__frame-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.wp-ifp__frame-label { flex: 1; min-width: 0; padding: 0 2px; font: 10px var(--wp-font-mono, monospace); color: var(--wp-text-dim, var(--wp-text3)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wp-ifp__frame-all { background: transparent; border: 0; padding: 0 2px; font: 10px var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); cursor: pointer; }
+.wp-ifp__frame-all:hover { color: var(--wp-accent-text, var(--wp-accent)); }
 .wp-ifp__opt { color: var(--wp-text-muted, var(--wp-text2)); font-family: var(--wp-font-sans); }
 .wp-ifp__sep { margin: 0 4px; opacity: .6; }
 .wp-ifp__tiles { display: flex; flex-wrap: wrap; gap: 6px; }

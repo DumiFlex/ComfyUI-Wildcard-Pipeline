@@ -54,10 +54,31 @@ describe("PickerModal", () => {
     expect(w.emitted("answer")?.[0]?.[0]).toEqual({ action: "picks", picks: [[0, 1], [0, 3]] });
   });
 
-  it("a loop's frames are grouped; clicking a frame label picks the whole frame", async () => {
+  it("clicking a frame zooms its first image; clicking an image only picks it", async () => {
+    const w = mk(request([2, 2], { labels: [{ loop_index: 0 }, { loop_index: 1 }] }));
+    await w.find('[data-test="image-filter-tile-1-1"]').trigger("click");
+    expect(w.find('[data-test="image-filter-zoom"]').exists()).toBe(false);
+    expect(w.find('[data-test="image-filter-status"]').text()).toContain("1 picked");
+    await w.find('[data-test="image-filter-frame-1"] .wp-ifp__frame-label').trigger("click");
+    expect(w.find('[data-test="image-filter-zoom"]').text()).toContain("image 1");
+  });
+
+  it("the header Zoom button opens the zoom on the first picked image and closes it again", async () => {
+    const w = mk(request([3]));
+    await w.find('[data-test="image-filter-tile-0-2"]').trigger("click");
+    const btn = w.find('[data-test="image-filter-zoom-toggle"]');
+    await btn.trigger("click");
+    expect(w.find('[data-test="image-filter-zoom"]').text()).toContain("3 / 3");
+    expect(btn.text()).toBe("Back to all");
+    await btn.trigger("click");
+    expect(w.find('[data-test="image-filter-zoom"]').exists()).toBe(false);
+  });
+
+  it("a loop's frames are grouped; the frame's all button picks the whole frame", async () => {
     const w = mk(request([2, 2, 2], { labels: [{ loop_index: 0 }, { loop_index: 1 }, { loop_index: 2 }] }));
     expect(w.findAll('[data-test^="image-filter-frame-"]')).toHaveLength(3);
-    await w.find('[data-test="image-filter-frame-1"] .wp-ifp__frame-label').trigger("click");
+    await w.find('[data-test="image-filter-frame-1"] .wp-ifp__frame-all').trigger("click");
+    expect(w.find('[data-test="image-filter-zoom"]').exists()).toBe(false);
     expect(w.find('[data-test="image-filter-status"]').text()).toContain("2 picked from 1 frame");
     await w.find('[data-test="image-filter-keep-picked"]').trigger("click");
     expect(w.emitted("answer")?.[0]?.[0]).toEqual({ action: "picks", picks: [[1, 0], [1, 1]] });
@@ -186,7 +207,8 @@ describe("PickerModal", () => {
     const w = mk(request([1, 1], { labels: [{ loop_index: 4, seed: 77, positive: "red hat" }, { loop_index: 5 }] }));
     const label = w.find('[data-test="image-filter-frame-0"] .wp-ifp__frame-label');
     expect(label.text()).toBe("#5");
-    expect(label.attributes("title")).toContain("Seed 77");
-    expect(label.attributes("title")).toContain("red hat");
+    const frame = w.find('[data-test="image-filter-frame-0"]');
+    expect(frame.attributes("title")).toContain("Seed 77");
+    expect(frame.attributes("title")).toContain("red hat");
   });
 });
