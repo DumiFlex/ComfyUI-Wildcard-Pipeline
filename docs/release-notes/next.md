@@ -5,3 +5,4 @@
 ### Fixes
 
 - **Sweep combinations can clear a wildcard's options in one click.** Next to **all** and **enabled only** there is now **none**, so you can untick everything and pick just the few options you want instead of unticking them one by one. A wildcard with nothing ticked sweeps nothing until you tick one.
+- **The loop's count is locked while a sweep is on.** The sweep decides how many frames run, so the count field now greys out and shows the sweep's frame count instead of looking editable.

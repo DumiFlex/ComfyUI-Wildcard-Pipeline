@@ -130,13 +130,12 @@ export function create(node: ContextLoopHostNode, inputName: string) {
   // from the config, so a stale widget can't change what runs.
   watch(
     [() => sweepFrameCount(config.value), count],
-    ([frames, current]) => {
-      if (frames == null || frames === current) return;
+    ([frames]) => {
       const w = (node.widgets ?? []).find((x) => x.name === "count");
-      if (!w) return;
-      w.value = frames;
-      (node as unknown as { setDirtyCanvas?: (fg: boolean, bg: boolean) => void })
-        .setDirtyCanvas?.(true, true);
+      if (w && syncCountToSweep(w, frames)) {
+        (node as unknown as { setDirtyCanvas?: (fg: boolean, bg: boolean) => void })
+          .setDirtyCanvas?.(true, true);
+      }
     },
     { immediate: true },
   );
@@ -184,4 +183,20 @@ export function create(node: ContextLoopHostNode, inputName: string) {
   attachLoopSeedsCapture(node);
 
   return host;
+}
+
+/**
+ * Keep the stock `count` widget in step with a sweep: while a sweep sets the
+ * frame count (`frames` not null) the widget shows it and is locked, since
+ * typing a count there would do nothing. Returns true when the widget changed.
+ */
+export function syncCountToSweep(
+  w: { value?: unknown; disabled?: boolean },
+  frames: number | null,
+): boolean {
+  const locked = frames != null;
+  const changed = !!w.disabled !== locked || (locked && w.value !== frames);
+  w.disabled = locked;
+  if (locked) w.value = frames;
+  return changed;
 }
