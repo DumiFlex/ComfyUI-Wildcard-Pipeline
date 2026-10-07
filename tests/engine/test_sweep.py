@@ -37,14 +37,24 @@ def test_parse_drops_bad_axes_and_dedupes():
             {"uid": "a1", "option_ids": ["x", "x", "", 3, "y"], "label": "hair"},
             {"uid": "a1", "option_ids": ["z"]},  # duplicate uid
             {"uid": "", "option_ids": ["z"]},  # no uid
-            {"uid": "b2", "option_ids": []},  # nothing to sweep
+            {"uid": "b2", "option_ids": []},  # kept, sweeps nothing
             "junk",
         ],
     })
     assert out["enabled"] is True
     assert out["limit"] == 999
     assert out["hold_others"] is False
-    assert out["axes"] == [{"uid": "a1", "option_ids": ["x", "y"], "label": "hair"}]
+    assert out["axes"] == [
+        {"uid": "a1", "option_ids": ["x", "y"], "label": "hair"},
+        {"uid": "b2", "option_ids": []},
+    ]
+
+
+def test_empty_axes_sweep_nothing():
+    axes = [{"uid": "a", "option_ids": []}, {"uid": "b", "option_ids": ["1", "2"]}]
+    assert sweep_total(axes) == 2
+    assert sweep_frames(axes, 64) == [{"b": "1"}, {"b": "2"}]
+    assert sweep_frames([{"uid": "a", "option_ids": []}], 64) == []
 
 
 def test_parse_rejects_non_int_limit():

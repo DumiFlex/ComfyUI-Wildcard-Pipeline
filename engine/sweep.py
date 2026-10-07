@@ -59,8 +59,8 @@ def parse_sweep(raw: object) -> dict[str, Any]:
         for oid in axis.get("option_ids") or []:
             if isinstance(oid, str) and oid and oid not in ids:
                 ids.append(oid)
-        if not ids:
-            continue
+        # An axis with nothing ticked is kept (the user cleared it to pick
+        # a few by hand) but sweeps nothing: see `live_axes`.
         seen.add(uid)
         clean: dict[str, Any] = {"uid": uid, "option_ids": ids}
         label = axis.get("label")
@@ -71,16 +71,22 @@ def parse_sweep(raw: object) -> dict[str, Any]:
     return out
 
 
+def live_axes(axes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The axes with at least one option ticked; only these sweep."""
+    return [a for a in axes if a["option_ids"]]
+
+
 def sweep_total(axes: list[dict[str, Any]]) -> int:
     """Number of combinations before the limit (1 for no axes)."""
     total = 1
-    for axis in axes:
+    for axis in live_axes(axes):
         total *= len(axis["option_ids"])
     return total
 
 
 def sweep_frames(axes: list[dict[str, Any]], limit: int) -> list[dict[str, str]]:
     """The first `limit` combinations as `{uid: option_id}` pin maps."""
+    axes = live_axes(axes)
     if not axes:
         return []
     uids = [a["uid"] for a in axes]
