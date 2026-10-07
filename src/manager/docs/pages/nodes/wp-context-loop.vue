@@ -98,7 +98,9 @@ const controls = [
         Each frame pins the swept wildcards exactly like pinning an option by hand, so their tag
         axes still roll and constraints they drive still apply downstream. A swept wildcard is not
         itself re-weighted by constraints, because the sweep decides its pick. Frame bypass and
-        per-frame overrides work as usual.
+        per-frame overrides work as usual. Changing the sweep moves each seed lock and bypassed
+        frame with its combination, and drops it when that combination no longer runs; lowering
+        the count drops the ones past it.
       </p>
       <DocCallout variant="tip">
         For a clean comparison, keep the sampler on one fixed seed (a plain KSampler already does),

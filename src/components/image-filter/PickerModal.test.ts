@@ -203,6 +203,30 @@ describe("PickerModal", () => {
     expect(w.find('[data-test="image-filter-mask-clear"]').exists()).toBe(true);
   });
 
+  it("I adds Details to the zoom: values, marked prompt, the frame's images; it is remembered", async () => {
+    const labels = [{ positive: "1girl, red hair, calm", vars: { hair: "red hair", mood: "calm" }, seed: 9 }];
+    const w = mk(request([2], { labels }));
+    await w.vm.$nextTick();
+    const root = w.find('[data-test="image-filter-picker"]');
+    await root.trigger("keydown", { key: " " });
+    expect(w.find('[data-test="image-filter-details"]').exists()).toBe(false);
+    await root.trigger("keydown", { key: "i" });
+    const details = w.find('[data-test="image-filter-details"]');
+    expect(details.text()).toContain("$hair");
+    expect(details.text()).toContain("seed9");
+    const marked = w.find('[data-test="image-filter-positive-marked"]');
+    expect(marked.findAll("mark").map((m) => m.text())).toEqual(["red hair", "calm"]);
+    await marked.trigger("click");
+    expect(w.find('[data-test="image-filter-positive"]').exists()).toBe(true);
+    await details.find('[data-test="image-filter-details-frame"]').trigger("click");
+    expect(w.find('[data-test="image-filter-status"]').text()).toContain("2 picked");
+    await details.findAll(".wp-ifp-tile")[1]?.trigger("click");
+    expect(w.find('[data-test="image-filter-zoom"]').text()).toContain("2 / 2");
+    w.unmount();
+    const again = mk(request([2], { labels }));
+    expect(again.find('[data-test="image-filter-details"]').exists()).toBe(true);
+  });
+
   it("frame captions show the loop number and hover shows seed and prompt", () => {
     const w = mk(request([1, 1], { labels: [{ loop_index: 4, seed: 77, positive: "red hat" }, { loop_index: 5 }] }));
     const label = w.find('[data-test="image-filter-frame-0"] .wp-ifp__frame-label');

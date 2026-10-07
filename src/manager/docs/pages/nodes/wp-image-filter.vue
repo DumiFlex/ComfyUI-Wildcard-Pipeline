@@ -22,6 +22,7 @@ const keys = [
   { term: "Click", desc: "Pick or unpick an image. A frame's all button picks the whole frame; Ctrl+A picks everything." },
   { term: "Frame", desc: "Click the frame around an image (its border or label) to zoom in, where you can compare, edit the prompt and paint a mask. The Zoom & refine button in the header does the same." },
   { term: "Space", desc: "Zoom the image under the mouse, or leave the zoom (same as Zoom & refine). In the zoom, ←/→ move and ↑ picks. The picker remembers: leave it zoomed and the next one opens zoomed." },
+  { term: "I", desc: "In the zoom: Details. Lists the frame's variable values (Copy copies them) and seed, shows the frame's other images with Pick whole frame, and marks each value in the positive prompt (click it to edit). Remembered for next time." },
   { term: "C", desc: "In the zoom: pin this image, then step to another to compare the two with a slider. C again stops." },
   { term: "M", desc: "In the zoom: paint a mask on this image (brush, eraser, size, invert, clear)." },
   { term: "Enter", desc: "Keep the picks and let the run go on." },

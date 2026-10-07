@@ -66,21 +66,28 @@ export function editsFor(all: PickEdits, keys: readonly string[]): PickEdits | u
 }
 
 const ZOOM_KEY = "wp-image-filter-zoom";
+const DETAILS_KEY = "wp-image-filter-details";
 
-/** Whether the picker opens zoomed in (remembered from last time). */
-export function readZoomPref(): boolean {
+function readFlag(key: string): boolean {
   try {
-    return localStorage.getItem(ZOOM_KEY) === "1";
+    return localStorage.getItem(key) === "1";
   } catch {
     return false;
   }
 }
 
-export function writeZoomPref(on: boolean): void {
+function writeFlag(key: string, on: boolean): void {
   try {
-    if (on) localStorage.setItem(ZOOM_KEY, "1");
-    else localStorage.removeItem(ZOOM_KEY);
+    if (on) localStorage.setItem(key, "1");
+    else localStorage.removeItem(key);
   } catch {
-    // Storage blocked: the picker just opens in the grid.
+    // Storage blocked: the picker just opens with the defaults.
   }
 }
+
+/** Whether the picker opens zoomed in (remembered from last time). */
+export const readZoomPref = (): boolean => readFlag(ZOOM_KEY);
+export const writeZoomPref = (on: boolean): void => writeFlag(ZOOM_KEY, on);
+/** Whether the zoom shows the Details panel (values, frame images). */
+export const readDetailsPref = (): boolean => readFlag(DETAILS_KEY);
+export const writeDetailsPref = (on: boolean): void => writeFlag(DETAILS_KEY, on);

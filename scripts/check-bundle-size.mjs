@@ -284,7 +284,9 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // (frame labels, sweep grid, compare, prompt edits, mask painter, Send to
 // Loop): the picker chunk grows ~8 KB and stays lazy. The branch sat at
 // 462,555 bytes before it. Same "guide, not a cap" rule as above.
-const TOTAL_LIMIT = 464 * 1024;     // 464 KB
+// RAISED 464 -> 468 KB on 2026-10-07 for the zoom's Details panel and the
+// frame-click zoom (lazy picker chunk); the branch sat at 476,239 bytes.
+const TOTAL_LIMIT = 468 * 1024;     // 468 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

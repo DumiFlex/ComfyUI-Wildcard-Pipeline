@@ -191,3 +191,14 @@ def test_frame_labels_read_loop_index_pins_seed_and_prompts():
     over = types.SimpleNamespace(internals={"__wp_seed_override__": 7, "__wp_loop_seeds__": [1]})
     assert node_mod._frame_labels([over], None, None, 1) == [{"seed": 7}]
     assert node_mod._frame_labels(None, None, None, 1) == [{}]
+
+
+def test_frame_labels_carry_the_frames_variables_as_text():
+    ctx = types.SimpleNamespace(
+        internals={},
+        context={"hair": "red hair", "empty": " ", "__trace__": "x", "count": 3, "long": "y" * 500},
+    )
+    [label] = node_mod._frame_labels([ctx], None, None, 1)
+    assert label["vars"]["hair"] == "red hair"
+    assert "empty" not in label["vars"] and "__trace__" not in label["vars"]
+    assert len(label["vars"]["long"]) == node_mod._MAX_VAR_TEXT

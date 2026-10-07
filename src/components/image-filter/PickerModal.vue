@@ -10,7 +10,7 @@
  * Closing (Escape / clicking outside) only minimises it: the run keeps
  * waiting until one of the three answers is sent.
  */
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import ModalShell from "../shared/ModalShell.vue";
 import MaskPainter from "./MaskPainter.vue";
 import PickerTile from "./PickerTile.vue";
@@ -23,9 +23,11 @@ import { editLoopConfig } from "../../widgets/context_loop";
 import { pushToast } from "../shared/toast-store";
 import { defaultGridLayout, findLoop, frameParts, loopEdit, sweepGrid, type GridLayout } from "./picker-loop";
 import {
-  draftEdits, dropDraftEdits, editsFor, hasEdit, readZoomPref, saveDraftEdits,
-  withMask, withText, writeZoomPref,
+  draftEdits, dropDraftEdits, editsFor, hasEdit, readDetailsPref, readZoomPref, saveDraftEdits,
+  withMask, withText, writeDetailsPref, writeZoomPref,
 } from "./picker-state";
+import { axisHueAt } from "../shared/axis-color";
+import { frameValues, promptRuns, valuesText } from "./picker-details";
 
 const props = withDefaults(
   defineProps<{ request: WaitingRequest; moreWaiting?: number; graph?: LiteGraphLike }>(),
@@ -118,7 +120,6 @@ function frameTooltip(frame: number): string {
   if (typeof l?.seed === "number") lines.push(`Seed ${l.seed}`);
   if (l?.positive) lines.push(`+ ${shortText(l.positive)}`);
   if (l?.negative) lines.push(`− ${shortText(l.negative)}`);
-  lines.push("Click to pick or clear the whole frame");
   return lines.join("\n");
 }
 
@@ -192,6 +193,31 @@ const painter = ref<InstanceType<typeof MaskPainter> | null>(null);
 function togglePaint(): void {
   painting.value = !painting.value;
   if (painting.value) comparePin.value = null;
+}
+
+/* Details (I): the frame's values, its other images, and the prompt with
+ * each value marked. Adds to the zoom; everything else stays. */
+const details = ref(readDetailsPref());
+watch(details, (on) => writeDetailsPref(on));
+const editingPositive = ref(false);
+watch(zoomIndex, () => { editingPositive.value = false; });
+const zoomValues = computed(() => frameValues(zoomLabel.value, axes.value));
+const positiveRuns = computed(() => promptRuns(textValue("positive"), zoomValues.value));
+const frameCells = computed(() => (zoomCell.value ? cells.value.filter((c) => c.frame === zoomCell.value?.frame) : []));
+function valueHue(axis: number): Record<string, string> {
+  return axis >= 0 ? { "--wp-ifp-hue": axisHueAt(axis) } : {};
+}
+function editPositive(ev: Event): void {
+  const aside = (ev.currentTarget as HTMLElement).parentElement;
+  editingPositive.value = true;
+  void nextTick(() => aside?.querySelector<HTMLTextAreaElement>('[data-test="image-filter-positive"]')?.focus());
+}
+function copyValues(): void {
+  const text = valuesText(zoomValues.value, zoomLabel.value?.seed);
+  void navigator.clipboard?.writeText(text).then(
+    () => pushToast("Values copied.", { severity: "success" }),
+    () => pushToast("Couldn't copy to the clipboard.", { severity: "warning" }),
+  );
 }
 
 /** Images an edit of the zoomed one's prompt applies to: the whole frame
@@ -303,6 +329,9 @@ function onKey(ev: KeyboardEvent): void {
   } else if (zoomed && (ev.key === "c" || ev.key === "C") && !ev.ctrlKey && !ev.metaKey) {
     ev.preventDefault();
     togglePin();
+  } else if (zoomed && (ev.key === "i" || ev.key === "I") && !ev.ctrlKey && !ev.metaKey) {
+    ev.preventDefault();
+    details.value = !details.value;
   } else if (zoomed && (ev.key === "m" || ev.key === "M") && !ev.ctrlKey && !ev.metaKey) {
     ev.preventDefault();
     togglePaint();
@@ -405,12 +434,55 @@ function indexOf(frame: number, image: number): number {
                 data-test="image-filter-compare-pin"
                 @click="togglePin"
               >{{ comparePin === null ? "Compare" : compareCell ? "Stop comparing" : "Pinned, pick another" }}</button>
+              <button
+                type="button"
+                class="wp-ifp__mini"
+                :class="{ 'is-on': details }"
+                title="Show the frame's values, its other images and where each value lands in the prompt (I)"
+                data-test="image-filter-details-toggle"
+                @click="details = !details"
+              >Details</button>
             </figcaption>
           </figure>
           <button type="button" class="wp-ifp__nav" aria-label="Next image" @click="step(1)">›</button>
         </div>
 
-        <aside class="wp-ifp__refine" data-test="image-filter-refine">
+        <aside class="wp-ifp__refine" :class="{ 'is-wide': details }" data-test="image-filter-refine">
+          <section v-if="details" class="wp-ifp__details" data-test="image-filter-details">
+            <div class="wp-ifp__field-head">
+              <span>Values</span>
+              <span class="wp-ifp__spacer" />
+              <button v-if="zoomValues.length" type="button" class="wp-ifp__link" @click="copyValues">Copy</button>
+            </div>
+            <dl class="wp-ifp__values">
+              <template v-for="r in zoomValues" :key="r.name">
+                <dt :class="{ 'is-swept': r.axis >= 0 }" :style="valueHue(r.axis)">${{ r.name }}</dt>
+                <dd>{{ r.value }}</dd>
+              </template>
+              <template v-if="typeof zoomLabel?.seed === 'number'">
+                <dt>seed</dt><dd>{{ zoomLabel.seed }}</dd>
+              </template>
+            </dl>
+            <p v-if="!zoomValues.length" class="wp-ifp__hint">Wire a context into the filter to see this frame's values.</p>
+            <template v-if="frameCells.length > 1">
+              <div class="wp-ifp__field-head">
+                <span>Images in this frame</span>
+                <span class="wp-ifp__spacer" />
+                <button type="button" class="wp-ifp__link" data-test="image-filter-details-frame" @click="toggleFrame(zoomCell.frame)">Pick whole frame</button>
+              </div>
+              <div class="wp-ifp__thumbs">
+                <PickerTile
+                  v-for="c in frameCells"
+                  :key="c.key"
+                  :src="viewUrl(c.ref)"
+                  :picked="picked.has(c.key)"
+                  :index="c.image + 1"
+                  :class="{ 'is-current': c.key === zoomCell.key }"
+                  @toggle="setZoom(indexOf(c.frame, c.image))"
+                />
+              </div>
+            </template>
+          </section>
           <div class="wp-ifp__refine-title">Refine before it goes on</div>
           <p v-if="request.send_as === 'same_shape' && (frames[zoomCell.frame]?.length ?? 0) > 1" class="wp-ifp__hint">
             Same shape: a prompt edit covers every image of this frame.
@@ -422,14 +494,29 @@ function indexOf(frame: number, image: number): number {
               <span class="wp-ifp__spacer" />
               <button v-if="isEdited(field)" type="button" class="wp-ifp__link" @click="resetText(field)">Reset</button>
             </div>
+            <div
+              v-if="details && field === 'positive' && !editingPositive && canEdit(field) && textValue(field)"
+              class="wp-ifp__text wp-ifp__marked"
+              tabindex="0"
+              title="Click to edit"
+              data-test="image-filter-positive-marked"
+              @click="editPositive"
+              @keydown.enter.prevent.stop="editPositive"
+            ><template v-for="(run, ri) in positiveRuns" :key="ri"><mark
+              v-if="run.name"
+              :class="{ 'is-swept': (run.axis ?? -1) >= 0 }"
+              :style="valueHue(run.axis ?? -1)"
+              :title="`$${run.name}`"
+            >{{ run.text }}</mark><template v-else>{{ run.text }}</template></template></div>
             <textarea
-              v-if="canEdit(field)"
+              v-else-if="canEdit(field)"
               class="wp-ifp__text"
               :value="textValue(field)"
               rows="5"
               spellcheck="false"
               :aria-label="`${field} prompt`"
               :data-test="`image-filter-${field}`"
+              @blur="editingPositive = false"
               @input="setText(field, ($event.target as HTMLTextAreaElement).value)"
             />
             <p v-else class="wp-ifp__hint">Wire {{ field }}_text or a CLIP into the filter to edit it here.</p>
@@ -618,6 +705,17 @@ function indexOf(frame: number, image: number): number {
 .wp-ifp__compare-tag.is-right { right: 8px; }
 .wp-ifp__compare-range { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: ew-resize; }
 
+.wp-ifp__refine.is-wide { width: 360px; }
+.wp-ifp__details { display: flex; flex-direction: column; gap: 6px; padding-bottom: 10px; margin-bottom: 4px; border-bottom: 1px solid var(--wp-border); }
+.wp-ifp__values { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; font: 11px var(--wp-font-mono, monospace); }
+.wp-ifp__values dt { color: var(--wp-text-dim, var(--wp-text3)); }
+.wp-ifp__values dt.is-swept { color: color-mix(in srgb, var(--wp-ifp-hue) 85%, #fff); font-weight: 600; }
+.wp-ifp__values dd { margin: 0; color: var(--wp-text); overflow-wrap: anywhere; }
+.wp-ifp__thumbs { display: flex; flex-wrap: wrap; gap: 4px; --wp-ifp-tile: 64px; }
+.wp-ifp__thumbs .is-current { border-color: var(--wp-accent); }
+.wp-ifp__marked { white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; min-height: 60px; }
+.wp-ifp__marked mark { padding: 0 2px; border-radius: 3px; color: var(--wp-text); background: color-mix(in srgb, var(--wp-accent) 22%, transparent); }
+.wp-ifp__marked mark.is-swept { background: color-mix(in srgb, var(--wp-ifp-hue) 28%, transparent); }
 .wp-ifp__refine { width: 300px; flex-shrink: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 12px; border-left: 1px solid var(--wp-border); background: var(--wp-bg-deep, var(--wp-bg)); }
 .wp-ifp__refine-title { font: 600 11px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .05em; color: var(--wp-text-muted, var(--wp-text2)); }
 .wp-ifp__field-head { display: flex; align-items: center; gap: 6px; margin-top: 6px; font: 600 11px var(--wp-font-sans); }
