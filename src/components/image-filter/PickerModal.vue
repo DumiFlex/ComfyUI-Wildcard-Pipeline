@@ -506,8 +506,8 @@ const fitStyle = computed(() => {
             </div>
             <dl class="wp-ifp__values">
               <template v-for="r in zoomValues" :key="r.name">
-                <dt :class="{ 'is-swept': r.axis >= 0 }" :style="valueHue(r.axis)">${{ r.name }}</dt>
-                <dd>{{ r.value }}</dd>
+                <dt :class="{ 'is-swept': r.axis >= 0 }" :style="valueHue(r.axis)" :title="`$${r.name}`">${{ r.name }}</dt>
+                <dd :title="r.value">{{ r.value }}</dd>
               </template>
               <template v-if="typeof zoomLabel?.seed === 'number'">
                 <dt>seed</dt><dd>{{ zoomLabel.seed }}</dd>
@@ -761,10 +761,12 @@ const fitStyle = computed(() => {
 
 .wp-ifp__refine.is-wide { width: 360px; }
 .wp-ifp__details { display: flex; flex-direction: column; gap: 6px; padding-bottom: 10px; margin-bottom: 4px; border-bottom: 1px solid var(--wp-border); }
-.wp-ifp__values { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; font: 11px var(--wp-font-mono, monospace); }
-.wp-ifp__values dt { color: var(--wp-text-dim, var(--wp-text3)); }
+/* Many variables scroll inside the list so Refine stays in view; long names
+ * and values are cut (full text on hover). */
+.wp-ifp__values { display: grid; grid-template-columns: minmax(0, max-content) minmax(0, 1fr); gap: 3px 12px; margin: 0; max-height: 210px; overflow-y: auto; font: 11px var(--wp-font-mono, monospace); }
+.wp-ifp__values dt { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-ifp__values dt.is-swept { color: color-mix(in srgb, var(--wp-ifp-hue) 85%, #fff); font-weight: 600; }
-.wp-ifp__values dd { margin: 0; color: var(--wp-text); overflow-wrap: anywhere; }
+.wp-ifp__values dd { margin: 0; color: var(--wp-text); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 .wp-ifp__thumbs { display: flex; flex-wrap: wrap; gap: 4px; --wp-ifp-tile: 64px; }
 .wp-ifp__thumbs .is-current { border-color: var(--wp-accent); }
 .wp-ifp__marked { white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; min-height: 60px; }
