@@ -213,7 +213,7 @@ describe("PickerModal", () => {
     await root.trigger("keydown", { key: "i" });
     const details = w.find('[data-test="image-filter-details"]');
     expect(details.text()).toContain("$hair");
-    expect(details.text()).toContain("seed9");
+    expect(details.find('[data-test="image-filter-values"]').text()).toContain("seed9");
     const marked = w.find('[data-test="image-filter-positive-marked"]');
     expect(marked.findAll("mark").map((m) => m.text())).toEqual(["red hair", "calm"]);
     await marked.trigger("click");

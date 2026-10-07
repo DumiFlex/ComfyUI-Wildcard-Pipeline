@@ -41,8 +41,18 @@ export function frameValues(label: FrameLabel | undefined, axes: readonly SweepA
   return rows;
 }
 
-/** Split `text` so every place a value appears is its own run. Longer
- *  values win where two overlap; values under 2 characters are skipped. */
+const WORD = /[\p{L}\p{N}_]/u;
+/** True when `text[start, end)` doesn't cut a word in half. */
+function onWordEdges(text: string, start: number, end: number): boolean {
+  const before = text[start - 1];
+  const after = text[end];
+  return !(before && WORD.test(before) && WORD.test(text[start] ?? ""))
+    && !(after && WORD.test(after) && WORD.test(text[end - 1] ?? ""));
+}
+
+/** Split `text` so every place a value appears as whole words is its own
+ *  run ("toe" never marks part of "cameltoe"). Longer values win where two
+ *  overlap; values under 2 characters are skipped. */
 export function promptRuns(text: string, rows: readonly ValueRow[]): PromptRun[] {
   const marks: { start: number; end: number; row: ValueRow }[] = [];
   const sorted = rows.filter((r) => r.value.trim().length >= 2).sort((a, b) => b.value.length - a.value.length);
@@ -50,7 +60,9 @@ export function promptRuns(text: string, rows: readonly ValueRow[]): PromptRun[]
     let at = text.indexOf(row.value);
     while (at >= 0) {
       const end = at + row.value.length;
-      if (!marks.some((m) => at < m.end && end > m.start)) marks.push({ start: at, end, row });
+      if (onWordEdges(text, at, end) && !marks.some((m) => at < m.end && end > m.start)) {
+        marks.push({ start: at, end, row });
+      }
       at = text.indexOf(row.value, end);
     }
   }

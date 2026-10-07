@@ -504,15 +504,15 @@ const fitStyle = computed(() => {
               <span class="wp-ifp__spacer" />
               <button v-if="zoomValues.length" type="button" class="wp-ifp__link" @click="copyValues">Copy</button>
             </div>
-            <dl class="wp-ifp__values">
-              <template v-for="r in zoomValues" :key="r.name">
-                <dt :class="{ 'is-swept': r.axis >= 0 }" :style="valueHue(r.axis)" :title="`$${r.name}`">${{ r.name }}</dt>
-                <dd :title="r.value">{{ r.value }}</dd>
-              </template>
-              <template v-if="typeof zoomLabel?.seed === 'number'">
-                <dt>seed</dt><dd>{{ zoomLabel.seed }}</dd>
-              </template>
-            </dl>
+            <div class="wp-ifp__values" data-test="image-filter-values">
+              <div v-for="r in zoomValues" :key="r.name" class="wp-ifp__value">
+                <span class="wp-ifp__value-name" :class="{ 'is-swept': r.axis >= 0 }" :style="valueHue(r.axis)" :title="`$${r.name}`">${{ r.name }}</span>
+                <span class="wp-ifp__value-text" :title="r.value">{{ r.value }}</span>
+              </div>
+              <div v-if="typeof zoomLabel?.seed === 'number'" class="wp-ifp__value">
+                <span class="wp-ifp__value-name">seed</span><span class="wp-ifp__value-text">{{ zoomLabel.seed }}</span>
+              </div>
+            </div>
             <p v-if="!zoomValues.length" class="wp-ifp__hint">Wire a context into the filter to see this frame's values.</p>
             <template v-if="frameCells.length > 1">
               <div class="wp-ifp__field-head">
@@ -760,13 +760,16 @@ const fitStyle = computed(() => {
 .wp-ifp__compare-range { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: ew-resize; }
 
 .wp-ifp__refine.is-wide { width: 360px; }
+.wp-ifp__refine > * { flex-shrink: 0; }
 .wp-ifp__details { display: flex; flex-direction: column; gap: 6px; padding-bottom: 10px; margin-bottom: 4px; border-bottom: 1px solid var(--wp-border); }
 /* Many variables scroll inside the list so Refine stays in view; long names
- * and values are cut (full text on hover). */
-.wp-ifp__values { display: grid; grid-template-columns: minmax(0, max-content) minmax(0, 1fr); gap: 3px 12px; margin: 0; max-height: 210px; overflow-y: auto; font: 11px var(--wp-font-mono, monospace); }
-.wp-ifp__values dt { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--wp-text-dim, var(--wp-text3)); }
-.wp-ifp__values dt.is-swept { color: color-mix(in srgb, var(--wp-ifp-hue) 85%, #fff); font-weight: 600; }
-.wp-ifp__values dd { margin: 0; color: var(--wp-text); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+ * and values are cut (full text on hover). Plain block rows, not a grid: a
+ * grid row with overflow:hidden items may shrink to nothing in a capped box. */
+.wp-ifp__values { flex-shrink: 0; max-height: 210px; overflow-y: auto; font: 11px/1.45 var(--wp-font-mono, monospace); }
+.wp-ifp__value { display: flex; gap: 12px; padding: 1px 0; }
+.wp-ifp__value-name { flex: 0 0 38%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--wp-text-dim, var(--wp-text3)); }
+.wp-ifp__value-name.is-swept { color: color-mix(in srgb, var(--wp-ifp-hue) 85%, #fff); font-weight: 600; }
+.wp-ifp__value-text { flex: 1; min-width: 0; color: var(--wp-text); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 .wp-ifp__thumbs { display: flex; flex-wrap: wrap; gap: 4px; --wp-ifp-tile: 64px; }
 .wp-ifp__thumbs .is-current { border-color: var(--wp-accent); }
 .wp-ifp__marked { white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; min-height: 60px; }
