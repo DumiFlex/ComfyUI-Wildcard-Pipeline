@@ -57,7 +57,8 @@ export function parseSweep(raw: unknown): SweepConfig {
     for (const id of Array.isArray(axis.option_ids) ? axis.option_ids : []) {
       if (typeof id === "string" && id && !ids.includes(id)) ids.push(id);
     }
-    if (!ids.length) continue;
+    // An axis with nothing ticked is kept (cleared to pick a few by hand)
+    // but sweeps nothing: see `liveAxes`.
     seen.add(uid);
     const clean: SweepAxis = { uid, option_ids: ids };
     if (typeof axis.label === "string" && axis.label) clean.label = axis.label;
@@ -66,9 +67,14 @@ export function parseSweep(raw: unknown): SweepConfig {
   return out;
 }
 
+/** The axes with at least one option ticked; only these sweep. */
+export function liveAxes(axes: readonly SweepAxis[]): SweepAxis[] {
+  return axes.filter((a) => a.option_ids.length > 0);
+}
+
 /** Combinations before the limit (1 with no axes). */
 export function sweepTotal(axes: readonly SweepAxis[]): number {
-  return axes.reduce((n, a) => n * a.option_ids.length, 1);
+  return liveAxes(axes).reduce((n, a) => n * a.option_ids.length, 1);
 }
 
 /** Frames the loop emits for this sweep, or null when the sweep is off,
@@ -76,7 +82,7 @@ export function sweepTotal(axes: readonly SweepAxis[]): number {
  *  falls back to `count`). */
 export function sweepFrameCount(cfg: ContextLoopConfig): number | null {
   const s = cfg.sweep;
-  if (!s.enabled || !s.axes.length || cfg.bypass) return null;
+  if (!s.enabled || !liveAxes(s.axes).length || cfg.bypass) return null;
   return Math.min(sweepTotal(s.axes), s.limit);
 }
 

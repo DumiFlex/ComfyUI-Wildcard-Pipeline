@@ -37,6 +37,8 @@ import {
   SETTING_ID_TOAST_LIFETIME,
   SETTING_ID_SUPPRESS_INFO,
   SETTING_ID_NEW_DISABLED,
+  SETTING_ID_IMAGE_FILTER_SOUND,
+  SETTING_ID_IMAGE_FILTER_NOTIFY,
   SETTING_ID_CONFIRM_DESTRUCTIVE_BUNDLE,
   SETTING_ID_BUNDLE_MASTER_OFF_BEHAVIOR,
   SETTING_ID_BUNDLE_COLLAPSED,
@@ -265,6 +267,10 @@ const state = reactive<{
   toastLifetime: ToastLifetime;
   suppressInfoToasts: boolean;
   newModuleDisabled: boolean;
+  /** Chime when WP Image Filter starts waiting (default on). */
+  imageFilterSound: boolean;
+  /** System notification when WP Image Filter waits in a background tab. */
+  imageFilterNotify: boolean;
   collapseMode: CollapseMode;
   colorIntensity: ColorIntensity;
   /** When true, destructive bundle ops (remove / reset-to-library /
@@ -302,6 +308,8 @@ const state = reactive<{
   toastLifetime: "default",
   suppressInfoToasts: false,
   newModuleDisabled: false,
+  imageFilterSound: true,
+  imageFilterNotify: false,
   collapseMode: "independent",
   colorIntensity: "standard",
   confirmDestructiveBundle: true,
@@ -365,6 +373,8 @@ export function _resetDisplayStateForTesting(): void {
   state.toastLifetime = "default";
   state.suppressInfoToasts = false;
   state.newModuleDisabled = false;
+  state.imageFilterSound = true;
+  state.imageFilterNotify = false;
   state.collapseMode = "independent";
   state.colorIntensity = "standard";
   // Tests default to skipping the confirm dialog so the existing
@@ -422,6 +432,16 @@ export function getToastLifetimeMs(): number {
  * warning + error severities, which always render. */
 export function shouldSuppressInfoToasts(): boolean {
   return state.suppressInfoToasts;
+}
+
+/** Whether WP Image Filter chimes when it starts waiting for a pick. */
+export function shouldPlayImageFilterSound(): boolean {
+  return state.imageFilterSound;
+}
+
+/** Whether WP Image Filter shows a system notification while it waits. */
+export function shouldNotifyImageFilter(): boolean {
+  return state.imageFilterNotify;
 }
 
 /**
@@ -646,6 +666,8 @@ export function applyDisplayPrefs(app: AppLike): void {
   state.toastLifetime = asToastLifetime(app.extensionManager?.setting?.get(SETTING_ID_TOAST_LIFETIME), "default");
   state.suppressInfoToasts = app.extensionManager?.setting?.get(SETTING_ID_SUPPRESS_INFO) === true;
   state.newModuleDisabled = app.extensionManager?.setting?.get(SETTING_ID_NEW_DISABLED) === true;
+  state.imageFilterSound = app.extensionManager?.setting?.get(SETTING_ID_IMAGE_FILTER_SOUND) !== false;
+  state.imageFilterNotify = app.extensionManager?.setting?.get(SETTING_ID_IMAGE_FILTER_NOTIFY) === true;
   state.confirmDestructiveBundle =
     app.extensionManager?.setting?.get(SETTING_ID_CONFIRM_DESTRUCTIVE_BUNDLE) !== false;
   state.bundleMasterOffBehavior = asBundleMasterOffBehavior(
@@ -1337,6 +1359,33 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
             severity: "warning",
             singletonKey: "wp-suppress-info",
           });
+        }
+      },
+    },
+    {
+      id: SETTING_ID_IMAGE_FILTER_SOUND,
+      name: "Image Filter sound",
+      type: "boolean",
+      defaultValue: true,
+      tooltip: "Play a short chime when WP Image Filter is waiting for your pick, so you hear it from another tab.",
+      category: ["Wildcard Pipeline", "7. Runtime behavior", "Image Filter sound"],
+      onChange: (newVal) => {
+        state.imageFilterSound = newVal !== false;
+      },
+    },
+    {
+      id: SETTING_ID_IMAGE_FILTER_NOTIFY,
+      name: "Image Filter desktop notification",
+      type: "boolean",
+      defaultValue: false,
+      tooltip: "Show a system notification when WP Image Filter is waiting and this tab is in the background. Your browser asks for permission the first time.",
+      category: ["Wildcard Pipeline", "7. Runtime behavior", "Image Filter notification"],
+      onChange: (newVal) => {
+        state.imageFilterNotify = newVal === true;
+        // Ask while the user is looking at the switch, not mid-run.
+        const N = globalThis.Notification;
+        if (state.imageFilterNotify && bootCompleted && N && N.permission === "default") {
+          void N.requestPermission().catch(() => undefined);
         }
       },
     },

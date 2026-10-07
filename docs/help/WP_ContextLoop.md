@@ -28,7 +28,7 @@ Concrete example: `count=3`, `override_seed=ON`, `seed=42`, `strategy=sequential
 
 ## Sweep combinations
 
-Open **Sweep combinations** on the node and switch it on. Pick wildcards from the WP_Context nodes after the loop and tick which of their options to include; one Generate then runs every combination, one frame each. Sweeping `$hair` (red, blonde, black) against `$mood` (calm, joyful, brooding) gives 9 prompts in grid order: the first wildcard changes slowest, the last fastest.
+Open **Sweep combinations** on the node and switch it on. Pick wildcards from the WP_Context nodes after the loop and tick which of their options to include; one Generate then runs every combination, one frame each. Sweeping `$hair` (red, blonde, black) against `$mood` (calm, joyful, brooding) gives 9 prompts in grid order: the first wildcard changes slowest, the last fastest. Above each wildcard's options, **all** ticks every option, **none** clears them so you can tick just the few you want, and **enabled only** goes back to the wildcard's enabled options.
 
 - **Limit** (default 64, max 999) caps the frames; extra combinations are skipped in order.
 - **Hold other picks** (default on) keeps every module you didn't sweep on the same pick across frames, so only the swept wildcards change.

@@ -10,6 +10,7 @@
 import { computed, ref } from "vue";
 import {
   SWEEP_MAX_LIMIT,
+  liveAxes,
   sweepTotal,
   type SweepAxis,
   type SweepConfig,
@@ -44,6 +45,7 @@ const rows = computed(() =>
   props.modelValue.axes.map((axis) => ({ axis, ...axisStatus(axis, props.candidates) })),
 );
 
+const live = computed(() => liveAxes(props.modelValue.axes));
 const total = computed(() => sweepTotal(props.modelValue.axes));
 const frames = computed(() => Math.min(total.value, props.modelValue.limit));
 const capped = computed(() => total.value > props.modelValue.limit);
@@ -96,9 +98,7 @@ function removeAxis(uid: string): void {
 }
 
 function setAxisIds(uid: string, ids: string[]): void {
-  // An axis with nothing picked would drop out of the sweep on save (the
-  // parsers discard it), so keep at least one option.
-  if (!ids.length) return;
+  // An empty axis is allowed: it sweeps nothing until an option is ticked.
   patch({
     axes: props.modelValue.axes.map((a) => (a.uid === uid ? { ...a, option_ids: ids } : a)),
   });
@@ -114,6 +114,10 @@ function toggleOption(axis: SweepAxis, id: string, candidate: SweepCandidate): v
 
 function selectAll(axis: SweepAxis, candidate: SweepCandidate): void {
   setAxisIds(axis.uid, candidate.options.map((o) => o.id));
+}
+
+function selectNone(axis: SweepAxis): void {
+  setAxisIds(axis.uid, []);
 }
 
 function selectDefault(axis: SweepAxis, candidate: SweepCandidate): void {
@@ -151,9 +155,10 @@ function moveAxis(uid: string, dir: -1 | 1): void {
     <template v-if="modelValue.enabled">
       <div v-if="modelValue.axes.length" class="wp-sweep__total" :class="{ 'wp-sweep__total--warn': capped }" data-test="sweep-total">
         <template v-if="loopBypassed">Loop is bypassed, so the sweep is ignored.</template>
+        <template v-else-if="!live.length">Tick at least one option to sweep.</template>
         <template v-else>
-          <template v-if="modelValue.axes.length > 1">
-            <span class="wp-sweep__math">{{ modelValue.axes.map((a) => a.option_ids.length).join(" × ") }}</span> =
+          <template v-if="live.length > 1">
+            <span class="wp-sweep__math">{{ live.map((a) => a.option_ids.length).join(" × ") }}</span> =
           </template>
           <strong>{{ total }}</strong> {{ total === 1 ? "combination" : "combinations" }}<template v-if="capped">; the limit runs the first <strong>{{ frames }}</strong></template>
         </template>
@@ -197,7 +202,8 @@ function moveAxis(uid: string, dir: -1 | 1): void {
         </div>
         <div v-if="openUid === row.axis.uid && row.candidate" class="wp-sweep__opts">
           <div class="wp-sweep__opts-bar">
-            <button type="button" class="wp-sweep__link" @click="selectAll(row.axis, row.candidate)">all</button>
+            <button type="button" class="wp-sweep__link" data-test="sweep-all" @click="selectAll(row.axis, row.candidate)">all</button>
+            <button type="button" class="wp-sweep__link" data-test="sweep-none" @click="selectNone(row.axis)">none</button>
             <button type="button" class="wp-sweep__link" @click="selectDefault(row.axis, row.candidate)">enabled only</button>
           </div>
           <div class="wp-sweep__opts-list">

@@ -73,7 +73,10 @@ const controls = [
         <VarToken>$hair</VarToken> (3 options) against <VarToken>$mood</VarToken> (2 options) and a
         single Generate makes 6 frames: red + calm, red + sad, blue + calm, and so on. The menu
         shows the total and lists every frame before you run, the node's button shows the frame
-        count, and the count widget follows it.
+        count, and the count widget follows it. Above each wildcard's options, <b>all</b> ticks
+        every option, <b>none</b> clears them so you can tick just the few you want, and
+        <b>enabled only</b> goes back to the options enabled in the wildcard. A wildcard with
+        nothing ticked sweeps nothing until you tick one.
       </p>
       <ul>
         <li>

@@ -190,7 +190,8 @@ class WPContextLoop(io.ComfyNode):
         sweep_pins: list[dict[str, str]] = []
         if sweep["enabled"] and sweep["axes"] and not bypass:
             sweep_pins = sweep_frames(sweep["axes"], sweep["limit"])
-            configured_count = len(sweep_pins)
+            if sweep_pins:
+                configured_count = len(sweep_pins)
         if bypass:
             total_count = 1
             kept = [0]
