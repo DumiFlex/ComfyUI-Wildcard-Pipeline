@@ -77,15 +77,40 @@ def _save_previews(images: list[Any]) -> list[list[dict[str, str]]]:
     return frames
 
 
-def _frame_labels(contexts: list[Any] | None, frames: int) -> list[dict[str, Any]]:
-    """Per-frame label data from the optional context: loop index + sweep pins.
+#: Longest prompt text sent to the picker per frame (it is shown and edited
+#: there; anything longer is cut, and an untouched prompt is never sent back).
+_MAX_LABEL_TEXT = 20_000
 
-    Kept small on purpose (step 1); the picker shows ``#n`` and the pinned
-    sweep values when there are any.
-    """
-    aligned = f.align(contexts, frames)
+
+def _frame_seed(internals: dict[str, Any]) -> int | None:
+    """The seed a Context Loop gave this frame, when there is one."""
+    seed = internals.get("__wp_seed_override__")
+    if isinstance(seed, int) and not isinstance(seed, bool):
+        return seed
+    seeds = internals.get("__wp_loop_seeds__")
+    idx = internals.get("__wp_loop_index__")
+    if isinstance(seeds, list) and isinstance(idx, int) and 0 <= idx < len(seeds):
+        value = seeds[idx]
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value
+    return None
+
+
+def _frame_labels(
+    contexts: list[Any] | None,
+    positive_text: list[Any] | None,
+    negative_text: list[Any] | None,
+    frames: int,
+) -> list[dict[str, Any]]:
+    """Per-frame label data for the picker: loop index, sweep pins, seed and
+    the frame's prompt texts (shown on hover and editable in zoom)."""
     labels: list[dict[str, Any]] = []
-    for ctx in aligned:
+    for ctx, pos, neg in zip(
+        f.align(contexts, frames),
+        f.align(positive_text, frames),
+        f.align(negative_text, frames),
+        strict=True,
+    ):
         internals = getattr(ctx, "internals", None) or {}
         label: dict[str, Any] = {}
         if "__wp_loop_index__" in internals:
@@ -93,8 +118,83 @@ def _frame_labels(contexts: list[Any] | None, frames: int) -> list[dict[str, Any
         pins = internals.get("__wp_pin_overrides__")
         if isinstance(pins, dict) and pins:
             label["pins"] = {str(k): str(v) for k, v in pins.items()}
+        seed = _frame_seed(internals)
+        if seed is not None:
+            label["seed"] = seed
+        if isinstance(pos, str):
+            label["positive"] = pos[:_MAX_LABEL_TEXT]
+        if isinstance(neg, str):
+            label["negative"] = neg[:_MAX_LABEL_TEXT]
         labels.append(label)
     return labels
+
+
+def _encode(clip: Any, text: str) -> Any:
+    """CLIPTextEncode, inline: an edited prompt's new conditioning."""
+    tokens = clip.tokenize(text)
+    return clip.encode_from_tokens_scheduled(tokens)
+
+
+def _decode_mask(url: str, height: int, width: int) -> Any:
+    """A painted PNG data URL as a ``[H, W]`` float mask.
+
+    The picker sends the mask in the alpha channel (painted = opaque); a PNG
+    without alpha is read by brightness (white = masked).
+    """
+    import base64
+    import io as _io
+
+    import numpy as np
+    import torch
+    from PIL import Image
+
+    raw = base64.b64decode(url[len(f.MASK_PREFIX):])
+    src = Image.open(_io.BytesIO(raw))
+    if src.mode in ("RGBA", "LA", "PA") or "transparency" in src.info:
+        img = src.convert("RGBA").getchannel("A")
+    else:
+        img = src.convert("L")
+    if img.size != (width, height):
+        img = img.resize((width, height), Image.BILINEAR)
+    return torch.from_numpy(np.asarray(img, dtype=np.float32) / 255.0)
+
+
+def _fit_mask(mask: Any, height: int, width: int) -> Any:
+    import torch
+
+    if tuple(mask.shape[-2:]) == (height, width):
+        return mask
+    resized = torch.nn.functional.interpolate(
+        mask.reshape(1, 1, *mask.shape[-2:]).float(), size=(height, width), mode="bilinear",
+    )
+    return resized.reshape(height, width)
+
+
+def _painted_masks(images: Any, incoming: Any, urls: list[str]) -> Any:
+    """One item's mask batch: painted masks where the user painted, the
+    incoming mask (sliced or broadcast) elsewhere, empty when there is none."""
+    import torch
+
+    n, height, width = int(images.shape[0]), int(images.shape[1]), int(images.shape[2])
+    out = []
+    for j in range(n):
+        url = urls[j] if j < len(urls) else ""
+        if url:
+            out.append(_decode_mask(url, height, width))
+            continue
+        base = None
+        if incoming is not None and hasattr(incoming, "shape"):
+            if incoming.ndim == 2:
+                base = incoming
+            elif incoming.ndim == 3 and incoming.shape[0] == n:
+                base = incoming[j]
+            elif incoming.ndim == 3 and incoming.shape[0] >= 1:
+                base = incoming[0]
+        if base is None:
+            out.append(torch.zeros((height, width), dtype=torch.float32))
+        else:
+            out.append(_fit_mask(base.float().cpu(), height, width))
+    return torch.stack(out)
 
 
 class WPImageFilter(io.ComfyNode):
@@ -161,6 +261,13 @@ class WPImageFilter(io.ComfyNode):
                     "extra_2", template=_extra_2, optional=True,
                     tooltip="Anything else to carry along. The output takes its type.",
                 ),
+                io.Clip.Input(
+                    "clip", optional=True,
+                    tooltip=(
+                        "Optional. Re-encodes a prompt you edit in the picker, so "
+                        "the positive/negative conditioning follows the edit."
+                    ),
+                ),
                 ImageFilterWidgetInput.Input(
                     "wp_image_filter", socketless=True, default="", optional=True,
                 ),
@@ -202,6 +309,7 @@ class WPImageFilter(io.ComfyNode):
         context: list[Any] | None = None,
         extra_1: list[Any] | None = None,
         extra_2: list[Any] | None = None,
+        clip: list[Any] | None = None,
         wp_image_filter: list[Any] | None = None,
     ):
         cfg = f.parse_config(_first(wp_image_filter, ""))
@@ -210,6 +318,8 @@ class WPImageFilter(io.ComfyNode):
         node_id = str(getattr(hidden, "unique_id", "") or "")
 
         picks: list[f.Pick] | None = None
+        edits: dict[f.Pick, f.Edit] = {}
+        clip_model = _first(clip)
         how = cfg["mode"]
         if cfg["mode"] == "pass_all":
             picks = f.all_picks(batch_sizes)
@@ -218,15 +328,19 @@ class WPImageFilter(io.ComfyNode):
             if picks is None:
                 how = "pause"
         if picks is None:
-            answer = await cls._ask(images, context, batch_sizes, cfg, node_id)
+            labels = _frame_labels(context, positive_text, negative_text, len(batch_sizes))
+            answer = await cls._ask(
+                images, labels, batch_sizes, cfg, node_id, has_clip=clip_model is not None,
+            )
             if answer.action == "stop":
                 return cls._blocked()
             picks = list(answer.picks)
+            edits = dict(answer.edits)
 
+        # The picker can't send an empty pick; an API caller can. Nothing to
+        # pass on, so stop the branch.
         if not picks:
-            if cfg["nothing_picked"] == "stop":
-                return cls._blocked()
-            picks = f.all_picks(batch_sizes)
+            return cls._blocked()
 
         if how == "pause":
             f.LAST_PICKS[node_id] = list(picks)
@@ -236,14 +350,46 @@ class WPImageFilter(io.ComfyNode):
         def follow(values: list[Any] | None) -> list[Any]:
             return f.follow_slot(values, plan, batch_sizes)
 
+        out_images = follow(images)
+        out_masks = follow(masks)
+        out_pos, out_neg = follow(positive), follow(negative)
+        out_pos_text, out_neg_text = follow(positive_text), follow(negative_text)
+        edited = 0
+        for k, (pos, neg) in enumerate(zip(
+            f.item_text_edits(plan, edits, "positive"),
+            f.item_text_edits(plan, edits, "negative"),
+            strict=True,
+        )):
+            if pos is not None:
+                edited += 1
+                out_pos_text[k] = pos
+                if clip_model is not None:
+                    out_pos[k] = _encode(clip_model, pos)
+            if neg is not None:
+                edited += 1
+                out_neg_text[k] = neg
+                if clip_model is not None:
+                    out_neg[k] = _encode(clip_model, neg)
+        painted = 0
+        for k, urls in enumerate(f.item_mask_edits(plan, edits)):
+            if urls is not None:
+                painted += sum(1 for u in urls if u)
+                out_masks[k] = _painted_masks(out_images[k], out_masks[k], urls)
+        if painted:
+            # Lists go downstream item by item: with nothing wired into
+            # `masks`, the unpainted items still need a mask, an empty one.
+            for k, m in enumerate(out_masks):
+                if m is None:
+                    out_masks[k] = _painted_masks(out_images[k], None, [])
+
         return io.NodeOutput(
-            follow(images),
+            out_images,
             follow(latent),
-            follow(masks),
-            follow(positive),
-            follow(negative),
-            follow(positive_text),
-            follow(negative_text),
+            out_masks,
+            out_pos,
+            out_neg,
+            out_pos_text,
+            out_neg_text,
             follow(context),
             follow(extra_1),
             follow(extra_2),
@@ -253,6 +399,8 @@ class WPImageFilter(io.ComfyNode):
                 "frames": len(batch_sizes),
                 "total": sum(batch_sizes),
                 "mode": how,
+                "edited": edited,
+                "masks": painted,
             }]},
         )
 
@@ -277,10 +425,11 @@ class WPImageFilter(io.ComfyNode):
     async def _ask(
         cls,
         images: list[Any],
-        contexts: list[Any] | None,
+        labels: list[dict[str, Any]],
         batch_sizes: list[int],
         cfg: dict[str, Any],
         node_id: str,
+        has_clip: bool = False,
     ) -> f.Answer:
         from comfy.model_management import (  # type: ignore[import-not-found]
             throw_exception_if_processing_interrupted,
@@ -294,7 +443,9 @@ class WPImageFilter(io.ComfyNode):
             "token": token,
             "node_id": node_id,
             "frames": _save_previews(images),
-            "labels": _frame_labels(contexts, len(batch_sizes)),
+            "labels": labels,
+            "send_as": cfg["send_as"],
+            "has_clip": has_clip,
             "timeout": timeout,
             "started_at": time.time(),
         }

@@ -6,13 +6,11 @@
  */
 
 export type FilterMode = "pause" | "reuse" | "pass_all";
-export type NothingPicked = "stop" | "keep_all";
 export type SendAs = "same_shape" | "per_image";
 export type OnTimeout = "keep_all" | "stop" | "keep_first";
 
 export interface ImageFilterConfig {
   mode: FilterMode;
-  nothing_picked: NothingPicked;
   send_as: SendAs;
   /** Seconds; 0 waits until answered. */
   timeout: number;
@@ -22,7 +20,7 @@ export interface ImageFilterConfig {
 export const MAX_TIMEOUT = 86_400;
 
 export function defaultImageFilterConfig(): ImageFilterConfig {
-  return { mode: "pause", nothing_picked: "stop", send_as: "same_shape", timeout: 600, on_timeout: "keep_all" };
+  return { mode: "pause", send_as: "same_shape", timeout: 600, on_timeout: "keep_all" };
 }
 
 function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
@@ -43,7 +41,6 @@ export function parseImageFilterConfig(raw: unknown): ImageFilterConfig {
   if (!obj || typeof obj !== "object" || Array.isArray(obj)) return out;
   const o = obj as Record<string, unknown>;
   out.mode = oneOf(o.mode, ["pause", "reuse", "pass_all"] as const, out.mode);
-  out.nothing_picked = oneOf(o.nothing_picked, ["stop", "keep_all"] as const, out.nothing_picked);
   out.send_as = oneOf(o.send_as, ["same_shape", "per_image"] as const, out.send_as);
   out.on_timeout = oneOf(o.on_timeout, ["keep_all", "stop", "keep_first"] as const, out.on_timeout);
   if (typeof o.timeout === "number" && Number.isFinite(o.timeout)) {
@@ -65,7 +62,13 @@ export interface ImageRef {
 
 export interface FrameLabel {
   loop_index?: number;
+  /** Sweep pins of this frame: wildcard instance uid -> option id. */
   pins?: Record<string, string>;
+  /** The seed the Context Loop gave this frame. */
+  seed?: number;
+  /** The frame's prompt texts, when wired into the filter. */
+  positive?: string;
+  negative?: string;
 }
 
 /** What the node sends when it starts waiting. */
@@ -75,6 +78,10 @@ export interface PickRequest {
   /** `frames[f][i]` is image `i` of frame `f`. */
   frames: ImageRef[][];
   labels: FrameLabel[];
+  /** How picks go on; with same_shape a frame's picks share one prompt. */
+  send_as: SendAs;
+  /** A CLIP is wired, so edited prompts are re-encoded. */
+  has_clip: boolean;
   /** Seconds; 0 = no limit. */
   timeout: number;
   /** Server clock (epoch seconds) when the wait began. */
@@ -83,9 +90,20 @@ export interface PickRequest {
 
 export type Pick = [frame: number, image: number];
 
+/** What the picker changed on one image. `mask` is a PNG data URL whose
+ *  alpha is the mask (painted = masked). */
+export interface PickEdit {
+  positive?: string;
+  negative?: string;
+  mask?: string;
+}
+
+/** Edits keyed by `pickKey(frame, image)`. */
+export type PickEdits = Record<string, PickEdit>;
+
 export type PickAnswer =
-  | { action: "picks"; picks: Pick[] }
-  | { action: "keep_all" }
+  | { action: "picks"; picks: Pick[]; edits?: PickEdits }
+  | { action: "keep_all"; edits?: PickEdits }
   | { action: "stop" };
 
 export function viewUrl(ref: ImageRef): string {
@@ -113,6 +131,8 @@ export function parsePickRequest(raw: unknown): PickRequest | null {
     node_id: String(r.node_id ?? ""),
     frames,
     labels,
+    send_as: r.send_as === "per_image" ? "per_image" : "same_shape",
+    has_clip: r.has_clip === true,
     timeout: typeof r.timeout === "number" ? r.timeout : 0,
     started_at: typeof r.started_at === "number" ? r.started_at : Date.now() / 1000,
   };
@@ -127,4 +147,7 @@ export interface ImageFilterRun {
   mode: string;
   /** The branch was stopped (nothing went on). */
   stopped: boolean;
+  /** Prompts edited / masks painted in the picker. */
+  edited: number;
+  masks: number;
 }

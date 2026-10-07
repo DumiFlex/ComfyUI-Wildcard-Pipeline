@@ -3,22 +3,39 @@
  * PickerModal — the pause-and-pick screen of WP Image Filter.
  *
  * Shows every image of one waiting request, grouped by frame when a Context
- * Loop (or any list) produced several. Click picks, Space zooms the hovered
- * image, Enter keeps the picks. Closing (Escape / clicking outside) only
- * minimises it: the run keeps waiting until one of the three answers is sent.
+ * Loop (or any list) produced several, or laid out as a grid when the loop
+ * swept two or more wildcards. Click picks, Space zooms (and the picker
+ * remembers whether you left it zoomed), Enter keeps the picks. In zoom the
+ * Refine panel edits the frame's prompts and paints a mask for the upscaler.
+ * Closing (Escape / clicking outside) only minimises it: the run keeps
+ * waiting until one of the three answers is sent.
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import ModalShell from "../shared/ModalShell.vue";
-import { pickKey, viewUrl, type Pick, type PickAnswer, type ImageRef } from "./types";
+import MaskPainter from "./MaskPainter.vue";
+import PickerTile from "./PickerTile.vue";
+import { pickKey, viewUrl, type Pick, type PickAnswer, type PickEdits, type ImageRef } from "./types";
 import type { WaitingRequest } from "../../extension/image-filter";
 import { draftPicks, saveDraftPicks, secondsLeft } from "../../extension/image-filter";
+import type { LiteGraphLike } from "../../extension/graph";
+import { editLoopConfig } from "../../widgets/context_loop";
+import { pushToast } from "../shared/toast-store";
+import { findLoop, frameParts, loopEdit, sweepGrid } from "./picker-loop";
+import {
+  draftEdits, dropDraftEdits, editsFor, hasEdit, readZoomPref, saveDraftEdits,
+  withMask, withText, writeZoomPref,
+} from "./picker-state";
 
-const props = withDefaults(defineProps<{ request: WaitingRequest; moreWaiting?: number }>(), { moreWaiting: 0 });
+const props = withDefaults(
+  defineProps<{ request: WaitingRequest; moreWaiting?: number; graph?: LiteGraphLike }>(),
+  { moreWaiting: 0, graph: undefined },
+);
 const emit = defineEmits<{ answer: [answer: PickAnswer]; minimize: [] }>();
 
 interface Cell { frame: number; image: number; ref: ImageRef; key: string }
 
 const frames = computed(() => props.request.frames);
+const labels = computed(() => props.request.labels);
 const cells = computed<Cell[]>(() =>
   frames.value.flatMap((imgs, f) => imgs.map((ref, i) => ({ frame: f, image: i, ref, key: pickKey(f, i) }))),
 );
@@ -26,11 +43,16 @@ const total = computed(() => cells.value.length);
 const multiFrame = computed(() => frames.value.length > 1);
 
 const picked = ref<Set<string>>(new Set(draftPicks(props.request.token)));
+const edits = ref<PickEdits>(draftEdits(props.request.token));
 watch(() => props.request.token, (token) => {
   picked.value = new Set(draftPicks(token));
-  zoomIndex.value = null;
+  edits.value = draftEdits(token);
+  comparePin.value = null;
+  painting.value = false;
+  if (zoomIndex.value !== null) zoomIndex.value = total.value ? 0 : null;
 });
 watch(picked, (keys) => saveDraftPicks(props.request.token, keys));
+watch(edits, (next) => saveDraftEdits(props.request.token, next));
 
 function toggle(key: string): void {
   const next = new Set(picked.value);
@@ -38,8 +60,11 @@ function toggle(key: string): void {
   else next.add(key);
   picked.value = next;
 }
+function frameKeys(frame: number): string[] {
+  return (frames.value[frame] ?? []).map((_, i) => pickKey(frame, i));
+}
 function toggleFrame(frame: number): void {
-  const keys = (frames.value[frame] ?? []).map((_, i) => pickKey(frame, i));
+  const keys = frameKeys(frame);
   const allOn = keys.every((k) => picked.value.has(k));
   const next = new Set(picked.value);
   for (const k of keys) {
@@ -55,24 +80,136 @@ function toggleAll(): void {
 const pickedList = computed<Pick[]>(() =>
   cells.value.filter((c) => picked.value.has(c.key)).map((c) => [c.frame, c.image] as Pick),
 );
-const pickedFrames = computed(() => new Set(pickedList.value.map(([f]) => f)).size);
+const pickedFrameSet = computed(() => new Set(pickedList.value.map(([f]) => f)));
+const pickedFrames = computed(() => pickedFrameSet.value.size);
+
+/* ── loop labels, sweep grid, send back ───────────────────────────────── */
+
+const loop = computed(() => findLoop(labels.value, props.graph));
+const axes = computed(() => loop.value?.axes ?? []);
+const grid = computed(() => sweepGrid(labels.value, axes.value));
+const view = ref<"grid" | "frames">("grid");
+const showGrid = computed(() => view.value === "grid" && !!grid.value);
 
 function frameTitle(frame: number): string {
-  const label = props.request.labels[frame];
-  const loop = label?.loop_index;
-  return typeof loop === "number" ? `#${loop + 1}` : `#${frame + 1}`;
+  return frameParts(labels.value[frame], frame, axes.value).join(" · ");
+}
+function shortText(text: string, max = 280): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+function frameTooltip(frame: number): string {
+  const l = labels.value[frame];
+  const lines = [`Frame ${frameTitle(frame)}`];
+  if (typeof l?.seed === "number") lines.push(`Seed ${l.seed}`);
+  if (l?.positive) lines.push(`+ ${shortText(l.positive)}`);
+  if (l?.negative) lines.push(`− ${shortText(l.negative)}`);
+  lines.push("Click to pick or clear the whole frame");
+  return lines.join("\n");
 }
 
-/* ── zoom ─────────────────────────────────────────────────────────────── */
+const canSendToLoop = computed(() => !!loop.value && labels.value.some((l) => typeof l?.loop_index === "number"));
 
-const zoomIndex = ref<number | null>(null);
+function sendToLoop(): void {
+  const link = loop.value;
+  if (!link || pickedFrames.value === 0) return;
+  let kept = 0;
+  let bypassed = 0;
+  let locked = 0;
+  const ok = editLoopConfig(link.node, (cfg) => {
+    const r = loopEdit(cfg, labels.value, pickedFrameSet.value);
+    kept = r.kept;
+    bypassed = r.bypassed;
+    locked = r.locked;
+    return r.config;
+  });
+  if (!ok) {
+    pushToast("Couldn't reach the Context Loop node to update it.", { severity: "warning" });
+    return;
+  }
+  pushToast(
+    `Context Loop: ${kept} ${kept === 1 ? "frame" : "frames"} kept${locked ? " with locked seeds" : ""}, ${bypassed} bypassed. The next run repeats only your picks.`,
+    { severity: "success" },
+  );
+}
+
+/* ── zoom, compare, refine ────────────────────────────────────────────── */
+
+const zoomIndex = ref<number | null>(readZoomPref() && total.value ? 0 : null);
 const hovered = ref<number | null>(null);
 const zoomCell = computed(() => (zoomIndex.value === null ? null : cells.value[zoomIndex.value] ?? null));
+watch(() => zoomIndex.value !== null, (on) => writeZoomPref(on));
 
+function setZoom(index: number | null): void {
+  zoomIndex.value = index;
+  if (index === null) {
+    comparePin.value = null;
+    painting.value = false;
+  }
+}
 function step(delta: number): void {
   if (zoomIndex.value === null || total.value === 0) return;
   zoomIndex.value = (zoomIndex.value + delta + total.value) % total.value;
 }
+
+const comparePin = ref<number | null>(null);
+const comparePos = ref(50);
+const compareCell = computed(() => {
+  const pin = comparePin.value;
+  if (pin === null || pin === zoomIndex.value) return null;
+  return cells.value[pin] ?? null;
+});
+function togglePin(): void {
+  if (zoomIndex.value === null) return;
+  comparePin.value = comparePin.value === null ? zoomIndex.value : null;
+  if (comparePin.value !== null) painting.value = false;
+}
+
+const painting = ref(false);
+const tool = ref<"brush" | "eraser">("brush");
+const brush = ref(40);
+const painter = ref<InstanceType<typeof MaskPainter> | null>(null);
+function togglePaint(): void {
+  painting.value = !painting.value;
+  if (painting.value) comparePin.value = null;
+}
+
+/** Images an edit of the zoomed one's prompt applies to: the whole frame
+ *  with Same shape (its picks go on as one item), else just this one. */
+const textKeys = computed(() => {
+  const c = zoomCell.value;
+  if (!c) return [];
+  return props.request.send_as === "same_shape" ? frameKeys(c.frame) : [c.key];
+});
+const zoomLabel = computed(() => (zoomCell.value ? labels.value[zoomCell.value.frame] : undefined));
+const zoomEdit = computed(() => (zoomCell.value ? edits.value[zoomCell.value.key] : undefined));
+function canEdit(field: "positive" | "negative"): boolean {
+  return props.request.has_clip || zoomLabel.value?.[field] !== undefined;
+}
+function textValue(field: "positive" | "negative"): string {
+  return zoomEdit.value?.[field] ?? zoomLabel.value?.[field] ?? "";
+}
+function isEdited(field: "positive" | "negative"): boolean {
+  return zoomEdit.value?.[field] !== undefined;
+}
+function setText(field: "positive" | "negative", text: string): void {
+  edits.value = withText(edits.value, textKeys.value, field, text, zoomLabel.value?.[field]);
+}
+function resetText(field: "positive" | "negative"): void {
+  setText(field, zoomLabel.value?.[field] ?? "");
+}
+const maskValue = computed(() => zoomEdit.value?.mask ?? "");
+function setMask(url: string): void {
+  if (zoomCell.value) edits.value = withMask(edits.value, zoomCell.value.key, url);
+}
+
+function isEditedCell(key: string): boolean {
+  const e = edits.value[key];
+  return !!e && (e.positive !== undefined || e.negative !== undefined);
+}
+function isMaskedCell(key: string): boolean {
+  return !!edits.value[key]?.mask;
+}
+const editCount = computed(() => Object.values(edits.value).filter(hasEdit).length);
 
 /* ── countdown ────────────────────────────────────────────────────────── */
 
@@ -94,21 +231,27 @@ const leftLabel = computed(() => {
 
 /* ── answers + keys ───────────────────────────────────────────────────── */
 
+function finish(answer: PickAnswer): void {
+  dropDraftEdits(props.request.token);
+  emit("answer", answer);
+}
 function keepPicked(): void {
   if (pickedList.value.length === 0) return;
-  emit("answer", { action: "picks", picks: pickedList.value });
+  const e = editsFor(edits.value, [...picked.value]);
+  finish(e ? { action: "picks", picks: pickedList.value, edits: e } : { action: "picks", picks: pickedList.value });
 }
 function keepAll(): void {
-  emit("answer", { action: "keep_all" });
+  const e = editsFor(edits.value, cells.value.map((c) => c.key));
+  finish(e ? { action: "keep_all", edits: e } : { action: "keep_all" });
 }
 function stop(): void {
-  emit("answer", { action: "stop" });
+  finish({ action: "stop" });
 }
 
 function onClose(): void {
   // Escape / outside click: leave the zoom first, then tuck the picker away.
   if (zoomIndex.value !== null) {
-    zoomIndex.value = null;
+    setZoom(null);
     return;
   }
   emit("minimize");
@@ -117,26 +260,33 @@ function onClose(): void {
 function onKey(ev: KeyboardEvent): void {
   const tag = (ev.target as HTMLElement | null)?.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA") return;
+  const zoomed = zoomIndex.value !== null;
   if (ev.key === " ") {
     ev.preventDefault();
-    if (zoomIndex.value !== null) zoomIndex.value = null;
-    else if (hovered.value !== null) zoomIndex.value = hovered.value;
-    else if (total.value) zoomIndex.value = 0;
+    if (zoomed) setZoom(null);
+    else if (hovered.value !== null) setZoom(hovered.value);
+    else if (total.value) setZoom(0);
   } else if (ev.key === "Enter") {
     ev.preventDefault();
     keepPicked();
   } else if ((ev.key === "a" || ev.key === "A") && (ev.ctrlKey || ev.metaKey)) {
     ev.preventDefault();
     toggleAll();
-  } else if (zoomIndex.value !== null && ev.key === "ArrowLeft") {
+  } else if (zoomed && ev.key === "ArrowLeft") {
     ev.preventDefault();
     step(-1);
-  } else if (zoomIndex.value !== null && ev.key === "ArrowRight") {
+  } else if (zoomed && ev.key === "ArrowRight") {
     ev.preventDefault();
     step(1);
-  } else if (zoomIndex.value !== null && ev.key === "ArrowUp" && zoomCell.value) {
+  } else if (zoomed && ev.key === "ArrowUp" && zoomCell.value) {
     ev.preventDefault();
     toggle(zoomCell.value.key);
+  } else if (zoomed && (ev.key === "c" || ev.key === "C") && !ev.ctrlKey && !ev.metaKey) {
+    ev.preventDefault();
+    togglePin();
+  } else if (zoomed && (ev.key === "m" || ev.key === "M") && !ev.ctrlKey && !ev.metaKey) {
+    ev.preventDefault();
+    togglePaint();
   }
 }
 
@@ -162,28 +312,161 @@ function indexOf(frame: number, image: number): number {
             Click to pick, <kbd>Space</kbd> to zoom, <kbd>Enter</kbd> to keep the picks.
           </div>
         </div>
+        <div v-if="grid && !zoomCell" class="wp-ifp__seg" role="group" aria-label="Layout">
+          <button type="button" :class="{ 'is-on': view === 'grid' }" data-test="image-filter-view-grid" @click="view = 'grid'">Grid</button>
+          <button type="button" :class="{ 'is-on': view === 'frames' }" data-test="image-filter-view-frames" @click="view = 'frames'">Frames</button>
+        </div>
         <button type="button" class="wp-ifp__icon-btn" title="Hide for now (the run keeps waiting)" data-test="image-filter-minimize" @click="emit('minimize')">
           <svg width="12" height="12" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14" /></svg>
         </button>
       </div>
 
       <div v-if="zoomCell" class="wp-ifp__zoom" data-test="image-filter-zoom">
-        <button type="button" class="wp-ifp__nav" aria-label="Previous image" @click="step(-1)">‹</button>
-        <figure class="wp-ifp__zoom-fig">
-          <img
-            :src="viewUrl(zoomCell.ref)"
-            class="wp-ifp__zoom-img"
-            :class="{ 'is-picked': picked.has(zoomCell.key) }"
-            alt=""
-            @click="toggle(zoomCell.key)"
-          >
-          <figcaption class="wp-ifp__zoom-cap">
-            <span v-if="multiFrame">Frame {{ frameTitle(zoomCell.frame) }} · </span>image {{ zoomCell.image + 1 }}
-            <span class="wp-ifp__zoom-pos">{{ (zoomIndex ?? 0) + 1 }} / {{ total }}</span>
-            <span class="wp-ifp__zoom-state" :class="{ 'is-picked': picked.has(zoomCell.key) }">{{ picked.has(zoomCell.key) ? "Picked" : "Not picked" }}</span>
-          </figcaption>
-        </figure>
-        <button type="button" class="wp-ifp__nav" aria-label="Next image" @click="step(1)">›</button>
+        <div class="wp-ifp__stage">
+          <button type="button" class="wp-ifp__nav" aria-label="Previous image" @click="step(-1)">‹</button>
+          <figure class="wp-ifp__zoom-fig">
+            <MaskPainter
+              v-if="painting"
+              ref="painter"
+              :key="zoomCell.key"
+              :src="viewUrl(zoomCell.ref)"
+              :model-value="maskValue"
+              :tool="tool"
+              :size="brush"
+              @update:model-value="setMask"
+            />
+            <div v-else-if="compareCell" class="wp-ifp__compare" data-test="image-filter-compare">
+              <img :src="viewUrl(zoomCell.ref)" class="wp-ifp__zoom-img" alt="">
+              <img
+                :src="viewUrl(compareCell.ref)"
+                class="wp-ifp__zoom-img wp-ifp__compare-top"
+                :style="{ clipPath: `inset(0 ${100 - comparePos}% 0 0)` }"
+                alt=""
+              >
+              <span class="wp-ifp__compare-line" :style="{ left: `${comparePos}%` }" aria-hidden="true" />
+              <span class="wp-ifp__compare-tag is-left">{{ multiFrame ? frameTitle(compareCell.frame) : `image ${compareCell.image + 1}` }}</span>
+              <span class="wp-ifp__compare-tag is-right">{{ multiFrame ? frameTitle(zoomCell.frame) : `image ${zoomCell.image + 1}` }}</span>
+              <input v-model.number="comparePos" type="range" min="0" max="100" class="wp-ifp__compare-range" aria-label="Compare slider">
+            </div>
+            <img
+              v-else
+              :src="viewUrl(zoomCell.ref)"
+              class="wp-ifp__zoom-img"
+              :class="{ 'is-picked': picked.has(zoomCell.key) }"
+              alt=""
+              @click="toggle(zoomCell.key)"
+            >
+            <figcaption class="wp-ifp__zoom-cap">
+              <span v-if="multiFrame">Frame {{ frameTitle(zoomCell.frame) }} · </span>image {{ zoomCell.image + 1 }}
+              <span class="wp-ifp__zoom-pos">{{ (zoomIndex ?? 0) + 1 }} / {{ total }}</span>
+              <button
+                type="button"
+                class="wp-ifp__zoom-state"
+                :class="{ 'is-picked': picked.has(zoomCell.key) }"
+                data-test="image-filter-zoom-pick"
+                @click="toggle(zoomCell.key)"
+              >{{ picked.has(zoomCell.key) ? "Picked" : "Not picked" }}</button>
+              <button
+                type="button"
+                class="wp-ifp__mini"
+                :class="{ 'is-on': comparePin !== null }"
+                title="Pin this image, then step to another to compare them (C)"
+                data-test="image-filter-compare-pin"
+                @click="togglePin"
+              >{{ comparePin === null ? "Compare" : compareCell ? "Stop comparing" : "Pinned, pick another" }}</button>
+            </figcaption>
+          </figure>
+          <button type="button" class="wp-ifp__nav" aria-label="Next image" @click="step(1)">›</button>
+        </div>
+
+        <aside class="wp-ifp__refine" data-test="image-filter-refine">
+          <div class="wp-ifp__refine-title">Refine before it goes on</div>
+          <p v-if="request.send_as === 'same_shape' && (frames[zoomCell.frame]?.length ?? 0) > 1" class="wp-ifp__hint">
+            Same shape: a prompt edit covers every image of this frame.
+          </p>
+          <template v-for="field in (['positive', 'negative'] as const)" :key="field">
+            <div class="wp-ifp__field-head">
+              <span>{{ field === "positive" ? "Positive" : "Negative" }}</span>
+              <span v-if="isEdited(field)" class="wp-ifp__badge">edited</span>
+              <span class="wp-ifp__spacer" />
+              <button v-if="isEdited(field)" type="button" class="wp-ifp__link" @click="resetText(field)">Reset</button>
+            </div>
+            <textarea
+              v-if="canEdit(field)"
+              class="wp-ifp__text"
+              :value="textValue(field)"
+              rows="5"
+              spellcheck="false"
+              :aria-label="`${field} prompt`"
+              :data-test="`image-filter-${field}`"
+              @input="setText(field, ($event.target as HTMLTextAreaElement).value)"
+            />
+            <p v-else class="wp-ifp__hint">Wire {{ field }}_text or a CLIP into the filter to edit it here.</p>
+          </template>
+          <p v-if="!request.has_clip && (canEdit('positive') || canEdit('negative'))" class="wp-ifp__warn" data-test="image-filter-no-clip">
+            No CLIP wired: an edit changes the text outputs only, the conditioning stays as it was.
+          </p>
+
+          <div class="wp-ifp__field-head wp-ifp__mask-head">
+            <span>Mask</span>
+            <span v-if="maskValue" class="wp-ifp__badge">painted</span>
+            <span class="wp-ifp__spacer" />
+            <button
+              type="button"
+              class="wp-ifp__mini"
+              :class="{ 'is-on': painting }"
+              title="Paint a mask for this image (M)"
+              data-test="image-filter-paint"
+              @click="togglePaint"
+            >{{ painting ? "Done" : "Paint" }}</button>
+          </div>
+          <template v-if="painting">
+            <div class="wp-ifp__seg wp-ifp__seg--full" role="group" aria-label="Tool">
+              <button type="button" :class="{ 'is-on': tool === 'brush' }" @click="tool = 'brush'">Brush</button>
+              <button type="button" :class="{ 'is-on': tool === 'eraser' }" @click="tool = 'eraser'">Eraser</button>
+            </div>
+            <label class="wp-ifp__size">Size <input v-model.number="brush" type="range" min="4" max="160"> <span>{{ brush }}</span></label>
+            <div class="wp-ifp__row">
+              <button type="button" class="wp-ifp__mini" @click="painter?.invert()">Invert</button>
+              <button type="button" class="wp-ifp__mini" data-test="image-filter-mask-clear" @click="painter?.clear()">Clear</button>
+            </div>
+          </template>
+          <p class="wp-ifp__hint">Goes to the masks output for this image. Images you don't paint keep the incoming mask.</p>
+        </aside>
+      </div>
+
+      <div v-else-if="showGrid && grid" class="wp-ifp__body is-grid" data-test="image-filter-grid">
+        <table class="wp-ifp__grid">
+          <thead>
+            <tr>
+              <th class="wp-ifp__corner"><span>{{ grid.rowAxis }}</span> ╲ <span>{{ grid.colAxis }}</span></th>
+              <th v-for="(c, ci) in grid.cols" :key="ci" class="wp-ifp__col">{{ c }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(r, ri) in grid.rows" :key="ri">
+              <th class="wp-ifp__row-head">{{ r }}</th>
+              <td v-for="(f, ci) in grid.cells[ri]" :key="ci" class="wp-ifp__grid-cell">
+                <div v-if="f >= 0" class="wp-ifp__tiles" :data-test="`image-filter-frame-${f}`" :title="frameTooltip(f)">
+                  <PickerTile
+                    v-for="(img, i) in frames[f]"
+                    :key="i"
+                    :src="viewUrl(img)"
+                    :picked="picked.has(pickKey(f, i))"
+                    :index="(frames[f]?.length ?? 0) > 1 ? i + 1 : 0"
+                    :edited="isEditedCell(pickKey(f, i))"
+                    :masked="isMaskedCell(pickKey(f, i))"
+                    :test-id="`image-filter-tile-${f}-${i}`"
+                    @toggle="toggle(pickKey(f, i))"
+                    @zoom="setZoom(indexOf(f, i))"
+                    @hover="(on) => (hovered = on ? indexOf(f, i) : null)"
+                  />
+                </div>
+                <span v-else class="wp-ifp__empty">—</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <div v-else class="wp-ifp__body" :class="{ 'is-flat': !multiFrame }">
@@ -198,27 +481,27 @@ function indexOf(frame: number, image: number): number {
             v-if="multiFrame"
             type="button"
             class="wp-ifp__frame-label"
-            title="Pick or clear the whole frame"
+            :title="frameTooltip(f)"
             @click="toggleFrame(f)"
-          >{{ frameTitle(f) }}</button>
+          >
+            <template v-for="(part, pi) in frameParts(labels[f], f, axes)" :key="pi">
+              <span v-if="pi > 0" class="wp-ifp__sep">·</span><span :class="{ 'wp-ifp__opt': pi > 0 }">{{ part }}</span>
+            </template>
+          </button>
           <div class="wp-ifp__tiles">
-            <button
+            <PickerTile
               v-for="(img, i) in imgs"
               :key="i"
-              type="button"
-              class="wp-ifp__tile"
-              :class="{ 'is-picked': picked.has(pickKey(f, i)) }"
-              :aria-pressed="picked.has(pickKey(f, i))"
-              :data-test="`image-filter-tile-${f}-${i}`"
-              @click="toggle(pickKey(f, i))"
-              @dblclick="zoomIndex = indexOf(f, i)"
-              @mouseenter="hovered = indexOf(f, i)"
-              @mouseleave="hovered = null"
-            >
-              <img :src="viewUrl(img)" alt="" loading="lazy" draggable="false">
-              <span v-if="picked.has(pickKey(f, i))" class="wp-ifp__check" aria-hidden="true">✓</span>
-              <span class="wp-ifp__idx">{{ i + 1 }}</span>
-            </button>
+              :src="viewUrl(img)"
+              :picked="picked.has(pickKey(f, i))"
+              :index="imgs.length > 1 || !multiFrame ? i + 1 : 0"
+              :edited="isEditedCell(pickKey(f, i))"
+              :masked="isMaskedCell(pickKey(f, i))"
+              :test-id="`image-filter-tile-${f}-${i}`"
+              @toggle="toggle(pickKey(f, i))"
+              @zoom="setZoom(indexOf(f, i))"
+              @hover="(on) => (hovered = on ? indexOf(f, i) : null)"
+            />
           </div>
         </section>
       </div>
@@ -226,9 +509,19 @@ function indexOf(frame: number, image: number): number {
       <div class="wp-ifp__foot">
         <div class="wp-ifp__status" data-test="image-filter-status">
           <span><strong>{{ pickedList.length }}</strong> picked<template v-if="multiFrame"> from {{ pickedFrames }} {{ pickedFrames === 1 ? "frame" : "frames" }}</template></span>
+          <span v-if="editCount" class="wp-ifp__edits">{{ editCount }} refined</span>
           <span v-if="leftLabel" class="wp-ifp__left" :class="{ 'is-low': (left ?? 99) <= 30 }">{{ leftLabel }}</span>
         </div>
         <span class="wp-ifp__spacer" />
+        <button
+          v-if="canSendToLoop"
+          type="button"
+          class="wp-ifp__btn"
+          :disabled="pickedFrames === 0"
+          title="Lock the picked frames' seeds in the Context Loop and bypass the rest, so the next run repeats only your picks"
+          data-test="image-filter-send-loop"
+          @click="sendToLoop"
+        >Send to Loop</button>
         <button type="button" class="wp-ifp__btn wp-ifp__btn--danger" title="Skip everything after this node for this run" data-test="image-filter-stop" @click="stop">Stop branch</button>
         <button type="button" class="wp-ifp__btn" data-test="image-filter-keep-all" @click="keepAll">Keep all {{ total }}</button>
         <button
@@ -246,7 +539,7 @@ function indexOf(frame: number, image: number): number {
 <style scoped>
 @import "../shared/theme.css";
 
-.wp-ifp { width: min(1180px, 94vw); max-height: 90vh; display: flex; flex-direction: column; background: var(--wp-bg2); border: 1px solid var(--wp-border); border-radius: 6px; overflow: hidden; color: var(--wp-text); font-size: 12px; box-shadow: 0 18px 50px rgba(0,0,0,.55); outline: none; }
+.wp-ifp { width: min(1280px, 95vw); max-height: 90vh; display: flex; flex-direction: column; background: var(--wp-bg2); border: 1px solid var(--wp-border); border-radius: 6px; overflow: hidden; color: var(--wp-text); font-size: 12px; box-shadow: 0 18px 50px rgba(0,0,0,.55); outline: none; }
 .wp-ifp__head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; flex-shrink: 0; border-bottom: 1px solid var(--wp-border); background: linear-gradient(180deg, color-mix(in srgb, var(--wp-accent) 18%, var(--wp-bg2)) 0%, var(--wp-bg2) 100%); }
 .wp-ifp__head-icon { color: var(--wp-accent); width: 24px; display: flex; justify-content: center; }
 .wp-ifp__title-block { flex: 1; min-width: 0; }
@@ -259,41 +552,81 @@ function indexOf(frame: number, image: number): number {
 .wp-ifp__icon-btn { background: transparent; border: 0; color: var(--wp-text-dim, var(--wp-text3)); cursor: pointer; padding: 4px; display: flex; }
 .wp-ifp__icon-btn:hover { color: var(--wp-text); }
 
-.wp-ifp__body { overflow-y: auto; padding: 12px 14px; flex: 1; min-height: 0; display: flex; flex-wrap: wrap; gap: 10px; align-content: flex-start; }
-.wp-ifp__frame { display: flex; flex-direction: column; gap: 4px; padding: 6px; border-radius: 5px; background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); }
-.wp-ifp__frame.is-flat { padding: 0; background: transparent; border: 0; width: 100%; }
-.wp-ifp__frame-label { align-self: flex-start; background: transparent; border: 0; padding: 0 2px; font: 10px var(--wp-font-mono, monospace); color: var(--wp-text-dim, var(--wp-text3)); cursor: pointer; }
-.wp-ifp__frame-label:hover { color: var(--wp-accent-text, var(--wp-accent)); }
-.wp-ifp__tiles { display: flex; flex-wrap: wrap; gap: 6px; }
-.wp-ifp__tile { position: relative; padding: 0; border: 2px solid transparent; border-radius: 5px; background: var(--wp-bg3); cursor: pointer; overflow: hidden; line-height: 0; }
-.wp-ifp__tile img { display: block; max-width: 200px; max-height: 200px; width: auto; height: auto; user-select: none; }
-.wp-ifp__frame:not(.is-flat) .wp-ifp__tile img { max-width: 150px; max-height: 150px; }
-.wp-ifp__tile:hover { border-color: var(--wp-border2, var(--wp-text-dim, #666)); }
-.wp-ifp__tile.is-picked { border-color: var(--wp-green, #34c47c); box-shadow: 0 0 0 2px color-mix(in srgb, var(--wp-green, #34c47c) 35%, transparent); }
-.wp-ifp__check { position: absolute; top: 4px; right: 4px; width: 18px; height: 18px; border-radius: 50%; background: var(--wp-green, #34c47c); color: #0d2a1b; font: 800 11px/18px var(--wp-font-sans); text-align: center; }
-.wp-ifp__idx { position: absolute; left: 4px; bottom: 3px; font: 10px/1 var(--wp-font-mono, monospace); color: #fff; text-shadow: 0 1px 2px #000; }
+.wp-ifp__seg { display: inline-flex; border: 1px solid var(--wp-border); border-radius: 4px; overflow: hidden; }
+.wp-ifp__seg button { padding: 3px 9px; border: 0; background: var(--wp-bg3); color: var(--wp-text-muted, var(--wp-text2)); font: 11px var(--wp-font-sans); cursor: pointer; }
+.wp-ifp__seg button + button { border-left: 1px solid var(--wp-border); }
+.wp-ifp__seg button.is-on { background: color-mix(in srgb, var(--wp-accent) 25%, var(--wp-bg3)); color: var(--wp-text); }
+.wp-ifp__seg--full { display: flex; }
+.wp-ifp__seg--full button { flex: 1; }
 
-.wp-ifp__zoom { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; }
+.wp-ifp__body { overflow-y: auto; padding: 12px 14px; flex: 1; min-height: 0; display: flex; flex-wrap: wrap; gap: 10px; align-content: flex-start; }
+.wp-ifp__body.is-grid { display: block; overflow: auto; }
+.wp-ifp__frame { display: flex; flex-direction: column; gap: 4px; padding: 6px; border-radius: 5px; background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); --wp-ifp-tile: 150px; }
+.wp-ifp__frame.is-flat { padding: 0; background: transparent; border: 0; width: 100%; --wp-ifp-tile: 200px; }
+.wp-ifp__frame-label { align-self: flex-start; max-width: 100%; background: transparent; border: 0; padding: 0 2px; font: 10px var(--wp-font-mono, monospace); color: var(--wp-text-dim, var(--wp-text3)); cursor: pointer; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wp-ifp__frame-label:hover { color: var(--wp-accent-text, var(--wp-accent)); }
+.wp-ifp__opt { color: var(--wp-text-muted, var(--wp-text2)); font-family: var(--wp-font-sans); }
+.wp-ifp__sep { margin: 0 4px; opacity: .6; }
+.wp-ifp__tiles { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.wp-ifp__grid { border-collapse: separate; border-spacing: 6px; --wp-ifp-tile: 140px; }
+.wp-ifp__grid th { font: 10.5px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); text-align: center; padding: 2px 4px; }
+.wp-ifp__corner { color: var(--wp-text-dim, var(--wp-text3)) !important; font-family: var(--wp-font-mono, monospace) !important; white-space: nowrap; }
+.wp-ifp__col { border-bottom: 1px solid var(--wp-border); }
+.wp-ifp__row-head { text-align: right !important; border-right: 1px solid var(--wp-border); max-width: 160px; }
+.wp-ifp__grid-cell { vertical-align: top; padding: 4px; border-radius: 5px; background: var(--wp-bg-deep, var(--wp-bg)); }
+.wp-ifp__empty { display: block; text-align: center; color: var(--wp-text-dim, var(--wp-text3)); }
+
+.wp-ifp__zoom { flex: 1; min-height: 0; display: flex; }
+.wp-ifp__stage { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; }
 .wp-ifp__zoom-fig { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; min-height: 0; }
-.wp-ifp__zoom-img { max-width: 100%; max-height: calc(90vh - 190px); border: 3px solid transparent; border-radius: 6px; cursor: pointer; }
+.wp-ifp__zoom-img { display: block; max-width: 100%; max-height: calc(90vh - 200px); border: 3px solid transparent; border-radius: 6px; cursor: pointer; }
 .wp-ifp__zoom-img.is-picked { border-color: var(--wp-green, #34c47c); }
-.wp-ifp__zoom-cap { display: flex; gap: 10px; align-items: center; font: 11px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); }
+.wp-ifp__zoom-cap { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; font: 11px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); }
 .wp-ifp__zoom-pos { color: var(--wp-text-dim, var(--wp-text3)); font-family: var(--wp-font-mono, monospace); }
-.wp-ifp__zoom-state { padding: 1px 6px; border-radius: 3px; border: 1px solid var(--wp-border); }
+.wp-ifp__zoom-state { padding: 1px 6px; border-radius: 3px; border: 1px solid var(--wp-border); background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .wp-ifp__zoom-state.is-picked { border-color: var(--wp-green, #34c47c); color: var(--wp-green, #34c47c); }
 .wp-ifp__nav { flex-shrink: 0; width: 34px; height: 60px; border: 1px solid var(--wp-border); border-radius: 4px; background: var(--wp-bg3); color: var(--wp-text-muted, var(--wp-text2)); font-size: 22px; cursor: pointer; }
 .wp-ifp__nav:hover { color: var(--wp-text); border-color: var(--wp-accent); }
 
+.wp-ifp__compare { position: relative; line-height: 0; }
+.wp-ifp__compare .wp-ifp__zoom-img { cursor: ew-resize; }
+.wp-ifp__compare-top { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.wp-ifp__compare-line { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #fff; box-shadow: 0 0 4px rgba(0,0,0,.6); pointer-events: none; }
+.wp-ifp__compare-tag { position: absolute; top: 8px; padding: 2px 6px; border-radius: 3px; background: rgba(0,0,0,.6); color: #fff; font: 10.5px/1.4 var(--wp-font-sans); pointer-events: none; }
+.wp-ifp__compare-tag.is-left { left: 8px; }
+.wp-ifp__compare-tag.is-right { right: 8px; }
+.wp-ifp__compare-range { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: ew-resize; }
+
+.wp-ifp__refine { width: 300px; flex-shrink: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 12px; border-left: 1px solid var(--wp-border); background: var(--wp-bg-deep, var(--wp-bg)); }
+.wp-ifp__refine-title { font: 600 11px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .05em; color: var(--wp-text-muted, var(--wp-text2)); }
+.wp-ifp__field-head { display: flex; align-items: center; gap: 6px; margin-top: 6px; font: 600 11px var(--wp-font-sans); }
+.wp-ifp__mask-head { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--wp-border); }
+.wp-ifp__badge { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .05em; padding: 1px 5px; border-radius: 2px; background: color-mix(in srgb, var(--wp-accent) 22%, transparent); color: var(--wp-accent-text, var(--wp-accent)); }
+.wp-ifp__text { width: 100%; box-sizing: border-box; resize: vertical; min-height: 70px; padding: 6px; border: 1px solid var(--wp-border); border-radius: 4px; background: var(--wp-bg2); color: var(--wp-text); font: 11px/1.45 var(--wp-font-mono, monospace); }
+.wp-ifp__text:focus { outline: none; border-color: var(--wp-accent); }
+.wp-ifp__hint { margin: 0; font: 10.5px/1.4 var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); }
+.wp-ifp__warn { margin: 0; font: 10.5px/1.4 var(--wp-font-sans); color: var(--wp-amber, #fbbf24); }
+.wp-ifp__link { background: none; border: 0; padding: 0; color: var(--wp-accent-text, var(--wp-accent)); font: 10.5px var(--wp-font-sans); cursor: pointer; }
+.wp-ifp__mini { padding: 2px 8px; border: 1px solid var(--wp-border); border-radius: 3px; background: var(--wp-bg3); color: var(--wp-text-muted, var(--wp-text2)); font: 10.5px var(--wp-font-sans); cursor: pointer; }
+.wp-ifp__mini:hover { color: var(--wp-text); border-color: var(--wp-text-dim, #666); }
+.wp-ifp__mini.is-on { border-color: var(--wp-accent); color: var(--wp-text); background: color-mix(in srgb, var(--wp-accent) 22%, var(--wp-bg3)); }
+.wp-ifp__size { display: flex; align-items: center; gap: 6px; font: 10.5px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); }
+.wp-ifp__size input { flex: 1; accent-color: var(--wp-accent); }
+.wp-ifp__size span { width: 26px; text-align: right; font-family: var(--wp-font-mono, monospace); }
+.wp-ifp__row { display: flex; gap: 6px; }
+
 .wp-ifp__foot { display: flex; align-items: center; gap: 8px; padding: 10px 14px; flex-shrink: 0; background: var(--wp-bg3); border-top: 1px solid var(--wp-border); }
 .wp-ifp__status { display: flex; gap: 12px; font: 11px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); }
 .wp-ifp__status strong { color: var(--wp-text); }
+.wp-ifp__edits { color: var(--wp-accent-text, var(--wp-accent)); }
 .wp-ifp__left { color: var(--wp-text-dim, var(--wp-text3)); font-family: var(--wp-font-mono, monospace); }
 .wp-ifp__left.is-low { color: var(--wp-amber, #fbbf24); }
 .wp-ifp__spacer { flex: 1; }
 .wp-ifp__btn { padding: 6px 12px; border: 1px solid var(--wp-border); border-radius: 3px; background: var(--wp-bg2); color: var(--wp-text); font: 11px var(--wp-font-sans); cursor: pointer; }
 .wp-ifp__btn:hover { border-color: var(--wp-text-dim, #666); }
+.wp-ifp__btn:disabled { opacity: .45; cursor: default; }
 .wp-ifp__btn--danger { color: var(--wp-red, #f08a8a); }
 .wp-ifp__btn--danger:hover { border-color: var(--wp-red, #f08a8a); }
 .wp-ifp__btn--primary { background: var(--wp-accent); border-color: var(--wp-accent); color: #fff; font-weight: 600; }
-.wp-ifp__btn--primary:disabled { opacity: .45; cursor: default; }
 </style>

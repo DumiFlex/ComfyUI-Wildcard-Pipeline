@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import json
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 Pick = tuple[int, int]
@@ -40,13 +40,11 @@ Pick = tuple[int, int]
 PlanItem = tuple[int, list[int]]
 
 MODES = ("pause", "reuse", "pass_all")
-NOTHING_PICKED = ("stop", "keep_all")
 SEND_AS = ("same_shape", "per_image")
 ON_TIMEOUT = ("keep_all", "stop", "keep_first")
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "mode": "pause",
-    "nothing_picked": "stop",
     "send_as": "same_shape",
     # Seconds; 0 waits until answered (or the run is cancelled).
     "timeout": 600,
@@ -75,7 +73,6 @@ def parse_config(raw: Any) -> dict[str, Any]:
         return out
     for key, allowed in (
         ("mode", MODES),
-        ("nothing_picked", NOTHING_PICKED),
         ("send_as", SEND_AS),
         ("on_timeout", ON_TIMEOUT),
     ):
@@ -226,12 +223,51 @@ def follow_slot(
 # ---------------------------------------------------------------- answers ---
 
 
+#: Per-image edits from the picker: ``positive`` / ``negative`` replacement
+#: text and ``mask``, a PNG data URL (white = masked) at any size.
+Edit = dict[str, str]
+
+#: Longest prompt edit accepted (characters) and mask data URL (bytes).
+MAX_EDIT_TEXT = 20_000
+MAX_MASK_URL = 16 * 1024 * 1024
+MASK_PREFIX = "data:image/png;base64,"
+
+
 @dataclass(frozen=True)
 class Answer:
-    """What the picker sent back: ``picks``, ``keep_all`` or ``stop``."""
+    """What the picker sent back: ``picks``, ``keep_all`` or ``stop``, plus
+    any per-image ``edits`` made in the picker."""
 
     action: str
     picks: tuple[Pick, ...] = ()
+    edits: dict[Pick, Edit] = field(default_factory=dict)
+
+
+def parse_edits(raw: Any, batch_sizes: list[int]) -> dict[Pick, Edit]:
+    """Validate ``{"f:i": {positive?, negative?, mask?}}``; bad entries drop."""
+    out: dict[Pick, Edit] = {}
+    if not isinstance(raw, dict):
+        return out
+    for key, entry in raw.items():
+        if not isinstance(key, str) or not isinstance(entry, dict):
+            continue
+        parts = key.split(":")
+        if len(parts) != 2 or not all(p.isdigit() for p in parts):
+            continue
+        f, i = int(parts[0]), int(parts[1])
+        if not (0 <= f < len(batch_sizes) and 0 <= i < batch_sizes[f]):
+            continue
+        edit: Edit = {}
+        for name in ("positive", "negative"):
+            text = entry.get(name)
+            if isinstance(text, str) and len(text) <= MAX_EDIT_TEXT:
+                edit[name] = text
+        mask = entry.get("mask")
+        if isinstance(mask, str) and mask.startswith(MASK_PREFIX) and len(mask) <= MAX_MASK_URL:
+            edit["mask"] = mask
+        if edit:
+            out[(f, i)] = edit
+    return out
 
 
 def parse_answer(payload: Any, batch_sizes: list[int]) -> Answer | None:
@@ -239,13 +275,41 @@ def parse_answer(payload: Any, batch_sizes: list[int]) -> Answer | None:
     if not isinstance(payload, dict):
         return None
     action = payload.get("action")
+    edits = parse_edits(payload.get("edits"), batch_sizes)
     if action == "keep_all":
-        return Answer("keep_all", tuple(all_picks(batch_sizes)))
+        return Answer("keep_all", tuple(all_picks(batch_sizes)), edits)
     if action == "stop":
         return Answer("stop")
     if action == "picks":
-        return Answer("picks", tuple(normalize_picks(payload.get("picks"), batch_sizes)))
+        picks = tuple(normalize_picks(payload.get("picks"), batch_sizes))
+        return Answer("picks", picks, {p: e for p, e in edits.items() if p in picks})
     return None
+
+
+def item_text_edits(
+    plan: list[PlanItem], edits: dict[Pick, Edit], key: str,
+) -> list[str | None]:
+    """Edited ``positive`` / ``negative`` text per output item, or None.
+
+    An item with several images (Same shape) has one prompt, so the first
+    edited image in it decides (the picker writes the same text to all of a
+    frame's images in that mode).
+    """
+    out: list[str | None] = []
+    for f, idx in plan:
+        text = next((edits[(f, i)][key] for i in idx if key in edits.get((f, i), {})), None)
+        out.append(text)
+    return out
+
+
+def item_mask_edits(plan: list[PlanItem], edits: dict[Pick, Edit]) -> list[list[str] | None]:
+    """Per output item, the painted mask URL of each image ("" when that image
+    has none), or None when no image of the item was painted."""
+    out: list[list[str] | None] = []
+    for f, idx in plan:
+        urls = [edits.get((f, i), {}).get("mask", "") for i in idx]
+        out.append(urls if any(urls) else None)
+    return out
 
 
 def resolve_timeout(on_timeout: str, batch_sizes: list[int]) -> Answer:

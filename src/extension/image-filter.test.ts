@@ -1,14 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { _resetDisplayStateForTesting, applyDisplayPrefs } from "./settings";
-import { SETTING_ID_IMAGE_FILTER_SOUND } from "./settings-catalog";
+import { SETTING_ID_IMAGE_FILTER_NOTIFY, SETTING_ID_IMAGE_FILTER_SOUND } from "./settings-catalog";
 import {
   _resetImageFilterForTests,
   addRequest,
   installImageFilter,
   lastRequestByNode,
+  notifyWaiting,
   playReadyChime,
   secondsLeft,
   submitAnswer,
+  syncTabTitle,
   waiting,
 } from "./image-filter";
 
@@ -129,5 +131,69 @@ describe("playReadyChime", () => {
     applyDisplayPrefs({ extensionManager: { setting: { get: (id: string) => (id === SETTING_ID_IMAGE_FILTER_SOUND ? false : undefined) } } });
     playReadyChime();
     expect(started).toHaveLength(0);
+  });
+});
+
+describe("tab title", () => {
+  it("marks the title while something waits and restores it after", () => {
+    document.title = "ComfyUI";
+    syncTabTitle(2);
+    expect(document.title).toBe("● Pick images · ComfyUI");
+    syncTabTitle(1);
+    expect(document.title).toBe("● Pick images · ComfyUI");
+    syncTabTitle(0);
+    expect(document.title).toBe("ComfyUI");
+  });
+
+  it("follows the queue once installed", async () => {
+    document.title = "ComfyUI";
+    const api = new FakeApi();
+    installImageFilter(api, () => undefined, () => okJson({ pending: [] }), () => undefined);
+    api.fire("wp-image-filter", req("t"));
+    await Promise.resolve();
+    expect(document.title.startsWith("● Pick images")).toBe(true);
+    api.fire("wp-image-filter-done", { token: "t" });
+    await Promise.resolve();
+    expect(document.title).toBe("ComfyUI");
+  });
+});
+
+describe("notifyWaiting", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    _resetDisplayStateForTesting();
+  });
+
+  function fakeNotification() {
+    const shown: string[] = [];
+    class N {
+      static permission = "granted";
+      onclick: (() => void) | null = null;
+      constructor(title: string, opts: { body: string }) { shown.push(`${title}: ${opts.body}`); }
+      close() {}
+    }
+    vi.stubGlobal("Notification", N);
+    return shown;
+  }
+  const notifyOn = () => applyDisplayPrefs({ extensionManager: { setting: { get: (id: string) => (id === SETTING_ID_IMAGE_FILTER_NOTIFY ? true : undefined) } } });
+  const hidden = (on: boolean) => Object.defineProperty(document, "hidden", { configurable: true, get: () => on });
+
+  it("is off by default", () => {
+    const shown = fakeNotification();
+    hidden(true);
+    notifyWaiting(3);
+    expect(shown).toEqual([]);
+  });
+
+  it("notifies only while the tab is in the background", () => {
+    const shown = fakeNotification();
+    notifyOn();
+    hidden(false);
+    notifyWaiting(3);
+    expect(shown).toEqual([]);
+    hidden(true);
+    notifyWaiting(3);
+    expect(shown).toEqual(["Image Filter is waiting: 3 images to pick from."]);
+    hidden(false);
   });
 });

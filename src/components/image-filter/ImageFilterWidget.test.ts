@@ -19,8 +19,7 @@ describe("ImageFilterWidget", () => {
     expect(lastEmit(w).mode).toBe("reuse");
     await w.find('[data-test="if-send-as"]').setValue("per_image");
     expect(lastEmit(w).send_as).toBe("per_image");
-    await w.find('[data-test="if-nothing-picked"]').setValue("keep_all");
-    expect(lastEmit(w).nothing_picked).toBe("keep_all");
+    expect(w.find('[data-test="if-nothing-picked"]').exists()).toBe(false);
   });
 
   it("timeout arrows step by 30 and never go below 0; 0 hides the after-timeout choice", async () => {
@@ -37,24 +36,26 @@ describe("ImageFilterWidget", () => {
   it("summarises the last run", async () => {
     const w = mk();
     expect(w.find('[data-test="if-summary"]').text()).toContain("after a run");
-    await w.setProps({ lastRun: { picks: [[0, 1], [2, 0]], frames: 3, total: 6, mode: "pause", stopped: false } });
+    await w.setProps({ lastRun: { picks: [[0, 1], [2, 0]], frames: 3, total: 6, mode: "pause", stopped: false, edited: 0, masks: 0 } });
     expect(w.find('[data-test="if-summary"]').text()).toBe("2 of 6 kept · frames 1, 3");
-    await w.setProps({ lastRun: { picks: [], frames: 1, total: 2, mode: "pause", stopped: true } });
+    await w.setProps({ lastRun: { picks: [], frames: 1, total: 2, mode: "pause", stopped: true, edited: 0, masks: 0 } });
     expect(w.find('[data-test="if-summary"]').text()).toBe("stopped the branch");
+    await w.setProps({ lastRun: { picks: [[0, 0]], frames: 1, total: 2, mode: "pause", stopped: false, edited: 1, masks: 2 } });
+    expect(w.find('[data-test="if-summary"]').text()).toBe("1 of 2 kept · 1 prompt edited · 2 masks");
   });
 });
 
 describe("widget glue helpers", () => {
   it("parseRun reads the UI payload defensively", () => {
     expect(parseRun([{ picks: [[0, 1], ["x", 2]], frames: 2, total: 4, mode: "pause" }])).toEqual({
-      picks: [[0, 1]], frames: 2, total: 4, mode: "pause", stopped: false,
+      picks: [[0, 1]], frames: 2, total: 4, mode: "pause", stopped: false, edited: 0, masks: 0,
     });
     expect(parseRun(null)).toBeNull();
   });
 
   it("pickedThumbs maps picks to the request's images", () => {
     const frames = [[{ filename: "a", subfolder: "", type: "temp" }], [{ filename: "b", subfolder: "", type: "temp" }]];
-    const run = { picks: [[1, 0], [5, 5]] as [number, number][], frames: 2, total: 2, mode: "pause", stopped: false };
+    const run = { picks: [[1, 0], [5, 5]] as [number, number][], frames: 2, total: 2, mode: "pause", stopped: false, edited: 0, masks: 0 };
     expect(pickedThumbs(run, frames).map((t) => t.filename)).toEqual(["b"]);
     expect(pickedThumbs(run, undefined)).toEqual([]);
   });

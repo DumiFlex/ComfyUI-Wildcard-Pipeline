@@ -280,7 +280,11 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // node): its picker modal (~7.6 KB) and node widget (~3.4 KB) are lazy
 // chunks, plus ~1.5 KB of event + widget glue in boot. dev sat at 448,610
 // bytes. Same "guide, not a cap" rule as above.
-const TOTAL_LIMIT = 452 * 1024;     // 452 KB
+// RAISED 452 -> 464 KB on 2026-10-07 for the Image Filter refine step
+// (frame labels, sweep grid, compare, prompt edits, mask painter, Send to
+// Loop): the picker chunk grows ~8 KB and stays lazy. The branch sat at
+// 462,555 bytes before it. Same "guide, not a cap" rule as above.
+const TOTAL_LIMIT = 464 * 1024;     // 464 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

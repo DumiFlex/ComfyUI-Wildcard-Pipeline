@@ -87,6 +87,7 @@ const autocompleteMinChars = ref<string>("3");
 const toastLifetime = ref<ToastLifetime>("default");
 const suppressInfoToasts = ref<boolean>(false);
 const imageFilterSound = ref<boolean>(true);
+const imageFilterNotify = ref<boolean>(false);
 const newModuleDisabled = ref<boolean>(false);
 const confirmDestructiveBundle = ref<boolean>(true);
 const bundleMasterOffBehavior = ref<BundleMasterOffBehavior>("preserve-manual");
@@ -119,6 +120,7 @@ function syncFromStore(): void {
   toastLifetime.value = asString(getSettingValue("toastLifetime"), "default") as ToastLifetime;
   suppressInfoToasts.value = asBool(getSettingValue("suppressInfoToasts"), false);
   imageFilterSound.value = asBool(getSettingValue("imageFilterSound"), true);
+  imageFilterNotify.value = asBool(getSettingValue("imageFilterNotify"), false);
   newModuleDisabled.value = asBool(getSettingValue("newModuleDisabled"), false);
   confirmDestructiveBundle.value = asBool(getSettingValue("confirmDestructiveBundle"), true);
   bundleMasterOffBehavior.value = asString(
@@ -155,6 +157,7 @@ watch(autocompleteMinChars, (v) => applySetting("autocompleteMinChars", v));
 watch(toastLifetime, (v) => applySetting("toastLifetime", v));
 watch(suppressInfoToasts, (v) => applySetting("suppressInfoToasts", v));
 watch(imageFilterSound, (v) => applySetting("imageFilterSound", v));
+watch(imageFilterNotify, (v) => applySetting("imageFilterNotify", v));
 watch(newModuleDisabled, (v) => applySetting("newModuleDisabled", v));
 watch(confirmDestructiveBundle, (v) => applySetting("confirmDestructiveBundle", v));
 watch(bundleMasterOffBehavior, (v) => applySetting("bundleMasterOffBehavior", v));
@@ -182,6 +185,7 @@ interface Defaults {
   toastLifetime: ToastLifetime;
   suppressInfoToasts: boolean;
   imageFilterSound: boolean;
+  imageFilterNotify: boolean;
   newModuleDisabled: boolean;
   confirmDestructiveBundle: boolean;
   bundleMasterOffBehavior: BundleMasterOffBehavior;
@@ -210,6 +214,7 @@ const defaults: Defaults = {
   toastLifetime: "default",
   suppressInfoToasts: false,
   imageFilterSound: true,
+  imageFilterNotify: false,
   newModuleDisabled: false,
   confirmDestructiveBundle: true,
   bundleMasterOffBehavior: "preserve-manual",
@@ -471,6 +476,10 @@ onBeforeUnmount(() => {
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Image Filter sound</span>
                 <WpCheck v-model="imageFilterSound" aria-label="Image Filter sound" />
+              </div>
+              <div class="wp-pg__row wp-pg__row--switch">
+                <span class="wp-pg__row-label">Image Filter desktop notification</span>
+                <WpCheck v-model="imageFilterNotify" aria-label="Image Filter desktop notification" />
               </div>
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">New modules start disabled</span>

@@ -138,6 +138,7 @@ Image = _IOType("IMAGE")
 Latent = _IOType("LATENT")
 Mask = _IOType("MASK")
 Conditioning = _IOType("CONDITIONING")
+Clip = _IOType("CLIP")
 
 
 class _MatchTemplate:
@@ -376,6 +377,7 @@ class _IONamespace:
     Latent = Latent
     Mask = Mask
     Conditioning = Conditioning
+    Clip = Clip
     MatchType = MatchType
     Autogrow = _Autogrow
     Custom = staticmethod(Custom)

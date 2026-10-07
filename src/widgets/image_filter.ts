@@ -36,6 +36,8 @@ export function parseRun(raw: unknown): ImageFilterRun | null {
     total: typeof r.total === "number" ? r.total : 0,
     mode: typeof r.mode === "string" ? r.mode : "",
     stopped: r.stopped === true,
+    edited: typeof r.edited === "number" ? r.edited : 0,
+    masks: typeof r.masks === "number" ? r.masks : 0,
   };
 }
 

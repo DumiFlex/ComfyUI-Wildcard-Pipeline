@@ -2,6 +2,7 @@ import { beforeEach, describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
 import PickerModal from "./PickerModal.vue";
 import { _resetImageFilterForTests, type WaitingRequest } from "../../extension/image-filter";
+import { dropDraftEdits } from "./picker-state";
 
 const ref = (n: string) => ({ filename: `${n}.png`, subfolder: "", type: "temp" });
 
@@ -11,6 +12,8 @@ function request(frames: number[], over: Partial<WaitingRequest> = {}): WaitingR
     node_id: "3",
     frames: frames.map((count, f) => Array.from({ length: count }, (_, i) => ref(`${f}-${i}`))),
     labels: [],
+    send_as: "same_shape",
+    has_clip: true,
     timeout: 0,
     started_at: 0,
     receivedAt: Date.now(),
@@ -23,7 +26,11 @@ function mk(req: WaitingRequest) {
 }
 
 describe("PickerModal", () => {
-  beforeEach(() => _resetImageFilterForTests());
+  beforeEach(() => {
+    _resetImageFilterForTests();
+    dropDraftEdits("tok");
+    localStorage.clear();
+  });
 
   it("picks survive the picker being tucked away and reopened", async () => {
     const req = request([3]);
@@ -96,5 +103,90 @@ describe("PickerModal", () => {
   it("shows the countdown when the node has a timeout", () => {
     const w = mk(request([1], { timeout: 125 }));
     expect(w.find('[data-test="image-filter-status"]').text()).toContain("2:05 left");
+  });
+
+  it("remembers being zoomed: the next picker opens zoomed in", async () => {
+    const w = mk(request([2]));
+    await w.vm.$nextTick();
+    const root = w.find('[data-test="image-filter-picker"]');
+    await root.trigger("keydown", { key: " " });
+    expect(w.find('[data-test="image-filter-zoom"]').exists()).toBe(true);
+    w.unmount();
+    const again = mk(request([2], { token: "tok2" }));
+    expect(again.find('[data-test="image-filter-zoom"]').exists()).toBe(true);
+    await again.vm.$nextTick();
+    await again.find('[data-test="image-filter-picker"]').trigger("keydown", { key: " " });
+    again.unmount();
+    expect(mk(request([2])).find('[data-test="image-filter-zoom"]').exists()).toBe(false);
+  });
+
+  it("an edited prompt goes out with the picks, for the whole frame with Same shape", async () => {
+    const w = mk(request([2], { labels: [{ positive: "a cat", negative: "blurry" }] }));
+    await w.vm.$nextTick();
+    const root = w.find('[data-test="image-filter-picker"]');
+    await root.trigger("keydown", { key: " " });
+    const pos = w.find('[data-test="image-filter-positive"]');
+    expect((pos.element as HTMLTextAreaElement).value).toBe("a cat");
+    await pos.setValue("a dog");
+    expect(w.find('[data-test="image-filter-refine"]').text()).toContain("edited");
+    await w.find('[data-test="image-filter-zoom-pick"]').trigger("click");
+    await root.trigger("keydown", { key: "Enter" });
+    expect(w.emitted("answer")?.[0]?.[0]).toEqual({
+      action: "picks",
+      picks: [[0, 0]],
+      edits: { "0:0": { positive: "a dog" } },
+    });
+  });
+
+  it("typing the original text back clears the edit; One per image edits one image", async () => {
+    const w = mk(request([2], { labels: [{ positive: "a cat" }], send_as: "per_image" }));
+    await w.vm.$nextTick();
+    const root = w.find('[data-test="image-filter-picker"]');
+    await root.trigger("keydown", { key: " " });
+    const pos = w.find('[data-test="image-filter-positive"]');
+    await pos.setValue("x");
+    await pos.setValue("a cat");
+    await pos.setValue("y");
+    await w.find('[data-test="image-filter-keep-all"]').trigger("click");
+    expect(w.emitted("answer")?.[0]?.[0]).toEqual({ action: "keep_all", edits: { "0:0": { positive: "y" } } });
+  });
+
+  it("warns that edits only change text without a CLIP", async () => {
+    const w = mk(request([1], { labels: [{ positive: "p" }], has_clip: false }));
+    await w.vm.$nextTick();
+    await w.find('[data-test="image-filter-picker"]').trigger("keydown", { key: " " });
+    expect(w.find('[data-test="image-filter-no-clip"]').exists()).toBe(true);
+    expect(w.find('[data-test="image-filter-negative"]').exists()).toBe(false);
+  });
+
+  it("C pins an image and compares it with the next one", async () => {
+    const w = mk(request([3]));
+    await w.vm.$nextTick();
+    const root = w.find('[data-test="image-filter-picker"]');
+    await root.trigger("keydown", { key: " " });
+    await root.trigger("keydown", { key: "c" });
+    expect(w.find('[data-test="image-filter-compare"]').exists()).toBe(false);
+    await root.trigger("keydown", { key: "ArrowRight" });
+    expect(w.find('[data-test="image-filter-compare"]').exists()).toBe(true);
+    await root.trigger("keydown", { key: "c" });
+    expect(w.find('[data-test="image-filter-compare"]').exists()).toBe(false);
+  });
+
+  it("M opens the mask painter for the zoomed image", async () => {
+    const w = mk(request([1]));
+    await w.vm.$nextTick();
+    const root = w.find('[data-test="image-filter-picker"]');
+    await root.trigger("keydown", { key: " " });
+    await root.trigger("keydown", { key: "m" });
+    expect(w.find('[data-test="image-filter-mask"]').exists()).toBe(true);
+    expect(w.find('[data-test="image-filter-mask-clear"]').exists()).toBe(true);
+  });
+
+  it("frame captions show the loop number and hover shows seed and prompt", () => {
+    const w = mk(request([1, 1], { labels: [{ loop_index: 4, seed: 77, positive: "red hat" }, { loop_index: 5 }] }));
+    const label = w.find('[data-test="image-filter-frame-0"] .wp-ifp__frame-label');
+    expect(label.text()).toBe("#5");
+    expect(label.attributes("title")).toContain("Seed 77");
+    expect(label.attributes("title")).toContain("red hat");
   });
 });

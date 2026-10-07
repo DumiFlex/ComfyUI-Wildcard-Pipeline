@@ -37,11 +37,11 @@ def test_parse_config_defaults_and_recovery():
     assert f.parse_config("not json") == f.DEFAULT_CONFIG
     assert f.parse_config("[1]") == f.DEFAULT_CONFIG
     cfg = f.parse_config(
-        '{"mode": "reuse", "nothing_picked": "keep_all", "send_as": "per_image",'
+        '{"mode": "reuse", "send_as": "per_image",'
         ' "timeout": 30, "on_timeout": "stop", "junk": 1}'
     )
     assert cfg == {
-        "mode": "reuse", "nothing_picked": "keep_all", "send_as": "per_image",
+        "mode": "reuse", "send_as": "per_image",
         "timeout": 30, "on_timeout": "stop",
     }
 
@@ -185,3 +185,31 @@ def test_reusable_picks_must_still_fit():
     assert f.reusable_picks([(0, 1)], [2]) == [(0, 1)]
     assert f.reusable_picks([(0, 3)], [2]) is None
     assert f.reusable_picks(None, [2]) is None
+
+
+def test_parse_edits_keeps_valid_entries_for_picked_images():
+    sizes = [2, 1]
+    ans = f.parse_answer({
+        "action": "picks",
+        "picks": [[0, 1], [1, 0]],
+        "edits": {
+            "0:1": {"positive": "new", "negative": 3, "mask": "data:image/png;base64,AAA"},
+            "1:0": {"mask": "javascript:x"},
+            "0:0": {"positive": "not picked"},
+            "5:0": {"positive": "out of range"},
+            "bad": {"positive": "x"},
+        },
+    }, sizes)
+    assert ans.edits == {(0, 1): {"positive": "new", "mask": "data:image/png;base64,AAA"}}
+    keep = f.parse_answer({"action": "keep_all", "edits": {"0:0": {"negative": "n"}}}, sizes)
+    assert keep.edits == {(0, 0): {"negative": "n"}}
+
+
+def test_item_edits_follow_the_plan():
+    edits = {(0, 1): {"positive": "p01", "mask": "m01"}, (1, 0): {"negative": "n10"}}
+    same = f.plan_output([(0, 0), (0, 1), (1, 0)], "same_shape")
+    assert f.item_text_edits(same, edits, "positive") == ["p01", None]
+    assert f.item_text_edits(same, edits, "negative") == [None, "n10"]
+    assert f.item_mask_edits(same, edits) == [["", "m01"], None]
+    per = f.plan_output([(0, 0), (0, 1)], "per_image")
+    assert f.item_text_edits(per, edits, "positive") == [None, "p01"]

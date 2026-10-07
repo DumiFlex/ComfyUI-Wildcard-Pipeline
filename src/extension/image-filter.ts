@@ -10,9 +10,9 @@
  * Lives in the boot chunk because the listener has to be in place before the
  * first run; it is tiny and imports no SFC.
  */
-import { ref, shallowRef } from "vue";
+import { ref, shallowRef, watch } from "vue";
 import { parsePickRequest, type PickAnswer, type PickRequest } from "../components/image-filter/types";
-import { shouldPlayImageFilterSound } from "./settings";
+import { shouldNotifyImageFilter, shouldPlayImageFilterSound } from "./settings";
 
 export interface WaitingRequest extends PickRequest {
   /** Browser clock when it arrived; the countdown runs from here so a server
@@ -124,6 +124,48 @@ export function playReadyChime(): void {
   }
 }
 
+/** System notification while this tab is in the background (setting, off by
+ *  default; the browser's permission is asked when it is switched on). */
+export function notifyWaiting(count: number): void {
+  if (!shouldNotifyImageFilter() || !document.hidden) return;
+  try {
+    const N = globalThis.Notification;
+    if (!N || N.permission !== "granted") return;
+    const n = new N("Image Filter is waiting", {
+      body: count > 1 ? `${count} images to pick from.` : "An image to pick.",
+      tag: "wp-image-filter",
+    });
+    n.onclick = () => {
+      window.focus();
+      n.close();
+    };
+  } catch {
+    // Notifications unsupported here: the chime and the tab title still work.
+  }
+}
+
+const TITLE_MARK = "● Pick images · ";
+
+let titleTimer: ReturnType<typeof setInterval> | null = null;
+
+function markTitle(): void {
+  if (!document.title.startsWith(TITLE_MARK)) document.title = TITLE_MARK + document.title;
+}
+
+/** Prefix the tab title while something waits, so the tab says so. ComfyUI
+ *  rewrites the title on its own (progress, workflow name), so the mark is
+ *  re-applied every second until nothing waits. */
+export function syncTabTitle(waitingCount: number): void {
+  if (waitingCount > 0) {
+    markTitle();
+    titleTimer ??= setInterval(markTitle, 1000);
+    return;
+  }
+  if (titleTimer) clearInterval(titleTimer);
+  titleTimer = null;
+  if (document.title.startsWith(TITLE_MARK)) document.title = document.title.slice(TITLE_MARK.length);
+}
+
 interface ApiLike {
   addEventListener: (name: string, fn: (e: Event) => void) => void;
 }
@@ -149,10 +191,13 @@ export function installImageFilter(
     mountPicker();
   };
   api.addEventListener("wp-image-filter", (e: Event) => {
-    if (!addRequest((e as CustomEvent).detail)) return;
+    const entry = addRequest((e as CustomEvent).detail);
+    if (!entry) return;
     ensureMounted();
     chime();
+    notifyWaiting(entry.frames.reduce((n, f) => n + f.length, 0));
   });
+  watch(() => waiting.value.length, (n) => syncTabTitle(n), { immediate: true });
   api.addEventListener("wp-image-filter-done", (e: Event) => {
     const token = ((e as CustomEvent).detail as { token?: unknown } | undefined)?.token;
     if (typeof token === "string") removeRequest(token);
@@ -180,4 +225,5 @@ export function _resetImageFilterForTests(): void {
   lastRequestByNode.value = new Map();
   drafts.clear();
   audio = null;
+  syncTabTitle(0);
 }

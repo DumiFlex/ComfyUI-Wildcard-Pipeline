@@ -7,6 +7,7 @@
  */
 import { computed, ref, watch } from "vue";
 import PickerModal from "./PickerModal.vue";
+import { app } from "#comfyui/app";
 import { submitAnswer, waiting } from "../../extension/image-filter";
 import type { PickAnswer } from "./types";
 
@@ -29,6 +30,7 @@ function onAnswer(answer: PickAnswer): void {
     v-if="current && !minimized"
     :request="current"
     :more-waiting="waiting.length - 1"
+    :graph="app.graph"
     @answer="onAnswer"
     @minimize="minimized = true"
   />

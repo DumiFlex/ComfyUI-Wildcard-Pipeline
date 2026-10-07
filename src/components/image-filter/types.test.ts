@@ -12,7 +12,7 @@ describe("parseImageFilterConfig", () => {
     const cfg = parseImageFilterConfig(JSON.stringify({
       mode: "reuse", nothing_picked: "keep_all", send_as: "bogus", timeout: 45.9, on_timeout: "stop",
     }));
-    expect(cfg).toEqual({ mode: "reuse", nothing_picked: "keep_all", send_as: "same_shape", timeout: 45, on_timeout: "stop" });
+    expect(cfg).toEqual({ mode: "reuse", send_as: "same_shape", timeout: 45, on_timeout: "stop" });
     expect(parseImageFilterConfig({ timeout: -3 }).timeout).toBe(0);
     expect(parseImageFilterConfig({ timeout: 1e12 }).timeout).toBe(MAX_TIMEOUT);
   });
@@ -26,7 +26,7 @@ describe("parsePickRequest", () => {
       labels: [{ loop_index: 0 }],
     });
     expect(req).toEqual({
-      token: "t", node_id: "7", timeout: 30, started_at: 1,
+      token: "t", node_id: "7", timeout: 30, started_at: 1, send_as: "same_shape", has_clip: false,
       frames: [[{ filename: "a.png", subfolder: "", type: "temp" }], []],
       labels: [{ loop_index: 0 }],
     });

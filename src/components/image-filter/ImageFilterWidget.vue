@@ -14,7 +14,6 @@ import {
   type ImageFilterConfig,
   type ImageFilterRun,
   type ImageRef,
-  type NothingPicked,
   type OnTimeout,
   type SendAs,
 } from "./types";
@@ -64,7 +63,11 @@ const summary = computed(() => {
   const frameText = run.frames > 1 && frames.length
     ? ` · ${frames.length === 1 ? "frame" : "frames"} ${frames.join(", ")}`
     : "";
-  return `${run.picks.length} of ${run.total} kept${frameText}`;
+  const extras = [
+    run.edited ? `${run.edited} ${run.edited === 1 ? "prompt" : "prompts"} edited` : "",
+    run.masks ? `${run.masks} ${run.masks === 1 ? "mask" : "masks"}` : "",
+  ].filter(Boolean);
+  return `${run.picks.length} of ${run.total} kept${frameText}${extras.length ? ` · ${extras.join(" · ")}` : ""}`;
 });
 </script>
 
@@ -91,19 +94,6 @@ const summary = computed(() => {
           </div>
         </div>
         <div class="wp-ifw__row">
-          <span class="wp-ifw__row-label">Nothing picked</span>
-          <select
-            class="wp-ifw__select"
-            :value="modelValue.nothing_picked"
-            aria-label="When nothing is picked"
-            data-test="if-nothing-picked"
-            @change="patch({ nothing_picked: ($event.target as HTMLSelectElement).value as NothingPicked })"
-          >
-            <option value="stop">Stop this branch</option>
-            <option value="keep_all">Keep all</option>
-          </select>
-        </div>
-        <div class="wp-ifw__row">
           <span class="wp-ifw__row-label" title="One per image: every picked image becomes its own item, with its own copy of its frame's prompt and conditioning">Send picks as</span>
           <select
             class="wp-ifw__select"
@@ -117,7 +107,7 @@ const summary = computed(() => {
           </select>
         </div>
         <div class="wp-ifw__row" :class="{ 'is-off': modelValue.mode === 'pass_all' }">
-          <span class="wp-ifw__row-label" title="Seconds to wait for a pick. 0 waits until you answer.">Timeout</span>
+          <span class="wp-ifw__row-label" title="Seconds to wait for your picks. 0 waits until you answer. The picker can't send an empty pick, so this is also what happens when nothing gets picked.">Timeout</span>
           <span class="wp-ifw__timeout">
             <span class="wp-ifw__num-wrap">
               <input
