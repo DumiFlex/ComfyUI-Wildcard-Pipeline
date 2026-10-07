@@ -88,7 +88,7 @@ list and connect it later.
 | **WP Context Loop** + **WP Seed List** | Run the whole chain N times from one Generate, each with its own prompt and seed, or sweep every combination of chosen wildcard options. |
 | **WP Context Injector** | Turns any ComfyUI output (text, a number) into a `$variable`. |
 | **WP Model Info** | Reads the loaded checkpoint into `$model_family` / `$model_variant` (Pony, Illustrious, …) so rules can pick LoRAs and tags per model. |
-| **WP Image Filter** | Pauses the run so you pick which images go on to the upscaler. Their latent, conditioning, prompt text and Context are filtered with them. |
+| **WP Image Filter** | Pauses the run so you pick which images go on to the upscaler. Their latent, conditioning, prompt text and Context are filtered with them, and you can edit a prompt or paint a mask before they go on. |
 | **WP Prompt Cleaner** | Tidies the final prompt: spacing, stray commas, empty `()`, nested weights, LoRA tags, duplicates, a blocklist. |
 | **WP Debug** | Shows what happened during a run (see below). |
 | **WP Var → Int / Float / Bool** | Use a variable to drive a number or switch, like image size or steps. |

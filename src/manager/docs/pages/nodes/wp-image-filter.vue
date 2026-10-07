@@ -5,27 +5,30 @@ import DocCallout from "../../../components/docs/DocCallout.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
+import picksDiagram from "../../images/how-picks-carry-over.webp";
 
 const ports = [
   { term: "images", desc: "The images to pick from. Required: this is what the picker shows." },
-  { term: "latent, masks", desc: "Sliced to the picked images." },
+  { term: "latent, masks", desc: "Sliced to the picked images. A mask you paint in the picker replaces that image's mask." },
   { term: "positive, negative", desc: "CONDITIONING. A batched conditioning is sliced with the images; a single one is kept for every frame that keeps an image." },
   { term: "positive_text, negative_text", desc: "The prompt strings, kept or dropped with their frame." },
   { term: "context", desc: "Each frame's WP Context, kept or dropped with it." },
+  { term: "clip (in)", desc: "Optional. Re-encodes a prompt you edit in the picker, so the positive/negative conditioning follows the edit. Without it, an edit changes only the text outputs." },
   { term: "extra_1, extra_2", desc: "Any type. The output takes the type of what you connect. Batched values are sliced, anything else follows its frame." },
   { term: "picks (out)", desc: "What was kept, as frame:image (1-based), for example 1:2, 3:1." },
 ];
 
 const keys = [
   { term: "Click", desc: "Pick or unpick an image. Clicking a frame's label picks the whole frame; Ctrl+A picks everything." },
-  { term: "Space", desc: "Zoom the image under the mouse. In the zoom, ←/→ move and ↑ picks." },
+  { term: "Space", desc: "Zoom the image under the mouse, or leave the zoom. In the zoom, ←/→ move and ↑ picks. The picker remembers: leave it zoomed and the next one opens zoomed." },
+  { term: "C", desc: "In the zoom: pin this image, then step to another to compare the two with a slider. C again stops." },
+  { term: "M", desc: "In the zoom: paint a mask on this image (brush, eraser, size, invert, clear)." },
   { term: "Enter", desc: "Keep the picks and let the run go on." },
   { term: "Escape", desc: "Tuck the picker away. A waiting pill at the bottom of the screen opens it again, picks intact." },
 ];
 
 const settings = [
   { term: "Mode", desc: "Pause & pick asks every run. Reuse last picks keeps the same picks without asking, and asks again when they no longer fit. Pass all lets everything through." },
-  { term: "Nothing picked", desc: "Stop this branch, or keep all." },
   { term: "Send picks as", desc: "Same shape keeps each frame's picks together as one batch. One per image sends every pick as its own item, with its own copy of its frame's prompt, conditioning and Context." },
   { term: "Timeout", desc: "Seconds to wait; 0 waits until you answer. After a timeout it keeps all, keeps the first image, or stops the branch." },
 ];
@@ -78,9 +81,46 @@ const settings = [
         the rest of the run finishes normally. Cancelling the run closes the picker.
       </p>
       <DocCallout variant="tip">
-        A short chime plays when the picker opens, so you hear it from another tab. Turn it off
-        with <b>Image Filter sound</b> in Settings.
+        A short chime plays when the picker opens, and the tab title starts with
+        <b>● Pick images</b> while something waits, so you notice from another tab. Turn the chime
+        off with <b>Image Filter sound</b> in Settings; turn on <b>Image Filter desktop
+        notification</b> to also get a system notification while the tab is in the background.
       </DocCallout>
+    </DocSection>
+
+    <DocSection title="Labels, sweep grid and Send to Loop">
+      <p>
+        With a <b>Context Loop</b>, each frame is labelled with its number and the options its
+        sweep pinned (for example <code>#3 · red · pencil</code>). Hover a label to see the
+        frame's seed and prompt. A sweep of two or more wildcards opens as a <b>grid</b>: the last
+        wildcard's options across, the others down. <b>Frames</b> in the header switches back to
+        the list.
+      </p>
+      <p>
+        <b>Send to Loop</b> writes your picks back to the loop: the picked frames' seeds are
+        locked (when the loop overrides seeds) and every other frame is bypassed, so the next run
+        repeats only what you kept.
+      </p>
+    </DocSection>
+
+    <DocSection title="Refine before it goes on">
+      <p>
+        In the zoom, the <b>Refine</b> panel edits the frame's positive and negative prompt and
+        paints a mask for the upscaler. Edits travel with the picks; tiles show ✎ for an edited
+        prompt and ◐ for a painted mask.
+      </p>
+      <ul>
+        <li>An edited prompt replaces the text output. Wire a <b>CLIP</b> into the filter's
+          <code>clip</code> input and the conditioning is re-encoded to match; without one the
+          conditioning stays as it was, and the panel says so.</li>
+        <li>With <b>Same shape</b> a frame's picks go on together, so a prompt edit covers the
+          whole frame. With <b>One per image</b> it covers just that image.</li>
+        <li>A painted mask goes to the <code>masks</code> output, resized to the image. Images you
+          don't paint keep the incoming mask, or an empty one when nothing is wired in.</li>
+      </ul>
+      <figure class="wp-doc-figure">
+        <img :src="picksDiagram" alt="How the picks carry over: images, latents, masks, conditioning and prompt text of picked frames go on; an edited prompt is re-encoded and a painted mask goes to the masks output." loading="lazy">
+      </figure>
     </DocSection>
 
     <DocSection title="Settings on the node">
@@ -99,3 +139,8 @@ const settings = [
     </DocSection>
   </DocPage>
 </template>
+
+<style scoped>
+.wp-doc-figure { margin: 12px 0 0; }
+.wp-doc-figure img { display: block; max-width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--wp-border, #34343a); }
+</style>

@@ -7,10 +7,11 @@ Pauses the run so you can pick which images go on. Everything that belongs to an
 Every input has a matching output. Connect only what you need.
 
 - **images**: the images to pick from. Required; this is what the picker shows.
-- **latent**, **masks**: sliced to the picked images.
+- **latent**, **masks**: sliced to the picked images. A mask you paint in the picker replaces that image's mask.
 - **positive**, **negative**: CONDITIONING. A batched conditioning is sliced with the images; a single one is kept for each frame that keeps any image.
 - **positive_text**, **negative_text**: the prompt strings, kept or dropped with their frame.
 - **context**: the WP Context of each frame, kept or dropped with it.
+- **clip** (input only, optional): re-encodes a prompt you edit in the picker, so the positive/negative conditioning follows the edit. Without it an edit changes only the text outputs.
 - **extra_1**, **extra_2**: any type. The output takes the type of what you connect. Batched values are sliced; anything else follows its frame.
 - **picks** (output only): what was kept, as `frame:image` (1-based), for example `1:2, 3:1`.
 
@@ -19,15 +20,31 @@ A Context Loop (or any list) makes one **frame** per iteration. Lists line up by
 ## The picker
 
 - Click an image to pick it. Click a frame's label to pick the whole frame. Ctrl+A picks everything.
-- **Space** zooms the image under the mouse. In the zoom, ←/→ move and ↑ picks.
+- **Space** zooms the image under the mouse, or leaves the zoom. In the zoom, ←/→ move and ↑ picks. The picker remembers: leave it zoomed and the next one opens zoomed.
+- **C** (in the zoom) pins the image; step to another and a slider compares the two. **C** again stops.
 - **Enter** or **Keep N picked** sends the picks on. **Keep all** sends everything. **Stop branch** stops the nodes after this one; the rest of the run finishes normally.
-- A short chime plays when the picker opens, so you hear it from another tab. Turn it off under **Settings → Wildcard Pipeline → Runtime behavior → Image Filter sound**.
+- A short chime plays when the picker opens, and the tab title starts with **● Pick images** while something waits. Turn the chime off under **Settings → Wildcard Pipeline → Runtime behavior → Image Filter sound**. Turn on **Image Filter desktop notification** there to also get a system notification while the tab is in the background.
 - **Escape** or the − button tucks the picker away. A "waiting" pill stays at the bottom of the screen and reopens it with your picks still there.
+
+## Labels, sweep grid and Send to Loop
+
+- With a Context Loop, each frame is labelled with its number and the options its sweep pinned, for example `#3 · red · pencil`. Hover a label for the frame's seed and prompt.
+- A sweep of two or more wildcards opens as a **grid**: the last wildcard's options across, the others down. **Frames** in the header switches back to the list.
+- **Send to Loop** writes your picks back to the loop: picked frames get their seeds locked (when the loop overrides seeds) and every other frame is bypassed, so the next run repeats only what you kept.
+
+## Refine before it goes on
+
+In the zoom, the **Refine** panel edits the frame's prompts and paints a mask for the upscaler. Tiles show ✎ for an edited prompt and ◐ for a painted mask.
+
+- An edited prompt replaces the text output. With a CLIP wired into **clip**, the conditioning is re-encoded to match; without one it stays as it was, and the panel says so.
+- With **Same shape** a frame's picks go on together, so a prompt edit covers the whole frame. With **One per image** it covers just that image.
+- **M** or **Paint** opens the mask painter: brush, eraser, size, invert and clear. The mask goes to the **masks** output, resized to the image. Images you don't paint keep the incoming mask, or an empty one when nothing is wired in.
+
+![How the picks carry over](images/how-picks-carry-over.webp)
 
 ## Settings on the node
 
 - **Mode**: **Pause & pick** asks every run. **Reuse last picks** keeps the same picks without asking, and asks again when they no longer fit (for example the batch size changed). **Pass all** lets everything through.
-- **Nothing picked**: what to do when no image is picked: stop this branch, or keep all.
 - **Send picks as**: **Same shape** keeps each frame's picks together as one batch. **One per image** sends every pick as its own item, with its own copy of the frame's prompt, conditioning and Context.
 - **Timeout**: seconds to wait. 0 waits until you answer. After a timeout it keeps all, keeps the first image, or stops the branch.
 
