@@ -38,6 +38,7 @@ class Schema:
     is_experimental: bool = False
     is_deprecated: bool = False
     accept_all_inputs: bool = False
+    is_input_list: bool = False
 
 
 # ------------------------------------------------------------ NodeOutput ---
@@ -133,6 +134,50 @@ Boolean = _IOType("BOOLEAN")
 String = _IOType("STRING")
 Model = _IOType("MODEL")
 AnyType = _IOType("*")
+Image = _IOType("IMAGE")
+Latent = _IOType("LATENT")
+Mask = _IOType("MASK")
+Conditioning = _IOType("CONDITIONING")
+
+
+class _MatchTemplate:
+    def __init__(self, template_id: str, allowed_types: Any = None):
+        self.template_id = template_id
+        self.allowed_types = allowed_types
+
+
+class _MatchType:
+    """Stand-in for ``io.MatchType``: an input/output whose type is resolved
+    on the canvas from what gets connected (``"*"`` until then)."""
+
+    Template = _MatchTemplate
+
+    @staticmethod
+    def Input(id: str, template: Any = None, **kwargs: Any) -> _Slot:
+        del template
+        return _Slot(kind="input", type_name="*", name=id, **kwargs)
+
+    @staticmethod
+    def Output(
+        template: Any = None,
+        id: str | None = None,
+        display_name: str | None = None,
+        tooltip: str | None = None,
+        is_output_list: bool = False,
+    ) -> _Slot:
+        # Same positional order as the real `MatchType.Output(template, id, …)`.
+        del template
+        return _Slot(
+            kind="output",
+            type_name="*",
+            name=id or "",
+            display_name=display_name,
+            tooltip=tooltip,
+            is_output_list=is_output_list,
+        )
+
+
+MatchType = _MatchType()
 
 
 class _ComboType:
@@ -327,6 +372,11 @@ class _IONamespace:
     Model = Model
     Combo = Combo
     AnyType = AnyType
+    Image = Image
+    Latent = Latent
+    Mask = Mask
+    Conditioning = Conditioning
+    MatchType = MatchType
     Autogrow = _Autogrow
     Custom = staticmethod(Custom)
     WidgetInput = WidgetInput

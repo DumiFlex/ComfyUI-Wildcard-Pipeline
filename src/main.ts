@@ -14,6 +14,8 @@ const {
   injMod,
   cleanerMod,
   modelInfoMod,
+  imageFilterWidgetMod,
+  imageFilterMod,
   varPickerMod,
   ctxLoopMod,
   seedListMod,
@@ -32,6 +34,7 @@ const {
   loadToast,
   loadPlayground,
   loadSubgraphBadge,
+  loadImageFilterPicker,
 } = await import("./boot");
 
 // Singleton toast container — one Vue app mounted to a body-level div renders
@@ -75,6 +78,20 @@ watch(playgroundStoreMod.playgroundOpen, (open) => {
   });
 });
 
+// WP Image Filter: listen for nodes that pause for a pick. The picker (its own
+// chunk) mounts the first time one does, as one body-level app like the toasts.
+imageFilterMod.installImageFilter(
+  (app as unknown as { api?: Parameters<typeof imageFilterMod.installImageFilter>[0] }).api,
+  () => {
+    void loadImageFilterPicker().then((m) => {
+      const root = document.createElement("div");
+      root.id = "wp-image-filter-root";
+      document.body.appendChild(root);
+      createApp(m.default).mount(root);
+    });
+  },
+);
+
 // Global clipboard shield. WP modals Teleport to <body>, so their editable
 // inputs (the Injector variable-binding field, instance-edit modals, blocklist,
 // pickers, …) sit OUTSIDE the per-widget `inner` shield — Ctrl+A/C/V there
@@ -104,6 +121,7 @@ type DebugCreateNode = Parameters<typeof dbgMod.create>[0];
 type InjectorCreateNode = Parameters<typeof injMod.create>[0];
 type CleanerCreateNode = Parameters<typeof cleanerMod.create>[0];
 type ModelInfoCreateNode = Parameters<typeof modelInfoMod.create>[0];
+type ImageFilterCreateNode = Parameters<typeof imageFilterWidgetMod.create>[0];
 type VarPickerCreateNode = Parameters<typeof varPickerMod.create>[0];
 type CtxLoopCreateNode = Parameters<typeof ctxLoopMod.create>[0];
 type SeedListCreateNode = Parameters<typeof seedListMod.create>[0];
@@ -216,6 +234,8 @@ app.registerExtension({
         seedListMod.create(node, inputName),
       WP_MODEL_INFO: (node: ModelInfoCreateNode, inputName: string) =>
         modelInfoMod.create(node, inputName),
+      WP_IMAGE_FILTER: (node: ImageFilterCreateNode, inputName: string) =>
+        imageFilterWidgetMod.create(node, inputName),
       // The assembler's `template`. Unlike every other entry here, this key
       // is NOT the input's socket type — the socket stays STRING so links
       // still work, and the node ships `widgetType` in the input spec's

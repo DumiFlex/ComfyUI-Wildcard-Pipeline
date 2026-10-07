@@ -676,6 +676,47 @@ class ContextLoopWidgetInput(ComfyTypeIO):
             )
 
 
+@comfytype(io_type="WP_IMAGE_FILTER")
+class ImageFilterWidgetInput:
+    """Widget-only custom type — frontend binds ``getCustomWidgets["WP_IMAGE_FILTER"]``.
+
+    JSON ``{mode, nothing_picked, send_as, timeout, on_timeout}`` for
+    WP_ImageFilter, parsed by ``engine/image_filter.py::parse_config``. The
+    same DOM widget shows the last run's picks.
+    """
+
+    Type = str
+
+    class Input(io.WidgetInput):
+        def __init__(
+            self,
+            id: str,
+            display_name: str | None = None,
+            optional: bool = False,
+            tooltip: str | None = None,
+            lazy: bool | None = None,
+            default: str | None = None,
+            socketless: bool | None = None,
+            extra_dict: dict[str, Any] | None = None,
+            raw_link: bool | None = None,
+            advanced: bool | None = None,
+        ):
+            super().__init__(
+                id,
+                display_name,
+                optional,
+                tooltip,
+                lazy,
+                default,
+                socketless,
+                None,  # widget_type
+                None,  # force_input
+                extra_dict,
+                raw_link,
+                advanced,
+            )
+
+
 @comfytype(io_type="WP_SEED_LIST_CONFIG")
 class SeedListConfigInput(ComfyTypeIO):
     """Custom type — Input renders as a widget via
