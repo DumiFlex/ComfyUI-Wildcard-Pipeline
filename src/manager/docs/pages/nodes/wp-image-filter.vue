@@ -92,9 +92,10 @@ const settings = [
       <p>
         With a <b>Context Loop</b>, each frame is labelled with its number and the options its
         sweep pinned (for example <code>#3 · red · pencil</code>). Hover a label to see the
-        frame's seed and prompt. A sweep of two or more wildcards opens as a <b>grid</b>: the last
-        wildcard's options across, the others down. <b>Frames</b> in the header switches back to
-        the list.
+        frame's seed and prompt. A sweep of two or more wildcards opens as a <b>grid</b>. The bar above it picks
+        which wildcard goes on <b>Rows</b> and which on <b>Columns</b> (⇄ swaps them); any others
+        <b>Split by</b>, one small grid per value. Click a row, column or group name to pick all of
+        it. <b>Frames</b> in the header switches back to the list.
       </p>
       <p>
         <b>Send to Loop</b> writes your picks back to the loop: the picked frames' seeds are

@@ -29,7 +29,7 @@ A Context Loop (or any list) makes one **frame** per iteration. Lists line up by
 ## Labels, sweep grid and Send to Loop
 
 - With a Context Loop, each frame is labelled with its number and the options its sweep pinned, for example `#3 · red · pencil`. Hover a label for the frame's seed and prompt.
-- A sweep of two or more wildcards opens as a **grid**: the last wildcard's options across, the others down. **Frames** in the header switches back to the list.
+- A sweep of two or more wildcards opens as a **grid**. The bar above it picks which wildcard goes on **Rows** and which on **Columns** (⇄ swaps them); any others **Split by**, one small grid per value. Click a row, column or group name to pick all of it. **Frames** in the header switches back to the list.
 - **Send to Loop** writes your picks back to the loop: picked frames get their seeds locked (when the loop overrides seeds) and every other frame is bypassed, so the next run repeats only what you kept.
 
 ## Refine before it goes on

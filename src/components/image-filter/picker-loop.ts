@@ -104,44 +104,107 @@ export function frameParts(label: FrameLabel | undefined, frame: number, axes: r
   return parts;
 }
 
-export interface SweepGrid {
-  /** Row header text (the swept options of every axis but the last). */
-  rows: string[];
-  /** Column header text (the last axis's options). */
-  cols: string[];
-  rowAxis: string;
-  colAxis: string;
+/** Which swept wildcard goes where in the grid (indices into the axes).
+ *  Every axis not on rows or columns splits the grid into groups. */
+export interface GridLayout {
+  rows: number;
+  cols: number;
+}
+
+export interface GridHeader {
+  /** Index of the axis, for its colour. */
+  axis: number;
+  name: string;
+}
+
+export interface GridGroup {
+  /** One `{axis, name, value}` per split axis; empty when nothing splits. */
+  title: { axis: number; name: string; value: string }[];
   /** `cells[r][c]` is a frame index, or -1 for a combination not present. */
   cells: number[][];
+  /** Every frame in the group, for "pick the whole group". */
+  frames: number[];
+}
+
+export interface SweepGrid {
+  rowAxis: GridHeader;
+  colAxis: GridHeader;
+  splitAxes: GridHeader[];
+  /** Row header text (the row axis's options). */
+  rows: string[];
+  /** Column header text (the column axis's options). */
+  cols: string[];
+  groups: GridGroup[];
+}
+
+/** Rows on the first axis, columns on the second, the rest split. */
+export function defaultGridLayout(): GridLayout {
+  return { rows: 0, cols: 1 };
 }
 
 /**
- * Lay a sweep of two or more wildcards out as a grid: the last wildcard's
- * options across, every combination of the others down. Null when the frames
- * don't all carry a pin for every axis (not a sweep, or a mixed list).
+ * Put `axis` in `slot`; the axis that held the slot takes `axis`'s old place
+ * (the other slot, or the split). Rows and columns never share an axis.
  */
-export function sweepGrid(labels: readonly FrameLabel[], axes: readonly SweepAxisInfo[]): SweepGrid | null {
-  if (axes.length < 2 || !labels.length) return null;
-  const rowAxes = axes.slice(0, -1);
-  const colAxis = axes[axes.length - 1];
-  const rowKeys: string[] = [];
-  const colKeys: string[] = [];
+export function moveAxis(layout: GridLayout, slot: "rows" | "cols", axis: number): GridLayout {
+  const other = slot === "rows" ? "cols" : "rows";
+  if (layout[other] === axis) return { rows: layout.cols, cols: layout.rows };
+  return { ...layout, [slot]: axis };
+}
+
+/**
+ * Lay a sweep of two or more wildcards out as a grid: one axis down, one
+ * across, and one small grid per combination of the others. Options keep
+ * the order the loop swept them in. Null when the frames don't all carry a
+ * pin for every axis (not a sweep, or a mixed list) or the layout doesn't fit.
+ */
+export function sweepGrid(
+  labels: readonly FrameLabel[],
+  axes: readonly SweepAxisInfo[],
+  layout: GridLayout = defaultGridLayout(),
+): SweepGrid | null {
+  const n = axes.length;
+  const { rows: ri, cols: ci } = layout;
+  if (n < 2 || !labels.length || ri === ci || ri < 0 || ci < 0 || ri >= n || ci >= n) return null;
+  const split = axes.map((_, i) => i).filter((i) => i !== ri && i !== ci);
+  const rowAxis = axes[ri];
+  const colAxis = axes[ci];
+  const rowIds: string[] = [];
+  const colIds: string[] = [];
+  const groupKeys: string[] = [];
+  const groupIds: string[][] = [];
   const at = new Map<string, number>();
+  const SEP = "\u0000";
   for (let f = 0; f < labels.length; f++) {
     const pins = labels[f].pins ?? {};
     if (!axes.every((a) => pins[a.uid] !== undefined)) return null;
-    const rk = rowAxes.map((a) => pins[a.uid]).join("\u0000");
-    const ck = pins[colAxis.uid];
-    if (!rowKeys.includes(rk)) rowKeys.push(rk);
-    if (!colKeys.includes(ck)) colKeys.push(ck);
-    at.set(`${rk}\u0001${ck}`, f);
+    const r = pins[rowAxis.uid];
+    const c = pins[colAxis.uid];
+    const gIds = split.map((i) => pins[axes[i].uid]);
+    const g = gIds.join(SEP);
+    if (!rowIds.includes(r)) rowIds.push(r);
+    if (!colIds.includes(c)) colIds.push(c);
+    if (!groupKeys.includes(g)) {
+      groupKeys.push(g);
+      groupIds.push(gIds);
+    }
+    at.set([g, r, c].join("\u0001"), f);
   }
+  const header = (i: number): GridHeader => ({ axis: i, name: axes[i].name });
   return {
-    rows: rowKeys.map((rk) => rk.split("\u0000").map((id, i) => rowAxes[i].labels[id] ?? id).join(" · ")),
-    cols: colKeys.map((id) => colAxis.labels[id] ?? id),
-    rowAxis: rowAxes.map((a) => a.name).join(" · "),
-    colAxis: colAxis.name,
-    cells: rowKeys.map((rk) => colKeys.map((ck) => at.get(`${rk}\u0001${ck}`) ?? -1)),
+    rowAxis: header(ri),
+    colAxis: header(ci),
+    splitAxes: split.map(header),
+    rows: rowIds.map((id) => rowAxis.labels[id] ?? id),
+    cols: colIds.map((id) => colAxis.labels[id] ?? id),
+    groups: groupKeys.map((g, gi) => {
+      const cells = rowIds.map((r) => colIds.map((c) => at.get([g, r, c].join("\u0001")) ?? -1));
+      return {
+        title: split.map((i, k) => ({ axis: i, name: axes[i].name, value: axes[i].labels[groupIds[gi][k]] ?? groupIds[gi][k] })),
+        cells,
+        frames: cells.flat().filter((f) => f >= 0),
+      };
+    }),
   };
 }
 

@@ -14,13 +14,14 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import ModalShell from "../shared/ModalShell.vue";
 import MaskPainter from "./MaskPainter.vue";
 import PickerTile from "./PickerTile.vue";
+import SweepGrid from "./SweepGrid.vue";
 import { pickKey, viewUrl, type Pick, type PickAnswer, type PickEdits, type ImageRef } from "./types";
 import type { WaitingRequest } from "../../extension/image-filter";
 import { draftPicks, saveDraftPicks, secondsLeft } from "../../extension/image-filter";
 import type { LiteGraphLike } from "../../extension/graph";
 import { editLoopConfig } from "../../widgets/context_loop";
 import { pushToast } from "../shared/toast-store";
-import { findLoop, frameParts, loopEdit, sweepGrid } from "./picker-loop";
+import { defaultGridLayout, findLoop, frameParts, loopEdit, sweepGrid, type GridLayout } from "./picker-loop";
 import {
   draftEdits, dropDraftEdits, editsFor, hasEdit, readZoomPref, saveDraftEdits,
   withMask, withText, writeZoomPref,
@@ -73,6 +74,18 @@ function toggleFrame(frame: number): void {
   }
   picked.value = next;
 }
+/** Pick every image of these frames, or clear them when all are picked. */
+function toggleFrames(list: readonly number[]): void {
+  const keys = list.flatMap((f) => frameKeys(f));
+  if (!keys.length) return;
+  const allOn = keys.every((k) => picked.value.has(k));
+  const next = new Set(picked.value);
+  for (const k of keys) {
+    if (allOn) next.delete(k);
+    else next.add(k);
+  }
+  picked.value = next;
+}
 function toggleAll(): void {
   picked.value = picked.value.size === total.value ? new Set() : new Set(cells.value.map((c) => c.key));
 }
@@ -87,7 +100,9 @@ const pickedFrames = computed(() => pickedFrameSet.value.size);
 
 const loop = computed(() => findLoop(labels.value, props.graph));
 const axes = computed(() => loop.value?.axes ?? []);
-const grid = computed(() => sweepGrid(labels.value, axes.value));
+const layout = ref<GridLayout>(defaultGridLayout());
+watch(() => axes.value.map((a) => a.uid).join(" "), () => { layout.value = defaultGridLayout(); });
+const grid = computed(() => sweepGrid(labels.value, axes.value, layout.value));
 const view = ref<"grid" | "frames">("grid");
 const showGrid = computed(() => view.value === "grid" && !!grid.value);
 
@@ -436,37 +451,19 @@ function indexOf(frame: number, image: number): number {
       </div>
 
       <div v-else-if="showGrid && grid" class="wp-ifp__body is-grid" data-test="image-filter-grid">
-        <table class="wp-ifp__grid">
-          <thead>
-            <tr>
-              <th class="wp-ifp__corner"><span>{{ grid.rowAxis }}</span> ╲ <span>{{ grid.colAxis }}</span></th>
-              <th v-for="(c, ci) in grid.cols" :key="ci" class="wp-ifp__col">{{ c }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(r, ri) in grid.rows" :key="ri">
-              <th class="wp-ifp__row-head">{{ r }}</th>
-              <td v-for="(f, ci) in grid.cells[ri]" :key="ci" class="wp-ifp__grid-cell">
-                <div v-if="f >= 0" class="wp-ifp__tiles" :data-test="`image-filter-frame-${f}`" :title="frameTooltip(f)">
-                  <PickerTile
-                    v-for="(img, i) in frames[f]"
-                    :key="i"
-                    :src="viewUrl(img)"
-                    :picked="picked.has(pickKey(f, i))"
-                    :index="(frames[f]?.length ?? 0) > 1 ? i + 1 : 0"
-                    :edited="isEditedCell(pickKey(f, i))"
-                    :masked="isMaskedCell(pickKey(f, i))"
-                    :test-id="`image-filter-tile-${f}-${i}`"
-                    @toggle="toggle(pickKey(f, i))"
-                    @zoom="setZoom(indexOf(f, i))"
-                    @hover="(on) => (hovered = on ? indexOf(f, i) : null)"
-                  />
-                </div>
-                <span v-else class="wp-ifp__empty">—</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <SweepGrid
+          v-model:layout="layout"
+          :grid="grid"
+          :axes="axes"
+          :frames="frames"
+          :picked="picked"
+          :edits="edits"
+          :tooltip="frameTooltip"
+          @toggle="toggle"
+          @toggle-frames="toggleFrames"
+          @zoom="(f, i) => setZoom(indexOf(f, i))"
+          @hover="(f, i, on) => (hovered = on ? indexOf(f, i) : null)"
+        />
       </div>
 
       <div v-else class="wp-ifp__body" :class="{ 'is-flat': !multiFrame }">
@@ -560,7 +557,7 @@ function indexOf(frame: number, image: number): number {
 .wp-ifp__seg--full button { flex: 1; }
 
 .wp-ifp__body { overflow-y: auto; padding: 12px 14px; flex: 1; min-height: 0; display: flex; flex-wrap: wrap; gap: 10px; align-content: flex-start; }
-.wp-ifp__body.is-grid { display: block; overflow: auto; }
+.wp-ifp__body.is-grid { display: flex; flex-direction: column; flex-wrap: nowrap; padding: 0; overflow: hidden; }
 .wp-ifp__frame { display: flex; flex-direction: column; gap: 4px; padding: 6px; border-radius: 5px; background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); --wp-ifp-tile: 150px; }
 .wp-ifp__frame.is-flat { padding: 0; background: transparent; border: 0; width: 100%; --wp-ifp-tile: 200px; }
 .wp-ifp__frame-label { align-self: flex-start; max-width: 100%; background: transparent; border: 0; padding: 0 2px; font: 10px var(--wp-font-mono, monospace); color: var(--wp-text-dim, var(--wp-text3)); cursor: pointer; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -569,13 +566,6 @@ function indexOf(frame: number, image: number): number {
 .wp-ifp__sep { margin: 0 4px; opacity: .6; }
 .wp-ifp__tiles { display: flex; flex-wrap: wrap; gap: 6px; }
 
-.wp-ifp__grid { border-collapse: separate; border-spacing: 6px; --wp-ifp-tile: 140px; }
-.wp-ifp__grid th { font: 10.5px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); text-align: center; padding: 2px 4px; }
-.wp-ifp__corner { color: var(--wp-text-dim, var(--wp-text3)) !important; font-family: var(--wp-font-mono, monospace) !important; white-space: nowrap; }
-.wp-ifp__col { border-bottom: 1px solid var(--wp-border); }
-.wp-ifp__row-head { text-align: right !important; border-right: 1px solid var(--wp-border); max-width: 160px; }
-.wp-ifp__grid-cell { vertical-align: top; padding: 4px; border-radius: 5px; background: var(--wp-bg-deep, var(--wp-bg)); }
-.wp-ifp__empty { display: block; text-align: center; color: var(--wp-text-dim, var(--wp-text3)); }
 
 .wp-ifp__zoom { flex: 1; min-height: 0; display: flex; }
 .wp-ifp__stage { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; }

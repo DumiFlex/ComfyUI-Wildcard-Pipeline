@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { frameParts, loopEdit, sweepGrid, type SweepAxisInfo } from "./picker-loop";
+import { frameParts, loopEdit, moveAxis, sweepGrid, type SweepAxisInfo } from "./picker-loop";
 import { parseContextLoopConfig } from "../context-loop/types";
 import type { FrameLabel } from "./types";
 
@@ -22,24 +22,59 @@ describe("frameParts", () => {
   });
 });
 
+const mood: SweepAxisInfo = { uid: "m1", name: "$mood", labels: { c: "calm", s: "stormy" } };
+
+function sweep3(): FrameLabel[] {
+  const out: FrameLabel[] = [];
+  for (const c of ["r", "b"]) for (const s of ["o", "w", "p"]) for (const m of ["c", "s"]) {
+    out.push({ loop_index: out.length, pins: { c1: c, s1: s, m1: m } });
+  }
+  return out;
+}
+
 describe("sweepGrid", () => {
-  it("puts the last axis across and the others down", () => {
+  it("puts the first axis down and the second across", () => {
     const g = sweepGrid(sweep(), [color, style]);
-    expect(g).toEqual({
-      rows: ["red", "blue"],
-      cols: ["oil", "watercolor", "pencil"],
-      rowAxis: "$color",
-      colAxis: "$style",
-      cells: [[0, 1, 2], [3, 4, 5]],
-    });
+    expect(g?.rowAxis).toEqual({ axis: 0, name: "$color" });
+    expect(g?.colAxis).toEqual({ axis: 1, name: "$style" });
+    expect(g?.splitAxes).toEqual([]);
+    expect(g?.rows).toEqual(["red", "blue"]);
+    expect(g?.cols).toEqual(["oil", "watercolor", "pencil"]);
+    expect(g?.groups).toEqual([{ title: [], cells: [[0, 1, 2], [3, 4, 5]], frames: [0, 1, 2, 3, 4, 5] }]);
+  });
+  it("splits a third axis into one grid per value", () => {
+    const g = sweepGrid(sweep3(), [color, style, mood]);
+    expect(g?.splitAxes).toEqual([{ axis: 2, name: "$mood" }]);
+    expect(g?.groups.map((x) => x.title)).toEqual([
+      [{ axis: 2, name: "$mood", value: "calm" }],
+      [{ axis: 2, name: "$mood", value: "stormy" }],
+    ]);
+    expect(g?.groups[0].cells).toEqual([[0, 2, 4], [6, 8, 10]]);
+    expect(g?.groups[1].cells).toEqual([[1, 3, 5], [7, 9, 11]]);
+  });
+  it("follows the layout", () => {
+    const g = sweepGrid(sweep3(), [color, style, mood], { rows: 2, cols: 0 });
+    expect(g?.rows).toEqual(["calm", "stormy"]);
+    expect(g?.cols).toEqual(["red", "blue"]);
+    expect(g?.groups.map((x) => x.title[0].value)).toEqual(["oil", "watercolor", "pencil"]);
+    expect(g?.groups[0].cells).toEqual([[0, 6], [1, 7]]);
   });
   it("marks missing combinations with -1", () => {
     const labels = sweep().filter((l) => l.loop_index !== 4);
-    expect(sweepGrid(labels, [color, style])?.cells).toEqual([[0, 1, 2], [3, -1, 4]]);
+    expect(sweepGrid(labels, [color, style])?.groups[0].cells).toEqual([[0, 1, 2], [3, -1, 4]]);
   });
-  it("needs two axes and a pin for every axis on every frame", () => {
+  it("needs two axes, a valid layout and a pin for every axis on every frame", () => {
     expect(sweepGrid(sweep(), [color])).toBeNull();
+    expect(sweepGrid(sweep(), [color, style], { rows: 1, cols: 1 })).toBeNull();
+    expect(sweepGrid(sweep(), [color, style], { rows: 0, cols: 2 })).toBeNull();
     expect(sweepGrid([...sweep(), { loop_index: 9 }], [color, style])).toBeNull();
+  });
+});
+
+describe("moveAxis", () => {
+  it("puts an axis in a slot and swaps when it was in the other slot", () => {
+    expect(moveAxis({ rows: 0, cols: 1 }, "rows", 2)).toEqual({ rows: 2, cols: 1 });
+    expect(moveAxis({ rows: 0, cols: 1 }, "cols", 0)).toEqual({ rows: 1, cols: 0 });
   });
 });
 
