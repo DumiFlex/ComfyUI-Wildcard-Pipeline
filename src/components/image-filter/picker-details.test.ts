@@ -33,6 +33,15 @@ describe("picker details", () => {
     expect(promptRuns("", rows)).toEqual([]);
   });
 
+  it("only marks whole words", () => {
+    const rows = [{ name: "a", value: "camelto", axis: -1 }, { name: "b", value: "red", axis: -1 }];
+    expect(promptRuns("cameltoe, red, redhead", rows)).toEqual([
+      { text: "cameltoe, " },
+      { text: "red", name: "b", axis: -1 },
+      { text: ", redhead" },
+    ]);
+  });
+
   it("copies values as $name: value lines", () => {
     expect(valuesText([{ name: "hair", value: "red", axis: 0 }], 42)).toBe("$hair: red\nseed: 42");
   });

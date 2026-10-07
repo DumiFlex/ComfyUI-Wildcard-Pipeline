@@ -7,5 +7,6 @@
 ### Fixes
 
 - **Sweep combinations can clear a wildcard's options in one click.** Next to **all** and **enabled only** there is now **none**, so you can untick everything and pick just the few options you want instead of unticking them one by one. A wildcard with nothing ticked sweeps nothing until you tick one.
+- **Editing a loop frame goes back to base when that frame goes away.** With frame #5 picked under **edit frame**, lowering the count below 5 or changing the sweep left you editing a frame that no longer existed (or now meant a different combination). It now switches back to **base**.
 - **Frame locks and bypasses no longer come back on the wrong frame.** Lowering a Context Loop's count used to keep the seed locks and bypasses of the frames past it, and raising the count again brought them back. Now they are dropped. Changing a sweep moves each lock and bypass with its combination, or drops it when that combination no longer runs.
 - **The loop's count is locked while a sweep is on.** The sweep decides how many frames run, so the count field now greys out and shows the sweep's frame count instead of looking editable.
