@@ -75,6 +75,24 @@ const ALL_RULES: {
     tooltip: "Drop tags that are only punctuation (e.g. lone '.'). Strip leading/trailing punctuation from each tag (tags mode) or from the whole string (text mode).",
   },
   {
+    id: "empty_groups",
+    label: "empty groups",
+    statKey: "removed",
+    tooltip: "Remove brackets with nothing inside: (), [], ( , ) and (:1.2), e.g. a weighted ref that resolved to nothing. Escaped \\( \\) and unbalanced brackets are left alone.",
+  },
+  {
+    id: "merge_weights",
+    label: "merge weights",
+    statKey: "merged",
+    tooltip: "Fold nested weights into one group the way ComfyUI multiplies them: ((a:1.1):1.2) → (a:1.32), ((a)) → (a:1.21). A weight of 1 is unwrapped: (a:1.0) → a. Rounded to 2 decimals.",
+  },
+  {
+    id: "lora_spacing",
+    label: "LoRA spacing",
+    statKey: "tidied",
+    tooltip: "Tidy <lora:…> tags: < lora : x : 0.8 > → <lora:x:0.8>, and give a tag touching a word a space (girl<lora:x:1> → girl <lora:x:1>). Spaces inside a file name stay.",
+  },
+  {
     id: "dedupe_exact",
     label: "tag dedupe",
     statKey: "dropped",
@@ -103,8 +121,8 @@ const MODE_TOOLTIPS = {
 
 const INTENSITY_TOOLTIPS = {
   gentle: "Gentle: whitespace cleanup only.",
-  balanced: "Balanced: whitespace + punctuation + exact tag dedupe.",
-  aggressive: "Aggressive: all rules including fuzzy dedupe.",
+  balanced: "Balanced: empty groups + LoRA spacing + whitespace + punctuation + exact tag dedupe.",
+  aggressive: "Aggressive: balanced plus merge weights and fuzzy dedupe.",
 };
 
 const INTENSITIES: Intensity[] = ["gentle", "balanced", "aggressive"];

@@ -65,6 +65,44 @@ const controls = [
       </ul>
     </DocSection>
 
+    <DocSection title="Sweep combinations">
+      <p>
+        Open <b>Sweep combinations</b> from the loop node and switch it on to compare options side
+        by side instead of rolling them. Pick one or more wildcards from the WP Context nodes after the loop, choose which of their
+        options to include, and the loop runs <em>every combination</em>, one frame each. Sweep
+        <VarToken>$hair</VarToken> (3 options) against <VarToken>$mood</VarToken> (2 options) and a
+        single Generate makes 6 frames: red + calm, red + sad, blue + calm, and so on. The menu
+        shows the total and lists every frame before you run, the node's button shows the frame
+        count, and the count widget follows it.
+      </p>
+      <ul>
+        <li>
+          <b>Order</b> — the first wildcard changes slowest and the last one fastest, so a
+          two-wildcard sweep reads like a grid: one row per option of the first, one column per
+          option of the second. Use the arrow to reorder.
+        </li>
+        <li>
+          <b>Limit</b> — the most frames a sweep runs (64 by default, up to 999). When the
+          combinations outnumber it, the loop runs the first ones in order and says so.
+        </li>
+        <li>
+          <b>Hold other picks</b> (on by default) — everything you are not sweeping keeps the same
+          pick on every frame, so the only thing that changes is what you swept. Turn it off to let
+          the rest re-roll per frame as in a normal loop.
+        </li>
+      </ul>
+      <p>
+        Each frame pins the swept wildcards exactly like pinning an option by hand, so their tag
+        axes still roll and constraints they drive still apply downstream. A swept wildcard is not
+        itself re-weighted by constraints, because the sweep decides its pick. Frame bypass and
+        per-frame overrides work as usual.
+      </p>
+      <DocCallout variant="tip">
+        For a clean comparison, keep the sampler on one fixed seed (a plain KSampler already does),
+        so the image only changes where the prompt does.
+      </DocCallout>
+    </DocSection>
+
     <DocSection title="Iteration variables">
       <p>
         Each run, the loop hands you two variables to drop into your prompt template or any combine:

@@ -9,6 +9,9 @@
  *   2. Clipboard paste — opens a textarea modal-style block. User
  *      pastes raw JSON, hits Parse, same pipeline.
  *
+ * Wildcard files (Dynamic Prompts / PPP / Impact Pack) dropped here are
+ * handed to the Wildcard packs tab via `wildcard-files`.
+ *
  * Both paths feed `parsePayload` (see ./parse.ts), which runs JSON
  * shape → migration chain → fingerprint integrity verify. On success
  * we emit `payload-ready` with the migrated payload, the total
@@ -29,6 +32,11 @@
 import { computed, ref } from "vue";
 import { parsePayload, type IntegrityWarning } from "./parse";
 import type { RawPayload } from "./migrations";
+import {
+  looksLikeWpExport,
+  sourcesFromDrop,
+  type WildcardSource,
+} from "./wildcard-files";
 
 interface Props {
   /**
@@ -60,6 +68,9 @@ const emit = defineEmits<{
    * next render (its own `payloadLoaded` prop flips back to false).
    */
   (e: "replace-requested"): void;
+  /** Wildcard files were dropped (or the user asked for the pack
+   *  converter): the host switches to the Wildcard packs tab. */
+  (e: "wildcard-files", sources: WildcardSource[]): void;
 }>();
 
 const pasteOpen = ref<boolean>(false);
@@ -135,10 +146,26 @@ function onDragLeave(ev: DragEvent): void {
 async function onDrop(ev: DragEvent): Promise<void> {
   ev.preventDefault();
   isDragging.value = false;
-  const file = ev.dataTransfer?.files?.[0];
-  // Non-JSON files fall through to parsePayload, which rejects them with a
-  // clear inline "Invalid payload" message — no need to gate on extension.
-  if (file) await readAndParse(file);
+  const dt = ev.dataTransfer;
+  if (!dt) return;
+  const fallback = dt.files?.[0];
+  // Folder entries must be read during the drop event, before any await.
+  const sources = await sourcesFromDrop(dt);
+  if (sources.length === 1 && sources[0].path.toLowerCase().endsWith(".json")) {
+    // A single .json is either our export or a Dynamic Prompts JSON file.
+    const text = await sources[0].file.text();
+    if (looksLikeWpExport(text)) {
+      handleParse(text, "file");
+      return;
+    }
+  }
+  if (sources.length > 0) {
+    emit("wildcard-files", sources);
+    return;
+  }
+  // Anything else falls through to parsePayload, which rejects it with a
+  // clear inline "Invalid payload" message.
+  if (fallback) await readAndParse(fallback);
 }
 
 function openPaste(): void {
@@ -267,6 +294,13 @@ function handleParse(raw: string, source: "file" | "paste"): void {
     <template v-else>
       <p class="wp-import-tab__lead">
         Import a Wildcard Pipeline export file or paste an export payload below.
+        For Dynamic Prompts, Prompt-PostProcessor or Impact Pack wildcards, use
+        <button
+          type="button"
+          class="wp-import-tab__link"
+          data-test="import-open-packs"
+          @click="emit('wildcard-files', [])"
+        >Wildcard packs</button>.
       </p>
 
       <div
@@ -305,7 +339,7 @@ function handleParse(raw: string, source: "file" | "paste"): void {
         <p class="wp-import-tab__drophint" aria-hidden="true">
           <i class="pi pi-download" />
           <span v-if="isDragging">Drop to import</span>
-          <span v-else>or drag &amp; drop a <code>.json</code> export file here</span>
+          <span v-else>or drag &amp; drop a <code>.json</code> export, or a wildcard pack, here</span>
         </p>
       </div>
 
@@ -377,6 +411,15 @@ function handleParse(raw: string, source: "file" | "paste"): void {
   margin: 0;
   color: var(--wp-text-muted);
   font-size: var(--wp-text-sm);
+}
+.wp-import-tab__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--wp-accent-text);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 /* Drag-and-drop target wrapping the pick/paste buttons. The whole area

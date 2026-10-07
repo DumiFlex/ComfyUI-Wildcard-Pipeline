@@ -67,6 +67,8 @@ export interface RawDetail {
   filter?: string;
   exclude_null?: boolean;
   held?: boolean;
+  /** Schema v9: nothing else was left, so the fallback option was used. */
+  fallback?: boolean;
   range?: [number, number];
   independent?: boolean;
   constraints?: Array<{ id?: string; uid?: string; name?: string; source?: string; source_value?: unknown }>;
@@ -114,7 +116,7 @@ export interface RawRef {
 
 // ── View model ──────────────────────────────────────────────────────────
 
-export type Kind = "wildcard" | "fixed" | "combine" | "derivation" | "constraint" | "injector" | "unknown";
+export type Kind = "wildcard" | "fixed" | "combine" | "derivation" | "constraint" | "injector" | "model" | "unknown";
 export type StepStatus = "ok" | "off" | "frame" | "error" | "unknown" | "never";
 export type Severity = "info" | "warning" | "error";
 
@@ -276,6 +278,7 @@ export const WARNING_LABELS: Record<string, string> = {
   constraint_source_missing: "Constraint source missing",
   constraint_register_failed: "Constraint failed to register",
   constraint_excludes_all_options: "Constraint excluded every option",
+  fallback_used: "Fallback used",
   constraint_factor_ignored_on_allow: "Constraint factor ignored (allow)",
   unknown_constraint_mode: "Unknown constraint mode",
   fixed_values_overrides_malformed: "Fixed-values overrides malformed",
@@ -310,6 +313,7 @@ const KIND_LABELS: Record<Kind, string> = {
   derivation: "derivation",
   constraint: "constraint",
   injector: "injector",
+  model: "model info",
   unknown: "module",
 };
 
@@ -350,6 +354,7 @@ function str(v: unknown): string {
 
 function kindOf(entry: RawTraceEntry): Kind {
   if (entry.node === "WP_ContextInjector") return "injector";
+  if (entry.node === "WP_ModelInfo") return "model";
   switch (entry.type) {
     case "wildcard": return "wildcard";
     case "fixed_values": return "fixed";
@@ -523,7 +528,7 @@ export function buildModel(snap: Record<string, unknown>): DebugModel {
       overwrite: !!w.overwrite,
       negative: str(w.negative).trim(),
     }));
-    if (kind === "injector" && t.binding) {
+    if ((kind === "injector" || kind === "model") && t.binding) {
       writes.push({ variable: t.binding, value: formatValue(t.value), overwrite: false, negative: "" });
     }
     const declared = writes.length

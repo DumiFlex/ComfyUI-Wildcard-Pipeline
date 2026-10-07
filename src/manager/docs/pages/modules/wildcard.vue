@@ -16,9 +16,10 @@ const tagGroupKinds = [
 
 const optionFields = [
   { term: "Value", desc: 'The text that goes into the prompt when this option is picked — for example, "a cat", "a dog", or "a fox".' },
-  { term: "Weight", desc: "How likely this option is to be chosen relative to the others. A weight of 2 is twice as likely as a weight of 1. Set to 0 to disable without deleting — and if every option ends up at 0, whether you set them or a constraint excluded them, the wildcard resolves to nothing rather than quietly using the first one." },
+  { term: "Weight", desc: "How likely this option is to be chosen relative to the others. A weight of 2 is twice as likely as a weight of 1. Set to 0 to disable without deleting — and if every option ends up at 0, whether you set them or a constraint excluded them, the wildcard resolves to nothing (or to its fallback, below) rather than quietly using the first one." },
   { term: "Sub-categories", desc: 'Zero or more labels on an option (e.g. "feline", "warm") — an option can carry several at once. They group options in the editor, form the Constraint matrix axes, power bulk selection, and back the per-use category filter below. Tags can be organised into axes (e.g. species, temperature) so the editor shows grouped pills.' },
   { term: "Null option", desc: 'Marks this option as the "no pick" result — the wildcard resolves to an empty string. At most one option per wildcard can be a null option.' },
+  { term: "Fallback", desc: 'Hover an option\'s probability and click "set as fallback". The fallback rolls like any other option, with its own weight, and is also used when nothing is left to pick: constraints (an Only rule included) excluded every option, the fallback included, or every weight is 0. Give it weight 0 if it should only ever stand in. Without one the wildcard resolves to nothing in that case. One per wildcard; the null option can\'t be the fallback. Turning the fallback off for one use (its checkbox on the node) keeps the empty result there. WP Debug and the Test Runner say "Fallback used" when it kicks in. Shared wildcards with a fallback are stamped schema 9.' },
 ];
 
 const instanceOptions = [
@@ -27,7 +28,23 @@ const instanceOptions = [
   { term: "Pinned mode", desc: "Locks to one specific option regardless of seed. Use this to hold an element steady across a batch while everything else varies." },
   { term: "Category filter", desc: 'A boolean sub-category expression — "and / or / not", parentheses, and comma as shorthand for "or" (e.g. "feline and warm, not lynx") — that narrows the pool to matching options before the pick. Build it from grouped pills or type it in the advanced editor; it never applies to the null option.' },
   { term: "Exclude null", desc: "Drops the null option for this use, so the wildcard always resolves to real text. Only shown when the wildcard actually has a null option to exclude." },
+  { term: "Match variable", desc: "Under Runtime in the node settings. Instead of rolling, pick the option whose text equals a variable's value (ignoring case), e.g. model_variant from WP Model Info. No match uses the fallback option; without one the wildcard rolls as usual and WP Debug notes it. This is how a variable drives a constraint: the matched pick is a normal source pick." },
   { term: "Locked seed", desc: "Freezes this wildcard's pick across every loop iteration — every iteration in the batch gets the same result. Useful for holding one element constant (e.g. the art style) while letting other wildcards vary." },
+];
+
+const importRules = [
+  { term: "Lists and their names", desc: "Each list is named by its path the way __name__ finds it: animals/cats.txt is animals/cats, and a YAML key clothing: { tops: [...] } is clothing/tops. A list that isn't merged becomes its own wildcard, and its variable is the last part ($cats, $tops)." },
+  { term: "Merging related lists", desc: "With Merge related lists ticked (the default), a folder of small lists becomes one wildcard, like one you'd build by hand: hair/colors/red.txt, hair/colors/blonde.txt and hair/colors/dark.txt become one hair/colors wildcard whose options are tagged red, blonde and dark. Each folder level is a tag group, and lists with the same name in sibling folders share a tag: female/footwear and male/footwear give a gender group (female, male) and a footwear tag, like the axes of a hand-built wildcard. A folder merges when it holds at least two lists and up to 1,000 options over at most three levels; a bigger folder is split into its subfolders. Entry points stay separate, and so does a list that points at another list in the same folder, because a wildcard can't reference itself." },
+  { term: "Keep separate", desc: "Merged rows show a lists chip. Open one to see each list with its tag and the tag groups, and click Keep these lists separate to import that folder as one wildcard per list again; Merge again under the settings undoes it. Untick Merge related lists to keep every list separate." },
+  { term: "Roles", desc: "The review sorts every wildcard by what it does in the pack. Entry points build a prompt from other wildcards and nothing else uses them: these are what you drop on a Context. Compositions build on other wildcards and are used by one. Vocabulary is a plain list. Groups are made for globs and folder references." },
+  { term: "Carries over", desc: "Each wildcard is marked Exact, Close (same outputs, but a setting or label didn't carry over) or Needs a look (some text no longer renders as it did, like a dropped if-condition). Open a row to see why." },
+  { term: "Domains", desc: "The top folders (or YAML top keys) of the pack. Pick one to review it on its own. Each wildcard goes in a category named after its domain, unless you type one category for all." },
+  { term: "Library tag", desc: "Every module gets the library tag, which starts as the pack's name, so the whole pack sits together on the Tags page." },
+  { term: "Bundles", desc: "With Bundle the entry points ticked (the default) the entry points go into one bundle per domain, inside one pack bundle. Lists stay in the library, where the entry points reach them through references, so dropping a bundle rolls the prompts the pack was written to make, not every list. A pack of plain lists gets no bundles." },
+  { term: "References", desc: "__other__ references become @{} chips that point at the imported wildcard. A reference to a list that was merged points at the merged wildcard, filtered by that list's tags (female and footwear), so it still draws from that list only. A glob like __animals/*__, or a parent key like __clothing__ in Impact packs, becomes a group wildcard that picks one of the matching wildcards, weighted by how many options each has. PPP filters such as __colors'warm'__ become a category filter on the chip." },
+  { term: "Choice syntax", desc: "{a|b}, weights like {2::a|b} and multi-pick like {2$$a|b|c} keep working, and so does __2$$name__: it picks two different values of name. Open ranges like {-2$$a|b} get their missing end filled in, samplers like {~a|b} pick at random, and the default separator is a comma." },
+  { term: "Weights, labels and fallbacks", desc: "Weighted lines (3::text), PPP labels ('summer, casual'::text) and PPP's else choice carry over as option weights, sub-categories and the wildcard's fallback. A line written twice becomes one option with twice the weight, so the odds stay the same." },
+  { term: "Comments and encoding", desc: "Lines starting with # are skipped and kept as the module's description, as is the # text inside multi-line YAML prompts. Text after a # with a space before it is cut (so C# survives). Files saved as UTF-8 or Windows-1252 both read correctly." },
 ];
 </script>
 
@@ -158,11 +175,48 @@ const instanceOptions = [
         The constraint must sit <em>after</em> the source wildcard and <em>before</em> this
         wildcard in the stack. See the Constraint page for the full picture.
       </p>
+      <p>
+        Constraints read picks, not variables. To steer one from a variable (the loaded
+        checkpoint, an injected value), give the source wildcard options that spell the
+        variable's values and set <b>Match variable</b> on it. See WP Model Info for a worked
+        example.
+      </p>
       <DocImage
         src="images/docs/wildcard-constraint-order.png"
         ratio="16 / 6"
         caption="A WP Context node showing the canonical source → constraint → target stack: Starter subject ($subject · 4 options), Starter pairing (#1 $subject → $mood · 2×2 matrix), Starter mood ($mood · 4 options). The pink left-border on the constraint + target row visually pairs them; the constraint claims the first instance of $mood downstream of itself."
       />
+    </DocSection>
+
+    <DocSection title="Importing wildcard packs">
+      <p>
+        Coming from A1111 or Forge? Open <b>Import / Export → Wildcard packs</b> and choose a folder,
+        files or a <code>.zip</code>, or drop them on the page. It reads Dynamic Prompts,
+        Prompt Post-Processor (PPP) and Impact Pack wildcards: <code>.txt</code> lists,
+        <code>.yaml</code> / <code>.yml</code> and <code>.json</code> files, and <code>.zip</code>
+        packs of them. Dropping a pack on the Import tab opens it here too.
+      </p>
+      <p>
+        You go through three steps: load the pack, review the plan, then pick what to import with
+        the usual import picker (everything starts selected).
+      </p>
+      <DocKeyList :items="importRules" />
+      <DocImage
+        src="images/docs/wildcard-import.png"
+        ratio="1148 / 695"
+        caption="Billions of Wildcards in review: 2,653 lists become 935 wildcards, 1,896 of them merged into 190 tagged wildcards. Open here is clothings/regular, 12 lists merged into one wildcard with a gender tag group (female, male, unisex) and a garment group; each list shows the tags that pick it, and Keep these lists separate undoes the merge."
+      />
+      <p>
+        Importing the same pack again finds the wildcards you already have instead of adding copies.
+      </p>
+      <DocCallout variant="warn">
+        <b>What doesn't carry over.</b> Rows marked <b>Needs a look</b> list what changed. PPP
+        <code>if</code> conditions are removed (the choice stays). Dynamic Prompts variables like
+        <code>${name}</code> stay as plain text, because a wildcard can't read a variable: rebuild
+        that part with a Combine, which can. Template arguments like
+        <code>__name(var=value)__</code> are dropped, and a reference to a wildcard the pack doesn't
+        contain stays as plain text.
+      </DocCallout>
     </DocSection>
 
     <DocSection title="Try it">

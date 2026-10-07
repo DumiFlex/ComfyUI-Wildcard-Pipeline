@@ -12,14 +12,17 @@ describe("intensity helpers", () => {
   it("INTENSITY_TO_RULES mirrors the Python pipeline", () => {
     expect(INTENSITY_TO_RULES.gentle).toEqual(["whitespace"]);
     expect(INTENSITY_TO_RULES.balanced).toEqual([
-      "whitespace", "punctuation", "dedupe_exact",
+      "empty_groups", "lora_spacing", "whitespace", "punctuation", "dedupe_exact",
     ]);
-    expect(INTENSITY_TO_RULES.aggressive).toHaveLength(4);
+    expect(INTENSITY_TO_RULES.aggressive).toEqual([
+      "empty_groups", "merge_weights", "lora_spacing",
+      "whitespace", "punctuation", "dedupe_exact", "fuzzy_dedupe",
+    ]);
   });
 
   it("computeEffectiveRules returns intensity rules when no overrides", () => {
     expect(computeEffectiveRules(emptyCleanerConfig())).toEqual([
-      "whitespace", "punctuation", "dedupe_exact",
+      "empty_groups", "lora_spacing", "whitespace", "punctuation", "dedupe_exact",
     ]);
   });
 
@@ -81,8 +84,11 @@ describe("intensity helpers", () => {
   it("INTENSITY_TO_NEG_RULES mirrors the Python pipeline's negative column", () => {
     expect(INTENSITY_TO_NEG_RULES).toEqual({
       gentle: ["whitespace"],
-      balanced: ["whitespace", "punctuation", "dedupe_exact"],
-      aggressive: ["whitespace", "punctuation", "dedupe_exact"],
+      balanced: ["empty_groups", "lora_spacing", "whitespace", "punctuation", "dedupe_exact"],
+      aggressive: [
+        "empty_groups", "merge_weights", "lora_spacing",
+        "whitespace", "punctuation", "dedupe_exact",
+      ],
     });
   });
 
@@ -92,10 +98,12 @@ describe("intensity helpers", () => {
       intensity: "aggressive",
       blocklist: { kind: "list", entries: ["x"] },
     };
-    expect(computeEffectiveNegativeRules(cfg)).toEqual(["whitespace", "punctuation", "dedupe_exact"]);
+    expect(computeEffectiveNegativeRules(cfg)).toEqual([
+      "empty_groups", "merge_weights", "lora_spacing", "whitespace", "punctuation", "dedupe_exact",
+    ]);
     expect(computeEffectiveNegativeRules({
-      ...cfg, negative_rules_override: { dedupe_exact: false, fuzzy_dedupe: true },
-    })).toEqual(["whitespace", "punctuation", "fuzzy_dedupe"]);
+      ...cfg, negative_rules_override: { dedupe_exact: false, fuzzy_dedupe: true, merge_weights: false },
+    })).toEqual(["empty_groups", "lora_spacing", "whitespace", "punctuation", "fuzzy_dedupe"]);
   });
 
   it("isPristine false when the neg column diverges from its preset", () => {

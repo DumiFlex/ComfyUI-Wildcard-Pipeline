@@ -101,6 +101,9 @@ async function tryMount() {
       // in lockstep — including OS flips while on auto. A live watch
       // below pushes subsequent toggles through handle.setTheme.
       theme: ui.themeMode,
+      // Settings → General → "Share anonymous usage stats". Read at mount;
+      // leaving the tab unmounts the embed, so a change applies on return.
+      analytics: ui.usageStats,
       onNavigate: (next) => {
         // Mirror the embed's internal nav into the extension router
         // so the URL bar reflects state + the back button works. Each

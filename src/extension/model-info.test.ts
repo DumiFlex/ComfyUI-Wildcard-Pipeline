@@ -1,0 +1,209 @@
+import { describe, it, expect } from "vitest";
+import corpus from "../../tests/fixtures/model-variant-corpus.json";
+import {
+  DEFAULT_VARIANT_RULES,
+  detectVariant,
+  loaderFileName,
+  modelInfoPreviewModules,
+  modelStem,
+  compileVariantRules,
+  parseModelInfoConfig,
+  recordModelInfoRun,
+  staticModelValues,
+  type VariantRuleRow,
+} from "./model-info";
+import {
+  collectUpstreamChain,
+  collectUpstreamInjectorBindings,
+  collectUpstreamInjectorNegatives,
+  collectUpstreamKinds,
+  collectUpstreamProducers,
+  collectUpstreamResolved,
+  collectUpstreamRenderableVariables,
+  internalVarNames,
+  type LiteGraphLike,
+  type LiteNodeLike,
+} from "./graph";
+
+const rulesOf = (rows: VariantRuleRow[] | null) => compileVariantRules(rows ?? DEFAULT_VARIANT_RULES);
+
+describe("model-info corpus (shared with engine/model_info.py)", () => {
+  it("default rules match the engine's", () => {
+    expect(DEFAULT_VARIANT_RULES).toEqual(corpus.default_rules);
+  });
+  for (const c of corpus.variants) {
+    it(`variant of ${c.name || "(empty)"} = ${c.variant || "(none)"}`, () => {
+      expect(detectVariant(c.name, rulesOf(c.rules).rules)).toBe(c.variant);
+    });
+  }
+  for (const c of corpus.problems) {
+    it(`reports ${c.count} rule problems`, () => {
+      expect(rulesOf(c.rules).problems).toHaveLength(c.count);
+    });
+  }
+  for (const c of corpus.stems) {
+    it(`stem of ${c.path || "(empty)"}`, () => {
+      expect(modelStem(c.path)).toBe(c.stem);
+    });
+  }
+});
+
+/** Loader(1) → LoRA(2) → ModelInfo(3) → Context(4). */
+function graph(opts: { ckpt?: string; info?: Record<string, unknown>; noModel?: boolean } = {}) {
+  const nodes: LiteNodeLike[] = [];
+  const g = {
+    _nodes: nodes,
+    links: {
+      10: { id: 10, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 },
+      11: { id: 11, origin_id: 2, origin_slot: 0, target_id: 3, target_slot: 1 },
+      12: { id: 12, origin_id: 3, origin_slot: 0, target_id: 4, target_slot: 0 },
+    },
+    getNodeById: (id: number) => nodes.find((n) => n.id === id) ?? null,
+  } as unknown as LiteGraphLike;
+  const loader: LiteNodeLike = {
+    id: 1, type: "CheckpointLoaderSimple", graph: g,
+    widgets: [{ name: "ckpt_name", value: opts.ckpt ?? "SDXL/ponyDiffusionV6XL.safetensors" }],
+    outputs: [{ name: "MODEL", links: [10], type: "MODEL" }],
+  };
+  const lora: LiteNodeLike = {
+    id: 2, type: "LoraLoader", graph: g,
+    inputs: [{ name: "model", link: 10 }],
+    widgets: [{ name: "lora_name", value: "detail.safetensors" }],
+    outputs: [{ name: "MODEL", links: [11], type: "MODEL" }],
+  };
+  const info: LiteNodeLike = {
+    id: 3, type: "WP_ModelInfo", graph: g,
+    inputs: [{ name: "upstream", link: null }, { name: "model", link: opts.noModel ? null : 11 }],
+    outputs: [{ name: "context", links: [12], type: "PIPELINE_CONTEXT" }],
+    widgets: [{ name: "wp_model_info", value: opts.info ? JSON.stringify(opts.info) : "" }],
+  };
+  const ctx: LiteNodeLike = {
+    id: 4, type: "WP_Context", graph: g,
+    inputs: [{ name: "upstream", link: 12 }],
+    outputs: [{ name: "context", links: [], type: "PIPELINE_CONTEXT" }],
+    widgets: [{ name: "wp_modules", value: JSON.stringify({ version: 1, modules: [] }) }],
+  };
+  nodes.push(loader, lora, info, ctx);
+  return { g, info, ctx };
+}
+
+describe("model-info on the canvas", () => {
+  it("reads the checkpoint name through a LoRA loader", () => {
+    const { g, info } = graph();
+    expect(loaderFileName(info, g)).toBe("SDXL/ponyDiffusionV6XL.safetensors");
+    expect(staticModelValues(info)).toEqual({
+      model_family: "$model_family",
+      model_variant: "pony",
+      model_name: "ponyDiffusionV6XL",
+    });
+  });
+
+  it("pins win", () => {
+    const { info } = graph({ info: { name: "waiIllustrious.safetensors", family: "sdxl" } });
+    expect(staticModelValues(info)).toEqual({
+      model_family: "sdxl", model_variant: "illustrious", model_name: "waiIllustrious",
+    });
+    const { info: forced } = graph({ info: { variant: "noobai" } });
+    expect(staticModelValues(forced).model_variant).toBe("noobai");
+  });
+
+  it("custom rules apply, and an empty list matches nothing", () => {
+    const { info } = graph({ info: { rules: [{ variant: "mine", pattern: "diffusion" }] } });
+    expect(staticModelValues(info).model_variant).toBe("mine");
+    const { info: none } = graph({ info: { rules: [] } });
+    expect(staticModelValues(none).model_variant).toBe("");
+  });
+
+  it("the family comes from the last run until pinned", () => {
+    const { info } = graph();
+    recordModelInfoRun(info, { family: "sdxl", variant: "pony", name: "x", sources: {} });
+    expect(staticModelValues(info).model_family).toBe("sdxl");
+  });
+
+  it("no model wired: placeholders, and the preview module leaves them out", () => {
+    const { info } = graph({ noModel: true });
+    expect(staticModelValues(info)).toEqual({
+      model_family: "$model_family", model_variant: "$model_variant", model_name: "$model_name",
+    });
+    expect(modelInfoPreviewModules(info)).toHaveLength(1);
+    expect(modelInfoPreviewModules(info)[0].entries).toEqual([]);
+  });
+
+  it("walkers see the three variables downstream", () => {
+    const { g, ctx } = graph();
+    const producers = collectUpstreamProducers(g, ctx);
+    expect(producers.model_variant.kind).toBe("model");
+    expect(producers.model_variant.nodeLabel).toBe("Model Info");
+    expect(collectUpstreamKinds(g, ctx).model_family).toBe("model");
+    expect(collectUpstreamInjectorBindings(g, ctx).sort())
+      .toEqual(["model_family", "model_name", "model_variant"]);
+    expect(collectUpstreamInjectorNegatives(g, ctx)).toEqual({
+      model_family: null, model_variant: null, model_name: null,
+    });
+    const resolved = collectUpstreamResolved(g, ctx);
+    expect(resolved.model_variant).toBe("pony");
+    expect(resolved.model_name).toBe("ponyDiffusionV6XL");
+  });
+
+  it("the preview chain carries a model step only when asked", () => {
+    const { g, ctx } = graph({ info: { family: "sdxl", internal: { variant: false } } });
+    expect(collectUpstreamChain(g, ctx)).toEqual([]);
+    const steps = collectUpstreamChain(g, ctx, { modelSteps: true });
+    expect(steps).toHaveLength(1);
+    const [shown, hidden] = steps[0] as { entries: unknown[]; instance?: unknown }[];
+    expect(shown.entries).toEqual([{ variable_name: "model_variant", value: "pony" }]);
+    expect(hidden.instance).toEqual({ internal: true });
+    expect(hidden.entries).toEqual([
+      { variable_name: "model_family", value: "sdxl" },
+      { variable_name: "model_name", value: "ponyDiffusionV6XL" },
+    ]);
+  });
+
+  it("all three are internal by default; a shown one loses the flag", () => {
+    const { g, ctx } = graph();
+    expect(JSON.parse(collectUpstreamKinds(g, ctx).__wp_internal_flags__)).toEqual({
+      model_family: true, model_variant: true, model_name: true,
+    });
+    expect(collectUpstreamProducers(g, ctx).model_variant.internal).toBe(true);
+    const { g: g2, ctx: ctx2 } = graph({ info: { internal: { variant: false } } });
+    expect(JSON.parse(collectUpstreamKinds(g2, ctx2).__wp_internal_flags__)).toEqual({
+      model_family: true, model_name: true,
+    });
+    expect(collectUpstreamProducers(g2, ctx2).model_variant.internal).toBe(false);
+    expect([...internalVarNames(collectUpstreamResolved(g2, ctx2))].sort())
+      .toEqual(["model_family", "model_name"]);
+    expect(collectUpstreamRenderableVariables(g2, ctx2)).toContain("model_variant");
+  });
+
+  it("the memo notices a checkpoint switch on the loader", () => {
+    const { g, ctx } = graph();
+    expect(collectUpstreamResolved(g, ctx).model_variant).toBe("pony");
+    const loader = g.getNodeById(1)!;
+    loader.widgets![0].value = "illustriousXL.safetensors";
+    expect(collectUpstreamResolved(g, ctx).model_variant).toBe("illustrious");
+  });
+});
+
+describe("parseModelInfoConfig (mirrors engine parse_config)", () => {
+  it("falls back to the shipped rules", () => {
+    for (const raw of ["", "{", "[]", 3, null, JSON.stringify({ family: "x" })]) {
+      expect(parseModelInfoConfig(raw).rules).toEqual(DEFAULT_VARIANT_RULES);
+    }
+  });
+  it("keeps rows and trims pins", () => {
+    const cfg = parseModelInfoConfig(JSON.stringify({
+      rules: [{ variant: "x", pattern: "y" }, 3], family: " f ", name: 5,
+    }));
+    expect(cfg.rules).toEqual([{ variant: "x", pattern: "y" }]);
+    expect([cfg.family, cfg.variant, cfg.name]).toEqual(["f", "", ""]);
+    expect(cfg.internal).toEqual({ family: true, variant: true, name: true });
+    expect(parseModelInfoConfig({ internal: { name: false, family: "no" } }).internal)
+      .toEqual({ family: true, variant: true, name: false });
+  });
+  it("marks the rows with problems", () => {
+    const { problemRows } = compileVariantRules([
+      { variant: "a", pattern: "" }, { variant: "", pattern: "" }, { variant: "b", pattern: "(" },
+    ]);
+    expect(problemRows).toEqual([0, 2]);
+  });
+});

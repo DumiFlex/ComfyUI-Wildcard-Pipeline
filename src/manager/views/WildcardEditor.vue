@@ -850,6 +850,15 @@ function probabilityFor(o: WildcardOption): number {
   return ((Number(o.weight) || 0) / totalWeight.value) * 100;
 }
 
+/** Make `o` the wildcard's one fallback option, or unset it. Stored only as
+ *  `true` (absent otherwise) so a payload without one never stamps schema 9. */
+function toggleFallback(o: WildcardOption): void {
+  if (o.is_null) return;
+  const on = !o.fallback;
+  for (const other of options.value) delete other.fallback;
+  if (on) o.fallback = true;
+}
+
 /** Coerce a raw `payload.tag_groups` into the editor's reactive shape:
  *  drop non-array members, keep only tags that are in the registry, and
  *  preserve insertion order. A tag claimed by two axes (shouldn't happen
@@ -2414,6 +2423,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
             :data-test="o.is_null ? 'wc-opt-row-null' : `wc-opt-row-${i}`"
             :class="{
               'wc-opt-row--null': o.is_null,
+              'wc-opt-row--fallback': o.fallback,
               'wc-opt-row--selected': bulkMode && isSelected(o.id),
               'wc-opt-row--dragging': dragFrom === i,
               'wc-opt-row--dropbefore': dragOver === i && dragFrom !== null && dragFrom !== i,
@@ -2617,6 +2627,30 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                 </div>
                 <span class="opt-prob__value wp-mono">{{ formatProbability(probabilityFor(o)) }}</span>
               </div>
+              <!-- One fallback per wildcard: setting it here moves the flag
+                   off any other option. The toggle is hover-revealed like
+                   the grip so the resting table looks unchanged. -->
+              <div v-if="!o.is_null" class="wc-fallback-line">
+                <span
+                  v-if="o.fallback"
+                  class="wc-fallback-chip"
+                  :data-test="`wc-opt-fallback-chip-${i}`"
+                  title="Rolls normally, and is also used when constraints or weights leave nothing else to pick."
+                >
+                  <i class="pi pi-shield" aria-hidden="true" />
+                  <span>fallback</span>
+                </span>
+                <button
+                  type="button"
+                  class="wc-fallback-toggle"
+                  :aria-pressed="o.fallback ? 'true' : 'false'"
+                  :data-test="`wc-opt-fallback-${i}`"
+                  :title="o.fallback
+                    ? 'Make this an ordinary option again'
+                    : 'Also use this option when every option is ruled out'"
+                  @click.stop="toggleFallback(o)"
+                >{{ o.fallback ? "unset" : "set as fallback" }}</button>
+              </div>
             </td>
             <td>
               <Button
@@ -2780,6 +2814,43 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
   font-size: var(--wp-text-sm);
 }
 .wc-null-chip .pi { font-size: 12px; }
+/* Fallback option: rolls normally and also stands in when nothing else is
+   left to pick, so the chip sits under its probability. */
+.wc-fallback-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+.wc-fallback-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border: 1px solid color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--wp-accent-500) 12%, transparent);
+  color: var(--wp-accent-400, var(--wp-accent-500));
+  font-family: var(--wp-font-mono, monospace);
+  font-size: var(--wp-text-xs, 11px);
+  font-weight: 600;
+}
+.wc-fallback-chip .pi { font-size: 10px; }
+.wc-fallback-toggle {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--wp-text-dim);
+  font-family: var(--wp-font-mono, monospace);
+  font-size: var(--wp-text-xs, 11px);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .12s, color .12s;
+}
+tr:hover .wc-fallback-toggle,
+.wc-fallback-toggle:focus-visible { opacity: 0.8; }
+.wc-fallback-toggle:hover { opacity: 1; color: var(--wp-accent-500); text-decoration: underline; }
+.wc-opt-row--fallback > td { background: color-mix(in oklab, var(--wp-accent-500) 4%, transparent); }
 .wc-em-dash {
   color: var(--wp-text-dim);
   font-family: var(--wp-font-mono, monospace);

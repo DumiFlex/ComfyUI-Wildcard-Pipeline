@@ -11,6 +11,8 @@ import pytest
 
 from wp_nodes.context_loop import WPContextLoop, _parse_config
 
+_SWEEP_OFF = {"enabled": False, "limit": 64, "hold_others": True, "axes": []}
+
 _DEFAULTS = {
     "strategy": "hash_index",
     "override_seed": False,
@@ -20,6 +22,7 @@ _DEFAULTS = {
     "total_internal": True,
     "seed_locks": {},
     "bypass_frames": [],
+    "sweep": _SWEEP_OFF,
 }
 
 
@@ -36,14 +39,14 @@ _DEFAULTS = {
             {"strategy": "sequential", "override_seed": True,
              "iteration_var_name": "idx", "bypass": True,
              "iteration_internal": True, "total_internal": True,
-             "seed_locks": {}, "bypass_frames": []},
+             "seed_locks": {}, "bypass_frames": [], "sweep": _SWEEP_OFF},
         ),
         (
             '{"strategy": "wat", "override_seed": true}',
             {"strategy": "hash_index", "override_seed": True,
              "iteration_var_name": "iteration", "bypass": False,
              "iteration_internal": True, "total_internal": True,
-             "seed_locks": {}, "bypass_frames": []},
+             "seed_locks": {}, "bypass_frames": [], "sweep": _SWEEP_OFF},
         ),
         ('{"iteration_var_name": "   "}', _DEFAULTS),
         (

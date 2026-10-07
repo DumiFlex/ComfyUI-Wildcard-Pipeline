@@ -21,8 +21,19 @@ from engine.cleaner.types import RuleId, RunReport
 
 INTENSITY_TO_RULES: dict[str, list[RuleId]] = {
     "gentle": ["whitespace"],
-    "balanced": ["whitespace", "punctuation", "dedupe_exact"],
+    # Empty groups + LoRA spacing never change what a prompt means; merging
+    # weights rewrites how it reads, so it waits for aggressive.
+    "balanced": [
+        "empty_groups",
+        "lora_spacing",
+        "whitespace",
+        "punctuation",
+        "dedupe_exact",
+    ],
     "aggressive": [
+        "empty_groups",
+        "merge_weights",
+        "lora_spacing",
         "whitespace",
         "punctuation",
         "dedupe_exact",
@@ -37,8 +48,21 @@ INTENSITY_TO_RULES: dict[str, list[RuleId]] = {
 #: OUT of the prompt, and those are often the words a negative names).
 INTENSITY_TO_NEG_RULES: dict[str, list[RuleId]] = {
     "gentle": ["whitespace"],
-    "balanced": ["whitespace", "punctuation", "dedupe_exact"],
-    "aggressive": ["whitespace", "punctuation", "dedupe_exact"],
+    "balanced": [
+        "empty_groups",
+        "lora_spacing",
+        "whitespace",
+        "punctuation",
+        "dedupe_exact",
+    ],
+    "aggressive": [
+        "empty_groups",
+        "merge_weights",
+        "lora_spacing",
+        "whitespace",
+        "punctuation",
+        "dedupe_exact",
+    ],
 }
 
 

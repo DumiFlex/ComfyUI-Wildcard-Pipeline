@@ -101,10 +101,10 @@ async function loadLibrary() {
     // into 5 buckets via row.type. Five parallel filtered requests
     // would be 5 needless network roundtrips.
     const [mods, buns, cats, tmpls] = await Promise.all([
-      api.modules.list({ limit: 1000 }),
-      api.bundles.list({ limit: 1000 }),
+      api.modules.list(),
+      api.bundles.list(),
       api.categories.list(),
-      api.templates.list({ limit: 1000 }),
+      api.templates.list(),
     ]);
     modules.value = mods.items;
     bundles.value = buns.items;

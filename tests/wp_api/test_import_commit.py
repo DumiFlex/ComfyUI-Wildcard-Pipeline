@@ -301,3 +301,42 @@ async def test_commit_rolls_back_on_partial_failure(wp_client):
     # Confirm the first add was rolled back.
     g = await wp_client.get("/wp/api/modules/11112222")
     assert g.status == 404
+
+
+# ── categories referenced by the same commit ──────────────────────────────
+
+
+async def test_categories_listed_after_their_members_still_commit(wp_client):
+    """The SPA lists category adds last; members reference them by id, so the
+    importer inserts categories first instead of tripping the foreign key."""
+    entity = {**_wildcard_entity("cat00001"), "category_id": "catnew01"}
+    resp = await wp_client.post("/wp/api/import/commit", json={"adds": [
+        {"kind": "wildcard", "entity": entity},
+        {"kind": "category", "entity": {"id": "catnew01", "name": "Animals"}},
+    ]})
+    assert resp.status == 200, await resp.text()
+    got = await (await wp_client.get("/wp/api/modules/cat00001")).json()
+    assert got["category_id"] == "catnew01"
+
+
+async def test_members_follow_a_category_merged_by_name(wp_client):
+    created = await wp_client.post("/wp/api/categories", json={"name": "Animals"})
+    existing_id = (await created.json())["id"]
+    entity = {**_wildcard_entity("cat00002"), "category_id": "catother"}
+    resp = await wp_client.post("/wp/api/import/commit", json={"adds": [
+        {"kind": "wildcard", "entity": entity},
+        {"kind": "category", "entity": {"id": "catother", "name": "animals"}},
+    ]})
+    assert resp.status == 200, await resp.text()
+    got = await (await wp_client.get("/wp/api/modules/cat00002")).json()
+    assert got["category_id"] == existing_id
+
+
+async def test_unknown_category_ids_are_dropped_not_fatal(wp_client):
+    entity = {**_wildcard_entity("cat00003"), "category_id": "nowhere1"}
+    resp = await wp_client.post("/wp/api/import/commit", json={"adds": [
+        {"kind": "wildcard", "entity": entity},
+    ]})
+    assert resp.status == 200, await resp.text()
+    got = await (await wp_client.get("/wp/api/modules/cat00003")).json()
+    assert got["category_id"] is None

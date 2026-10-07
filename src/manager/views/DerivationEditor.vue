@@ -21,6 +21,7 @@ import DerivationRuleCard from "../components/DerivationRuleCard.vue";
 import Checkbox from "../components/ui/Checkbox.vue";
 import ListFilter from "../components/ui/ListFilter.vue";
 import { derivationRuleHaystack } from "../utils/listFilter";
+import { loraByModelRule } from "../utils/derivation-presets";
 import BulkDeleteToolbar from "../components/BulkDeleteToolbar.vue";
 import { useBulkSelection } from "../composables/useBulkSelection";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
@@ -349,6 +350,10 @@ onMounted(async () => {
 function addRule() {
   rules.value = [...rules.value, blankRule()];
 }
+/** Preset: `$loras` per `$model_variant` (pairs with WP Model Info). */
+function addLoraByModelRule() {
+  rules.value = [...rules.value, loraByModelRule(newRuleId())];
+}
 function removeRule(idx: number) {
   rules.value = rules.value.filter((_, i) => i !== idx);
 }
@@ -517,7 +522,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
   { label: isEdit.value ? (name.value || "Editing") : "New derivation" },
 ]);
 
-defineExpose({ rules, addRule, removeRule, applyRestore });
+defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
 </script>
 
 <template>
@@ -611,6 +616,14 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
           data-test="drv-bulk-toggle"
           @click="ruleBulkToggleMode"
         >{{ ruleBulkActive ? "Done" : "Bulk edit" }}</Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          icon="pi-microchip"
+          data-test="add-lora-by-model"
+          title="Add a rule that sets $loras from $model_variant (WP Model Info)"
+          @click="addLoraByModelRule"
+        >LoRA by model</Button>
         <Button size="sm" variant="primary" icon="pi-plus" data-test="add-rule" @click="addRule">
           Add rule
         </Button>
@@ -642,7 +655,8 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
       </p>
 
       <div v-if="rules.length === 0" class="wp-empty-card" data-test="rules-empty">
-        No rules yet. Click <strong>Add rule</strong> to start defining IF / ELIF / ELSE behaviour.
+        No rules yet. Click <strong>Add rule</strong> to start defining IF / ELIF / ELSE behaviour,
+        or <strong>LoRA by model</strong> for a rule that picks LoRAs per checkpoint.
       </div>
 
       <div

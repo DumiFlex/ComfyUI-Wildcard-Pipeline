@@ -11,6 +11,7 @@ describe("INSTANCE_FIELDS_PER_KIND registry", () => {
       // SP2a multi-select (2026-06-08): per-instance count range + separator.
       // SP2c: pick_independent (allow repeats / with replacement).
       "pick_min", "pick_max", "pick_separator", "pick_independent",
+      "match_variable",
     ]);
     expect(INSTANCE_FIELDS_PER_KIND.fixed_values).toEqual([
       // `locked_seed` added in the combine + fixed_values syntax-parity

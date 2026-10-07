@@ -154,7 +154,7 @@ describe("buildModel", () => {
       "unknown_ref", "ref_subcategory_empty_pool", "ref_out_of_surface", "var_out_of_surface",
       "unknown_var", "axis_untagged_pick", "unknown_tag_axis", "recursion_limit", "cycle_detected",
       "constraint_never_applied", "constraint_partial_reach", "constraint_source_missing",
-      "constraint_register_failed", "constraint_excludes_all_options",
+      "constraint_register_failed", "constraint_excludes_all_options", "fallback_used",
       "constraint_factor_ignored_on_allow", "unknown_constraint_mode",
       "fixed_values_overrides_malformed", "handler_error",
     ]) expect(WARNING_LABELS[t], t).toBeTruthy();

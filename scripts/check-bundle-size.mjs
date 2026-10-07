@@ -257,7 +257,26 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // and would have passed unnoticed. It does not fit under 420 KB. The 17 KB of
 // headroom left is deliberate — enough for ordinary work, not enough to hide a
 // whole asset class coming back.
-const TOTAL_LIMIT = 420 * 1024;     // 420 KB
+// RAISED 420 -> 424 KB on 2026-10-02 for the wildcard fallback option (canvas
+// badge + Debug note): dev sat at 429,971 bytes, 109 under the gate, and the
+// feature needed ~200. Approved by the maintainer ("you are allowed to
+// increase the bundle budget if necessary"). 4 KB leaves room for a few more
+// small features while a re-inlined font (~90 KB) still trips the gate.
+// RAISED 424 -> 428 KB on 2026-10-05 for Context Loop sweep mode (Sweep
+// panel in the loop widget chunk, downstream-wildcard walk in boot): dev sat
+// at 430,134 bytes and the feature adds ~4.8 KB. The maintainer treats this
+// budget as a guide to raise when a needed feature does not fit.
+// RAISED 428 -> 436 KB on 2026-10-06 for model-aware pipelines (WP Model Info
+// walker branches + variant rules + its widget glue in boot, the Model Info
+// widget chunk with pins, Assembler toggles and the shared row-primitive
+// buttons, Match variable control in the wildcard modal chunk, LoRA by model
+// preset): the feature adds ~6 KB and tipped dev ~3.2 KB over. Same "guide,
+// not a cap" rule as above.
+// RAISED 436 -> 440 KB on 2026-10-06 for the constraint "rules out all"
+// warning (the constraint factor math and wildcard pool helpers now reach the
+// ContextWidget chunk): dev sat at 446,313 of 446,464 bytes and the check adds
+// ~2.2 KB. Same "guide, not a cap" rule as above.
+const TOTAL_LIMIT = 440 * 1024;     // 440 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

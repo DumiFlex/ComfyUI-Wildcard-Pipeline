@@ -39,7 +39,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  * very shapes this runtime just learned to produce, one version up. The
  * regression test below pins MAX_KNOWN >= the highest content-stamp.
  */
-export const MAX_KNOWN_SCHEMA_VERSION = 8;
+export const MAX_KNOWN_SCHEMA_VERSION = 9;
 
 /**
  * Community catalog version for the SP2b nested multi-pick TEXT grammar
@@ -131,6 +131,20 @@ export const DERIVATION_CONDITIONS_SCHEMA_VERSION = 7;
  * uses one — see `schemaVersionForPayload` / `usesNegatives`.
  */
 export const NEGATIVES_SCHEMA_VERSION = 8;
+
+/**
+ * Community catalog version for the wildcard fallback option: an option
+ * flagged `fallback: true` rolls normally and is also used when
+ * nothing else is left to pick (constraints excluded everything, or every
+ * weight is 0).
+ *
+ * Additive: the flag is optional and stored only as `true`, so there is no
+ * migrator and `CURRENT_SCHEMA_VERSION` stays 2. The bump exists because a
+ * pre-v9 runtime would roll the fallback like any other option, so the stamp
+ * makes it refuse the pack instead. Publish stamps THIS version only when an
+ * option is flagged — see `schemaVersionForPayload` / `usesFallbackOption`.
+ */
+export const FALLBACK_SCHEMA_VERSION = 9;
 
 export interface MigrationOk<T> {
   ok: true;

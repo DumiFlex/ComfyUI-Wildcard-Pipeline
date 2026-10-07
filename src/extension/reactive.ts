@@ -58,6 +58,33 @@ function watchNodeMode(node: ConnectableNode, cb: () => void): () => void {
   return () => { slot!.subs.delete(cb); };
 }
 
+/** Opacity our own widgets use for a muted/bypassed node (`--skipped`). */
+export const SKIPPED_OPACITY = "0.45";
+
+/**
+ * Dim a node's DOM widgets while it is muted (2) or bypassed (4).
+ *
+ * Our Vue widgets dim themselves from `nodeMode`, but a node's text boxes are
+ * either ComfyUI's own multiline widgets (the Cleaner's `prompt` and
+ * `negative`) or plain editors without a mode prop (the Assembler's
+ * templates), and ComfyUI leaves DOM widgets at full opacity when it dims the
+ * node frame. This sets the opacity on each named widget's element instead.
+ * Elements are looked up on every change, so a widget added later is covered.
+ */
+export function dimWidgetsWhileSkipped(node: ConnectableNode, names: readonly string[]): () => void {
+  const apply = (): void => {
+    const skipped = node.mode === 2 || node.mode === 4;
+    const widgets = (node as { widgets?: { name?: string; element?: HTMLElement }[] }).widgets ?? [];
+    for (const w of widgets) {
+      if (!w.element || !w.name || !names.includes(w.name)) continue;
+      w.element.style.transition = "opacity 120ms ease";
+      w.element.style.opacity = skipped ? SKIPPED_OPACITY : "";
+    }
+  };
+  apply();
+  return watchNodeMode(node, apply);
+}
+
 /* ── Shared activity clock ────────────────────────────────────────────────
  *
  * ONE document listener for the whole extension, not one per node. Every

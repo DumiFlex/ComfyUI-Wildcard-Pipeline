@@ -660,6 +660,13 @@ def ref_option_pool(tok: Token, ctx: ResolveContext) -> list[dict]:
             )
             return []
 
+    # Schema v9 fallback (engine/modules/_fallback.py): the flagged option
+    # rolls normally and returns as the whole pool when the constraints below
+    # leave nothing to pick.
+    from engine.modules._fallback import fallback_warning, find_fallback, pool_is_dead
+    fallback = find_fallback(options)
+    any_applied = False
+
     get_constraints = getattr(ctx, "get_constraints", None)
     get_picks = getattr(ctx, "get_picks", None)
     if callable(get_constraints) and callable(get_picks):
@@ -695,8 +702,11 @@ def ref_option_pool(tok: Token, ctx: ResolveContext) -> list[dict]:
                     if isinstance(payload_dict, dict) else {}
                 ),
             )
-            if any_applied:
+            if any_applied and fallback is None:
                 warn_excludes_all(options, uuid, ctx.warnings)
+    if fallback is not None and pool_is_dead(options):
+        ctx.warnings.append(fallback_warning(uuid, fallback, constrained=any_applied))
+        return [{**fallback, "weight": 1}]
     return options
 
 

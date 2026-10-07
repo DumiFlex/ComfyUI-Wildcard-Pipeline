@@ -15,7 +15,7 @@ export type SurfaceKind =
 export interface ResolveModule {
   type: string;
   var_binding: string;
-  options: Array<{ value: string; weight: number }>;
+  options: Array<{ value: string; weight: number; fallback?: boolean }>;
 }
 
 export interface ResolveWarning {
@@ -209,7 +209,12 @@ function resolveRef(
     return "";
   }
 
-  const chosen = pickWeighted(module.options ?? [], ctx.rng);
+  // Schema v9 fallback: rolls normally, and is also taken (without a draw)
+  // when nothing is live (engine/modules/_fallback.py).
+  const all = module.options ?? [];
+  const fallback = all.find((o) => o.fallback === true);
+  const live = all.some((o) => Math.max(0, Number(o.weight) || 0) > 0);
+  const chosen = fallback && !live ? fallback : pickWeighted(all, ctx.rng);
   if (!chosen) return "";
   const chosenValue = String(chosen.value ?? "");
   if (!chosenValue) return "";

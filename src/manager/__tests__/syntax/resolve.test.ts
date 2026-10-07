@@ -150,3 +150,34 @@ describe("resolveTokens — inline + multi-pick", () => {
     expect(resolveTokens("{2$$, $$a|b|c}", makeCtx({ surface: "assembler" }))).toBe("{2$$, $$a|b|c}");
   });
 });
+
+describe("resolveTokens — fallback option (v9)", () => {
+  const mod = (options: ResolveModule["options"]): ResolveModule => ({
+    type: "wildcard", var_binding: "hair", options,
+  });
+
+  it("rolls the fallback like any other option", () => {
+    const seen = new Set<string>();
+    for (let seed = 0; seed < 30; seed++) {
+      const ctx = makeCtx({
+        rngSeed: seed,
+        modules: { a4f7b2e1: mod([
+          { value: "red", weight: 1 },
+          { value: "hair", weight: 1, fallback: true },
+        ]) },
+      });
+      seen.add(resolveTokens("@{a4f7b2e1}", ctx));
+    }
+    expect([...seen].sort()).toEqual(["hair", "red"]);
+  });
+
+  it("uses the fallback when every weight is 0", () => {
+    const ctx = makeCtx({
+      modules: { a4f7b2e1: mod([
+        { value: "red", weight: 0 },
+        { value: "hair", weight: 0, fallback: true },
+      ]) },
+    });
+    expect(resolveTokens("@{a4f7b2e1}", ctx)).toBe("hair");
+  });
+});

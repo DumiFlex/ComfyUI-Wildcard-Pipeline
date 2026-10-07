@@ -99,6 +99,7 @@ function modeGlyph(mode: string | undefined): string {
     <template v-if="step.kind === 'wildcard' && d">
       <div class="wp-dbg-detail__facts">
         <span v-if="d.held" class="wp-dbg-fact">held from frame 0</span>
+        <span v-if="d.fallback" class="wp-dbg-fact wp-dbg-fact--accent" data-test="dbg-fallback">fallback used</span>
         <span v-if="d.mode === 'pinned'" class="wp-dbg-fact wp-dbg-fact--accent"><i class="pi pi-thumbtack" /> pinned option</span>
         <span v-if="chanceText" class="wp-dbg-fact wp-dbg-fact--accent" data-test="dbg-chance">{{ chanceText }}</span>
         <span v-if="typeof d.pool === 'number'" class="wp-dbg-fact">

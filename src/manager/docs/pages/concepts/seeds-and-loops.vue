@@ -147,6 +147,12 @@ const strategies = [
         (the default), each downstream Context uses its own widget seed independently and the loop
         only provides per-iteration variation on top.
       </p>
+      <p>
+        To compare chosen options instead of random rolls, use the loop's
+        <b>Sweep combinations</b> menu: it runs every combination of the wildcard options you pick,
+        one iteration each, and can hold everything else steady. See
+        <b>WP Context Loop</b> for details.
+      </p>
     </DocSection>
 
     <DocSection title="Per-iteration seed locks">

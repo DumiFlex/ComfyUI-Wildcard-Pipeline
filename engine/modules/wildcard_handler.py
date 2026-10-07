@@ -477,6 +477,44 @@ def _record_axes(
         decl[binding] = list(_accepts_axes(payload))
 
 
+def _match_variable_option(
+    ctx: Any, options: list[dict[str, Any]], var_name: str,
+) -> tuple[dict[str, Any] | None, str]:
+    """Option for a ``match_variable`` instance, and how it was chosen
+    (``"match_variable"`` or ``"match_fallback"``). ``(None, "")`` means roll
+    normally; a ``match_variable_no_match`` warning says why."""
+    from engine.modules._fallback import find_fallback
+
+    name = var_name[1:] if var_name.startswith("$") else var_name
+    raw = ctx.get(name) if ctx is not None else None
+    wanted = "" if raw is None else str(raw).strip().lower()
+    if wanted:
+        for o in options:
+            if o.get("value") is None:
+                continue
+            if str(o.get("value", "")).strip().lower() == wanted:
+                return o, "match_variable"
+    fallback = find_fallback(options)
+    if fallback is not None:
+        return fallback, "match_fallback"
+    if ctx is not None and isinstance(ctx.get("__wp_warnings__"), list):
+        module_id = ctx.get("__wp_current_module_id__") or ""
+        ctx["__wp_warnings__"].append({
+            "type": "match_variable_no_match",
+            "severity": "warn",
+            "module_id": module_id,
+            "source_field": "",
+            "position": 0,
+            "token_index": None,
+            "detail": {"variable": name, "value": "" if raw is None else str(raw)},
+            "message": (
+                f"no option equals ${name} ({'' if raw is None else str(raw)!r}) "
+                "and none is marked fallback; rolled normally"
+            ),
+        })
+    return None, ""
+
+
 def _record_pick(
     ctx: Any,
     chosen: dict[str, Any],
@@ -717,6 +755,7 @@ class WildcardHandler(ModuleHandler):
 
         seen_ids: set[str] = set()
         null_count = 0
+        fallback_count = 0
         for i, opt in enumerate(options):
             if not isinstance(opt, dict):
                 raise ValueError(f"wildcard payload.options[{i}] must be an object")
@@ -767,6 +806,20 @@ class WildcardHandler(ModuleHandler):
                 raise ValueError(
                     f"wildcard payload.options[{i}].negative must be a string"
                 )
+            # Fallback (schema v9): the one option used when nothing else is
+            # left to pick. Stored only as `true`; absent means not.
+            fb = opt.get("fallback")
+            if fb is not None and not isinstance(fb, bool):
+                raise ValueError(
+                    f"wildcard payload.options[{i}].fallback must be a boolean"
+                )
+            if fb:
+                if is_null:
+                    raise ValueError(
+                        f"wildcard payload.options[{i}] null option "
+                        f"{opt_id!r} can't be the fallback"
+                    )
+                fallback_count += 1
             weight = opt.get("weight", 1)
             if not isinstance(weight, (int, float)) or isinstance(weight, bool):
                 raise ValueError(
@@ -796,6 +849,11 @@ class WildcardHandler(ModuleHandler):
             raise ValueError(
                 f"wildcard payload may have at most one null option "
                 f"(found {null_count})"
+            )
+        if fallback_count > 1:
+            raise ValueError(
+                f"wildcard payload may have at most one fallback option "
+                f"(found {fallback_count})"
             )
         binding = payload.get("var_binding")
         if binding is not None:
@@ -843,41 +901,52 @@ class WildcardHandler(ModuleHandler):
         # has since removed. Honors enabled_options + weights normally
         # in every other mode.
         mode = instance.get("mode")
+        pinned: dict[str, Any] | None = None
+        pin_mode = "pinned"
         if mode == "pinned":
             pinned_id = instance.get("pinned_option_id")
             pinned = next((o for o in options if o.get("id") == pinned_id), None)
-            if pinned is not None:
-                # A pinned option still rolls its axes: pinning fixes WHICH
-                # option fires, not which of the shoes it accepts. Roll BEFORE
-                # recording so the pick carries the single rolled winner (the
-                # constraint source-view a downstream target reads), same as the
-                # random path. Pinned bypasses this wildcard's own constraint
-                # application, so there's nothing to restrict the roll against.
-                pinned_rolled = _roll_axes(
-                    _axis_menus(payload, pinned.get("sub_categories")),
-                    _derive_module_rng(
-                        int(ctx.get("__wp_node_seed__", 0) or 0), f"{binding}::axes",
-                    ),
-                )
-                # Track the pinned pick the same way as a random pick —
-                # downstream constraint-aware wildcards need source
-                # info regardless of how the source resolved its option.
-                _record_pick(ctx, pinned, payload, pinned_rolled)
-                _record_axes(ctx, binding, pinned_rolled, payload)
-                detail = module_detail(ctx)
-                if detail is not None:
-                    detail.update({"mode": "pinned", "option_id": pinned.get("id")})
-                value = str(pinned.get("value", ""))
-                resolve_ctx = build_resolve_ctx(ctx, surface="wildcard")
-                with negatives.collecting(resolve_ctx) as col:
-                    out_value = resolve_text(value, resolve_ctx) if value else ""
-                _file_negatives(
-                    ctx, binding, resolve_ctx,
-                    int(ctx.get("__wp_node_seed__", 0) or 0),
-                    [(pinned, col.ref_negatives, None)],
-                )
-                return {binding: out_value}
-            # else: pinned target is missing — fall through to random.
+        # `match_variable`: take the option whose text equals another
+        # variable's value (case-insensitive), e.g. `$model_variant` from WP
+        # Model Info, so this wildcard's pick can drive constraints. No match →
+        # the fallback option if one is flagged, else a normal roll + warning.
+        match_var = instance.get("match_variable")
+        if pinned is None and isinstance(match_var, str) and match_var.strip():
+            pinned, pin_mode = _match_variable_option(ctx, options, match_var.strip())
+        if pinned is not None:
+            # A pinned option still rolls its axes: pinning fixes WHICH
+            # option fires, not which of the shoes it accepts. Roll BEFORE
+            # recording so the pick carries the single rolled winner (the
+            # constraint source-view a downstream target reads), same as the
+            # random path. Pinned bypasses this wildcard's own constraint
+            # application, so there's nothing to restrict the roll against.
+            pinned_rolled = _roll_axes(
+                _axis_menus(payload, pinned.get("sub_categories")),
+                _derive_module_rng(
+                    int(ctx.get("__wp_node_seed__", 0) or 0), f"{binding}::axes",
+                ),
+            )
+            # Track the pinned pick the same way as a random pick —
+            # downstream constraint-aware wildcards need source
+            # info regardless of how the source resolved its option.
+            _record_pick(ctx, pinned, payload, pinned_rolled)
+            _record_axes(ctx, binding, pinned_rolled, payload)
+            detail = module_detail(ctx)
+            if detail is not None:
+                detail.update({"mode": pin_mode, "option_id": pinned.get("id")})
+                if pin_mode != "pinned":
+                    detail["match_variable"] = match_var.strip()
+            value = str(pinned.get("value", ""))
+            resolve_ctx = build_resolve_ctx(ctx, surface="wildcard")
+            with negatives.collecting(resolve_ctx) as col:
+                out_value = resolve_text(value, resolve_ctx) if value else ""
+            _file_negatives(
+                ctx, binding, resolve_ctx,
+                int(ctx.get("__wp_node_seed__", 0) or 0),
+                [(pinned, col.ref_negatives, None)],
+            )
+            return {binding: out_value}
+        # else: nothing pinned or matched — fall through to random.
 
         # `category_filter` narrows the option pool to entries whose tag
         # set (`sub_categories`) satisfies a boolean expression
@@ -901,6 +970,16 @@ class WildcardHandler(ModuleHandler):
         if enabled is not None:
             allowed = set(enabled)
             options = [o for o in options if o.get("id") in allowed]
+
+        # Schema v9 fallback: the flagged option stays in the draw pool and
+        # is also taken when weights + constraints leave nothing to pick. Found
+        # after the node's filters + toggles, so a toggled-off one is gone.
+        from engine.modules._fallback import (
+            fallback_warning,
+            find_fallback,
+            pool_is_dead,
+        )
+        fallback = find_fallback(options)
 
         detail = module_detail(ctx)
         if detail is not None:
@@ -977,11 +1056,19 @@ class WildcardHandler(ModuleHandler):
                 # the allowed member by `_restrict_menus_by_constraints`.
                 target_axes=_accepts_axes(payload),
             )
-        if any_constraint_applied:
+        if any_constraint_applied and fallback is None:
             warn_excludes_all(options, my_id or "", ctx["__wp_warnings__"])
         if detail is not None:
             _explain_pool(detail, options)
             _explain_constraints(detail, applied_constraints)
+        use_fallback = fallback is not None and pool_is_dead(options)
+        if use_fallback:
+            assert fallback is not None
+            ctx["__wp_warnings__"].append(fallback_warning(
+                my_id or "", fallback, constrained=any_constraint_applied,
+            ))
+            if detail is not None:
+                detail["fallback"] = True
 
         # Effective seed selection:
         #   - locked_seed when present → reproducible per-instance
@@ -1030,7 +1117,11 @@ class WildcardHandler(ModuleHandler):
             weights = [max(0.0, float(o.get("weight", 1))) for o in pool]
             pool_n = len(pool)
             independent = bool(instance.get("pick_independent", False))
-            if independent:
+            if use_fallback:
+                # One fallback, never repeated: it stands in for the whole
+                # pick, so a `2-3` range doesn't render "hair, hair".
+                picks = [fallback] if hi > 0 else []
+            elif independent:
                 # SP2c: independent multi-pick draws WITH replacement (repeats
                 # allowed), mirroring the inline `~` flag — so the count is the
                 # requested range and is NOT clamped to the pool size.
@@ -1085,13 +1176,20 @@ class WildcardHandler(ModuleHandler):
             _record_axes(ctx, binding, rolled_list, payload)
             return {binding: ListVar(items, sep)}
 
-        chosen = _pick_weighted(options, rng)
+        # The fallback is taken without a draw, so no rng is consumed where
+        # the pre-v9 path returned empty.
+        chosen = fallback if use_fallback else _pick_weighted(options, rng)
         if chosen is None:
             return {binding: ""}
         if detail is not None:
             total = sum(_weight(o) for o in options)
             detail["option_id"] = chosen.get("id")
-            detail["chance"] = _weight(chosen) / total if total > 0 else None
+            # No draw happened for a fallback, so there is no chance to show
+            # (Debug reads `fallback` instead).
+            detail["chance"] = (
+                None if use_fallback
+                else _weight(chosen) / total if total > 0 else None
+            )
 
         # Roll the accepts axes AFTER the option draw (same rng, so a locked
         # seed still reproduces the option) but BEFORE recording the pick, so

@@ -193,6 +193,47 @@ class InjectorRowsInput:
             )
 
 
+@comfytype(io_type="WP_MODEL_INFO")
+class ModelInfoWidgetInput:
+    """Widget-only custom type — frontend binds ``getCustomWidgets["WP_MODEL_INFO"]``.
+
+    JSON ``{version, rules: [{variant, pattern}], family, variant, name}``;
+    the pins are empty when detection should decide. Parsed by
+    ``engine/model_info.py::parse_config``.
+    """
+
+    Type = str
+
+    class Input(io.WidgetInput):
+        def __init__(
+            self,
+            id: str,
+            display_name: str | None = None,
+            optional: bool = False,
+            tooltip: str | None = None,
+            lazy: bool | None = None,
+            default: str | None = None,
+            socketless: bool | None = None,
+            extra_dict: dict[str, Any] | None = None,
+            raw_link: bool | None = None,
+            advanced: bool | None = None,
+        ):
+            super().__init__(
+                id,
+                display_name,
+                optional,
+                tooltip,
+                lazy,
+                default,
+                socketless,
+                None,  # widget_type
+                None,  # force_input
+                extra_dict,
+                raw_link,
+                advanced,
+            )
+
+
 def deserialize_modules(payload: str) -> list[Module]:
     """Parse the widget JSON payload into a list of engine module dataclasses.
 
@@ -399,6 +440,11 @@ _CROSS_NODE_INTERNAL_KEYS = (
     "__wp_loop_index__",
     "__wp_seed_override__",
     "__wp_loop_seeds__",
+    # Sweep mode (engine/sweep.py): this frame's {uid: option_id} pins and
+    # the "hold other picks" flag, carried so every Context in the chain
+    # pins its own swept wildcards and holds the rest.
+    "__wp_pin_overrides__",
+    "__wp_sweep_hold__",
 )
 
 

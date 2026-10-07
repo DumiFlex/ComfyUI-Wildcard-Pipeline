@@ -5,8 +5,13 @@ import type { CleanerNodeConfig, Intensity, RuleId } from "./types";
 
 export const INTENSITY_TO_RULES: Record<Intensity, RuleId[]> = {
   gentle: ["whitespace"],
-  balanced: ["whitespace", "punctuation", "dedupe_exact"],
-  aggressive: ["whitespace", "punctuation", "dedupe_exact", "fuzzy_dedupe"],
+  // Empty groups + LoRA spacing never change what a prompt means; merging
+  // weights rewrites how it reads, so it waits for aggressive.
+  balanced: ["empty_groups", "lora_spacing", "whitespace", "punctuation", "dedupe_exact"],
+  aggressive: [
+    "empty_groups", "merge_weights", "lora_spacing",
+    "whitespace", "punctuation", "dedupe_exact", "fuzzy_dedupe",
+  ],
 };
 
 /** Mirrors `engine/cleaner/pipeline.INTENSITY_TO_NEG_RULES`: the "neg"
@@ -14,12 +19,18 @@ export const INTENSITY_TO_RULES: Record<Intensity, RuleId[]> = {
  *  are usually deliberate) and the blocklist never auto-enables. */
 export const INTENSITY_TO_NEG_RULES: Record<Intensity, RuleId[]> = {
   gentle: ["whitespace"],
-  balanced: ["whitespace", "punctuation", "dedupe_exact"],
-  aggressive: ["whitespace", "punctuation", "dedupe_exact"],
+  balanced: ["empty_groups", "lora_spacing", "whitespace", "punctuation", "dedupe_exact"],
+  aggressive: [
+    "empty_groups", "merge_weights", "lora_spacing",
+    "whitespace", "punctuation", "dedupe_exact",
+  ],
 };
 
 /** Same canonical order as engine/cleaner/rules/__init__.py:RULE_REGISTRY. */
 const REGISTRY_ORDER: RuleId[] = [
+  "empty_groups",
+  "merge_weights",
+  "lora_spacing",
   "whitespace",
   "punctuation",
   "dedupe_exact",

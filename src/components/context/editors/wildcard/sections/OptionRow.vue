@@ -484,6 +484,11 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
         data-test="opt-neg"
         :title="`Negative: ${negativeText} (edit in the library)`"
       >NEG</span>
+      <span
+        v-if="option.fallback"
+        class="opt__neg opt__neg--fb"
+        title="Rolls normally, and is also used when nothing else is left"
+      >FALLBACK</span>
       <span v-if="pairBadges.length > 0" class="opt__pair-badges" data-test="opt-pair-badges">
         <PairBadge
           v-for="p in pairBadges"
@@ -653,6 +658,10 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
   color: var(--wp-danger, #ef4444);
   background: color-mix(in srgb, var(--wp-danger, #ef4444) 14%, transparent);
   cursor: help;
+}
+.opt__neg--fb {
+  color: var(--wp-accent-400);
+  background: color-mix(in srgb, var(--wp-accent-500) 16%, transparent);
 }
 .opt__pair-badges {
   flex: 0 0 auto;

@@ -12,6 +12,7 @@ Optional power-user node that loops a WP_Context chain N times in a single workf
 | `override_seed` | switch | When OFF (default): `seed` is ignored. Downstream WP_Context widget seeds drive each node; loop iteration only adds XOR variation. When ON: `seed` becomes the base; derived N times via `strategy`; replaces downstream widget seeds. |
 | `iteration var` | text | Stamps `$<name>` (0..N-1) and `$<name>_total` (N) into each iteration's context. Default `iteration`. |
 | `bypass` | switch | Skip the loop. Behaves as `count=1`. |
+| Sweep combinations | menu | Run every combination of chosen wildcard options instead of `count` random rolls. See below. |
 
 ## Outputs
 
@@ -24,6 +25,15 @@ Optional power-user node that loops a WP_Context chain N times in a single workf
 Each iteration runs the downstream chain with a different seed. Locked modules (any wildcard with a locked seed) ignore the loop — they always roll their fixed seed. Everything else varies per iteration.
 
 Concrete example: `count=3`, `override_seed=ON`, `seed=42`, `strategy=sequential` → downstream WP_Context chain runs three times with chain seeds 42, 43, 44. PromptAssembler emits three prompts; KSampler renders three batches; SaveImage writes three files.
+
+## Sweep combinations
+
+Open **Sweep combinations** on the node and switch it on. Pick wildcards from the WP_Context nodes after the loop and tick which of their options to include; one Generate then runs every combination, one frame each. Sweeping `$hair` (red, blonde, black) against `$mood` (calm, joyful, brooding) gives 9 prompts in grid order: the first wildcard changes slowest, the last fastest.
+
+- **Limit** (default 64, max 999) caps the frames; extra combinations are skipped in order.
+- **Hold other picks** (default on) keeps every module you didn't sweep on the same pick across frames, so only the swept wildcards change.
+- The menu lists every frame before you run, the button shows the frame count, and `count` follows it.
+- Each frame pins the swept wildcards like a hand-pinned option: tag axes still roll and constraints they drive still apply downstream.
 
 ## Tips
 

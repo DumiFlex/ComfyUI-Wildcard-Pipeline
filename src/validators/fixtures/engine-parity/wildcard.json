@@ -37,6 +37,13 @@
         "weight": 1,
         "sub_categories": [],
         "is_null": true
+      },
+      {
+        "id": "opt00003",
+        "value": "calm",
+        "weight": 1,
+        "sub_categories": [],
+        "fallback": true
       }
     ]
   }

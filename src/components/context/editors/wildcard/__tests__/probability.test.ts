@@ -153,3 +153,15 @@ describe("probabilityFor", () => {
     expect(probabilityFor(catOpts[2], catOpts, { category_filter: "warm" })).toBe(0);
   });
 });
+
+describe("fallback option (v9)", () => {
+  it("gets its normal share like any option", () => {
+    const a = opt([], { id: "a", weight: 1 });
+    const b = opt([], { id: "b", weight: 3 });
+    const fb = opt([], { id: "fb", weight: 4, fallback: true });
+    const all = [a, b, fb];
+    expect(probabilityFor(fb, all, {})).toBe(0.5);
+    expect(probabilityFor(a, all, {})).toBe(0.125);
+    expect(probabilityFor(b, all, {})).toBe(0.375);
+  });
+});

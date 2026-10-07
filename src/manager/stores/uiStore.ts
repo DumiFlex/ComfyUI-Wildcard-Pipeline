@@ -40,6 +40,8 @@ const STORAGE_KEY_START_PAGE = "wp-start-page";
 export const STORAGE_KEY_LAST_ROUTE = "wp-last-route";
 const STORAGE_KEY_MOTION = "wp-motion";
 const STORAGE_KEY_WHATS_NEW = "wp-whats-new-after-update";
+/** Anonymous usage pings from the Community tab (passed to the embed). */
+const STORAGE_KEY_USAGE_STATS = "wp-usage-stats";
 export const STORAGE_KEY_LAST_SEEN_VERSION = "wp-last-seen-version";
 export const STORAGE_KEY_TEST_RUNNER_DEFAULTS = "wp-test-runner-defaults";
 /** Pre-merge home of density and the sidebar state (Tweaks panel). Read once
@@ -243,6 +245,7 @@ export const useUiStore = defineStore("ui", () => {
   const startPage = ref<StartPage>(readStoredEnum(STORAGE_KEY_START_PAGE, START_PAGES, "dashboard"));
   const motion = ref<MotionMode>(readStoredEnum(STORAGE_KEY_MOTION, MOTION_MODES, "auto"));
   const whatsNewAfterUpdate = ref<boolean>(readStoredEnum(STORAGE_KEY_WHATS_NEW, ["1", "0"] as const, "1") === "1");
+  const usageStats = ref<boolean>(readStoredEnum(STORAGE_KEY_USAGE_STATS, ["1", "0"] as const, "1") === "1");
   const testRunnerDefaults = ref<TestRunnerDefaults>(readTestRunnerDefaults());
   const maxRefDepth = ref<number>(readStoredMaxRefDepth());
   const checkOnLaunch = ref<boolean>(readStoredCheckOnLaunch());
@@ -354,6 +357,11 @@ export const useUiStore = defineStore("ui", () => {
     try { localStorage.setItem(STORAGE_KEY_WHATS_NEW, v ? "1" : "0"); } catch { /* ignore */ }
   }
 
+  function setUsageStats(v: boolean): void {
+    usageStats.value = v;
+    try { localStorage.setItem(STORAGE_KEY_USAGE_STATS, v ? "1" : "0"); } catch { /* ignore */ }
+  }
+
   function setTestRunnerDefaults(patch: Partial<TestRunnerDefaults>): void {
     const next = normalizeTestRunnerDefaults({ ...testRunnerDefaults.value, ...patch });
     testRunnerDefaults.value = next;
@@ -428,6 +436,8 @@ export const useUiStore = defineStore("ui", () => {
     setMotion,
     whatsNewAfterUpdate,
     setWhatsNewAfterUpdate,
+    usageStats,
+    setUsageStats,
     testRunnerDefaults,
     setTestRunnerDefaults,
     maxRefDepth,

@@ -1708,3 +1708,24 @@ describe("scanTemplateConflicts — Assembler negative template", () => {
     expect(out.map((c) => c.variable)).toEqual(["negatives"]);
   });
 });
+
+describe("scanConflicts — constraint_excludes_all", () => {
+  const value: ContextWidgetValue = {
+    version: 1,
+    modules: [constraint("c1", "aaaa1111", "ddddeeee")],
+  };
+
+  it("flags the constraint row with the source values that empty the target", () => {
+    const out = scanConflicts(
+      value, [], ["aaaa1111"], ["ddddeeee"], [], null, new Set(),
+      new Map([["c1", ["gloomy", "stormy"]]]),
+    );
+    const hit = out.find((c) => c.type === "constraint_excludes_all");
+    expect(hit).toMatchObject({ moduleId: "c1", variable: "ddddeeee", severity: "warning", detail: "gloomy, stormy" });
+  });
+
+  it("stays quiet without a dead-end entry", () => {
+    const out = scanConflicts(value, [], ["aaaa1111"], ["ddddeeee"]);
+    expect(out.find((c) => c.type === "constraint_excludes_all")).toBeUndefined();
+  });
+});

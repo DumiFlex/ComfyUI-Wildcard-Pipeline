@@ -25,6 +25,19 @@ const held = computed(() => instance.value.seed_scope === "hold");
 function onHoldClick(): void {
   emit("update", { instance: { ...instance.value, seed_scope: held.value ? "vary" : "hold" } });
 }
+
+// "Match variable": pick the option whose text equals `$<name>` instead of
+// rolling (engine `_match_variable_option`). Stored bare, absent when empty.
+const matchVar = computed(() =>
+  typeof instance.value.match_variable === "string" ? instance.value.match_variable : "",
+);
+function onMatchInput(e: Event): void {
+  const raw = (e.target as HTMLInputElement).value.replace(/^\$/, "").trim();
+  const next: Record<string, unknown> = { ...instance.value };
+  if (raw) next.match_variable = raw;
+  else delete next.match_variable;
+  emit("update", { instance: next as ModuleEntry["instance"] });
+}
 </script>
 
 <template>
@@ -57,11 +70,31 @@ function onHoldClick(): void {
       <i class="pi pi-link" aria-hidden="true" />
       Hold across run
     </button>
+    <label class="match" :class="{ 'match--on': matchVar }" data-test="runtime-match">
+      <i class="pi pi-equals" aria-hidden="true" />
+      <span>Match variable</span>
+      <span class="match__sigil">$</span>
+      <input
+        class="match__input"
+        type="text"
+        spellcheck="false"
+        placeholder="model_variant"
+        data-test="runtime-match-input"
+        :value="matchVar"
+        :disabled="frameActive || undefined"
+        @change="onMatchInput"
+      >
+    </label>
+    <p
+      v-if="matchVar"
+      class="runtime__frame-hint"
+      data-test="runtime-match-hint"
+    >Picks the option whose text equals ${{ matchVar }}. No match uses the fallback option, else rolls as usual.</p>
     <p
       v-if="frameActive"
       class="runtime__frame-hint"
       data-test="runtime-frame-hint"
-    >Hide from prompt and Hold across run apply to every frame — switch to base to change.</p>
+    >Hide from prompt, Hold across run and Match variable apply to every frame — switch to base to change.</p>
   </section>
 </template>
 
@@ -105,6 +138,30 @@ function onHoldClick(): void {
   opacity: 0.45;
   cursor: not-allowed;
 }
+.match {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px 3px 10px;
+  border: 1px solid var(--wp-border);
+  border-radius: 3px;
+  font: 11px var(--wp-font-sans);
+  color: var(--wp-text-muted, var(--wp-text2));
+  background: var(--wp-bg-deep, var(--wp-bg));
+}
+.match .pi { font-size: 11px; color: var(--wp-text-dim, var(--wp-text3)); }
+.match--on { border-color: var(--wp-accent); color: var(--wp-accent-text, var(--wp-text)); }
+.match__sigil { font-family: var(--wp-font-mono, monospace); color: var(--wp-text-dim, var(--wp-text3)); margin-right: -4px; }
+.match__input {
+  width: 120px;
+  padding: 2px 6px;
+  border: 1px solid var(--wp-border-soft, var(--wp-border));
+  border-radius: 2px;
+  background: var(--wp-bg2);
+  color: var(--wp-text);
+  font: 11px var(--wp-font-mono, monospace);
+}
+.match__input:disabled { opacity: 0.45; cursor: not-allowed; }
 .runtime__frame-hint {
   margin: 4px 0 0;
   font: 10px var(--wp-font-sans);

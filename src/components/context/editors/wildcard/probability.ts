@@ -28,6 +28,9 @@ export interface WildcardOption {
    *  resolve to empty string. See spec
    *  `docs/superpowers/specs/2026-05-24-null-wildcard-option-design.md`. */
   is_null?: boolean;
+  /** Schema v9: rolls normally, and is also used when nothing else is left
+   *  to pick (so it needs no special share here). */
+  fallback?: boolean;
 }
 
 export interface InstanceLike {

@@ -75,6 +75,10 @@ _SAMPLES: dict[str, tuple[type, dict]] = {
                 # through the validator or install rebuilds it as an
                 # invalid empty-value option.
                 {"id": "opt00002", "value": "", "weight": 1, "sub_categories": [], "is_null": True},
+                # Fallback (v9): the flag must survive the strict validator,
+                # or a shared pack's fallback rolls like any other option.
+                {"id": "opt00003", "value": "calm", "weight": 1, "sub_categories": [],
+                 "fallback": True},
             ],
         },
     ),

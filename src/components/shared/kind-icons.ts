@@ -38,6 +38,9 @@ export const KIND_ICON_MAP = {
   // "this came from the loop" at a glance. `pi-replay` = the loop-back
   // arrow, matching the iteration-counter semantic.
   loop:         "pi pi-replay",
+  // WP_ModelInfo vars (`$model_family` / `$model_variant` / `$model_name`).
+  // Graph-side like the injector; the chip names the checkpoint as source.
+  model:        "pi pi-microchip",
 } as const;
 
 export type WpKind = keyof typeof KIND_ICON_MAP;

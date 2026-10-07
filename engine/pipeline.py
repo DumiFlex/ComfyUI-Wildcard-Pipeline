@@ -19,6 +19,7 @@ from engine.modules import Module
 from engine.modules._detail import DETAIL_KEY, EXPLAIN_KEY
 from engine.modules.dispatcher import UnknownModuleType, resolve_module
 from engine.modules.snapshot import coerce_legacy_module
+from engine.sweep import apply_pin_override
 
 logger = logging.getLogger(__name__)
 
@@ -578,6 +579,11 @@ class PipelineEngine:
                         snapshot.get("instance"), dict
                     ):
                         snapshot["instance"] = {**snapshot["instance"], **_patch}
+                # Sweep mode (WP_ContextLoop): pin a swept wildcard to this
+                # frame's combination. Applied after the per-frame override so
+                # the sweep decides which option fires.
+                if isinstance(snapshot, dict):
+                    snapshot = apply_pin_override(snapshot, _module_uid, ctx)
             except Exception as e:
                 logger.warning(
                     "Failed to coerce module %r at index %s: %s", module, index, e
