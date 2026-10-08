@@ -5,6 +5,7 @@ import type {
   CategoryCreateInput, CategoryRow,
   DatabaseConfig, DatabaseConfigUpdate,
   BackupEntry, BackupList, ServerSettings, ServerSettingsPatch,
+  AiConfig, AiConfigPatch, AiTestResult, AiWildcardDraftRequest, AiWildcardDraftResult,
   TagStatus, TagSuggestResponse, TagDownloadResult, LibraryTagUpdateCounts,
   ModelKind, ModelSourceStatus, ModelSuggestResponse,
   DatabaseInfo, MaintenanceOp, MaintenanceResult,
@@ -378,6 +379,28 @@ export const api = {
       return request<ServerSettings>("/wp/api/settings", {
         method: "PUT",
         body: JSON.stringify(patch),
+      });
+    },
+  },
+  /** The AI assistant. Off until the user turns it on; the key is write-only. */
+  ai: {
+    config() {
+      return request<AiConfig>("/wp/api/ai/config", { method: "GET" });
+    },
+    saveConfig(patch: AiConfigPatch) {
+      return request<AiConfig>("/wp/api/ai/config", {
+        method: "PUT", body: JSON.stringify(patch),
+      });
+    },
+    models() {
+      return request<{ models: string[] }>("/wp/api/ai/models", { method: "POST" });
+    },
+    test() {
+      return request<AiTestResult>("/wp/api/ai/test", { method: "POST" });
+    },
+    draftWildcard(body: AiWildcardDraftRequest, signal?: AbortSignal) {
+      return request<AiWildcardDraftResult>("/wp/api/ai/wildcard/draft", {
+        method: "POST", body: JSON.stringify(body), signal,
       });
     },
   },

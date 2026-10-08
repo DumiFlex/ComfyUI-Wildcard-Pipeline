@@ -123,6 +123,11 @@ Open it from the ComfyUI sidebar. It's where your modules live between workflows
   into one wildcard whose options are tagged by list, with a tag group per folder level.
   You review the plan first (each wildcard's role, what was merged and how exactly it
   carries over), and the pack's entry points are filed into bundles per folder.
+- **AI assistant (optional, off by default):** connect a model you run yourself
+  (Ollama, LM Studio, llama.cpp) or your own Claude or OpenAI key under
+  **Settings → AI assistant**, then use **Draft with AI** in the wildcard editor
+  to write new options in the style of the ones you have. You review them before
+  anything is added, and nothing is saved until you press Save.
 - **Documentation:** the full guide, built into the app.
 
 ## Checking a run
@@ -149,7 +154,9 @@ install them from the manager's **Community** page.
 
 Everything runs locally. The extension only goes online to check for updates
 (you can turn this off in Settings), when you open the Community page, or when
-you choose to download the optional tag list for autocomplete. Details are in
+you choose to download the optional tag list for autocomplete. The optional AI
+assistant is off until you turn it on, and then talks only to the model server
+you choose (a local one keeps everything on your PC). Details are in
 [docs/network-access.md](docs/network-access.md).
 
 ## Contributing

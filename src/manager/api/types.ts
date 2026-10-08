@@ -795,6 +795,82 @@ export interface ServerSettingsPatch {
   backups?: Partial<ServerSettings["backups"]>;
 }
 
+/* ── AI assistant (/wp/api/ai/*) ──────────────────────────────────────── */
+
+export type AiProviderId = "anthropic" | "openai" | "ollama" | "lmstudio" | "llamacpp" | "custom";
+
+export interface AiPreset {
+  label: string;
+  api: "anthropic" | "openai" | "ollama";
+  /** Runs on the user's machine, so prompts don't leave it. */
+  local: boolean;
+  needs_key: boolean;
+  base_url: string;
+}
+
+/** The saved AI settings. The key itself is never sent back: `key_set` says
+ *  whether one is saved (or comes from the environment, `key_from_env`). */
+export interface AiConfig {
+  enabled: boolean;
+  provider: AiProviderId;
+  /** Empty means the preset's address. */
+  base_url: string;
+  model: string;
+  unload_after_s: number;
+  key_set: boolean;
+  key_from_env: boolean;
+  presets: Record<AiProviderId, AiPreset>;
+}
+
+export interface AiConfigPatch {
+  enabled?: boolean;
+  provider?: AiProviderId;
+  base_url?: string;
+  model?: string;
+  unload_after_s?: number;
+  /** Write-only. `""` removes the saved key. */
+  api_key?: string;
+}
+
+export interface AiTestResult {
+  ok: boolean;
+  models: string[];
+  /** `null` when no model is chosen yet. */
+  model_found: boolean | null;
+  json_ok: boolean | null;
+  latency_ms: number | null;
+  error: string | null;
+}
+
+export interface AiDraftOption {
+  value: string;
+  weight: number;
+  tags: string[];
+  negative: string;
+}
+
+export interface AiWildcardDraftRequest {
+  instruction: string;
+  count: number;
+  wildcard: {
+    name: string;
+    var_binding: string;
+    payload: {
+      options: Array<{ value: string }>;
+      sub_categories: string[];
+      tag_groups?: Record<string, string[]>;
+    };
+  };
+}
+
+export interface AiWildcardDraftResult {
+  options: AiDraftOption[];
+  /** Tags the draft uses that the wildcard doesn't have yet. */
+  new_tags: string[];
+  skipped: Array<{ text: string; reason: string }>;
+  model: string;
+}
+
 /* ── Tag autocomplete ─────────────────────────────────────────────────── */
 
 /** Danbooru's numeric tag categories. `null` when the installed file is the

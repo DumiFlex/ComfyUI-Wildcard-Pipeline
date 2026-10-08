@@ -73,6 +73,8 @@ import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { ResolveWarning } from "../utils/resolveTokens";
 import { brokenRefLabels } from "../utils/validateModule";
 import { NEG_ACCESSOR } from "../../widgets/richTokenize";
+import AiDraftPanel from "../components/ai/AiDraftPanel.vue";
+import { useAiConfig } from "../composables/useAiConfig";
 
 const props = defineProps<{ id?: string }>();
 const router = useRouter();
@@ -226,9 +228,14 @@ function snapshot(): string {
  *     wording changes.
  */
 const bulkPending = ref(false);
+/** "Draft with AI" (Settings › AI assistant). The button only shows once the
+ *  assistant is turned on. A draft not yet added counts as unsaved work. */
+const ai = useAiConfig();
+const aiDraftOpen = ref(false);
+const aiPending = ref(false);
 
 const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
-  () => bulkPending.value || snapshot() !== baseline.value,
+  () => bulkPending.value || aiPending.value || snapshot() !== baseline.value,
 );
 
 const draft = useEditorDraft({
@@ -1701,6 +1708,11 @@ function isUntouchedBlank(o: WildcardOption): boolean {
     && !o.negative;
 }
 
+function commitAiDraft(parsed: ParsedBulkOption[]): void {
+  commitBulkAddOptions(parsed);
+  aiDraftOpen.value = false;
+}
+
 function commitBulkAddOptions(parsed: ParsedBulkOption[]): void {
   bulkNote.value = "";
   let skippedTags = 0;
@@ -1960,8 +1972,10 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
 
 <template>
   <EditorFrame
-    :save-disabled="bulkAddOpen"
-    save-disabled-reason="Finish or cancel the bulk add first — use its own Add / Cancel buttons"
+    :save-disabled="bulkAddOpen || aiPending"
+    :save-disabled-reason="aiPending
+      ? 'Add or discard the AI draft first, with its own buttons'
+      : 'Finish or cancel the bulk add first — use its own Add / Cancel buttons'"
     :title="isEdit ? 'Edit wildcard' : 'New wildcard'"
     back-route="/wildcards"
     back-label="Wildcards"
@@ -2347,6 +2361,14 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
           @click="bulkAddOpen = !bulkAddOpen"
         >Bulk add</Button>
         <Button
+          v-if="ai.config.value?.enabled"
+          size="sm"
+          :variant="aiDraftOpen ? 'secondary' : 'ghost'"
+          icon="pi-microchip-ai"
+          data-test="wc-ai-draft"
+          @click="aiDraftOpen = !aiDraftOpen"
+        >Draft with AI</Button>
+        <Button
           size="sm"
           variant="ghost"
           icon="pi-ban"
@@ -2359,6 +2381,18 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
         </Button>
       </template>
       <template #subheader>
+      <div v-if="aiDraftOpen && ai.config.value?.enabled" class="wpc-bulk-controls">
+        <AiDraftPanel
+          :name="name"
+          :var-binding="varBinding"
+          :existing-values="options.map((o) => o.value)"
+          :existing-tags="subCategories"
+          :tag-groups="tagGroups"
+          @commit-options="commitAiDraft"
+          @cancel="aiDraftOpen = false"
+          @update:pending="(v: boolean) => (aiPending = v)"
+        />
+      </div>
       <div v-if="bulkMode && (bulkAddOpen || selectedCount > 0 || bulkNote)" class="wpc-bulk-controls">
         <BulkAddPanel
           v-if="bulkAddOpen"
@@ -2709,10 +2743,12 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
          source placement here only affects vnode tracking. -->
     <ConfirmDialog
       :visible="showConfirm"
-      :title="bulkPending ? 'Discard un-added options?' : 'Discard unsaved changes?'"
-      :body="bulkPending
-        ? 'The bulk add box still holds options you have not added. Leaving discards them.'
-        : 'You have unsaved edits. Leaving this page will discard them.'"
+      :title="bulkPending || aiPending ? 'Discard un-added options?' : 'Discard unsaved changes?'"
+      :body="aiPending
+        ? 'The AI draft holds options you have not added. Leaving discards them.'
+        : bulkPending
+          ? 'The bulk add box still holds options you have not added. Leaving discards them.'
+          : 'You have unsaved edits. Leaving this page will discard them.'"
       confirm-label="Discard & leave"
       cancel-label="Stay"
       variant="danger"
