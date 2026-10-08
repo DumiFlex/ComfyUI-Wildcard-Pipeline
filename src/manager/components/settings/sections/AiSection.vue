@@ -17,7 +17,7 @@ import SettingRow from "../SettingRow.vue";
 import { api } from "../../../api/client";
 import type { AiProviderId, AiTestResult } from "../../../api/types";
 import { useAiConfig } from "../../../composables/useAiConfig";
-import { SUGGESTED_LOCAL_MODELS } from "../ai-models";
+import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../ai-models";
 
 const { config, error, save } = useAiConfig();
 
@@ -317,21 +317,28 @@ const off = computed(() => !config.value?.enabled);
       </div>
     </SettingGroup>
 
-    <SettingGroup title="Suggested local models" note="Uncensored builds that don't refuse NSFW words. Pull one with Ollama (ollama pull <name>) or load the same model in LM Studio.">
-      <table class="wp-ai-set__models" data-test="ai-suggested-models">
-        <thead><tr><th>GPU memory</th><th>Model</th><th>Good for</th><th>Get it</th></tr></thead>
-        <tbody>
-          <tr v-for="m in SUGGESTED_LOCAL_MODELS" :key="m.name">
-            <td>{{ m.vram }}</td>
-            <td><code>{{ m.name }}</code></td>
-            <td>{{ m.goodFor }}</td>
-            <td class="wp-ai-set__links">
-              <a :href="m.ollamaUrl" target="_blank" rel="noopener noreferrer" data-test="ai-model-ollama">Ollama</a>
-              <a :href="m.hfUrl" target="_blank" rel="noopener noreferrer" data-test="ai-model-hf">Hugging Face</a>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <SettingGroup title="Suggested local models" note="Uncensored models you run yourself. Pull one with Ollama (ollama pull <name>), or download it from Hugging Face for LM Studio or llama.cpp.">
+      <div data-test="ai-suggested-models">
+        <div v-for="g in SUGGESTED_MODEL_GROUPS" :key="g.use" class="wp-ai-set__model-group" :data-test="`ai-models-${g.use}`">
+          <div class="wp-ai-set__model-group-title">{{ g.title }}</div>
+          <div class="wp-ai-set__model-group-note">{{ g.note }}</div>
+          <table class="wp-ai-set__models">
+            <colgroup><col style="width: 90px" /><col /><col /><col style="width: 160px" /></colgroup>
+            <thead><tr><th>GPU memory</th><th>Model</th><th>Good for</th><th>Get it</th></tr></thead>
+            <tbody>
+              <tr v-for="m in SUGGESTED_LOCAL_MODELS.filter((x) => x.use === g.use)" :key="m.name">
+                <td>{{ m.vram }}</td>
+                <td><code>{{ m.name }}</code></td>
+                <td>{{ m.goodFor }}</td>
+                <td class="wp-ai-set__links">
+                  <a v-if="m.ollamaUrl" :href="m.ollamaUrl" target="_blank" rel="noopener noreferrer" data-test="ai-model-ollama">Ollama</a>
+                  <a :href="m.hfUrl" target="_blank" rel="noopener noreferrer" data-test="ai-model-hf">Hugging Face</a>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </SettingGroup>
   </template>
 </template>
@@ -348,7 +355,7 @@ const off = computed(() => !config.value?.enabled);
 }
 .wp-ai-set__privacy[data-local="true"] { border-left-color: var(--wp-success); }
 .wp-ai-set__privacy strong { color: var(--wp-text); }
-.wp-ai-set__models { width: 100%; border-collapse: collapse; font-size: var(--wp-text-sm); }
+.wp-ai-set__models { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: var(--wp-text-sm); }
 .wp-ai-set__models th {
   text-align: left;
   font-size: 11px;
@@ -363,6 +370,9 @@ const off = computed(() => !config.value?.enabled);
   border-top: 1px solid var(--wp-border);
   color: var(--wp-text-muted);
 }
+.wp-ai-set__model-group + .wp-ai-set__model-group { margin-top: var(--wp-space-6); }
+.wp-ai-set__model-group-title { font-size: var(--wp-text-sm); font-weight: 600; color: var(--wp-text); }
+.wp-ai-set__model-group-note { font-size: var(--wp-text-sm); color: var(--wp-text-muted); margin: 2px 0 var(--wp-space-3); }
 .wp-ai-set__links { white-space: nowrap; }
 .wp-ai-set__links a { color: var(--wp-accent); text-decoration: none; }
 .wp-ai-set__links a:hover { text-decoration: underline; }

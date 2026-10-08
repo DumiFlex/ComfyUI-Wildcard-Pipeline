@@ -4,7 +4,7 @@ import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
-import { SUGGESTED_LOCAL_MODELS } from "../../../components/settings/ai-models";
+import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../components/settings/ai-models";
 </script>
 
 <template>
@@ -65,18 +65,28 @@ import { SUGGESTED_LOCAL_MODELS } from "../../../components/settings/ai-models";
 
     <DocSection title="Which model">
       <p>
-        Hosted models (Claude, OpenAI) give the best results but may refuse explicit content.
-        These uncensored local builds write NSFW lists without refusing. Install one in Ollama
-        with <code>ollama pull</code> and the name below, or download it from Hugging Face for
-        LM Studio or llama.cpp.
+        Hosted models (Claude, OpenAI) follow instructions best but may refuse explicit content.
+        For NSFW packs, run an uncensored model yourself. Not refusing isn't enough, though: a
+        model also has to know the words, so the suggestions come in two groups. Install one in
+        Ollama with <code>ollama pull</code> and the name below, or download it from Hugging Face
+        for LM Studio or llama.cpp.
       </p>
-      <ul class="wp-doc-ai-models">
-        <li v-for="m in SUGGESTED_LOCAL_MODELS" :key="m.name">
-          <code>{{ m.name }}</code> ({{ m.vram }} GPU): {{ m.goodFor }}.
-          <a :href="m.ollamaUrl" target="_blank" rel="noopener noreferrer">Ollama</a> ·
-          <a :href="m.hfUrl" target="_blank" rel="noopener noreferrer">Hugging Face</a>
-        </li>
-      </ul>
+      <template v-for="g in SUGGESTED_MODEL_GROUPS" :key="g.use">
+        <p><b>{{ g.title }}.</b> {{ g.note }}</p>
+        <ul class="wp-doc-ai-models">
+          <li v-for="m in SUGGESTED_LOCAL_MODELS.filter((x) => x.use === g.use)" :key="m.name">
+            <code>{{ m.name }}</code> ({{ m.vram }} GPU): {{ m.goodFor }}.
+            <template v-if="m.ollamaUrl">
+              <a :href="m.ollamaUrl" target="_blank" rel="noopener noreferrer">Ollama</a> ·
+            </template>
+            <a :href="m.hfUrl" target="_blank" rel="noopener noreferrer">Hugging Face</a>
+          </li>
+        </ul>
+      </template>
+      <DocCallout variant="tip">
+        Keep a writer selected for drafting, and switch the model to a builder in Settings when
+        you organize a library or build a whole pack.
+      </DocCallout>
     </DocSection>
 
     <DocSection title="Privacy">

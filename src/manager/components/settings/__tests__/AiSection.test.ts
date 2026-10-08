@@ -48,10 +48,12 @@ describe("Settings › AI assistant", () => {
     expect(w.get('[data-test="ai-suggested-models"]').text()).toContain("abliterated");
     const ollama = w.findAll('[data-test="ai-model-ollama"]');
     const hf = w.findAll('[data-test="ai-model-hf"]');
-    expect(ollama.length).toBe(SUGGESTED_LOCAL_MODELS.length);
+    expect(ollama.length).toBe(SUGGESTED_LOCAL_MODELS.filter((m) => m.ollamaUrl).length);
+    expect(w.find('[data-test="ai-models-writing"]').text()).toContain("Rocinante");
+    expect(w.find('[data-test="ai-models-building"]').text()).toContain("abliterated");
     expect(hf.length).toBe(SUGGESTED_LOCAL_MODELS.length);
     for (const a of [...ollama, ...hf]) {
-      expect(a.attributes("href")).toMatch(/^https:\/\/(ollama\.com\/huihui_ai|huggingface\.co\/huihui-ai)\//);
+      expect(a.attributes("href")).toMatch(/^https:\/\/(ollama\.com|huggingface\.co)\//);
       expect(a.attributes("target")).toBe("_blank");
       expect(a.attributes("rel")).toContain("noopener");
     }
