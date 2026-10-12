@@ -8,15 +8,18 @@ it makes:
 | --- | --- | --- |
 | Update check | When the manager opens (turn off under Settings → Updates), or when you click **Check now** | GitHub releases API |
 | Community tab | Only when you open the **Community** page in the manager | `wp.dumiflex.dev` |
-| AI assistant | Only after you turn it on under Settings → AI assistant, and then only when you test the connection, refresh the model list or ask it to draft something | The server you set there: your own Ollama, LM Studio or llama.cpp on this PC, or the Claude or OpenAI API |
+| AI assistant | Only after you turn it on under Settings → AI assistant, and then only when you test the connection, refresh the model list or ask it to draft or change something | The server you set there: your own Ollama, LM Studio or llama.cpp on this PC, or the Claude or OpenAI API |
 | Booru tag list for value autocomplete | Only when you click **Download** under Settings → Tag autocomplete | `github.com` → `objects.githubusercontent.com`, our own release asset |
 
 Delete the downloaded tag file and the autocomplete feature simply turns off.
 
 The AI assistant is off by default. With a local server (Ollama, LM Studio,
 llama.cpp) nothing leaves your PC. With Claude or OpenAI, the text you ask
-about (your request, the wildcard's name, its existing options and tags) is
-sent to that provider under your own account.
+about is sent to that provider under your own account: your request, the
+wildcard's name, its existing options and tags, and for rules the wildcards
+involved. Writing derivation rules also sends the list of variables your
+library sets, with the first options of each wildcard, so the model can use
+their names.
 
 ## How the AI assistant is locked down
 

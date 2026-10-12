@@ -8,6 +8,10 @@ import type {
   AiConfig, AiConfigPatch, AiTestResult, AiWildcardDraftRequest, AiWildcardDraftResult,
   AiWildcardEditRequest,
   AiWildcardEditResult,
+  AiDerivationDraftRequest,
+  AiDerivationDraftResult,
+  AiConstraintDraftRequest,
+  AiConstraintDraftResult,
   TagStatus, TagSuggestResponse, TagDownloadResult, LibraryTagUpdateCounts,
   ModelKind, ModelSourceStatus, ModelSuggestResponse,
   DatabaseInfo, MaintenanceOp, MaintenanceResult,
@@ -407,6 +411,16 @@ export const api = {
     },
     editWildcard(body: AiWildcardEditRequest, signal?: AbortSignal) {
       return request<AiWildcardEditResult>("/wp/api/ai/wildcard/edit", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    draftDerivation(body: AiDerivationDraftRequest, signal?: AbortSignal) {
+      return request<AiDerivationDraftResult>("/wp/api/ai/derivation/draft", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    draftConstraint(body: AiConstraintDraftRequest, signal?: AbortSignal) {
+      return request<AiConstraintDraftResult>("/wp/api/ai/constraint/draft", {
         method: "POST", body: JSON.stringify(body), signal,
       });
     },

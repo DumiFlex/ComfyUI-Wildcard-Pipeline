@@ -18,6 +18,19 @@ ANSWER = {"options": [
 EDIT_ANSWERS = {
     "wildcard_remove": {"remove": [{"id": "2", "reason": "modern"}, {"id": "99", "reason": "?"}]},
     "wildcard_rewrite": {"options": [{"id": "1", "text": "a long red cloak"}]},
+    "derivation_rules": {"rules": [{
+        "summary": "Mages get a title",
+        "branches": [{"match": "all",
+                      "conditions": [{"var": "$class", "op": "equals", "value": "MAGE"}],
+                      "actions": [{"target_var": "title", "mode": "replace",
+                                   "value": "Archmage"}]}],
+        "else_actions": [],
+    }]},
+    "constraint_rules": {"rules": [
+        {"source": "#magic", "target": "#blade", "effect": "exclude", "factor": 0,
+         "reason": "no swords"},
+        {"source": "S1", "target": "T1", "effect": "boost", "factor": 3, "reason": "classic"},
+    ]},
 }
 
 
@@ -277,3 +290,70 @@ async def test_edit_input_validation(wp_client, fake_llm):
     resp = await wp_client.post(url, json=many)
     assert resp.status == 400
     assert "select up to 300" in await resp.text()
+
+
+async def _wildcard(wp_client, name, var, options, tags):
+    resp = await wp_client.post("/wp/api/modules", json={
+        "type": "wildcard", "name": name, "description": "", "category_id": None, "tags": [],
+        "payload": {"var_binding": var, "sub_categories": tags, "options": options},
+    })
+    assert resp.status == 201, await resp.text()
+    return (await resp.json())["id"]
+
+
+async def _two_wildcards(wp_client):
+    src = await _wildcard(wp_client, "Class", "class", [
+        {"id": "aaaa0001", "value": "mage", "weight": 1, "sub_categories": ["magic"]},
+        {"id": "aaaa0002", "value": "warrior", "weight": 1, "sub_categories": []},
+    ], ["magic"])
+    tgt = await _wildcard(wp_client, "Weapon", "weapon", [
+        {"id": "bbbb0001", "value": "oak staff", "weight": 1, "sub_categories": []},
+        {"id": "bbbb0002", "value": "longsword", "weight": 1, "sub_categories": ["blade"]},
+    ], ["blade"])
+    return src, tgt
+
+
+async def test_derivation_draft_uses_library_variables(wp_client, fake_llm):
+    await _two_wildcards(wp_client)
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    resp = await wp_client.post("/wp/api/ai/derivation/draft", json={
+        "instruction": "give mages a title", "derivation": {"name": "Titles", "rules": []},
+    })
+    assert resp.status == 200, await resp.text()
+    body = await resp.json()
+    [r] = body["rules"]
+    cond = r["rule"]["branches"][0]["condition"]
+    assert cond == {"var": "class", "op": "equals", "value": "mage"}
+    assert r["warnings"] == []
+    assert body["model"] == "m1"
+    prompt = fake_llm.seen[-1]["body"]["messages"][1]["content"]
+    assert '$class (wildcard "Class"): mage, warrior' in prompt
+    assert "$model_family" in prompt
+    assert (await wp_client.post("/wp/api/ai/derivation/draft", json={})).status == 400
+
+
+async def test_constraint_draft_reads_both_wildcards(wp_client, fake_llm):
+    src, tgt = await _two_wildcards(wp_client)
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    url = "/wp/api/ai/constraint/draft"
+    resp = await wp_client.post(url, json={
+        "instruction": "mages never use swords",
+        "constraint": {"source_wildcard_id": src, "target_wildcard_id": tgt,
+                       "matrix": {}, "exceptions": []},
+    })
+    assert resp.status == 200, await resp.text()
+    body = await resp.json()
+    assert body["cells"][0]["cell"] == {"mode": "exclude", "factor": 0}
+    assert body["exceptions"][0]["exception"] == {
+        "source": "mage", "target": "oak staff", "mode": "boost", "factor": 3,
+        "source_id": "aaaa0001", "target_id": "bbbb0001",
+    }
+    prompt = fake_llm.seen[-1]["body"]["messages"][1]["content"]
+    assert "S1. mage  [#magic]" in prompt and "T2. longsword  [#blade]" in prompt
+    missing = {"instruction": "x", "constraint": {"source_wildcard_id": src}}
+    assert (await wp_client.post(url, json=missing)).status == 400
+    gone = {"instruction": "x",
+            "constraint": {"source_wildcard_id": src, "target_wildcard_id": "deadbeef"}}
+    assert (await wp_client.post(url, json=gone)).status == 404

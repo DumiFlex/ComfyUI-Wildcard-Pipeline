@@ -127,8 +127,10 @@ Open it from the ComfyUI sidebar. It's where your modules live between workflows
   (Ollama, LM Studio, llama.cpp) or your own Claude or OpenAI key under
   **Settings → AI assistant**, then press **AI** in the wildcard editor to write
   new options in the style of the ones you have, or to remove, rewrite, retag or
-  re-weight the ones there. You review every change first, and nothing is saved
-  until you press Save.
+  re-weight the ones there. In the derivation and constraint editors, describe
+  the rules you want and it writes them using your library's variables, options
+  and tags. You review every change first, and nothing is saved until you press
+  Save.
 - **Documentation:** the full guide, built into the app.
 
 ## Checking a run

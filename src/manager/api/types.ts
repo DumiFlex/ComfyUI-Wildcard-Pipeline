@@ -907,6 +907,60 @@ export interface AiWildcardEditResult {
   model: string;
 }
 
+export interface AiDerivationDraftRequest {
+  instruction: string;
+  derivation: { name: string; rules: DerivationRule[] };
+}
+
+export interface AiDerivationDraftRule {
+  rule: DerivationRule;
+  summary: string;
+  /** Things that work but look wrong: a variable nothing sets, an option
+   *  the wildcard doesn't have. */
+  warnings: string[];
+}
+
+export interface AiDerivationDraftResult {
+  rules: AiDerivationDraftRule[];
+  skipped: Array<{ text: string; reason: string }>;
+  model: string;
+}
+
+export interface AiConstraintDraftRequest {
+  instruction: string;
+  constraint: {
+    source_wildcard_id: string;
+    target_wildcard_id: string;
+    matrix: ConstraintMatrix;
+    exceptions: ConstraintException[];
+  };
+}
+
+export interface AiConstraintCellDraft {
+  source_tag: string;
+  target_tag: string;
+  cell: ConstraintCell;
+  reason: string;
+  /** The constraint already has a rule for this tag pair. */
+  replaces: boolean;
+}
+
+export interface AiConstraintExceptionDraft {
+  exception: ConstraintException;
+  reason: string;
+  /** "#tag → option" when the model's rule named a tag on one side and
+   *  was expanded into one exception per option; "" otherwise. */
+  from: string;
+  replaces: boolean;
+}
+
+export interface AiConstraintDraftResult {
+  cells: AiConstraintCellDraft[];
+  exceptions: AiConstraintExceptionDraft[];
+  skipped: Array<{ text: string; reason: string }>;
+  model: string;
+}
+
 /* ── Tag autocomplete ─────────────────────────────────────────────────── */
 
 /** Danbooru's numeric tag categories. `null` when the installed file is the

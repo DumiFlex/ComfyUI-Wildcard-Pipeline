@@ -23,6 +23,8 @@ import ListFilter from "../components/ui/ListFilter.vue";
 import { derivationRuleHaystack } from "../utils/listFilter";
 import { loraByModelRule } from "../utils/derivation-presets";
 import BulkDeleteToolbar from "../components/BulkDeleteToolbar.vue";
+import AiDerivationPanel from "../components/ai/AiDerivationPanel.vue";
+import { useAiConfig } from "../composables/useAiConfig";
 import { useBulkSelection } from "../composables/useBulkSelection";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useToast } from "../composables/useToast";
@@ -145,8 +147,13 @@ function snapshot(): string {
   });
 }
 
+const ai = useAiConfig();
+const aiOpen = ref(false);
+/** The AI panel holds rules the user hasn't added yet. */
+const aiPending = ref(false);
+
 const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
-  () => snapshot() !== baseline.value,
+  () => aiPending.value || snapshot() !== baseline.value,
 );
 
 const draft = useEditorDraft({
@@ -346,6 +353,16 @@ onMounted(async () => {
   }
   baseline.value = snapshot();
 });
+
+function addAiRules(incoming: DerivationRule[]): void {
+  rules.value = [...rules.value, ...incoming.map(migrateRule)];
+  toast.push({
+    severity: "success",
+    summary: `Added ${incoming.length} rule${incoming.length === 1 ? "" : "s"}`,
+    detail: "Check them, then Save.",
+    life: 3000,
+  });
+}
 
 function addRule() {
   rules.value = [...rules.value, blankRule()];
@@ -617,6 +634,14 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
           @click="ruleBulkToggleMode"
         >{{ ruleBulkActive ? "Done" : "Bulk edit" }}</Button>
         <Button
+          v-if="ai.config.value?.enabled"
+          size="sm"
+          :variant="aiOpen ? 'secondary' : 'ghost'"
+          icon="pi-microchip-ai"
+          data-test="drv-ai"
+          @click="aiOpen = !aiOpen"
+        >AI</Button>
+        <Button
           size="sm"
           variant="ghost"
           icon="pi-microchip"
@@ -650,6 +675,14 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
           />
         </div>
       </template>
+      <AiDerivationPanel
+        v-if="aiOpen && ai.config.value?.enabled"
+        :name="name"
+        :rules="rules"
+        @add="addAiRules"
+        @close="aiOpen = false"
+        @update:pending="(v: boolean) => (aiPending = v)"
+      />
       <p class="wp-card__hint">
         Each rule runs independently. Inside a rule, branches evaluate top-to-bottom — the first matching IF/ELIF wins; the optional ELSE only fires when no branch matched.
       </p>

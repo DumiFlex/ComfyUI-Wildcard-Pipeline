@@ -13,7 +13,7 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
     title="AI assistant"
     icon="pi pi-microchip-ai"
     tone="neutral"
-    blurb="Optional and off by default: connect a model you choose and let it add, remove, rewrite, retag and re-weight wildcard options for you to review."
+    blurb="Optional and off by default: connect a model you choose and let it write wildcard options, edit the ones you have, and write derivation and constraint rules, all for you to review."
   >
     <DocSection title="What it does">
       <p>
@@ -23,10 +23,10 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         the assistant on.
       </p>
       <p>
-        Today it works on wildcards: it adds options and removes, rewrites, retags or
-        re-weights the ones you have. More is planned: rules from plain language, organizing
-        your library, a chat that can edit modules, and building a
-        whole pack from a description.
+        Today it adds wildcard options and removes, rewrites, retags or re-weights the ones
+        you have, and writes derivation and constraint rules from a description. More is
+        planned: organizing your library, a chat that can edit modules, and building a whole
+        pack from a description.
       </p>
     </DocSection>
 
@@ -86,6 +86,25 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       </p>
     </DocSection>
 
+    <DocSection title="Write rules from a description">
+      <p>
+        The derivation and constraint editors have an <b>AI</b> button too. Describe what the
+        rules should do in your own words and the model writes them. You get each rule in plain
+        words with a tick box, and nothing changes until you press <b>Add</b> or
+        <b>Apply</b>; nothing is saved until you press <b>Save</b>.
+      </p>
+      <DocKeyList
+        :items="[
+          { term: 'Derivations', desc: 'For example: when $class is mage, set $title to Archmage and add robes to $outfit. The model sees every variable your library sets and the options of its wildcards, so it uses their real names. A rule that reads a variable nothing sets, or tests for an option the wildcard doesn\'t have, comes with a warning. Option names are fixed to the exact spelling, since the test is case-sensitive. New rules go to the end of the list.' },
+          { term: 'Constraints', desc: 'Pick the source and target wildcards first, then press AI on the Rule matrix. For example: mages never carry swords, warriors rarely get staves. Rules between two tags go in the matrix, rules between two options become exceptions, and a tag paired with one option becomes an exception per option. A rule for a pair that already has one is marked “replaces” and takes its place.' },
+        ]"
+      />
+      <DocCallout variant="tip">
+        Rules need a model that follows instructions well. If the answer comes back unusable,
+        switch to one of the builder models below.
+      </DocCallout>
+    </DocSection>
+
     <DocSection title="Which model">
       <p>
         Hosted models (Claude, OpenAI) follow instructions best but may refuse explicit content.
@@ -115,7 +134,9 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
     <DocSection title="Privacy">
       <p>
         With a local server nothing leaves your PC. With Claude or OpenAI, your request and the
-        wildcard's name, options and tags go to that provider under your account.
+        wildcard's name, options and tags go to that provider under your account. Writing
+        derivation rules also sends the variables your library sets, with the first options of
+        each wildcard; constraint rules send the two wildcards' options and tags.
       </p>
       <DocCallout variant="warn">
         ComfyUI has no login, so anyone who can reach its port can use the assistant while it is
@@ -127,6 +148,8 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       <CrossLinks
         :links="[
           { id: 'wildcard', label: 'Wildcard', icon: 'pi pi-sparkles', tone: 'wildcard' },
+          { id: 'derivation', label: 'Derivation', icon: 'pi pi-arrow-right-arrow-left', tone: 'derivation' },
+          { id: 'constraint', label: 'Constraint', icon: 'pi pi-filter', tone: 'constraint' },
           { id: 'chips-and-references', label: 'Chips & references', icon: 'pi pi-tag', tone: 'neutral' },
         ]"
       />

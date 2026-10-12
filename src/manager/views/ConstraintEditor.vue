@@ -27,6 +27,8 @@ import Checkbox from "../components/ui/Checkbox.vue";
 import ListFilter from "../components/ui/ListFilter.vue";
 import { constraintExceptionHaystack } from "../utils/listFilter";
 import BulkDeleteToolbar from "../components/BulkDeleteToolbar.vue";
+import AiConstraintPanel from "../components/ai/AiConstraintPanel.vue";
+import { useAiConfig } from "../composables/useAiConfig";
 import { useBulkSelection } from "../composables/useBulkSelection";
 import RichTextPreview from "../components/RichTextPreview.vue";
 import ConstraintMatrixGrid from "../components/ConstraintMatrix.vue";
@@ -62,6 +64,8 @@ import type {
   ConstraintCell,
   ConstraintException,
   ConstraintMatrix,
+  AiConstraintCellDraft,
+  AiConstraintExceptionDraft,
   ConstraintMode,
   ConstraintPayload,
   ModuleHistoryEntry,
@@ -197,8 +201,13 @@ function snapshot(): string {
   });
 }
 
+const ai = useAiConfig();
+const aiOpen = ref(false);
+/** The AI panel holds rules the user hasn't applied yet. */
+const aiPending = ref(false);
+
 const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
-  () => snapshot() !== baseline.value,
+  () => aiPending.value || snapshot() !== baseline.value,
 );
 
 const draft = useEditorDraft({
@@ -897,6 +906,33 @@ function onMatrixUpdate(next: ConstraintMatrix) {
   matrix.value = next;
 }
 
+/** Write the AI's ticked rules in: a tag pair sets its matrix cell, an
+ *  option pair replaces the exception that pair already had (the engine
+ *  keeps only one per pair) or is appended. */
+function applyAiRules(cells: AiConstraintCellDraft[], excs: AiConstraintExceptionDraft[]): void {
+  if (cells.length) {
+    const next: ConstraintMatrix = { ...matrix.value };
+    for (const c of cells) {
+      next[c.source_tag] = { ...(next[c.source_tag] ?? {}), [c.target_tag]: { ...c.cell } };
+    }
+    matrix.value = next;
+  }
+  for (const { exception } of excs) {
+    const at = exceptions.value.findIndex(
+      (e) => e.source === exception.source && e.target === exception.target,
+    );
+    if (at >= 0) exceptions.value.splice(at, 1, { ...exception });
+    else exceptions.value.push({ ...exception });
+  }
+  const n = cells.length + excs.length;
+  toast.push({
+    severity: "success",
+    summary: `Applied ${n} rule${n === 1 ? "" : "s"}`,
+    detail: "Check the matrix and exceptions, then Save.",
+    life: 3000,
+  });
+}
+
 function addException() {
   exceptions.value.push({ source: "", target: "", mode: "allow", factor: 1 });
 }
@@ -1419,8 +1455,30 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
         >
           <i class="pi pi-lock" aria-hidden="true" /> Read-only
         </span>
-        <span v-else class="wp-card__hint">Click a cell to edit rule + factor</span>
+        <template v-else>
+          <span class="wp-card__hint">Click a cell to edit rule + factor</span>
+          <Button
+            v-if="ai.config.value?.enabled && sourceWildcardId && targetWildcardId"
+            size="sm"
+            :variant="aiOpen ? 'secondary' : 'ghost'"
+            icon="pi-microchip-ai"
+            data-test="cn-ai"
+            @click="aiOpen = !aiOpen"
+          >AI</Button>
+        </template>
       </template>
+      <AiConstraintPanel
+        v-if="aiOpen && ai.config.value?.enabled && sourceWildcardId && targetWildcardId && !refMissing"
+        :source-wildcard-id="sourceWildcardId"
+        :target-wildcard-id="targetWildcardId"
+        :source-name="sourceWildcard?.name ?? ''"
+        :target-name="targetWildcard?.name ?? ''"
+        :matrix="matrix"
+        :exceptions="exceptions"
+        @apply="applyAiRules"
+        @close="aiOpen = false"
+        @update:pending="(v: boolean) => (aiPending = v)"
+      />
       <div
         v-if="!sourceWildcardId || !targetWildcardId"
         class="wp-empty-card"
