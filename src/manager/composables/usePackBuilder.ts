@@ -14,8 +14,8 @@
 import { computed, ref, shallowRef } from "vue";
 import { api, ApiError } from "../api/client";
 import type {
-  AiPackBuilt, AiPackCheck, AiPackInstallResult, AiPackItem, AiPackItemResult, AiPackPlan,
-  AiPackPlanResult,
+  AiPackBuilt, AiPackCheck, AiPackFinding, AiPackInstallResult, AiPackItem, AiPackItemResult,
+  AiPackPlan, AiPackPlanResult,
 } from "../api/types";
 import { useAiConversation } from "./useAiConversation";
 
@@ -34,7 +34,7 @@ const MAX_REPAIRS = 2;
 /** Mirrors `engine/ai/pack.py:build_order`: vocabularies (wildcards with
  *  no variable) first, since other items point at them by name. */
 const BUILD_RANK: Record<AiPackItem["kind"], number> = {
-  fixed_values: 1, wildcard: 1, derivation: 2, combine: 3, constraint: 4, template: 5,
+  library: 0, fixed_values: 1, wildcard: 1, derivation: 2, combine: 3, constraint: 4, template: 5,
 };
 function buildRank(item: AiPackItem): number {
   return item.kind === "wildcard" && !item.var ? 0 : BUILD_RANK[item.kind];
@@ -53,12 +53,20 @@ const stage = ref("");
 const check = shallowRef<AiPackCheck | null>(null);
 const installed = shallowRef<AiPackInstallResult | null>(null);
 const error = ref("");
+/** A prompt the user likes, to rebuild as a pack ("" for none). */
+const sample = ref("");
+/** The model's own review of the plan, added to the checker's. */
+const aiFindings = shallowRef<AiPackFinding[]>([]);
+const reviewing = ref(false);
 let controller: AbortController | null = null;
 
 const convo = useAiConversation<AiPackPlanResult, null>({
   capture: () => null,
   send: ({ instruction, history }, signal) =>
-    api.ai.packPlan({ instruction, ...(history ? { history } : {}) }, signal),
+    api.ai.packPlan({
+      instruction, ...(history ? { history } : {}),
+      ...(sample.value.trim() ? { sample: sample.value.trim() } : {}),
+    }, signal),
   note: (res) => {
     const bits: string[] = [];
     const gone = res.plan.items.filter((i) => removed.value.has(i.key)).map((i) => i.name);
@@ -67,6 +75,38 @@ const convo = useAiConversation<AiPackPlanResult, null>({
     return bits.join(". ").slice(0, 900);
   },
 });
+
+/** What the review found: the checker's findings with every plan, plus the
+ *  model's when asked. Findings about removed items drop out. */
+const findings = computed<AiPackFinding[]>(() => {
+  const all = [...(convo.result.value?.review ?? []), ...aiFindings.value];
+  return all.filter((f) => !f.key || !removed.value.has(f.key));
+});
+
+/** Ask the model to review the plan too. */
+async function reviewPlan(): Promise<void> {
+  const p = plan.value;
+  if (!p || reviewing.value) return;
+  reviewing.value = true;
+  error.value = "";
+  try {
+    const res = await api.ai.packReview({ plan: p, ai: true });
+    aiFindings.value = res.findings.filter((f) => f.by === "model");
+  } catch (err) {
+    error.value = message(err);
+  } finally {
+    reviewing.value = false;
+  }
+}
+
+/** Send the findings to the planner as a follow-up. */
+async function fixFindings(): Promise<void> {
+  const list = findings.value;
+  if (!list.length) return;
+  const note = "Revise the plan to fix these: " + list.map((f) => `- ${f.text}.`).join(" ");
+  convo.instruction.value = [convo.instruction.value.trim(), note].filter(Boolean).join("\n");
+  await refinePlan();
+}
 
 /** The shown plan minus what the user removed. */
 const plan = computed<AiPackPlan | null>(() => {
@@ -100,6 +140,7 @@ async function askPlan(): Promise<void> {
   error.value = "";
   answers.value = {};
   removed.value = new Set();
+  aiFindings.value = [];
   await convo.ask();
 }
 
@@ -114,6 +155,7 @@ async function refinePlan(): Promise<void> {
   if (!convo.error.value) {
     answers.value = {};
     removed.value = new Set();
+    aiFindings.value = [];
   }
 }
 
@@ -136,11 +178,27 @@ async function buildOne(p: AiPackPlan, key: string, note: string, signal: AbortS
   }
 }
 
+/** Build an item; a failed answer is asked again with the error named,
+ *  and an answer that doesn't fit the rest of the pack (a rule testing an
+ *  option that isn't there) is rebuilt once with that as the note. */
+async function buildItem(p: AiPackPlan, item: AiPackItem, signal: AbortSignal): Promise<void> {
+  if (!(await buildOne(p, item.key, "", signal))) {
+    const why = states.value[item.key]?.error ?? "";
+    await buildOne(p, item.key, why ? `your last answer failed: ${why}` : "", signal);
+  }
+  const repair = states.value[item.key]?.result?.repair;
+  if (repair) {
+    stage.value = `Fixing ${item.name}…`;
+    setState(item.key, { status: "fixing", fixed: [repair] });
+    await buildOne(p, item.key, repair, signal);
+  }
+}
+
 /** Constraints built on a wildcard: its option ids change when it is
  *  rebuilt, so they are rebuilt after it. */
 function dependents(p: AiPackPlan, key: string): string[] {
   const w = p.items.find((i) => i.key === key);
-  if (!w || w.kind !== "wildcard") return [];
+  if (!w || w.kind !== "wildcard" || !w.var) return [];
   return p.items
     .filter((i) => i.kind === "constraint" && (i.source === w.var || i.target === w.var))
     .map((i) => i.key);
@@ -175,10 +233,7 @@ async function build(): Promise<void> {
     for (const item of order) {
       stage.value = `Building ${item.name}…`;
       setState(item.key, { status: "building" });
-      // One retry: a local model's first answer is sometimes unusable.
-      if (!(await buildOne(p, item.key, "", mine.signal))) {
-        await buildOne(p, item.key, "", mine.signal);
-      }
+      await buildItem(p, item, mine.signal);
     }
     let report = await runCheck(p, mine.signal);
     for (let round = 0; report && round < MAX_REPAIRS; round += 1) {
@@ -293,6 +348,8 @@ function reset(): void {
   convo.instruction.value = "";
   answers.value = {};
   removed.value = new Set();
+  aiFindings.value = [];
+  sample.value = "";
   error.value = "";
 }
 
@@ -304,7 +361,7 @@ export function usePackBuilder() {
   return {
     convo, plan, answers, removed, states, phase, working, stage, check, installed, error,
     builtCount, askPlan, refinePlan, removeItem, build, rebuild, stop, install, undoInstall,
-    backToPlan, reset,
+    backToPlan, reset, sample, findings, reviewing, reviewPlan, fixFindings,
   };
 }
 

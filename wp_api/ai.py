@@ -17,6 +17,7 @@
     POST /wp/api/ai/chat            a chat turn: the model reads the library
                                     with tools and proposes changes
     POST /wp/api/ai/pack/plan       pack builder: an outline from a request
+    POST /wp/api/ai/pack/review     check a plan against the guide (+ model review)
     POST /wp/api/ai/pack/item       build one planned item (not saved)
     POST /wp/api/ai/pack/check      run the built pack on the engine
     POST /wp/api/ai/pack/install    install the pack as one undoable import
@@ -39,6 +40,7 @@ from typing import Any
 from aiohttp import web
 
 from engine.ai import about as ai_about
+from engine.ai import budget as ai_budget
 from engine.ai import chat as ai_chat
 from engine.ai import config as ai_config
 from engine.ai import constraint as ai_constraint
@@ -48,6 +50,7 @@ from engine.ai import followup as ai_followup
 from engine.ai import library_vars, text_items
 from engine.ai import organize as ai_organize
 from engine.ai import pack as ai_pack
+from engine.ai import patterns as ai_patterns
 from engine.ai import refs as ai_refs
 from engine.ai import wildcard as ai_wildcard
 from engine.ai import wildcard_edit as ai_edit
@@ -728,6 +731,38 @@ def _tool_results(results: list[str]) -> str:
     )
 
 
+async def _chat_step(
+    cfg: dict[str, Any], system: str, user: str, history: list[tuple[str, Any]],
+    prof: dict[str, Any],
+) -> tuple[Any, str, list[dict[str, Any]]]:
+    """One model step, asked again once with the problem named when the
+    answer isn't usable JSON: small models usually fix a named error."""
+    problem = ""
+    for attempt in range(2):
+        asked = user if not problem else (
+            f"{user}\n\nYour last answer couldn't be used ({problem}). Answer again "
+            "with only the JSON object: plan, message, calls.")
+        try:
+            answer = await _ai_client.complete_json(
+                cfg, system=system, user=asked, history=history,
+                schema=ai_chat.STEP_SCHEMA, schema_name="chat_step",
+                temperature=prof["chat_temp"],
+            )
+            said, calls = ai_chat.parse_step(answer)
+            return answer, said, calls
+        except _ai_client.AIError as e:
+            if attempt or "JSON" not in e.message:
+                raise
+            problem = "it wasn't valid JSON"
+        except ValueError as e:
+            if attempt:
+                raise _ai_client.AIError(
+                    f"the model's answer couldn't be used ({e}). Try again, or a larger "
+                    "model.") from e
+            problem = str(e)
+    raise _ai_client.AIError("the model's answer couldn't be used")
+
+
 async def post_chat(request: web.Request) -> web.Response:
     """Body: {messages: [{role: "user"|"assistant", content}], page?: {route, id?,
     doc?, note?, editor?}}. `editor` is the open editor's item as it stands,
@@ -756,7 +791,9 @@ async def post_chat(request: web.Request) -> web.Response:
     page = body.get("page") if isinstance(body.get("page"), dict) else None
     if page:
         lib.use_editor(page.get("editor"))
-    system = ai_chat.system_prompt() + "\n\n" + lib.overview()
+    prof = ai_budget.profile(cfg)
+    system = ai_chat.system_prompt(slim=prof["slim"]) + "\n\n" + lib.overview(
+        limit=40 if prof["slim"] else None)
     history = ai_chat.history_pairs(turns)
     user = turns[-1]["content"]
     note = lib.page_note(page)
@@ -766,28 +803,20 @@ async def post_chat(request: web.Request) -> web.Response:
     proposals: list[dict[str, Any]] = []
     steps: list[dict[str, Any]] = []
     message = ""
+    checked = False
     for step in range(ai_chat.MAX_STEPS):
+        history = ai_budget.fit_history(history, prof["history_chars"])
         try:
-            answer = await _ai_client.complete_json(
-                cfg, system=system, user=user, history=history,
-                schema=ai_chat.STEP_SCHEMA, schema_name="chat_step", temperature=0.4,
-            )
+            answer, said, calls = await _chat_step(cfg, system, user, history, prof)
         except _ai_client.AIError as e:
             if not steps:
                 return json_error(e.message, status=e.status)
             message = f"(Stopped early: {e.message})"
             break
-        try:
-            said, calls = ai_chat.parse_step(answer)
-        except ValueError as e:
-            return json_error(
-                f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
-                status=502,
-            )
         if said:
             message = said
-        if not calls:
-            break
+        if any(c["tool"] == "run_test" for c in calls):
+            checked = True
         history.append((user, answer))
         results: list[str] = []
         needs_reply = False
@@ -805,13 +834,22 @@ async def post_chat(request: web.Request) -> web.Response:
                 continue
             if isinstance(out, str):
                 needs_reply = True
-                results.append(f"{tool} {_json.dumps(args, ensure_ascii=False)[:200]}:\n{out}")
+                results.append(f"{tool} {_json.dumps(args, ensure_ascii=False)[:200]}:\n"
+                               + ai_budget.clip(out, prof["result_chars"]))
                 steps.append({"tool": tool, "note": ai_chat.args_note(tool, args, lib), "ok": True})
             else:
                 proposals.append(out)
                 results.append(f"{tool}: proposal {out['pid']} shown to the user: {out['title']}")
                 steps.append({"tool": tool, "note": out["title"], "ok": True})
         if not needs_reply:
+            # Changes were proposed but never tried: ask for one check
+            # before the answer stands, so "done" means it ran.
+            if (not checked and step < ai_chat.MAX_STEPS - 1
+                    and any(p["tool"] in ai_chat.CHECKABLE_TOOLS for p in proposals)):
+                checked = True
+                user = (_tool_results(results) + "\n\n" if results else "") \
+                    + ai_chat.CHECK_NUDGE
+                continue
             break
         if step == ai_chat.MAX_STEPS - 1:
             message = message or "I ran out of steps before finishing; ask me to continue."
@@ -825,10 +863,12 @@ async def post_chat(request: web.Request) -> web.Response:
     })
 
 
-def _pack_body(body: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]] | web.Response:
+def _pack_body(
+    body: dict[str, Any], library: list[dict[str, Any]] | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]] | web.Response:
     """The plan and built items the manager sends back, checked again."""
     try:
-        plan = ai_pack.compile_plan(body.get("plan"))
+        plan = ai_pack.compile_plan(body.get("plan"), library=library)
     except ai_pack.PlanError as e:
         return json_error(f"the plan can't be used: {e}", status=400)
     return plan, ai_pack.parse_built(plan, body.get("built"))
@@ -849,14 +889,21 @@ async def post_pack_plan(request: web.Request) -> web.Response:
     turns = _turns(body)
     if isinstance(turns, web.Response):
         return turns
-    first = ai_pack.plan_prompt(ai_followup.first_instruction(turns, instruction))
+    sample = body.get("sample") if isinstance(body.get("sample"), str) else ""
+    with db_session(request) as conn:
+        modules = ModuleRepository(conn).list()
+        lib_note = ai_patterns.note(ai_patterns.summarize(
+            modules, BundleRepository(conn).list(), TemplateRepository(conn).list()))
+    library = [m for m in modules if m.get("type") == "wildcard"]
+    first = ai_pack.plan_prompt(ai_followup.first_instruction(turns, instruction),
+                                library_note=lib_note, sample=sample)
     try:
         answer = await _ask(
             cfg, first=first, turns=turns, instruction=instruction,
             system=ai_pack.PLAN_SYSTEM, schema=ai_pack.PLAN_SCHEMA,
             schema_name="pack_plan", temperature=0.4,
         )
-        plan = ai_pack.compile_plan(answer)
+        plan = ai_pack.compile_plan(answer, library=library)
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
     except ai_pack.PlanError as e:
@@ -864,7 +911,34 @@ async def post_pack_plan(request: web.Request) -> web.Response:
             f"the model's plan couldn't be used ({e}). Try again, or a larger model.",
             status=502,
         )
-    return json_ok({"plan": plan, "model": cfg["model"], "answer": answer})
+    return json_ok({"plan": plan, "model": cfg["model"], "answer": answer,
+                    "review": ai_pack.review_plan(plan)})
+
+
+async def post_pack_review(request: web.Request) -> web.Response:
+    """Body: {plan, ai?}. The plan checked against the guide before it is
+    built; with ``ai`` the model reviews it too. Returns {findings, note}."""
+    cfg = _enabled_cfg()
+    if isinstance(cfg, web.Response):
+        return cfg
+    body = await _body(request)
+    if isinstance(body, web.Response):
+        return body
+    parsed = _pack_body(body, _wildcards(request))
+    if isinstance(parsed, web.Response):
+        return parsed
+    plan, _built = parsed
+    findings = ai_pack.review_plan(plan)
+    if body.get("ai") is True:
+        try:
+            answer = await _ai_client.complete_json(
+                cfg, system=ai_pack.REVIEW_SYSTEM, user=ai_pack.review_prompt(plan, findings),
+                schema=ai_pack.REVIEW_SCHEMA, schema_name="pack_review", temperature=0.3,
+            )
+        except _ai_client.AIError as e:
+            return json_error(e.message, status=e.status)
+        findings += ai_pack.compile_review(answer, plan)
+    return json_ok({"findings": findings, "note": ai_pack.review_note(findings)})
 
 
 async def post_pack_item(request: web.Request) -> web.Response:
@@ -876,7 +950,8 @@ async def post_pack_item(request: web.Request) -> web.Response:
     body = await _body(request)
     if isinstance(body, web.Response):
         return body
-    parsed = _pack_body(body)
+    library = _wildcards(request)
+    parsed = _pack_body(body, library)
     if isinstance(parsed, web.Response):
         return parsed
     plan, built = parsed
@@ -884,7 +959,12 @@ async def post_pack_item(request: web.Request) -> web.Response:
     note = body.get("note") if isinstance(body.get("note"), str) else ""
     if not isinstance(key, str) or key not in {i["key"] for i in plan["items"]}:
         return json_error("no such item in the plan", status=400)
-    library = _wildcards(request)
+    if next(i for i in plan["items"] if i["key"] == key)["kind"] == "library":
+        try:
+            out = ai_pack.library_item(plan, key, library)
+        except ai_pack.PlanError as e:
+            return json_error(str(e), status=400)
+        return json_ok({**out, "repair": "", "model": cfg["model"]})
     try:
         req = ai_pack.item_request(plan, key, built, note[:1500], library=library)
     except ai_pack.PlanError as e:
@@ -916,13 +996,13 @@ async def post_pack_check(request: web.Request) -> web.Response:
     body = await _body(request)
     if isinstance(body, web.Response):
         return body
-    parsed = _pack_body(body)
+    library = _wildcards(request)
+    parsed = _pack_body(body, library)
     if isinstance(parsed, web.Response):
         return parsed
     plan, built = parsed
     if not built:
         return json_error("nothing is built yet", status=400)
-    library = _wildcards(request)
     loop = asyncio.get_running_loop()
     report = await loop.run_in_executor(
         None, lambda: ai_pack.check_pack(plan, built, library=library))
@@ -938,7 +1018,7 @@ async def post_pack_install(request: web.Request) -> web.Response:
     body = await _body(request)
     if isinstance(body, web.Response):
         return body
-    parsed = _pack_body(body)
+    parsed = _pack_body(body, _wildcards(request))
     if isinstance(parsed, web.Response):
         return parsed
     plan, built = parsed
@@ -972,6 +1052,7 @@ def register(router: web.UrlDispatcher) -> None:
     router.add_post("/wp/api/ai/models", post_models)
     router.add_post("/wp/api/ai/test", post_test)
     router.add_post("/wp/api/ai/wildcard/draft", post_wildcard_draft)
+    router.add_post("/wp/api/ai/pack/review", post_pack_review)
     router.add_post("/wp/api/ai/wildcard/edit", post_wildcard_edit)
     router.add_post("/wp/api/ai/derivation/draft", post_derivation_draft)
     router.add_post("/wp/api/ai/constraint/draft", post_constraint_draft)

@@ -25,6 +25,7 @@ const PRESETS: AiConfig["presets"] = {
 function cfg(over: Partial<AiConfig> = {}): AiConfig {
   return {
     enabled: false, provider: "ollama", base_url: "", model: "", unload_after_s: 60,
+    context_max: 16384, model_size: "auto", model_size_auto: "medium",
     key_set: false, key_from_env: false, keys_saved: [], presets: PRESETS, ...over,
   };
 }
@@ -78,7 +79,7 @@ describe("Settings › AI assistant", () => {
   it("lists models once on and shows the test result", async () => {
     vi.mocked(api.ai.config).mockResolvedValue(cfg({ enabled: true, model: "a" }));
     vi.mocked(api.ai.test).mockResolvedValue({
-      ok: true, models: ["a", "b"], model_found: true, json_ok: true, latency_ms: 1400, error: null,
+      ok: true, models: ["a", "b"], model_found: true, json_ok: true, latency_ms: 1400, context: null, context_low: false, error: null,
     });
     const w = mount(AiSection, { global: { plugins: [router] } });
     await flushPromises();
@@ -92,7 +93,7 @@ describe("Settings › AI assistant", () => {
     vi.mocked(api.ai.config).mockResolvedValue(cfg({ enabled: true }));
     vi.mocked(api.ai.test).mockResolvedValue({
       ok: false, models: [], model_found: null, json_ok: null, latency_ms: null,
-      error: "couldn't connect to 127.0.0.1:11434. Is the server running?",
+      context: null, context_low: false, error: "couldn't connect to 127.0.0.1:11434. Is the server running?",
     });
     const w = mount(AiSection, { global: { plugins: [router] } });
     await flushPromises();
@@ -121,5 +122,35 @@ describe("Settings › AI assistant", () => {
     const opts = (sel?.props("options") ?? []) as { value: string; label: string }[];
     expect(opts.find((o) => o.value === "anthropic")?.label).toContain("key saved");
     expect(opts.find((o) => o.value === "openai")?.label).not.toContain("key saved");
+  });
+
+  it("warns when a local server loaded the model with a small context", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({ enabled: true, provider: "lmstudio", model: "a" }));
+    vi.mocked(api.ai.test).mockResolvedValue({
+      ok: true, models: ["a"], model_found: true, json_ok: true, latency_ms: 900,
+      context: 4096, context_low: true, error: null,
+    });
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    await w.get('[data-test="ai-test"]').trigger("click");
+    await flushPromises();
+    expect(w.text()).toContain("loaded with only 4096 tokens of context");
+  });
+
+  it("saves the model size and the context cap", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({ enabled: true, model: "qwen3.6:27b" }));
+    vi.mocked(api.ai.saveConfig).mockImplementation(async (p) => cfg({ enabled: true, ...p }));
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    const size = w.findAllComponents(Select).find((c) => c.attributes("data-test") === "ai-model-size");
+    expect(size).toBeTruthy();
+    size!.vm.$emit("update:modelValue", "small");
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ model_size: "small" });
+    const ctx = w.get('[data-test="ai-context"] input, input[data-test="ai-context"]');
+    await ctx.setValue(1000);
+    await ctx.trigger("blur");
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ context_max: 4096 });
   });
 });

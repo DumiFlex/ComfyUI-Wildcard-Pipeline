@@ -7,6 +7,8 @@ place so the chat and the pack builder give the same advice, and checked by
 """
 from __future__ import annotations
 
+import json
+
 SYNTAX = """\
 Text grammar (the compilers check it and say what to fix):
 - $name reads a variable; $name.0 the first of a multi-pick; $name.AXIS the \
@@ -71,6 +73,62 @@ warnings and braces left in sample prompts.
 """
 
 
-def text() -> str:
-    """The chat's copy: everything, plus how to check with its tools."""
+#: One worked chat answer: anchor first, rules keyed on tags both sides
+#: carry, a fallback on the constrained target, then a check. Compiled by
+#: tests/engine/ai/test_ai_guide.py so it can't drift from the tools.
+EXAMPLE_CHAT_REQUEST = "outfits that suit the season"
+EXAMPLE_CHAT_STEPS: list[dict] = [
+    {
+        "plan": "Season is the anchor. Outfit options get warm/light tags, a "
+                "constraint keys on them, and a fallback keeps Outfit from "
+                "ever coming out empty. Then check with run_test.",
+        "message": "I'll add a Season wildcard and an Outfit wildcard that follows it.",
+        "calls": [
+            {"tool": "create_wildcard", "args": {
+                "name": "Season", "var": "season", "options": [
+                    {"text": "winter", "tags": ["winter"]},
+                    {"text": "summer", "tags": ["summer"]}], "axes": []}},
+            {"tool": "create_wildcard", "args": {
+                "name": "Outfit", "var": "outfit", "options": [
+                    {"text": "wool coat and scarf", "tags": ["warm"]},
+                    {"text": "puffer jacket", "tags": ["warm"]},
+                    {"text": "linen shirt", "tags": ["light"]},
+                    {"text": "sundress", "tags": ["light"]},
+                    {"text": "jeans and a hoodie", "tags": ["warm", "light"],
+                     "fallback": True}], "axes": []}},
+            {"tool": "create_constraint", "args": {
+                "name": "Season → Outfit", "source_id": "Season", "target_id": "Outfit",
+                "rules": [
+                    {"source": "#winter", "target": "#light", "effect": "exclude"},
+                    {"source": "#summer", "target": "#warm", "effect": "reduce",
+                     "factor": 0.2}]}},
+        ],
+    },
+    {
+        "plan": "Check the new stack with the proposed changes.",
+        "message": "",
+        "calls": [{"tool": "run_test", "args": {
+            "stack": ["Season", "Outfit", "Season → Outfit"], "proposed": True}}],
+    },
+]
+
+
+def _example_chat() -> str:
+    lines = [f'Example. User: "{EXAMPLE_CHAT_REQUEST}"']
+    for step in EXAMPLE_CHAT_STEPS:
+        calls = [{"tool": c["tool"], "args": json.dumps(c["args"], ensure_ascii=False)}
+                 for c in step["calls"]]
+        lines.append("You: " + json.dumps({**step, "calls": calls}, ensure_ascii=False))
+    lines.append("(then a last answer with \"calls\": [] saying what the test showed)")
+    return "\n".join(lines) + "\n"
+
+
+EXAMPLES_CHAT = "\n" + _example_chat()
+
+
+def text(*, slim: bool = False) -> str:
+    """The chat's copy: everything, plus how to check with its tools. `slim`
+    keeps the grammar and the feature choice and drops the rest."""
+    if slim:
+        return "\n".join([SYNTAX, "", WHICH, CHAT])
     return "\n".join([SYNTAX, "", WHICH, COHERENCE, CHAT])

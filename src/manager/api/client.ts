@@ -25,6 +25,7 @@ import type {
   AiPackPlan,
   AiPackPlanRequest,
   AiPackPlanResult,
+  AiPackReview,
   AiDescribeRequest,
   AiDescribeResult,
   TagStatus, TagSuggestResponse, TagDownloadResult, LibraryTagUpdateCounts,
@@ -469,6 +470,11 @@ export const api = {
       signal?: AbortSignal,
     ) {
       return request<AiPackItemResult>("/wp/api/ai/pack/item", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    packReview(body: { plan: AiPackPlan; ai?: boolean }, signal?: AbortSignal) {
+      return request<AiPackReview>("/wp/api/ai/pack/review", {
         method: "POST", body: JSON.stringify(body), signal,
       });
     },

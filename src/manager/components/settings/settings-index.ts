@@ -69,6 +69,8 @@ const STATIC_ENTRIES: SettingEntry[] = [
   { key: "ai-address", section: "ai", label: "Server address", hint: "Where the model server answers.", keywords: "url base endpoint host port" },
   { key: "ai-key", section: "ai", label: "API key", hint: "Saved on the ComfyUI machine and never shown again.", keywords: "token secret credential" },
   { key: "ai-model", section: "ai", label: "Model", hint: "Which model the assistant uses.", keywords: "llm qwen gemma claude gpt" },
+  { key: "ai-model-size", section: "ai", label: "Model size", hint: "How much the assistant asks of the model: shorter instructions for small ones.", keywords: "small medium large parameters 12b 27b profile" },
+  { key: "ai-context", section: "ai", label: "Most context to use", hint: "The most context the assistant asks Ollama for, in tokens.", keywords: "num_ctx context window tokens ollama memory vram" },
   { key: "ai-unload", section: "ai", label: "Unload the model after", hint: "Free the GPU for ComfyUI after a short idle.", keywords: "vram gpu keep alive ttl memory" },
   { key: "ai-test", section: "ai", label: "Test connection", hint: "Check the server answers and the model returns JSON.", keywords: "check ping" },
   { key: "db-summary", section: "library", label: "Database", hint: "File, size and what is in it.", keywords: "sqlite file size rows" },

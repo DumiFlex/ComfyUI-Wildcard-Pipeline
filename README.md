@@ -143,7 +143,11 @@ Open it from the ComfyUI sidebar. It's where your modules live between workflows
   one description: it plans the wildcards, fixed values, rules, constraints,
   combines, template, per-use settings and inputs, builds
   them one at a time, tests them on the engine and fixes what fails, then installs
-  everything as one bundle you can undo. If an
+  everything as one bundle you can undo. It matches your library's style,
+  reuses wildcards you already have, reviews the plan before building, and can
+  start from a sample prompt you like. After a wildcard pack import, **Tag and
+  connect with AI** has the chat tag the new lists, link them with constraints and
+  bundle them. If an
   answer is close, type a follow-up and press **Refine** to revise it instead of
   starting over. You review every change first, and nothing is saved until you
   press Save.

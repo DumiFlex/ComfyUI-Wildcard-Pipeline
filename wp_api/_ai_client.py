@@ -47,6 +47,8 @@ from typing import Any
 
 import aiohttp
 
+from engine.ai import budget
+
 _MAX_BODY = 4 * 1024 * 1024
 _LIST_TIMEOUT = aiohttp.ClientTimeout(total=15)
 #: Local models on a busy GPU can take minutes for a long list.
@@ -286,7 +288,15 @@ async def complete_json(
                 "stream": False,
                 "format": schema,
                 "keep_alive": f"{int(cfg.get('unload_after_s', 60))}s",
-                "options": {"temperature": temperature},
+                "options": {
+                    "temperature": temperature,
+                    # Ollama's default window is 2-4k tokens and it cuts a
+                    # longer prompt without saying so, so size it per request.
+                    "num_ctx": budget.num_ctx(
+                        budget.prompt_chars(system, history, user, schema),
+                        int(cfg.get("context_max") or budget.CONTEXT_DEFAULT),
+                    ),
+                },
                 "messages": _chat_messages(system, history, user),
             })
             msg = data.get("message") if isinstance(data, dict) else None
@@ -327,10 +337,41 @@ _PROBE_SCHEMA = {
 }
 
 
+#: Below this the chat's own instructions don't fit.
+CONTEXT_WARN = 8192
+
+
+async def server_context(cfg: dict[str, Any]) -> int | None:
+    """The context window a local OpenAI-compatible server loaded the model
+    with, when it says: LM Studio (`/api/v0/models/<id>`) or llama.cpp's
+    llama-server (`/props`). These fix the window at load time, so a model
+    loaded with 4k quietly loses most of the chat's prompt. Ollama takes
+    `num_ctx` per request instead, and cloud providers need no check."""
+    if cfg["api"] != "openai" or not cfg.get("local"):
+        return None
+    root = re.sub(r"/v1$", "", cfg["base_url"].rstrip("/"))
+    rooted = {**cfg, "base_url": root}
+    model = urllib.parse.quote(str(cfg.get("model") or ""), safe="")
+    for path, read in (
+        (f"/api/v0/models/{model}", lambda d: d.get("loaded_context_length")),
+        ("/props", lambda d: (d.get("default_generation_settings") or {}).get("n_ctx")
+            or d.get("n_ctx")),
+    ):
+        try:
+            data = await _request(rooted, "GET", path, timeout=_LIST_TIMEOUT)
+        except AIError:
+            continue
+        value = read(data) if isinstance(data, dict) else None
+        if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+            return value
+    return None
+
+
 async def probe(cfg: dict[str, Any]) -> dict[str, Any]:
     """Test connection: list models, then (if one is chosen) a tiny JSON call."""
     result: dict[str, Any] = {"ok": False, "models": [], "model_found": None,
-                              "json_ok": None, "latency_ms": None, "error": None}
+                              "json_ok": None, "latency_ms": None, "error": None,
+                              "context": None, "context_low": False}
     try:
         result["models"] = await list_models(cfg)
     except AIError as e:
@@ -353,4 +394,9 @@ async def probe(cfg: dict[str, Any]) -> dict[str, Any]:
     except AIError as e:
         result["error"] = e.message
     result["latency_ms"] = int((time.monotonic() - started) * 1000)
+    if result["ok"]:
+        result["context"] = await server_context(cfg)
+        result["context_low"] = (
+            result["context"] is not None and result["context"] < CONTEXT_WARN
+        )
     return result

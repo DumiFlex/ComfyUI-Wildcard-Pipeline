@@ -6,6 +6,7 @@ import json
 import pytest
 from aiohttp import web
 
+from engine.ai import chat as ai_chat
 from engine.ai import config as ai_config
 from wp_api import _ai_client
 
@@ -67,7 +68,11 @@ async def fake_llm(aiohttp_server):
             content = overrides[schema_name]
         if schema_name == "chat_step":
             content = chat_steps.pop(0) if chat_steps else {"message": "Done.", "calls": []}
-        return web.json_response({"choices": [{"message": {"content": json.dumps(content)}}]})
+        text = content if isinstance(content, str) else json.dumps(content)
+        return web.json_response({"choices": [{"message": {"content": text}}]})
+
+    async def lmstudio_model(request):
+        return web.json_response({"id": request.match_info["mid"], "loaded_context_length": 4096})
 
     async def ollama_tags(request):
         return web.json_response({"models": [{"name": "qwen:9b"}]})
@@ -95,6 +100,7 @@ async def fake_llm(aiohttp_server):
     app = web.Application()
     app.router.add_get("/v1/models", openai_models)
     app.router.add_post("/v1/chat/completions", openai_chat)
+    app.router.add_get("/api/v0/models/{mid}", lmstudio_model)
     app.router.add_get("/api/tags", ollama_tags)
     app.router.add_post("/api/chat", ollama_chat)
     app.router.add_get("/anthropic/v1/models", anthropic_models)
@@ -176,6 +182,8 @@ async def test_ollama_native_draft(wp_client, fake_llm):
     assert [o["value"] for o in (await resp.json())["options"]] == ["silver hair"]
     sent = fake_llm.seen[-1]["body"]
     assert sent["keep_alive"] == "30s"
+    # The window is sized to the prompt, a power of two within the cap.
+    assert sent["options"]["num_ctx"] in (4096, 8192)
     assert sent["format"]["required"] == ["options"]
     assert sent["stream"] is False
 
@@ -536,6 +544,10 @@ async def test_chat_reads_then_proposes(wp_client, fake_llm):
                 "source_id": src, "target_id": tgt,
                 "rules": [{"source": "#magic", "target": "#blade", "effect": "exclude"}]})},
         ]},
+        {"message": "Here are two more weapons and a rule.", "calls": [
+            {"tool": "run_test", "args": json.dumps({
+                "stack": ["Class", "Weapon"], "seeds": 20, "proposed": True})}]},
+        {"message": "Checked: no blades for mages now.", "calls": []},
     ])
     resp = await wp_client.post("/wp/api/ai/chat", json={
         "messages": [{"role": "user", "content": "hi"},
@@ -545,16 +557,19 @@ async def test_chat_reads_then_proposes(wp_client, fake_llm):
     })
     assert resp.status == 200, await resp.text()
     body = await resp.json()
-    assert body["message"] == "Here are two more weapons and a rule."
+    assert body["message"] == "Checked: no blades for mages now."
     assert [s["tool"] for s in body["steps"]] == [
-        "search", "read", "read", "add_options", "create_constraint"]
+        "search", "read", "read", "add_options", "create_constraint", "run_test"]
     assert body["steps"][2]["ok"] is False
     add, con = body["proposals"]
     assert add["pid"] == "p1" and add["op"]["op"] == "update" and add["op"]["id"] == tgt
     assert [o["value"] for o in add["op"]["body"]["payload"]["options"]][-1] == "war axe"
     assert con["op"]["body"]["payload"]["matrix"] == {
         "magic": {"blade": {"mode": "exclude", "factor": 0}}}
-    first, second = fake_llm.seen[-2:]
+    first, second, nudged, checked = fake_llm.seen[-4:]
+    # Changes that were never tried get one nudge to run them.
+    assert ai_chat.CHECK_NUDGE in nudged["body"]["messages"][-1]["content"]
+    assert "with the proposed changes" in checked["body"]["messages"][-1]["content"]
     msgs = first["body"]["messages"]
     assert msgs[0]["role"] == "system" and "Items (id" in msgs[0]["content"]
     assert msgs[1]["content"] == "hi" and json.loads(msgs[2]["content"])["message"] == "Hello!"
@@ -596,7 +611,7 @@ async def test_chat_uses_the_open_editor_and_the_docs(wp_client, fake_llm):
     assert doc["op"] == {"op": "open", "kind": "doc", "type": "doc", "id": "constraint"}
     assert [s["note"] for s in body["steps"][:2]] == [
         'Searched the docs for "constraint exclude"', "Read Weapon (draft)"]
-    first, second = fake_llm.seen[-2:]
+    first, second = fake_llm.seen[-3:-1]
     assert "Docs pages (id: title)" in first["body"]["messages"][0]["content"]
     asked = first["body"]["messages"][-1]["content"]
     assert "with unsaved changes" in asked and "On screen: 2 options shown" in asked
@@ -797,3 +812,63 @@ async def test_chat_sees_templates_and_runs_stacks(wp_client, fake_llm):
     assert prop["op"]["body"]["negative_template"] == "$negatives, lowres"
     results = fake_llm.seen[-1]["body"]["messages"][-1]["content"]
     assert "Ran 20 seeds." in results and "Prompt: " in results
+
+
+async def test_connection_test_warns_about_a_small_loaded_context(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    body = await (await wp_client.post("/wp/api/ai/test")).json()
+    assert body["ok"] and body["context"] == 4096 and body["context_low"] is True
+
+
+async def test_chat_asks_again_when_a_step_is_not_json(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "lmstudio", "model_size": "small",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.chat_steps.extend(["Sure! I will look at it", {"message": "Hi.", "calls": []}])
+    resp = await wp_client.post("/wp/api/ai/chat", json={
+        "messages": [{"role": "user", "content": "hello"}]})
+    assert resp.status == 200, await resp.text()
+    assert (await resp.json())["message"] == "Hi."
+    retry = fake_llm.seen[-1]["body"]
+    assert "couldn't be used (it wasn't valid JSON)" in retry["messages"][-1]["content"]
+    # A small model gets the short prompt and a steady temperature.
+    assert retry["temperature"] == 0.15
+    assert "Making prompts coherent" not in retry["messages"][0]["content"]
+
+
+
+async def test_pack_plan_sees_the_library_and_a_sample_and_gets_reviewed(wp_client, fake_llm):
+    await _two_wildcards(wp_client)
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.overrides["pack_plan"] = {**PACK_PLAN, "items": [
+        {"kind": "library", "name": "Class", "var": "", "about": "reuse", "count": 0,
+         "tags": [], "source": "", "target": "", "use": ""},
+        *PACK_PLAN["items"]]}
+    resp = await wp_client.post("/wp/api/ai/pack/plan", json={
+        "instruction": "more like this", "sample": "mage, longsword, castle"})
+    assert resp.status == 200, await resp.text()
+    body = await resp.json()
+    lib = body["plan"]["items"][0]
+    assert lib["kind"] == "library" and lib["var"] == "class"
+    assert isinstance(body["review"], list)
+    asked = fake_llm.seen[-1]["body"]["messages"][1]["content"]
+    assert "mage, longsword, castle" in asked and "- Class · $class · 2" not in asked
+    assert "The user's library" in asked
+
+    # The library item builds without the model.
+    calls = len(fake_llm.seen)
+    resp = await wp_client.post("/wp/api/ai/pack/item", json={
+        "plan": body["plan"], "built": {}, "key": lib["key"]})
+    assert resp.status == 200, await resp.text()
+    assert (await resp.json())["kind"] == "library" and len(fake_llm.seen) == calls
+
+    fake_llm.overrides["pack_review"] = {"findings": [{"item": "", "text": "Add a mood."}]}
+    resp = await wp_client.post("/wp/api/ai/pack/review", json={"plan": body["plan"], "ai": True})
+    assert resp.status == 200, await resp.text()
+    review = await resp.json()
+    assert review["findings"][-1] == {"key": "", "level": "tip", "text": "Add a mood.",
+                                      "by": "model"}
+    assert review["note"].startswith("Revise the plan")
+    resp = await wp_client.post("/wp/api/ai/pack/review", json={"plan": body["plan"]})
+    assert all(f.get("by") != "model" for f in (await resp.json())["findings"])

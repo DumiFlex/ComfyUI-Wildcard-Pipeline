@@ -817,6 +817,12 @@ export interface AiConfig {
   base_url: string;
   model: string;
   unload_after_s: number;
+  /** Most tokens of context a request may ask a local server for. */
+  context_max: number;
+  /** How much the assistant asks of the model ("auto" reads the name). */
+  model_size: "auto" | AiModelSize;
+  /** What "auto" picks for the chosen model. */
+  model_size_auto: AiModelSize;
   key_set: boolean;
   key_from_env: boolean;
   /** Providers that already have a key (saved or from the environment).
@@ -825,12 +831,16 @@ export interface AiConfig {
   presets: Record<AiProviderId, AiPreset>;
 }
 
+export type AiModelSize = "small" | "medium" | "large";
+
 export interface AiConfigPatch {
   enabled?: boolean;
   provider?: AiProviderId;
   base_url?: string;
   model?: string;
   unload_after_s?: number;
+  context_max?: number;
+  model_size?: "auto" | AiModelSize;
   /** Write-only. `""` removes the saved key. */
   api_key?: string;
 }
@@ -842,6 +852,10 @@ export interface AiTestResult {
   model_found: boolean | null;
   json_ok: boolean | null;
   latency_ms: number | null;
+  /** The context a local server loaded the model with, when it says. */
+  context: number | null;
+  /** True when that is too small for the assistant's instructions. */
+  context_low: boolean;
   error: string | null;
 }
 
@@ -1125,8 +1139,10 @@ export interface AiChatResult {
 
 /* ── Pack builder ───────────────────────────────────────────────────── */
 
+/** `library`: a wildcard the user already has, used as it is. */
 export type AiPackKind =
-  | "wildcard" | "fixed_values" | "derivation" | "combine" | "constraint" | "template";
+  | "wildcard" | "library" | "fixed_values" | "derivation" | "combine" | "constraint"
+  | "template";
 
 export interface AiPackItem {
   key: string;
@@ -1144,6 +1160,8 @@ export interface AiPackItem {
   target: string;
   /** Per-use settings on the bundle ("pick 2-3; hold"), or "". */
   use: string;
+  /** The library wildcard a `library` item uses ("" otherwise). */
+  library_id: string;
 }
 
 /** A value the pack reads but doesn't set: a WP Context Injector row. */
@@ -1158,6 +1176,12 @@ export interface AiPackPlan {
   title: string;
   summary: string;
   rating: "safe" | "nsfw";
+  /** How every option is written: Danbooru-style tags or natural phrases. */
+  style: "tags" | "sentences";
+  /** The image model family the pack targets, or "". */
+  model: string;
+  /** The variable the other picks follow, or "". */
+  anchor: string;
   questions: Array<{ question: string; choices: string[] }>;
   inputs: AiPackInput[];
   items: AiPackItem[];
@@ -1167,12 +1191,33 @@ export interface AiPackPlan {
 
 export interface AiPackPlanRequest extends AiConversational {
   instruction: string;
+  /** A prompt the user likes, to rebuild as a pack. */
+  sample?: string;
+}
+
+/** One thing the plan review found. `fix`: it would break the pack or
+ *  leave a rule doing nothing; `tip`: it would make prompts more coherent. */
+export interface AiPackFinding {
+  /** The plan item it is about, or "" for the whole pack. */
+  key: string;
+  level: "fix" | "tip";
+  text: string;
+  /** "model" when the model's review found it. */
+  by?: "model";
 }
 
 export interface AiPackPlanResult {
   plan: AiPackPlan;
   model: string;
   answer: Record<string, unknown>;
+  /** The plan checked against the guide. */
+  review: AiPackFinding[];
+}
+
+export interface AiPackReview {
+  findings: AiPackFinding[];
+  /** The findings as a refine request for the planner. */
+  note: string;
 }
 
 /** Built items by plan key. A template's payload is
@@ -1186,6 +1231,8 @@ export interface AiPackItemResult {
   payload: Record<string, unknown>;
   preview: string[];
   warnings: string[];
+  /** Warnings worth one automatic rebuild, as its note ("" when none). */
+  repair: string;
   model: string;
 }
 
@@ -1197,6 +1244,9 @@ export interface AiPackCheck {
   notes: string[];
   variables: Array<{ var: string; distinct: number; top: Array<{ value: string; share: number }> }>;
   prompts: Array<{ seed: number; text: string; negative: string }>;
+  /** Variety advice: options never picked, too few distinct values, one
+   *  value taking most runs. */
+  quality: Array<{ key: string; text: string }>;
 }
 
 export interface AiPackInstallResult {

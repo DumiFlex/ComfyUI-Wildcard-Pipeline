@@ -15,7 +15,7 @@ import type { SelectOption } from "../../ui/select-types";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
 import { api } from "../../../api/client";
-import type { AiProviderId, AiTestResult } from "../../../api/types";
+import type { AiModelSize, AiProviderId, AiTestResult } from "../../../api/types";
 import { useAiConfig } from "../../../composables/useAiConfig";
 import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../ai-models";
 
@@ -114,6 +114,27 @@ async function commitUnload(): Promise<void> {
   if (n !== config.value?.unload_after_s) await patch({ unload_after_s: n });
 }
 
+/* ── Model size + context ───────────────────────────────────────────── */
+const SIZE_LABEL: Record<string, string> = {
+  small: "Small (under 20B)", medium: "Medium (20-60B)", large: "Large (over 60B, or a cloud model)",
+};
+const sizeOptions = computed<SelectOption[]>(() => [
+  { value: "auto", label: `Automatic · ${SIZE_LABEL[config.value?.model_size_auto ?? "medium"]}` },
+  ...(["small", "medium", "large"] as const).map((v) => ({ value: v, label: SIZE_LABEL[v] })),
+]);
+async function setSize(v: string | number | null): Promise<void> {
+  if (typeof v !== "string" || v === config.value?.model_size) return;
+  await patch({ model_size: v as AiModelSize });
+}
+const contextDraft = ref<number>(16384);
+watch(() => config.value?.context_max, (v) => { if (typeof v === "number") contextDraft.value = v; }, { immediate: true });
+async function commitContext(): Promise<void> {
+  const n = Math.min(131072, Math.max(4096, Math.round(Number(contextDraft.value))));
+  if (!Number.isFinite(n)) { contextDraft.value = config.value?.context_max ?? 16384; return; }
+  contextDraft.value = n;
+  if (n !== config.value?.context_max) await patch({ context_max: n });
+}
+
 /* ── Provider / on-off ───────────────────────────────────────────────── */
 async function setProvider(id: string | number | null): Promise<void> {
   if (typeof id !== "string" || id === config.value?.provider) return;
@@ -138,7 +159,7 @@ async function runTest(): Promise<void> {
   } catch (err) {
     test.value = {
       ok: false, models: [], model_found: null, json_ok: null, latency_ms: null,
-      error: err instanceof Error ? err.message : "Test failed",
+      context: null, context_low: false, error: err instanceof Error ? err.message : "Test failed",
     };
   } finally {
     testing.value = false;
@@ -153,9 +174,11 @@ const testSummary = computed(() => {
   parts.push(t.json_ok ? "JSON answers ✓" : "JSON answers ✗ (try another model)");
   if (t.latency_ms !== null) parts.push(`${(t.latency_ms / 1000).toFixed(1)} s`);
   if (t.model_found === false) parts.push("model not in the server's list");
+  if (t.context_low) parts.push(`loaded with only ${t.context} tokens of context: reload it with 16k or more, or the assistant forgets its instructions`);
+  else if (t.context) parts.push(`${Math.round(t.context / 1024)}k context`);
   return parts.join(" · ");
 });
-const testTone = computed(() => (!test.value ? "" : test.value.ok && test.value.json_ok !== false ? "ok" : "warn"));
+const testTone = computed(() => (!test.value ? "" : test.value.ok && test.value.json_ok !== false && !test.value.context_low ? "ok" : "warn"));
 
 const off = computed(() => !config.value?.enabled);
 </script>
@@ -272,6 +295,43 @@ const off = computed(() => !config.value?.enabled);
           aria-label="Refresh the model list"
           data-test="ai-models-refresh"
           @click="refreshModels"
+        />
+      </SettingRow>
+
+      <SettingRow
+        label="Model size"
+        hint="How much the assistant asks of the model. Small models get shorter instructions, smaller tool results and steadier settings; large ones get everything. Automatic reads the size from the model's name."
+        setting-key="ai-model-size"
+      >
+        <Select
+          :model-value="config.model_size"
+          :options="sizeOptions"
+          :filterable="false"
+          aria-label="Model size"
+          data-test="ai-model-size"
+          @update:model-value="setSize"
+        />
+      </SettingRow>
+
+      <SettingRow
+        v-if="isLocal"
+        label="Most context to use"
+        hint="Tokens of context a request may ask for. Ollama is told how much each request needs, up to this. Lower it if the model runs out of GPU memory; 16384 or more keeps the chat's instructions whole. LM Studio and llama.cpp set this when the model loads, so set it there too."
+        setting-key="ai-context"
+        for="ai-context"
+      >
+        <Input
+          id="ai-context"
+          v-model.number="contextDraft"
+          type="number"
+          :min="4096"
+          :max="131072"
+          :step="4096"
+          class="wp-set-num"
+          aria-label="Most context to use, in tokens"
+          data-test="ai-context"
+          @blur="commitContext"
+          @keydown.enter="commitContext"
         />
       </SettingRow>
 

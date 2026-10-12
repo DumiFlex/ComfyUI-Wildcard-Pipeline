@@ -1,6 +1,7 @@
 """/wp/api/modules CRUD + snapshot + match + duplicate + favorite endpoints."""
 from __future__ import annotations
 
+import re
 import sqlite3
 
 from aiohttp import web
@@ -204,6 +205,9 @@ async def list_modules(request: web.Request) -> web.Response:
     return json_ok({"items": items, "total": total})
 
 
+_NEW_ID = re.compile(r"[0-9a-f]{8}")
+
+
 async def create_module(request: web.Request) -> web.Response:
     err = validate_body_size(request.content_length)
     if err is not None:
@@ -236,7 +240,21 @@ async def create_module(request: web.Request) -> web.Response:
             err = _validate_payload_for_type(body["type"], body["payload"])
             if err is not None:
                 return json_error(err, status=400)
-            row = ModuleRepository(conn).create(
+            repo = ModuleRepository(conn)
+            # An optional `id` (8 hex) lets the AI chat pre-assign the id of
+            # a module it proposes, so a constraint or ref proposed in the
+            # same answer can already point at it.
+            given = body.get("id")
+            if given is not None:
+                if not isinstance(given, str) or not _NEW_ID.fullmatch(given):
+                    return json_error("id must be 8 lowercase hex characters", status=400)
+                try:
+                    repo.get(given)
+                    return json_error(f"module {given} already exists", status=409)
+                except ModuleNotFound:
+                    pass
+            row = repo.create(
+                id=given,
                 type=body["type"], name=body["name"],
                 description=body.get("description", ""),
                 category_id=body.get("category_id"),

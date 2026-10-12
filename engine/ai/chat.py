@@ -21,6 +21,7 @@ from __future__ import annotations
 import copy
 import json
 import re
+import secrets
 from typing import Any
 
 from engine.ai import constraint as ai_constraint
@@ -29,6 +30,7 @@ from engine.ai import describe as ai_describe
 from engine.ai import docs as ai_docs
 from engine.ai import guide as ai_guide
 from engine.ai import library_vars
+from engine.ai import patterns as ai_patterns
 from engine.ai import refs as ai_refs
 from engine.ai import use as ai_use
 from engine.ai import wildcard as ai_wildcard
@@ -65,6 +67,18 @@ APP_PAGES: dict[str, str] = {
     "whats-new": "release notes", "community": "community packs",
 }
 MAX_PAGE_NOTE = 1500
+#: Changes run_test can try (the rest change names, tags or open pages).
+CHECKABLE_TOOLS = (
+    "create_wildcard", "add_options", "edit_options", "create_fixed_values", "edit_values",
+    "create_combine", "edit_combine", "create_derivation", "add_rules", "edit_rules",
+    "create_constraint", "edit_constraint", "create_bundle", "edit_bundle",
+)
+#: Sent once when an answer proposed module changes without trying them.
+CHECK_NUDGE = (
+    "Before you finish: you proposed changes but haven't tried them. Call run_test "
+    "with \"proposed\": true on a stack that uses them (with a template if one fits), "
+    "then tell the user what it showed and fix anything it flags."
+)
 TOOLS = READ_TOOLS + CHANGE_TOOLS
 
 MAX_STEPS = 6
@@ -80,8 +94,11 @@ _IDENT = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]{0,63}$")
 
 STEP_SCHEMA: dict[str, Any] = {
     "type": "object", "additionalProperties": False,
-    "required": ["message", "calls"],
+    "required": ["plan", "message", "calls"],
     "properties": {
+        # Written first, so the model decides before it calls. Never shown;
+        # it stays in the step history the model sees next.
+        "plan": {"type": "string"},
         "message": {"type": "string"},
         "calls": {
             "type": "array",
@@ -97,7 +114,7 @@ STEP_SCHEMA: dict[str, Any] = {
     },
 }
 
-SYSTEM_PROMPT = """\
+SYSTEM_HEAD = """\
 You are the assistant inside Wildcard Pipeline's library manager. Wildcard \
 Pipeline is a ComfyUI extension that builds image-generation prompts from \
 modules that run in order and set $variables:
@@ -120,7 +137,9 @@ change anything yourself: every change tool makes a proposal card the user \
 reviews and applies. Plans are fine, but act: if the user asks for \
 something, propose it.
 
-Answer with JSON: {"message": what you say to the user now, "calls": tools \
+Answer with JSON: {"plan": one or two sentences for yourself: what the \
+user wants, which features fit (see "Which feature for which job") and what \
+you'll call next, "message": what you say to the user now, "calls": tools \
 to run}. Each call is {"tool": name, "args": a JSON object written as a \
 string}. Read tools run at once and you get their results in the next \
 message; then continue. When you are done, answer with "calls": [] and a \
@@ -172,7 +191,8 @@ exclude|reduce|boost|only, "factor", "reason"}], "reach": "all" | "first" | \
 or {"page": manager page, "section": settings section}: a button that goes \
 there.
 
-""" + ai_guide.text() + """
+"""
+SYSTEM_TAIL = """
 Per-use settings ("use" on bundle items and run_test items): """ + ai_use.GUIDE + """
 
 Read an item before changing it. Don't add commentary about content; the \
@@ -191,11 +211,21 @@ version, unsaved changes included, and your changes to that item go into the \
 editor; the user saves them there. On the Test Runner page the note under \
 the user's message shows the last run; use run_test to try changes.
 """
+SYSTEM_PROMPT = SYSTEM_HEAD + ai_guide.text() + SYSTEM_TAIL
 
 
-def system_prompt() -> str:
+def system_prompt(*, slim: bool = False, examples: bool = True) -> str:
+    """The chat's instructions. `slim` (small models) keeps the tools and
+    the core guide but leaves out the coherence notes and the docs and page
+    tables (docs_search still finds pages), about a third shorter."""
     pages = "\n".join(f"- {k}: {v}" for k, v in APP_PAGES.items())
-    return (f"{SYSTEM_PROMPT}\nDocs pages (id: title):\n{ai_docs.contents()}\n\n"
+    shown = ai_guide.EXAMPLES_CHAT if examples else ""
+    if slim:
+        return (SYSTEM_HEAD + ai_guide.text(slim=True) + shown + SYSTEM_TAIL
+                + "\nDocs: find pages with docs_search. Manager pages: "
+                + ", ".join(APP_PAGES))
+    return (f"{SYSTEM_HEAD}{ai_guide.text()}{shown}{SYSTEM_TAIL}\n"
+            f"Docs pages (id: title):\n{ai_docs.contents()}\n\n"
             f"Manager pages:\n{pages}")
 
 
@@ -293,6 +323,8 @@ class Library(MoreTools):
         # change to the same item builds on the earlier proposal, so applying
         # both in order keeps both; the card says to apply the earlier first.
         self._pending: dict[str, tuple[str, dict[str, Any]]] = {}
+        #: Id of each module proposed in this answer -> its proposal id.
+        self._created: dict[str, str] = {}
         self._next_pid = 0
         #: Id of the item open in an editor whose unsaved state replaced the
         #: saved row (`use_editor`); changes to it go into that editor.
@@ -339,7 +371,7 @@ class Library(MoreTools):
 
     # ── what the model is told up front ──────────────────────────────────
 
-    def overview(self) -> str:
+    def overview(self, limit: int | None = None) -> str:
         counts: dict[str, int] = {}
         for m in self.modules.values():
             counts[str(m.get("type"))] = counts.get(str(m.get("type")), 0) + 1
@@ -356,10 +388,16 @@ class Library(MoreTools):
         rows = [*self.modules.values(), *self.bundles.values(), *self.templates.values()]
         rows.sort(key=lambda r: str(r.get("updated_at") or ""), reverse=True)
         lines.append(f"Items (id · type · name), newest first, {len(rows)} in all:")
-        for r in rows[:MAX_OVERVIEW_ITEMS]:
+        habits = ai_patterns.note(ai_patterns.summarize(
+            list(self.modules.values()), list(self.bundles.values()),
+            list(self.templates.values())), reuse=False)
+        if habits:
+            lines.append(habits)
+        limit = limit or MAX_OVERVIEW_ITEMS
+        for r in rows[:limit]:
             lines.append(f"- {self._line(r)}")
-        if len(rows) > MAX_OVERVIEW_ITEMS:
-            lines.append(f"- … {len(rows) - MAX_OVERVIEW_ITEMS} more (use search)")
+        if len(rows) > limit:
+            lines.append(f"- … {len(rows) - limit} more (use search)")
         return "\n".join(lines)
 
     def _kind(self, row: dict[str, Any]) -> str:
@@ -946,6 +984,28 @@ class Library(MoreTools):
                    "type": kind, "id": r["id"]},
         }
 
+    def _adopt(self, proposal: dict[str, Any]) -> None:
+        """Make a proposed new item visible to the rest of this answer, so
+        later calls can name it, point at it and run it. A module gets the
+        id it will be created with; a bundle or template, which nothing
+        points at by id, is only findable by name here."""
+        op, pid = proposal["op"], proposal["pid"]
+        body = op["body"]
+        if op["kind"] == "module":
+            new_id = secrets.token_hex(4)
+            while new_id in self.modules:
+                new_id = secrets.token_hex(4)
+            body["id"] = new_id
+            self.modules[new_id] = {**copy.deepcopy(body), "id": new_id, "_proposed": pid}
+            self.names[new_id] = str(body.get("name") or "")
+            self._catalog = None
+            self._created[new_id] = pid
+            self._pending[new_id] = (pid, self.modules[new_id])
+        elif op["kind"] == "bundle":
+            self.bundles[pid] = {**copy.deepcopy(body), "id": pid, "_proposed": pid}
+        elif op["kind"] == "template":
+            self.templates[pid] = {**copy.deepcopy(body), "id": pid, "_proposed": pid}
+
     def run(self, tool: str, args: dict[str, Any]) -> str | dict[str, Any]:
         """A read tool's text, or a change tool's proposal (with `pid`, and
         `after` when it builds on an earlier proposal). Raises ValueError."""
@@ -965,6 +1025,16 @@ class Library(MoreTools):
         if op["op"] == "update" and op["id"] == self.editor_id:
             # Built on the editor's unsaved version: it goes into the editor.
             op["basis"] = "editor"
+        if op["op"] == "create":
+            self._adopt(proposal)
+        # A change that points at an item proposed earlier in this answer
+        # (a constraint between two new wildcards, a bundle of new modules)
+        # waits for that one: its id only exists once it is applied.
+        if not after:
+            body = json.dumps(op.get("body") or {}, ensure_ascii=False)
+            deps = [p for i, p in self._created.items() if i in body and p != pid]
+            if deps:
+                proposal["after"] = after = deps[-1]
         if op["op"] == "update":
             base = self._current(op["id"])[0] or {}
             self._pending[op["id"]] = (pid, {**base, **op["body"]})

@@ -1,6 +1,7 @@
 """engine/ai/guide.py — the authoring guide says only what the compilers accept."""
 from __future__ import annotations
 
+import json
 import re
 
 import pytest
@@ -37,3 +38,28 @@ def test_the_guide_reaches_the_chat_and_the_planner():
     assert guide.SYNTAX in chat.SYSTEM_PROMPT and guide.CHAT in chat.SYSTEM_PROMPT
     assert guide.WHICH in pack.PLAN_SYSTEM and guide.COHERENCE in pack.PLAN_SYSTEM
     assert "run_test" not in pack.PLAN_SYSTEM
+
+
+def test_the_worked_chat_example_runs_through_the_real_tools():
+    lib = chat.Library([], [], [])
+    proposals = []
+    for step in guide.EXAMPLE_CHAT_STEPS:
+        for call in step["calls"]:
+            out = lib.run(call["tool"], chat.parse_args(json.dumps(call["args"])))
+            if isinstance(out, dict):
+                assert not [w for w in out["warnings"] if w.startswith("Left out")], out
+                proposals.append(out)
+            else:
+                report = out
+    season, outfit, rule = proposals
+    payload = rule["op"]["body"]["payload"]
+    # The constraint points at the ids the new wildcards will be created with,
+    # and waits for them to be applied.
+    assert payload["source_wildcard_id"] == season["op"]["body"]["id"]
+    assert payload["target_wildcard_id"] == outfit["op"]["body"]["id"]
+    assert rule["after"] == outfit["pid"]
+    assert "Ran 100 seeds" in report and "sundress" in report
+    assert "puffer jacket" in guide.EXAMPLES_CHAT
+    assert guide.EXAMPLES_CHAT in chat.system_prompt()
+    assert guide.COHERENCE not in chat.system_prompt(slim=True)
+    assert len(chat.system_prompt(slim=True)) < len(chat.system_prompt()) * 0.8

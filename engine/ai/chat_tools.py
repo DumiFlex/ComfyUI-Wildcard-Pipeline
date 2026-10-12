@@ -488,7 +488,7 @@ class MoreTools:
                 item["var"] = (c.get("instance") or {}).get("variable_binding") \
                     or p.get("var_binding") or f"__vocab{n}"
             elif c["type"] in ("combine", "fixed_values", "derivation"):
-                item["var"] = p.get("output_var") or f"__x{n}"
+                item["var"] = p.get("output_var") or ""
             elif c["type"] == "constraint":
                 byid = {k.get("id"): k for k in kids if k["type"] == "wildcard"}
                 s, t = byid.get(p.get("source_wildcard_id")), byid.get(p.get("target_wildcard_id"))
@@ -500,8 +500,10 @@ class MoreTools:
             plan_items.append(item)
         bundles = [c for c in kids if c["type"] == "bundle"]
         plan = {"items": [i for i in plan_items if i["kind"] != "bundle"]}
+        built = {i["key"]: {"payload": kids[n].get("payload") or {}}
+                 for n, i in enumerate(plan_items)}
         try:
-            order = ai_pack.chain_order(plan)
+            order = ai_pack.chain_order(plan, built)
         except KeyError:
             return kids
         by_key = {i["key"]: kids[n] for n, i in enumerate(plan_items)}
@@ -615,6 +617,8 @@ class MoreTools:
                 else (x, "")
             found = self._find(ref)
             row = get(found["id"]) if found else None
+            if row is not None and row.get("_proposed") and not proposed:
+                continue  # new in this answer: only in the "now" run
             if row is None:
                 warnings.append(f"Left out {_short(ref, 40)}: not in the library")
                 continue
@@ -705,15 +709,22 @@ class MoreTools:
             template = self._find(args["template"], ("template",))
             if template is None:
                 raise ValueError(f"no template {_short(args['template'], 40)!r}")
+        proposed = bool(args.get("proposed")) and bool(self._pending)  # type: ignore
         modules, warnings = self._stack(args.get("stack"), False)
-        if not modules:
+        after_modules: list[dict[str, Any]] = []
+        if proposed:
+            after_modules, warnings = self._stack(args.get("stack"), True)
+        if not modules and not after_modules:
             raise ValueError("nothing to run" + "".join(f"; {w}" for w in warnings[:3]))
-        report = self._run(modules, pins, seeds, template)
         before = None
-        if args.get("proposed") and self._pending:  # type: ignore[attr-defined]
-            after_modules, _ = self._stack(args.get("stack"), True)
-            before, report = report, self._run(after_modules, pins, seeds, template)
-            modules = after_modules
+        if not after_modules:
+            report = self._run(modules, pins, seeds, template)
+        elif not modules:
+            # Everything in the stack is new in this answer: nothing to compare.
+            report, modules = self._run(after_modules, pins, seeds, template), after_modules
+        else:
+            before = self._run(modules, pins, seeds, template)
+            report, modules = self._run(after_modules, pins, seeds, template), after_modules
         return self._report(report, modules, warnings, before)
 
     def _report(self, report: dict[str, Any], modules: list[dict[str, Any]],

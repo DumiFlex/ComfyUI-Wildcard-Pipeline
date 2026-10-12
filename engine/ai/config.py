@@ -34,11 +34,17 @@ import urllib.parse
 from pathlib import Path
 from typing import Any
 
+from engine.ai import budget
+
 CONFIG_FILENAME = "ai.json"
 FALLBACK_FILENAME = "wp-ai.json"
 
 UNLOAD_AFTER_MIN = 0
 UNLOAD_AFTER_MAX = 3600
+CONTEXT_MIN = 4096
+CONTEXT_MAX = 131072
+#: "auto" reads the size from the model's name (engine/ai/budget.py).
+MODEL_SIZES = ("auto", "small", "medium", "large")
 
 #: Wire format per preset. `ollama` uses Ollama's native API (it is the only
 #: one that takes `keep_alive`, and its `format` accepts a JSON schema);
@@ -76,6 +82,7 @@ DEFAULTS: dict[str, Any] = {
     "base_url": "",
     "model": "",
     "unload_after_s": 60,
+    "context_max": 16384,
 }
 
 _lock = threading.Lock()
@@ -135,7 +142,9 @@ def _normalize_slot(raw: Any) -> dict[str, str]:
         base_url = ""
     model = src.get("model") if isinstance(src.get("model"), str) else ""
     key = src.get("api_key") if isinstance(src.get("api_key"), str) else ""
-    return {"base_url": base_url, "model": model.strip()[:200], "api_key": key.strip()}
+    size = src.get("model_size") if src.get("model_size") in MODEL_SIZES else "auto"
+    return {"base_url": base_url, "model": model.strip()[:200], "api_key": key.strip(),
+            "model_size": size}
 
 
 def _normalize(raw: Any) -> dict[str, Any]:
@@ -157,6 +166,9 @@ def _normalize(raw: Any) -> dict[str, Any]:
             src.get("unload_after_s"), UNLOAD_AFTER_MIN, UNLOAD_AFTER_MAX,
             DEFAULTS["unload_after_s"],
         ),
+        "context_max": _clamp_int(
+            src.get("context_max"), CONTEXT_MIN, CONTEXT_MAX, DEFAULTS["context_max"],
+        ),
         "providers": slots,
     }
 
@@ -170,6 +182,8 @@ def _active(cfg: dict[str, Any]) -> dict[str, Any]:
         "base_url": slot["base_url"],
         "model": slot["model"],
         "unload_after_s": cfg["unload_after_s"],
+        "context_max": cfg["context_max"],
+        "model_size": slot["model_size"],
         "api_key": slot["api_key"],
     }
 
@@ -234,6 +248,10 @@ def public_view() -> dict[str, Any]:
     env_key = bool(_env_key(cfg["provider"]))
     view = {k: v for k, v in cfg.items() if k != "api_key"}
     view["key_set"] = env_key or bool(cfg["api_key"])
+    # What "auto" means for the chosen model, so Settings can say it.
+    view["model_size_auto"] = budget.model_size({
+        "model": cfg["model"], "local": PRESETS[cfg["provider"]]["local"],
+    })
     view["key_from_env"] = env_key
     # Which providers already have a key, so Settings can say so before
     # the user switches to one. Never the keys themselves.
@@ -284,6 +302,14 @@ def update(patch: dict[str, Any]) -> dict[str, Any]:
             cfg["unload_after_s"] = _clamp_int(
                 patch["unload_after_s"], UNLOAD_AFTER_MIN, UNLOAD_AFTER_MAX,
                 cfg["unload_after_s"],
+            )
+        if "model_size" in patch:
+            if patch["model_size"] not in MODEL_SIZES:
+                raise ConfigError("model_size must be auto, small, medium or large")
+            slot["model_size"] = patch["model_size"]
+        if "context_max" in patch:
+            cfg["context_max"] = _clamp_int(
+                patch["context_max"], CONTEXT_MIN, CONTEXT_MAX, cfg["context_max"],
             )
         if "api_key" in patch:
             key = patch["api_key"]

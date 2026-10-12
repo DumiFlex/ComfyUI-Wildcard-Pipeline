@@ -66,7 +66,9 @@ const problemCount = computed(() => {
   return c ? Object.values(c.problems).reduce((n, list) => n + list.length, 0) + c.notes.length : 0;
 });
 const moduleCount = computed(
-  () => builtItems.value.filter((i) => i.kind !== "template" && pb.states.value[i.key]?.result).length,
+  () => builtItems.value.filter(
+    (i) => i.kind !== "template" && i.kind !== "library" && pb.states.value[i.key]?.result,
+  ).length,
 );
 const hasTemplate = computed(
   () => builtItems.value.some((i) => i.kind === "template" && pb.states.value[i.key]?.result),
@@ -79,7 +81,7 @@ const steps = computed(() => [
 ]);
 
 const RANK: Record<AiPackItem["kind"], number> = {
-  fixed_values: 0, wildcard: 1, derivation: 2, combine: 3, constraint: 4, template: 5,
+  fixed_values: 0, library: 1, wildcard: 1, derivation: 2, combine: 3, constraint: 4, template: 5,
 };
 function order(i: AiPackItem): number {
   return RANK[i.kind] * 100 + items.value.indexOf(i);
@@ -87,6 +89,7 @@ function order(i: AiPackItem): number {
 
 function kindLabel(i: AiPackItem): string {
   if (i.kind === "fixed_values") return "fixed";
+  if (i.kind === "library") return "yours";
   return i.kind === "wildcard" && !i.var ? "vocabulary" : i.kind;
 }
 
@@ -96,6 +99,9 @@ function label(i: AiPackItem): string {
 }
 
 function meta(i: AiPackItem): string {
+  if (i.kind === "library") {
+    return ["your wildcard, used as it is", i.use ? `use: ${i.use}` : ""].filter(Boolean).join(" · ");
+  }
   if (i.kind === "wildcard") {
     return [`${i.count} options`, i.tags.length ? `tags ${i.tags.map((t) => `#${t}`).join(" ")}` : "",
       i.use ? `use: ${i.use}` : ""]
@@ -108,7 +114,7 @@ function builtMeta(i: AiPackItem): string {
   const r = pb.states.value[i.key]?.result;
   if (!r) return "";
   const p = r.payload as Record<string, unknown>;
-  if (i.kind === "wildcard") return `${(p.options as unknown[]).length} options`;
+  if (i.kind === "wildcard" || i.kind === "library") return `${(p.options as unknown[]).length} options`;
   if (i.kind === "fixed_values") {
     const n = (p.values as unknown[]).length;
     return `${n} value${n === 1 ? "" : "s"}`;
@@ -123,6 +129,26 @@ function builtMeta(i: AiPackItem): string {
 
 function problems(key: string): string[] {
   return pb.check.value?.problems[key] ?? [];
+}
+
+function quality(key: string): string[] {
+  return (pb.check.value?.quality ?? []).filter((q) => q.key === key).map((q) => q.text);
+}
+
+const STYLE_LABEL = { tags: "Danbooru-style tags", sentences: "natural phrases" } as const;
+const shape = computed(() => {
+  const p = fullPlan.value;
+  if (!p) return "";
+  return [
+    `Written as ${STYLE_LABEL[p.style] ?? "tags"}`,
+    p.model ? `for ${p.model}` : "",
+    p.anchor ? `everything follows $${p.anchor}` : "",
+  ].filter(Boolean).join(" · ");
+});
+const showSample = ref(!!pb.sample.value);
+const fixes = computed(() => pb.findings.value.filter((f) => f.level === "fix").length);
+function findingItem(key: string): string {
+  return items.value.find((i) => i.key === key)?.name ?? "";
 }
 
 function toggle(key: string): void {
@@ -223,6 +249,25 @@ function openTemplate(): void {
           :disabled="convo.loading.value"
           @keydown="onKey($event, pb.askPlan)"
         ></textarea>
+        <button
+          type="button"
+          class="wp-pack__toggle"
+          :aria-expanded="showSample"
+          data-test="pack-sample-toggle"
+          @click="showSample = !showSample"
+        ><i :class="['pi', showSample ? 'pi-chevron-down' : 'pi-chevron-right']" aria-hidden="true" /> Start from a prompt you like</button>
+        <template v-if="showSample">
+          <textarea
+            v-model="pb.sample.value"
+            class="wp-textarea wp-pack__request"
+            rows="3"
+            placeholder="1girl, long red hair, green eyes, sundress, sitting on a pier, sunset, masterpiece, best quality"
+            aria-label="A prompt you like"
+            data-test="pack-sample"
+            :disabled="convo.loading.value"
+          ></textarea>
+          <p class="wp-pack__dim">The plan splits it into slots, reuses your wildcards where they fit and builds the rest, so the pack makes more prompts like it.</p>
+        </template>
         <div class="wp-pack__row">
           <span class="wp-pack__dim">Ctrl+Enter plans it. Nothing is saved until you install.</span>
           <Button v-if="convo.loading.value" size="sm" icon="pi-stop" @click="pb.stop">Stop</Button>
@@ -275,6 +320,20 @@ function openTemplate(): void {
             </div>
           </div>
         </Card>
+        <Card title="Plan review" data-test="pack-review">
+          <p v-if="!pb.findings.value.length" class="wp-pack__ok"><i class="pi pi-check" aria-hidden="true" /> Nothing to fix: every rule has what it needs.</p>
+          <ul v-else class="wp-pack__findings">
+            <li v-for="(f, j) in pb.findings.value" :key="j" :data-level="f.level" data-test="pack-finding">
+              <i :class="['pi', f.level === 'fix' ? 'pi-exclamation-triangle' : 'pi-lightbulb']" aria-hidden="true" />
+              <span><b v-if="f.key && findingItem(f.key)">{{ findingItem(f.key) }}: </b>{{ f.text }}<span v-if="f.by === 'model'" class="wp-pack__by"> · model</span></span>
+            </li>
+          </ul>
+          <div class="wp-pack__row">
+            <span class="wp-pack__dim">{{ fixes ? `${fixes} to fix before building.` : 'Checked against the authoring guide.' }}</span>
+            <Button size="sm" variant="ghost" icon="pi-microchip-ai" :loading="pb.reviewing.value" :disabled="convo.loading.value" data-test="pack-review-ai" @click="pb.reviewPlan">Review with AI</Button>
+            <Button v-if="pb.findings.value.length" size="sm" icon="pi-wrench" :disabled="convo.loading.value" data-test="pack-fix" @click="pb.fixFindings">Fix these in the plan</Button>
+          </div>
+        </Card>
         <Card title="Edit the plan">
           <textarea
             v-model="convo.instruction.value"
@@ -310,6 +369,7 @@ function openTemplate(): void {
           <span v-if="fullPlan?.rating === 'nsfw'" class="wp-pack__nsfw">NSFW</span>
         </p>
         <p v-if="fullPlan?.summary" class="wp-pack__dim">{{ fullPlan.summary }}</p>
+        <p v-if="shape" class="wp-pack__shape" data-test="pack-shape">{{ shape }}</p>
         <ul class="wp-pack__items">
           <li
             v-for="i in items"
@@ -380,18 +440,21 @@ function openTemplate(): void {
               </button>
               <span class="wp-pack__item-meta">{{ builtMeta(i) }}</span>
               <button
-                v-if="!pb.working.value && pb.phase.value === 'build'"
+                v-if="!pb.working.value && pb.phase.value === 'build' && i.kind !== 'library'"
                 type="button"
                 class="wp-pack__remove"
                 :aria-label="`Rebuild ${i.name}`"
                 title="Build it again"
                 data-test="pack-rebuild"
-                @click="pb.rebuild(i.key, problems(i.key).join('; '))"
+                @click="pb.rebuild(i.key, [...problems(i.key), ...quality(i.key)].join('; '))"
               ><i class="pi pi-refresh" aria-hidden="true" /></button>
             </div>
             <p v-if="pb.states.value[i.key].error" class="wp-pack__error">{{ pb.states.value[i.key].error }}</p>
             <ul v-if="problems(i.key).length" class="wp-pack__warnings">
               <li v-for="(w, j) in problems(i.key)" :key="j"><i class="pi pi-exclamation-triangle" aria-hidden="true" /> {{ w }}</li>
+            </ul>
+            <ul v-if="quality(i.key).length" class="wp-pack__findings" data-test="pack-quality">
+              <li v-for="(w, j) in quality(i.key)" :key="j" data-level="tip"><i class="pi pi-lightbulb" aria-hidden="true" /> <span>{{ w }}. Rebuild it to spread the picks.</span></li>
             </ul>
             <div v-if="open.has(i.key) && pb.states.value[i.key].result" class="wp-pack__detail">
               <ul class="wp-pack__preview">
@@ -573,5 +636,16 @@ function openTemplate(): void {
 .wp-pack__bar-label { position: relative; padding: 0 6px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
 .wp-pack__prompt p { margin: 0 0 4px; font-family: var(--wp-font-mono, monospace); font-size: 12px; overflow-wrap: anywhere; }
 .wp-pack__prompt + .wp-pack__prompt { margin-top: 10px; }
+.wp-pack__shape { margin: 4px 0 0; font-size: 12px; color: var(--wp-accent-text); }
+.wp-pack__toggle { margin-top: 8px; border: 0; background: none; padding: 0; color: var(--wp-text-muted); font: inherit; font-size: 12.5px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.wp-pack__toggle:hover { color: var(--wp-text); }
+.wp-pack__toggle + .wp-pack__request { margin-top: 6px; }
+.wp-pack__findings { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; }
+.wp-pack__findings li { display: flex; gap: 8px; align-items: baseline; }
+.wp-pack__findings li[data-level="fix"] .pi { color: var(--wp-warn); }
+.wp-pack__findings li[data-level="tip"] .pi { color: var(--wp-accent-text); }
+.wp-pack__built .wp-pack__findings { margin: 6px 0 0; color: var(--wp-text-muted); }
+.wp-pack__by { color: var(--wp-text-dim); }
+.wp-pack__kind[data-kind="library"] { color: var(--wp-success); background: color-mix(in oklab, var(--wp-success) 14%, transparent); }
 .wp-pack__tag { font-size: 12px; padding: 1px 7px; border-radius: 999px; border: 1px dashed var(--wp-accent-400); color: var(--wp-accent-text); }
 </style>

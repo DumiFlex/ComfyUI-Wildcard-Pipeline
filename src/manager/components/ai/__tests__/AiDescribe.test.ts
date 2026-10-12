@@ -8,7 +8,7 @@ import { _resetAiConfigForTests } from "../../../composables/useAiConfig";
 import type { AiConfig } from "../../../api/types";
 
 const CONFIG = {
-  enabled: true, provider: "ollama", base_url: "", model: "m", unload_after_s: 60,
+  enabled: true, provider: "ollama", base_url: "", model: "m", unload_after_s: 60, context_max: 16384, model_size: "auto", model_size_auto: "small",
   key_set: false, key_from_env: false, keys_saved: [],
   presets: { ollama: { label: "Ollama", api: "ollama", local: true, needs_key: false, base_url: "" } },
 } as unknown as AiConfig;

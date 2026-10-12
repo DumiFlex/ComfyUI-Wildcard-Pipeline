@@ -42,7 +42,9 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           { term: 'API key', desc: 'Only needed for Claude, OpenAI or a server that asks for one. It is stored on ComfyUI\'s side and never shown again; Remove deletes it. WP_AI_API_KEY, ANTHROPIC_API_KEY or OPENAI_API_KEY in the environment work too.' },
           { term: 'Model', desc: 'Picked from the list your server reports (refresh after downloading a new one), or typed in.' },
           { term: 'Unload after', desc: 'For local servers: how many idle seconds before the model leaves the GPU, so ComfyUI gets its memory back. 0 unloads right away.' },
-          { term: 'Test connection', desc: 'Lists the models, then asks the chosen one for a tiny JSON answer, and tells you whether it worked and how long it took.' },
+          { term: 'Model size', desc: 'How much the assistant asks of the model. Small models (under 20B) get shorter instructions, smaller tool results and steadier settings; large ones and hosted models get everything. Automatic reads the size from the model\'s name; set it when the name doesn\'t say.' },
+          { term: 'Most context to use', desc: 'For Ollama: the assistant asks for as much context as each request needs, up to this many tokens (16384 by default). Ollama\'s own default is far smaller and silently cuts the instructions off. Lower it if the model no longer fits on your GPU.' },
+          { term: 'Test connection', desc: 'Lists the models, then asks the chosen one for a tiny JSON answer, and tells you whether it worked and how long it took. For LM Studio and llama.cpp it also reads how much context the model was loaded with and warns when it is under 8192 tokens, since the assistant\'s instructions alone need more.' },
         ]"
       />
     </DocSection>
@@ -211,6 +213,13 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         constraint points at are never removed this way.
       </p>
       <p>
+        The assistant plans before it acts and checks its work: when it proposes changes to
+        modules it runs the stack with them before it answers, so the reply says what the change
+        does. It can propose several items that depend on each other in one answer (a wildcard
+        and a constraint on it); the later card waits until the first is applied. An answer that
+        comes back garbled is asked for again once, with the problem named.
+      </p>
+      <p>
         Each card lists what it changes and warns about anything it left out (a duplicate option, a
         variable nothing sets). <b>Undo</b> on an applied card puts back what it replaced, or
         deletes what it created. <b>Dismiss</b> tells the assistant you said no. When two cards
@@ -221,6 +230,17 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         Chat works best with a model that follows instructions well; use one of the builder
         models below. A small model may need a second try or a more specific request.
       </DocCallout>
+    </DocSection>
+
+    <DocSection title="Tidy up an imported wildcard pack">
+      <p>
+        Packs converted from Dynamic Prompts, Prompt Post-Processor or Impact files arrive as flat
+        lists. After an import in <b>Import / Export → Wildcard packs</b>, a bar offers
+        <b>Tag and connect with AI</b>: the chat opens with the imported wildcards and asks the
+        assistant to tag their options, group the tags, link the lists with constraints (with a
+        fallback where a rule could leave a list empty), gather them into a bundle and run a test.
+        Every change comes back as a card to apply or skip; the option text stays as it was.
+      </p>
     </DocSection>
 
     <DocSection title="Ask about a test run">
@@ -257,11 +277,23 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           guns, mages get robes").</li>
         <li><b>Plan.</b> The assistant lists every item it will build, by variable, and may ask up
           to three questions. Inputs are listed under the plan. Click an answer, remove items you don't want (the ✕ on a row), or
-          type a change, then press <b>Update plan</b>. Nothing is built yet.</li>
+          type a change, then press <b>Update plan</b>. Nothing is built yet. Above the items, a
+          line says how the pack is written (tags or sentences), which checkpoint family it is
+          for, and the variable everything follows. Items marked <b>yours</b> are wildcards from
+          your library the pack reuses instead of building a copy.</li>
+        <li><b>Plan review.</b> Before anything is built, the plan is checked for what would
+          break: a template or rule that reads a variable nothing sets, a constraint keyed on a tag
+          neither wildcard lists, two constraints that loop, wildcards that ignore the pack's
+          anchor, picks that nothing links. <b>Review with AI</b> asks the model for a second
+          opinion, and <b>Fix these in the plan</b> sends the findings back as a change.</li>
         <li><b>Build &amp; check.</b> Each item is written in its own request, wildcards first so
           rules can use their tags. Then the pack runs 200 seeds on the real engine. An item with
           a problem (a rule that never applies, a variable nothing sets) is rebuilt with the
-          problem as a note, up to twice, and the row says what was fixed. Click a row to see what
+          problem as a note, up to twice, and the row says what was fixed. An item whose answer
+          fails is asked again once with the error, and one that doesn't fit what it reads (a rule
+          testing for an option its wildcard lacks) is rebuilt once with that named. The run also
+          flags options that never came up or that take most of the picks; rebuild the item to
+          spread them. Click a row to see what
           it holds; the refresh button builds that one again. The test run shows each variable's
           most common values and a few sample prompts.</li>
         <li><b>Install</b> adds the modules, the template and a bundle that runs them in the right
@@ -269,6 +301,13 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           to wire it on the canvas (the bundle in a WP Context, the template in a WP Prompt
           Assembler, an Injector row per input). <b>Undo</b> removes all of it.</li>
       </ol>
+      <p>
+        The planner reads your library's conventions first: whether your options are tags or
+        sentences and how long, the tags and tag groups you use, the variables your stacks set and
+        the standing negatives in your templates, so the pack matches what you have. Open
+        <b>Start from a prompt you like</b> and paste a prompt to build a pack that makes more like
+        it: the planner splits it into slots, one wildcard each.
+      </p>
       <DocCallout variant="tip">
         Building a pack takes one request per item, so a local model needs a few minutes. Use a
         builder model; a small one may leave an item unbuilt, which you can rebuild or remove.
@@ -304,7 +343,11 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         For NSFW packs, run an uncensored model yourself. Not refusing isn't enough, though: a
         model also has to know the words, so the suggestions come in two groups. Install one in
         Ollama with <code>ollama pull</code> and the name below, or download it from Hugging Face
-        for LM Studio or llama.cpp.
+        for LM Studio or llama.cpp. With a 24 GB GPU, one of the 24 GB builders is enough on its
+        own; below 16 GB, Gemma 4 12B heretic is the best single model. "Heretic" and
+        "abliterated" builds are the original model with its refusals removed; heretic ones keep
+        more of the original. None of these is proven to know Danbooru tags, so check a draft
+        before you rely on it.
       </p>
       <template v-for="g in SUGGESTED_MODEL_GROUPS" :key="g.use">
         <p><b>{{ g.title }}.</b> {{ g.note }}</p>
@@ -319,8 +362,9 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         </ul>
       </template>
       <DocCallout variant="tip">
-        Keep a writer selected for drafting, and switch the model to a builder in Settings when
-        you organize a library or build a whole pack.
+        With two models, keep a writer selected for drafting and switch to a builder in Settings
+        when you organize a library, chat or build a whole pack. Load local models with at least
+        16k of context.
       </DocCallout>
     </DocSection>
 
@@ -336,8 +380,9 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         assistant reads to answer, the results of stacks it runs (they run on your PC) and a
         short note of what the page shows (the open editor's item, a list's selection, the Test
         Runner's stack and last results). The fixed values, combine and template panels send the
-        item and the variables your library sets. The pack builder sends your description and, for each item, what the pack has
-        built so far. A follow-up sends the earlier requests
+        item and the variables your library sets. The pack builder sends your description, a sample prompt if you gave one,
+        a summary of your library's conventions (option style, tags, variables, negatives and the
+        wildcards worth reusing) and, for each item, what the pack has built so far. A follow-up sends the earlier requests
         and answers of that conversation again; nothing is kept on the server between requests.
       </p>
       <DocCallout variant="warn">
