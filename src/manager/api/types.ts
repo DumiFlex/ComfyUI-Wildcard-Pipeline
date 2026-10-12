@@ -874,6 +874,39 @@ export interface AiWildcardDraftResult {
   model: string;
 }
 
+export type AiWildcardEditAction = "remove" | "rewrite" | "retag" | "reweight";
+
+export interface AiWildcardEditRequest {
+  action: AiWildcardEditAction;
+  instruction: string;
+  wildcard: {
+    name: string;
+    var_binding: string;
+    payload: {
+      /** The rows to edit (whole list or the selection), with real ids. */
+      options: Array<{ id: string; value: string; weight: number; sub_categories: string[]; is_null?: boolean }>;
+      sub_categories: string[];
+      tag_groups?: Record<string, string[]>;
+    };
+  };
+}
+
+/** One proposed change. `after` is null for a removal. */
+export interface AiWildcardEditChange {
+  option_id: string;
+  before: { value?: string; tags?: string[]; weight?: number };
+  after: { value?: string; tags?: string[]; weight?: number } | null;
+  reason?: string;
+}
+
+export interface AiWildcardEditResult {
+  action: AiWildcardEditAction;
+  changes: AiWildcardEditChange[];
+  new_tags: string[];
+  skipped: Array<{ text: string; reason: string }>;
+  model: string;
+}
+
 /* ── Tag autocomplete ─────────────────────────────────────────────────── */
 
 /** Danbooru's numeric tag categories. `null` when the installed file is the

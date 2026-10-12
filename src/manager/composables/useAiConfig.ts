@@ -1,6 +1,6 @@
 /**
  * The AI assistant's saved settings, one module-level copy so the Settings
- * section and every editor's "Draft with AI" button agree on whether the
+ * section and every editor's AI button agree on whether the
  * assistant is on, without each fetching it.
  */
 import { computed, ref } from "vue";

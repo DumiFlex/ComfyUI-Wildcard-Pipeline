@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * AiDraftPanel — "Draft with AI" for the wildcard editor.
+ * AiDraftPanel — the Add tab of the wildcard editor's AI panel.
  *
  * The user says what to add; the server asks their model (Settings › AI
  * assistant) and returns options that already passed the engine's checks
@@ -56,10 +56,6 @@ onBeforeUnmount(() => {
 });
 
 const modelLabel = computed(() => config.value?.model ?? "");
-const isLocal = computed(() => {
-  const c = config.value;
-  return c ? c.presets[c.provider].local : true;
-});
 
 const newTagSet = computed(() => new Set(result.value?.new_tags ?? []));
 const ticked = computed<AiDraftOption[]>(() =>
@@ -156,10 +152,6 @@ const skippedSummary = computed(() => {
 
 <template>
   <div class="wp-ai-draft" data-test="ai-draft-panel">
-    <div class="wp-ai-draft__head">
-      <span class="wp-ai-draft__title"><i class="pi pi-microchip-ai" aria-hidden="true" /> Draft with AI</span>
-      <span class="wp-ai-draft__model" :data-local="isLocal ? 'true' : 'false'" :title="isLocal ? 'Runs on your machine' : 'Sent to a cloud provider'">{{ modelLabel }}</span>
-    </div>
 
     <textarea
       v-model="instruction"
@@ -252,27 +244,7 @@ const skippedSummary = computed(() => {
 </template>
 
 <style scoped>
-.wp-ai-draft {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px;
-  border: 1px solid color-mix(in oklab, var(--wp-accent-500) 40%, var(--wp-border));
-  border-radius: 8px;
-  background: color-mix(in oklab, var(--wp-accent-500) 5%, var(--wp-bg-2));
-}
-.wp-ai-draft__head { display: flex; align-items: center; gap: 8px; }
-.wp-ai-draft__title { font-weight: 600; color: var(--wp-accent-text); display: inline-flex; gap: 6px; align-items: center; }
-.wp-ai-draft__model {
-  margin-left: auto;
-  font-family: var(--wp-font-mono, monospace);
-  font-size: 11px;
-  padding: 1px 7px;
-  border-radius: 5px;
-  color: var(--wp-warn);
-  border: 1px solid color-mix(in oklab, var(--wp-warn) 45%, transparent);
-}
-.wp-ai-draft__model[data-local="true"] { color: var(--wp-success); border-color: color-mix(in oklab, var(--wp-success) 45%, transparent); }
+.wp-ai-draft { display: flex; flex-direction: column; gap: 10px; }
 .wp-ai-draft__input { width: 100%; resize: vertical; overscroll-behavior: contain; font-size: 13px; }
 .wp-ai-draft__controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .wp-ai-draft__count { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--wp-text-muted); white-space: nowrap; }

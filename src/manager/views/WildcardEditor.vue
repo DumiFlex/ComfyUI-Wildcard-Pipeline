@@ -62,6 +62,8 @@ import { formatProbability } from "../utils/percent";
 import type {
   ModuleHistoryEntry,
   WildcardOption,
+  AiWildcardEditAction,
+  AiWildcardEditChange,
   WildcardPayload,
 } from "../api/types";
 import { useCascadeStore } from "../cascade/cascade-store";
@@ -73,7 +75,7 @@ import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { ResolveWarning } from "../utils/resolveTokens";
 import { brokenRefLabels } from "../utils/validateModule";
 import { NEG_ACCESSOR } from "../../widgets/richTokenize";
-import AiDraftPanel from "../components/ai/AiDraftPanel.vue";
+import AiWildcardPanel from "../components/ai/AiWildcardPanel.vue";
 import { useAiConfig } from "../composables/useAiConfig";
 
 const props = defineProps<{ id?: string }>();
@@ -228,7 +230,7 @@ function snapshot(): string {
  *     wording changes.
  */
 const bulkPending = ref(false);
-/** "Draft with AI" (Settings › AI assistant). The button only shows once the
+/** The AI panel (Settings › AI assistant). The button only shows once the
  *  assistant is turned on. A draft not yet added counts as unsaved work. */
 const ai = useAiConfig();
 const aiDraftOpen = ref(false);
@@ -1713,6 +1715,50 @@ function commitAiDraft(parsed: ParsedBulkOption[]): void {
   aiDraftOpen.value = false;
 }
 
+/** Apply reviewed AI edits to the draft. Rows that changed or vanished since
+ *  the request are matched by id, so a stale change just doesn't land. An
+ *  option other modules point at isn't removed here: that needs the cascade
+ *  dialog, so it is left for the user to delete by hand. */
+function applyAiEdits(action: AiWildcardEditAction, changes: AiWildcardEditChange[]): void {
+  const byId = new Map(changes.map((c) => [c.option_id, c]));
+  let done = 0;
+  let kept = 0;
+  if (action === "remove") {
+    options.value = options.value.filter((o) => {
+      if (typeof o.id !== "string" || !byId.has(o.id)) return true;
+      if (props.id && cascade.optionRefsTo(o.id).length > 0) { kept += 1; return true; }
+      done += 1;
+      return false;
+    });
+    if (selectedIds.value.size) {
+      const left = new Set(options.value.map((o) => o.id));
+      selectedIds.value = new Set([...selectedIds.value].filter((id) => left.has(id)));
+    }
+  } else {
+    for (const o of options.value) {
+      const c = typeof o.id === "string" ? byId.get(o.id) : undefined;
+      if (!c?.after) continue;
+      if (action === "rewrite" && c.after.value) o.value = c.after.value;
+      else if (action === "reweight" && typeof c.after.weight === "number") o.weight = c.after.weight;
+      else if (action === "retag" && c.after.tags) {
+        const tagSet = new Set(c.after.tags.filter((t) => ensureSubcat(t)).map((t) => t.trim()));
+        o.sub_categories = subCategories.value.filter((s) => tagSet.has(s));
+      } else continue;
+      done += 1;
+    }
+  }
+  const verb = action === "remove" ? "Removed" : "Changed";
+  toast.push({ severity: "success", summary: `${verb} ${done} option${done === 1 ? "" : "s"}`, life: 2500 });
+  if (kept > 0) {
+    toast.push({
+      severity: "warn",
+      summary: `${kept} option${kept === 1 ? " is" : "s are"} used by other modules`,
+      detail: "Delete those by hand so you can see what refers to them.",
+      life: 6000,
+    });
+  }
+}
+
 function commitBulkAddOptions(parsed: ParsedBulkOption[]): void {
   bulkNote.value = "";
   let skippedTags = 0;
@@ -2367,7 +2413,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
           icon="pi-microchip-ai"
           data-test="wc-ai-draft"
           @click="aiDraftOpen = !aiDraftOpen"
-        >Draft with AI</Button>
+        >AI</Button>
         <Button
           size="sm"
           variant="ghost"
@@ -2382,13 +2428,15 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
       </template>
       <template #subheader>
       <div v-if="aiDraftOpen && ai.config.value?.enabled" class="wpc-bulk-controls">
-        <AiDraftPanel
+        <AiWildcardPanel
           :name="name"
           :var-binding="varBinding"
-          :existing-values="options.map((o) => o.value)"
+          :options="options"
+          :selected-ids="selectedIds"
           :existing-tags="subCategories"
           :tag-groups="tagGroups"
           @commit-options="commitAiDraft"
+          @apply-edits="applyAiEdits"
           @cancel="aiDraftOpen = false"
           @update:pending="(v: boolean) => (aiPending = v)"
         />

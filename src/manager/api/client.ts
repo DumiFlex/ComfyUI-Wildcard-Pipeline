@@ -6,6 +6,8 @@ import type {
   DatabaseConfig, DatabaseConfigUpdate,
   BackupEntry, BackupList, ServerSettings, ServerSettingsPatch,
   AiConfig, AiConfigPatch, AiTestResult, AiWildcardDraftRequest, AiWildcardDraftResult,
+  AiWildcardEditRequest,
+  AiWildcardEditResult,
   TagStatus, TagSuggestResponse, TagDownloadResult, LibraryTagUpdateCounts,
   ModelKind, ModelSourceStatus, ModelSuggestResponse,
   DatabaseInfo, MaintenanceOp, MaintenanceResult,
@@ -400,6 +402,11 @@ export const api = {
     },
     draftWildcard(body: AiWildcardDraftRequest, signal?: AbortSignal) {
       return request<AiWildcardDraftResult>("/wp/api/ai/wildcard/draft", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    editWildcard(body: AiWildcardEditRequest, signal?: AbortSignal) {
+      return request<AiWildcardEditResult>("/wp/api/ai/wildcard/edit", {
         method: "POST", body: JSON.stringify(body), signal,
       });
     },

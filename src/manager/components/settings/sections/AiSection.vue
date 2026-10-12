@@ -168,7 +168,7 @@ const off = computed(() => !config.value?.enabled);
     <SettingGroup title="Assistant">
       <SettingRow
         label="Turn on the AI assistant"
-        hint="Adds Draft with AI to the editors. It uses a model you already have: Claude, OpenAI, or a server on your machine. Off by default, and nothing is sent anywhere until you turn it on."
+        hint="Adds an AI button to the wildcard editor that drafts and edits options. It uses a model you already have: Claude, OpenAI, or a server on your machine. Off by default, and nothing is sent anywhere until you turn it on."
         setting-key="ai-enabled"
       >
         <Toggle

@@ -54,7 +54,6 @@ describe("AiDraftPanel", () => {
     });
     const w = mountPanel();
     await flushPromises();
-    expect(w.text()).toContain("qwen3.5:9b");
     await w.get('[data-test="ai-draft-instruction"]').setValue("more colours");
     await w.get('[data-test="ai-draft-generate"]').trigger("click");
     await flushPromises();

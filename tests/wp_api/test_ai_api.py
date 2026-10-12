@@ -15,6 +15,12 @@ ANSWER = {"options": [
 ]}
 
 
+EDIT_ANSWERS = {
+    "wildcard_remove": {"remove": [{"id": "2", "reason": "modern"}, {"id": "99", "reason": "?"}]},
+    "wildcard_rewrite": {"options": [{"id": "1", "text": "a long red cloak"}]},
+}
+
+
 @pytest.fixture(autouse=True)
 def _isolated_ai(tmp_path, monkeypatch):
     monkeypatch.setenv("WP_AI_CONFIG_PATH", str(tmp_path / "ai.json"))
@@ -34,7 +40,7 @@ async def fake_llm(aiohttp_server):
         body = await request.json()
         seen.append({"path": request.path, "headers": dict(request.headers), "body": body})
         schema_name = body["response_format"]["json_schema"]["name"]
-        content = {"ok": True} if schema_name == "probe" else ANSWER
+        content = {"ok": True} if schema_name == "probe" else EDIT_ANSWERS.get(schema_name, ANSWER)
         return web.json_response({"choices": [{"message": {"content": json.dumps(content)}}]})
 
     async def ollama_tags(request):
@@ -83,7 +89,8 @@ def _draft_body():
 
 
 async def test_everything_but_config_is_off_by_default(wp_client):
-    for path in ("/wp/api/ai/models", "/wp/api/ai/test", "/wp/api/ai/wildcard/draft"):
+    for path in ("/wp/api/ai/models", "/wp/api/ai/test", "/wp/api/ai/wildcard/draft",
+                 "/wp/api/ai/wildcard/edit"):
         resp = await wp_client.post(path, json=_draft_body())
         assert resp.status == 403, path
     resp = await wp_client.get("/wp/api/ai/config")
@@ -208,3 +215,65 @@ def test_fence_and_chatty_json_are_recovered():
     assert _ai_client._parse_text_json('Sure! {"a": 2} hope that helps') == {"a": 2}
     with pytest.raises(_ai_client.AIError):
         _ai_client._parse_text_json("no json here")
+
+
+def _edit_body(action):
+    return {
+        "action": action, "instruction": "drop anything modern",
+        "wildcard": {"name": "outfit", "var_binding": "outfit", "payload": {
+            "options": [
+                {"id": "null0001", "value": "", "weight": 1, "is_null": True},
+                {"id": "aaaa0001", "value": "red cloak", "weight": 1, "sub_categories": []},
+                {"id": "aaaa0002", "value": "hoodie, jeans", "weight": 1, "sub_categories": []},
+            ],
+            "sub_categories": [],
+        }},
+    }
+
+
+async def test_edit_maps_numbers_back_to_real_option_ids(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    resp = await wp_client.post("/wp/api/ai/wildcard/edit", json=_edit_body("remove"))
+    assert resp.status == 200, await resp.text()
+    body = await resp.json()
+    assert body["action"] == "remove"
+    assert body["changes"] == [{
+        "option_id": "aaaa0002", "before": {"value": "hoodie, jeans"},
+        "after": None, "reason": "modern",
+    }]
+    assert body["skipped"][0]["reason"] == "not an option in the list"
+    sent = fake_llm.seen[-1]["body"]
+    prompt = sent["messages"][1]["content"]
+    # The null option isn't shown, real ids never are.
+    assert "1. red cloak" in prompt and "2. hoodie, jeans" in prompt
+    assert "aaaa0001" not in prompt
+    assert sent["temperature"] == 0.3
+
+
+async def test_edit_rewrite_returns_before_and_after(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    resp = await wp_client.post("/wp/api/ai/wildcard/edit", json=_edit_body("rewrite"))
+    body = await resp.json()
+    assert body["changes"] == [{
+        "option_id": "aaaa0001", "before": {"value": "red cloak"},
+        "after": {"value": "a long red cloak"},
+    }]
+
+
+async def test_edit_input_validation(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    url = "/wp/api/ai/wildcard/edit"
+    assert (await wp_client.post(url, json=_edit_body("explode"))).status == 400
+    empty = _edit_body("remove")
+    empty["wildcard"]["payload"]["options"] = []
+    assert (await wp_client.post(url, json=empty)).status == 400
+    many = _edit_body("remove")
+    many["wildcard"]["payload"]["options"] = [
+        {"id": f"{i:08x}", "value": f"opt {i}", "weight": 1} for i in range(301)
+    ]
+    resp = await wp_client.post(url, json=many)
+    assert resp.status == 400
+    assert "select up to 300" in await resp.text()

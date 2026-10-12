@@ -5,6 +5,8 @@
     POST /wp/api/ai/models          list the server's models (uses saved config)
     POST /wp/api/ai/test            Test connection: models + a tiny JSON call
     POST /wp/api/ai/wildcard/draft  new options for a wildcard (not saved)
+    POST /wp/api/ai/wildcard/edit   remove / rewrite / retag / re-weight
+                                    options (a before/after list, not saved)
 
 Off by default: every route except the config pair answers 403 until the user
 turns the assistant on. Nothing here writes to the library. Drafts come back
@@ -20,6 +22,7 @@ from aiohttp import web
 
 from engine.ai import config as ai_config
 from engine.ai import wildcard as ai_wildcard
+from engine.ai import wildcard_edit as ai_edit
 from wp_api import _ai_client
 from wp_api._helpers import json_error, json_ok
 
@@ -162,9 +165,96 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
     return json_ok(result)
 
 
+async def post_wildcard_edit(request: web.Request) -> web.Response:
+    """Body: {action, instruction, wildcard: {name?, var_binding?, payload}}.
+
+    `payload.options` are the rows to edit (the whole list, or the editor's
+    selection), each with its real `id`. The model sees them numbered 1..N
+    and the answer is mapped back, so every change names a real option.
+    """
+    cfg = _enabled_cfg()
+    if isinstance(cfg, web.Response):
+        return cfg
+    body = await _body(request)
+    if isinstance(body, web.Response):
+        return body
+
+    action = body.get("action")
+    if action not in ai_edit.ACTIONS:
+        return json_error("action must be remove, rewrite, retag or reweight", status=400)
+    instruction = body.get("instruction")
+    if not isinstance(instruction, str) or not instruction.strip():
+        return json_error("say what to change", status=400)
+    if len(instruction) > ai_wildcard.MAX_INSTRUCTION_LEN:
+        return json_error("that request is too long", status=400)
+
+    wc = body.get("wildcard") if isinstance(body.get("wildcard"), dict) else {}
+    payload = wc.get("payload") if isinstance(wc.get("payload"), dict) else {}
+    raw_opts = payload.get("options") if isinstance(payload.get("options"), list) else []
+    rows: list[dict] = []
+    real_ids: dict[str, str] = {}
+    for o in raw_opts:
+        if not isinstance(o, dict) or o.get("is_null") is True:
+            continue
+        value = o.get("value")
+        oid = o.get("id")
+        if not isinstance(value, str) or not value.strip() or not isinstance(oid, str):
+            continue
+        short = str(len(rows) + 1)
+        real_ids[short] = oid
+        weight = o.get("weight", 1)
+        if isinstance(weight, bool) or not isinstance(weight, (int, float)):
+            weight = 1
+        rows.append({
+            "id": short,
+            "value": value.strip(),
+            "weight": weight,
+            "sub_categories": _str_list(o.get("sub_categories"), limit=50),
+        })
+    if not rows:
+        return json_error("there are no options to edit", status=400)
+    if len(rows) > ai_edit.MAX_EDIT_OPTIONS:
+        return json_error(
+            f"that's {len(rows)} options; select up to {ai_edit.MAX_EDIT_OPTIONS} and try again",
+            status=400,
+        )
+    tags = _str_list(payload.get("sub_categories"), limit=500)
+    raw_groups = payload.get("tag_groups") if isinstance(payload.get("tag_groups"), dict) else {}
+    axes = {str(k): _str_list(v, limit=200) for k, v in list(raw_groups.items())[:50]}
+    name = wc.get("name") if isinstance(wc.get("name"), str) else ""
+    var = wc.get("var_binding") if isinstance(wc.get("var_binding"), str) else ""
+
+    user = ai_edit.build_edit_prompt(
+        action=action, instruction=instruction, name=name[:200], var_binding=var[:100],
+        options=rows, tags=tags, axes=axes,
+    )
+    try:
+        answer = await _ai_client.complete_json(
+            cfg, system=ai_edit.system_prompt(action), user=user,
+            schema=ai_edit.SCHEMAS[action], schema_name=f"wildcard_{action}",
+            # Edits should be faithful to the request, not creative.
+            temperature=0.3,
+        )
+    except _ai_client.AIError as e:
+        return json_error(e.message, status=e.status)
+    try:
+        result = ai_edit.compile_edit(action, answer, options=rows, registry=tags)
+    except ValueError as e:
+        return json_error(
+            f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
+            status=502,
+        )
+    for c in result["changes"]:
+        c["option_id"] = real_ids[c.pop("id")]
+    result["action"] = action
+    result["model"] = cfg["model"]
+    return json_ok(result)
+
+
 def register(router: web.UrlDispatcher) -> None:
     router.add_get("/wp/api/ai/config", get_config)
     router.add_put("/wp/api/ai/config", put_config)
     router.add_post("/wp/api/ai/models", post_models)
     router.add_post("/wp/api/ai/test", post_test)
     router.add_post("/wp/api/ai/wildcard/draft", post_wildcard_draft)
+    router.add_post("/wp/api/ai/wildcard/edit", post_wildcard_edit)

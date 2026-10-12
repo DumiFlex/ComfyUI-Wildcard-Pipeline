@@ -13,7 +13,7 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
     title="AI assistant"
     icon="pi pi-microchip-ai"
     tone="neutral"
-    blurb="Optional and off by default: connect a model you choose and let it draft wildcard options for you to review."
+    blurb="Optional and off by default: connect a model you choose and let it add, remove, rewrite, retag and re-weight wildcard options for you to review."
   >
     <DocSection title="What it does">
       <p>
@@ -23,8 +23,9 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         the assistant on.
       </p>
       <p>
-        Today it drafts wildcard options. More is planned: quick actions in every editor,
-        organizing and re-tagging your library, a chat that can edit modules, and building a
+        Today it works on wildcards: it adds options and removes, rewrites, retags or
+        re-weights the ones you have. More is planned: rules from plain language, organizing
+        your library, a chat that can edit modules, and building a
         whole pack from a description.
       </p>
     </DocSection>
@@ -33,7 +34,7 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       <p>Open <b>Settings → AI assistant</b>.</p>
       <DocKeyList
         :items="[
-          { term: 'Enable', desc: 'Turns the assistant on. While it is off, the Draft with AI button is hidden and the model routes refuse every call.' },
+          { term: 'Enable', desc: 'Turns the assistant on. While it is off, the AI button in the editors is hidden and the model routes refuse every call.' },
           { term: 'Provider', desc: 'Ollama, LM Studio, llama.cpp, Claude, OpenAI, or Custom for any other OpenAI-compatible server. Each provider remembers its own address, model and key, so you can switch back and forth without typing them again.' },
           { term: 'Server address', desc: 'Filled in for each provider; change it if your server runs on another port or machine.' },
           { term: 'API key', desc: 'Only needed for Claude, OpenAI or a server that asks for one. It is stored on ComfyUI\'s side and never shown again; Remove deletes it. WP_AI_API_KEY, ANTHROPIC_API_KEY or OPENAI_API_KEY in the environment work too.' },
@@ -44,12 +45,12 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       />
     </DocSection>
 
-    <DocSection title="Draft wildcard options">
+    <DocSection title="Add options to a wildcard">
       <p>
-        In a wildcard's editor, press <b>Draft with AI</b>. Say what you want (for example
-        <em>more outfits for a rainy city at night</em>) and how many, then <b>Draft</b>
-        (Ctrl + Enter). The model sees the wildcard's name, its options and its tags, so it
-        writes in the same style and reuses your tags.
+        In a wildcard's editor, press <b>AI</b> above the options and stay on the <b>Add</b> tab.
+        Say what you want (for example <em>more outfits for a rainy city at night</em>) and how
+        many, then <b>Draft</b> (Ctrl + Enter). The model sees the wildcard's name, its options
+        and its tags, so it writes in the same style and reuses your tags.
       </p>
       <p>
         You get a list to review. Untick anything you don't want and press <b>Add</b>; the rest
@@ -61,6 +62,28 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         <code>{</code>, <code>}</code> or <code>|</code>, are left out and listed under
         the result, so a draft can never add a broken reference.
       </DocCallout>
+    </DocSection>
+
+    <DocSection title="Edit the options you have">
+      <p>
+        The other tabs change options that are already there. They work on every option, or on
+        just the ones you selected (tick their boxes in <b>Bulk edit</b> first). Say what you
+        want and the model answers with a before/after list, one tick box per change.
+      </p>
+      <DocKeyList
+        :items="[
+          { term: 'Remove', desc: 'Finds options that match what you describe (\'drop anything modern\') and says why. Options other modules point at stay; delete those by hand so you can see what refers to them.' },
+          { term: 'Rewrite', desc: 'Changes the wording: tags to sentences, a different style, shorter, typos fixed. A rewrite that would make two options the same is left out.' },
+          { term: 'Retag', desc: 'Sets each option\'s tags (\'tag each by the seasons it suits\'). The new list replaces the old one; new tags are marked and created when you apply.' },
+          { term: 'Weights', desc: 'Makes options rarer or more common (\'heavy winter gear rarer\'). 1 is normal, 0.5 half as likely, 2 twice, 0 never.' },
+        ]"
+      />
+      <p>
+        Untick what you don't want and press <b>Apply</b> (or <b>Remove</b>). The changes land in
+        the editor like your own edits, so you can still tweak or undo them, and nothing is
+        saved until you press <b>Save</b>. Up to 300 options go in one request; select some
+        first for a longer list.
+      </p>
     </DocSection>
 
     <DocSection title="Which model">

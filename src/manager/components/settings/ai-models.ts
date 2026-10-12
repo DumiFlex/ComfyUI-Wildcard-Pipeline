@@ -56,7 +56,7 @@ export const SUGGESTED_LOCAL_MODELS: SuggestedModel[] = [
 
 export const SUGGESTED_MODEL_GROUPS: { use: SuggestedModel["use"]; title: string; note: string }[] = [
   { use: "writing", title: "Best for writing",
-    note: "Fine-tuned on creative writing, NSFW included, so they know the words and use them. Pick one of these for Draft with AI." },
+    note: "Fine-tuned on creative writing, NSFW included, so they know the words and use them. Pick one of these for drafting and rewriting options." },
   { use: "building", title: "Best for organizing and building packs",
     note: "Uncensored (they won't refuse) and strong at following instructions and returning structured answers, but they write explicit content more blandly." },
 ];
