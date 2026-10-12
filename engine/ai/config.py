@@ -15,6 +15,11 @@ The key can also come from the environment so it never touches disk:
 ``WP_AI_API_KEY`` for any provider, else ``ANTHROPIC_API_KEY`` /
 ``OPENAI_API_KEY`` for those two presets. An env key wins over a saved one.
 
+Each provider keeps its own address, model and key under ``providers``, so
+switching from Claude to Ollama and back doesn't lose the Claude key. Files
+written before that (flat ``base_url`` / ``model`` / ``api_key``) are read
+as the settings of the provider they were saved with.
+
 The feature is OFF by default. Nothing in this package makes a request; this
 is only the shape of what the user configured.
 """
@@ -121,11 +126,8 @@ def _clamp_int(value: Any, lo: int, hi: int, default: int) -> int:
     return max(lo, min(hi, int(value)))
 
 
-def _normalize(raw: Any) -> dict[str, Any]:
+def _normalize_slot(raw: Any) -> dict[str, str]:
     src = raw if isinstance(raw, dict) else {}
-    provider = src.get("provider")
-    if provider not in PRESETS:
-        provider = DEFAULTS["provider"]
     base_url = src.get("base_url") if isinstance(src.get("base_url"), str) else ""
     try:
         base_url = check_base_url(base_url)
@@ -133,16 +135,42 @@ def _normalize(raw: Any) -> dict[str, Any]:
         base_url = ""
     model = src.get("model") if isinstance(src.get("model"), str) else ""
     key = src.get("api_key") if isinstance(src.get("api_key"), str) else ""
+    return {"base_url": base_url, "model": model.strip()[:200], "api_key": key.strip()}
+
+
+def _normalize(raw: Any) -> dict[str, Any]:
+    """The stored shape: shared fields plus one slot per provider."""
+    src = raw if isinstance(raw, dict) else {}
+    provider = src.get("provider")
+    if provider not in PRESETS:
+        provider = DEFAULTS["provider"]
+    raw_slots = src.get("providers") if isinstance(src.get("providers"), dict) else {}
+    slots = {pid: _normalize_slot(raw_slots.get(pid)) for pid in PRESETS}
+    if "providers" not in src and any(k in src for k in ("base_url", "model", "api_key")):
+        # A file from before per-provider slots: its flat fields belong to
+        # the provider it was saved with.
+        slots[provider] = _normalize_slot(src)
     return {
         "enabled": src.get("enabled") is True,
         "provider": provider,
-        "base_url": base_url,
-        "model": model.strip()[:200],
         "unload_after_s": _clamp_int(
             src.get("unload_after_s"), UNLOAD_AFTER_MIN, UNLOAD_AFTER_MAX,
             DEFAULTS["unload_after_s"],
         ),
-        "api_key": key.strip(),
+        "providers": slots,
+    }
+
+
+def _active(cfg: dict[str, Any]) -> dict[str, Any]:
+    """Shared fields plus the active provider's slot, flattened."""
+    slot = cfg["providers"][cfg["provider"]]
+    return {
+        "enabled": cfg["enabled"],
+        "provider": cfg["provider"],
+        "base_url": slot["base_url"],
+        "model": slot["model"],
+        "unload_after_s": cfg["unload_after_s"],
+        "api_key": slot["api_key"],
     }
 
 
@@ -188,7 +216,7 @@ def load_effective() -> dict[str, Any]:
     `base_url` falls back to the preset's when the user left it empty.
     """
     with _lock:
-        cfg = _read()
+        cfg = _active(_read())
     preset = PRESETS[cfg["provider"]]
     out = copy.deepcopy(cfg)
     out["base_url"] = cfg["base_url"] or preset["base_url"]
@@ -201,11 +229,18 @@ def load_effective() -> dict[str, Any]:
 def public_view() -> dict[str, Any]:
     """What the Settings page sees: everything except the key itself."""
     with _lock:
-        cfg = _read()
+        stored = _read()
+    cfg = _active(stored)
     env_key = bool(_env_key(cfg["provider"]))
     view = {k: v for k, v in cfg.items() if k != "api_key"}
     view["key_set"] = env_key or bool(cfg["api_key"])
     view["key_from_env"] = env_key
+    # Which providers already have a key, so Settings can say so before
+    # the user switches to one. Never the keys themselves.
+    view["keys_saved"] = sorted(
+        pid for pid, slot in stored["providers"].items()
+        if slot["api_key"] or _env_key(pid)
+    )
     view["presets"] = {
         pid: {k: p[k] for k in ("label", "api", "local", "needs_key", "base_url")}
         for pid, p in PRESETS.items()
@@ -216,9 +251,11 @@ def public_view() -> dict[str, Any]:
 def update(patch: dict[str, Any]) -> dict[str, Any]:
     """Apply a partial update and return the public view.
 
-    `api_key`: a non-empty string replaces the saved key, `""` or `None`
-    removes it, absent leaves it alone. It is write-only: no response
-    carries it back.
+    `base_url`, `model` and `api_key` apply to the provider that is active
+    after `provider` (if given) is applied. Switching provider keeps every
+    provider's own settings. `api_key`: a non-empty string replaces the
+    saved key, `""` or `None` removes it, absent leaves it alone. It is
+    write-only: no response carries it back.
     """
     if not isinstance(patch, dict):
         raise ConfigError("body must be an object")
@@ -231,20 +268,18 @@ def update(patch: dict[str, Any]) -> dict[str, Any]:
         if "provider" in patch:
             if patch["provider"] not in PRESETS:
                 raise ConfigError(f"unknown provider {patch['provider']!r}")
-            if patch["provider"] != cfg["provider"]:
-                # A key for one company is never right for another.
-                cfg["api_key"] = ""
-                cfg["base_url"] = ""
-                cfg["model"] = ""
+            # Each provider has its own slot, so a key for one company is
+            # never sent to another and nothing is lost by switching.
             cfg["provider"] = patch["provider"]
+        slot = cfg["providers"][cfg["provider"]]
         if "base_url" in patch:
             if not isinstance(patch["base_url"], str):
                 raise ConfigError("base_url must be a string")
-            cfg["base_url"] = check_base_url(patch["base_url"])
+            slot["base_url"] = check_base_url(patch["base_url"])
         if "model" in patch:
             if not isinstance(patch["model"], str):
                 raise ConfigError("model must be a string")
-            cfg["model"] = patch["model"].strip()[:200]
+            slot["model"] = patch["model"].strip()[:200]
         if "unload_after_s" in patch:
             cfg["unload_after_s"] = _clamp_int(
                 patch["unload_after_s"], UNLOAD_AFTER_MIN, UNLOAD_AFTER_MAX,
@@ -259,6 +294,6 @@ def update(patch: dict[str, Any]) -> dict[str, Any]:
             key = key.strip()
             if len(key) > 512:
                 raise ConfigError("that key is too long")
-            cfg["api_key"] = key
+            slot["api_key"] = key
         _write(_normalize(cfg))
     return public_view()

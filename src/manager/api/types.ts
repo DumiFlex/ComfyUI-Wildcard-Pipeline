@@ -819,6 +819,9 @@ export interface AiConfig {
   unload_after_s: number;
   key_set: boolean;
   key_from_env: boolean;
+  /** Providers that already have a key (saved or from the environment).
+   *  Each provider keeps its own address, model and key. */
+  keys_saved: AiProviderId[];
   presets: Record<AiProviderId, AiPreset>;
 }
 

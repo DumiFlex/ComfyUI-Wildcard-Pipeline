@@ -34,7 +34,7 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       <DocKeyList
         :items="[
           { term: 'Enable', desc: 'Turns the assistant on. While it is off, the Draft with AI button is hidden and the model routes refuse every call.' },
-          { term: 'Provider', desc: 'Ollama, LM Studio, llama.cpp, Claude, OpenAI, or Custom for any other OpenAI-compatible server. Changing it clears the address, key and model.' },
+          { term: 'Provider', desc: 'Ollama, LM Studio, llama.cpp, Claude, OpenAI, or Custom for any other OpenAI-compatible server. Each provider remembers its own address, model and key, so you can switch back and forth without typing them again.' },
           { term: 'Server address', desc: 'Filled in for each provider; change it if your server runs on another port or machine.' },
           { term: 'API key', desc: 'Only needed for Claude, OpenAI or a server that asks for one. It is stored on ComfyUI\'s side and never shown again; Remove deletes it. WP_AI_API_KEY, ANTHROPIC_API_KEY or OPENAI_API_KEY in the environment work too.' },
           { term: 'Model', desc: 'Picked from the list your server reports (refresh after downloading a new one), or typed in.' },

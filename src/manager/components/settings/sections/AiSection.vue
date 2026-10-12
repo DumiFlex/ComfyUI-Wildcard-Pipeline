@@ -28,7 +28,8 @@ const providerOptions = computed<SelectOption[]>(() => {
   if (!presets) return [];
   return PROVIDER_ORDER.map((id) => ({
     value: id,
-    label: `${presets[id].label} · ${presets[id].local ? "runs on your machine" : "cloud"}`,
+    label: `${presets[id].label} · ${presets[id].local ? "runs on your machine" : "cloud"}`
+      + (presets[id].needs_key && config.value?.keys_saved?.includes(id) ? " · key saved" : ""),
   }));
 });
 

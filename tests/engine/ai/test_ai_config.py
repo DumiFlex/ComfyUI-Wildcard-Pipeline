@@ -30,7 +30,7 @@ def test_key_is_write_only(_isolated):
     assert "sk-secret" not in json.dumps(ai_config.public_view())
     # It is on disk for the client, and only there.
     assert ai_config.load_effective()["api_key"] == "sk-secret"
-    assert json.loads(_isolated.read_text())["api_key"] == "sk-secret"
+    assert json.loads(_isolated.read_text())["providers"]["anthropic"]["api_key"] == "sk-secret"
 
 
 def test_empty_key_removes_it():
@@ -39,13 +39,45 @@ def test_empty_key_removes_it():
     assert view["key_set"] is False
 
 
-def test_switching_provider_drops_key_address_and_model():
+def test_each_provider_keeps_its_own_key_address_and_model():
     ai_config.update({"provider": "openai", "api_key": "sk-1", "model": "gpt-x",
                       "base_url": "https://example.test/v1"})
     view = ai_config.update({"provider": "anthropic"})
+    # The OpenAI settings don't leak into Claude's...
     assert view["key_set"] is False
     assert view["model"] == ""
     assert view["base_url"] == ""
+    assert view["keys_saved"] == ["openai"]
+    ai_config.update({"api_key": "sk-ant", "model": "claude-x"})
+    assert ai_config.load_effective()["api_key"] == "sk-ant"
+    # ...and switching back brings them back.
+    view = ai_config.update({"provider": "openai"})
+    assert view["key_set"] is True
+    assert view["model"] == "gpt-x"
+    assert view["base_url"] == "https://example.test/v1"
+    assert view["keys_saved"] == ["anthropic", "openai"]
+    assert ai_config.load_effective()["api_key"] == "sk-1"
+
+
+def test_old_flat_file_is_read_as_its_providers_settings():
+    ai_config.config_path().write_text(json.dumps({
+        "enabled": True, "provider": "openai", "base_url": "https://example.test/v1",
+        "model": "gpt-x", "api_key": "sk-old", "unload_after_s": 30,
+    }), encoding="utf-8")
+    cfg = ai_config.load_effective()
+    assert cfg["api_key"] == "sk-old"
+    assert cfg["model"] == "gpt-x"
+    ai_config.update({"provider": "ollama"})
+    view = ai_config.update({"provider": "openai"})
+    assert view["key_set"] is True and view["model"] == "gpt-x"
+    assert "api_key" not in json.loads(ai_config.config_path().read_text())
+
+
+def test_public_view_never_carries_any_key():
+    ai_config.update({"provider": "openai", "api_key": "sk-1"})
+    ai_config.update({"provider": "anthropic", "api_key": "sk-2"})
+    text = json.dumps(ai_config.public_view())
+    assert "sk-1" not in text and "sk-2" not in text
 
 
 def test_env_key_wins_and_is_reported(monkeypatch):

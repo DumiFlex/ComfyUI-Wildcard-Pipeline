@@ -2,6 +2,7 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryHistory, createRouter } from "vue-router";
 import AiSection from "../sections/AiSection.vue";
+import Select from "../../ui/Select.vue";
 import { SUGGESTED_LOCAL_MODELS } from "../ai-models";
 import { api } from "../../../api/client";
 import { _resetAiConfigForTests } from "../../../composables/useAiConfig";
@@ -24,7 +25,7 @@ const PRESETS: AiConfig["presets"] = {
 function cfg(over: Partial<AiConfig> = {}): AiConfig {
   return {
     enabled: false, provider: "ollama", base_url: "", model: "", unload_after_s: 60,
-    key_set: false, key_from_env: false, presets: PRESETS, ...over,
+    key_set: false, key_from_env: false, keys_saved: [], presets: PRESETS, ...over,
   };
 }
 
@@ -110,5 +111,15 @@ describe("Settings › AI assistant", () => {
     await flushPromises();
     expect(api.ai.saveConfig).toHaveBeenCalledWith({ enabled: true });
     expect(api.ai.models).toHaveBeenCalled();
+  });
+
+  it("marks cloud providers that already have a saved key", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({ keys_saved: ["anthropic"] }));
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    const sel = w.findAllComponents(Select).find((c) => c.attributes("data-test") === "ai-provider");
+    const opts = (sel?.props("options") ?? []) as { value: string; label: string }[];
+    expect(opts.find((o) => o.value === "anthropic")?.label).toContain("key saved");
+    expect(opts.find((o) => o.value === "openai")?.label).not.toContain("key saved");
   });
 });

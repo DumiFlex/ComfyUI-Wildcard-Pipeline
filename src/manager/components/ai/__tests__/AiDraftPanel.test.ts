@@ -7,7 +7,7 @@ import type { AiConfig } from "../../../api/types";
 
 const CONFIG: AiConfig = {
   enabled: true, provider: "ollama", base_url: "", model: "qwen3.5:9b", unload_after_s: 60,
-  key_set: false, key_from_env: false,
+  key_set: false, key_from_env: false, keys_saved: [],
   presets: {
     anthropic: { label: "Claude", api: "anthropic", local: false, needs_key: true, base_url: "" },
     openai: { label: "OpenAI", api: "openai", local: false, needs_key: true, base_url: "" },
