@@ -9,6 +9,7 @@ import { useTemplateStore } from "../stores/templateStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { GITHUB_REPO } from "../config/links";
 import { libraryTagCounts } from "../utils/library-tags";
+import { useAiConfig } from "../composables/useAiConfig";
 
 interface NavItem {
   id: string;
@@ -23,6 +24,8 @@ interface NavItem {
   /** Nested children — when present, the item renders as a
    *  collapsible parent (chevron + click toggles). Sakai-vue style. */
   children?: NavItem[];
+  /** Shown only while the AI assistant is on and has a model. */
+  ai?: boolean;
 }
 interface NavSection {
   label: string;
@@ -67,6 +70,7 @@ const SECTIONS: NavSection[] = [
       { id: "tags",       label: "Tags",            icon: "pi-hashtag",                  to: "/tags"           },
       { id: "io",         label: "Import / Export", icon: "pi-arrow-right-arrow-left",   to: "/import-export"  },
       { id: "test",       label: "Test Runner",     icon: "pi-bolt",                     to: "/test"           },
+      { id: "pack",       label: "Pack builder",    icon: "pi-microchip-ai",             to: "/pack-builder", ai: true },
     ],
   },
   {
@@ -106,6 +110,7 @@ const activeId = computed<string>(() => {
     ["tags", "tags"],
     ["import-export", "io"],
     ["test", "test"],
+    ["pack-builder", "pack"],
     ["documentation", "documentation"],
     ["dashboard", "dashboard"],
     ["all", "all"],
@@ -172,12 +177,13 @@ function onItemClick(item: NavItem) {
 // ── Task 9: Search-within ─────────────────────────────────────────────────
 const searchQuery = ref("");
 
+const { ready: aiReady } = useAiConfig();
+
 const filteredSections = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
-  if (!q) return SECTIONS;
   return SECTIONS.map((s) => ({
     ...s,
-    items: s.items.filter((i) => i.label.toLowerCase().includes(q)),
+    items: s.items.filter((i) => (!i.ai || aiReady.value) && (!q || i.label.toLowerCase().includes(q))),
   })).filter((s) => s.items.length > 0);
 });
 

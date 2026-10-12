@@ -133,7 +133,10 @@ Open it from the ComfyUI sidebar. It's where your modules live between workflows
   **Organize with AI** sorts a selection of library items into categories, tags and
   ratings. The **AI** button in the top bar opens a chat that reads your library
   to answer questions and proposes new wildcards, rules, constraints and edits as
-  cards you apply one by one, with Undo. If an
+  cards you apply one by one, with Undo. **Pack builder** makes a whole pack from
+  one description: it plans the wildcards, rules, constraints and template, builds
+  them one at a time, tests them on the engine and fixes what fails, then installs
+  everything as one bundle you can undo. If an
   answer is close, type a follow-up and press **Refine** to revise it instead of
   starting over. You review every change first, and nothing is saved until you
   press Save.

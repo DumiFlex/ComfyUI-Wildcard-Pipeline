@@ -205,7 +205,16 @@ def _slim_trace(
 def _slim_warning(w: Any) -> dict[str, Any]:
     if not isinstance(w, dict):
         return {"type": "unknown", "message": str(w)}
-    return {k: _json_value(v) for k, v in w.items()}
+    return {k: _json_detail(v) for k, v in w.items()}
+
+
+def _json_detail(value: Any) -> Any:
+    """``_json_value`` that keeps dicts and lists (a warning's ``detail``)."""
+    if isinstance(value, dict):
+        return {str(k): _json_detail(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_detail(v) for v in value]
+    return _json_value(value)
 
 
 def _option_id_by_value(modules: list[dict[str, Any]]) -> dict[str, dict[str, str]]:

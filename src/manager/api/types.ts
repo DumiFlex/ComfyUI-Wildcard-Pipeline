@@ -1092,6 +1092,78 @@ export interface AiChatResult {
   model: string;
 }
 
+/* ── Pack builder ───────────────────────────────────────────────────── */
+
+export type AiPackKind = "wildcard" | "derivation" | "combine" | "constraint" | "template";
+
+export interface AiPackItem {
+  key: string;
+  kind: AiPackKind;
+  name: string;
+  /** The variable it sets ("" for constraints and the template). */
+  var: string;
+  about: string;
+  /** Options to write (wildcards only). */
+  count: number;
+  /** Option tags (wildcards only). */
+  tags: string[];
+  /** A constraint's two wildcards, by variable. */
+  source: string;
+  target: string;
+}
+
+export interface AiPackPlan {
+  title: string;
+  summary: string;
+  rating: "safe" | "nsfw";
+  questions: Array<{ question: string; choices: string[] }>;
+  items: AiPackItem[];
+  /** What the checker left out of the model's plan. */
+  warnings: string[];
+}
+
+export interface AiPackPlanRequest extends AiConversational {
+  instruction: string;
+}
+
+export interface AiPackPlanResult {
+  plan: AiPackPlan;
+  model: string;
+  answer: Record<string, unknown>;
+}
+
+/** Built items by plan key. A template's payload is
+ *  `{template_string, negative_template}`. */
+export type AiPackBuilt = Record<string, { id: string; payload: Record<string, unknown> }>;
+
+export interface AiPackItemResult {
+  key: string;
+  id: string;
+  kind: AiPackKind;
+  payload: Record<string, unknown>;
+  preview: string[];
+  warnings: string[];
+  model: string;
+}
+
+export interface AiPackCheck {
+  runs: number;
+  failed: number;
+  /** What went wrong, by item key. */
+  problems: Record<string, string[]>;
+  notes: string[];
+  variables: Array<{ var: string; distinct: number; top: Array<{ value: string; share: number }> }>;
+  prompts: Array<{ seed: number; text: string; negative: string }>;
+}
+
+export interface AiPackInstallResult {
+  undo_entry_id: string;
+  ids: Record<string, string>;
+  bundle_id: string;
+  template_id: string;
+  tag: string;
+}
+
 /* ── Tag autocomplete ─────────────────────────────────────────────────── */
 
 /** Danbooru's numeric tag categories. `null` when the installed file is the

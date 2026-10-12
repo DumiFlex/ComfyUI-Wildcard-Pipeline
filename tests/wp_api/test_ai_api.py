@@ -53,6 +53,7 @@ async def fake_llm(aiohttp_server):
     """One server speaking all three formats; records what it was sent."""
     seen: list[dict] = []
     chat_steps: list[dict] = []
+    overrides: dict[str, dict] = {}
 
     async def openai_models(request):
         return web.json_response({"data": [{"id": "m1"}, {"id": "m2"}]})
@@ -62,6 +63,8 @@ async def fake_llm(aiohttp_server):
         seen.append({"path": request.path, "headers": dict(request.headers), "body": body})
         schema_name = body["response_format"]["json_schema"]["name"]
         content = {"ok": True} if schema_name == "probe" else EDIT_ANSWERS.get(schema_name, ANSWER)
+        if schema_name in overrides:
+            content = overrides[schema_name]
         if schema_name == "chat_step":
             content = chat_steps.pop(0) if chat_steps else {"message": "Done.", "calls": []}
         return web.json_response({"choices": [{"message": {"content": json.dumps(content)}}]})
@@ -99,6 +102,7 @@ async def fake_llm(aiohttp_server):
     server = await aiohttp_server(app)
     server.seen = seen
     server.chat_steps = chat_steps
+    server.overrides = overrides
     return server
 
 
@@ -581,3 +585,101 @@ async def test_chat_stops_after_max_steps(wp_client, fake_llm):
         "messages": [{"role": "user", "content": "loop"}]})
     body = await resp.json()
     assert len(body["steps"]) == 6 and "ran out of steps" in body["message"]
+
+
+PACK_PLAN = {
+    "title": "Seasons", "summary": "Outfits by season.", "rating": "safe",
+    "questions": [{"question": "How many?", "choices": ["Few", "Many"]}],
+    "items": [
+        {"kind": "wildcard", "name": "Season", "var": "season", "about": "seasons", "count": 4,
+         "tags": ["cold", "warm"], "source": "", "target": ""},
+        {"kind": "wildcard", "name": "Outfit", "var": "outfit", "about": "outfits", "count": 4,
+         "tags": ["cold", "warm"], "source": "", "target": ""},
+        {"kind": "constraint", "name": "Season → Outfit", "var": "", "about": "dress for it",
+         "count": 0, "tags": [], "source": "season", "target": "outfit"},
+        {"kind": "template", "name": "Scene", "var": "", "about": "uses both", "count": 0,
+         "tags": [], "source": "", "target": ""},
+    ],
+}
+
+
+async def test_pack_plan_build_check_install(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.overrides["pack_plan"] = PACK_PLAN
+    resp = await wp_client.post("/wp/api/ai/pack/plan", json={"instruction": "season outfits"})
+    assert resp.status == 200, await resp.text()
+    body = await resp.json()
+    plan = body["plan"]
+    assert [i["kind"] for i in plan["items"]] == ["wildcard", "wildcard", "constraint", "template"]
+    assert body["answer"] == PACK_PLAN and plan["questions"][0]["choices"] == ["Few", "Many"]
+    assert "Request: season outfits" in fake_llm.seen[-1]["body"]["messages"][1]["content"]
+
+    opts = {
+        "season": [("winter", ["cold"]), ("summer", ["warm"]), ("autumn", ["cold"]),
+                   ("spring", ["warm"])],
+        "outfit": [("parka", ["cold"]), ("sundress", ["warm"]), ("wool coat", ["cold"]),
+                   ("shorts", ["warm"])],
+    }
+    built: dict = {}
+    keys = {i["name"]: i["key"] for i in plan["items"]}
+    for name, var in (("Season", "season"), ("Outfit", "outfit")):
+        fake_llm.overrides["options"] = {"options": [
+            {"text": t, "weight": 1, "tags": tags, "negative": ""} for t, tags in opts[var]]}
+        resp = await wp_client.post("/wp/api/ai/pack/item", json={
+            "plan": plan, "built": built, "key": keys[name]})
+        assert resp.status == 200, await resp.text()
+        out = await resp.json()
+        built[keys[name]] = {"id": out["id"], "payload": out["payload"]}
+    fake_llm.overrides["constraint_rules"] = {"rules": [
+        {"source": "#cold", "target": "#warm", "effect": "exclude", "factor": 0, "reason": ""}]}
+    resp = await wp_client.post("/wp/api/ai/pack/item", json={
+        "plan": plan, "built": built, "key": keys["Season → Outfit"], "note": "x"})
+    out = await resp.json()
+    assert out["payload"]["source_wildcard_id"] == built[keys["Season"]]["id"]
+    built[keys["Season → Outfit"]] = {"id": out["id"], "payload": out["payload"]}
+    fake_llm.overrides["template"] = {"template": "$season day, wearing $outfit", "negative": ""}
+    resp = await wp_client.post("/wp/api/ai/pack/item", json={
+        "plan": plan, "built": built, "key": keys["Scene"]})
+    out = await resp.json()
+    built[keys["Scene"]] = {"id": out["id"], "payload": out["payload"]}
+    # A rebuild keeps the id.
+    resp = await wp_client.post("/wp/api/ai/pack/item", json={
+        "plan": plan, "built": built, "key": keys["Scene"]})
+    assert (await resp.json())["id"] == out["id"]
+
+    resp = await wp_client.post("/wp/api/ai/pack/check", json={"plan": plan, "built": built})
+    assert resp.status == 200, await resp.text()
+    report = await resp.json()
+    assert report["runs"] == 200 and report["failed"] == 0 and report["problems"] == {}
+    for p in report["prompts"]:
+        if p["text"].startswith(("winter", "autumn")):
+            assert "sundress" not in p["text"] and "shorts" not in p["text"]
+
+    resp = await wp_client.post("/wp/api/ai/pack/install", json={"plan": plan, "built": built})
+    assert resp.status == 200, await resp.text()
+    done = await resp.json()
+    assert done["tag"] == "seasons" and done["undo_entry_id"]
+    bundle = await (await wp_client.get(f"/wp/api/bundles/{done['bundle_id']}")).json()
+    assert [c["meta"]["name"] for c in bundle["children"]] == [
+        "Season", "Season → Outfit", "Outfit"]
+    resp = await wp_client.post("/wp/api/import/undo",
+                                json={"undo_entry_id": done["undo_entry_id"]})
+    assert resp.status == 200
+    assert (await wp_client.get(f"/wp/api/bundles/{done['bundle_id']}")).status == 404
+
+
+async def test_pack_validation(wp_client, fake_llm):
+    assert (await wp_client.post("/wp/api/ai/pack/plan", json={"instruction": "x"})).status == 403
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    assert (await wp_client.post("/wp/api/ai/pack/plan", json={})).status == 400
+    fake_llm.overrides["pack_plan"] = {"title": "x", "items": []}
+    assert (await wp_client.post("/wp/api/ai/pack/plan",
+                                 json={"instruction": "x"})).status == 502
+    plan = {**PACK_PLAN, "items": PACK_PLAN["items"][:1]}
+    for path, extra in (("item", {"key": "nope"}), ("check", {}), ("install", {})):
+        resp = await wp_client.post(f"/wp/api/ai/pack/{path}",
+                                    json={"plan": plan, "built": {}, **extra})
+        assert resp.status == 400, path
+    assert (await wp_client.post("/wp/api/ai/pack/check", json={"plan": {}})).status == 400

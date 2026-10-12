@@ -16,6 +16,10 @@
                                     of modules and bundles
     POST /wp/api/ai/chat            a chat turn: the model reads the library
                                     with tools and proposes changes
+    POST /wp/api/ai/pack/plan       pack builder: an outline from a request
+    POST /wp/api/ai/pack/item       build one planned item (not saved)
+    POST /wp/api/ai/pack/check      run the built pack on the engine
+    POST /wp/api/ai/pack/install    install the pack as one undoable import
 
 Every drafting route also takes `history` (earlier turns of the same
 conversation, see `engine/ai/followup.py`) and returns the model's raw
@@ -28,6 +32,7 @@ the user does. See `_ai_client.py` for the threat model.
 """
 from __future__ import annotations
 
+import asyncio
 import json as _json
 from typing import Any
 
@@ -42,6 +47,7 @@ from engine.ai import describe as ai_describe
 from engine.ai import followup as ai_followup
 from engine.ai import library_vars
 from engine.ai import organize as ai_organize
+from engine.ai import pack as ai_pack
 from engine.ai import wildcard as ai_wildcard
 from engine.ai import wildcard_edit as ai_edit
 from engine.db.repositories import (
@@ -50,8 +56,10 @@ from engine.db.repositories import (
     ModuleNotFound,
     ModuleRepository,
 )
+from engine.importer import commit_import
 from wp_api import _ai_client
 from wp_api._helpers import db_session, json_error, json_ok
+from wp_api._validators import validate_wildcard_name
 
 _MAX_BODY_BYTES = 512 * 1024
 
@@ -694,6 +702,143 @@ async def post_chat(request: web.Request) -> web.Response:
     })
 
 
+def _pack_body(body: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]] | web.Response:
+    """The plan and built items the manager sends back, checked again."""
+    try:
+        plan = ai_pack.compile_plan(body.get("plan"))
+    except ai_pack.PlanError as e:
+        return json_error(f"the plan can't be used: {e}", status=400)
+    return plan, ai_pack.parse_built(plan, body.get("built"))
+
+
+async def post_pack_plan(request: web.Request) -> web.Response:
+    """Body: {instruction, history?}. An outline of the pack: title, up to
+    three questions and the items to build. Nothing is built yet."""
+    cfg = _enabled_cfg()
+    if isinstance(cfg, web.Response):
+        return cfg
+    body = await _body(request)
+    if isinstance(body, web.Response):
+        return body
+    instruction = _instruction(body, "describe the pack first")
+    if isinstance(instruction, web.Response):
+        return instruction
+    turns = _turns(body)
+    if isinstance(turns, web.Response):
+        return turns
+    first = ai_pack.plan_prompt(ai_followup.first_instruction(turns, instruction))
+    try:
+        answer = await _ask(
+            cfg, first=first, turns=turns, instruction=instruction,
+            system=ai_pack.PLAN_SYSTEM, schema=ai_pack.PLAN_SCHEMA,
+            schema_name="pack_plan", temperature=0.4,
+        )
+        plan = ai_pack.compile_plan(answer)
+    except _ai_client.AIError as e:
+        return json_error(e.message, status=e.status)
+    except ai_pack.PlanError as e:
+        return json_error(
+            f"the model's plan couldn't be used ({e}). Try again, or a larger model.",
+            status=502,
+        )
+    return json_ok({"plan": plan, "model": cfg["model"], "answer": answer})
+
+
+async def post_pack_item(request: web.Request) -> web.Response:
+    """Body: {plan, built, key, note?}. Builds one item with the model.
+    A rebuild keeps the item's id, so constraints keep pointing at it."""
+    cfg = _enabled_cfg()
+    if isinstance(cfg, web.Response):
+        return cfg
+    body = await _body(request)
+    if isinstance(body, web.Response):
+        return body
+    parsed = _pack_body(body)
+    if isinstance(parsed, web.Response):
+        return parsed
+    plan, built = parsed
+    key = body.get("key")
+    note = body.get("note") if isinstance(body.get("note"), str) else ""
+    if not isinstance(key, str) or key not in {i["key"] for i in plan["items"]}:
+        return json_error("no such item in the plan", status=400)
+    try:
+        req = ai_pack.item_request(plan, key, built, note[:1500])
+    except ai_pack.PlanError as e:
+        return json_error(str(e), status=400)
+    try:
+        answer = await _ai_client.complete_json(cfg, **req)
+    except _ai_client.AIError as e:
+        return json_error(e.message, status=e.status)
+    old = built.get(key)
+    try:
+        out = ai_pack.compile_item(
+            plan, key, built, answer, taken={b["id"] for b in built.values()},
+            item_id=old["id"] if old else "",
+        )
+    except ValueError as e:
+        return json_error(
+            f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
+            status=502,
+        )
+    out["model"] = cfg["model"]
+    return json_ok(out)
+
+
+async def post_pack_check(request: web.Request) -> web.Response:
+    """Body: {plan, built}. Runs the pack on the engine; no model call."""
+    cfg = _enabled_cfg()
+    if isinstance(cfg, web.Response):
+        return cfg
+    body = await _body(request)
+    if isinstance(body, web.Response):
+        return body
+    parsed = _pack_body(body)
+    if isinstance(parsed, web.Response):
+        return parsed
+    plan, built = parsed
+    if not built:
+        return json_error("nothing is built yet", status=400)
+    loop = asyncio.get_running_loop()
+    report = await loop.run_in_executor(None, lambda: ai_pack.check_pack(plan, built))
+    return json_ok(report)
+
+
+async def post_pack_install(request: web.Request) -> web.Response:
+    """Body: {plan, built}. One import commit: the modules, the template and
+    a bundle, tagged as one collection. Returns the import's undo id."""
+    cfg = _enabled_cfg()
+    if isinstance(cfg, web.Response):
+        return cfg
+    body = await _body(request)
+    if isinstance(body, web.Response):
+        return body
+    parsed = _pack_body(body)
+    if isinstance(parsed, web.Response):
+        return parsed
+    plan, built = parsed
+    if not any(i["key"] in built for i in plan["items"] if i["kind"] != "template"):
+        return json_error("nothing is built yet", status=400)
+    for i in plan["items"]:
+        if i["kind"] == "wildcard" and i["key"] in built:
+            err = validate_wildcard_name(i["name"])
+            if err is not None:
+                return json_error(f"{i['name']}: {err}", status=400)
+    with db_session(request) as conn:
+        def ids(table: str) -> set[str]:
+            return {r[0] for r in conn.execute(f"SELECT id FROM {table};")}  # noqa: S608
+        ops = ai_pack.install_ops(
+            plan, built, taken=ids("modules") | ids("bundles"),
+            template_ids=ids("templates"), bundle_ids=ids("bundles"),
+        )
+        result = commit_import(conn, {"adds": ops["adds"]})
+    if not result.get("ok"):
+        return json_error(result.get("error", "install failed"), status=400)
+    return json_ok({
+        "undo_entry_id": result["undo_id"], "ids": ops["ids"],
+        "bundle_id": ops["bundle_id"], "template_id": ops["template_id"], "tag": ops["tag"],
+    })
+
+
 def register(router: web.UrlDispatcher) -> None:
     router.add_get("/wp/api/ai/config", get_config)
     router.add_put("/wp/api/ai/config", put_config)
@@ -706,3 +851,7 @@ def register(router: web.UrlDispatcher) -> None:
     router.add_post("/wp/api/ai/describe", post_describe)
     router.add_post("/wp/api/ai/organize", post_organize)
     router.add_post("/wp/api/ai/chat", post_chat)
+    router.add_post("/wp/api/ai/pack/plan", post_pack_plan)
+    router.add_post("/wp/api/ai/pack/item", post_pack_item)
+    router.add_post("/wp/api/ai/pack/check", post_pack_check)
+    router.add_post("/wp/api/ai/pack/install", post_pack_install)

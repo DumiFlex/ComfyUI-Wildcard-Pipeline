@@ -16,6 +16,13 @@ import type {
   AiOrganizeResult,
   AiChatRequest,
   AiChatResult,
+  AiPackBuilt,
+  AiPackCheck,
+  AiPackInstallResult,
+  AiPackItemResult,
+  AiPackPlan,
+  AiPackPlanRequest,
+  AiPackPlanResult,
   AiDescribeRequest,
   AiDescribeResult,
   TagStatus, TagSuggestResponse, TagDownloadResult, LibraryTagUpdateCounts,
@@ -443,6 +450,29 @@ export const api = {
     chat(body: AiChatRequest, signal?: AbortSignal) {
       return request<AiChatResult>("/wp/api/ai/chat", {
         method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    packPlan(body: AiPackPlanRequest, signal?: AbortSignal) {
+      return request<AiPackPlanResult>("/wp/api/ai/pack/plan", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    packItem(
+      body: { plan: AiPackPlan; built: AiPackBuilt; key: string; note?: string },
+      signal?: AbortSignal,
+    ) {
+      return request<AiPackItemResult>("/wp/api/ai/pack/item", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    packCheck(body: { plan: AiPackPlan; built: AiPackBuilt }, signal?: AbortSignal) {
+      return request<AiPackCheck>("/wp/api/ai/pack/check", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    packInstall(body: { plan: AiPackPlan; built: AiPackBuilt }) {
+      return request<AiPackInstallResult>("/wp/api/ai/pack/install", {
+        method: "POST", body: JSON.stringify(body),
       });
     },
   },

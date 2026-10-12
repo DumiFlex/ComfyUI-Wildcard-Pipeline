@@ -171,6 +171,34 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       </DocCallout>
     </DocSection>
 
+    <DocSection title="Build a whole pack">
+      <p>
+        <b>Pack builder</b> in the sidebar (shown once the assistant is on) makes a complete pack
+        from one description: wildcards, derivation rules, combines, constraints between wildcards
+        and a prompt template, filed into one bundle.
+      </p>
+      <ol>
+        <li><b>Describe</b> what the pack makes and the rules between its parts ("elves never use
+          guns, mages get robes").</li>
+        <li><b>Plan.</b> The assistant lists every item it will build, by variable, and may ask up
+          to three questions. Click an answer, remove items you don't want (the ✕ on a row), or
+          type a change, then press <b>Update plan</b>. Nothing is built yet.</li>
+        <li><b>Build &amp; check.</b> Each item is written in its own request, wildcards first so
+          rules can use their tags. Then the pack runs 200 seeds on the real engine. An item with
+          a problem (a rule that never applies, a variable nothing sets) is rebuilt with the
+          problem as a note, up to twice, and the row says what was fixed. Click a row to see what
+          it holds; the refresh button builds that one again. The test run shows each variable's
+          most common values and a few sample prompts.</li>
+        <li><b>Install</b> adds the modules, the template and a bundle that runs them in the right
+          order, all tagged with the pack's name so they show up together under Tags.
+          <b>Undo</b> removes all of it.</li>
+      </ol>
+      <DocCallout variant="tip">
+        Building a pack takes one request per item, so a local model needs a few minutes. Use a
+        builder model; a small one may leave an item unbuilt, which you can rebuild or remove.
+      </DocCallout>
+    </DocSection>
+
     <DocSection title="Refine an answer">
       <p>
         You don't have to start over when an answer is close but not right. Once it shows, the
@@ -229,7 +257,8 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         what the item holds and the tags your library uses; Organize sends that for every selected
         item, plus your category names. The chat sends a list of your items (names, types and
         variables) and the conversation so far, plus whatever items the assistant reads to
-        answer. A follow-up sends the earlier requests
+        answer. The pack builder sends your description and, for each item, what the pack has
+        built so far. A follow-up sends the earlier requests
         and answers of that conversation again; nothing is kept on the server between requests.
       </p>
       <DocCallout variant="warn">

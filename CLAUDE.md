@@ -120,6 +120,7 @@ When a payload shape change lands (not a row-column change — those don't bump 
 3. **Bump `MAX_KNOWN_SCHEMA_VERSION`** in `migrations.ts` AND `engine/migrations/__init__.py`, and update the drift guard in `schema-version-fork.test.ts` to exercise the new highest stamp.
 4. **Make sure the strict validator keeps the new field** (it strips unknown keys) — `src/validators/module/v2.ts` + the engine-parity test.
 5. **Catalog row** — step 7 below. `CURRENT_SCHEMA_VERSION` does not move.
+6. **AI assistant** — the model never writes payloads; `engine/ai/` compiles them (`wildcard`, `derivation`, `constraint`, `pack`, `chat`). A feature the assistant should author needs its compiler + schema + prompt there, with tests.
 
 **Shape-changing bump** (needs a migrator):
 
