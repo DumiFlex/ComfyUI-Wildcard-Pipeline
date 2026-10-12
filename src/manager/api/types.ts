@@ -858,6 +858,9 @@ export interface AiWildcardDraftRequest {
   wildcard: {
     name: string;
     var_binding: string;
+    /** What the wildcard is for: its description and library tags. */
+    description?: string;
+    tags?: string[];
     payload: {
       options: Array<{ value: string }>;
       sub_categories: string[];
@@ -882,6 +885,9 @@ export interface AiWildcardEditRequest {
   wildcard: {
     name: string;
     var_binding: string;
+    /** What the wildcard is for: its description and library tags. */
+    description?: string;
+    tags?: string[];
     payload: {
       /** The rows to edit (whole list or the selection), with real ids. */
       options: Array<{ id: string; value: string; weight: number; sub_categories: string[]; is_null?: boolean }>;
@@ -909,7 +915,7 @@ export interface AiWildcardEditResult {
 
 export interface AiDerivationDraftRequest {
   instruction: string;
-  derivation: { name: string; rules: DerivationRule[] };
+  derivation: { name: string; description?: string; tags?: string[]; rules: DerivationRule[] };
 }
 
 export interface AiDerivationDraftRule {
@@ -929,6 +935,9 @@ export interface AiDerivationDraftResult {
 export interface AiConstraintDraftRequest {
   instruction: string;
   constraint: {
+    name?: string;
+    description?: string;
+    tags?: string[];
     source_wildcard_id: string;
     target_wildcard_id: string;
     matrix: ConstraintMatrix;
@@ -958,6 +967,27 @@ export interface AiConstraintDraftResult {
   cells: AiConstraintCellDraft[];
   exceptions: AiConstraintExceptionDraft[];
   skipped: Array<{ text: string; reason: string }>;
+  model: string;
+}
+
+export type AiDescribeKind =
+  | "wildcard" | "fixed_values" | "combine" | "derivation" | "constraint" | "bundle" | "template";
+
+export interface AiDescribeRequest {
+  kind: AiDescribeKind;
+  name: string;
+  description: string;
+  tags: string[];
+  /** What the editor holds now: a module payload, a bundle's children or a
+   *  template's text. */
+  payload: unknown;
+  hint?: string;
+}
+
+export interface AiDescribeResult {
+  description: string;
+  /** `new`: nothing in the library uses it yet. `has`: the item already has it. */
+  tags: Array<{ tag: string; new: boolean; has: boolean }>;
   model: string;
 }
 

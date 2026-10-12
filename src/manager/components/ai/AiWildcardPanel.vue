@@ -22,6 +22,9 @@ interface Props {
   selectedIds: Set<string>;
   existingTags: string[];
   tagGroups?: Record<string, string[]>;
+  /** The wildcard's description and library tags: what it is for. */
+  description?: string;
+  labels?: string[];
 }
 const props = defineProps<Props>();
 
@@ -83,6 +86,8 @@ function onApply(changes: AiWildcardEditChange[]): void {
       :existing-values="options.map((o) => o.value)"
       :existing-tags="existingTags"
       :tag-groups="tagGroups"
+      :description="description"
+      :labels="labels"
       @commit-options="(p: ParsedBulkOption[]) => emit('commit-options', p)"
       @cancel="emit('cancel')"
       @update:pending="(v: boolean) => (draftPending = v)"
@@ -96,6 +101,8 @@ function onApply(changes: AiWildcardEditChange[]): void {
       :from-selection="selectedIds.size > 0"
       :existing-tags="existingTags"
       :tag-groups="tagGroups"
+      :description="description"
+      :labels="labels"
       @apply="onApply"
       @cancel="emit('cancel')"
       @update:pending="(v: boolean) => (editPending = v)"

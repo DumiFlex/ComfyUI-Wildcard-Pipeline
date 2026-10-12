@@ -23,6 +23,8 @@ from engine.model_info import (
 
 #: Values listed per variable in the prompt; the rest are counted.
 MAX_VALUES_SHOWN = 30
+#: Characters of a module's description shown next to its variable.
+MAX_ABOUT = 100
 #: Variables listed in the prompt. A library with more lists the first ones;
 #: the user names the rest in their request.
 MAX_VARS_SHOWN = 120
@@ -39,14 +41,17 @@ _SOURCE_LABEL = {
 def _add(
     out: dict[str, dict[str, Any]], name: str, source: str, module: str,
     values: list[str] | None = None, tags: list[str] | None = None,
+    about: str = "",
 ) -> None:
     if not isinstance(name, str) or not name or name.startswith("__"):
         return
     entry = out.get(name)
     if entry is None:
         entry = out[name] = {
-            "name": name, "sources": [], "values": [], "tags": [],
+            "name": name, "sources": [], "values": [], "tags": [], "about": "",
         }
+    if about and not entry["about"]:
+        entry["about"] = about
     src = {"kind": source, "module": module}
     if src not in entry["sources"]:
         entry["sources"].append(src)
@@ -91,6 +96,9 @@ def build_catalog(modules: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             continue
         p = m.get("payload") if isinstance(m.get("payload"), dict) else {}
         mname = m.get("name") if isinstance(m.get("name"), str) else ""
+        desc = m.get("description") if isinstance(m.get("description"), str) else ""
+        desc = " ".join(desc.split())
+        desc = desc if len(desc) <= MAX_ABOUT else desc[:MAX_ABOUT - 1] + "…"
         kind = m.get("type")
         if kind == "wildcard":
             values = [
@@ -99,13 +107,13 @@ def build_catalog(modules: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
                 and isinstance(o.get("value"), str) and o["value"].strip()
             ]
             tags = [t for t in p.get("sub_categories") or [] if isinstance(t, str)]
-            _add(out, p.get("var_binding") or "", "wildcard", mname, values, tags)
+            _add(out, p.get("var_binding") or "", "wildcard", mname, values, tags, desc)
         elif kind == "fixed_values":
             for v in p.get("values") or []:
                 if isinstance(v, dict) and isinstance(v.get("name"), str):
-                    _add(out, v["name"].strip(), "fixed_values", mname)
+                    _add(out, v["name"].strip(), "fixed_values", mname, about=desc)
         elif kind == "combine":
-            _add(out, p.get("output_var") or "", "combine", mname)
+            _add(out, p.get("output_var") or "", "combine", mname, about=desc)
         elif kind == "derivation":
             for rule in p.get("rules") or []:
                 for target in _action_targets(rule):
@@ -131,6 +139,8 @@ def describe(catalog: dict[str, dict[str, Any]], *, focus: list[str] | None = No
             for s in e["sources"]
         )
         line = f"${name} ({srcs})"
+        if e.get("about"):
+            line += f" — {e['about']}"
         vals = e["values"]
         if vals:
             shown = ", ".join(vals[:MAX_VALUES_SHOWN])

@@ -32,6 +32,7 @@ import re
 import secrets
 from typing import Any
 
+from engine.ai import about
 from engine.modules.derivation_handler import (
     _VALID_MODES,
     _VALID_OPS,
@@ -118,8 +119,10 @@ the user's own library.\
 
 def build_prompt(
     *, instruction: str, name: str, catalog_text: str, existing_rules: list[str],
+    description: str = "", labels: list[str] | None = None,
 ) -> str:
     lines = [f"Derivation module: {name or '(unnamed)'}"]
+    lines.extend(about.lines(description, labels or []))
     if existing_rules:
         lines.append("It already has these rules (don't repeat them):")
         lines.extend(f"- {r}" for r in existing_rules[:40])

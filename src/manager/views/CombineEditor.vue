@@ -604,6 +604,8 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
       >Delete</Button>
     </template>
     <IdentityCard
+      ai-kind="combine"
+      :ai-payload="() => ({ template, output_var: outputVar, negative })"
       :name="name"
       :description="description"
       :category-id="categoryId"

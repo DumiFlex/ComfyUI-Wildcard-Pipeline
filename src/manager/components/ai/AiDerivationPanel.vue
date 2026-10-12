@@ -14,7 +14,13 @@ import { api, ApiError } from "../../api/client";
 import type { AiDerivationDraftResult, DerivationRule } from "../../api/types";
 import { ruleLines } from "../../utils/ai-rule-text";
 
-const props = defineProps<{ name: string; rules: DerivationRule[] }>();
+const props = defineProps<{
+  name: string;
+  rules: DerivationRule[];
+  /** The module's description and library tags: what it is for. */
+  description?: string;
+  labels?: string[];
+}>();
 const emit = defineEmits<{
   (e: "add", rules: DerivationRule[]): void;
   (e: "close"): void;
@@ -56,7 +62,10 @@ async function run(): Promise<void> {
   try {
     result.value = await api.ai.draftDerivation({
       instruction: instruction.value.trim(),
-      derivation: { name: props.name, rules: props.rules },
+      derivation: {
+        name: props.name, description: props.description ?? "", tags: props.labels ?? [],
+        rules: props.rules,
+      },
     }, controller.signal);
     if (result.value.rules.length === 0) {
       error.value = result.value.skipped.length

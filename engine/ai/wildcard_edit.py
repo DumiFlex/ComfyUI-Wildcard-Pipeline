@@ -21,6 +21,7 @@ import math
 import re
 from typing import Any
 
+from engine.ai import about
 from engine.ai.wildcard import (
     _RESERVED_SYNTAX,
     MAX_TEXT_LEN,
@@ -96,10 +97,12 @@ def build_edit_prompt(
     *, action: str, instruction: str, name: str, var_binding: str,
     options: list[dict[str, Any]], tags: list[str],
     axes: dict[str, list[str]] | None = None,
+    description: str = "", labels: list[str] | None = None,
 ) -> str:
     """`options` are `{"id", "value", "weight", "sub_categories", "negative"}`
     with the short ids the model answers with."""
     lines: list[str] = [f"Wildcard: {name or '(unnamed)'}"]
+    lines.extend(about.lines(description, labels or []))
     if var_binding:
         lines.append(f"Variable: ${var_binding}")
     if axes:

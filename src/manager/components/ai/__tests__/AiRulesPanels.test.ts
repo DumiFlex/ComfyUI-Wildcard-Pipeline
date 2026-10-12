@@ -78,7 +78,10 @@ describe("AiDerivationPanel", () => {
     await w.get('[data-test="ai-run"]').trigger("click");
     await flushPromises();
     expect(api.ai.draftDerivation).toHaveBeenCalledWith(
-      { instruction: "mages get a title", derivation: { name: "Titles", rules: existing } },
+      {
+        instruction: "mages get a title",
+        derivation: { name: "Titles", description: "", tags: [], rules: existing },
+      },
       expect.any(AbortSignal),
     );
     expect(w.findAll('[data-test="ai-rule"]')).toHaveLength(2);

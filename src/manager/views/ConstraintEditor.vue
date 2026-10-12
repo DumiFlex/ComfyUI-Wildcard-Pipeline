@@ -28,6 +28,8 @@ import ListFilter from "../components/ui/ListFilter.vue";
 import { constraintExceptionHaystack } from "../utils/listFilter";
 import BulkDeleteToolbar from "../components/BulkDeleteToolbar.vue";
 import AiConstraintPanel from "../components/ai/AiConstraintPanel.vue";
+import ConstraintPreview from "../components/ConstraintPreview.vue";
+import { mergeAiRules, type PreviewWildcard } from "../utils/constraint-preview";
 import { useAiConfig } from "../composables/useAiConfig";
 import { useBulkSelection } from "../composables/useBulkSelection";
 import RichTextPreview from "../components/RichTextPreview.vue";
@@ -203,6 +205,7 @@ function snapshot(): string {
 
 const ai = useAiConfig();
 const aiOpen = ref(false);
+const previewOpen = ref(true);
 /** The AI panel holds rules the user hasn't applied yet. */
 const aiPending = ref(false);
 
@@ -910,20 +913,9 @@ function onMatrixUpdate(next: ConstraintMatrix) {
  *  option pair replaces the exception that pair already had (the engine
  *  keeps only one per pair) or is appended. */
 function applyAiRules(cells: AiConstraintCellDraft[], excs: AiConstraintExceptionDraft[]): void {
-  if (cells.length) {
-    const next: ConstraintMatrix = { ...matrix.value };
-    for (const c of cells) {
-      next[c.source_tag] = { ...(next[c.source_tag] ?? {}), [c.target_tag]: { ...c.cell } };
-    }
-    matrix.value = next;
-  }
-  for (const { exception } of excs) {
-    const at = exceptions.value.findIndex(
-      (e) => e.source === exception.source && e.target === exception.target,
-    );
-    if (at >= 0) exceptions.value.splice(at, 1, { ...exception });
-    else exceptions.value.push({ ...exception });
-  }
+  const next = mergeAiRules(matrix.value, exceptions.value, cells, excs);
+  matrix.value = next.matrix;
+  exceptions.value = next.exceptions;
   const n = cells.length + excs.length;
   toast.push({
     severity: "success",
@@ -1274,6 +1266,8 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
     </template>
     <div id="editor-section-identity">
       <IdentityCard
+        ai-kind="constraint"
+        :ai-payload="() => ({ source_wildcard_id: sourceWildcardId, target_wildcard_id: targetWildcardId, source_wildcard_name: resolvedSourceName, target_wildcard_name: resolvedTargetName, matrix, exceptions })"
         :name="name"
         :description="description"
         :category-id="categoryId"
@@ -1475,6 +1469,11 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
         :target-name="targetWildcard?.name ?? ''"
         :matrix="matrix"
         :exceptions="exceptions"
+        :source-payload="sourceWildcard?.payload as PreviewWildcard"
+        :target-payload="targetWildcard?.payload as PreviewWildcard"
+        :name="name"
+        :description="description"
+        :labels="tags"
         @apply="applyAiRules"
         @close="aiOpen = false"
         @update:pending="(v: boolean) => (aiPending = v)"
@@ -1778,6 +1777,32 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
         Linked: when {{ onlyLinkSources.map((s) => displayLabel(s) || "⌀ null").join(", ") }}
         {{ onlyLinkSources.length === 1 ? "is" : "are" }} picked, only target values listed here for
         {{ onlyLinkSources.length === 1 ? "it" : "them" }} can be picked.
+      </p>
+    </Card>
+    </div>
+
+    <div v-if="sourceWildcard && targetWildcard" id="editor-section-preview">
+    <Card title="Preview">
+      <template #actions>
+        <span class="wp-card__hint">Chance of each target option, per source option</span>
+        <Button
+          size="sm"
+          variant="ghost"
+          :icon="previewOpen ? 'pi-angle-up' : 'pi-angle-down'"
+          data-test="cn-preview-toggle"
+          @click="previewOpen = !previewOpen"
+        >{{ previewOpen ? "Hide" : "Show" }}</Button>
+      </template>
+      <ConstraintPreview
+        v-if="previewOpen"
+        :source="sourceWildcard.payload as PreviewWildcard"
+        :target="targetWildcard.payload as PreviewWildcard"
+        :matrix="matrix"
+        :exceptions="exceptions"
+      />
+      <p v-else class="wp-card__hint">
+        See how likely each target option is for every source option, with the matrix and
+        exceptions above applied. Other constraints, filters and toggles are left out.
       </p>
     </Card>
     </div>

@@ -12,6 +12,8 @@ import type {
   AiDerivationDraftResult,
   AiConstraintDraftRequest,
   AiConstraintDraftResult,
+  AiDescribeRequest,
+  AiDescribeResult,
   TagStatus, TagSuggestResponse, TagDownloadResult, LibraryTagUpdateCounts,
   ModelKind, ModelSourceStatus, ModelSuggestResponse,
   DatabaseInfo, MaintenanceOp, MaintenanceResult,
@@ -416,6 +418,11 @@ export const api = {
     },
     draftDerivation(body: AiDerivationDraftRequest, signal?: AbortSignal) {
       return request<AiDerivationDraftResult>("/wp/api/ai/derivation/draft", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    describe(body: AiDescribeRequest, signal?: AbortSignal) {
+      return request<AiDescribeResult>("/wp/api/ai/describe", {
         method: "POST", body: JSON.stringify(body), signal,
       });
     },

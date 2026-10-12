@@ -11,6 +11,9 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "../ui/Button.vue";
 import AiPanelFrame from "./AiPanelFrame.vue";
+import ConstraintPreview from "../ConstraintPreview.vue";
+import SegControl, { type SegOption } from "../settings/SegControl.vue";
+import { mergeAiRules, type PreviewWildcard } from "../../utils/constraint-preview";
 import { api, ApiError } from "../../api/client";
 import type {
   AiConstraintCellDraft, AiConstraintDraftResult, AiConstraintExceptionDraft,
@@ -24,6 +27,13 @@ const props = defineProps<{
   targetName: string;
   matrix: ConstraintMatrix;
   exceptions: ConstraintException[];
+  /** The two wildcards, for the preview of what the rules change. */
+  sourcePayload?: PreviewWildcard;
+  targetPayload?: PreviewWildcard;
+  /** The constraint's own name, description and library tags. */
+  name?: string;
+  description?: string;
+  labels?: string[];
 }>();
 const emit = defineEmits<{
   (e: "apply", cells: AiConstraintCellDraft[], exceptions: AiConstraintExceptionDraft[]): void;
@@ -59,6 +69,17 @@ const tickedExceptions = computed(() =>
 );
 const tickedCount = computed(() => tickedCells.value.length + tickedExceptions.value.length);
 
+type View = "rules" | "preview";
+const VIEWS: SegOption<View>[] = [
+  { value: "rules", label: "Rules", icon: "pi-list" },
+  { value: "preview", label: "Preview", icon: "pi-table" },
+];
+const view = ref<View>("rules");
+const canPreview = computed(() => !!props.sourcePayload && !!props.targetPayload);
+const after = computed(() =>
+  mergeAiRules(props.matrix, props.exceptions, tickedCells.value, tickedExceptions.value),
+);
+
 function toggle(key: string): void {
   const next = new Set(unticked.value);
   if (next.has(key)) next.delete(key);
@@ -77,6 +98,9 @@ async function run(): Promise<void> {
     result.value = await api.ai.draftConstraint({
       instruction: instruction.value.trim(),
       constraint: {
+        name: props.name ?? "",
+        description: props.description ?? "",
+        tags: props.labels ?? [],
         source_wildcard_id: props.sourceWildcardId,
         target_wildcard_id: props.targetWildcardId,
         matrix: props.matrix,
@@ -135,7 +159,22 @@ function shown(v: string): string {
     @close="close"
   >
     <template v-if="result && count">
-      <ul class="wp-ai-cn" data-test="ai-constraint-results">
+      <SegControl
+        v-if="canPreview"
+        v-model="view"
+        :options="VIEWS"
+        aria-label="Show the rules or a preview"
+        test-prefix="ai-cn-view"
+      />
+      <ConstraintPreview
+        v-if="view === 'preview' && sourcePayload && targetPayload"
+        :source="sourcePayload"
+        :target="targetPayload"
+        :matrix="after.matrix"
+        :exceptions="after.exceptions"
+        :before="{ matrix, exceptions }"
+      />
+      <ul v-show="view === 'rules' || !canPreview" class="wp-ai-cn" data-test="ai-constraint-results">
         <li v-if="result.cells.length" class="wp-ai-cn__group">Rule matrix (tags)</li>
         <li
           v-for="(c, i) in result.cells"
@@ -145,8 +184,8 @@ function shown(v: string): string {
           :data-off="unticked.has(`c:${i}`) ? 'true' : 'false'"
           data-test="ai-cn-cell"
         >
-          <label class="wp-ai-cn__body">
-            <input type="checkbox" class="wp-ai-cn__check" :checked="!unticked.has(`c:${i}`)" @change="toggle(`c:${i}`)" />
+          <label class="wp-ai-cn__body" :for="`wp-ai-cn-c${i}`">
+            <input :id="`wp-ai-cn-c${i}`" type="checkbox" class="wp-ai-cn__check" :checked="!unticked.has(`c:${i}`)" @change="toggle(`c:${i}`)" />
             <span class="wp-ai-cn__tag">#{{ c.source_tag }}</span>
             <i class="pi pi-arrow-right wp-ai-cn__arrow" aria-hidden="true" />
             <span class="wp-ai-cn__tag">#{{ c.target_tag }}</span>
@@ -164,8 +203,8 @@ function shown(v: string): string {
           :data-off="unticked.has(`e:${i}`) ? 'true' : 'false'"
           data-test="ai-cn-exception"
         >
-          <label class="wp-ai-cn__body">
-            <input type="checkbox" class="wp-ai-cn__check" :checked="!unticked.has(`e:${i}`)" @change="toggle(`e:${i}`)" />
+          <label class="wp-ai-cn__body" :for="`wp-ai-cn-e${i}`">
+            <input :id="`wp-ai-cn-e${i}`" type="checkbox" class="wp-ai-cn__check" :checked="!unticked.has(`e:${i}`)" @change="toggle(`e:${i}`)" />
             <span class="wp-ai-cn__opt">{{ shown(e.exception.source) }}</span>
             <i class="pi pi-arrow-right wp-ai-cn__arrow" aria-hidden="true" />
             <span class="wp-ai-cn__opt">{{ shown(e.exception.target) }}</span>

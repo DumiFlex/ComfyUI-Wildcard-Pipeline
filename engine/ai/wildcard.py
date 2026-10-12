@@ -32,6 +32,7 @@ import math
 import re
 from typing import Any
 
+from engine.ai import about
 from engine.modules.wildcard_handler import WildcardHandler
 from engine.syntax.subcat_filter import validate_subcat_name
 
@@ -101,10 +102,12 @@ def build_user_prompt(
     *, instruction: str, count: int, name: str, var_binding: str,
     existing_options: list[str], tags: list[str],
     axes: dict[str, list[str]] | None = None,
+    description: str = "", labels: list[str] | None = None,
 ) -> str:
     """The per-request message: what exists, then what to add."""
     lines: list[str] = []
     lines.append(f"Wildcard: {name or '(unnamed)'}")
+    lines.extend(about.lines(description, labels or []))
     if var_binding:
         lines.append(f"Variable: ${var_binding}")
     if axes:

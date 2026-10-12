@@ -587,6 +587,8 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
       >Delete</Button>
     </template>
     <IdentityCard
+      ai-kind="derivation"
+      :ai-payload="() => ({ rules })"
       :name="name"
       :description="description"
       :category-id="categoryId"
@@ -679,6 +681,8 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
         v-if="aiOpen && ai.config.value?.enabled"
         :name="name"
         :rules="rules"
+        :description="description"
+        :labels="tags"
         @add="addAiRules"
         @close="aiOpen = false"
         @update:pending="(v: boolean) => (aiPending = v)"

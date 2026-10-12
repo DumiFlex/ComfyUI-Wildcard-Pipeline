@@ -134,6 +134,8 @@ function cancel() {
     <div v-if="loading" class="wp-dim wp-tpl-editor__loading">Loading template…</div>
     <template v-else>
       <IdentityCard
+        ai-kind="template"
+        :ai-payload="() => ({ template: templateString, negative: negativeTemplate })"
         :name="name"
         :description="description"
         :category-id="categoryId"

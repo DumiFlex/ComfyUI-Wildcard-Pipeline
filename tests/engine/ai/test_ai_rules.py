@@ -196,3 +196,69 @@ def test_constraint_tag_to_option_expands_per_option():
                "exceptions": [e["exception"] for e in out["exceptions"]]}
     ConstraintHandler.validate_payload(payload)
     ConstraintHandler.validate_authoring(payload)
+
+
+def test_prompts_carry_description_and_labels():
+    from engine.ai import about
+    from engine.ai import wildcard as ai_wildcard
+    from engine.ai import wildcard_edit as ai_edit
+    raw_tags = ["winter", "", 3, "winter", "cozy"]
+    desc, labels = about.clean("  Outfits for a\ncozy  winter set ", raw_tags)
+    assert (desc, labels) == ("Outfits for a cozy winter set", ["winter", "cozy"])
+    expect = "Labels (the module's own tags): winter, cozy"
+    draft = ai_wildcard.build_user_prompt(
+        instruction="x", count=3, name="Outfit", var_binding="outfit", existing_options=[],
+        tags=[], description="Outfits", labels=labels)
+    assert "Description: Outfits" in draft and expect in draft
+    edit = ai_edit.build_edit_prompt(
+        action="remove", instruction="x", name="Outfit", var_binding="", options=[], tags=[],
+        description="Outfits", labels=labels)
+    assert expect in edit
+    drv = ai_derivation.build_prompt(
+        instruction="x", name="T", catalog_text="", existing_rules=[],
+        description="Titles per class", labels=["rpg"])
+    assert "Description: Titles per class" in drv
+    described = {**CLASS_WC, "description": "Fantasy classes", "tags": ["rpg"]}
+    s = ai_constraint.side_view(described, "S")
+    _, t = _sides()
+    cn = ai_constraint.build_prompt(instruction="x", source=s, target=t, existing=[],
+                                    name="Class weapons", description="Who carries what")
+    assert "Constraint: Class weapons" in cn and "Description: Who carries what" in cn
+    assert "  Description: Fantasy classes" in cn
+
+
+def test_catalog_shows_module_descriptions():
+    lib = [{**CLASS_WC, "description": "Fantasy character classes for portraits"}]
+    text = library_vars.describe(library_vars.build_catalog(lib))
+    assert '$class (wildcard "Class") — Fantasy character classes for portraits' in text
+
+
+def test_describe_summaries_and_answer():
+    from engine.ai import describe as ai_describe
+    s = ai_describe.summarize("wildcard", CLASS_WC["payload"])
+    assert "Variable: $class" in s and "- mage" in s and "Option tags: magic, melee" in s
+    s = ai_describe.summarize("constraint", {
+        "source_wildcard_id": "a", "target_wildcard_id": "b",
+        "matrix": {"magic": {"blade": {"mode": "exclude", "factor": 0}}}, "exceptions": [],
+    }, names={"a": "Class", "b": "Weapon"})
+    assert "Links wildcard Class (source) to Weapon (target)." in s and "#magic → #blade" in s
+    child = {"type": "wildcard", "name": "Class", "description": "classes"}
+    s = ai_describe.summarize("bundle", [child])
+    assert s == "- wildcard Class: classes"
+    s = ai_describe.summarize("derivation", LIBRARY[4]["payload"])
+    assert '$class equals "mage"' in s
+    assert "opt" not in ai_describe.summarize("combine", {"id": "opt1", "template": "a $b"})
+    rows = [{"tags": ["rpg", "Fantasy"]}, {"tags": ["rpg"]}]
+    assert ai_describe.library_tags(rows) == ["rpg", "Fantasy"]
+    out = ai_describe.compile_answer(
+        {"description": ' "Fantasy classes  for portraits." ',
+         "tags": ["#RPG", "fantasy", "new one", "rpg", "x" * 40]},
+        current=["rpg"], library=["Fantasy"])
+    assert out["description"] == "Fantasy classes for portraits."
+    assert out["tags"] == [
+        {"tag": "rpg", "new": False, "has": True},
+        {"tag": "Fantasy", "new": False, "has": False},
+        {"tag": "new one", "new": True, "has": False},
+    ]
+    with pytest.raises(ValueError):
+        ai_describe.compile_answer({"description": "", "tags": []}, current=[], library=[])

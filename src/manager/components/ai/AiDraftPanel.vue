@@ -26,6 +26,9 @@ interface Props {
   /** Current option values, blank rows included (the server ignores them). */
   existingValues: string[];
   existingTags: string[];
+  /** The wildcard\'s description and library tags: what it is for. */
+  description?: string;
+  labels?: string[];
   tagGroups?: Record<string, string[]>;
 }
 const props = defineProps<Props>();
@@ -86,6 +89,8 @@ async function generate(): Promise<void> {
       wildcard: {
         name: props.name,
         var_binding: props.varBinding,
+        description: props.description ?? "",
+        tags: props.labels ?? [],
         payload: {
           options: props.existingValues.filter((v) => v.trim()).map((value) => ({ value })),
           sub_categories: props.existingTags,

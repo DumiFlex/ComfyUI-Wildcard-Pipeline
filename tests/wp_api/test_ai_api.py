@@ -26,6 +26,7 @@ EDIT_ANSWERS = {
                                    "value": "Archmage"}]}],
         "else_actions": [],
     }]},
+    "describe": {"description": "Fantasy classes.", "tags": ["rpg", "Portrait"]},
     "constraint_rules": {"rules": [
         {"source": "#magic", "target": "#blade", "effect": "exclude", "factor": 0,
          "reason": "no swords"},
@@ -357,3 +358,30 @@ async def test_constraint_draft_reads_both_wildcards(wp_client, fake_llm):
     gone = {"instruction": "x",
             "constraint": {"source_wildcard_id": src, "target_wildcard_id": "deadbeef"}}
     assert (await wp_client.post(url, json=gone)).status == 404
+
+
+async def test_describe_reuses_library_tags(wp_client, fake_llm):
+    resp = await wp_client.post("/wp/api/modules", json={
+        "type": "wildcard", "name": "Hair", "description": "", "category_id": None,
+        "tags": ["portrait"], "payload": {"options": []},
+    })
+    assert resp.status == 201
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    url = "/wp/api/ai/describe"
+    resp = await wp_client.post(url, json={
+        "kind": "wildcard", "name": "Class", "description": "", "tags": ["rpg"],
+        "payload": {"var_binding": "class", "options": [{"id": "x", "value": "mage"}]},
+        "hint": "for anime portraits",
+    })
+    assert resp.status == 200, await resp.text()
+    body = await resp.json()
+    assert body["description"] == "Fantasy classes."
+    assert body["tags"] == [
+        {"tag": "rpg", "new": False, "has": True},
+        {"tag": "portrait", "new": False, "has": False},
+    ]
+    prompt = fake_llm.seen[-1]["body"]["messages"][1]["content"]
+    assert "Library tags: portrait" in prompt and "- mage" in prompt
+    assert "Request: for anime portraits" in prompt
+    assert (await wp_client.post(url, json={"kind": "nope"})).status == 400

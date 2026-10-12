@@ -129,8 +129,10 @@ Open it from the ComfyUI sidebar. It's where your modules live between workflows
   new options in the style of the ones you have, or to remove, rewrite, retag or
   re-weight the ones there. In the derivation and constraint editors, describe
   the rules you want and it writes them using your library's variables, options
-  and tags. You review every change first, and nothing is saved until you press
-  Save.
+  and tags. **Describe** in any editor writes a description and tags for it. You
+  review every change first, and nothing is saved until you press Save.
+- **Constraint preview:** a table of each target option's chance for every
+  source option, so you can see what a constraint does before running it.
 - **Documentation:** the full guide, built into the app.
 
 ## Checking a run

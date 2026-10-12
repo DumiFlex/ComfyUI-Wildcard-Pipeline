@@ -21,6 +21,8 @@ interface Props {
   blocked?: boolean;
   /** One line under the title saying what the model sees. */
   scope?: string;
+  /** The request box may stay empty (it only steers the answer). */
+  optional?: boolean;
 }
 const props = defineProps<Props>();
 const instruction = defineModel<string>({ required: true });
@@ -32,7 +34,9 @@ const isLocal = computed(() => {
   const c = config.value;
   return c ? c.presets[c.provider].local : true;
 });
-const canRun = computed(() => !!instruction.value.trim() && !props.loading && !props.blocked);
+const canRun = computed(
+  () => (props.optional || !!instruction.value.trim()) && !props.loading && !props.blocked,
+);
 
 function onKeydown(ev: KeyboardEvent): void {
   if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
@@ -56,7 +60,7 @@ function onKeydown(ev: KeyboardEvent): void {
     <textarea
       v-model="instruction"
       class="wp-textarea wp-ai-frame__input"
-      rows="2"
+      :rows="optional ? 1 : 2"
       :placeholder="placeholder"
       aria-label="What should the AI do?"
       data-test="ai-instruction"

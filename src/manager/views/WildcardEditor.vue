@@ -2059,6 +2059,8 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
     </template>
     <div id="editor-section-identity">
       <IdentityCard
+        ai-kind="wildcard"
+        :ai-payload="() => ({ var_binding: varBinding, sub_categories: subCategories, options })"
         :name="name"
         :description="description"
         :category-id="categoryId"
@@ -2435,6 +2437,8 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
           :selected-ids="selectedIds"
           :existing-tags="subCategories"
           :tag-groups="tagGroups"
+          :description="description"
+          :labels="tags"
           @commit-options="commitAiDraft"
           @apply-edits="applyAiEdits"
           @cancel="aiDraftOpen = false"

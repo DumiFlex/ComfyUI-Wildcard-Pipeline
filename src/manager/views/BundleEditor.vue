@@ -1060,6 +1060,8 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
     <template v-else>
       <div id="editor-section-identity">
         <IdentityCard
+          ai-kind="bundle"
+          :ai-payload="() => children"
           :name="name"
           :description="description"
           :category-id="categoryId"

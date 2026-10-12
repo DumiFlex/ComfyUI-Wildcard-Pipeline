@@ -108,6 +108,17 @@ const reachModes = [
       </DocCallout>
     </DocSection>
 
+    <DocSection title="Preview">
+      <p>
+        The <b>Preview</b> card under the exceptions shows what the constraint does in numbers:
+        one row per source option, one column per target option, and in each cell the chance that
+        target option is picked when the source picked that row. It counts the target's own
+        weights, the matrix and the exceptions. A dash means the option is ruled out; a row marked
+        <b>nothing left</b> would leave the target empty, and <b>fallback</b> means the target's
+        fallback option stands in. Other constraints, filters and toggles are left out.
+      </p>
+    </DocSection>
+
     <DocSection title="Reattach a broken axis">
       <p>
         A constraint points at two wildcards by id — its <em>source</em> and its <em>target</em>.

@@ -19,7 +19,7 @@ about is sent to that provider under your own account: your request, the
 wildcard's name, its existing options and tags, and for rules the wildcards
 involved. Writing derivation rules also sends the list of variables your
 library sets, with the first options of each wildcard, so the model can use
-their names.
+their names. Describe sends what the item holds and the tags your library uses.
 
 ## How the AI assistant is locked down
 

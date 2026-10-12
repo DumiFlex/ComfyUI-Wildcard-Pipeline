@@ -13,7 +13,7 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
     title="AI assistant"
     icon="pi pi-microchip-ai"
     tone="neutral"
-    blurb="Optional and off by default: connect a model you choose and let it write wildcard options, edit the ones you have, and write derivation and constraint rules, all for you to review."
+    blurb="Optional and off by default: connect a model you choose and let it write wildcard options, edit the ones you have, write derivation and constraint rules, and describe and tag your modules, all for you to review."
   >
     <DocSection title="What it does">
       <p>
@@ -24,8 +24,10 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       </p>
       <p>
         Today it adds wildcard options and removes, rewrites, retags or re-weights the ones
-        you have, and writes derivation and constraint rules from a description. More is
-        planned: organizing your library, a chat that can edit modules, and building a whole
+        you have, writes derivation and constraint rules from a description, and writes a
+        description and tags for anything in your library. Every request includes the item's
+        name, description and tags, so writing a good description first points the model in
+        the right direction. More is planned: organizing your library, a chat that can edit modules, and building a whole
         pack from a description.
       </p>
     </DocSection>
@@ -96,13 +98,25 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       <DocKeyList
         :items="[
           { term: 'Derivations', desc: 'For example: when $class is mage, set $title to Archmage and add robes to $outfit. The model sees every variable your library sets and the options of its wildcards, so it uses their real names. A rule that reads a variable nothing sets, or tests for an option the wildcard doesn\'t have, comes with a warning. Option names are fixed to the exact spelling, since the test is case-sensitive. New rules go to the end of the list.' },
-          { term: 'Constraints', desc: 'Pick the source and target wildcards first, then press AI on the Rule matrix. For example: mages never carry swords, warriors rarely get staves. Rules between two tags go in the matrix, rules between two options become exceptions, and a tag paired with one option becomes an exception per option. A rule for a pair that already has one is marked “replaces” and takes its place.' },
+          { term: 'Constraints', desc: 'Pick the source and target wildcards first, then press AI on the Rule matrix. For example: mages never carry swords, warriors rarely get staves. Rules between two tags go in the matrix, rules between two options become exceptions, and a tag paired with one option becomes an exception per option. A rule for a pair that already has one is marked “replaces” and takes its place. Switch to Preview to see each option\'s chances with the ticked rules, with arrows on what they change.' },
         ]"
       />
       <DocCallout variant="tip">
         Rules need a model that follows instructions well. If the answer comes back unusable,
         switch to one of the builder models below.
       </DocCallout>
+    </DocSection>
+
+    <DocSection title="Describe and tag">
+      <p>
+        Every editor's <b>Identity</b> card has a <b>Describe</b> button. The model reads what the
+        item holds (a wildcard's options, a derivation's rules, a bundle's modules, a template's
+        text) and writes a short description saying what it is for, plus tags to find it by. It
+        reuses tags your library already has; new ones are dashed. Type a note first to steer it
+        (optional). Untick what you don't want and press <b>Apply</b>: the description is
+        replaced, the tags are added to the ones there, and nothing is saved until you press
+        <b>Save</b>.
+      </p>
     </DocSection>
 
     <DocSection title="Which model">
@@ -136,7 +150,8 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         With a local server nothing leaves your PC. With Claude or OpenAI, your request and the
         wildcard's name, options and tags go to that provider under your account. Writing
         derivation rules also sends the variables your library sets, with the first options of
-        each wildcard; constraint rules send the two wildcards' options and tags.
+        each wildcard; constraint rules send the two wildcards' options and tags; Describe sends
+        what the item holds and the tags your library uses.
       </p>
       <DocCallout variant="warn">
         ComfyUI has no login, so anyone who can reach its port can use the assistant while it is

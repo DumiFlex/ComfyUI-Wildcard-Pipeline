@@ -10,6 +10,8 @@
     POST /wp/api/ai/derivation/draft  derivation rules from a description
     POST /wp/api/ai/constraint/draft  constraint cells + exceptions from a
                                       description
+    POST /wp/api/ai/describe        a description + library tags for a
+                                    module, bundle or template
 
 Off by default: every route except the config pair answers 403 until the user
 turns the assistant on. Nothing here writes to the library. Drafts come back
@@ -23,13 +25,15 @@ from typing import Any
 
 from aiohttp import web
 
+from engine.ai import about as ai_about
 from engine.ai import config as ai_config
 from engine.ai import constraint as ai_constraint
 from engine.ai import derivation as ai_derivation
+from engine.ai import describe as ai_describe
 from engine.ai import library_vars
 from engine.ai import wildcard as ai_wildcard
 from engine.ai import wildcard_edit as ai_edit
-from engine.db.repositories import ModuleNotFound, ModuleRepository
+from engine.db.repositories import BundleRepository, ModuleNotFound, ModuleRepository
 from wp_api import _ai_client
 from wp_api._helpers import db_session, json_error, json_ok
 
@@ -142,9 +146,11 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
     name = wc.get("name") if isinstance(wc.get("name"), str) else ""
     var = wc.get("var_binding") if isinstance(wc.get("var_binding"), str) else ""
 
+    description, labels = ai_about.clean(wc.get("description"), wc.get("tags"))
     user = ai_wildcard.build_user_prompt(
         instruction=instruction, count=count, name=name[:200], var_binding=var[:100],
         existing_options=existing_texts, tags=tags, axes=axes,
+        description=description, labels=labels,
     )
     try:
         answer = await _ai_client.complete_json(
@@ -231,9 +237,10 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
     name = wc.get("name") if isinstance(wc.get("name"), str) else ""
     var = wc.get("var_binding") if isinstance(wc.get("var_binding"), str) else ""
 
+    description, labels = ai_about.clean(wc.get("description"), wc.get("tags"))
     user = ai_edit.build_edit_prompt(
         action=action, instruction=instruction, name=name[:200], var_binding=var[:100],
-        options=rows, tags=tags, axes=axes,
+        options=rows, tags=tags, axes=axes, description=description, labels=labels,
     )
     try:
         answer = await _ai_client.complete_json(
@@ -294,8 +301,9 @@ async def post_derivation_draft(request: web.Request) -> web.Response:
         n for line in (ai_derivation.describe_rule(r) for r in rules)
         for n in library_vars.var_names_in(line)
     ]
+    description, labels = ai_about.clean(drv.get("description"), drv.get("tags"))
     user = ai_derivation.build_prompt(
-        instruction=instruction, name=name[:200],
+        instruction=instruction, name=name[:200], description=description, labels=labels,
         catalog_text=library_vars.describe(catalog, focus=focus),
         existing_rules=[ai_derivation.describe_rule(r) for r in rules],
     )
@@ -357,8 +365,11 @@ async def post_constraint_draft(request: web.Request) -> web.Response:
         "matrix": cons.get("matrix") if isinstance(cons.get("matrix"), dict) else {},
         "exceptions": [e for e in cons.get("exceptions") or [] if isinstance(e, dict)][:2000],
     }
+    description, labels = ai_about.clean(cons.get("description"), cons.get("tags"))
+    cname = cons.get("name") if isinstance(cons.get("name"), str) else ""
     user = ai_constraint.build_prompt(
         instruction=instruction, source=source, target=target,
+        name=cname[:200], description=description, labels=labels,
         existing=ai_constraint.describe_existing(existing),
     )
     try:
@@ -381,6 +392,56 @@ async def post_constraint_draft(request: web.Request) -> web.Response:
     return json_ok(result)
 
 
+async def post_describe(request: web.Request) -> web.Response:
+    """Body: {kind, name?, description?, tags?, payload, hint?}.
+
+    `payload` is what the editor holds now (a module payload, a bundle's
+    children, a template's text). The model also sees the library's tags so
+    it reuses them.
+    """
+    cfg = _enabled_cfg()
+    if isinstance(cfg, web.Response):
+        return cfg
+    body = await _body(request)
+    if isinstance(body, web.Response):
+        return body
+    kind = body.get("kind")
+    if kind not in ai_describe.KINDS:
+        return json_error("unknown kind", status=400)
+    name = body.get("name") if isinstance(body.get("name"), str) else ""
+    description, tags = ai_about.clean(body.get("description"), body.get("tags"))
+    hint = body.get("hint") if isinstance(body.get("hint"), str) else ""
+    if len(hint) > ai_wildcard.MAX_INSTRUCTION_LEN:
+        return json_error("that request is too long", status=400)
+
+    with db_session(request) as conn:
+        modules = ModuleRepository(conn).list()
+        bundles = BundleRepository(conn).list()
+    names = {m["id"]: m.get("name") or "" for m in modules if isinstance(m.get("id"), str)}
+    library = ai_describe.library_tags([*modules, *bundles])
+    user = ai_describe.build_prompt(
+        kind=kind, name=name[:200], description=description, tags=tags,
+        summary=ai_describe.summarize(kind, body.get("payload"), names=names),
+        library=library, hint=hint,
+    )
+    try:
+        answer = await _ai_client.complete_json(
+            cfg, system=ai_describe.SYSTEM_PROMPT, user=user,
+            schema=ai_describe.SCHEMA, schema_name="describe", temperature=0.4,
+        )
+    except _ai_client.AIError as e:
+        return json_error(e.message, status=e.status)
+    try:
+        result = ai_describe.compile_answer(answer, current=tags, library=library)
+    except ValueError as e:
+        return json_error(
+            f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
+            status=502,
+        )
+    result["model"] = cfg["model"]
+    return json_ok(result)
+
+
 def register(router: web.UrlDispatcher) -> None:
     router.add_get("/wp/api/ai/config", get_config)
     router.add_put("/wp/api/ai/config", put_config)
@@ -390,3 +451,4 @@ def register(router: web.UrlDispatcher) -> None:
     router.add_post("/wp/api/ai/wildcard/edit", post_wildcard_edit)
     router.add_post("/wp/api/ai/derivation/draft", post_derivation_draft)
     router.add_post("/wp/api/ai/constraint/draft", post_constraint_draft)
+    router.add_post("/wp/api/ai/describe", post_describe)

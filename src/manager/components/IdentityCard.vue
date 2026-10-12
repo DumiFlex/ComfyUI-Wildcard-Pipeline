@@ -22,6 +22,9 @@ import Toggle from "./ui/Toggle.vue";
 import { useCategoryStore } from "../stores/categoryStore";
 import { categorySelectOptions } from "../utils/category-options";
 import { toIdentifier } from "../utils/slug";
+import AiDescribePanel from "./ai/AiDescribePanel.vue";
+import { useAiConfig } from "../composables/useAiConfig";
+import type { AiDescribeKind } from "../api/types";
 
 interface Props {
   name: string;
@@ -49,6 +52,13 @@ interface Props {
    * the toggle entirely.
    */
   showContentRating?: boolean;
+  /**
+   * What the item is, for the AI "Describe" button. With both set and the
+   * assistant on, the card offers a description and tags written from
+   * `aiPayload()` (read on demand, so unsaved edits count).
+   */
+  aiKind?: AiDescribeKind;
+  aiPayload?: () => unknown;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -70,6 +80,16 @@ const emit = defineEmits<{
 }>();
 
 const isNsfw = computed(() => props.contentRating === "nsfw");
+
+const ai = useAiConfig();
+const aiOpen = ref(false);
+const aiAvailable = computed(() => !!props.aiKind && !!props.aiPayload && !!ai.config.value?.enabled);
+function onAiApply(patch: { description?: string; addTags: string[] }): void {
+  if (patch.description !== undefined) emit("update:description", patch.description);
+  const next = [...props.tags, ...patch.addTags.filter((t) => !props.tags.includes(t))];
+  if (next.length !== props.tags.length) emit("update:tags", next);
+  aiOpen.value = false;
+}
 function onNsfwToggle(next: boolean) {
   emit("update:contentRating", next ? "nsfw" : "safe");
 }
@@ -123,6 +143,26 @@ function removeTag(t: string) {
 
 <template>
   <Card title="Identity">
+    <template v-if="aiAvailable" #actions>
+      <Button
+        size="sm"
+        :variant="aiOpen ? 'secondary' : 'ghost'"
+        icon="pi-microchip-ai"
+        data-test="identity-ai"
+        title="Write a description and tags with AI"
+        @click="aiOpen = !aiOpen"
+      >Describe</Button>
+    </template>
+    <AiDescribePanel
+      v-if="aiOpen && aiAvailable && aiKind && aiPayload"
+      :kind="aiKind"
+      :name="name"
+      :description="description"
+      :tags="tags"
+      :payload="aiPayload"
+      @apply="onAiApply"
+      @close="aiOpen = false"
+    />
     <div class="identity-grid">
       <div v-if="$slots.nameLeading" class="identity-name-row">
         <slot name="nameLeading" />

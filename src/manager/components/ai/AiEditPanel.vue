@@ -25,6 +25,9 @@ interface Props {
   /** True when `options` is the user's selection rather than the whole list. */
   fromSelection: boolean;
   existingTags: string[];
+  /** The wildcard\'s description and library tags: what it is for. */
+  description?: string;
+  labels?: string[];
   tagGroups?: Record<string, string[]>;
 }
 const props = defineProps<Props>();
@@ -101,6 +104,8 @@ async function run(): Promise<void> {
       wildcard: {
         name: props.name,
         var_binding: props.varBinding,
+        description: props.description ?? "",
+        tags: props.labels ?? [],
         payload: {
           options: editable.value.map((o) => ({
             id: o.id, value: o.value, weight: o.weight ?? 1, sub_categories: o.sub_categories ?? [],

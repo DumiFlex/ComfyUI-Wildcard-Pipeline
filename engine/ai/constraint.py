@@ -27,6 +27,7 @@ import math
 import re
 from typing import Any
 
+from engine.ai import about
 from engine.modules.constraint_handler import ConstraintHandler, exception_pair
 
 EFFECTS = ("exclude", "only", "boost", "reduce")
@@ -97,23 +98,32 @@ def side_view(wildcard: dict[str, Any], prefix: str) -> dict[str, Any]:
     for i, o in enumerate(options, 1):
         o["short"] = f"{prefix}{i}"
     tags = [t for t in payload.get("sub_categories") or [] if isinstance(t, str)]
+    description, labels = about.clean(wildcard.get("description"), wildcard.get("tags"))
     return {
         "name": wildcard.get("name") if isinstance(wildcard.get("name"), str) else "",
         "var": payload.get("var_binding") if isinstance(payload.get("var_binding"), str) else "",
         "options": options,
         "tags": tags,
         "prefix": prefix,
+        "description": description,
+        "labels": labels,
     }
 
 
 def build_prompt(
     *, instruction: str, source: dict[str, Any], target: dict[str, Any],
-    existing: list[str],
+    existing: list[str], name: str = "", description: str = "",
+    labels: list[str] | None = None,
 ) -> str:
     lines: list[str] = []
+    if name or description or labels:
+        lines.append(f"Constraint: {name or '(unnamed)'}")
+        lines.extend(about.lines(description, labels or []))
+        lines.append("")
     for label, side in (("SOURCE", source), ("TARGET", target)):
         var = f" (${side['var']})" if side["var"] else ""
         lines.append(f"{label} wildcard: {side['name'] or '(unnamed)'}{var}")
+        lines.extend(about.lines(side["description"], side["labels"], indent="  "))
         lines.append(f"Tags: {', '.join('#' + t for t in side['tags']) or 'none'}")
         for o in side["options"]:
             tags = f"  [{', '.join('#' + t for t in o['tags'])}]" if o["tags"] else ""
