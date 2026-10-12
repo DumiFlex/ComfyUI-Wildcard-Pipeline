@@ -128,6 +128,7 @@ function toggleTag(t: string, currentTags: string[] | undefined): string[] {
   <div class="wp-route-root">
   <ModuleListView
     title="Templates"
+    hide-ai-organize
     subtitle="Templates store a reusable PromptAssembler template string. Save one from an assembler's Save button, then load it back into any assembler."
     new-label="New Template"
     new-route="/templates/new"

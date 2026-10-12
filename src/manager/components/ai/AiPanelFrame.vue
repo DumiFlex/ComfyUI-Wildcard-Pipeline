@@ -88,7 +88,7 @@ function onKeydown(ev: KeyboardEvent): void {
       <ol class="wp-ai-frame__asks">
         <li v-for="(a, i) in asked" :key="i" data-test="ai-asked">
           <i :class="['pi', i === 0 ? 'pi-comment' : 'pi-reply']" aria-hidden="true" />
-          <span>{{ a || "(no request)" }}</span>
+          <span>{{ a || "Asked without a note" }}</span>
         </li>
       </ol>
       <span v-if="answerCount > 1" class="wp-ai-frame__nav" data-test="ai-answer-nav">

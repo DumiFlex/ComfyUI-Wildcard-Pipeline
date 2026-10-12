@@ -12,6 +12,8 @@
                                       description
     POST /wp/api/ai/describe        a description + library tags for a
                                     module, bundle or template
+    POST /wp/api/ai/organize        category, tags and rating for a batch
+                                    of modules and bundles
 
 Every drafting route also takes `history` (earlier turns of the same
 conversation, see `engine/ai/followup.py`) and returns the model's raw
@@ -36,9 +38,15 @@ from engine.ai import derivation as ai_derivation
 from engine.ai import describe as ai_describe
 from engine.ai import followup as ai_followup
 from engine.ai import library_vars
+from engine.ai import organize as ai_organize
 from engine.ai import wildcard as ai_wildcard
 from engine.ai import wildcard_edit as ai_edit
-from engine.db.repositories import BundleRepository, ModuleNotFound, ModuleRepository
+from engine.db.repositories import (
+    BundleRepository,
+    CategoryRepository,
+    ModuleNotFound,
+    ModuleRepository,
+)
 from wp_api import _ai_client
 from wp_api._helpers import db_session, json_error, json_ok
 
@@ -491,6 +499,99 @@ async def post_describe(request: web.Request) -> web.Response:
     return json_ok(result)
 
 
+async def post_organize(request: web.Request) -> web.Response:
+    """Body: {items: [{kind: "module"|"bundle", id}], hint?, history?}.
+
+    The items are read from the library, so the model sees what is saved.
+    Changes come back keyed by kind + id for the manager to review.
+    """
+    cfg = _enabled_cfg()
+    if isinstance(cfg, web.Response):
+        return cfg
+    body = await _body(request)
+    if isinstance(body, web.Response):
+        return body
+    hint = body.get("instruction") if isinstance(body.get("instruction"), str) else ""
+    if len(hint) > ai_wildcard.MAX_INSTRUCTION_LEN:
+        return json_error("that request is too long", status=400)
+    turns = _turns(body)
+    if isinstance(turns, web.Response):
+        return turns
+    wanted = body.get("items") if isinstance(body.get("items"), list) else []
+    refs: list[tuple[str, str]] = []
+    for w in wanted:
+        if isinstance(w, dict) and w.get("kind") in ("module", "bundle") \
+                and isinstance(w.get("id"), str) and (w["kind"], w["id"]) not in refs:
+            refs.append((w["kind"], w["id"]))
+    if not refs:
+        return json_error("select some modules or bundles first", status=400)
+    if len(refs) > ai_organize.MAX_ITEMS:
+        return json_error(
+            f"that's {len(refs)} items; select up to {ai_organize.MAX_ITEMS} and try again",
+            status=400,
+        )
+
+    with db_session(request) as conn:
+        modules = ModuleRepository(conn).list()
+        bundles = BundleRepository(conn).list()
+        cats = CategoryRepository(conn).list()
+    by_ref = {("module", m["id"]): m for m in modules}
+    by_ref.update({("bundle", b["id"]): b for b in bundles})
+    cat_names = {c["id"]: c["name"] for c in cats}
+    names = {m["id"]: m.get("name") or "" for m in modules if isinstance(m.get("id"), str)}
+    items: list[dict[str, Any]] = []
+    real: dict[str, tuple[str, str]] = {}
+    for ref in refs:
+        row = by_ref.get(ref)
+        if row is None:
+            continue
+        short = str(len(items) + 1)
+        real[short] = ref
+        items.append(ai_organize.item_view(
+            row, ref[0], short, category=cat_names.get(row.get("category_id") or "", ""),
+            names=names,
+        ))
+    if not items:
+        return json_error("none of those items are in the library any more", status=404)
+    categories = ai_organize.library_categories(cats)
+    library = ai_describe.library_tags([*modules, *bundles])
+    first = ai_organize.build_prompt(
+        items=items, categories=categories, library=library,
+        hint=ai_followup.first_instruction(turns, hint),
+    )
+    try:
+        answer = await _ask(
+            cfg, first=first, turns=turns, instruction=hint,
+            system=ai_organize.SYSTEM_PROMPT, schema=ai_organize.SCHEMA,
+            schema_name="organize", temperature=0.3,
+        )
+    except _ai_client.AIError as e:
+        return json_error(e.message, status=e.status)
+    try:
+        result = ai_organize.compile_answer(
+            answer, items=items, categories=categories, library=library,
+        )
+    except ValueError as e:
+        return json_error(
+            f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
+            status=502,
+        )
+    cat_ids = {c["name"].lower(): c["id"] for c in cats}
+    by_short = {it["id"]: it for it in items}
+    for c in result["changes"]:
+        it = by_short[c["id"]]
+        c["kind"], c["id"] = real[c.pop("id")]
+        c["name"] = it["name"]
+        c["type"] = it["type"]
+        c["before"] = {"category": it["category"], "tags": it["tags"], "rating": it["rating"]}
+        if c["category"]:
+            c["category"]["id"] = cat_ids.get(c["category"]["name"].lower())
+    result["count"] = len(items)
+    result["model"] = cfg["model"]
+    result["answer"] = answer
+    return json_ok(result)
+
+
 def register(router: web.UrlDispatcher) -> None:
     router.add_get("/wp/api/ai/config", get_config)
     router.add_put("/wp/api/ai/config", put_config)
@@ -501,3 +602,4 @@ def register(router: web.UrlDispatcher) -> None:
     router.add_post("/wp/api/ai/derivation/draft", post_derivation_draft)
     router.add_post("/wp/api/ai/constraint/draft", post_constraint_draft)
     router.add_post("/wp/api/ai/describe", post_describe)
+    router.add_post("/wp/api/ai/organize", post_organize)

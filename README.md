@@ -129,7 +129,9 @@ Open it from the ComfyUI sidebar. It's where your modules live between workflows
   new options in the style of the ones you have, or to remove, rewrite, retag or
   re-weight the ones there. In the derivation and constraint editors, describe
   the rules you want and it writes them using your library's variables, options
-  and tags. **Describe** in any editor writes a description and tags for it. If an
+  and tags. **Describe** in any editor writes a description and tags for it, and
+  **Organize with AI** sorts a selection of library items into categories, tags and
+  ratings. If an
   answer is close, type a follow-up and press **Refine** to revise it instead of
   starting over. You review every change first, and nothing is saved until you
   press Save.

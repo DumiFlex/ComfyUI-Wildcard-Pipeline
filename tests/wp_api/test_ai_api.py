@@ -27,6 +27,12 @@ EDIT_ANSWERS = {
         "else_actions": [],
     }]},
     "describe": {"description": "Fantasy classes.", "tags": ["rpg", "Portrait"]},
+    "organize": {"items": [
+        {"id": "1", "category": "Characters", "tags_add": ["rpg"], "tags_remove": [],
+         "rating": "keep", "reason": "classes"},
+        {"id": "2", "category": "Gear", "tags_add": [], "tags_remove": [], "rating": "nsfw",
+         "reason": "?"},
+    ]},
     "constraint_rules": {"rules": [
         {"source": "#magic", "target": "#blade", "effect": "exclude", "factor": 0,
          "reason": "no swords"},
@@ -469,3 +475,36 @@ async def test_every_drafting_route_returns_its_raw_answer(wp_client, fake_llm):
     assert (await resp.json())["answer"] == EDIT_ANSWERS["describe"]
     resp = await wp_client.post("/wp/api/ai/wildcard/edit", json=_edit_body("remove"))
     assert (await resp.json())["answer"] == EDIT_ANSWERS["wildcard_remove"]
+
+
+async def test_organize_reads_items_and_maps_changes_back(wp_client, fake_llm):
+    src, tgt = await _two_wildcards(wp_client)
+    resp = await wp_client.post("/wp/api/categories", json={"name": "Characters"})
+    assert resp.status in (200, 201), await resp.text()
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    url = "/wp/api/ai/organize"
+    resp = await wp_client.post(url, json={
+        "items": [{"kind": "module", "id": src}, {"kind": "module", "id": tgt},
+                  {"kind": "module", "id": src}],
+        "instruction": "tidy it",
+    })
+    assert resp.status == 200, await resp.text()
+    body = await resp.json()
+    assert body["count"] == 2
+    first, second = body["changes"]
+    assert first["kind"] == "module" and first["id"] == src and first["name"] == "Class"
+    assert first["category"]["name"] == "Characters" and first["category"]["new"] is False
+    assert first["category"]["id"]
+    assert first["tags_add"] == [{"tag": "rpg", "new": True}]
+    assert second["id"] == tgt and second["category"] == {"name": "Gear", "new": True, "id": None}
+    assert second["rating"] == "nsfw" and second["before"]["rating"] == "safe"
+    assert body["new_categories"] == ["Gear"]
+    prompt = fake_llm.seen[-1]["body"]["messages"][1]["content"]
+    assert "Library categories: Characters" in prompt and '2. wildcard "Weapon"' in prompt
+    assert "Request: tidy it" in prompt
+    assert (await wp_client.post(url, json={"items": []})).status == 400
+    gone = {"items": [{"kind": "bundle", "id": "deadbeef"}]}
+    assert (await wp_client.post(url, json=gone)).status == 404
+    many = {"items": [{"kind": "module", "id": f"{i:08x}"} for i in range(61)]}
+    assert (await wp_client.post(url, json=many)).status == 400

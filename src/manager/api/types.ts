@@ -1017,6 +1017,39 @@ export interface AiDescribeResult {
   answer: Record<string, unknown>;
 }
 
+export interface AiOrganizeRequest extends AiConversational {
+  items: Array<{ kind: "module" | "bundle"; id: string }>;
+  /** Optional steer ("split by subject"). */
+  instruction?: string;
+}
+
+export interface AiOrganizeChange {
+  kind: "module" | "bundle";
+  id: string;
+  name: string;
+  /** Module type, or "bundle". */
+  type: string;
+  /** `id` is null for a category the library doesn't have yet. */
+  category: { name: string; new: boolean; id: string | null } | null;
+  tags_add: Array<{ tag: string; new: boolean }>;
+  tags_remove: string[];
+  rating: "safe" | "nsfw" | null;
+  reason: string;
+  before: { category: string; tags: string[]; rating: "safe" | "nsfw" };
+}
+
+export interface AiOrganizeResult {
+  /** Only items with something to change. */
+  changes: AiOrganizeChange[];
+  new_categories: string[];
+  skipped: Array<{ text: string; reason: string }>;
+  /** How many items the model looked at. */
+  count: number;
+  model: string;
+  /** The model's raw answer, for a follow-up's `history`. */
+  answer: Record<string, unknown>;
+}
+
 /* ── Tag autocomplete ─────────────────────────────────────────────────── */
 
 /** Danbooru's numeric tag categories. `null` when the installed file is the

@@ -12,6 +12,8 @@ import type {
   AiDerivationDraftResult,
   AiConstraintDraftRequest,
   AiConstraintDraftResult,
+  AiOrganizeRequest,
+  AiOrganizeResult,
   AiDescribeRequest,
   AiDescribeResult,
   TagStatus, TagSuggestResponse, TagDownloadResult, LibraryTagUpdateCounts,
@@ -428,6 +430,11 @@ export const api = {
     },
     draftConstraint(body: AiConstraintDraftRequest, signal?: AbortSignal) {
       return request<AiConstraintDraftResult>("/wp/api/ai/constraint/draft", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    organize(body: AiOrganizeRequest, signal?: AbortSignal) {
+      return request<AiOrganizeResult>("/wp/api/ai/organize", {
         method: "POST", body: JSON.stringify(body), signal,
       });
     },

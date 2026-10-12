@@ -119,6 +119,27 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       </p>
     </DocSection>
 
+    <DocSection title="Organize the library">
+      <p>
+        Select modules or bundles in any library list (up to 60), then press <b>Organize with AI</b>
+        in the selection bar. The model reads each item (its name, description, what it holds and
+        its current category, tags and rating) together with your library's categories and tags,
+        and suggests:
+      </p>
+      <ul>
+        <li>a <b>category</b>, reusing yours where one fits (a new one is dashed and created when
+          you apply; bundles have no category),</li>
+        <li><b>tags</b> to add or remove, reusing tags the library already has,</li>
+        <li>a <b>content rating</b> change, Safe or NSFW, when the content calls for it.</li>
+      </ul>
+      <p>
+        Only items that would change are listed, each with a short reason. Every change is a chip:
+        click one to leave it out, or untick an item to skip it. Type a note first to steer it
+        (optional, e.g. "one category per subject"). <b>Apply</b> saves right away, and the toast
+        that follows has <b>Undo</b>.
+      </p>
+    </DocSection>
+
     <DocSection title="Refine an answer">
       <p>
         You don't have to start over when an answer is close but not right. Once it shows, the
@@ -174,7 +195,8 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         wildcard's name, options and tags go to that provider under your account. Writing
         derivation rules also sends the variables your library sets, with the first options of
         each wildcard; constraint rules send the two wildcards' options and tags; Describe sends
-        what the item holds and the tags your library uses. A follow-up sends the earlier requests
+        what the item holds and the tags your library uses; Organize sends that for every selected
+        item, plus your category names. A follow-up sends the earlier requests
         and answers of that conversation again; nothing is kept on the server between requests.
       </p>
       <DocCallout variant="warn">

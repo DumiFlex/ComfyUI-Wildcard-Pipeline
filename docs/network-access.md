@@ -19,7 +19,8 @@ about is sent to that provider under your own account: your request, the
 wildcard's name, its existing options and tags, and for rules the wildcards
 involved. Writing derivation rules also sends the list of variables your
 library sets, with the first options of each wildcard, so the model can use
-their names. Describe sends what the item holds and the tags your library uses.
+their names. Describe sends what the item holds and the tags your library uses;
+Organize sends that for every selected item, plus your category names.
 A follow-up (Refine) sends that conversation's earlier requests and answers
 again; nothing is stored between requests.
 
