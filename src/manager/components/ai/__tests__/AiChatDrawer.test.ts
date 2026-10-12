@@ -7,6 +7,10 @@ import { api } from "../../../api/client";
 import { _resetAiConfigForTests } from "../../../composables/useAiConfig";
 import { _resetAiChatForTests, chatMessages, useAiChat } from "../../../composables/useAiChat";
 import type { AiChatResult, AiConfig } from "../../../api/types";
+import { defineComponent, ref } from "vue";
+import {
+  _resetOpenEditorForTests, registerOpenEditor, registerPageNote,
+} from "../../../composables/useOpenEditor";
 
 const CONFIG = {
   enabled: true, provider: "ollama", base_url: "", model: "m", unload_after_s: 60,
@@ -65,6 +69,9 @@ function makeRouter() {
     routes: [
       { path: "/", name: "dashboard", component: { template: "<div />" } },
       { path: "/wildcards/:id/edit", name: "wildcards-edit", component: { template: "<div />" } },
+      { path: "/docs/:page", name: "documentation-page", component: { template: "<div />" } },
+      { path: "/settings/:section?", name: "settings", component: { template: "<div />" } },
+      { path: "/test", name: "test", component: { template: "<div />" } },
     ],
   });
   return r;
@@ -75,6 +82,7 @@ describe("AiChatDrawer", () => {
     setActivePinia(createPinia());
     _resetAiConfigForTests();
     _resetAiChatForTests();
+    _resetOpenEditorForTests();
     vi.mocked(api.ai.config).mockResolvedValue(CONFIG);
     vi.mocked(api.ai.chat).mockReset().mockResolvedValue(RESULT);
     vi.mocked(api.modules.create).mockReset().mockImplementation(
@@ -163,6 +171,105 @@ describe("AiChatDrawer", () => {
     expect(history).toEqual([{ role: "user", content: "hello" }]);
     await w.get('[data-test="ai-chat-new"]').trigger("click");
     expect(w.find('[data-test="ai-chat-empty"]').exists()).toBe(true);
+    w.unmount();
+  });
+
+  it("sends the open editor and the page note, and puts changes into the editor", async () => {
+    const options = ref<unknown[]>([1, 2]);
+    const name = ref("Outfit");
+    const host = defineComponent({
+      setup() {
+        registerOpenEditor({
+          id: "m1", type: "wildcard", dirty: () => true,
+          name, description: ref(""), tags: ref<string[]>([]), categoryId: ref<string | null>(null),
+          contentRating: ref<"safe" | "nsfw">("safe"),
+          payload: () => ({ options: options.value }),
+          setPayload: (p) => { options.value = p.options as unknown[]; },
+        });
+        registerPageNote(() => "Wildcard editor with 2 options");
+        return {};
+      },
+      template: "<div />",
+    });
+    const editorHost = mount(host);
+    const toEditor = (pid: string, after: string | null, from: unknown[], to: unknown[]) => ({
+      pid, tool: "edit_options", title: `Change ${pid}`, summary: "", preview: [], warnings: [], after,
+      op: {
+        op: "update" as const, kind: "module" as const, type: "wildcard", id: "m1", name: "Outfit",
+        basis: "editor" as const, body: { payload: { options: to } }, before: { payload: { options: from } },
+      },
+    });
+    vi.mocked(api.ai.chat).mockResolvedValueOnce({
+      message: "Here.", model: "m", steps: [],
+      proposals: [
+        toEditor("p1", null, [1, 2], [1, 2, 3]),
+        toEditor("p2", "p1", [1, 2, 3], [2, 3]),
+        { pid: "p3", tool: "open", title: "Open the docs: Combine", summary: "docs", preview: [],
+          warnings: [], after: null, op: { op: "open", kind: "doc", type: "doc", id: "combine" } },
+        { pid: "p4", tool: "open", title: "Go to Settings › ai", summary: "page", preview: [],
+          warnings: [], after: null,
+          op: { op: "open", kind: "page", type: "page", id: "settings", section: "ai" } },
+      ],
+    });
+    const router = makeRouter();
+    await router.push("/wildcards/m1/edit");
+    const w = mount(AiChatDrawer, { global: { plugins: [router] }, attachTo: document.body });
+    await flushPromises();
+    expect(w.findAll('[data-test="ai-chat-suggestion"]')[0].text()).toBe("What could make this better?");
+    await w.get('[data-test="ai-chat-input"]').setValue("tidy this");
+    await w.get('[data-test="ai-chat-send"]').trigger("click");
+    await flushPromises();
+    expect(vi.mocked(api.ai.chat).mock.calls[0][0].page).toEqual({
+      route: "wildcards-edit", id: "m1", note: "Wildcard editor with 2 options",
+      editor: {
+        id: "m1", name: "Outfit", description: "", tags: [], category_id: null,
+        content_rating: "safe", payload: { options: [1, 2] }, dirty: true,
+      },
+    });
+    const cards = w.findAll('[data-test="ai-chat-proposal"]');
+    expect(cards[0].text()).toContain("Goes into the open editor");
+    await cards[0].get('[data-test="ai-chat-apply"]').trigger("click");
+    await flushPromises();
+    expect(api.modules.update).not.toHaveBeenCalled();
+    expect(options.value).toEqual([1, 2, 3]);
+    expect(cards[0].attributes("data-status")).toBe("editor");
+    expect(cards[0].get('[data-test="ai-chat-in-editor"]').text()).toContain("Save there");
+    expect(chatMessages(useAiChat().entries.value)[1].content).toContain(
+      "put into the open editor, not saved yet");
+    // The second builds on the first, which is now in the editor.
+    expect(cards[1].get('[data-test="ai-chat-apply"]').attributes("disabled")).toBeUndefined();
+    await cards[0].get('[data-test="ai-chat-undo"]').trigger("click");
+    await flushPromises();
+    expect(options.value).toEqual([1, 2]);
+    // An edit made in the editor after asking makes the suggestion stale.
+    await cards[0].get('[data-test="ai-chat-apply"]').trigger("click");
+    await flushPromises();
+    options.value = [9];
+    await flushPromises();
+    expect(cards[1].text()).toContain("The editor changed since; ask again");
+
+    await cards[2].get('[data-test="ai-chat-open"]').trigger("click");
+    await flushPromises();
+    expect(router.currentRoute.value.fullPath).toBe("/docs/combine");
+    await cards[3].get('[data-test="ai-chat-open"]').trigger("click");
+    await flushPromises();
+    expect(router.currentRoute.value.fullPath).toBe("/settings/ai");
+    w.unmount();
+    editorHost.unmount();
+  });
+
+  it("names the docs page being read", async () => {
+    const router = makeRouter();
+    await router.push("/docs/combine");
+    const w = mount(AiChatDrawer, { global: { plugins: [router] }, attachTo: document.body });
+    await flushPromises();
+    expect(w.findAll('[data-test="ai-chat-suggestion"]')[0].text()).toBe("Explain this page in simpler words");
+    await w.get('[data-test="ai-chat-input"]').setValue("explain");
+    await w.get('[data-test="ai-chat-send"]').trigger("click");
+    await flushPromises();
+    expect(vi.mocked(api.ai.chat).mock.calls[0][0].page).toEqual({
+      route: "documentation-page", doc: "combine",
+    });
     w.unmount();
   });
 });

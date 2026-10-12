@@ -13,6 +13,7 @@ import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
+import { registerPageNote } from "../composables/useOpenEditor";
 import { usePackBuilder } from "../composables/usePackBuilder";
 import { useAiConfig } from "../composables/useAiConfig";
 import { useToast } from "../composables/useToast";
@@ -22,6 +23,19 @@ import { useTemplateStore } from "../stores/templateStore";
 import type { AiPackItem } from "../api/types";
 
 const pb = usePackBuilder();
+
+// Tell the AI chat which pack is being built, so it can help with the plan.
+registerPageNote(() => {
+  const plan = pb.plan.value;
+  if (!plan) return "Pack builder, nothing planned yet";
+  const items = plan.items.map((it) => `${it.name} (${it.kind}${it.var ? ` $${it.var}` : ""})`).join(", ");
+  const check = pb.check.value;
+  const problems = check ? Object.values(check.problems).flat().slice(0, 5) : [];
+  return [
+    `Pack builder, step ${pb.phase.value}, pack "${plan.title}": ${items}`,
+    check ? `Test run: ${check.runs} seeds; ${problems.length ? `problems: ${problems.join("; ")}` : "no problems"}` : "",
+  ].filter(Boolean).join(". ");
+});
 const { convo } = pb;
 const { config, ready } = useAiConfig();
 const router = useRouter();

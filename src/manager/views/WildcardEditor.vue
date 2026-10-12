@@ -37,6 +37,7 @@ import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
 import { useEditorDraft } from "../composables/useEditorDraft";
+import { registerOpenEditor } from "../composables/useOpenEditor";
 import DraftBanner from "../components/DraftBanner.vue";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
@@ -239,6 +240,18 @@ const aiPending = ref(false);
 const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => bulkPending.value || aiPending.value || snapshot() !== baseline.value,
 );
+
+registerOpenEditor({
+  id: props.id, type: "wildcard", dirty: () => dirty.value,
+  name, description, tags, categoryId, contentRating,
+  payload: () => currentPayload() as unknown as Record<string, unknown>,
+  setPayload: (p) => {
+    const next = p as Partial<WildcardPayload>;
+    if (Array.isArray(next.options)) options.value = next.options as typeof options.value;
+    if (Array.isArray(next.sub_categories)) subCategories.value = [...next.sub_categories];
+    if (next.tag_groups) tagGroups.value = next.tag_groups;
+  },
+});
 
 const draft = useEditorDraft({
   kind: "wildcard",
@@ -1863,6 +1876,28 @@ function applyRestore(entry: ModuleHistoryEntry): void {
   });
 }
 
+/** The payload as Save stores it. */
+function currentPayload(binding = varBinding.value.trim() || toIdentifier(name.value)): WildcardPayload {
+  // The null option keeps whatever position the user gave it. The engine
+  // locates it by the `is_null` flag, never by index, so pinning it to 0 on
+  // save only served to undo a reorder the user had just performed.
+  // Serialise tag_groups, dropping empty axes (a "+ Group" box the user
+  // created but never filled) + members no longer in the registry. Omit
+  // the key entirely when nothing is grouped, keeping legacy payloads
+  // byte-identical when grouping is unused.
+  const serializedGroups = serializeTagGroups();
+  const serializedKinds = serializeTagGroupKinds(serializedGroups);
+  return {
+    // An emptied negative is stored as an ABSENT key (schema v8 stamps
+    // only when a negative is really there).
+    options: pruneBlankNegatives(options.value),
+    sub_categories: subCategories.value,
+    var_binding: binding,
+    ...(serializedGroups ? { tag_groups: serializedGroups } : {}),
+    ...(serializedKinds ? { tag_group_kinds: serializedKinds } : {}),
+  };
+}
+
 async function save() {
   // Update varBindingError synchronously so the rollup picks it up
   // in the same tick. The validation computed reads this ref.
@@ -1880,26 +1915,7 @@ async function save() {
   setSaveState("saving");
   saving.value = true;
   try {
-    // The null option keeps whatever position the user gave it. The engine
-    // locates it by the `is_null` flag, never by index, so pinning it to 0 on
-    // save only served to undo a reorder the user had just performed.
-    const sortedOptions = options.value;
-    // Serialise tag_groups, dropping empty axes (a "+ Group" box the user
-    // created but never filled) + members no longer in the registry. Omit
-    // the key entirely when nothing is grouped, keeping legacy payloads
-    // byte-identical when grouping is unused.
-    const serializedGroups = serializeTagGroups();
-    const serializedKinds = serializeTagGroupKinds(serializedGroups);
-    const payload: WildcardPayload = {
-      // An emptied negative is stored as an ABSENT key (schema v8 stamps
-      // only when a negative is really there).
-      options: pruneBlankNegatives(sortedOptions),
-      sub_categories: subCategories.value,
-      var_binding: finalBinding,
-      ...(serializedGroups ? { tag_groups: serializedGroups } : {}),
-      ...(serializedKinds ? { tag_group_kinds: serializedKinds } : {}),
-    };
-    const newPayload = payload as unknown as Record<string, unknown>;
+    const newPayload = currentPayload(finalBinding) as unknown as Record<string, unknown>;
     if (isEdit.value && props.id) {
       const prev = await moduleStore.get(props.id);
       const nextHistory = appendSnapshot(

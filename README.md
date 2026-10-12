@@ -132,8 +132,10 @@ Open it from the ComfyUI sidebar. It's where your modules live between workflows
   and tags. **Describe** in any editor writes a description and tags for it, and
   **Organize with AI** sorts a selection of library items into categories, tags and
   ratings. The **AI** button in the top bar opens a chat that reads your library
-  to answer questions and proposes new wildcards, rules, constraints and edits as
-  cards you apply one by one, with Undo. **Pack builder** makes a whole pack from
+  and the built-in docs to answer questions (or explain a docs page in simpler
+  words), sees the page you're on, and proposes new wildcards, rules,
+  constraints and edits as cards you apply one by one, with Undo. Changes to the
+  item open in an editor go into that editor, to keep with Save. **Pack builder** makes a whole pack from
   one description: it plans the wildcards, rules, constraints and template, builds
   them one at a time, tests them on the engine and fixes what fails, then installs
   everything as one bundle you can undo. If an

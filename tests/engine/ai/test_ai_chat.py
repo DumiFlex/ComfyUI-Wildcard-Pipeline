@@ -65,7 +65,7 @@ def test_overview_search_read_variables():
     assert "Outfit" in hit and "category Characters" in hit
     assert lib.search({"query": "zzz"}) == "no matches"
     text = lib.read({"id": "aaaa0001"})
-    assert "Variable: $outfit" in text and "- wool coat  [#warm]" in text and "×2" in text
+    assert "Variable: $outfit" in text and "1. wool coat  [#warm]" in text and "×2" in text
     assert "Kit" in lib.read({"id": "bbbb0001"})
     with pytest.raises(ValueError):
         lib.read({"id": "nope"})
@@ -155,3 +155,73 @@ def test_args_note():
     assert chat.args_note("search", {"query": "coat", "tag": "warm"}) == \
         'Searched "coat" tagged #warm'
     assert chat.args_note("read", {"id": "aaaa0001"}) == "Read aaaa0001"
+
+
+def test_edit_options_remove_rewrite_retag_weights():
+    lib = _lib()
+    # A constraint points at "wool coat", so removing it is refused.
+    lib.modules["cccc0001"] = {"id": "cccc0001", "type": "constraint", "name": "c", "payload": {
+        "source_wildcard_id": "aaaa0002", "target_wildcard_id": "aaaa0001", "matrix": {},
+        "exceptions": [{"source": "winter", "target": "wool coat", "source_id": "s1",
+                        "target_id": "o1", "mode": "boost", "factor": 2}]}}
+    p = lib.run("edit_options", {
+        "id": "aaaa0001", "remove": [1], "rewrite": [{"n": 2, "text": "summer dress"}],
+        "retag": [{"n": 2, "tags": ["warm", "light"]}], "weights": [{"n": 1, "weight": 3}],
+    })
+    opts = p["op"]["body"]["payload"]["options"]
+    assert [o["value"] for o in opts] == ["wool coat", "summer dress"]
+    assert opts[0]["weight"] == 3 and opts[1]["sub_categories"] == ["warm", "light"]
+    assert p["op"]["body"]["payload"]["sub_categories"] == ["warm", "light"]
+    assert any("constraint points at it" in w for w in p["warnings"])
+    assert p["op"]["before"]["payload"]["options"][1]["value"] == "sundress"
+    assert "sundress → summer dress" in p["preview"]
+
+    q = _lib().run("edit_options", {"id": "aaaa0001", "remove": [2, 9]})
+    assert [o["value"] for o in q["op"]["body"]["payload"]["options"]] == ["wool coat"]
+    with pytest.raises(ValueError, match="changes nothing"):
+        _lib().run("edit_options", {"id": "aaaa0001", "weights": [{"n": 2, "weight": 2}]})
+    with pytest.raises(ValueError):
+        _lib().run("edit_options", {"id": "aaaa0001", "rewrite": [{"n": 1, "text": "a $b"}]})
+
+
+def test_editor_version_and_page_note():
+    lib = _lib()
+    lib.use_editor({"id": "aaaa0001", "name": "Outfits", "dirty": True, "payload": {
+        "var_binding": "outfit", "sub_categories": ["warm"], "options": [
+            {"id": "o1", "value": "wool coat", "weight": 1, "sub_categories": ["warm"]},
+            {"id": "o9", "value": "raincoat", "weight": 1, "sub_categories": []},
+        ]}})
+    assert "2. raincoat" in lib.read({"id": "aaaa0001"})
+    note = lib.page_note({"route": "wildcards-edit", "id": "aaaa0001", "note": "x" * 3000})
+    assert "unsaved changes" in note and "On screen:" in note and len(note) < 1700
+    p = lib.run("add_options", {"id": "aaaa0001", "options": [{"text": "parka"}]})
+    assert p["op"]["basis"] == "editor"
+    assert [o["value"] for o in p["op"]["body"]["payload"]["options"]][:2] == [
+        "wool coat", "raincoat"]
+    # Other items still save to the library.
+    assert "basis" not in lib.run("update_info", {"id": "aaaa0002", "description": "d"})["op"]
+    # An editor for an unknown id is ignored.
+    other = _lib()
+    other.use_editor({"id": "zzzz0000", "name": "x"})
+    assert other.editor_id is None
+
+    doc = chat.Library([], [], []).page_note({"route": "documentation-page", "doc": "combine"})
+    assert '"Combine"' in doc and "docs_read" in doc
+
+
+def test_docs_tools_and_open_targets():
+    lib = _lib()
+    found = lib.run("docs_search", {"query": "constraint target reach"})
+    assert "constraint" in found and "›" in found
+    text = lib.run("docs_read", {"page": "combine", "section": "per-use"})
+    assert text.startswith("Combine (combine)") and "Template override" in text
+    with pytest.raises(ValueError):
+        lib.run("docs_read", {"page": "nope"})
+    assert lib.run("open", {"doc": "combine"})["op"] == {
+        "op": "open", "kind": "doc", "type": "doc", "id": "combine"}
+    page = lib.run("open", {"page": "settings", "section": "ai"})["op"]
+    assert page["kind"] == "page" and page["id"] == "settings" and page["section"] == "ai"
+    with pytest.raises(ValueError):
+        lib.run("open", {"page": "nowhere"})
+    assert "Docs pages" in chat.system_prompt() and "- combine: Combine." in chat.system_prompt()
+    assert chat.args_note("docs_read", {"page": "combine"}) == "Read the docs: Combine"

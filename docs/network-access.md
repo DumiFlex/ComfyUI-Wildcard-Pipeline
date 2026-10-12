@@ -22,7 +22,10 @@ library sets, with the first options of each wildcard, so the model can use
 their names. Describe sends what the item holds and the tags your library uses;
 Organize sends that for every selected item, plus your category names.
 The chat sends a list of your library's items (names, types and variables),
-the conversation so far, and the items the assistant reads to answer.
+the conversation so far, the items and docs pages the assistant reads to
+answer, and a short note of what your page shows (the open editor's item with
+its unsaved changes, a list's filters and selection, the Test Runner's last
+results, the Pack builder's plan).
 The pack builder sends your description and, for each item it builds, what
 the pack has built so far; it doesn't read your library.
 A follow-up (Refine) sends that conversation's earlier requests and answers
@@ -41,8 +44,9 @@ browser:
   The address comes from your saved settings and must be a plain `http(s)`
   address with no user name, password, query or fragment.
 - **Nothing is saved for you.** Drafts come back to the editor, and only your
-  own **Save** writes them to the library. Organize and chat changes are
-  saved only when you press **Apply**, through the same API the editors use,
+  own **Save** writes them to the library. A chat change to the item open in
+  an editor goes into that editor, to keep with Save. Organize and other chat
+  changes are saved only when you press **Apply**, through the same API the editors use,
   and a pack only when you press **Install** (one import, one undo).
 - **Size caps both ways.** Requests are capped at 512 KB and replies at 4 MB
   while streaming, at most two model calls run at once, and upstream error

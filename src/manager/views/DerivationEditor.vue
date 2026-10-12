@@ -31,6 +31,7 @@ import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
 import { useEditorDraft } from "../composables/useEditorDraft";
+import { registerOpenEditor } from "../composables/useOpenEditor";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
 import { useRecentStore } from "../stores/recentStore";
@@ -155,6 +156,16 @@ const aiPending = ref(false);
 const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => aiPending.value || snapshot() !== baseline.value,
 );
+
+registerOpenEditor({
+  id: props.id, type: "derivation", dirty: () => dirty.value,
+  name, description, tags, categoryId, contentRating,
+  payload: () => currentPayload() as unknown as Record<string, unknown>,
+  setPayload: (p) => {
+    const next = p as Partial<DerivationPayload>;
+    if (Array.isArray(next.rules)) rules.value = next.rules.map(migrateRule);
+  },
+});
 
 const draft = useEditorDraft({
   kind: "derivation",
@@ -455,6 +466,18 @@ function applyRestore(entry: ModuleHistoryEntry): void {
   });
 }
 
+/** The payload as Save stores it. */
+function currentPayload(): DerivationPayload {
+  // Save the simplest equivalent condition: a group of one collapses to its
+  // member, so a branch only needs schema v7 when it really combines tests.
+  return {
+    rules: rules.value.map((r) => ({
+      ...r,
+      branches: r.branches.map((b) => ({ ...b, condition: simplifyCondition(b.condition) })),
+    })),
+  };
+}
+
 async function save() {
   if (!name.value.trim()) {
     toast.push({ severity: "warn", summary: "Name required" });
@@ -463,15 +486,7 @@ async function save() {
   setSaveState("saving");
   saving.value = true;
   try {
-    // Save the simplest equivalent condition: a group of one collapses to its
-    // member, so a branch only needs schema v7 when it really combines tests.
-    const payload: DerivationPayload = {
-      rules: rules.value.map((r) => ({
-        ...r,
-        branches: r.branches.map((b) => ({ ...b, condition: simplifyCondition(b.condition) })),
-      })),
-    };
-    const newPayload = payload as unknown as Record<string, unknown>;
+    const newPayload = currentPayload() as unknown as Record<string, unknown>;
     if (isEdit.value && props.id) {
       const prev = await moduleStore.get(props.id);
       const nextHistory = appendSnapshot(

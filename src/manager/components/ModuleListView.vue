@@ -27,6 +27,7 @@ import type { SelectOption } from "./ui/select-types";
 import RelativeDate from "./RelativeDate.vue";
 import EmptyState from "./ui/EmptyState.vue";
 import { useCommunityUpdateStore } from "../stores/communityUpdateStore";
+import { registerPageNote } from "../composables/useOpenEditor";
 import type { UpdateEntry } from "../stores/communityUpdateStore";
 import CommunityUpdateDialog from "./CommunityUpdateDialog.vue";
 import { matchesTags, type TagMatchMode } from "../utils/library-tags";
@@ -419,6 +420,27 @@ function toggleExpand(id: string) {
 function isExpanded(id: string): boolean {
   return expanded.value.has(id);
 }
+
+// Tell the AI chat what this list shows, so "these" means the selection
+// (or the filtered rows) on screen.
+registerPageNote(() => {
+  const bits: string[] = [`${props.title} list, ${filteredItems.value.length} of ${props.items.length} shown`];
+  const f = props.filter;
+  const filters: string[] = [];
+  if (f.q) filters.push(`search "${f.q}"`);
+  if (f.tags?.length) filters.push(`tags ${f.tags.map((t) => `#${t}`).join(f.tagMode === "all" ? " and " : " or ")}`);
+  if (f.category) filters.push(`category ${categoryLabelById.value.get(f.category) ?? f.category}`);
+  if (f.favorites) filters.push("favorites only");
+  if (f.nsfw && f.nsfw !== "all") filters.push(f.nsfw === "nsfw" ? "18+ only" : "SFW only");
+  if (filters.length) bits.push(`filtered by ${filters.join(", ")}`);
+  const rows = selected.value.size
+    ? props.items.filter((r) => selected.value.has(r.id))
+    : filteredItems.value;
+  const label = selected.value.size ? `${selected.value.size} selected` : "rows";
+  const listed = rows.slice(0, 40).map((r) => `${r.name ?? "(unnamed)"} (${r.id})`);
+  bits.push(`${label}: ${listed.join(", ")}${rows.length > 40 ? ", …" : ""}`);
+  return bits.join(". ");
+});
 
 const focusedRowId = ref<string | null>(null);
 // The <tbody> is the keyboard entry point. We move REAL DOM focus onto

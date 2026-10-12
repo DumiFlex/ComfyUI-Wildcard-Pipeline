@@ -35,6 +35,7 @@ import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
 import { useEditorDraft } from "../composables/useEditorDraft";
+import { registerOpenEditor } from "../composables/useOpenEditor";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -253,6 +254,12 @@ function snapshot(): string {
 const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => snapshot() !== baseline.value,
 );
+
+// The chat reads and edits this item's info here; its payload stays on Save.
+registerOpenEditor({
+  id: props.id, type: "combine", dirty: () => dirty.value,
+  name, description, tags, categoryId, contentRating,
+});
 
 const draft = useEditorDraft({
   kind: "combine",

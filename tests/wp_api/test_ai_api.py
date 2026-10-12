@@ -564,6 +564,46 @@ async def test_chat_reads_then_proposes(wp_client, fake_llm):
     assert "error: no item with id 'nope'" in results
 
 
+async def test_chat_uses_the_open_editor_and_the_docs(wp_client, fake_llm):
+    _src, tgt = await _two_wildcards(wp_client)
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [
+            {"tool": "docs_search", "args": '{"query": "constraint exclude"}'},
+            {"tool": "read", "args": json.dumps({"id": tgt})},
+        ]},
+        {"message": "Dropped the first one.", "calls": [
+            {"tool": "edit_options", "args": json.dumps({"id": tgt, "remove": [1]})},
+            {"tool": "open", "args": '{"doc": "constraint"}'},
+        ]},
+    ])
+    editor = {"id": tgt, "name": "Weapon (draft)", "description": "", "tags": [],
+              "category_id": None, "content_rating": "safe", "dirty": True,
+              "payload": {"var_binding": "weapon", "sub_categories": ["blade"], "options": [
+                  {"id": "x1", "value": "unsaved spear", "weight": 1, "sub_categories": []},
+                  {"id": "x2", "value": "unsaved bow", "weight": 1, "sub_categories": []}]}}
+    resp = await wp_client.post("/wp/api/ai/chat", json={
+        "messages": [{"role": "user", "content": "remove the first option"}],
+        "page": {"route": "wildcards-edit", "id": tgt, "note": "2 options shown",
+                 "editor": editor},
+    })
+    assert resp.status == 200, await resp.text()
+    body = await resp.json()
+    edit, doc = body["proposals"]
+    assert edit["op"]["basis"] == "editor"
+    assert [o["value"] for o in edit["op"]["body"]["payload"]["options"]] == ["unsaved bow"]
+    assert doc["op"] == {"op": "open", "kind": "doc", "type": "doc", "id": "constraint"}
+    assert [s["note"] for s in body["steps"][:2]] == [
+        'Searched the docs for "constraint exclude"', "Read Weapon (draft)"]
+    first, second = fake_llm.seen[-2:]
+    assert "Docs pages (id: title)" in first["body"]["messages"][0]["content"]
+    asked = first["body"]["messages"][-1]["content"]
+    assert "with unsaved changes" in asked and "On screen: 2 options shown" in asked
+    results = second["body"]["messages"][-1]["content"]
+    assert "1. unsaved spear" in results and "constraint ›" in results
+
+
 async def test_chat_validation_and_off(wp_client, fake_llm):
     body = {"messages": [{"role": "user", "content": "hi"}]}
     assert (await wp_client.post("/wp/api/ai/chat", json=body)).status == 403

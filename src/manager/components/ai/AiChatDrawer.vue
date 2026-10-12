@@ -2,17 +2,21 @@
 /**
  * AiChatDrawer — the assistant chat, docked on the right of the manager.
  *
- * The model reads the library with tools and answers; anything it would
- * change comes back as a proposal card. Apply saves it through the stores,
- * Undo puts back what it replaced, Dismiss tells the model the user said
- * no. State lives in `useAiChat`, so closing the drawer keeps the chat.
+ * The model reads the library and the docs with tools and answers; anything
+ * it would change comes back as a proposal card. Apply saves it through the
+ * stores (or puts it into the open editor, when it was built on that
+ * editor's unsaved version), Undo puts back what it replaced, Dismiss tells
+ * the model the user said no. Each message carries what's on screen: the
+ * route, the open editor's item, the docs page and the view's own note.
+ * State lives in `useAiChat`, so closing the drawer keeps the chat.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import Button from "../ui/Button.vue";
 import { useAiChat, type ChatAssistantEntry } from "../../composables/useAiChat";
 import { useAiConfig } from "../../composables/useAiConfig";
-import type { AiChatProposal } from "../../api/types";
+import type { AiChatPage, AiChatProposal } from "../../api/types";
+import { currentPageNote, openEditor } from "../../composables/useOpenEditor";
 
 const EDIT_ROUTES: Record<string, string> = {
   wildcard: "wildcards-edit",
@@ -26,7 +30,15 @@ const PREVIEW_LINES = 6;
 const SUGGESTIONS = [
   "What does my library set up for characters?",
   "Make a wildcard of weather with tags for warm and cold",
-  "Which wildcards have no description? Write them one",
+  "How do constraints work?",
+];
+const DOC_SUGGESTIONS = [
+  "Explain this page in simpler words",
+  "Show me a small example of this",
+];
+const EDITOR_SUGGESTIONS = [
+  "What could make this better?",
+  "Remove options that repeat each other",
 ];
 
 const chat = useAiChat();
@@ -43,12 +55,26 @@ const isLocal = computed(() => {
   return c ? c.presets[c.provider].local : true;
 });
 
-function page(): { route: string; id?: string } {
+const suggestions = computed(() => {
+  if (route.name === "documentation-page") return DOC_SUGGESTIONS;
+  if (typeof route.params.id === "string" && route.params.id) return EDITOR_SUGGESTIONS;
+  return SUGGESTIONS;
+});
+
+function page(): AiChatPage {
   const id = route.params.id;
-  return {
-    route: String(route.name ?? route.path),
-    ...(typeof id === "string" && id ? { id } : {}),
-  };
+  const out: AiChatPage = { route: String(route.name ?? route.path) };
+  if (typeof id === "string" && id) out.id = id;
+  const doc = route.params.page;
+  if (route.name === "documentation-page" && typeof doc === "string" && doc) out.doc = doc;
+  if (route.name === "settings" && typeof route.params.section === "string") {
+    out.note = `Settings › ${route.params.section || "general"}`;
+  }
+  const note = currentPageNote();
+  if (note) out.note = note;
+  const ed = openEditor();
+  if (ed && ed.id === out.id) out.editor = ed.read();
+  return out;
 }
 
 function send(): void {
@@ -85,19 +111,34 @@ function toggle(i: number, p: AiChatProposal): void {
   expanded.value = next;
 }
 
-/** The editor route for a proposal's item, once there is an item. */
-function target(entry: ChatAssistantEntry, p: AiChatProposal): { name: string; id: string } | null {
+/** Where a proposal's Open button goes: the item's editor (once there is
+ *  an item), a docs page or a manager page. */
+function target(entry: ChatAssistantEntry, p: AiChatProposal): RouteLocationRaw | null {
   const op = p.op;
   if (op.op === "create") {
     const id = entry.created[p.pid];
-    return id ? { name: EDIT_ROUTES[op.body.type] ?? "", id } : null;
+    const name = EDIT_ROUTES[op.body.type];
+    return id && name ? { name, params: { id } } : null;
   }
-  return { name: EDIT_ROUTES[op.type] ?? "", id: op.id };
+  if (op.op === "open" && op.kind === "doc") {
+    return { name: "documentation-page", params: { page: op.id } };
+  }
+  if (op.op === "open" && op.kind === "page") {
+    return op.id === "settings"
+      ? { name: "settings", params: { section: op.section ?? "" } }
+      : { name: op.id };
+  }
+  const name = EDIT_ROUTES[op.type];
+  return name ? { name, params: { id: op.id } } : null;
 }
 
 function openItem(entry: ChatAssistantEntry, p: AiChatProposal): void {
   const t = target(entry, p);
-  if (t?.name) void router.push({ name: t.name, params: { id: t.id } });
+  if (t) void router.push(t);
+}
+
+function toEditor(p: AiChatProposal): boolean {
+  return p.op.op === "update" && p.op.basis === "editor";
 }
 
 function scrollDown(): void {
@@ -152,7 +193,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
       <div v-if="!chat.started.value" class="wp-ai-chat__empty" data-test="ai-chat-empty">
         <p>Ask about your library, or ask for a change. The assistant reads what you have and proposes changes as cards; nothing is saved until you press Apply.</p>
         <button
-          v-for="s in SUGGESTIONS"
+          v-for="s in suggestions"
           :key="s"
           type="button"
           class="wp-ai-chat__suggestion"
@@ -199,18 +240,23 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
             <p v-if="entry.errors[p.pid]" class="wp-ai-chat__error" role="alert">{{ entry.errors[p.pid] }}</p>
             <div class="wp-ai-chat__actions">
               <template v-if="p.op.op === 'open'">
-                <Button size="sm" icon="pi-arrow-up-right" data-test="ai-chat-open" @click="openItem(entry, p)">Open</Button>
+                <Button size="sm" icon="pi-arrow-up-right" data-test="ai-chat-open" @click="openItem(entry, p)">{{ p.op.kind === "doc" ? "Open the docs" : p.op.kind === "page" ? "Go there" : "Open" }}</Button>
               </template>
               <template v-else-if="entry.status[p.pid] === 'applied'">
                 <span class="wp-ai-chat__done"><i class="pi pi-check" aria-hidden="true" /> Applied</span>
                 <Button variant="ghost" size="sm" data-test="ai-chat-undo" @click="chat.undo(entry, p)">Undo</Button>
-                <Button v-if="target(entry, p)?.name" variant="ghost" size="sm" icon="pi-arrow-up-right" data-test="ai-chat-open" @click="openItem(entry, p)">Open</Button>
+                <Button v-if="target(entry, p)" variant="ghost" size="sm" icon="pi-arrow-up-right" data-test="ai-chat-open" @click="openItem(entry, p)">Open</Button>
+              </template>
+              <template v-else-if="entry.status[p.pid] === 'editor'">
+                <span class="wp-ai-chat__done" data-test="ai-chat-in-editor"><i class="pi pi-check" aria-hidden="true" /> In the editor. Save there to keep it.</span>
+                <Button variant="ghost" size="sm" data-test="ai-chat-undo" @click="chat.undo(entry, p)">Undo</Button>
               </template>
               <template v-else-if="entry.status[p.pid] === 'dismissed'">
                 <span class="wp-ai-chat__dismissed">Dismissed</span>
               </template>
               <template v-else>
                 <span v-if="chat.blockedReason(entry, p)" class="wp-ai-chat__blocked">{{ chat.blockedReason(entry, p) }}</span>
+                <span v-else-if="toEditor(p)" class="wp-ai-chat__blocked">Goes into the open editor</span>
                 <Button variant="ghost" size="sm" data-test="ai-chat-dismiss" @click="chat.dismiss(entry, p)">Dismiss</Button>
                 <Button
                   variant="primary"
@@ -319,7 +365,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
   border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px;
   background: color-mix(in oklab, var(--wp-accent-500) 4%, var(--wp-bg-2));
 }
-.wp-ai-chat__card[data-status="applied"] { border-color: color-mix(in oklab, var(--wp-success) 50%, var(--wp-border)); }
+.wp-ai-chat__card[data-status="applied"], .wp-ai-chat__card[data-status="editor"] { border-color: color-mix(in oklab, var(--wp-success) 50%, var(--wp-border)); }
 .wp-ai-chat__card[data-status="dismissed"] { opacity: 0.6; }
 .wp-ai-chat__card[data-status="failed"] { border-color: color-mix(in oklab, var(--wp-danger) 50%, var(--wp-border)); }
 .wp-ai-chat__card-head { display: flex; flex-direction: column; gap: 1px; }

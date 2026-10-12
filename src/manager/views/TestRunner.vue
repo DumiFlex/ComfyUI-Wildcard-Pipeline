@@ -25,6 +25,7 @@ import ComparePanel from "../components/test-runner/ComparePanel.vue";
 import TraceDrawer from "../components/test-runner/TraceDrawer.vue";
 import InspectorDrawer from "../components/test-runner/InspectorDrawer.vue";
 import { useScenarioWorkbench } from "../composables/useScenarioWorkbench";
+import { registerPageNote } from "../composables/useOpenEditor";
 import { useDeleteConfirm } from "../composables/useDeleteConfirm";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { buildUuidToName } from "../utils/wildcardSyntax";
@@ -36,6 +37,27 @@ const route = useRoute();
 const router = useRouter();
 const wb = useScenarioWorkbench();
 const { draft, result } = wb;
+
+// Tell the AI chat what this run holds, so it can explain a warning or a
+// result the user is looking at.
+registerPageNote(() => {
+  const stack = wb.stackViews.value
+    .map((v) => `${v.name} (${v.kind}${v.id ? ` ${v.id}` : ""}${v.enabled ? "" : ", off"})`)
+    .join(", ");
+  const bits = [`Test Runner scenario "${draft.value.name || "Quick run"}" with ${stack || "nothing"}`];
+  const r = result.value;
+  if (r) {
+    bits.push(`Last run: ${r.runs} seeds, ${r.failed} failed`);
+    const vars = Object.entries(r.variables).slice(0, 8).map(([name, v]) => {
+      const top = Object.entries(v.counts).slice(0, 3).map(([val, n]) => `${val} ${n}`).join(", ");
+      return `$${name}: ${v.distinct} values (${top})`;
+    });
+    if (vars.length) bits.push(vars.join("; "));
+    const warns = r.warnings.slice(0, 6).map((w) => `${w.type}: ${w.message} (${w.count} runs)`);
+    bits.push(warns.length ? `Warnings: ${warns.join("; ")}` : "No warnings");
+  }
+  return bits.join(". ");
+});
 
 type Tab = "variables" | "outputs" | "samples" | "warnings" | "compare";
 const tab = ref<Tab>("variables");

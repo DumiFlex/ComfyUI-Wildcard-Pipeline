@@ -7,19 +7,22 @@
  * conversation. An assistant message goes back as its reply plus one line
  * per proposal saying whether the user applied it, so the model knows what
  * the library now holds. Applying a proposal goes through the same stores
- * the editors use; Undo restores what the proposal replaced.
+ * the editors use; Undo restores what the proposal replaced. A change built
+ * on the open editor's unsaved version goes into that editor instead
+ * (`useOpenEditor`), where Save keeps it.
  */
 import { computed, ref, shallowRef, triggerRef } from "vue";
 import { api, ApiError } from "../api/client";
-import type { AiChatMessage, AiChatProposal, AiChatResult } from "../api/types";
+import type { AiChatMessage, AiChatPage, AiChatProposal, AiChatResult } from "../api/types";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import { useCategoryStore } from "../stores/categoryStore";
+import { openEditor } from "./useOpenEditor";
 
 /** Server cap on messages per request (20 turns each way). */
 const MAX_MESSAGES = 40;
 
-export type ProposalStatus = "applied" | "dismissed" | "failed";
+export type ProposalStatus = "applied" | "editor" | "dismissed" | "failed";
 
 export interface ChatUserEntry {
   role: "user";
@@ -33,6 +36,9 @@ export interface ChatAssistantEntry {
   /** Id of the row a create proposal made, for Open and Undo. */
   created: Record<string, string>;
   errors: Record<string, string>;
+  /** The open editor's item when this answer was asked for, to spot edits
+   *  made in the editor since (then a proposal built on it is stale). */
+  editorSnap?: { id: string; json: string };
 }
 
 export type ChatEntry = ChatUserEntry | ChatAssistantEntry;
@@ -46,7 +52,9 @@ let controller: AbortController | null = null;
 
 function statusLine(entry: ChatAssistantEntry, p: AiChatProposal): string {
   const s = entry.status[p.pid];
-  const what = s === "applied" ? "applied" : s === "dismissed" ? "dismissed" : "not applied yet";
+  const what = s === "applied" ? "applied"
+    : s === "editor" ? "put into the open editor, not saved yet"
+      : s === "dismissed" ? "dismissed" : "not applied yet";
   return `[Proposal ${p.pid} "${p.title}": ${what}]`;
 }
 
@@ -63,7 +71,15 @@ function touch(): void {
   triggerRef(entries);
 }
 
-async function send(page?: { route: string; id?: string }): Promise<void> {
+function editorJson(): { id: string; json: string } | undefined {
+  const ed = openEditor();
+  if (!ed) return undefined;
+  const state: Partial<ReturnType<typeof ed.read>> = ed.read();
+  delete state.dirty;
+  return { id: ed.id, json: JSON.stringify(state) };
+}
+
+async function send(page?: AiChatPage): Promise<void> {
   const text = input.value.trim();
   if (!text || loading.value) return;
   const next: ChatEntry[] = [...entries.value, { role: "user", text }];
@@ -77,11 +93,15 @@ async function send(page?: { route: string; id?: string }): Promise<void> {
   const mine = new AbortController();
   controller = mine;
   loading.value = true;
+  const snap = page?.editor ? editorJson() : undefined;
   try {
     const result = await api.ai.chat({ messages: chatMessages(next), page }, mine.signal);
     entries.value = [
       ...entries.value,
-      { role: "assistant", result, status: {}, created: {}, errors: {} },
+      {
+        role: "assistant", result, status: {}, created: {}, errors: {},
+        ...(snap ? { editorSnap: snap } : {}),
+      },
     ];
   } catch (err) {
     // Put the message back so it can be sent again.
@@ -113,7 +133,18 @@ function reset(): void {
 
 /** Why a proposal can't be applied yet, else "". */
 function blockedReason(entry: ChatAssistantEntry, p: AiChatProposal): string {
-  if (!p.after || entry.status[p.after] === "applied") return "";
+  const op = p.op;
+  if (op.op === "update" && op.basis === "editor" && !entry.status[p.pid]) {
+    const ed = openEditor();
+    if (!ed || ed.id !== op.id) return `Open ${op.name} in its editor to apply`;
+    const now = editorJson();
+    if (entry.editorSnap && now && entry.editorSnap.json !== now.json) {
+      return "The editor changed since; ask again";
+    }
+  }
+  if (!p.after || entry.status[p.after] === "applied" || entry.status[p.after] === "editor") {
+    return "";
+  }
   const first = entry.result.proposals.find((x) => x.pid === p.after);
   return `Apply "${first?.title ?? "the earlier change"}" first`;
 }
@@ -138,9 +169,17 @@ async function apply(entry: ChatAssistantEntry, p: AiChatProposal): Promise<void
       const body = cid === undefined ? op.body : { ...op.body, category_id: cid };
       const row = await modules.create(body);
       entry.created[p.pid] = row.id;
-    } else {
+    } else if (op.op === "update") {
       const body = { ...op.body };
       if (op.new_category) body.category_id = (await categoryId(op.new_category)) ?? null;
+      const ed = op.basis === "editor" ? openEditor() : null;
+      if (ed && ed.id === op.id) {
+        ed.write(body);
+        entry.editorSnap = editorJson();
+        entry.status[p.pid] = "editor";
+        touch();
+        return;
+      }
       if (op.kind === "module") await modules.update(op.id, body);
       else await bundles.update(op.id, body);
     }
@@ -154,6 +193,19 @@ async function apply(entry: ChatAssistantEntry, p: AiChatProposal): Promise<void
 
 async function undo(entry: ChatAssistantEntry, p: AiChatProposal): Promise<void> {
   const op = p.op;
+  if (op.op === "update" && entry.status[p.pid] === "editor") {
+    const ed = openEditor();
+    if (!ed || ed.id !== op.id) {
+      entry.errors[p.pid] = `Open ${op.name} in its editor to undo`;
+    } else {
+      ed.write(op.before);
+      entry.editorSnap = editorJson();
+      delete entry.status[p.pid];
+      delete entry.errors[p.pid];
+    }
+    touch();
+    return;
+  }
   if (entry.status[p.pid] !== "applied" || op.op === "open") return;
   try {
     if (op.op === "create") {

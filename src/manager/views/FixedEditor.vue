@@ -34,6 +34,7 @@ import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { moveSelected, nudge, type MoveTarget } from "../utils/option-list-ops";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
 import { useEditorDraft } from "../composables/useEditorDraft";
+import { registerOpenEditor } from "../composables/useOpenEditor";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -169,6 +170,12 @@ const bulkPending = ref(false);
 const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => bulkPending.value || snapshot() !== baseline.value,
 );
+
+// The chat reads and edits this item's info here; its payload stays on Save.
+registerOpenEditor({
+  id: props.id, type: "fixed_values", dirty: () => dirty.value,
+  name, description, tags, categoryId, contentRating,
+});
 
 const draft = useEditorDraft({
   kind: "fixed_values",

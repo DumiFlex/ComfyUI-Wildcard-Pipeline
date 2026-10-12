@@ -144,22 +144,34 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       <p>
         The <b>AI</b> button in the top bar (shown once the assistant is on) opens a chat on the
         right. Ask about your library ("which wildcards set $outfit?", "what's missing for a
-        fantasy pack?") or ask for a change. The assistant searches and reads your items itself;
-        the lines above each reply say what it looked at. It knows which item you have open, so
-        "this wildcard" means that one.
+        fantasy pack?"), ask how something works, or ask for a change. The assistant searches and
+        reads your items and these docs itself; the lines above each reply say what it looked at.
       </p>
       <p>
-        Every change comes back as a card, and nothing is saved until you press <b>Apply</b> on
+        It sees the page you're on. In an editor it reads the item as it is in the editor, unsaved
+        changes included, so "this wildcard" means what you see. In a list it knows the filters
+        and which rows you selected, in the Test Runner the last run's results and warnings, and in
+        the Pack builder the plan.
+      </p>
+      <p>
+        Every change comes back as a card, and nothing happens until you press <b>Apply</b> on
         it. It can:
       </p>
       <ul>
         <li>create a wildcard, a derivation or a constraint between two wildcards,</li>
-        <li>add options to a wildcard or rules to a derivation,</li>
+        <li>add options to a wildcard, or remove, rewrite, retag and re-weight the ones it has,</li>
+        <li>add rules to a derivation,</li>
         <li>change an item's description, tags, category or rating,</li>
-        <li>open an item's editor.</li>
+        <li>open an item's editor, a docs page or a manager page such as a Settings section.</li>
       </ul>
       <p>
-        Each card lists what it adds and warns about anything it left out (a duplicate option, a
+        A change to the item open in your editor goes into the editor, and you keep it with
+        <b>Save</b> there as usual. If you edit the item yourself after asking, the card says it's
+        out of date; ask again. Other changes save to the library when you apply them. Options a
+        constraint points at are never removed this way.
+      </p>
+      <p>
+        Each card lists what it changes and warns about anything it left out (a duplicate option, a
         variable nothing sets). <b>Undo</b> on an applied card puts back what it replaced, or
         deletes what it created. <b>Dismiss</b> tells the assistant you said no. When two cards
         change the same item, the second builds on the first, so apply them in order. The chat
@@ -169,6 +181,16 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         Chat works best with a model that follows instructions well; use one of the builder
         models below. A small model may need a second try or a more specific request.
       </DocCallout>
+    </DocSection>
+
+    <DocSection title="Ask about the docs">
+      <p>
+        The assistant answers questions about Wildcard Pipeline from these docs and says which
+        page it used, with a button to open it. On any docs page, <b>Ask the assistant</b> at the
+        top of the page list opens the chat ready to explain the page in simpler words. Select a
+        part of the page first to ask about just that part. It doesn't guess: if the docs don't
+        cover something, it says so.
+      </p>
     </DocSection>
 
     <DocSection title="Build a whole pack">
@@ -256,8 +278,9 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         each wildcard; constraint rules send the two wildcards' options and tags; Describe sends
         what the item holds and the tags your library uses; Organize sends that for every selected
         item, plus your category names. The chat sends a list of your items (names, types and
-        variables) and the conversation so far, plus whatever items the assistant reads to
-        answer. The pack builder sends your description and, for each item, what the pack has
+        variables) and the conversation so far, plus whatever items and docs pages the
+        assistant reads to answer and a short note of what the page shows (the open editor's
+        item, a list's selection, the Test Runner's last results). The pack builder sends your description and, for each item, what the pack has
         built so far. A follow-up sends the earlier requests
         and answers of that conversation again; nothing is kept on the server between requests.
       </p>

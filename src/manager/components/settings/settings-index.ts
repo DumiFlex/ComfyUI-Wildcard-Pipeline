@@ -64,7 +64,7 @@ const STATIC_ENTRIES: SettingEntry[] = [
   { key: "tr-from", section: "test-runner", label: "First seed", hint: "Where a consecutive range starts.", keywords: "seed fixed start" },
   { key: "tr-count", section: "test-runner", label: "Number of seeds", hint: "How many prompts a run makes.", keywords: "samples count runs" },
 
-  { key: "ai-enabled", section: "ai", label: "Turn on the AI assistant", hint: "Adds an AI button to the wildcard editor, using a model you already have.", keywords: "llm claude openai ollama lm studio llama gpt assistant" },
+  { key: "ai-enabled", section: "ai", label: "Turn on the AI assistant", hint: "Adds the AI tools (editor panels, Describe, Organize, the chat and the Pack builder), using a model you already have.", keywords: "llm claude openai ollama lm studio llama gpt assistant" },
   { key: "ai-provider", section: "ai", label: "Provider", hint: "Who runs the model.", keywords: "claude anthropic openai ollama lm studio llama.cpp local cloud" },
   { key: "ai-address", section: "ai", label: "Server address", hint: "Where the model server answers.", keywords: "url base endpoint host port" },
   { key: "ai-key", section: "ai", label: "API key", hint: "Saved on the ComfyUI machine and never shown again.", keywords: "token secret credential" },

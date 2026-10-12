@@ -47,7 +47,7 @@ export const DOC_PAGES: DocPageMeta[] = [
     keywords: ["test", "scenario", "seed", "baseline", "compare", "inspect", "trace", "preview"],
     ...page(() => import("./pages/overview/test-runner.vue")) },
   { id: "ai-assistant", title: "AI assistant", group: "overview", icon: "pi pi-microchip-ai", tone: "neutral",
-    blurb: "Connect a model you choose (local or your own API key) and draft wildcard options with it.",
+    blurb: "Connect a model you choose (local or your own API key) to draft, organize, chat about your library and build packs.",
     keywords: ["ai", "llm", "model", "ollama", "lm studio", "llama.cpp", "claude", "openai", "draft", "assistant", "uncensored"],
     ...page(() => import("./pages/overview/ai-assistant.vue")) },
   { id: "glossary", title: "Glossary", group: "overview", icon: "pi pi-book", tone: "neutral",

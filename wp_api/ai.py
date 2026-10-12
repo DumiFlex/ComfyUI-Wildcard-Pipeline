@@ -611,7 +611,9 @@ def _tool_results(results: list[str]) -> str:
 
 
 async def post_chat(request: web.Request) -> web.Response:
-    """Body: {messages: [{role: "user"|"assistant", content}], page?: {route, id?}}.
+    """Body: {messages: [{role: "user"|"assistant", content}], page?: {route, id?,
+    doc?, note?, editor?}}. `editor` is the open editor's item as it stands,
+    unsaved changes included; the chat reads and changes that version.
 
     Runs up to `chat.MAX_STEPS` model steps. Read tools run here and their
     results go back to the model; change tools become proposals the manager
@@ -633,10 +635,13 @@ async def post_chat(request: web.Request) -> web.Response:
             ModuleRepository(conn).list(), BundleRepository(conn).list(),
             CategoryRepository(conn).list(),
         )
-    system = ai_chat.SYSTEM_PROMPT + "\n\n" + lib.overview()
+    page = body.get("page") if isinstance(body.get("page"), dict) else None
+    if page:
+        lib.use_editor(page.get("editor"))
+    system = ai_chat.system_prompt() + "\n\n" + lib.overview()
     history = ai_chat.history_pairs(turns)
     user = turns[-1]["content"]
-    note = lib.page_note(body.get("page"))
+    note = lib.page_note(page)
     if note:
         user = f"{user}\n\n{note}"
 
@@ -683,7 +688,7 @@ async def post_chat(request: web.Request) -> web.Response:
             if isinstance(out, str):
                 needs_reply = True
                 results.append(f"{tool} {_json.dumps(args, ensure_ascii=False)[:200]}:\n{out}")
-                steps.append({"tool": tool, "note": ai_chat.args_note(tool, args), "ok": True})
+                steps.append({"tool": tool, "note": ai_chat.args_note(tool, args, lib), "ok": True})
             else:
                 proposals.append(out)
                 results.append(f"{tool}: proposal {out['pid']} shown to the user: {out['title']}")

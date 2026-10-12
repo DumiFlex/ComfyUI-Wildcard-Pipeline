@@ -1057,10 +1057,33 @@ export interface AiChatMessage {
   content: string;
 }
 
+/** The item open in an editor, as it stands (unsaved changes included). */
+export interface AiChatEditorState {
+  id: string;
+  name: string;
+  description: string;
+  tags: string[];
+  category_id: string | null;
+  content_rating: "safe" | "nsfw";
+  /** Absent for editors that only share the item's info. */
+  payload?: Record<string, unknown>;
+  dirty: boolean;
+}
+
+/** Where the user is and what they see, so "this" means what's on screen. */
+export interface AiChatPage {
+  route: string;
+  id?: string;
+  /** Docs page id on a docs page. */
+  doc?: string;
+  /** A short description of what the page shows (filters, selection, results). */
+  note?: string;
+  editor?: AiChatEditorState;
+}
+
 export interface AiChatRequest {
   messages: AiChatMessage[];
-  /** Where the user is, so "this wildcard" means the open one. */
-  page?: { route: string; id?: string };
+  page?: AiChatPage;
 }
 
 export type AiChatOp =
@@ -1068,8 +1091,12 @@ export type AiChatOp =
   | {
       op: "update"; kind: "module" | "bundle"; type: string; id: string; name: string;
       body: ModuleUpdateInput; before: ModuleUpdateInput; new_category?: string;
+      /** "editor": built on the open editor's unsaved version; goes into it. */
+      basis?: "editor";
     }
-  | { op: "open"; kind: "module" | "bundle"; type: string; id: string };
+  | { op: "open"; kind: "module" | "bundle"; type: string; id: string }
+  | { op: "open"; kind: "doc"; type: "doc"; id: string }
+  | { op: "open"; kind: "page"; type: "page"; id: string; section?: string };
 
 /** A change the assistant proposes. Nothing is saved until Apply. */
 export interface AiChatProposal {
