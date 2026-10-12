@@ -26,8 +26,11 @@ the conversation so far, the items and docs pages the assistant reads to
 answer, and a short note of what your page shows (the open editor's item with
 its unsaved changes, a list's filters and selection, the Test Runner's last
 results, the Pack builder's plan).
-The pack builder sends your description and, for each item it builds, what
-the pack has built so far; it doesn't read your library.
+The pack builder sends your description, a sample prompt if you gave one, a
+short summary of your library's conventions (option style, the tags and
+variables you use, standing negatives in your templates, and the names, variables
+and tags of wildcards it could reuse) and, for each item it builds, what the
+pack has built so far.
 A follow-up (Refine) sends that conversation's earlier requests and answers
 again; nothing is stored between requests.
 
