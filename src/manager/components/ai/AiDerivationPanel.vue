@@ -10,9 +10,10 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "../ui/Button.vue";
 import AiPanelFrame from "./AiPanelFrame.vue";
-import { api, ApiError } from "../../api/client";
+import { api } from "../../api/client";
 import type { AiDerivationDraftResult, DerivationRule } from "../../api/types";
 import { ruleLines } from "../../utils/ai-rule-text";
+import { keptNote, useAiConversation } from "../../composables/useAiConversation";
 
 const props = defineProps<{
   name: string;
@@ -27,17 +28,30 @@ const emit = defineEmits<{
   (e: "update:pending", pending: boolean): void;
 }>();
 
-const instruction = ref("");
-const loading = ref(false);
-const error = ref("");
-const result = ref<AiDerivationDraftResult | null>(null);
 const unticked = ref<Set<number>>(new Set());
-let controller: AbortController | null = null;
+
+const convo = useAiConversation<AiDerivationDraftResult, { rules: DerivationRule[] }>({
+  capture: () => ({ rules: props.rules }),
+  send: ({ instruction, history, ctx }, signal) => api.ai.draftDerivation({
+    instruction,
+    history,
+    derivation: {
+      name: props.name, description: props.description ?? "", tags: props.labels ?? [],
+      rules: ctx.rules,
+    },
+  }, signal),
+  note: (res) => keptNote(res.rules.map((r) => r.summary), unticked.value),
+  emptyMessage: (res) => res.rules.length ? "" : res.skipped.length
+    ? "The model's rules couldn't be used. Try asking differently, or a larger model."
+    : "The model didn't write any rules.",
+});
+const { instruction, loading, error, result } = convo;
+watch(result, () => { unticked.value = new Set(); });
 
 const pending = computed(() => loading.value || (result.value?.rules.length ?? 0) > 0);
 watch(pending, (v) => emit("update:pending", v), { immediate: true });
 onBeforeUnmount(() => {
-  controller?.abort();
+  convo.stop();
   emit("update:pending", false);
 });
 
@@ -52,53 +66,14 @@ function toggle(i: number): void {
   unticked.value = next;
 }
 
-async function run(): Promise<void> {
-  controller?.abort();
-  controller = new AbortController();
-  loading.value = true;
-  error.value = "";
-  result.value = null;
-  unticked.value = new Set();
-  try {
-    result.value = await api.ai.draftDerivation({
-      instruction: instruction.value.trim(),
-      derivation: {
-        name: props.name, description: props.description ?? "", tags: props.labels ?? [],
-        rules: props.rules,
-      },
-    }, controller.signal);
-    if (result.value.rules.length === 0) {
-      error.value = result.value.skipped.length
-        ? "The model's rules couldn't be used. Try asking differently, or a larger model."
-        : "The model didn't write any rules.";
-    }
-  } catch (err) {
-    if (err instanceof DOMException && err.name === "AbortError") return;
-    error.value = err instanceof ApiError || err instanceof Error ? err.message : "Something went wrong";
-  } finally {
-    loading.value = false;
-    controller = null;
-  }
-}
-
-function stop(): void {
-  controller?.abort();
-  loading.value = false;
-}
-
 function add(): void {
   if (!ticked.value.length) return;
   emit("add", ticked.value);
-  result.value = null;
-}
-
-function discard(): void {
-  result.value = null;
-  error.value = "";
+  convo.clear();
 }
 
 function close(): void {
-  controller?.abort();
+  convo.stop();
   emit("close");
 }
 </script>
@@ -112,8 +87,15 @@ function close(): void {
     :loading="loading"
     :answered="!!result"
     :error="error"
-    @run="run"
-    @stop="stop"
+    :asked="convo.asked.value"
+    :answer-index="convo.index.value"
+    :answer-count="convo.count.value"
+    @run="convo.ask"
+    @refine="convo.refine"
+    @retry="convo.retry"
+    @restart="convo.restart"
+    @go="convo.go"
+    @stop="convo.stop"
     @close="close"
   >
     <template v-if="result && result.rules.length">
@@ -153,7 +135,7 @@ function close(): void {
         {{ result.rules.length }} rule{{ result.rules.length === 1 ? "" : "s" }} written<template v-if="result.skipped.length"> · skipped {{ result.skipped.length }} that couldn't be used ({{ result.skipped.map((s) => s.reason).join("; ") }})</template>
       </p>
       <div class="wp-ai-rules__actions">
-        <Button variant="ghost" size="sm" data-test="ai-discard" @click="discard">Discard</Button>
+        <Button variant="ghost" size="sm" data-test="ai-discard" @click="convo.clear">Discard</Button>
         <Button
           variant="primary"
           size="sm"

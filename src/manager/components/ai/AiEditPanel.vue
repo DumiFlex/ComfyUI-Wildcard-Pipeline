@@ -10,11 +10,12 @@
  */
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "../ui/Button.vue";
-import { api, ApiError } from "../../api/client";
+import AiPanelFrame from "./AiPanelFrame.vue";
+import { api } from "../../api/client";
 import type {
   AiWildcardEditAction, AiWildcardEditChange, AiWildcardEditResult, WildcardOption,
 } from "../../api/types";
-import { useAiConfig } from "../../composables/useAiConfig";
+import { keptNote, useAiConversation } from "../../composables/useAiConversation";
 
 interface Props {
   action: AiWildcardEditAction;
@@ -50,14 +51,7 @@ const VERB: Record<AiWildcardEditAction, string> = {
   remove: "Find options to remove", rewrite: "Rewrite", retag: "Suggest tags", reweight: "Suggest weights",
 };
 
-const { config } = useAiConfig();
-
-const instruction = ref("");
-const loading = ref(false);
-const error = ref("");
-const result = ref<AiWildcardEditResult | null>(null);
 const unticked = ref<Set<number>>(new Set());
-let controller: AbortController | null = null;
 
 const editable = computed(() => props.options.filter((o) => !o.is_null && (o.value ?? "").trim()));
 const tooMany = computed(() => editable.value.length > MAX_OPTIONS);
@@ -67,16 +61,44 @@ const scopeLabel = computed(() => {
   return props.fromSelection ? `the ${what} you selected` : `all ${what}`;
 });
 
+type Ctx = { action: AiWildcardEditAction; rows: WildcardOption[]; tags: string[] };
+const convo = useAiConversation<AiWildcardEditResult, Ctx>({
+  capture: () => ({ action: props.action, rows: editable.value, tags: props.existingTags }),
+  send: ({ instruction, history, ctx }, signal) => api.ai.editWildcard({
+    action: ctx.action,
+    instruction,
+    history,
+    wildcard: {
+      name: props.name,
+      var_binding: props.varBinding,
+      description: props.description ?? "",
+      tags: props.labels ?? [],
+      payload: {
+        options: ctx.rows.map((o) => ({
+          id: o.id, value: o.value, weight: o.weight ?? 1, sub_categories: o.sub_categories ?? [],
+        })),
+        sub_categories: ctx.tags,
+        ...(props.tagGroups && Object.keys(props.tagGroups).length ? { tag_groups: props.tagGroups } : {}),
+      },
+    },
+  }, signal),
+  note: (res) => keptNote(res.changes.map(changeLabel), unticked.value),
+  emptyMessage: (res) => res.changes.length ? "" : res.skipped.length
+    ? "The model's suggestions couldn't be used. Try asking differently."
+    : "The model didn't find anything to change.",
+});
+const { instruction, loading, error, result } = convo;
+watch(result, () => { unticked.value = new Set(); });
+
 const pending = computed(() => loading.value || (result.value?.changes.length ?? 0) > 0);
 watch(pending, (v) => emit("update:pending", v), { immediate: true });
 onBeforeUnmount(() => {
-  controller?.abort();
+  convo.stop();
   emit("update:pending", false);
 });
 // A different action makes the old answer meaningless.
-watch(() => props.action, () => { discard(); });
+watch(() => props.action, () => { convo.clear(); });
 
-const modelLabel = computed(() => config.value?.model ?? "");
 const newTagSet = computed(() => new Set(result.value?.new_tags ?? []));
 const ticked = computed<AiWildcardEditChange[]>(() =>
   (result.value?.changes ?? []).filter((_, i) => !unticked.value.has(i)),
@@ -89,73 +111,24 @@ function toggle(i: number): void {
   unticked.value = next;
 }
 
-async function run(): Promise<void> {
-  if (!instruction.value.trim() || loading.value || tooMany.value || !editable.value.length) return;
-  controller?.abort();
-  controller = new AbortController();
-  loading.value = true;
-  error.value = "";
-  result.value = null;
-  unticked.value = new Set();
-  try {
-    result.value = await api.ai.editWildcard({
-      action: props.action,
-      instruction: instruction.value.trim(),
-      wildcard: {
-        name: props.name,
-        var_binding: props.varBinding,
-        description: props.description ?? "",
-        tags: props.labels ?? [],
-        payload: {
-          options: editable.value.map((o) => ({
-            id: o.id, value: o.value, weight: o.weight ?? 1, sub_categories: o.sub_categories ?? [],
-          })),
-          sub_categories: props.existingTags,
-          ...(props.tagGroups && Object.keys(props.tagGroups).length ? { tag_groups: props.tagGroups } : {}),
-        },
-      },
-    }, controller.signal);
-    if (result.value.changes.length === 0) {
-      error.value = result.value.skipped.length
-        ? "The model's suggestions couldn't be used. Try asking differently."
-        : "The model didn't find anything to change.";
-    }
-  } catch (err) {
-    if (err instanceof DOMException && err.name === "AbortError") return;
-    error.value = err instanceof ApiError || err instanceof Error ? err.message : "Something went wrong";
-  } finally {
-    loading.value = false;
-    controller = null;
-  }
-}
-
-function stop(): void {
-  controller?.abort();
-  loading.value = false;
+/** One change in words, for the follow-up note. */
+function changeLabel(c: AiWildcardEditChange): string {
+  const v = c.before.value ?? props.options.find((o) => o.id === c.option_id)?.value ?? "?";
+  if (!c.after) return `remove "${v}"`;
+  if (c.after.value !== undefined) return `"${v}" → "${c.after.value}"`;
+  if (c.after.tags) return `"${v}" tags ${c.after.tags.join(", ") || "none"}`;
+  return `"${v}" weight ${c.after.weight ?? 1}`;
 }
 
 function apply(): void {
   if (ticked.value.length === 0) return;
   emit("apply", ticked.value);
-  result.value = null;
-}
-
-function discard(): void {
-  result.value = null;
-  error.value = "";
-  unticked.value = new Set();
+  convo.clear();
 }
 
 function cancel(): void {
-  controller?.abort();
+  convo.stop();
   emit("cancel");
-}
-
-function onKeydown(ev: KeyboardEvent): void {
-  if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
-    ev.preventDefault();
-    void run();
-  }
 }
 
 const applyLabel = computed(() => {
@@ -178,48 +151,38 @@ function fmtWeight(w: number | undefined): string {
 </script>
 
 <template>
-  <div class="wp-ai-edit" data-test="ai-edit-panel">
-
-    <p class="wp-ai-edit__scope" data-test="ai-edit-scope">
-      Works on {{ scopeLabel }}.
-      <template v-if="!fromSelection">Select options first to work on just those.</template>
-    </p>
-    <p v-if="tooMany" class="wp-ai-edit__error" role="alert" data-test="ai-edit-too-many">
-      That's more than {{ MAX_OPTIONS }} options. Select up to {{ MAX_OPTIONS }} and try again.
-    </p>
-
-    <textarea
-      v-model="instruction"
-      class="wp-textarea wp-ai-edit__input"
-      rows="2"
-      :placeholder="PLACEHOLDER[action]"
-      aria-label="What should the AI change?"
-      data-test="ai-edit-instruction"
-      :disabled="loading"
-      @keydown="onKeydown"
-    ></textarea>
-
-    <div class="wp-ai-edit__controls">
-      <span class="wp-ai-edit__hint">You review every change first. Ctrl+Enter asks.</span>
-      <span class="wp-ai-edit__spacer" />
-      <Button variant="ghost" size="sm" data-test="ai-edit-cancel" @click="cancel">Close</Button>
-      <Button v-if="loading" size="sm" icon="pi-stop" data-test="ai-edit-stop" @click="stop">Stop</Button>
-      <Button
-        v-else
-        variant="primary"
-        size="sm"
-        icon="pi-microchip-ai"
-        :disabled="!instruction.trim() || tooMany || !editable.length"
-        data-test="ai-edit-run"
-        @click="run"
-      >{{ result ? "Ask again" : VERB[action] }}</Button>
-    </div>
-
-    <p v-if="loading" class="wp-ai-edit__status" role="status" data-test="ai-edit-loading">
-      <i class="pi pi-spin pi-spinner" aria-hidden="true" /> Asking {{ modelLabel || "the model" }}… local models can take a minute.
-    </p>
-    <p v-if="error" class="wp-ai-edit__error" role="alert" data-test="ai-edit-error">{{ error }}</p>
-
+  <AiPanelFrame
+    v-model="instruction"
+    class="wp-ai-edit"
+    data-test="ai-edit-panel"
+    bare
+    :placeholder="PLACEHOLDER[action]"
+    :verb="VERB[action]"
+    hint="You review every change first."
+    :blocked="tooMany || !editable.length"
+    :loading="loading"
+    :answered="!!result"
+    :error="error"
+    :asked="convo.asked.value"
+    :answer-index="convo.index.value"
+    :answer-count="convo.count.value"
+    @run="convo.ask"
+    @refine="convo.refine"
+    @retry="convo.retry"
+    @restart="convo.restart"
+    @go="convo.go"
+    @stop="convo.stop"
+    @close="cancel"
+  >
+    <template #top>
+      <p class="wp-ai-edit__scope" data-test="ai-edit-scope">
+        Works on {{ scopeLabel }}.
+        <template v-if="!fromSelection">Select options first to work on just those.</template>
+      </p>
+      <p v-if="tooMany" class="wp-ai-edit__error" role="alert" data-test="ai-edit-too-many">
+        That's more than {{ MAX_OPTIONS }} options. Select up to {{ MAX_OPTIONS }} and try again.
+      </p>
+    </template>
     <template v-if="result && result.changes.length">
       <ul class="wp-ai-edit__list" data-test="ai-edit-results">
         <li
@@ -277,7 +240,7 @@ function fmtWeight(w: number | undefined): string {
         <template v-if="result.new_tags.length"> · new tags (dashed) are created when you apply</template>
       </p>
       <div class="wp-ai-edit__actions">
-        <Button variant="ghost" size="sm" data-test="ai-edit-discard" @click="discard">Discard</Button>
+        <Button variant="ghost" size="sm" data-test="ai-edit-discard" @click="convo.clear">Discard</Button>
         <Button
           :variant="action === 'remove' ? 'danger' : 'primary'"
           size="sm"
@@ -289,17 +252,11 @@ function fmtWeight(w: number | undefined): string {
       </div>
       <p class="wp-ai-edit__note">Nothing is saved until you press Save.</p>
     </template>
-  </div>
+  </AiPanelFrame>
 </template>
 
 <style scoped>
-.wp-ai-edit { display: flex; flex-direction: column; gap: 10px; }
 .wp-ai-edit__scope { margin: 0; font-size: 12px; color: var(--wp-text-muted); }
-.wp-ai-edit__input { width: 100%; resize: vertical; overscroll-behavior: contain; font-size: 13px; }
-.wp-ai-edit__controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.wp-ai-edit__hint { font-size: 12px; color: var(--wp-text-dim); }
-.wp-ai-edit__spacer { flex: 1; }
-.wp-ai-edit__status { margin: 0; font-size: 12px; color: var(--wp-text-muted); display: flex; gap: 6px; align-items: center; }
 .wp-ai-edit__error { margin: 0; font-size: 12px; color: var(--wp-danger); }
 .wp-ai-edit__list {
   list-style: none;

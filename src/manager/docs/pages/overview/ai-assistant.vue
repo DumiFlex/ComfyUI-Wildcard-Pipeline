@@ -119,6 +119,29 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       </p>
     </DocSection>
 
+    <DocSection title="Refine an answer">
+      <p>
+        You don't have to start over when an answer is close but not right. Once it shows, the
+        request box takes a follow-up: type what to change ("darker", "shorter names", "keep the
+        first three, drop the rest") and press <b>Refine</b>. The model gets your earlier requests
+        and its own answers, plus which items you unticked, and sends back a revised answer in
+        full. Your requests so far are listed above the box.
+      </p>
+      <ul>
+        <li><b>Try again</b> asks the same thing again for another take.</li>
+        <li>Every answer is kept: the arrows next to <b>Answer 2 of 3</b> flip back to an earlier one,
+          and a refine from there continues from that answer.</li>
+        <li><b>Start over</b> drops the conversation and puts your first request back in the box to
+          edit.</li>
+        <li>Adding or applying ends the conversation; the next request starts fresh and sees what
+          you added.</li>
+      </ul>
+      <p>
+        A follow-up works on the same rows, rules and options the first request saw, even if you
+        edit the list meanwhile, so the model's answers keep pointing at the same things.
+      </p>
+    </DocSection>
+
     <DocSection title="Which model">
       <p>
         Hosted models (Claude, OpenAI) follow instructions best but may refuse explicit content.
@@ -151,7 +174,8 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         wildcard's name, options and tags go to that provider under your account. Writing
         derivation rules also sends the variables your library sets, with the first options of
         each wildcard; constraint rules send the two wildcards' options and tags; Describe sends
-        what the item holds and the tags your library uses.
+        what the item holds and the tags your library uses. A follow-up sends the earlier requests
+        and answers of that conversation again; nothing is kept on the server between requests.
       </p>
       <DocCallout variant="warn">
         ComfyUI has no login, so anyone who can reach its port can use the assistant while it is

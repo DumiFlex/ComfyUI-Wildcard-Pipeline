@@ -34,7 +34,7 @@ describe("AiDescribePanel", () => {
         { tag: "portrait", new: false, has: false },
         { tag: "anime", new: true, has: false },
       ],
-      model: "m",
+      model: "m", answer: {},
     });
     const payload = vi.fn(() => ({ options: [{ value: "mage" }] }));
     const w = mount(AiDescribePanel, { props: {

@@ -5,10 +5,11 @@
  * model reads what the item holds and the library's existing tags; the user
  * ticks what to keep and "Apply" emits it. Nothing is saved until Save.
  */
-import { computed, onBeforeUnmount, ref } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "../ui/Button.vue";
 import AiPanelFrame from "./AiPanelFrame.vue";
-import { api, ApiError } from "../../api/client";
+import { api } from "../../api/client";
+import { useAiConversation } from "../../composables/useAiConversation";
 import type { AiDescribeKind, AiDescribeResult } from "../../api/types";
 
 const props = defineProps<{
@@ -24,14 +25,31 @@ const emit = defineEmits<{
   (e: "close"): void;
 }>();
 
-const hint = ref("");
-const loading = ref(false);
-const error = ref("");
-const result = ref<AiDescribeResult | null>(null);
 const useDescription = ref(true);
 const picked = ref<Set<string>>(new Set());
-let controller: AbortController | null = null;
-onBeforeUnmount(() => controller?.abort());
+
+const convo = useAiConversation<AiDescribeResult, unknown>({
+  capture: () => props.payload(),
+  send: ({ instruction, history, ctx }, signal) => api.ai.describe({
+    kind: props.kind, name: props.name, description: props.description, tags: props.tags,
+    payload: ctx, history, ...(instruction ? { hint: instruction } : {}),
+  }, signal),
+  note: (res) => {
+    const parts: string[] = [];
+    if (res.description && !useDescription.value) parts.push("they didn't take the description");
+    const fresh = res.tags.filter((t) => !t.has).map((t) => t.tag);
+    const off = fresh.filter((t) => !picked.value.has(t));
+    if (off.length) parts.push(`they unticked the tags ${off.join(", ")}`);
+    return parts.join("; ");
+  },
+});
+const { instruction: hint, loading, error, result } = convo;
+watch(result, (r) => {
+  if (!r) return;
+  useDescription.value = !!r.description && r.description !== props.description;
+  picked.value = new Set(r.tags.filter((t) => !t.has).map((t) => t.tag));
+});
+onBeforeUnmount(() => convo.stop());
 
 const freshTags = computed(() => (result.value?.tags ?? []).filter((t) => !t.has));
 const keptTags = computed(() => (result.value?.tags ?? []).filter((t) => t.has));
@@ -46,45 +64,17 @@ function toggle(tag: string): void {
   picked.value = next;
 }
 
-async function run(): Promise<void> {
-  controller?.abort();
-  controller = new AbortController();
-  loading.value = true;
-  error.value = "";
-  result.value = null;
-  try {
-    const r = await api.ai.describe({
-      kind: props.kind, name: props.name, description: props.description, tags: props.tags,
-      payload: props.payload(), ...(hint.value.trim() ? { hint: hint.value.trim() } : {}),
-    }, controller.signal);
-    result.value = r;
-    useDescription.value = !!r.description && r.description !== props.description;
-    picked.value = new Set(r.tags.filter((t) => !t.has).map((t) => t.tag));
-  } catch (err) {
-    if (err instanceof DOMException && err.name === "AbortError") return;
-    error.value = err instanceof ApiError || err instanceof Error ? err.message : "Something went wrong";
-  } finally {
-    loading.value = false;
-    controller = null;
-  }
-}
-
-function stop(): void {
-  controller?.abort();
-  loading.value = false;
-}
-
 function apply(): void {
   if (!result.value || !changeCount.value) return;
   emit("apply", {
     ...(useDescription.value && result.value.description ? { description: result.value.description } : {}),
     addTags: freshTags.value.map((t) => t.tag).filter((t) => picked.value.has(t)),
   });
-  result.value = null;
+  convo.clear();
 }
 
 function close(): void {
-  controller?.abort();
+  convo.stop();
   emit("close");
 }
 </script>
@@ -99,8 +89,15 @@ function close(): void {
     :loading="loading"
     :answered="!!result"
     :error="error"
-    @run="run"
-    @stop="stop"
+    :asked="convo.asked.value"
+    :answer-index="convo.index.value"
+    :answer-count="convo.count.value"
+    @run="convo.ask"
+    @refine="convo.refine"
+    @retry="convo.retry"
+    @restart="convo.restart"
+    @go="convo.go"
+    @stop="convo.stop"
     @close="close"
   >
     <template v-if="result">
@@ -134,7 +131,7 @@ function close(): void {
         >{{ t.tag }}</span>
       </div>
       <div class="wp-ai-desc__actions">
-        <Button variant="ghost" size="sm" data-test="ai-discard" @click="result = null">Discard</Button>
+        <Button variant="ghost" size="sm" data-test="ai-discard" @click="convo.clear">Discard</Button>
         <Button
           variant="primary"
           size="sm"

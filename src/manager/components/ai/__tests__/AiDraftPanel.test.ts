@@ -50,12 +50,12 @@ describe("AiDraftPanel", () => {
         { value: "silver hair", weight: 1, tags: ["cool"], negative: "" },
         { value: "auburn hair", weight: 2, tags: ["warm"], negative: "grey" },
       ],
-      new_tags: ["cool"], skipped: [{ text: "red hair", reason: "duplicate" }], model: "qwen3.5:9b",
+      new_tags: ["cool"], skipped: [{ text: "red hair", reason: "duplicate" }], model: "qwen3.5:9b", answer: {},
     });
     const w = mountPanel();
     await flushPromises();
-    await w.get('[data-test="ai-draft-instruction"]').setValue("more colours");
-    await w.get('[data-test="ai-draft-generate"]').trigger("click");
+    await w.get('[data-test="ai-instruction"]').setValue("more colours");
+    await w.get('[data-test="ai-run"]').trigger("click");
     await flushPromises();
 
     const body = draft.mock.calls[0][0];
@@ -80,11 +80,11 @@ describe("AiDraftPanel", () => {
         { value: "a hair", weight: 1, tags: [], negative: "" },
         { value: "b hair", weight: 1, tags: ["x"], negative: "frizz" },
       ],
-      new_tags: ["x"], skipped: [], model: "m",
+      new_tags: ["x"], skipped: [], model: "m", answer: {},
     });
     const w = mountPanel();
-    await w.get('[data-test="ai-draft-instruction"]').setValue("go");
-    await w.get('[data-test="ai-draft-generate"]').trigger("click");
+    await w.get('[data-test="ai-instruction"]').setValue("go");
+    await w.get('[data-test="ai-run"]').trigger("click");
     await flushPromises();
     await w.findAll(".wp-ai-draft__check")[0].trigger("change");
     expect(w.get('[data-test="ai-draft-add"]').text()).toBe("Add 1 option");
@@ -99,28 +99,28 @@ describe("AiDraftPanel", () => {
     const { ApiError } = await import("../../../api/client");
     draft.mockRejectedValue(new ApiError(403, "the AI assistant is off"));
     const w = mountPanel();
-    await w.get('[data-test="ai-draft-instruction"]').setValue("go");
-    await w.get('[data-test="ai-draft-generate"]').trigger("click");
+    await w.get('[data-test="ai-instruction"]').setValue("go");
+    await w.get('[data-test="ai-run"]').trigger("click");
     await flushPromises();
-    expect(w.get('[data-test="ai-draft-error"]').text()).toContain("the AI assistant is off");
+    expect(w.get('[data-test="ai-error"]').text()).toContain("the AI assistant is off");
   });
 
   it("explains an empty result", async () => {
-    draft.mockResolvedValue({ options: [], new_tags: [], skipped: [{ text: "x", reason: "duplicate" }], model: "m" });
+    draft.mockResolvedValue({ options: [], new_tags: [], skipped: [{ text: "x", reason: "duplicate" }], model: "m", answer: {} });
     const w = mountPanel();
-    await w.get('[data-test="ai-draft-instruction"]').setValue("go");
-    await w.get('[data-test="ai-draft-generate"]').trigger("click");
+    await w.get('[data-test="ai-instruction"]').setValue("go");
+    await w.get('[data-test="ai-run"]').trigger("click");
     await flushPromises();
-    expect(w.get('[data-test="ai-draft-error"]').text()).toContain("already in the list");
+    expect(w.get('[data-test="ai-error"]').text()).toContain("already in the list");
   });
 
   it("clamps the count and needs an instruction", async () => {
-    draft.mockResolvedValue({ options: [], new_tags: [], skipped: [], model: "m" });
+    draft.mockResolvedValue({ options: [], new_tags: [], skipped: [], model: "m", answer: {} });
     const w = mountPanel();
-    expect(w.get('[data-test="ai-draft-generate"]').attributes("disabled")).toBeDefined();
-    await w.get('[data-test="ai-draft-instruction"]').setValue("go");
+    expect(w.get('[data-test="ai-run"]').attributes("disabled")).toBeDefined();
+    await w.get('[data-test="ai-instruction"]').setValue("go");
     await w.get('[data-test="ai-draft-count"] input').setValue("500");
-    await w.get('[data-test="ai-draft-generate"]').trigger("click");
+    await w.get('[data-test="ai-run"]').trigger("click");
     await flushPromises();
     expect(draft.mock.calls[0][0].count).toBe(100);
   });

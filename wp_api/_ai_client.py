@@ -207,12 +207,54 @@ def _parse_text_json(text: Any) -> Any:
     raise AIError("the model's answer wasn't valid JSON. A larger model may do better.")
 
 
+def _anthropic_messages(history: list[tuple[str, Any]], user: str) -> list[dict[str, Any]]:
+    """Earlier answers go back as the tool calls they were, each followed by
+    its tool result, which is how the Messages API expects a forced tool
+    conversation to continue."""
+    messages: list[dict[str, Any]] = []
+    pending: str | None = None
+    for i, (asked, answer) in enumerate(history):
+        content: list[dict[str, Any]] = []
+        if pending:
+            content.append({"type": "tool_result", "tool_use_id": pending, "content": "Shown."})
+        content.append({"type": "text", "text": asked})
+        messages.append({"role": "user", "content": content})
+        pending = f"toolu_wp{i}"
+        messages.append({"role": "assistant", "content": [{
+            "type": "tool_use", "id": pending, "name": _TOOL_NAME, "input": answer,
+        }]})
+    if pending is None:
+        messages.append({"role": "user", "content": user})
+    else:
+        messages.append({"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": pending, "content": "Shown."},
+            {"type": "text", "text": user},
+        ]})
+    return messages
+
+
+def _chat_messages(system: str, history: list[tuple[str, Any]], user: str) -> list[dict[str, Any]]:
+    messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
+    for asked, answer in history:
+        messages.append({"role": "user", "content": asked})
+        messages.append({"role": "assistant", "content": json.dumps(answer, ensure_ascii=False)})
+    messages.append({"role": "user", "content": user})
+    return messages
+
+
 async def complete_json(
     cfg: dict[str, Any], *, system: str, user: str, schema: dict[str, Any],
     schema_name: str, temperature: float = 0.8, max_tokens: int = 8192,
+    history: list[tuple[str, Any]] | None = None,
 ) -> Any:
-    """One request, one JSON object back, shaped by `schema` where supported."""
+    """One request, one JSON object back, shaped by `schema` where supported.
+
+    `history` holds earlier turns of the same conversation, oldest first, as
+    (what was asked, the JSON the model answered). `user` is then the
+    follow-up, and the model sees its own earlier answers.
+    """
     _require_model(cfg)
+    history = history or []
     if _semaphore.locked():
         raise AIError("the assistant is already busy with two requests", status=429)
     async with _semaphore:
@@ -222,7 +264,7 @@ async def complete_json(
                 "max_tokens": max_tokens,
                 "temperature": temperature,
                 "system": system,
-                "messages": [{"role": "user", "content": user}],
+                "messages": _anthropic_messages(history, user),
                 "tools": [{
                     "name": _TOOL_NAME,
                     "description": f"Submit the {schema_name}.",
@@ -245,20 +287,14 @@ async def complete_json(
                 "format": schema,
                 "keep_alive": f"{int(cfg.get('unload_after_s', 60))}s",
                 "options": {"temperature": temperature},
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
+                "messages": _chat_messages(system, history, user),
             })
             msg = data.get("message") if isinstance(data, dict) else None
             return _parse_text_json(msg.get("content") if isinstance(msg, dict) else None)
 
         body: dict[str, Any] = {
             "model": cfg["model"],
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
+            "messages": _chat_messages(system, history, user),
             "response_format": {
                 "type": "json_schema",
                 "json_schema": {"name": schema_name, "schema": schema, "strict": True},

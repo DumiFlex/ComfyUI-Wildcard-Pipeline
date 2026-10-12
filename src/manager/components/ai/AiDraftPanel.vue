@@ -15,10 +15,11 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "../ui/Button.vue";
 import Input from "../ui/Input.vue";
-import { api, ApiError } from "../../api/client";
+import AiPanelFrame from "./AiPanelFrame.vue";
+import { api } from "../../api/client";
 import type { AiDraftOption, AiWildcardDraftResult } from "../../api/types";
 import type { ParsedBulkOption } from "../../utils/bulkParse";
-import { useAiConfig } from "../../composables/useAiConfig";
+import { keptNote, useAiConversation } from "../../composables/useAiConversation";
 
 interface Props {
   name: string;
@@ -40,25 +41,51 @@ const emit = defineEmits<{
   (e: "update:pending", pending: boolean): void;
 }>();
 
-const { config } = useAiConfig();
-
-const instruction = ref("");
 const count = ref<number>(10);
-const loading = ref(false);
-const error = ref("");
-const result = ref<AiWildcardDraftResult | null>(null);
 /** Indices of result rows the user unticked. */
 const unticked = ref<Set<number>>(new Set());
-let controller: AbortController | null = null;
+
+type Ctx = { values: string[]; tags: string[]; tagGroups?: Record<string, string[]> };
+const convo = useAiConversation<AiWildcardDraftResult, Ctx>({
+  capture: () => ({
+    values: props.existingValues.filter((v) => v.trim()),
+    tags: props.existingTags,
+    tagGroups: props.tagGroups,
+  }),
+  send: ({ instruction, history, ctx }, signal) => {
+    const n = Math.min(100, Math.max(1, Math.round(Number(count.value) || 10)));
+    count.value = n;
+    return api.ai.draftWildcard({
+      instruction,
+      history,
+      count: n,
+      wildcard: {
+        name: props.name,
+        var_binding: props.varBinding,
+        description: props.description ?? "",
+        tags: props.labels ?? [],
+        payload: {
+          options: ctx.values.map((value) => ({ value })),
+          sub_categories: ctx.tags,
+          ...(ctx.tagGroups && Object.keys(ctx.tagGroups).length ? { tag_groups: ctx.tagGroups } : {}),
+        },
+      },
+    }, signal);
+  },
+  note: (res) => keptNote(res.options.map((o) => o.value), unticked.value),
+  emptyMessage: (res) => res.options.length ? "" : res.skipped.length
+    ? "Everything the model suggested was already in the list or unusable. Try asking differently."
+    : "The model didn't suggest anything. Try again or reword the request.",
+});
+const { instruction, loading, error, result } = convo;
+watch(result, () => { unticked.value = new Set(); });
 
 const pending = computed(() => loading.value || (result.value?.options.length ?? 0) > 0);
 watch(pending, (v) => emit("update:pending", v), { immediate: true });
 onBeforeUnmount(() => {
-  controller?.abort();
+  convo.stop();
   emit("update:pending", false);
 });
-
-const modelLabel = computed(() => config.value?.model ?? "");
 
 const newTagSet = computed(() => new Set(result.value?.new_tags ?? []));
 const ticked = computed<AiDraftOption[]>(() =>
@@ -72,51 +99,6 @@ function toggle(i: number): void {
   unticked.value = next;
 }
 
-async function generate(): Promise<void> {
-  if (!instruction.value.trim() || loading.value) return;
-  controller?.abort();
-  controller = new AbortController();
-  loading.value = true;
-  error.value = "";
-  result.value = null;
-  unticked.value = new Set();
-  const n = Math.min(100, Math.max(1, Math.round(Number(count.value) || 10)));
-  count.value = n;
-  try {
-    result.value = await api.ai.draftWildcard({
-      instruction: instruction.value.trim(),
-      count: n,
-      wildcard: {
-        name: props.name,
-        var_binding: props.varBinding,
-        description: props.description ?? "",
-        tags: props.labels ?? [],
-        payload: {
-          options: props.existingValues.filter((v) => v.trim()).map((value) => ({ value })),
-          sub_categories: props.existingTags,
-          ...(props.tagGroups && Object.keys(props.tagGroups).length ? { tag_groups: props.tagGroups } : {}),
-        },
-      },
-    }, controller.signal);
-    if (result.value.options.length === 0) {
-      error.value = result.value.skipped.length
-        ? "Everything the model suggested was already in the list or unusable. Try asking differently."
-        : "The model didn't suggest anything. Try again or reword the request.";
-    }
-  } catch (err) {
-    if (err instanceof DOMException && err.name === "AbortError") return;
-    error.value = err instanceof ApiError || err instanceof Error ? err.message : "Something went wrong";
-  } finally {
-    loading.value = false;
-    controller = null;
-  }
-}
-
-function stop(): void {
-  controller?.abort();
-  loading.value = false;
-}
-
 function commit(): void {
   if (ticked.value.length === 0) return;
   emit("commit-options", ticked.value.map((o) => ({
@@ -125,25 +107,12 @@ function commit(): void {
     tags: o.tags,
     ...(o.negative ? { negative: o.negative } : {}),
   })));
-  result.value = null;
-  instruction.value = "";
-}
-
-function discard(): void {
-  result.value = null;
-  error.value = "";
+  convo.clear();
 }
 
 function cancel(): void {
-  controller?.abort();
+  convo.stop();
   emit("cancel");
-}
-
-function onKeydown(ev: KeyboardEvent): void {
-  if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
-    ev.preventDefault();
-    void generate();
-  }
 }
 
 const skippedSummary = computed(() => {
@@ -156,20 +125,29 @@ const skippedSummary = computed(() => {
 </script>
 
 <template>
-  <div class="wp-ai-draft" data-test="ai-draft-panel">
-
-    <textarea
-      v-model="instruction"
-      class="wp-textarea wp-ai-draft__input"
-      rows="3"
-      placeholder="e.g. more everyday outfits, spread across the four seasons, same comma style as the existing ones"
-      aria-label="What should the AI add?"
-      data-test="ai-draft-instruction"
-      :disabled="loading"
-      @keydown="onKeydown"
-    ></textarea>
-
-    <div class="wp-ai-draft__controls">
+  <AiPanelFrame
+    v-model="instruction"
+    class="wp-ai-draft"
+    data-test="ai-draft-panel"
+    bare
+    placeholder="e.g. more everyday outfits, spread across the four seasons, same comma style as the existing ones"
+    verb="Draft"
+    hint="Uses your existing options and tags as examples."
+    :loading="loading"
+    :answered="!!result"
+    :error="error"
+    :asked="convo.asked.value"
+    :answer-index="convo.index.value"
+    :answer-count="convo.count.value"
+    @run="convo.ask"
+    @refine="convo.refine"
+    @retry="convo.retry"
+    @restart="convo.restart"
+    @go="convo.go"
+    @stop="convo.stop"
+    @close="cancel"
+  >
+    <template #controls>
       <label class="wp-ai-draft__count" for="wp-ai-draft-count">
         How many
         <Input
@@ -184,26 +162,7 @@ const skippedSummary = computed(() => {
           data-test="ai-draft-count"
         />
       </label>
-      <span class="wp-ai-draft__hint">Uses your existing options and tags as examples. Ctrl+Enter drafts.</span>
-      <span class="wp-ai-draft__spacer" />
-      <Button variant="ghost" size="sm" data-test="ai-draft-cancel" @click="cancel">Close</Button>
-      <Button v-if="loading" size="sm" icon="pi-stop" data-test="ai-draft-stop" @click="stop">Stop</Button>
-      <Button
-        v-else
-        variant="primary"
-        size="sm"
-        icon="pi-microchip-ai"
-        :disabled="!instruction.trim()"
-        data-test="ai-draft-generate"
-        @click="generate"
-      >{{ result ? "Draft again" : "Draft" }}</Button>
-    </div>
-
-    <p v-if="loading" class="wp-ai-draft__status" role="status" data-test="ai-draft-loading">
-      <i class="pi pi-spin pi-spinner" aria-hidden="true" /> Asking {{ modelLabel || "the model" }}… local models can take a minute.
-    </p>
-    <p v-if="error" class="wp-ai-draft__error" role="alert" data-test="ai-draft-error">{{ error }}</p>
-
+    </template>
     <template v-if="result && result.options.length">
       <ul class="wp-ai-draft__list" data-test="ai-draft-results">
         <li v-for="(o, i) in result.options" :key="i" class="wp-ai-draft__row" :data-off="unticked.has(i) ? 'true' : 'false'">
@@ -233,7 +192,7 @@ const skippedSummary = computed(() => {
         <template v-if="result.new_tags.length"> · new tags (dashed) are created when you add</template>
       </p>
       <div class="wp-ai-draft__actions">
-        <Button variant="ghost" size="sm" data-test="ai-draft-discard" @click="discard">Discard</Button>
+        <Button variant="ghost" size="sm" data-test="ai-draft-discard" @click="convo.clear">Discard</Button>
         <Button
           variant="primary"
           size="sm"
@@ -245,19 +204,12 @@ const skippedSummary = computed(() => {
       </div>
       <p class="wp-ai-draft__note">Nothing is saved until you press Save.</p>
     </template>
-  </div>
+  </AiPanelFrame>
 </template>
 
 <style scoped>
-.wp-ai-draft { display: flex; flex-direction: column; gap: 10px; }
-.wp-ai-draft__input { width: 100%; resize: vertical; overscroll-behavior: contain; font-size: 13px; }
-.wp-ai-draft__controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .wp-ai-draft__count { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--wp-text-muted); white-space: nowrap; }
 .wp-ai-draft__count :deep(.wp-input-group) { width: 96px; flex: 0 0 auto; }
-.wp-ai-draft__hint { font-size: 12px; color: var(--wp-text-dim); }
-.wp-ai-draft__spacer { flex: 1; }
-.wp-ai-draft__status { margin: 0; font-size: 12px; color: var(--wp-text-muted); display: flex; gap: 6px; align-items: center; }
-.wp-ai-draft__error { margin: 0; font-size: 12px; color: var(--wp-danger); }
 .wp-ai-draft__list {
   list-style: none;
   margin: 0;

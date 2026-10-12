@@ -13,6 +13,10 @@
     POST /wp/api/ai/describe        a description + library tags for a
                                     module, bundle or template
 
+Every drafting route also takes `history` (earlier turns of the same
+conversation, see `engine/ai/followup.py`) and returns the model's raw
+`answer`, so the editor can send a follow-up that refines the last answer.
+
 Off by default: every route except the config pair answers 403 until the user
 turns the assistant on. Nothing here writes to the library. Drafts come back
 to the editor, which inserts them like any pasted option and saves only when
@@ -30,6 +34,7 @@ from engine.ai import config as ai_config
 from engine.ai import constraint as ai_constraint
 from engine.ai import derivation as ai_derivation
 from engine.ai import describe as ai_describe
+from engine.ai import followup as ai_followup
 from engine.ai import library_vars
 from engine.ai import wildcard as ai_wildcard
 from engine.ai import wildcard_edit as ai_edit
@@ -102,6 +107,22 @@ async def post_test(request: web.Request) -> web.Response:
     return json_ok(await _ai_client.probe(cfg))
 
 
+def _turns(body: dict[str, Any]) -> list[dict[str, Any]] | web.Response:
+    try:
+        return ai_followup.parse_history(body.get("history"))
+    except ai_followup.HistoryError as e:
+        return json_error(str(e), status=400)
+
+
+async def _ask(
+    cfg: dict[str, Any], *, first: str, turns: list[dict[str, Any]], instruction: str,
+    **kwargs: Any,
+) -> Any:
+    """`complete_json` with the conversation so far, when there is one."""
+    history, user = ai_followup.conversation(first, turns, instruction)
+    return await _ai_client.complete_json(cfg, user=user, history=history, **kwargs)
+
+
 def _str_list(value: Any, *, limit: int) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -130,6 +151,9 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
     if isinstance(count, bool) or not isinstance(count, int):
         return json_error("count must be a whole number", status=400)
     count = max(1, min(ai_wildcard.MAX_COUNT, count))
+    turns = _turns(body)
+    if isinstance(turns, web.Response):
+        return turns
 
     wc = body.get("wildcard") if isinstance(body.get("wildcard"), dict) else {}
     payload = wc.get("payload") if isinstance(wc.get("payload"), dict) else {}
@@ -147,15 +171,17 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
     var = wc.get("var_binding") if isinstance(wc.get("var_binding"), str) else ""
 
     description, labels = ai_about.clean(wc.get("description"), wc.get("tags"))
-    user = ai_wildcard.build_user_prompt(
-        instruction=instruction, count=count, name=name[:200], var_binding=var[:100],
+    first = ai_wildcard.build_user_prompt(
+        instruction=ai_followup.first_instruction(turns, instruction), count=count,
+        name=name[:200], var_binding=var[:100],
         existing_options=existing_texts, tags=tags, axes=axes,
         description=description, labels=labels,
     )
     try:
-        answer = await _ai_client.complete_json(
-            cfg, system=ai_wildcard.SYSTEM_PROMPT, user=user,
-            schema=ai_wildcard.OPTIONS_SCHEMA, schema_name="wildcard_options",
+        answer = await _ask(
+            cfg, first=first, turns=turns, instruction=instruction,
+            system=ai_wildcard.SYSTEM_PROMPT, schema=ai_wildcard.OPTIONS_SCHEMA,
+            schema_name="wildcard_options",
         )
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
@@ -175,6 +201,7 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
             status=502,
         )
     result["model"] = cfg["model"]
+    result["answer"] = answer
     return json_ok(result)
 
 
@@ -200,6 +227,9 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
         return json_error("say what to change", status=400)
     if len(instruction) > ai_wildcard.MAX_INSTRUCTION_LEN:
         return json_error("that request is too long", status=400)
+    turns = _turns(body)
+    if isinstance(turns, web.Response):
+        return turns
 
     wc = body.get("wildcard") if isinstance(body.get("wildcard"), dict) else {}
     payload = wc.get("payload") if isinstance(wc.get("payload"), dict) else {}
@@ -238,13 +268,15 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
     var = wc.get("var_binding") if isinstance(wc.get("var_binding"), str) else ""
 
     description, labels = ai_about.clean(wc.get("description"), wc.get("tags"))
-    user = ai_edit.build_edit_prompt(
-        action=action, instruction=instruction, name=name[:200], var_binding=var[:100],
+    first = ai_edit.build_edit_prompt(
+        action=action, instruction=ai_followup.first_instruction(turns, instruction),
+        name=name[:200], var_binding=var[:100],
         options=rows, tags=tags, axes=axes, description=description, labels=labels,
     )
     try:
-        answer = await _ai_client.complete_json(
-            cfg, system=ai_edit.system_prompt(action), user=user,
+        answer = await _ask(
+            cfg, first=first, turns=turns, instruction=instruction,
+            system=ai_edit.system_prompt(action),
             schema=ai_edit.SCHEMAS[action], schema_name=f"wildcard_{action}",
             # Edits should be faithful to the request, not creative.
             temperature=0.3,
@@ -262,6 +294,7 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
         c["option_id"] = real_ids[c.pop("id")]
     result["action"] = action
     result["model"] = cfg["model"]
+    result["answer"] = answer
     return json_ok(result)
 
 
@@ -290,6 +323,9 @@ async def post_derivation_draft(request: web.Request) -> web.Response:
     instruction = _instruction(body, "say what the rules should do")
     if isinstance(instruction, web.Response):
         return instruction
+    turns = _turns(body)
+    if isinstance(turns, web.Response):
+        return turns
     drv = body.get("derivation") if isinstance(body.get("derivation"), dict) else {}
     rules = [r for r in drv.get("rules") or [] if isinstance(r, dict)][:200]
     name = drv.get("name") if isinstance(drv.get("name"), str) else ""
@@ -302,14 +338,16 @@ async def post_derivation_draft(request: web.Request) -> web.Response:
         for n in library_vars.var_names_in(line)
     ]
     description, labels = ai_about.clean(drv.get("description"), drv.get("tags"))
-    user = ai_derivation.build_prompt(
-        instruction=instruction, name=name[:200], description=description, labels=labels,
+    first = ai_derivation.build_prompt(
+        instruction=ai_followup.first_instruction(turns, instruction), name=name[:200],
+        description=description, labels=labels,
         catalog_text=library_vars.describe(catalog, focus=focus),
         existing_rules=[ai_derivation.describe_rule(r) for r in rules],
     )
     try:
-        answer = await _ai_client.complete_json(
-            cfg, system=ai_derivation.SYSTEM_PROMPT, user=user,
+        answer = await _ask(
+            cfg, first=first, turns=turns, instruction=instruction,
+            system=ai_derivation.SYSTEM_PROMPT,
             schema=ai_derivation.SCHEMA, schema_name="derivation_rules", temperature=0.3,
         )
     except _ai_client.AIError as e:
@@ -325,6 +363,7 @@ async def post_derivation_draft(request: web.Request) -> web.Response:
             status=502,
         )
     result["model"] = cfg["model"]
+    result["answer"] = answer
     return json_ok(result)
 
 
@@ -345,6 +384,9 @@ async def post_constraint_draft(request: web.Request) -> web.Response:
     instruction = _instruction(body, "say what the rules should do")
     if isinstance(instruction, web.Response):
         return instruction
+    turns = _turns(body)
+    if isinstance(turns, web.Response):
+        return turns
     cons = body.get("constraint") if isinstance(body.get("constraint"), dict) else {}
     src_id, tgt_id = cons.get("source_wildcard_id"), cons.get("target_wildcard_id")
     if not isinstance(src_id, str) or not isinstance(tgt_id, str) or not src_id or not tgt_id:
@@ -367,14 +409,15 @@ async def post_constraint_draft(request: web.Request) -> web.Response:
     }
     description, labels = ai_about.clean(cons.get("description"), cons.get("tags"))
     cname = cons.get("name") if isinstance(cons.get("name"), str) else ""
-    user = ai_constraint.build_prompt(
-        instruction=instruction, source=source, target=target,
+    first = ai_constraint.build_prompt(
+        instruction=ai_followup.first_instruction(turns, instruction), source=source, target=target,
         name=cname[:200], description=description, labels=labels,
         existing=ai_constraint.describe_existing(existing),
     )
     try:
-        answer = await _ai_client.complete_json(
-            cfg, system=ai_constraint.SYSTEM_PROMPT, user=user,
+        answer = await _ask(
+            cfg, first=first, turns=turns, instruction=instruction,
+            system=ai_constraint.SYSTEM_PROMPT,
             schema=ai_constraint.SCHEMA, schema_name="constraint_rules", temperature=0.3,
         )
     except _ai_client.AIError as e:
@@ -389,6 +432,7 @@ async def post_constraint_draft(request: web.Request) -> web.Response:
             status=502,
         )
     result["model"] = cfg["model"]
+    result["answer"] = answer
     return json_ok(result)
 
 
@@ -413,20 +457,24 @@ async def post_describe(request: web.Request) -> web.Response:
     hint = body.get("hint") if isinstance(body.get("hint"), str) else ""
     if len(hint) > ai_wildcard.MAX_INSTRUCTION_LEN:
         return json_error("that request is too long", status=400)
+    turns = _turns(body)
+    if isinstance(turns, web.Response):
+        return turns
 
     with db_session(request) as conn:
         modules = ModuleRepository(conn).list()
         bundles = BundleRepository(conn).list()
     names = {m["id"]: m.get("name") or "" for m in modules if isinstance(m.get("id"), str)}
     library = ai_describe.library_tags([*modules, *bundles])
-    user = ai_describe.build_prompt(
+    first = ai_describe.build_prompt(
         kind=kind, name=name[:200], description=description, tags=tags,
         summary=ai_describe.summarize(kind, body.get("payload"), names=names),
-        library=library, hint=hint,
+        library=library, hint=ai_followup.first_instruction(turns, hint),
     )
     try:
-        answer = await _ai_client.complete_json(
-            cfg, system=ai_describe.SYSTEM_PROMPT, user=user,
+        answer = await _ask(
+            cfg, first=first, turns=turns, instruction=hint,
+            system=ai_describe.SYSTEM_PROMPT,
             schema=ai_describe.SCHEMA, schema_name="describe", temperature=0.4,
         )
     except _ai_client.AIError as e:
@@ -439,6 +487,7 @@ async def post_describe(request: web.Request) -> web.Response:
             status=502,
         )
     result["model"] = cfg["model"]
+    result["answer"] = answer
     return json_ok(result)
 
 

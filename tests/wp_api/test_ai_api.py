@@ -385,3 +385,87 @@ async def test_describe_reuses_library_tags(wp_client, fake_llm):
     assert "Library tags: portrait" in prompt and "- mage" in prompt
     assert "Request: for anime portraits" in prompt
     assert (await wp_client.post(url, json={"kind": "nope"})).status == 400
+
+
+def _followup_body():
+    body = _draft_body()
+    body["instruction"] = "darker ones"
+    body["history"] = [{
+        "instruction": "more hair colours",
+        "answer": {"options": [{"text": "pink hair", "weight": 1, "tags": [], "negative": ""}]},
+        "note": "kept 0 of 1",
+    }]
+    return body
+
+
+async def test_followup_replays_the_conversation_openai(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    resp = await wp_client.post("/wp/api/ai/wildcard/draft", json=_followup_body())
+    assert resp.status == 200, await resp.text()
+    body = await resp.json()
+    assert body["answer"] == ANSWER
+    msgs = fake_llm.seen[-1]["body"]["messages"]
+    assert [m["role"] for m in msgs] == ["system", "user", "assistant", "user"]
+    # The first prompt is rebuilt from the FIRST request, with the editor's context.
+    assert "more hair colours" in msgs[1]["content"] and "red hair" in msgs[1]["content"]
+    assert "darker ones" not in msgs[1]["content"]
+    assert json.loads(msgs[2]["content"])["options"][0]["text"] == "pink hair"
+    assert "darker ones" in msgs[3]["content"] and "kept 0 of 1" in msgs[3]["content"]
+
+
+async def test_followup_replays_the_conversation_ollama(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "ollama",
+                      "base_url": str(fake_llm.make_url("")), "model": "qwen:9b"})
+    resp = await wp_client.post("/wp/api/ai/wildcard/draft", json=_followup_body())
+    assert resp.status == 200, await resp.text()
+    msgs = fake_llm.seen[-1]["body"]["messages"]
+    assert [m["role"] for m in msgs] == ["system", "user", "assistant", "user"]
+
+
+async def test_followup_anthropic_uses_tool_turns(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "anthropic", "api_key": "sk-ant",
+                      "base_url": str(fake_llm.make_url("/anthropic")), "model": "claude-x"})
+    resp = await wp_client.post("/wp/api/ai/wildcard/draft", json=_followup_body())
+    assert resp.status == 200, await resp.text()
+    msgs = fake_llm.seen[-1]["body"]["messages"]
+    assert [m["role"] for m in msgs] == ["user", "assistant", "user"]
+    use = msgs[1]["content"][0]
+    assert use["type"] == "tool_use" and use["name"] == "submit"
+    assert use["input"]["options"][0]["text"] == "pink hair"
+    result, text = msgs[2]["content"]
+    assert result == {"type": "tool_result", "tool_use_id": use["id"], "content": "Shown."}
+    assert "darker ones" in text["text"]
+
+
+async def test_followup_history_is_validated(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    url = "/wp/api/ai/derivation/draft"
+    base = {"instruction": "x", "derivation": {"rules": []}}
+    for history in ("nope", [{"instruction": "a"}], [{"instruction": "a", "answer": {}}] * 9):
+        resp = await wp_client.post(url, json={**base, "history": history})
+        assert resp.status == 400, history
+
+
+async def test_every_drafting_route_returns_its_raw_answer(wp_client, fake_llm):
+    src, tgt = await _two_wildcards(wp_client)
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    history = [{"instruction": "first", "answer": {"rules": []}, "note": ""}]
+    resp = await wp_client.post("/wp/api/ai/constraint/draft", json={
+        "instruction": "also boost staffs", "history": history,
+        "constraint": {"source_wildcard_id": src, "target_wildcard_id": tgt},
+    })
+    assert resp.status == 200, await resp.text()
+    assert (await resp.json())["answer"] == EDIT_ANSWERS["constraint_rules"]
+    msgs = fake_llm.seen[-1]["body"]["messages"]
+    assert "first" in msgs[1]["content"] and "also boost staffs" in msgs[3]["content"]
+    resp = await wp_client.post("/wp/api/ai/describe", json={
+        "kind": "wildcard", "payload": {}, "hint": "shorter",
+        "history": [{"instruction": "", "answer": {"description": "x", "tags": []}}],
+    })
+    assert resp.status == 200, await resp.text()
+    assert (await resp.json())["answer"] == EDIT_ANSWERS["describe"]
+    resp = await wp_client.post("/wp/api/ai/wildcard/edit", json=_edit_body("remove"))
+    assert (await resp.json())["answer"] == EDIT_ANSWERS["wildcard_remove"]

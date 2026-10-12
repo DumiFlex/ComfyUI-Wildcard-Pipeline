@@ -52,13 +52,13 @@ describe("AiEditPanel", () => {
 
   it("sends real ids without the null option and lists removals", async () => {
     edit.mockResolvedValue({
-      action: "remove", model: "qwen3.5:9b", new_tags: [], skipped: [],
+      action: "remove", model: "qwen3.5:9b", answer: {}, new_tags: [], skipped: [],
       changes: [{ option_id: "aaaa0002", before: { value: "hoodie, jeans" }, after: null, reason: "modern" }],
     });
     const w = mountEdit("remove");
     expect(w.get('[data-test="ai-edit-scope"]').text()).toContain("all 2 options");
-    await w.get('[data-test="ai-edit-instruction"]').setValue("drop anything modern");
-    await w.get('[data-test="ai-edit-run"]').trigger("click");
+    await w.get('[data-test="ai-instruction"]').setValue("drop anything modern");
+    await w.get('[data-test="ai-run"]').trigger("click");
     await flushPromises();
     const sent = edit.mock.calls[0][0];
     expect(sent.action).toBe("remove");
@@ -73,15 +73,15 @@ describe("AiEditPanel", () => {
 
   it("applies only the ticked changes", async () => {
     edit.mockResolvedValue({
-      action: "reweight", model: "m", new_tags: [], skipped: [],
+      action: "reweight", model: "m", answer: {}, new_tags: [], skipped: [],
       changes: [
         { option_id: "aaaa0001", before: { weight: 1 }, after: { weight: 0.5 } },
         { option_id: "aaaa0002", before: { weight: 1 }, after: { weight: 2 } },
       ],
     });
     const w = mountEdit("reweight");
-    await w.get('[data-test="ai-edit-instruction"]').setValue("cloaks rarer");
-    await w.get('[data-test="ai-edit-run"]').trigger("click");
+    await w.get('[data-test="ai-instruction"]').setValue("cloaks rarer");
+    await w.get('[data-test="ai-run"]').trigger("click");
     await flushPromises();
     expect(w.text()).toContain("×0.5");
     await w.findAll('[data-test="ai-edit-results"] input[type="checkbox"]')[1].setValue(false);
@@ -96,16 +96,16 @@ describe("AiEditPanel", () => {
     }));
     const w = mountEdit("rewrite", { options: many });
     expect(w.find('[data-test="ai-edit-too-many"]').exists()).toBe(true);
-    expect(w.get('[data-test="ai-edit-run"]').attributes("disabled")).toBeDefined();
+    expect(w.get('[data-test="ai-run"]').attributes("disabled")).toBeDefined();
   });
 
   it("shows a clear message when nothing needs changing", async () => {
-    edit.mockResolvedValue({ action: "retag", model: "m", new_tags: [], skipped: [], changes: [] });
+    edit.mockResolvedValue({ action: "retag", model: "m", answer: {}, new_tags: [], skipped: [], changes: [] });
     const w = mountEdit("retag");
-    await w.get('[data-test="ai-edit-instruction"]').setValue("tag by season");
-    await w.get('[data-test="ai-edit-run"]').trigger("click");
+    await w.get('[data-test="ai-instruction"]').setValue("tag by season");
+    await w.get('[data-test="ai-run"]').trigger("click");
     await flushPromises();
-    expect(w.get('[data-test="ai-edit-error"]').text()).toContain("didn't find anything");
+    expect(w.get('[data-test="ai-error"]').text()).toContain("didn't find anything");
   });
 });
 
@@ -130,11 +130,11 @@ describe("AiWildcardPanel", () => {
     expect(w.get('[data-test="ai-edit-panel"]').isVisible()).toBe(true);
     expect(w.get('[data-test="ai-edit-scope"]').text()).toContain("the 1 option you selected");
     edit.mockResolvedValue({
-      action: "retag", model: "m", new_tags: ["street"], skipped: [],
+      action: "retag", model: "m", answer: {}, new_tags: ["street"], skipped: [],
       changes: [{ option_id: "aaaa0002", before: { tags: [] }, after: { tags: ["street"] } }],
     });
-    await w.get('[data-test="ai-edit-instruction"]').setValue("tag it");
-    await w.get('[data-test="ai-edit-run"]').trigger("click");
+    await w.get('[data-test="ai-edit-panel"] [data-test="ai-instruction"]').setValue("tag it");
+    await w.get('[data-test="ai-edit-panel"] [data-test="ai-run"]').trigger("click");
     await flushPromises();
     expect(edit.mock.calls[0][0].action).toBe("retag");
     await w.get('[data-test="ai-edit-apply"]').trigger("click");

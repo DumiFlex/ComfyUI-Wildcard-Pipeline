@@ -845,6 +845,22 @@ export interface AiTestResult {
   error: string | null;
 }
 
+/** One earlier turn of an AI conversation, sent back with a follow-up so the
+ *  model refines its last answer instead of starting over. */
+export interface AiTurn {
+  instruction: string;
+  /** The model's raw answer for that turn (each result's `answer`). */
+  answer: Record<string, unknown>;
+  /** What the user did with it, e.g. which items they kept. */
+  note?: string;
+}
+
+/** Fields every AI drafting request and result share. */
+export interface AiConversational {
+  /** Earlier turns, oldest first; `instruction` is then the follow-up. */
+  history?: AiTurn[];
+}
+
 export interface AiDraftOption {
   value: string;
   weight: number;
@@ -852,7 +868,7 @@ export interface AiDraftOption {
   negative: string;
 }
 
-export interface AiWildcardDraftRequest {
+export interface AiWildcardDraftRequest extends AiConversational {
   instruction: string;
   count: number;
   wildcard: {
@@ -875,11 +891,13 @@ export interface AiWildcardDraftResult {
   new_tags: string[];
   skipped: Array<{ text: string; reason: string }>;
   model: string;
+  /** The model's raw answer, for a follow-up's `history`. */
+  answer: Record<string, unknown>;
 }
 
 export type AiWildcardEditAction = "remove" | "rewrite" | "retag" | "reweight";
 
-export interface AiWildcardEditRequest {
+export interface AiWildcardEditRequest extends AiConversational {
   action: AiWildcardEditAction;
   instruction: string;
   wildcard: {
@@ -911,9 +929,11 @@ export interface AiWildcardEditResult {
   new_tags: string[];
   skipped: Array<{ text: string; reason: string }>;
   model: string;
+  /** The model's raw answer, for a follow-up's `history`. */
+  answer: Record<string, unknown>;
 }
 
-export interface AiDerivationDraftRequest {
+export interface AiDerivationDraftRequest extends AiConversational {
   instruction: string;
   derivation: { name: string; description?: string; tags?: string[]; rules: DerivationRule[] };
 }
@@ -930,9 +950,11 @@ export interface AiDerivationDraftResult {
   rules: AiDerivationDraftRule[];
   skipped: Array<{ text: string; reason: string }>;
   model: string;
+  /** The model's raw answer, for a follow-up's `history`. */
+  answer: Record<string, unknown>;
 }
 
-export interface AiConstraintDraftRequest {
+export interface AiConstraintDraftRequest extends AiConversational {
   instruction: string;
   constraint: {
     name?: string;
@@ -968,12 +990,14 @@ export interface AiConstraintDraftResult {
   exceptions: AiConstraintExceptionDraft[];
   skipped: Array<{ text: string; reason: string }>;
   model: string;
+  /** The model's raw answer, for a follow-up's `history`. */
+  answer: Record<string, unknown>;
 }
 
 export type AiDescribeKind =
   | "wildcard" | "fixed_values" | "combine" | "derivation" | "constraint" | "bundle" | "template";
 
-export interface AiDescribeRequest {
+export interface AiDescribeRequest extends AiConversational {
   kind: AiDescribeKind;
   name: string;
   description: string;
@@ -989,6 +1013,8 @@ export interface AiDescribeResult {
   /** `new`: nothing in the library uses it yet. `has`: the item already has it. */
   tags: Array<{ tag: string; new: boolean; has: boolean }>;
   model: string;
+  /** The model's raw answer, for a follow-up's `history`. */
+  answer: Record<string, unknown>;
 }
 
 /* ── Tag autocomplete ─────────────────────────────────────────────────── */

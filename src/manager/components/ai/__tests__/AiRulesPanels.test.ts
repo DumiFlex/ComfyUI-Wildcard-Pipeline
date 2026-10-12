@@ -69,7 +69,7 @@ describe("AiDerivationPanel", () => {
         { rule: RULE, summary: "Mages get a title", warnings: ["nothing in your library sets $weapon"] },
         { rule: second, summary: "Second", warnings: [] },
       ],
-      skipped: [], model: "qwen3.6:27b",
+      skipped: [], model: "qwen3.6:27b", answer: {},
     });
     const existing: DerivationRule[] = [{ ...RULE, id: "old" }];
     const w = mount(AiDerivationPanel, { props: { name: "Titles", rules: existing } });
@@ -97,7 +97,7 @@ describe("AiDerivationPanel", () => {
 
   it("explains an empty answer", async () => {
     vi.mocked(api.ai.draftDerivation).mockResolvedValue({
-      rules: [], skipped: [{ text: "x", reason: "bad" }], model: "m",
+      rules: [], skipped: [{ text: "x", reason: "bad" }], model: "m", answer: {},
     });
     const w = mount(AiDerivationPanel, { props: { name: "", rules: [] } });
     await w.get('[data-test="ai-instruction"]').setValue("anything");
@@ -126,7 +126,7 @@ describe("AiConstraintPanel", () => {
     };
     const exc2 = { ...exc, exception: { ...exc.exception, target: "crystal staff" } };
     vi.mocked(api.ai.draftConstraint).mockResolvedValue({
-      cells: [cell], exceptions: [exc, exc2], skipped: [], model: "m",
+      cells: [cell], exceptions: [exc, exc2], skipped: [], model: "m", answer: {},
     });
     const w = mount(AiConstraintPanel, { props: {
       sourceWildcardId: "src", targetWildcardId: "tgt", sourceName: "Class", targetName: "Weapon",
@@ -143,5 +143,77 @@ describe("AiConstraintPanel", () => {
     await w.findAll('[data-test="ai-cn-exception"] input')[1].trigger("change");
     await w.get('[data-test="ai-apply"]').trigger("click");
     expect(w.emitted("apply")?.[0]).toEqual([[cell], [exc]]);
+  });
+});
+
+describe("follow-ups", () => {
+  beforeEach(() => {
+    _resetAiConfigForTests();
+    vi.mocked(api.ai.config).mockResolvedValue(CONFIG);
+    vi.mocked(api.ai.draftDerivation).mockReset();
+  });
+
+  const answer = (summary: string) => ({
+    rules: [
+      { rule: { ...RULE, id: `r_${summary}` }, summary, warnings: [] },
+      { rule: { ...RULE, id: `r_${summary}2` }, summary: `${summary} 2`, warnings: [] },
+    ],
+    skipped: [], model: "m", answer: { raw: summary },
+  });
+
+  it("refines with the conversation, flips between answers and starts over", async () => {
+    const draft = vi.mocked(api.ai.draftDerivation);
+    draft.mockResolvedValueOnce(answer("first")).mockResolvedValueOnce(answer("second"));
+    const w = mount(AiDerivationPanel, { props: { name: "Titles", rules: [] } });
+    await flushPromises();
+    await w.get('[data-test="ai-instruction"]').setValue("mages get a title");
+    await w.get('[data-test="ai-run"]').trigger("click");
+    await flushPromises();
+    expect(draft.mock.calls[0][0].history).toBeUndefined();
+    // The box is now a follow-up box; the first request is listed above it.
+    expect((w.get('[data-test="ai-instruction"]').element as HTMLTextAreaElement).value).toBe("");
+    expect(w.findAll('[data-test="ai-asked"]').map((x) => x.text())).toEqual(["mages get a title"]);
+    expect(w.get('[data-test="ai-refine"]').attributes("disabled")).toBeDefined();
+    await w.findAll('[data-test="ai-rule"] input[type="checkbox"]')[1].setValue(false);
+    await w.get('[data-test="ai-instruction"]').setValue("shorter titles");
+    await w.get('[data-test="ai-refine"]').trigger("click");
+    await flushPromises();
+    expect(draft.mock.calls[1][0]).toMatchObject({
+      instruction: "shorter titles",
+      history: [{
+        instruction: "mages get a title", answer: { raw: "first" },
+        note: "they kept first. They unticked first 2",
+      }],
+    });
+    expect(w.findAll('[data-test="ai-asked"]').map((x) => x.text()))
+      .toEqual(["mages get a title", "shorter titles"]);
+    expect(w.get('[data-test="ai-answer-nav"]').text()).toContain("Answer 2 of 2");
+    expect(w.text()).toContain("second 2");
+    await w.get('[data-test="ai-prev"]').trigger("click");
+    expect(w.text()).toContain("first 2");
+    expect(w.get('[data-test="ai-answer-nav"]').text()).toContain("Answer 1 of 2");
+    await w.get('[data-test="ai-restart"]').trigger("click");
+    expect(w.find('[data-test="ai-rules-results"]').exists()).toBe(false);
+    expect((w.get('[data-test="ai-instruction"]').element as HTMLTextAreaElement).value)
+      .toBe("mages get a title");
+  });
+
+  it("Try again re-asks the shown answer's request with its history", async () => {
+    const draft = vi.mocked(api.ai.draftDerivation);
+    draft.mockResolvedValue(answer("x"));
+    const w = mount(AiDerivationPanel, { props: { name: "Titles", rules: [] } });
+    await flushPromises();
+    await w.get('[data-test="ai-instruction"]').setValue("go");
+    await w.get('[data-test="ai-run"]').trigger("click");
+    await flushPromises();
+    await w.get('[data-test="ai-retry"]').trigger("click");
+    await flushPromises();
+    expect(draft.mock.calls[1][0].instruction).toBe("go");
+    expect(draft.mock.calls[1][0].history).toBeUndefined();
+    expect(w.get('[data-test="ai-answer-nav"]').text()).toContain("Answer 2 of 2");
+    // Adding ends the conversation.
+    await w.get('[data-test="ai-apply"]').trigger("click");
+    expect(w.find('[data-test="ai-thread"]').exists()).toBe(false);
+    expect(w.find('[data-test="ai-run"]').exists()).toBe(true);
   });
 });

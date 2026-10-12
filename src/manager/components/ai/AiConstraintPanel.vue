@@ -14,7 +14,8 @@ import AiPanelFrame from "./AiPanelFrame.vue";
 import ConstraintPreview from "../ConstraintPreview.vue";
 import SegControl, { type SegOption } from "../settings/SegControl.vue";
 import { mergeAiRules, type PreviewWildcard } from "../../utils/constraint-preview";
-import { api, ApiError } from "../../api/client";
+import { api } from "../../api/client";
+import { keptNote, useAiConversation } from "../../composables/useAiConversation";
 import type {
   AiConstraintCellDraft, AiConstraintDraftResult, AiConstraintExceptionDraft,
   ConstraintException, ConstraintMatrix, ConstraintMode,
@@ -45,23 +46,51 @@ const MODE_LABEL: Record<ConstraintMode, string> = {
   allow: "Allow", exclude: "Exclude", boost: "Boost", reduce: "Reduce", only: "Only",
 };
 
-const instruction = ref("");
-const loading = ref(false);
-const error = ref("");
-const result = ref<AiConstraintDraftResult | null>(null);
 /** Unticked rows, keyed "c:i" for cells and "e:i" for exceptions. */
 const unticked = ref<Set<string>>(new Set());
-let controller: AbortController | null = null;
+
+type Ctx = { matrix: ConstraintMatrix; exceptions: ConstraintException[] };
+const convo = useAiConversation<AiConstraintDraftResult, Ctx>({
+  capture: () => ({ matrix: props.matrix, exceptions: props.exceptions }),
+  send: ({ instruction, history, ctx }, signal) => api.ai.draftConstraint({
+    instruction,
+    history,
+    constraint: {
+      name: props.name ?? "",
+      description: props.description ?? "",
+      tags: props.labels ?? [],
+      source_wildcard_id: props.sourceWildcardId,
+      target_wildcard_id: props.targetWildcardId,
+      matrix: ctx.matrix,
+      exceptions: ctx.exceptions,
+    },
+  }, signal),
+  note: (res) => {
+    const labels = [
+      ...res.cells.map((c) => `#${c.source_tag} → #${c.target_tag} ${c.cell.mode}`),
+      ...res.exceptions.map((e) => `${shown(e.exception.source)} → ${shown(e.exception.target)} ${e.exception.mode}`),
+    ];
+    const off = new Set<number>();
+    res.cells.forEach((_, i) => { if (unticked.value.has(`c:${i}`)) off.add(i); });
+    res.exceptions.forEach((_, i) => { if (unticked.value.has(`e:${i}`)) off.add(res.cells.length + i); });
+    return keptNote(labels, off);
+  },
+  emptyMessage: (res) => res.cells.length + res.exceptions.length ? "" : res.skipped.length
+    ? "The model's rules couldn't be used. Try asking differently, or a larger model."
+    : "The model didn't write any rules.",
+});
+const { instruction, loading, error, result } = convo;
+watch(result, () => { unticked.value = new Set(); });
 
 const count = computed(() => (result.value?.cells.length ?? 0) + (result.value?.exceptions.length ?? 0));
 const pending = computed(() => loading.value || count.value > 0);
 watch(pending, (v) => emit("update:pending", v), { immediate: true });
 onBeforeUnmount(() => {
-  controller?.abort();
+  convo.stop();
   emit("update:pending", false);
 });
 // A different pair of wildcards makes the old answer meaningless.
-watch(() => [props.sourceWildcardId, props.targetWildcardId], () => { result.value = null; });
+watch(() => [props.sourceWildcardId, props.targetWildcardId], () => { convo.clear(); });
 
 const tickedCells = computed(() => (result.value?.cells ?? []).filter((_, i) => !unticked.value.has(`c:${i}`)));
 const tickedExceptions = computed(() =>
@@ -87,53 +116,14 @@ function toggle(key: string): void {
   unticked.value = next;
 }
 
-async function run(): Promise<void> {
-  controller?.abort();
-  controller = new AbortController();
-  loading.value = true;
-  error.value = "";
-  result.value = null;
-  unticked.value = new Set();
-  try {
-    result.value = await api.ai.draftConstraint({
-      instruction: instruction.value.trim(),
-      constraint: {
-        name: props.name ?? "",
-        description: props.description ?? "",
-        tags: props.labels ?? [],
-        source_wildcard_id: props.sourceWildcardId,
-        target_wildcard_id: props.targetWildcardId,
-        matrix: props.matrix,
-        exceptions: props.exceptions,
-      },
-    }, controller.signal);
-    if (count.value === 0) {
-      error.value = result.value.skipped.length
-        ? "The model's rules couldn't be used. Try asking differently, or a larger model."
-        : "The model didn't write any rules.";
-    }
-  } catch (err) {
-    if (err instanceof DOMException && err.name === "AbortError") return;
-    error.value = err instanceof ApiError || err instanceof Error ? err.message : "Something went wrong";
-  } finally {
-    loading.value = false;
-    controller = null;
-  }
-}
-
-function stop(): void {
-  controller?.abort();
-  loading.value = false;
-}
-
 function apply(): void {
   if (!tickedCount.value) return;
   emit("apply", tickedCells.value, tickedExceptions.value);
-  result.value = null;
+  convo.clear();
 }
 
 function close(): void {
-  controller?.abort();
+  convo.stop();
   emit("close");
 }
 
@@ -154,8 +144,15 @@ function shown(v: string): string {
     :loading="loading"
     :answered="!!result"
     :error="error"
-    @run="run"
-    @stop="stop"
+    :asked="convo.asked.value"
+    :answer-index="convo.index.value"
+    :answer-count="convo.count.value"
+    @run="convo.ask"
+    @refine="convo.refine"
+    @retry="convo.retry"
+    @restart="convo.restart"
+    @go="convo.go"
+    @stop="convo.stop"
     @close="close"
   >
     <template v-if="result && count">
@@ -219,7 +216,7 @@ function shown(v: string): string {
         Skipped {{ result.skipped.length }}: {{ result.skipped.map((s) => `${s.text} (${s.reason})`).join("; ") }}
       </p>
       <div class="wp-ai-cn__actions">
-        <Button variant="ghost" size="sm" data-test="ai-discard" @click="result = null">Discard</Button>
+        <Button variant="ghost" size="sm" data-test="ai-discard" @click="convo.clear">Discard</Button>
         <Button
           variant="primary"
           size="sm"
