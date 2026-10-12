@@ -664,7 +664,7 @@ async def test_pack_plan_build_check_install(wp_client, fake_llm):
     built: dict = {}
     keys = {i["name"]: i["key"] for i in plan["items"]}
     for name, var in (("Season", "season"), ("Outfit", "outfit")):
-        fake_llm.overrides["options"] = {"options": [
+        fake_llm.overrides["wildcard"] = {"options": [
             {"text": t, "weight": 1, "tags": tags, "negative": ""} for t, tags in opts[var]]}
         resp = await wp_client.post("/wp/api/ai/pack/item", json={
             "plan": plan, "built": built, "key": keys[name]})
@@ -723,3 +723,77 @@ async def test_pack_validation(wp_client, fake_llm):
                                     json={"plan": plan, "built": {}, **extra})
         assert resp.status == 400, path
     assert (await wp_client.post("/wp/api/ai/pack/check", json={"plan": {}})).status == 400
+
+
+async def test_text_draft_for_fixed_values_combine_and_template(wp_client, fake_llm):
+    await _two_wildcards(wp_client)
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    url = "/wp/api/ai/text/draft"
+    fake_llm.overrides["fixed_values"] = {"values": [
+        {"name": "quality", "value": "best quality", "negative": "lowres"}]}
+    resp = await wp_client.post(url, json={
+        "kind": "fixed_values", "instruction": "quality tags",
+        "item": {"name": "Quality", "payload": {"values": [
+            {"id": "v1", "name": "quality", "value": "masterpiece"}]}},
+    })
+    assert resp.status == 200, await resp.text()
+    body = await resp.json()
+    assert body["payload"]["values"] == [{"id": "v1", "name": "quality", "value": "best quality",
+                                          "negative": "lowres"}]
+    prompt = fake_llm.seen[-1]["body"]["messages"][1]["content"]
+    assert "$quality = masterpiece" in prompt and "$class" in prompt
+
+    fake_llm.overrides["combine"] = {"template": "$class with $weapon", "negative": ""}
+    resp = await wp_client.post(url, json={
+        "kind": "combine", "instruction": "join them",
+        "item": {"name": "Hero", "payload": {"output_var": "hero", "template": ""}},
+    })
+    assert resp.status == 200, await resp.text()
+    body = await resp.json()
+    assert body["payload"]["input_vars"] == ["class", "weapon"] and body["warnings"] == []
+
+    fake_llm.overrides["prompt_template"] = {"template": "{a|b} $hero", "negative": ""}
+    resp = await wp_client.post(url, json={"kind": "template", "instruction": "x", "item": {}})
+    assert resp.status == 502
+    fake_llm.overrides["prompt_template"] = {"template": "$hero, $class",
+                                             "negative": "$negatives, lowres"}
+    resp = await wp_client.post(url, json={"kind": "template", "instruction": "x", "item": {}})
+    body = await resp.json()
+    assert body["payload"] == {"template_string": "$hero, $class",
+                               "negative_template": "$negatives, lowres"}
+    assert any("$hero" in w for w in body["warnings"])
+
+    assert (await wp_client.post(url, json={"kind": "nope", "instruction": "x"})).status == 400
+    no_var = {"kind": "combine", "instruction": "x", "item": {"payload": {}}}
+    assert (await wp_client.post(url, json=no_var)).status == 400
+
+
+async def test_chat_sees_templates_and_runs_stacks(wp_client, fake_llm):
+    await _two_wildcards(wp_client)
+    resp = await wp_client.post("/wp/api/templates", json={
+        "name": "Hero shot", "template_string": "$class, $weapon"})
+    assert resp.status in (200, 201), await resp.text()
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.chat_steps.extend([
+        {"message": "Trying it.", "calls": [
+            {"tool": "run_test", "args": json.dumps(
+                {"stack": ["Class", "Weapon"], "seeds": 20, "template": "Hero shot"})},
+        ]},
+        {"message": "Adding a negative.", "calls": [
+            {"tool": "edit_template", "args": json.dumps(
+                {"id": "Hero shot", "negative": "$negatives, lowres"})},
+        ]},
+    ])
+    resp = await wp_client.post("/wp/api/ai/chat", json={
+        "messages": [{"role": "user", "content": "check my hero template"}]})
+    assert resp.status == 200, await resp.text()
+    body = await resp.json()
+    assert [s["tool"] for s in body["steps"]] == ["run_test", "edit_template"]
+    assert body["steps"][0]["note"] == "Ran Class, Weapon on 20 seeds"
+    [prop] = body["proposals"]
+    assert prop["op"]["kind"] == "template" and prop["op"]["op"] == "update"
+    assert prop["op"]["body"]["negative_template"] == "$negatives, lowres"
+    results = fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+    assert "Ran 20 seeds." in results and "Prompt: " in results

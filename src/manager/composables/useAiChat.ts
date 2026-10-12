@@ -16,6 +16,7 @@ import { api, ApiError } from "../api/client";
 import type { AiChatMessage, AiChatPage, AiChatProposal, AiChatResult } from "../api/types";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
+import { useTemplateStore } from "../stores/templateStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { openEditor } from "./useOpenEditor";
 
@@ -45,6 +46,9 @@ export type ChatEntry = ChatUserEntry | ChatAssistantEntry;
 
 const open = ref(false);
 const input = ref("");
+/** A question a page asked for (`ask`); the drawer sends it with its page
+ *  context as soon as it is open. */
+const queued = ref("");
 const entries = shallowRef<ChatEntry[]>([]);
 const loading = ref(false);
 const error = ref("");
@@ -162,12 +166,15 @@ async function apply(entry: ChatAssistantEntry, p: AiChatProposal): Promise<void
   if (op.op === "open" || blockedReason(entry, p)) return;
   const modules = useModuleStore();
   const bundles = useBundleStore();
+  const templates = useTemplateStore();
   delete entry.errors[p.pid];
   try {
     if (op.op === "create") {
       const cid = await categoryId(op.new_category);
-      const body = cid === undefined ? op.body : { ...op.body, category_id: cid };
-      const row = await modules.create(body);
+      const extra = cid === undefined ? {} : { category_id: cid };
+      const row = op.kind === "bundle" ? await bundles.create({ ...op.body, ...extra })
+        : op.kind === "template" ? await templates.create({ ...op.body, ...extra })
+          : await modules.create({ ...op.body, ...extra });
       entry.created[p.pid] = row.id;
     } else if (op.op === "update") {
       const body = { ...op.body };
@@ -181,6 +188,7 @@ async function apply(entry: ChatAssistantEntry, p: AiChatProposal): Promise<void
         return;
       }
       if (op.kind === "module") await modules.update(op.id, body);
+      else if (op.kind === "template") await templates.update(op.id, body);
       else await bundles.update(op.id, body);
     }
     entry.status[p.pid] = "applied";
@@ -210,10 +218,14 @@ async function undo(entry: ChatAssistantEntry, p: AiChatProposal): Promise<void>
   try {
     if (op.op === "create") {
       const id = entry.created[p.pid];
-      if (id) await useModuleStore().remove(id);
+      if (id && op.kind === "bundle") await useBundleStore().remove(id);
+      else if (id && op.kind === "template") await useTemplateStore().remove(id);
+      else if (id) await useModuleStore().remove(id);
       delete entry.created[p.pid];
     } else if (op.kind === "module") {
       await useModuleStore().update(op.id, op.before);
+    } else if (op.kind === "template") {
+      await useTemplateStore().update(op.id, op.before);
     } else {
       await useBundleStore().update(op.id, op.before);
     }
@@ -222,6 +234,15 @@ async function undo(entry: ChatAssistantEntry, p: AiChatProposal): Promise<void>
     entry.errors[p.pid] = err instanceof Error ? err.message : String(err);
   }
   touch();
+}
+
+/** Open the chat and send `text` (from a page button, like the Test
+ *  Runner's "Explain this run"). */
+function ask(text: string): void {
+  if (loading.value) return;
+  input.value = text;
+  open.value = true;
+  queued.value = text;
 }
 
 function dismiss(entry: ChatAssistantEntry, p: AiChatProposal): void {
@@ -233,8 +254,8 @@ const started = computed(() => entries.value.length > 0);
 
 export function useAiChat() {
   return {
-    open, input, entries, loading, error, started,
-    send, stop, reset, apply, undo, dismiss, blockedReason,
+    open, input, entries, loading, error, started, queued,
+    send, stop, reset, apply, undo, dismiss, blockedReason, ask,
   };
 }
 
@@ -243,4 +264,5 @@ export function _resetAiChatForTests(): void {
   reset();
   open.value = false;
   input.value = "";
+  queued.value = "";
 }

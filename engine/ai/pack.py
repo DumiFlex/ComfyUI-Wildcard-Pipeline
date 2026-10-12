@@ -3,42 +3,55 @@
 Four steps, each its own request so a small local model stays on track:
 
 1. **Plan.** The model writes an outline (`PLAN_SCHEMA`): the pack's title,
-   up to three questions it can't guess, and a list of items by name and
-   variable (wildcards, derivations, combines, constraints, one template).
-   `compile_plan` checks it and gives every item a key.
+   up to three questions it can't guess, the run-time inputs it expects
+   (variables a WP Context Injector brings in), and a list of items by name
+   and variable (wildcards, fixed values, derivations, combines,
+   constraints, one template), each with an optional per-use line (`use`:
+   "pick 2-3; hold", see `use.py`). A wildcard with no variable is a
+   vocabulary other options point at with ``@{Name:tag}``. `compile_plan`
+   checks it and gives every item a key.
 2. **Build.** One call per item in `build_order`, with the same prompts and
-   checkers the editor panels use (`wildcard`, `derivation`, `constraint`),
-   or the small combine/template schemas here. Later items see what earlier
-   ones built, so a constraint knows its wildcards' tags.
+   checkers the editor panels and the chat use (`wildcard.compile_spec`,
+   `derivation`, `constraint`, `text_items`). Later items see what earlier
+   ones built, so a constraint knows its wildcards' tags and an option can
+   point at a vocabulary built before it.
 3. **Check.** `check_pack` runs the pack on the real engine for a few
    hundred seeds and lists, per item, what went wrong, plus sample prompts.
 4. **Install.** `install_ops` turns the pack into one import commit (the
    modules, the template and a bundle, tagged as one collection), so one
    undo removes all of it.
 
-The model never writes ids, `sub_categories`, `@{uuid}` refs or rule ids;
-every payload is built here and validated by its engine handler. The
+The model never writes ids, `sub_categories`, `@{uuid}` refs or rule ids
+(it names wildcards; `refs.compile_text` turns names into ids); every
+payload is built here and validated by its engine handler. The
 manager holds the plan and the built items between requests, so nothing is
 kept on the server.
 """
 from __future__ import annotations
 
 import copy
+import json
 import re
 import secrets
 from typing import Any
 
 from engine.ai import constraint as ai_constraint
 from engine.ai import derivation as ai_derivation
-from engine.ai import library_vars
+from engine.ai import guide as ai_guide
+from engine.ai import library_vars, text_items
+from engine.ai import refs as ai_refs
+from engine.ai import use as ai_use
 from engine.ai import wildcard as ai_wildcard
 from engine.modules.combine_handler import CombineHandler
 from engine.modules.constraint_handler import ConstraintHandler
 from engine.modules.derivation_handler import DerivationHandler
-from engine.modules.snapshot import payload_hash
+from engine.modules.fixed_values_handler import FixedValuesHandler
+from engine.modules.snapshot import payload_hash, walk_transitive_refs
 from engine.modules.wildcard_handler import WildcardHandler
 
-KINDS = ("wildcard", "derivation", "combine", "constraint", "template")
+KINDS = ("wildcard", "fixed_values", "derivation", "combine", "constraint", "template")
+MAX_INPUTS = 6
+MAX_USE = 200
 MAX_ITEMS = 20
 MAX_QUESTIONS = 3
 MIN_COUNT, MAX_COUNT, DEFAULT_COUNT = 4, 60, 12
@@ -66,6 +79,7 @@ PLAN_SCHEMA: dict[str, Any] = _obj({
     "summary": _STR,
     "rating": {"type": "string", "enum": ["safe", "nsfw"]},
     "questions": {"type": "array", "items": _obj({"question": _STR, "choices": _STRS})},
+    "inputs": {"type": "array", "items": _obj({"var": _STR, "about": _STR, "example": _STR})},
     "items": {"type": "array", "items": _obj({
         "kind": {"type": "string", "enum": list(KINDS)},
         "name": _STR,
@@ -75,56 +89,65 @@ PLAN_SCHEMA: dict[str, Any] = _obj({
         "tags": _STRS,
         "source": _STR,
         "target": _STR,
+        "use": _STR,
     })},
 })
 
 PLAN_SYSTEM = """\
 You plan prompt packs for Wildcard Pipeline, a ComfyUI extension that builds \
-image-generation prompts from modules chained in order:
-- wildcard: a list of options bound to a $variable; each run picks one. Its \
-options can carry tags (one lowercase word each) that rules refer to.
+image-generation prompts from modules that run in order on a WP Context node \
+and set $variables; a WP Prompt Assembler then renders a template from them.
+- wildcard: a list of options bound to a $variable; each run picks one \
+(weighted). Options carry tags (one lowercase word each) that rules and \
+filters use, may hold small {a|b} variations, and may point at another \
+wildcard with @{Its name:tag} for a fresh pick from it ("a @{Colors:warm} \
+scarf"). A wildcard with var "" is a vocabulary: it isn't in the stack; \
+other options point at it (colours, materials, names used in many places).
+- fixed_values: variables set to the same text every run (quality tags, a \
+style preset); var is the main one.
 - derivation: IF/ELSE rules that read variables and set others ("when $class \
-is mage, set $title to Archmage").
+is mage, set $title to Archmage"; "when $season is winter, add coat to \
+$outfit"); they can also add words to a variable's negative prompt.
 - combine: a template that joins variables into a new one ("$race $class").
 - constraint: links a SOURCE wildcard to a TARGET wildcard so the source's \
-pick changes the target's odds (exclude, reduce, boost, only), usually by tag.
-- template: the final prompt, reading the variables.
+pick changes the target's odds (exclude, reduce, boost, only), usually by \
+tag ("#caster gets only #robe outfits"). To make two picks agree (shoes \
+that match the outfit), tag both wildcards with the same words for it.
+- template: the final prompt, reading $variables only (no picks).
 
 Plan a self-contained pack for the request. Answer with:
 - title: a short pack name. summary: one sentence on what it makes.
 - rating: "nsfw" if the pack is sexual or explicit, else "safe".
-- questions: up to 3 things you can't guess that would change the plan, each \
-with 2 to 4 short choices. Ask only when it matters; [] is fine. Still write a \
-full plan using the most likely answers.
+- questions: up to 3 things you can't guess that would change the plan, \
+each with 2 to 4 short choices. Ask only when it matters; [] is fine. Still \
+write a full plan using the most likely answers.
+- inputs: variables the pack expects from outside at run time (a subject the \
+user types, a LoRA name), brought in by a WP Context Injector: {var, about, \
+example}. [] when the pack makes everything itself.
 - items, each with every field (use "" / 0 / [] where a field doesn't apply):
-  - wildcard: name, var (its variable, no $), about (what its options are), \
-count (how many options, 6 to 40), tags (option tags rules will use).
+  - wildcard: name, var (its variable, no $; "" for a vocabulary), about \
+(what its options are and anything special: "sometimes none", "never \
+empty", "tag each with the shoes it goes with"), count (how many options, \
+6 to 40), tags (option tags rules and filters will use).
+  - fixed_values: name, var (the main variable), about (each variable and \
+its text, in words).
   - derivation: name, var (the main variable it sets), about (the rules in \
 plain words, naming variables with $).
   - combine: name, var (the variable it sets), about (which $variables it \
 joins and how).
-  - constraint: name, source and target (the two wildcards' variables, no $), \
-about (the rules in words, by tag: "#caster gets only #robe outfits").
+  - constraint: name, source and target (the two wildcards' variables, no \
+$), about (the rules in words, by tag).
   - template: exactly one, last: name, about (what the prompt reads, with \
-$variables).
+$variables, and its standing negative).
+  - use: how the bundle uses this item, or "". """ + ai_use.GUIDE + """
 Every variable a derivation, combine or template reads must be set by an \
-earlier item. Give rules something to work with: a constraint's tags must be \
-tags its two wildcards carry. Variable names: letters, digits and _. Keep it \
-to what the request needs; at most 20 items. Don't add commentary; the output \
-is data for the user's own library.\
-"""
+earlier item or be an input ($iteration, the WP Context Loop's iteration \
+number, is always there too). A constraint's tags must be tags its two \
+wildcards carry. Each wildcard is about one thing. Variable names: letters, \
+digits and _. Keep it to what the request needs; at most 20 items. Don't add \
+commentary; the output is data for the user's own library.
 
-COMBINE_SCHEMA = _obj({"template": _STR})
-TEMPLATE_SCHEMA = _obj({"template": _STR, "negative": _STR})
-
-TEXT_SYSTEM = """\
-You write prompt text for Wildcard Pipeline, a ComfyUI extension that builds \
-image-generation prompts. Read variables with $name; only the variables \
-listed are available. {a|b} picks one of a or b at random. Write the text \
-exactly as it should appear, in the style of the options listed (usually \
-comma-separated tags). Never use @{...}. Don't add commentary; the output is \
-data for the user's own library.\
-"""
+""" + ai_guide.WHICH + "\n" + ai_guide.COHERENCE
 
 
 class PlanError(ValueError):
@@ -149,11 +172,27 @@ def _tag(raw: Any) -> str:
     return t if t and re.fullmatch(r"[a-z0-9_\-]+", t) else ""
 
 
+def _inputs(raw: Any, warnings: list[str]) -> list[dict[str, str]]:
+    out: list[dict[str, str]] = []
+    for i in raw if isinstance(raw, list) else []:
+        if not isinstance(i, dict):
+            continue
+        var = _var(i.get("var"))
+        if not var or any(x["var"] == var for x in out):
+            continue
+        out.append({"var": var, "about": _clean(i.get("about"), 200),
+                    "example": _clean(i.get("example"), 200)})
+    if len(out) > MAX_INPUTS:
+        warnings.append(f"Kept the first {MAX_INPUTS} inputs")
+    return out[:MAX_INPUTS]
+
+
 def compile_plan(raw: Any) -> dict[str, Any]:
     """The model's plan (or one the manager sends back) as a checked plan:
-    ``{title, summary, rating, questions, items: [{key, kind, name, var,
-    about, count, tags, source, target}], warnings}``. Items the manager sent
-    keep their keys. Raises PlanError when nothing usable is left."""
+    ``{title, summary, rating, questions, inputs, items: [{key, kind, name,
+    var, about, count, tags, source, target, use}], warnings}``. Items the
+    manager sent keep their keys. Raises PlanError when nothing usable is
+    left."""
     if not isinstance(raw, dict) or not isinstance(raw.get("items"), list):
         raise PlanError("the plan had no items")
     warnings: list[str] = []
@@ -165,9 +204,11 @@ def compile_plan(raw: Any) -> dict[str, Any]:
         choices = [c for c in (_clean(x, 60) for x in q.get("choices") or []) if c][:4]
         if text and len(choices) >= 2:
             questions.append({"question": text, "choices": choices})
+    inputs = _inputs(raw.get("inputs"), warnings)
     items: list[dict[str, Any]] = []
     keys: set[str] = set()
-    sets: dict[str, str] = {}
+    sets: dict[str, str] = {i["var"]: "an input" for i in inputs}
+    names: set[str] = set()
     next_key = 1
     template_seen = False
     for it in raw["items"]:
@@ -182,14 +223,21 @@ def compile_plan(raw: Any) -> dict[str, Any]:
                 warnings.append(f"Left out a second template, {name or 'unnamed'}")
                 continue
             template_seen = True
-        if kind in ("wildcard", "combine") and not var:
-            warnings.append(f"Left out {kind} {name or 'unnamed'}: it needs a variable")
+        if kind in ("combine", "fixed_values") and not var:
+            warnings.append(f"Left out {kind.replace('_', ' ')} {name or 'unnamed'}: "
+                            "it needs a variable")
+            continue
+        if kind == "wildcard" and not var and not name:
+            warnings.append("Left out a wildcard with no name or variable")
             continue
         if kind == "derivation" and not about:
             warnings.append(f"Left out derivation {name or 'unnamed'}: it says no rules")
             continue
-        if kind in ("wildcard", "combine") and var in sets:
+        if kind in ("wildcard", "combine", "fixed_values") and var in sets:
             warnings.append(f"Left out {name or var}: ${var} is already set by {sets[var]}")
+            continue
+        if kind == "wildcard" and not var and name.lower() in names:
+            warnings.append(f"Left out a second wildcard named {name}")
             continue
         key = it.get("key") if isinstance(it.get("key"), str) and _KEY.match(it["key"]) else ""
         if not key or key in keys:
@@ -204,7 +252,7 @@ def compile_plan(raw: Any) -> dict[str, Any]:
             else DEFAULT_COUNT
         item = {
             "key": key, "kind": kind,
-            "name": name or (f"${var}" if var else kind.title()),
+            "name": name or (f"${var}" if var else kind.replace("_", " ").title()),
             "var": var, "about": about,
             "count": max(MIN_COUNT, min(MAX_COUNT, count)) if kind == "wildcard" else 0,
             "tags": list(dict.fromkeys(
@@ -212,14 +260,18 @@ def compile_plan(raw: Any) -> dict[str, Any]:
             if kind == "wildcard" else [],
             "source": _var(it.get("source")) if kind == "constraint" else "",
             "target": _var(it.get("target")) if kind == "constraint" else "",
+            "use": _clean(it.get("use"), MAX_USE) if kind in (
+                "wildcard", "combine", "derivation", "fixed_values") and var else "",
         }
-        if kind in ("wildcard", "combine", "derivation") and var:
+        if kind in ("wildcard", "combine", "derivation", "fixed_values") and var:
             sets.setdefault(var, item["name"])
+        if kind == "wildcard":
+            names.add(item["name"].lower())
         items.append(item)
         if len(items) >= MAX_ITEMS:
             warnings.append(f"Kept the first {MAX_ITEMS} items")
             break
-    wildcard_vars = {i["var"]: i for i in items if i["kind"] == "wildcard"}
+    wildcard_vars = {i["var"]: i for i in items if i["kind"] == "wildcard" and i["var"]}
     kept: list[dict[str, Any]] = []
     for i in items:
         if i["kind"] == "constraint":
@@ -231,7 +283,7 @@ def compile_plan(raw: Any) -> dict[str, Any]:
                        else "its source and target are the same"))
                 continue
         kept.append(i)
-    if not any(i["kind"] == "wildcard" for i in kept):
+    if not any(i["kind"] == "wildcard" and i["var"] for i in kept):
         raise PlanError("the plan has no wildcards")
     rating = raw.get("rating") if raw.get("rating") in ("safe", "nsfw") else "safe"
     return {
@@ -239,30 +291,38 @@ def compile_plan(raw: Any) -> dict[str, Any]:
         "summary": _clean(raw.get("summary"), 300),
         "rating": rating,
         "questions": questions[:MAX_QUESTIONS],
+        "inputs": inputs,
         "items": kept,
         "warnings": warnings,
     }
 
 
-_BUILD_RANK = {"wildcard": 0, "derivation": 1, "combine": 2, "constraint": 3, "template": 4}
+def _vocab(item: dict[str, Any]) -> bool:
+    """A wildcard with no variable: only reached through refs."""
+    return item["kind"] == "wildcard" and not item["var"]
+
+
+_BUILD_RANK = {"fixed_values": 1, "wildcard": 1, "derivation": 2, "combine": 3,
+               "constraint": 4, "template": 5}
 
 
 def build_order(plan: dict[str, Any]) -> list[str]:
-    """Keys in the order to build them: what an item reads comes first."""
+    """Keys in the order to build them: what an item reads comes first, and
+    vocabularies before the wildcards that point at them."""
     items = list(enumerate(plan["items"]))
-    items.sort(key=lambda p: (_BUILD_RANK[p[1]["kind"]], p[0]))
+    items.sort(key=lambda p: (0 if _vocab(p[1]) else _BUILD_RANK[p[1]["kind"]], p[0]))
     return [i["key"] for _, i in items]
 
 
 def chain_order(plan: dict[str, Any]) -> list[str]:
-    """Keys of the modules in the order they run. A constraint needs its
-    source picked before it and its target after it, so wildcards follow
-    the constraint edges and each constraint sits just before its target.
-    Derivations then combines come after the wildcards. A constraint whose
-    edges loop back is placed last, where it does nothing; the check
-    reports that."""
+    """Keys of the modules in the order they run. Fixed values first. A
+    constraint needs its source picked before it and its target after it,
+    so wildcards follow the constraint edges and each constraint sits just
+    before its target. Derivations then combines come after the wildcards.
+    A constraint whose edges loop back is placed last, where it does
+    nothing; the check reports that. Vocabularies aren't in the chain."""
     items = plan["items"]
-    wild = [i for i in items if i["kind"] == "wildcard"]
+    wild = [i for i in items if i["kind"] == "wildcard" and i["var"]]
     by_var = {i["var"]: i for i in wild}
     cons = [i for i in items if i["kind"] == "constraint"]
     after: dict[str, set[str]] = {i["var"]: set() for i in wild}
@@ -279,7 +339,7 @@ def chain_order(plan: dict[str, Any]) -> list[str]:
         placed.add(ready)
         ordered.append(ready)
     position = {v: n for n, v in enumerate(ordered)}
-    chain: list[str] = []
+    chain: list[str] = [i["key"] for i in items if i["kind"] == "fixed_values"]
     for v in ordered:
         for c in cons:
             if c["target"] == v and position[c["source"]] < position[v]:
@@ -321,20 +381,32 @@ def _built_rows(plan: dict[str, Any], built: dict[str, Any]) -> list[dict[str, A
     rows = []
     for i in plan["items"]:
         b = built.get(i["key"])
-        if i["kind"] in ("wildcard", "derivation", "combine") and isinstance(b, dict):
-            rows.append({"type": i["kind"], "name": i["name"], "description": i["about"],
-                         "payload": b["payload"]})
+        if i["kind"] in ("wildcard", "derivation", "combine", "fixed_values") \
+                and isinstance(b, dict):
+            rows.append({"id": b["id"], "type": i["kind"], "name": i["name"],
+                         "description": i["about"], "payload": b["payload"]})
     return rows
 
 
 def _catalog(plan: dict[str, Any], built: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    cat = library_vars.build_catalog(_built_rows(plan, built))
+    cat = library_vars.build_catalog(_built_rows(plan, built), inputs=plan.get("inputs"))
     # Planned variables not built yet still count as known.
     for i in plan["items"]:
         if i["var"] and i["var"] not in cat and i["kind"] != "constraint":
             cat[i["var"]] = {"name": i["var"], "sources": [], "values": [], "tags": [],
-                             "about": i["about"][:100]}
+                             "about": i["about"][:100], "axes": []}
     return cat
+
+
+def ref_index(
+    plan: dict[str, Any], built: dict[str, Any], library: list[dict[str, Any]] | None = None,
+) -> ai_refs.RefIndex:
+    """What an option may point at: the library's wildcards, then the pack's."""
+    idx = ai_refs.RefIndex([r for r in library or [] if r.get("type") == "wildcard"])
+    for r in _built_rows(plan, built):
+        if r["type"] == "wildcard":
+            idx.add(r)
+    return idx
 
 
 def _wildcard_view(item: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
@@ -344,6 +416,7 @@ def _wildcard_view(item: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
 
 def item_request(
     plan: dict[str, Any], key: str, built: dict[str, Any], note: str = "",
+    library: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """``{system, user, schema, schema_name, temperature}`` for one item."""
     item = _item(plan, key)
@@ -351,21 +424,27 @@ def item_request(
     fix = f"\n\nThe last version had these problems; fix them: {note.strip()}" \
         if note.strip() else ""
     if kind == "wildcard":
+        own = built.get(key, {}).get("id")
+        idx = ref_index(plan, built, library)
+        pointers = idx.describe(exclude=own)
         user = ai_wildcard.build_user_prompt(
             instruction=f"{item['about']} {_pack_line(plan)}."
             + (f" Tag options with these tags where they fit: {', '.join(item['tags'])}."
-               if item["tags"] else "") + fix,
+               if item["tags"] else "")
+            + (" It's a vocabulary other options point at, so keep each option short."
+               if _vocab(item) else "") + fix,
             count=item["count"], name=item["name"], var_binding=item["var"],
-            existing_options=[], tags=item["tags"],
+            existing_options=[], tags=item["tags"], refs_text=pointers,
         )
-        return {"system": ai_wildcard.SYSTEM_PROMPT, "user": user,
-                "schema": ai_wildcard.OPTIONS_SCHEMA, "schema_name": "options",
+        return {"system": ai_wildcard.spec_prompt(), "user": user,
+                "schema": ai_wildcard.SPEC_SCHEMA, "schema_name": "wildcard",
                 "temperature": 0.8}
     if kind == "derivation":
+        idx = ref_index(plan, built, library)
         user = ai_derivation.build_prompt(
             instruction=item["about"] + fix, name=item["name"],
             catalog_text=library_vars.describe(_catalog(plan, built)),
-            existing_rules=[], description=_pack_line(plan),
+            existing_rules=[], description=_pack_line(plan), refs_text=idx.describe(),
         )
         return {"system": ai_derivation.SYSTEM_PROMPT, "user": user,
                 "schema": ai_derivation.SCHEMA, "schema_name": "derivation_rules",
@@ -380,26 +459,26 @@ def item_request(
                 "schema": ai_constraint.SCHEMA, "schema_name": "constraint_rules",
                 "temperature": 0.3}
     cat = _catalog(plan, built)
-    if kind == "combine":
+    if kind in ("combine", "fixed_values"):
         cat.pop(item["var"], None)
-    lines = [_pack_line(plan), "", "Variables you can read:",
-             library_vars.describe(cat) or "(none)", ""]
-    if kind == "combine":
-        lines.append(f"Write the text for ${item['var']} ({item['name']}): {item['about']}")
-        lines.append("Answer with {\"template\": text}.")
-        schema, name = COMBINE_SCHEMA, "combine"
-    else:
-        lines.append(f"Write the final prompt template \"{item['name']}\": {item['about']}")
-        lines.append("Also write a short negative prompt, or \"\".")
-        schema, name = TEMPLATE_SCHEMA, "template"
-    return {"system": TEXT_SYSTEM, "user": "\n".join(lines) + fix,
-            "schema": schema, "schema_name": name, "temperature": 0.4}
+    user = text_items.build_prompt(
+        kind=kind, instruction=item["about"] + fix, name=item["name"],
+        catalog_text=library_vars.describe(cat), description=_pack_line(plan),
+        out_var=item["var"] if kind == "combine" else "",
+    )
+    system, schema, name = {
+        "fixed_values": (text_items.FIXED_SYSTEM, text_items.FIXED_SCHEMA, "fixed_values"),
+        "combine": (text_items.COMBINE_SYSTEM, text_items.COMBINE_SCHEMA, "combine"),
+        "template": (text_items.TEMPLATE_SYSTEM, text_items.TEMPLATE_SCHEMA, "template"),
+    }[kind]
+    return {"system": system, "user": user, "schema": schema, "schema_name": name,
+            "temperature": 0.4}
 
 
 def _constraint_sides(
     plan: dict[str, Any], item: dict[str, Any], built: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    by_var = {i["var"]: i for i in plan["items"] if i["kind"] == "wildcard"}
+    by_var = {i["var"]: i for i in plan["items"] if i["kind"] == "wildcard" and i["var"]}
     sides = []
     for var, prefix in ((item["source"], "S"), (item["target"], "T")):
         w = by_var.get(var)
@@ -422,20 +501,10 @@ def _reads(text: str) -> list[str]:
     return list(dict.fromkeys(_VAR_READ.findall(text)))
 
 
-def _text_answer(raw: Any, field: str) -> str:
-    if not isinstance(raw, dict) or not isinstance(raw.get(field), str):
-        raise ValueError(f"the answer had no {field}")
-    text = raw[field].strip()
-    if "@{" in text:
-        raise ValueError("it points at a module by id")
-    if not text:
-        raise ValueError(f"the {field} is empty")
-    return text[:MAX_TEMPLATE]
-
-
 def compile_item(
     plan: dict[str, Any], key: str, built: dict[str, Any], answer: Any, *,
     taken: set[str] | None = None, item_id: str = "",
+    library: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """The model's answer for one item as ``{key, id, kind, payload,
     preview, warnings}``. A template's payload is ``{template_string,
@@ -443,37 +512,32 @@ def compile_item(
     item = _item(plan, key)
     kind = item["kind"]
     taken = taken if taken is not None else set()
-    mid = item_id if _HEX8.match(item_id or "") else new_id(taken)
+    mid = item_id if _HEX8.match(item_id or "") else new_id(
+        taken | {r["id"] for r in library or [] if isinstance(r.get("id"), str)})
     warnings: list[str] = []
     preview: list[str] = []
     if kind == "wildcard":
-        compiled = ai_wildcard.compile_options(
-            answer, existing_payload={"options": [], "sub_categories": item["tags"]},
-            limit=item["count"],
+        idx = ref_index(plan, {k: v for k, v in built.items() if k != key}, library)
+        compiled = ai_wildcard.compile_spec(
+            answer, var=item["var"] or None, refs=idx, self_id=mid, limit=item["count"],
+            existing_payload={"options": [], "sub_categories": list(item["tags"])},
         )
-        if not compiled["options"]:
-            raise ValueError("no usable options")
-        used = {t for o in compiled["options"] for t in o["tags"]}
-        tags = [t for t in [*item["tags"], *compiled["new_tags"]] if t in used]
-        options = []
-        for o in compiled["options"]:
-            opt: dict[str, Any] = {"id": new_id(set()), "value": o["value"],
-                                   "weight": o["weight"], "sub_categories": o["tags"]}
-            if o["negative"]:
-                opt["negative"] = o["negative"]
-            options.append(opt)
-        payload: dict[str, Any] = {"var_binding": item["var"], "sub_categories": tags,
-                                   "options": options}
+        payload = compiled["payload"]
+        used = {t for o in payload["options"] for t in o.get("sub_categories") or []}
+        payload["sub_categories"] = [t for t in payload["sub_categories"] if t in used
+                                     or t in {x for v in (payload.get("tag_groups") or {})
+                                              .values() for x in v}]
         WildcardHandler.validate_payload(payload)
         missing = [t for t in item["tags"] if t not in used]
         if missing:
             warnings.append("No option carries #" + ", #".join(missing))
-        warnings += [f"Left out {s['text'][:60]}: {s['reason']}"
-                     for s in compiled["skipped"][:5]]
-        preview = [o["value"] + (f"  #{' #'.join(o['tags'])}" if o["tags"] else "")
-                   for o in compiled["options"]]
+        warnings += compiled["warnings"]
+        preview = [ai_wildcard.option_line(o, idx) for o in payload["options"]]
+        if item["use"]:
+            warnings += _use_notes(item, payload)
     elif kind == "derivation":
-        compiled = ai_derivation.compile_rules(answer, catalog=_catalog(plan, built))
+        compiled = ai_derivation.compile_rules(answer, catalog=_catalog(plan, built),
+                                               refs=ref_index(plan, built, library))
         if not compiled["rules"]:
             raise ValueError("no usable rules" + "".join(
                 f"; {s['text'][:40]}: {s['reason']}" for s in compiled["skipped"][:3]))
@@ -492,7 +556,7 @@ def compile_item(
         matrix: dict[str, dict[str, Any]] = {}
         for c in compiled["cells"]:
             matrix.setdefault(c["source_tag"], {})[c["target_tag"]] = c["cell"]
-        by_var = {i["var"]: i for i in plan["items"] if i["kind"] == "wildcard"}
+        by_var = {i["var"]: i for i in plan["items"] if i["kind"] == "wildcard" and i["var"]}
         payload = {
             "source_wildcard_id": built[by_var[item["source"]]["key"]]["id"],
             "target_wildcard_id": built[by_var[item["target"]]["key"]]["id"],
@@ -505,24 +569,36 @@ def compile_item(
             f"{e['exception']['mode']}" for e in compiled["exceptions"]]
         warnings += [f"Left out {s['text'][:60]}: {s['reason']}"
                      for s in compiled["skipped"][:5]]
-    else:
+    elif kind == "fixed_values":
+        out = text_items.compile_fixed(answer)
+        payload, preview, warnings = out["payload"], out["preview"], out["warnings"]
+        names = [v["name"] for v in payload["values"]]
+        if item["var"] not in names:
+            warnings.append(f"It doesn't set ${item['var']}")
+    elif kind == "combine":
         cat = _catalog(plan, built)
-        text = _text_answer(answer, "template")
-        unknown = [v for v in _reads(text) if v not in cat or v == item["var"]]
-        if unknown:
-            warnings.append("Reads $" + ", $".join(unknown) + ", which nothing in the pack sets")
-        if kind == "combine":
-            payload = {"template": text, "output_var": item["var"],
-                       "input_vars": [v for v in _reads(text) if v in cat]}
-            CombineHandler.validate_payload(payload)
-        else:
-            neg = answer.get("negative") if isinstance(answer.get("negative"), str) else ""
-            neg = neg.strip()[:MAX_TEMPLATE] if "@{" not in neg else ""
-            payload = {"template_string": text, "negative_template": neg}
-        preview = [text] + ([f"Negative: {payload['negative_template']}"]
-                            if kind == "template" and payload["negative_template"] else [])
+        out = text_items.compile_combine(answer, out_var=item["var"], catalog=cat)
+        payload, preview, warnings = out["payload"], out["preview"], out["warnings"]
+    else:
+        out = text_items.compile_template(answer, catalog=_catalog(plan, built))
+        payload, preview, warnings = out["payload"], out["preview"], out["warnings"]
     return {"key": key, "id": mid, "kind": kind, "payload": payload,
             "preview": preview, "warnings": warnings}
+
+
+def _use_notes(item: dict[str, Any], payload: dict[str, Any]) -> list[str]:
+    _inst, notes = ai_use.parse_use(item["use"], kind=item["kind"],
+                                    tags=payload.get("sub_categories") or [])
+    return [f"Use: {n}" for n in notes]
+
+
+def item_instance(item: dict[str, Any], payload: dict[str, Any] | None) -> dict[str, Any]:
+    """The item's use line as the instance its bundle child carries."""
+    if not item.get("use"):
+        return {}
+    tags = (payload or {}).get("sub_categories") if item["kind"] == "wildcard" else None
+    inst, _notes = ai_use.parse_use(item["use"], kind=item["kind"], tags=tags)
+    return inst
 
 
 def parse_built(plan: dict[str, Any], raw: Any) -> dict[str, dict[str, Any]]:
@@ -545,6 +621,8 @@ def parse_built(plan: dict[str, Any], raw: Any) -> dict[str, dict[str, Any]]:
         try:
             if kind == "wildcard":
                 WildcardHandler.validate_payload(payload)
+            elif kind == "fixed_values":
+                FixedValuesHandler.validate_payload(payload)
             elif kind == "derivation":
                 DerivationHandler.validate_payload(payload)
             elif kind == "combine":
@@ -575,7 +653,8 @@ def parse_built(plan: dict[str, Any], raw: Any) -> dict[str, dict[str, Any]]:
 
 
 def chain_modules(plan: dict[str, Any], built: dict[str, Any]) -> list[dict[str, Any]]:
-    """The built modules in run order, in the list shape the engine takes."""
+    """The built modules in run order, in the list shape the engine takes,
+    each with its use line as its instance."""
     items = {i["key"]: i for i in plan["items"]}
     out = []
     for n, key in enumerate(chain_order(plan)):
@@ -587,9 +666,37 @@ def chain_modules(plan: dict[str, Any], built: dict[str, Any]) -> list[dict[str,
             "id": b["id"], "_uid": f"pack.{n}", "type": i["kind"], "enabled": True,
             "name": i["name"], "meta": {"name": i["name"], "library_name": i["name"]},
             "payload": copy.deepcopy(b["payload"]),
-            "payload_hash": payload_hash(b["payload"]), "instance": {},
+            "payload_hash": payload_hash(b["payload"]),
+            "instance": item_instance(i, b["payload"]),
         })
     return out
+
+
+def ref_catalog(
+    modules: list[dict[str, Any]], rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """The ``@{uuid}`` catalog a run needs: every wildcard the modules point
+    at, transitively, from ``rows`` (the pack's and the library's)."""
+    by_id = {r["id"]: r for r in rows if isinstance(r.get("id"), str)
+             and r.get("type", "wildcard") == "wildcard"}
+    roots = sorted({t for m in modules for t in _ids_in(m)} | {
+        m["id"] for m in modules if m.get("type") == "wildcard"})
+    if not roots:
+        return {}
+
+    def fetch(uuid: str) -> dict[str, Any] | None:
+        r = by_id.get(uuid)
+        if r is None:
+            return None
+        return {"id": uuid, "type": "wildcard", "name": r.get("name", ""),
+                "payload": r["payload"], "payload_hash": payload_hash(r["payload"])}
+
+    return walk_transitive_refs(roots, fetch_module=fetch).snapshots
+
+
+def _ids_in(module: dict[str, Any]) -> set[str]:
+    text = json.dumps(module.get("payload") or {})
+    return set(re.findall(r"@\{([0-9a-f]{8})", text))
 
 
 def _template(plan: dict[str, Any], built: dict[str, Any]) -> tuple[dict[str, Any], str] | None:
@@ -599,18 +706,41 @@ def _template(plan: dict[str, Any], built: dict[str, Any]) -> tuple[dict[str, An
     return None
 
 
+def pins(plan: dict[str, Any]) -> dict[str, str]:
+    """Each input's example, as the check pins it."""
+    return {i["var"]: i["example"] or i["var"].replace("_", " ")
+            for i in plan.get("inputs") or []}
+
+
+def render(text: str, negative: str, ctx: dict[str, Any]) -> tuple[str, str]:
+    """A template and its negative the way the Assembler renders them."""
+    from engine.negatives import entries_for_reads, join_unique, render_negative
+    from engine.template import resolve_variables, resolve_variables_raw
+
+    reads: list[Any] = []
+    prompt = resolve_variables(text, ctx, reads=reads)
+    collected = join_unique(str(e.get("text", "")) for e in entries_for_reads(ctx, reads))
+    neg = render_negative(negative, collected, lambda t: resolve_variables_raw(t, ctx))
+    return prompt, neg
+
+
 def check_pack(
     plan: dict[str, Any], built: dict[str, Any], *, seeds: int = CHECK_SEEDS,
+    library: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Run the pack on the engine. Returns ``{runs, failed, problems:
     {key: [text]}, notes: [text], variables: [{var, distinct, top}],
     prompts: [{seed, text, negative}]}``. ``problems`` are what an item's
-    repair gets told; ``notes`` are pack-wide."""
+    repair gets told; ``notes`` are pack-wide. Inputs are pinned to their
+    examples; refs resolve against the pack and ``library``."""
     from engine.pipeline import PipelineEngine
     from engine.scenario import run_scenario
-    from engine.template import resolve_variables
 
     modules = chain_modules(plan, built)
+    rows = [*(r for r in library or [] if r.get("type") == "wildcard"),
+            *(r for r in _built_rows(plan, built) if r["type"] == "wildcard")]
+    catalog = ref_catalog(modules, rows)
+    pinned = pins(plan)
     by_id = {}
     for i in plan["items"]:
         if i["key"] in built:
@@ -621,7 +751,8 @@ def check_pack(
     if missing:
         notes.append("Not built: " + ", ".join(missing))
     seed_list = list(range(1, max(1, seeds) + 1))
-    report = run_scenario(modules, seeds=seed_list, sample_limit=0, value_limit=5)
+    report = run_scenario(modules, seeds=seed_list, catalog=catalog, pins=pinned,
+                          sample_limit=0, value_limit=5)
     for w in report["warnings"]:
         key = by_id.get(str(w.get("owner_id") or w.get("module_id") or ""))
         detail = w.get("detail") if isinstance(w.get("detail"), dict) else {}
@@ -635,7 +766,7 @@ def check_pack(
         notes.append(f"{report['failed']} of {report['runs']} runs failed")
     variables = []
     for i in plan["items"]:
-        if i["kind"] in ("wildcard", "derivation", "combine") and i["var"]:
+        if i["kind"] in ("wildcard", "derivation", "combine", "fixed_values") and i["var"]:
             v = report["variables"].get(i["var"])
             if v is None:
                 if i["key"] in built:
@@ -649,19 +780,27 @@ def check_pack(
     prompts: list[dict[str, Any]] = []
     if tpl is not None:
         item, text = tpl
-        set_vars = set(report["variables"])
+        set_vars = set(report["variables"]) | set(pinned)
         unset = [v for v in _reads(text) if v not in set_vars]
         if unset:
             problems.setdefault(item["key"], []).append(
                 "reads $" + ", $".join(unset) + ", which no run set")
         neg = built[item["key"]]["payload"].get("negative_template") or ""
+        braces = 0
         for seed in seed_list[:SAMPLE_PROMPTS]:
             try:
-                ctx = PipelineEngine().run(copy.deepcopy(modules), ctx={}, seed=seed)
-                prompts.append({"seed": seed, "text": resolve_variables(text, ctx),
-                                "negative": resolve_variables(neg, ctx) if neg else ""})
+                ctx = PipelineEngine().run(copy.deepcopy(modules),
+                                           ctx={**pinned, "__wp_catalog__": catalog}, seed=seed)
+                prompt, negative = render(text, neg, ctx)
+                if re.search(r"[{}]|@\{", prompt):
+                    braces += 1
+                prompts.append({"seed": seed, "text": prompt, "negative": negative})
             except Exception as exc:  # noqa: BLE001 - shown, not raised
                 prompts.append({"seed": seed, "text": f"(failed: {exc})", "negative": ""})
+        if braces:
+            problems.setdefault(item["key"], []).append(
+                "the prompt shows { } or @{ } as written: a variable it reads holds a pick "
+                "the Assembler can't make")
     return {"runs": report["runs"], "failed": report["failed"], "problems": problems,
             "notes": notes, "variables": variables, "prompts": prompts}
 
@@ -674,13 +813,37 @@ def collection_tag(title: str) -> str:
     return tag or "ai-pack"
 
 
+def _remap_refs(payload: dict[str, Any], remap: dict[str, str]) -> dict[str, Any]:
+    moved = {old: new for old, new in remap.items() if old != new}
+    if not moved:
+        return payload
+    text = json.dumps(payload)
+    text = re.sub(r"@\{([0-9a-f]{8})", lambda m: "@{" + moved.get(m.group(1), m.group(1)), text)
+    return json.loads(text)
+
+
+def wiring_notes(plan: dict[str, Any]) -> list[str]:
+    """How to use the pack on the canvas, one step per line."""
+    out = [f"Add a WP Context node and insert the bundle \"{plan['title']}\"."]
+    for i in plan.get("inputs") or []:
+        out.append(f"Bring ${i['var']} in with a WP Context Injector row named {i['var']}"
+                   + (f" ({i['about']})" if i["about"] else "") + ", above the Context.")
+    if any(i["kind"] == "template" for i in plan["items"]):
+        out.append("Add a WP Prompt Assembler after it and load the template "
+                   f"\"{next(i['name'] for i in plan['items'] if i['kind'] == 'template')}\".")
+    if any("hold" in (i.get("use") or "") for i in plan["items"]):
+        out.append("Items set to hold keep their pick across a WP Context Loop run.")
+    return out
+
+
 def install_ops(
     plan: dict[str, Any], built: dict[str, Any], *, taken: set[str],
     template_ids: set[str], bundle_ids: set[str],
 ) -> dict[str, Any]:
     """An import commit for the pack: ``{adds, ids: {key: id}, bundle_id,
-    template_id, tag}``. Ids already in the library are swapped for fresh
-    ones and the constraints and bundle follow."""
+    template_id, tag, notes}``. Ids already in the library are swapped for
+    fresh ones; constraints, refs and the bundle follow. Vocabularies are
+    installed but stay out of the bundle (refs reach them)."""
     tag = collection_tag(plan["title"])
     remap: dict[str, str] = {}
     used = set(taken)
@@ -692,7 +855,7 @@ def install_ops(
         used.add(remap[b["id"]])
     fixed: dict[str, dict[str, Any]] = {}
     for key, b in built.items():
-        p = copy.deepcopy(b["payload"])
+        p = _remap_refs(copy.deepcopy(b["payload"]), remap)
         if "source_wildcard_id" in p:
             p["source_wildcard_id"] = remap.get(p["source_wildcard_id"], p["source_wildcard_id"])
             p["target_wildcard_id"] = remap.get(p["target_wildcard_id"], p["target_wildcard_id"])
@@ -723,7 +886,7 @@ def install_ops(
         children.append({
             "id": m["id"], "type": m["type"], "enabled": True, "collapsed": False,
             "meta": m["meta"], "payload": m["payload"], "payload_hash": m["payload_hash"],
-            "instance": {}, "entries": [],
+            "instance": m["instance"], "entries": [],
         })
     bundle_id = new_id(set(bundle_ids) | used)
     adds.append({"kind": "bundle", "entity": {
@@ -731,7 +894,7 @@ def install_ops(
         "tags": [tag], "children": children, "content_rating": plan["rating"],
     }})
     return {"adds": adds, "ids": ids, "bundle_id": bundle_id,
-            "template_id": template_id, "tag": tag}
+            "template_id": template_id, "tag": tag, "notes": wiring_notes(plan)}
 
 
 # ── whole run (evals) ───────────────────────────────────────────────────
@@ -743,6 +906,7 @@ Complete = Any
 
 async def run_pack(
     complete: Complete, instruction: str, *, seeds: int = 100, repairs: int = 2,
+    library: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Plan, build, check and repair a pack the way the manager does, for
     the eval script. Returns ``{plan, built, check, log, failed}``; ``failed``
@@ -758,12 +922,12 @@ async def run_pack(
     async def build(key: str, note: str = "") -> bool:
         for attempt in range(2):
             try:
-                req = item_request(plan, key, built, note)
+                req = item_request(plan, key, built, note, library=library)
                 raw = await complete(**req)
                 old = built.get(key)
                 out = compile_item(plan, key, built, raw,
                                    taken={b["id"] for b in built.values()},
-                                   item_id=old["id"] if old else "")
+                                   item_id=old["id"] if old else "", library=library)
             except (ValueError, PlanError) as e:
                 log.append(f"{key} attempt {attempt + 1}: {e}")
                 continue
@@ -778,7 +942,7 @@ async def run_pack(
     for key in build_order(plan):
         if not await build(key):
             failed.append(key)
-    report = check_pack(plan, built, seeds=seeds) if built else None
+    report = check_pack(plan, built, seeds=seeds, library=library) if built else None
     for _ in range(repairs):
         if not report or not report["problems"]:
             break
@@ -791,5 +955,5 @@ async def run_pack(
                     for c in plan["items"]:
                         if c["kind"] == "constraint" and w["var"] in (c["source"], c["target"]):
                             await build(c["key"])
-        report = check_pack(plan, built, seeds=seeds)
+        report = check_pack(plan, built, seeds=seeds, library=library)
     return {"plan": plan, "built": built, "check": report, "log": log, "failed": failed}

@@ -21,27 +21,33 @@ from __future__ import annotations
 import copy
 import json
 import re
-import secrets
 from typing import Any
 
 from engine.ai import constraint as ai_constraint
 from engine.ai import derivation as ai_derivation
 from engine.ai import describe as ai_describe
 from engine.ai import docs as ai_docs
+from engine.ai import guide as ai_guide
 from engine.ai import library_vars
+from engine.ai import refs as ai_refs
+from engine.ai import use as ai_use
 from engine.ai import wildcard as ai_wildcard
 from engine.ai import wildcard_edit as ai_wildcard_edit
+from engine.ai.chat_tools import GUIDE_RUN, GUIDE_TOOLS, MoreTools, _num, _reach, _reach_text
 from engine.modules.constraint_handler import ConstraintHandler
 from engine.modules.derivation_handler import DerivationHandler
 from engine.modules.wildcard_handler import WildcardHandler
 
-READ_TOOLS = ("search", "read", "variables", "docs_search", "docs_read")
+READ_TOOLS = ("search", "read", "variables", "docs_search", "docs_read", "run_test")
 CHANGE_TOOLS = (
-    "create_wildcard", "add_options", "edit_options", "create_derivation", "add_rules",
-    "create_constraint", "update_info", "open",
+    "create_wildcard", "add_options", "edit_options", "create_fixed_values", "edit_values",
+    "create_combine", "edit_combine", "create_derivation", "add_rules", "edit_rules",
+    "create_constraint", "edit_constraint", "create_template", "edit_template",
+    "create_bundle", "edit_bundle", "update_info", "open",
 )
 #: Tools that change one existing item (its id is `args.id`).
-ITEM_TOOLS = ("add_options", "edit_options", "add_rules", "update_info")
+ITEM_TOOLS = ("add_options", "edit_options", "edit_values", "edit_combine", "add_rules",
+              "edit_rules", "edit_constraint", "edit_template", "edit_bundle", "update_info")
 
 #: Manager pages `open` can go to: route name → what it is for.
 APP_PAGES: dict[str, str] = {
@@ -94,66 +100,83 @@ STEP_SCHEMA: dict[str, Any] = {
 SYSTEM_PROMPT = """\
 You are the assistant inside Wildcard Pipeline's library manager. Wildcard \
 Pipeline is a ComfyUI extension that builds image-generation prompts from \
-modules:
-- wildcard: a list of options, one picked per run, bound to a $variable. \
-Options can carry tags, a weight and a negative.
-- fixed_values: variables set to fixed text.
+modules that run in order and set $variables:
+- wildcard: a list of options, one picked per run, bound to a $variable (or \
+none: a vocabulary other options draw from with @{Name}). Options carry a \
+weight, tags, a negative; tags can be grouped into axes; one option can be \
+empty (null) and one a fallback.
+- fixed_values: variables set to the same text every run.
 - combine: a template that joins variables into a new one.
 - derivation: IF/ELSE rules that set or change variables from others.
 - constraint: links a SOURCE wildcard to a TARGET wildcard so the source's \
 pick changes the odds of the target's options (exclude, reduce, boost, only).
-- bundle: a saved group of modules.
+- bundle: a saved stack of modules in order; each child has per-use settings.
+- template: the WP Prompt Assembler's prompt and negative, reading variables.
 
 You help the user understand, build and tidy their library, and you answer \
 questions about Wildcard Pipeline itself. You can read the library and the \
-built-in docs with tools and propose changes. You never change anything yourself: every \
-change tool makes a proposal card the user reviews and applies. Plans are \
-fine, but act: if the user asks for something, propose it.
+built-in docs, run stacks on the engine, and propose changes. You never \
+change anything yourself: every change tool makes a proposal card the user \
+reviews and applies. Plans are fine, but act: if the user asks for \
+something, propose it.
 
 Answer with JSON: {"message": what you say to the user now, "calls": tools \
 to run}. Each call is {"tool": name, "args": a JSON object written as a \
 string}. Read tools run at once and you get their results in the next \
 message; then continue. When you are done, answer with "calls": [] and a \
-message for the user. Keep messages short and plain; refer to items by name.
+message for the user. Keep messages short and plain; refer to items by name. \
+Wherever a tool takes an id you can also give the item's exact name.
 
 Read tools:
-- search {"query": text, "type": optional module type or "bundle", "tag": \
-optional tag}: items whose name, description or tags match. Empty query lists \
-everything of that type.
-- read {"id": item id}: one item in full (options with tags, rules, …).
+- search {"query": text, "type": optional module type, "bundle" or \
+"template", "tag": optional tag}: items whose name, description or tags \
+match. Empty query lists everything of that type.
+- read {"id": item id}: one item in full (numbered options with tags, \
+negatives and groups, numbered rules, a bundle's children with their use \
+settings, …).
 - variables {}: every variable the library sets, with its options.
 - docs_search {"query": words}: the docs sections that match, with a snippet.
 - docs_read {"page": docs page id, "section": optional section title}: the \
 page's text.
+""" + GUIDE_RUN + """
 
 Change tools (each becomes a proposal):
-- create_wildcard {"name", "var": variable name without $, "description", \
-"tags": [library tags], "category": name or "", "options": [{"text", \
-"weight": 1, "tags": [option tags], "negative": ""}]}
-- add_options {"id": wildcard id, "options": [same as above]}
+- create_wildcard {"name", "var": variable name without $ ("" for a \
+vocabulary), "description", "tags": [library tags], "category": name or "", \
+"options": [{"text", "weight": 1, "tags": [option tags], "negative": "", \
+"fallback": false}], "axes": [{"name", "kind": "classify"|"accepts", "tags"}] \
+or [], "null_weight": 0}
+- add_options {"id": wildcard id, "options": [same as above], "axes"?}
 - edit_options {"id": wildcard id, "remove": [option numbers], "rewrite": \
 [{"n": number, "text"}], "retag": [{"n": number, "tags": [option tags]}], \
-"weights": [{"n": number, "weight": 0-100}]}: change options that exist. The \
+"weights": [{"n": number, "weight": 0-100}], "negatives": [{"n": number, \
+"negative": text or ""}], "fallback": option number (0 for none), \
+"null_weight": weight of the empty option (0 removes it), "axes": [{"name", \
+"kind", "tags"}] to group existing tags}: change options that exist. The \
 numbers are the ones read shows. Leave out what you don't change.
 - create_derivation {"name", "description", "tags", "category", "rules": \
 [{"summary", "branches": [{"match": "all"|"any", "conditions": [{"var", "op": \
-equals|not_equals|contains|not_contains|matches|exists|not_exists|is_set|\
-is_unset|is_empty|is_not_empty, "value"}], "actions": [{"target_var", "mode": \
+equals|not_equals|contains|matches|exists|not_exists|is_set|is_unset|\
+is_empty|is_not_empty, "value"}], "actions": [{"target_var", "mode": \
 replace|append|prepend|negative|negative_replace, "value"}]}], \
-"else_actions": [actions]}]}
+"else_actions": [actions]}]}. There is no "not contains": test "contains" \
+and act in else_actions.
 - add_rules {"id": derivation id, "rules": [same as above]}
 - create_constraint {"name", "source_id", "target_id", "rules": [{"source": \
 "#tag" or option text, "target": "#tag" or option text, "effect": \
-exclude|reduce|boost|only, "factor", "reason"}]}
-- update_info {"id", "description": new text or omit, "tags_add": [], \
+exclude|reduce|boost|only, "factor", "reason"}], "reach": "all" | "first" | \
+"next N"}
+""" + GUIDE_TOOLS + """- update_info {"id", "description": new text or omit, "tags_add": [], \
 "tags_remove": [], "category": name or omit, "rating": "safe"|"nsfw" or omit}
 - open {"id"} for an item's editor, {"doc": docs page id} for a docs page, \
 or {"page": manager page, "section": settings section}: a button that goes \
 there.
 
-Option text is plain prompt text: no $, @, {, } or |. Read an item before \
-changing it. Reuse the library's tags, categories and variables. Don't add \
-commentary about content; the output is data for the user's own library.
+""" + ai_guide.text() + """
+Per-use settings ("use" on bundle items and run_test items): """ + ai_use.GUIDE + """
+
+Read an item before changing it. Don't add commentary about content; the \
+output is data for the user's own library.
 
 Questions about Wildcard Pipeline (how something works, what a warning \
 means, where a setting is, what a page says): search and read the docs \
@@ -165,7 +188,8 @@ it, say so instead of guessing.
 
 When the user has an item open in its editor, read shows the editor's \
 version, unsaved changes included, and your changes to that item go into the \
-editor; the user saves them there.
+editor; the user saves them there. On the Test Runner page the note under \
+the user's message shows the last run; use run_test to try changes.
 """
 
 
@@ -251,17 +275,19 @@ def history_pairs(turns: list[dict[str, str]]) -> list[tuple[str, Any]]:
     return pairs
 
 
-class Library:
+class Library(MoreTools):
     """The rows one chat request may look at, plus the change compilers."""
 
     def __init__(self, modules: list[dict[str, Any]], bundles: list[dict[str, Any]],
-                 categories: list[dict[str, Any]]) -> None:
+                 categories: list[dict[str, Any]],
+                 templates: list[dict[str, Any]] | None = None) -> None:
         self.modules = {m["id"]: m for m in modules if isinstance(m.get("id"), str)}
         self.bundles = {b["id"]: b for b in bundles if isinstance(b.get("id"), str)}
+        self.templates = {t["id"]: t for t in templates or [] if isinstance(t.get("id"), str)}
         self.categories = {c["id"]: c["name"] for c in categories}
         self.cat_by_lower = {c["name"].lower(): c["id"] for c in categories}
         self.names = {i: m.get("name") or "" for i, m in self.modules.items()}
-        self.tags = ai_describe.library_tags([*modules, *bundles])
+        self.tags = ai_describe.library_tags([*modules, *bundles, *(templates or [])])
         self._catalog: dict[str, dict[str, Any]] | None = None
         # Item id -> (proposal id, the row as that proposal leaves it). A later
         # change to the same item builds on the earlier proposal, so applying
@@ -319,13 +345,15 @@ class Library:
             counts[str(m.get("type"))] = counts.get(str(m.get("type")), 0) + 1
         if self.bundles:
             counts["bundle"] = len(self.bundles)
+        if self.templates:
+            counts["template"] = len(self.templates)
         lines = ["The library now:"]
         lines.append("Counts: " + (", ".join(f"{n} {t}" for t, n in sorted(counts.items()))
                                    or "empty"))
         cats = list(self.categories.values())
         lines.append(f"Categories: {', '.join(cats) if cats else 'none'}")
         lines.append(f"Tags: {', '.join(self.tags[:60]) if self.tags else 'none'}")
-        rows = [*self.modules.values(), *self.bundles.values()]
+        rows = [*self.modules.values(), *self.bundles.values(), *self.templates.values()]
         rows.sort(key=lambda r: str(r.get("updated_at") or ""), reverse=True)
         lines.append(f"Items (id · type · name), newest first, {len(rows)} in all:")
         for r in rows[:MAX_OVERVIEW_ITEMS]:
@@ -335,6 +363,8 @@ class Library:
         return "\n".join(lines)
 
     def _kind(self, row: dict[str, Any]) -> str:
+        if row.get("id") in self.templates and "template_string" in row:
+            return "template"
         return "bundle" if row.get("id") in self.bundles and "children" in row else str(
             row.get("type") or "module")
 
@@ -342,8 +372,10 @@ class Library:
         bits = [str(r["id"]), self._kind(r), str(r.get("name") or "(unnamed)")]
         if r.get("type") == "wildcard" and isinstance(r.get("payload"), dict):
             var = r["payload"].get("var_binding")
-            if var:
-                bits.append(f"${var}")
+            bits.append(f"${var}" if var else "vocabulary")
+        elif r.get("type") == "combine" and isinstance(r.get("payload"), dict):
+            if r["payload"].get("output_var"):
+                bits.append(f"${r['payload']['output_var']}")
         return " · ".join(bits)
 
     def page_note(self, page: Any) -> str:
@@ -375,7 +407,19 @@ class Library:
     def get(self, item_id: Any) -> dict[str, Any] | None:
         if not isinstance(item_id, str):
             return None
-        return self.modules.get(item_id) or self.bundles.get(item_id)
+        return (self.modules.get(item_id) or self.bundles.get(item_id)
+                or self.templates.get(item_id))
+
+    def _resolve(self, args: dict[str, Any], *keys: str) -> dict[str, Any]:
+        """``args`` with each of ``keys`` (an id or a unique name) turned
+        into the item's id, so tools take either."""
+        out = dict(args)
+        for k in keys:
+            if isinstance(out.get(k), str) and self.get(out[k]) is None:
+                row = self._find(out[k])
+                if row is not None:
+                    out[k] = row["id"]
+        return out
 
     # ── read tools ───────────────────────────────────────────────────────
 
@@ -385,7 +429,7 @@ class Library:
         tag = _short(args.get("tag"), 40).lower().lstrip("#")
         hits: list[str] = []
         total = 0
-        for r in [*self.modules.values(), *self.bundles.values()]:
+        for r in [*self.modules.values(), *self.bundles.values(), *self.templates.values()]:
             kind = self._kind(r)
             if type_ and type_ not in (kind, kind.replace("_", " ")):
                 continue
@@ -424,30 +468,9 @@ class Library:
         cat = self.categories.get(r.get("category_id") or "", "")
         lines.append(f"Category: {cat or '(none)'}")
         lines.append(f"Tags: {', '.join(r.get('tags') or []) or '(none)'}")
-        lines.append(f"Rating: {r.get('content_rating') or 'safe'}")
-        p = r.get("payload") if isinstance(r.get("payload"), dict) else {}
-        if kind == "wildcard":
-            lines.append(f"Variable: ${p.get('var_binding') or '(none)'}")
-            lines.append(f"Option tags: {', '.join(p.get('sub_categories') or []) or '(none)'}")
-            opts = [o for o in p.get("options") or [] if isinstance(o, dict)]
-            lines.append(f"Options ({len(opts)}):")
-            for n, o in enumerate(opts[:MAX_READ_OPTIONS], start=1):
-                text = "∅ (empty)" if o.get("is_null") else _short(o.get("value"), 200)
-                extra = []
-                if o.get("weight", 1) != 1:
-                    extra.append(f"×{o.get('weight')}")
-                if o.get("sub_categories"):
-                    extra.append("#" + " #".join(o["sub_categories"]))
-                if o.get("fallback"):
-                    extra.append("fallback")
-                lines.append(f"{n}. {text}" + (f"  [{' '.join(extra)}]" if extra else ""))
-            if len(opts) > MAX_READ_OPTIONS:
-                lines.append(f"- … {len(opts) - MAX_READ_OPTIONS} more")
-        elif kind == "bundle":
-            lines.append(ai_describe.summarize("bundle", r.get("children") or [],
-                                               names=self.names))
-        else:
-            lines.append(ai_describe.summarize(kind, p, names=self.names))
+        if kind != "template":
+            lines.append(f"Rating: {r.get('content_rating') or 'safe'}")
+        lines.extend(self.read_body(kind, r))
         return "\n".join(lines)
 
     def variables(self, _args: dict[str, Any]) -> str:
@@ -488,47 +511,36 @@ class Library:
     def _name(self, args: dict[str, Any], fallback: str) -> str:
         return _short(args.get("name"), 120) or fallback
 
-    @staticmethod
-    def _option_rows(compiled: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        rows = []
-        for o in compiled:
-            row: dict[str, Any] = {
-                "id": secrets.token_hex(4), "value": o["value"], "weight": o["weight"],
-                "sub_categories": o["tags"],
-            }
-            if o["negative"]:
-                row["negative"] = o["negative"]
-            rows.append(row)
-        return rows
+    def _spec(self, args: dict[str, Any]) -> dict[str, Any]:
+        return {"options": args.get("options") if isinstance(args.get("options"), list) else [],
+                "axes": args.get("axes") if isinstance(args.get("axes"), list) else [],
+                "null_weight": args.get("null_weight", 0)}
 
     def create_wildcard(self, args: dict[str, Any]) -> dict[str, Any]:
         name = self._name(args, "")
         if not name:
             raise ValueError("give the wildcard a name")
         var = _short(args.get("var"), 64).lstrip("$")
-        if not _IDENT.match(var):
-            raise ValueError("var must be a variable name: letters, digits and _")
-        compiled = ai_wildcard.compile_options(
-            {"options": args.get("options") if isinstance(args.get("options"), list) else []},
-            existing_payload={"options": [], "sub_categories": []},
-        )
-        if not compiled["options"]:
-            raise ValueError("no usable options" + _skipped(compiled["skipped"]))
-        payload = {
-            "var_binding": var, "sub_categories": compiled["new_tags"],
-            "options": self._option_rows(compiled["options"]),
-        }
-        WildcardHandler.validate_payload(payload)
+        if var and not _IDENT.match(var):
+            raise ValueError("var must be a variable name: letters, digits and _ "
+                             "(or \"\" for a vocabulary)")
+        if not var and any(str(r.get("name") or "").lower() == name.lower()
+                           for r in self.modules.values() if r.get("type") == "wildcard"):
+            raise ValueError(f"a wildcard named {name} exists; a vocabulary needs a "
+                             "unique name so @{{{name}}} finds it")
+        out = ai_wildcard.compile_spec(self._spec(args), var=var or None, refs=self.refs)
+        payload = out["payload"]
         meta = self._meta(args)
         warnings = []
-        if var in self.catalog:
+        if var and var in self.catalog:
             warnings.append(f"${var} is already set elsewhere in the library")
         return {
             "title": f"Create wildcard {name}",
-            "summary": f"${var} with {len(payload['options'])} options",
-            "preview": [o["value"] + (f"  #{' #'.join(o['tags'])}" if o["tags"] else "")
-                        for o in compiled["options"]],
-            "warnings": warnings + _skip_notes(compiled["skipped"]),
+            "summary": (f"${var}" if var else "vocabulary (no variable)")
+            + f" with {len(payload['options'])} options",
+            "preview": out["preview"] + [f"Group {g}: {', '.join(t)}"
+                                         for g, t in (payload.get("tag_groups") or {}).items()],
+            "warnings": warnings + out["warnings"],
             "op": {"op": "create", "kind": "module", "new_category": meta["new_category"],
                    "body": {"type": "wildcard", "name": name, **meta["body"], "payload": payload}},
         }
@@ -553,23 +565,17 @@ class Library:
     def add_options(self, args: dict[str, Any]) -> dict[str, Any]:
         r = self._module(args, "wildcard")
         old = r.get("payload") if isinstance(r.get("payload"), dict) else {}
-        compiled = ai_wildcard.compile_options(
-            {"options": args.get("options") if isinstance(args.get("options"), list) else []},
-            existing_payload=old,
-        )
-        if not compiled["options"]:
-            raise ValueError("no usable new options" + _skipped(compiled["skipped"]))
-        payload = copy.deepcopy(old)
-        payload["sub_categories"] = list(dict.fromkeys(
-            [*(old.get("sub_categories") or []), *compiled["new_tags"]]))
-        payload["options"] = [*(old.get("options") or []), *self._option_rows(compiled["options"])]
-        WildcardHandler.validate_payload(payload)
+        spec = self._spec(args)
+        spec["null_weight"] = 0
+        out = ai_wildcard.compile_spec(spec, var=old.get("var_binding") or None, refs=self.refs,
+                                       self_id=r["id"], existing_payload=copy.deepcopy(old))
+        payload = out["payload"]
+        n = out["new_count"]
         return {
-            "title": f"Add {len(compiled['options'])} options to {r.get('name')}",
+            "title": f"Add {n} option{'s' if n != 1 else ''} to {r.get('name')}",
             "summary": f"{len(old.get('options') or [])} → {len(payload['options'])} options",
-            "preview": [o["value"] + (f"  #{' #'.join(o['tags'])}" if o["tags"] else "")
-                        for o in compiled["options"]],
-            "warnings": _skip_notes(compiled["skipped"]),
+            "preview": out["preview"],
+            "warnings": out["warnings"],
             "op": {"op": "update", "kind": "module", "type": "wildcard", "id": r["id"],
                    "name": r.get("name"), "body": {"payload": payload},
                    "before": {"payload": old}},
@@ -620,7 +626,8 @@ class Library:
             if not next(iter(raw.values())):
                 continue
             out = ai_wildcard_edit.compile_edit(action, raw, options=shown,
-                                                registry=registry + new_tags)
+                                                registry=registry + new_tags,
+                                                refs=self.refs, self_id=r["id"])
             got = out["changes"]
             if action in ("rewrite", "retag"):
                 skipped += [{"text": "the empty option", "reason": "it has no text"}
@@ -656,10 +663,22 @@ class Library:
             rows[int(c["id"]) - 1]["weight"] = c["after"]["weight"]
             preview.append(f"{shown[int(c['id']) - 1]['value'] or '∅'}: "
                            f"×{c['before']['weight']} → ×{c['after']['weight']}")
-        if not preview:
+        preview += self._option_extras(args, rows, nulls, gone, skipped, r["id"])
+        if isinstance(args.get("axes"), list) and args["axes"]:
+            payload["options"] = rows
+            grouped = ai_wildcard.group_tags(payload, args["axes"])
+            payload.update(grouped["payload"])
+            preview += grouped["preview"]
+            skipped += [{"text": "groups", "reason": w} for w in grouped["warnings"]]
+        if not preview and not isinstance(args.get("null_weight"), (int, float)):
             raise ValueError("that changes nothing" + _skipped(skipped)
                              + (f" ({len(kept)} options are used by constraints)" if kept else ""))
         payload["options"] = [o for i, o in enumerate(rows) if i not in gone]
+        null_w = args.get("null_weight")
+        if isinstance(null_w, (int, float)) and not isinstance(null_w, bool):
+            preview += self._null_weight(payload, null_w, refs)
+        if not preview:
+            raise ValueError("that changes nothing" + _skipped(skipped))
         if new_tags:
             payload["sub_categories"] = list(dict.fromkeys([*registry, *new_tags]))
         WildcardHandler.validate_payload(payload)
@@ -675,10 +694,77 @@ class Library:
                    "before": {"payload": old}},
         }
 
+    def _option_extras(self, args: dict[str, Any], rows: list[dict[str, Any]],
+                       nulls: set[str], gone: set[int], skipped: list[dict[str, str]],
+                       self_id: str) -> list[str]:
+        """Negatives and the fallback flag, by option number."""
+        preview: list[str] = []
+        for x in args.get("negatives") or []:
+            if not isinstance(x, dict):
+                continue
+            n = _num(x.get("n"), len(rows))
+            if n is None or str(n) in nulls or n - 1 in gone:
+                skipped.append({"text": f"negative for {x.get('n')}", "reason": "no such option"})
+                continue
+            try:
+                neg = ai_refs.compile_text(_short(x.get("negative"), 2000), surface="negative",
+                                           refs=self.refs, self_id=self_id)
+            except ValueError as e:
+                skipped.append({"text": f"negative for {n}", "reason": str(e)})
+                continue
+            row = rows[n - 1]
+            if neg == (row.get("negative") or ""):
+                continue
+            if neg:
+                row["negative"] = neg
+            else:
+                row.pop("negative", None)
+            preview.append(f"{self._show(row.get('value'))}: negative "
+                           + (self._show(neg) if neg else "removed"))
+        if "fallback" in args:
+            n = args.get("fallback")
+            n = 0 if n in (None, False, 0, "0", "") else _num(n, len(rows))
+            if n is None or (n and (str(n) in nulls or n - 1 in gone)):
+                skipped.append({"text": "fallback", "reason": "pick a non-empty option number"})
+            else:
+                had = next((i for i, o in enumerate(rows) if o.get("fallback")), None)
+                if had != (n - 1 if n else None):
+                    for o in rows:
+                        o.pop("fallback", None)
+                    if n:
+                        rows[n - 1]["fallback"] = True
+                        preview.append(f"Fallback: {self._show(rows[n - 1].get('value'))}")
+                    else:
+                        preview.append("No fallback")
+        return preview
+
+    @staticmethod
+    def _null_weight(payload: dict[str, Any], weight: float, refs: set[str]) -> list[str]:
+        opts = payload["options"]
+        i = next((k for k, o in enumerate(opts) if o.get("is_null")), None)
+        if weight <= 0:
+            if i is None:
+                return []
+            if isinstance(opts[i].get("id"), str) and opts[i]["id"] in refs:
+                return []
+            opts.pop(i)
+            return ["− ∅ (nothing)"]
+        w = ai_wildcard.clean_weight(weight)
+        if i is None:
+            taken = {o.get("id") for o in opts}
+            opts.append({"id": ai_wildcard.new_option_id(taken), "value": "", "is_null": True,
+                         "weight": w, "sub_categories": []})
+            return [f"+ ∅ (nothing) ×{w}"]
+        if opts[i].get("weight", 1) == w:
+            return []
+        before = opts[i].get("weight", 1)
+        opts[i]["weight"] = w
+        return [f"∅ (nothing): ×{before} → ×{w}"]
+
     def _rules(self, args: dict[str, Any], taken: set[str]) -> dict[str, Any]:
         compiled = ai_derivation.compile_rules(
             {"rules": args.get("rules") if isinstance(args.get("rules"), list) else []},
-            catalog=self.catalog, taken_ids=taken,
+            catalog=self.catalog, taken_ids=taken, refs=self.refs,
         )
         if not compiled["rules"]:
             raise ValueError("no usable rules" + _skipped(compiled["skipped"]))
@@ -695,7 +781,7 @@ class Library:
         return {
             "title": f"Create derivation {name}",
             "summary": f"{len(payload['rules'])} rule{'s' if len(payload['rules']) != 1 else ''}",
-            "preview": [ai_derivation.describe_rule(r) for r in payload["rules"]],
+            "preview": [self._show(ai_derivation.describe_rule(r)) for r in payload["rules"]],
             "warnings": [w for r in compiled["rules"] for w in r["warnings"]]
             + _skip_notes(compiled["skipped"]),
             "op": {"op": "create", "kind": "module", "new_category": meta["new_category"],
@@ -714,7 +800,8 @@ class Library:
         return {
             "title": f"Add {len(compiled['rules'])} rules to {r.get('name')}",
             "summary": f"{len(old_rules)} → {len(payload['rules'])} rules",
-            "preview": [ai_derivation.describe_rule(x["rule"]) for x in compiled["rules"]],
+            "preview": [self._show(ai_derivation.describe_rule(x["rule"]))
+                        for x in compiled["rules"]],
             "warnings": [w for x in compiled["rules"] for w in x["warnings"]]
             + _skip_notes(compiled["skipped"]),
             "op": {"op": "update", "kind": "module", "type": "derivation", "id": r["id"],
@@ -742,6 +829,9 @@ class Library:
             "source_wildcard_id": src["id"], "target_wildcard_id": tgt["id"],
             "matrix": matrix, "exceptions": [e["exception"] for e in compiled["exceptions"]],
         }
+        reach = _reach(args.get("reach"))
+        if reach and reach["mode"] != "all":
+            payload["target_select"] = reach
         ConstraintHandler.validate_payload(payload)
         name = self._name(args, f"{src.get('name')} → {tgt.get('name')}")
         meta = self._meta(args)
@@ -755,6 +845,8 @@ class Library:
                if e["exception"]["mode"] in ("boost", "reduce") else "")
             for e in compiled["exceptions"]
         ]
+        if reach and reach["mode"] != "all":
+            preview.append(f"Reaches {_reach_text(reach)}")
         return {
             "title": f"Create constraint {name}",
             "summary": f"{len(compiled['cells'])} tag rules, "
@@ -770,7 +862,8 @@ class Library:
         r = self._current(args.get("id"))[0]
         if r is None:
             raise ValueError(f"no item with id {_short(args.get('id'), 20)!r}")
-        kind = "bundle" if r["id"] in self.bundles else "module"
+        kind = ("bundle" if r["id"] in self.bundles else
+                "template" if r["id"] in self.templates else "module")
         body: dict[str, Any] = {}
         before: dict[str, Any] = {}
         preview: list[str] = []
@@ -797,13 +890,13 @@ class Library:
             before["tags"] = tags
             preview.append("Tags: " + " ".join(
                 [f"+#{a}" for a in added] + [f"−#{t}" for t in tags if t.lower() in rms]))
-        if kind == "module" and isinstance(args.get("category"), str) and args["category"]:
+        if kind != "bundle" and isinstance(args.get("category"), str) and args["category"]:
             cid, new_cat = self._category(args["category"])
             if (cid or new_cat) and cid != r.get("category_id"):
                 body["category_id"], before["category_id"] = cid, r.get("category_id")
                 preview.append(f"Category: {args['category'].strip()}"
                                + (" (new)" if new_cat else ""))
-        rating = args.get("rating")
+        rating = args.get("rating") if kind != "template" else None
         if rating in ("safe", "nsfw") and rating != (r.get("content_rating") or "safe"):
             body["content_rating"] = rating
             before["content_rating"] = r.get("content_rating") or "safe"
@@ -849,7 +942,7 @@ class Library:
         return {
             "title": f"Open {r.get('name')}", "summary": kind.replace("_", " "),
             "preview": [], "warnings": [],
-            "op": {"op": "open", "kind": "bundle" if kind == "bundle" else "module",
+            "op": {"op": "open", "kind": kind if kind in ("bundle", "template") else "module",
                    "type": kind, "id": r["id"]},
         }
 
@@ -859,6 +952,7 @@ class Library:
         fn = getattr(self, tool, None)
         if tool not in TOOLS or fn is None:
             raise ValueError(f"unknown tool {tool}")
+        args = self._resolve(args, "id", "source_id", "target_id")
         if tool in READ_TOOLS:
             return fn(args)
         item_id = args.get("id") if tool in ITEM_TOOLS else None
@@ -912,4 +1006,11 @@ def args_note(tool: str, args: dict[str, Any], lib: Library | None = None) -> st
         title = doc["title"] if doc else _short(args.get("page"), 30)
         sec = f" › {_short(args.get('section'), 30)}" if args.get("section") else ""
         return f"Read the docs: {title}{sec}"
+    if tool == "run_test":
+        stack = args.get("stack") if isinstance(args.get("stack"), list) else []
+        names = [_short(x.get("item") if isinstance(x, dict) else x, 30) for x in stack[:4]]
+        more = f" +{len(stack) - 4}" if len(stack) > 4 else ""
+        n = args.get("seeds") if isinstance(args.get("seeds"), int) else 100
+        return f"Ran {', '.join(names)}{more} on {n} seeds" + (
+            " with the proposed changes" if args.get("proposed") else "")
     return "Listed the library's variables"

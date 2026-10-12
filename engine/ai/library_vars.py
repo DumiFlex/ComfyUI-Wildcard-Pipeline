@@ -35,20 +35,27 @@ _SOURCE_LABEL = {
     "combine": "combine",
     "derivation": "set by derivation",
     "model": "WP Model Info",
+    "loop": "WP Context Loop",
+    "input": "run-time input",
+}
+#: What the WP Context Loop sets on every iteration (internal by default).
+LOOP_VARS = {
+    "iteration": "this iteration's number, 1 to N",
+    "iteration_total": "how many iterations the loop runs",
 }
 
 
 def _add(
     out: dict[str, dict[str, Any]], name: str, source: str, module: str,
     values: list[str] | None = None, tags: list[str] | None = None,
-    about: str = "",
+    about: str = "", axes: list[str] | None = None,
 ) -> None:
     if not isinstance(name, str) or not name or name.startswith("__"):
         return
     entry = out.get(name)
     if entry is None:
         entry = out[name] = {
-            "name": name, "sources": [], "values": [], "tags": [], "about": "",
+            "name": name, "sources": [], "values": [], "tags": [], "about": "", "axes": [],
         }
     if about and not entry["about"]:
         entry["about"] = about
@@ -61,6 +68,9 @@ def _add(
     for t in tags or []:
         if t not in entry["tags"]:
             entry["tags"].append(t)
+    for a in axes or []:
+        if a not in entry.setdefault("axes", []):
+            entry["axes"].append(a)
 
 
 def _action_targets(rule: Any) -> list[str]:
@@ -83,12 +93,16 @@ def _action_targets(rule: Any) -> list[str]:
     return out
 
 
-def build_catalog(modules: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """Every variable the library sets → ``{name, sources, values, tags}``.
+def build_catalog(
+    modules: list[dict[str, Any]], *, inputs: list[dict[str, Any]] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Every variable the library sets → ``{name, sources, values, tags, axes}``.
 
     ``values`` are a wildcard's option texts (what an ``equals`` condition
-    compares against); ``tags`` its tags. The WP Model Info variables are
-    always present, with the values the node can produce.
+    compares against); ``tags`` its tags; ``axes`` its "accepts" tag groups,
+    readable as ``$name.AXIS``. The WP Model Info and WP Context Loop
+    variables are always present; ``inputs`` (``{var, about}``) are run-time
+    inputs a request declares, set by a WP Context Injector.
     """
     out: dict[str, dict[str, Any]] = {}
     for m in modules:
@@ -107,7 +121,9 @@ def build_catalog(modules: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
                 and isinstance(o.get("value"), str) and o["value"].strip()
             ]
             tags = [t for t in p.get("sub_categories") or [] if isinstance(t, str)]
-            _add(out, p.get("var_binding") or "", "wildcard", mname, values, tags, desc)
+            kinds = p.get("tag_group_kinds") if isinstance(p.get("tag_group_kinds"), dict) else {}
+            axes = [k for k, v in kinds.items() if v == "accepts" and isinstance(k, str)]
+            _add(out, p.get("var_binding") or "", "wildcard", mname, values, tags, desc, axes)
         elif kind == "fixed_values":
             for v in p.get("values") or []:
                 if isinstance(v, dict) and isinstance(v.get("name"), str):
@@ -122,6 +138,11 @@ def build_catalog(modules: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     _add(out, FAMILY_VAR, "model", "", families)
     _add(out, VARIANT_VAR, "model", "", [r["variant"] for r in DEFAULT_VARIANT_RULES])
     _add(out, NAME_VAR, "model", "", [])
+    for name, about in LOOP_VARS.items():
+        _add(out, name, "loop", "", about=about)
+    for i in inputs or []:
+        if isinstance(i, dict) and isinstance(i.get("var"), str):
+            _add(out, i["var"], "input", "", about=str(i.get("about") or "")[:MAX_ABOUT])
     return out
 
 
@@ -149,6 +170,8 @@ def describe(catalog: dict[str, dict[str, Any]], *, focus: list[str] | None = No
             line += f": {shown}{more}"
         if e["tags"]:
             line += f"  [tags: {', '.join(e['tags'][:30])}]"
+        if e.get("axes"):
+            line += "  [reads: " + ", ".join(f"${name}.{a}" for a in e["axes"]) + "]"
         lines.append(line)
     if len(names) > MAX_VARS_SHOWN:
         lines.append(f"(+{len(names) - MAX_VARS_SHOWN} more variables not listed)")

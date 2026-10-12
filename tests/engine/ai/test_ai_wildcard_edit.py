@@ -50,7 +50,9 @@ def test_rewrite_refuses_syntax_and_collisions_and_drops_no_ops():
     ]}, options=OPTS, registry=REG)
     assert out["changes"] == []
     assert [s["reason"] for s in out["skipped"]] == [
-        "uses $, @, {, } or |", "same as another option",
+        "an option can't read $variables (a wildcard sets one); join variables in a "
+        "combine or a derivation instead (write $$ for a literal $)",
+        "same as another option",
     ]
 
 

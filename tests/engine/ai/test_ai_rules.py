@@ -5,7 +5,7 @@ import pytest
 
 from engine.ai import constraint as ai_constraint
 from engine.ai import derivation as ai_derivation
-from engine.ai import library_vars
+from engine.ai import library_vars, refs
 from engine.modules.constraint_handler import ConstraintHandler
 from engine.modules.derivation_handler import DerivationHandler
 
@@ -122,8 +122,8 @@ def test_derivation_warns_and_skips():
     [r] = out["rules"]
     assert r["warnings"] == [
         '$class has no option "bard"',
-        "nothing in your library sets $mood",
-        "nothing in your library sets $song_title",
+        ai_derivation.unset_note("mood"),
+        ai_derivation.unset_note("song_title"),
     ]
     assert r["rule"]["else"] == {
         "action": {"target_var": "song", "mode": "replace", "value": "silence"},
@@ -132,6 +132,30 @@ def test_derivation_warns_and_skips():
     assert [s["text"] for s in out["skipped"]] == ["bad var", "ref", "regex", "empty"]
     with pytest.raises(ValueError):
         ai_derivation.compile_rules({"nope": 1}, catalog=cat)
+
+
+def test_derivation_actions_pick_from_wildcards_by_name():
+    idx = refs.RefIndex([{"id": "c0c0c0c0", "name": "Weapons", "type": "wildcard",
+                          "payload": {"sub_categories": ["arcane"], "options": []}}])
+    cat = library_vars.build_catalog(LIBRARY)
+    out = ai_derivation.compile_rules(_drv([
+        {"summary": "gear", "branches": [{"match": "all",
+            "conditions": [{"var": "class", "op": "equals", "value": "mage"}],
+            "actions": [{"target_var": "gear", "mode": "append",
+                         "value": ", @{Weapons:arcane} on {a belt|the back}"}]}],
+         "else_actions": []},
+        {"summary": "pick in a condition", "branches": [{"match": "all",
+            "conditions": [{"var": "class", "op": "equals", "value": "{a|b}"}],
+            "actions": [_A("b")]}], "else_actions": []},
+        {"summary": "loop", "branches": [{"match": "all",
+            "conditions": [{"var": "iteration", "op": "equals", "value": "1"}],
+            "actions": [_A("first")]}], "else_actions": []},
+    ]), catalog=cat, refs=idx)
+    gear, loop = out["rules"]
+    assert gear["rule"]["branches"][0]["action"]["value"] == (
+        ", @{c0c0c0c0#Weapons:arcane} on {a belt|the back}")
+    assert loop["warnings"] == []
+    assert [s["text"] for s in out["skipped"]] == ["pick in a condition"]
 
 
 def _sides():

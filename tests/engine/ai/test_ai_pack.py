@@ -181,7 +181,7 @@ async def test_run_pack_and_eval_report():
             return PLAN
         for name, answer in ANSWERS.items():
             item = by_name[name]
-            if schema_name in ("options",) and f"Wildcard: {name}" in user:
+            if schema_name == "wildcard" and f"Wildcard: {name}" in user:
                 return answer
             if schema_name == "derivation_rules" and item["kind"] == "derivation":
                 return answer
@@ -204,3 +204,116 @@ async def test_run_pack_and_eval_report():
 
     [bad] = await evals.evaluate(broken, ["x"], seeds=5)
     assert bad["plan"] is False and "down" in bad["error"]
+
+
+PLAN2 = {
+    "title": "Winter Looks", "summary": "Winter outfits.", "rating": "safe", "questions": [],
+    "inputs": [{"var": "subject", "about": "who it is", "example": "a red-haired knight"}],
+    "items": [
+        {"kind": "wildcard", "name": "Colors", "var": "", "about": "colours", "count": 6,
+         "tags": ["warm", "cool"], "source": "", "target": "", "use": "pick 2"},
+        {"kind": "wildcard", "name": "Scarf", "var": "scarf", "about": "scarves", "count": 4,
+         "tags": [], "source": "", "target": "", "use": "pick 1-2; hold; nonsense"},
+        {"kind": "fixed_values", "name": "Quality", "var": "quality", "about": "quality tags",
+         "count": 0, "tags": [], "source": "", "target": "", "use": ""},
+        {"kind": "template", "name": "Look", "var": "", "about": "the prompt", "count": 0,
+         "tags": [], "source": "", "target": "", "use": ""},
+    ],
+}
+ANSWERS2 = {
+    "Colors": {"axes": [], "null_weight": 0, "options": [
+        {"text": t, "weight": 1, "tags": [tag], "negative": "", "fallback": False}
+        for t, tag in (("red", "warm"), ("amber", "warm"), ("blue", "cool"), ("teal", "cool"))]},
+    "Scarf": {"axes": [], "null_weight": 0, "options": [
+        {"text": "a @{Colors:warm} wool scarf", "weight": 1, "tags": [], "negative": "",
+         "fallback": False},
+        {"text": "a {knitted|woven} @{Colors} scarf", "weight": 1, "tags": [],
+         "negative": "@{Colors:cool}", "fallback": True},
+        {"text": "a @{Colours} scarf", "weight": 1, "tags": [], "negative": "", "fallback": False},
+    ]},
+    "Quality": {"values": [{"name": "quality", "value": "masterpiece, best quality",
+                            "negative": "lowres"}, {"name": "bad name!", "value": "x",
+                                                    "negative": ""}]},
+    "Look": {"template": "$subject wearing $scarf, $quality", "negative": "$negatives, blurry"},
+}
+
+
+def test_vocabulary_refs_fixed_values_inputs_and_use(wp_db):
+    plan = pack.compile_plan(PLAN2)
+    assert plan["inputs"] == [{"var": "subject", "about": "who it is",
+                               "example": "a red-haired knight"}]
+    colors = plan["items"][0]
+    assert colors["var"] == "" and colors["use"] == ""  # a vocabulary has no use line
+    order = pack.build_order(plan)
+    assert order[0] == colors["key"]
+    built, results = {}, {}
+    for key in order:
+        item = next(i for i in plan["items"] if i["key"] == key)
+        req = pack.item_request(plan, key, built)
+        if item["name"] == "Scarf":
+            assert "@{Colors} tags: warm, cool" in req["user"]
+        out = pack.compile_item(plan, key, built, ANSWERS2[item["name"]])
+        built[key] = {"id": out["id"], "payload": out["payload"]}
+        results[item["name"]] = out
+    cid = results["Colors"]["id"]
+    scarf = results["Scarf"]
+    assert [o["value"] for o in scarf["payload"]["options"]] == [
+        f"a @{{{cid}#Colors:warm}} wool scarf", f"a {{knitted|woven}} @{{{cid}#Colors}} scarf"]
+    assert any("Colours" in w for w in scarf["warnings"])
+    assert any("nonsense" in w for w in scarf["warnings"])
+    assert results["Quality"]["payload"]["values"][0]["negative"] == "lowres"
+    assert pack.chain_order(plan)[0] == plan["items"][2]["key"]  # fixed values first
+    assert colors["key"] not in pack.chain_order(plan)
+
+    report = pack.check_pack(plan, built, seeds=30)
+    assert report["problems"] == {} and report["notes"] == [], report
+    p = report["prompts"][0]
+    assert p["text"].startswith("a red-haired knight wearing a ") and "@{" not in p["text"]
+    assert p["negative"].endswith(", blurry") and "lowres" in p["negative"]
+
+    # A clashing vocabulary id moves, and the refs to it follow.
+    ops = pack.install_ops(plan, built, taken={cid}, template_ids=set(), bundle_ids=set())
+    new_cid = ops["ids"][colors["key"]]
+    assert new_cid != cid
+    result = commit_import(wp_db, {"adds": ops["adds"]})
+    assert result["ok"], result
+    sc = ModuleRepository(wp_db).get(ops["ids"][plan["items"][1]["key"]])
+    assert all(cid not in o["value"] for o in sc["payload"]["options"])
+    assert f"@{{{new_cid}#Colors:warm}}" in sc["payload"]["options"][0]["value"]
+    bundle = BundleRepository(wp_db).get(ops["bundle_id"])
+    assert [ch["meta"]["name"] for ch in bundle["children"]] == ["Quality", "Scarf"]
+    assert bundle["children"][1]["instance"] == {"pick_min": 1, "pick_max": 2,
+                                                 "seed_scope": "hold"}
+    assert any("Injector" in n and "subject" in n for n in ops["notes"])
+
+
+def test_template_with_a_pick_is_refused_and_braces_are_flagged():
+    plan = pack.compile_plan(PLAN2)
+    tkey = plan["items"][3]["key"]
+    with pytest.raises(ValueError, match="Assembler doesn't pick"):
+        pack.compile_item(plan, tkey, {}, {"template": "a {red|blue} $scarf", "negative": ""})
+
+
+def test_eval_features_score_a_built_pack():
+    import importlib.util
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location(
+        "ai_pack_evals", Path(__file__).resolve().parents[3] / "scripts" / "ai_pack_evals.py")
+    evals = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(evals)
+    wants = {f for r in evals.REQUESTS if isinstance(r, tuple) for f in [r[1]]}
+    assert wants == set(evals.FEATURES)
+    result = {
+        "plan": {"inputs": [{"var": "subject"}], "items": [
+            {"key": "i1", "kind": "wildcard", "use": "pick 2-3; hold"},
+            {"key": "i2", "kind": "fixed_values", "use": ""}]},
+        "built": {
+            "i1": {"payload": {"tag_group_kinds": {"SHOES": "accepts"}, "options": [
+                {"value": "@{abcd1234#Colors:warm} scarf", "fallback": True},
+                {"value": "", "is_null": True}]}},
+            "i2": {"payload": {"values": [{"name": "q", "value": "x", "negative": "lowres"}]}},
+        },
+    }
+    used = {f for f, check in evals.FEATURES.items() if check(result)}
+    assert used == set(evals.FEATURES) - {"model"}

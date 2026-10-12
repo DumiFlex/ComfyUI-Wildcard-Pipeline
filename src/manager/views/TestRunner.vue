@@ -22,6 +22,8 @@ import OutputsPanel from "../components/test-runner/OutputsPanel.vue";
 import SamplesPanel from "../components/test-runner/SamplesPanel.vue";
 import WarningsPanel from "../components/test-runner/WarningsPanel.vue";
 import ComparePanel from "../components/test-runner/ComparePanel.vue";
+import AiRunBar from "../components/test-runner/AiRunBar.vue";
+import { useAiConfig } from "../composables/useAiConfig";
 import TraceDrawer from "../components/test-runner/TraceDrawer.vue";
 import InspectorDrawer from "../components/test-runner/InspectorDrawer.vue";
 import { useScenarioWorkbench } from "../composables/useScenarioWorkbench";
@@ -36,6 +38,7 @@ import type { ScenarioRow, ScenarioStackItem } from "../api/types";
 const route = useRoute();
 const router = useRouter();
 const wb = useScenarioWorkbench();
+const ai = useAiConfig();
 const { draft, result } = wb;
 
 // Tell the AI chat what this run holds, so it can explain a warning or a
@@ -45,6 +48,14 @@ registerPageNote(() => {
     .map((v) => `${v.name} (${v.kind}${v.id ? ` ${v.id}` : ""}${v.enabled ? "" : ", off"})`)
     .join(", ");
   const bits = [`Test Runner scenario "${draft.value.name || "Quick run"}" with ${stack || "nothing"}`];
+  // The same stack in run_test's words, so the chat can re-run it as is.
+  const runStack = draft.value.stack
+    .filter((item) => item.enabled !== false)
+    .map((item) => "bundle" in item ? { item: item.bundle }
+      : item.instance && Object.keys(item.instance).length
+        ? { item: item.module, instance: item.instance } : { item: item.module });
+  const pins = Object.fromEntries(Object.entries(draft.value.pins ?? {}).filter(([, v]) => v !== ""));
+  bits.push(`run_test args: ${JSON.stringify({ stack: runStack, ...(Object.keys(pins).length ? { pins } : {}) })}`);
   const r = result.value;
   if (r) {
     bits.push(`Last run: ${r.runs} seeds, ${r.failed} failed`);
@@ -309,6 +320,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
             <div><span>Engine time</span><strong>{{ result.elapsed_ms < 1000 ? `${Math.round(result.elapsed_ms)} ms` : `${(result.elapsed_ms / 1000).toFixed(2)} s` }}</strong><em>real engine, seeded</em></div>
           </div>
 
+          <AiRunBar v-if="ai.ready.value" :result="result" />
           <section class="wp-tr__results" aria-label="Results">
             <div class="wp-tr__tabs" role="tablist">
               <button

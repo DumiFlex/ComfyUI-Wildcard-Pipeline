@@ -22,8 +22,8 @@ import re
 from typing import Any
 
 from engine.ai import about
+from engine.ai import refs as ai_refs
 from engine.ai.wildcard import (
-    _RESERVED_SYNTAX,
     MAX_TEXT_LEN,
     _clean_tag,
     _norm_key,
@@ -76,8 +76,9 @@ give a reason of a few words. Keep everything that doesn't clearly match.""",
 Task: REWRITE option texts as the request says (for example a different style, \
 tags to sentences, fixing typos, shorter). Return the full new text for each \
 option you change. Keep each option's meaning unless the request says \
-otherwise, keep options distinct from each other, and never use the characters \
-$ @ { } | in text.""",
+otherwise, keep options distinct from each other. Never use $ in text. Keep \
+any {a|b} pick and @{Name} reference unless the request is about them; a \
+reference must name a wildcard listed under "Wildcards you can point at".""",
     "retag": """
 Task: set TAGS on options as the request says. Return the option's complete new \
 tag list (it replaces the old one). Prefer the wildcard's existing tags. A new \
@@ -98,6 +99,7 @@ def build_edit_prompt(
     options: list[dict[str, Any]], tags: list[str],
     axes: dict[str, list[str]] | None = None,
     description: str = "", labels: list[str] | None = None,
+    refs: ai_refs.RefIndex | None = None,
 ) -> str:
     """`options` are `{"id", "value", "weight", "sub_categories", "negative"}`
     with the short ids the model answers with."""
@@ -124,7 +126,11 @@ def build_edit_prompt(
         if o.get("sub_categories"):
             extra.append("tags " + ", ".join(o["sub_categories"]))
         suffix = f"  [{'; '.join(extra)}]" if extra else ""
-        lines.append(f"{o['id']}. {o['value']}{suffix}")
+        lines.append(f"{o['id']}. {ai_refs.display_text(o['value'], refs)}{suffix}")
+    if refs and action == "rewrite":
+        lines.append("")
+        lines.append("Wildcards you can point at with @{name}:")
+        lines.append(refs.describe())
     lines.append("")
     lines.append(f"Request: {instruction.strip()}")
     return "\n".join(lines)
@@ -141,6 +147,7 @@ def _clean_weight(raw: Any) -> float | int | None:
 
 def compile_edit(
     action: str, raw: Any, *, options: list[dict[str, Any]], registry: list[str],
+    refs: ai_refs.RefIndex | None = None, self_id: str | None = None,
 ) -> dict[str, Any]:
     """Check the model's answer against the options it was shown.
 
@@ -194,13 +201,16 @@ def compile_edit(
         elif action == "rewrite":
             text = item.get("text")
             text = re.sub(r"\s+", " ", text).strip() if isinstance(text, str) else ""
-            if not text or text == opt["value"]:
-                continue
             if len(text) > MAX_TEXT_LEN:
                 skipped.append({"text": text[:80] + "…", "reason": "too long"})
                 continue
-            if any(s in text for s in _RESERVED_SYNTAX):
-                skipped.append({"text": text, "reason": "uses $, @, {, } or |"})
+            try:
+                text = ai_refs.compile_text(text, surface="option", refs=refs, self_id=self_id) \
+                    if text else ""
+            except ValueError as e:
+                skipped.append({"text": text, "reason": str(e)})
+                continue
+            if not text or text == opt["value"]:
                 continue
             nk = _norm_key(text)
             if final_texts.get(nk, oid) != oid:

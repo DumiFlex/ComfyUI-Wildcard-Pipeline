@@ -1,0 +1,811 @@
+"""The chat's tools for everything past wildcards and rules.
+
+A mixin for `chat.Library`: reading any item in full (with refs by name,
+tag groups, negatives, per-use settings), fixed values, combines, prompt
+templates, bundles, editing existing rules and constraints, and running a
+stack on the engine (`run_test`) so the model can check what a change does
+before the user applies it.
+
+Every change tool returns a proposal dict the manager shows as a card;
+nothing here writes. Payloads go through the same compilers the editor
+panels and the pack builder use, and their engine handlers.
+"""
+from __future__ import annotations
+
+import copy
+import re
+from typing import Any
+
+from engine.ai import constraint as ai_constraint
+from engine.ai import derivation as ai_derivation
+from engine.ai import pack as ai_pack
+from engine.ai import refs as ai_refs
+from engine.ai import text_items
+from engine.ai import use as ai_use
+from engine.ai import wildcard as ai_wildcard
+from engine.modules.constraint_handler import ConstraintHandler
+from engine.modules.derivation_handler import DerivationHandler
+from engine.modules.snapshot import payload_hash
+
+MAX_READ_ROWS = 150
+MAX_STACK = 40
+MAX_SEEDS = 500
+DEFAULT_SEEDS = 100
+SAMPLES = 3
+TOP_VALUES = 5
+_REACH = re.compile(r"^(all|first|next)(?:\s+(\d+))?$")
+
+
+def _short(text: Any, n: int) -> str:
+    s = re.sub(r"\s+", " ", text).strip() if isinstance(text, str) else ""
+    return s if len(s) <= n else s[: n - 1] + "…"
+
+
+def _plural(n: int, word: str) -> str:
+    return f"{n} {word}{'' if n == 1 else 's'}"
+
+
+def constraint_rows(p: dict[str, Any]) -> list[tuple[str, Any, Any, dict[str, Any]]]:
+    """A constraint's rules in the order `read` numbers them: matrix cells
+    (``("cell", src_tag, tgt_tag, cell)``), then exceptions
+    (``("exception", index, None, exc)``)."""
+    rows: list[tuple[str, Any, Any, dict[str, Any]]] = []
+    matrix = p.get("matrix") if isinstance(p.get("matrix"), dict) else {}
+    for src, row in matrix.items():
+        if isinstance(row, dict):
+            for tgt, cell in row.items():
+                if isinstance(cell, dict) and cell.get("mode") not in (None, "allow"):
+                    rows.append(("cell", src, tgt, cell))
+    for i, e in enumerate(p.get("exceptions") or []):
+        if isinstance(e, dict):
+            rows.append(("exception", i, None, e))
+    return rows
+
+
+def _effect(rule: dict[str, Any]) -> str:
+    mode = rule.get("mode", "")
+    if mode in ("boost", "reduce") and isinstance(rule.get("factor"), (int, float)):
+        return f"{mode} ×{rule['factor']}"
+    return str(mode)
+
+
+def _reach(raw: Any) -> dict[str, Any] | None:
+    """``"all"`` / ``"first"`` / ``"next 2"`` → a ``target_select``."""
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    m = _REACH.match(raw.strip().lower())
+    if not m:
+        raise ValueError("reach is all, first or next N")
+    mode = m.group(1)
+    if mode == "all":
+        return {"mode": "all"}
+    if mode == "first":
+        return {"mode": "first"}
+    return {"mode": "next", "count": max(1, min(20, int(m.group(2) or 1)))}
+
+
+def _reach_text(sel: Any) -> str:
+    if not isinstance(sel, dict) or sel.get("mode") in (None, "all"):
+        return "every target after it"
+    if sel["mode"] == "first":
+        return "the first target after it"
+    if sel["mode"] == "next":
+        return f"the next {sel.get('count', 1)} targets after it"
+    return "picked targets"
+
+
+class MoreTools:
+    """Mixed into `chat.Library` (which supplies modules, bundles,
+    templates, `_module`, `_current`, `_meta`, `_name`, `catalog`)."""
+
+    modules: dict[str, dict[str, Any]]
+    bundles: dict[str, dict[str, Any]]
+    templates: dict[str, dict[str, Any]]
+    names: dict[str, str]
+
+    # ── shared ───────────────────────────────────────────────────────────
+
+    @property
+    def refs(self) -> ai_refs.RefIndex:
+        return ai_refs.RefIndex([m for m in self.modules.values()
+                                 if m.get("type") == "wildcard"])
+
+    def _show(self, text: Any) -> str:
+        return ai_refs.display_text(text, self.refs)
+
+    def _find(self, raw: Any, kinds: tuple[str, ...] = ()) -> dict[str, Any] | None:
+        """An item by id, or by name when it is unique (case-insensitive)."""
+        if not isinstance(raw, str) or not raw.strip():
+            return None
+        key = raw.strip()
+        row = self.get(key)  # type: ignore[attr-defined]
+        if row is None:
+            low = key.lower().lstrip("$")
+            pool = [*self.modules.values(), *self.bundles.values(), *self.templates.values()]
+            hits = [r for r in pool if str(r.get("name") or "").lower() == low]
+            if not hits:
+                hits = [m for m in self.modules.values() if isinstance(m.get("payload"), dict)
+                        and low in (m["payload"].get("var_binding"),
+                                    m["payload"].get("output_var"))]
+            row = hits[0] if len(hits) == 1 else None
+        if row is not None and kinds and self._kind(row) not in kinds:  # type: ignore
+            return None
+        return row
+
+    def _used_by(self, mid: str) -> list[str]:
+        out = []
+        for m in self.modules.values():
+            p = m.get("payload") if isinstance(m.get("payload"), dict) else {}
+            if m.get("type") == "constraint":
+                if p.get("source_wildcard_id") == mid:
+                    out.append(f"constraint {m.get('name')} (source)")
+                if p.get("target_wildcard_id") == mid:
+                    out.append(f"constraint {m.get('name')} (target)")
+            elif m["id"] != mid and f"@{{{mid}" in str(p):
+                out.append(f"{m.get('type')} {m.get('name')} (points at it)")
+        for b in self.bundles.values():
+            if any(isinstance(c, dict) and c.get("id") == mid for c in b.get("children") or []):
+                out.append(f"bundle {b.get('name')}")
+        return out[:12]
+
+    # ── read ─────────────────────────────────────────────────────────────
+
+    def read_body(self, kind: str, r: dict[str, Any]) -> list[str]:
+        p = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+        if kind == "wildcard":
+            return self._read_wildcard(r, p)
+        if kind == "fixed_values":
+            vals = [v for v in p.get("values") or [] if isinstance(v, dict)]
+            lines = [f"Values ({len(vals)}):"]
+            for n, v in enumerate(vals, 1):
+                line = f"{n}. ${v.get('name', '')} = {v.get('value', '')}"
+                if v.get("negative"):
+                    line += f"  (negative: {v['negative']})"
+                lines.append(line)
+            return lines
+        if kind == "combine":
+            lines = [f"Sets ${p.get('output_var', '')} = {p.get('template', '')}"]
+            if p.get("negative"):
+                lines.append(f"Negative: {p['negative']}")
+            return lines
+        if kind == "derivation":
+            rules = [x for x in p.get("rules") or [] if isinstance(x, dict)]
+            lines = [f"Rules ({len(rules)}, each runs on its own, top to bottom):"]
+            lines += [f"{n}. {self._show(ai_derivation.describe_rule(x))}"
+                      for n, x in enumerate(rules, 1)]
+            return lines
+        if kind == "constraint":
+            src = self.names.get(str(p.get("source_wildcard_id")), "?")
+            tgt = self.names.get(str(p.get("target_wildcard_id")), "?")
+            lines = [f"Source: {src} ({p.get('source_wildcard_id')}). Target: {tgt} "
+                     f"({p.get('target_wildcard_id')}).",
+                     f"Reaches {_reach_text(p.get('target_select'))}."]
+            rows = constraint_rows(p)
+            lines.append(f"Rules ({len(rows)}):")
+            for n, (what, a, b, rule) in enumerate(rows, 1):
+                if what == "cell":
+                    lines.append(f"{n}. #{a} → #{b}: {_effect(rule)}")
+                else:
+                    lines.append(f"{n}. {rule.get('source')} → {rule.get('target')}: "
+                                 f"{_effect(rule)} (one option pair)")
+            return lines
+        if kind == "bundle":
+            kids = [c for c in r.get("children") or [] if isinstance(c, dict)]
+            lines = [f"Runs in this order ({len(kids)}):"]
+            for n, c in enumerate(kids, 1):
+                meta = c.get("meta") if isinstance(c.get("meta"), dict) else {}
+                cname = meta.get("name") or self.names.get(str(c.get("id")), "") or c.get("id")
+                line = f"{n}. {c.get('type')} {cname}"
+                use = ai_use.describe(c.get("instance"))
+                if use:
+                    line += f"  [use: {use}]"
+                if c.get("enabled") is False:
+                    line += "  (off)"
+                lines.append(line)
+            return lines
+        if kind == "template":
+            lines = [f"Template: {r.get('template_string') or ''}"]
+            neg = r.get("negative_template")
+            lines.append(f"Negative: {neg}" if neg else "Negative: (none: just the "
+                         "negatives of what the prompt used)")
+            return lines
+        return []
+
+    def _read_wildcard(self, r: dict[str, Any], p: dict[str, Any]) -> list[str]:
+        lines = []
+        var = p.get("var_binding")
+        lines.append(f"Variable: ${var}" if var else
+                     f"Variable: none (a vocabulary: options elsewhere point at it with "
+                     f"@{{{r.get('name')}}})")
+        groups = p.get("tag_groups") if isinstance(p.get("tag_groups"), dict) else {}
+        kinds = p.get("tag_group_kinds") if isinstance(p.get("tag_group_kinds"), dict) else {}
+        grouped: set[str] = set()
+        for g, members in groups.items():
+            kind = kinds.get(g, "classify")
+            how = f"accepts; read ${var}.{g}" if kind == "accepts" and var else kind
+            lines.append(f"Tag group {g} ({how}): {', '.join(members)}")
+            grouped.update(members)
+        loose = [t for t in p.get("sub_categories") or [] if t not in grouped]
+        lines.append(f"{'Other tags' if groups else 'Option tags'}: "
+                     f"{', '.join(loose) or '(none)'}")
+        used = self._used_by(r["id"])
+        if used:
+            lines.append("Used by: " + "; ".join(used))
+        opts = [o for o in p.get("options") or [] if isinstance(o, dict)]
+        lines.append(f"Options ({len(opts)}):")
+        refs = self.refs
+        for n, o in enumerate(opts[:MAX_READ_ROWS], start=1):
+            lines.append(f"{n}. {ai_wildcard.option_line(o, refs)}")
+        if len(opts) > MAX_READ_ROWS:
+            lines.append(f"- … {len(opts) - MAX_READ_ROWS} more")
+        return lines
+
+    # ── fixed values ─────────────────────────────────────────────────────
+
+    def create_fixed_values(self, args: dict[str, Any]) -> dict[str, Any]:
+        name = self._name(args, "")  # type: ignore[attr-defined]
+        if not name:
+            raise ValueError("give the fixed values a name")
+        out = text_items.compile_fixed({"values": args.get("values") or []})
+        meta = self._meta(args)  # type: ignore[attr-defined]
+        clash = [v["name"] for v in out["payload"]["values"] if v["name"] in self.catalog]  # type: ignore[attr-defined]
+        warnings = [f"${n} is already set elsewhere in the library" for n in clash[:4]]
+        return {
+            "title": f"Create fixed values {name}",
+            "summary": _plural(len(out["payload"]["values"]), "value"),
+            "preview": out["preview"], "warnings": warnings + out["warnings"],
+            "op": {"op": "create", "kind": "module", "new_category": meta["new_category"],
+                   "body": {"type": "fixed_values", "name": name, **meta["body"],
+                            "payload": out["payload"]}},
+        }
+
+    def edit_values(self, args: dict[str, Any]) -> dict[str, Any]:
+        r = self._module(args, "fixed_values")  # type: ignore[attr-defined]
+        old = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+        payload = copy.deepcopy(old)
+        preview: list[str] = []
+        warnings: list[str] = []
+        if args.get("set"):
+            out = text_items.compile_fixed({"values": args["set"]}, existing=payload)
+            payload, preview, warnings = out["payload"], out["preview"], out["warnings"]
+        drop = {str(n).lstrip("$") for n in args.get("remove") or [] if isinstance(n, str)}
+        if drop:
+            kept = [v for v in payload.get("values") or [] if v.get("name") not in drop]
+            gone = len(payload.get("values") or []) - len(kept)
+            payload["values"] = kept
+            preview += [f"− ${n}" for n in sorted(drop)][:gone]
+        if not preview:
+            raise ValueError("that changes nothing")
+        return self._update(r, old, payload, f"Change {r.get('name')}", preview, warnings,
+                            "fixed_values")
+
+    # ── combine ──────────────────────────────────────────────────────────
+
+    def create_combine(self, args: dict[str, Any]) -> dict[str, Any]:
+        name = self._name(args, "")  # type: ignore[attr-defined]
+        var = _short(args.get("var"), 64).lstrip("$")
+        if not name or not var:
+            raise ValueError("give the combine a name and the variable it sets")
+        cat = dict(self.catalog)  # type: ignore[attr-defined]
+        out = text_items.compile_combine(args, out_var=var, catalog=cat)
+        meta = self._meta(args)  # type: ignore[attr-defined]
+        warnings = list(out["warnings"])
+        if var in cat:
+            warnings.insert(0, f"${var} is already set elsewhere in the library")
+        return {
+            "title": f"Create combine {name}", "summary": f"sets ${var}",
+            "preview": out["preview"], "warnings": warnings,
+            "op": {"op": "create", "kind": "module", "new_category": meta["new_category"],
+                   "body": {"type": "combine", "name": name, **meta["body"],
+                            "payload": out["payload"]}},
+        }
+
+    def edit_combine(self, args: dict[str, Any]) -> dict[str, Any]:
+        r = self._module(args, "combine")  # type: ignore[attr-defined]
+        old = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+        raw = {"template": args["template"] if isinstance(args.get("template"), str)
+               else old.get("template", ""),
+               "negative": args["negative"] if isinstance(args.get("negative"), str)
+               else old.get("negative", "")}
+        out = text_items.compile_combine(raw, out_var=str(old.get("output_var") or ""),
+                                         catalog=self.catalog, existing=old)  # type: ignore
+        if out["payload"] == old:
+            raise ValueError("that changes nothing")
+        return self._update(r, old, out["payload"], f"Change {r.get('name')}", out["preview"],
+                            out["warnings"], "combine")
+
+    # ── templates ────────────────────────────────────────────────────────
+
+    def create_template(self, args: dict[str, Any]) -> dict[str, Any]:
+        name = self._name(args, "")  # type: ignore[attr-defined]
+        if not name:
+            raise ValueError("give the template a name")
+        out = text_items.compile_template(args, catalog=self.catalog)  # type: ignore
+        meta = self._meta(args)  # type: ignore[attr-defined]
+        return {
+            "title": f"Create template {name}", "summary": "prompt template",
+            "preview": out["preview"], "warnings": out["warnings"],
+            "op": {"op": "create", "kind": "template", "new_category": "",
+                   "body": {"name": name, "description": meta["body"]["description"],
+                            "tags": meta["body"]["tags"], **out["payload"]}},
+        }
+
+    def edit_template(self, args: dict[str, Any]) -> dict[str, Any]:
+        r = self.templates.get(args.get("id")) if isinstance(args.get("id"), str) else None
+        if r is None:
+            raise ValueError(f"no template with id {_short(args.get('id'), 20)!r}")
+        r = self._current(r["id"])[0] or r  # type: ignore[attr-defined]
+        raw = {"template": args["template"] if isinstance(args.get("template"), str)
+               else r.get("template_string") or "",
+               "negative": args["negative"] if isinstance(args.get("negative"), str)
+               else r.get("negative_template") or ""}
+        out = text_items.compile_template(raw, catalog=self.catalog)  # type: ignore
+        before = {"template_string": r.get("template_string") or "",
+                  "negative_template": r.get("negative_template") or ""}
+        if out["payload"] == before:
+            raise ValueError("that changes nothing")
+        return {
+            "title": f"Change template {r.get('name')}", "summary": "prompt template",
+            "preview": out["preview"], "warnings": out["warnings"],
+            "op": {"op": "update", "kind": "template", "type": "template", "id": r["id"],
+                   "name": r.get("name"), "body": out["payload"], "before": before},
+        }
+
+    # ── derivation rules ─────────────────────────────────────────────────
+
+    def edit_rules(self, args: dict[str, Any]) -> dict[str, Any]:
+        r = self._module(args, "derivation")  # type: ignore[attr-defined]
+        old = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+        rules = [copy.deepcopy(x) for x in old.get("rules") or [] if isinstance(x, dict)]
+        preview: list[str] = []
+        warnings: list[str] = []
+        for x in args.get("replace") or []:
+            if not isinstance(x, dict):
+                continue
+            n = _num(x.get("n"), len(rules))
+            if n is None:
+                warnings.append(f"Left out rule {x.get('n')}: no such rule")
+                continue
+            compiled = ai_derivation.compile_rules(
+                {"rules": [x.get("rule")]}, catalog=self.catalog,  # type: ignore
+                refs=self.refs, taken_ids={y.get("id") for y in rules})
+            if not compiled["rules"]:
+                warnings += [f"Left out rule {n}: {s['reason']}" for s in compiled["skipped"]]
+                continue
+            new = {**compiled["rules"][0]["rule"], "id": rules[n - 1].get("id")}
+            preview.append(f"{n}. {self._show(ai_derivation.describe_rule(rules[n - 1]))} → "
+                           f"{self._show(ai_derivation.describe_rule(new))}")
+            warnings += compiled["rules"][0]["warnings"]
+            rules[n - 1] = new
+        gone = {n for n in (_num(v, len(rules)) for v in args.get("remove") or []) if n}
+        for n in sorted(gone):
+            preview.append(f"− {n}. {self._show(ai_derivation.describe_rule(rules[n - 1]))}")
+        rules = [x for i, x in enumerate(rules, 1) if i not in gone]
+        if not preview:
+            raise ValueError("that changes nothing" + "".join(f"; {w}" for w in warnings[:3]))
+        payload = {**copy.deepcopy(old), "rules": rules}
+        DerivationHandler.validate_payload(payload)
+        return self._update(r, old, payload, f"Change rules in {r.get('name')}", preview,
+                            list(dict.fromkeys(warnings)), "derivation")
+
+    # ── constraints ──────────────────────────────────────────────────────
+
+    def edit_constraint(self, args: dict[str, Any]) -> dict[str, Any]:
+        r = self._module(args, "constraint")  # type: ignore[attr-defined]
+        old = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+        src = self.modules.get(str(old.get("source_wildcard_id")))
+        tgt = self.modules.get(str(old.get("target_wildcard_id")))
+        if src is None or tgt is None:
+            raise ValueError("one of its wildcards isn't in the library any more")
+        payload = copy.deepcopy(old)
+        preview: list[str] = []
+        warnings: list[str] = []
+        rows = constraint_rows(payload)
+        gone = {n for n in (_num(v, len(rows)) for v in args.get("remove") or []) if n}
+        drop_exc = set()
+        for n in sorted(gone):
+            what, a, b, rule = rows[n - 1]
+            if what == "cell":
+                payload["matrix"][a].pop(b, None)
+                if not payload["matrix"][a]:
+                    payload["matrix"].pop(a)
+                preview.append(f"− #{a} → #{b}: {_effect(rule)}")
+            else:
+                drop_exc.add(a)
+                preview.append(f"− {rule.get('source')} → {rule.get('target')}: {_effect(rule)}")
+        if drop_exc:
+            payload["exceptions"] = [e for i, e in enumerate(payload.get("exceptions") or [])
+                                     if i not in drop_exc]
+        if args.get("rules"):
+            source = ai_constraint.side_view(self._current(src["id"])[0] or src, "S")  # type: ignore
+            target = ai_constraint.side_view(self._current(tgt["id"])[0] or tgt, "T")  # type: ignore
+            compiled = ai_constraint.compile_rules(
+                {"rules": args["rules"]}, source=source, target=target, existing=payload)
+            for c in compiled["cells"]:
+                payload.setdefault("matrix", {}).setdefault(c["source_tag"], {})[
+                    c["target_tag"]] = c["cell"]
+                preview.append(f"#{c['source_tag']} → #{c['target_tag']}: {_effect(c['cell'])}"
+                               + (" (replaces)" if c["replaces"] else ""))
+            excs = list(payload.get("exceptions") or [])
+            for e in compiled["exceptions"]:
+                pair = (e["exception"]["source"], e["exception"]["target"])
+                excs = [x for x in excs if (x.get("source"), x.get("target")) != pair]
+                excs.append(e["exception"])
+                preview.append(f"{pair[0]} → {pair[1]}: {_effect(e['exception'])}")
+            payload["exceptions"] = excs
+            warnings += [f"Left out {s['text'][:50]}: {s['reason']}" for s in compiled["skipped"]]
+        if "reach" in args:
+            sel = _reach(args.get("reach"))
+            if sel and sel != (old.get("target_select") or {"mode": "all"}):
+                if sel["mode"] == "all":
+                    payload.pop("target_select", None)
+                else:
+                    payload["target_select"] = sel
+                preview.append(f"Reaches {_reach_text(sel)}")
+        if not preview:
+            raise ValueError("that changes nothing")
+        ConstraintHandler.validate_payload(payload)
+        return self._update(r, old, payload, f"Change {r.get('name')}", preview, warnings,
+                            "constraint")
+
+    # ── bundles ──────────────────────────────────────────────────────────
+
+    def _child(self, raw: Any, warnings: list[str]) -> dict[str, Any] | None:
+        """A stack/bundle entry: ``"name or id"`` or ``{"item", "use"}``."""
+        ref, use = (raw.get("item") or raw.get("id"), raw.get("use")) \
+            if isinstance(raw, dict) else (raw, "")
+        row = self._find(ref)
+        if row is None:
+            warnings.append(f"Left out {_short(ref, 40) or 'an item'}: not in the library "
+                            "(or more than one item has that name; use its id)")
+            return None
+        row = self._current(row["id"])[0] or row  # type: ignore[attr-defined]
+        kind = self._kind(row)  # type: ignore[attr-defined]
+        if kind == "template":
+            warnings.append(f"Left out {row.get('name')}: a template isn't part of a stack")
+            return None
+        if kind == "bundle":
+            return {"id": row["id"], "type": "bundle", "enabled": True, "name": row.get("name")}
+        p = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+        inst, notes = ai_use.parse_use(use, kind=kind, tags=p.get("sub_categories")
+                                       if kind == "wildcard" else None)
+        warnings += [f"{row.get('name')}: {n}" for n in notes]
+        return {
+            "id": row["id"], "type": kind, "enabled": True, "collapsed": False,
+            "meta": {"name": row.get("name"), "library_name": row.get("name")},
+            "payload": copy.deepcopy(p), "payload_hash": payload_hash(p),
+            "instance": inst, "entries": [], "name": row.get("name"),
+        }
+
+    def _order(self, kids: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Producers first, a constraint between its source and target,
+        derivations after the picks, combines last (the pack's order)."""
+        plan_items = []
+        for n, c in enumerate(kids):
+            p = c.get("payload") or {}
+            item = {"key": f"i{n + 1}", "kind": c["type"], "var": "", "source": "", "target": ""}
+            if c["type"] == "wildcard":
+                item["var"] = (c.get("instance") or {}).get("variable_binding") \
+                    or p.get("var_binding") or f"__vocab{n}"
+            elif c["type"] in ("combine", "fixed_values", "derivation"):
+                item["var"] = p.get("output_var") or f"__x{n}"
+            elif c["type"] == "constraint":
+                byid = {k.get("id"): k for k in kids if k["type"] == "wildcard"}
+                s, t = byid.get(p.get("source_wildcard_id")), byid.get(p.get("target_wildcard_id"))
+                if s is None or t is None:
+                    item["kind"] = "derivation"  # unknown edges: keep it with the rules
+                else:
+                    item["source"] = (s.get("payload") or {}).get("var_binding") or ""
+                    item["target"] = (t.get("payload") or {}).get("var_binding") or ""
+            plan_items.append(item)
+        bundles = [c for c in kids if c["type"] == "bundle"]
+        plan = {"items": [i for i in plan_items if i["kind"] != "bundle"]}
+        try:
+            order = ai_pack.chain_order(plan)
+        except KeyError:
+            return kids
+        by_key = {i["key"]: kids[n] for n, i in enumerate(plan_items)}
+        return bundles + [by_key[k] for k in order if k in by_key]
+
+    def create_bundle(self, args: dict[str, Any]) -> dict[str, Any]:
+        name = self._name(args, "")  # type: ignore[attr-defined]
+        if not name:
+            raise ValueError("give the bundle a name")
+        warnings: list[str] = []
+        kids = [k for k in (self._child(x, warnings) for x in (args.get("items") or [])
+                            [:MAX_STACK]) if k]
+        if not kids:
+            raise ValueError("no items to bundle" + "".join(f"; {w}" for w in warnings[:3]))
+        if args.get("order") != "as_given":
+            kids = self._order(kids)
+        meta = self._meta(args)  # type: ignore[attr-defined]
+        return {
+            "title": f"Create bundle {name}",
+            "summary": _plural(len(kids), "item"),
+            "preview": [self._kid_line(n, k) for n, k in enumerate(kids, 1)],
+            "warnings": warnings,
+            "op": {"op": "create", "kind": "bundle", "new_category": "",
+                   "body": {"name": name, "description": meta["body"]["description"],
+                            "tags": meta["body"]["tags"],
+                            "children": [self._stored(k) for k in kids]}},
+        }
+
+    @staticmethod
+    def _stored(k: dict[str, Any]) -> dict[str, Any]:
+        if k["type"] == "bundle":
+            return {"id": k["id"], "type": "bundle", "enabled": k.get("enabled", True)}
+        return {key: v for key, v in k.items() if key != "name"}
+
+    @staticmethod
+    def _kid_line(n: int, k: dict[str, Any]) -> str:
+        meta = k.get("meta") if isinstance(k.get("meta"), dict) else {}
+        line = f"{n}. {k['type']} {k.get('name') or meta.get('name') or k['id']}"
+        use = ai_use.describe(k.get("instance"))
+        return line + (f"  [use: {use}]" if use else "")
+
+    def edit_bundle(self, args: dict[str, Any]) -> dict[str, Any]:
+        r = self._current(args.get("id"))[0] if isinstance(args.get("id"), str) else None  # type: ignore
+        if r is None or r.get("id") not in self.bundles:
+            raise ValueError(f"no bundle with id {_short(args.get('id'), 20)!r}")
+        old = [copy.deepcopy(c) for c in r.get("children") or [] if isinstance(c, dict)]
+        kids = copy.deepcopy(old)
+        warnings: list[str] = []
+        preview: list[str] = []
+        for x in args.get("use") or []:
+            if not isinstance(x, dict):
+                continue
+            n = _num(x.get("n"), len(kids))
+            if n is None or kids[n - 1].get("type") == "bundle":
+                warnings.append(f"Left out use for {x.get('n')}: not a module in the bundle")
+                continue
+            k = kids[n - 1]
+            p = k.get("payload") if isinstance(k.get("payload"), dict) else {}
+            inst, notes = ai_use.parse_use(x.get("use"), kind=k["type"],
+                                           tags=p.get("sub_categories")
+                                           if k["type"] == "wildcard" else None)
+            warnings += notes
+            keep = {key: v for key, v in (k.get("instance") or {}).items()
+                    if key not in _USE_KEYS}
+            k["instance"] = {**keep, **inst}
+            preview.append(self._kid_line(n, {**k, "name": (k.get("meta") or {}).get("name")}))
+        gone = {n for n in (_num(v, len(kids)) for v in args.get("remove") or []) if n}
+        for n in sorted(gone):
+            meta = kids[n - 1].get("meta") or {}
+            preview.append(f"− {kids[n - 1].get('type')} "
+                           f"{meta.get('name') or self.names.get(str(kids[n - 1].get('id')), '')}")
+        kids = [k for i, k in enumerate(kids, 1) if i not in gone]
+        added = [k for k in (self._child(x, warnings) for x in args.get("add") or []) if k]
+        for k in added:
+            preview.append(f"+ {self._kid_line(len(kids) + 1, k)[3:]}")
+        kids += added
+        if added and args.get("order") != "as_given":
+            kids = self._order(kids)
+        if not preview:
+            raise ValueError("that changes nothing" + "".join(f"; {w}" for w in warnings[:3]))
+        return {
+            "title": f"Change bundle {r.get('name')}",
+            "summary": f"{len(old)} → {_plural(len(kids), 'item')}",
+            "preview": preview, "warnings": warnings,
+            "op": {"op": "update", "kind": "bundle", "type": "bundle", "id": r["id"],
+                   "name": r.get("name"), "body": {"children": [self._stored(k) for k in kids]},
+                   "before": {"children": old}},
+        }
+
+    # ── shared update proposal ───────────────────────────────────────────
+
+    def _update(self, r: dict[str, Any], old: dict[str, Any], payload: dict[str, Any],
+                title: str, preview: list[str], warnings: list[str],
+                type_: str) -> dict[str, Any]:
+        return {
+            "title": title, "summary": type_.replace("_", " "),
+            "preview": [self._show(x) for x in preview], "warnings": warnings,
+            "op": {"op": "update", "kind": "module", "type": type_, "id": r["id"],
+                   "name": r.get("name"), "body": {"payload": payload},
+                   "before": {"payload": old}},
+        }
+
+    # ── run_test ─────────────────────────────────────────────────────────
+
+    def _stack(self, raw: Any, proposed: bool) -> tuple[list[dict[str, Any]], list[str]]:
+        warnings: list[str] = []
+        modules: list[dict[str, Any]] = []
+        get = (lambda i: self._current(i)[0]) if proposed else self.get  # type: ignore
+        for i, x in enumerate((raw if isinstance(raw, list) else [])[:MAX_STACK]):
+            ref, use = (x.get("item") or x.get("id"), x.get("use")) if isinstance(x, dict) \
+                else (x, "")
+            found = self._find(ref)
+            row = get(found["id"]) if found else None
+            if row is None:
+                warnings.append(f"Left out {_short(ref, 40)}: not in the library")
+                continue
+            kind = self._kind(row)  # type: ignore[attr-defined]
+            if kind == "template":
+                warnings.append(f"{row.get('name')} is a template; pass it as template")
+                continue
+            uid = f"s{i}"
+            if kind == "bundle":
+                modules += self._expand(row, uid, get)
+                continue
+            p = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+            inst, notes = ai_use.parse_use(use, kind=kind, tags=p.get("sub_categories")
+                                           if kind == "wildcard" else None)
+            warnings += notes
+            raw_inst = x.get("instance") if isinstance(x, dict) else None
+            if isinstance(raw_inst, dict):
+                # A Test Runner stack item's own settings, passed through.
+                inst = {**{k: v for k, v in raw_inst.items() if isinstance(k, str)}, **inst}
+            modules.append(self._entry(row, uid, inst))
+        return modules, warnings
+
+    @staticmethod
+    def _entry(row: dict[str, Any], uid: str, inst: dict[str, Any],
+               origin: str | None = None) -> dict[str, Any]:
+        e = {"id": row["id"], "_uid": uid, "type": row.get("type"), "enabled": True,
+             "name": row.get("name", ""), "meta": {"name": row.get("name", "")},
+             "payload": copy.deepcopy(row.get("payload") or {}),
+             "payload_hash": payload_hash(row.get("payload") or {}), "instance": inst}
+        if origin:
+            e["bundle_origin"] = origin
+        return e
+
+    def _expand(self, bundle: dict[str, Any], uid: str, get: Any) -> list[dict[str, Any]]:
+        out = []
+        for j, c in enumerate(bundle.get("children") or []):
+            if not isinstance(c, dict) or c.get("enabled") is False:
+                continue
+            if c.get("type") == "bundle":
+                inner = get(c.get("id"))
+                if inner and inner.get("id") in self.bundles:
+                    for k, g in enumerate(inner.get("children") or []):
+                        if isinstance(g, dict) and g.get("type") != "bundle" \
+                                and g.get("enabled") is not False:
+                            out.append(self._kid_entry(g, f"{uid}.{j}.{k}", f"{uid}.{j}"))
+                continue
+            out.append(self._kid_entry(c, f"{uid}.{j}", uid))
+        return out
+
+    def _kid_entry(self, c: dict[str, Any], uid: str, origin: str) -> dict[str, Any]:
+        meta = c.get("meta") if isinstance(c.get("meta"), dict) else {}
+        row = {"id": c.get("id"), "type": c.get("type"), "payload": c.get("payload") or {},
+               "name": meta.get("name") or self.names.get(str(c.get("id")), "")}
+        return self._entry(row, uid, dict(c.get("instance") or {}), origin)
+
+    def _run(self, modules: list[dict[str, Any]], pins: dict[str, str], seeds: int,
+             template: dict[str, Any] | None) -> dict[str, Any]:
+        from engine.pipeline import PipelineEngine
+        from engine.scenario import run_scenario
+
+        rows = [m for m in self.modules.values() if m.get("type") == "wildcard"]
+        rows += [m for m in modules if m.get("type") == "wildcard"]
+        catalog = ai_pack.ref_catalog(modules, rows)
+        seed_list = list(range(1, seeds + 1))
+        report = run_scenario(modules, seeds=seed_list, catalog=catalog, pins=pins,
+                              sample_limit=0, value_limit=TOP_VALUES)
+        report["prompts"] = []
+        if template is not None:
+            for seed in seed_list[:SAMPLES]:
+                try:
+                    ctx = PipelineEngine().run(copy.deepcopy(modules),
+                                               ctx={**pins, "__wp_catalog__": catalog}, seed=seed)
+                    report["prompts"].append(ai_pack.render(
+                        template.get("template_string") or "",
+                        template.get("negative_template") or "", ctx))
+                except Exception as exc:  # noqa: BLE001 - shown, not raised
+                    report["prompts"].append((f"(failed: {exc})", ""))
+        return report
+
+    def run_test(self, args: dict[str, Any]) -> str:
+        seeds = args.get("seeds", DEFAULT_SEEDS)
+        seeds = max(1, min(MAX_SEEDS, int(seeds))) if isinstance(seeds, (int, float)) \
+            and not isinstance(seeds, bool) else DEFAULT_SEEDS
+        pins = {str(k).lstrip("$"): str(v) for k, v in (args.get("pins") or {}).items()} \
+            if isinstance(args.get("pins"), dict) else {}
+        template = None
+        if args.get("template"):
+            template = self._find(args["template"], ("template",))
+            if template is None:
+                raise ValueError(f"no template {_short(args['template'], 40)!r}")
+        modules, warnings = self._stack(args.get("stack"), False)
+        if not modules:
+            raise ValueError("nothing to run" + "".join(f"; {w}" for w in warnings[:3]))
+        report = self._run(modules, pins, seeds, template)
+        before = None
+        if args.get("proposed") and self._pending:  # type: ignore[attr-defined]
+            after_modules, _ = self._stack(args.get("stack"), True)
+            before, report = report, self._run(after_modules, pins, seeds, template)
+            modules = after_modules
+        return self._report(report, modules, warnings, before)
+
+    def _report(self, report: dict[str, Any], modules: list[dict[str, Any]],
+                warnings: list[str], before: dict[str, Any] | None) -> str:
+        runs = report["runs"]
+        lines = [f"Ran {_plural(runs, 'seed')}"
+                 + (f", {report['failed']} failed" if report["failed"] else "")
+                 + (" with the proposed changes (was → now)" if before else "") + "."]
+        lines += [f"Note: {w}" for w in warnings]
+
+        def share(var: dict[str, Any] | None, value: str) -> str:
+            if not var:
+                return "0%"
+            total = sum(var["counts"].values()) + var["other"]
+            return f"{round(100 * var['counts'].get(value, 0) / total) if total else 0}%"
+
+        for name, v in report["variables"].items():
+            total = sum(v["counts"].values()) + v["other"]
+            tops = "; ".join(
+                (f'"{_short(self._show(k), 50)}" ' if k else "(empty) ")
+                + (f"{share((before or {}).get('variables', {}).get(name), k)} → " if before
+                   else "") + f"{round(100 * n / total) if total else 0}%"
+                for k, n in list(v["counts"].items())[:TOP_VALUES])
+            tag = " (internal)" if v.get("internal") else ""
+            lines.append(f"${name}{tag}: {tops} ({v['distinct']} different)")
+        for m in modules:
+            if m.get("type") != "wildcard":
+                continue
+            picked = report["picks"].get(m["id"], {})
+            never = [o.get("value") for o in m["payload"].get("options") or []
+                     if isinstance(o, dict) and not o.get("is_null") and o.get("id") not in picked
+                     and o.get("weight", 1) != 0]
+            if never and len(never) < len(m["payload"].get("options") or []):
+                lines.append(f"Never picked in {m.get('name')}: "
+                             + ", ".join(_short(self._show(x), 40) for x in never[:8])
+                             + (f" (+{len(never) - 8})" if len(never) > 8 else ""))
+        for w in report["warnings"][:10]:
+            detail = w.get("detail") if isinstance(w.get("detail"), dict) else {}
+            what = detail.get("hint") or w.get("message") or w.get("type")
+            lines.append(f"Warning: {_short(what, 200)} ({w['count']} of {runs} runs)")
+        for prompt, negative in report.get("prompts") or []:
+            lines.append(f"Prompt: {_short(prompt, 400)}")
+            if negative:
+                lines.append(f"  Negative: {_short(negative, 200)}")
+        return "\n".join(lines)
+
+
+_USE_KEYS = {"pick_min", "pick_max", "pick_separator", "pick_independent", "category_filter",
+             "exclude_null", "match_variable", "seed_scope", "internal", "variable_binding"}
+
+
+def _num(raw: Any, size: int) -> int | None:
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return n if 1 <= n <= size else None
+
+
+GUIDE_TOOLS = """\
+- create_fixed_values {"name", "description", "tags", "category", "values": \
+[{"name": variable, "value": text (may use {a|b}, no $), "negative": ""}]}
+- edit_values {"id", "set": [same as values; a name that exists is replaced], \
+"remove": [variable names]}
+- create_combine {"name", "var": the variable it sets, "description", "tags", \
+"category", "template": text reading $variables (may use {a|b}), "negative": ""}
+- edit_combine {"id", "template"?, "negative"?}
+- create_template {"name", "description", "tags", "template": the final \
+prompt reading $variables only (no picks), "negative": standing negative \
+with $negatives where the used variables' negatives go}
+- edit_template {"id", "template"?, "negative"?}
+- edit_rules {"id": derivation id, "replace": [{"n": rule number, "rule": a \
+rule like in add_rules}], "remove": [rule numbers]}
+- edit_constraint {"id", "rules": [like create_constraint; a pair that \
+exists is replaced], "remove": [rule numbers read shows], "reach": "all" | \
+"first" | "next N" (which target wildcards after it it changes)}
+- create_bundle {"name", "description", "tags", "items": [name or id, or \
+{"item": name or id, "use": per-use settings}], "order": "auto" (default: \
+producers, then constraints before their target, rules, combines) or \
+"as_given"}
+- edit_bundle {"id", "add": [like items], "remove": [numbers], "use": [{"n", \
+"use"}], "order"?}
+"""
+
+GUIDE_RUN = """\
+- run_test {"stack": [names or ids of modules and bundles, or {"item", \
+"use"} (or {"item", "instance"} as the Test Runner page gives it)], \
+"pins": {"var": value set from outside, like an Injector}, \
+"seeds": 100, "template": a template name or id for sample prompts, \
+"proposed": true to run it with the changes you proposed in this answer \
+(was → now)}: runs the stack on the engine and reports each variable's top \
+values, options never picked, warnings with counts and sample prompts. Use \
+it to check a change before or after proposing it, and to answer "why do I \
+never get X?".\
+"""

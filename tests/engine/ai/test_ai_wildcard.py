@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import pytest
 
+from engine.ai import refs
 from engine.ai import wildcard as w
 
 EXISTING = {
@@ -35,11 +36,62 @@ def test_duplicates_of_existing_and_each_other_are_skipped():
     assert [s["reason"] for s in out["skipped"]] == ["duplicate", "duplicate"]
 
 
-@pytest.mark.parametrize("text", ["$color hair", "@{abcd1234} hair", "{a|b} hair"])
-def test_extension_syntax_is_refused(text):
+@pytest.mark.parametrize("text, why", [
+    ("$color hair", "can't read $variables"),
+    ("@{abcd1234} hair", "no wildcards to point at"),
+    ("a {b hair", "isn't a pick"),
+])
+def test_unusable_syntax_is_refused_with_a_reason(text, why):
     out = w.compile_options({"options": [_opt(text)]}, existing_payload=EXISTING)
     assert out["options"] == []
-    assert out["skipped"][0]["reason"].startswith("uses")
+    assert why in out["skipped"][0]["reason"]
+
+
+COLORS = {"id": "c0c0c0c0", "name": "Colors", "type": "wildcard",
+          "payload": {"var_binding": "color", "sub_categories": ["warm", "cool"],
+                      "options": [{"id": "o1", "value": "red", "sub_categories": ["warm"]}]}}
+
+
+def test_picks_and_named_refs_compile():
+    idx = refs.RefIndex([COLORS])
+    out = w.compile_options({"options": [
+        _opt("{long|short} hair"), _opt("@{Colors:warm!null} hair", negative="@{colors}"),
+        _opt("@{Colors:hot} hair"), _opt("@{Paints} hair"),
+    ]}, existing_payload=EXISTING, refs=idx)
+    assert [o["value"] for o in out["options"]] == [
+        "{long|short} hair", "@{c0c0c0c0#Colors:warm!null} hair"]
+    assert out["options"][1]["negative"] == "@{c0c0c0c0#Colors}"
+    assert [s["reason"] for s in out["skipped"]] == [
+        "Colors has no tag 'hot'; its tags are warm, cool", "no wildcard named 'Paints'"]
+
+
+def test_a_ref_to_itself_or_back_is_refused():
+    idx = refs.RefIndex([COLORS])
+    out = w.compile_options({"options": [_opt("@{Colors} hair")]},
+                            existing_payload=EXISTING, refs=idx, self_id="c0c0c0c0")
+    assert "itself" in out["skipped"][0]["reason"]
+
+
+def test_spec_builds_groups_null_and_one_fallback():
+    out = w.compile_spec({
+        "axes": [{"name": "SHOES", "kind": "accepts", "tags": ["sneakers", "boots"]},
+                 {"name": "neg", "kind": "accepts", "tags": ["formal"]}],
+        "null_weight": 2,
+        "options": [
+            {"text": "jeans", "weight": 1, "tags": ["sneakers", "boots"], "negative": "",
+             "fallback": True},
+            {"text": "suit", "weight": 1, "tags": ["formal"], "negative": "", "fallback": True},
+        ],
+    }, var="outfit")
+    p = out["payload"]
+    assert p["var_binding"] == "outfit"
+    assert p["tag_groups"] == {"SHOES": ["sneakers", "boots"], "neg": ["formal"]}
+    assert p["tag_group_kinds"] == {"SHOES": "accepts", "neg": "classify"}
+    assert [o.get("fallback") for o in p["options"]] == [True, None, None]
+    assert p["options"][-1] == {"id": p["options"][-1]["id"], "value": "", "is_null": True,
+                                "weight": 2, "sub_categories": []}
+    assert any("neg" in x for x in out["warnings"])
+    assert any("offers no SHOES tag" in x for x in out["warnings"])
 
 
 def test_tags_are_reshaped_and_reuse_existing_spelling():

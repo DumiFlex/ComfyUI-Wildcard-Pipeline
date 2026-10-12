@@ -25,6 +25,7 @@ const EDIT_ROUTES: Record<string, string> = {
   constraint: "constraints-edit",
   fixed_values: "fixed-values-edit",
   bundle: "bundles-edit",
+  template: "templates-edit",
 };
 const PREVIEW_LINES = 6;
 const SUGGESTIONS = [
@@ -35,6 +36,10 @@ const SUGGESTIONS = [
 const DOC_SUGGESTIONS = [
   "Explain this page in simpler words",
   "Show me a small example of this",
+];
+const TEST_SUGGESTIONS = [
+  "Explain this run",
+  "Why do I never get some of these options?",
 ];
 const EDITOR_SUGGESTIONS = [
   "What could make this better?",
@@ -57,6 +62,7 @@ const isLocal = computed(() => {
 
 const suggestions = computed(() => {
   if (route.name === "documentation-page") return DOC_SUGGESTIONS;
+  if (route.name === "test") return TEST_SUGGESTIONS;
   if (typeof route.params.id === "string" && route.params.id) return EDITOR_SUGGESTIONS;
   return SUGGESTIONS;
 });
@@ -80,6 +86,13 @@ function page(): AiChatPage {
 function send(): void {
   void chat.send(page());
 }
+
+// A page asked a question (`chat.ask`): send it once the drawer is here.
+watch(chat.queued, (text) => {
+  if (!text) return;
+  chat.queued.value = "";
+  if (chat.input.value.trim() === text.trim()) send();
+}, { immediate: true });
 
 function suggest(text: string): void {
   chat.input.value = text;
@@ -117,7 +130,7 @@ function target(entry: ChatAssistantEntry, p: AiChatProposal): RouteLocationRaw 
   const op = p.op;
   if (op.op === "create") {
     const id = entry.created[p.pid];
-    const name = EDIT_ROUTES[op.body.type];
+    const name = EDIT_ROUTES[op.kind === "module" ? op.body.type : op.kind];
     return id && name ? { name, params: { id } } : null;
   }
   if (op.op === "open" && op.kind === "doc") {

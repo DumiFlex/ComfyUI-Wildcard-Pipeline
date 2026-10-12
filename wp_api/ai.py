@@ -45,9 +45,10 @@ from engine.ai import constraint as ai_constraint
 from engine.ai import derivation as ai_derivation
 from engine.ai import describe as ai_describe
 from engine.ai import followup as ai_followup
-from engine.ai import library_vars
+from engine.ai import library_vars, text_items
 from engine.ai import organize as ai_organize
 from engine.ai import pack as ai_pack
+from engine.ai import refs as ai_refs
 from engine.ai import wildcard as ai_wildcard
 from engine.ai import wildcard_edit as ai_edit
 from engine.db.repositories import (
@@ -55,6 +56,7 @@ from engine.db.repositories import (
     CategoryRepository,
     ModuleNotFound,
     ModuleRepository,
+    TemplateRepository,
 )
 from engine.importer import commit_import
 from wp_api import _ai_client
@@ -142,6 +144,24 @@ async def _ask(
     return await _ai_client.complete_json(cfg, user=user, history=history, **kwargs)
 
 
+def _wildcards(request: web.Request) -> list[dict[str, Any]]:
+    """The library's wildcards, for name refs (`@{Colors:warm}`)."""
+    with db_session(request) as conn:
+        return [m for m in ModuleRepository(conn).list() if m.get("type") == "wildcard"]
+
+
+def _ref_index(rows: list[dict[str, Any]], editor_id: Any = None,
+               editor_payload: Any = None, name: Any = None) -> ai_refs.RefIndex:
+    """Library wildcards, with the open editor's version of its own."""
+    idx = ai_refs.RefIndex(rows)
+    if isinstance(editor_id, str) and isinstance(editor_payload, dict):
+        saved = idx.rows.get(editor_id) or {}
+        idx.add({"id": editor_id, "type": "wildcard",
+                 "name": name if isinstance(name, str) and name else saved.get("name", ""),
+                 "payload": editor_payload})
+    return idx
+
+
 def _str_list(value: Any, *, limit: int) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -190,11 +210,14 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
     var = wc.get("var_binding") if isinstance(wc.get("var_binding"), str) else ""
 
     description, labels = ai_about.clean(wc.get("description"), wc.get("tags"))
+    self_id = wc.get("id") if isinstance(wc.get("id"), str) else None
+    refs = _ref_index(_wildcards(request), self_id, payload, name)
+    existing_texts = [ai_refs.display_text(t, refs) for t in existing_texts]
     first = ai_wildcard.build_user_prompt(
         instruction=ai_followup.first_instruction(turns, instruction), count=count,
         name=name[:200], var_binding=var[:100],
         existing_options=existing_texts, tags=tags, axes=axes,
-        description=description, labels=labels,
+        description=description, labels=labels, refs_text=refs.describe(exclude=self_id),
     )
     try:
         answer = await _ask(
@@ -212,7 +235,7 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
                 "options": [o for o in options if isinstance(o, dict)][:5000],
                 "sub_categories": tags,
             },
-            limit=count,
+            limit=count, refs=refs, self_id=self_id,
         )
     except ValueError as e:
         return json_error(
@@ -287,10 +310,13 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
     var = wc.get("var_binding") if isinstance(wc.get("var_binding"), str) else ""
 
     description, labels = ai_about.clean(wc.get("description"), wc.get("tags"))
+    self_id = wc.get("id") if isinstance(wc.get("id"), str) else None
+    refs = _ref_index(_wildcards(request), self_id, payload, name)
     first = ai_edit.build_edit_prompt(
         action=action, instruction=ai_followup.first_instruction(turns, instruction),
         name=name[:200], var_binding=var[:100],
         options=rows, tags=tags, axes=axes, description=description, labels=labels,
+        refs=refs,
     )
     try:
         answer = await _ask(
@@ -303,7 +329,8 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
     try:
-        result = ai_edit.compile_edit(action, answer, options=rows, registry=tags)
+        result = ai_edit.compile_edit(action, answer, options=rows, registry=tags,
+                                      refs=refs, self_id=self_id)
     except ValueError as e:
         return json_error(
             f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
@@ -352,6 +379,7 @@ async def post_derivation_draft(request: web.Request) -> web.Response:
     with db_session(request) as conn:
         modules = ModuleRepository(conn).list()
     catalog = library_vars.build_catalog(modules)
+    refs = ai_refs.RefIndex([m for m in modules if m.get("type") == "wildcard"])
     focus = [
         n for line in (ai_derivation.describe_rule(r) for r in rules)
         for n in library_vars.var_names_in(line)
@@ -362,6 +390,7 @@ async def post_derivation_draft(request: web.Request) -> web.Response:
         description=description, labels=labels,
         catalog_text=library_vars.describe(catalog, focus=focus),
         existing_rules=[ai_derivation.describe_rule(r) for r in rules],
+        refs_text=refs.describe(),
     )
     try:
         answer = await _ask(
@@ -374,8 +403,97 @@ async def post_derivation_draft(request: web.Request) -> web.Response:
     try:
         result = ai_derivation.compile_rules(
             answer, catalog=catalog,
-            taken_ids={r["id"] for r in rules if isinstance(r.get("id"), str)},
+            taken_ids={r["id"] for r in rules if isinstance(r.get("id"), str)}, refs=refs,
         )
+    except ValueError as e:
+        return json_error(
+            f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
+            status=502,
+        )
+    result["model"] = cfg["model"]
+    result["answer"] = answer
+    return json_ok(result)
+
+
+_TEXT_KINDS = {
+    "fixed_values": (text_items.FIXED_SYSTEM, text_items.FIXED_SCHEMA, "fixed_values"),
+    "combine": (text_items.COMBINE_SYSTEM, text_items.COMBINE_SCHEMA, "combine"),
+    "template": (text_items.TEMPLATE_SYSTEM, text_items.TEMPLATE_SCHEMA, "prompt_template"),
+}
+
+
+async def post_text_draft(request: web.Request) -> web.Response:
+    """Body: {kind: "fixed_values"|"combine"|"template", instruction,
+    history?, item: {id?, name, description?, tags?, payload? (fixed values,
+    combine), template_string?, negative_template? (template)}}.
+
+    The editor panels for fixed values, combines and prompt templates. The
+    answer is compiled against the editor's item as it stands: fixed values
+    come back as the whole value list (a name that exists is rewritten in
+    place), a combine or template as its new text.
+    """
+    cfg = _enabled_cfg()
+    if isinstance(cfg, web.Response):
+        return cfg
+    body = await _body(request)
+    if isinstance(body, web.Response):
+        return body
+    kind = body.get("kind")
+    if kind not in _TEXT_KINDS:
+        return json_error("kind must be fixed_values, combine or template", status=400)
+    instruction = _instruction(body, "say what to write")
+    if isinstance(instruction, web.Response):
+        return instruction
+    turns = _turns(body)
+    if isinstance(turns, web.Response):
+        return turns
+    item = body.get("item") if isinstance(body.get("item"), dict) else {}
+    payload = item.get("payload") if isinstance(item.get("payload"), dict) else {}
+    name = item.get("name") if isinstance(item.get("name"), str) else ""
+    out_var = ""
+    if kind == "fixed_values":
+        current = "\n".join(
+            f"${v.get('name')} = {v.get('value')}"
+            + (f"  (negative: {v['negative']})" if v.get("negative") else "")
+            for v in payload.get("values") or [] if isinstance(v, dict))
+    elif kind == "combine":
+        out_var = payload.get("output_var") if isinstance(payload.get("output_var"), str) else ""
+        out_var = out_var.strip().lstrip("$")
+        if not out_var:
+            return json_error("name the variable the combine sets first", status=400)
+        current = str(payload.get("template") or "")
+        if payload.get("negative"):
+            current += f"\nNegative: {payload['negative']}"
+    else:
+        current = str(item.get("template_string") or "")
+        if item.get("negative_template"):
+            current += f"\nNegative: {item['negative_template']}"
+
+    with db_session(request) as conn:
+        modules = ModuleRepository(conn).list()
+    item_id = item.get("id") if isinstance(item.get("id"), str) else None
+    catalog = library_vars.build_catalog([m for m in modules if m.get("id") != item_id])
+    description, labels = ai_about.clean(item.get("description"), item.get("tags"))
+    first = text_items.build_prompt(
+        kind=kind, instruction=ai_followup.first_instruction(turns, instruction),
+        name=name[:200], catalog_text=library_vars.describe(catalog), description=description,
+        labels=labels, current=current[:4000], out_var=out_var,
+    )
+    system, schema, schema_name = _TEXT_KINDS[kind]
+    try:
+        answer = await _ask(cfg, first=first, turns=turns, instruction=instruction,
+                            system=system, schema=schema, schema_name=schema_name,
+                            temperature=0.5)
+    except _ai_client.AIError as e:
+        return json_error(e.message, status=e.status)
+    try:
+        if kind == "fixed_values":
+            result = text_items.compile_fixed(answer, existing=payload)
+        elif kind == "combine":
+            result = text_items.compile_combine(answer, out_var=out_var, catalog=catalog,
+                                                existing=payload)
+        else:
+            result = text_items.compile_template(answer, catalog=catalog)
     except ValueError as e:
         return json_error(
             f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
@@ -633,7 +751,7 @@ async def post_chat(request: web.Request) -> web.Response:
     with db_session(request) as conn:
         lib = ai_chat.Library(
             ModuleRepository(conn).list(), BundleRepository(conn).list(),
-            CategoryRepository(conn).list(),
+            CategoryRepository(conn).list(), TemplateRepository(conn).list(),
         )
     page = body.get("page") if isinstance(body.get("page"), dict) else None
     if page:
@@ -766,8 +884,9 @@ async def post_pack_item(request: web.Request) -> web.Response:
     note = body.get("note") if isinstance(body.get("note"), str) else ""
     if not isinstance(key, str) or key not in {i["key"] for i in plan["items"]}:
         return json_error("no such item in the plan", status=400)
+    library = _wildcards(request)
     try:
-        req = ai_pack.item_request(plan, key, built, note[:1500])
+        req = ai_pack.item_request(plan, key, built, note[:1500], library=library)
     except ai_pack.PlanError as e:
         return json_error(str(e), status=400)
     try:
@@ -778,7 +897,7 @@ async def post_pack_item(request: web.Request) -> web.Response:
     try:
         out = ai_pack.compile_item(
             plan, key, built, answer, taken={b["id"] for b in built.values()},
-            item_id=old["id"] if old else "",
+            item_id=old["id"] if old else "", library=library,
         )
     except ValueError as e:
         return json_error(
@@ -803,8 +922,10 @@ async def post_pack_check(request: web.Request) -> web.Response:
     plan, built = parsed
     if not built:
         return json_error("nothing is built yet", status=400)
+    library = _wildcards(request)
     loop = asyncio.get_running_loop()
-    report = await loop.run_in_executor(None, lambda: ai_pack.check_pack(plan, built))
+    report = await loop.run_in_executor(
+        None, lambda: ai_pack.check_pack(plan, built, library=library))
     return json_ok(report)
 
 
@@ -841,6 +962,7 @@ async def post_pack_install(request: web.Request) -> web.Response:
     return json_ok({
         "undo_entry_id": result["undo_id"], "ids": ops["ids"],
         "bundle_id": ops["bundle_id"], "template_id": ops["template_id"], "tag": ops["tag"],
+        "notes": ops["notes"],
     })
 
 
@@ -853,6 +975,7 @@ def register(router: web.UrlDispatcher) -> None:
     router.add_post("/wp/api/ai/wildcard/edit", post_wildcard_edit)
     router.add_post("/wp/api/ai/derivation/draft", post_derivation_draft)
     router.add_post("/wp/api/ai/constraint/draft", post_constraint_draft)
+    router.add_post("/wp/api/ai/text/draft", post_text_draft)
     router.add_post("/wp/api/ai/describe", post_describe)
     router.add_post("/wp/api/ai/organize", post_organize)
     router.add_post("/wp/api/ai/chat", post_chat)

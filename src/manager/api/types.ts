@@ -1088,13 +1088,17 @@ export interface AiChatRequest {
 
 export type AiChatOp =
   | { op: "create"; kind: "module"; new_category: string; body: ModuleCreateInput }
+  | { op: "create"; kind: "bundle"; new_category: string; body: BundleCreateInput }
+  | { op: "create"; kind: "template"; new_category: string; body: TemplateCreateInput }
   | {
-      op: "update"; kind: "module" | "bundle"; type: string; id: string; name: string;
-      body: ModuleUpdateInput; before: ModuleUpdateInput; new_category?: string;
+      op: "update"; kind: "module" | "bundle" | "template"; type: string; id: string;
+      name: string; body: ModuleUpdateInput & BundleUpdateInput & TemplateUpdateInput;
+      before: ModuleUpdateInput & BundleUpdateInput & TemplateUpdateInput;
+      new_category?: string;
       /** "editor": built on the open editor's unsaved version; goes into it. */
       basis?: "editor";
     }
-  | { op: "open"; kind: "module" | "bundle"; type: string; id: string }
+  | { op: "open"; kind: "module" | "bundle" | "template"; type: string; id: string }
   | { op: "open"; kind: "doc"; type: "doc"; id: string }
   | { op: "open"; kind: "page"; type: "page"; id: string; section?: string };
 
@@ -1121,7 +1125,8 @@ export interface AiChatResult {
 
 /* ── Pack builder ───────────────────────────────────────────────────── */
 
-export type AiPackKind = "wildcard" | "derivation" | "combine" | "constraint" | "template";
+export type AiPackKind =
+  | "wildcard" | "fixed_values" | "derivation" | "combine" | "constraint" | "template";
 
 export interface AiPackItem {
   key: string;
@@ -1137,6 +1142,16 @@ export interface AiPackItem {
   /** A constraint's two wildcards, by variable. */
   source: string;
   target: string;
+  /** Per-use settings on the bundle ("pick 2-3; hold"), or "". */
+  use: string;
+}
+
+/** A value the pack reads but doesn't set: a WP Context Injector row. */
+export interface AiPackInput {
+  var: string;
+  about: string;
+  /** What the check pins it to. */
+  example: string;
 }
 
 export interface AiPackPlan {
@@ -1144,6 +1159,7 @@ export interface AiPackPlan {
   summary: string;
   rating: "safe" | "nsfw";
   questions: Array<{ question: string; choices: string[] }>;
+  inputs: AiPackInput[];
   items: AiPackItem[];
   /** What the checker left out of the model's plan. */
   warnings: string[];
@@ -1189,6 +1205,32 @@ export interface AiPackInstallResult {
   bundle_id: string;
   template_id: string;
   tag: string;
+  /** How to wire the pack on the canvas. */
+  notes: string[];
+}
+
+export interface AiTextDraftRequest extends AiConversational {
+  kind: "fixed_values" | "combine" | "template";
+  instruction: string;
+  item: {
+    id?: string;
+    name: string;
+    description?: string;
+    tags?: string[];
+    payload?: Record<string, unknown>;
+    template_string?: string;
+    negative_template?: string;
+  };
+}
+
+/** Fixed values: the whole value list. Combine: its payload. Template:
+ *  `{template_string, negative_template}`. */
+export interface AiTextDraftResult {
+  payload: Record<string, unknown>;
+  preview: string[];
+  warnings: string[];
+  model: string;
+  answer: Record<string, unknown>;
 }
 
 /* ── Tag autocomplete ─────────────────────────────────────────────────── */

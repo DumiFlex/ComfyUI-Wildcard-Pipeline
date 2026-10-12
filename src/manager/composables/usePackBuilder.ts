@@ -31,9 +31,14 @@ export interface ItemState {
 
 /** Repair rounds after the first check. */
 const MAX_REPAIRS = 2;
+/** Mirrors `engine/ai/pack.py:build_order`: vocabularies (wildcards with
+ *  no variable) first, since other items point at them by name. */
 const BUILD_RANK: Record<AiPackItem["kind"], number> = {
-  wildcard: 0, derivation: 1, combine: 2, constraint: 3, template: 4,
+  fixed_values: 1, wildcard: 1, derivation: 2, combine: 3, constraint: 4, template: 5,
 };
+function buildRank(item: AiPackItem): number {
+  return item.kind === "wildcard" && !item.var ? 0 : BUILD_RANK[item.kind];
+}
 
 function message(err: unknown): string {
   return err instanceof ApiError || err instanceof Error ? err.message : "Something went wrong";
@@ -163,7 +168,7 @@ async function build(): Promise<void> {
   installed.value = null;
   const order = p.items
     .map((item, i) => ({ item, i }))
-    .sort((a, b) => BUILD_RANK[a.item.kind] - BUILD_RANK[b.item.kind] || a.i - b.i)
+    .sort((a, b) => buildRank(a.item) - buildRank(b.item) || a.i - b.i)
     .map(({ item }) => item);
   states.value = Object.fromEntries(order.map((i) => [i.key, { status: "waiting" } as ItemState]));
   try {

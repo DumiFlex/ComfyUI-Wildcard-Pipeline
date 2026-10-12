@@ -30,7 +30,7 @@ vi.mock("../../api/client", () => ({
 }));
 
 const item = (key: string, kind: AiPackItem["kind"], name: string, extra: Partial<AiPackItem> = {}): AiPackItem => ({
-  key, kind, name, var: "", about: `${name} about`, count: 0, tags: [], source: "", target: "", ...extra,
+  key, kind, name, var: "", about: `${name} about`, count: 0, tags: [], source: "", target: "", use: "", ...extra,
 });
 
 const PLAN: AiPackPlanResult = {
@@ -38,6 +38,7 @@ const PLAN: AiPackPlanResult = {
   plan: {
     title: "Seasons", summary: "Outfits by season.", rating: "safe", warnings: [],
     questions: [{ question: "How many?", choices: ["Few", "Many"] }],
+    inputs: [],
     items: [
       item("i1", "template", "Scene"),
       item("i2", "constraint", "Season → Outfit", { source: "season", target: "outfit" }),
@@ -70,6 +71,7 @@ describe("PackBuilder", () => {
       });
     vi.mocked(api.ai.packInstall).mockReset().mockResolvedValue({
       undo_entry_id: "u1", ids: {}, bundle_id: "b0000001", template_id: "t0000001", tag: "seasons",
+      notes: ["Add a WP Context node and load the bundle."],
     });
     vi.mocked(api.importExport.undo).mockReset().mockResolvedValue({ ok: true });
   });

@@ -127,16 +127,21 @@ Open it from the ComfyUI sidebar. It's where your modules live between workflows
   (Ollama, LM Studio, llama.cpp) or your own Claude or OpenAI key under
   **Settings → AI assistant**, then press **AI** in the wildcard editor to write
   new options in the style of the ones you have, or to remove, rewrite, retag or
-  re-weight the ones there. In the derivation and constraint editors, describe
-  the rules you want and it writes them using your library's variables, options
-  and tags. **Describe** in any editor writes a description and tags for it, and
+  re-weight the ones there (options can pick with `{a|b}` and draw from other
+  wildcards by name, `@{Colors:warm}`). In the fixed values, combine, template,
+  derivation and constraint editors, describe what you want and it writes it
+  using your library's variables, options and tags. **Describe** in any editor writes a description and tags for it, and
   **Organize with AI** sorts a selection of library items into categories, tags and
   ratings. The **AI** button in the top bar opens a chat that reads your library
   and the built-in docs to answer questions (or explain a docs page in simpler
-  words), sees the page you're on, and proposes new wildcards, rules,
-  constraints and edits as cards you apply one by one, with Undo. Changes to the
+  words), sees the page you're on, runs stacks on the engine to check its work,
+  and proposes new wildcards, fixed values, combines, rules, constraints,
+  templates, bundles and edits as cards you apply one by one, with Undo. In the
+  Test Runner it explains a run, fixes its warnings or says why an option never
+  comes up. Changes to the
   item open in an editor go into that editor, to keep with Save. **Pack builder** makes a whole pack from
-  one description: it plans the wildcards, rules, constraints and template, builds
+  one description: it plans the wildcards, fixed values, rules, constraints,
+  combines, template, per-use settings and inputs, builds
   them one at a time, tests them on the engine and fixes what fails, then installs
   everything as one bundle you can undo. If an
   answer is close, type a follow-up and press **Refine** to revise it instead of

@@ -13,7 +13,7 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
     title="AI assistant"
     icon="pi pi-microchip-ai"
     tone="neutral"
-    blurb="Optional and off by default: connect a model you choose and let it write wildcard options, edit the ones you have, write derivation and constraint rules, and describe and tag your modules, all for you to review."
+    blurb="Optional and off by default: connect a model you choose and let it write wildcards, fixed values, combines, rules, constraints and templates, test them on the engine, explain a Test Runner run and build whole packs, all for you to review."
   >
     <DocSection title="What it does">
       <p>
@@ -23,12 +23,12 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         the assistant on.
       </p>
       <p>
-        Today it adds wildcard options and removes, rewrites, retags or re-weights the ones
-        you have, writes derivation and constraint rules from a description, and writes a
-        description and tags for anything in your library. Every request includes the item's
-        name, description and tags, so writing a good description first points the model in
-        the right direction. More is planned: organizing your library, a chat that can edit modules, and building a whole
-        pack from a description.
+        It writes and edits every kind of module (wildcard options with tags, tag groups,
+        negatives, an empty option and a fallback; fixed values; combines; derivation and
+        constraint rules; prompt templates and bundles), runs what it made on the real engine to
+        check it, explains a Test Runner run, organizes your library and builds whole packs from
+        a description. Every request includes the item's name, description and tags, so writing
+        a good description first points the model in the right direction.
       </p>
     </DocSection>
 
@@ -59,10 +59,17 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         go in like pasted options, with new tags marked. <b>Draft again</b> asks for another
         set, and <b>Stop</b> cancels a slow one. Nothing is saved until you press <b>Save</b>.
       </p>
+      <p>
+        Options can hold the same syntax you'd type: <code>{red|blue}</code> picks one each run, and
+        <code>@{Colors:warm}</code> draws from another wildcard (only its options tagged warm). The
+        model names the wildcard; the assistant finds it in your library and writes the reference,
+        so ask for "a scarf in a warm colour from my Colors wildcard" and it points there.
+      </p>
       <DocCallout variant="tip">
-        Options that repeat an existing one, or that use <code>$</code>, <code>@</code>,
-        <code>{</code>, <code>}</code> or <code>|</code>, are left out and listed under
-        the result, so a draft can never add a broken reference.
+        Options that repeat an existing one, read a <code>$variable</code> (options can't), point
+        at a wildcard you don't have or at a tag it doesn't have, or point back at the wildcard
+        itself are left out and listed under the result, so a draft can never add a broken
+        reference.
       </DocCallout>
     </DocSection>
 
@@ -105,6 +112,24 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         Rules need a model that follows instructions well. If the answer comes back unusable,
         switch to one of the builder models below.
       </DocCallout>
+    </DocSection>
+
+    <DocSection title="Fixed values, combines and templates">
+      <p>
+        The fixed values, combine and template editors have an <b>AI</b> button as well. Describe
+        what you want and the model writes it with the variables your library sets:
+      </p>
+      <DocKeyList
+        :items="[
+          { term: 'Fixed values', desc: 'A style preset or quality tags, each with the negative words it should add (an anime preset adds 3d render to the negative). A value with a name you already have is rewritten in place; the rest are added. Values can use {a|b} picks but not $variables.' },
+          { term: 'Combine', desc: 'Joins variables into one phrase in the order the model reads best, and can add a negative. Set the output variable first.' },
+          { term: 'Template', desc: 'Writes the Assembler prompt from your variables, plus a standing negative with $negatives where the negatives of the variables it used go. Choices belong in wildcards, so it never writes {a|b} here (the Assembler has no seed and would print it as is).' },
+        ]"
+      />
+      <p>
+        You see the result first, with a warning for any variable nothing in the library sets.
+        <b>Use</b> puts it in the editor; nothing is saved until you press <b>Save</b>.
+      </p>
     </DocSection>
 
     <DocSection title="Describe and tag">
@@ -158,12 +183,27 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         it. It can:
       </p>
       <ul>
-        <li>create a wildcard, a derivation or a constraint between two wildcards,</li>
-        <li>add options to a wildcard, or remove, rewrite, retag and re-weight the ones it has,</li>
-        <li>add rules to a derivation,</li>
+        <li>create a wildcard (with tag groups, negatives, an empty option, a fallback and
+          references to other wildcards), or a vocabulary wildcard other options draw from,</li>
+        <li>add options to a wildcard, or remove, rewrite, retag and re-weight the ones it has,
+          set their negatives, pick the fallback, change how often the empty option comes up and
+          group tags,</li>
+        <li>create or change fixed values, a combine or a prompt template,</li>
+        <li>create a derivation, add rules, or replace and remove rules by number,</li>
+        <li>create a constraint between two wildcards, or change its rules and its reach,</li>
+        <li>create a bundle in the right running order with per-use settings (pick 2-3, a tag
+          filter, never empty, hold for a whole Loop run, internal), or add, remove and change its
+          items,</li>
         <li>change an item's description, tags, category or rating,</li>
         <li>open an item's editor, a docs page or a manager page such as a Settings section.</li>
       </ul>
+      <p>
+        It can also <b>run a stack on the engine</b> before it answers: modules and bundles from
+        your library, with pinned values and a template for sample prompts. It reads each
+        variable's most common values, options that never came up and warnings, and with its own
+        proposals swapped in it reports what moves ("wool coat 40% → 0%"). Ask it to check a
+        change and it tries it first. Running changes nothing in your library.
+      </p>
       <p>
         A change to the item open in your editor goes into the editor, and you keep it with
         <b>Save</b> there as usual. If you edit the item yourself after asking, the card says it's
@@ -183,6 +223,16 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       </DocCallout>
     </DocSection>
 
+    <DocSection title="Ask about a test run">
+      <p>
+        After a run in the <b>Test Runner</b>, a bar above the results asks the assistant about
+        it: <b>Explain this run</b>, <b>Fix the warnings</b> (when there are any) or <b>Why do I
+        never get…</b> with an option you expected to see. The chat gets the scenario's stack,
+        pins and results, runs it again itself to check its answer, and offers any fix as cards
+        you apply.
+      </p>
+    </DocSection>
+
     <DocSection title="Ask about the docs">
       <p>
         The assistant answers questions about Wildcard Pipeline from these docs and says which
@@ -196,14 +246,17 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
     <DocSection title="Build a whole pack">
       <p>
         <b>Pack builder</b> in the sidebar (shown once the assistant is on) makes a complete pack
-        from one description: wildcards, derivation rules, combines, constraints between wildcards
-        and a prompt template, filed into one bundle.
+        from one description: wildcards, fixed values, derivation rules, combines, constraints
+        between wildcards and a prompt template, filed into one bundle. It can also make
+        vocabulary wildcards that other options draw from (<code>@{Colors:warm}</code>), give an
+        item per-use settings in the bundle ("pick 2-3", "hold"), and plan inputs: values the
+        pack reads but you set, like the subject, through a WP Context Injector row.
       </p>
       <ol>
         <li><b>Describe</b> what the pack makes and the rules between its parts ("elves never use
           guns, mages get robes").</li>
         <li><b>Plan.</b> The assistant lists every item it will build, by variable, and may ask up
-          to three questions. Click an answer, remove items you don't want (the ✕ on a row), or
+          to three questions. Inputs are listed under the plan. Click an answer, remove items you don't want (the ✕ on a row), or
           type a change, then press <b>Update plan</b>. Nothing is built yet.</li>
         <li><b>Build &amp; check.</b> Each item is written in its own request, wildcards first so
           rules can use their tags. Then the pack runs 200 seeds on the real engine. An item with
@@ -212,8 +265,9 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           it holds; the refresh button builds that one again. The test run shows each variable's
           most common values and a few sample prompts.</li>
         <li><b>Install</b> adds the modules, the template and a bundle that runs them in the right
-          order, all tagged with the pack's name so they show up together under Tags.
-          <b>Undo</b> removes all of it.</li>
+          order, all tagged with the pack's name so they show up together under Tags, and says how
+          to wire it on the canvas (the bundle in a WP Context, the template in a WP Prompt
+          Assembler, an Injector row per input). <b>Undo</b> removes all of it.</li>
       </ol>
       <DocCallout variant="tip">
         Building a pack takes one request per item, so a local model needs a few minutes. Use a
@@ -279,8 +333,10 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         what the item holds and the tags your library uses; Organize sends that for every selected
         item, plus your category names. The chat sends a list of your items (names, types and
         variables) and the conversation so far, plus whatever items and docs pages the
-        assistant reads to answer and a short note of what the page shows (the open editor's
-        item, a list's selection, the Test Runner's last results). The pack builder sends your description and, for each item, what the pack has
+        assistant reads to answer, the results of stacks it runs (they run on your PC) and a
+        short note of what the page shows (the open editor's item, a list's selection, the Test
+        Runner's stack and last results). The fixed values, combine and template panels send the
+        item and the variables your library sets. The pack builder sends your description and, for each item, what the pack has
         built so far. A follow-up sends the earlier requests
         and answers of that conversation again; nothing is kept on the server between requests.
       </p>
@@ -296,6 +352,7 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           { id: 'wildcard', label: 'Wildcard', icon: 'pi pi-sparkles', tone: 'wildcard' },
           { id: 'derivation', label: 'Derivation', icon: 'pi pi-arrow-right-arrow-left', tone: 'derivation' },
           { id: 'constraint', label: 'Constraint', icon: 'pi pi-filter', tone: 'constraint' },
+          { id: 'test-runner', label: 'Test Runner', icon: 'pi pi-bolt', tone: 'neutral' },
           { id: 'chips-and-references', label: 'Chips & references', icon: 'pi pi-tag', tone: 'neutral' },
         ]"
       />

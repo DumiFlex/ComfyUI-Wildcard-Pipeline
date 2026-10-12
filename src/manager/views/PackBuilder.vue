@@ -79,10 +79,15 @@ const steps = computed(() => [
 ]);
 
 const RANK: Record<AiPackItem["kind"], number> = {
-  wildcard: 0, derivation: 1, combine: 2, constraint: 3, template: 4,
+  fixed_values: 0, wildcard: 1, derivation: 2, combine: 3, constraint: 4, template: 5,
 };
 function order(i: AiPackItem): number {
   return RANK[i.kind] * 100 + items.value.indexOf(i);
+}
+
+function kindLabel(i: AiPackItem): string {
+  if (i.kind === "fixed_values") return "fixed";
+  return i.kind === "wildcard" && !i.var ? "vocabulary" : i.kind;
 }
 
 function label(i: AiPackItem): string {
@@ -92,10 +97,11 @@ function label(i: AiPackItem): string {
 
 function meta(i: AiPackItem): string {
   if (i.kind === "wildcard") {
-    return [`${i.count} options`, i.tags.length ? `tags ${i.tags.map((t) => `#${t}`).join(" ")}` : ""]
+    return [`${i.count} options`, i.tags.length ? `tags ${i.tags.map((t) => `#${t}`).join(" ")}` : "",
+      i.use ? `use: ${i.use}` : ""]
       .filter(Boolean).join(" · ");
   }
-  return "";
+  return i.use ? `use: ${i.use}` : "";
 }
 
 function builtMeta(i: AiPackItem): string {
@@ -103,6 +109,10 @@ function builtMeta(i: AiPackItem): string {
   if (!r) return "";
   const p = r.payload as Record<string, unknown>;
   if (i.kind === "wildcard") return `${(p.options as unknown[]).length} options`;
+  if (i.kind === "fixed_values") {
+    const n = (p.values as unknown[]).length;
+    return `${n} value${n === 1 ? "" : "s"}`;
+  }
   if (i.kind === "derivation") {
     const n = (p.rules as unknown[]).length;
     return `${n} rule${n === 1 ? "" : "s"}`;
@@ -200,7 +210,7 @@ function openTemplate(): void {
       <Card title="Describe the pack">
         <p class="wp-pack__hint">
           Say what the pack should make and the rules between its parts. The assistant plans the
-          wildcards, rules, constraints and a template, builds them one at a time, tests them on
+          wildcards, fixed values, rules, constraints, combines and a template, builds them one at a time, tests them on
           the engine, and installs everything as one collection you can undo.
         </p>
         <textarea
@@ -308,7 +318,7 @@ function openTemplate(): void {
             :data-removed="pb.removed.value.has(i.key) ? 'true' : undefined"
             data-test="pack-item"
           >
-            <span class="wp-pack__kind" :data-kind="i.kind">{{ i.kind }}</span>
+            <span class="wp-pack__kind" :data-kind="i.kind">{{ kindLabel(i) }}</span>
             <span class="wp-pack__item-main">
               <span class="wp-pack__item-name"><code v-if="i.kind !== 'template'">{{ label(i) }}</code> {{ i.kind === 'template' || i.var ? i.name : '' }}</span>
               <span class="wp-pack__item-about" :title="i.about">{{ i.about }}</span>
@@ -324,6 +334,14 @@ function openTemplate(): void {
             ><i :class="['pi', pb.removed.value.has(i.key) ? 'pi-undo' : 'pi-times']" aria-hidden="true" /></button>
           </li>
         </ul>
+        <div v-if="fullPlan?.inputs?.length" class="wp-pack__inputs" data-test="pack-inputs">
+          <p class="wp-pack__dim">Set from outside (a WP Context Injector row each):</p>
+          <ul>
+            <li v-for="inp in fullPlan.inputs" :key="inp.var">
+              <code>${{ inp.var }}</code> {{ inp.about }}<span v-if="inp.example" class="wp-pack__dim"> · tested as "{{ inp.example }}"</span>
+            </li>
+          </ul>
+        </div>
         <ul v-if="fullPlan?.warnings.length" class="wp-pack__warnings">
           <li v-for="(w, j) in fullPlan.warnings" :key="j"><i class="pi pi-info-circle" aria-hidden="true" /> {{ w }}</li>
         </ul>
@@ -353,7 +371,7 @@ function openTemplate(): void {
                 <i v-else-if="problems(i.key).length" class="pi pi-exclamation-triangle" aria-hidden="true" />
                 <i v-else class="pi pi-check" aria-hidden="true" />
               </span>
-              <span class="wp-pack__kind" :data-kind="i.kind">{{ i.kind }}</span>
+              <span class="wp-pack__kind" :data-kind="i.kind">{{ kindLabel(i) }}</span>
               <button type="button" class="wp-pack__item-main wp-pack__expand" :aria-expanded="open.has(i.key)" @click="toggle(i.key)">
                 <span class="wp-pack__item-name">{{ i.name }}</span>
                 <span v-if="pb.states.value[i.key].fixed?.length && pb.states.value[i.key].status !== 'fixing'" class="wp-pack__fixed">
@@ -422,6 +440,12 @@ function openTemplate(): void {
             Added {{ moduleCount }} modules{{ hasTemplate ? ', a template' : '' }} and a bundle, tagged
             <span class="wp-pack__tag">#{{ pb.installed.value.tag }}</span>.
           </p>
+          <div v-if="pb.installed.value.notes?.length" class="wp-pack__inputs" data-test="pack-wiring">
+            <p class="wp-pack__dim">To use it on the canvas:</p>
+            <ul>
+              <li v-for="(n, j) in pb.installed.value.notes" :key="j">{{ n }}</li>
+            </ul>
+          </div>
           <div class="wp-pack__row">
             <Button size="sm" icon="pi-box" data-test="pack-open-bundle" @click="openBundle">Open the bundle</Button>
             <Button v-if="pb.installed.value.template_id" size="sm" icon="pi-file-edit" @click="openTemplate">Open the template</Button>
@@ -509,6 +533,11 @@ function openTemplate(): void {
   text-transform: uppercase; padding: 2px 0; border-radius: 4px;
   color: var(--wp-kind-wildcard); background: var(--wp-kind-wildcard-bg);
 }
+.wp-pack__kind[data-kind="fixed_values"] { color: var(--wp-kind-fixed); background: var(--wp-kind-fixed-bg); }
+.wp-pack__inputs { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 8px; }
+.wp-pack__inputs p { margin: 0; font-size: 12px; }
+.wp-pack__inputs ul { margin: 0; padding-left: 18px; font-size: 12.5px; display: flex; flex-direction: column; gap: 3px; }
+.wp-pack__inputs code { font-family: var(--wp-font-mono, monospace); font-size: 12px; }
 .wp-pack__kind[data-kind="derivation"] { color: var(--wp-kind-derivation); background: var(--wp-kind-derivation-bg); }
 .wp-pack__kind[data-kind="combine"] { color: var(--wp-kind-combine); background: var(--wp-kind-combine-bg); }
 .wp-pack__kind[data-kind="constraint"] { color: var(--wp-kind-constraint); background: var(--wp-kind-constraint-bg); }

@@ -8,7 +8,11 @@ under Settings › AI assistant, and scores it:
 - built: share of planned items that built and passed their engine
   validator;
 - clean: the test run on the engine ended with no problems;
-- prompts: the template rendered sample prompts.
+- prompts: the template rendered sample prompts;
+- feature: for the requests at the end, whether the pack used the feature
+  the request calls for (a reference with a tag filter, an accepts axis, an
+  empty option, a multi-pick, a fallback, an input, a model rule, a preset
+  with negatives, hold).
 
 Use it before listing a model as a suggestion. It is not part of CI: it
 needs a running model and takes minutes per request.
@@ -71,7 +75,55 @@ REQUESTS = [
     "Superhero pack: power, costume colours, city, a hero name built from the power.",
     "Wedding photography: venue, season, dress style, flowers in season.",
     "A simple pack: just a colour wildcard and a shape wildcard and a template.",
+    # Each of these needs one feature; `feature` scores whether the pack used it.
+    ("Winter clothes: a scarf, a hat and mittens, each in a warm colour drawn from one shared "
+     "colour list.", "ref_filter"),
+    ("Outfits and shoes: the shoes must match the outfit (sneakers with casual, heels with "
+     "formal, boots with either).", "accepts"),
+    ("Portraits where the person wears a hat about 30% of the time.", "null"),
+    ("Fantasy adventurers carrying 2 to 3 accessories each.", "multi_pick"),
+    ("Pets with a collar colour; rules narrow the colours a lot, but it must never come out "
+     "empty.", "fallback"),
+    ("Portraits of a subject I type in myself, with a background and lighting that suit "
+     "a portrait.", "input"),
+    ("A character pack that works on both Pony and Flux checkpoints, with tags for Pony and "
+     "sentences for Flux.", "model"),
+    ("An anime style preset with quality tags and its own negatives.", "preset_negatives"),
+    ("A comic batch: the same hero in every image of a loop, with a different scene each "
+     "time.", "hold"),
 ]
+
+
+def _wildcards(result: dict[str, Any]) -> list[dict[str, Any]]:
+    kinds = {i["key"]: i["kind"] for i in result["plan"]["items"]}
+    return [b["payload"] for k, b in result["built"].items() if kinds.get(k) == "wildcard"]
+
+
+def _uses(result: dict[str, Any]) -> str:
+    return " ; ".join(i.get("use") or "" for i in result["plan"]["items"])
+
+
+#: Whether a built pack used the feature its request calls for.
+FEATURES: dict[str, Any] = {
+    "ref_filter": lambda r: any(":" in o.get("value", "") and "@{" in o.get("value", "")
+                                for w in _wildcards(r) for o in w.get("options") or []),
+    "accepts": lambda r: any("accepts" in (w.get("tag_group_kinds") or {}).values()
+                             for w in _wildcards(r)),
+    "null": lambda r: any(o.get("is_null") for w in _wildcards(r)
+                          for o in w.get("options") or []),
+    "multi_pick": lambda r: "pick" in _uses(r),
+    "fallback": lambda r: any(o.get("fallback") for w in _wildcards(r)
+                              for o in w.get("options") or []),
+    "input": lambda r: bool(r["plan"].get("inputs")),
+    "model": lambda r: "$model_" in json.dumps(r["built"]) or "model_variant" in json.dumps(
+        r["built"]),
+    "preset_negatives": lambda r: any(
+        i["kind"] == "fixed_values" and any(v.get("negative") for v in
+                                            r["built"].get(i["key"], {}).get("payload", {})
+                                            .get("values") or [])
+        for i in r["plan"]["items"]),
+    "hold": lambda r: "hold" in _uses(r),
+}
 
 
 def _score(result: dict[str, Any]) -> dict[str, Any]:
@@ -88,17 +140,22 @@ def _score(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-async def evaluate(complete: Any, requests: list[str], *, seeds: int = 100) -> list[dict]:
+async def evaluate(complete: Any, requests: list[Any], *, seeds: int = 100) -> list[dict]:
+    """``requests``: text, or ``(text, feature)`` to also score a feature."""
     rows = []
-    for req in requests:
+    for entry in requests:
+        req, feature = entry if isinstance(entry, tuple) else (entry, "")
         started = time.perf_counter()
         try:
             result = await pack.run_pack(complete, req, seeds=seeds)
         except Exception as e:  # noqa: BLE001 - every request is scored
-            rows.append({"request": req, "plan": False, "error": f"{type(e).__name__}: {e}",
+            rows.append({"request": req, "plan": False, "feature": feature,
+                         "error": f"{type(e).__name__}: {e}",
                          "seconds": round(time.perf_counter() - started, 1)})
             continue
         rows.append({"request": req, "plan": True, **_score(result),
+                     **({"feature": feature, "feature_used": bool(FEATURES[feature](result))}
+                        if feature else {}),
                      "log": result["log"][-12:],
                      "seconds": round(time.perf_counter() - started, 1)})
     return rows
@@ -113,7 +170,10 @@ def report(rows: list[dict], model: str) -> str:
         f"- Requests: {len(rows)}",
         f"- Plans that compiled: {len(planned)} / {len(rows)}",
         f"- Items built (mean share): {share:.0%}",
-        f"- Packs with a clean test run: {len(clean)} / {len(rows)}", "",
+        f"- Packs with a clean test run: {len(clean)} / {len(rows)}",
+        f"- Feature requests that used the feature: "
+        f"{sum(1 for r in planned if r.get('feature_used'))} / "
+        f"{sum(1 for r in rows if r.get('feature'))}", "",
         "| # | Request | Plan | Built | Problems | Seconds |",
         "| --- | --- | --- | --- | --- | --- |",
     ]
@@ -122,7 +182,9 @@ def report(rows: list[dict], model: str) -> str:
         if not r["plan"]:
             lines.append(f"| {n} | {req} | no: {r['error'][:60]} | | | {r['seconds']} |")
             continue
-        lines.append(f"| {n} | {req} | yes | {r['built']}/{r['items']} | "
+        feat = f" ({r['feature']}: {'used' if r['feature_used'] else 'missing'})" \
+            if r.get("feature") else ""
+        lines.append(f"| {n} | {req}{feat} | yes | {r['built']}/{r['items']} | "
                      f"{r['problems']} | {r['seconds']} |")
     lines += ["", "## Sample prompts", ""]
     for r in planned:

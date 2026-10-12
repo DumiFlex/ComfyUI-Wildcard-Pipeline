@@ -9,6 +9,8 @@ import type {
   AiWildcardEditRequest,
   AiWildcardEditResult,
   AiDerivationDraftRequest,
+  AiTextDraftRequest,
+  AiTextDraftResult,
   AiDerivationDraftResult,
   AiConstraintDraftRequest,
   AiConstraintDraftResult,
@@ -424,6 +426,11 @@ export const api = {
     },
     editWildcard(body: AiWildcardEditRequest, signal?: AbortSignal) {
       return request<AiWildcardEditResult>("/wp/api/ai/wildcard/edit", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    draftText(body: AiTextDraftRequest, signal?: AbortSignal) {
+      return request<AiTextDraftResult>("/wp/api/ai/text/draft", {
         method: "POST", body: JSON.stringify(body), signal,
       });
     },

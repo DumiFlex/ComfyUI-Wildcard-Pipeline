@@ -19,7 +19,9 @@ The model answers in a flat spec, forced by a JSON schema:
 - an ``equals`` / ``not_equals`` value that matches a wildcard option except
   for case is corrected to the option's spelling, since the engine compares
   exactly;
-- refs (``@{…}``) are refused: the model can't know module ids;
+- action values may point at wildcards by name (``@{Colors:warm}``); those
+  are compiled to id refs by `refs.compile_text` (unknown names and tags are
+  refused); conditions are literal text or ``$var`` only;
 - every rule gets a fresh id and must pass `DerivationHandler.validate_payload`.
 
 Rules that can't be used are dropped and reported; things that work but look
@@ -33,6 +35,7 @@ import secrets
 from typing import Any
 
 from engine.ai import about
+from engine.ai import refs as ai_refs
 from engine.modules.derivation_handler import (
     _VALID_MODES,
     _VALID_OPS,
@@ -107,19 +110,27 @@ before what target_var already holds (include a leading ", " when appending \
 to a list of tags).
 - negative: add value to target_var's negative prompt. negative_replace: make \
 value its only negative.
-- value is prompt text. It may read variables as $name. Never use @{...}.
+- value is prompt text. It may read variables as $name, and also \
+$name.0 (the first of a multi-pick, .1 the second), $name.AXIS (the tag an \
+"accepts" tag group rolled, like $outfit.SHOES) and $name.neg (the \
+variable's negative words). It may pick: {a|b}, or @{Wildcard name} / \
+@{Wildcard name:tag} for a fresh pick from a wildcard listed below ("if \
+$class is mage, append @{Weapons:arcane} to $gear"). Condition values are \
+plain text or one $name, never picks.
 
 Use the library's variable names and option texts when the request refers to \
-them. A new variable name is fine when the request asks for one: letters, \
-digits and _ only. Write one rule per independent decision, and a short \
-summary of what each rule does. Don't add commentary; the output is data for \
-the user's own library.\
+them. Some variables are set at run time outside the library ($iteration from \
+a WP Context Loop, anything a WP Context Injector brings in); reading them is \
+fine when the request mentions them. A new variable name is fine when the \
+request asks for one: letters, digits and _ only. Write one rule per \
+independent decision, and a short summary of what each rule does. Don't add \
+commentary; the output is data for the user's own library.\
 """
 
 
 def build_prompt(
     *, instruction: str, name: str, catalog_text: str, existing_rules: list[str],
-    description: str = "", labels: list[str] | None = None,
+    description: str = "", labels: list[str] | None = None, refs_text: str = "",
 ) -> str:
     lines = [f"Derivation module: {name or '(unnamed)'}"]
     lines.extend(about.lines(description, labels or []))
@@ -129,6 +140,10 @@ def build_prompt(
     lines.append("")
     lines.append("Variables in the library (name, where it comes from, its options):")
     lines.append(catalog_text or "(none yet)")
+    if refs_text:
+        lines.append("")
+        lines.append("Wildcards an action can pick from with @{name}:")
+        lines.append(refs_text)
     lines.append("")
     lines.append(f"Request: {instruction.strip()}")
     return "\n".join(lines)
@@ -186,6 +201,7 @@ def _new_id(taken: set[str]) -> str:
 
 def compile_rules(
     raw: Any, *, catalog: dict[str, dict[str, Any]], taken_ids: set[str] | None = None,
+    refs: ai_refs.RefIndex | None = None,
 ) -> dict[str, Any]:
     """Check the model's rules. Returns
     ``{"rules": [{"rule", "summary", "warnings"}], "skipped": [{"text", "reason"}]}``.
@@ -207,7 +223,7 @@ def compile_rules(
         summary = _flat(item.get("summary"))[:200]
         warnings: list[str] = []
         try:
-            rule = _compile_rule(item, catalog, warnings)
+            rule = _compile_rule(item, catalog, warnings, refs)
         except _Drop as e:
             skipped.append({"text": summary or "a rule", "reason": str(e)})
             continue
@@ -237,6 +253,7 @@ def _answer_targets(item: Any) -> list[str]:
 
 def _compile_rule(
     item: dict[str, Any], catalog: dict[str, dict[str, Any]], warnings: list[str],
+    refs: ai_refs.RefIndex | None = None,
 ) -> dict[str, Any]:
     branches: list[dict[str, Any]] = []
     for b in (item.get("branches") or [])[:MAX_BRANCHES]:
@@ -247,7 +264,7 @@ def _compile_rule(
                         for x in (b.get("conditions") or [])[:MAX_CONDITIONS])
             if c is not None
         ]
-        actions = _compile_actions(b.get("actions"), catalog, warnings)
+        actions = _compile_actions(b.get("actions"), catalog, warnings, refs)
         if not conds or not actions:
             continue
         condition = conds[0] if len(conds) == 1 else {
@@ -260,7 +277,7 @@ def _compile_rule(
     if not branches:
         raise _Drop("no usable condition and action")
     rule: dict[str, Any] = {"branches": branches}
-    else_actions = _compile_actions(item.get("else_actions"), catalog, warnings)
+    else_actions = _compile_actions(item.get("else_actions"), catalog, warnings, refs)
     if else_actions:
         clause: dict[str, Any] = {"action": else_actions[0]}
         if len(else_actions) > 1:
@@ -283,7 +300,15 @@ def _compile_condition(
     value = "" if op in _NO_VALUE_OPS else _flat(c.get("value"))[:MAX_VALUE_LEN]
     entry = catalog.get(var)
     if entry is None:
-        warnings.append(f"nothing in your library sets ${var}")
+        warnings.append(unset_note(var))
+    if value.startswith("$") and op not in _NO_VALUE_OPS:
+        read = value[1:]
+        if not _IDENT.match(read.split(".")[0]):
+            raise _Drop(f"{value!r} isn't a variable name")
+        if read.split(".")[0] not in catalog:
+            warnings.append(unset_note(read.split(".")[0]))
+    elif "@{" in value or ai_refs.has_pick(value):
+        raise _Drop("a condition compares with plain text or one $variable, not a pick")
     if op == "matches":
         try:
             re.compile(value)
@@ -299,8 +324,14 @@ def _compile_condition(
     return {"var": var, "op": op, "value": value}
 
 
+def unset_note(var: str) -> str:
+    return (f"nothing in your library sets ${var} (fine if a WP Context Injector "
+            "or an earlier Context sets it)")
+
+
 def _compile_actions(
     raw: Any, catalog: dict[str, dict[str, Any]], warnings: list[str],
+    refs: ai_refs.RefIndex | None = None,
 ) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for a in (raw if isinstance(raw, list) else [])[:MAX_ACTIONS]:
@@ -311,13 +342,15 @@ def _compile_actions(
             raise _Drop(f"{a.get('target_var')!r} isn't a variable name")
         mode = a.get("mode") if a.get("mode") in _VALID_MODES else "replace"
         value = a.get("value") if isinstance(a.get("value"), str) else ""
-        value = value.strip()[:MAX_VALUE_LEN]
-        if "@{" in value:
-            raise _Drop("it points at a module by id")
+        value = re.sub(r"\s+", " ", value).strip()[:MAX_VALUE_LEN]
+        try:
+            value = ai_refs.compile_text(value, surface="action", refs=refs)
+        except ValueError as e:
+            raise _Drop(str(e)) from None
         if not value and mode != "replace":
             continue
         for read in _VAR_READ.findall(value):
             if read not in catalog and read != target:
-                warnings.append(f"nothing in your library sets ${read}")
+                warnings.append(unset_note(read))
         out.append({"target_var": target, "mode": mode, "value": value})
     return out
