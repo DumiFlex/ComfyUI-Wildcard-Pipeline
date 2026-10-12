@@ -1,5 +1,9 @@
 import { mount, flushPromises } from "@vue/test-utils";
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, vi } from "vitest";
+import { api } from "../../api/client";
+import type { AiConfig } from "../../api/types";
+import { _resetAiConfigForTests } from "../../composables/useAiConfig";
+import { _resetAiChatForTests, useAiChat } from "../../composables/useAiChat";
 import { createPinia } from "pinia";
 import { createRouter, createMemoryHistory } from "vue-router";
 import Docs from "../../views/Docs.vue";
@@ -51,5 +55,25 @@ describe("Docs.vue", () => {
     await input.trigger("input");
     expect(w.text()).toContain("Constraint");
     expect(w.text()).not.toContain("WP Prompt Cleaner");
+  });
+
+  it("opens the assistant about this page, or the selected text, once it's on", async () => {
+    _resetAiConfigForTests();
+    _resetAiChatForTests();
+    const spy = vi.spyOn(api.ai, "config").mockResolvedValue(
+      { enabled: true, model: "m" } as unknown as AiConfig);
+    const w = await mountAt("wp-context");
+    await w.get('[data-test="doc-ask-ai"]').trigger("click");
+    const chat = useAiChat();
+    expect(chat.open.value).toBe(true);
+    expect(chat.input.value).toBe("Explain this page in simpler words");
+    const sel = vi.spyOn(window, "getSelection").mockReturnValue(
+      { toString: () => "  the  Context node " } as unknown as Selection);
+    await w.get('[data-test="doc-ask-ai"]').trigger("click");
+    expect(chat.input.value).toBe('Explain this in simpler words: "the Context node"');
+    sel.mockRestore();
+    spy.mockRestore();
+    _resetAiConfigForTests();
+    _resetAiChatForTests();
   });
 });

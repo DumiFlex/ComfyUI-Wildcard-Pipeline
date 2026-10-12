@@ -5,6 +5,29 @@ import type {
   CategoryCreateInput, CategoryRow,
   DatabaseConfig, DatabaseConfigUpdate,
   BackupEntry, BackupList, ServerSettings, ServerSettingsPatch,
+  AiConfig, AiConfigPatch, AiTestResult, AiWildcardDraftRequest, AiWildcardDraftResult,
+  AiWildcardEditRequest,
+  AiWildcardEditResult,
+  AiDerivationDraftRequest,
+  AiTextDraftRequest,
+  AiTextDraftResult,
+  AiDerivationDraftResult,
+  AiConstraintDraftRequest,
+  AiConstraintDraftResult,
+  AiOrganizeRequest,
+  AiOrganizeResult,
+  AiChatRequest,
+  AiChatResult,
+  AiPackBuilt,
+  AiPackCheck,
+  AiPackInstallResult,
+  AiPackItemResult,
+  AiPackPlan,
+  AiPackPlanRequest,
+  AiPackPlanResult,
+  AiPackReview,
+  AiDescribeRequest,
+  AiDescribeResult,
   TagStatus, TagSuggestResponse, TagDownloadResult, LibraryTagUpdateCounts,
   ModelKind, ModelSourceStatus, ModelSuggestResponse,
   DatabaseInfo, MaintenanceOp, MaintenanceResult,
@@ -378,6 +401,91 @@ export const api = {
       return request<ServerSettings>("/wp/api/settings", {
         method: "PUT",
         body: JSON.stringify(patch),
+      });
+    },
+  },
+  /** The AI assistant. Off until the user turns it on; the key is write-only. */
+  ai: {
+    config() {
+      return request<AiConfig>("/wp/api/ai/config", { method: "GET" });
+    },
+    saveConfig(patch: AiConfigPatch) {
+      return request<AiConfig>("/wp/api/ai/config", {
+        method: "PUT", body: JSON.stringify(patch),
+      });
+    },
+    models() {
+      return request<{ models: string[] }>("/wp/api/ai/models", { method: "POST" });
+    },
+    test() {
+      return request<AiTestResult>("/wp/api/ai/test", { method: "POST" });
+    },
+    draftWildcard(body: AiWildcardDraftRequest, signal?: AbortSignal) {
+      return request<AiWildcardDraftResult>("/wp/api/ai/wildcard/draft", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    editWildcard(body: AiWildcardEditRequest, signal?: AbortSignal) {
+      return request<AiWildcardEditResult>("/wp/api/ai/wildcard/edit", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    draftText(body: AiTextDraftRequest, signal?: AbortSignal) {
+      return request<AiTextDraftResult>("/wp/api/ai/text/draft", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    draftDerivation(body: AiDerivationDraftRequest, signal?: AbortSignal) {
+      return request<AiDerivationDraftResult>("/wp/api/ai/derivation/draft", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    describe(body: AiDescribeRequest, signal?: AbortSignal) {
+      return request<AiDescribeResult>("/wp/api/ai/describe", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    draftConstraint(body: AiConstraintDraftRequest, signal?: AbortSignal) {
+      return request<AiConstraintDraftResult>("/wp/api/ai/constraint/draft", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    organize(body: AiOrganizeRequest, signal?: AbortSignal) {
+      return request<AiOrganizeResult>("/wp/api/ai/organize", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    chat(body: AiChatRequest, signal?: AbortSignal) {
+      return request<AiChatResult>("/wp/api/ai/chat", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    packPlan(body: AiPackPlanRequest, signal?: AbortSignal) {
+      return request<AiPackPlanResult>("/wp/api/ai/pack/plan", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    packItem(
+      body: { plan: AiPackPlan; built: AiPackBuilt; key: string; note?: string },
+      signal?: AbortSignal,
+    ) {
+      return request<AiPackItemResult>("/wp/api/ai/pack/item", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    packReview(body: { plan: AiPackPlan; ai?: boolean }, signal?: AbortSignal) {
+      return request<AiPackReview>("/wp/api/ai/pack/review", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    packCheck(body: { plan: AiPackPlan; built: AiPackBuilt }, signal?: AbortSignal) {
+      return request<AiPackCheck>("/wp/api/ai/pack/check", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    packInstall(body: { plan: AiPackPlan; built: AiPackBuilt }) {
+      return request<AiPackInstallResult>("/wp/api/ai/pack/install", {
+        method: "POST", body: JSON.stringify(body),
       });
     },
   },

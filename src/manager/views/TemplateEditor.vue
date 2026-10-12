@@ -18,6 +18,9 @@ import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
 import Field from "../components/ui/Field.vue";
 import RichTextInput from "../components/RichTextInput.vue";
+import Button from "../components/ui/Button.vue";
+import AiTextPanel from "../components/ai/AiTextPanel.vue";
+import { useAiConfig } from "../composables/useAiConfig";
 import { useToast } from "../composables/useToast";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useTemplateStore } from "../stores/templateStore";
@@ -36,6 +39,13 @@ const editingId = computed<string | null>(
   () => props.id ?? (route.params.id as string | undefined) ?? null,
 );
 const isEdit = computed(() => editingId.value !== null);
+
+const ai = useAiConfig();
+const aiOpen = ref(false);
+function useAiPrompt(p: Record<string, unknown>): void {
+  if (typeof p.template_string === "string") templateString.value = p.template_string;
+  if (typeof p.negative_template === "string") negativeTemplate.value = p.negative_template;
+}
 
 const name = ref("");
 const description = ref("");
@@ -134,6 +144,8 @@ function cancel() {
     <div v-if="loading" class="wp-dim wp-tpl-editor__loading">Loading template…</div>
     <template v-else>
       <IdentityCard
+        ai-kind="template"
+        :ai-payload="() => ({ template: templateString, negative: negativeTemplate })"
         :name="name"
         :description="description"
         :category-id="categoryId"
@@ -144,7 +156,23 @@ function cancel() {
         :show-content-rating="false"
         @update:tags="(v) => (tags = v)"
       />
-      <Card>
+      <Card title="Prompt">
+        <template v-if="ai.config.value?.enabled" #actions>
+          <Button
+            size="sm"
+            :variant="aiOpen ? 'secondary' : 'ghost'"
+            icon="pi-microchip-ai"
+            data-test="tpl-ai"
+            @click="aiOpen = !aiOpen"
+          >AI</Button>
+        </template>
+        <AiTextPanel
+          v-if="aiOpen && ai.config.value?.enabled"
+          kind="template"
+          :item="{ id: editingId ?? undefined, name, description, tags, template_string: templateString, negative_template: negativeTemplate }"
+          @use="useAiPrompt"
+          @close="aiOpen = false"
+        />
         <Field label="Template" hint="The PromptAssembler template string — $var tokens are resolved at render.">
           <!-- The same editor the assembler node uses, on the same surface.
                A template IS an assembler template string — saved here, loaded

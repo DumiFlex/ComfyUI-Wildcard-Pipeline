@@ -3,8 +3,23 @@ import { computed, nextTick, ref, shallowRef, watch, type Component } from "vue"
 import { RouterLink } from "vue-router";
 import { DOC_GROUPS, pagesByGroup, findPage, searchPages, toneVar, type DocGroupId } from "../docs/registry";
 import { GITHUB_WIKI } from "../config/links";
+import { useAiConfig } from "../composables/useAiConfig";
+import { useAiChat } from "../composables/useAiChat";
 
 const props = defineProps<{ page?: string }>();
+
+const ai = useAiConfig();
+const chat = useAiChat();
+
+/** Open the assistant chat with a question about this page (or the text the
+ *  user selected on it), ready to send or edit. */
+function askAssistant(): void {
+  const picked = window.getSelection?.()?.toString().replace(/\s+/g, " ").trim() ?? "";
+  chat.input.value = picked
+    ? `Explain this in simpler words: "${picked.slice(0, 600)}"`
+    : "Explain this page in simpler words";
+  chat.open.value = true;
+}
 
 const query = ref("");
 const activeMeta = computed(() => findPage(props.page) ?? findPage("introduction"));
@@ -50,6 +65,17 @@ watch(
           aria-label="Search documentation"
         />
       </div>
+      <button
+        v-if="ai.ready.value"
+        type="button"
+        class="wp-doc__ask"
+        data-test="doc-ask-ai"
+        title="Select text on the page first to ask about just that part"
+        @mousedown.prevent
+        @click="askAssistant"
+      >
+        <i class="pi pi-microchip-ai" aria-hidden="true" /> Ask the assistant
+      </button>
       <template v-for="g in DOC_GROUPS" :key="g.id">
         <div v-if="groupPages(g.id).length" class="wp-doc__grp">{{ g.label }}</div>
         <RouterLink
@@ -122,6 +148,24 @@ watch(
   font: inherit;
   font-size: 12px;
 }
+.wp-doc__ask {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  padding: 0 9px;
+  margin: -6px 0 6px;
+  background: color-mix(in oklab, var(--wp-accent-500) 12%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-accent-500) 35%, var(--wp-border));
+  border-radius: 7px;
+  color: var(--wp-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.wp-doc__ask:hover { background: color-mix(in oklab, var(--wp-accent-500) 20%, transparent); }
+.wp-doc__ask:focus-visible { outline: 2px solid var(--wp-accent-500); outline-offset: 2px; }
 .wp-doc__grp {
   font-size: 10px;
   font-weight: 600;

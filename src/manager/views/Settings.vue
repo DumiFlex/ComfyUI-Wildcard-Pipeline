@@ -18,6 +18,7 @@ import EditingSection from "../components/settings/sections/EditingSection.vue";
 import AutocompleteSection from "../components/settings/sections/AutocompleteSection.vue";
 import CanvasSection from "../components/settings/sections/CanvasSection.vue";
 import TestRunnerSection from "../components/settings/sections/TestRunnerSection.vue";
+import AiSection from "../components/settings/sections/AiSection.vue";
 import LibrarySection from "../components/settings/sections/LibrarySection.vue";
 import AdvancedSection from "../components/settings/sections/AdvancedSection.vue";
 import {
@@ -40,6 +41,7 @@ const COMPONENTS: Record<SectionId, Component> = {
   autocomplete: AutocompleteSection,
   canvas: CanvasSection,
   "test-runner": TestRunnerSection,
+  ai: AiSection,
   library: LibrarySection,
   advanced: AdvancedSection,
 };

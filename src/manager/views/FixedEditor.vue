@@ -23,6 +23,8 @@ import RichTextInput from "../components/RichTextInput.vue";
 import NegativeField from "../components/NegativeField.vue";
 import { pruneBlankNegatives, setNegative } from "../utils/negatives";
 import BulkAddPanel from "../components/BulkAddPanel.vue";
+import AiTextPanel from "../components/ai/AiTextPanel.vue";
+import { useAiConfig } from "../composables/useAiConfig";
 import BulkDeleteToolbar from "../components/BulkDeleteToolbar.vue";
 import Checkbox from "../components/ui/Checkbox.vue";
 import ListFilter from "../components/ui/ListFilter.vue";
@@ -34,6 +36,7 @@ import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { moveSelected, nudge, type MoveTarget } from "../utils/option-list-ops";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
 import { useEditorDraft } from "../composables/useEditorDraft";
+import { registerOpenEditor } from "../composables/useOpenEditor";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -166,9 +169,29 @@ function snapshot(): string {
  */
 const bulkPending = ref(false);
 
-const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
-  () => bulkPending.value || snapshot() !== baseline.value,
+const ai = useAiConfig();
+const aiOpen = ref(false);
+/** The AI panel holds values the user hasn't used yet. */
+const aiPending = ref(false);
+/** The filled-in rows, as the AI panel sends them. */
+const aiValues = computed(() =>
+  values.value.filter((v) => v.name.trim()).map((v) => toNamedValue(v)),
 );
+/** The AI answer is the whole list (rewritten names keep their row). */
+function useAiValues(p: Record<string, unknown>): void {
+  const next = Array.isArray(p.values) ? (p.values as NamedValue[]).map(toNamedValue) : [];
+  if (next.length) values.value = next;
+}
+
+const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
+  () => bulkPending.value || aiPending.value || snapshot() !== baseline.value,
+);
+
+// The chat reads and edits this item's info here; its payload stays on Save.
+registerOpenEditor({
+  id: props.id, type: "fixed_values", dirty: () => dirty.value,
+  name, description, tags, categoryId, contentRating,
+});
 
 const draft = useEditorDraft({
   kind: "fixed_values",
@@ -550,6 +573,8 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
       >Delete</Button>
     </template>
     <IdentityCard
+      ai-kind="fixed_values"
+      :ai-payload="() => ({ values })"
       :name="name"
       :description="description"
       :category-id="categoryId"
@@ -590,12 +615,28 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
           data-test="fv-bulk-add"
           @click="bulkAddOpen = !bulkAddOpen"
         >Bulk add</Button>
+        <Button
+          v-if="ai.config.value?.enabled"
+          size="sm"
+          :variant="aiOpen ? 'secondary' : 'ghost'"
+          icon="pi-microchip-ai"
+          data-test="fv-ai"
+          @click="aiOpen = !aiOpen"
+        >AI</Button>
         <Button size="sm" variant="primary" icon="pi-plus" data-test="fv-add" @click="addValue">
           Add value
         </Button>
       </template>
       <template #subheader>
-      <div v-if="bulkAddOpen || (bulkActive && bulkCount > 0)" class="wpc-bulk-controls">
+      <div v-if="bulkAddOpen || (aiOpen && ai.config.value?.enabled) || (bulkActive && bulkCount > 0)" class="wpc-bulk-controls">
+        <AiTextPanel
+          v-if="aiOpen && ai.config.value?.enabled"
+          kind="fixed_values"
+          :item="{ id: props.id, name, description, tags, payload: { values: aiValues } }"
+          @use="useAiValues"
+          @close="aiOpen = false"
+          @update:pending="(v: boolean) => (aiPending = v)"
+        />
         <BulkAddPanel
           v-if="bulkAddOpen"
           mode="values"

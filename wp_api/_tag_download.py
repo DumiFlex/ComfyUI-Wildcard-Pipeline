@@ -1,7 +1,7 @@
 """Fetch the tag list from our own GitHub release.
 
-This is the only outbound network request the extension ever makes, and it
-happens solely when someone clicks Download in Settings. Nothing here runs on a
+This request happens solely when someone clicks Download in Settings (the
+full list of outbound requests is in docs/network-access.md). Nothing here runs on a
 timer, at startup, or as a side effect of anything else.
 
 THREAT MODEL

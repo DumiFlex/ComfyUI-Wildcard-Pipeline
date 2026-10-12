@@ -28,6 +28,8 @@ import Chip from "../components/ui/Chip.vue";
 import RichTextInput from "../components/RichTextInput.vue";
 import RichTextPreview from "../components/RichTextPreview.vue";
 import NegativeField from "../components/NegativeField.vue";
+import AiTextPanel from "../components/ai/AiTextPanel.vue";
+import { useAiConfig } from "../composables/useAiConfig";
 import { isBlankNegative, libraryVarNegatives, type VarNegativeSource } from "../utils/negatives";
 import { tokenizeRich } from "../../widgets/richTokenize";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
@@ -35,6 +37,7 @@ import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
 import { useEditorDraft } from "../composables/useEditorDraft";
+import { registerOpenEditor } from "../composables/useOpenEditor";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -250,9 +253,24 @@ function snapshot(): string {
   });
 }
 
+const ai = useAiConfig();
+const aiOpen = ref(false);
+/** The AI panel holds an answer the user hasn't used yet. */
+const aiPending = ref(false);
+function useAiTemplate(p: Record<string, unknown>): void {
+  if (typeof p.template === "string") template.value = p.template;
+  negative.value = typeof p.negative === "string" ? p.negative : "";
+}
+
 const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
-  () => snapshot() !== baseline.value,
+  () => aiPending.value || snapshot() !== baseline.value,
 );
+
+// The chat reads and edits this item's info here; its payload stays on Save.
+registerOpenEditor({
+  id: props.id, type: "combine", dirty: () => dirty.value,
+  name, description, tags, categoryId, contentRating,
+});
 
 const draft = useEditorDraft({
   kind: "combine",
@@ -604,6 +622,8 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
       >Delete</Button>
     </template>
     <IdentityCard
+      ai-kind="combine"
+      :ai-payload="() => ({ template, output_var: outputVar, negative })"
       :name="name"
       :description="description"
       :category-id="categoryId"
@@ -617,6 +637,23 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
     />
 
     <Card title="Template & Output">
+      <template v-if="ai.config.value?.enabled" #actions>
+        <Button
+          size="sm"
+          :variant="aiOpen ? 'secondary' : 'ghost'"
+          icon="pi-microchip-ai"
+          data-test="cb-ai"
+          @click="aiOpen = !aiOpen"
+        >AI</Button>
+      </template>
+      <AiTextPanel
+        v-if="aiOpen && ai.config.value?.enabled"
+        kind="combine"
+        :item="{ id: props.id, name, description, tags, payload: { template, negative, output_var: outputVar || toIdentifier(name) } }"
+        @use="useAiTemplate"
+        @close="aiOpen = false"
+        @update:pending="(v: boolean) => (aiPending = v)"
+      />
       <!-- Output variable BEFORE the template, each full-width. It used to sit
            in a 220px column beside the template, which squeezed the template
            (the field that actually needs room to grow) and read as a footnote

@@ -1,0 +1,1463 @@
+{
+ "pages": [
+  {
+   "id": "introduction",
+   "title": "Introduction",
+   "group": "overview",
+   "blurb": "What Wildcard Pipeline is and how the pieces fit.",
+   "keywords": [
+    "start",
+    "overview",
+    "mental model"
+   ],
+   "sections": [
+    {
+     "title": "What does it do?",
+     "text": "Each time you press Generate, Wildcard Pipeline randomly picks from your lists, combines the results, and drops them into a prompt template. You get a different, meaningful prompt every run without touching the text.\nA simple example: you have a wildcard called \"subject\" with options a cat, a dog, and a fox. Your template reads A photo of $subject. Each generation picks one animal and assembles the final prompt for you."
+    },
+    {
+     "title": "How the pieces fit together",
+     "text": "There are three nodes you connect in ComfyUI:\n- WP Context — holds your modules (wildcards, fixed values, combines, etc.) and resolves them into a map of $variables on every run.\n- WP Prompt Assembler — takes the variable map and fills your template string, producing a ready-to-use prompt.\n- CLIP Text Encode (standard ComfyUI node) — receives the assembled prompt and feeds it into your sampler."
+    },
+    {
+     "title": "What are modules?",
+     "text": "Modules are the building blocks you author in this manager. Each module produces (or shapes) one $variable in the context:\n- Wildcard — a list of options; one is picked at random each run.\n- Fixed Values — always outputs the same value.\n- Combine — joins several variables into one string.\n- Derivation — transforms an existing variable into a new one.\n- Constraint — forces a wildcard to pick a specific option when another variable has a certain value.\nYou create and edit modules here in the manager. You then add them to a WP Context node on the ComfyUI canvas."
+    },
+    {
+     "title": "Good to know",
+     "text": "Right-click is your friend. Most WP nodes — and the rows inside their widgets — carry a context menu: push a module to the library, sync a drifted one, bypass, duplicate, and more. If something looks interactive, try right-clicking it too; a lot of the handy stuff is tucked in there."
+    },
+    {
+     "title": "Where to next",
+     "text": "Quick start Glossary WP Context"
+    }
+   ]
+  },
+  {
+   "id": "quick-start",
+   "title": "Quick start",
+   "group": "overview",
+   "blurb": "Build the smallest working pipeline.",
+   "keywords": [
+    "tutorial",
+    "first"
+   ],
+   "sections": [
+    {
+     "title": "Step 1 — Create a starter wildcard",
+     "text": "The easiest way to begin is to let the editor pre-fill a ready-to-save wildcard for you. Click the button below and you will land in the wildcard editor with a \"subject\" wildcard already set up — three options (a cat, a dog, a fox) with equal weights. Give it a look, adjust the options to whatever you like, then click Save.\nYou can rename the wildcard, change the options, and add or remove rows before saving. Nothing is committed until you click Save."
+    },
+    {
+     "title": "Step 2 — Wire the graph in ComfyUI",
+     "text": "With your wildcard saved, head to the ComfyUI canvas and build this three-node chain:\n- Add a WP Context node. Right-click the canvas → Add Node → wildcard-pipeline → WP Context.\n- Add your wildcard to the context. Click the + button in the WP Context widget, choose Wildcard from the module picker, and select the \"subject\" wildcard you just saved.\n- Add a WP Prompt Assembler node. Connect the WP Context's context output to the Assembler's context input. In the template field, type: A photo of $subject.\n- Connect to CLIP. Connect the Assembler's prompt output to your CLIP Text Encode node's text input.\n- Generate. Press Queue. Each run picks a random subject and builds the prompt automatically."
+    },
+    {
+     "title": "Step 3 — Check what was picked",
+     "text": "Add a WP Debug node (connect it to the context output) to see exactly which value was chosen for $subject on each run — handy for understanding what the pipeline is doing without interrupting generation."
+    },
+    {
+     "title": "What to try next",
+     "text": "Once the basic pipeline works, you can add more modules to the context to build richer prompts: a Fixed Values module for a consistent art style, a Combine to merge two variables, or a Constraint to link choices together. Use WP Context Loop to generate a whole batch of variations in one queue run."
+    },
+    {
+     "title": "See also",
+     "text": "WP Context WP Prompt Assembler Wildcard Glossary"
+    }
+   ]
+  },
+  {
+   "id": "test-runner",
+   "title": "Test Runner",
+   "group": "overview",
+   "blurb": "Run modules on many seeds, inspect each one, and compare against a baseline.",
+   "keywords": [
+    "test",
+    "scenario",
+    "seed",
+    "baseline",
+    "compare",
+    "inspect",
+    "trace",
+    "preview"
+   ],
+   "sections": [
+    {
+     "title": "What it's for",
+     "text": "The Test Runner, in the manager sidebar, runs a stack of your library modules through the real engine, one chain seed per run, and shows what comes out. Use it to check that a wildcard's options all come up, that a constraint actually fires, or that a combine reads the variables you think it does, before you wire anything on the canvas.\nScenariostack + pins + seedsRunreal engine, seededResultsvalues, traces, warningsBaselinecompare after editsA seed here is a real chain seed: the same seed on a canvas Context holding the same modules gives the same values."
+    },
+    {
+     "title": "Build a scenario",
+     "text": "A scenario is what one Context node would hold, saved so you can run it again. Press New in the rail, then Add module or bundle. Cards run left to right, like the modules on a Context; drag them (or Alt + arrow keys) to reorder, and use a card's switch to leave it out of a run without removing it.\nStack\nThe modules and bundles to run, in order. A card warns when it reads a $variable nothing earlier sets, or when a combine template is plain text and will never vary.\nPinned values\nStand-ins for what a node further up the graph would pass in, such as $subject from an Injector. They are set before the first card runs.\nSeeds\nRange runs seeds from N upward; Random draws a fresh set each run. Up to 10,000 seeds per run.\nOutput\nThe variable treated as the prompt: the last combine's output unless you pick another on the Outputs tab.\nSave (Ctrl + S) keeps the scenario, and the pin icon keeps it at the top of the rail. From a module or bundle editor, Send to Test Runner opens a quick run with just that item, and In N scenarios lists the saved scenarios that use it."
+    },
+    {
+     "title": "Read a run",
+     "text": "The stats row gives runs, unique outputs, warnings and engine time. Below it, each tab answers one question:\nVariables\nEvery $variable and how often it took each value, with values that never changed listed once as constants.\nOutputs\nThe output for the first seeds, tinted by which variable wrote each part, with a NEG line for the negative words it carries.\nSamples\nOne row per seed with every variable (and the output's negative, when there is one); filter by seed or value.\nWarnings\nRuntime warnings grouped by kind, with the seeds that raised them, and any runs that failed.\nCompare\nWhat changed since the saved baseline. See below.\nClick any seed to open its trace: every card in run order with what it wrote, plus the nested @{…} picks it made on the way. Copy seed puts it on the clipboard for a canvas Context."
+    },
+    {
+     "title": "Inspect a module",
+     "text": "Click a stack card to open its inspector: how that module is set up next to what the last run did with it.\nWildcard\nEach option's share of the weight next to its share of the picks. Options that were never picked are flagged; picks through @{} references elsewhere in the stack count too.\nConstraint\nWhich pick it listens to, which wildcard it re-weights and how far it reaches, and how many times it applied. Zero usually means the target runs before the source.\nCombine\nThe template, the $variables it reads, and the outputs it produced.\nDerivation\nIts rules as plain if / else lines, and the values its target ended up with.\nFixed values\nEvery name and value it sets.\nBundle\nIts modules in run order (nested bundles indented) and the values each one wrote.\nEdit in the inspector opens that module in its editor."
+    },
+    {
+     "title": "Baselines: catch what an edit changed",
+     "text": "On the Compare tab of a saved scenario, Save as baseline keeps this run's output for each seed (the first 1,000), plus every variable's spread and the warnings. Edit your modules, run again, and the tab lists each seed whose output changed (with the changed words marked), values that appeared or disappeared, shares that moved, and warnings that came or went. A seed whose negative changed is listed too; a baseline saved before negatives existed says negative not recorded until you save it again.\nRe-run all in the rail's Pinned header runs every pinned scenario against its baseline in one go, and each row then reads matches or N changed. When the result is the new normal, Use this run as baseline replaces it.\nCompare needs the same seeds on both sides. A Range scenario always has them; for a Random one, Run the baseline's seeds reruns exactly the seeds the baseline used."
+    },
+    {
+     "title": "Works with",
+     "text": "Seeds & loops WP Debug Warning & conflict types"
+    }
+   ]
+  },
+  {
+   "id": "ai-assistant",
+   "title": "AI assistant",
+   "group": "overview",
+   "blurb": "Connect a model you choose (local or your own API key) to draft, organize, chat about your library and build packs.",
+   "keywords": [
+    "ai",
+    "llm",
+    "model",
+    "ollama",
+    "lm studio",
+    "llama.cpp",
+    "claude",
+    "openai",
+    "draft",
+    "assistant",
+    "uncensored"
+   ],
+   "sections": [
+    {
+     "title": "What it does",
+     "text": "The assistant uses a model you supply: one running on your own PC (Ollama, LM Studio, llama.cpp or any OpenAI-compatible server) or the Claude or OpenAI API with your own key. Wildcard Pipeline ships no model and sends nothing anywhere until you turn the assistant on.\nIt writes and edits every kind of module (wildcard options with tags, tag groups, negatives, an empty option and a fallback; fixed values; combines; derivation and constraint rules; prompt templates and bundles), runs what it made on the real engine to check it, explains a Test Runner run, organizes your library and builds whole packs from a description. Every request includes the item's name, description and tags, so writing a good description first points the model in the right direction."
+    },
+    {
+     "title": "Set it up",
+     "text": "Open Settings → AI assistant.\nEnable\nTurns the assistant on. While it is off, the AI button in the editors is hidden and the model routes refuse every call.\nProvider\nOllama, LM Studio, llama.cpp, Claude, OpenAI, or Custom for any other OpenAI-compatible server. Each provider remembers its own address, model and key, so you can switch back and forth without typing them again.\nServer address\nFilled in for each provider; change it if your server runs on another port or machine.\nAPI key\nOnly needed for Claude, OpenAI or a server that asks for one. It is stored on ComfyUI's side and never shown again; Remove deletes it. WP_AI_API_KEY, ANTHROPIC_API_KEY or OPENAI_API_KEY in the environment work too.\nModel\nPicked from the list your server reports (refresh after downloading a new one), or typed in.\nUnload after\nFor local servers: how many idle seconds before the model leaves the GPU, so ComfyUI gets its memory back. 0 unloads right away.\nModel size\nHow much the assistant asks of the model. Small models (under 20B) get shorter instructions, smaller tool results and steadier settings; large ones and hosted models get everything. Automatic reads the size from the model's name; set it when the name doesn't say.\nMost context to use\nFor Ollama: the assistant asks for as much context as each request needs, up to this many tokens (16384 by default). Ollama's own default is far smaller and silently cuts the instructions off. Lower it if the model no longer fits on your GPU.\nTest connection\nLists the models, then asks the chosen one for a tiny JSON answer, and tells you whether it worked and how long it took. For LM Studio and llama.cpp it also reads how much context the model was loaded with and warns when it is under 8192 tokens, since the assistant's instructions alone need more."
+    },
+    {
+     "title": "Add options to a wildcard",
+     "text": "In a wildcard's editor, press AI above the options and stay on the Add tab. Say what you want (for example more outfits for a rainy city at night) and how many, then Draft (Ctrl + Enter). The model sees the wildcard's name, its options and its tags, so it writes in the same style and reuses your tags.\nYou get a list to review. Untick anything you don't want and press Add; the rest go in like pasted options, with new tags marked. Draft again asks for another set, and Stop cancels a slow one. Nothing is saved until you press Save.\nOptions can hold the same syntax you'd type: {red|blue} picks one each run, and @{Colors:warm} draws from another wildcard (only its options tagged warm). The model names the wildcard; the assistant finds it in your library and writes the reference, so ask for \"a scarf in a warm colour from my Colors wildcard\" and it points there.\nOptions that repeat an existing one, read a $variable (options can't), point at a wildcard you don't have or at a tag it doesn't have, or point back at the wildcard itself are left out and listed under the result, so a draft can never add a broken reference."
+    },
+    {
+     "title": "Edit the options you have",
+     "text": "The other tabs change options that are already there. They work on every option, or on just the ones you selected (tick their boxes in Bulk edit first). Say what you want and the model answers with a before/after list, one tick box per change.\nRemove\nFinds options that match what you describe ('drop anything modern') and says why. Options other modules point at stay; delete those by hand so you can see what refers to them.\nRewrite\nChanges the wording: tags to sentences, a different style, shorter, typos fixed. A rewrite that would make two options the same is left out.\nRetag\nSets each option's tags ('tag each by the seasons it suits'). The new list replaces the old one; new tags are marked and created when you apply.\nWeights\nMakes options rarer or more common ('heavy winter gear rarer'). 1 is normal, 0.5 half as likely, 2 twice, 0 never.\nUntick what you don't want and press Apply (or Remove). The changes land in the editor like your own edits, so you can still tweak or undo them, and nothing is saved until you press Save. Up to 300 options go in one request; select some first for a longer list."
+    },
+    {
+     "title": "Write rules from a description",
+     "text": "The derivation and constraint editors have an AI button too. Describe what the rules should do in your own words and the model writes them. You get each rule in plain words with a tick box, and nothing changes until you press Add or Apply; nothing is saved until you press Save.\nDerivations\nFor example: when $class is mage, set $title to Archmage and add robes to $outfit. The model sees every variable your library sets and the options of its wildcards, so it uses their real names. A rule that reads a variable nothing sets, or tests for an option the wildcard doesn't have, comes with a warning. Option names are fixed to the exact spelling, since the test is case-sensitive. New rules go to the end of the list.\nConstraints\nPick the source and target wildcards first, then press AI on the Rule matrix. For example: mages never carry swords, warriors rarely get staves. Rules between two tags go in the matrix, rules between two options become exceptions, and a tag paired with one option becomes an exception per option. A rule for a pair that already has one is marked “replaces” and takes its place. Switch to Preview to see each option's chances with the ticked rules, with arrows on what they change.\nRules need a model that follows instructions well. If the answer comes back unusable, switch to one of the builder models below."
+    },
+    {
+     "title": "Fixed values, combines and templates",
+     "text": "The fixed values, combine and template editors have an AI button as well. Describe what you want and the model writes it with the variables your library sets:\nFixed values\nA style preset or quality tags, each with the negative words it should add (an anime preset adds 3d render to the negative). A value with a name you already have is rewritten in place; the rest are added. Values can use {a|b} picks but not $variables.\nCombine\nJoins variables into one phrase in the order the model reads best, and can add a negative. Set the output variable first.\nTemplate\nWrites the Assembler prompt from your variables, plus a standing negative with $negatives where the negatives of the variables it used go. Choices belong in wildcards, so it never writes {a|b} here (the Assembler has no seed and would print it as is).\nYou see the result first, with a warning for any variable nothing in the library sets. Use puts it in the editor; nothing is saved until you press Save."
+    },
+    {
+     "title": "Describe and tag",
+     "text": "Every editor's Identity card has a Describe button. The model reads what the item holds (a wildcard's options, a derivation's rules, a bundle's modules, a template's text) and writes a short description saying what it is for, plus tags to find it by. It reuses tags your library already has; new ones are dashed. Type a note first to steer it (optional). Untick what you don't want and press Apply: the description is replaced, the tags are added to the ones there, and nothing is saved until you press Save."
+    },
+    {
+     "title": "Organize the library",
+     "text": "Select modules or bundles in any library list (up to 60), then press Organize with AI in the selection bar. The model reads each item (its name, description, what it holds and its current category, tags and rating) together with your library's categories and tags, and suggests:\n- a category, reusing yours where one fits (a new one is dashed and created when you apply; bundles have no category),\n- tags to add or remove, reusing tags the library already has,\n- a content rating change, Safe or NSFW, when the content calls for it.\nOnly items that would change are listed, each with a short reason. Every change is a chip: click one to leave it out, or untick an item to skip it. Type a note first to steer it (optional, e.g. \"one category per subject\"). Apply saves right away, and the toast that follows has Undo."
+    },
+    {
+     "title": "Chat with the assistant",
+     "text": "The AI button in the top bar (shown once the assistant is on) opens a chat on the right. Ask about your library (\"which wildcards set $outfit?\", \"what's missing for a fantasy pack?\"), ask how something works, or ask for a change. The assistant searches and reads your items and these docs itself; the lines above each reply say what it looked at.\nIt sees the page you're on. In an editor it reads the item as it is in the editor, unsaved changes included, so \"this wildcard\" means what you see. In a list it knows the filters and which rows you selected, in the Test Runner the last run's results and warnings, and in the Pack builder the plan.\nEvery change comes back as a card, and nothing happens until you press Apply on it. It can:\n- create a wildcard (with tag groups, negatives, an empty option, a fallback and references to other wildcards), or a vocabulary wildcard other options draw from,\n- add options to a wildcard, or remove, rewrite, retag and re-weight the ones it has, set their negatives, pick the fallback, change how often the empty option comes up and group tags,\n- create or change fixed values, a combine or a prompt template,\n- create a derivation, add rules, or replace and remove rules by number,\n- create a constraint between two wildcards, or change its rules and its reach,\n- create a bundle in the right running order with per-use settings (pick 2-3, a tag filter, never empty, hold for a whole Loop run, internal), or add, remove and change its items,\n- change an item's description, tags, category or rating,\n- open an item's editor, a docs page or a manager page such as a Settings section.\nIt can also run a stack on the engine before it answers: modules and bundles from your library, with pinned values and a template for sample prompts. It reads each variable's most common values, options that never came up and warnings, and with its own proposals swapped in it reports what moves (\"wool coat 40% → 0%\"). Ask it to check a change and it tries it first. Running changes nothing in your library.\nA change to the item open in your editor goes into the editor, and you keep it with Save there as usual. If you edit the item yourself after asking, the card says it's out of date; ask again. Other changes save to the library when you apply them. Options a constraint points at are never removed this way.\nThe assistant plans before it acts and checks its work: when it proposes changes to modules it runs the stack with them before it answers, so the reply says what the change does. It can propose several items that depend on each other in one answer (a wildcard and a constraint on it); the later card waits until the first is applied. An answer that comes back garbled is asked for again once, with the problem named.\nEach card lists what it changes and warns about anything it left out (a duplicate option, a variable nothing sets). Undo on an applied card puts back what it replaced, or deletes what it created. Dismiss tells the assistant you said no. When two cards change the same item, the second builds on the first, so apply them in order. The chat stays when you close the drawer; New chat starts over.\nChat works best with a model that follows instructions well; use one of the builder models below. A small model may need a second try or a more specific request."
+    },
+    {
+     "title": "Tidy up an imported wildcard pack",
+     "text": "Packs converted from Dynamic Prompts, Prompt Post-Processor or Impact files arrive as flat lists. After an import in Import / Export → Wildcard packs, a bar offers Tag and connect with AI: the chat opens with the imported wildcards and asks the assistant to tag their options, group the tags, link the lists with constraints (with a fallback where a rule could leave a list empty), gather them into a bundle and run a test. Every change comes back as a card to apply or skip; the option text stays as it was."
+    },
+    {
+     "title": "Ask about a test run",
+     "text": "After a run in the Test Runner, a bar above the results asks the assistant about it: Explain this run, Fix the warnings (when there are any) or Why do I never get… with an option you expected to see. The chat gets the scenario's stack, pins and results, runs it again itself to check its answer, and offers any fix as cards you apply."
+    },
+    {
+     "title": "Ask about the docs",
+     "text": "The assistant answers questions about Wildcard Pipeline from these docs and says which page it used, with a button to open it. On any docs page, Ask the assistant at the top of the page list opens the chat ready to explain the page in simpler words. Select a part of the page first to ask about just that part. It doesn't guess: if the docs don't cover something, it says so."
+    },
+    {
+     "title": "Build a whole pack",
+     "text": "Pack builder in the sidebar (shown once the assistant is on) makes a complete pack from one description: wildcards, fixed values, derivation rules, combines, constraints between wildcards and a prompt template, filed into one bundle. It can also make vocabulary wildcards that other options draw from (@{Colors:warm}), give an item per-use settings in the bundle (\"pick 2-3\", \"hold\"), and plan inputs: values the pack reads but you set, like the subject, through a WP Context Injector row.\n- Describe what the pack makes and the rules between its parts (\"elves never use guns, mages get robes\").\n- Plan. The assistant lists every item it will build, by variable, and may ask up to three questions. Inputs are listed under the plan. Click an answer, remove items you don't want (the ✕ on a row), or type a change, then press Update plan. Nothing is built yet. Above the items, a line says how the pack is written (tags or sentences), which checkpoint family it is for, and the variable everything follows. Items marked yours are wildcards from your library the pack reuses instead of building a copy.\n- Plan review. Before anything is built, the plan is checked for what would break: a template or rule that reads a variable nothing sets, a constraint keyed on a tag neither wildcard lists, two constraints that loop, wildcards that ignore the pack's anchor, picks that nothing links. Review with AI asks the model for a second opinion, and Fix these in the plan sends the findings back as a change.\n- Build & check. Each item is written in its own request, wildcards first so rules can use their tags. Then the pack runs 200 seeds on the real engine. An item with a problem (a rule that never applies, a variable nothing sets) is rebuilt with the problem as a note, up to twice, and the row says what was fixed. An item whose answer fails is asked again once with the error, and one that doesn't fit what it reads (a rule testing for an option its wildcard lacks) is rebuilt once with that named. The run also flags options that never came up or that take most of the picks; rebuild the item to spread them. Click a row to see what it holds; the refresh button builds that one again. The test run shows each variable's most common values and a few sample prompts.\n- Install adds the modules, the template and a bundle that runs them in the right order, all tagged with the pack's name so they show up together under Tags, and says how to wire it on the canvas (the bundle in a WP Context, the template in a WP Prompt Assembler, an Injector row per input). Undo removes all of it.\nThe planner reads your library's conventions first: whether your options are tags or sentences and how long, the tags and tag groups you use, the variables your stacks set and the standing negatives in your templates, so the pack matches what you have. Open Start from a prompt you like and paste a prompt to build a pack that makes more like it: the planner splits it into slots, one wildcard each.\nBuilding a pack takes one request per item, so a local model needs a few minutes. Use a builder model; a small one may leave an item unbuilt, which you can rebuild or remove."
+    },
+    {
+     "title": "Refine an answer",
+     "text": "You don't have to start over when an answer is close but not right. Once it shows, the request box takes a follow-up: type what to change (\"darker\", \"shorter names\", \"keep the first three, drop the rest\") and press Refine. The model gets your earlier requests and its own answers, plus which items you unticked, and sends back a revised answer in full. Your requests so far are listed above the box.\n- Try again asks the same thing again for another take.\n- Every answer is kept: the arrows next to Answer 2 of 3 flip back to an earlier one, and a refine from there continues from that answer.\n- Start over drops the conversation and puts your first request back in the box to edit.\n- Adding or applying ends the conversation; the next request starts fresh and sees what you added.\nA follow-up works on the same rows, rules and options the first request saw, even if you edit the list meanwhile, so the model's answers keep pointing at the same things."
+    },
+    {
+     "title": "Which model",
+     "text": "Hosted models (Claude, OpenAI) follow instructions best but may refuse explicit content. For NSFW packs, run an uncensored model yourself. Not refusing isn't enough, though: a model also has to know the words, so the suggestions come in two groups. Install one in Ollama with ollama pull and the name below, or download it from Hugging Face for LM Studio or llama.cpp. With a 24 GB GPU, one of the 24 GB builders is enough on its own; below 16 GB, Gemma 4 12B heretic is the best single model. \"Heretic\" and \"abliterated\" builds are the original model with its refusals removed; heretic ones keep more of the original. None of these is proven to know Danbooru tags, so check a draft before you rely on it.\nBest for writing. Fine-tuned on creative writing, NSFW included, so they know the words and use them. Pick one of these for drafting and rewriting options.\n- hf.co/TheDrummer/Rocinante-X-12B-v1-GGUF:Q4_K_M (10 GB GPU): Explicit option lists on a mid-range GPU (Mistral Nemo 12B); drafting only. Hugging Face\n- HammerAI/cydonia-v4.3:24b-q4_K_M (16 GB GPU): Richer explicit writing that still follows instructions well (Mistral Small 24B). Ollama · Hugging Face\n- hf.co/bartowski/TheDrummer_Artemis-31B-v1.2-GGUF:Q4_K_M (24 GB GPU): The strongest writer here, and tool calls still work (Gemma 4 31B). Hugging Face\nBest for organizing and building packs. Uncensored (they won't refuse) and strong at following instructions and returning structured answers. The 24 GB ones also write well enough to be your only model.\n- huihui_ai/qwen3.5-abliterated:9b (8 GB GPU): Tidying and tagging lists on a small GPU. Ollama · Hugging Face\n- hf.co/igorls/gemma-4-12B-it-heretic-GGUF:Q4_K_M (10 GB GPU): The best single model under 16 GB: writes well and builds packs. Hugging Face\n- huihui_ai/gemma-4-abliterated:26b (18 GB GPU): Rules and small packs (fast, mixture of experts). Ollama · Hugging Face\n- HammerAI/gemma-4-31b-heretic (24 GB GPU): One model for everything, leaning to writing (Gemma 4 31B). Ollama · Hugging Face\n- hf.co/llmfan46/Qwen3.6-27B-uncensored-heretic-v2-Native-MTP-Preserved-GGUF:Q4_K_M (24 GB GPU): One model for everything: whole packs and the chat (Qwen3.6 27B). Hugging Face\nWith two models, keep a writer selected for drafting and switch to a builder in Settings when you organize a library, chat or build a whole pack. Load local models with at least 16k of context."
+    },
+    {
+     "title": "Privacy",
+     "text": "With a local server nothing leaves your PC. With Claude or OpenAI, your request and the wildcard's name, options and tags go to that provider under your account. Writing derivation rules also sends the variables your library sets, with the first options of each wildcard; constraint rules send the two wildcards' options and tags; Describe sends what the item holds and the tags your library uses; Organize sends that for every selected item, plus your category names. The chat sends a list of your items (names, types and variables) and the conversation so far, plus whatever items and docs pages the assistant reads to answer, the results of stacks it runs (they run on your PC) and a short note of what the page shows (the open editor's item, a list's selection, the Test Runner's stack and last results). The fixed values, combine and template panels send the item and the variables your library sets. The pack builder sends your description, a sample prompt if you gave one, a summary of your library's conventions (option style, tags, variables, negatives and the wildcards worth reusing) and, for each item, what the pack has built so far. A follow-up sends the earlier requests and answers of that conversation again; nothing is kept on the server between requests.\nComfyUI has no login, so anyone who can reach its port can use the assistant while it is on, which spends your credits on a paid provider. Keep it off on a ComfyUI you share."
+    },
+    {
+     "title": "Works with",
+     "text": "Wildcard Derivation Constraint Test Runner Chips & references"
+    }
+   ]
+  },
+  {
+   "id": "glossary",
+   "title": "Glossary",
+   "group": "overview",
+   "blurb": "Terms: module, instance, $var, ref, snapshot, drift, surface.",
+   "keywords": [],
+   "sections": [
+    {
+     "title": "Terms",
+     "text": "Module\nA named piece of pipeline logic you author in the manager — for example a wildcard list or a fixed value. Modules live in your library and can be reused across many different WP Context nodes.\nWildcard\nA module that holds a list of options. Each time the pipeline runs, one option is picked at random (weighted by the numbers you set). The picked value is stored in the context under a $variable name.\nSub-category (tag)\nA label on a wildcard option — e.g. \"warm\", \"sneakers\". An option can carry several. Tags filter the pool and drive constraint matrices, and can be grouped into named groups; they are editor-only unless a group is marked accepts.\nLibrary tag\nA label on a whole module, bundle or template — e.g. \"outfit\", \"portrait\". An item can carry several, so a tag works as a collection: the sidebar lists the most-used ones and the Tags page renames, merges or deletes them. Library tags only organise your library; they never change what a pipeline picks. Not the same as a wildcard option's sub-categories.\nAxis (accepts group)\nA tag group marked accepts: its tags are alternatives the option offers, and exactly one is rolled per pick. Read it anywhere with $var.AXIS (e.g. $outfit.SHOES). A constraint from an accepts source keys on that single rolled tag, and an accepts target agrees with it under a diagonal.\nClassify group\nThe default tag-group kind: the tags describe what the option is, all true at once. Not readable as a variable; a constraint on a classify group uses all its tags together (AND).\n$variable\nA named slot in the context that holds a text value. Wildcards, Fixed Values, and Combines all write into $variables. Your template reads from them — for example $subject or $style.\nChip\nThe small tinted pill a text field shows for a $variable or an @{…} reference, so it edits as one unit. A chip is resolved (points at something real), filtered (a funnel: the reference narrows its pool), or broken (red ?: its target isn't in your library).\nReference (@{…})\nAn embedded fresh pick from another module, written @{uuid#name:filter!null} with only the 8-character id required. Plain @name is not a reference; it stays literal text.\nFilter expression\nThe :filter part of a reference: sub-category names joined with not, and, or (or a comma), grouped with parentheses, e.g. not warm and (low or high).\nCombine\nA module that joins two or more $variables (and any fixed text) into a new $variable. Useful for building phrases like \"$style portrait of $subject\".\nConstraint\nA module that forces a specific wildcard option to be chosen when another $variable has a particular value. Lets you say things like \"whenever $style is cinematic, $lighting must be low-key\".\nBundle\nA named group of modules stored together. You can drop an entire bundle into a WP Context at once. Bundle contents are frozen at insert time, so editing the library later does not change bundles already placed in a workflow.\nSeed\nA number that controls which options get picked. Same seed + same modules = same result. Change the seed to get a different set of picks. Each WP Context node has its own seed widget.\nContext\nThe WP Context node. It holds your modules, runs them in order on each Generate, and produces a map of $variables that the Assembler can read.\nTemplate\nA text string with $variable placeholders that the WP Prompt Assembler fills in. For example: \"A $style portrait of $subject\" becomes \"A cinematic portrait of a fox\" after resolution."
+    },
+    {
+     "title": "See also",
+     "text": "Introduction Quick start The $variable pipeline"
+    }
+   ]
+  },
+  {
+   "id": "variable-pipeline",
+   "title": "The $variable pipeline",
+   "group": "concepts",
+   "blurb": "How modules produce $vars and the Assembler fills templates.",
+   "keywords": [
+    "$var",
+    "@{uuid}",
+    "{a|b|c}",
+    "syntax",
+    "surface"
+   ],
+   "sections": [
+    {
+     "title": "The pipeline",
+     "text": "When a WP Context runs, it works through its module stack from top to bottom. Each module produces one or more name = value bindings. Those bindings build up inside the Context and are then passed downstream to Assemblers, other Contexts, or Debug nodes. The Assembler's job is to take your prompt template and swap in the values — every $name token becomes the value that was set upstream."
+    },
+    {
+     "title": "Syntax reference",
+     "text": "The following constructs are recognised inside template strings and wildcard option text:\nSyntax | Where it works | What it does\n$name | combine, derivation, assembler | Reads the named variable from the Context and inserts its value. For a multi-pick variable, bare $name joins the whole list with its separator.\n$name.K | combine, derivation, assembler | Indexes a single item out of a multi-pick result — K is 0-based, so $colors.0 is the first pick. Out-of-range indices resolve to empty.\n$name.AXIS | combine, derivation, assembler | Reads the tag an accepts axis named AXIS rolled on the source wildcard — e.g. $outfit.SHOES is the shoe tag chosen this run. Rolled once when the option is picked, so it's the same value in every template, module and chained node. For a multi-pick source, $name.K.AXIS is the K-th pick's (index and axis compose in either order). A tag that was never promoted to an accepts axis — or one in a classify group — resolves to empty and is flagged.\n@{8hexchars} | wildcard options, derivation actions | Nested module reference — resolves to the picked value of the target wildcard. Segments are optional and combinable: #name caches a display name (shown only if the row is missing), :filter narrows a referenced wildcard's pool by a sub-category boolean expression (e.g. warm or cool), and !null drops the null option. Full form: @{abcd1234#Mood:calm or intense!null}. Filter grammar: Chips & references.\n{a|b|c} | all text fields | Picks one alternative at render time. Weight an arm with N::value (e.g. {3::cat|dog} makes cat 3× as likely). The Assembler has no seed, so it leaves picks literal.\n{N$$sep$$a|b|c} | all text fields | Multi-pick: picks N items joined by sep. {N-M$$sep$$…} picks a random count in the N–M range. Default is UNIQUE (no repeats); add ~ ({N~$$…} / {N-M~$$…}) for INDEPENDENT picks with replacement, which may repeat.\n$$ · @@ · {{ | all text fields | Escapes — produce a literal $, @, or { instead of starting a token.\nAn inline pick's arms are resolved recursively, so an arm can itself contain $vars, @{} refs, and further {…} picks — for example {a @{abcd1234} cat|{2$$, $$red|blue|green} sky}. What each nested token resolves to still depends on the surface it sits on — see the gate below.\nVariable names must match ^[A-Za-z_][A-Za-z0-9_]*$, be at most 64 characters, and must not start with __ (reserved for internal use). Ref UUIDs are exactly 8 lowercase hex characters."
+    },
+    {
+     "title": "The per-surface gate",
+     "text": "Not every token resolves on every surface — each module resolves only what makes sense for it; anything else stays literal text.\nSurface | $var read | @{uuid} ref | {a|b} pick\nWildcard option value | — | ✓ | ✓\nCombine template | ✓ | literal | ✓\nDerivation action value | ✓ | ✓ | ✓\nDerivation condition value | ✓ | — | —\nFixed Values value | — | — | ✓\nPrompt Assembler template | ✓ | literal | literal\nWildcards and fixed values are producers — their option text doesn't read $var at all. So a wildcard can't pull in a value another module set, no matter the order. To build a value from earlier picks, add a combine or derivation after the producers — those surfaces do read $var.\nThe Assembler is seedless: any leftover picks or refs in the final template render verbatim, so roll the value upstream and reference its $var. Derivation action values now resolve @{} refs too — a rule can inject a nested wildcard's pick — while derivation conditions compare plain $var values only."
+    },
+    {
+     "title": "Works with",
+     "text": "WP Context WP Prompt Assembler Wildcard"
+    }
+   ]
+  },
+  {
+   "id": "chips-and-references",
+   "title": "Chips & references",
+   "group": "concepts",
+   "blurb": "The chips in text fields, their three states, @{uuid#name:filter} refs, and the filter grammar.",
+   "keywords": [
+    "chip",
+    "chips",
+    "placeholder",
+    "broken",
+    "@{uuid}",
+    "@name",
+    "reference",
+    "filter",
+    "sub-category",
+    "not",
+    "and",
+    "or",
+    "negation",
+    "!null",
+    "expression"
+   ],
+   "sections": [
+    {
+     "title": "What a chip is",
+     "text": "Text fields that understand pipeline syntax show each $name and each @{…} reference as a chip: a small tinted pill instead of raw characters. A chip is one unit. The caret steps over it in one move and Backspace deletes it whole, so you can't half-delete a reference and leave broken syntax behind.\nUnder the chip the field still stores plain text. Copying a chip copies its syntax, and pasting that syntax anywhere turns back into the same chip. There are two kinds:\n- Var chips ($mood, $outfit.SHOES) read a variable from the Context. They appear where variables can be read: combine and derivation text and the Prompt Assembler template. Each name keeps the same colour everywhere, so the chip in a combine matches the one in the Assembler's variable strip.\n- Ref chips (@{abcd1234#Mood}) embed a fresh pick from another module. They appear where references work: wildcard options and derivation actions. They show the target's name, not its id."
+    },
+    {
+     "title": "The three states",
+     "text": "Resolved\nThe chip points at something real. A ref chip is tinted with the colour of the module it points at (violet ✦ for a wildcard) and hovering it shows the target's id and option count. A var chip (⌘) is tinted by its name, and hovering it says which module writes it, or that it binds at runtime.\nFiltered\nA resolved ref chip that narrows its pool. A funnel icon means it carries a sub-category filter, a ban icon means it excludes the null option. Hover shows the filter as it reads and how many options still match, e.g. \"3 of 8 options match\". Click the chip to edit the filter.\nBroken\nA red chip with a ? icon: the reference points at a module id that isn't in your library (a placeholder, a deleted module, or one never imported here). Hover shows the name it carries, when the reference stored one. Click it to point it at another module. The editors also outline the field and mark its row (an option, a derivation branch) in red, so you can find it in a long table. At run time it produces nothing and the run reports an \"Unresolved reference\" warning.\nA var chip never turns red just because nothing produces it yet: variables can be set at run time (by an injector, a loop, or a Context further up the chain), so an unknown name stays a normal chip. Its hover says binds at runtime, and on the canvas no upstream producer when the graph really has none. The one var-chip warning is an accessor like $outfit.SHOES whose axis the wildcard doesn't declare, which is underlined because it would render empty."
+    },
+    {
+     "title": "Making chips (and placeholders)",
+     "text": "Type $ to open the variable list, or @ to open the module list. Keep typing to narrow the list, then pick with Enter or a click.\nPicking a wildcard that has sub-categories (or a null option) opens a second step, the filter picker, where you can type a filter expression and tick Exclude null. Press Enter to insert the chip, or leave the expression empty for an unfiltered reference. You can reopen the same picker later by clicking the chip.\nPlaceholders. To use a variable nothing produces yet, type $ and the name, e.g. $lighting, then a space or a comma (or press Enter when the list is empty). The name becomes a chip right away and is filled in by whatever module later writes $lighting. Until then it renders empty and the Assembler marks it as missing, which is a handy to-do marker while you build a template ahead of its modules.\nModule placeholders. The same works for a module you haven't built yet. Type @ and the name, e.g. @castle. When no module has that name, the last row of the list is Placeholder @castle. Pick it to insert a red broken chip under that name. The row it sits in is marked red too, and the list view shows its warning triangle, so it can't be forgotten. Once the module exists, click the chip and point it at the module."
+    },
+    {
+     "title": "@{uuid#name:filter} versus plain @name",
+     "text": "A reference is always written with braces and the target's 8-character id. Typing @name does not make a reference: it stays literal text and goes into the prompt as written. Use the @ list to insert the chip and the editor writes the full form for you. The long form has four segments, and only the id is required:\nSegment | Example | What it does\nid | @{abcd1234} | The module's 8 lowercase hex characters. This is what the engine resolves, so renaming the target never breaks the reference.\n#name | @{abcd1234#Mood} | A remembered label. Only used for display, and to tell you what a broken chip used to point at.\n:filter | @{abcd1234#Mood:warm or calm} | Only options whose sub-categories satisfy the expression can be picked. Grammar below.\n!null | @{abcd1234#Mood:warm!null} | Drops the wildcard's null option from the pool. Without it, the null option always stays in, whatever the filter says.\nWhere a plain name is enough, reach for a variable instead: $mood reads the value an upstream wildcard already picked, while @{…} rolls the referenced wildcard again, on the spot, from its (optionally filtered) pool."
+    },
+    {
+     "title": "Filter expression grammar",
+     "text": "A filter is plain boolean English over the referenced wildcard's sub-category names. Each option is tested against its own tags, and it stays in the pool when the expression is true.\nWrite | Keeps options that\nwarm | carry the warm tag\nnot warm | don't carry warm (options with no tags at all count)\nwarm and bright | carry both\nwarm or cool · warm, cool | carry either (a comma is short for or)\nnot warm and (low or high) | don't carry warm, and carry low or high\nnot (warm or cool) | carry neither\n- Precedence: not binds tightest, then and, then or. So a or b and c means a or (b and c). Use parentheses whenever you mean something else; they nest to any depth.\n- Operators are lowercase words. Symbols like !, & or | are not operators, and ! is reserved for the !null flag. Write not warm, never !warm.\n- Tag names match exactly, including case. A name can't contain spaces or any of ( ) ! , # : { } @ $, and and, or, not and null are reserved.\n- Null is a flag, not a term. To keep the null option out, tick Exclude null (the !null segment); writing not null in the expression is an error.\nThe filter picker checks the expression as you type. It shows how the expression reads as (fully parenthesised where it matters), how many options match, and flags an unknown sub-category with a did you mean fix. If a valid filter matches no option, the reference resolves to empty at run time and raises a Sub-category filter matched nothing warning that lists the tags the pool actually has (see Warning & conflict types)."
+    },
+    {
+     "title": "Works with",
+     "text": "The $variable pipeline Wildcard WP Prompt Assembler Warning & conflict types"
+    }
+   ]
+  },
+  {
+   "id": "context-chaining",
+   "title": "Context chaining",
+   "group": "concepts",
+   "blurb": "Layer Contexts; last write wins; internal keys.",
+   "keywords": [
+    "upstream",
+    "override",
+    "internals"
+   ],
+   "sections": [
+    {
+     "title": "The flow",
+     "text": "WP Context Arolls $varsWP Context Badds / overridesPrompt Assemblerfills templateEach Context inherits the upstream map; the last write for any $var wins."
+    },
+    {
+     "title": "How chaining works",
+     "text": "A WP Context node has an optional upstream input. When you connect one Context into another, the downstream Context starts with all the variables the upstream already produced, then runs its own modules on top. Any variable the downstream modules set replaces the upstream value for that name. Variables that the downstream does not touch pass through unchanged.\nThis makes it easy to build a base Context (character, setting) and then add a second Context that overrides only $style, leaving everything else alone. You can chain as many Contexts as you like — the last value written for any variable is what the Assembler receives.\nUse WP Context Injector for one-off variable overrides without adding a full new Context node — it lets you route any node output into a named $variable slot."
+    },
+    {
+     "title": "Internal variables survive the chain",
+     "text": "When you mark a variable as internal in a module's settings, it travels through the chain to downstream Contexts and combine/derivation modules — it is only hidden at the very end, when the Assembler renders the final prompt string. This means a variable you need for intermediate calculations can be internal from the start, passing through as many chained Contexts as you like, and it still will not appear in the rendered prompt."
+    },
+    {
+     "title": "Constraint modules cross chain boundaries",
+     "text": "A constraint module placed in one Context can still apply to a wildcard in a later Context downstream. You can even create a dedicated \"constraints\" Context that does nothing but hold constraint modules, and chain it before the Context with the target wildcards — the constraints fire when those wildcards roll, exactly as if they were in the same Context.\nSeparating constraints into their own Context keeps your module stacks readable when you have complex pairing rules across many wildcards."
+    },
+    {
+     "title": "Works with",
+     "text": "WP Context Internal variables Constraints in depth"
+    }
+   ]
+  },
+  {
+   "id": "seeds-and-loops",
+   "title": "Seeds & loops",
+   "group": "concepts",
+   "blurb": "Chain seed, locked seeds, WP Context Loop, iteration vars.",
+   "keywords": [
+    "seed",
+    "loop",
+    "iteration",
+    "rng"
+   ],
+   "sections": [
+    {
+     "title": "The seed and per-module randomness",
+     "text": "Every WP Context node has a seed input. At generation time, each module in the stack gets its own independent random stream derived from that seed — so changing the seed changes every module's picks together, but reordering modules does not disturb each other's results.\nThe seed advances automatically after each generation, so you get a fresh set of picks every time you press Generate without editing anything manually."
+    },
+    {
+     "title": "Locked seeds",
+     "text": "Any module can have its seed locked. When a module's seed is locked, it always makes the same pick regardless of what the Context seed is doing — perfect for holding a background style or an art direction steady while everything else randomises. Locked modules are also unaffected by the WP Context Loop seed strategies, so they do not vary between iterations.\nLock one module and leave the rest free to compare how different random picks combine with a fixed element — useful for testing whether a style works with a variety of subjects."
+    },
+    {
+     "title": "Seed scope: vary vs hold",
+     "text": "Inside a loop, each module decides whether it rides the per-iteration seed or the run's base seed. Every wildcard, combine, fixed-values and derivation module has a Hold across run toggle in its Runtime settings:\n- Vary (default) — the module re-rolls every iteration, so its pick changes across the batch.\n- Hold across run — the module resolves once at the first iteration and reuses that exact value on every iteration of the run, then re-rolls on the next run. It holds the resolved value, not just the seed: a constrained wildcard keeps its option even as the constraint reshapes the pool, and any nested @{} ref is frozen too — an outfit of @{color} jeans that lands on “green jeans” stays “green jeans” all run. A held derivation works a little differently: it freezes each rule branch's random roll, not which branch fires — the conditions still pick the branch from the current inputs, but a chosen branch always resolves to the same value it landed on at the first iteration. No manual seed lock needed. Flip it from the module's Runtime settings, or right-click the row and pick Hold across run for a two-click toggle.\nHold answers “keep the identity or outfit steady across this batch, but let it re-roll next time.” That's different from a locked seed, which freezes the pick for good — same every run, not just within one run."
+    },
+    {
+     "title": "The flow",
+     "text": "WP Context Loopemits NWP Contextfresh roll each passPrompt AssemblerN promptsThe loop fans the chain out into N passes — one resolved prompt per iteration."
+    },
+    {
+     "title": "Sampler seeds inside a loop",
+     "text": "The loop emits a list of prompts — one per iteration — and ComfyUI runs the downstream sampler once per prompt. But a standard KSampler takes a single INT seed, not a list, so every iteration would be sampled with that same seed. If two iterations happen to roll the exact same prompt (e.g. your wildcards landed on the same options twice), the sampler produces the same image for both.\nThe cleanest fix is to also emit a list of seeds. Drop a WP Seed List between the loop and your sampler:\nWP Context LoopN promptsWP Seed ListN seedsKSamplerN unique imagesWire the loop's loop_config side-output into the Seed List; downstream the prompt list and seed list pair up by index so each iteration gets its own seed.\nConnecting loop_config auto-matches the seed list's count + strategy to the loop's, so the two lists stay the same length without manual setup. Two other workarounds work too: bake $iteration into the prompt template (the prompt text itself never repeats), or wire $iteration through a WP Var → Int into the sampler's seed input — both fine for simple cases, but the Seed List scales better when you want a deterministic, reproducible series."
+    },
+    {
+     "title": "WP Context Loop",
+     "text": "Add a WP Context Loop before your WP Context and one Generate runs the whole chain N times in a single click — each iteration with its own seed and its own fresh roll of your wildcards. The Variation strategy controls how those per-iteration seeds are spread:\nHashed (default)\nEach iteration gets an unrelated seed derived from the base. Produces the most variety — neighbouring iterations look nothing alike.\nSequential\nSeeds walk seed, seed+1, seed+2 … so adjacent iterations feel related and drift gradually.\nPrime stride\nTakes large even jumps through the seed space. Good for sampling widely spread results from a known base.\nThe Override seed toggle on the loop controls whether these strategies apply. When on, the loop derives N seeds from the base and sets each iteration's seed accordingly, making the whole batch reproducible from that one base seed. When off (the default), each downstream Context uses its own widget seed independently and the loop only provides per-iteration variation on top.\nTo compare chosen options instead of random rolls, use the loop's Sweep combinations menu: it runs every combination of the wildcard options you pick, one iteration each, and can hold everything else steady. See WP Context Loop for details."
+    },
+    {
+     "title": "Per-iteration seed locks",
+     "text": "Both WP Context Loop and WP Seed List carry a Per-iteration seeds button that opens a list of the seed each iteration will use. From there you can:\n- Lock any single iteration to a fixed seed (the rest stay derived), or Lock all / Unlock all at once.\n- Copy / Paste the whole list as #N: seed text to reproduce a series elsewhere — Alt-click Copy grabs only the locked rows.\n- Prev — lock the seed an iteration actually used on the previous run, rather than the upcoming one.\nReach for Prev after a run you liked. The list normally shows the seeds for the next run; with control-after-generate set to randomize, the base seed has already rotated, so those upcoming seeds won't reproduce what you just saw. Prev pins the seed that iteration rolled last time — greyed out until a run has happened (and, on the loop, until Override seed is on). So: run once, then lock the iterations worth keeping."
+    },
+    {
+     "title": "Iteration variables",
+     "text": "Inside each loop iteration, two variables are available for your templates:\n- $iteration — which run you are on, starting at 1 (so 1, 2, 3 … up to the count).\n- $iteration_total — the total number of runs, constant across every iteration.\nBy default both are hidden from the rendered prompt. You can turn off the internal flag for either one in the loop settings if you want them to appear in the output text — for example to label each iteration's output as \"frame 1 of 4\".\nThese variables are injected as internal by default, so they will not appear in your prompt unless you deliberately expose them."
+    },
+    {
+     "title": "Turning the loop off",
+     "text": "The loop has a Bypass switch that collapses it to a single run while keeping the node wired — handy for comparing looped vs single output without rebuilding the graph."
+    },
+    {
+     "title": "Connecting an external seed",
+     "text": "You can convert the seed widget to an input socket and connect any integer source — a Primitive node, or any other INT output. This lets you synchronise the loop seed with an upstream sampler or another node."
+    },
+    {
+     "title": "Works with",
+     "text": "WP Context Loop WP Seed List WP Context Per-iteration overrides"
+    }
+   ]
+  },
+  {
+   "id": "iteration-overrides",
+   "title": "Per-iteration overrides",
+   "group": "concepts",
+   "blurb": "Give individual loop frames their own settings: pinned picks, per-frame seed locks, enable/disable.",
+   "keywords": [
+    "override",
+    "iteration",
+    "frame",
+    "keyframe",
+    "per-frame",
+    "edit frame",
+    "enable",
+    "disable"
+   ],
+   "sections": [
+    {
+     "title": "Base vs. per-frame",
+     "text": "A WP Context Loop fans your chain out into N passes (“frames”). By default every frame resolves from the same module settings — the base. An override is a per-frame exception: a single frame gets a different value while all the others keep using the base. Think of it as a keyframe — most of the run follows the base, and you pin only the spots that need to differ.\nBase settingsapply to all framesFrame #k overridepatches just frame kResolved framesbase, except where pinnedEach frame resolves from the base, then any override recorded for that frame is layered on top."
+    },
+    {
+     "title": "Editing a frame",
+     "text": "The loop widget carries an edit frame row of chips: base, then #1 #2 #3 … up to the count. Pick a frame chip and the module editors switch to “editing frame #k”: open any module, change it, and the change is recorded as that frame's override — not the base. Switch back to base and you're editing the default that every un-pinned frame uses.\nOverrides are sparse: a frame stores only the fields you actually changed, so a four-frame run with one pinned wildcard carries one tiny patch, not four full copies. Each pinned field shows a small badge on its module row so you can see at a glance which frames diverge, and a revert to base control clears a frame's override and returns it to the default.\nOverrides are instance-level — they patch how a module resolves for a frame (the pick, the lock, the template text, enable/disable), not its underlying structure. Adding or removing a wildcard option, or changing a module's identity, always edits the base and applies to every frame."
+    },
+    {
+     "title": "What you can override",
+     "text": "Wildcard pick\nPin a specific option for one frame while the rest re-roll. Frame #3 always lands on \"red\"; the others stay random.\nCombine template / Fixed value\nGive a frame its own template string or fixed value — e.g. a different caption on the last frame.\nConstraint reach + matrix tweaks\nAdjust a constraint's instance settings for one frame.\nSeed lock\nLock a module's seed on one frame only, so just that frame reproduces while the others vary. See the per-frame seed lock below.\nEnable / disable\nRun a module only on some frames, or skip it on others. See per-frame enable/disable below."
+    },
+    {
+     "title": "Per-frame enable / disable",
+     "text": "Every module row has an enable checkbox that's frame-aware. The effective state for a frame is the per-frame setting if you've set one, otherwise the module's base on/off. That makes both directions work:\n- Base on, frame off — the module runs everywhere except the frames you switch off.\n- Base off, frame on — the module is dormant except on the frames you switch on, so a run can introduce an extra element on just a couple of frames.\nA skipped frame still produces an image — the module simply contributes nothing to that pass. In WP Debug a frame turned off by a per-frame switch reads differently from a module that's off at the base, so you can tell intentional per-frame skips from a globally-disabled module."
+    },
+    {
+     "title": "Per-frame seed lock",
+     "text": "Seed locks are frame-aware too. Locking a module's seed while a frame chip is active pins the seed for that frame only — the others keep varying. This is the difference between “hold this one element steady across the whole batch” (lock at the base) and “make frame #4 reproducible but let the rest roam” (lock on frame #4). Unlocking a frame whose base is locked records an explicit per-frame unlock, so a single frame can break free of a base lock.\nWhile a frame chip is active, the run-level toggles (Hide from prompt, Hold across run) are disabled — those apply to every frame, so you switch back to base to change them. Only the per-frame things (pick, seed lock, enable) are editable on a frame."
+    },
+    {
+     "title": "Works with",
+     "text": "WP Context Loop Seeds & loops WP Context"
+    }
+   ]
+  },
+  {
+   "id": "constraints",
+   "title": "Constraints in depth",
+   "group": "concepts",
+   "blurb": "Source→target pairing, matrix vs exceptions, one-shot consume.",
+   "keywords": [
+    "pairing",
+    "matrix",
+    "carrier"
+   ],
+   "sections": [
+    {
+     "title": "What a constraint does",
+     "text": "A Constraint module links a source wildcard to a target wildcard. After the source rolls its pick, the constraint adjusts the target's option pool — boosting some choices, excluding others, or narrowing it to a specific set — before the target rolls. The constraint itself does not set any $variable; it only shapes the odds for the target.\nA classic use: the source wildcard picks a season, and the constraint makes warm-toned lighting far more likely when the source rolled \"summer\", while cool tones become more likely when it rolled \"winter\"."
+    },
+    {
+     "title": "Order matters",
+     "text": "The module stack runs top to bottom. The source wildcard must come before the Constraint, and the Constraint must come before the target wildcard. A constraint whose source has not yet rolled is silently skipped for that iteration."
+    },
+    {
+     "title": "Matrix and exceptions",
+     "text": "A constraint's rules come in two layers that work together:\n- Matrix — rules that apply to whole subcategory pairs. For example: when source subcategory \"season/warm\" rolled, boost all target options in subcategory \"lighting/warm\".\n- Exceptions — rules that apply to specific individual option pairs. These override the matrix for exact combinations.\nWhen a matrix rule and an exception both match a given pair, the exception wins. This lets you set broad subcategory behaviour and then fine-tune individual combinations on top.\nEach rule has a mode:\nAllow\nNo change. Shown as Neutral in the matrix: the pair rolls as if there were no rule.\nExclude\nRemove matching options from the target pool before it rolls.\nBoost\nMultiply the weight of matching options by the factor you set (> 1 = more likely).\nReduce\nMultiply the weight of matching options by a factor less than 1 (= less likely).\nOnly\nLink picks. When the source rolls this, only targets that have a rule of their own in the same row can be picked. Everything else in the row is removed."
+    },
+    {
+     "title": "Linking picks with Only",
+     "text": "Only ties one wildcard's pick to another's. Add an exception maid → frilled apron in Only mode, and whenever the source rolls \"maid\" the target can only roll \"frilled apron\". You don't list every outfit to exclude, and an outfit you add to the target later is shut out too.\n- On an exception, Only links exact values. Several Only exceptions for the same source value make a short list: \"maid\" can pick \"frilled apron\" or \"kimono\" and nothing else. A target with any other exception of its own for that source (a Boost, say) stays in the pool with that rule.\n- In the matrix, Only links subcategories. An Only cell summer → open means a summer pick can only reach targets tagged open (or tagged with anything else that has a rule in the summer row). The other cells in that row show a faint × so you can see what is shut out. A Neutral cell does not count as a rule here.\nOnly rows and exceptions for other source values are unaffected. A \"biker\" pick in the example above still rolls every outfit."
+    },
+    {
+     "title": "Accepts axes as a source or target",
+     "text": "When a wildcard group is marked accepts — an axis, read as $var.AXIS — the matrix folds differently on whichever side of the constraint the axis sits, so the tag you read always agrees with the tag the constraint acts on.\n- Accepts source. The axis rolls exactly one tag per pick, so the constraint keys on that single rolled tag — not every tag the source option carries. A source outfit tagged sneakers · heels · sandals that rolls sandals makes a diagonal “same tag wins” matrix pin the target to sandals, so $outfit.SHOES and the shoe that gets picked match. A classify source keeps the older behaviour: all its tags apply together (AND), so a multi-tag classify option under a strict diagonal can exclude the whole target pool.\n- Accepts target. A target option's tags inside an accepts axis are alternatives, so the option stays in the pool when the source allows any of them, and the target's own axis roll is then restricted to the allowed tag. A target shoe tagged sandals · heels isn't dropped just because heels is excluded — it survives as sandals and rolls sandals.\nPut the two together — an accepts source, an accepts target, and a diagonal matrix — and $source.AXIS always equals $target.AXIS: the two wildcards agree on the axis every run."
+    },
+    {
+     "title": "Target reach",
+     "text": "A constraint is not a one-shot. By default it re-weights every target wildcard instance it can reach downstream — including instances reached through nested @{uuid} refs. The per-instance Target reach selector lets you narrow that scope when re-weighting every match is too broad:\nAll\nDefault. Re-weight every target instance the constraint can reach downstream — direct rows and instances reached through nested refs alike.\nFirst\nRe-weight only the first reachable target instance; every later one rolls unconstrained.\nNext N\nRe-weight the next N reachable instances (you set the count, minimum 1); the rest roll unconstrained.\nPick\nRe-weight only the instances you tick from a checklist of reachable targets — direct rows, or nested-ref carrier options that resolve to the target.\nReach is always measured downstream of the constraint: it can only see — and count toward First / Next N — target instances that come after it in the run. A Pick selection names each instance the same way the engine matches it: a direct row by its per-instance id, or a nested ref by its carrier row plus the option that hosts the @{uuid}.\nIf a constraint's reach covers zero reachable targets — its only target sits above it, the count overshoots what's downstream, or a picked instance no longer exists — it is flagged constraint_orphan_target so a dead pairing surfaces instead of silently doing nothing. Separately, a constraint that reaches fewer instances than a Next N / Pick selector asked for is noted as a partial reach.\nA constraint can also rule out every option of its target for some source value (each one excluded, shut out by an Only rule, or weighted 0). If the target has no fallback it would come out empty, so the constraint row gets a rules out all badge before you run; hover it to see which source values do it. Allow an option for those values, or mark one of the target's options as its fallback.\nYou can still add multiple Constraint modules for the same source→target pair — one per distinct rule — and give each its own reach. Stack position plus each module's reach decide which instances every constraint claims."
+    },
+    {
+     "title": "Constraints reach through nested refs",
+     "text": "If the target wildcard appears only inside another wildcard's option text (via a @{uuid} nested reference), the constraint still applies — it follows the reference chain to find the target. Each such reachable instance counts as one target for the reach selector above, and a Pick entry can name it by its carrier row plus the hosting option. A safeguard counts each downstream instance only once even when multiple reference paths converge on it."
+    },
+    {
+     "title": "When a source or target is missing",
+     "text": "A constraint refers to its source and target wildcards by id. If one isn't in your library — you installed the constraint without its wildcards, or deleted one — that axis is stranded: the editor shows the dead id with its remembered name and keeps the rule matrix read-only until you heal it. Reattach re-points the axis at a local wildcard (or downloads the missing one from the community), then remaps the matrix and exceptions onto the new wildcard's sub-categories."
+    },
+    {
+     "title": "Works with",
+     "text": "Constraint Wildcard"
+    }
+   ]
+  },
+  {
+   "id": "internal-variables",
+   "title": "Internal variables",
+   "group": "concepts",
+   "blurb": "Hide a $var from the rendered prompt; when it's stripped.",
+   "keywords": [
+    "internal",
+    "strip",
+    "__"
+   ],
+   "sections": [
+    {
+     "title": "What internal means",
+     "text": "When you mark a module as internal in its settings, all the variables it produces are hidden from the final rendered prompt. They still travel through the whole pipeline — you can read them in combine and derivation modules further down the chain — but they are removed just before the Assembler turns the template into text, so they never appear in the output.\nA typical use: a wildcard picks a lighting key code like $_lighting_key, marked internal. A derivation module then uses that key to produce a human-readable $lighting description. Only the description reaches the prompt; the key code stays hidden."
+    },
+    {
+     "title": "Internal variables survive chaining",
+     "text": "Internal variables are only removed at the render step inside the Assembler — not when a Context passes its output to the next node. This means a variable set as internal in Context A is still readable by a derivation in Context B downstream. Only the final Assembler hides it from the prompt.\nYou can set a variable internal in an early Context and use it as a building block in every subsequent Context in the chain — it will never pollute your rendered prompt."
+    },
+    {
+     "title": "Loop iteration variable flags",
+     "text": "The $iteration and $iteration_total variables injected by WP Context Loop each have their own internal flag in the loop configuration. By default both are internal, so they do not show up in the rendered prompt. Turn off the flag for either one if you want it to appear — for example, to caption outputs with \"frame 1 of 4\"."
+    },
+    {
+     "title": "Works with",
+     "text": "Context chaining WP Prompt Assembler"
+    }
+   ]
+  },
+  {
+   "id": "negatives",
+   "title": "Negatives",
+   "group": "concepts",
+   "blurb": "Send words to the negative prompt from the option, value or rule that needs them.",
+   "keywords": [
+    "negative",
+    "negative prompt",
+    "send to negative",
+    "$negatives",
+    "add to negative",
+    "--",
+    "neg",
+    "schema 8"
+   ],
+   "sections": [
+    {
+     "title": "The idea",
+     "text": "A negative belongs to the $variable it came with, and only reaches an Assembler that actually uses that variable. The main Assembler that renders $hair, $mood and $face gets all three variables' negative words; a face detailer Assembler that only renders $face gets only the face words from the same Context.\nWildcard optionnegative: fruit$haircarries itAssemblerrenders $hairnegative outputfruitNegatives follow usage: words only reach a negative output when their variable was rendered."
+    },
+    {
+     "title": "Where negatives come from",
+     "text": "Wildcard option\nEach option has an optional Negative line under its value. When that option is picked, its words attach to the wildcard's $variable. A multi-pick attaches each picked option's words to its own pick. The null option has no negative.\nFixed value\nEach value has the same Negative line. A fixed value always applies, so its negative travels with the variable wherever it is used. Handy for style presets: $style brings “photo, 3d render” along with it.\nCombine\nA combine carries the negatives of every variable its template read, with no setup. On top of that it has one optional Negative of its own, for words that belong to the phrase as a whole.\nDerivation “Add to negative”\nA fourth action next to Replace, Append and Prepend. It leaves the target variable's text alone and adds the value to that variable's negatives, so a rule like “when $mood is gloomy, add ‘smiling’” follows $mood wherever it goes. With + And, one branch can replace a variable and add to its negative in the same step. “Replace negative” is the fifth action: it drops the variable's negative words and uses the value instead.\nContext Injector row\nSocket rows and template rows can carry a Negative, written with the same $slot grammar as the row template. It replaces whatever negatives the variable carried before, so injecting $character over a picked one swaps the pick's negative for the row's."
+    },
+    {
+     "title": "What each negative field accepts",
+     "text": "A negative field takes the same syntax as the value field next to it.\nField | Accepts\nWildcard option negative | text, {a|b}, @{ref} (no $vars)\nFixed value negative | text, {a|b} (no refs, no $vars)\nCombine negative | $vars, {a|b}\nDerivation “Add to negative” value | $vars, @{ref}, {a|b}\nInjector row negative | the row's $input_N slots, like the row template\nAssembler negative template | $vars and the reserved $negatives slot\nNegatives never change your picks. Negative text rolls on its own seed stream, and an @{ref} inside a negative resolves quietly: it doesn't count as a pick, isn't logged in the Test Runner trace, doesn't trigger constraints, and the picked option's own negative is ignored. Adding or editing a negative leaves every seed's prompt exactly as it was."
+    },
+    {
+     "title": "How they follow the variable",
+     "text": "A write replaces, an append keeps\nWhen a module writes a variable, the old value's negatives go with it. A derivation Replace swaps them for the negatives of whatever its new text read; Append and Prepend keep the old ones and add the new.\nIndex and axis accessors\n$props.0 carries only the first pick's negative. Bare $props and $props.AXIS carry every pick's.\nInternal variables add nothing\nAn internal variable never renders in a prompt, so its negatives never reach a negative output, even though they are kept for downstream modules that read it.\nVariables in the negative template\nA $var you write in the Assembler's negative template adds its text, not its own negatives.\nReading a variable's negatives: $name.neg\n$pose.neg is the negative words $pose carries at that point in the chain, and $props.1.neg only pick 1's. It works wherever $vars do: hand one variable's negatives to another with “Add to negative” and the value $pose_portrait.neg, use it in a combine or the Assembler's negative template, or test it in a condition. Reading .neg is not a use of $pose, so it never pulls $pose's words in a second time."
+    },
+    {
+     "title": "The Assembler's negative output",
+     "text": "WP Prompt Assembler has a second output, negative, next to prompt. Wire it into your negative CLIP Text Encode. Under the preview sits a collapsible negative template:\n- $negatives marks where the collected words go, e.g. lowres, bad anatomy, $negatives.\n- An empty template outputs just the collected words.\n- A template without $negatives gets the collected words appended at the end.\nRepeated tags are dropped (case-insensitive, and (blurry:1.2) counts as blurry), including tags you already typed in the template."
+    },
+    {
+     "title": "Cleaning both prompts",
+     "text": "WP Prompt Cleaner takes an optional negative input and returns a cleaned negative output beside the prompt. Its rule list has a second column for the negative: it follows the prompt column's preset, except fuzzy dedupe and the blocklist are off. The extra rule Drop negative tags also in prompt (off by default) removes a tag from the negative when the prompt asks for it too; either way the report names the overlap."
+    },
+    {
+     "title": "Bulk add",
+     "text": "In a wildcard's bulk add, -- starts an option's negative. Everything after the first -- is the negative, and #tag / *N still work at the end of either side:\nModule | Line\nWildcard | strawberry blonde #warm *2 -- strawberry, fruit\nFixed values | style = oil painting -- photo, 3d render\nWith options checked, bulk edit's Negative menu adds words to each checked option, replaces their negative, or clears it."
+    },
+    {
+     "title": "Seeing where each word came from",
+     "text": "WP Debug lists a variable's negative words under its value, naming the module when they came from elsewhere (a derivation's Add to negative, a combine inheriting from $hair). The Test Runner shows a NEG line under each output, tinted by the variable each word came from, adds a Negative column to Samples, and Compare lists a seed whose negative changed."
+    },
+    {
+     "title": "Sharing",
+     "text": "A module or bundle that uses a negative (or an “Add to negative” action) is stamped schema 8 when you publish it. Older versions of the extension refuse schema 8 packs and ask you to update, instead of silently dropping the negatives. Injector rows and Cleaner settings live in the workflow, not the library, so they need no schema bump."
+    },
+    {
+     "title": "Works with",
+     "text": "WP Prompt Assembler WP Prompt Cleaner Wildcard Derivation"
+    }
+   ]
+  },
+  {
+   "id": "conflicts-and-warnings",
+   "title": "Conflicts & warnings",
+   "group": "concepts",
+   "blurb": "The advisory scanner + runtime warnings (never blocks).",
+   "keywords": [
+    "scanner",
+    "advisory",
+    "warning"
+   ],
+   "sections": [
+    {
+     "title": "Where you'll see them",
+     "text": "You never have to go looking — problems come to you in two places:\n- On the node, while you build — the WP Context shows small coloured dots with a short label (e.g. a duplicate variable, a missing one). Hover any dot for the full, plain-English message. A Subgraph that contains WP nodes gets a single badge summarising the worst issue inside it, so you can spot trouble without opening it.\n- In WP Debug, after a run — open the Warnings tab on a WP Debug node to see what came up during the actual generation, in order, one line each."
+    },
+    {
+     "title": "Reading the colour",
+     "text": "The dot's colour tells you how much to care — the wording in the hover message tells you exactly what:\n- Blue (info) — just so you know. Usually nothing to fix (an intended override, a constraint that didn't come up).\n- Amber (warning) — worth a look. Something probably isn't doing what you meant (a duplicate, a missing variable, a mis-ordered constraint).\n- Red — something won't resolve as written (a reference that points nowhere). The run still completes; that piece just won't take effect.\nEvery flag here is advisory. It never blocks generation or raises an error. Writing a variable twice is perfectly valid — the later write wins; the dot just makes the override visible so it's a choice, not an accident."
+    },
+    {
+     "title": "Common things it flags",
+     "text": "Shadowed variable\nAn earlier WP Context already sets this variable and yours overrides it. Normal when you chain Contexts — it's shown (as info, not a warning) so the override is on purpose, not a surprise.\nDuplicate variable\nTwo modules in the same Context produce the same variable. The lower one wins. Rename one, or reorder them if the wrong value is coming through.\nMissing variable\nYour Prompt Assembler template uses a $variable that nothing upstream produces — it resolves to empty (the canvas preview underlines the token so you can spot it). Add a module that sets it, or drop the token.\nConstraint not wired\nA constraint can't find one of its two wildcards, or they're in the wrong order — the constraint has to sit between its source and target wildcard to fire.\nConstraint never fired\nA constraint was set up correctly but its target wildcard never came up on this run, so it had no effect. Often fine — just letting you know it didn't do anything.\nThat's the short list. The Warning & conflict types reference page has the full set with what each one means and what to do about it."
+    },
+    {
+     "title": "Works with",
+     "text": "Warning & conflict types WP Debug Constraints in depth"
+    }
+   ]
+  },
+  {
+   "id": "bundles-concept",
+   "title": "Bundles",
+   "group": "concepts",
+   "blurb": "Group + reuse modules; frozen snapshots; enable overlay.",
+   "keywords": [
+    "group",
+    "snapshot",
+    "reuse"
+   ],
+   "sections": [
+    {
+     "title": "What a bundle is",
+     "text": "A bundle groups a contiguous range of modules in a Context into a named, collapsible unit. You can collapse it in the module stack to keep long setups tidy, and you can save it to the library to reuse the whole group in other Contexts or workflows.\nAt generation time the bundle is transparent — its modules run inline exactly as if they had been placed directly in the stack. The bundle is purely an organisational tool; it does not add any processing of its own."
+    },
+    {
+     "title": "Frozen snapshots",
+     "text": "When you capture a bundle, the current state of each module — its options, settings, and metadata — is saved into the bundle as a frozen snapshot. Changes you later make to the source modules in the library do not propagate into existing bundles. Each bundle keeps resolving from the state it captured.\nBecause bundle children are frozen, deleting a source wildcard from the library does not break bundles that captured it. The bundle keeps working. A MISSING badge appears on the workflow row to signal that the library entry and the bundle's snapshot have diverged — giving you an honest indication to decide whether to update or leave it as-is."
+    },
+    {
+     "title": "Disabling a bundle",
+     "text": "Each bundle has an enabled toggle. Disabling a bundle suppresses all its children without touching their individual settings. Re-enabling it restores them exactly as they were. This lets you mute an entire group of modules in one click during testing without having to disable each one separately."
+    },
+    {
+     "title": "Inserting a bundle",
+     "text": "When you drop a saved bundle into a Context, each child module receives a fresh ID so that inserting the same bundle multiple times does not cause ID collisions. Any @{uuid} references and constraint pairings inside the bundle are automatically rewritten to match the new IDs."
+    },
+    {
+     "title": "Bundles are not a module kind",
+     "text": "Bundles are a grouping and portability mechanism, not a processing step. They have no module type, no kind colour, and no engine handler of their own. Everything they contribute to the pipeline comes from their children."
+    },
+    {
+     "title": "Works with",
+     "text": "Bundles WP Context"
+    }
+   ]
+  },
+  {
+   "id": "wp-context",
+   "title": "WP Context",
+   "group": "nodes",
+   "blurb": "Rolls a module stack into a $variable Context.",
+   "keywords": [
+    "context",
+    "modules",
+    "seed"
+   ],
+   "sections": [
+    {
+     "title": "What it's for",
+     "text": "A WP Context is where you define the named values that power your prompt. Add a wildcard module and it becomes $subject. Add a fixed-value module and it becomes $style. When you press Generate the node rolls every module with your seed and hands a complete map of $variable → value to whatever is wired downstream.\nChain two Context nodes together — the downstream one can add new variables or override ones set above. The last write wins, so a downstream $subject replaces the upstream one."
+    },
+    {
+     "title": "Inputs & outputs",
+     "text": "upstream (in)\nConnect an earlier WP Context here to chain them together. Its variables flow through and can be overridden by modules in this node. Leave unconnected to start a fresh chain.\nseed\nControls the random picks inside this node. Change it to get a different roll; right-click → Convert widget to input to drive it from a seed widget or the WP Context Loop.\nmodules\nThe stack of modules inside this node — wildcards, fixed values, combines, constraints, and bundles. Add modules by clicking the + button. Drag rows to reorder.\ncontext (out)\nThe resolved variable map produced by this node. Wire it into a WP Prompt Assembler, WP Debug, WP Context Injector, or another WP Context."
+    },
+    {
+     "title": "Per-module behaviour in a loop",
+     "text": "When a WP Context Loop drives this node, each module chooses how it behaves across the batch through its Runtime settings:\n- Hold across run — the module resolves once at the first frame and reuses that exact value on every frame of the run (the resolved value, not just the seed — constrained picks and nested @{} refs stay frozen too), then re-rolls next run. The “keep this element steady for the whole batch” switch. Flip it from the module's Runtime settings, or right-click the row and pick Hold across run for a two-click toggle.\n- Per-frame overrides — using the loop's edit frame selector you can give one frame its own pick, seed lock, or enable/disable for any module in the stack, leaving the rest of the batch on the base."
+    },
+    {
+     "title": "Good to know",
+     "text": "Lock a module's seed (via the module's instance options) to freeze that pick across all WP Context Loop iterations — handy for holding the art style steady while the subject varies across a batch.\nModules you add to a WP Context are snapshots, not live links. If you edit a module in the library afterward, the Context doesn't change under you — it flags that row as drifted so you can pull (sync) the updated version when you're ready. That keeps a saved workflow reproducible: it won't silently change because you edited a module somewhere else."
+    },
+    {
+     "title": "Works with",
+     "text": "WP Prompt Assembler WP Context Loop Per-iteration overrides WP Context Injector Wildcard Constraint"
+    }
+   ]
+  },
+  {
+   "id": "wp-context-loop",
+   "title": "WP Context Loop",
+   "group": "nodes",
+   "blurb": "Emit N Contexts so the chain auto-iterates.",
+   "keywords": [
+    "loop",
+    "iterate",
+    "batch"
+   ],
+   "sections": [
+    {
+     "title": "What it's for",
+     "text": "Normally one Generate runs the whole chain once — one WP Context, one resolved prompt. Put a WP Context Loop in front of your WP Context and a single Generate re-runs the chain N times instead, re-rolling your wildcards each pass, so one click yields N different Contexts and prompts (and whatever your sampler renders downstream from each). Set the count to 8, press Generate once, and compare eight variations. No repeated queueing, no batch node to wire."
+    },
+    {
+     "title": "The controls",
+     "text": "Count\nHow many variations to make in one run (1–999). Set it to 1 to switch looping off without removing the node.\nSeed\nThe starting point for the batch. Change it for a different set of variations; keep it the same to reproduce the same batch. Right-click → Convert widget to input to drive it from another seed node.\nOverride seed\nOn: the loop chooses the seed for every iteration, so the whole batch is reproducible from this one seed. Off (default): each WP Context keeps using its own seed and the loop just nudges it per iteration.\nVariation strategy\nHow the per-iteration seeds spread out. Hashed (default) makes each iteration unrelated and maximally varied; Sequential walks seed, seed+1, seed+2… so neighbours feel related; Prime stride takes large even jumps.\nBypass\nThe node's own on/off switch. When on, the loop collapses to a single run but stays wired, so you can flip it back without rebuilding the graph."
+    },
+    {
+     "title": "Per-iteration control",
+     "text": "Two more controls open finer, per-iteration tuning of the batch:\n- Per-iteration seeds — the seed list for the run. Lock individual iterations, Lock all / Unlock all, Copy / Paste the series as #N: seed text, or Prev to lock the seed an iteration actually used on the previous run. These locks take effect when Override seed is on.\n- Edit frame — the base / #1 #2 … chip row. Pick a frame and the module editors switch to editing just that frame, recording a per-frame override — a pinned wildcard pick, a tweaked template, a per-frame seed lock, or a per-frame enable/disable. base edits the default every un-pinned frame uses."
+    },
+    {
+     "title": "Sweep combinations",
+     "text": "Open Sweep combinations from the loop node and switch it on to compare options side by side instead of rolling them. Pick one or more wildcards from the WP Context nodes after the loop, choose which of their options to include, and the loop runs every combination, one frame each. Sweep $hair (3 options) against $mood (2 options) and a single Generate makes 6 frames: red + calm, red + sad, blue + calm, and so on. The menu shows the total and lists every frame before you run, the node's button shows the frame count, and the count widget follows it. Above each wildcard's options, all ticks every option, none clears them so you can tick just the few you want, and enabled only goes back to the options enabled in the wildcard. A wildcard with nothing ticked sweeps nothing until you tick one.\n- Order — the first wildcard changes slowest and the last one fastest, so a two-wildcard sweep reads like a grid: one row per option of the first, one column per option of the second. Use the arrow to reorder.\n- Limit — the most frames a sweep runs (64 by default, up to 999). When the combinations outnumber it, the loop runs the first ones in order and says so.\n- Hold other picks (on by default) — everything you are not sweeping keeps the same pick on every frame, so the only thing that changes is what you swept. Turn it off to let the rest re-roll per frame as in a normal loop.\nEach frame pins the swept wildcards exactly like pinning an option by hand, so their tag axes still roll and constraints they drive still apply downstream. A swept wildcard is not itself re-weighted by constraints, because the sweep decides its pick. Frame bypass and per-frame overrides work as usual. Changing the sweep moves each seed lock and bypassed frame with its combination, and drops it when that combination no longer runs; lowering the count drops the ones past it.\nFor a clean comparison, keep the sampler on one fixed seed (a plain KSampler already does), so the image only changes where the prompt does."
+    },
+    {
+     "title": "Iteration variables",
+     "text": "Each run, the loop hands you two variables to drop into your prompt template or any combine:\n- $iteration — which run you're on, starting at 1 (1, 2, 3 … up to the count). Handy for labelling outputs.\n- $iteration_total — the total number of runs. Same on every iteration.\nFor example, a template of frame $iteration of $iteration_total — $subject renders “frame 1 of 4 — a fox”, “frame 2 of 4 — a cat”, and so on. These two variables stay out of the rendered prompt by default — switch their internal flag off in the loop config if you want them to appear in the text."
+    },
+    {
+     "title": "Good to know",
+     "text": "A module with a locked seed ignores the loop — it makes the same pick every iteration. Useful for holding one thing steady (say, the art style) while everything else varies across the batch.\nThe loop emits a list of prompts — one per iteration. Downstream samplers run once per prompt, but a standard KSampler takes a single seed (not a list), so every iteration is sampled with that same seed. If two iterations happen to roll the exact same prompt string (e.g. your wildcards landed on the same options twice), the sampler produces the same image for both. Three ways to keep every output distinct:\n- Drop a WP Seed List between the loop and your sampler (cleanest). It emits a list of N seeds — one per iteration — that pairs with the loop's prompts so each (prompt, seed) combination is unique. Wire its loop_config input from the loop's side output and it auto-matches the loop's count + strategy.\n- Bake $iteration into the prompt template — it never repeats, so the prompt text is always unique.\n- Wire $iteration through a WP Var → Int into the sampler's seed input so each iteration also gets its own seed."
+    },
+    {
+     "title": "Works with",
+     "text": "Seeds & loops Per-iteration overrides WP Seed List WP Context WP Prompt Assembler"
+    }
+   ]
+  },
+  {
+   "id": "wp-seed-list",
+   "title": "WP Seed List",
+   "group": "nodes",
+   "blurb": "Emit N derived seeds — one per loop iteration — for downstream samplers.",
+   "keywords": [
+    "seed",
+    "list",
+    "ksampler",
+    "loop",
+    "batch",
+    "unique"
+   ],
+   "sections": [
+    {
+     "title": "What it's for",
+     "text": "A standard KSampler takes a single INT seed. When a WP Context Loop emits N prompts, the sampler runs N times but reads the same seed every pass — so two iterations that happen to roll the exact same prompt string would produce the exact same image. Drop a WP Seed List between the loop and your sampler: it emits a list of N derived seeds, pairing one with each prompt, so every iteration gets its own (prompt, seed) combo.\nThe node works standalone too — even without a loop wired in, the widget controls produce a stable, reproducible series of N seeds you can fan out across any node that accepts INT."
+    },
+    {
+     "title": "The controls",
+     "text": "Base seed\nThe starting point for the seed series. Change it for a different batch of seeds; keep it the same to reproduce the same set. Right-click → Convert widget to input to drive it from another seed node.\nCount\nHow many seeds to emit in one run (1–999). When you wire a WP Context Loop into loop_config, the count auto-mirrors the loop's count so the two lists stay the same length.\nStrategy\nHow the per-iteration seeds are spread out — Hashed (default), Sequential (base, base+1, base+2 …), or Stride (large prime jumps). Picks a chip inside the node's DOM widget.\nOverride base seed from loop\nWhen ON and loop_config is wired, the node uses the loop's base seed instead of the local widget. Independent of the count + strategy toggles so you can mix sources.\nOverride count from loop\nWhen ON and loop_config is wired, the node uses the loop's count. Auto-flips ON the moment you connect a loop_config wire — flip it off manually if you want a different count.\nOverride strategy from loop\nWhen ON and loop_config is wired, the node uses the loop's strategy. Also auto-flips ON when you connect the wire.\nloop_config (in)\nOptional WP Context Loop side-output. Wire it in to have the seed series mirror the loop's shape automatically.\nseed (out)\nList of N derived seeds — one per iteration. Connect it to a KSampler's seed input (or anything that takes INT) and the downstream node fans out across the series in lockstep with the loop's prompts."
+    },
+    {
+     "title": "The flow with WP Context Loop",
+     "text": "WP Context LoopN promptsWP Seed ListN seedsKSamplerN unique imagesThe loop's side-output drives the seed list's count + strategy; the loop's prompt list and the seed list pair up one-to-one downstream so every iteration gets a unique seed.\nWire the loop's loop_config side-output into the seed list's loop_config input and the override-count + override-strategy toggles auto-flip ON. From that point on the seed series matches the loop's length and shape without you touching the widgets. Flip Override base seed from loop on as well if you want the loop's base seed to anchor the series too; leave it off to keep a different sampler base.\nDisconnecting the loop_config wire leaves the override toggles where they are — the widget values stay as the fallback so the node keeps running standalone. Re-connecting the wire auto-arms the toggles again."
+    },
+    {
+     "title": "Variation strategies",
+     "text": "Same three strategies as WP Context Loop, applied to the seed series instead of per-iteration Context seeds:\n- Hashed (default) — each iteration gets an unrelated seed derived from the base. Most variety; recommended.\n- Sequential — base, base+1, base+2 … Adjacent iterations feel related and drift gradually.\n- Stride — large prime jumps through the seed space. Wide spread, deterministic.\nEvery emitted seed is masked to 50 bits so it stays inside the range ComfyUI's frontend produces when you press the seed randomise button — you can copy any seed back into a standalone sampler and it'll reproduce identically."
+    },
+    {
+     "title": "Per-iteration seed locks",
+     "text": "The Per-iteration seeds button opens the seed list, where you can pin any iteration to a fixed seed while the rest stay derived — handy for keeping a couple of results you liked while the others keep exploring. Lock all / Unlock all, Copy / Paste (as #N: seed text), and a per-row Prev button round it out.\nPrev locks the seed an iteration actually used on the previous run, not the upcoming one — the right choice when control-after-generate is randomising the base. The Seed List captures its series on every run, so Prev lights up after the first generate."
+    },
+    {
+     "title": "Good to know",
+     "text": "The seed list pairs with the loop by list index, not by any wire-based handshake. As long as the counts match (which the auto-on override guarantees when you wire loop_config), iteration N's prompt always gets paired with seed N.\nWithout a loop wired in, the seed list still emits N seeds — useful for fanning a single sampler out N ways from one click. But if you connect it to a non-loop chain that expects a single seed, ComfyUI will iterate the downstream node N times anyway. Set the count to 1 to collapse to single-seed behaviour without removing the node."
+    },
+    {
+     "title": "Works with",
+     "text": "Seeds & loops WP Context Loop Per-iteration overrides WP Context"
+    }
+   ]
+  },
+  {
+   "id": "wp-context-injector",
+   "title": "WP Context Injector",
+   "group": "nodes",
+   "blurb": "Lift external node outputs into named $vars.",
+   "keywords": [
+    "inject",
+    "override",
+    "rows"
+   ],
+   "sections": [
+    {
+     "title": "What it's for",
+     "text": "Most variables in the pipeline come from wildcards and fixed values inside a WP Context. The WP Context Injector lets you bring in values from outside — a LoRA name picked by another node, an INT from a seed widget, a FLOAT from a slider — and give each one a $variable name. From that point on it behaves just like any other variable: you can reference it in the Assembler template, use it in a Combine rule, or read it in a Derivation.\nChain multiple injectors for more bindings. Each one passes the upstream Context through unchanged and adds its own variables on top."
+    },
+    {
+     "title": "The flow",
+     "text": "External nodeany outputWP Context Injectornames it $varWP Contextmerged inThe injector lifts an outside value into a named $variable the rest of the pipeline can use."
+    },
+    {
+     "title": "Ports & sockets",
+     "text": "upstream (in)\nAn existing Context to extend. All of its variables pass through; the injector adds or overrides bindings on top. Leave unconnected to create a standalone Context from injected values only.\nrows widget\nHolds two kinds of rows: socket rows (one per wired input) and template rows you add manually. Each defines one $variable and can be marked internal (available to modules but hidden from the final prompt).\ninput_0 … input_9\nDynamic socket slots. Wire any ComfyUI output — a STRING, INT, FLOAT, or anything else — into a slot. A socket row appears automatically. Add up to 10 sockets; chain a second injector for more.\ncontext (out)\nThe upstream Context with your injected bindings merged on top. Wire it into an Assembler, Debug node, or another Context."
+    },
+    {
+     "title": "Two kinds of rows",
+     "text": "The injector resolves rows top to bottom in two passes. Socket rows run first — each one turns a single wired input into a $variable, and its template (if any) can only reference its own socket. Template rows run last, so they can compose from every input and from the variables the socket rows produced.\nSocket row\nCreated automatically when you wire an input, and removed when you disconnect it. Binds that one socket to a $variable. Its optional template may reference only its OWN socket (e.g. the input_0 row can use $input_0) — rows resolve top to bottom, so a socket row can't read a later socket.\nTemplate row\nAdd one with the “Add template row” button. It isn't tied to any socket and survives disconnects. It runs after all socket rows, so its template can compose from both the raw sockets ($input_0, $input_1, …) and the variables the socket rows produced ($test). Use it to combine multiple inputs."
+    },
+    {
+     "title": "Row options",
+     "text": "Binding name\nThe $variable name that downstream modules and the Assembler will see. Use letters, digits, and underscores; must start with a letter.\nTemplate\nOn a socket row: leave blank to write the raw socket value as-is, or wrap just that socket (e.g. prefix $input_0). On a template row: required — compose from any input or socket-row variable (e.g. $input_0 by $test). Use $$ for a literal dollar sign.\nNegative\nOptional, on both row kinds, under Template in the row's edit panel. Negative words for this $variable, written with the same $slot grammar as the template, so a wired string (say, the negative an LLM node writes) can feed it. They replace whatever negatives the variable carried before, and reach only Assemblers that render the variable. A row with a negative shows a NEG badge.\nInternal\nTick this to make the variable available to Combine and Derivation modules downstream but keep it out of the assembled prompt text. Works on both row kinds."
+    },
+    {
+     "title": "Good to know",
+     "text": "To combine two sockets without an extra Combine module, click Add template row and set a template like $input_0 by $input_1. You name the row's $variable inline in its header and set that template from the row's edit panel (right-click the row → Edit) — the same edit panel socket rows use. A template row runs after every socket row, so it can also reference the variables those rows produce (for example $test) — and it sticks around even if you re-wire the inputs. A socket row's own template can only use its own socket.\nA row's negative follows the usual rule: it only reaches an Assembler that renders the row's variable. An internal row, or a boolean that only feeds a derivation, never adds to a negative output. Injector rows live in the workflow, so a negative here needs no library schema bump.\nThe injector is best suited for STRING, INT, and FLOAT values. Complex types like IMAGE or LATENT are stored as their text representation, which is rarely useful in a prompt."
+    },
+    {
+     "title": "Works with",
+     "text": "WP Context WP Prompt Assembler Negatives"
+    }
+   ]
+  },
+  {
+   "id": "wp-model-info",
+   "title": "WP Model Info",
+   "group": "nodes",
+   "blurb": "Name the loaded checkpoint so rules can branch on it.",
+   "keywords": [
+    "model",
+    "checkpoint",
+    "pony",
+    "illustrious",
+    "lora",
+    "variant"
+   ],
+   "sections": [
+    {
+     "title": "What it's for",
+     "text": "One prompt setup rarely suits every checkpoint. Pony wants its score tags, Illustrious wants different LoRAs, Flux reads plain sentences. WP Model Info looks at the model you loaded and writes what it found into the Context, so the rest of the pipeline can react to it.\n$model_family\nThe architecture, read from the loaded model itself: sd15, sdxl, flux, sd3, chroma and so on. Needs the model input.\n$model_variant\nThe fine-tune line, read from the checkpoint's file name by the variant rules: pony, illustrious, noobai, animagine, or empty when no rule matches.\n$model_name\nThe checkpoint's file name without folders or extension, e.g. ponyDiffusionV6XL.\nPony and Illustrious are both SDXL underneath, so $model_family reads sdxl for both. $model_variant tells them apart, and it can only come from the file name."
+    },
+    {
+     "title": "Where it goes",
+     "text": "Load CheckpointMODELWP Model Info$model_variantWP Contextrules branch on itModel Info heads the chain, so every Context after it can read the model variables.\nIf a node that loads LoRAs from the prompt sits on the model, wire Model Info to the MODEL from before that node. Otherwise the prompt needs the model and the model needs the prompt, and ComfyUI refuses to run the loop."
+    },
+    {
+     "title": "Ports & widget",
+     "text": "upstream (in)\nAn existing Context to extend. Only nodes after Model Info see its variables, so it usually goes first.\nmodel (in)\nThe MODEL from your checkpoint loader. Gives the family, and the node follows the wire back to the loader for the file name, stepping over LoRA loaders and other model patches.\nDetected\nThe three values and where each comes from. Variant and name update as soon as you change the loader's checkpoint; the family shows after the first run.\nGlobe\nWhether the Assembler can use the variable. All three start internal: later rules read them, but the Assembler leaves them out of the prompt and its variable chips. Click the globe to use one in the Assembler.\nPin\nUse your own value for a row instead of the detected one: a file name when no model is wired, or a variant to try your Pony rules without switching checkpoint. Click it again to go back to detection.\nVariant rules\nVariant + pattern rows. The first pattern found in the file name sets $model_variant and its row lights up. Case-insensitive; | separates alternatives. A broken row is outlined in red and skipped with a WP Debug warning. Reset puts the shipped rules back.\ncontext (out)\nThe upstream Context plus the three variables. To use a value outside the pipeline, turn its globe off and put it in an Assembler template."
+    },
+    {
+     "title": "LoRAs per model",
+     "text": "In the derivation editor, LoRA by model adds a ready-made rule: if $model_variant is pony, set $loras to a Pony LoRA tag; if illustrious, an Illustrious one; otherwise leave it empty. Swap the placeholder LoRA names for yours, add branches for other variants, and put $loras in your Assembler template. The same pattern works for quality tags, negatives or anything else a derivation can write."
+    },
+    {
+     "title": "Constraints from the model",
+     "text": "Constraints react to a wildcard's pick, not to a variable, so the model reaches them through a wildcard. Make a wildcard (say Model) with options pony and illustrious, tag them, add it to your Context, and in its node settings set Match variable to model_variant. Instead of rolling, it picks the option whose text equals the detected variant, and any constraint can use it as its source, for example “if Model is pony, exclude photo styles”.\nMark one option of that wildcard as the fallback (for example “other”), so checkpoints your rules don't recognise still get a predictable pick. Without a fallback the wildcard rolls as usual and WP Debug notes that nothing matched."
+    },
+    {
+     "title": "Good to know",
+     "text": "The canvas previews $model_variant and $model_name from the loader's file name straight away. $model_family needs the loaded model, so it previews as a placeholder until the first run (or pin it).\nModel Info changes nothing in your library, so shared modules that branch on $model_variant need no schema update."
+    },
+    {
+     "title": "Works with",
+     "text": "WP Context Derivation Constraint WP Context Injector"
+    }
+   ]
+  },
+  {
+   "id": "wp-prompt-assembler",
+   "title": "WP Prompt Assembler",
+   "group": "nodes",
+   "blurb": "Fill $var placeholders in a template string.",
+   "keywords": [
+    "template",
+    "prompt",
+    "assemble"
+   ],
+   "sections": [
+    {
+     "title": "What it's for",
+     "text": "Write a template like a $style portrait of $subject, $lighting and the Assembler substitutes every $variable from the upstream Context. The result is a plain text string you send straight to a CLIP Text Encode or any other text consumer. Variables marked as internal in the Context are kept out of the rendered prompt automatically."
+    },
+    {
+     "title": "Inputs & output",
+     "text": "context (in)\nThe resolved variable map from any WP Context chain. Required — without it the node has no values to substitute.\ntemplate\nYour prompt template. Type free text and insert $variable names wherever you want a wildcard pick or fixed value to appear. The multiline editor supports the full variable syntax.\nnegative_template\nOptional. The negative template, in the collapsible negative section under the preview. $negatives marks where the collected negative words go; it reads $vars too. Leave it empty to output just the collected words. Like the template, it can be turned into an input and wired from any STRING.\nprompt (out)\nThe fully resolved prompt string. Wire it directly into a CLIP Text Encode, a WP Prompt Cleaner, or any other node that accepts a STRING. Stays output 0, so existing links never move.\nnegative (out)\nThe negative words of every variable the template rendered, filled into the negative template. Wire it into your negative CLIP Text Encode (or the Cleaner's negative input)."
+    },
+    {
+     "title": "Writing templates",
+     "text": "The Assembler's one job is to drop $variable values into your text:\n- $varname — replaced with the value from the Context. If no binding exists, the placeholder resolves to empty and the canvas preview highlights it with an amber underline so you can spot the gap before running.\n- $$ — a literal dollar sign, in case you need one in the output text.\nInline picks like {a|b|c} are not rolled here. The Assembler has no seed of its own, so a pick would freeze on the same branch every run — instead it leaves the {a|b|c} in the prompt verbatim. To get a real random pick, produce the value in a seeded module — a Wildcard, Combine, or Derivation inside a WP Context — and reference its $variable in the template instead.\nThe Variables strip below the template lists every upstream binding — click any chip to insert $name at the cursor position rather than typing it by hand."
+    },
+    {
+     "title": "The negative output",
+     "text": "Options, fixed values, combines and derivations can carry negative words for the variable they set. The negative output collects them, but only for the variables this template actually rendered, so a detailer Assembler that renders just $face never picks up the hair negatives. Internal variables add nothing.\n- $negatives in the negative template marks where the collected words go, e.g. lowres, bad anatomy, $negatives.\n- An empty negative template outputs just the collected words.\n- A negative template without $negatives gets them appended at the end.\n- Repeated tags are dropped (case-insensitive, and weight wraps like (blurry:1.2) count as the plain tag), including tags already in the negative template. A $var in the negative template adds its text, not its own negatives.\nKeep your standing negative (lowres, bad anatomy) in the negative template and let $negatives add the words this run's picks call for. See Negatives for where negative words come from."
+    },
+    {
+     "title": "Save & Load template",
+     "text": "The toolbar buttons let you save the current template to the Templates library or load a previously saved one. After loading, the next Save defaults to updating that same library entry. Manage all templates in the SPA Templates tab."
+    },
+    {
+     "title": "Works with",
+     "text": "The $variable pipeline Negatives WP Context WP Prompt Cleaner"
+    }
+   ]
+  },
+  {
+   "id": "wp-prompt-cleaner",
+   "title": "WP Prompt Cleaner",
+   "group": "nodes",
+   "blurb": "Rule-based cleanup of a prompt string.",
+   "keywords": [
+    "clean",
+    "dedupe",
+    "blocklist"
+   ],
+   "sections": [
+    {
+     "title": "What it's for",
+     "text": "Wire any prompt string — typically from a WP Prompt Assembler — into the Cleaner and it applies a configurable set of rules: whitespace normalization, prompt syntax tidying (empty groups, nested weights, LoRA tags), tag deduplication, fuzzy matching, and an optional blocklist. The cleaned text comes out the other side ready to wire into a CLIP Text Encode. It works on text alone and needs no Context connection."
+    },
+    {
+     "title": "Inputs & output",
+     "text": "prompt (in)\nThe text to clean. Typically from a WP Prompt Assembler, but works with any STRING source.\ncleaner widget\nConfigure the cleaning rules: pick a mode, set an intensity preset, toggle individual rules on or off, and manage the blocklist. The widget also shows run-stats after each execution.\nnegative (in)\nOptional. A negative prompt to clean alongside the prompt — type it in the box or wire one in, typically the Assembler's negative output. Left empty, the negative output is empty.\nprompt (out)\nThe cleaned text, ready to wire into a CLIP Text Encode or any other text consumer. Stays output 0.\nnegative (out)\nThe cleaned negative, using the negative column's rules. Wire it into your negative CLIP Text Encode."
+    },
+    {
+     "title": "Mode",
+     "text": "Choose Tags mode when your prompt is a comma-separated tag list (the default for most SD workflows). The cleaner splits on commas, applies all rules per-tag, and reassembles. Choose Text mode for prose-style prompts — tag-only rules like deduplication are disabled, and the blocklist removes matched words without pulling the whole phrase."
+    },
+    {
+     "title": "Intensity presets",
+     "text": "Gentle\nWhitespace normalization only — collapses extra spaces, strips leading/trailing gaps. Safest option when you want minimal changes.\nBalanced\nAdds empty-group removal, LoRA tag spacing, punctuation cleanup and exact tag deduplication on top of gentle. None of these change what the prompt means. Good default for most prompt workflows.\nAggressive\nAlso merges nested weights and enables fuzzy deduplication, which catches near-duplicate tags that differ by pluralisation or minor spelling. May occasionally merge things you intended to keep separate.\nCustom\nNo preset — a Custom badge lights up when your per-rule toggles diverge from the active preset level."
+    },
+    {
+     "title": "Prompt syntax rules",
+     "text": "Three rules read the prompt the way ComfyUI does. They work in both modes and run first, so the commas and spaces they leave behind are tidied in the same run.\nEmpty groups\nRemoves brackets with nothing inside: (), [], ( , ), (:1.2), and groups left empty once those go. red (), dress becomes red, dress. The usual source is a weighted ref that resolved to nothing: (@{hat}:1.2) becomes (:1.2). On from Balanced.\nMerge weights\nFolds stacked weights into one group by multiplying them, as ComfyUI does (a bare ( ) counts as 1.1): ((a:1.1):1.2) becomes (a:1.32), (((a))) becomes (a:1.33), and (a:1.0) becomes plain a. Only merges when the inner group is everything inside the outer one, rounds to 2 decimals, and never touches [ ]. On in Aggressive.\nLoRA spacing\nTidies <lora:…> tags (and lyco, locon, hypernet, <embedding:…>): < lora : x : 0.8 > becomes <lora:x:0.8>, and girl<lora:x:1> becomes girl <lora:x:1>. Spaces inside a file name stay. On from Balanced.\nEscaped \\( \\) stay literal, LoRA and embedding names are never edited, and if the brackets don't balance the bracket rules leave the prompt exactly as written."
+    },
+    {
+     "title": "Cleaning the negative",
+     "text": "With a negative wired in, one Cleaner cleans both prompts. The rule list gets a second column of checkboxes for the negative, with its own defaults: the same as the prompt column's, except fuzzy dedupe and the blocklist are off. Near-duplicates in a negative (\"bad hands\", \"bad hand\") are usually deliberate, and the blocklist's words are often exactly what belongs in a negative. Presets set both columns; changing a negative checkbox marks the preset as custom.\nDrop negative tags also in prompt (off by default) removes a tag from the negative when the prompt asks for it too, since the model can't both draw it and avoid it. Either way, the run stats name the tags the two share."
+    },
+    {
+     "title": "Blocklist",
+     "text": "Add words or phrases you always want removed. Two modes:\n- List — comma or newline-separated words, matched case-insensitively. In tags mode the entire tag containing the match is removed; in text mode only the matched word is removed and any orphan punctuation cleaned up around it.\n- Regex — one pattern per line. Patterns are matched case-insensitively. Invalid patterns are skipped and reported in run-stats.\nHover any rule toggle for an inline explanation. After each run, the stat counters next to each active rule show exactly what was dropped — a quick sanity check that your rules are working as expected."
+    },
+    {
+     "title": "Works with",
+     "text": "WP Prompt Assembler Negatives"
+    }
+   ]
+  },
+  {
+   "id": "wp-image-filter",
+   "title": "WP Image Filter",
+   "group": "nodes",
+   "blurb": "Pause the run and pick which images (and their prompts) go on.",
+   "keywords": [
+    "image",
+    "filter",
+    "pick",
+    "select",
+    "upscale",
+    "batch",
+    "pause"
+   ],
+   "sections": [
+    {
+     "title": "What it's for",
+     "text": "Upscaling every image of a batch costs time on the ones you'd throw away. Put WP Image Filter between the first KSampler and the upscaler: the run stops there, a picker shows every image, and only the ones you pick continue. Everything that belongs to an image travels with it, so the upscaler gets each picked image's own latent, conditioning and prompt."
+    },
+    {
+     "title": "Where it goes",
+     "text": "KSampler + VAE Decodeimages, latentWP Image Filteryou pickUpscalerpicked onlyWire the same conditioning and prompt text through the filter that the upscaler would otherwise take from the start.\nWith a Context Loop, every iteration is a frame. The picker groups images by frame, and the prompt, conditioning and Context of a frame are kept only when one of its images is."
+    },
+    {
+     "title": "Inputs & outputs",
+     "text": "Every input has a matching output. Connect only what you need.\nimages\nThe images to pick from. Required: this is what the picker shows.\nlatent, masks\nSliced to the picked images. A mask you paint in the picker replaces that image's mask.\npositive, negative\nCONDITIONING. A batched conditioning is sliced with the images; a single one is kept for every frame that keeps an image.\npositive_text, negative_text\nThe prompt strings, kept or dropped with their frame.\ncontext\nEach frame's WP Context, kept or dropped with it.\nclip (in)\nOptional. Re-encodes a prompt you edit in the picker, so the positive/negative conditioning follows the edit. Without it, an edit changes only the text outputs.\nextra_1, extra_2\nAny type. The output takes the type of what you connect. Batched values are sliced, anything else follows its frame.\npicks (out)\nWhat was kept, as frame:image (1-based), for example 1:2, 3:1."
+    },
+    {
+     "title": "The picker",
+     "text": "Click\nPick or unpick an image. A frame's all button picks the whole frame; Ctrl+A picks everything.\nFrame\nClick the frame around an image (its border or label) to zoom in, where you can compare, edit the prompt and paint a mask. The Zoom & refine button in the header does the same.\nSpace\nZoom the image under the mouse, or leave the zoom (same as Zoom & refine). In the zoom, ←/→ move and ↑ picks. The picker remembers: leave it zoomed and the next one opens zoomed.\nF\nFit: make the images as big as the picker allows, so a few images fill the screen. Same as the Fit button; remembered for next time.\nI\nIn the zoom: Details. Lists the frame's variable values (Copy copies them) and seed, shows the frame's other images with Pick whole frame, and marks each value in the positive prompt (click it to edit). Remembered for next time.\nC\nIn the zoom: pin this image, then step to another to compare the two with a slider. C again stops.\nM\nIn the zoom: paint a mask on this image (brush, eraser, size, invert, clear).\nEnter\nKeep the picks and let the run go on.\nEscape\nTuck the picker away. A waiting pill at the bottom of the screen opens it again, picks intact.\nKeep all sends everything on. Stop branch stops the nodes after this one; the rest of the run finishes normally. Cancelling the run closes the picker.\nA short chime plays when the picker opens, and the tab title starts with ● Pick images while something waits, so you notice from another tab. Turn the chime off with Image Filter sound in Settings; turn on Image Filter desktop notification to also get a system notification while the tab is in the background."
+    },
+    {
+     "title": "Labels, sweep grid and Send to Loop",
+     "text": "With a Context Loop, each frame is labelled with its number and the options its sweep pinned (for example #3 · red · pencil). Hover a label to see the frame's seed and prompt. A sweep of two or more wildcards opens as a grid. The bar above it picks which wildcard goes on Rows and which on Columns (⇄ swaps them); any others Split by, one small grid per value. Click a row, column or group name to pick all of it. Frames in the header switches back to the list.\nSend to Loop writes your picks back to the loop: the picked frames' seeds are locked (when the loop overrides seeds) and every other frame is bypassed, so the next run repeats only what you kept."
+    },
+    {
+     "title": "Refine before it goes on",
+     "text": "In the zoom, the Refine panel edits the frame's positive and negative prompt and paints a mask for the upscaler. Edits travel with the picks; tiles show ✎ for an edited prompt and ◐ for a painted mask.\n- An edited prompt replaces the text output. Wire a CLIP into the filter's clip input and the conditioning is re-encoded to match; without one the conditioning stays as it was, and the panel says so.\n- With Same shape a frame's picks go on together, so a prompt edit covers the whole frame. With One per image it covers just that image.\n- A painted mask goes to the masks output, resized to the image. Images you don't paint keep the incoming mask, or an empty one when nothing is wired in."
+    },
+    {
+     "title": "Settings on the node",
+     "text": "Mode\nPause & pick asks every run. Reuse last picks keeps the same picks without asking, and asks again when they no longer fit. Pass all lets everything through.\nSend picks as\nSame shape keeps each frame's picks together as one batch. One per image sends every pick as its own item, with its own copy of its frame's prompt, conditioning and Context.\nTimeout\nSeconds to wait; 0 waits until you answer. After a timeout it keeps all, keeps the first image, or stops the branch.\nThe Last run strip under the settings shows what the last run kept."
+    },
+    {
+     "title": "Works with",
+     "text": "WP Context Loop WP Prompt Assembler WP Seed List"
+    }
+   ]
+  },
+  {
+   "id": "wp-debug",
+   "title": "WP Debug",
+   "group": "nodes",
+   "blurb": "Inspect the Context: snapshot, trace, picks, warnings.",
+   "keywords": [
+    "debug",
+    "inspect",
+    "trace"
+   ],
+   "sections": [
+    {
+     "title": "What it's for",
+     "text": "Drop a WP Debug node anywhere and wire a Context output into it. After each Generate the built-in viewer fills with a tabbed snapshot of everything that flowed through that point. It has no output — it is a read-only observation tool that updates every run so you always see fresh data."
+    },
+    {
+     "title": "Viewer tabs",
+     "text": "Variables\nEvery $variable and its resolved value at this point in the chain, with the step that set it — the quickest way to check that your wildcards rolled what you expected. A variable's negative words sit under its value in red, naming the module they came from when it isn't the variable's own, and the tab bar counts the variables that carry negatives.\nTrace\nEvery step in run order, grouped by Context node. Open a step to see why it did what it did: a wildcard's odds and the constraints that re-weighted it, which derivation branch fired (an Add to negative action reads “negative: …”), and the negative each write left on its variable.\nWarnings\nRuntime notices: missing variables referenced in templates, constraints that never fired, invalid bindings, and similar issues. Check here first when something looks off.\nRaw\nThe whole snapshot as JSON, including the negatives table. The download button saves it.\nUse the filter box at the top of each tab to search by variable name or warning type when the list is long."
+    },
+    {
+     "title": "Placement tips",
+     "text": "Wire the debug node after a specific Context to inspect that stage of the chain, or wire it after the final Context to see the complete resolved map. You can have multiple debug nodes at different points in the same workflow — each shows what it sees at its own position."
+    },
+    {
+     "title": "Works with",
+     "text": "Conflicts & warnings Warning & conflict types"
+    }
+   ]
+  },
+  {
+   "id": "wp-var-to-int",
+   "title": "WP Var → Int",
+   "group": "nodes",
+   "blurb": "Parse an integer out of a $var.",
+   "keywords": [
+    "convert",
+    "int",
+    "number"
+   ],
+   "sections": [
+    {
+     "title": "What it's for",
+     "text": "Sometimes a wildcard pick contains a number — a resolution like 1920x1080, a step count like 30 steps, or just a plain value like 512. WP Var → Int extracts the number and emits it as a proper integer you can wire into any node that expects one. If the variable is missing or contains no recognisable number, it quietly returns the default you set — it never stops the run."
+    },
+    {
+     "title": "Controls",
+     "text": "context (in)\nThe upstream Context carrying the $variable you want to read.\nvar_name\nPick the $variable to parse from the dropdown. The list updates automatically with every variable available in the upstream Context.\nindex\nWhich number to extract when the variable contains more than one. 0 gives the first, 1 the second, and so on. Most variables only have one number, so leave this at 0.\ndefault\nThe value to use when the variable is missing, has no numbers in it, or the index is beyond what was found. The node never errors — it always falls back to this.\nvalue (out)\nThe extracted integer, ready to wire into any node that accepts INT — image width, step count, batch size, and so on."
+    },
+    {
+     "title": "How the extraction works",
+     "text": "The node scans the variable's text value for signed integers and collects them in order. The index control selects which one to return:\n- 1920x1080 — index 0 → 1920, index 1 → 1080\n- 30 steps — index 0 → 30\n- hello — no numbers found → returns default\nTo extract both width and height from a single $resolution variable, place two WP Var → Int nodes reading the same variable: one with index 0 for width and one with index 1 for height."
+    },
+    {
+     "title": "Works with",
+     "text": "WP Var → Float WP Var → Bool WP Context"
+    }
+   ]
+  },
+  {
+   "id": "wp-var-to-float",
+   "title": "WP Var → Float",
+   "group": "nodes",
+   "blurb": "Parse a float out of a $var.",
+   "keywords": [
+    "convert",
+    "float",
+    "number"
+   ],
+   "sections": [
+    {
+     "title": "What it's for",
+     "text": "When a wildcard pick contains a decimal value — 0.75, cfg 7.5, or even a plain integer like 8 — WP Var → Float extracts it and emits it as a proper float you can wire into any node that expects one. Plain integers match too, so you can use this node wherever you need FLOAT output even if your variable only ever holds whole numbers. Missing variables or ones with no recognisable number quietly return the default."
+    },
+    {
+     "title": "Controls",
+     "text": "context (in)\nThe upstream Context carrying the $variable you want to read.\nvar_name\nPick the $variable to parse from the dropdown. The list updates automatically with every variable available in the upstream Context.\nindex\nWhich number to extract when the variable contains more than one. 0 gives the first, 1 the second, and so on. Leave at 0 for single-value variables.\ndefault\nThe value to use when the variable is missing, has no numbers in it, or the index is beyond what was found. The node never errors — it always falls back to this.\nvalue (out)\nThe extracted float, ready to wire into any node that accepts FLOAT — CFG scale, denoising strength, and similar inputs."
+    },
+    {
+     "title": "How the extraction works",
+     "text": "The node scans the variable's text for decimal and scientific-notation numbers. Whole integers match too:\n- cfg 7.5 — index 0 → 7.5\n- 1920x1080 — index 0 → 1920.0, index 1 → 1080.0\n- 1.5e-3 — index 0 → 0.0015\n- hello — no numbers found → returns default\nBecause whole integers match the float pattern, WP Var → Float works as a drop-in when you need a FLOAT output from a variable that holds a whole number."
+    },
+    {
+     "title": "Works with",
+     "text": "WP Var → Int WP Var → Bool WP Context"
+    }
+   ]
+  },
+  {
+   "id": "wp-var-to-bool",
+   "title": "WP Var → Bool",
+   "group": "nodes",
+   "blurb": "Parse a boolean out of a $var.",
+   "keywords": [
+    "convert",
+    "bool",
+    "toggle"
+   ],
+   "sections": [
+    {
+     "title": "What it's for",
+     "text": "WP Var → Bool reads a $variable from the upstream Context and interprets its text as a boolean. Words like true, yes, on, and 1 become true; words like false, no, off, and 0 become false. Wire the output into any node that accepts BOOLEAN — a sampler toggle, a switch, a boolean math node — to make that switch probabilistic."
+    },
+    {
+     "title": "Controls",
+     "text": "context (in)\nThe upstream Context carrying the $variable you want to read.\nvar_name\nPick the $variable to parse from the dropdown. The list updates automatically with every variable available in the upstream Context.\nindex\nWhich boolean token to use when the variable contains more than one recognised value. 0 gives the first match, 1 the second. Words like \"maybe\" or numbers like 1.5 are ignored and do not count toward the index.\ndefault\nThe value to use when the variable is missing or contains no recognised boolean words. The node never errors — it always falls back to this.\nvalue (out)\nThe parsed boolean, ready to wire into any node that accepts BOOLEAN — sampler toggles, switch nodes, and so on."
+    },
+    {
+     "title": "How the parsing works",
+     "text": "The node splits the variable's value on spaces, commas, semicolons, pipes, and slashes, then checks each piece against the recognised word lists (case-insensitive). Words that match neither list are skipped entirely — they do not advance the index:\n- Truthy words: true, yes, on, 1\n- Falsy words: false, no, off, 0\n- Everything else (e.g. maybe, 1.5, hello) is ignored\nSo a variable value of true maybe false has two boolean tokens: index 0 → true, index 1 → false.\nAdd a wildcard with options on / off and wire it through WP Var → Bool to randomly enable or disable any boolean input in your workflow."
+    },
+    {
+     "title": "Works with",
+     "text": "WP Var → Int WP Var → Float WP Context"
+    }
+   ]
+  },
+  {
+   "id": "wildcard",
+   "title": "Wildcard",
+   "group": "modules",
+   "blurb": "Weighted random pick that sets one $var.",
+   "keywords": [
+    "random",
+    "weight",
+    "option",
+    "import",
+    "dynamic prompts",
+    "ppp",
+    "yaml",
+    "a1111",
+    "forge",
+    "wildcard packs",
+    "impact pack",
+    "merge lists",
+    "tag groups"
+   ],
+   "sections": [
+    {
+     "title": "What it does",
+     "text": "A Wildcard module holds a list of options — \"a cat\", \"a dog\", \"a fox\" — and picks one (or several) each run. The result is written to a $variable you name, so later modules (and your prompt template) can use it. Options can carry weights so some are more likely than others, you can tag them with several sub-category labels to filter on the fly, and an option's text can even embed another wildcard — see Multi-pick and Nested references below."
+    },
+    {
+     "title": "Option fields",
+     "text": "Value\nThe text that goes into the prompt when this option is picked — for example, \"a cat\", \"a dog\", or \"a fox\".\nWeight\nHow likely this option is to be chosen relative to the others. A weight of 2 is twice as likely as a weight of 1. Set to 0 to disable without deleting — and if every option ends up at 0, whether you set them or a constraint excluded them, the wildcard resolves to nothing (or to its fallback, below) rather than quietly using the first one.\nSub-categories\nZero or more labels on an option (e.g. \"feline\", \"warm\") — an option can carry several at once. They group options in the editor, form the Constraint matrix axes, power bulk selection, and back the per-use category filter below. Tags can be organised into axes (e.g. species, temperature) so the editor shows grouped pills.\nNull option\nMarks this option as the \"no pick\" result — the wildcard resolves to an empty string. At most one option per wildcard can be a null option.\nFallback\nHover an option's probability and click \"set as fallback\". The fallback rolls like any other option, with its own weight, and is also used when nothing is left to pick: constraints (an Only rule included) excluded every option, the fallback included, or every weight is 0. Give it weight 0 if it should only ever stand in. Without one the wildcard resolves to nothing in that case. One per wildcard; the null option can't be the fallback. Turning the fallback off for one use (its checkbox on the node) keeps the empty result there. WP Debug and the Test Runner say \"Fallback used\" when it kicks in. Shared wildcards with a fallback are stamped schema 9."
+    },
+    {
+     "title": "Per-use options",
+     "text": "When you add a wildcard to a Context you can change how it behaves for that use without touching the shared library entry:\nRandom mode\nPick any option from the pool using its weights. This is the default.\nSubcategory mode\nA quick pre-filter that narrows the pool to options carrying a chosen sub-category before the pick. The pick itself is identical to random — only which options are eligible changes. The category filter below is the general, boolean form of it.\nPinned mode\nLocks to one specific option regardless of seed. Use this to hold an element steady across a batch while everything else varies.\nCategory filter\nA boolean sub-category expression — \"and / or / not\", parentheses, and comma as shorthand for \"or\" (e.g. \"feline and warm, not lynx\") — that narrows the pool to matching options before the pick. Build it from grouped pills or type it in the advanced editor; it never applies to the null option.\nExclude null\nDrops the null option for this use, so the wildcard always resolves to real text. Only shown when the wildcard actually has a null option to exclude.\nMatch variable\nUnder Runtime in the node settings. Instead of rolling, pick the option whose text equals a variable's value (ignoring case), e.g. model_variant from WP Model Info. No match uses the fallback option; without one the wildcard rolls as usual and WP Debug notes it. This is how a variable drives a constraint: the matched pick is a normal source pick.\nLocked seed\nFreezes this wildcard's pick across every loop iteration — every iteration in the batch gets the same result. Useful for holding one element constant (e.g. the art style) while letting other wildcards vary.\nSubcategory mode and random mode produce the same result when no sub-category filter is active — subcategory mode is just a convenient way to pre-narrow the pool."
+    },
+    {
+     "title": "Multi-pick",
+     "text": "By default a wildcard makes a single pick, but a use can draw several at once. Set the Pick count to a range — a low and a high (make them equal for a fixed count, e.g. 2–2) — and the wildcard rolls that many options. A separator joins them, and Allow repeats decides whether a draw can land on the same option twice: off (the default) keeps the picks distinct, on draws with replacement so repeats are possible.\nA multi-pick produces a list value. Reference the joined list with a bare $name (it uses the separator), or pull out a single item with $name.K — K is 0-based, so $colors.0 is the first pick. For example, a $colors wildcard set to Pick 2–3 with separator , might resolve to \"red, blue, green\", while $colors.0 is just \"red\".\nIn multi-pick the null option leaves the pool — set the minimum to 0 when you want \"maybe nothing\" (a use that sometimes picks fewer, or none). The text-field equivalent of multi-pick is the inline pick syntax, covered on The $variable pipeline."
+    },
+    {
+     "title": "Nested references",
+     "text": "An option's value isn't limited to plain text — it can embed a reference to another wildcard with @{uuid}, so picking that option pulls in a fresh pick from the referenced \"nested\" wildcard. The reference can narrow what the nested wildcard may roll with a :filter sub-category expression and drop its null option with !null — for example @{abcd1234:warm} rolls the nested wildcard but only from its warm-tagged options. Inline {a|b} picks work in option text too. Type @ to insert one; the chip states, the full filter grammar (not / and / or / parentheses) and why plain @name stays text are on Chips & references.\nA wildcard is a producer: on its option text, @{} references and {a|b} picks resolve, but $name reads do not — an option can't pull in a value another module set, no matter the order. To build a value from earlier picks, use a Combine or Derivation. The full token grammar and the per-surface gate live on The $variable pipeline."
+    },
+    {
+     "title": "What a tag is, and the two kinds",
+     "text": "A sub-category is a label on an option. It filters the pool and drives the Constraint matrix. It is not a variable, and until you say otherwise nothing outside those two places can read it.\nEvery tag group carries a kind, chosen on the group's header:\nclassify (default)\nThe tags describe what the option IS — casual, t-shirt, skirt. Several are true at once, so a constraint on this group uses all of them together (AND). This is how every group has always behaved; leaving it alone changes nothing.\naccepts\nThe tags are alternatives the option OFFERS — an outfit that works with sneakers, heels or sandals. Exactly one is rolled at pick time and read as $var.AXIS, and it's that single rolled tag a constraint keys on — so a diagonal “same tag wins” constraint pins the target to exactly the shoe that was rolled, not the whole accepted set.\nThe test is what the tag says about the option. \"Is this outfit casual?\" is classify. \"Which shoes go with this outfit?\" is accepts.\nAn accepts group can be read as a variable. If a $outfit wildcard has an accepts group named SHOES, then $outfit.SHOES is the tag rolled for this run — the same value in every template, every module and every chained node, because it is rolled once when the option is picked rather than each time it is read. When the wildcard picks more than one option, $outfit.0.SHOES is the first pick's.\nOnly accepts groups are readable. Ungrouped tags, and tags in a classify group, stay editor-only — $outfit.SHOES renders as nothing if SHOES was never promoted, and the conflict scanner flags it. An accepts group's name is read as $var.NAME, so it must be letters, digits and underscores starting with a letter; renaming one can strand a template that reads it."
+    },
+    {
+     "title": "Constraint interaction",
+     "text": "A Constraint module placed between a source wildcard and this one can tilt the option weights — for example, making \"stormy\" more likely when the subject was \"ocean\". The constraint must sit after the source wildcard and before this wildcard in the stack. See the Constraint page for the full picture.\nConstraints read picks, not variables. To steer one from a variable (the loaded checkpoint, an injected value), give the source wildcard options that spell the variable's values and set Match variable on it. See WP Model Info for a worked example."
+    },
+    {
+     "title": "Importing wildcard packs",
+     "text": "Coming from A1111 or Forge? Open Import / Export → Wildcard packs and choose a folder, files or a .zip, or drop them on the page. It reads Dynamic Prompts, Prompt Post-Processor (PPP) and Impact Pack wildcards: .txt lists, .yaml / .yml and .json files, and .zip packs of them. Dropping a pack on the Import tab opens it here too.\nYou go through three steps: load the pack, review the plan, then pick what to import with the usual import picker (everything starts selected).\nLists and their names\nEach list is named by its path the way __name__ finds it: animals/cats.txt is animals/cats, and a YAML key clothing: { tops: [...] } is clothing/tops. A list that isn't merged becomes its own wildcard, and its variable is the last part ($cats, $tops).\nMerging related lists\nWith Merge related lists ticked (the default), a folder of small lists becomes one wildcard, like one you'd build by hand: hair/colors/red.txt, hair/colors/blonde.txt and hair/colors/dark.txt become one hair/colors wildcard whose options are tagged red, blonde and dark. Each folder level is a tag group, and lists with the same name in sibling folders share a tag: female/footwear and male/footwear give a gender group (female, male) and a footwear tag, like the axes of a hand-built wildcard. A folder merges when it holds at least two lists and up to 1,000 options over at most three levels; a bigger folder is split into its subfolders. Entry points stay separate, and so does a list that points at another list in the same folder, because a wildcard can't reference itself.\nKeep separate\nMerged rows show a lists chip. Open one to see each list with its tag and the tag groups, and click Keep these lists separate to import that folder as one wildcard per list again; Merge again under the settings undoes it. Untick Merge related lists to keep every list separate.\nRoles\nThe review sorts every wildcard by what it does in the pack. Entry points build a prompt from other wildcards and nothing else uses them: these are what you drop on a Context. Compositions build on other wildcards and are used by one. Vocabulary is a plain list. Groups are made for globs and folder references.\nCarries over\nEach wildcard is marked Exact, Close (same outputs, but a setting or label didn't carry over) or Needs a look (some text no longer renders as it did, like a dropped if-condition). Open a row to see why.\nDomains\nThe top folders (or YAML top keys) of the pack. Pick one to review it on its own. Each wildcard goes in a category named after its domain, unless you type one category for all.\nLibrary tag\nEvery module gets the library tag, which starts as the pack's name, so the whole pack sits together on the Tags page.\nBundles\nWith Bundle the entry points ticked (the default) the entry points go into one bundle per domain, inside one pack bundle. Lists stay in the library, where the entry points reach them through references, so dropping a bundle rolls the prompts the pack was written to make, not every list. A pack of plain lists gets no bundles.\nReferences\n__other__ references become @{} chips that point at the imported wildcard. A reference to a list that was merged points at the merged wildcard, filtered by that list's tags (female and footwear), so it still draws from that list only. A glob like __animals/*__, or a parent key like __clothing__ in Impact packs, becomes a group wildcard that picks one of the matching wildcards, weighted by how many options each has. PPP filters such as __colors'warm'__ become a category filter on the chip.\nChoice syntax\n{a|b}, weights like {2::a|b} and multi-pick like {2$$a|b|c} keep working, and so does __2$$name__: it picks two different values of name. Open ranges like {-2$$a|b} get their missing end filled in, samplers like {~a|b} pick at random, and the default separator is a comma.\nWeights, labels and fallbacks\nWeighted lines (3::text), PPP labels ('summer, casual'::text) and PPP's else choice carry over as option weights, sub-categories and the wildcard's fallback. A line written twice becomes one option with twice the weight, so the odds stay the same.\nComments and encoding\nLines starting with # are skipped and kept as the module's description, as is the # text inside multi-line YAML prompts. Text after a # with a space before it is cut (so C# survives). Files saved as UTF-8 or Windows-1252 both read correctly.\nImporting the same pack again finds the wildcards you already have instead of adding copies.\nWhat doesn't carry over. Rows marked Needs a look list what changed. PPP if conditions are removed (the choice stays). Dynamic Prompts variables like ${name} stay as plain text, because a wildcard can't read a variable: rebuild that part with a Combine, which can. Template arguments like __name(var=value)__ are dropped, and a reference to a wildcard the pack doesn't contain stays as plain text."
+    },
+    {
+     "title": "Try it",
+     "text": "Create a ready-made $subject wildcard in your library — four options (\"cat\", \"tiger\", \"dog\", \"wolf\") split across two sub-categories. It lands as the first piece of the starter set you can build into a full pipeline."
+    },
+    {
+     "title": "Works with",
+     "text": "The $variable pipeline Constraint WP Context"
+    }
+   ]
+  },
+  {
+   "id": "fixed-values",
+   "title": "Fixed Values",
+   "group": "modules",
+   "blurb": "Assign explicit name = value bindings.",
+   "keywords": [
+    "fixed",
+    "constant"
+   ],
+   "sections": [
+    {
+     "title": "What it does",
+     "text": "A Fixed Values module lets you write plain name = value pairs into the Context. Every time the pipeline runs, those $variables are set to whatever text you typed. Nothing is picked at random (unless you use inline {a|b|c} syntax inside the value), and nothing depends on other modules — it just stamps the values in.\nUse it for anything that should stay constant: an artist style like \"oil painting\", a quality booster like \"8k, masterpiece\", or a reusable negative-prompt fragment. Drop it at the top of your stack and every module below can read those variables."
+    },
+    {
+     "title": "Row fields",
+     "text": "Name\nThe $variable name to set — for example, \"style\" sets $style.\nValue\nThe text to assign. You can use inline {a|b|c} pick syntax here to add a touch of randomness, but you cannot read other $variables — use Combine for that.\nEnable / disable\nTurn a row off without deleting it. Useful for toggling optional extras like a quality booster or a negative-prompt fragment."
+    },
+    {
+     "title": "Per-use options",
+     "text": "When you add a Fixed Values module to a Context you can adjust it for that use:\nValue override\nReplace the value of any row for this particular use, without changing the shared library entry. Good for adapting a reusable Fixed Values module to a specific workflow.\nLocked seed\nFreezes any inline {a|b|c} picks across loop iterations so the value stays the same throughout a batch.\nFixed Values cannot read $variables that other modules have set — it is a producer, not a consumer. If you need to build a value from earlier picks, use a Combine module instead."
+    },
+    {
+     "title": "Try it",
+     "text": "Create a starter Fixed Values module that sets $style to \"oil painting\". It's the constant the starter set's prompt template reuses every run — drop it in and every module below can read it."
+    },
+    {
+     "title": "Works with",
+     "text": "Combine Derivation WP Context"
+    }
+   ]
+  },
+  {
+   "id": "combine",
+   "title": "Combine",
+   "group": "modules",
+   "blurb": "Template-fill $vars into one output $var.",
+   "keywords": [
+    "template",
+    "merge"
+   ],
+   "sections": [
+    {
+     "title": "What it does",
+     "text": "A Combine module takes a template string you write — like $style portrait of $subject, $mood lighting — and fills in the $variable placeholders with whatever was picked or set earlier in the stack. The filled-in result is written to a single output variable (e.g. $prompt_fragment) that your prompt assembler or further modules can use.\nYou can also sprinkle {a|b|c} inline picks directly inside the template for any on-the-fly variation that doesn't need its own wildcard."
+    },
+    {
+     "title": "What you type in the template",
+     "text": "- $variablename — substituted with whatever that variable holds at this point in the stack. The variable must have been set by an earlier module.\n- {a|b|c} — picks one of the options at random inline. Good for small variations you don't need a full wildcard for.\n- $$ — a literal $ character in the output (escape if you need to write a dollar sign that shouldn't be treated as a variable).\nThe manager shows you which $variables your template reads as chips below the template field. If a chip is highlighted as missing, add an upstream module that sets that variable."
+    },
+    {
+     "title": "Per-use options",
+     "text": "Template override\nReplace the entire template for this particular use without changing the shared library entry.\nOutput variable\nChange which $variable name this combine writes to for this use."
+    },
+    {
+     "title": "Try it",
+     "text": "Create a starter Combine that fills $mood $subject into a single $scene variable. It reads the starter subject and mood wildcards, so build those first (or just use \"Build starter bundle\" to get the whole set at once)."
+    },
+    {
+     "title": "Works with",
+     "text": "Wildcard Fixed Values The $variable pipeline WP Prompt Assembler"
+    }
+   ]
+  },
+  {
+   "id": "derivation",
+   "title": "Derivation",
+   "group": "modules",
+   "blurb": "IF/ELIF/ELSE rules that mutate the Context.",
+   "keywords": [
+    "rule",
+    "condition",
+    "logic",
+    "and",
+    "or",
+    "group"
+   ],
+   "sections": [
+    {
+     "title": "What it does",
+     "text": "A Derivation module runs a set of IF/ELIF/ELSE rules after earlier modules have made their picks. Each rule checks a $variable already in the Context and, if the condition matches, changes one or more variables — replacing, appending to, or prepending to their current values.\nFor example: IF $subject equals \"ocean\" → append \", with crashing waves\" to $mood. If not, the rule does nothing and the next rule is checked."
+    },
+    {
+     "title": "How rules work",
+     "text": "Each Derivation module can hold multiple rules. Every rule is checked from top to bottom — even if an earlier rule fired, the next one is still evaluated independently. Within a single rule, only the first matching branch (IF, ELIF, or ELSE) runs.\nBecause rules are independent, you can chain several simple rules instead of writing one very complex one. It also means two rules can both fire in the same run if their conditions are both true."
+    },
+    {
+     "title": "Condition operators",
+     "text": "equals / not equals\nMatches when the variable's value is (or isn't) exactly the text you provide. Case-sensitive.\ncontains\nMatches when the variable's value includes the text you provide somewhere inside it.\nmatches\nMatches using a regular expression — for flexible pattern-based conditions.\nexists / not exists\nMatches when the variable is present in the Context (or absent), regardless of its value. Under exists, a switch narrows it: any, is empty (present but empty, e.g. a wildcard that rolled its null option) or has value.\nis set / is unset\nis set matches when the variable is present and non-empty; is unset matches when it's absent or empty."
+    },
+    {
+     "title": "Combining tests with AND / OR",
+     "text": "A branch can check more than one thing. Click + Condition under a test to add another; the connector between them reads AND (every test must match) and one click flips it to OR (any test may match).\nEach connector flips on its own, and AND binds tighter than OR, the way it reads. Turn the second connector of \"a AND b AND c\" to OR and you get (a AND b) OR c: the tests still joined by AND are drawn as a boxed group, so the page always shows what runs. Flip it back and the box goes away.\nYou can also build the box yourself with + Group. A group is a boxed list of its own with the opposite connector, so IF $time equals \"night\" AND ($weather equals \"rain\" OR $weather equals \"fog\") is one test plus a group of two. + Group nests up to three levels deep.\nRemoving tests until one is left turns the branch back into a plain single test, so a derivation only needs the newer format when it really combines tests. An older Wildcard Pipeline refuses a shared pack that does and asks for an update."
+    },
+    {
+     "title": "Action modes",
+     "text": "Replace\nOverwrite the variable's current value entirely with the action text.\nAppend\nAdd the action text to the end of the variable's current value.\nPrepend\nInsert the action text before the variable's current value.\nAdd to negative\nLeave the variable's text alone and add the action text to its negative words, so they follow the variable into any Assembler that renders it. The value takes $vars, @{refs} and {a|b}; refs resolve quietly and never change a pick.\nReplace negative\nLike Add to negative, but the action text becomes the variable's only negative words: whatever it carried before is dropped. The variable's own text is still left alone.\nNegatives travel with the value. Replace swaps the variable's negatives for those of the variables its new text read; Append and Prepend keep the old ones and add. For example, IF $mood equals \"gloomy\" → Add to negative \"bright colors, smiling\" keeps smiles out of every image that renders $mood. A derivation that uses Add to negative is shared as schema 8, which older versions refuse with a request to update."
+    },
+    {
+     "title": "Several actions in one branch",
+     "text": "Click + And under a branch's action to add another. The actions run in order when the branch fires, and each one sees what the one before it wrote. For example, IF $tier equals \"warmup\" THEN $pose Replace $pose_portrait AND $pose Add to negative $pose_portrait.neg. The ELSE branch works the same way. On the canvas, each action gets its own value override.\nA branch with more than one action is shared as schema 8, which older versions refuse with a request to update."
+    },
+    {
+     "title": "Nested references in actions",
+     "text": "An action's value isn't limited to plain text. When a rule fires, its action value is fully resolved before it's written — so it can embed a @{uuid} reference to another wildcard, an inline {a|b} pick, and $variable reads, all in the same string. A reference can carry the same segments as anywhere else: a :filter sub-category expression to narrow the nested wildcard's pool and !null to drop its null option.\nFor example, an action $accent = cinematic lighting, @{abcd1234:dramatic} writes \"cinematic lighting,\" followed by a fresh pick from the nested @{abcd1234} wildcard, drawn only from its dramatic-tagged options. This lets a rule conditionally pull in a whole nested wildcard's result rather than a fixed phrase.\nActions and conditions are not symmetric. An action value resolves @{} refs and {a|b} picks; a condition value — the text you compare against — does not. A condition is a plain literal or a $variable, so @{} and {a|b} stay verbatim there and won't match what you expect. This mirrors the per-surface gate on The $variable pipeline."
+    },
+    {
+     "title": "Reading multi-pick variables",
+     "text": "A rule can read a multi-pick result the same way templates do. Reference the joined list with a bare $colors (it uses the variable's separator), or pull out a single item with $colors.0 — K in $name.K is 0-based, so $colors.0 is the first pick. This works in both condition and action values. The full grammar lives on The $variable pipeline."
+    },
+    {
+     "title": "LoRA by model",
+     "text": "The LoRA by model button in the editor adds a ready-made rule for use with the WP Model Info node: if $model_variant is pony it sets $loras to a Pony LoRA tag, if illustrious to an Illustrious one, and otherwise to nothing. Replace the placeholder LoRA names with yours, add a branch per variant you use, and put $loras in your Assembler template."
+    },
+    {
+     "title": "Per-use options",
+     "text": "When you add a Derivation to a Context you can tune which rules are active for that use:\nDisable a rule\nSkip one of the top-level IF/ELIF/ELSE rules for this use without removing it from the library entry.\nDisable a branch\nSkip a specific IF, ELIF, or ELSE branch within a rule for this use.\nValue override\nReplace the text that a specific branch action writes, or the value a condition compares against, for this use only. A branch that combines tests gets one condition field per test.\nRule order\nReorder the rules for this use without changing the shared library entry."
+    },
+    {
+     "title": "Try it",
+     "text": "Create a starter Derivation that sets $accent based on the mood: if $mood is \"dramatic\" it writes \"cinematic lighting\", otherwise \"soft lighting\". A one-rule example of conditional logic reacting to an upstream pick."
+    },
+    {
+     "title": "Works with",
+     "text": "Wildcard Combine The $variable pipeline Negatives WP Context"
+    }
+   ]
+  },
+  {
+   "id": "constraint",
+   "title": "Constraint",
+   "group": "modules",
+   "blurb": "Reweight a target wildcard from a source pick.",
+   "keywords": [
+    "pairing",
+    "matrix",
+    "exclude"
+   ],
+   "sections": [
+    {
+     "title": "What it does",
+     "text": "A Constraint module watches the pick made by a source wildcard and then adjusts the option weights of a target wildcard further down the stack — before that target makes its own pick. The constraint itself sets no $variables and produces no text; its entire effect is the nudge it gives to the target.\nFor example: source wildcard $weather picked \"stormy\" → boost \"dramatic\" and \"moody\" in $mood, reduce \"sunny\" and \"cheerful\". The target still picks randomly — you're just shifting the odds."
+    },
+    {
+     "title": "The flow",
+     "text": "Source wildcardits pickConstraintreweightsTarget wildcardpicks to matchThe constraint nudges the odds of its downstream target instances — every match by default, or a narrower set you choose. It sets no $vars itself."
+    },
+    {
+     "title": "Reweight modes",
+     "text": "Allow\nNo change (shown as Neutral in the matrix). The pair rolls as if there were no rule.\nExclude\nThese options are removed from the pool; everything else remains.\nBoost\nThese options have their weight increased, making them more likely without removing anything.\nReduce\nThese options have their weight decreased, making them less likely without removing anything.\nOnly\nLinks picks: only these options can be picked, and every option without a rule of its own in the same row is removed. Extensions from before this rule existed refuse community packs that use it and ask you to update.\nException rules (per-option pairs) win over sub-category matrix rules when both apply to the same option. Use exceptions for precise overrides and the matrix for broad category nudges."
+    },
+    {
+     "title": "Stack order matters",
+     "text": "The Constraint module must sit after its source wildcard and before its target wildcard in the stack. The engine runs modules top-to-bottom, so position controls the source → constraint → target chain.\nBy default a Constraint re-weights every matching target instance below it. Use the Target reach selector (below) to narrow that to the first, the next N, or a hand-picked set — and remember that position in the stack decides which instances are even reachable, since a constraint only sees targets after it."
+    },
+    {
+     "title": "Target reach",
+     "text": "By default a constraint re-weights every matching target instance it can reach downstream. The per-instance Target reach selector narrows that scope:\nAll\nDefault — re-weight every matching target instance downstream of the constraint.\nFirst\nOnly the first target instance after the constraint; later ones roll unconstrained.\nNext N\nThe next N target instances (you set the count); the rest roll unconstrained.\nPick\nOnly specific target rows you tick — direct instances, or nested-ref carrier options that reach the target.\nIf a constraint's reach lands on zero reachable targets — e.g. its only target sits above it, or you picked rows that aren't downstream — the editor flags it constraint_orphan_target so the dead pairing doesn't fail silently.\nA constraint can also rule out every option of its target for some source value (each one excluded, shut out by an Only rule, or weighted 0). If the target has no fallback it would come out empty, so the constraint row gets a rules out all badge before you run; hover it to see which source values do it. Allow an option for those values, or mark one of the target's options as its fallback."
+    },
+    {
+     "title": "Preview",
+     "text": "The Preview card under the exceptions shows what the constraint does in numbers: one row per source option, one column per target option, and in each cell the chance that target option is picked when the source picked that row. It counts the target's own weights, the matrix and the exceptions. A dash means the option is ruled out; a row marked nothing left would leave the target empty, and fallback means the target's fallback option stands in. Other constraints, filters and toggles are left out."
+    },
+    {
+     "title": "Reattach a broken axis",
+     "text": "A constraint points at two wildcards by id — its source and its target. If one of those isn't in your library (you installed the constraint without its wildcards, or deleted one later), that axis is stranded: the editor shows the dead id with its remembered name and locks the rule matrix read-only until you fix it.\nUse Reattach to re-point the stranded axis at a local wildcard — or Download from community to pull the missing one. The matrix and exceptions then remap onto the new wildcard's sub-categories; any rows that don't exist there are dropped (the editor previews the count before you confirm)."
+    },
+    {
+     "title": "Deeper topics",
+     "text": "Full constraint mechanics — matrix vs exception priority, how constraints carry through nested references, the Target reach selectors in detail, and the \"never fired\" runtime notice — are covered on the Constraints concept page."
+    },
+    {
+     "title": "Try it",
+     "text": "Create a starter Constraint that pairs the subject and mood wildcards: feline subjects lean intense, canine subjects lean calm. Clicking this also creates the two wildcards it needs ($subject and $mood) if they aren't in your library yet, so the pairing always wires up correctly."
+    },
+    {
+     "title": "Works with",
+     "text": "Constraints in depth Wildcard WP Context"
+    }
+   ]
+  },
+  {
+   "id": "bundles",
+   "title": "Bundles",
+   "group": "modules",
+   "blurb": "Group a range of modules into a reusable unit.",
+   "keywords": [
+    "group",
+    "snapshot"
+   ],
+   "sections": [
+    {
+     "title": "What bundles are",
+     "text": "A Bundle is a named container that holds several modules together — not a module kind itself. Think of it as a saved preset: you author a combination of wildcards, fixed values, derivations, or whatever you like, save them as a bundle, and then drop that bundle into any Context widget without having to recreate the same setup each time.\nAt runtime, bundle children run as if they were placed directly in the stack — the bundle is just a grouping layer for the editor."
+    },
+    {
+     "title": "Frozen snapshots",
+     "text": "When you insert a bundle into a Context, the editor takes a snapshot of its children at that moment. If you later edit the bundle's library entry, those changes do not flow into existing snapshots — each use is independent.\nThis is intentional: a bundle is a point-in-time capture of a known-working setup. If the original bundle is later deleted from the library, the snapshot keeps working and the row simply shows a MISSING badge to let you know it is no longer linked to a live library entry.\nTo pick up changes from the library entry, use \"Push to library\" from the bundle's context menu to sync the snapshot back up, or re-insert a fresh copy."
+    },
+    {
+     "title": "Disabling a bundle",
+     "text": "Each bundle has its own enable/disable toggle. Turning a bundle off suppresses all of its children without changing their individual settings. Turn it back on and everything restores exactly as it was — nothing is lost."
+    },
+    {
+     "title": "Bundles and the wildcard cascade",
+     "text": "When you delete a wildcard from the library, the manager offers to clean up every use of that wildcard across your Contexts. Bundles are intentionally excluded from this cascade — their children are frozen snapshots, so they continue to work correctly even after the source wildcard is gone."
+    },
+    {
+     "title": "Try it",
+     "text": "Build the whole starter set in one click: the subject, mood, style, scene, accent, and pairing modules — plus a bundle that groups them, ready to drop into a Context. Anything you already created from the other pages is reused, and anything missing is filled in."
+    },
+    {
+     "title": "Works with",
+     "text": "Bundles concept WP Context"
+    }
+   ]
+  },
+  {
+   "id": "templates",
+   "title": "Templates",
+   "group": "modules",
+   "blurb": "Save a reusable $var prompt string for the Assembler.",
+   "keywords": [
+    "template",
+    "assembler",
+    "$var",
+    "prompt"
+   ],
+   "sections": [
+    {
+     "title": "What a template is",
+     "text": "A prompt template is just the text you feed the WP Prompt Assembler: a mix of literal words and $variable placeholders like $scene, $style, $accent, masterpiece, highly detailed. At runtime the Assembler swaps each $var for whatever your modules produced and emits the finished prompt.\nTemplates aren't a module kind and they don't sit in a Context stack — they're saved Assembler strings you can name, reuse across workflows, and edit in one place. Think of them as the prompt-shaped counterpart to a bundle: a bundle reuses a set of modules, a template reuses the wording that stitches their $variables together."
+    },
+    {
+     "title": "How it pairs with the Assembler",
+     "text": "In a workflow, the WP Prompt Assembler node holds the template string. Saving that string to your library makes a Template; loading a Template back into the Assembler drops the whole string in at once. The Assembler's toolbar has Save and Load buttons wired directly to this library.\nAny $var in the template must be produced by a module upstream of the Assembler. If a placeholder has no matching variable at runtime it resolves to empty (the assembler preview underlines it) so you can spot the gap — add a module (or fix the name) that sets it."
+    },
+    {
+     "title": "Try it",
+     "text": "Create the starter prompt template — $scene, $style, $accent, masterpiece, highly detailed — the wording that ties the rest of the starter set together. Load it into a WP Prompt Assembler and it fills in from the starter modules."
+    },
+    {
+     "title": "Works with",
+     "text": "WP Prompt Assembler The $variable pipeline Bundles"
+    }
+   ]
+  },
+  {
+   "id": "warning-types",
+   "title": "Warning & conflict types",
+   "group": "reference",
+   "blurb": "Every runtime warning + scanner rule, explained.",
+   "keywords": [
+    "warning",
+    "error",
+    "conflict",
+    "reference"
+   ],
+   "sections": [
+    {
+     "title": "As you build (canvas)",
+     "text": "The scanner watches your graph and flags these straight away:\nWhat it flags | Severity | What it means\nShadowed variable | info | An upstream Context already sets this variable; this one overrides it (last write wins). Normal when chaining — shown so the override is visible.\nDuplicate variable | warn | Two modules in the same Context set the same variable name; the lower one wins.\nMissing variable in template | warn | The Prompt Assembler template references a $variable that no upstream module produces.\nConstraint source not found | warn | A constraint points at a source wildcard that isn't in your library.\nConstraint target not found | warn | A constraint points at a target wildcard that isn't in your library.\nConstraint source not upstream | warn | The constraint's source wildcard doesn't appear before the constraint in the chain, so it can't read a pick from it.\nConstraint target not downstream | warn | No copy of the target wildcard appears after the constraint. Each constraint needs its own downstream target — N constraints on the same wildcard need N copies.\nRules out all (no fallback) | warn | For some value of the constraint's source, every option of the target ends up excluded or weighted 0, and the target has no fallback, so it would come out empty. The hover message lists those source values. Allow at least one option for them, or set a fallback on the target wildcard.\nInjector binding unmatched | warn | A WP Context Injector row names a variable that nothing upstream produces.\nUnknown tag axis | warn | A $var.AXIS read names an accepts axis the wildcard doesn't declare, so it resolves to empty. Promote that tag group to accepts, or fix the axis name in the read.\nOption misses its accepts-axis tag | info | Some options of an accepts-axis wildcard carry none of the axis's tags, so $var.AXIS is empty on the runs those options are picked. Add a tag from the axis to those options, or leave it if empty is intended."
+    },
+    {
+     "title": "After a run (WP Debug → Warnings)",
+     "text": "These only become clear during an actual generation:\nWhat it flags | Severity | What it means\nUnknown variable | warn | A $variable used in a template or combine was never set by any module, so it resolved to empty.\nUnresolved reference | warn | An @{…} nested reference couldn't be resolved — its target wildcard wasn't found, or wasn't upstream.\nReference nested too deep | warn | Nested @{…} references went past the depth limit and stopped expanding.\nCircular reference | warn | A loop of @{…} references pointed back at itself; it was broken to avoid hanging.\nVariable used where it can't be | warn | A $variable was read somewhere that doesn't support one (for example, inside a wildcard option).\nSub-category filter matched nothing | warn | An @{…} sub-category filter matched no options, so the reference resolved to nothing (empty).\nFixed Values override unreadable | warn | A Fixed Values instance's per-instance overrides couldn't be read, so they were ignored.\nUnknown constraint mode | warn | A constraint used a reweight mode that isn't recognised; that entry was skipped.\nFactor ignored (Allow) | info | A factor was set together with mode Allow, where the factor has no effect.\nConstraint source missing at run | warn | The constraint's source wildcard wasn't present in the stack when the run reached it.\nConstraint excluded everything | warn | Reweighting zeroed out every option on the target, so it resolved to nothing. Give the target a fallback option to have it stand in instead (Debug then shows \"Fallback used\").\nConstraint never fired | info | A constraint was set up but its target wildcard never came up this run, so it had no effect.\nInvalid injector name | warn | A WP Context Injector row used a variable name that isn't valid.\nReserved injector name | warn | A WP Context Injector row tried to use a name starting with __, which is reserved internally."
+    },
+    {
+     "title": "See also",
+     "text": "Conflicts & warnings WP Debug Constraints in depth"
+    }
+   ]
+  },
+  {
+   "id": "settings",
+   "title": "Settings",
+   "group": "settings",
+   "blurb": "Every setting in the manager's Settings page, by section.",
+   "keywords": [],
+   "sections": [
+    {
+     "title": "General",
+     "text": "Version, updates, what's new and privacy.\n- About: Version, license and source repository.\n- Check for updates on launch: Look for a newer release when the manager opens.\n- Check for updates now: Ask GitHub for the latest release.\n- Open What's new after an update: Show the release notes once, the first time the manager opens on a new version.\n- Share anonymous usage stats: Let the Community tab count page views, installs and publishes on the community site."
+    },
+    {
+     "title": "Appearance",
+     "text": "How the manager looks on this device.\n- Theme: Dark, light, or follow the system.\n- Accent color: The highlight color used for buttons, links and selection.\n- Density: Spacing and control height across the manager.\n- Sidebar: Show the navigation with labels, or as icons only.\n- Start page: What the manager opens to.\n- Reduce motion: Turn animations and transitions off in the manager."
+    },
+    {
+     "title": "Editing",
+     "text": "How the module editors behave.\n- Keep empty tag groups: Keep a tag group with no tags when saving a wildcard.\n- Sub-categories panel: Whether the sub-categories panel opens on its own in the wildcard editor."
+    },
+    {
+     "title": "Autocomplete",
+     "text": "Suggestions while you type option values.\n- Booru tags: Danbooru tag names while you type option values.\n- LoRAs: Installed LoRA names, inserted as <lora:name:1.0>.\n- Embeddings: Installed embedding names.\n- Append \", \" after a pick: Follow each completion with a comma and a space.\n- Max suggestions: How many tag suggestions the popup lists.\n- Minimum characters: Letters typed before tag suggestions appear."
+    },
+    {
+     "title": "Canvas",
+     "text": "The nodes on the ComfyUI canvas, and how runs resolve.\n- Ref recursion limit: How deep nested @{uuid} references resolve when a workflow runs.\n- Module density: Module spacing and chip sizes.\n- Decoration: Gradients & shadows. Off = flat (weak GPU / remote desktop).\n- Color intensity: How saturated accent / kind / status colors render. Muted reduces chroma for a calmer palette; vivid bumps it for pop.\n- Type style: How the kind indicator shows on module rows AND bundle headers: chip text, icon glyph, or both.\n- State indicator style: How mod / missing / drift / conflict markers appear.\n- State border highlights: Color the module border by its state.\n- Collapse new modules by default: Modules added via the picker render with body hidden (header only). Bundles have their own setting below.\n- Collapse new bundles by default: Bundles inserted from the library render with the frame collapsed (header only). Independent from the modules collapse-default since bundles usually carry 3-8 children and users often want a different default there.\n- Collapse stack mode: Independent: each module collapses on its own. Accordion: expanding a module collapses all others.\n- Focus mode: Hover a module to dim the others.\n- New modules start disabled: When on, modules added from the picker start with their toggle off. Useful when configuring before letting them run.\n- Confirm destructive bundle actions: Show a confirm dialog before remove / reset-to-library / save-to-library on bundles. Turn off if you trust the Undo toast as the only safety net.\n- Bundle master toggle: clear behavior: What the bundle master ON->OFF click clears. Preserve manual: only revert rows the master itself turned on; rows the user marked internal / locked individually stay put. Cascade: clear every applicable row regardless of how it got set. Applicability (skip constraint for internal, skip non-lockable for lock) is hardcoded — the engine ignores the flag on those kinds, so writing it would be dead data.\n- Validation strictness: How aggressively the conflict scanner surfaces issues. Permissive turns it off — use only if you know what you're doing.\n- Toast lifetime: How long status toasts stay on screen before auto-dismissing.\n- Suppress info-severity toasts: When on, info toasts (status confirmations) are filtered out. Warnings + errors still show.\n- Image Filter sound: Play a short chime when WP Image Filter is waiting for your pick, so you hear it from another tab.\n- Image Filter desktop notification: Show a system notification when WP Image Filter is waiting and this tab is in the background. Your browser asks for permission the first time.\n- Reduce motion: Disables Wildcard Pipeline animations. Match system honors prefers-reduced-motion.\n- Contrast: Bumps borders + text contrast. Match system honors prefers-contrast."
+    },
+    {
+     "title": "Test Runner",
+     "text": "What a new Test Runner scenario starts with.\n- Seed mode: Consecutive seeds, or a fresh random set on every run.\n- First seed: Where a consecutive range starts.\n- Number of seeds: How many prompts a run makes."
+    },
+    {
+     "title": "AI assistant",
+     "text": "Use your own model (Claude, OpenAI or a local server) to draft modules.\n- Turn on the AI assistant: Adds the AI tools (editor panels, Describe, Organize, the chat and the Pack builder), using a model you already have.\n- Provider: Who runs the model.\n- Server address: Where the model server answers.\n- API key: Saved on the ComfyUI machine and never shown again.\n- Model: Which model the assistant uses.\n- Model size: How much the assistant asks of the model: shorter instructions for small ones.\n- Most context to use: The most context the assistant asks Ollama for, in tokens.\n- Unload the model after: Free the GPU for ComfyUI after a short idle.\n- Test connection: Check the server answers and the model returns JSON."
+    },
+    {
+     "title": "Library & data",
+     "text": "Your module database, backups and maintenance.\n- Database: File, size and what is in it.\n- Automatic backups: Copy the database before every migration and once a day.\n- Backups to keep: Older automatic backups are deleted.\n- Backups: Back up now, restore, or delete a backup.\n- Database location: Where the database file lives.\n- Maintenance: Vacuum, integrity check, analyze, re-run migrations."
+    },
+    {
+     "title": "Advanced",
+     "text": "Move settings between machines, or start over.\n- Export settings: Save every preference to a JSON file.\n- Import settings: Load a settings file from another machine.\n- Reset browser preferences: Clear this device's preferences. Your library is untouched."
+    }
+   ]
+  }
+ ]
+}

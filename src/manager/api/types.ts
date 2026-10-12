@@ -795,6 +795,494 @@ export interface ServerSettingsPatch {
   backups?: Partial<ServerSettings["backups"]>;
 }
 
+/* ── AI assistant (/wp/api/ai/*) ──────────────────────────────────────── */
+
+export type AiProviderId = "anthropic" | "openai" | "ollama" | "lmstudio" | "llamacpp" | "custom";
+
+export interface AiPreset {
+  label: string;
+  api: "anthropic" | "openai" | "ollama";
+  /** Runs on the user's machine, so prompts don't leave it. */
+  local: boolean;
+  needs_key: boolean;
+  base_url: string;
+}
+
+/** The saved AI settings. The key itself is never sent back: `key_set` says
+ *  whether one is saved (or comes from the environment, `key_from_env`). */
+export interface AiConfig {
+  enabled: boolean;
+  provider: AiProviderId;
+  /** Empty means the preset's address. */
+  base_url: string;
+  model: string;
+  unload_after_s: number;
+  /** Most tokens of context a request may ask a local server for. */
+  context_max: number;
+  /** How much the assistant asks of the model ("auto" reads the name). */
+  model_size: "auto" | AiModelSize;
+  /** What "auto" picks for the chosen model. */
+  model_size_auto: AiModelSize;
+  key_set: boolean;
+  key_from_env: boolean;
+  /** Providers that already have a key (saved or from the environment).
+   *  Each provider keeps its own address, model and key. */
+  keys_saved: AiProviderId[];
+  presets: Record<AiProviderId, AiPreset>;
+}
+
+export type AiModelSize = "small" | "medium" | "large";
+
+export interface AiConfigPatch {
+  enabled?: boolean;
+  provider?: AiProviderId;
+  base_url?: string;
+  model?: string;
+  unload_after_s?: number;
+  context_max?: number;
+  model_size?: "auto" | AiModelSize;
+  /** Write-only. `""` removes the saved key. */
+  api_key?: string;
+}
+
+export interface AiTestResult {
+  ok: boolean;
+  models: string[];
+  /** `null` when no model is chosen yet. */
+  model_found: boolean | null;
+  json_ok: boolean | null;
+  latency_ms: number | null;
+  /** The context a local server loaded the model with, when it says. */
+  context: number | null;
+  /** True when that is too small for the assistant's instructions. */
+  context_low: boolean;
+  error: string | null;
+}
+
+/** One earlier turn of an AI conversation, sent back with a follow-up so the
+ *  model refines its last answer instead of starting over. */
+export interface AiTurn {
+  instruction: string;
+  /** The model's raw answer for that turn (each result's `answer`). */
+  answer: Record<string, unknown>;
+  /** What the user did with it, e.g. which items they kept. */
+  note?: string;
+}
+
+/** Fields every AI drafting request and result share. */
+export interface AiConversational {
+  /** Earlier turns, oldest first; `instruction` is then the follow-up. */
+  history?: AiTurn[];
+}
+
+export interface AiDraftOption {
+  value: string;
+  weight: number;
+  tags: string[];
+  negative: string;
+}
+
+export interface AiWildcardDraftRequest extends AiConversational {
+  instruction: string;
+  count: number;
+  wildcard: {
+    name: string;
+    var_binding: string;
+    /** What the wildcard is for: its description and library tags. */
+    description?: string;
+    tags?: string[];
+    payload: {
+      options: Array<{ value: string }>;
+      sub_categories: string[];
+      tag_groups?: Record<string, string[]>;
+    };
+  };
+}
+
+export interface AiWildcardDraftResult {
+  options: AiDraftOption[];
+  /** Tags the draft uses that the wildcard doesn't have yet. */
+  new_tags: string[];
+  skipped: Array<{ text: string; reason: string }>;
+  model: string;
+  /** The model's raw answer, for a follow-up's `history`. */
+  answer: Record<string, unknown>;
+}
+
+export type AiWildcardEditAction = "remove" | "rewrite" | "retag" | "reweight";
+
+export interface AiWildcardEditRequest extends AiConversational {
+  action: AiWildcardEditAction;
+  instruction: string;
+  wildcard: {
+    name: string;
+    var_binding: string;
+    /** What the wildcard is for: its description and library tags. */
+    description?: string;
+    tags?: string[];
+    payload: {
+      /** The rows to edit (whole list or the selection), with real ids. */
+      options: Array<{ id: string; value: string; weight: number; sub_categories: string[]; is_null?: boolean }>;
+      sub_categories: string[];
+      tag_groups?: Record<string, string[]>;
+    };
+  };
+}
+
+/** One proposed change. `after` is null for a removal. */
+export interface AiWildcardEditChange {
+  option_id: string;
+  before: { value?: string; tags?: string[]; weight?: number };
+  after: { value?: string; tags?: string[]; weight?: number } | null;
+  reason?: string;
+}
+
+export interface AiWildcardEditResult {
+  action: AiWildcardEditAction;
+  changes: AiWildcardEditChange[];
+  new_tags: string[];
+  skipped: Array<{ text: string; reason: string }>;
+  model: string;
+  /** The model's raw answer, for a follow-up's `history`. */
+  answer: Record<string, unknown>;
+}
+
+export interface AiDerivationDraftRequest extends AiConversational {
+  instruction: string;
+  derivation: { name: string; description?: string; tags?: string[]; rules: DerivationRule[] };
+}
+
+export interface AiDerivationDraftRule {
+  rule: DerivationRule;
+  summary: string;
+  /** Things that work but look wrong: a variable nothing sets, an option
+   *  the wildcard doesn't have. */
+  warnings: string[];
+}
+
+export interface AiDerivationDraftResult {
+  rules: AiDerivationDraftRule[];
+  skipped: Array<{ text: string; reason: string }>;
+  model: string;
+  /** The model's raw answer, for a follow-up's `history`. */
+  answer: Record<string, unknown>;
+}
+
+export interface AiConstraintDraftRequest extends AiConversational {
+  instruction: string;
+  constraint: {
+    name?: string;
+    description?: string;
+    tags?: string[];
+    source_wildcard_id: string;
+    target_wildcard_id: string;
+    matrix: ConstraintMatrix;
+    exceptions: ConstraintException[];
+  };
+}
+
+export interface AiConstraintCellDraft {
+  source_tag: string;
+  target_tag: string;
+  cell: ConstraintCell;
+  reason: string;
+  /** The constraint already has a rule for this tag pair. */
+  replaces: boolean;
+}
+
+export interface AiConstraintExceptionDraft {
+  exception: ConstraintException;
+  reason: string;
+  /** "#tag → option" when the model's rule named a tag on one side and
+   *  was expanded into one exception per option; "" otherwise. */
+  from: string;
+  replaces: boolean;
+}
+
+export interface AiConstraintDraftResult {
+  cells: AiConstraintCellDraft[];
+  exceptions: AiConstraintExceptionDraft[];
+  skipped: Array<{ text: string; reason: string }>;
+  model: string;
+  /** The model's raw answer, for a follow-up's `history`. */
+  answer: Record<string, unknown>;
+}
+
+export type AiDescribeKind =
+  | "wildcard" | "fixed_values" | "combine" | "derivation" | "constraint" | "bundle" | "template";
+
+export interface AiDescribeRequest extends AiConversational {
+  kind: AiDescribeKind;
+  name: string;
+  description: string;
+  tags: string[];
+  /** What the editor holds now: a module payload, a bundle's children or a
+   *  template's text. */
+  payload: unknown;
+  hint?: string;
+}
+
+export interface AiDescribeResult {
+  description: string;
+  /** `new`: nothing in the library uses it yet. `has`: the item already has it. */
+  tags: Array<{ tag: string; new: boolean; has: boolean }>;
+  model: string;
+  /** The model's raw answer, for a follow-up's `history`. */
+  answer: Record<string, unknown>;
+}
+
+export interface AiOrganizeRequest extends AiConversational {
+  items: Array<{ kind: "module" | "bundle"; id: string }>;
+  /** Optional steer ("split by subject"). */
+  instruction?: string;
+}
+
+export interface AiOrganizeChange {
+  kind: "module" | "bundle";
+  id: string;
+  name: string;
+  /** Module type, or "bundle". */
+  type: string;
+  /** `id` is null for a category the library doesn't have yet. */
+  category: { name: string; new: boolean; id: string | null } | null;
+  tags_add: Array<{ tag: string; new: boolean }>;
+  tags_remove: string[];
+  rating: "safe" | "nsfw" | null;
+  reason: string;
+  before: { category: string; tags: string[]; rating: "safe" | "nsfw" };
+}
+
+export interface AiOrganizeResult {
+  /** Only items with something to change. */
+  changes: AiOrganizeChange[];
+  new_categories: string[];
+  skipped: Array<{ text: string; reason: string }>;
+  /** How many items the model looked at. */
+  count: number;
+  model: string;
+  /** The model's raw answer, for a follow-up's `history`. */
+  answer: Record<string, unknown>;
+}
+
+/** One message of an assistant chat. Assistant messages carry the reply
+ *  plus a line per proposal saying what the user did with it. */
+export interface AiChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+/** The item open in an editor, as it stands (unsaved changes included). */
+export interface AiChatEditorState {
+  id: string;
+  name: string;
+  description: string;
+  tags: string[];
+  category_id: string | null;
+  content_rating: "safe" | "nsfw";
+  /** Absent for editors that only share the item's info. */
+  payload?: Record<string, unknown>;
+  dirty: boolean;
+}
+
+/** Where the user is and what they see, so "this" means what's on screen. */
+export interface AiChatPage {
+  route: string;
+  id?: string;
+  /** Docs page id on a docs page. */
+  doc?: string;
+  /** A short description of what the page shows (filters, selection, results). */
+  note?: string;
+  editor?: AiChatEditorState;
+}
+
+export interface AiChatRequest {
+  messages: AiChatMessage[];
+  page?: AiChatPage;
+}
+
+export type AiChatOp =
+  | { op: "create"; kind: "module"; new_category: string; body: ModuleCreateInput }
+  | { op: "create"; kind: "bundle"; new_category: string; body: BundleCreateInput }
+  | { op: "create"; kind: "template"; new_category: string; body: TemplateCreateInput }
+  | {
+      op: "update"; kind: "module" | "bundle" | "template"; type: string; id: string;
+      name: string; body: ModuleUpdateInput & BundleUpdateInput & TemplateUpdateInput;
+      before: ModuleUpdateInput & BundleUpdateInput & TemplateUpdateInput;
+      new_category?: string;
+      /** "editor": built on the open editor's unsaved version; goes into it. */
+      basis?: "editor";
+    }
+  | { op: "open"; kind: "module" | "bundle" | "template"; type: string; id: string }
+  | { op: "open"; kind: "doc"; type: "doc"; id: string }
+  | { op: "open"; kind: "page"; type: "page"; id: string; section?: string };
+
+/** A change the assistant proposes. Nothing is saved until Apply. */
+export interface AiChatProposal {
+  pid: string;
+  tool: string;
+  title: string;
+  summary: string;
+  preview: string[];
+  warnings: string[];
+  /** The proposal this one builds on (same item); apply that first. */
+  after: string | null;
+  op: AiChatOp;
+}
+
+export interface AiChatResult {
+  message: string;
+  proposals: AiChatProposal[];
+  /** What the model looked at or tried, for the "worked on" lines. */
+  steps: Array<{ tool: string; note: string; ok: boolean }>;
+  model: string;
+}
+
+/* ── Pack builder ───────────────────────────────────────────────────── */
+
+/** `library`: a wildcard the user already has, used as it is. */
+export type AiPackKind =
+  | "wildcard" | "library" | "fixed_values" | "derivation" | "combine" | "constraint"
+  | "template";
+
+export interface AiPackItem {
+  key: string;
+  kind: AiPackKind;
+  name: string;
+  /** The variable it sets ("" for constraints and the template). */
+  var: string;
+  about: string;
+  /** Options to write (wildcards only). */
+  count: number;
+  /** Option tags (wildcards only). */
+  tags: string[];
+  /** A constraint's two wildcards, by variable. */
+  source: string;
+  target: string;
+  /** Per-use settings on the bundle ("pick 2-3; hold"), or "". */
+  use: string;
+  /** The library wildcard a `library` item uses ("" otherwise). */
+  library_id: string;
+}
+
+/** A value the pack reads but doesn't set: a WP Context Injector row. */
+export interface AiPackInput {
+  var: string;
+  about: string;
+  /** What the check pins it to. */
+  example: string;
+}
+
+export interface AiPackPlan {
+  title: string;
+  summary: string;
+  rating: "safe" | "nsfw";
+  /** How every option is written: Danbooru-style tags or natural phrases. */
+  style: "tags" | "sentences";
+  /** The image model family the pack targets, or "". */
+  model: string;
+  /** The variable the other picks follow, or "". */
+  anchor: string;
+  questions: Array<{ question: string; choices: string[] }>;
+  inputs: AiPackInput[];
+  items: AiPackItem[];
+  /** What the checker left out of the model's plan. */
+  warnings: string[];
+}
+
+export interface AiPackPlanRequest extends AiConversational {
+  instruction: string;
+  /** A prompt the user likes, to rebuild as a pack. */
+  sample?: string;
+}
+
+/** One thing the plan review found. `fix`: it would break the pack or
+ *  leave a rule doing nothing; `tip`: it would make prompts more coherent. */
+export interface AiPackFinding {
+  /** The plan item it is about, or "" for the whole pack. */
+  key: string;
+  level: "fix" | "tip";
+  text: string;
+  /** "model" when the model's review found it. */
+  by?: "model";
+}
+
+export interface AiPackPlanResult {
+  plan: AiPackPlan;
+  model: string;
+  answer: Record<string, unknown>;
+  /** The plan checked against the guide. */
+  review: AiPackFinding[];
+}
+
+export interface AiPackReview {
+  findings: AiPackFinding[];
+  /** The findings as a refine request for the planner. */
+  note: string;
+}
+
+/** Built items by plan key. A template's payload is
+ *  `{template_string, negative_template}`. */
+export type AiPackBuilt = Record<string, { id: string; payload: Record<string, unknown> }>;
+
+export interface AiPackItemResult {
+  key: string;
+  id: string;
+  kind: AiPackKind;
+  payload: Record<string, unknown>;
+  preview: string[];
+  warnings: string[];
+  /** Warnings worth one automatic rebuild, as its note ("" when none). */
+  repair: string;
+  model: string;
+}
+
+export interface AiPackCheck {
+  runs: number;
+  failed: number;
+  /** What went wrong, by item key. */
+  problems: Record<string, string[]>;
+  notes: string[];
+  variables: Array<{ var: string; distinct: number; top: Array<{ value: string; share: number }> }>;
+  prompts: Array<{ seed: number; text: string; negative: string }>;
+  /** Variety advice: options never picked, too few distinct values, one
+   *  value taking most runs. */
+  quality: Array<{ key: string; text: string }>;
+}
+
+export interface AiPackInstallResult {
+  undo_entry_id: string;
+  ids: Record<string, string>;
+  bundle_id: string;
+  template_id: string;
+  tag: string;
+  /** How to wire the pack on the canvas. */
+  notes: string[];
+}
+
+export interface AiTextDraftRequest extends AiConversational {
+  kind: "fixed_values" | "combine" | "template";
+  instruction: string;
+  item: {
+    id?: string;
+    name: string;
+    description?: string;
+    tags?: string[];
+    payload?: Record<string, unknown>;
+    template_string?: string;
+    negative_template?: string;
+  };
+}
+
+/** Fixed values: the whole value list. Combine: its payload. Template:
+ *  `{template_string, negative_template}`. */
+export interface AiTextDraftResult {
+  payload: Record<string, unknown>;
+  preview: string[];
+  warnings: string[];
+  model: string;
+  answer: Record<string, unknown>;
+}
+
 /* ── Tag autocomplete ─────────────────────────────────────────────────── */
 
 /** Danbooru's numeric tag categories. `null` when the installed file is the

@@ -123,6 +123,36 @@ Open it from the ComfyUI sidebar. It's where your modules live between workflows
   into one wildcard whose options are tagged by list, with a tag group per folder level.
   You review the plan first (each wildcard's role, what was merged and how exactly it
   carries over), and the pack's entry points are filed into bundles per folder.
+- **AI assistant (optional, off by default):** connect a model you run yourself
+  (Ollama, LM Studio, llama.cpp) or your own Claude or OpenAI key under
+  **Settings → AI assistant**, then press **AI** in the wildcard editor to write
+  new options in the style of the ones you have, or to remove, rewrite, retag or
+  re-weight the ones there (options can pick with `{a|b}` and draw from other
+  wildcards by name, `@{Colors:warm}`). In the fixed values, combine, template,
+  derivation and constraint editors, describe what you want and it writes it
+  using your library's variables, options and tags. **Describe** in any editor writes a description and tags for it, and
+  **Organize with AI** sorts a selection of library items into categories, tags and
+  ratings. The **AI** button in the top bar opens a chat that reads your library
+  and the built-in docs to answer questions (or explain a docs page in simpler
+  words), sees the page you're on, runs stacks on the engine to check its work,
+  and proposes new wildcards, fixed values, combines, rules, constraints,
+  templates, bundles and edits as cards you apply one by one, with Undo. In the
+  Test Runner it explains a run, fixes its warnings or says why an option never
+  comes up. Changes to the
+  item open in an editor go into that editor, to keep with Save. **Pack builder** makes a whole pack from
+  one description: it plans the wildcards, fixed values, rules, constraints,
+  combines, template, per-use settings and inputs, builds
+  them one at a time, tests them on the engine and fixes what fails, then installs
+  everything as one bundle you can undo. It matches your library's style,
+  reuses wildcards you already have, reviews the plan before building, and can
+  start from a sample prompt you like. After a wildcard pack import, **Tag and
+  connect with AI** has the chat tag the new lists, link them with constraints and
+  bundle them. If an
+  answer is close, type a follow-up and press **Refine** to revise it instead of
+  starting over. You review every change first, and nothing is saved until you
+  press Save.
+- **Constraint preview:** a table of each target option's chance for every
+  source option, so you can see what a constraint does before running it.
 - **Documentation:** the full guide, built into the app.
 
 ## Checking a run
@@ -149,7 +179,9 @@ install them from the manager's **Community** page.
 
 Everything runs locally. The extension only goes online to check for updates
 (you can turn this off in Settings), when you open the Community page, or when
-you choose to download the optional tag list for autocomplete. Details are in
+you choose to download the optional tag list for autocomplete. The optional AI
+assistant is off until you turn it on, and then talks only to the model server
+you choose (a local one keeps everything on your PC). Details are in
 [docs/network-access.md](docs/network-access.md).
 
 ## Contributing

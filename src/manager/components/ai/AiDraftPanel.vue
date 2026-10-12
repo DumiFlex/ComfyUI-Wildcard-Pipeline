@@ -1,0 +1,250 @@
+<script setup lang="ts">
+/**
+ * AiDraftPanel — the Add tab of the wildcard editor's AI panel.
+ *
+ * The user says what to add; the server asks their model (Settings › AI
+ * assistant) and returns options that already passed the engine's checks
+ * (`/wp/api/ai/wildcard/draft`). The draft shows here with a checkbox per row.
+ * "Add" emits the ticked rows in the same shape the Bulk add panel emits, so
+ * the editor inserts them through the one path it already has, and nothing
+ * is saved until the user presses Save.
+ *
+ * The editor's current draft is sent, unsaved rows included, so the model
+ * sees what is really in the list.
+ */
+import { computed, onBeforeUnmount, ref, watch } from "vue";
+import Button from "../ui/Button.vue";
+import Input from "../ui/Input.vue";
+import AiPanelFrame from "./AiPanelFrame.vue";
+import { api } from "../../api/client";
+import type { AiDraftOption, AiWildcardDraftResult } from "../../api/types";
+import type { ParsedBulkOption } from "../../utils/bulkParse";
+import { keptNote, useAiConversation } from "../../composables/useAiConversation";
+
+interface Props {
+  name: string;
+  varBinding: string;
+  /** Current option values, blank rows included (the server ignores them). */
+  existingValues: string[];
+  existingTags: string[];
+  /** The wildcard\'s description and library tags: what it is for. */
+  description?: string;
+  labels?: string[];
+  tagGroups?: Record<string, string[]>;
+}
+const props = defineProps<Props>();
+
+const emit = defineEmits<{
+  (e: "commit-options", payload: ParsedBulkOption[]): void;
+  (e: "cancel"): void;
+  /** True while there is a draft or a request the user would lose. */
+  (e: "update:pending", pending: boolean): void;
+}>();
+
+const count = ref<number>(10);
+/** Indices of result rows the user unticked. */
+const unticked = ref<Set<number>>(new Set());
+
+type Ctx = { values: string[]; tags: string[]; tagGroups?: Record<string, string[]> };
+const convo = useAiConversation<AiWildcardDraftResult, Ctx>({
+  capture: () => ({
+    values: props.existingValues.filter((v) => v.trim()),
+    tags: props.existingTags,
+    tagGroups: props.tagGroups,
+  }),
+  send: ({ instruction, history, ctx }, signal) => {
+    const n = Math.min(100, Math.max(1, Math.round(Number(count.value) || 10)));
+    count.value = n;
+    return api.ai.draftWildcard({
+      instruction,
+      history,
+      count: n,
+      wildcard: {
+        name: props.name,
+        var_binding: props.varBinding,
+        description: props.description ?? "",
+        tags: props.labels ?? [],
+        payload: {
+          options: ctx.values.map((value) => ({ value })),
+          sub_categories: ctx.tags,
+          ...(ctx.tagGroups && Object.keys(ctx.tagGroups).length ? { tag_groups: ctx.tagGroups } : {}),
+        },
+      },
+    }, signal);
+  },
+  note: (res) => keptNote(res.options.map((o) => o.value), unticked.value),
+  emptyMessage: (res) => res.options.length ? "" : res.skipped.length
+    ? "Everything the model suggested was already in the list or unusable. Try asking differently."
+    : "The model didn't suggest anything. Try again or reword the request.",
+});
+const { instruction, loading, error, result } = convo;
+watch(result, () => { unticked.value = new Set(); });
+
+const pending = computed(() => loading.value || (result.value?.options.length ?? 0) > 0);
+watch(pending, (v) => emit("update:pending", v), { immediate: true });
+onBeforeUnmount(() => {
+  convo.stop();
+  emit("update:pending", false);
+});
+
+const newTagSet = computed(() => new Set(result.value?.new_tags ?? []));
+const ticked = computed<AiDraftOption[]>(() =>
+  (result.value?.options ?? []).filter((_, i) => !unticked.value.has(i)),
+);
+
+function toggle(i: number): void {
+  const next = new Set(unticked.value);
+  if (next.has(i)) next.delete(i);
+  else next.add(i);
+  unticked.value = next;
+}
+
+function commit(): void {
+  if (ticked.value.length === 0) return;
+  emit("commit-options", ticked.value.map((o) => ({
+    value: o.value,
+    weight: o.weight,
+    tags: o.tags,
+    ...(o.negative ? { negative: o.negative } : {}),
+  })));
+  convo.clear();
+}
+
+function cancel(): void {
+  convo.stop();
+  emit("cancel");
+}
+
+const skippedSummary = computed(() => {
+  const s = result.value?.skipped ?? [];
+  if (!s.length) return "";
+  const byReason = new Map<string, number>();
+  for (const x of s) byReason.set(x.reason, (byReason.get(x.reason) ?? 0) + 1);
+  return [...byReason].map(([r, n]) => `${n} ${r}`).join(", ");
+});
+</script>
+
+<template>
+  <AiPanelFrame
+    v-model="instruction"
+    class="wp-ai-draft"
+    data-test="ai-draft-panel"
+    bare
+    placeholder="e.g. more everyday outfits, spread across the four seasons, same comma style as the existing ones"
+    verb="Draft"
+    hint="Uses your existing options and tags as examples."
+    :loading="loading"
+    :answered="!!result"
+    :error="error"
+    :asked="convo.asked.value"
+    :answer-index="convo.index.value"
+    :answer-count="convo.count.value"
+    @run="convo.ask"
+    @refine="convo.refine"
+    @retry="convo.retry"
+    @restart="convo.restart"
+    @go="convo.go"
+    @stop="convo.stop"
+    @close="cancel"
+  >
+    <template #controls>
+      <label class="wp-ai-draft__count" for="wp-ai-draft-count">
+        How many
+        <Input
+          id="wp-ai-draft-count"
+          v-model.number="count"
+          type="number"
+          :min="1"
+          :max="100"
+          :step="1"
+          size="sm"
+          aria-label="How many options to draft"
+          data-test="ai-draft-count"
+        />
+      </label>
+    </template>
+    <template v-if="result && result.options.length">
+      <ul class="wp-ai-draft__list" data-test="ai-draft-results">
+        <li v-for="(o, i) in result.options" :key="i" class="wp-ai-draft__row" :data-off="unticked.has(i) ? 'true' : 'false'">
+          <label class="wp-ai-draft__row-label" :for="`wp-ai-draft-opt-${i}`">
+            <input
+              :id="`wp-ai-draft-opt-${i}`"
+              type="checkbox"
+              class="wp-ai-draft__check"
+              :checked="!unticked.has(i)"
+              @change="toggle(i)"
+            />
+            <span class="wp-ai-draft__value">{{ o.value }}</span>
+          </label>
+          <span v-if="o.weight !== 1" class="wp-ai-draft__weight" title="Weight">×{{ o.weight }}</span>
+          <span
+            v-for="t in o.tags"
+            :key="t"
+            class="wp-ai-draft__tag"
+            :data-new="newTagSet.has(t) ? 'true' : 'false'"
+            :title="newTagSet.has(t) ? 'New tag' : 'Existing tag'"
+          >#{{ t }}</span>
+          <span v-if="o.negative" class="wp-ai-draft__neg" title="Negative">− {{ o.negative }}</span>
+        </li>
+      </ul>
+      <p class="wp-ai-draft__summary">
+        {{ result.options.length }} suggested<template v-if="skippedSummary"> · skipped {{ skippedSummary }}</template>
+        <template v-if="result.new_tags.length"> · new tags (dashed) are created when you add</template>
+      </p>
+      <div class="wp-ai-draft__actions">
+        <Button variant="ghost" size="sm" data-test="ai-draft-discard" @click="convo.clear">Discard</Button>
+        <Button
+          variant="primary"
+          size="sm"
+          icon="pi-plus"
+          :disabled="ticked.length === 0"
+          data-test="ai-draft-add"
+          @click="commit"
+        >Add {{ ticked.length }} option{{ ticked.length === 1 ? "" : "s" }}</Button>
+      </div>
+      <p class="wp-ai-draft__note">Nothing is saved until you press Save.</p>
+    </template>
+  </AiPanelFrame>
+</template>
+
+<style scoped>
+.wp-ai-draft__count { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--wp-text-muted); white-space: nowrap; }
+.wp-ai-draft__count :deep(.wp-input-group) { width: 96px; flex: 0 0 auto; }
+.wp-ai-draft__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 320px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--wp-border);
+  border-radius: 6px;
+  background: var(--wp-bg-1);
+}
+.wp-ai-draft__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 6px 10px;
+  border-top: 1px solid var(--wp-border);
+  box-shadow: inset 3px 0 0 var(--wp-success);
+}
+.wp-ai-draft__row:first-child { border-top: 0; }
+.wp-ai-draft__row[data-off="true"] { box-shadow: none; opacity: 0.5; }
+.wp-ai-draft__row-label { display: inline-flex; align-items: center; gap: 8px; flex: 1 1 240px; min-width: 0; cursor: pointer; }
+.wp-ai-draft__check { accent-color: var(--wp-accent-500); }
+.wp-ai-draft__value { font-family: var(--wp-font-mono, monospace); font-size: 12px; color: var(--wp-text); overflow-wrap: anywhere; }
+.wp-ai-draft__weight { font-size: 11px; color: var(--wp-text-muted); font-variant-numeric: tabular-nums; }
+.wp-ai-draft__tag {
+  font-size: 11px;
+  padding: 0 7px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in oklab, var(--wp-success) 45%, transparent);
+  color: var(--wp-success);
+}
+.wp-ai-draft__tag[data-new="true"] { border-style: dashed; border-color: var(--wp-accent-400); color: var(--wp-accent-text); }
+.wp-ai-draft__neg { font-size: 11px; color: var(--wp-danger-text, var(--wp-danger)); }
+.wp-ai-draft__summary, .wp-ai-draft__note { margin: 0; font-size: 12px; color: var(--wp-text-dim); }
+.wp-ai-draft__actions { display: flex; justify-content: flex-end; gap: 8px; }
+</style>

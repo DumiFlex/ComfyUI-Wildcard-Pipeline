@@ -37,6 +37,7 @@ import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
 import { useEditorDraft } from "../composables/useEditorDraft";
+import { registerOpenEditor } from "../composables/useOpenEditor";
 import DraftBanner from "../components/DraftBanner.vue";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
@@ -62,6 +63,8 @@ import { formatProbability } from "../utils/percent";
 import type {
   ModuleHistoryEntry,
   WildcardOption,
+  AiWildcardEditAction,
+  AiWildcardEditChange,
   WildcardPayload,
 } from "../api/types";
 import { useCascadeStore } from "../cascade/cascade-store";
@@ -73,6 +76,8 @@ import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { ResolveWarning } from "../utils/resolveTokens";
 import { brokenRefLabels } from "../utils/validateModule";
 import { NEG_ACCESSOR } from "../../widgets/richTokenize";
+import AiWildcardPanel from "../components/ai/AiWildcardPanel.vue";
+import { useAiConfig } from "../composables/useAiConfig";
 
 const props = defineProps<{ id?: string }>();
 const router = useRouter();
@@ -226,10 +231,27 @@ function snapshot(): string {
  *     wording changes.
  */
 const bulkPending = ref(false);
+/** The AI panel (Settings › AI assistant). The button only shows once the
+ *  assistant is turned on. A draft not yet added counts as unsaved work. */
+const ai = useAiConfig();
+const aiDraftOpen = ref(false);
+const aiPending = ref(false);
 
 const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
-  () => bulkPending.value || snapshot() !== baseline.value,
+  () => bulkPending.value || aiPending.value || snapshot() !== baseline.value,
 );
+
+registerOpenEditor({
+  id: props.id, type: "wildcard", dirty: () => dirty.value,
+  name, description, tags, categoryId, contentRating,
+  payload: () => currentPayload() as unknown as Record<string, unknown>,
+  setPayload: (p) => {
+    const next = p as Partial<WildcardPayload>;
+    if (Array.isArray(next.options)) options.value = next.options as typeof options.value;
+    if (Array.isArray(next.sub_categories)) subCategories.value = [...next.sub_categories];
+    if (next.tag_groups) tagGroups.value = next.tag_groups;
+  },
+});
 
 const draft = useEditorDraft({
   kind: "wildcard",
@@ -1701,6 +1723,55 @@ function isUntouchedBlank(o: WildcardOption): boolean {
     && !o.negative;
 }
 
+function commitAiDraft(parsed: ParsedBulkOption[]): void {
+  commitBulkAddOptions(parsed);
+  aiDraftOpen.value = false;
+}
+
+/** Apply reviewed AI edits to the draft. Rows that changed or vanished since
+ *  the request are matched by id, so a stale change just doesn't land. An
+ *  option other modules point at isn't removed here: that needs the cascade
+ *  dialog, so it is left for the user to delete by hand. */
+function applyAiEdits(action: AiWildcardEditAction, changes: AiWildcardEditChange[]): void {
+  const byId = new Map(changes.map((c) => [c.option_id, c]));
+  let done = 0;
+  let kept = 0;
+  if (action === "remove") {
+    options.value = options.value.filter((o) => {
+      if (typeof o.id !== "string" || !byId.has(o.id)) return true;
+      if (props.id && cascade.optionRefsTo(o.id).length > 0) { kept += 1; return true; }
+      done += 1;
+      return false;
+    });
+    if (selectedIds.value.size) {
+      const left = new Set(options.value.map((o) => o.id));
+      selectedIds.value = new Set([...selectedIds.value].filter((id) => left.has(id)));
+    }
+  } else {
+    for (const o of options.value) {
+      const c = typeof o.id === "string" ? byId.get(o.id) : undefined;
+      if (!c?.after) continue;
+      if (action === "rewrite" && c.after.value) o.value = c.after.value;
+      else if (action === "reweight" && typeof c.after.weight === "number") o.weight = c.after.weight;
+      else if (action === "retag" && c.after.tags) {
+        const tagSet = new Set(c.after.tags.filter((t) => ensureSubcat(t)).map((t) => t.trim()));
+        o.sub_categories = subCategories.value.filter((s) => tagSet.has(s));
+      } else continue;
+      done += 1;
+    }
+  }
+  const verb = action === "remove" ? "Removed" : "Changed";
+  toast.push({ severity: "success", summary: `${verb} ${done} option${done === 1 ? "" : "s"}`, life: 2500 });
+  if (kept > 0) {
+    toast.push({
+      severity: "warn",
+      summary: `${kept} option${kept === 1 ? " is" : "s are"} used by other modules`,
+      detail: "Delete those by hand so you can see what refers to them.",
+      life: 6000,
+    });
+  }
+}
+
 function commitBulkAddOptions(parsed: ParsedBulkOption[]): void {
   bulkNote.value = "";
   let skippedTags = 0;
@@ -1805,6 +1876,28 @@ function applyRestore(entry: ModuleHistoryEntry): void {
   });
 }
 
+/** The payload as Save stores it. */
+function currentPayload(binding = varBinding.value.trim() || toIdentifier(name.value)): WildcardPayload {
+  // The null option keeps whatever position the user gave it. The engine
+  // locates it by the `is_null` flag, never by index, so pinning it to 0 on
+  // save only served to undo a reorder the user had just performed.
+  // Serialise tag_groups, dropping empty axes (a "+ Group" box the user
+  // created but never filled) + members no longer in the registry. Omit
+  // the key entirely when nothing is grouped, keeping legacy payloads
+  // byte-identical when grouping is unused.
+  const serializedGroups = serializeTagGroups();
+  const serializedKinds = serializeTagGroupKinds(serializedGroups);
+  return {
+    // An emptied negative is stored as an ABSENT key (schema v8 stamps
+    // only when a negative is really there).
+    options: pruneBlankNegatives(options.value),
+    sub_categories: subCategories.value,
+    var_binding: binding,
+    ...(serializedGroups ? { tag_groups: serializedGroups } : {}),
+    ...(serializedKinds ? { tag_group_kinds: serializedKinds } : {}),
+  };
+}
+
 async function save() {
   // Update varBindingError synchronously so the rollup picks it up
   // in the same tick. The validation computed reads this ref.
@@ -1822,26 +1915,7 @@ async function save() {
   setSaveState("saving");
   saving.value = true;
   try {
-    // The null option keeps whatever position the user gave it. The engine
-    // locates it by the `is_null` flag, never by index, so pinning it to 0 on
-    // save only served to undo a reorder the user had just performed.
-    const sortedOptions = options.value;
-    // Serialise tag_groups, dropping empty axes (a "+ Group" box the user
-    // created but never filled) + members no longer in the registry. Omit
-    // the key entirely when nothing is grouped, keeping legacy payloads
-    // byte-identical when grouping is unused.
-    const serializedGroups = serializeTagGroups();
-    const serializedKinds = serializeTagGroupKinds(serializedGroups);
-    const payload: WildcardPayload = {
-      // An emptied negative is stored as an ABSENT key (schema v8 stamps
-      // only when a negative is really there).
-      options: pruneBlankNegatives(sortedOptions),
-      sub_categories: subCategories.value,
-      var_binding: finalBinding,
-      ...(serializedGroups ? { tag_groups: serializedGroups } : {}),
-      ...(serializedKinds ? { tag_group_kinds: serializedKinds } : {}),
-    };
-    const newPayload = payload as unknown as Record<string, unknown>;
+    const newPayload = currentPayload(finalBinding) as unknown as Record<string, unknown>;
     if (isEdit.value && props.id) {
       const prev = await moduleStore.get(props.id);
       const nextHistory = appendSnapshot(
@@ -1960,8 +2034,10 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
 
 <template>
   <EditorFrame
-    :save-disabled="bulkAddOpen"
-    save-disabled-reason="Finish or cancel the bulk add first — use its own Add / Cancel buttons"
+    :save-disabled="bulkAddOpen || aiPending"
+    :save-disabled-reason="aiPending
+      ? 'Add or discard the AI draft first, with its own buttons'
+      : 'Finish or cancel the bulk add first — use its own Add / Cancel buttons'"
     :title="isEdit ? 'Edit wildcard' : 'New wildcard'"
     back-route="/wildcards"
     back-label="Wildcards"
@@ -1999,6 +2075,8 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
     </template>
     <div id="editor-section-identity">
       <IdentityCard
+        ai-kind="wildcard"
+        :ai-payload="() => ({ var_binding: varBinding, sub_categories: subCategories, options })"
         :name="name"
         :description="description"
         :category-id="categoryId"
@@ -2347,6 +2425,14 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
           @click="bulkAddOpen = !bulkAddOpen"
         >Bulk add</Button>
         <Button
+          v-if="ai.config.value?.enabled"
+          size="sm"
+          :variant="aiDraftOpen ? 'secondary' : 'ghost'"
+          icon="pi-microchip-ai"
+          data-test="wc-ai-draft"
+          @click="aiDraftOpen = !aiDraftOpen"
+        >AI</Button>
+        <Button
           size="sm"
           variant="ghost"
           icon="pi-ban"
@@ -2359,6 +2445,22 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
         </Button>
       </template>
       <template #subheader>
+      <div v-if="aiDraftOpen && ai.config.value?.enabled" class="wpc-bulk-controls">
+        <AiWildcardPanel
+          :name="name"
+          :var-binding="varBinding"
+          :options="options"
+          :selected-ids="selectedIds"
+          :existing-tags="subCategories"
+          :tag-groups="tagGroups"
+          :description="description"
+          :labels="tags"
+          @commit-options="commitAiDraft"
+          @apply-edits="applyAiEdits"
+          @cancel="aiDraftOpen = false"
+          @update:pending="(v: boolean) => (aiPending = v)"
+        />
+      </div>
       <div v-if="bulkMode && (bulkAddOpen || selectedCount > 0 || bulkNote)" class="wpc-bulk-controls">
         <BulkAddPanel
           v-if="bulkAddOpen"
@@ -2709,10 +2811,12 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
          source placement here only affects vnode tracking. -->
     <ConfirmDialog
       :visible="showConfirm"
-      :title="bulkPending ? 'Discard un-added options?' : 'Discard unsaved changes?'"
-      :body="bulkPending
-        ? 'The bulk add box still holds options you have not added. Leaving discards them.'
-        : 'You have unsaved edits. Leaving this page will discard them.'"
+      :title="bulkPending || aiPending ? 'Discard un-added options?' : 'Discard unsaved changes?'"
+      :body="aiPending
+        ? 'The AI draft holds options you have not added. Leaving discards them.'
+        : bulkPending
+          ? 'The bulk add box still holds options you have not added. Leaving discards them.'
+          : 'You have unsaved edits. Leaving this page will discard them.'"
       confirm-label="Discard & leave"
       cancel-label="Stay"
       variant="danger"

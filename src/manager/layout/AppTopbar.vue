@@ -7,6 +7,8 @@ import { DISCORD_INVITE, GITHUB_REPO } from "../config/links";
 import { useBrowserHistory } from "../composables/useBrowserHistory";
 import { useReleaseCheck } from "../composables/useReleaseCheck";
 import { useUiStore } from "../stores/uiStore";
+import { useAiChat } from "../composables/useAiChat";
+import { useAiConfig } from "../composables/useAiConfig";
 import { useTweaksStore } from "../stores/tweaksStore";
 import { useEngagementStore } from "../stores/engagementStore";
 import { isMac } from "../utils/platform";
@@ -14,6 +16,8 @@ import { isMac } from "../utils/platform";
 const ui = useUiStore();
 const tweaks = useTweaksStore();
 const engagement = useEngagementStore();
+const aiChat = useAiChat();
+const { ready: aiReady } = useAiConfig();
 
 // Version is injected at build time from package.json via vite's
 // `define` config (see vite.config.mts). The release check composable
@@ -143,6 +147,19 @@ function openPalette(): void {
     </button>
 
     <button
+      v-if="aiReady || aiChat.open.value"
+      type="button"
+      class="wp-topbar__icon-btn wp-topbar__ai"
+      :aria-pressed="aiChat.open.value"
+      aria-label="AI assistant"
+      title="AI assistant"
+      data-test="topbar-ai"
+      @click="aiChat.open.value = !aiChat.open.value"
+    >
+      <Icon name="pi-microchip-ai" />
+    </button>
+
+    <button
       type="button"
       class="wp-topbar__icon-btn"
       :disabled="!canGoBack"
@@ -235,6 +252,8 @@ function openPalette(): void {
 /* Discord brand tint on hover so it reads as the social route, not another
    settings control. */
 .wp-topbar__discord:hover { color: #5865f2; }
+
+.wp-topbar__ai[aria-pressed="true"] { color: var(--wp-accent-text); }
 
 /* What's new — an unread dot in the icon's BOTTOM-right corner, which is the
  * only corner the megaphone's horn leaves empty; at top-right it merged into

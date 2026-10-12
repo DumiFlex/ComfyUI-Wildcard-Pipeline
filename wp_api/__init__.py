@@ -12,6 +12,7 @@ from engine.db import backups as _db_backups
 from engine.db.connection import get_connection
 from engine.db.migrations import migrate
 from engine.db.pending_move import execute_pending_move
+from wp_api import ai as _ai
 from wp_api import bundles as _bundles
 from wp_api import cascade as _cascade
 from wp_api import categories as _categories
@@ -156,6 +157,7 @@ def register_routes(app: web.Application) -> None:
     _library_tags.register(app.router)
     _models.register(app.router)
     _image_filter.register(app.router)
+    _ai.register(app.router)
     # SPA fallback last — broad catch-all `/wp/{path:.*}` must not shadow
     # specific `/wp/api/...` routes. aiohttp resolves more-specific routes
     # first regardless of registration order, but late registration keeps

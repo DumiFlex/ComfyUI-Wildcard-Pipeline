@@ -133,6 +133,7 @@ import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
 import { useEditorDraft } from "../composables/useEditorDraft";
+import { registerOpenEditor } from "../composables/useOpenEditor";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useBundleStore } from "../stores/bundleStore";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -340,6 +341,12 @@ function bundleSnapshot(): string {
 const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => bundleSnapshot() !== bundleBaseline.value,
 );
+
+// The chat reads and edits this item's info here; its payload stays on Save.
+registerOpenEditor({
+  id: props.id, type: "bundle", dirty: () => dirty.value,
+  name, description, tags, categoryId, contentRating,
+});
 
 const draft = useEditorDraft({
   kind: "bundle",
@@ -1060,6 +1067,8 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
     <template v-else>
       <div id="editor-section-identity">
         <IdentityCard
+          ai-kind="bundle"
+          :ai-payload="() => children"
           :name="name"
           :description="description"
           :category-id="categoryId"

@@ -16,7 +16,7 @@
  *   - `actions`               — trailing per-row action buttons
  *   - `expansion`             — body of the expanded-row drawer
  */
-import { computed, nextTick, ref, watch, useSlots } from "vue";
+import { computed, defineAsyncComponent, nextTick, ref, watch, useSlots } from "vue";
 import { useRouter } from "vue-router";
 import Button from "./ui/Button.vue";
 import Checkbox from "./ui/Checkbox.vue";
@@ -27,9 +27,13 @@ import type { SelectOption } from "./ui/select-types";
 import RelativeDate from "./RelativeDate.vue";
 import EmptyState from "./ui/EmptyState.vue";
 import { useCommunityUpdateStore } from "../stores/communityUpdateStore";
+import { registerPageNote } from "../composables/useOpenEditor";
 import type { UpdateEntry } from "../stores/communityUpdateStore";
 import CommunityUpdateDialog from "./CommunityUpdateDialog.vue";
 import { matchesTags, type TagMatchMode } from "../utils/library-tags";
+import { useAiConfig } from "../composables/useAiConfig";
+
+const AiOrganizePanel = defineAsyncComponent(() => import("./ai/AiOrganizePanel.vue"));
 
 const communityUpdates = useCommunityUpdateStore();
 const updateDialogEntry = ref<UpdateEntry | null>(null);
@@ -142,6 +146,8 @@ interface Props {
   hideBulkSetCategory?: boolean;
   /** Hide the bulk Duplicate action — for kinds without library duplicate support (bundles). */
   hideBulkDuplicate?: boolean;
+  /** Hide "Organize with AI" — for rows that aren't modules or bundles (templates). */
+  hideAiOrganize?: boolean;
   /** When set, surfaces a dismissible error banner above the table with a Retry
    *  button. The banner replaces the empty/skeleton row, since "no items + load
    *  error" is fundamentally an error state, not an empty library. */
@@ -159,6 +165,7 @@ const props = withDefaults(defineProps<Props>(), {
   categoryOptions: () => [],
   hideBulkSetCategory: false,
   hideBulkDuplicate: false,
+  hideAiOrganize: false,
 });
 
 const emit = defineEmits<{
@@ -414,6 +421,27 @@ function isExpanded(id: string): boolean {
   return expanded.value.has(id);
 }
 
+// Tell the AI chat what this list shows, so "these" means the selection
+// (or the filtered rows) on screen.
+registerPageNote(() => {
+  const bits: string[] = [`${props.title} list, ${filteredItems.value.length} of ${props.items.length} shown`];
+  const f = props.filter;
+  const filters: string[] = [];
+  if (f.q) filters.push(`search "${f.q}"`);
+  if (f.tags?.length) filters.push(`tags ${f.tags.map((t) => `#${t}`).join(f.tagMode === "all" ? " and " : " or ")}`);
+  if (f.category) filters.push(`category ${categoryLabelById.value.get(f.category) ?? f.category}`);
+  if (f.favorites) filters.push("favorites only");
+  if (f.nsfw && f.nsfw !== "all") filters.push(f.nsfw === "nsfw" ? "18+ only" : "SFW only");
+  if (filters.length) bits.push(`filtered by ${filters.join(", ")}`);
+  const rows = selected.value.size
+    ? props.items.filter((r) => selected.value.has(r.id))
+    : filteredItems.value;
+  const label = selected.value.size ? `${selected.value.size} selected` : "rows";
+  const listed = rows.slice(0, 40).map((r) => `${r.name ?? "(unnamed)"} (${r.id})`);
+  bits.push(`${label}: ${listed.join(", ")}${rows.length > 40 ? ", …" : ""}`);
+  return bits.join(". ");
+});
+
 const focusedRowId = ref<string | null>(null);
 // The <tbody> is the keyboard entry point. We move REAL DOM focus onto
 // rows so :focus-visible tracks our roving-tabindex state (see
@@ -558,6 +586,14 @@ const categoryOpen = ref(false);
 const categoryValue = ref<string | null>(CATEGORY_NOT_PICKED);
 
 const deleteOpen = ref(false);
+const organizeOpen = ref(false);
+const aiConfig = useAiConfig();
+const canOrganize = computed(() => !props.hideAiOrganize && !!aiConfig.config.value?.enabled);
+
+function onOrganized() {
+  organizeOpen.value = false;
+  emit("fetch");
+}
 
 watch(tagAddOpen, async (open) => {
   if (open) {
@@ -788,11 +824,26 @@ defineExpose({
         @click="tagRemoveOpen = true">Remove tag</Button>
       <Button v-if="!hideBulkSetCategory" variant="ghost" size="sm" icon="pi-folder" data-test="bulk-set-category-open"
         @click="categoryOpen = true">Set category</Button>
+      <Button v-if="canOrganize" variant="ghost" size="sm" icon="pi-microchip-ai" data-test="bulk-ai-organize"
+        @click="organizeOpen = true">Organize with AI</Button>
       <Button variant="ghost" size="sm" data-test="bulk-clear"
         @click="selected = new Set()">Clear</Button>
       <Button variant="danger" size="sm" icon="pi-trash" data-test="bulk-delete-open"
         @click="deleteOpen = true">Delete</Button>
     </div>
+
+    <!-- Organize with AI -->
+    <Modal v-if="canOrganize" :open="organizeOpen" size="lg" @update:open="organizeOpen = $event">
+      <template #header>
+        <h3 class="wp-modal__title"><i class="pi pi-microchip-ai" aria-hidden="true" /> Organize with AI</h3>
+      </template>
+      <AiOrganizePanel
+        v-if="organizeOpen"
+        :rows="selectedItems"
+        @applied="onOrganized"
+        @close="organizeOpen = false"
+      />
+    </Modal>
 
     <!-- Tag-add modal -->
     <Modal :open="tagAddOpen" @update:open="tagAddOpen = $event">

@@ -4,6 +4,9 @@ import { useRoute, useRouter } from "vue-router";
 import Button from "../components/ui/Button.vue";
 import Icon from "../components/ui/Icon.vue";
 import { useToast } from "../composables/useToast";
+import { useAiChat } from "../composables/useAiChat";
+import { useAiConfig } from "../composables/useAiConfig";
+import { committedWildcardNames, upgradeAsk } from "../import-export/ai-upgrade";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
@@ -82,6 +85,15 @@ watch(() => route?.query.tab, () => { mode.value = modeFromQuery(); });
 const incomingPack = ref<WildcardSource[] | null>(null);
 /** Bumped after a commit so the converter starts fresh. */
 const packKey = ref(0);
+/** Wildcards the last pack import brought in, for the assistant offer. */
+const upgradeNames = ref<string[]>([]);
+const ai = useAiConfig();
+const aiChat = useAiChat();
+
+function upgradeWithAi(): void {
+  aiChat.ask(upgradeAsk(upgradeNames.value));
+  upgradeNames.value = [];
+}
 
 // ---------- Source library state (fetched once on mount) ----------
 // Powers the collision detector + broken-ref walker. Modules + bundles
@@ -792,6 +804,7 @@ async function runCommit(resolution: {
     batchConflicts.value = [];
     perItemIssues.value = [];
     if (mode.value === "packs") {
+      upgradeNames.value = committedWildcardNames(payload);
       incomingPack.value = null;
       packKey.value += 1;
     }
@@ -912,6 +925,29 @@ function clearImport() {
       class="wp-io-import-pane"
       :data-test="mode === 'packs' ? 'io-packs-pane' : 'io-import-pane'"
     >
+      <!-- After a pack import: hand the new lists to the assistant. -->
+      <div
+        v-if="mode === 'packs' && upgradeNames.length && ai.ready.value && !importState"
+        class="wp-io-ai-upgrade"
+        data-test="io-ai-upgrade"
+      >
+        <p class="wp-io-ai-upgrade__line">
+          Imported {{ upgradeNames.length }}
+          {{ upgradeNames.length === 1 ? "wildcard" : "wildcards" }}. The assistant can tag
+          their options, link them with constraints, gather them into a bundle and test it.
+          You review every change.
+        </p>
+        <Button
+          size="sm" icon="pi-microchip-ai" data-test="io-ai-upgrade-go"
+          :disabled="aiChat.loading.value"
+          @click="upgradeWithAi"
+        >Tag and connect with AI</Button>
+        <Button
+          variant="ghost" size="sm" icon="pi-times" aria-label="Dismiss"
+          data-test="io-ai-upgrade-dismiss"
+          @click="upgradeNames = []"
+        />
+      </div>
       <!-- Wildcard packs: review the conversion plan, then the same picker. -->
       <PackConverter
         v-if="mode === 'packs'"
@@ -986,6 +1022,20 @@ function clearImport() {
   display: flex;
   flex-direction: column;
   gap: var(--wp-space-6);
+}
+.wp-io-ai-upgrade {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-4);
+  padding: var(--wp-space-5);
+  background: var(--wp-bg-2);
+  border: 1px solid var(--wp-accent-glow);
+  border-radius: var(--wp-radius);
+  font-size: var(--wp-text-sm);
+}
+.wp-io-ai-upgrade__line {
+  flex: 1;
+  margin: 0;
 }
 .wp-io-import-stash {
   display: flex;

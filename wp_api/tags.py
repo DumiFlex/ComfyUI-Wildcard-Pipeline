@@ -120,8 +120,8 @@ async def suggest(request: web.Request) -> web.Response:
 async def download(request: web.Request) -> web.Response:
     """POST /wp/api/tags/download — fetch the list from our GitHub release.
 
-    The only outbound request this extension makes, and only on an explicit
-    click. **The request body is ignored entirely**: there is no URL parameter
+    Runs only on an explicit click (every outbound request is listed in
+    docs/network-access.md). **The request body is ignored entirely**: there is no URL parameter
     and no destination parameter, so a caller cannot steer either. See
     `_tag_download.py` for the reasoning behind each restriction.
 

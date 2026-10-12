@@ -23,12 +23,15 @@ import ListFilter from "../components/ui/ListFilter.vue";
 import { derivationRuleHaystack } from "../utils/listFilter";
 import { loraByModelRule } from "../utils/derivation-presets";
 import BulkDeleteToolbar from "../components/BulkDeleteToolbar.vue";
+import AiDerivationPanel from "../components/ai/AiDerivationPanel.vue";
+import { useAiConfig } from "../composables/useAiConfig";
 import { useBulkSelection } from "../composables/useBulkSelection";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
 import { useEditorDraft } from "../composables/useEditorDraft";
+import { registerOpenEditor } from "../composables/useOpenEditor";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
 import { useRecentStore } from "../stores/recentStore";
@@ -145,9 +148,24 @@ function snapshot(): string {
   });
 }
 
+const ai = useAiConfig();
+const aiOpen = ref(false);
+/** The AI panel holds rules the user hasn't added yet. */
+const aiPending = ref(false);
+
 const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
-  () => snapshot() !== baseline.value,
+  () => aiPending.value || snapshot() !== baseline.value,
 );
+
+registerOpenEditor({
+  id: props.id, type: "derivation", dirty: () => dirty.value,
+  name, description, tags, categoryId, contentRating,
+  payload: () => currentPayload() as unknown as Record<string, unknown>,
+  setPayload: (p) => {
+    const next = p as Partial<DerivationPayload>;
+    if (Array.isArray(next.rules)) rules.value = next.rules.map(migrateRule);
+  },
+});
 
 const draft = useEditorDraft({
   kind: "derivation",
@@ -347,6 +365,16 @@ onMounted(async () => {
   baseline.value = snapshot();
 });
 
+function addAiRules(incoming: DerivationRule[]): void {
+  rules.value = [...rules.value, ...incoming.map(migrateRule)];
+  toast.push({
+    severity: "success",
+    summary: `Added ${incoming.length} rule${incoming.length === 1 ? "" : "s"}`,
+    detail: "Check them, then Save.",
+    life: 3000,
+  });
+}
+
 function addRule() {
   rules.value = [...rules.value, blankRule()];
 }
@@ -438,6 +466,18 @@ function applyRestore(entry: ModuleHistoryEntry): void {
   });
 }
 
+/** The payload as Save stores it. */
+function currentPayload(): DerivationPayload {
+  // Save the simplest equivalent condition: a group of one collapses to its
+  // member, so a branch only needs schema v7 when it really combines tests.
+  return {
+    rules: rules.value.map((r) => ({
+      ...r,
+      branches: r.branches.map((b) => ({ ...b, condition: simplifyCondition(b.condition) })),
+    })),
+  };
+}
+
 async function save() {
   if (!name.value.trim()) {
     toast.push({ severity: "warn", summary: "Name required" });
@@ -446,15 +486,7 @@ async function save() {
   setSaveState("saving");
   saving.value = true;
   try {
-    // Save the simplest equivalent condition: a group of one collapses to its
-    // member, so a branch only needs schema v7 when it really combines tests.
-    const payload: DerivationPayload = {
-      rules: rules.value.map((r) => ({
-        ...r,
-        branches: r.branches.map((b) => ({ ...b, condition: simplifyCondition(b.condition) })),
-      })),
-    };
-    const newPayload = payload as unknown as Record<string, unknown>;
+    const newPayload = currentPayload() as unknown as Record<string, unknown>;
     if (isEdit.value && props.id) {
       const prev = await moduleStore.get(props.id);
       const nextHistory = appendSnapshot(
@@ -570,6 +602,8 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
       >Delete</Button>
     </template>
     <IdentityCard
+      ai-kind="derivation"
+      :ai-payload="() => ({ rules })"
       :name="name"
       :description="description"
       :category-id="categoryId"
@@ -617,6 +651,14 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
           @click="ruleBulkToggleMode"
         >{{ ruleBulkActive ? "Done" : "Bulk edit" }}</Button>
         <Button
+          v-if="ai.config.value?.enabled"
+          size="sm"
+          :variant="aiOpen ? 'secondary' : 'ghost'"
+          icon="pi-microchip-ai"
+          data-test="drv-ai"
+          @click="aiOpen = !aiOpen"
+        >AI</Button>
+        <Button
           size="sm"
           variant="ghost"
           icon="pi-microchip"
@@ -650,6 +692,16 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
           />
         </div>
       </template>
+      <AiDerivationPanel
+        v-if="aiOpen && ai.config.value?.enabled"
+        :name="name"
+        :rules="rules"
+        :description="description"
+        :labels="tags"
+        @add="addAiRules"
+        @close="aiOpen = false"
+        @update:pending="(v: boolean) => (aiPending = v)"
+      />
       <p class="wp-card__hint">
         Each rule runs independently. Inside a rule, branches evaluate top-to-bottom — the first matching IF/ELIF wins; the optional ELSE only fires when no branch matched.
       </p>
