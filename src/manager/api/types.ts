@@ -1050,6 +1050,48 @@ export interface AiOrganizeResult {
   answer: Record<string, unknown>;
 }
 
+/** One message of an assistant chat. Assistant messages carry the reply
+ *  plus a line per proposal saying what the user did with it. */
+export interface AiChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface AiChatRequest {
+  messages: AiChatMessage[];
+  /** Where the user is, so "this wildcard" means the open one. */
+  page?: { route: string; id?: string };
+}
+
+export type AiChatOp =
+  | { op: "create"; kind: "module"; new_category: string; body: ModuleCreateInput }
+  | {
+      op: "update"; kind: "module" | "bundle"; type: string; id: string; name: string;
+      body: ModuleUpdateInput; before: ModuleUpdateInput; new_category?: string;
+    }
+  | { op: "open"; kind: "module" | "bundle"; type: string; id: string };
+
+/** A change the assistant proposes. Nothing is saved until Apply. */
+export interface AiChatProposal {
+  pid: string;
+  tool: string;
+  title: string;
+  summary: string;
+  preview: string[];
+  warnings: string[];
+  /** The proposal this one builds on (same item); apply that first. */
+  after: string | null;
+  op: AiChatOp;
+}
+
+export interface AiChatResult {
+  message: string;
+  proposals: AiChatProposal[];
+  /** What the model looked at or tried, for the "worked on" lines. */
+  steps: Array<{ tool: string; note: string; ok: boolean }>;
+  model: string;
+}
+
 /* ── Tag autocomplete ─────────────────────────────────────────────────── */
 
 /** Danbooru's numeric tag categories. `null` when the installed file is the

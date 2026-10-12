@@ -14,6 +14,8 @@ import type {
   AiConstraintDraftResult,
   AiOrganizeRequest,
   AiOrganizeResult,
+  AiChatRequest,
+  AiChatResult,
   AiDescribeRequest,
   AiDescribeResult,
   TagStatus, TagSuggestResponse, TagDownloadResult, LibraryTagUpdateCounts,
@@ -435,6 +437,11 @@ export const api = {
     },
     organize(body: AiOrganizeRequest, signal?: AbortSignal) {
       return request<AiOrganizeResult>("/wp/api/ai/organize", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    chat(body: AiChatRequest, signal?: AbortSignal) {
+      return request<AiChatResult>("/wp/api/ai/chat", {
         method: "POST", body: JSON.stringify(body), signal,
       });
     },

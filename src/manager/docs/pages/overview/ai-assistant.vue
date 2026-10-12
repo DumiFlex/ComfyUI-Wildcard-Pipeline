@@ -140,6 +140,37 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       </p>
     </DocSection>
 
+    <DocSection title="Chat with the assistant">
+      <p>
+        The <b>AI</b> button in the top bar (shown once the assistant is on) opens a chat on the
+        right. Ask about your library ("which wildcards set $outfit?", "what's missing for a
+        fantasy pack?") or ask for a change. The assistant searches and reads your items itself;
+        the lines above each reply say what it looked at. It knows which item you have open, so
+        "this wildcard" means that one.
+      </p>
+      <p>
+        Every change comes back as a card, and nothing is saved until you press <b>Apply</b> on
+        it. It can:
+      </p>
+      <ul>
+        <li>create a wildcard, a derivation or a constraint between two wildcards,</li>
+        <li>add options to a wildcard or rules to a derivation,</li>
+        <li>change an item's description, tags, category or rating,</li>
+        <li>open an item's editor.</li>
+      </ul>
+      <p>
+        Each card lists what it adds and warns about anything it left out (a duplicate option, a
+        variable nothing sets). <b>Undo</b> on an applied card puts back what it replaced, or
+        deletes what it created. <b>Dismiss</b> tells the assistant you said no. When two cards
+        change the same item, the second builds on the first, so apply them in order. The chat
+        stays when you close the drawer; <b>New chat</b> starts over.
+      </p>
+      <DocCallout variant="tip">
+        Chat works best with a model that follows instructions well; use one of the builder
+        models below. A small model may need a second try or a more specific request.
+      </DocCallout>
+    </DocSection>
+
     <DocSection title="Refine an answer">
       <p>
         You don't have to start over when an answer is close but not right. Once it shows, the
@@ -196,7 +227,9 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         derivation rules also sends the variables your library sets, with the first options of
         each wildcard; constraint rules send the two wildcards' options and tags; Describe sends
         what the item holds and the tags your library uses; Organize sends that for every selected
-        item, plus your category names. A follow-up sends the earlier requests
+        item, plus your category names. The chat sends a list of your items (names, types and
+        variables) and the conversation so far, plus whatever items the assistant reads to
+        answer. A follow-up sends the earlier requests
         and answers of that conversation again; nothing is kept on the server between requests.
       </p>
       <DocCallout variant="warn">

@@ -52,6 +52,7 @@ def _isolated_ai(tmp_path, monkeypatch):
 async def fake_llm(aiohttp_server):
     """One server speaking all three formats; records what it was sent."""
     seen: list[dict] = []
+    chat_steps: list[dict] = []
 
     async def openai_models(request):
         return web.json_response({"data": [{"id": "m1"}, {"id": "m2"}]})
@@ -61,6 +62,8 @@ async def fake_llm(aiohttp_server):
         seen.append({"path": request.path, "headers": dict(request.headers), "body": body})
         schema_name = body["response_format"]["json_schema"]["name"]
         content = {"ok": True} if schema_name == "probe" else EDIT_ANSWERS.get(schema_name, ANSWER)
+        if schema_name == "chat_step":
+            content = chat_steps.pop(0) if chat_steps else {"message": "Done.", "calls": []}
         return web.json_response({"choices": [{"message": {"content": json.dumps(content)}}]})
 
     async def ollama_tags(request):
@@ -95,6 +98,7 @@ async def fake_llm(aiohttp_server):
     app.router.add_post("/anthropic/v1/messages", anthropic_messages)
     server = await aiohttp_server(app)
     server.seen = seen
+    server.chat_steps = chat_steps
     return server
 
 
@@ -508,3 +512,72 @@ async def test_organize_reads_items_and_maps_changes_back(wp_client, fake_llm):
     assert (await wp_client.post(url, json=gone)).status == 404
     many = {"items": [{"kind": "module", "id": f"{i:08x}"} for i in range(61)]}
     assert (await wp_client.post(url, json=many)).status == 400
+
+
+async def test_chat_reads_then_proposes(wp_client, fake_llm):
+    src, tgt = await _two_wildcards(wp_client)
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.chat_steps.extend([
+        {"message": "Let me look.", "calls": [
+            {"tool": "search", "args": '{"query": "weapon"}'},
+            {"tool": "read", "args": json.dumps({"id": tgt})},
+            {"tool": "read", "args": '{"id": "nope"}'},
+        ]},
+        {"message": "Here are two more weapons and a rule.", "calls": [
+            {"tool": "add_options", "args": json.dumps(
+                {"id": tgt, "options": [{"text": "war axe", "tags": ["blade"]},
+                                        {"text": "longsword"}]})},
+            {"tool": "create_constraint", "args": json.dumps({
+                "source_id": src, "target_id": tgt,
+                "rules": [{"source": "#magic", "target": "#blade", "effect": "exclude"}]})},
+        ]},
+    ])
+    resp = await wp_client.post("/wp/api/ai/chat", json={
+        "messages": [{"role": "user", "content": "hi"},
+                     {"role": "assistant", "content": "Hello!"},
+                     {"role": "user", "content": "more weapons, no blades for mages"}],
+        "page": {"route": "modules-edit", "id": tgt},
+    })
+    assert resp.status == 200, await resp.text()
+    body = await resp.json()
+    assert body["message"] == "Here are two more weapons and a rule."
+    assert [s["tool"] for s in body["steps"]] == [
+        "search", "read", "read", "add_options", "create_constraint"]
+    assert body["steps"][2]["ok"] is False
+    add, con = body["proposals"]
+    assert add["pid"] == "p1" and add["op"]["op"] == "update" and add["op"]["id"] == tgt
+    assert [o["value"] for o in add["op"]["body"]["payload"]["options"]][-1] == "war axe"
+    assert con["op"]["body"]["payload"]["matrix"] == {
+        "magic": {"blade": {"mode": "exclude", "factor": 0}}}
+    first, second = fake_llm.seen[-2:]
+    msgs = first["body"]["messages"]
+    assert msgs[0]["role"] == "system" and "Items (id" in msgs[0]["content"]
+    assert msgs[1]["content"] == "hi" and json.loads(msgs[2]["content"])["message"] == "Hello!"
+    assert 'The user has wildcard "Weapon"' in msgs[-1]["content"]
+    results = second["body"]["messages"][-1]["content"]
+    assert results.startswith("Tool results:") and "longsword" in results
+    assert "error: no item with id 'nope'" in results
+
+
+async def test_chat_validation_and_off(wp_client, fake_llm):
+    body = {"messages": [{"role": "user", "content": "hi"}]}
+    assert (await wp_client.post("/wp/api/ai/chat", json=body)).status == 403
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    assert (await wp_client.post("/wp/api/ai/chat", json={"messages": []})).status == 400
+    long = {"messages": [{"role": "user", "content": "x"}] * 41}
+    assert (await wp_client.post("/wp/api/ai/chat", json=long)).status == 400
+    resp = await wp_client.post("/wp/api/ai/chat", json=body)
+    assert (await resp.json()) == {"message": "Done.", "proposals": [], "steps": [], "model": "m1"}
+
+
+async def test_chat_stops_after_max_steps(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.chat_steps.extend(
+        [{"message": "", "calls": [{"tool": "variables", "args": "{}"}]}] * 10)
+    resp = await wp_client.post("/wp/api/ai/chat", json={
+        "messages": [{"role": "user", "content": "loop"}]})
+    body = await resp.json()
+    assert len(body["steps"]) == 6 and "ran out of steps" in body["message"]

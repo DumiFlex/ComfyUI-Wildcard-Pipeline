@@ -131,7 +131,9 @@ Open it from the ComfyUI sidebar. It's where your modules live between workflows
   the rules you want and it writes them using your library's variables, options
   and tags. **Describe** in any editor writes a description and tags for it, and
   **Organize with AI** sorts a selection of library items into categories, tags and
-  ratings. If an
+  ratings. The **AI** button in the top bar opens a chat that reads your library
+  to answer questions and proposes new wildcards, rules, constraints and edits as
+  cards you apply one by one, with Undo. If an
   answer is close, type a follow-up and press **Refine** to revise it instead of
   starting over. You review every change first, and nothing is saved until you
   press Save.

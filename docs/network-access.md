@@ -21,6 +21,8 @@ involved. Writing derivation rules also sends the list of variables your
 library sets, with the first options of each wildcard, so the model can use
 their names. Describe sends what the item holds and the tags your library uses;
 Organize sends that for every selected item, plus your category names.
+The chat sends a list of your library's items (names, types and variables),
+the conversation so far, and the items the assistant reads to answer.
 A follow-up (Refine) sends that conversation's earlier requests and answers
 again; nothing is stored between requests.
 
@@ -37,7 +39,8 @@ browser:
   The address comes from your saved settings and must be a plain `http(s)`
   address with no user name, password, query or fragment.
 - **Nothing is saved for you.** Drafts come back to the editor, and only your
-  own **Save** writes them to the library.
+  own **Save** writes them to the library. Organize and chat changes are
+  saved only when you press **Apply**, through the same API the editors use.
 - **Size caps both ways.** Requests are capped at 512 KB and replies at 4 MB
   while streaming, at most two model calls run at once, and upstream error
   bodies are cut to a short message.

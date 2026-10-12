@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { RouterView } from "vue-router";
 import AppTopbar from "./AppTopbar.vue";
 import AppSidebar from "./AppSidebar.vue";
@@ -12,6 +12,7 @@ import CommandPalette from "../components/CommandPalette.vue";
 import ShortcutsHelp from "../components/ShortcutsHelp.vue";
 import UnmetDepsDialog from "../components/UnmetDepsDialog.vue";
 import { useUiStore } from "../stores/uiStore";
+import { useAiChat } from "../composables/useAiChat";
 import { useCommandIndex } from "../composables/useCommandIndex";
 import { useRecentStore } from "../stores/recentStore";
 import { useStaleStore } from "../stores/staleStore";
@@ -33,6 +34,10 @@ import {
 } from "../../components/context/drift-store";
 
 const ui = useUiStore();
+const aiChat = useAiChat();
+// Loaded the first time the assistant opens, so the manager doesn't pay for
+// it when the assistant is off.
+const AiChatDrawer = defineAsyncComponent(() => import("../components/ai/AiChatDrawer.vue"));
 const commandIndex = useCommandIndex();
 const recent = useRecentStore();
 const stale = useStaleStore();
@@ -285,7 +290,11 @@ onBeforeUnmount(() => {
     <a href="#wp-main" class="wp-skip-link">Skip to main content</a>
     <StaleBanner />
     <AppTopbar />
-    <div class="wp-body" :data-collapsed="ui.sidebarCollapsed || undefined">
+    <div
+      class="wp-body"
+      :data-collapsed="ui.sidebarCollapsed || undefined"
+      :data-ai-chat="aiChat.open.value || undefined"
+    >
       <AppSidebar @action="onNavAction" />
       <main id="wp-main" class="wp-content" tabindex="-1">
         <ErrorBoundary>
@@ -304,6 +313,7 @@ onBeforeUnmount(() => {
         </ErrorBoundary>
       </main>
     </div>
+    <AiChatDrawer v-if="aiChat.open.value" />
     <ToastHost />
     <TweaksPanel />
     <CommandPalette v-model:open="paletteOpen" :items="commandIndex" :recent-ids="recent.recentIds" />
@@ -339,6 +349,11 @@ onBeforeUnmount(() => {
 .route-fade-enter-from { opacity: 0; transform: translateY(6px); }
 .route-fade-leave-to { opacity: 0; transform: translateY(-4px); }
 .route-fade-leave-active { transition-duration: 100ms; }
+
+/* Wide screens make room for the assistant chat instead of covering the page. */
+@media (min-width: 1200px) {
+  .wp-body[data-ai-chat] > .wp-content { margin-right: min(440px, 100vw); }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .route-fade-enter-active,

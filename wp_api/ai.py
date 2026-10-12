@@ -14,6 +14,8 @@
                                     module, bundle or template
     POST /wp/api/ai/organize        category, tags and rating for a batch
                                     of modules and bundles
+    POST /wp/api/ai/chat            a chat turn: the model reads the library
+                                    with tools and proposes changes
 
 Every drafting route also takes `history` (earlier turns of the same
 conversation, see `engine/ai/followup.py`) and returns the model's raw
@@ -32,6 +34,7 @@ from typing import Any
 from aiohttp import web
 
 from engine.ai import about as ai_about
+from engine.ai import chat as ai_chat
 from engine.ai import config as ai_config
 from engine.ai import constraint as ai_constraint
 from engine.ai import derivation as ai_derivation
@@ -592,6 +595,105 @@ async def post_organize(request: web.Request) -> web.Response:
     return json_ok(result)
 
 
+def _tool_results(results: list[str]) -> str:
+    return (
+        "Tool results:\n" + "\n\n".join(results)
+        + "\n\nContinue. When you are done, answer with \"calls\": [] and your message."
+    )
+
+
+async def post_chat(request: web.Request) -> web.Response:
+    """Body: {messages: [{role: "user"|"assistant", content}], page?: {route, id?}}.
+
+    Runs up to `chat.MAX_STEPS` model steps. Read tools run here and their
+    results go back to the model; change tools become proposals the manager
+    shows as cards. Nothing is written to the library.
+    """
+    cfg = _enabled_cfg()
+    if isinstance(cfg, web.Response):
+        return cfg
+    body = await _body(request)
+    if isinstance(body, web.Response):
+        return body
+    try:
+        turns = ai_chat.parse_turns(body.get("messages"))
+    except ValueError as e:
+        return json_error(str(e), status=400)
+
+    with db_session(request) as conn:
+        lib = ai_chat.Library(
+            ModuleRepository(conn).list(), BundleRepository(conn).list(),
+            CategoryRepository(conn).list(),
+        )
+    system = ai_chat.SYSTEM_PROMPT + "\n\n" + lib.overview()
+    history = ai_chat.history_pairs(turns)
+    user = turns[-1]["content"]
+    note = lib.page_note(body.get("page"))
+    if note:
+        user = f"{user}\n\n{note}"
+
+    proposals: list[dict[str, Any]] = []
+    steps: list[dict[str, Any]] = []
+    message = ""
+    for step in range(ai_chat.MAX_STEPS):
+        try:
+            answer = await _ai_client.complete_json(
+                cfg, system=system, user=user, history=history,
+                schema=ai_chat.STEP_SCHEMA, schema_name="chat_step", temperature=0.4,
+            )
+        except _ai_client.AIError as e:
+            if not steps:
+                return json_error(e.message, status=e.status)
+            message = f"(Stopped early: {e.message})"
+            break
+        try:
+            said, calls = ai_chat.parse_step(answer)
+        except ValueError as e:
+            return json_error(
+                f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
+                status=502,
+            )
+        if said:
+            message = said
+        if not calls:
+            break
+        history.append((user, answer))
+        results: list[str] = []
+        needs_reply = False
+        for call in calls:
+            tool = call["tool"]
+            try:
+                args = ai_chat.parse_args(call["args"])
+                if tool in ai_chat.CHANGE_TOOLS and len(proposals) >= ai_chat.MAX_PROPOSALS:
+                    raise ValueError("too many changes in one answer; stop here")
+                out = lib.run(tool, args)
+            except ValueError as e:
+                needs_reply = True
+                results.append(f"{tool}: error: {e}")
+                steps.append({"tool": tool, "note": f"{tool}: {e}", "ok": False})
+                continue
+            if isinstance(out, str):
+                needs_reply = True
+                results.append(f"{tool} {_json.dumps(args, ensure_ascii=False)[:200]}:\n{out}")
+                steps.append({"tool": tool, "note": ai_chat.args_note(tool, args), "ok": True})
+            else:
+                proposals.append(out)
+                results.append(f"{tool}: proposal {out['pid']} shown to the user: {out['title']}")
+                steps.append({"tool": tool, "note": out["title"], "ok": True})
+        if not needs_reply:
+            break
+        if step == ai_chat.MAX_STEPS - 1:
+            message = message or "I ran out of steps before finishing; ask me to continue."
+            break
+        user = _tool_results(results)
+
+    if not message:
+        message = "Here's what I'd change." if proposals else "Done."
+    return json_ok({
+        "message": message, "proposals": proposals, "steps": steps, "model": cfg["model"],
+    })
+
+
 def register(router: web.UrlDispatcher) -> None:
     router.add_get("/wp/api/ai/config", get_config)
     router.add_put("/wp/api/ai/config", put_config)
@@ -603,3 +705,4 @@ def register(router: web.UrlDispatcher) -> None:
     router.add_post("/wp/api/ai/constraint/draft", post_constraint_draft)
     router.add_post("/wp/api/ai/describe", post_describe)
     router.add_post("/wp/api/ai/organize", post_organize)
+    router.add_post("/wp/api/ai/chat", post_chat)
