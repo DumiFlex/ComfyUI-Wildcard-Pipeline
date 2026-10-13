@@ -4,7 +4,7 @@
  * the four edits (AiEditPanel). Both stay mounted (v-show) so switching tabs
  * doesn't lose a draft the user is still reviewing.
  */
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import SegControl, { type SegOption } from "../settings/SegControl.vue";
 import AiDraftPanel from "./AiDraftPanel.vue";
 import AiEditPanel from "./AiEditPanel.vue";
@@ -66,6 +66,17 @@ watch(() => draftPending.value || editPending.value, (v) => emit("update:pending
 function onApply(changes: AiWildcardEditChange[]): void {
   emit("apply-edits", editAction.value, changes);
 }
+
+const drafter = ref<InstanceType<typeof AiDraftPanel> | null>(null);
+
+/** Draft options on the Add tab (the chat's `draft_options`). */
+async function draft(instruction: string, count: number): Promise<string> {
+  mode.value = "add";
+  await nextTick();
+  return drafter.value ? drafter.value.run(instruction, count) : "couldn't: the Add tab didn't open";
+}
+
+defineExpose({ draft });
 </script>
 
 <template>
@@ -81,6 +92,7 @@ function onApply(changes: AiWildcardEditChange[]): void {
     </div>
     <AiDraftPanel
       v-show="mode === 'add'"
+      ref="drafter"
       :name="name"
       :var-binding="varBinding"
       :existing-values="options.map((o) => o.value)"

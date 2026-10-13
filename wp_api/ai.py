@@ -45,6 +45,7 @@ from engine.ai import about as ai_about
 from engine.ai import budget as ai_budget
 from engine.ai import chat as ai_chat
 from engine.ai import chatlog as ai_chatlog
+from engine.ai import client_tools as ai_client_tools
 from engine.ai import config as ai_config
 from engine.ai import constraint as ai_constraint
 from engine.ai import derivation as ai_derivation
@@ -71,7 +72,7 @@ from engine.db.repositories import (
     TemplateRepository,
 )
 from engine.importer import commit_import
-from wp_api import _ai_chat, _ai_client, _ai_embed
+from wp_api import _ai_chat, _ai_client, _ai_embed, _ai_search
 from wp_api._ai_guard import guarded
 from wp_api._helpers import cancel_on_disconnect, db_session, json_error, json_ok
 from wp_api._validators import validate_wildcard_name
@@ -803,12 +804,12 @@ def _final_step(fmt: str, message: str) -> dict[str, Any]:
 
 def _more_tools(meta: dict[str, Any]) -> str:
     offered = set(meta.get("tools") or [])
-    rest = [t for t in ai_tools.TOOLS if t.name not in offered]
+    rest = [t for t in ai_tools.TOOLS if t.name not in offered
+            and (t.kind != "web" or meta.get("web"))]
     if not rest:
         return "every tool is already available"
     meta["tools"] = [t.name for t in ai_tools.TOOLS if t.name in offered or t in rest]
-    return ("These tools are available now:\n" + ai_tools.prompt_lines(rest, "read")
-            + "\n" + ai_tools.prompt_lines(rest, "change")).strip()
+    return ("These tools are available now:\n" + ai_chat.kinds_section(rest)).strip()
 
 
 #: One library index per library database file (see `engine.ai.index`).
@@ -960,14 +961,19 @@ async def post_chat(request: web.Request) -> web.Response:
     body = await _body(request)
     if isinstance(body, web.Response):
         return body
+    # `results`: the browser answering the calls a paused turn waits on
+    # (page tools it ran, or the user's answer to a web search).
+    answers = body.get("results")
+    resume = isinstance(answers, list)
     text = body.get("message")
-    if not isinstance(text, str) or not text.strip():
-        return json_error("say something first", status=400)
-    text = ai_safety.strip_invisible(text).strip()
-    if not text:
-        return json_error("say something first", status=400)
-    if len(text) > ai_chat.MAX_TURN_CHARS:
-        text = text[:ai_chat.MAX_TURN_CHARS] + " …"
+    if not resume:
+        if not isinstance(text, str) or not text.strip():
+            return json_error("say something first", status=400)
+        text = ai_safety.strip_invisible(text).strip()
+        if not text:
+            return json_error("say something first", status=400)
+        if len(text) > ai_chat.MAX_TURN_CHARS:
+            text = text[:ai_chat.MAX_TURN_CHARS] + " …"
     page = body.get("page") if isinstance(body.get("page"), dict) else None
     chat_id = body.get("chat_id") if isinstance(body.get("chat_id"), str) else None
 
@@ -985,7 +991,12 @@ async def post_chat(request: web.Request) -> web.Response:
                 log = ChatRepository(conn).messages(chat_id)
             except ChatNotFound:
                 chat = None
-    if sum(1 for e in log if e.get("kind") == "user") >= ai_chat.MAX_TURNS:
+    paused = (chat or {}).get("meta", {}).get("pending") if chat else None
+    if resume:
+        if not paused:
+            return json_error("nothing in this chat is waiting for an answer", status=409)
+        text = ai_chatlog.last_user_text(log)
+    elif sum(1 for e in log if e.get("kind") == "user") >= ai_chat.MAX_TURNS:
         return json_error("this chat is long; start a new one to keep it focused", status=400)
     if lib.index is not None and _ai_embed.enabled(cfg):
         lib.embed_model = cfg["embed_model"]
@@ -997,7 +1008,9 @@ async def post_chat(request: web.Request) -> web.Response:
         fmt = await _ai_chat.pick_format(cfg)
         meta: dict[str, Any] = {
             "format": fmt, "proposals": {}, "fingerprint": {},
-            "tools": ai_tools.toolset(page.get("route") if page else None, scoped=prof["slim"]),
+            "tools": ai_tools.toolset(page.get("route") if page else None, scoped=prof["slim"],
+                                      web=_ai_search.enabled(cfg)),
+            "web": _ai_search.enabled(cfg),
         }
         snapshot = ai_safety.strip_invisible(lib.overview(limit=40 if prof["slim"] else None))
     else:
@@ -1016,17 +1029,36 @@ async def post_chat(request: web.Request) -> web.Response:
         note = ""  # still on the same page: it is in the history already
     elif note:
         meta["page_note"] = note
-    hints = await _retrieval(lib, text, meta, prof, cfg)
-    sent = ai_safety.strip_invisible(
-        "\n\n".join(x for x in (since, changes, text, note, hints) if x))
-    new: list[dict[str, Any]] = [ai_chatlog.user_entry(text, sent)]
+    new: list[dict[str, Any]] = []
+    first_steps: list[dict[str, Any]] = []
+    step = 0
+    if paused:
+        # Every paused call gets its result before anything else: the
+        # browser's answers, or "not run" when the user moved on.
+        meta = dict(meta)
+        meta.pop("pending", None)
+        got = {a["id"]: a for a in (answers or []) if isinstance(a, dict)
+               and isinstance(a.get("id"), str)} if resume else {}
+        items, first_steps = await _paused_results(cfg, meta, paused, got)
+        tail = ""
+        if resume:
+            step = int(paused.get("step") or 0)
+            tail = "".join("\n\n" + x for x in (since, changes, note) if x) + _results_tail(
+                text, last=step >= ai_chat.MAX_STEPS - 1, native=fmt == "native")
+        new.append(ai_chatlog.results_entry(items, tail))
+    if not resume:
+        hints = await _retrieval(lib, text, meta, prof, cfg)
+        sent = ai_safety.strip_invisible(
+            "\n\n".join(x for x in (since, changes, text, note, hints) if x))
+        new.append(ai_chatlog.user_entry(text, sent))
 
     num_ctx = int(cfg.get("context_max") or ai_budget.CONTEXT_DEFAULT)
     cache_key = chat["id"] if chat else ""
     pids = [int(p[1:]) for p in meta.get("proposals") or {} if p[1:].isdigit()]
     lib._next_pid = max(pids, default=0)
     proposals: list[dict[str, Any]] = []
-    steps: list[dict[str, Any]] = []
+    steps: list[dict[str, Any]] = first_steps
+    pause: list[dict[str, Any]] = []
     message = ""
     interim = ""
     seen: set[str] = set()
@@ -1044,7 +1076,6 @@ async def post_chat(request: web.Request) -> web.Response:
 
     loop = asyncio.get_running_loop()
     deadline = loop.time() + TURN_SECONDS
-    step = 0
     while step < ai_chat.MAX_STEPS:
         meta = ai_chatlog.fit(log + new, meta, prof["history_chars"])
         rendered = ai_chatlog.render(log + new, meta)
@@ -1123,6 +1154,19 @@ async def post_chat(request: web.Request) -> web.Response:
             try:
                 raw = call["args"] if isinstance(call.get("args"), dict) else call["args_text"]
                 args, arg_notes = ai_tools.check_args(spec, ai_chat.parse_args(raw))
+                if tool in ai_chat.PAUSE_TOOLS:
+                    cargs, label = ai_client_tools.prepare(lib, tool, args)
+                    if tool in ai_tools.WEB and meta.get("web_ok"):
+                        # Allowed for this chat already: search now.
+                        result(await _web_result(cfg, cargs["query"]))
+                        needs_reply = True
+                        steps.append({"tool": tool, "note": label, "ok": True})
+                        continue
+                    # The browser runs it, or the user allows it: pause.
+                    pause.append({"id": call["id"], "tool": tool, "args": cargs,
+                                  "label": label})
+                    steps.append({"tool": tool, "note": label, "ok": True})
+                    continue
                 key = tool + _json.dumps(args, sort_keys=True, ensure_ascii=False)
                 if tool not in ai_chat.CHANGE_TOOLS and key in seen:
                     # Small models re-run the same search every step.
@@ -1172,6 +1216,12 @@ async def post_chat(request: web.Request) -> web.Response:
                 result(f"{tool}: proposal {out['pid']} shown to the user: {out['title']}"
                        + extra)
                 steps.append({"tool": tool, "note": out["title"], "ok": True})
+        if pause:
+            # Wait for the browser: what ran here waits with the calls.
+            meta["pending"] = {"calls": pause, "items": items, "step": step,
+                               "order": [c["id"] for c in calls]}
+            message = said or interim
+            break
         if not needs_reply:
             # Asked leave instead of proposing, or met "yes" with more talk:
             # tell it once to act. Small models loop on "Should I proceed?".
@@ -1206,17 +1256,20 @@ async def post_chat(request: web.Request) -> web.Response:
         new.append(ai_chatlog.results_entry(
             items, _results_tail(text, last=forced, native=fmt == "native")))
 
-    if not message:
-        message = interim if interim and proposals else (
-            "Here's what I'd change." if proposals else interim or "Done.")
-    # Every call gets a result and the turn ends on an answer.
-    last = new[-1]
-    if last.get("kind") == "step" and last.get("calls"):
-        new.append(ai_chatlog.results_entry(
-            [{"id": c["id"], "tool": c["tool"], "text": f"{c['tool']}: not run"}
-             for c in last["calls"]], ""))
-    if new[-1].get("kind") != "step":
-        new.append(_final_step(fmt, message))
+    if pause:
+        pass  # the turn goes on when the browser answers
+    else:
+        if not message:
+            message = interim if interim and proposals else (
+                "Here's what I'd change." if proposals else interim or "Done.")
+        # Every call gets a result and the turn ends on an answer.
+        last = new[-1]
+        if last.get("kind") == "step" and last.get("calls"):
+            new.append(ai_chatlog.results_entry(
+                [{"id": c["id"], "tool": c["tool"], "text": f"{c['tool']}: not run"}
+                 for c in last["calls"]], ""))
+        if new[-1].get("kind") != "step":
+            new.append(_final_step(fmt, message))
     meta["format"] = fmt
     meta["fingerprint"] = fp_now
     meta["model"] = cfg.get("model")
@@ -1229,7 +1282,43 @@ async def post_chat(request: web.Request) -> web.Response:
         "chat_id": chat["id"], "message": message, "proposals": proposals, "steps": steps,
         "model": cfg["model"], "format": fmt, "usage": usage,
         "refs": lib.message_refs(message),
+        # Calls for the browser to run (or the user to allow) before the
+        # turn goes on; it posts their results back as `results`.
+        "pending": [{k: c[k] for k in ("id", "tool", "args", "label")} for c in pause],
     })
+
+
+async def _paused_results(
+    cfg: dict[str, Any], meta: dict[str, Any], paused: dict[str, Any],
+    got: dict[str, dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """The results entry for a paused step, in the step's call order: the
+    server results made before the pause plus each paused call's answer."""
+    by_id = {it["id"]: it for it in paused.get("items") or [] if isinstance(it, dict)}
+    steps: list[dict[str, Any]] = []
+    for c in paused.get("calls") or []:
+        answer = got.get(c["id"], {"cancelled": True})
+        if c["tool"] in ai_tools.WEB and answer.get("approve") in ("once", "chat"):
+            if answer["approve"] == "chat":
+                meta["web_ok"] = True
+            text = await _web_result(cfg, c["args"]["query"])
+            steps.append({"tool": c["tool"], "note": c.get("label") or c["tool"], "ok": True})
+        else:
+            text = ai_client_tools.result_text(c["tool"], answer)
+            if answer.get("denied"):
+                steps.append({"tool": c["tool"], "note": "You declined: "
+                              + (c.get("label") or c["tool"]), "ok": False})
+        by_id[c["id"]] = {"id": c["id"], "tool": c["tool"], "text": text}
+    order = [i for i in paused.get("order") or [] if i in by_id]
+    order += [i for i in by_id if i not in order]
+    return [by_id[i] for i in order], steps
+
+
+async def _web_result(cfg: dict[str, Any], query: str) -> str:
+    try:
+        return "web_search: " + await _ai_search.search(cfg, query)
+    except _ai_client.AIError as e:
+        return f"web_search: error: {e.message}"
 
 
 def _pack_body(

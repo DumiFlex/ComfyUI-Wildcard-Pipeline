@@ -505,18 +505,33 @@ async def test_chat_uses_the_open_editor_and_the_docs(wp_client, fake_llm):
     body = await _chat(wp_client, "remove the first option",
                        page={"route": "wildcards-edit", "id": tgt, "note": "2 options shown",
                              "editor": editor})
-    edit, doc = body["proposals"]
+    # Opening the docs runs in the browser: the turn waits for it.
+    [edit] = body["proposals"]
     assert edit["op"]["basis"] == "editor"
     assert [o["value"] for o in edit["op"]["body"]["payload"]["options"]] == ["unsaved bow"]
-    assert doc["op"] == {"op": "open", "kind": "doc", "type": "doc", "id": "constraint"}
+    [call] = body["pending"]
+    assert call["tool"] == "open" and call["args"] == {"doc": "constraint"}
     assert [s["note"] for s in body["steps"][:2]] == [
         'Searched the docs for "constraint exclude"', "Read Weapon (draft)"]
-    first, second = fake_llm.seen[-3:-1]
+    first, second = fake_llm.seen[-2:]
     assert "Docs pages (id: title)" in first["body"]["messages"][0]["content"]
     asked = first["body"]["messages"][-1]["content"]
     assert "with unsaved changes" in asked and "On screen: 2 options shown" in asked
     results = second["body"]["messages"][-1]["content"]
     assert "1. unsaved spear" in results and "constraint ›" in results
+    fake_llm.chat_steps.append({"message": "It's open on the right.", "calls": []})
+    done = await _chat_resume(wp_client, body["chat_id"], [{"id": call["id"], "text": "opened"}],
+                              page={"route": "documentation-page", "doc": "constraint"})
+    assert done["message"] == "It's open on the right." and done["pending"] == []
+    back = fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+    assert "open: opened" in back and "reading the docs page" in back
+
+
+async def _chat_resume(wp_client, chat_id, results, **extra):
+    resp = await wp_client.post("/wp/api/ai/chat",
+                                json={"chat_id": chat_id, "results": results, **extra})
+    assert resp.status == 200, await resp.text()
+    return await resp.json()
 
 
 async def test_chat_validation_and_off(wp_client, fake_llm):

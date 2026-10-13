@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from engine.ai import chat
+from engine.ai import chat, client_tools
 
 
 def _lib():
@@ -133,8 +133,8 @@ def test_rules_constraint_info_open():
     assert op["body"]["content_rating"] == "nsfw"
     with pytest.raises(ValueError):
         lib.run("update_info", {"id": "bbbb0001", "tags_add": ["kit"]})
-    o = lib.run("open", {"id": "bbbb0001"})
-    assert o["op"] == {"op": "open", "kind": "bundle", "type": "bundle", "id": "bbbb0001"}
+    assert client_tools.prepare(lib, "open", {"id": "bbbb0001"})[0] == {
+        "id": "bbbb0001", "type": "bundle"}
     with pytest.raises(ValueError):
         lib.run("delete_everything", {})
 
@@ -205,12 +205,13 @@ def test_docs_tools_and_open_targets():
     assert text.startswith("Combine (combine)") and "Template override" in text
     with pytest.raises(ValueError):
         lib.run("docs_read", {"page": "nope"})
-    assert lib.run("open", {"doc": "combine"})["op"] == {
-        "op": "open", "kind": "doc", "type": "doc", "id": "combine"}
-    page = lib.run("open", {"page": "settings", "section": "ai"})["op"]
-    assert page["kind"] == "page" and page["id"] == "settings" and page["section"] == "ai"
-    with pytest.raises(ValueError):
-        lib.run("open", {"page": "nowhere"})
+    assert client_tools.prepare(lib, "open", {"doc": "combine"})[0] == {"doc": "combine"}
+    page, label = client_tools.prepare(lib, "open", {"page": "settings", "section": "ai"})
+    assert page == {"page": "settings", "section": "ai"} and label == "Opened settings › ai"
+    for bad in ({"page": "nowhere"}, {"page": "settings", "section": "x"},
+                {"page": "javascript:alert(1)"}, {"doc": "../../etc/passwd"}):
+        with pytest.raises(ValueError):
+            client_tools.prepare(lib, "open", bad)
     assert "Docs pages" in chat.system_prompt() and "- combine: Combine." in chat.system_prompt()
     assert chat.args_note("docs_read", {"page": "combine"}) == "Read the docs: Combine"
 

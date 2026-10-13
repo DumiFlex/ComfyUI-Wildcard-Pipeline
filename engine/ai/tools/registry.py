@@ -23,7 +23,11 @@ from typing import Any
 
 #: read: runs on the server and its result goes back to the model.
 #: change: compiled into a proposal card; nothing is written.
-KINDS = ("read", "change")
+#: client: runs in the user's browser (navigate, point, drive an AI panel);
+#:   the turn pauses until the browser posts the result back.
+#: web: leaves the machine (web search); the turn pauses until the user
+#:   allows it, then the server runs it.
+KINDS = ("read", "change", "client", "web")
 
 
 @dataclass(frozen=True)

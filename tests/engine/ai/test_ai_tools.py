@@ -5,13 +5,17 @@ import json
 
 import pytest
 
-from engine.ai import chat, tools
+from engine.ai import chat, client_tools, tools
 
 
 def test_every_tool_has_code_and_a_matching_prompt_line():
     for t in tools.TOOLS:
-        assert t.kind in ("read", "change")
-        assert t.name == "more_tools" or callable(getattr(chat.Library, t.name, None)), t.name
+        assert t.kind in ("read", "change", "client", "web")
+        if t.kind in ("client", "web"):
+            # Checked here, run by the browser (or the server once allowed).
+            assert t.name in client_tools._PREPARE, t.name
+        else:
+            assert t.name == "more_tools" or callable(getattr(chat.Library, t.name, None)), t.name
         props = set(t.params.get("properties") or {})
         missing = [p for p in props if f'"{p}"' not in t.line]
         assert not missing, (t.name, missing)
@@ -21,8 +25,9 @@ def test_every_tool_has_code_and_a_matching_prompt_line():
 def test_prompt_lists_tools_from_the_registry():
     head = chat.system_prompt(slim=True)
     for t in tools.TOOLS:
-        if t.name != "more_tools":
+        if t.name != "more_tools" and t.kind != "web":
             assert f"- {t.name} " in head
+    assert "- web_search " not in head and "Page tools (run in the user's browser" in head
     native = chat.system_prompt(slim=True, native=True)
     assert "Read tools:" not in native and "plain text without calling a tool" in native
     scoped = chat.system_prompt(slim=True, tools=tools.toolset("templates", scoped=True))
@@ -35,6 +40,14 @@ def test_toolsets():
     assert small[-1] == "more_tools" and "edit_rules" in small and "create_bundle" not in small
     assert "search" in small and "run_test" in small
     assert "plan_pack" in tools.toolset(None, scoped=True)
+    # Web search only once the user set up an engine.
+    assert "web_search" not in tools.toolset(None, scoped=False)
+    assert "web_search" in tools.toolset(None, scoped=False, web=True)
+    assert "web_search" in tools.toolset("wildcards", scoped=True, web=True)
+    lists = tools.toolset("all", scoped=True)
+    assert "select_rows" in lists and "organize" in lists and "show_test" not in lists
+    assert "show_test" in tools.toolset("test", scoped=True)
+    assert "draft_options" in tools.toolset("wildcards-edit", scoped=True)
 
 
 def test_native_declarations():

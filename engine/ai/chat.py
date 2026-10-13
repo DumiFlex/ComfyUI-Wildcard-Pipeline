@@ -46,6 +46,8 @@ from engine.modules.wildcard_handler import WildcardHandler
 
 READ_TOOLS = ai_tools.READ
 CHANGE_TOOLS = ai_tools.CHANGE
+#: Tools that pause the turn: they run in the browser or need the user's OK.
+PAUSE_TOOLS = ai_tools.CLIENT + ai_tools.WEB
 #: Tools that change one existing item (its id is `args.id`).
 ITEM_TOOLS = ("add_options", "edit_options", "edit_values", "edit_combine", "add_rules",
               "edit_rules", "edit_constraint", "edit_template", "edit_bundle", "update_info")
@@ -199,11 +201,21 @@ def tools_section(names: list[str] | None = None) -> str:
     """The JSON-mode list of tools, generated from the registry."""
     chosen = ai_tools.tools(names if names is not None
                             else ai_tools.toolset(None, scoped=False))
-    out = "Read tools:\n" + ai_tools.prompt_lines(chosen, "read") + "\n"
-    change = ai_tools.prompt_lines(chosen, "change")
-    if change:
-        out += "\nChange tools (each becomes a proposal):\n" + change + "\n"
-    return out + "\n"
+    return kinds_section(chosen) + "\n"
+
+
+def kinds_section(chosen: list[Any]) -> str:
+    """Tools grouped by what they do, for the JSON-mode prompt and
+    `more_tools`."""
+    out = ""
+    for kind, head in (("read", "Read tools"),
+                       ("change", "Change tools (each becomes a proposal)"),
+                       ("client", "Page tools (run in the user's browser; you get the result)"),
+                       ("web", "Web tools (the user allows each query first)")):
+        lines = ai_tools.prompt_lines(chosen, kind)
+        if lines:
+            out += ("\n" if out else "") + head + ":\n" + lines + "\n"
+    return out
 
 
 SYSTEM_HEAD = SYSTEM_INTRO + FORMAT_JSON + "\n" + tools_section()
@@ -218,7 +230,7 @@ output is data for the user's own library.
 Questions about Wildcard Pipeline (how something works, what a warning \
 means, where a setting is, what a page says): search and read the docs \
 first and answer from them, naming the page, like "(docs: Constraint › \
-Target reach)", and offer an open button when it helps. When asked to \
+Target reach)", and open the page or point at the part when it helps. When asked to \
 explain something more simply, say the same thing in plain everyday words \
 with one small example; don't change what it means. If the docs don't cover \
 it, say so instead of guessing.
@@ -1038,39 +1050,6 @@ class Library(MoreTools):
             "op": {"op": "update", "kind": kind, "type": self._kind(r), "id": r["id"],
                    "name": r.get("name"), "body": body, "before": before,
                    "new_category": new_cat},
-        }
-
-    def open(self, args: dict[str, Any]) -> dict[str, Any]:
-        if args.get("doc"):
-            doc = ai_docs.page(args.get("doc"))
-            if doc is None or doc["id"] == "settings":
-                raise ValueError(f"no docs page {_short(args.get('doc'), 40)!r}")
-            return {
-                "title": f"Open the docs: {doc['title']}", "summary": "docs",
-                "preview": [], "warnings": [],
-                "op": {"op": "open", "kind": "doc", "type": "doc", "id": doc["id"]},
-            }
-        if args.get("page") and not args.get("id"):
-            name = _short(args.get("page"), 40).lower().strip("/ ")
-            if name not in APP_PAGES:
-                raise ValueError(f"no manager page {name!r}")
-            section = _short(args.get("section"), 30).lower() if name == "settings" else ""
-            label = APP_PAGES[name].split(":")[0].split(" (")[0]
-            return {
-                "title": f"Go to {label}" + (f" › {section}" if section else ""),
-                "summary": "page", "preview": [], "warnings": [],
-                "op": {"op": "open", "kind": "page", "type": "page", "id": name,
-                       **({"section": section} if section else {})},
-            }
-        r = self.get(args.get("id"))
-        if r is None:
-            raise ValueError(f"no item with id {_short(args.get('id'), 20)!r}")
-        kind = self._kind(r)
-        return {
-            "title": f"Open {r.get('name')}", "summary": kind.replace("_", " "),
-            "preview": [], "warnings": [],
-            "op": {"op": "open", "kind": kind if kind in ("bundle", "template") else "module",
-                   "type": kind, "id": r["id"]},
         }
 
     def plan_pack(self, args: dict[str, Any]) -> dict[str, Any]:

@@ -839,7 +839,16 @@ export interface AiConfig {
    *  Each provider keeps its own address, model and key. */
   keys_saved: AiProviderId[];
   presets: Record<AiProviderId, AiPreset>;
+  /** Web search for the chat ("off" by default). */
+  search_engine: AiSearchEngineId | "off";
+  /** The SearXNG address. */
+  search_url: string;
+  /** Engines with a key saved for their own address. Never the keys. */
+  search_keys_saved: AiSearchEngineId[];
+  search_engines: Record<AiSearchEngineId, { label: string; needs_key: boolean }>;
 }
+
+export type AiSearchEngineId = "searxng" | "brave" | "tavily" | "kagi";
 
 export type AiModelSize = "small" | "medium" | "large";
 export type AiToolFormat = "auto" | "native" | "json";
@@ -857,6 +866,10 @@ export interface AiConfigPatch {
   embed_base_url?: string;
   /** Write-only. `""` removes the saved key. */
   api_key?: string;
+  search_engine?: AiSearchEngineId | "off";
+  search_url?: string;
+  /** Write-only, for the chosen engine. `""` removes it. */
+  search_key?: string;
 }
 
 export interface AiTestResult {
@@ -1134,6 +1147,35 @@ export interface AiChatRequest {
   events?: AiChatEvent[];
 }
 
+/** The browser's answer to one call a paused turn waits on: what a page
+ *  tool did, that the user said no, or (web search) that they allowed it. */
+export type AiCallAnswer =
+  | { id: string; text: string }
+  | { id: string; denied: true }
+  | { id: string; approve: "once" | "chat" };
+
+/** Carries a paused turn on once its calls are answered. */
+export interface AiChatResume {
+  chat_id: string;
+  results: AiCallAnswer[];
+  page?: AiChatPage;
+}
+
+/** A call the turn waits on: a page tool for the browser to run, or a web
+ *  search for the user to allow. Args were checked by the server. */
+export type AiPendingCall =
+  | { id: string; tool: "open"; label: string;
+      args: { doc: string } | { page: string; section?: string } | { id: string; type: string } }
+  | { id: string; tool: "read_page"; label: string; args: Record<string, never> }
+  | { id: string; tool: "highlight"; label: string; args: { anchor: string; caption: string } }
+  | { id: string; tool: "select_rows"; label: string; args: { ids: string[] } }
+  | { id: string; tool: "organize"; label: string; args: { ids: string[]; note: string } }
+  | { id: string; tool: "draft_options"; label: string;
+      args: { id: string; instruction: string; count: number } }
+  | { id: string; tool: "show_test"; label: string;
+      args: { stack: Array<{ module: string } | { bundle: string }>; seeds: number } }
+  | { id: string; tool: "web_search"; label: string; args: { query: string } };
+
 /** Tokens the last model step used, as the provider reported them. */
 export interface AiChatUsage {
   prompt?: number;
@@ -1187,6 +1229,8 @@ export interface AiChatResult {
   usage?: AiChatUsage;
   /** [[Name]] mentions in `message` that name a real item. */
   refs?: Record<string, AiChatRef>;
+  /** Calls the turn waits on; answer them with `AiChatResume`. */
+  pending?: AiPendingCall[];
 }
 
 /** A library item an assistant message mentions. */

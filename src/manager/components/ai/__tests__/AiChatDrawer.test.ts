@@ -1,17 +1,18 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createMemoryHistory, createRouter } from "vue-router";
+import { createMemoryHistory, createRouter, RouterView } from "vue-router";
 import AiChatDrawer from "../AiChatDrawer.vue";
 import { api } from "../../../api/client";
 import { _resetAiConfigForTests } from "../../../composables/useAiConfig";
 import { _resetAiChatForTests, useAiChat } from "../../../composables/useAiChat";
 import { _resetPackBuilderForTests, usePackBuilder } from "../../../composables/usePackBuilder";
-import type { AiChatResult, AiConfig } from "../../../api/types";
+import type { AiChatRequest, AiChatResult, AiConfig } from "../../../api/types";
 import { defineComponent, ref } from "vue";
 import {
   _resetOpenEditorForTests, registerOpenEditor, registerPageNote,
 } from "../../../composables/useOpenEditor";
+import { _resetAiActionsForTests, pointer, registerAiAction } from "../../../composables/useAiActions";
 
 const CONFIG = {
   enabled: true, provider: "ollama", base_url: "", model: "m", unload_after_s: 60, context_max: 16384, model_size: "auto", model_size_auto: "small",
@@ -65,6 +66,18 @@ const RESULT: AiChatResult = {
   ],
 };
 
+const SettingsPage = defineComponent({
+  template: `<div><div data-setting="ai-context"><span class="wp-set-row__label">Context size</span></div>
+    <button data-ai-anchor="save" data-ai-label="Save button">Save</button></div>`,
+});
+const TestPage = defineComponent({
+  setup() {
+    registerAiAction("show_test", async (args) => `ran ${JSON.stringify(args.stack)}`);
+    return {};
+  },
+  template: "<div />",
+});
+
 function makeRouter() {
   const r = createRouter({
     history: createMemoryHistory(),
@@ -72,8 +85,8 @@ function makeRouter() {
       { path: "/", name: "dashboard", component: { template: "<div />" } },
       { path: "/wildcards/:id/edit", name: "wildcards-edit", component: { template: "<div />" } },
       { path: "/docs/:page", name: "documentation-page", component: { template: "<div />" } },
-      { path: "/settings/:section?", name: "settings", component: { template: "<div />" } },
-      { path: "/test", name: "test", component: { template: "<div />" } },
+      { path: "/settings/:section?", name: "settings", component: SettingsPage },
+      { path: "/test", name: "test", component: TestPage },
       { path: "/pack-builder", name: "pack-builder", component: { template: "<div />" } },
     ],
   });
@@ -86,6 +99,7 @@ describe("AiChatDrawer", () => {
     _resetAiConfigForTests();
     _resetAiChatForTests();
     _resetOpenEditorForTests();
+    _resetAiActionsForTests();
     vi.mocked(api.ai.config).mockResolvedValue(CONFIG);
     vi.mocked(api.ai.chat).mockReset().mockResolvedValue(RESULT);
     vi.mocked(api.modules.create).mockReset().mockImplementation(
@@ -162,7 +176,7 @@ describe("AiChatDrawer", () => {
     await w.get('[data-test="ai-chat-input"]').setValue("again");
     await w.get('[data-test="ai-chat-send"]').trigger("click");
     await flushPromises();
-    expect(vi.mocked(api.ai.chat).mock.calls[2][0].events).toBeUndefined();
+    expect((vi.mocked(api.ai.chat).mock.calls[2][0] as AiChatRequest).events).toBeUndefined();
     expect(useAiChat().chatId.value).toBe("c1");
     w.unmount();
   });
@@ -179,8 +193,8 @@ describe("AiChatDrawer", () => {
     await w.get('[data-test="ai-chat-send"]').trigger("click");
     await flushPromises();
     expect(w.findAll('[data-test="ai-chat-reply"]')).toHaveLength(1);
-    expect(vi.mocked(api.ai.chat).mock.calls[1][0].message).toBe("hello");
-    expect(vi.mocked(api.ai.chat).mock.calls[1][0].chat_id).toBeUndefined();
+    expect((vi.mocked(api.ai.chat).mock.calls[1][0] as AiChatRequest).message).toBe("hello");
+    expect((vi.mocked(api.ai.chat).mock.calls[1][0] as AiChatRequest).chat_id).toBeUndefined();
     expect(useAiChat().chatId.value).toBe("c1");
     await w.get('[data-test="ai-chat-new"]').trigger("click");
     expect(w.find('[data-test="ai-chat-empty"]').exists()).toBe(true);
@@ -234,7 +248,7 @@ describe("AiChatDrawer", () => {
     await w.get('[data-test="ai-chat-input"]').setValue("tidy this");
     await w.get('[data-test="ai-chat-send"]').trigger("click");
     await flushPromises();
-    expect(vi.mocked(api.ai.chat).mock.calls[0][0].page).toEqual({
+    expect((vi.mocked(api.ai.chat).mock.calls[0][0] as AiChatRequest).page).toEqual({
       route: "wildcards-edit", id: "m1", note: "Wildcard editor with 2 options",
       editor: {
         id: "m1", name: "Outfit", description: "", tags: [], category_id: null,
@@ -280,7 +294,7 @@ describe("AiChatDrawer", () => {
     await w.get('[data-test="ai-chat-input"]').setValue("explain");
     await w.get('[data-test="ai-chat-send"]').trigger("click");
     await flushPromises();
-    expect(vi.mocked(api.ai.chat).mock.calls[0][0].page).toEqual({
+    expect((vi.mocked(api.ai.chat).mock.calls[0][0] as AiChatRequest).page).toEqual({
       route: "documentation-page", doc: "combine",
     });
     w.unmount();
@@ -331,5 +345,126 @@ describe("AiChatDrawer", () => {
     await flushPromises();
     expect(router.currentRoute.value.fullPath).toBe("/wildcards/w1/edit");
     w.unmount();
+  });
+
+  describe("page tools and web search", () => {
+    const DONE: AiChatResult = { chat_id: "c1", message: "There it is.", model: "m", steps: [], proposals: [] };
+
+    beforeEach(() => {
+      Element.prototype.scrollIntoView = vi.fn();
+      vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue([{}] as unknown as DOMRectList);
+    });
+
+    /** The drawer beside the page, so page tools find what the page shows. */
+    async function mountWithPage() {
+      const router = makeRouter();
+      await router.push("/");
+      const Shell = defineComponent({
+        components: { AiChatDrawer, RouterView },
+        template: "<div><RouterView /><AiChatDrawer /></div>",
+      });
+      const w = mount(Shell, { global: { plugins: [router] }, attachTo: document.body });
+      await flushPromises();
+      return { w, router };
+    }
+
+    async function ask(w: Awaited<ReturnType<typeof mountWithPage>>["w"], text: string) {
+      await w.get('[data-test="ai-chat-input"]').setValue(text);
+      await w.get('[data-test="ai-chat-send"]').trigger("click");
+      await flushPromises();
+      await new Promise((r) => setTimeout(r, 60));
+      await flushPromises();
+    }
+
+    it("opens a page, reads it, points at a part and carries the turn on", async () => {
+      vi.mocked(api.ai.chat).mockReset()
+        .mockResolvedValueOnce({
+          ...DONE, message: "Let me show you.",
+          steps: [{ tool: "open", note: "Opened settings › ai", ok: true }],
+          pending: [
+            { id: "k1", tool: "open", label: "Opened settings › ai", args: { page: "settings", section: "ai" } },
+            { id: "k2", tool: "read_page", label: "Read the page", args: {} },
+            { id: "k3", tool: "highlight", label: "Pointed at it", args: { anchor: "ai-context", caption: "Set it here" } },
+          ],
+        })
+        .mockResolvedValueOnce(DONE);
+      const { w, router } = await mountWithPage();
+      useAiChat().open.value = true;
+      await ask(w, "where do I set the context size?");
+      await vi.waitFor(() => expect(api.ai.chat).toHaveBeenCalledTimes(2), { timeout: 4000 });
+      await flushPromises();
+      expect(router.currentRoute.value.fullPath).toBe("/settings/ai");
+      const resume = vi.mocked(api.ai.chat).mock.calls[1][0];
+      expect(resume).toMatchObject({ chat_id: "c1", page: { route: "settings" } });
+      const results = "results" in resume ? resume.results : [];
+      expect(results[0]).toEqual({ id: "k1", text: "opened" });
+      const read = results[1] as { text: string };
+      expect(read.text).toContain("[ai-context] Context size");
+      expect(read.text).toContain("[save] Save button");
+      expect(results[2]).toEqual({ id: "k3", text: "pointed at Context size" });
+      expect(w.findAll('[data-test="ai-chat-reply"]')).toHaveLength(2);
+      expect(w.text()).toContain("There it is.");
+      expect(pointer.value?.caption).toBe("Set it here");
+      await flushPromises();
+      expect(document.querySelector('[data-test="ai-pointer"]')?.textContent).toContain("Set it here");
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+      expect(pointer.value).toBeNull();
+      // That Esc closed only the pointer.
+      expect(useAiChat().open.value).toBe(true);
+      w.unmount();
+    });
+
+    it("hands work to a page and reports what it said", async () => {
+      vi.mocked(api.ai.chat).mockReset()
+        .mockResolvedValueOnce({
+          ...DONE, message: "",
+          pending: [{ id: "t1", tool: "show_test", label: "Ran 1 item", args: { stack: [{ module: "m1" }], seeds: 20 } }],
+        })
+        .mockResolvedValueOnce(DONE);
+      const { w, router } = await mountWithPage();
+      await ask(w, "test the outfit wildcard");
+      await vi.waitFor(() => expect(api.ai.chat).toHaveBeenCalledTimes(2), { timeout: 4000 });
+      expect(router.currentRoute.value.name).toBe("test");
+      const resume = vi.mocked(api.ai.chat).mock.calls[1][0];
+      expect("results" in resume && resume.results).toEqual([{ id: "t1", text: 'ran [{"module":"m1"}]' }]);
+      w.unmount();
+    });
+
+    it("asks before a web search and sends the user's answer", async () => {
+      vi.mocked(api.ai.chat).mockReset()
+        .mockResolvedValueOnce({
+          ...DONE, message: "I'll look that up.",
+          pending: [{ id: "s1", tool: "web_search", label: "Web search: bustle", args: { query: "victorian bustle styles" } }],
+        })
+        .mockResolvedValueOnce(DONE);
+      const { w } = await mountWithPage();
+      await ask(w, "find victorian outfit words");
+      const card = w.get('[data-test="ai-chat-search"]');
+      expect(card.get('[data-test="ai-chat-search-query"]').text()).toBe("victorian bustle styles");
+      expect(api.ai.chat).toHaveBeenCalledTimes(1);
+      expect(w.find('[data-test="ai-chat-loading"]').exists()).toBe(false);
+      await card.get('[data-test="ai-chat-search-chat"]').trigger("click");
+      await flushPromises();
+      expect(vi.mocked(api.ai.chat).mock.calls[1][0]).toMatchObject({
+        chat_id: "c1", results: [{ id: "s1", approve: "chat" }],
+      });
+      expect(w.get('[data-test="ai-chat-search"]').text()).toContain("Allowed for this chat");
+      w.unmount();
+    });
+
+    it("Stop leaves a waiting search unanswered", async () => {
+      vi.mocked(api.ai.chat).mockReset().mockResolvedValueOnce({
+        ...DONE, message: "",
+        pending: [{ id: "s1", tool: "web_search", label: "Web search: x", args: { query: "x y" } }],
+      });
+      const { w } = await mountWithPage();
+      await ask(w, "search it");
+      useAiChat().stop();
+      await flushPromises();
+      expect(api.ai.chat).toHaveBeenCalledTimes(1);
+      expect(useAiChat().loading.value).toBe(false);
+      expect(w.get('[data-test="ai-chat-search"]').text()).toContain("Not answered");
+      w.unmount();
+    });
   });
 });

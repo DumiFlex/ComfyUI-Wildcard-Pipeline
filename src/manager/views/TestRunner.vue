@@ -27,7 +27,8 @@ import { useAiConfig } from "../composables/useAiConfig";
 import TraceDrawer from "../components/test-runner/TraceDrawer.vue";
 import InspectorDrawer from "../components/test-runner/InspectorDrawer.vue";
 import { useScenarioWorkbench } from "../composables/useScenarioWorkbench";
-import { registerPageNote } from "../composables/useOpenEditor";
+import { currentPageNote, registerPageNote } from "../composables/useOpenEditor";
+import { registerAiAction } from "../composables/useAiActions";
 import { useDeleteConfirm } from "../composables/useDeleteConfirm";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { buildUuidToName } from "../utils/wildcardSyntax";
@@ -167,7 +168,19 @@ const uses = computed(() => {
   return { id, name };
 });
 
+let markReady: () => void = () => {};
+/** Resolves once the page has loaded the library and opened its scenario. */
+const ready = new Promise<void>((resolve) => { markReady = resolve; });
+
 onMounted(async () => {
+  try {
+    await openFirst();
+  } finally {
+    markReady();
+  }
+});
+
+async function openFirst(): Promise<void> {
   await wb.loadLibrary();
   const item = deepLinkItem();
   const using = usesId.value
@@ -181,6 +194,25 @@ onMounted(async () => {
   } else if (wb.scenarios.value.length) {
     wb.openScenario(wb.scenarios.value[0]);
   }
+}
+
+// The chat's `show_test`: run that stack as a quick run where the user can
+// see it, and tell the chat what came out (the same text as the page note).
+registerAiAction("show_test", async (args) => {
+  await ready;
+  if (wb.dirty.value && draft.value.stack.length) {
+    return "couldn't: the open scenario has unsaved changes; ask the user to save or discard them first";
+  }
+  const stack = (Array.isArray(args.stack) ? args.stack : []) as ScenarioStackItem[];
+  if (!stack.length) return "couldn't: the stack is empty";
+  const count = Math.min(500, Math.max(1, Number(args.seeds) || 20));
+  wb.newQuickRun(stack[0]);
+  draft.value.stack = stack.map((item) => ({ ...item }));
+  const seeds = draft.value.seeds;
+  draft.value.seeds = "random" in seeds ? { random: true, count } : { from: "from" in seeds ? seeds.from : 0, count };
+  await wb.run();
+  if (wb.runError.value) return `couldn't run it: ${wb.runError.value}`;
+  return `ran it in the Test Runner, where the user sees the results. ${currentPageNote()}`;
 });
 
 /* ---------------------------- actions ----------------------------- */
@@ -287,13 +319,15 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
           :disabled="!draft.stack.length"
           :loading="wb.running.value"
           title="Ctrl + Enter"
-          data-test="run-btn"
+          data-test="run-btn" data-ai-anchor="run" data-ai-label="Run button"
           @click="wb.run()"
         >{{ wb.running.value ? "Running…" : "Run" }}</Button>
       </div>
 
       <div class="wp-tr__content">
         <StackBuilder
+          data-ai-anchor="stack"
+          data-ai-label="Stack: the modules and bundles to run"
           v-model:stack="draft.stack"
           v-model:pins="draft.pins"
           :views="wb.stackViews.value"
@@ -313,7 +347,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
           <p v-if="result.missing.length" class="wp-tr__missing" data-test="missing">
             Skipped {{ result.missing.length }} item{{ result.missing.length === 1 ? "" : "s" }} no longer in the library.
           </p>
-          <div class="wp-tr__stats" data-test="run-stats">
+          <div class="wp-tr__stats" data-test="run-stats" data-ai-anchor="run-stats" data-ai-label="Run summary: runs, seeds, failures">
             <div><span>Runs</span><strong>{{ result.runs }}</strong><em>{{ seedLabel(wb.ranSeeds.value ?? draft.seeds) }}</em></div>
             <div><span>Unique outputs</span><strong>{{ uniqueOutputs ?? "none" }}</strong><em>{{ wb.outputVar.value ? `of $${wb.outputVar.value}` : "no output variable" }}</em></div>
             <div><span>Warnings</span><strong :data-warn="warningCount + result.failed ? 'true' : 'false'">{{ warningCount + result.failed }}</strong><em>{{ result.failed ? `${result.failed} runs failed` : result.warnings.length ? `${result.warnings.length} kinds` : "none reported" }}</em></div>
@@ -322,7 +356,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 
           <AiRunBar v-if="ai.ready.value" :result="result" />
           <section class="wp-tr__results" aria-label="Results">
-            <div class="wp-tr__tabs" role="tablist">
+            <div class="wp-tr__tabs" role="tablist" data-ai-anchor="result-tabs" data-ai-label="Result tabs: variables, outputs, samples, warnings, compare">
               <button
                 v-for="t in TABS"
                 :key="t.id"

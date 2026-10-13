@@ -329,47 +329,113 @@ TOOLS: list[Tool] = [
         ("pack",),
     ),
     Tool(
-        "open", "change",
-        "Show a button that opens an item's editor, a docs page or a manager page.",
+        "open", "client",
+        "Go to an item's editor, a docs page or a manager page in the user's browser.",
         '{"id"} for an item\'s editor, {"doc": docs page id} for a docs page, or {"page": '
-        'manager page, "section": settings section}: a button that goes there.',
+        'manager page, "section": settings section}: takes the user there now.',
         obj({"id": s("item id or name"), "doc": s("docs page id"),
              "page": s("manager page"), "section": s("settings section")}),
         ("core",),
+    ),
+    Tool(
+        "read_page", "client",
+        "List what the user's current page shows and the parts you can point at.",
+        "{}: what the user's page shows now and its parts, each with an anchor for highlight.",
+        obj(),
+        ("core",),
+    ),
+    Tool(
+        "highlight", "client",
+        "Point at a part of the user's page: scroll to it and outline it with a short caption.",
+        '{"anchor": an anchor from read_page, "caption": a few words}: scrolls to that part '
+        "of the page and outlines it with your caption. Call read_page first for anchors.",
+        obj({"anchor": s("anchor from read_page"), "caption": s("a few words")}, ("anchor",)),
+        ("core",),
+    ),
+    Tool(
+        "select_rows", "client",
+        "Select items in the list the user has open (a list page).",
+        '{"ids": [ids or names]}: selects those rows in the list page the user has open.',
+        obj({"ids": arr(s("item id or name"))}, ("ids",)),
+        ("lists",),
+    ),
+    Tool(
+        "organize", "client",
+        "Open Organize for some items in the user's list: the assistant panel suggests "
+        "categories, tags and ratings, and the user applies what they like.",
+        '{"ids": [ids or names], "note": how to organize them, optional}: selects them in the '
+        "list and runs Organize; the user reviews and applies the suggestions there.",
+        obj({"ids": arr(s("item id or name")), "note": s("how to organize them")}, ("ids",)),
+        ("lists",),
+    ),
+    Tool(
+        "draft_options", "client",
+        "Open a wildcard and draft new options with its AI panel; the user ticks the ones "
+        "to add.",
+        '{"id": wildcard, "instruction": what options to write, "count": how many (10)}: '
+        "opens the wildcard and drafts options in its AI panel, where the user picks which "
+        "to add. Use add_options instead when you know the exact options.",
+        obj({"id": s("wildcard id or name"), "instruction": s("what options to write"),
+             "count": n("how many, 1-50", integer=True)}, ("id", "instruction")),
+        ("wildcards",),
+    ),
+    Tool(
+        "show_test", "client",
+        "Open the Test Runner with a stack and run it, so the user sees the results.",
+        '{"stack": [names or ids of modules and bundles], "seeds": how many runs (20)}: opens '
+        "the Test Runner with that stack and runs it for the user to see. Use run_test to "
+        "check something yourself.",
+        obj({"stack": arr(s("name or id")), "seeds": n("how many runs", integer=True)},
+            ("stack",)),
+        ("test",),
+    ),
+    Tool(
+        "web_search", "web",
+        "Search the web with the user's search engine. The user sees the query and allows "
+        "it first; you get short result snippets.",
+        '{"query": a short search, no private details}: searches the web with the user\'s '
+        "own engine after the user allows the query; returns a few snippets with links.",
+        obj({"query": s("a short search")}, ("query",)),
+        ("web",),
     ),
 ]
 
 BY_NAME: dict[str, Tool] = {t.name: t for t in TOOLS}
 READ = tuple(t.name for t in TOOLS if t.kind == "read")
 CHANGE = tuple(t.name for t in TOOLS if t.kind == "change")
+#: Run in the browser, or need the user's OK: the turn pauses for them.
+CLIENT = tuple(t.name for t in TOOLS if t.kind == "client")
+WEB = tuple(t.name for t in TOOLS if t.kind == "web")
 
 #: Groups a small model gets on each page, besides "core". Keys are route
 #: names with their -new / -edit suffix removed.
 PAGE_GROUPS: dict[str, tuple[str, ...]] = {
-    "wildcards": ("wildcards", "pack"),
-    "fixed-values": ("fixed-values",),
-    "combines": ("combines",),
-    "derivations": ("derivations",),
-    "constraints": ("constraints", "wildcards"),
-    "bundles": ("bundles",),
-    "templates": ("templates",),
-    "test": ("wildcards", "derivations", "constraints"),
+    "all": ("lists", "wildcards", "pack"),
+    "wildcards": ("wildcards", "pack", "lists"),
+    "fixed-values": ("fixed-values", "lists"),
+    "combines": ("combines", "lists"),
+    "derivations": ("derivations", "lists"),
+    "constraints": ("constraints", "wildcards", "lists"),
+    "bundles": ("bundles", "lists"),
+    "templates": ("templates", "lists"),
+    "test": ("wildcards", "derivations", "constraints", "test"),
     "pack-builder": ("pack", "wildcards"),
 }
 DEFAULT_GROUPS = ("wildcards", "pack")
 
 
-def toolset(route: str | None, *, scoped: bool) -> list[str]:
+def toolset(route: str | None, *, scoped: bool, web: bool = False) -> list[str]:
     """Tool names a new chat offers. Unscoped (medium and large models):
     all of them. Scoped (small models): the core tools, the page's groups
-    and `more_tools`, in catalog order so the list is stable."""
+    and `more_tools`, in catalog order so the list is stable. `web`: web
+    search is set up (Settings › AI assistant), so `web_search` is offered."""
     if not scoped:
-        return [t.name for t in TOOLS if t.name != "more_tools"]
+        return [t.name for t in TOOLS if t.name != "more_tools" and (web or t.kind != "web")]
     key = str(route or "")
     for suffix in ("-new", "-edit"):
         if key.endswith(suffix):
             key = key[: -len(suffix)]
-    groups = {"core", *PAGE_GROUPS.get(key, DEFAULT_GROUPS)}
+    groups = {"core", *PAGE_GROUPS.get(key, DEFAULT_GROUPS), *(("web",) if web else ())}
     names = [t.name for t in TOOLS if groups.intersection(t.groups)]
     return [*names, "more_tools"]
 

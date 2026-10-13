@@ -9,7 +9,7 @@ import { api } from "../../../api/client";
 import { _resetAiConfigForTests } from "../../../composables/useAiConfig";
 import { _resetAiChatForTests, useAiChat } from "../../../composables/useAiChat";
 import { _resetOpenEditorForTests } from "../../../composables/useOpenEditor";
-import type { AiChatResult, AiConfig, ScenarioRunResponse } from "../../../api/types";
+import type { AiChatRequest, AiChatResult, AiConfig, ScenarioRunResponse } from "../../../api/types";
 
 const CONFIG = {
   enabled: true, provider: "ollama", base_url: "", model: "m", unload_after_s: 60, context_max: 16384, model_size: "auto", model_size_auto: "small",
@@ -100,7 +100,7 @@ describe("AiRunBar + chat", () => {
     const drawer = mount(AiChatDrawer, { global: { plugins: [router] }, attachTo: document.body });
     await flushPromises();
     expect(api.ai.chat).toHaveBeenCalledTimes(1);
-    const [body] = vi.mocked(api.ai.chat).mock.calls[0];
+    const body = vi.mocked(api.ai.chat).mock.calls[0][0] as AiChatRequest;
     expect(body.message).toContain("red scarf");
     expect(body.page?.route).toBe("test");
     expect(drawer.text()).toContain("It picks winter most.");

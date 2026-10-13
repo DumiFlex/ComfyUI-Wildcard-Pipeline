@@ -195,7 +195,7 @@ watch(
           v-if="historyEntries && historyEntries.length"
           variant="ghost"
           icon="pi-history"
-          data-test="history-btn"
+          data-test="history-btn" data-ai-anchor="history" data-ai-label="History (earlier versions)"
           @click="historyOpen = true"
         >
           History ({{ historyEntries.length }})
@@ -213,7 +213,7 @@ watch(
           :title="effectiveSaveState === 'error'
             ? saveError
             : (saveDisabled && saveDisabledReason) || undefined"
-          data-test="save-btn"
+          data-test="save-btn" data-ai-anchor="save" data-ai-label="Save button"
           @click="onSave"
         >{{ saveLabel }}</Button>
       </div>

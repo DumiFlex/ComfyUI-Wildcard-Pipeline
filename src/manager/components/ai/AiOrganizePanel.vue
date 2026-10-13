@@ -114,6 +114,22 @@ const onCount = computed(() =>
 
 const RATING_LABEL = { safe: "Safe", nsfw: "NSFW" } as const;
 
+/** The chat's `organize`: ask with its note, leave the changes here for the
+ *  user to apply, and tell the chat what was proposed. */
+async function run(note: string): Promise<string> {
+  instruction.value = note;
+  await convo.ask();
+  const res = result.value;
+  if (!res) return `couldn't: ${error.value || "the model didn't answer"}`;
+  if (!res.changes.length) return error.value || "nothing to change";
+  const lines = res.changes.slice(0, 20).map((c, i) => `${c.name}: ${keysOf(c, i).map((k) => chipText(c, k)).join(", ")}`);
+  const more = res.changes.length > 20 ? `; and ${res.changes.length - 20} more` : "";
+  return `proposed changes for ${res.changes.length} of ${res.count} items in the Organize window: `
+    + `${lines.join("; ")}${more}. Nothing is saved until the user presses Apply there.`;
+}
+
+defineExpose({ run });
+
 function liveRow(kind: Kind, id: string): Row | undefined {
   // The store has the latest copy; the list's row may predate an edit.
   if (kind === "module") {

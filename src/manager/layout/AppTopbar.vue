@@ -138,7 +138,7 @@ function openPalette(): void {
       type="button"
       class="wp-topbar__palette-hint"
       :title="paletteShortcut.tooltip"
-      data-test="topbar-palette"
+      data-test="topbar-palette" data-ai-anchor="command-palette" data-ai-label="Command palette (search everything)"
       @click="openPalette"
     >
       <Icon name="pi-search" :size="12" />
@@ -198,7 +198,7 @@ function openPalette(): void {
       class="wp-topbar__icon-btn wp-topbar__news"
       :aria-label="hasUnreadNews ? `What's new in v${version} (unread)` : `What's new`"
       :title="hasUnreadNews ? `What's new in v${version}` : `What's new`"
-      data-test="topbar-whats-new"
+      data-test="topbar-whats-new" data-ai-anchor="whats-new" data-ai-label="What's new"
     >
       <!-- A megaphone is what "here is an announcement" looks like, so the
            dot moves rather than the glyph: its horn occupies the top-right
@@ -234,7 +234,7 @@ function openPalette(): void {
       class="wp-topbar__icon-btn"
       aria-label="Settings"
       title="Settings"
-      data-test="topbar-settings"
+      data-test="topbar-settings" data-ai-anchor="settings" data-ai-label="Settings"
     >
       <Icon name="pi-cog" />
     </RouterLink>

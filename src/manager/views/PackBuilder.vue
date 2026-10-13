@@ -245,7 +245,7 @@ function openTemplate(): void {
           rows="5"
           placeholder="A fantasy character pack: race, class, an outfit and a weapon that fit the class. Elves never use guns. Give each character a title like 'Elven Archmage'."
           aria-label="Describe the pack"
-          data-test="pack-request"
+          data-test="pack-request" data-ai-anchor="pack-request" data-ai-label="Describe the pack"
           :disabled="convo.loading.value"
           @keydown="onKey($event, pb.askPlan)"
         ></textarea>
@@ -276,7 +276,7 @@ function openTemplate(): void {
             variant="primary"
             icon="pi-microchip-ai"
             :disabled="!convo.instruction.value.trim()"
-            data-test="pack-plan"
+            data-test="pack-plan" data-ai-anchor="pack-plan" data-ai-label="Plan it button"
             @click="pb.askPlan"
           >Plan it</Button>
         </div>
@@ -411,7 +411,7 @@ function openTemplate(): void {
             variant="primary"
             icon="pi-cog"
             :disabled="!keptCount || convo.loading.value"
-            data-test="pack-build"
+            data-test="pack-build" data-ai-anchor="pack-build" data-ai-label="Build button"
             @click="pb.build"
           >Build this pack</Button>
         </div>
@@ -528,7 +528,7 @@ function openTemplate(): void {
               variant="primary"
               icon="pi-download"
               :disabled="!moduleCount"
-              data-test="pack-install"
+              data-test="pack-install" data-ai-anchor="pack-install" data-ai-label="Install button"
               @click="install"
             >Install pack</Button>
             <Button variant="ghost" data-test="pack-back" @click="pb.backToPlan">Back to plan</Button>

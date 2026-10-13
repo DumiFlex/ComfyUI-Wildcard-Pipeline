@@ -15,7 +15,7 @@ import type { SelectOption } from "../../ui/select-types";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
 import { api } from "../../../api/client";
-import type { AiIndexStatus, AiModelSize, AiProviderId, AiTestResult, AiToolFormat } from "../../../api/types";
+import type { AiConfigPatch, AiIndexStatus, AiModelSize, AiProviderId, AiTestResult, AiToolFormat } from "../../../api/types";
 import { useAiConfig } from "../../../composables/useAiConfig";
 import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../ai-models";
 
@@ -225,6 +225,40 @@ async function commitEmbedAddress(): Promise<void> {
 }
 
 /* ── Library index ───────────────────────────────────────────────────── */
+/* Web search (off by default): SearXNG at the user's own address, or a
+ * keyed engine. The key is bound to that engine's host on the server. */
+const searchOptions = computed<SelectOption[]>(() => [
+  { value: "off", label: "Off" },
+  ...Object.entries(config.value?.search_engines ?? {}).map(([id, e]) => ({ value: id, label: e.label })),
+]);
+const searchEngine = computed(() => {
+  const id = config.value?.search_engine;
+  return id && id !== "off" ? config.value?.search_engines[id] ?? null : null;
+});
+const searchKeySet = computed(() => {
+  const id = config.value?.search_engine;
+  return !!id && id !== "off" && (config.value?.search_keys_saved ?? []).includes(id);
+});
+async function setSearchEngine(v: string | number | null): Promise<void> {
+  if (typeof v === "string") await patch({ search_engine: v as AiConfigPatch["search_engine"] });
+}
+const searchUrlDraft = ref("");
+watch(() => config.value?.search_url, (v) => { searchUrlDraft.value = v ?? ""; }, { immediate: true });
+async function commitSearchUrl(): Promise<void> {
+  if (!config.value || searchUrlDraft.value.trim() === config.value.search_url) return;
+  if (!(await patch({ search_url: searchUrlDraft.value.trim() }))) {
+    searchUrlDraft.value = config.value.search_url;
+  }
+}
+const searchKeyDraft = ref("");
+async function commitSearchKey(): Promise<void> {
+  if (!searchKeyDraft.value.trim()) return;
+  if (await patch({ search_key: searchKeyDraft.value.trim() })) searchKeyDraft.value = "";
+}
+async function removeSearchKey(): Promise<void> {
+  await patch({ search_key: "" });
+}
+
 const index = ref<AiIndexStatus | null>(null);
 const indexError = ref("");
 const rebuilding = ref(false);
@@ -326,7 +360,7 @@ const off = computed(() => !config.value?.enabled);
   <p v-if="error" class="wp-set-error" role="alert">{{ error }}</p>
   <p v-if="saveError" class="wp-set-error" role="alert" data-test="ai-save-error">{{ saveError }}</p>
 
-  <template v-if="config">
+  <div v-if="config" class="wp-ai-set-wrap">
     <div class="wp-ai-set">
       <div class="wp-ai-set__main">
         <SettingGroup title="Assistant">
@@ -637,6 +671,67 @@ const off = computed(() => !config.value?.enabled);
           </SettingRow>
         </SettingGroup>
 
+        <SettingGroup title="Web search">
+          <SettingRow
+            form
+            label="Search engine"
+            hint="Lets the chat look things up on the web. Each search shows you its exact words first, and you allow it once, for the chat, or not at all. Only short result snippets come back; pages are never opened."
+            setting-key="ai-search-engine"
+          >
+            <Select
+              :model-value="config.search_engine"
+              :options="searchOptions"
+              :filterable="false"
+              aria-label="Search engine"
+              data-test="ai-search-engine"
+              @update:model-value="setSearchEngine"
+            />
+          </SettingRow>
+
+          <SettingRow
+            v-if="config.search_engine === 'searxng'"
+            form
+            label="SearXNG address"
+            hint="Your SearXNG server. JSON output must be on: add json to search.formats in its settings.yml."
+            setting-key="ai-search-url"
+            for="ai-search-url"
+          >
+            <Input
+              id="ai-search-url"
+              v-model="searchUrlDraft"
+              placeholder="http://127.0.0.1:8888"
+              class="wp-ai-set__fill wp-ai-set__mono"
+              aria-label="SearXNG address"
+              data-test="ai-search-url"
+              @blur="commitSearchUrl"
+              @keydown.enter="commitSearchUrl"
+            />
+          </SettingRow>
+
+          <SettingRow
+            v-else-if="searchEngine?.needs_key"
+            form
+            :label="`${searchEngine.label} key`"
+            hint="Saved on the ComfyUI machine, never shown again, and only ever sent to this engine."
+            setting-key="ai-search-key"
+            for="ai-search-key"
+          >
+            <Input
+              id="ai-search-key"
+              v-model="searchKeyDraft"
+              type="password"
+              :placeholder="searchKeySet ? 'Paste a new key to replace it' : 'Paste your key'"
+              class="wp-ai-set__fill"
+              aria-label="Search engine key"
+              data-test="ai-search-key"
+              @keydown.enter="commitSearchKey"
+            />
+            <Button size="sm" :disabled="!searchKeyDraft.trim()" data-test="ai-search-key-save" @click="commitSearchKey">Save</Button>
+            <Button v-if="searchKeySet" size="sm" variant="ghost" data-test="ai-search-key-remove" @click="removeSearchKey">Remove</Button>
+            <span v-if="searchKeySet" class="wp-set-pill" data-tone="ok" data-test="ai-search-key-set">Key saved</span>
+          </SettingRow>
+        </SettingGroup>
+
         <SettingGroup title="Advanced">
           <SettingRow
             form
@@ -699,10 +794,13 @@ const off = computed(() => !config.value?.enabled);
         </section>
       </aside>
     </div>
-  </template>
+  </div>
 </template>
 
 <style scoped>
+/* The side cards drop below once the section is narrow, whatever makes it
+ * narrow (a small window, or the AI chat open beside it). */
+.wp-ai-set-wrap { container-type: inline-size; }
 .wp-ai-set {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
@@ -710,7 +808,7 @@ const off = computed(() => !config.value?.enabled);
   align-items: start;
 }
 .wp-ai-set__side { position: sticky; top: var(--wp-space-6); display: flex; flex-direction: column; gap: var(--wp-space-6); }
-@media (max-width: 1180px) {
+@container (max-width: 900px) {
   .wp-ai-set { grid-template-columns: minmax(0, 1fr); }
   .wp-ai-set__side { position: static; }
 }

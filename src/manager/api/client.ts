@@ -17,6 +17,7 @@ import type {
   AiOrganizeRequest,
   AiOrganizeResult,
   AiChatRequest,
+  AiChatResume,
   AiChatResult,
   AiPackBuilt,
   AiPackCheck,
@@ -461,7 +462,7 @@ export const api = {
         method: "POST", body: JSON.stringify(body), signal,
       });
     },
-    chat(body: AiChatRequest, signal?: AbortSignal) {
+    chat(body: AiChatRequest | AiChatResume, signal?: AbortSignal) {
       return request<AiChatResult>("/wp/api/ai/chat", {
         method: "POST", body: JSON.stringify(body), signal,
       });

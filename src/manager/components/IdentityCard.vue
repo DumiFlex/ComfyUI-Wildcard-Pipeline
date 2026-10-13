@@ -148,7 +148,7 @@ function removeTag(t: string) {
         size="sm"
         :variant="aiOpen ? 'secondary' : 'ghost'"
         icon="pi-microchip-ai"
-        data-test="identity-ai"
+        data-test="identity-ai" data-ai-anchor="describe-ai" data-ai-label="AI: suggest a name, description and tags"
         title="Write a description and tags with AI"
         @click="aiOpen = !aiOpen"
       >Describe</Button>
@@ -191,7 +191,7 @@ function removeTag(t: string) {
           placeholder="None"
           clearable
           aria-label="Category"
-          data-test="identity-category"
+          data-test="identity-category" data-ai-anchor="category" data-ai-label="Category"
           @update:model-value="(v) => emit('update:categoryId', (v as string | null) ?? null)"
         />
       </Field>
@@ -225,7 +225,7 @@ function removeTag(t: string) {
           :rows="3"
           placeholder="What does this module do?"
           aria-label="Description"
-          data-test="identity-description"
+          data-test="identity-description" data-ai-anchor="description" data-ai-label="Description"
           @update:model-value="(v) => emit('update:description', v)"
         />
       </Field>
@@ -235,7 +235,7 @@ function removeTag(t: string) {
           <Input
             v-model="tagDraft"
             placeholder="Type a tag and press Enter…"
-            data-test="identity-tag-input"
+            data-test="identity-tag-input" data-ai-anchor="tags" data-ai-label="Library tags"
             @keydown.enter.prevent="addTag"
           />
           <Button

@@ -9,26 +9,24 @@
  * the model the user said no. Each message carries what's on screen: the
  * route, the open editor's item, the docs page and the view's own note.
  * State lives in `useAiChat`, so closing the drawer keeps the chat.
+ *
+ * Page tools (open, point at, hand work to a page) run while the drawer is
+ * open, through the router it hands to `useAiChat.attach`. A web search the
+ * model asks for shows its exact query with Allow once / Allow for this
+ * chat / Deny; nothing leaves the machine before the user picks.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { useRoute, useRouter, type RouteLocationRaw } from "vue-router";
+import { isNavigationFailure, useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import Button from "../ui/Button.vue";
 import AiMessage from "./AiMessage.vue";
-import { useAiChat, type ChatAssistantEntry } from "../../composables/useAiChat";
+import AiPointer from "./AiPointer.vue";
+import { useAiChat, type ChatAssistantEntry, type SearchApproval } from "../../composables/useAiChat";
+import { clearPointer, EDIT_ROUTES } from "../../composables/useAiActions";
 import { useAiConfig } from "../../composables/useAiConfig";
-import type { AiChatPage, AiChatProposal } from "../../api/types";
+import type { AiChatPage, AiChatProposal, AiPendingCall } from "../../api/types";
 import { currentPageNote, openEditor } from "../../composables/useOpenEditor";
 import { usePackBuilder } from "../../composables/usePackBuilder";
 
-const EDIT_ROUTES: Record<string, string> = {
-  wildcard: "wildcards-edit",
-  combine: "combines-edit",
-  derivation: "derivations-edit",
-  constraint: "constraints-edit",
-  fixed_values: "fixed-values-edit",
-  bundle: "bundles-edit",
-  template: "templates-edit",
-};
 const PREVIEW_LINES = 6;
 const SUGGESTIONS = [
   "What does my library set up for characters?",
@@ -88,6 +86,29 @@ function page(): AiChatPage {
 function send(): void {
   void chat.send(page());
 }
+
+chat.attach({
+  page,
+  hasRoute: (name) => router.hasRoute(name),
+  navigate: async (to) => {
+    const failure = await router.push(to);
+    return !isNavigationFailure(failure);
+  },
+});
+onBeforeUnmount(() => chat.attach(null));
+watch(() => route.fullPath, () => clearPointer());
+
+type SearchCall = Extract<AiPendingCall, { tool: "web_search" }>;
+
+function searches(entry: ChatAssistantEntry): SearchCall[] {
+  return (entry.result.pending ?? []).filter((c): c is SearchCall => c.tool === "web_search");
+}
+
+const ANSWERED: Record<SearchApproval, string> = {
+  once: "Allowed",
+  chat: "Allowed for this chat",
+  deny: "Declined",
+};
 
 // A page asked a question (`chat.ask`): send it once the drawer is here.
 watch(chat.queued, (text) => {
@@ -201,6 +222,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 
 <template>
   <aside class="wp-ai-chat" role="dialog" aria-label="AI assistant" data-test="ai-chat">
+    <AiPointer />
     <header class="wp-ai-chat__head">
       <span class="wp-ai-chat__title"><i class="pi pi-microchip-ai" aria-hidden="true" /> Assistant</span>
       <span
@@ -250,6 +272,28 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
             </li>
           </ul>
           <AiMessage :text="entry.result.message" :refs="entry.result.refs" />
+
+          <article
+            v-for="c in searches(entry)"
+            :key="c.id"
+            class="wp-ai-chat__card wp-ai-chat__search"
+            data-test="ai-chat-search"
+          >
+            <div class="wp-ai-chat__card-head">
+              <span class="wp-ai-chat__card-title"><i class="pi pi-globe" aria-hidden="true" /> Search the web?</span>
+              <span class="wp-ai-chat__card-summary">Only this text goes to your search engine. Results come back as short snippets.</span>
+            </div>
+            <p class="wp-ai-chat__query" data-test="ai-chat-search-query">{{ c.args.query }}</p>
+            <div class="wp-ai-chat__actions">
+              <template v-if="chat.asking.value.has(c.id)">
+                <Button variant="ghost" size="sm" data-test="ai-chat-search-deny" @click="chat.answerSearch(c.id, 'deny')">Deny</Button>
+                <Button variant="secondary" size="sm" data-test="ai-chat-search-chat" @click="chat.answerSearch(c.id, 'chat')">Allow for this chat</Button>
+                <Button variant="primary" size="sm" icon="pi-check" data-test="ai-chat-search-once" @click="chat.answerSearch(c.id, 'once')">Allow once</Button>
+              </template>
+              <span v-else-if="entry.approved?.[c.id]" :class="entry.approved[c.id] === 'deny' ? 'wp-ai-chat__dismissed' : 'wp-ai-chat__done'">{{ ANSWERED[entry.approved[c.id]] }}</span>
+              <span v-else class="wp-ai-chat__dismissed">Not answered</span>
+            </div>
+          </article>
 
           <article
             v-for="p in entry.result.proposals"
@@ -310,8 +354,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
         </div>
       </template>
 
-      <p v-if="chat.loading.value" class="wp-ai-chat__status" role="status" data-test="ai-chat-loading">
-        <i class="pi pi-spin pi-spinner" aria-hidden="true" /> Working… it may read a few items first.
+      <p v-if="chat.loading.value && !chat.asking.value.size" class="wp-ai-chat__status" role="status" data-test="ai-chat-loading">
+        <i class="pi pi-spin pi-spinner" aria-hidden="true" />
+        {{ chat.running.value ? `${chat.running.value}…` : "Working… it may read a few items first." }}
       </p>
     </div>
 
@@ -411,6 +456,10 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__preview {
   margin: 0; padding: 6px 8px 6px 22px; font-size: 12px; border-radius: 6px;
   background: var(--wp-bg-1); display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere;
+}
+.wp-ai-chat__query {
+  margin: 0; padding: 6px 8px; border-radius: 6px; background: var(--wp-bg-1);
+  font-family: var(--wp-font-mono, monospace); font-size: 12px; overflow-wrap: anywhere;
 }
 .wp-ai-chat__more { align-self: flex-start; border: 0; background: none; padding: 0; font-size: 12px; color: var(--wp-accent-text); cursor: pointer; }
 .wp-ai-chat__warnings { list-style: none; margin: 0; padding: 0; font-size: 12px; color: var(--wp-warn); display: flex; flex-direction: column; gap: 2px; }

@@ -10,15 +10,26 @@
  * the editors use; Undo restores what the proposal replaced. A change built
  * on the open editor's unsaved version goes into that editor instead
  * (`useOpenEditor`), where Save keeps it.
+ *
+ * A turn can pause on page tools (open a page, point at something, hand
+ * work to a page's AI feature) and on web searches: page tools run here
+ * (`useAiActions`), a search waits for the user's Allow or Deny, and the
+ * answers carry the turn on (`AiChatResume`) until nothing waits.
  */
 import { computed, ref, shallowRef, triggerRef } from "vue";
 import { api, ApiError } from "../api/client";
-import type { AiChatEvent, AiChatPage, AiChatProposal, AiChatResult } from "../api/types";
+import type {
+  AiCallAnswer, AiChatEvent, AiChatPage, AiChatProposal, AiChatResult, AiPendingCall,
+} from "../api/types";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import { useTemplateStore } from "../stores/templateStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { openEditor } from "./useOpenEditor";
+import { runCall, type AiActionHost } from "./useAiActions";
+
+/** The user's answer to a web search the model asked for. */
+export type SearchApproval = "once" | "chat" | "deny";
 
 export type ProposalStatus = "applied" | "editor" | "dismissed" | "failed";
 
@@ -37,6 +48,8 @@ export interface ChatAssistantEntry {
   /** The open editor's item when this answer was asked for, to spot edits
    *  made in the editor since (then a proposal built on it is stale). */
   editorSnap?: { id: string; json: string };
+  /** The user's answers to the web searches this answer asked for. */
+  approved?: Record<string, SearchApproval>;
 }
 
 export type ChatEntry = ChatUserEntry | ChatAssistantEntry;
@@ -55,6 +68,13 @@ let controller: AbortController | null = null;
 const chatId = ref<string | null>(null);
 /** Card actions not yet sent, newest per proposal. */
 let pending: AiChatEvent[] = [];
+/** Runs page tools; set by the drawer, which knows the router. */
+let host: AiActionHost | null = null;
+/** Web searches waiting for the user's Allow or Deny, by call id. */
+const asking = shallowRef<ReadonlySet<string>>(new Set());
+const approvals = new Map<string, (choice: SearchApproval | null) => void>();
+/** Page tools running now (their labels), for the status line. */
+const running = ref("");
 
 function record(pid: string, status: AiChatEvent["status"]): void {
   pending = [...pending.filter((e) => e.pid !== pid), { pid, status }];
@@ -103,26 +123,105 @@ async function send(page?: AiChatPage): Promise<void> {
         ...(snap ? { editorSnap: snap } : {}),
       },
     ];
+    await carryOn(result, mine.signal);
   } catch (err) {
-    // Put the message back so it can be sent again.
-    if (entries.value[entries.value.length - 1] === next[next.length - 1]) {
-      entries.value = entries.value.slice(0, -1);
-    }
-    input.value = text;
+    unsent(next, text);
     if (err instanceof DOMException && err.name === "AbortError") return;
     error.value = err instanceof ApiError || err instanceof Error ? err.message : "Something went wrong";
   } finally {
     if (controller === mine) {
       controller = null;
       loading.value = false;
+      running.value = "";
     }
   }
+}
+
+/** Put a message that got no answer back in the box, to send again. */
+function unsent(next: ChatEntry[], text: string): void {
+  if (entries.value[entries.value.length - 1] === next[next.length - 1]) {
+    entries.value = entries.value.slice(0, -1);
+    input.value = text;
+  }
+}
+
+/** While the turn waits on calls: answer them and send the answers, each
+ *  continuation showing as its own reply. Stop leaves the calls waiting;
+ *  the next message tells the model they didn't run. */
+async function carryOn(first: AiChatResult, signal: AbortSignal): Promise<void> {
+  let result = first;
+  while (result.pending?.length) {
+    const entry = entries.value[entries.value.length - 1];
+    if (entry?.role !== "assistant") return;
+    const answers = await answerCalls(entry, result.pending, signal);
+    if (!answers) return;
+    const page = host?.page();
+    const snap = page?.editor ? editorJson() : undefined;
+    result = await api.ai.chat({
+      chat_id: result.chat_id, results: answers, ...(page ? { page } : {}),
+    }, signal);
+    entries.value = [
+      ...entries.value,
+      {
+        role: "assistant", result, status: {}, created: {}, errors: {},
+        ...(snap ? { editorSnap: snap } : {}),
+      },
+    ];
+  }
+}
+
+async function answerCalls(
+  entry: ChatAssistantEntry, calls: AiPendingCall[], signal: AbortSignal,
+): Promise<AiCallAnswer[] | null> {
+  const out: AiCallAnswer[] = [];
+  for (const call of calls) {
+    if (signal.aborted) return null;
+    if (call.tool === "web_search") {
+      const choice = await approval(call.id, signal);
+      if (!choice) return null;
+      entry.approved = { ...entry.approved, [call.id]: choice };
+      touch();
+      out.push(choice === "deny" ? { id: call.id, denied: true } : { id: call.id, approve: choice });
+      continue;
+    }
+    running.value = call.label;
+    const text = host ? await runCall(call, host) : "couldn't: the page isn't ready";
+    running.value = "";
+    out.push({ id: call.id, text });
+  }
+  return signal.aborted ? null : out;
+}
+
+function approval(id: string, signal: AbortSignal): Promise<SearchApproval | null> {
+  return new Promise((resolve) => {
+    const done = (choice: SearchApproval | null): void => {
+      approvals.delete(id);
+      const next = new Set(asking.value);
+      next.delete(id);
+      asking.value = next;
+      resolve(choice);
+    };
+    approvals.set(id, done);
+    asking.value = new Set([...asking.value, id]);
+    signal.addEventListener("abort", () => done(null), { once: true });
+  });
+}
+
+/** The user's Allow once / Allow for this chat / Deny on a web search. */
+function answerSearch(id: string, choice: SearchApproval): void {
+  approvals.get(id)?.(choice);
+}
+
+/** The drawer hands over how to navigate and read the page. */
+function attach(next: AiActionHost | null): void {
+  host = next;
 }
 
 function stop(): void {
   controller?.abort();
   controller = null;
   loading.value = false;
+  running.value = "";
 }
 
 function reset(): void {
@@ -258,8 +357,8 @@ const started = computed(() => entries.value.length > 0);
 
 export function useAiChat() {
   return {
-    open, input, entries, loading, error, started, queued, chatId,
-    send, stop, reset, apply, undo, dismiss, blockedReason, ask,
+    open, input, entries, loading, error, started, queued, chatId, asking, running,
+    send, stop, reset, apply, undo, dismiss, blockedReason, ask, answerSearch, attach,
   };
 }
 

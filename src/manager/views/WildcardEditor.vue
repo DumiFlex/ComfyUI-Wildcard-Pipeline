@@ -12,7 +12,7 @@
  * Save flow appends a snapshot to `payload.history` (utils/history.ts) so
  * the EditorFrame's history button works on the next mount.
  */
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import type { SaveState, EditorFieldError } from "../components/EditorFrame.types";
 import { useRouter, useRoute } from "vue-router";
@@ -38,6 +38,7 @@ import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
 import { useEditorDraft } from "../composables/useEditorDraft";
 import { registerOpenEditor } from "../composables/useOpenEditor";
+import { registerAiAction } from "../composables/useAiActions";
 import DraftBanner from "../components/DraftBanner.vue";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
@@ -252,6 +253,17 @@ registerOpenEditor({
     if (next.tag_groups) tagGroups.value = next.tag_groups;
   },
 });
+
+// The chat's `draft_options`: open the AI panel on Add and draft there, so
+// the user picks what to keep exactly as if they had asked the panel.
+const aiPanel = ref<InstanceType<typeof AiWildcardPanel> | null>(null);
+registerAiAction("draft_options", async (args) => {
+  if (!ai.config.value?.enabled) return "couldn't: the assistant is off";
+  aiDraftOpen.value = true;
+  await nextTick();
+  if (!aiPanel.value) return "couldn't: the AI panel didn't open";
+  return aiPanel.value.draft(String(args.instruction ?? ""), Number(args.count) || 10);
+}, (args) => !!props.id && args.id === props.id);
 
 const draft = useEditorDraft({
   kind: "wildcard",
@@ -2356,7 +2368,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
             aria-label="Filter options"
             spellcheck="false"
             autocomplete="off"
-            data-test="wc-opt-search"
+            data-test="wc-opt-search" data-ai-anchor="opt-search" data-ai-label="Search the options"
           />
           <button
             v-if="optQuery"
@@ -2421,7 +2433,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
           size="sm"
           variant="ghost"
           icon="pi-clipboard"
-          data-test="wc-bulk-add"
+          data-test="wc-bulk-add" data-ai-anchor="bulk-add" data-ai-label="Bulk add button"
           @click="bulkAddOpen = !bulkAddOpen"
         >Bulk add</Button>
         <Button
@@ -2429,7 +2441,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
           size="sm"
           :variant="aiDraftOpen ? 'secondary' : 'ghost'"
           icon="pi-microchip-ai"
-          data-test="wc-ai-draft"
+          data-test="wc-ai-draft" data-ai-anchor="ai-panel-button" data-ai-label="AI button (draft or edit options)"
           @click="aiDraftOpen = !aiDraftOpen"
         >AI</Button>
         <Button
@@ -2440,13 +2452,14 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
           data-test="wc-add-null"
           @click="addNullOption"
         >Add null</Button>
-        <Button size="sm" variant="primary" icon="pi-plus" data-test="wc-add-opt" @click="addOption">
+        <Button size="sm" variant="primary" icon="pi-plus" data-test="wc-add-opt" data-ai-anchor="add-option" data-ai-label="Add option button" @click="addOption">
           Add option
         </Button>
       </template>
       <template #subheader>
       <div v-if="aiDraftOpen && ai.config.value?.enabled" class="wpc-bulk-controls">
         <AiWildcardPanel
+          ref="aiPanel"
           :name="name"
           :var-binding="varBinding"
           :options="options"
@@ -2498,7 +2511,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
         <p v-if="bulkNote" class="wpc-bulk-note" role="status">{{ bulkNote }}</p>
       </div>
       </template>
-      <table class="wp-table wp-options-table">
+      <table class="wp-table wp-options-table"> data-ai-anchor="options" data-ai-label="Options list"
         <thead>
           <tr>
             <th v-if="bulkMode" scope="col" class="opt-col-check">

@@ -217,11 +217,25 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           filter, never empty, hold for a whole Loop run, internal), or add, remove and change its
           items,</li>
         <li>change an item's description, tags, category or rating,</li>
-        <li>open an item's editor, a docs page or a manager page such as a Settings section,</li>
         <li>hand a whole new pack to the Pack builder: <b>Plan it</b> on the card opens the Pack
           builder with the pack described and starts the plan (a plan already there is kept and
           the description waits in its box).</li>
       </ul>
+      <p>
+        It can <b>show you around</b>. It opens an item's editor, a docs page or a manager page
+        (a Settings section, the Test Runner) itself, reads what the page offers, and points at
+        a part of it with an outline and a short caption: ask "where do I set the context
+        size?" and it takes you there. Esc or a click anywhere closes the pointer. On a list it
+        can select rows for you.
+      </p>
+      <p>
+        It can also <b>hand work to the page's own AI features</b>, so you review the result
+        where you would anyway: it opens a wildcard's AI panel and drafts options there (you tick
+        the ones to keep and press Add), opens <b>Organize with AI</b> on the rows it means, or
+        runs a stack in the Test Runner where you see the results. The chat is told what came
+        back. A Test Runner scenario with unsaved changes is never replaced, and an editor with
+        unsaved changes asks before the chat moves you elsewhere.
+      </p>
       <p>
         It can also <b>run a stack on the engine</b> before it answers: modules and bundles from
         your library, with pinned values and a template for sample prompts. It reads each
@@ -266,6 +280,24 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         Chat works best with a model that follows instructions well; use one of the builder
         models below. A small model may need a second try or a more specific request.
       </DocCallout>
+    </DocSection>
+
+    <DocSection title="Search the web">
+      <p>
+        The chat can look things up on the web when you give it a search engine in
+        <b>Settings › AI assistant › Web search</b>. It is off by default. Pick
+        <b>SearXNG</b> (your own server: add <code>json</code> to <code>search.formats</code> in
+        its <code>settings.yml</code>, or it refuses the chat's searches) or a service that takes a
+        key: <b>Brave Search</b>, <b>Tavily</b> or <b>Kagi</b>. The key is saved on the ComfyUI
+        machine and is only ever sent to that engine.
+      </p>
+      <p>
+        Every search asks you first. The chat shows the exact words it wants to search for, with
+        <b>Allow once</b>, <b>Allow for this chat</b> (later searches in the same chat run without
+        asking) and <b>Deny</b>. Only the search words leave your PC. Five short result snippets
+        come back with their links; the assistant never opens the pages, cites results as [1],
+        [2] with the link, and treats what it found as information, never as instructions.
+      </p>
     </DocSection>
 
     <DocSection title="Tidy up an imported wildcard pack">
@@ -420,7 +452,8 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         a summary of your library's conventions (option style, tags, variables, negatives and the
         wildcards worth reusing) and, for each item, what the pack has built so far. With meaning search on, the text of each item (name, variable, tags, description and its
         first options) and your search phrases go to the embedding server; with a local server
-        that stays on your PC. Each chat
+        that stays on your PC. A web search you allow sends only its search words to the search
+        engine you picked. Each chat
         message sends the chat so far again (the provider may cache it for a few minutes to
         charge less); the chat itself is stored only in ComfyUI's own database on your PC.
       </p>
@@ -435,8 +468,10 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         The assistant can't do anything you don't see. It has a fixed set of tools: it searches
         and reads your library and these docs, runs test stacks in memory, and proposes changes
         as cards. It can't delete items, touch files, change its own settings, install or
-        publish packs, or reach the internet, and nothing is saved until you press
-        <b>Apply</b>. Its replies can't contain links, images or HTML, so a reply can't send
+        publish packs, or open web pages, and nothing is saved until you press
+        <b>Apply</b>. It reaches the internet only through web search, which you turn on and
+        allow search by search. Opening pages and pointing at things needs no permission, since
+        they change nothing. Its replies can't contain links, images or HTML, so a reply can't send
         your data anywhere when it is shown.
       </p>
       <p>

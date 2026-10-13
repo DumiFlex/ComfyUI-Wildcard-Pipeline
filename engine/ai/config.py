@@ -98,6 +98,17 @@ DEFAULTS: dict[str, Any] = {
 }
 TOOL_FORMATS = ("auto", "native", "json")
 
+#: Web search engines the user can bring (Settings › AI assistant › Web
+#: search). Off by default. SearXNG runs at the user's own address; the
+#: others are fixed hosts that take a key, bound to that host like model keys.
+SEARCH_ENGINES: dict[str, dict[str, Any]] = {
+    "searxng": {"label": "SearXNG", "base_url": "", "needs_key": False},
+    "brave": {"label": "Brave Search", "base_url": "https://api.search.brave.com",
+              "needs_key": True},
+    "tavily": {"label": "Tavily", "base_url": "https://api.tavily.com", "needs_key": True},
+    "kagi": {"label": "Kagi", "base_url": "https://kagi.com", "needs_key": True},
+}
+
 _lock = threading.Lock()
 
 
@@ -222,7 +233,31 @@ def _normalize(raw: Any) -> dict[str, Any]:
         "tool_format": src.get("tool_format") if src.get("tool_format") in TOOL_FORMATS
         else DEFAULTS["tool_format"],
         "providers": slots,
+        "search": _normalize_search(src.get("search")),
     }
+
+
+def _normalize_search(raw: Any) -> dict[str, Any]:
+    src = raw if isinstance(raw, dict) else {}
+    engine = src.get("engine") if src.get("engine") in SEARCH_ENGINES else "off"
+    url = src.get("base_url") if isinstance(src.get("base_url"), str) else ""
+    try:
+        url = check_base_url(url)
+    except ConfigError:
+        url = ""
+    keys: dict[str, dict[str, str]] = {}
+    raw_keys = src.get("keys") if isinstance(src.get("keys"), dict) else {}
+    for eid in SEARCH_ENGINES:
+        k = raw_keys.get(eid) if isinstance(raw_keys.get(eid), dict) else {}
+        key = k.get("api_key") if isinstance(k.get("api_key"), str) else ""
+        org = k.get("key_origin") if isinstance(k.get("key_origin"), str) else ""
+        if key.strip():
+            keys[eid] = {"api_key": key.strip(), "key_origin": org}
+    return {"engine": engine, "base_url": url, "keys": keys}
+
+
+def _search_url(search: dict[str, Any], engine: str) -> str:
+    return search["base_url"] if engine == "searxng" else SEARCH_ENGINES[engine]["base_url"]
 
 
 def _active(cfg: dict[str, Any]) -> dict[str, Any]:
@@ -312,6 +347,19 @@ def load_effective() -> dict[str, Any]:
     out["embed_base_url"] = cfg["embed_base_url"] or out["base_url"]
     out["embed_api_key"] = _key_for(cfg, out["embed_base_url"])
     out.pop("key_origin", None)
+    with _lock:
+        search = _read()["search"]
+    engine = search["engine"]
+    out["search"] = {"engine": "off", "base_url": "", "api_key": ""}
+    if engine != "off":
+        url = _search_url(search, engine)
+        key = search["keys"].get(engine) or {}
+        out["search"] = {
+            "engine": engine, "base_url": url,
+            # Only to the host it was saved for.
+            "api_key": key.get("api_key", "") if url and key.get("key_origin") == origin(url)
+            else "",
+        }
     return out
 
 
@@ -341,6 +389,14 @@ def public_view() -> dict[str, Any]:
         pid for pid, slot in stored["providers"].items()
         if slot["api_key"] or _env_key(pid)[0]
     )
+    search = stored["search"]
+    view["search_engine"] = search["engine"]
+    view["search_url"] = search["base_url"]
+    view["search_keys_saved"] = sorted(
+        eid for eid, k in search["keys"].items()
+        if k.get("key_origin") and k["key_origin"] == origin(_search_url(search, eid)))
+    view["search_engines"] = {eid: {"label": e["label"], "needs_key": e["needs_key"]}
+                              for eid, e in SEARCH_ENGINES.items()}
     view["presets"] = {
         pid: {k: p[k] for k in ("label", "api", "local", "needs_key", "base_url")}
         for pid, p in PRESETS.items()
@@ -422,5 +478,32 @@ def update(patch: dict[str, Any]) -> dict[str, Any]:
             # the same request changes both).
             where = slot["base_url"] or PRESETS[cfg["provider"]]["base_url"]
             slot["key_origin"] = origin(where) if key else ""
+        _update_search(cfg["search"], patch)
         _write(_normalize(cfg))
     return public_view()
+
+
+def _update_search(search: dict[str, Any], patch: dict[str, Any]) -> None:
+    if "search_engine" in patch:
+        engine = patch["search_engine"]
+        if engine != "off" and engine not in SEARCH_ENGINES:
+            raise ConfigError(f"unknown search engine {engine!r}")
+        search["engine"] = engine
+    if "search_url" in patch:
+        if not isinstance(patch["search_url"], str):
+            raise ConfigError("search_url must be a string")
+        search["base_url"] = check_base_url(patch["search_url"])
+    if "search_key" in patch:
+        engine = search["engine"]
+        if engine == "off" or not SEARCH_ENGINES[engine]["needs_key"]:
+            raise ConfigError("pick a search engine that takes a key first")
+        key = patch["search_key"]
+        if key is None:
+            key = ""
+        if not isinstance(key, str) or len(key.strip()) > 512:
+            raise ConfigError("search_key must be a string")
+        if key.strip():
+            search["keys"][engine] = {"api_key": key.strip(),
+                                      "key_origin": origin(_search_url(search, engine))}
+        else:
+            search["keys"].pop(engine, None)

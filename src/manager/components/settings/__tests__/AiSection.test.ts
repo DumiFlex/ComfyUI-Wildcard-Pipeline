@@ -25,7 +25,7 @@ const PRESETS: AiConfig["presets"] = {
 function cfg(over: Partial<AiConfig> = {}): AiConfig {
   return {
     enabled: false, provider: "ollama", base_url: "", model: "", unload_after_s: 60,
-    context_max: 16384, model_size: "auto", model_size_auto: "medium", tool_format: "auto", embed_model: "", embed_base_url: "", key_for_host: null,
+    context_max: 16384, model_size: "auto", model_size_auto: "medium", tool_format: "auto", embed_model: "", embed_base_url: "", search_engine: "off", search_url: "", search_keys_saved: [], search_engines: { searxng: { label: "SearXNG", needs_key: false }, brave: { label: "Brave Search", needs_key: true }, tavily: { label: "Tavily", needs_key: true }, kagi: { label: "Kagi", needs_key: true } }, key_for_host: null,
     key_set: false, key_from_env: false, keys_saved: [], presets: PRESETS, ...over,
   };
 }
@@ -214,6 +214,37 @@ describe("Settings › AI assistant", () => {
     expect(w.find('[data-test="ai-embed-address"]').exists()).toBe(true);
     expect(w.get('[data-test="ai-index-status"]').text()).toBe("120 items indexed · 32 searchable by meaning (adding the rest…)");
     expect(w.get('[data-test="ai-index-rebuild"]').attributes("disabled")).toBeDefined();
+    w.unmount();
+  });
+
+  it("sets up web search: an engine, then its key or address", async () => {
+    let saved = cfg({ enabled: true, model: "a" });
+    vi.mocked(api.ai.config).mockResolvedValue(saved);
+    vi.mocked(api.ai.saveConfig).mockImplementation(async (p) => {
+      const keys = p.search_key ? [saved.search_engine as "brave"] : saved.search_keys_saved;
+      saved = { ...saved, ...p, search_keys_saved: keys } as AiConfig;
+      return saved;
+    });
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    const engine = w.findAllComponents(Select).find((c) => c.attributes("data-test") === "ai-search-engine")!;
+    expect((engine.props("options") as Array<{ value: unknown }>).map((o) => o.value))
+      .toEqual(["off", "searxng", "brave", "tavily", "kagi"]);
+    expect(w.find('[data-test="ai-search-key"]').exists()).toBe(false);
+    engine.vm.$emit("update:modelValue", "brave");
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ search_engine: "brave" });
+    await w.get('[data-test="ai-search-key"]').setValue("bk-1");
+    await w.get('[data-test="ai-search-key-save"]').trigger("click");
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ search_key: "bk-1" });
+    expect(w.get('[data-test="ai-search-key-set"]').text()).toBe("Key saved");
+    engine.vm.$emit("update:modelValue", "searxng");
+    await flushPromises();
+    await w.get('[data-test="ai-search-url"]').setValue("http://127.0.0.1:8888");
+    await w.get('[data-test="ai-search-url"]').trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ search_url: "http://127.0.0.1:8888" });
     w.unmount();
   });
 

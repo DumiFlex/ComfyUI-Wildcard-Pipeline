@@ -163,6 +163,14 @@ def fit(entries: list[dict[str, Any]], meta: dict[str, Any], limit: int) -> dict
     return meta
 
 
+def last_user_text(entries: list[dict[str, Any]]) -> str:
+    """The user's newest message (what a resumed turn is still answering)."""
+    for e in reversed(entries):
+        if e.get("kind") == "user":
+            return str(e.get("text") or "")
+    return ""
+
+
 def last_reply(entries: list[dict[str, Any]]) -> str:
     """What the user last saw from the assistant: the newest step's text
     that called nothing (the JSON-mode message, when it has one)."""
