@@ -1292,7 +1292,15 @@ def _row_to_chat(row: sqlite3.Row) -> dict[str, Any]:
         "meta": meta if isinstance(meta, dict) else {},
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
+        "pinned": _pinned(row),
     }
+
+
+def _pinned(row: sqlite3.Row) -> bool:
+    try:
+        return bool(row["pinned"])
+    except (IndexError, KeyError):
+        return False  # before migration 021
 
 
 class ChatRepository:
@@ -1316,14 +1324,80 @@ class ChatRepository:
                 "VALUES (?, ?, ?, ?, ?, ?);",
                 (cid, title, snapshot, json.dumps(meta or {}, sort_keys=True), now, now),
             )
+            # The newest MAX_AI_CHATS unpinned chats stay; pinned ones always do.
             old = [r[0] for r in self._conn.execute(
-                "SELECT id FROM ai_chats ORDER BY updated_at DESC, id LIMIT -1 OFFSET ?;",
+                "SELECT id FROM ai_chats WHERE " + self._unpinned()
+                + " ORDER BY updated_at DESC, id LIMIT -1 OFFSET ?;",
                 (MAX_AI_CHATS,),
             ).fetchall()]
             for chat_id in old:
                 self._conn.execute("DELETE FROM ai_chat_messages WHERE chat_id = ?;", (chat_id,))
                 self._conn.execute("DELETE FROM ai_chats WHERE id = ?;", (chat_id,))
         return self.get(cid)
+
+    def _has_pins(self) -> bool:
+        cols = self._conn.execute("PRAGMA table_info(ai_chats);").fetchall()
+        return any(c[1] == "pinned" for c in cols)
+
+    def _unpinned(self) -> str:
+        return "pinned = 0" if self._has_pins() else "1 = 1"
+
+    def list(self, query: str = "") -> list[dict[str, Any]]:
+        """Every chat, pinned first, then newest: id, title, pinned, turns
+        (user messages), created_at, updated_at. `query` keeps chats whose
+        title, or a message the user sent or saw, contains it."""
+        pinned = "c.pinned" if self._has_pins() else "0"
+        sql = (f"SELECT c.id, c.title, c.created_at, c.updated_at, {pinned} AS pinned, "
+               "(SELECT COUNT(*) FROM ai_chat_messages m WHERE m.chat_id = c.id "
+               "AND m.body LIKE '%\"kind\": \"user\"%') AS turns FROM ai_chats c")
+        args: list[Any] = []
+        q = (query or "").strip()[:100]
+        if q:
+            like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+            sql += (" WHERE c.title LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM ai_chat_messages m "
+                    "WHERE m.chat_id = c.id AND (m.body LIKE '%\"kind\": \"user\"%' "
+                    "OR m.body LIKE '%\"kind\": \"shown\"%') AND m.body LIKE ? ESCAPE '\\')")
+            args += [like, like]
+        sql += f" ORDER BY {pinned} DESC, c.updated_at DESC, c.id;"
+        return [{"id": r["id"], "title": r["title"], "pinned": bool(r["pinned"]),
+                 "turns": int(r["turns"]), "created_at": r["created_at"],
+                 "updated_at": r["updated_at"]}
+                for r in self._conn.execute(sql, args).fetchall()]
+
+    def update(self, chat_id: str, *, title: str | None = None,
+               pinned: bool | None = None) -> dict[str, Any]:
+        """Rename or (un)pin. Neither counts as activity: `updated_at`
+        stays, so the chat doesn't jump to the top of the list."""
+        sets: list[str] = []
+        args: list[Any] = []
+        if title is not None:
+            sets.append("title = ?")
+            args.append(title)
+        if pinned is not None and self._has_pins():
+            sets.append("pinned = ?")
+            args.append(1 if pinned else 0)
+        if sets:
+            with self._conn:
+                cur = self._conn.execute(
+                    f"UPDATE ai_chats SET {', '.join(sets)} WHERE id = ?;", (*args, chat_id))
+            if cur.rowcount == 0:
+                raise ChatNotFound(chat_id)
+        return self.get(chat_id)
+
+    def truncate(self, chat_id: str, keep: int, *, meta: dict[str, Any]) -> None:
+        """Keep the first `keep` entries of the log (dropping a turn to run
+        it again) and store the new meta."""
+        seqs = [r[0] for r in self._conn.execute(
+            "SELECT seq FROM ai_chat_messages WHERE chat_id = ? ORDER BY seq;", (chat_id,))]
+        with self._conn:
+            if keep < len(seqs):
+                self._conn.execute(
+                    "DELETE FROM ai_chat_messages WHERE chat_id = ? AND seq >= ?;",
+                    (chat_id, seqs[max(0, keep)]))
+            cur = self._conn.execute("UPDATE ai_chats SET meta = ? WHERE id = ?;",
+                                     (json.dumps(meta, sort_keys=True), chat_id))
+        if cur.rowcount == 0:
+            raise ChatNotFound(chat_id)
 
     def get(self, chat_id: str) -> dict[str, Any]:
         row = self._conn.execute("SELECT * FROM ai_chats WHERE id = ?;", (chat_id,)).fetchone()

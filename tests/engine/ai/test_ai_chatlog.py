@@ -51,8 +51,36 @@ def test_last_reply_and_title():
     assert cl.last_reply(log) == "a1"
     json_step = cl.step_entry('{"message": "hi"}', [], answer={"message": "hi", "calls": []})
     assert cl.last_reply([json_step]) == "hi"
-    assert cl.title_for("  hello\n world ") == "hello world"
+    # The first line, without the polite opener, cut at a word.
+    assert cl.title_for("  make hats\n and more ") == "Make hats"
+    assert cl.title_for("could we take a closer look at pose pool?") == \
+        "Take a closer look at pose pool"
+    assert cl.title_for("Hi, can you please add weather") == "Add weather"
+    assert cl.title_for("Can I add hair?") == "Can I add hair"
+    assert cl.title_for("hey") == "hey"
+    long = cl.title_for("word " * 40)
+    assert len(long) <= 60 and long.endswith("word…")
     assert len(cl.title_for("x" * 200)) == 60
+
+
+def test_display_rebuilds_what_the_user_saw():
+    view = {"message": "Here.", "steps": [], "refs": {},
+            "proposals": [{"pid": "p1", "title": "Add hats"}, {"pid": "p2", "title": "New"}]}
+    log = [cl.user_entry("hats", "hats"), cl.step_entry("Here.", []), cl.shown_entry(view),
+           cl.user_entry("old turn", "old turn"), cl.step_entry("plain reply", [])]
+    meta = {"proposals": {"p1": {"status": "dismissed"}, "p2": {"status": None}},
+            "shown_status": {"p2": {"status": "applied", "created": "ab12cd34"}}}
+    turns = cl.display(log, meta)
+    assert [t["role"] for t in turns] == ["user", "assistant", "user", "assistant"]
+    assert turns[1]["status"] == {"p1": "dismissed", "p2": "applied"}
+    assert turns[1]["created"] == {"p2": "ab12cd34"}
+    # A turn from before "shown" entries: its reply text only.
+    assert turns[3]["view"]["message"] == "plain reply"
+    # The model never sees "shown".
+    assert all("Here." not in str(m.get("content")) or m["role"] == "assistant"
+               for m in cl.render(log, {}))
+    assert sum(1 for m in cl.render(log, {}) if m["role"] == "assistant") == 2
+    assert cl.last_turn_start(log) == 3
 
 
 def test_events_and_library_changes():

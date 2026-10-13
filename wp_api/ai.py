@@ -46,6 +46,7 @@ from engine.ai import budget as ai_budget
 from engine.ai import chat as ai_chat
 from engine.ai import chatlog as ai_chatlog
 from engine.ai import client_tools as ai_client_tools
+from engine.ai import compact as ai_compact
 from engine.ai import config as ai_config
 from engine.ai import constraint as ai_constraint
 from engine.ai import derivation as ai_derivation
@@ -766,6 +767,7 @@ def _results_tail(question: str, *, last: bool, native: bool) -> str:
 async def _chat_step(
     cfg: dict[str, Any], *, system: str, log: list[dict[str, Any]], fmt: str,
     names: list[str], prof: dict[str, Any], num_ctx: int, cache_key: str,
+    emit: Any = None,
 ) -> dict[str, Any]:
     """One model step, asked again once with the problem named when a
     JSON-mode answer isn't usable: small models usually fix a named error."""
@@ -781,7 +783,7 @@ async def _chat_step(
             return await _ai_chat.step(
                 cfg, system=system, log=asked, fmt=fmt, tools=native, names=names,
                 schema=schema, temperature=prof["chat_temp"], num_ctx=num_ctx,
-                cache_key=cache_key,
+                cache_key=cache_key, emit=emit,
             )
         except _ai_chat.ToolsUnsupported:
             raise
@@ -815,6 +817,74 @@ def _more_tools(meta: dict[str, Any]) -> str:
         return "every tool is already available"
     meta["tools"] = [t.name for t in ai_tools.TOOLS if t.name in offered or t in rest]
     return ("These tools are available now:\n" + ai_chat.kinds_section(rest)).strip()
+
+
+#: About how much a cloud model holds, for the meter (labelled "about").
+CLOUD_WINDOW = {"anthropic": 200000, "openai": 128000}
+#: The summary's own answer.
+SUMMARY_TOKENS = 1200
+
+
+async def _window(cfg: dict[str, Any], meta: dict[str, Any]) -> int:
+    """The tokens this chat's model holds: what a local server loaded the
+    model with (asked once per chat), else the context setting (which
+    Ollama gets as `num_ctx`); a cloud model's usual size."""
+    if not cfg.get("local"):
+        return CLOUD_WINDOW.get(str(cfg.get("api")), 128000)
+    if isinstance(meta.get("window"), int) and meta.get("window_model") == cfg.get("model"):
+        return int(meta["window"])
+    found = None
+    try:
+        found = await _ai_client.server_context(cfg)
+    except Exception:  # noqa: BLE001 - only a hint for the meter
+        found = None
+    setting = int(cfg.get("context_max") or ai_budget.CONTEXT_DEFAULT)
+    window = min(found, setting) if found and cfg.get("api") == "ollama" else (found or setting)
+    meta["window"] = window
+    meta["window_model"] = cfg.get("model")
+    return window
+
+
+def _context(cfg: dict[str, Any], meta: dict[str, Any], entries: list[dict[str, Any]],
+             system_chars: int, usage: dict[str, Any], window: int) -> dict[str, Any]:
+    """The meter: tokens the last request used (the provider's count when
+    it gave one, else an estimate) against the window."""
+    rendered = ai_chatlog.size(ai_chatlog.render(entries, meta)) + system_chars
+    estimate = ai_budget.tokens(rendered)
+    reported = int(usage.get("prompt") or 0) + int(usage.get("output") or 0)
+    used = reported or max(estimate, int(usage.get("evaluated") or 0))
+    return {"used": used, "window": window, "estimated": not reported,
+            "about": not cfg.get("local"), "compactions": int(meta.get("compactions") or 0)}
+
+
+async def _maybe_compact(cfg: dict[str, Any], log: list[dict[str, Any]], meta: dict[str, Any],
+                         prof: dict[str, Any], num_ctx: int, window: int, fixed_chars: int,
+                         emit: Any, *, force: bool = False) -> dict[str, Any]:
+    """Summarise the turns before the last few when the prompt nears the
+    window (or when asked). A failed summary changes nothing: the older
+    masking and dropping still keep the prompt in budget."""
+    cut = ai_compact.split_point(log, meta)
+    if cut is None:
+        return meta
+    if not force:
+        need = ai_budget.tokens(ai_chatlog.size(ai_chatlog.render(log, meta)) + fixed_chars)
+        if need < ai_compact.TRIGGER * window:
+            return meta
+    if emit:
+        await emit({"type": "status", "v": "Summarizing earlier messages to make room"})
+    try:
+        answer = await _ai_client.complete_json(
+            cfg, system=ai_compact.SYSTEM, user=ai_compact.prompt(log, meta, cut),
+            schema=ai_compact.SCHEMA, schema_name="summary", temperature=0.2,
+            max_tokens=SUMMARY_TOKENS,
+            num_ctx=num_ctx if cfg.get("api") == "ollama" else None)
+    except _ai_client.AIError:
+        return meta
+    summary = answer.get("summary") if isinstance(answer, dict) else None
+    if not isinstance(summary, str) or len(summary.strip()) < 20:
+        return meta
+    text = ai_safety.strip_invisible(ai_compact.finish(summary, ai_compact.ids_in(log, meta, cut)))
+    return ai_compact.apply(meta, text, cut)
 
 
 #: One library index per library database file (see `engine.ai.index`).
@@ -945,9 +1015,43 @@ async def post_index_rebuild(request: web.Request) -> web.Response:
     return json_ok(_index_status(idx, cfg))
 
 
-async def post_chat(request: web.Request) -> web.Response:
+async def post_chat(request: web.Request) -> web.StreamResponse:
+    """The chat turn (see `_chat_turn`). With `"stream": true` the answer
+    comes as NDJSON events while it is worked out: `step` (a model step
+    starts), `status` (what's happening, e.g. a summary), `thinking`,
+    `text` (the answer so far, replacing the last), `tool` (a step the
+    lines above the reply list), then `done` with the same JSON the plain
+    request returns, or `error`."""
+    body = await _body(request)
+    if isinstance(body, web.Response):
+        return body
+    if not body.get("stream"):
+        return await _chat_turn(request, body, None)
+    resp = web.StreamResponse(headers={
+        "Content-Type": "application/x-ndjson", "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff"})
+    await resp.prepare(request)
+
+    async def emit(event: dict[str, Any]) -> None:
+        await resp.write((_json.dumps(event, ensure_ascii=False) + "\n").encode("utf-8"))
+
+    out = await _chat_turn(request, body, emit)
+    try:
+        data = _json.loads(out.text or "{}")
+    except ValueError:
+        data = {}
+    if out.status >= 400:
+        await emit({"type": "error", "status": out.status,
+                    "message": str(data.get("error") or "something went wrong")})
+    else:
+        await emit({"type": "done", "result": data})
+    await resp.write_eof()
+    return resp
+
+
+async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> web.Response:
     """Body: {message, chat_id?, page?: {route, id?, doc?, note?, editor?},
-    events?: [{pid, status}]}.
+    events?: [{pid, status}], retry?: true}.
 
     The server keeps the chat (`ai_chats`), so the browser sends only the new
     message; without a `chat_id` (or with one that's gone) a new chat starts.
@@ -963,14 +1067,14 @@ async def post_chat(request: web.Request) -> web.Response:
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
-    body = await _body(request)
-    if isinstance(body, web.Response):
-        return body
     # `results`: the browser answering the calls a paused turn waits on
     # (page tools it ran, or the user's answer to a web search).
     answers = body.get("results")
     resume = isinstance(answers, list)
     text = body.get("message")
+    retry = bool(body.get("retry")) and not resume
+    if retry:
+        text = "(retry)"  # replaced by the turn's own message below
     if not resume:
         if not isinstance(text, str) or not text.strip():
             return json_error("say something first", status=400)
@@ -996,6 +1100,30 @@ async def post_chat(request: web.Request) -> web.Response:
                 log = ChatRepository(conn).messages(chat_id)
             except ChatNotFound:
                 chat = None
+    retried_from: int | None = None
+    if retry:
+        if chat is None:
+            return json_error("that chat is gone", status=404)
+        retried_from = ai_chatlog.last_turn_start(log)
+        if retried_from is None:
+            return json_error("nothing to try again", status=409)
+        turn_pids = {p.get("pid") for e in log[retried_from:] if e.get("kind") == "shown"
+                     for p in (e.get("view") or {}).get("proposals") or []}
+        shown_status = (chat["meta"].get("shown_status") or {})
+        model_status = (chat["meta"].get("proposals") or {})
+        if any((shown_status.get(pid) or {}).get("status") in ("applied", "editor")
+               or (model_status.get(pid) or {}).get("status") in ("applied", "editor")
+               for pid in turn_pids):
+            return json_error("undo the changes you applied from that answer first",
+                              status=409)
+        text = str(log[retried_from].get("text") or "")
+        log = log[:retried_from]
+        m = dict(chat["meta"])
+        m.pop("pending", None)
+        m["proposals"] = {k: v for k, v in (m.get("proposals") or {}).items()
+                          if k not in turn_pids}
+        m["shown_status"] = {k: v for k, v in shown_status.items() if k not in turn_pids}
+        chat = {**chat, "meta": m}
     paused = (chat or {}).get("meta", {}).get("pending") if chat else None
     if resume:
         if not paused:
@@ -1051,13 +1179,17 @@ async def post_chat(request: web.Request) -> web.Response:
             tail = "".join("\n\n" + x for x in (since, changes, note) if x) + _results_tail(
                 text, last=step >= ai_chat.MAX_STEPS - 1, native=fmt == "native")
         new.append(ai_chatlog.results_entry(items, tail))
+    num_ctx = int(cfg.get("context_max") or ai_budget.CONTEXT_DEFAULT)
+    window = await _window(cfg, meta)
+    if not resume and log:
+        meta = await _maybe_compact(cfg, log, meta, prof, num_ctx, window,
+                                    len(snapshot) + 12000, emit)
     if not resume:
         hints = await _retrieval(lib, text, meta, prof, cfg)
         sent = ai_safety.strip_invisible(
             "\n\n".join(x for x in (since, changes, text, note, hints) if x))
         new.append(ai_chatlog.user_entry(text, sent))
 
-    num_ctx = int(cfg.get("context_max") or ai_budget.CONTEXT_DEFAULT)
     cache_key = chat["id"] if chat else ""
     pids = [int(p[1:]) for p in meta.get("proposals") or {} if p[1:].isdigit()]
     lib._next_pid = max(pids, default=0)
@@ -1076,6 +1208,7 @@ async def post_chat(request: web.Request) -> web.Response:
     out_of_time = False
     reads = 0
     ran = 0
+    sent_steps = len(steps)
     read_budget = ai_chat.read_budget(prof["size"])
     last_answer = ai_chatlog.last_reply(log)
     usage: dict[str, Any] = {}
@@ -1100,11 +1233,13 @@ async def post_chat(request: web.Request) -> web.Response:
                 "\n\nTime is up: no more tool calls. Answer the user now from what you have.")}
         meta = ai_chatlog.fit(log + new, meta, prof["history_chars"])
         rendered = ai_chatlog.render(log + new, meta)
+        if emit:
+            await emit({"type": "step", "n": step + 1})
         try:
             st = await asyncio.wait_for(
                 _chat_step(cfg, system=system_for(), log=rendered, fmt=fmt,
                            names=meta["tools"], prof=prof, num_ctx=num_ctx,
-                           cache_key=cache_key),
+                           cache_key=cache_key, emit=emit),
                 timeout=STEP_SECONDS)
         except asyncio.TimeoutError:
             if not steps and not any(x.get("kind") == "step" for x in new):
@@ -1242,6 +1377,10 @@ async def post_chat(request: web.Request) -> web.Response:
                 result(f"{tool}: proposal {out['pid']} shown to the user: {out['title']}"
                        + extra)
                 steps.append({"tool": tool, "note": out["title"], "ok": True})
+        if emit:
+            for s_ in steps[sent_steps:]:
+                await emit({"type": "tool", "step": s_})
+            sent_steps = len(steps)
         if pause:
             # Wait for the browser: what ran here waits with the calls.
             meta["pending"] = {"calls": pause, "items": items, "step": step,
@@ -1322,19 +1461,147 @@ async def post_chat(request: web.Request) -> web.Response:
     meta["format"] = fmt
     meta["fingerprint"] = fp_now
     meta["model"] = cfg.get("model")
-    with db_session(request) as conn:
-        repo = ChatRepository(conn)
-        if chat is None:
-            chat = repo.create(title=ai_chatlog.title_for(text), snapshot=snapshot, meta=meta)
-        repo.append(chat["id"], new, meta=meta)
-    return json_ok({
-        "chat_id": chat["id"], "message": message, "proposals": proposals, "steps": steps,
+    out: dict[str, Any] = {
+        "message": message, "proposals": proposals, "steps": steps,
         "model": cfg["model"], "format": fmt, "usage": usage,
         "refs": lib.message_refs(message),
         # Calls for the browser to run (or the user to allow) before the
         # turn goes on; it posts their results back as `results`.
         "pending": [{k: c[k] for k in ("id", "tool", "args", "label")} for c in pause],
+    }
+    # What the user saw, for reopening the chat later (the model never
+    # reads it).
+    new.append(ai_chatlog.shown_entry({k: out[k] for k in (
+        "message", "proposals", "steps", "refs", "model", "pending")}))
+    out["context"] = _context(cfg, meta, log + new, len(system_for()), usage, window)
+    with db_session(request) as conn:
+        repo = ChatRepository(conn)
+        if chat is None:
+            chat = repo.create(title=ai_chatlog.title_for(text), snapshot=snapshot, meta=meta)
+        elif retried_from is not None:
+            repo.truncate(chat["id"], retried_from, meta=meta)
+        repo.append(chat["id"], new, meta=meta)
+    return json_ok({"chat_id": chat["id"], **out})
+
+
+# ── the chat list ───────────────────────────────────────────────────────
+
+
+def _chat_id(request: web.Request) -> str:
+    return str(request.match_info.get("chat_id") or "")[:40]
+
+
+async def get_chats(request: web.Request) -> web.Response:
+    """The stored chats, pinned first, then newest. `?q=` searches titles
+    and what was said."""
+    q = str(request.query.get("q") or "")
+    with db_session(request) as conn:
+        return json_ok({"chats": ChatRepository(conn).list(q)})
+
+
+async def get_chat(request: web.Request) -> web.Response:
+    """One chat as the user saw it, to reopen it in the drawer."""
+    with db_session(request) as conn:
+        repo = ChatRepository(conn)
+        try:
+            chat = repo.get(_chat_id(request))
+        except ChatNotFound:
+            return json_error("that chat is gone", status=404)
+        log = repo.messages(chat["id"])
+    meta = chat["meta"]
+    cfg = ai_config.load_effective()
+    usage = next((e.get("usage") or {} for e in reversed(log) if e.get("kind") == "step"), {})
+    window = int(meta.get("window") or 0) or (
+        CLOUD_WINDOW.get(str(cfg.get("api")), 128000) if not cfg.get("local")
+        else int(cfg.get("context_max") or ai_budget.CONTEXT_DEFAULT))
+    return json_ok({
+        "id": chat["id"], "title": chat["title"], "pinned": chat.get("pinned", False),
+        "updated_at": chat["updated_at"], "model": meta.get("model"),
+        "turns": ai_chatlog.display(log, meta),
+        "waiting": bool(meta.get("pending")),
+        "context": _context(cfg, meta, log, len(chat.get("snapshot") or "") + 12000, usage,
+                            window),
     })
+
+
+async def patch_chat(request: web.Request) -> web.Response:
+    """Body: {title?, pinned?, events?: [{pid, status, created?}]}. Events
+    record what the user did with cards for reopening the chat; the model
+    is told on the next message, as before."""
+    body = await _body(request)
+    if isinstance(body, web.Response):
+        return body
+    title = body.get("title")
+    if title is not None:
+        if not isinstance(title, str) or not title.strip():
+            return json_error("a chat needs a title", status=400)
+        title = ai_safety.strip_invisible(title).strip()[:120]
+    pinned = body.get("pinned")
+    if pinned is not None and not isinstance(pinned, bool):
+        return json_error("pinned must be true or false", status=400)
+    with db_session(request) as conn:
+        repo = ChatRepository(conn)
+        try:
+            chat = repo.update(_chat_id(request), title=title, pinned=pinned)
+        except ChatNotFound:
+            return json_error("that chat is gone", status=404)
+        events = body.get("events")
+        if isinstance(events, list) and events:
+            meta = dict(chat["meta"])
+            seen = dict(meta.get("shown_status") or {})
+            for ev in events[:200]:
+                if not isinstance(ev, dict) or not isinstance(ev.get("pid"), str):
+                    continue
+                if ev.get("status") not in ("applied", "editor", "dismissed", "failed", "undone"):
+                    continue
+                entry = {"status": ev["status"]}
+                if isinstance(ev.get("created"), str) and len(ev["created"]) <= 40:
+                    entry["created"] = ev["created"]
+                seen[ev["pid"][:12]] = entry
+            meta["shown_status"] = seen
+            repo.set_meta(chat["id"], meta)
+    return json_ok({"id": chat["id"], "title": chat["title"], "pinned": chat["pinned"]})
+
+
+async def delete_chat(request: web.Request) -> web.Response:
+    with db_session(request) as conn:
+        try:
+            ChatRepository(conn).delete(_chat_id(request))
+        except ChatNotFound:
+            return json_error("that chat is gone", status=404)
+    return json_ok({"deleted": True})
+
+
+async def post_compact(request: web.Request) -> web.Response:
+    """Summarise a chat's older turns now (the meter's Compact)."""
+    cfg = _enabled_cfg()
+    if isinstance(cfg, web.Response):
+        return cfg
+    with db_session(request) as conn:
+        repo = ChatRepository(conn)
+        try:
+            chat = repo.get(_chat_id(request))
+        except ChatNotFound:
+            return json_error("that chat is gone", status=404)
+        log = repo.messages(chat["id"])
+    meta = dict(chat["meta"])
+    if meta.get("pending"):
+        return json_error("this chat is waiting for an answer", status=409)
+    if ai_compact.split_point(log, meta) is None:
+        return json_error("nothing to summarize yet: the last few turns always stay whole",
+                          status=409)
+    prof = ai_budget.profile(cfg)
+    num_ctx = int(cfg.get("context_max") or ai_budget.CONTEXT_DEFAULT)
+    window = await _window(cfg, meta)
+    after = await _maybe_compact(cfg, log, meta, prof, num_ctx, window,
+                                 len(chat.get("snapshot") or "") + 12000, None, force=True)
+    if after.get("compactions") == meta.get("compactions"):
+        return json_error("the model couldn't write a summary; try again", status=502)
+    with db_session(request) as conn:
+        ChatRepository(conn).set_meta(chat["id"], after)
+    usage: dict[str, Any] = {}
+    return json_ok({"compacted": True, "context": _context(
+        cfg, after, log, len(chat.get("snapshot") or "") + 12000, usage, window)})
 
 
 async def _paused_results(
@@ -1575,6 +1842,11 @@ def register(router: web.UrlDispatcher) -> None:
     add("POST", "/wp/api/ai/describe", post_describe)
     add("POST", "/wp/api/ai/organize", post_organize)
     add("POST", "/wp/api/ai/chat", post_chat)
+    add("GET", "/wp/api/ai/chats", get_chats, cut_short=False)
+    add("GET", "/wp/api/ai/chats/{chat_id}", get_chat, cut_short=False)
+    add("PATCH", "/wp/api/ai/chats/{chat_id}", patch_chat, cut_short=False)
+    add("DELETE", "/wp/api/ai/chats/{chat_id}", delete_chat, cut_short=False)
+    add("POST", "/wp/api/ai/chats/{chat_id}/compact", post_compact)
     add("POST", "/wp/api/ai/pack/plan", post_pack_plan)
     add("POST", "/wp/api/ai/pack/item", post_pack_item)
     add("POST", "/wp/api/ai/pack/check", post_pack_check)

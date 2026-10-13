@@ -17,6 +17,9 @@ Entries, oldest first:
 - ``{"kind": "results", "items": [{"id", "tool", "text"}], "tail": str}`` —
   every call of the step before it gets exactly one item.
 - ``{"kind": "note", "text": str}`` — a nudge from the server.
+- ``{"kind": "shown", "view": {message, steps, proposals, refs, …}}`` — what
+  the user saw for this part of the turn, so the chat list can reopen it.
+  The model never sees it (`render` skips it).
 
 Rendering gives provider-neutral messages that `_ai_client` turns into each
 API's format. A turn always ends with a step that calls nothing, so roles
@@ -37,6 +40,7 @@ from typing import Any
 KEEP_TURNS = 3
 MAX_CHANGES_LISTED = 8
 DROPPED_NOTE = "(Earlier messages of this chat were left out to save room.)"
+SUMMARY_HEAD = "Earlier in this chat (a summary of messages left out to save room):\n"
 
 
 def dumps(value: Any) -> str:
@@ -55,6 +59,10 @@ def step_entry(text: str, calls: list[dict[str, Any]], *, answer: Any = None,
     if synthetic:
         out["synthetic"] = True
     return out
+
+
+def shown_entry(view: dict[str, Any]) -> dict[str, Any]:
+    return {"kind": "shown", "view": view}
 
 
 def results_entry(items: list[dict[str, Any]], tail: str) -> dict[str, Any]:
@@ -92,7 +100,9 @@ def render(entries: list[dict[str, Any]], meta: dict[str, Any]) -> list[dict[str
         kind = e.get("kind")
         if kind in ("user", "note"):
             text = str(e.get("sent") if kind == "user" else e.get("text") or "")
-            if first_user and dropped:
+            if first_user and meta.get("summary") and dropped:
+                text = SUMMARY_HEAD + str(meta["summary"]) + "\n\n" + text
+            elif first_user and dropped:
                 text = DROPPED_NOTE + "\n\n" + text
             first_user = False
             if out and out[-1]["role"] == "user":
@@ -239,9 +249,83 @@ def apply_events(meta: dict[str, Any], events: Any) -> tuple[dict[str, Any], str
 
 
 _TITLE_WS = re.compile(r"\s+")
+#: Openers that say nothing about the chat ("could you please …").
+_FILLER = re.compile(
+    r"^(?:(?:hi|hey|hello|ok(?:ay)?|so|um|please|pls|(?:can|could|would|will) (?:you|we|u)|"
+    r"i want(?: you)? to|i'd like(?: you)? to|i would like(?: you)? to|help me to|"
+    r"let'?s)[\s,!.]+)+",
+    re.IGNORECASE,
+)
+TITLE_CHARS = 60
 
 
 def title_for(text: str) -> str:
-    """A chat's title from its first message."""
-    t = _TITLE_WS.sub(" ", text or "").strip()
-    return t if len(t) <= 60 else t[:59].rstrip() + "…"
+    """A chat's title from its first message: its first line without the
+    polite opener, cut at a word. The model isn't asked: that would be a
+    second request on a local GPU (or a paid one) for every chat."""
+    t = _TITLE_WS.sub(" ", (text or "").strip().split("\n", 1)[0]).strip()
+    short = _FILLER.sub("", t).strip(" ,.!?")
+    if len(short) >= 4:
+        t = short[0].upper() + short[1:]
+    t = t.rstrip(" ?.!") or (text or "").strip()[:TITLE_CHARS]
+    if len(t) <= TITLE_CHARS:
+        return t
+    cut = t.rfind(" ", 0, TITLE_CHARS - 1)
+    return t[:cut if cut > TITLE_CHARS // 2 else TITLE_CHARS - 1].rstrip(" ,;:") + "…"
+
+
+def display(entries: list[dict[str, Any]], meta: dict[str, Any]) -> list[dict[str, Any]]:
+    """The chat as the user saw it, for reopening from the chat list:
+    ``{"role": "user", "text"}`` and ``{"role": "assistant", "view", "status",
+    "created"}``. Card status comes from what the browser reported (applied,
+    undone, …); a turn from before `shown` entries existed shows its reply
+    text only."""
+    shown_status = meta.get("shown_status") or {}
+    model_status = meta.get("proposals") or {}
+
+    def status_of(view: dict[str, Any]) -> tuple[dict[str, str], dict[str, str]]:
+        status: dict[str, str] = {}
+        created: dict[str, str] = {}
+        for p in view.get("proposals") or []:
+            pid = p.get("pid") if isinstance(p, dict) else None
+            if not isinstance(pid, str):
+                continue
+            seen = shown_status.get(pid) or {}
+            st = seen.get("status") or (model_status.get(pid) or {}).get("status")
+            if st in ("applied", "editor", "dismissed", "failed"):
+                status[pid] = st
+            if isinstance(seen.get("created"), str) and st == "applied":
+                created[pid] = seen["created"]
+        return status, created
+
+    out: list[dict[str, Any]] = []
+    span: list[dict[str, Any]] = []
+
+    def close() -> None:
+        if span and not any(e.get("kind") == "shown" for e in span):
+            reply = last_reply(span)
+            if reply:
+                out.append({"role": "assistant", "view": {"message": reply, "steps": [],
+                            "proposals": [], "refs": {}}, "status": {}, "created": {}})
+
+    for e in entries:
+        kind = e.get("kind")
+        if kind == "user":
+            close()
+            span = []
+            out.append({"role": "user", "text": str(e.get("text") or "")})
+        elif kind == "shown" and isinstance(e.get("view"), dict):
+            status, created = status_of(e["view"])
+            out.append({"role": "assistant", "view": e["view"], "status": status,
+                        "created": created})
+        span.append(e)
+    close()
+    return out
+
+
+def last_turn_start(entries: list[dict[str, Any]]) -> int | None:
+    """Index of the newest user entry (where a retried turn starts)."""
+    for i in range(len(entries) - 1, -1, -1):
+        if entries[i].get("kind") == "user":
+            return i
+    return None

@@ -73,6 +73,8 @@ class AIError(Exception):
         super().__init__(message)
         self.message = message
         self.status = status
+        #: The model server's own HTTP status, when it answered one.
+        self.upstream: int | None = None
 
 
 def _is_loopback(url: str) -> bool:
@@ -145,6 +147,85 @@ def _upstream_error(status: int, body: Any) -> AIError:
     else:
         msg = f"the server answered {status}"
     return AIError(f"{msg}{': ' + detail if detail else ''}")
+
+
+#: A streamed answer may take as long as it likes while it keeps sending;
+#: it fails only after this long with nothing arriving (a large prompt on a
+#: local GPU can take minutes before the first token).
+STREAM_IDLE_S = 180
+_STREAM_TIMEOUT = aiohttp.ClientTimeout(total=None, sock_connect=10, sock_read=STREAM_IDLE_S)
+_MAX_STREAM = 16 * 1024 * 1024
+
+
+async def stream_request(
+    cfg: dict[str, Any], path: str, *, body: dict[str, Any],
+    on_obj: Any,
+) -> Any:
+    """POST with streaming on. Each server-sent event (`data: {…}`) or JSON
+    line is parsed and passed to `on_obj` (awaited). Returns None after a
+    stream, or the parsed body when the server answered with plain JSON
+    instead (it ignored `stream`). Raises AIError like `_request`; the
+    status is on the error for the caller's fallback."""
+    url = _url(cfg, path)
+    try:
+        async with _session(url, _STREAM_TIMEOUT) as s:
+            async with s.post(url, json=body, headers=_headers(cfg),
+                              allow_redirects=False) as resp:
+                if 300 <= resp.status < 400:
+                    where = resp.headers.get("Location", "")[:200]
+                    raise AIError(f"the server redirected to {where or 'another address'}. "
+                                  "Use that address in Settings instead.")
+                ctype = resp.headers.get("Content-Type", "").split(";")[0].strip().lower()
+                if resp.status >= 400:
+                    try:
+                        data = await _read_json(resp)
+                    except AIError:
+                        data = None
+                    err = _upstream_error(resp.status, data)
+                    err.upstream = resp.status
+                    raise err
+                if ctype == "application/json":
+                    return await _read_json(resp)
+                total = 0
+                buf = b""
+                async for chunk in resp.content.iter_any():
+                    total += len(chunk)
+                    if total > _MAX_STREAM:
+                        raise AIError("the model's reply was too large")
+                    buf += chunk
+                    while b"\n" in buf:
+                        line, buf = buf.split(b"\n", 1)
+                        await _stream_line(line, on_obj)
+                if buf.strip():
+                    await _stream_line(buf, on_obj)
+                return None
+    except AIError:
+        raise
+    except asyncio.TimeoutError as e:
+        raise AIError(f"the model sent nothing for {STREAM_IDLE_S} seconds", status=504) from e
+    except aiohttp.ClientConnectorError as e:
+        raise AIError(
+            f"couldn't connect to {urllib.parse.urlsplit(url).netloc}. "
+            "Is the server running?",
+        ) from e
+    except aiohttp.ClientError as e:
+        raise AIError(f"connection failed: {type(e).__name__}") from e
+
+
+async def _stream_line(raw: bytes, on_obj: Any) -> None:
+    line = raw.decode("utf-8", errors="replace").strip()
+    if not line or line.startswith((":", "event:", "id:", "retry:")):
+        return
+    if line.startswith("data:"):
+        line = line[5:].strip()
+    if line == "[DONE]":
+        return
+    try:
+        obj = json.loads(line)
+    except ValueError:
+        return
+    if isinstance(obj, dict):
+        await on_obj(obj)
 
 
 async def _request(
@@ -262,7 +343,7 @@ def _chat_messages(system: str, history: list[tuple[str, Any]], user: str) -> li
 async def complete_json(
     cfg: dict[str, Any], *, system: str, user: str, schema: dict[str, Any],
     schema_name: str, temperature: float = 0.8, max_tokens: int = 8192,
-    history: list[tuple[str, Any]] | None = None,
+    history: list[tuple[str, Any]] | None = None, num_ctx: int | None = None,
 ) -> Any:
     """One request, one JSON object back, shaped by `schema` where supported.
 
@@ -307,7 +388,9 @@ async def complete_json(
                     "temperature": temperature,
                     # Ollama's default window is 2-4k tokens and it cuts a
                     # longer prompt without saying so, so size it per request.
-                    "num_ctx": budget.num_ctx(
+                    # A chat's own window when given: a new size reloads the
+                    # model and throws its cache away.
+                    "num_ctx": num_ctx or budget.num_ctx(
                         budget.prompt_chars(system, history, user, schema),
                         int(cfg.get("context_max") or budget.CONTEXT_DEFAULT),
                     ),

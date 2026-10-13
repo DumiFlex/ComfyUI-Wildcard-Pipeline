@@ -362,6 +362,222 @@ def _json_step(raw_text: str, answer: Any, usage: dict[str, Any]) -> dict[str, A
             "message": message.strip(), "plan": plan}
 
 
+# ── streaming ───────────────────────────────────────────────────────────
+#
+# Every model step streams when the server allows it: the step may take as
+# long as the model keeps sending (an idle limit instead of a total one),
+# and the answer's text reaches the browser as it is written. Each stream is
+# assembled into the same JSON the non-streaming call returns, so parsing
+# stays in one place. A server that refuses streaming is asked again
+# without it and remembered for the session.
+
+#: (base_url, model) pairs whose server refused a streamed request.
+_NO_STREAM: set[tuple[str, str]] = set()
+#: Seconds between live text updates sent to the browser.
+TEXT_EVERY = 0.15
+
+
+class _Live:
+    """Sends the visible part of the text written so far (reasoning left
+    out), at most every TEXT_EVERY seconds, plus one "thinking" signal."""
+
+    def __init__(self, emit: Any) -> None:
+        self.emit = emit
+        self.text = ""
+        self.sent = ""
+        self.last = 0.0
+        self.thought = False
+
+    async def add(self, delta: str) -> None:
+        if not delta or self.emit is None:
+            return
+        self.text += delta
+        now = time.monotonic()
+        if now - self.last >= TEXT_EVERY:
+            await self.flush(now)
+
+    async def flush(self, now: float | None = None) -> None:
+        if self.emit is None:
+            return
+        visible = strip_thinking(self.text)
+        if visible != self.sent:
+            self.sent = visible
+            self.last = now if now is not None else time.monotonic()
+            await self.emit({"type": "text", "v": visible})
+
+    async def thinking(self) -> None:
+        if self.emit is not None and not self.thought:
+            self.thought = True
+            await self.emit({"type": "thinking"})
+
+
+def _openai_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
+    data: dict[str, Any] = {"choices": [{"message": {"content": "", "tool_calls": []},
+                                         "finish_reason": None}]}
+    msg = data["choices"][0]["message"]
+    calls: list[dict[str, Any]] = msg["tool_calls"]
+
+    async def on(obj: dict[str, Any]) -> None:
+        if isinstance(obj.get("usage"), dict):
+            data["usage"] = obj["usage"]
+        if isinstance(obj.get("timings"), dict):
+            data["timings"] = obj["timings"]
+        if isinstance(obj.get("error"), dict | str):
+            raise client._upstream_error(500, obj)
+        for ch in obj.get("choices") or []:
+            if not isinstance(ch, dict):
+                continue
+            if ch.get("finish_reason"):
+                data["choices"][0]["finish_reason"] = ch["finish_reason"]
+            d = ch.get("delta") or ch.get("message") or {}
+            if not isinstance(d, dict):
+                continue
+            if d.get("refusal"):
+                msg["refusal"] = d["refusal"]
+            if d.get("reasoning_content") or d.get("reasoning"):
+                await live.thinking()
+            text = d.get("content")
+            if isinstance(text, str) and text:
+                msg["content"] += text
+                if show:
+                    await live.add(text)
+            for tc in d.get("tool_calls") or []:
+                if not isinstance(tc, dict):
+                    continue
+                fn = tc.get("function") if isinstance(tc.get("function"), dict) else {}
+                idx = tc.get("index")
+                # By index; else a new id starts a call; else it continues
+                # the last one (llama.cpp may send a call whole, no index).
+                cur = None
+                if isinstance(idx, int):
+                    cur = next((c for c in calls if c.get("_i") == idx), None)
+                elif tc.get("id") and not any(c.get("id") == tc["id"] for c in calls):
+                    cur = None
+                elif calls:
+                    cur = calls[-1]
+                if cur is None:
+                    cur = {"_i": idx if isinstance(idx, int) else len(calls), "id": tc.get("id"),
+                           "type": "function", "function": {"name": "", "arguments": ""}}
+                    calls.append(cur)
+                if tc.get("id"):
+                    cur["id"] = tc["id"]
+                if isinstance(fn.get("name"), str):
+                    cur["function"]["name"] += fn["name"]
+                args = fn.get("arguments")
+                if isinstance(args, dict):
+                    cur["function"]["arguments"] = args
+                elif isinstance(args, str) and isinstance(cur["function"]["arguments"], str):
+                    cur["function"]["arguments"] += args
+
+    return data, on
+
+
+def _ollama_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
+    data: dict[str, Any] = {"message": {"role": "assistant", "content": "", "tool_calls": []}}
+
+    async def on(obj: dict[str, Any]) -> None:
+        if obj.get("error"):
+            raise client._upstream_error(500, obj)
+        m = obj.get("message") if isinstance(obj.get("message"), dict) else {}
+        if m.get("thinking"):
+            await live.thinking()
+        text = m.get("content")
+        if isinstance(text, str) and text:
+            data["message"]["content"] += text
+            if show:
+                await live.add(text)
+        for tc in m.get("tool_calls") or []:
+            data["message"]["tool_calls"].append(tc)
+        if obj.get("done"):
+            for k in ("done_reason", "prompt_eval_count", "eval_count"):
+                if k in obj:
+                    data[k] = obj[k]
+
+    return data, on
+
+
+def _anthropic_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
+    data: dict[str, Any] = {"content": [], "usage": {}}
+    partial: dict[int, str] = {}
+
+    async def on(obj: dict[str, Any]) -> None:
+        kind = obj.get("type")
+        if kind == "error":
+            raise client._upstream_error(500, obj)
+        if kind == "message_start" and isinstance(obj.get("message"), dict):
+            data["usage"].update(obj["message"].get("usage") or {})
+        elif kind == "content_block_start" and isinstance(obj.get("content_block"), dict):
+            block = dict(obj["content_block"])
+            if block.get("type") == "tool_use":
+                block["input"] = {}
+            data["content"].append(block)
+            partial[len(data["content"]) - 1] = ""
+        elif kind == "content_block_delta" and isinstance(obj.get("delta"), dict):
+            d = obj["delta"]
+            i = obj.get("index") if isinstance(obj.get("index"), int) else len(data["content"]) - 1
+            if not 0 <= i < len(data["content"]):
+                return
+            block = data["content"][i]
+            if d.get("type") == "text_delta" and isinstance(d.get("text"), str):
+                block["text"] = str(block.get("text") or "") + d["text"]
+                if show:
+                    await live.add(d["text"])
+            elif d.get("type") == "input_json_delta" and isinstance(d.get("partial_json"), str):
+                partial[i] = partial.get(i, "") + d["partial_json"]
+            elif d.get("type") == "thinking_delta":
+                await live.thinking()
+        elif kind == "content_block_stop":
+            i = obj.get("index") if isinstance(obj.get("index"), int) else -1
+            if 0 <= i < len(data["content"]) and partial.get(i):
+                try:
+                    data["content"][i]["input"] = json.loads(partial[i])
+                except ValueError:
+                    data["content"][i]["input"] = {}
+        elif kind == "message_delta":
+            d = obj.get("delta") if isinstance(obj.get("delta"), dict) else {}
+            if d.get("stop_reason"):
+                data["stop_reason"] = d["stop_reason"]
+            data["usage"].update(obj.get("usage") or {})
+
+    return data, on
+
+
+async def _post(cfg: dict[str, Any], path: str, body: dict[str, Any], *, kind: str,
+                emit: Any, show: bool) -> Any:
+    """The model's answer as the non-streaming JSON, streamed when the
+    server allows it (see above)."""
+    key = (str(cfg.get("base_url")), str(cfg.get("model")))
+    if key in _NO_STREAM:
+        return await client._request(cfg, "POST", path, body=body,
+                                     timeout=client._COMPLETE_TIMEOUT)
+    live = _Live(emit)
+    collect = {"openai": _openai_collect, "ollama": _ollama_collect,
+               "anthropic": _anthropic_collect}[kind]
+    data, on = collect(live, show)
+    streamed = {**body, "stream": True}
+    if kind == "openai":
+        streamed["stream_options"] = {"include_usage": True}
+    try:
+        plain = await client.stream_request(cfg, path, body=streamed, on_obj=on)
+    except AIError as e:
+        if e.upstream is not None and 400 <= e.upstream < 500 and e.upstream not in (
+                401, 403, 404, 429):
+            # Maybe it's the streaming it refused: ask once more without,
+            # and remember only when that works.
+            plain = await client._request(cfg, "POST", path, body=body,
+                                          timeout=client._COMPLETE_TIMEOUT)
+            _NO_STREAM.add(key)
+            return plain
+        raise
+    if plain is not None:
+        return plain  # the server ignored `stream`
+    await live.flush()
+    if kind == "openai":
+        for c in data["choices"][0]["message"]["tool_calls"]:
+            c.pop("_i", None)
+    return data
+
+
 def _refused(e: AIError) -> bool:
     return e.status == 502 and bool(re.search(r"answered 4\d\d.*\btool", e.message, re.I))
 
@@ -370,6 +586,7 @@ async def step(
     cfg: dict[str, Any], *, system: str, log: list[dict[str, Any]], fmt: str,
     tools: list[dict[str, Any]], names: list[str], schema: dict[str, Any],
     temperature: float, num_ctx: int, cache_key: str = "", max_tokens: int = 8192,
+    emit: Any = None,
 ) -> dict[str, Any]:
     """One model step. Returns ``{"text", "calls", "answer", "usage",
     "message", "plan"}``; JSON-mode answers that aren't JSON raise AIError
@@ -386,12 +603,12 @@ async def step(
         try:
             if cfg["api"] == "anthropic":
                 return await _step_anthropic(cfg, system, log, fmt, tools, schema, temperature,
-                                             max_tokens, allowed)
+                                             max_tokens, allowed, emit)
             if cfg["api"] == "ollama":
                 return await _step_ollama(cfg, system, log, fmt, tools, schema, temperature,
-                                          num_ctx, allowed)
+                                          num_ctx, allowed, emit)
             return await _step_openai(cfg, system, log, fmt, tools, schema, temperature,
-                                      max_tokens, cache_key, allowed)
+                                      max_tokens, cache_key, allowed, emit)
         except AIError as e:
             if fmt == "native" and _refused(e):
                 raise ToolsUnsupported(e.message, status=e.status) from e
@@ -401,7 +618,7 @@ async def step(
 async def _step_anthropic(cfg: dict[str, Any], system: str, log: list[dict[str, Any]], fmt: str,
                           tools: list[dict[str, Any]], schema: dict[str, Any],
                           temperature: float, max_tokens: int,
-                          allowed: set[str]) -> dict[str, Any]:
+                          allowed: set[str], emit: Any = None) -> dict[str, Any]:
     body: dict[str, Any] = {
         "model": cfg["model"], "max_tokens": max_tokens, "temperature": temperature,
         # The instructions and the frozen library snapshot are the same for
@@ -417,8 +634,8 @@ async def _step_anthropic(cfg: dict[str, Any], system: str, log: list[dict[str, 
         body["tools"] = [{"name": client._TOOL_NAME, "description": "Submit the chat_step.",
                           "input_schema": schema}]
         body["tool_choice"] = {"type": "tool", "name": client._TOOL_NAME}
-    data = await client._request(cfg, "POST", "/messages", body=body,
-                                 timeout=client._COMPLETE_TIMEOUT)
+    data = await _post(cfg, "/messages", body, kind="anthropic", emit=emit,
+                       show=fmt == "native")
     if not isinstance(data, dict):
         raise AIError("the model didn't return an answer")
     if data.get("stop_reason") == "refusal":
@@ -443,7 +660,7 @@ async def _step_anthropic(cfg: dict[str, Any], system: str, log: list[dict[str, 
 
 async def _step_ollama(cfg: dict[str, Any], system: str, log: list[dict[str, Any]], fmt: str,
                        tools: list[dict[str, Any]], schema: dict[str, Any], temperature: float,
-                       num_ctx: int, allowed: set[str]) -> dict[str, Any]:
+                       num_ctx: int, allowed: set[str], emit: Any = None) -> dict[str, Any]:
     body: dict[str, Any] = {
         "model": cfg["model"], "stream": False,
         "keep_alive": f"{int(cfg.get('unload_after_s', 60))}s",
@@ -458,8 +675,7 @@ async def _step_ollama(cfg: dict[str, Any], system: str, log: list[dict[str, Any
         body["tools"] = tools
     else:
         body["format"] = schema
-    data = await client._request(cfg, "POST", "/api/chat", body=body,
-                                 timeout=client._COMPLETE_TIMEOUT)
+    data = await _post(cfg, "/api/chat", body, kind="ollama", emit=emit, show=fmt == "native")
     msg = data.get("message") if isinstance(data, dict) else None
     if not isinstance(msg, dict):
         raise AIError("the model didn't return an answer")
@@ -483,7 +699,8 @@ async def _step_ollama(cfg: dict[str, Any], system: str, log: list[dict[str, Any
 
 async def _step_openai(cfg: dict[str, Any], system: str, log: list[dict[str, Any]], fmt: str,
                        tools: list[dict[str, Any]], schema: dict[str, Any], temperature: float,
-                       max_tokens: int, cache_key: str, allowed: set[str]) -> dict[str, Any]:
+                       max_tokens: int, cache_key: str, allowed: set[str],
+                       emit: Any = None) -> dict[str, Any]:
     body: dict[str, Any] = {
         "model": cfg["model"],
         "messages": openai_messages(system, log, fmt),
@@ -507,8 +724,8 @@ async def _step_openai(cfg: dict[str, Any], system: str, log: list[dict[str, Any
     elif cfg.get("provider") == "openai" and cache_key:
         # Routes the chat's requests to the machine that cached its prefix.
         body["prompt_cache_key"] = cache_key
-    data = await client._request(cfg, "POST", "/chat/completions", body=body,
-                                 timeout=client._COMPLETE_TIMEOUT)
+    data = await _post(cfg, "/chat/completions", body, kind="openai", emit=emit,
+                       show=fmt == "native")
     choices = data.get("choices") if isinstance(data, dict) else None
     if not choices or not isinstance(choices[0], dict):
         raise AIError("the model didn't return an answer")
