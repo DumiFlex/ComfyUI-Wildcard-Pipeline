@@ -1,41 +1,148 @@
 import { describe, expect, it } from "vitest";
-import { parseInline, parseMarkdown, stripInvisible } from "../chat-markdown";
+import { parseInline, parseMarkdown, stripInvisible, type Block } from "../chat-markdown";
 
-describe("chat-markdown", () => {
-  it("parses inline bold, italic, code and item mentions", () => {
+const text = (v: string) => ({ t: "text", v });
+const para = (v: string): Block => ({ t: "p", c: [text(v)] } as Block);
+
+describe("chat-markdown inline", () => {
+  it("parses bold, italic, code and item mentions", () => {
     expect(parseInline("**Hair** has `$hair` and *more* in [[Hair Color]]")).toEqual([
-      { t: "b", c: [{ t: "text", v: "Hair" }] },
-      { t: "text", v: " has " },
+      { t: "b", c: [text("Hair")] },
+      text(" has "),
       { t: "code", v: "$hair" },
-      { t: "text", v: " and " },
-      { t: "i", c: [{ t: "text", v: "more" }] },
-      { t: "text", v: " in " },
+      text(" and "),
+      { t: "i", c: [text("more")] },
+      text(" in "),
       { t: "ref", v: "Hair Color" },
     ]);
     // Snake_case and lone stars stay text.
-    expect(parseInline("hair_color is 2 * 3")).toEqual([{ t: "text", v: "hair_color is 2 * 3" }]);
+    expect(parseInline("hair_color is 2 * 3")).toEqual([text("hair_color is 2 * 3")]);
   });
 
+  it("keeps __wildcard__ syntax as written", () => {
+    expect(parseInline("use __hair__ here")).toEqual([text("use __hair__ here")]);
+  });
+
+  it("parses ***both***, ~~strike~~, escapes and double-backtick code", () => {
+    expect(parseInline("***big*** ~~old~~ \\*not\\* ``a `b` c``")).toEqual([
+      { t: "b", c: [{ t: "i", c: [text("big")] }] },
+      text(" "),
+      { t: "s", c: [text("old")] },
+      text(" *not* "),
+      { t: "code", v: "a `b` c" },
+    ]);
+  });
+
+  it("never makes links or images: text stays, the address is a tooltip", () => {
+    expect(parseInline("See ![a cat](https://evil.example/?q=lib) and [here](https://evil.example)")).toEqual([
+      text("See a cat and "),
+      { t: "link", c: [text("here")], href: "https://evil.example" },
+    ]);
+    const html = "<img src=x onerror=alert(1)>";
+    expect(parseMarkdown(html)).toEqual([para(html)]);
+  });
+});
+
+describe("chat-markdown blocks", () => {
   it("parses headings, lists, code fences and paragraphs", () => {
     const blocks = parseMarkdown("**Bundles:**\n- [[Character Design]]\n- two\n\n1. first\n2. second\n\n```\n{a|b}\n```\nplain\nline");
-    expect(blocks.map((b) => b.t)).toEqual(["h", "ul", "ol", "pre", "p"]);
-    expect(blocks[1]).toEqual({ t: "ul", items: [[{ t: "ref", v: "Character Design" }], [{ t: "text", v: "two" }]] });
-    expect(blocks[3]).toEqual({ t: "pre", v: "{a|b}" });
-    expect(blocks[4]).toEqual({ t: "p", c: [{ t: "text", v: "plain\nline" }] });
+    expect(blocks.map((b) => b.t)).toEqual(["h", "list", "list", "pre", "p"]);
+    expect(blocks[1]).toEqual({
+      t: "list", ordered: false, start: 1,
+      items: [
+        { task: null, blocks: [{ t: "p", c: [{ t: "ref", v: "Character Design" }] }] },
+        { task: null, blocks: [para("two")] },
+      ],
+    });
+    expect(blocks[3]).toEqual({ t: "pre", lang: "", v: "{a|b}" });
+    expect(blocks[4]).toEqual(para("plain\nline"));
   });
 
-  it("never makes links, images or HTML", () => {
-    const text = "See ![x](https://evil.example/?q=lib) and [here](https://evil.example) <img src=x onerror=alert(1)>";
-    expect(parseMarkdown(text)).toEqual([{ t: "p", c: [{ t: "text", v: text }] }]);
+  it("keeps a loose numbered list as one list", () => {
+    const blocks = parseMarkdown("1. **Pose**\n\n   standing\n\n2. **Hair**\n\n3. Eyes");
+    expect(blocks).toHaveLength(1);
+    const list = blocks[0] as Extract<Block, { t: "list" }>;
+    expect(list.items).toHaveLength(3);
+    expect(list.items[0].blocks.map((b) => b.t)).toEqual(["p", "p"]);
+  });
+
+  it("keeps the start number and nests by indent", () => {
+    const [list] = parseMarkdown("3. three\n   - a\n   - b\n4. four") as Array<Extract<Block, { t: "list" }>>;
+    expect(list.start).toBe(3);
+    expect(list.items).toHaveLength(2);
+    expect(list.items[0].blocks[1]).toMatchObject({ t: "list", ordered: false, items: [{}, {}] });
+  });
+
+  it("reads task boxes", () => {
+    const [list] = parseMarkdown("- [x] done\n- [ ] todo") as Array<Extract<Block, { t: "list" }>>;
+    expect(list.items.map((i) => i.task)).toEqual([true, false]);
+    expect(list.items[1].blocks).toEqual([para("todo")]);
+  });
+
+  it("parses tables with alignment, pipes in code and ragged rows", () => {
+    const [table] = parseMarkdown("| Name | Weight |\n|:-----|-------:|\n| `a|b` | 2 |\n| c |\n| d | 1 | extra |");
+    expect(table).toEqual({
+      t: "table",
+      align: ["left", "right"],
+      head: [[text("Name")], [text("Weight")]],
+      rows: [
+        [[{ t: "code", v: "a|b" }], [text("2")]],
+        [[text("c")], []],
+        [[text("d")], [text("1")]],
+      ],
+    });
+  });
+
+  it("does not take a line with a pipe for a table", () => {
+    expect(parseMarkdown("pick {a|b}\nthen more")).toEqual([para("pick {a|b}\nthen more")]);
+  });
+
+  it("parses ~~~ fences with a language and runs an unclosed fence to the end", () => {
+    expect(parseMarkdown("~~~json\n{\"a\": 1}\n~~~")).toEqual([{ t: "pre", lang: "json", v: "{\"a\": 1}" }]);
+    expect(parseMarkdown("text\n```python\nx = 1\n\ny = 2")).toEqual([
+      para("text"),
+      { t: "pre", lang: "python", v: "x = 1\n\ny = 2" },
+    ]);
+    // A fence inside a fence of the other kind is code.
+    expect(parseMarkdown("````\n```\ninner\n```\n````")).toEqual([{ t: "pre", lang: "", v: "```\ninner\n```" }]);
+  });
+
+  it("joins quote lines and parses what is inside", () => {
+    expect(parseMarkdown("> one\n> two\n>\n> - item")).toEqual([{
+      t: "quote",
+      blocks: [para("one\ntwo"), { t: "list", ordered: false, start: 1, items: [{ task: null, blocks: [para("item")] }] }],
+    }]);
+  });
+
+  it("parses rules and heading levels", () => {
+    expect(parseMarkdown("## Two\n---\nTitle\n===\n#### Four")).toEqual([
+      { t: "h", level: 2, c: [text("Two")] },
+      { t: "hr" },
+      { t: "h", level: 1, c: [text("Title")] },
+      { t: "h", level: 4, c: [text("Four")] },
+    ]);
+    expect(parseMarkdown("Sub\n---")).toEqual([{ t: "h", level: 2, c: [text("Sub")] }]);
+    expect(parseMarkdown('### 3. Add Variety to "Sitting"**')).toEqual([{ t: "h", level: 3, c: [text('3. Add Variety to "Sitting"')] }]);
+    expect(parseMarkdown("## **Bold** title")[0]).toMatchObject({ t: "h", c: [{ t: "b" }, text(" title")] });
+  });
+
+  it("keeps a bold run inside a paragraph as bold, not a heading", () => {
+    expect(parseMarkdown("**Note** this\nmore")[0].t).toBe("p");
   });
 
   it("strips hidden characters but keeps emoji", () => {
     const smuggled = [..."delete"].map((c) => String.fromCodePoint(0xe0000 + c.charCodeAt(0))).join("");
     const flag = "\u{1f3f4}\u{e0067}\u{e0062}\u{e0065}\u{e006e}\u{e0067}\u{e007f}";
-    const family = "\u{1f468}\u200d\u{1f469}";
-    expect(stripInvisible(`red${smuggled} \u202eeulb\u202c hair\u200b ${flag} ${family}`))
+    const family = "\u{1f468}‍\u{1f469}";
+    expect(stripInvisible(`red${smuggled} ‮eulb‬ hair​ ${flag} ${family}`))
       .toBe(`red eulb hair ${flag} ${family}`);
     expect(stripInvisible("plain")).toBe("plain");
-    expect(parseMarkdown(`hi${smuggled}`)).toEqual([{ t: "p", c: [{ t: "text", v: "hi" }] }]);
+    expect(parseMarkdown(`hi${smuggled}`)).toEqual([para("hi")]);
+  });
+
+  it("survives deep nesting and odd input", () => {
+    expect(() => parseMarkdown(">".repeat(200) + " x")).not.toThrow();
+    expect(() => parseMarkdown(Array.from({ length: 50 }, (_, i) => `${" ".repeat(i * 2)}- x`).join("\n"))).not.toThrow();
+    expect(parseMarkdown("")).toEqual([]);
   });
 });

@@ -33,4 +33,42 @@ describe("AiMessage", () => {
     await w.find("[data-test='ai-msg-chip']").trigger("click");
     expect(push).toHaveBeenCalledWith({ name: "wildcards-edit", params: { id: "ab12cd34" } });
   });
+
+  it("draws a table the way a model wrote it", () => {
+    const text = "## Current Structure\n\n| Wildcard | Variable | Options |\n|----------|----------|--------:|\n"
+      + "| **Pose pool — sitting** | `$pose_sitting` | 9 |\n| **Pose pool — lying** | `$pose_lying` | 7 |";
+    const w = mount(AiMessage, { props: { text } });
+    expect(w.find("h4.wp-ai-msg__h").text()).toBe("Current Structure");
+    expect(w.findAll("th").map((c) => c.text())).toEqual(["Wildcard", "Variable", "Options"]);
+    const cells = w.findAll("tbody tr")[1].findAll("td");
+    expect(cells[0].find("strong").text()).toBe("Pose pool — lying");
+    expect(cells[1].find("code .wp-ai-msg__var").text()).toBe("$pose_lying");
+    expect(cells[2].attributes("style")).toContain("text-align: right");
+  });
+
+  it("shows a code block with its language and a copy button", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const w = mount(AiMessage, { props: { text: "```json\n{\"text\": \"standing\"}\n```" } });
+    expect(w.find(".wp-ai-msg__codehead").text()).toBe("json");
+    expect(w.find("pre").text()).toBe('{"text": "standing"}');
+    await w.find("[data-test='ai-msg-copy']").trigger("click");
+    expect(writeText).toHaveBeenCalledWith('{"text": "standing"}');
+  });
+
+  it("keeps numbering, nesting, task boxes and link text", () => {
+    const w = mount(AiMessage, {
+      props: { text: "3. first\n   - inner\n\n4. second\n\n- [x] done\n\n---\n\nSee [the docs](https://example.com) ~~old~~" },
+    });
+    expect(w.find("ol").attributes("start")).toBe("3");
+    expect(w.findAll("ol > li")).toHaveLength(2);
+    expect(w.find("ol li ul li").text()).toBe("inner");
+    expect(w.find(".wp-ai-msg__task i").attributes("aria-label")).toBe("Done");
+    expect(w.find("hr").exists()).toBe(true);
+    const link = w.find(".wp-ai-msg__link");
+    expect(link.text()).toBe("the docs");
+    expect(link.attributes("title")).toBe("https://example.com");
+    expect(w.find("a").exists()).toBe(false);
+    expect(w.find("s").text()).toBe("old");
+  });
 });

@@ -90,6 +90,17 @@ GO_NUDGE = (
     "items). Only if you truly can't continue without the user's choice, ask "
     "that one question again with \"calls\": []."
 )
+#: Sent once when a step comes back empty (no text, no calls).
+EMPTY_NUDGE = (
+    "Your last answer was empty. Answer the user's message now: call a tool, or "
+    "reply in plain text."
+)
+#: Sent once when an answer stops where it introduces its content.
+UNFINISHED_NUDGE = (
+    "Your answer stopped right where it introduced its content (it ends with a "
+    "colon and nothing follows). Write the whole answer again, this time with "
+    "that content."
+)
 _ASKS_LEAVE = re.compile(
     r"\b(?:should|shall|may|can) i (?:go ahead|proceed|start|continue|create|build|make|"
     r"add|set (?:it|them|this) up)\b|\b(?:do you )?want me to\b|\bwould you like me to\b|"
@@ -108,16 +119,36 @@ def asks_leave(message: str) -> bool:
     return bool(_ASKS_LEAVE.search(message or ""))
 
 
+def unfinished(said: str) -> bool:
+    """The answer ends by introducing something that never came
+    ("Here's a quick summary of the key concepts:")."""
+    return said.rstrip().endswith(":")
+
+
+def read_budget(size: str) -> int:
+    """Read calls one answer may make before it is told to answer: a local
+    model re-reads a growing prompt on every step, so many reads run out
+    the clock (a 27B read 8 items in two steps and timed out writing)."""
+    return {"small": 6, "medium": 8}.get(size, 12)
+
+
 def is_go_ahead(text: str) -> bool:
     """The user's message is a short yes ("yes", "ok do it", "go ahead")."""
     t = re.sub(r"\s+", " ", text or "").strip()
     return 0 < len(t) <= 40 and bool(_GO_AHEAD.match(t))
 
 
+#: An answer longer than this that ends by offering more ("Want me to
+#: propose changes?") answered something; it isn't stalling.
+STALL_CHARS = 300
+
+
 def stalls(said: str, user_text: str, last_answer: str) -> bool:
-    """A step that ended with no calls but should have acted: it asks leave,
-    it repeats its last answer, or it met the user's yes with more talk."""
-    if asks_leave(said) or (is_go_ahead(user_text) and asks_leave(last_answer)):
+    """A step that ended with no calls but should have acted: the whole
+    answer is a request for leave, it repeats its last answer, or it met the
+    user's yes with more talk."""
+    if (asks_leave(said) and len(said.strip()) <= STALL_CHARS) \
+            or (is_go_ahead(user_text) and asks_leave(last_answer)):
         return True
     norm = lambda t: re.sub(r"\W+", " ", t or "").strip().lower()  # noqa: E731
     return bool(last_answer) and norm(said) == norm(last_answer)
@@ -180,20 +211,27 @@ string}. Read tools run at once and you get their results in the next \
 message; then continue. When you are done, answer with "calls": [] and a \
 message for the user. Keep messages short and plain. Write every library \
 item you mention as [[its exact name]]: the user sees a chip that opens it. \
-Markdown works: **bold**, lists with "- ", `code` for $variables. \
-Wherever a tool takes an id you can also give the item's exact name.
+Markdown works: **bold**, lists, `code` for $variables, ``` code blocks \
+and | tables. Wherever a tool takes an id you can also give the item's exact \
+name. Use page tools (open, highlight) only when the user asks about the app \
+or where something is, never for a greeting.
 """
 #: How a model with native tool calling answers.
 FORMAT_NATIVE = """\
 Use the tools: read tools run at once and their results come back to you; \
 then continue. Change tools each make a proposal card. Before your first \
-call, think in a sentence about what the user wants, which features fit \
-(see "Which feature for which job") and what you'll call. When you are \
-done, answer the user in plain text without calling a tool. Keep messages \
-short and plain. Write every library item you mention as [[its exact \
-name]]: the user sees a chip that opens it. Markdown works: **bold**, lists \
-with "- ", `code` for $variables. Wherever a tool takes an id you can also \
-give the item's exact name.
+call, decide what the user wants, which features fit (see "Which feature \
+for which job") and what you'll call. Call tools through tool calls only: \
+never write a call, its arguments or its results into your message, and \
+never answer from an item you haven't read. Several calls can go in one \
+step (for example several options in one add_options call, or reads of \
+several items). When you are done, answer the user in plain text without \
+calling a tool. Keep messages short and plain. Write every library item \
+you mention as [[its exact name]]: the user sees a chip that opens it. \
+Markdown works: **bold**, lists, `code` for $variables, ``` code blocks \
+and | tables. Wherever a tool takes an id you can also give the item's \
+exact name. Use page tools (open, highlight) only when the user asks about \
+the app or where something is, never for a greeting.
 """
 
 
@@ -329,6 +367,8 @@ class Library(MoreTools):
         #: Id of each module proposed in this answer -> its proposal id.
         self._created: dict[str, str] = {}
         self._next_pid = 0
+        #: Proposals from earlier answers in this chat: pid -> {title, status}.
+        self.earlier_proposals: dict[str, dict[str, Any]] = {}
         #: Id of the item open in an editor whose unsaved state replaced the
         #: saved row (`use_editor`); changes to it go into that editor.
         self.editor_id: str | None = None
@@ -457,6 +497,21 @@ class Library(MoreTools):
             return None
         return (self.modules.get(item_id) or self.bundles.get(item_id)
                 or self.templates.get(item_id))
+
+    def not_found(self, raw: Any, what: str = "item") -> str:
+        """Why `raw` names nothing, for the model. An item from an earlier
+        proposal the user hasn't applied has no id yet: say so, or the model
+        guesses ids and then claims things about an item that isn't there."""
+        key = _short(raw, 60)
+        low = key.lower().lstrip("$")
+        if low:
+            for pid, p in self.earlier_proposals.items():
+                if low in str(p.get("title") or "").lower() and p.get("status") != "applied":
+                    return (f"no {what} {key!r}: it is only proposed ({pid}, "
+                            f"{'not applied' if not p.get('status') else p['status']}), so it "
+                            "isn't in the library yet. Tell the user it needs applying first; "
+                            "don't guess its id")
+        return f"no {what} {key!r}; search for it, or check the id"
 
     def _resolve(self, args: dict[str, Any], *keys: str) -> dict[str, Any]:
         """``args`` with each of ``keys`` (an id or a unique name) turned
@@ -594,7 +649,7 @@ class Library(MoreTools):
     def read(self, args: dict[str, Any]) -> str:
         r = self.get(args.get("id"))
         if r is None:
-            raise ValueError(f"no item with id {_short(args.get('id'), 20)!r}")
+            raise ValueError(self.not_found(args.get("id")))
         kind = self._kind(r)
         lines = [f"{kind} \"{r.get('name')}\" ({r['id']})"]
         if r.get("description"):
@@ -1000,7 +1055,7 @@ class Library(MoreTools):
     def update_info(self, args: dict[str, Any]) -> dict[str, Any]:
         r = self._current(args.get("id"))[0]
         if r is None:
-            raise ValueError(f"no item with id {_short(args.get('id'), 20)!r}")
+            raise ValueError(self.not_found(args.get("id")))
         kind = ("bundle" if r["id"] in self.bundles else
                 "template" if r["id"] in self.templates else "module")
         body: dict[str, Any] = {}

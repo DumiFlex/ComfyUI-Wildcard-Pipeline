@@ -228,6 +228,20 @@ async def test_one_broken_tool_doesnt_end_the_answer(wp_client, fake_llm, monkey
 async def test_an_answer_has_a_time_limit(wp_client, fake_llm, monkeypatch):
     ai_config.update({"enabled": True, "provider": "lmstudio",
                       "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
-    monkeypatch.setattr(ai_routes, "TURN_SECONDS", 0)
+    monkeypatch.setattr(ai_routes, "TURN_SECONDS_LOCAL", -1)
+    search = {"tool": "search", "args": json.dumps({"query": "x"})}
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [search]},
+        {"message": "", "calls": [{"tool": "search", "args": json.dumps({"query": "y"})}]},
+        {"message": "never asked", "calls": []},
+    ])
+    # Out of time after the first step: one last step to answer, then stop.
+    body = await _chat(wp_client, "hi")
+    assert "Time is up" in fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+    assert body["message"].startswith("I kept looking")
+    assert len(fake_llm.chat_steps) == 1
+    fake_llm.chat_steps.clear()
+    # One step can't run forever either.
+    monkeypatch.setattr(ai_routes, "STEP_SECONDS", 0)
     resp = await wp_client.post("/wp/api/ai/chat", json={"message": "hi"})
     assert resp.status == 504

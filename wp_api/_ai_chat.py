@@ -36,6 +36,19 @@ _support: dict[tuple[str, str, str], tuple[float, bool | None]] = {}
 _THINK = re.compile(r"<think>.*?</think>\s*", re.DOTALL | re.IGNORECASE)
 
 
+def strip_thinking(text: str) -> str:
+    """The answer without its reasoning. Qwen-style templates open the
+    <think> block in the prompt, so the reply has only "</think>"; a reply
+    cut off while thinking has only "<think>"."""
+    text = _THINK.sub("", text)
+    low = text.lower()
+    if "</think>" in low:
+        text = text[low.rindex("</think>") + len("</think>"):]
+    elif "<think>" in low:
+        text = text[:low.index("<think>")]
+    return text.strip()
+
+
 class ToolsUnsupported(AIError):
     """The server refused a request with tools in it."""
 
@@ -217,7 +230,6 @@ def anthropic_messages(log: list[dict[str, Any]], fmt: str) -> list[dict[str, An
 
 # ── answers ─────────────────────────────────────────────────────────────
 
-_TOOL_CALLS_TAG = re.compile(r"\[TOOL_CALLS\]\s*(.*)", re.DOTALL)
 _TOOL_CALL_XML = re.compile(r"<tool_call>\s*(.*?)\s*</tool_call>", re.DOTALL)
 
 
@@ -245,35 +257,54 @@ def _loads(text: str) -> Any:
         return None
 
 
+_DECODER = json.JSONDecoder()
+#: A tool name right before a JSON object: "read {…}", "read({…})",
+#: Mistral's "[TOOL_CALLS]read[ARGS]{…}", "I call: read {…}".
+_NAME_BEFORE = re.compile(r"([A-Za-z_][\w]*)\s*(?:\[ARGS\])?\s*\(?\s*$")
+
+
 def salvage_calls(text: str, names: set[str]) -> list[dict[str, Any]]:
     """Tool calls a model wrote as text instead of in the tool format:
-    Mistral's ``[TOOL_CALLS][…]``, ``<tool_call>{…}</tool_call>``, a bare
-    ``{"name", "arguments"}`` (or a list of them), or our JSON step shape."""
+    ``<tool_call>{…}</tool_call>``, Mistral's ``[TOOL_CALLS][…]`` or
+    ``[TOOL_CALLS]name{…}``, a bare ``{"name", "arguments"}`` (or a list of
+    them), our JSON step shape, or a tool's name followed by its arguments
+    ("I call: read {"id": …}"), anywhere in the text, in code blocks or
+    not, several of them. Only names this chat offers count."""
     text = (text or "").strip()
     if not text:
         return []
-    found: list[Any] = []
-    m = _TOOL_CALLS_TAG.search(text)
-    if m:
-        value = _loads(m.group(1).strip())
-        found = value if isinstance(value, list) else [value]
-    elif _TOOL_CALL_XML.search(text):
-        found = [_loads(x) for x in _TOOL_CALL_XML.findall(text)]
-    else:
-        body = text
-        fence = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", body, re.DOTALL)
-        if fence:
-            body = fence.group(1)
-        if body[:1] in "[{":
-            value = _loads(body)
-            if isinstance(value, dict) and isinstance(value.get("calls"), list):
-                found = value["calls"]
-            elif isinstance(value, list):
-                found = value
-            elif value is not None:
-                found = [value]
-    calls = [c for c in (_as_call(x, names) for x in found) if c]
-    return calls
+    found: list[dict[str, Any]] = []
+    for x in _TOOL_CALL_XML.findall(text):
+        c = _as_call(_loads(x), names)
+        if c:
+            found.append(c)
+    if found:
+        return found
+    pos = 0
+    while True:
+        starts = [i for i in (text.find("{", pos), text.find("[", pos)) if i != -1]
+        if not starts:
+            break
+        at = min(starts)
+        try:
+            value, end = _DECODER.raw_decode(text, at)
+        except ValueError:
+            pos = at + 1
+            continue
+        pos = end
+        named = _NAME_BEFORE.search(text, 0, at)
+        if isinstance(value, dict) and named and named.group(1) in names:
+            name = named.group(1)
+            found.append({"id": new_call_id(), "tool": name, "args": value,
+                          "args_text": chatlog.dumps(value)})
+            continue
+        if isinstance(value, dict) and isinstance(value.get("calls"), list):
+            value = value["calls"]
+        for item in value if isinstance(value, list) else [value]:
+            c = _as_call(item, names)
+            if c:
+                found.append(c)
+    return found
 
 
 def _usage_openai(data: dict[str, Any]) -> dict[str, Any]:
@@ -304,7 +335,7 @@ def _usage_anthropic(data: dict[str, Any]) -> dict[str, Any]:
 
 def _native_step(text: Any, calls: list[dict[str, Any]], names: set[str],
                  usage: dict[str, Any]) -> dict[str, Any]:
-    text = _THINK.sub("", text if isinstance(text, str) else "").strip()
+    text = strip_thinking(text if isinstance(text, str) else "")
     if not calls:
         calls = salvage_calls(text, names)
         if calls:
@@ -393,6 +424,8 @@ async def _step_anthropic(cfg: dict[str, Any], system: str, log: list[dict[str, 
     if data.get("stop_reason") == "refusal":
         raise AIError("the model declined this request", status=422)
     usage = _usage_anthropic(data)
+    if data.get("stop_reason") == "max_tokens":
+        usage["cut"] = True
     blocks = [b for b in data.get("content") or [] if isinstance(b, dict)]
     if fmt == "json":
         for block in blocks:
@@ -431,6 +464,8 @@ async def _step_ollama(cfg: dict[str, Any], system: str, log: list[dict[str, Any
     if not isinstance(msg, dict):
         raise AIError("the model didn't return an answer")
     usage = _usage_ollama(data)
+    if data.get("done_reason") == "length":
+        usage["cut"] = True
     if fmt == "json":
         text = msg.get("content") if isinstance(msg.get("content"), str) else ""
         return _json_step(text, client._parse_text_json(text), usage)
@@ -456,11 +491,16 @@ async def _step_openai(cfg: dict[str, Any], system: str, log: list[dict[str, Any
     if fmt == "native":
         body["tools"] = tools
         body["tool_choice"] = "auto"
+        if cfg.get("local"):
+            # llama.cpp returns one call per step unless asked for more.
+            body["parallel_tool_calls"] = True
     else:
         body["response_format"] = {"type": "json_schema", "json_schema": {
             "name": "chat_step", "schema": schema, "strict": True}}
     if cfg.get("local"):
         body["temperature"] = temperature
+        # A server's own default can be short (replies stopped mid-sentence).
+        body["max_tokens"] = max_tokens
         ttl = int(cfg.get("unload_after_s", 60))
         if ttl > 0:
             body["ttl"] = ttl
@@ -476,6 +516,8 @@ async def _step_openai(cfg: dict[str, Any], system: str, log: list[dict[str, Any
     if message.get("refusal"):
         raise AIError("the model declined this request", status=422)
     usage = _usage_openai(data)
+    if choices[0].get("finish_reason") == "length":
+        usage["cut"] = True
     if fmt == "json":
         text = message.get("content") if isinstance(message.get("content"), str) else ""
         return _json_step(text, client._parse_text_json(text), usage)

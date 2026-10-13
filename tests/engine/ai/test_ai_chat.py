@@ -226,6 +226,12 @@ def test_stalls_spots_asking_leave_and_repeats():
     assert chat.stalls("Done thinking.", "yes", asked)
     assert not chat.stalls("Glad it helped.", "ok thanks", "Applied the change.")
     assert chat.stalls("Same answer again.", "hmm", "Same answer, again!")
+    # A full answer that ends by offering more answered the question.
+    long = "Here's what I found in your pose pools. " * 10 + "Want me to propose changes?"
+    assert not chat.stalls(long, "what do my pose pools look like?", "")
+    assert chat.unfinished("Here's a quick summary of the key concepts:")
+    assert not chat.unfinished("Done: two cards.")
+    assert chat.read_budget("small") < chat.read_budget("large")
 
 
 def test_plan_pack_hands_the_description_to_the_pack_builder():

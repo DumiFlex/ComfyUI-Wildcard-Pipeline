@@ -352,7 +352,7 @@ onBeforeUnmount(() => {
 
 /* Wide screens make room for the assistant chat instead of covering the page. */
 @media (min-width: 1200px) {
-  .wp-body[data-ai-chat] > .wp-content { margin-right: min(440px, 100vw); }
+  .wp-body[data-ai-chat] > .wp-content { margin-right: min(var(--wp-ai-chat-w, 440px), 100vw); }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -132,6 +132,39 @@ def _coerce(schema: dict[str, Any], value: Any) -> Any:
     return value
 
 
+def _check(tool: str, schema: dict[str, Any], value: Any, where: str) -> Any:
+    """`value` coerced to `schema`, list items and nested objects included,
+    or ArgsError naming where it went wrong. A wrong list item is refused,
+    never dropped: a model that wrote `[{...}, 12, 13]` meant four options."""
+    value = _coerce(schema, value)
+    if not _type_ok(schema, value):
+        raise ArgsError(f"{tool}: {where} must be {_type_name(schema)}")
+    t = schema.get("type")
+    if t == "array" and isinstance(schema.get("items"), dict):
+        items = schema["items"]
+        return [_check(tool, items, _item(items, v), f"{where} item {i + 1}")
+                for i, v in enumerate(value)]
+    if t == "object" and isinstance(value, dict):
+        props = schema.get("properties") or {}
+        out = dict(value)
+        for k, v in value.items():
+            if k in props and v is not None:
+                out[k] = _check(tool, props[k], v, f"{where}.{k}")
+        missing = [k for k in schema.get("required") or [] if out.get(k) is None]
+        if missing:
+            raise ArgsError(f"{tool}: {where} is missing {', '.join(repr(k) for k in missing)}")
+        return out
+    return value
+
+
+def _item(schema: dict[str, Any], value: Any) -> Any:
+    """A bare string where an object with a "text" goes is that text."""
+    if (isinstance(value, str) and schema.get("type") == "object"
+            and "text" in (schema.get("properties") or {})):
+        return {"text": value}
+    return value
+
+
 def _type_name(schema: dict[str, Any]) -> str:
     if "anyOf" in schema:
         return " or ".join(_type_name(o) for o in schema["anyOf"])
@@ -154,11 +187,7 @@ def check_args(tool: Tool, args: Any) -> tuple[dict[str, Any], list[str]]:
             continue
         if value is None:
             continue
-        schema = props[key]
-        value = _coerce(schema, value)
-        if not _type_ok(schema, value):
-            raise ArgsError(f"{tool.name}: \"{key}\" must be {_type_name(schema)}")
-        out[key] = value
+        out[key] = _check(tool.name, props[key], value, f'"{key}"')
     missing = [k for k in tool.params.get("required") or [] if k not in out]
     if missing:
         raise ArgsError(f"{tool.name}: missing {', '.join(repr(k) for k in missing)}")

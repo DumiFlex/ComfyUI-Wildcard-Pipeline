@@ -18,11 +18,14 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { isNavigationFailure, useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import Button from "../ui/Button.vue";
+import Select, { type SelectOption } from "../ui/Select.vue";
+import { api } from "../../api/client";
 import AiMessage from "./AiMessage.vue";
 import AiPointer from "./AiPointer.vue";
 import { useAiChat, type ChatAssistantEntry, type SearchApproval } from "../../composables/useAiChat";
 import { clearPointer, EDIT_ROUTES } from "../../composables/useAiActions";
 import { useAiConfig } from "../../composables/useAiConfig";
+import { useAiChatWidth } from "../../composables/useAiChatWidth";
 import type { AiChatPage, AiChatProposal, AiPendingCall } from "../../api/types";
 import { currentPageNote, openEditor } from "../../composables/useOpenEditor";
 import { usePackBuilder } from "../../composables/usePackBuilder";
@@ -47,18 +50,57 @@ const EDITOR_SUGGESTIONS = [
 ];
 
 const chat = useAiChat();
-const { config } = useAiConfig();
+const { config, save: saveConfig } = useAiConfig();
 const route = useRoute();
 const router = useRouter();
 const scroller = ref<HTMLElement | null>(null);
 const box = ref<HTMLTextAreaElement | null>(null);
 const expanded = ref(new Set<string>());
+const size = useAiChatWidth();
 
 const modelLabel = computed(() => config.value?.model ?? "");
 const isLocal = computed(() => {
   const c = config.value;
   return c ? c.presets[c.provider].local : true;
 });
+
+/* ── Model picker ── */
+
+/** Names that look like embedding models: they can't chat. */
+const EMBED_NAME = /embed|bge|minilm|e5-|gte-|nomic|arctic/i;
+const models = ref<string[]>([]);
+/** A line under the header after the model changed (or failed to). */
+const modelNote = ref("");
+const modelOptions = computed<SelectOption[]>(() => {
+  const names = models.value.filter((m) => !EMBED_NAME.test(m));
+  const cur = modelLabel.value;
+  if (cur && !names.includes(cur)) names.unshift(cur);
+  const dot = isLocal.value ? "var(--wp-success)" : "var(--wp-warn)";
+  return names.map((m) => ({ value: m, label: m, dot }));
+});
+
+async function loadModels(): Promise<void> {
+  try {
+    models.value = (await api.ai.models()).models;
+  } catch {
+    models.value = []; // the picker still shows the current model
+  }
+}
+
+async function pickModel(v: string | number | null): Promise<void> {
+  if (typeof v !== "string" || !v || v === modelLabel.value || chat.loading.value) return;
+  try {
+    await saveConfig({ model: v });
+    // The provider's cache holds this chat for the old model only.
+    modelNote.value = chat.started.value
+      ? `Now using ${v}. Its next answer reads this chat again from the start, so it may take longer. Start a new chat if it struggles.`
+      : "";
+  } catch (err) {
+    modelNote.value = `Couldn't switch the model: ${err instanceof Error ? err.message : String(err)}`;
+  }
+}
+
+watch(() => chat.entries.value.length, () => { modelNote.value = ""; });
 
 const suggestions = computed(() => {
   if (route.name === "documentation-page") return DOC_SUGGESTIONS;
@@ -213,6 +255,7 @@ function onGlobalKey(ev: KeyboardEvent): void {
   if (ev.key === "Escape" && chat.open.value && !chat.loading.value) chat.open.value = false;
 }
 onMounted(() => {
+  void loadModels();
   scrollDown();
   void nextTick(() => box.value?.focus());
   window.addEventListener("keydown", onGlobalKey);
@@ -221,15 +264,41 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 </script>
 
 <template>
-  <aside class="wp-ai-chat" role="dialog" aria-label="AI assistant" data-test="ai-chat">
+  <aside class="wp-ai-chat" role="dialog" aria-label="AI assistant" data-test="ai-chat" :data-resizing="size.dragging.value || undefined">
     <AiPointer />
+    <div
+      class="wp-ai-chat__grip"
+      role="separator"
+      tabindex="0"
+      aria-orientation="vertical"
+      aria-label="Resize the assistant"
+      aria-controls="wp-ai-chat-body"
+      :aria-valuenow="size.width.value"
+      :aria-valuemin="size.min"
+      :aria-valuemax="size.max.value"
+      title="Drag to resize, double-click to reset"
+      data-test="ai-chat-grip"
+      @pointerdown="size.startDrag"
+      @keydown="size.onKey"
+      @dblclick="size.reset"
+    />
     <header class="wp-ai-chat__head">
       <span class="wp-ai-chat__title"><i class="pi pi-microchip-ai" aria-hidden="true" /> Assistant</span>
       <span
         class="wp-ai-chat__model"
         :data-local="isLocal ? 'true' : 'false'"
-        :title="isLocal ? 'Runs on your machine' : 'Sent to a cloud provider'"
-      >{{ modelLabel }}</span>
+        :title="`${modelLabel} · ${isLocal ? 'runs on your machine' : 'sent to a cloud provider'}`"
+        data-test="ai-chat-model"
+      >
+        <Select
+          :model-value="modelLabel"
+          :options="modelOptions"
+          size="sm"
+          :disabled="chat.loading.value"
+          :aria-label="`Model: ${modelLabel}`"
+          @update:model-value="pickModel"
+        />
+      </span>
       <span class="wp-ai-chat__spacer" />
       <Button
         variant="ghost"
@@ -248,8 +317,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
         @click="chat.open.value = false"
       ><i class="pi pi-times" aria-hidden="true" /></button>
     </header>
+    <p v-if="modelNote" class="wp-ai-chat__model-note" role="status" data-test="ai-chat-model-note">{{ modelNote }}</p>
 
-    <div ref="scroller" class="wp-ai-chat__body" data-test="ai-chat-body">
+    <div id="wp-ai-chat-body" ref="scroller" class="wp-ai-chat__body" data-test="ai-chat-body">
       <div v-if="!chat.started.value" class="wp-ai-chat__empty" data-test="ai-chat-empty">
         <p>Ask about your library, or ask for a change. The assistant reads what you have and proposes changes as cards; nothing is saved until you press Apply.</p>
         <button
@@ -397,24 +467,42 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
   right: 0;
   bottom: 0;
   z-index: 50;
-  width: min(440px, 100vw);
+  width: min(var(--wp-ai-chat-w, 440px), 100vw);
   display: flex;
   flex-direction: column;
   background: var(--wp-bg-1);
   border-left: 1px solid var(--wp-border);
   box-shadow: -8px 0 24px rgb(0 0 0 / 0.25);
 }
+/* The left edge: a splitter the user drags or moves with the arrow keys. */
+.wp-ai-chat__grip {
+  position: absolute; top: 0; bottom: 0; left: -4px; width: 8px; z-index: 1;
+  cursor: col-resize; touch-action: none;
+}
+.wp-ai-chat__grip::after {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px;
+  background: transparent; transition: background 120ms;
+}
+.wp-ai-chat__grip:hover::after, .wp-ai-chat[data-resizing] .wp-ai-chat__grip::after { background: var(--wp-accent-500); }
+.wp-ai-chat__grip:focus-visible { outline: none; }
+.wp-ai-chat__grip:focus-visible::after { background: var(--wp-accent-500); width: 3px; }
+.wp-ai-chat[data-resizing] { user-select: none; }
+@media (max-width: 639px) {
+  .wp-ai-chat { width: 100vw; }
+  .wp-ai-chat__grip { display: none; }
+}
 .wp-ai-chat__head {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 12px; border-bottom: 1px solid var(--wp-border);
 }
 .wp-ai-chat__title { font-weight: 600; color: var(--wp-accent-text); display: inline-flex; gap: 6px; align-items: center; }
-.wp-ai-chat__model {
-  font-family: var(--wp-font-mono, monospace); font-size: 11px; padding: 1px 7px; border-radius: 5px;
-  color: var(--wp-warn); border: 1px solid color-mix(in oklab, var(--wp-warn) 45%, transparent);
-  max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+.wp-ai-chat__model { min-width: 0; flex: 0 1 220px; }
+.wp-ai-chat__model :deep(.wp-select) { width: 100%; }
+.wp-ai-chat__model :deep(button) { font-family: var(--wp-font-mono, monospace); font-size: 11px; }
+.wp-ai-chat__model-note {
+  margin: 0; padding: 6px 12px; font-size: 12px; color: var(--wp-text-muted);
+  border-bottom: 1px solid var(--wp-border); background: var(--wp-bg-2);
 }
-.wp-ai-chat__model[data-local="true"] { color: var(--wp-success); border-color: color-mix(in oklab, var(--wp-success) 45%, transparent); }
 .wp-ai-chat__spacer { flex: 1; }
 .wp-ai-chat__close {
   display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;

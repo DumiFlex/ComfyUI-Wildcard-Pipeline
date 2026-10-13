@@ -73,3 +73,32 @@ def test_salvage_calls():
 def test_native_step_strips_thinking():
     st = ac._native_step("<think>hmm</think>Hello", [], {"search"}, {})
     assert st["message"] == "Hello" and st["calls"] == []
+
+
+def test_salvage_calls_written_as_text():
+    names = {"search", "read", "add_options"}
+    # A native-tools model writing calls into its message (seen with a 12B).
+    got = ac.salvage_calls('I think: read it first.\n\nI call: read {"id": "05c54db9"}\n\n'
+                           "(then answer)\n\nThe options are …", names)
+    assert [(c["tool"], c["args"]) for c in got] == [("read", {"id": "05c54db9"})]
+    # Several, in code blocks, with prose around them.
+    got = ac.salvage_calls('Here:\n```\nsearch {"query": "pose"}\n```\nand\n```\n'
+                           'read({"id": "a"})\n```', names)
+    assert [c["tool"] for c in got] == ["search", "read"]
+    # Mistral's name-first form, and objects on separate lines.
+    got = ac.salvage_calls('[TOOL_CALLS]read[ARGS]{"id": "b"}', names)
+    assert got[0]["tool"] == "read" and got[0]["args"] == {"id": "b"}
+    got = ac.salvage_calls('{"name": "search", "arguments": {"query": "a"}}\n'
+                           '{"name": "read", "arguments": {"id": "c"}}', names)
+    assert [c["tool"] for c in got] == ["search", "read"]
+    # Option objects in an answer aren't calls; nor are names not offered.
+    assert ac.salvage_calls('```\n{"text": "standing", "tags": ["pose"]}\n```', names) == []
+    assert ac.salvage_calls('delete_everything {"all": true}', names) == []
+    assert ac.salvage_calls("pick {a|b} or {c|d}", names) == []
+
+
+def test_strip_thinking():
+    assert ac.strip_thinking("<think>a</think> Hi") == "Hi"
+    assert ac.strip_thinking("reasoning here</think>\n\nHi") == "Hi"
+    assert ac.strip_thinking("Hi <think>cut off") == "Hi"
+    assert ac.strip_thinking("<think>only thinking") == ""

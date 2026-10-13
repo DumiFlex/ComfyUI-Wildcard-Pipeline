@@ -22,7 +22,7 @@ const CONFIG = {
 
 vi.mock("../../../api/client", () => ({
   api: {
-    ai: { config: vi.fn(), chat: vi.fn(), packPlan: vi.fn() },
+    ai: { config: vi.fn(), chat: vi.fn(), packPlan: vi.fn(), models: vi.fn(), saveConfig: vi.fn() },
     modules: { create: vi.fn(), update: vi.fn(), delete: vi.fn() },
     bundles: { update: vi.fn() },
     categories: { create: vi.fn() },
@@ -102,6 +102,9 @@ describe("AiChatDrawer", () => {
     _resetAiActionsForTests();
     vi.mocked(api.ai.config).mockResolvedValue(CONFIG);
     vi.mocked(api.ai.chat).mockReset().mockResolvedValue(RESULT);
+    vi.mocked(api.ai.models).mockReset().mockResolvedValue({ models: ["m", "big-27b", "nomic-embed-text"] });
+    vi.mocked(api.ai.saveConfig).mockReset().mockImplementation(
+      async (patch) => ({ ...CONFIG, ...patch }) as AiConfig);
     vi.mocked(api.modules.create).mockReset().mockImplementation(
       async (body) => ({ id: "new1", ...body }) as never);
     vi.mocked(api.modules.update).mockReset().mockImplementation(
@@ -466,5 +469,42 @@ describe("AiChatDrawer", () => {
       expect(w.get('[data-test="ai-chat-search"]').text()).toContain("Not answered");
       w.unmount();
     });
+  });
+
+  it("switches the model from the header, and says the next answer reads the chat again", async () => {
+    const { w } = await mountIt();
+    await w.get('[data-test="ai-chat-model"] [data-test="select-trigger"]').trigger("click");
+    await flushPromises();
+    const rows = [...document.querySelectorAll<HTMLElement>("[role='option']")];
+    // Embedding models can't chat, so they aren't offered.
+    expect(rows.map((r) => r.textContent?.trim())).toEqual(["m", "big-27b"]);
+    // Before any message, switching says nothing.
+    rows[1].dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ model: "big-27b" });
+    expect(w.find('[data-test="ai-chat-model-note"]').exists()).toBe(false);
+    await w.get('[data-test="ai-chat-input"]').setValue("hi");
+    await w.get('[data-test="ai-chat-input"]').trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    await w.get('[data-test="ai-chat-model"] [data-test="select-trigger"]').trigger("click");
+    await flushPromises();
+    [...document.querySelectorAll<HTMLElement>("[role='option']")][0]
+      .dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    await flushPromises();
+    expect(w.get('[data-test="ai-chat-model-note"]').text()).toContain("reads this chat again");
+    w.unmount();
+  });
+
+  it("resizes from its left edge", async () => {
+    const { w } = await mountIt();
+    const grip = w.get('[data-test="ai-chat-grip"]');
+    expect(grip.attributes("role")).toBe("separator");
+    expect(grip.attributes("aria-valuenow")).toBe("440");
+    await grip.trigger("keydown", { key: "ArrowLeft" });
+    expect(grip.attributes("aria-valuenow")).toBe("456");
+    expect(document.documentElement.style.getPropertyValue("--wp-ai-chat-w")).toBe("456px");
+    await grip.trigger("dblclick");
+    expect(grip.attributes("aria-valuenow")).toBe("440");
+    w.unmount();
   });
 });

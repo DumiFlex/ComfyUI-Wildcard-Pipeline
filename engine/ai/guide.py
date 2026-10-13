@@ -124,12 +124,16 @@ def _example_chat() -> str:
 
 
 def _example_chat_native() -> str:
-    lines = [f'Example. User: "{EXAMPLE_CHAT_REQUEST}"']
-    for step in EXAMPLE_CHAT_STEPS:
-        calls = ", ".join(f"{c['tool']} {json.dumps(c['args'], ensure_ascii=False)}"
-                          for c in step["calls"])
-        lines.append(f"You think: {step['plan']} You call: {calls}")
-    lines.append("(then a last answer, with no call, saying what the test showed)")
+    # Told as steps, not as a transcript: small models copied a "You call:
+    # read {...}" transcript into their answer as text instead of calling.
+    lines = [f'Example of a good order of tool calls for "{EXAMPLE_CHAT_REQUEST}" '
+             "(each one a real tool call, never written out as text):"]
+    for i, step in enumerate(EXAMPLE_CHAT_STEPS, 1):
+        calls = " and ".join(f"{c['tool']} with {json.dumps(c['args'], ensure_ascii=False)}"
+                             for c in step["calls"])
+        lines.append(f"{i}. {step['plan']} Call {calls}.")
+    lines.append(f"{len(EXAMPLE_CHAT_STEPS) + 1}. Answer in plain text, with no call, "
+                 "saying what the test showed.")
     return "\n".join(lines) + "\n"
 
 

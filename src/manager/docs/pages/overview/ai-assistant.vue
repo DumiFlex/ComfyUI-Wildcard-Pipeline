@@ -179,11 +179,22 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         reads your items and these docs itself; the lines above each reply say what it looked at. Its
         search reads what items hold, not only their names and tags: option texts, values and
         rules count, and broad subjects widen on their own, so "characters" also finds hair, eye
-        and outfit wildcards. Replies use simple formatting (bold, lists, code), and every item it
+        and outfit wildcards. Replies use Markdown: headings, bold and italic, numbered, nested and
+        checklist lists, tables, quotes and code blocks (each with its language and a copy button).
+        Links show as text with the address on hover and are never opened. Every item it
         mentions is a chip you click to open it. Prompt syntax in a reply is coloured the way the
         editors colour it: each $variable in its own colour, {a|b} picks, @{…} references, LoRA
         and embedding tags, and #tags. A line starting with "Tip:" or "Warning:" stands out as a
         note.
+      </p>
+      <p>
+        Drag the chat's left edge to make it wider or narrower (or focus the edge and use the
+        arrow keys; Shift moves further, Home and End go to the smallest and largest).
+        Double-click the edge to go back to the usual width. The width is remembered, and on a
+        wide screen the page moves over to make room. The model's name in the chat's header is
+        a menu: pick another model from your server to use it from the next message on. Its
+        first answer reads the chat again from the start, so it takes a little longer; if the new
+        model can't carry on a chat the old one started, start a new chat.
       </p>
       <p>
         Before the model answers, the chat searches your library for what your message seems to be
@@ -256,7 +267,18 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         and a constraint on it); the later card waits until the first is applied. An answer that
         comes back garbled is asked for again once, with the problem named. It doesn't ask "should I go
         ahead?" before proposing, since the card is already the asking; if it does, or answers your
-        "yes" by asking again, it is told once to make the change.
+        "yes" by asking again, it is told once to make the change. An empty answer, or one that
+        stops at "Here's a summary:" with nothing after it, is asked for again once. A tool call a
+        model writes out as text ("I call: read …") is run as a real call, and a call with broken
+        arguments (a list of options where some aren't options) comes back to the model with the
+        problem named instead of quietly losing part of it.
+      </p>
+      <p>
+        One answer may read a handful of items (about 6 for a small model, 8 for a medium one, 12
+        for a large or cloud one) before it is told to answer from what it has, and a local model
+        gets up to 20 minutes per answer (a cloud model 10). When the time is up it gets one last
+        step to answer instead of stopping mid-way. If a reply ends with "Cut off", the model
+        reached its output limit; thinking models can use it all up before they answer.
       </p>
       <p>
         Each card lists what it changes and warns about anything it left out (a duplicate option, a

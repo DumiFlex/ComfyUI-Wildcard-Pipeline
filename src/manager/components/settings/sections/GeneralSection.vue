@@ -102,8 +102,9 @@ const appLicense = __APP_LICENSE__;
 <style scoped>
 .wp-set-about {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: var(--wp-space-3) var(--wp-space-6);
+  min-width: 0;
   font-size: var(--wp-text-sm);
   align-items: center;
 }
@@ -113,6 +114,9 @@ const appLicense = __APP_LICENSE__;
   display: inline-flex;
   align-items: center;
   gap: var(--wp-space-3);
+  min-width: 0;
+  /* The long address wraps instead of pushing the card wider than the page. */
+  overflow-wrap: anywhere;
 }
 .wp-set-about__link:hover { color: var(--wp-text); }
 .wp-set-status { margin: 3px 0 0; font-size: 12px; color: var(--wp-text-muted); }

@@ -36,10 +36,11 @@ def _row(lib: Any, raw: Any, what: str = "item") -> dict[str, Any]:
     row = lib.get(raw) if isinstance(raw, str) else None
     if row is None and isinstance(raw, str):
         row = lib._find(raw)
-    if row is None or row.get("_proposed"):
-        raise ValueError(f"no {what} {_text(raw, 40)!r}"
-                         + (" (proposed items exist only once applied)"
-                            if row is not None else ""))
+    if row is not None and row.get("_proposed"):
+        raise ValueError(f"no {what} {_text(raw, 40)!r} (proposed items exist only once applied)")
+    if row is None:
+        finder = getattr(lib, "not_found", None)
+        raise ValueError(finder(raw, what) if finder else f"no {what} {_text(raw, 40)!r}")
     return row
 
 
@@ -82,7 +83,8 @@ def _read_page(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
 
 
 def _highlight(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
-    anchor = _text(args.get("anchor"), 80)
+    # read_page lists parts as "[key] label"; models copy the brackets.
+    anchor = _text(args.get("anchor"), 80).strip().strip("[]").strip()
     if not anchor:
         raise ValueError("highlight needs an anchor from read_page")
     caption = _text(args.get("caption"), 160)

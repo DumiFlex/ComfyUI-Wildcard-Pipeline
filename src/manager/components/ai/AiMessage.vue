@@ -9,11 +9,11 @@
  * multi-picks, `@{…}` references, `<lora:…>` / `embedding:` runs and
  * `#tags`. A line opening with "Tip:", "Note:" or "Warning:" is a callout.
  */
-import { computed, h, type VNode } from "vue";
+import { computed, h, ref, type VNode } from "vue";
 import { useRouter } from "vue-router";
 import { KIND_ICON_MAP } from "../../../components/shared/kind-icons";
 import type { AiChatRef } from "../../api/types";
-import { parseMarkdown, type Block, type Inline } from "../../utils/chat-markdown";
+import { parseMarkdown, type Block, type Inline, type ListItem } from "../../utils/chat-markdown";
 import { tokenizeRich } from "@/widgets/richTokenize";
 import { varColorIndex } from "../../../components/shared/var-color";
 
@@ -27,15 +27,15 @@ const EDIT_ROUTES: Record<string, string> = {
 };
 
 function chip(label: string): VNode {
-  const ref = props.refs?.[label];
-  if (!ref) return h("span", { class: "wp-ai-msg__chip", "data-missing": "true" }, label);
-  const icon = KIND_ICON_MAP[ref.type as keyof typeof KIND_ICON_MAP] ?? "pi pi-circle";
-  const route = EDIT_ROUTES[ref.type];
+  const found = props.refs?.[label];
+  if (!found) return h("span", { class: "wp-ai-msg__chip", "data-missing": "true" }, label);
+  const icon = KIND_ICON_MAP[found.type as keyof typeof KIND_ICON_MAP] ?? "pi pi-circle";
+  const route = EDIT_ROUTES[found.type];
   return h("button", {
-    type: "button", class: "wp-ai-msg__chip", "data-test": "ai-msg-chip", "data-kind": ref.type,
-    title: `Open ${ref.name}`,
-    onClick: () => { if (route) void router.push({ name: route, params: { id: ref.id } }); },
-  }, [h("i", { class: icon, "aria-hidden": "true" }), ref.name]);
+    type: "button", class: "wp-ai-msg__chip", "data-test": "ai-msg-chip", "data-kind": found.type,
+    title: `Open ${found.name}`,
+    onClick: () => { if (route) void router.push({ name: route, params: { id: found.id } }); },
+  }, [h("i", { class: icon, "aria-hidden": "true" }), found.name]);
 }
 
 /** `<lora:…>`, `embedding:…` and `#tags`: not tokenizer kinds, so split first. */
@@ -81,10 +81,60 @@ function inline(nodes: Inline[]): Array<VNode | string> {
       case "text": return syntax(n.v);
       case "b": return [h("strong", inline(n.c))];
       case "i": return [h("em", inline(n.c))];
+      case "s": return [h("s", inline(n.c))];
       case "code": return [h("code", { class: "wp-ai-msg__code" }, syntax(n.v))];
       case "ref": return [chip(n.v)];
+      // Never followed: the text, with the address in a tooltip.
+      case "link": return [h("span", { class: "wp-ai-msg__link", title: n.href }, inline(n.c))];
     }
   });
+}
+
+const copied = ref<string | null>(null);
+
+function copy(v: string): void {
+  void navigator.clipboard?.writeText(v).then(() => {
+    copied.value = v;
+    setTimeout(() => { if (copied.value === v) copied.value = null; }, 1500);
+  });
+}
+
+function pre(lang: string, v: string): VNode {
+  const done = copied.value === v;
+  return h("div", { class: "wp-ai-msg__codeblock" }, [
+    h("div", { class: "wp-ai-msg__codehead" }, [
+      h("span", lang || "text"),
+      h("button", {
+        type: "button", class: "wp-ai-msg__copy", "data-test": "ai-msg-copy",
+        "aria-label": done ? "Copied" : "Copy code", title: done ? "Copied" : "Copy",
+        onClick: () => copy(v),
+      }, [h("i", { class: done ? "pi pi-check" : "pi pi-copy", "aria-hidden": "true" })]),
+    ]),
+    h("pre", { class: "wp-ai-msg__pre" }, syntax(v)),
+  ]);
+}
+
+function table(b: Extract<Block, { t: "table" }>): VNode {
+  const style = (i: number): Record<string, string> | undefined =>
+    b.align[i] ? { textAlign: b.align[i] as string } : undefined;
+  return h("div", { class: "wp-ai-msg__table", tabindex: 0, role: "region", "aria-label": "Table" }, [
+    h("table", [
+      h("thead", [h("tr", b.head.map((c, i) => h("th", { style: style(i) }, inline(c))))]),
+      h("tbody", b.rows.map((r) => h("tr", r.map((c, i) => h("td", { style: style(i) }, inline(c)))))),
+    ]),
+  ]);
+}
+
+function item(it: ListItem): VNode {
+  const body = it.blocks.map(block);
+  if (it.task === null) return h("li", body);
+  return h("li", { class: "wp-ai-msg__task" }, [
+    h("i", {
+      class: it.task ? "pi pi-check-square" : "pi pi-stop",
+      role: "img", "aria-label": it.task ? "Done" : "Not done",
+    }),
+    h("div", body),
+  ]);
 }
 
 const CALLOUT = /^(tip|note|warning|careful|heads up)\s*:\s*/i;
@@ -104,10 +154,16 @@ function block(b: Block): VNode {
       }
       return h("p", inline(b.c));
     }
-    case "h": return h("p", { class: "wp-ai-msg__h" }, inline(b.c));
-    case "ul": case "ol": return h(b.t, b.items.map((it) => h("li", inline(it))));
-    case "pre": return h("pre", { class: "wp-ai-msg__pre" }, syntax(b.v));
-    case "quote": return h("blockquote", inline(b.c));
+    // Message headings sit under the drawer's own, so they start at h3.
+    case "h": return h(`h${Math.min(6, b.level + 2)}`, { class: "wp-ai-msg__h", "data-level": b.level }, inline(b.c));
+    case "list":
+      return b.ordered
+        ? h("ol", b.start !== 1 ? { start: b.start } : {}, b.items.map(item))
+        : h("ul", b.items.map(item));
+    case "pre": return pre(b.lang, b.v);
+    case "quote": return h("blockquote", b.blocks.map(block));
+    case "table": return table(b);
+    case "hr": return h("hr");
   }
 }
 
@@ -122,15 +178,50 @@ const Body = () => blocks.value.map(block);
 <style scoped>
 .wp-ai-msg { font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; display: flex; flex-direction: column; gap: 6px; }
 .wp-ai-msg :deep(p) { margin: 0; white-space: pre-wrap; }
-.wp-ai-msg :deep(ul), .wp-ai-msg :deep(ol) { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; }
+.wp-ai-msg :deep(ul), .wp-ai-msg :deep(ol) { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 2px; }
+/* The app resets list markers; a reply's lists keep theirs. */
+.wp-ai-msg :deep(ul) { list-style: disc; }
+.wp-ai-msg :deep(ul ul) { list-style: circle; }
+.wp-ai-msg :deep(ol) { list-style: decimal; }
+.wp-ai-msg :deep(li) { display: list-item; }
+.wp-ai-msg :deep(li::marker) { color: var(--wp-text-muted); }
 .wp-ai-msg :deep(blockquote) { margin: 0; padding-left: 8px; border-left: 2px solid var(--wp-border-strong, var(--wp-border)); color: var(--wp-text-muted); }
-.wp-ai-msg :deep(.wp-ai-msg__h) { font-weight: 600; color: var(--wp-text); margin-top: 2px; }
+.wp-ai-msg :deep(.wp-ai-msg__h) { margin: 2px 0 0; font-size: 13px; font-weight: 600; line-height: 1.35; color: var(--wp-text); }
+.wp-ai-msg :deep(.wp-ai-msg__h[data-level="1"]) { font-size: 15px; }
+.wp-ai-msg :deep(.wp-ai-msg__h[data-level="2"]) { font-size: 14px; }
+.wp-ai-msg :deep(li > p + *), .wp-ai-msg :deep(li > * + p) { margin-top: 4px; }
+.wp-ai-msg :deep(li > ul), .wp-ai-msg :deep(li > ol) { margin-top: 2px; }
+.wp-ai-msg :deep(li.wp-ai-msg__task) { list-style: none; margin-left: -18px; display: flex; gap: 6px; align-items: baseline; }
+.wp-ai-msg :deep(.wp-ai-msg__task > i) { font-size: 12px; color: var(--wp-text-muted); }
+.wp-ai-msg :deep(blockquote > * + *) { margin-top: 4px; }
+.wp-ai-msg :deep(hr) { width: 100%; margin: 4px 0; border: 0; border-top: 1px solid var(--wp-border); }
+.wp-ai-msg :deep(s) { color: var(--wp-text-muted); }
+.wp-ai-msg :deep(.wp-ai-msg__link) { text-decoration: underline dotted; text-underline-offset: 2px; cursor: help; }
+.wp-ai-msg :deep(.wp-ai-msg__table) { max-width: 100%; overflow-x: auto; border: 1px solid var(--wp-border); border-radius: var(--wp-radius-sm); }
+.wp-ai-msg :deep(.wp-ai-msg__table:focus-visible) { outline: 2px solid var(--wp-accent-500); outline-offset: 1px; }
+.wp-ai-msg :deep(.wp-ai-msg__table table) { border-collapse: collapse; font-size: 12.5px; min-width: 100%; }
+.wp-ai-msg :deep(.wp-ai-msg__table th), .wp-ai-msg :deep(.wp-ai-msg__table td) {
+  padding: 4px 8px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--wp-border); overflow-wrap: normal; min-width: 4ch;
+}
+.wp-ai-msg :deep(.wp-ai-msg__table th) { font-weight: 600; background: var(--wp-bg-2); white-space: nowrap; }
+.wp-ai-msg :deep(.wp-ai-msg__table tbody tr:last-child td) { border-bottom: 0; }
+.wp-ai-msg :deep(.wp-ai-msg__codeblock) { border-radius: var(--wp-radius-sm); background: var(--wp-bg-3, var(--wp-bg-2)); overflow: hidden; }
+.wp-ai-msg :deep(.wp-ai-msg__codehead) {
+  display: flex; align-items: center; justify-content: space-between; padding: 2px 4px 2px 8px;
+  font-size: 11px; color: var(--wp-text-muted); border-bottom: 1px solid var(--wp-border);
+}
+.wp-ai-msg :deep(.wp-ai-msg__copy) {
+  display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0;
+  border: 0; border-radius: var(--wp-radius-sm); background: transparent; color: inherit; cursor: pointer;
+}
+.wp-ai-msg :deep(.wp-ai-msg__copy:hover) { color: var(--wp-text); background: var(--wp-bg-2); }
+.wp-ai-msg :deep(.wp-ai-msg__copy i) { font-size: 11px; }
 .wp-ai-msg :deep(.wp-ai-msg__code) {
   font-family: var(--wp-font-mono, ui-monospace, monospace); font-size: 12px;
   padding: 0 4px; border-radius: var(--wp-radius-sm); background: var(--wp-bg-3, var(--wp-bg-2));
 }
 .wp-ai-msg :deep(.wp-ai-msg__pre) {
-  margin: 0; padding: 8px; border-radius: var(--wp-radius-sm); background: var(--wp-bg-3, var(--wp-bg-2));
+  margin: 0; padding: 8px; overflow-x: auto;
   font-family: var(--wp-font-mono, ui-monospace, monospace); font-size: 12px; white-space: pre-wrap;
 }
 .wp-ai-msg :deep(.wp-ai-msg__chip) {

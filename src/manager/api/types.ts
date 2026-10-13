@@ -1184,6 +1184,8 @@ export interface AiChatUsage {
   /** Ollama: prompt tokens it had to read (the rest came from its cache). */
   evaluated?: number;
   output?: number;
+  /** The answer stopped at the output limit. */
+  cut?: boolean;
 }
 
 export type AiChatOp =

@@ -80,6 +80,35 @@ def test_check_args():
     assert tools.check_args(tools.BY_NAME["read"], {"id": "a", "extra": None})[0] == {"id": "a"}
 
 
+def test_check_args_checks_list_items():
+    add = tools.BY_NAME["add_options"]
+    # Seen with a 12B: four options meant, one object and three numbers sent.
+    with pytest.raises(tools.ArgsError, match='"options" item 2 must be an object'):
+        tools.check_args(add, {"id": "w", "options": [{"text": "crouching"}, 12, 13, 14]})
+    with pytest.raises(tools.ArgsError, match="item 1 is missing 'text'"):
+        tools.check_args(add, {"id": "w", "options": [{"weight": 2}]})
+    with pytest.raises(tools.ArgsError, match=r"item 1\.weight"):
+        tools.check_args(add, {"id": "w", "options": [{"text": "a", "weight": "lots"}]})
+    # A bare string is an option's text; nested numbers are coerced.
+    args, _ = tools.check_args(add, {"id": "w", "options": ["a", {"text": "b", "weight": "2"}]})
+    assert args["options"] == [{"text": "a"}, {"text": "b", "weight": 2}]
+
+
+def test_unapplied_proposals_say_so():
+    lib = chat.Library([], [], [])
+    lib.earlier_proposals = {"p3": {"title": "New wildcard Outfit — Victorian", "status": None}}
+    assert "only proposed (p3" in lib.not_found("Outfit — Victorian")
+    assert "search for it" in lib.not_found("Hat")
+    with pytest.raises(ValueError, match="only proposed"):
+        client_tools.prepare(lib, "open", {"id": "Outfit — Victorian"})
+
+
+def test_highlight_takes_the_key_with_its_brackets():
+    lib = chat.Library([], [], [])
+    args, _ = client_tools.prepare(lib, "highlight", {"anchor": "[settings]"})
+    assert args["anchor"] == "settings"
+
+
 def test_step_schema_names_the_offered_tools():
     schema = tools.step_schema(["search", "read"])
     assert schema["properties"]["calls"]["items"]["properties"]["tool"]["enum"] == [
