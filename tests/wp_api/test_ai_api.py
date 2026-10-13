@@ -1055,3 +1055,59 @@ async def test_chat_asks_claude_to_cache_the_stable_prefix(wp_client, fake_llm):
     assert body["system"][0]["cache_control"] == {"type": "ephemeral"}
     assert "The library now:" in body["system"][0]["text"]
     assert "tool_choice" not in body and body["tools"][0]["name"] == "search"
+
+
+async def test_stop_closes_the_model_request(wp_app, aiohttp_server, unused_tcp_port):
+    """Aborting a chat request (the Stop button) cancels the handler, which
+    closes its request to the model server, so the server stops generating.
+
+    Served the way ComfyUI serves it: a plain AppRunner, which does NOT cancel
+    handlers when the client goes away (aiohttp's test server does)."""
+    import asyncio
+
+    import aiohttp
+
+    started = asyncio.Event()
+    closed = asyncio.Event()
+
+    async def slow_chat(request):
+        await request.read()
+        started.set()
+        try:
+            for _ in range(200):  # a long generation
+                if request.transport is None or request.transport.is_closing():
+                    closed.set()
+                    break
+                await asyncio.sleep(0.05)
+        except asyncio.CancelledError:  # a server that cancels on disconnect
+            closed.set()
+            raise
+        return web.json_response({"choices": [{"message": {"content": "late"}}]})
+
+    async def caps(request):
+        return web.json_response({"id": "m", "capabilities": []})
+
+    app = web.Application()
+    app.router.add_post("/v1/chat/completions", slow_chat)
+    app.router.add_get("/api/v0/models/{mid}", caps)
+    model = await aiohttp_server(app)
+
+    runner = web.AppRunner(wp_app)
+    await runner.setup()
+    site = web.TCPSite(runner, "127.0.0.1", unused_tcp_port)
+    await site.start()
+    base = f"http://127.0.0.1:{unused_tcp_port}"
+    try:
+        async with aiohttp.ClientSession() as s:
+            resp = await s.put(base + "/wp/api/ai/config", json={
+                "enabled": True, "provider": "custom", "model": "m",
+                "base_url": str(model.make_url("/v1")), "tool_format": "json"})
+            assert resp.status == 200, await resp.text()
+            req = asyncio.ensure_future(s.post(base + "/wp/api/ai/chat", json={"message": "hi"}))
+            await asyncio.wait_for(started.wait(), 5)
+            req.cancel()  # what the browser's AbortController does: drop the connection
+            with pytest.raises(asyncio.CancelledError):
+                await req
+            await asyncio.wait_for(closed.wait(), 5)
+    finally:
+        await runner.cleanup()

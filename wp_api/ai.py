@@ -68,7 +68,7 @@ from engine.db.repositories import (
 )
 from engine.importer import commit_import
 from wp_api import _ai_chat, _ai_client
-from wp_api._helpers import db_session, json_error, json_ok
+from wp_api._helpers import cancel_on_disconnect, db_session, json_error, json_ok
 from wp_api._validators import validate_wildcard_name
 
 _MAX_BODY_BYTES = 512 * 1024
@@ -1240,18 +1240,18 @@ async def post_pack_install(request: web.Request) -> web.Response:
 def register(router: web.UrlDispatcher) -> None:
     router.add_get("/wp/api/ai/config", get_config)
     router.add_put("/wp/api/ai/config", put_config)
-    router.add_post("/wp/api/ai/models", post_models)
-    router.add_post("/wp/api/ai/test", post_test)
-    router.add_post("/wp/api/ai/wildcard/draft", post_wildcard_draft)
-    router.add_post("/wp/api/ai/pack/review", post_pack_review)
-    router.add_post("/wp/api/ai/wildcard/edit", post_wildcard_edit)
-    router.add_post("/wp/api/ai/derivation/draft", post_derivation_draft)
-    router.add_post("/wp/api/ai/constraint/draft", post_constraint_draft)
-    router.add_post("/wp/api/ai/text/draft", post_text_draft)
-    router.add_post("/wp/api/ai/describe", post_describe)
-    router.add_post("/wp/api/ai/organize", post_organize)
-    router.add_post("/wp/api/ai/chat", post_chat)
-    router.add_post("/wp/api/ai/pack/plan", post_pack_plan)
-    router.add_post("/wp/api/ai/pack/item", post_pack_item)
-    router.add_post("/wp/api/ai/pack/check", post_pack_check)
-    router.add_post("/wp/api/ai/pack/install", post_pack_install)
+    router.add_post("/wp/api/ai/models", cancel_on_disconnect(post_models))
+    router.add_post("/wp/api/ai/test", cancel_on_disconnect(post_test))
+    router.add_post("/wp/api/ai/wildcard/draft", cancel_on_disconnect(post_wildcard_draft))
+    router.add_post("/wp/api/ai/pack/review", cancel_on_disconnect(post_pack_review))
+    router.add_post("/wp/api/ai/wildcard/edit", cancel_on_disconnect(post_wildcard_edit))
+    router.add_post("/wp/api/ai/derivation/draft", cancel_on_disconnect(post_derivation_draft))
+    router.add_post("/wp/api/ai/constraint/draft", cancel_on_disconnect(post_constraint_draft))
+    router.add_post("/wp/api/ai/text/draft", cancel_on_disconnect(post_text_draft))
+    router.add_post("/wp/api/ai/describe", cancel_on_disconnect(post_describe))
+    router.add_post("/wp/api/ai/organize", cancel_on_disconnect(post_organize))
+    router.add_post("/wp/api/ai/chat", cancel_on_disconnect(post_chat))
+    router.add_post("/wp/api/ai/pack/plan", cancel_on_disconnect(post_pack_plan))
+    router.add_post("/wp/api/ai/pack/item", cancel_on_disconnect(post_pack_item))
+    router.add_post("/wp/api/ai/pack/check", cancel_on_disconnect(post_pack_check))
+    router.add_post("/wp/api/ai/pack/install", post_pack_install)  # writes; never cut short
