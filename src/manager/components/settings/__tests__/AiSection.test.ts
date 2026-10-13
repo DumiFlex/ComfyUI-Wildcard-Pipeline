@@ -25,7 +25,7 @@ const PRESETS: AiConfig["presets"] = {
 function cfg(over: Partial<AiConfig> = {}): AiConfig {
   return {
     enabled: false, provider: "ollama", base_url: "", model: "", unload_after_s: 60,
-    context_max: 16384, model_size: "auto", model_size_auto: "medium",
+    context_max: 16384, model_size: "auto", model_size_auto: "medium", tool_format: "auto",
     key_set: false, key_from_env: false, keys_saved: [], presets: PRESETS, ...over,
   };
 }
@@ -146,6 +146,22 @@ describe("Settings › AI assistant", () => {
     await flushPromises();
     expect(w.text()).toContain("only 4k context");
     expect(w.get('[data-test="ai-context-low"]').text()).toContain("loaded with 4k of context");
+  });
+
+  it("saves the tool format", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({ enabled: true, model: "m" }));
+    vi.mocked(api.ai.saveConfig).mockImplementation(async (p) => cfg({ enabled: true, model: "m", ...p }));
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    const fmt = w.findAllComponents(Select).find((c) => c.attributes("data-test") === "ai-tool-format")!;
+    expect(fmt.props("modelValue")).toBe("auto");
+    fmt.vm.$emit("update:modelValue", "json");
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ tool_format: "json" });
+    vi.mocked(api.ai.saveConfig).mockClear();
+    fmt.vm.$emit("update:modelValue", "json");
+    await flushPromises();
+    expect(api.ai.saveConfig).not.toHaveBeenCalled();
   });
 
   it("saves the model size and the context cap", async () => {

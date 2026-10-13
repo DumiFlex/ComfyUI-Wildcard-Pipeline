@@ -1267,3 +1267,122 @@ class ScenarioRepository:
             if any(isinstance(i, dict) and i.get(key) == target for i in stack):
                 out.append(row["id"])
         return out
+
+
+# ── AI assistant chats ─────────────────────────────────────────────────
+
+
+class ChatNotFound(LookupError):
+    """Raised when a requested AI chat id does not exist."""
+
+
+#: Chats kept; older ones are removed when a new chat starts.
+MAX_AI_CHATS = 100
+
+
+def _row_to_chat(row: sqlite3.Row) -> dict[str, Any]:
+    try:
+        meta = json.loads(row["meta"] or "{}")
+    except ValueError:
+        meta = {}
+    return {
+        "id": row["id"],
+        "title": row["title"],
+        "snapshot": row["snapshot"],
+        "meta": meta if isinstance(meta, dict) else {},
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+class ChatRepository:
+    """The AI assistant's chats (migration 020): one row per chat plus its
+    turn log. The log is append-only; `append` writes a whole turn and the
+    chat's meta in one transaction, so a turn that fails leaves nothing
+    half-written. Pure DB — engine-isolated."""
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._conn = conn
+
+    def create(self, *, title: str = "", snapshot: str = "",
+               meta: dict[str, Any] | None = None) -> dict[str, Any]:
+        cid = secrets.token_hex(_ID_HEX_LEN // 2)
+        while self._conn.execute("SELECT 1 FROM ai_chats WHERE id = ?;", (cid,)).fetchone():
+            cid = secrets.token_hex(_ID_HEX_LEN // 2)
+        now = _now()
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO ai_chats(id, title, snapshot, meta, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?);",
+                (cid, title, snapshot, json.dumps(meta or {}, sort_keys=True), now, now),
+            )
+            old = [r[0] for r in self._conn.execute(
+                "SELECT id FROM ai_chats ORDER BY updated_at DESC, id LIMIT -1 OFFSET ?;",
+                (MAX_AI_CHATS,),
+            ).fetchall()]
+            for chat_id in old:
+                self._conn.execute("DELETE FROM ai_chat_messages WHERE chat_id = ?;", (chat_id,))
+                self._conn.execute("DELETE FROM ai_chats WHERE id = ?;", (chat_id,))
+        return self.get(cid)
+
+    def get(self, chat_id: str) -> dict[str, Any]:
+        row = self._conn.execute("SELECT * FROM ai_chats WHERE id = ?;", (chat_id,)).fetchone()
+        if row is None:
+            raise ChatNotFound(chat_id)
+        return _row_to_chat(row)
+
+    def messages(self, chat_id: str) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT body FROM ai_chat_messages WHERE chat_id = ? ORDER BY seq;", (chat_id,),
+        ).fetchall()
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            try:
+                body = json.loads(r["body"])
+            except ValueError:
+                continue
+            if isinstance(body, dict):
+                out.append(body)
+        return out
+
+    def append(self, chat_id: str, entries: list[dict[str, Any]], *,
+               meta: dict[str, Any], title: str | None = None) -> None:
+        """Add a turn's entries after the last one and store the new meta."""
+        now = _now()
+        with self._conn:
+            row = self._conn.execute(
+                "SELECT COALESCE(MAX(seq), -1) FROM ai_chat_messages WHERE chat_id = ?;",
+                (chat_id,),
+            ).fetchone()
+            seq = int(row[0]) + 1
+            for i, entry in enumerate(entries):
+                self._conn.execute(
+                    "INSERT INTO ai_chat_messages(chat_id, seq, body, created_at) "
+                    "VALUES (?, ?, ?, ?);",
+                    (chat_id, seq + i, json.dumps(entry, ensure_ascii=False, sort_keys=True),
+                     now),
+                )
+            cur = self._conn.execute(
+                "UPDATE ai_chats SET meta = ?, updated_at = ?"
+                + (", title = ?" if title is not None else "") + " WHERE id = ?;",
+                (json.dumps(meta, sort_keys=True), now,
+                 *((title,) if title is not None else ()), chat_id),
+            )
+            if cur.rowcount == 0:
+                raise ChatNotFound(chat_id)
+
+    def set_meta(self, chat_id: str, meta: dict[str, Any]) -> None:
+        with self._conn:
+            cur = self._conn.execute(
+                "UPDATE ai_chats SET meta = ? WHERE id = ?;",
+                (json.dumps(meta, sort_keys=True), chat_id),
+            )
+        if cur.rowcount == 0:
+            raise ChatNotFound(chat_id)
+
+    def delete(self, chat_id: str) -> None:
+        with self._conn:
+            self._conn.execute("DELETE FROM ai_chat_messages WHERE chat_id = ?;", (chat_id,))
+            cur = self._conn.execute("DELETE FROM ai_chats WHERE id = ?;", (chat_id,))
+        if cur.rowcount == 0:
+            raise ChatNotFound(chat_id)

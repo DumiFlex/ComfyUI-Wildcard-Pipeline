@@ -43,18 +43,6 @@ def test_parse_args_and_step():
         chat.parse_step("nope")
 
 
-def test_turns_and_history():
-    turns = chat.parse_turns([
-        {"role": "user", "content": "a"}, {"role": "assistant", "content": "b"},
-        {"role": "user", "content": "c"},
-    ])
-    assert chat.history_pairs(turns) == [("a", {"message": "b", "calls": []})]
-    for bad in ([], [{"role": "assistant", "content": "x"}], [{"role": "user", "content": 1}],
-                [{"role": "user", "content": "  "}]):
-        with pytest.raises(ValueError):
-            chat.parse_turns(bad)
-
-
 def test_overview_search_read_variables():
     lib = _lib()
     over = lib.overview()

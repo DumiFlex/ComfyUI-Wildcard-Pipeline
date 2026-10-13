@@ -86,7 +86,7 @@ function makeRouter() {
 
 describe("AiRunBar + chat", () => {
   it("asks about the run, and the drawer sends it with the page", async () => {
-    const result: AiChatResult = { message: "It picks winter most.", model: "m", steps: [], proposals: [] };
+    const result: AiChatResult = { chat_id: "c1", message: "It picks winter most.", model: "m", steps: [], proposals: [] };
     vi.mocked(api.ai.chat).mockResolvedValue(result);
     const router = makeRouter();
     await router.push("/test");
@@ -101,7 +101,7 @@ describe("AiRunBar + chat", () => {
     await flushPromises();
     expect(api.ai.chat).toHaveBeenCalledTimes(1);
     const [body] = vi.mocked(api.ai.chat).mock.calls[0];
-    expect(body.messages[0].content).toContain("red scarf");
+    expect(body.message).toContain("red scarf");
     expect(body.page?.route).toBe("test");
     expect(drawer.text()).toContain("It picks winter most.");
     drawer.unmount();
@@ -112,7 +112,7 @@ describe("AiRunBar + chat", () => {
     vi.mocked(api.templates.delete).mockResolvedValue(undefined as never);
     vi.mocked(api.bundles.update).mockImplementation(async (id, b) => ({ id, ...b }) as never);
     vi.mocked(api.ai.chat).mockResolvedValue({
-      message: "Done.", model: "m", steps: [],
+      chat_id: "c1", message: "Done.", model: "m", steps: [],
       proposals: [
         {
           pid: "p1", tool: "create_template", title: "Create template Full", summary: "", preview: [],

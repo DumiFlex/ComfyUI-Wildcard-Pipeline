@@ -7,7 +7,7 @@ import { _resetAiConfigForTests } from "../../../composables/useAiConfig";
 import type { AiConfig, AiWildcardEditAction, WildcardOption } from "../../../api/types";
 
 const CONFIG: AiConfig = {
-  enabled: true, provider: "ollama", base_url: "", model: "qwen3.5:9b", unload_after_s: 60, context_max: 16384, model_size: "auto", model_size_auto: "small",
+  enabled: true, provider: "ollama", base_url: "", model: "qwen3.5:9b", unload_after_s: 60, context_max: 16384, model_size: "auto", model_size_auto: "small", tool_format: "auto",
   key_set: false, key_from_env: false, keys_saved: [],
   presets: {
     anthropic: { label: "Claude", api: "anthropic", local: false, needs_key: true, base_url: "" },

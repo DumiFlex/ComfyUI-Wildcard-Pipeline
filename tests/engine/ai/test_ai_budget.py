@@ -30,13 +30,8 @@ def test_num_ctx_fits_the_prompt_within_the_cap():
     assert budget.num_ctx(100000, 131072) == 65536
 
 
-def test_clip_and_fit_history():
+def test_clip():
     text = "\n".join(f"line {i}" for i in range(200))
     out = budget.clip(text, 100)
     assert out.startswith("line 0") and "more lines left out" in out
     assert budget.clip("short", 100) == "short"
-    history = [(f"Tool results:\n{'x' * 5000}", {"calls": []}) for _ in range(4)]
-    fitted = budget.fit_history(history, 8000)
-    assert all(len(a) < 400 for a, _ in fitted[:-1])
-    assert fitted[-1] == history[-1]
-    assert budget.fit_history(history, 10**6) == history

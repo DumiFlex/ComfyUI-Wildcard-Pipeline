@@ -5,7 +5,7 @@ import { createMemoryHistory, createRouter } from "vue-router";
 import AiChatDrawer from "../AiChatDrawer.vue";
 import { api } from "../../../api/client";
 import { _resetAiConfigForTests } from "../../../composables/useAiConfig";
-import { _resetAiChatForTests, chatMessages, useAiChat } from "../../../composables/useAiChat";
+import { _resetAiChatForTests, useAiChat } from "../../../composables/useAiChat";
 import { _resetPackBuilderForTests, usePackBuilder } from "../../../composables/usePackBuilder";
 import type { AiChatResult, AiConfig } from "../../../api/types";
 import { defineComponent, ref } from "vue";
@@ -32,6 +32,7 @@ vi.mock("../../../api/client", () => ({
 }));
 
 const RESULT: AiChatResult = {
+  chat_id: "c1",
   message: "Here is a weather wildcard and two more outfits.",
   model: "m",
   steps: [{ tool: "search", note: 'Searched "outfit"', ok: true }],
@@ -113,7 +114,7 @@ describe("AiChatDrawer", () => {
     await w.get('[data-test="ai-chat-input"]').trigger("keydown", { key: "Enter" });
     await flushPromises();
     expect(vi.mocked(api.ai.chat).mock.calls[0][0]).toEqual({
-      messages: [{ role: "user", content: "make weather and more outfits" }],
+      message: "make weather and more outfits",
       page: { route: "dashboard" },
     });
     expect(w.get('[data-test="ai-chat-user"]').text()).toBe("make weather and more outfits");
@@ -147,13 +148,22 @@ describe("AiChatDrawer", () => {
     expect(cards[1].attributes("data-status")).toBe("pending");
 
     await cards[2].get('[data-test="ai-chat-dismiss"]').trigger("click");
-    const chat = useAiChat();
-    expect(chatMessages(chat.entries.value)[1].content).toBe([
-      "Here is a weather wildcard and two more outfits.",
-      '[Proposal p1 "Create wildcard Weather": applied]',
-      '[Proposal p2 "Add 1 options to Outfit": not applied yet]',
-      '[Proposal p3 "Add 1 options to Outfit": dismissed]',
-    ].join("\n"));
+    // The next message says what happened to each card, once.
+    await w.get('[data-test="ai-chat-input"]').setValue("thanks");
+    await w.get('[data-test="ai-chat-send"]').trigger("click");
+    await flushPromises();
+    expect(vi.mocked(api.ai.chat).mock.calls[1][0]).toEqual({
+      message: "thanks", chat_id: "c1", page: { route: "wildcards-edit", id: "new1" },
+      events: [
+        { pid: "p1", status: "applied" }, { pid: "p2", status: "undone" },
+        { pid: "p3", status: "dismissed" },
+      ],
+    });
+    await w.get('[data-test="ai-chat-input"]').setValue("again");
+    await w.get('[data-test="ai-chat-send"]').trigger("click");
+    await flushPromises();
+    expect(vi.mocked(api.ai.chat).mock.calls[2][0].events).toBeUndefined();
+    expect(useAiChat().chatId.value).toBe("c1");
     w.unmount();
   });
 
@@ -169,10 +179,12 @@ describe("AiChatDrawer", () => {
     await w.get('[data-test="ai-chat-send"]').trigger("click");
     await flushPromises();
     expect(w.findAll('[data-test="ai-chat-reply"]')).toHaveLength(1);
-    const history = vi.mocked(api.ai.chat).mock.calls[1][0].messages;
-    expect(history).toEqual([{ role: "user", content: "hello" }]);
+    expect(vi.mocked(api.ai.chat).mock.calls[1][0].message).toBe("hello");
+    expect(vi.mocked(api.ai.chat).mock.calls[1][0].chat_id).toBeUndefined();
+    expect(useAiChat().chatId.value).toBe("c1");
     await w.get('[data-test="ai-chat-new"]').trigger("click");
     expect(w.find('[data-test="ai-chat-empty"]').exists()).toBe(true);
+    expect(useAiChat().chatId.value).toBeNull();
     w.unmount();
   });
 
@@ -202,6 +214,7 @@ describe("AiChatDrawer", () => {
       },
     });
     vi.mocked(api.ai.chat).mockResolvedValueOnce({
+      chat_id: "c1",
       message: "Here.", model: "m", steps: [],
       proposals: [
         toEditor("p1", null, [1, 2], [1, 2, 3]),
@@ -236,8 +249,6 @@ describe("AiChatDrawer", () => {
     expect(options.value).toEqual([1, 2, 3]);
     expect(cards[0].attributes("data-status")).toBe("editor");
     expect(cards[0].get('[data-test="ai-chat-in-editor"]').text()).toContain("Save there");
-    expect(chatMessages(useAiChat().entries.value)[1].content).toContain(
-      "put into the open editor, not saved yet");
     // The second builds on the first, which is now in the editor.
     expect(cards[1].get('[data-test="ai-chat-apply"]').attributes("disabled")).toBeUndefined();
     await cards[0].get('[data-test="ai-chat-undo"]').trigger("click");
@@ -279,6 +290,7 @@ describe("AiChatDrawer", () => {
     _resetPackBuilderForTests();
     vi.mocked(api.ai.packPlan).mockReset().mockReturnValue(new Promise(() => {}));
     vi.mocked(api.ai.chat).mockResolvedValueOnce({
+      chat_id: "c1",
       message: "Here it is.", model: "m", steps: [],
       proposals: [{
         pid: "p1", tool: "plan_pack", title: "Plan this pack in the Pack builder", summary: "pack",
@@ -302,6 +314,7 @@ describe("AiChatDrawer", () => {
 
   it("renders Markdown and opens mentioned items from their chips", async () => {
     vi.mocked(api.ai.chat).mockResolvedValueOnce({
+      chat_id: "c1",
       message: "**Characters:**\n- [[Hair Color]] sets `$hair`\n- [[Gone]]", model: "m", steps: [], proposals: [],
       refs: { "Hair Color": { id: "w1", type: "wildcard", name: "Hair Color" } },
     });

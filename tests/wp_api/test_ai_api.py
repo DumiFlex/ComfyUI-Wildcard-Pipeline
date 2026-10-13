@@ -62,6 +62,14 @@ async def fake_llm(aiohttp_server):
     async def openai_chat(request):
         body = await request.json()
         seen.append({"path": request.path, "headers": dict(request.headers), "body": body})
+        if "tools" in body and body.get("model") == "refuser":
+            return web.json_response({"error": {"message": "this model has no tool support"}},
+                                     status=400)
+        if "tools" in body:
+            step = chat_steps.pop(0) if chat_steps else {"content": "Done."}
+            return web.json_response({"choices": [{"message": {"role": "assistant", **step}}],
+                                      "usage": {"prompt_tokens": 900, "completion_tokens": 20,
+                                                "prompt_tokens_details": {"cached_tokens": 800}}})
         schema_name = body["response_format"]["json_schema"]["name"]
         content = {"ok": True} if schema_name == "probe" else EDIT_ANSWERS.get(schema_name, ANSWER)
         if schema_name in overrides:
@@ -72,7 +80,9 @@ async def fake_llm(aiohttp_server):
         return web.json_response({"choices": [{"message": {"content": text}}]})
 
     async def lmstudio_model(request):
-        return web.json_response({"id": request.match_info["mid"], "loaded_context_length": 4096})
+        caps = ["tool_use"] if request.match_info["mid"] == "tooly" else []
+        return web.json_response({"id": request.match_info["mid"], "loaded_context_length": 4096,
+                                  "capabilities": caps})
 
     async def ollama_tags(request):
         return web.json_response({"models": [{"name": "qwen:9b"}]})
@@ -92,6 +102,11 @@ async def fake_llm(aiohttp_server):
         seen.append({"path": request.path, "headers": dict(request.headers), "body": body})
         if request.headers.get("x-api-key") != "sk-ant":
             return web.json_response({"error": {"message": "invalid x-api-key"}}, status=401)
+        if any(t.get("name") == "search" for t in body.get("tools") or []):
+            return web.json_response({
+                "content": [{"type": "text", "text": "Hi from Claude."}],
+                "usage": {"input_tokens": 50, "cache_read_input_tokens": 4000,
+                          "cache_creation_input_tokens": 0, "output_tokens": 9}})
         return web.json_response({"content": [
             {"type": "text", "text": "Here you go"},
             {"type": "tool_use", "name": "submit", "input": ANSWER},
@@ -110,6 +125,12 @@ async def fake_llm(aiohttp_server):
     server.chat_steps = chat_steps
     server.overrides = overrides
     return server
+
+
+async def _chat(wp_client, message, **extra):
+    resp = await wp_client.post("/wp/api/ai/chat", json={"message": message, **extra})
+    assert resp.status == 200, await resp.text()
+    return await resp.json()
 
 
 def _draft_body():
@@ -530,6 +551,8 @@ async def test_chat_reads_then_proposes(wp_client, fake_llm):
     src, tgt = await _two_wildcards(wp_client)
     ai_config.update({"enabled": True, "provider": "lmstudio",
                       "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.chat_steps.append({"message": "Hello!", "calls": []})
+    first_turn = await _chat(wp_client, "hi")
     fake_llm.chat_steps.extend([
         {"message": "Let me look.", "calls": [
             {"tool": "search", "args": '{"query": "weapon"}'},
@@ -549,14 +572,9 @@ async def test_chat_reads_then_proposes(wp_client, fake_llm):
                 "stack": ["Class", "Weapon"], "seeds": 20, "proposed": True})}]},
         {"message": "Checked: no blades for mages now.", "calls": []},
     ])
-    resp = await wp_client.post("/wp/api/ai/chat", json={
-        "messages": [{"role": "user", "content": "hi"},
-                     {"role": "assistant", "content": "Hello!"},
-                     {"role": "user", "content": "more weapons, no blades for mages"}],
-        "page": {"route": "modules-edit", "id": tgt},
-    })
-    assert resp.status == 200, await resp.text()
-    body = await resp.json()
+    body = await _chat(wp_client, "more weapons, no blades for mages",
+                       chat_id=first_turn["chat_id"], page={"route": "modules-edit", "id": tgt})
+    assert body["chat_id"] == first_turn["chat_id"]
     assert body["message"] == "Checked: no blades for mages now."
     assert [s["tool"] for s in body["steps"]] == [
         "search", "read", "read", "add_options", "create_constraint", "run_test"]
@@ -598,13 +616,9 @@ async def test_chat_uses_the_open_editor_and_the_docs(wp_client, fake_llm):
               "payload": {"var_binding": "weapon", "sub_categories": ["blade"], "options": [
                   {"id": "x1", "value": "unsaved spear", "weight": 1, "sub_categories": []},
                   {"id": "x2", "value": "unsaved bow", "weight": 1, "sub_categories": []}]}}
-    resp = await wp_client.post("/wp/api/ai/chat", json={
-        "messages": [{"role": "user", "content": "remove the first option"}],
-        "page": {"route": "wildcards-edit", "id": tgt, "note": "2 options shown",
-                 "editor": editor},
-    })
-    assert resp.status == 200, await resp.text()
-    body = await resp.json()
+    body = await _chat(wp_client, "remove the first option",
+                       page={"route": "wildcards-edit", "id": tgt, "note": "2 options shown",
+                             "editor": editor})
     edit, doc = body["proposals"]
     assert edit["op"]["basis"] == "editor"
     assert [o["value"] for o in edit["op"]["body"]["payload"]["options"]] == ["unsaved bow"]
@@ -620,16 +634,17 @@ async def test_chat_uses_the_open_editor_and_the_docs(wp_client, fake_llm):
 
 
 async def test_chat_validation_and_off(wp_client, fake_llm):
-    body = {"messages": [{"role": "user", "content": "hi"}]}
+    body = {"message": "hi"}
     assert (await wp_client.post("/wp/api/ai/chat", json=body)).status == 403
     ai_config.update({"enabled": True, "provider": "lmstudio",
                       "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    assert (await wp_client.post("/wp/api/ai/chat", json={"message": "  "})).status == 400
     assert (await wp_client.post("/wp/api/ai/chat", json={"messages": []})).status == 400
-    long = {"messages": [{"role": "user", "content": "x"}] * 41}
-    assert (await wp_client.post("/wp/api/ai/chat", json=long)).status == 400
-    resp = await wp_client.post("/wp/api/ai/chat", json=body)
-    assert (await resp.json()) == {"message": "Done.", "proposals": [], "steps": [], "model": "m1",
-                                  "refs": {}}
+    out = await _chat(wp_client, "hi", chat_id="gone1234")
+    assert out["chat_id"] != "gone1234"  # a chat that's gone starts a new one
+    assert {k: out[k] for k in ("message", "proposals", "steps", "model", "refs", "format")} == {
+        "message": "Done.", "proposals": [], "steps": [], "model": "m1", "refs": {},
+        "format": "json"}
 
 
 async def test_chat_stops_after_max_steps(wp_client, fake_llm):
@@ -638,8 +653,7 @@ async def test_chat_stops_after_max_steps(wp_client, fake_llm):
     fake_llm.chat_steps.extend(
         [{"message": "", "calls": [{"tool": "search", "args": json.dumps({"query": f"q{i}"})}]}
          for i in range(10)])
-    resp = await wp_client.post("/wp/api/ai/chat", json={
-        "messages": [{"role": "user", "content": "loop"}]})
+    resp = await wp_client.post("/wp/api/ai/chat", json={"message": "loop"})
     body = await resp.json()
     # The last step is told to answer; calling again stops the turn.
     assert len(body["steps"]) == 5 and "kept looking" in body["message"]
@@ -653,7 +667,7 @@ async def test_chat_stops_repeating_the_same_call(wp_client, fake_llm):
             "calls": [{"tool": "search", "args": json.dumps({"query": "character"})}]}
     fake_llm.chat_steps.extend([same, same, {"message": "You have Hair Color.", "calls": []}])
     resp = await wp_client.post("/wp/api/ai/chat", json={
-        "messages": [{"role": "user", "content": "what does my library set up for characters?"}]})
+        "message": "what does my library set up for characters?"})
     body = await resp.json()
     assert body["message"] == "You have Hair Color."
     assert len(body["steps"]) == 1
@@ -672,8 +686,7 @@ async def test_chat_answer_is_the_step_that_stops_calling(wp_client, fake_llm):
          "calls": [{"tool": "search", "args": json.dumps({"query": "hair"})}]},
         {"message": "", "calls": []},
     ])
-    resp = await wp_client.post("/wp/api/ai/chat", json={
-        "messages": [{"role": "user", "content": "hair?"}]})
+    resp = await wp_client.post("/wp/api/ai/chat", json={"message": "hair?"})
     body = await resp.json()
     # Only the promise was said: it's the fallback, not "Done.".
     assert body["message"] == "I'll search your library."
@@ -688,13 +701,11 @@ async def test_chat_acts_when_the_user_says_yes_instead_of_asking_again(wp_clien
         {"message": "Here it is.", "calls": [{"tool": "plan_pack", "args": json.dumps(
             {"description": "Medieval fantasy character: hair, eyes, outfit, scene, pose"})}]},
     ])
-    resp = await wp_client.post("/wp/api/ai/chat", json={
-        "messages": [{"role": "user", "content": "build a medieval character pack"},
-                     {"role": "assistant", "content": asked},
-                     {"role": "user", "content": "yes"}],
-        "page": {"route": "pack-builder", "note": "Pack builder, nothing planned yet"}})
-    assert resp.status == 200, await resp.text()
-    body = await resp.json()
+    # The first turn asks too (and is nudged once), so its answer is the question.
+    fake_llm.chat_steps[:0] = [{"message": asked, "calls": []}] * 2
+    first = await _chat(wp_client, "build a medieval character pack")
+    page = {"route": "pack-builder", "note": "Pack builder, nothing planned yet"}
+    body = await _chat(wp_client, "yes", chat_id=first["chat_id"], page=page)
     assert body["message"] == "Here it is."
     (card,) = body["proposals"]
     assert card["op"] == {"op": "open", "kind": "pack", "type": "pack", "id": "pack-builder",
@@ -709,8 +720,7 @@ async def test_chat_nudges_only_once(wp_client, fake_llm):
                       "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
     fake_llm.chat_steps.extend(
         [{"message": "Want me to use your hair wildcard or a new one?", "calls": []}] * 3)
-    resp = await wp_client.post("/wp/api/ai/chat", json={
-        "messages": [{"role": "user", "content": "add hair"}]})
+    resp = await wp_client.post("/wp/api/ai/chat", json={"message": "add hair"})
     body = await resp.json()
     assert body["message"] == "Want me to use your hair wildcard or a new one?"
     assert len(fake_llm.chat_steps) == 1
@@ -875,8 +885,7 @@ async def test_chat_sees_templates_and_runs_stacks(wp_client, fake_llm):
                 {"id": "Hero shot", "negative": "$negatives, lowres"})},
         ]},
     ])
-    resp = await wp_client.post("/wp/api/ai/chat", json={
-        "messages": [{"role": "user", "content": "check my hero template"}]})
+    resp = await wp_client.post("/wp/api/ai/chat", json={"message": "check my hero template"})
     assert resp.status == 200, await resp.text()
     body = await resp.json()
     assert [s["tool"] for s in body["steps"]] == ["run_test", "edit_template"]
@@ -899,8 +908,7 @@ async def test_chat_asks_again_when_a_step_is_not_json(wp_client, fake_llm):
     ai_config.update({"enabled": True, "provider": "lmstudio", "model_size": "small",
                       "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
     fake_llm.chat_steps.extend(["Sure! I will look at it", {"message": "Hi.", "calls": []}])
-    resp = await wp_client.post("/wp/api/ai/chat", json={
-        "messages": [{"role": "user", "content": "hello"}]})
+    resp = await wp_client.post("/wp/api/ai/chat", json={"message": "hello"})
     assert resp.status == 200, await resp.text()
     assert (await resp.json())["message"] == "Hi."
     retry = fake_llm.seen[-1]["body"]
@@ -946,3 +954,104 @@ async def test_pack_plan_sees_the_library_and_a_sample_and_gets_reviewed(wp_clie
     assert review["note"].startswith("Revise the plan")
     resp = await wp_client.post("/wp/api/ai/pack/review", json={"plan": body["plan"]})
     assert all(f.get("by") != "model" for f in (await resp.json())["findings"])
+
+
+def _tool_call(cid, name, args):
+    return {"id": cid, "type": "function",
+            "function": {"name": name, "arguments": json.dumps(args)}}
+
+
+async def test_chat_native_tools_keep_the_turn_for_the_follow_up(wp_client, fake_llm):
+    """A follow-up sees the earlier calls and results, and the next request
+    starts with exactly the previous one, so the server's cache is reused."""
+    _src, tgt = await _two_wildcards(wp_client)
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "tooly"})
+    fake_llm.chat_steps.extend([
+        {"content": "Looking.", "tool_calls": [
+            _tool_call("call_a", "search", {"query": "weapon", "why": "x"}),
+            _tool_call("call_b", "nope", {})]},
+        {"content": "You have [[Weapon]]."},
+        {"content": "It has 2 options."},
+    ])
+    first = await _chat(wp_client, "what weapons do I have?", page={"route": "wildcards"})
+    assert first["format"] == "native" and first["message"] == "You have [[Weapon]]."
+    assert first["usage"] == {"prompt": 900, "output": 20, "cached": 800}
+    turn1 = fake_llm.seen[-1]["body"]
+    assert "response_format" not in turn1 and turn1["tool_choice"] == "auto"
+    offered = [t["function"]["name"] for t in turn1["tools"]]
+    assert "search" in offered and "create_wildcard" in offered
+    tool_msgs = [m for m in turn1["messages"] if m["role"] == "tool"]
+    assert [m["tool_call_id"] for m in tool_msgs] == ["call_a", "call_b"]
+    assert "ignored unknown arguments: why" in tool_msgs[0]["content"]
+    assert "there is no tool named nope" in tool_msgs[1]["content"]
+    assert "The user's message you are answering" in tool_msgs[1]["content"]
+    assert "Read tools:" not in turn1["messages"][0]["content"]
+
+    second = await _chat(wp_client, "and how many options?", chat_id=first["chat_id"],
+                         page={"route": "wildcards"})
+    assert second["message"] == "It has 2 options."
+    turn2 = fake_llm.seen[-1]["body"]["messages"]
+    assert turn2[:len(turn1["messages"])] == turn1["messages"]
+    assert turn2[len(turn1["messages"])] == {"role": "assistant",
+                                             "content": "You have [[Weapon]]."}
+    assert turn2[-1] == {"role": "user", "content": "and how many options?"}
+
+
+async def test_chat_reports_card_actions_and_library_changes(wp_client, fake_llm):
+    _src, tgt = await _two_wildcards(wp_client)
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.chat_steps.append({"message": "Here.", "calls": [
+        {"tool": "update_info", "args": json.dumps({"id": tgt, "tags_add": ["gear"]})}]})
+    first = await _chat(wp_client, "tag Weapon as gear")
+    assert first["proposals"][0]["pid"] == "p1"
+    resp = await wp_client.post("/wp/api/modules", json={
+        "type": "fixed_values", "name": "Style", "payload": {"values": []}})
+    assert resp.status in (200, 201), await resp.text()
+    fake_llm.chat_steps.append({"message": "More.", "calls": [
+        {"tool": "update_info", "args": json.dumps({"id": tgt, "description": "Arms."})}]})
+    second = await _chat(wp_client, "thanks", chat_id=first["chat_id"],
+                         events=[{"pid": "p1", "status": "applied"},
+                                 {"pid": "p9", "status": "applied"}])
+    sent = fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+    assert 'Since your last message the user p1 "Update Weapon" applied.' in sent
+    assert "Library changed since the last message: new: Style (" in sent
+    # Proposal ids keep counting across the chat.
+    assert second["proposals"][0]["pid"] == "p2"
+
+
+async def test_chat_falls_back_to_json_when_the_server_refuses_tools(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "lmstudio", "tool_format": "native",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "refuser"})
+    fake_llm.chat_steps.append({"message": "Hi there.", "calls": []})
+    out = await _chat(wp_client, "hello")
+    assert out["format"] == "json" and out["message"] == "Hi there."
+
+
+async def test_chat_takes_tool_calls_written_as_text(wp_client, fake_llm):
+    await _two_wildcards(wp_client)
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "tooly"})
+    fake_llm.chat_steps.extend([
+        {"content": '[TOOL_CALLS][{"name": "search", "arguments": {"query": "weapon"}}]'},
+        {"content": "Found it."},
+    ])
+    out = await _chat(wp_client, "find weapons")
+    assert out["message"] == "Found it." and out["steps"][0]["tool"] == "search"
+    msgs = fake_llm.seen[-1]["body"]["messages"]
+    call = next(m for m in msgs if m["role"] == "assistant")
+    assert call["tool_calls"][0]["function"]["name"] == "search"
+
+
+async def test_chat_asks_claude_to_cache_the_stable_prefix(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "anthropic", "api_key": "sk-ant",
+                      "base_url": str(fake_llm.make_url("/anthropic")), "model": "claude-x"})
+    out = await _chat(wp_client, "hello")
+    assert out["format"] == "native" and out["message"] == "Hi from Claude."
+    assert out["usage"] == {"prompt": 4050, "cached": 4000, "output": 9}
+    body = fake_llm.seen[-1]["body"]
+    assert body["cache_control"] == {"type": "ephemeral"}
+    assert body["system"][0]["cache_control"] == {"type": "ephemeral"}
+    assert "The library now:" in body["system"][0]["text"]
+    assert "tool_choice" not in body and body["tools"][0]["name"] == "search"

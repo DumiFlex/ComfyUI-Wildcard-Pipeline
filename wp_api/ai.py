@@ -15,7 +15,8 @@
     POST /wp/api/ai/organize        category, tags and rating for a batch
                                     of modules and bundles
     POST /wp/api/ai/chat            a chat turn: the model reads the library
-                                    with tools and proposes changes
+                                    with tools and proposes changes; the
+                                    server keeps the chat (`ai_chats`)
     POST /wp/api/ai/pack/plan       pack builder: an outline from a request
     POST /wp/api/ai/pack/review     check a plan against the guide (+ model review)
     POST /wp/api/ai/pack/item       build one planned item (not saved)
@@ -42,6 +43,7 @@ from aiohttp import web
 from engine.ai import about as ai_about
 from engine.ai import budget as ai_budget
 from engine.ai import chat as ai_chat
+from engine.ai import chatlog as ai_chatlog
 from engine.ai import config as ai_config
 from engine.ai import constraint as ai_constraint
 from engine.ai import derivation as ai_derivation
@@ -52,17 +54,20 @@ from engine.ai import organize as ai_organize
 from engine.ai import pack as ai_pack
 from engine.ai import patterns as ai_patterns
 from engine.ai import refs as ai_refs
+from engine.ai import tools as ai_tools
 from engine.ai import wildcard as ai_wildcard
 from engine.ai import wildcard_edit as ai_edit
 from engine.db.repositories import (
     BundleRepository,
     CategoryRepository,
+    ChatNotFound,
+    ChatRepository,
     ModuleNotFound,
     ModuleRepository,
     TemplateRepository,
 )
 from engine.importer import commit_import
-from wp_api import _ai_client
+from wp_api import _ai_chat, _ai_client
 from wp_api._helpers import db_session, json_error, json_ok
 from wp_api._validators import validate_wildcard_name
 
@@ -724,43 +729,48 @@ async def post_organize(request: web.Request) -> web.Response:
     return json_ok(result)
 
 
-def _tool_results(results: list[str], question: str = "", last: bool = False) -> str:
-    """The results of a step, sent back as the next message. The user's
-    question goes with them: once a step's results are the newest message,
-    small models forget what was asked and answer with a greeting."""
+def _results_tail(question: str, *, last: bool, native: bool) -> str:
+    """What follows a step's results. The user's question goes with them:
+    once a step's results are the newest message, small models forget what
+    was asked and answer with a greeting."""
     asked = f"\n\nThe user's message you are answering: \"{ai_budget.clip(question, 600)}\"" \
         if question else ""
+    done = ("answer in plain text without calling a tool" if native
+            else "answer with \"calls\": [] and a message")
     if last:
-        tail = ("\n\nNo more tool calls. Answer the user's message now from these results, "
-                "with \"calls\": [] and a message that gives the actual answer.")
+        tail = (f"\n\nNo more tool calls. Answer the user's message now from these results: "
+                f"{done} that gives the actual answer.")
     else:
-        tail = ("\n\nIf these results answer the user's message, answer now with "
-                "\"calls\": [] and a message that gives the actual answer. Otherwise make "
-                "the next calls. Never repeat a call you already made.")
-    return "Tool results:\n" + "\n\n".join(results) + asked + tail
+        tail = (f"\n\nIf these results answer the user's message, {done} that gives the "
+                "actual answer. Otherwise make the next calls. Never repeat a call you already "
+                "made.")
+    return asked + tail
 
 
 async def _chat_step(
-    cfg: dict[str, Any], system: str, user: str, history: list[tuple[str, Any]],
-    prof: dict[str, Any],
-) -> tuple[Any, str, list[dict[str, Any]]]:
-    """One model step, asked again once with the problem named when the
-    answer isn't usable JSON: small models usually fix a named error."""
+    cfg: dict[str, Any], *, system: str, log: list[dict[str, Any]], fmt: str,
+    names: list[str], prof: dict[str, Any], num_ctx: int, cache_key: str,
+) -> dict[str, Any]:
+    """One model step, asked again once with the problem named when a
+    JSON-mode answer isn't usable: small models usually fix a named error."""
+    chosen = ai_tools.tools(names)
+    native = ai_tools.native(chosen, cfg["api"])
+    schema = ai_tools.step_schema(names)
     problem = ""
     for attempt in range(2):
-        asked = user if not problem else (
-            f"{user}\n\nYour last answer couldn't be used ({problem}). Answer again "
-            "with only the JSON object: plan, message, calls.")
+        asked = log if not problem else [*log, {"role": "user", "content": (
+            f"Your last answer couldn't be used ({problem}). Answer again with only the "
+            "JSON object: plan, message, calls.")}]
         try:
-            answer = await _ai_client.complete_json(
-                cfg, system=system, user=asked, history=history,
-                schema=ai_chat.STEP_SCHEMA, schema_name="chat_step",
-                temperature=prof["chat_temp"],
+            return await _ai_chat.step(
+                cfg, system=system, log=asked, fmt=fmt, tools=native, names=names,
+                schema=schema, temperature=prof["chat_temp"], num_ctx=num_ctx,
+                cache_key=cache_key,
             )
-            said, calls = ai_chat.parse_step(answer)
-            return answer, said, calls
+        except _ai_chat.ToolsUnsupported:
+            raise
         except _ai_client.AIError as e:
-            if attempt or "JSON" not in e.message:
+            if attempt or fmt != "json" or "JSON" not in e.message:
                 raise
             problem = "it wasn't valid JSON"
         except ValueError as e:
@@ -772,14 +782,39 @@ async def _chat_step(
     raise _ai_client.AIError("the model's answer couldn't be used")
 
 
+def _final_step(fmt: str, message: str) -> dict[str, Any]:
+    """The reply the user saw, as a step that calls nothing, when the model's
+    last step called tools: the turn must end on an answer so the next one
+    reads like a conversation (and strict chat templates accept it)."""
+    answer = {"calls": [], "message": message, "plan": ""} if fmt == "json" else None
+    return ai_chatlog.step_entry(ai_chatlog.dumps(answer) if answer else message, [],
+                                 answer=answer, synthetic=True)
+
+
+def _more_tools(meta: dict[str, Any]) -> str:
+    offered = set(meta.get("tools") or [])
+    rest = [t for t in ai_tools.TOOLS if t.name not in offered]
+    if not rest:
+        return "every tool is already available"
+    meta["tools"] = [t.name for t in ai_tools.TOOLS if t.name in offered or t in rest]
+    return ("These tools are available now:\n" + ai_tools.prompt_lines(rest, "read")
+            + "\n" + ai_tools.prompt_lines(rest, "change")).strip()
+
+
 async def post_chat(request: web.Request) -> web.Response:
-    """Body: {messages: [{role: "user"|"assistant", content}], page?: {route, id?,
-    doc?, note?, editor?}}. `editor` is the open editor's item as it stands,
+    """Body: {message, chat_id?, page?: {route, id?, doc?, note?, editor?},
+    events?: [{pid, status}]}.
+
+    The server keeps the chat (`ai_chats`), so the browser sends only the new
+    message; without a `chat_id` (or with one that's gone) a new chat starts.
+    `events` say what the user did with earlier proposal cards (applied,
+    undone, dismissed, …). `editor` is the open editor's item as it stands,
     unsaved changes included; the chat reads and changes that version.
 
     Runs up to `chat.MAX_STEPS` model steps. Read tools run here and their
     results go back to the model; change tools become proposals the manager
-    shows as cards. Nothing is written to the library.
+    shows as cards. Nothing is written to the library. The turn is stored
+    only once it finishes, so a failed turn leaves the chat as it was.
     """
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
@@ -787,48 +822,106 @@ async def post_chat(request: web.Request) -> web.Response:
     body = await _body(request)
     if isinstance(body, web.Response):
         return body
-    try:
-        turns = ai_chat.parse_turns(body.get("messages"))
-    except ValueError as e:
-        return json_error(str(e), status=400)
+    text = body.get("message")
+    if not isinstance(text, str) or not text.strip():
+        return json_error("say something first", status=400)
+    text = text.strip()
+    if len(text) > ai_chat.MAX_TURN_CHARS:
+        text = text[:ai_chat.MAX_TURN_CHARS] + " …"
+    page = body.get("page") if isinstance(body.get("page"), dict) else None
+    chat_id = body.get("chat_id") if isinstance(body.get("chat_id"), str) else None
 
     with db_session(request) as conn:
         lib = ai_chat.Library(
             ModuleRepository(conn).list(), BundleRepository(conn).list(),
             CategoryRepository(conn).list(), TemplateRepository(conn).list(),
         )
-    page = body.get("page") if isinstance(body.get("page"), dict) else None
+        chat: dict[str, Any] | None = None
+        log: list[dict[str, Any]] = []
+        if chat_id:
+            try:
+                chat = ChatRepository(conn).get(chat_id)
+                log = ChatRepository(conn).messages(chat_id)
+            except ChatNotFound:
+                chat = None
+    if sum(1 for e in log if e.get("kind") == "user") >= ai_chat.MAX_TURNS:
+        return json_error("this chat is long; start a new one to keep it focused", status=400)
+    prof = ai_budget.profile(cfg)
+    rows = [*lib.modules.values(), *lib.bundles.values(), *lib.templates.values()]
+    fp_now = ai_chatlog.fingerprint(rows, lib._kind)
+    if chat is None:
+        fmt = await _ai_chat.pick_format(cfg)
+        meta: dict[str, Any] = {
+            "format": fmt, "proposals": {}, "fingerprint": {},
+            "tools": ai_tools.toolset(page.get("route") if page else None, scoped=prof["slim"]),
+        }
+        snapshot = lib.overview(limit=40 if prof["slim"] else None)
+    else:
+        meta = dict(chat["meta"])
+        snapshot = chat["snapshot"]
+        fmt = meta.get("format") if meta.get("format") in ("native", "json") else "json"
+        if cfg.get("tool_format") in ("native", "json") and cfg["tool_format"] != fmt \
+                and not any(e.get("kind") == "step" for e in log):
+            fmt = cfg["tool_format"]
     if page:
         lib.use_editor(page.get("editor"))
-    prof = ai_budget.profile(cfg)
-    system = ai_chat.system_prompt(slim=prof["slim"]) + "\n\n" + lib.overview(
-        limit=40 if prof["slim"] else None)
-    history = ai_chat.history_pairs(turns)
-    user = turns[-1]["content"]
+    meta, since = ai_chatlog.apply_events(meta, body.get("events"))
+    changes = ai_chatlog.library_changes(meta.get("fingerprint") or {}, fp_now)
     note = lib.page_note(page)
-    if note:
-        user = f"{user}\n\n{note}"
+    if note and note == meta.get("page_note"):
+        note = ""  # still on the same page: it is in the history already
+    elif note:
+        meta["page_note"] = note
+    sent = "\n\n".join(x for x in (since, changes, text, note) if x)
+    new: list[dict[str, Any]] = [ai_chatlog.user_entry(text, sent)]
 
-    question = turns[-1]["content"]
+    num_ctx = int(cfg.get("context_max") or ai_budget.CONTEXT_DEFAULT)
+    cache_key = chat["id"] if chat else ""
+    pids = [int(p[1:]) for p in meta.get("proposals") or {} if p[1:].isdigit()]
+    lib._next_pid = max(pids, default=0)
     proposals: list[dict[str, Any]] = []
     steps: list[dict[str, Any]] = []
     message = ""
     interim = ""
     seen: set[str] = set()
+    errors: dict[str, int] = {}
     forced = False
     checked = False
     nudged = False
-    last_answer = next((t["content"] for t in reversed(turns[:-1])
-                        if t["role"] == "assistant"), "")
-    for step in range(ai_chat.MAX_STEPS):
-        history = ai_budget.fit_history(history, prof["history_chars"])
+    last_answer = ai_chatlog.last_reply(log)
+    usage: dict[str, Any] = {}
+
+    def system_for() -> str:
+        return ai_chat.system_prompt(
+            slim=prof["slim"], native=fmt == "native", tools=meta["tools"],
+        ) + "\n\n" + snapshot
+
+    step = 0
+    while step < ai_chat.MAX_STEPS:
+        meta = ai_chatlog.fit(log + new, meta, prof["history_chars"])
+        rendered = ai_chatlog.render(log + new, meta)
         try:
-            answer, said, calls = await _chat_step(cfg, system, user, history, prof)
-        except _ai_client.AIError as e:
+            st = await _chat_step(cfg, system=system_for(), log=rendered, fmt=fmt,
+                                  names=meta["tools"], prof=prof, num_ctx=num_ctx,
+                                  cache_key=cache_key)
+        except _ai_chat.ToolsUnsupported as e:
+            if fmt == "native" and not any(x.get("kind") == "step" for x in log + new):
+                fmt = "json"  # the server has no tool calling: use the JSON format
+                continue
             if not steps:
                 return json_error(e.message, status=e.status)
             message = f"(Stopped early: {e.message})"
             break
+        except _ai_client.AIError as e:
+            if not steps and not any(x.get("kind") == "step" for x in new):
+                return json_error(e.message, status=e.status)
+            message = f"(Stopped early: {e.message})"
+            break
+        step += 1
+        usage = st["usage"]
+        said = st["message"][:ai_chat.MAX_MESSAGE]
+        calls = st["calls"][:ai_chat.MAX_CALLS_PER_STEP]
+        new.append(ai_chatlog.step_entry(st["text"], calls, answer=st["answer"], usage=usage))
         # A message sent along with calls is usually "I'll search…": keep it
         # only as a fallback, so the answer is the step that stops calling.
         if said and not calls:
@@ -843,72 +936,120 @@ async def post_chat(request: web.Request) -> web.Response:
             break
         if any(c["tool"] == "run_test" for c in calls):
             checked = True
-        history.append((user, answer))
-        results: list[str] = []
+        items: list[dict[str, Any]] = []
         needs_reply = False
         repeats = 0
         for call in calls:
             tool = call["tool"]
+
+            def result(out: str, call: dict[str, Any] = call,
+                       items: list[dict[str, Any]] = items) -> None:
+                items.append({"id": call["id"], "tool": call["tool"], "text": out})
+
+            spec = ai_tools.BY_NAME.get(tool)
+            if spec is None:
+                needs_reply = True
+                result(f"{tool}: error: there is no tool named {tool[:40]}")
+                steps.append({"tool": "unknown", "note": f"Unknown tool {tool[:40]}",
+                              "ok": False})
+                continue
             try:
-                args = ai_chat.parse_args(call["args"])
+                raw = call["args"] if isinstance(call.get("args"), dict) else call["args_text"]
+                args, arg_notes = ai_tools.check_args(spec, ai_chat.parse_args(raw))
                 key = tool + _json.dumps(args, sort_keys=True, ensure_ascii=False)
                 if tool not in ai_chat.CHANGE_TOOLS and key in seen:
                     # Small models re-run the same search every step.
                     repeats += 1
                     needs_reply = True
-                    results.append(f"{tool}: you already made this exact call; its results "
-                                   "are above. Don't repeat it.")
+                    result(f"{tool}: you already made this exact call; its results are above. "
+                           "Don't repeat it.")
                     continue
                 seen.add(key)
+                if errors.get(tool, 0) >= 3:
+                    raise ValueError("this tool failed three times in this answer; stop "
+                                     "calling it and tell the user what went wrong")
                 if tool in ai_chat.CHANGE_TOOLS and len(proposals) >= ai_chat.MAX_PROPOSALS:
                     raise ValueError("too many changes in one answer; stop here")
-                out = lib.run(tool, args)
+                if tool == "more_tools":
+                    out: Any = _more_tools(meta)
+                else:
+                    out = lib.run(tool, args)
             except ValueError as e:
+                errors[tool] = errors.get(tool, 0) + 1
                 needs_reply = True
-                results.append(f"{tool}: error: {e}")
+                result(f"{tool}: error: {e}")
                 steps.append({"tool": tool, "note": f"{tool}: {e}", "ok": False})
                 continue
+            extra = ("\n(" + "; ".join(arg_notes) + ")") if arg_notes else ""
             if isinstance(out, str):
                 needs_reply = True
-                results.append(f"{tool} {_json.dumps(args, ensure_ascii=False)[:200]}:\n"
-                               + ai_budget.clip(out, prof["result_chars"]))
-                steps.append({"tool": tool, "note": ai_chat.args_note(tool, args, lib), "ok": True})
+                result(f"{tool} {_json.dumps(args, ensure_ascii=False, sort_keys=True)[:200]}:\n"
+                       + ai_budget.clip(out, prof["result_chars"]) + extra)
+                steps.append({"tool": tool, "note": ai_chat.args_note(tool, args, lib),
+                              "ok": True})
             else:
                 proposals.append(out)
-                results.append(f"{tool}: proposal {out['pid']} shown to the user: {out['title']}")
+                meta.setdefault("proposals", {})[out["pid"]] = {
+                    "title": out["title"], "status": None}
+                result(f"{tool}: proposal {out['pid']} shown to the user: {out['title']}"
+                       + extra)
                 steps.append({"tool": tool, "note": out["title"], "ok": True})
         if not needs_reply:
             # Asked leave instead of proposing, or met "yes" with more talk:
             # tell it once to act. Small models loop on "Should I proceed?".
             if (not calls and not proposals and not nudged
-                    and step < ai_chat.MAX_STEPS - 1
-                    and ai_chat.stalls(said, turns[-1]["content"], last_answer)):
+                    and step < ai_chat.MAX_STEPS
+                    and ai_chat.stalls(said, text, last_answer)):
                 nudged = True
                 message = ""  # the stalled question isn't the answer
-                user = ai_chat.GO_NUDGE
+                new.append(ai_chatlog.note_entry(ai_chat.GO_NUDGE))
                 continue
             # Changes were proposed but never tried: ask for one check
             # before the answer stands, so "done" means it ran.
-            if (not checked and step < ai_chat.MAX_STEPS - 1
+            if (not checked and step < ai_chat.MAX_STEPS
                     and any(p["tool"] in ai_chat.CHECKABLE_TOOLS for p in proposals)):
                 checked = True
-                user = (_tool_results(results, question) + "\n\n" if results else "") \
-                    + ai_chat.CHECK_NUDGE
+                tail = "\n\n" + ai_chat.CHECK_NUDGE
+                if items:
+                    new.append(ai_chatlog.results_entry(items, tail))
+                else:
+                    new.append(ai_chatlog.note_entry(ai_chat.CHECK_NUDGE))
                 continue
+            if items:
+                new.append(ai_chatlog.results_entry(items, ""))
             break
-        if step == ai_chat.MAX_STEPS - 1:
+        if step >= ai_chat.MAX_STEPS:
+            new.append(ai_chatlog.results_entry(items, ""))
             message = (message or interim
                        or "I ran out of steps before finishing; ask me to continue.")
             break
         # Only repeats, or one step left: no more tools, answer now.
-        forced = (calls and repeats == len(calls)) or step == ai_chat.MAX_STEPS - 2
-        user = _tool_results(results, question, last=bool(forced))
+        forced = bool(calls and repeats == len(calls)) or step == ai_chat.MAX_STEPS - 1
+        new.append(ai_chatlog.results_entry(
+            items, _results_tail(text, last=forced, native=fmt == "native")))
 
     if not message:
         message = interim if interim and proposals else (
             "Here's what I'd change." if proposals else interim or "Done.")
+    # Every call gets a result and the turn ends on an answer.
+    last = new[-1]
+    if last.get("kind") == "step" and last.get("calls"):
+        new.append(ai_chatlog.results_entry(
+            [{"id": c["id"], "tool": c["tool"], "text": f"{c['tool']}: not run"}
+             for c in last["calls"]], ""))
+    if new[-1].get("kind") != "step":
+        new.append(_final_step(fmt, message))
+    meta["format"] = fmt
+    meta["fingerprint"] = fp_now
+    meta["model"] = cfg.get("model")
+    with db_session(request) as conn:
+        repo = ChatRepository(conn)
+        if chat is None:
+            chat = repo.create(title=ai_chatlog.title_for(text), snapshot=snapshot, meta=meta)
+        repo.append(chat["id"], new, meta=meta)
     return json_ok({
-        "message": message, "proposals": proposals, "steps": steps, "model": cfg["model"],
+        "chat_id": chat["id"], "message": message, "proposals": proposals, "steps": steps,
+        "model": cfg["model"], "format": fmt, "usage": usage,
         "refs": lib.message_refs(message),
     })
 

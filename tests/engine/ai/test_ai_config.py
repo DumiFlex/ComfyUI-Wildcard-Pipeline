@@ -118,3 +118,12 @@ def test_unload_after_is_clamped():
 def test_corrupt_file_degrades_to_defaults(_isolated):
     _isolated.write_text("{not json")
     assert ai_config.public_view()["enabled"] is False
+
+
+def test_tool_format(tmp_path, monkeypatch):
+    monkeypatch.setenv("WP_AI_CONFIG_PATH", str(tmp_path / "ai.json"))
+    assert ai_config.public_view()["tool_format"] == "auto"
+    assert ai_config.update({"tool_format": "json"})["tool_format"] == "json"
+    assert ai_config.load_effective()["tool_format"] == "json"
+    with pytest.raises(ai_config.ConfigError):
+        ai_config.update({"tool_format": "xml"})

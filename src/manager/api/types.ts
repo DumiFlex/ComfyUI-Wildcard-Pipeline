@@ -823,6 +823,9 @@ export interface AiConfig {
   model_size: "auto" | AiModelSize;
   /** What "auto" picks for the chosen model. */
   model_size_auto: AiModelSize;
+  /** How the chat calls tools: native tool calls, the JSON step format, or
+   *  automatic (native where the server says the model takes tools). */
+  tool_format: AiToolFormat;
   key_set: boolean;
   key_from_env: boolean;
   /** Providers that already have a key (saved or from the environment).
@@ -832,6 +835,7 @@ export interface AiConfig {
 }
 
 export type AiModelSize = "small" | "medium" | "large";
+export type AiToolFormat = "auto" | "native" | "json";
 
 export interface AiConfigPatch {
   enabled?: boolean;
@@ -841,6 +845,7 @@ export interface AiConfigPatch {
   unload_after_s?: number;
   context_max?: number;
   model_size?: "auto" | AiModelSize;
+  tool_format?: AiToolFormat;
   /** Write-only. `""` removes the saved key. */
   api_key?: string;
 }
@@ -1066,11 +1071,6 @@ export interface AiOrganizeResult {
 
 /** One message of an assistant chat. Assistant messages carry the reply
  *  plus a line per proposal saying what the user did with it. */
-export interface AiChatMessage {
-  role: "user" | "assistant";
-  content: string;
-}
-
 /** The item open in an editor, as it stands (unsaved changes included). */
 export interface AiChatEditorState {
   id: string;
@@ -1095,9 +1095,29 @@ export interface AiChatPage {
   editor?: AiChatEditorState;
 }
 
+/** What the user did with a proposal card since the last message. */
+export interface AiChatEvent {
+  pid: string;
+  status: "applied" | "editor" | "dismissed" | "undone" | "failed";
+}
+
+/** One chat turn. The server keeps the chat: send only the new message and
+ *  the `chat_id` it returned (none starts a new chat). */
 export interface AiChatRequest {
-  messages: AiChatMessage[];
+  message: string;
+  chat_id?: string;
   page?: AiChatPage;
+  events?: AiChatEvent[];
+}
+
+/** Tokens the last model step used, as the provider reported them. */
+export interface AiChatUsage {
+  prompt?: number;
+  /** Prompt tokens the provider reused from its cache. */
+  cached?: number;
+  /** Ollama: prompt tokens it had to read (the rest came from its cache). */
+  evaluated?: number;
+  output?: number;
 }
 
 export type AiChatOp =
@@ -1132,11 +1152,15 @@ export interface AiChatProposal {
 }
 
 export interface AiChatResult {
+  chat_id: string;
   message: string;
   proposals: AiChatProposal[];
   /** What the model looked at or tried, for the "worked on" lines. */
   steps: Array<{ tool: string; note: string; ok: boolean }>;
   model: string;
+  /** How this chat calls tools. */
+  format?: "native" | "json";
+  usage?: AiChatUsage;
   /** [[Name]] mentions in `message` that name a real item. */
   refs?: Record<string, AiChatRef>;
 }

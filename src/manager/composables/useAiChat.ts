@@ -3,25 +3,22 @@
  * bar button and the drawer agree, and the conversation survives closing
  * the drawer.
  *
- * The server keeps nothing between turns: every send carries the whole
- * conversation. An assistant message goes back as its reply plus one line
- * per proposal saying whether the user applied it, so the model knows what
- * the library now holds. Applying a proposal goes through the same stores
+ * The server keeps the chat (its tool calls, results and proposal cards), so
+ * a send carries only the new message, the chat's id and what the user did
+ * with the cards since (`events`), which the model is told. Applying a
+ * proposal goes through the same stores
  * the editors use; Undo restores what the proposal replaced. A change built
  * on the open editor's unsaved version goes into that editor instead
  * (`useOpenEditor`), where Save keeps it.
  */
 import { computed, ref, shallowRef, triggerRef } from "vue";
 import { api, ApiError } from "../api/client";
-import type { AiChatMessage, AiChatPage, AiChatProposal, AiChatResult } from "../api/types";
+import type { AiChatEvent, AiChatPage, AiChatProposal, AiChatResult } from "../api/types";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import { useTemplateStore } from "../stores/templateStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { openEditor } from "./useOpenEditor";
-
-/** Server cap on messages per request (20 turns each way). */
-const MAX_MESSAGES = 40;
 
 export type ProposalStatus = "applied" | "editor" | "dismissed" | "failed";
 
@@ -54,21 +51,13 @@ const loading = ref(false);
 const error = ref("");
 let controller: AbortController | null = null;
 
-function statusLine(entry: ChatAssistantEntry, p: AiChatProposal): string {
-  const s = entry.status[p.pid];
-  const what = s === "applied" ? "applied"
-    : s === "editor" ? "put into the open editor, not saved yet"
-      : s === "dismissed" ? "dismissed" : "not applied yet";
-  return `[Proposal ${p.pid} "${p.title}": ${what}]`;
-}
+/** The server's id for this chat; null until the first answer. */
+const chatId = ref<string | null>(null);
+/** Card actions not yet sent, newest per proposal. */
+let pending: AiChatEvent[] = [];
 
-/** The conversation as the server takes it. */
-export function chatMessages(list: ChatEntry[]): AiChatMessage[] {
-  return list.map((e) => {
-    if (e.role === "user") return { role: "user", content: e.text };
-    const lines = [e.result.message, ...e.result.proposals.map((p) => statusLine(e, p))];
-    return { role: "assistant", content: lines.filter(Boolean).join("\n") };
-  });
+function record(pid: string, status: AiChatEvent["status"]): void {
+  pending = [...pending.filter((e) => e.pid !== pid), { pid, status }];
 }
 
 function touch(): void {
@@ -87,10 +76,6 @@ async function send(page?: AiChatPage): Promise<void> {
   const text = input.value.trim();
   if (!text || loading.value) return;
   const next: ChatEntry[] = [...entries.value, { role: "user", text }];
-  if (next.length > MAX_MESSAGES) {
-    error.value = "This chat is long. Start a new one to keep it focused.";
-    return;
-  }
   entries.value = next;
   input.value = "";
   error.value = "";
@@ -98,8 +83,19 @@ async function send(page?: AiChatPage): Promise<void> {
   controller = mine;
   loading.value = true;
   const snap = page?.editor ? editorJson() : undefined;
+  const events = pending;
+  const id = chatId.value;
   try {
-    const result = await api.ai.chat({ messages: chatMessages(next), page }, mine.signal);
+    const result = await api.ai.chat({
+      message: text,
+      ...(id ? { chat_id: id } : {}),
+      ...(page ? { page } : {}),
+      ...(events.length ? { events } : {}),
+    }, mine.signal);
+    if (chatId.value === id) {
+      chatId.value = result.chat_id;
+      pending = pending.filter((e) => !events.includes(e));
+    }
     entries.value = [
       ...entries.value,
       {
@@ -133,6 +129,8 @@ function reset(): void {
   stop();
   entries.value = [];
   error.value = "";
+  chatId.value = null;
+  pending = [];
 }
 
 /** Why a proposal can't be applied yet, else "". */
@@ -184,6 +182,7 @@ async function apply(entry: ChatAssistantEntry, p: AiChatProposal): Promise<void
         ed.write(body);
         entry.editorSnap = editorJson();
         entry.status[p.pid] = "editor";
+        record(p.pid, "editor");
         touch();
         return;
       }
@@ -192,9 +191,11 @@ async function apply(entry: ChatAssistantEntry, p: AiChatProposal): Promise<void
       else await bundles.update(op.id, body);
     }
     entry.status[p.pid] = "applied";
+    record(p.pid, "applied");
   } catch (err) {
     entry.status[p.pid] = "failed";
     entry.errors[p.pid] = err instanceof Error ? err.message : String(err);
+    record(p.pid, "failed");
   }
   touch();
 }
@@ -210,6 +211,7 @@ async function undo(entry: ChatAssistantEntry, p: AiChatProposal): Promise<void>
       entry.editorSnap = editorJson();
       delete entry.status[p.pid];
       delete entry.errors[p.pid];
+      record(p.pid, "undone");
     }
     touch();
     return;
@@ -230,6 +232,7 @@ async function undo(entry: ChatAssistantEntry, p: AiChatProposal): Promise<void>
       await useBundleStore().update(op.id, op.before);
     }
     delete entry.status[p.pid];
+    record(p.pid, "undone");
   } catch (err) {
     entry.errors[p.pid] = err instanceof Error ? err.message : String(err);
   }
@@ -247,6 +250,7 @@ function ask(text: string): void {
 
 function dismiss(entry: ChatAssistantEntry, p: AiChatProposal): void {
   entry.status[p.pid] = "dismissed";
+  record(p.pid, "dismissed");
   touch();
 }
 
@@ -254,7 +258,7 @@ const started = computed(() => entries.value.length > 0);
 
 export function useAiChat() {
   return {
-    open, input, entries, loading, error, started, queued,
+    open, input, entries, loading, error, started, queued, chatId,
     send, stop, reset, apply, undo, dismiss, blockedReason, ask,
   };
 }

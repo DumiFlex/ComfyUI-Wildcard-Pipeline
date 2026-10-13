@@ -83,7 +83,12 @@ DEFAULTS: dict[str, Any] = {
     "model": "",
     "unload_after_s": 60,
     "context_max": 16384,
+    # How the chat calls tools: "auto" (native tool calls where the server
+    # says the model takes them, else the JSON step format), "native" or
+    # "json".
+    "tool_format": "auto",
 }
+TOOL_FORMATS = ("auto", "native", "json")
 
 _lock = threading.Lock()
 
@@ -169,6 +174,8 @@ def _normalize(raw: Any) -> dict[str, Any]:
         "context_max": _clamp_int(
             src.get("context_max"), CONTEXT_MIN, CONTEXT_MAX, DEFAULTS["context_max"],
         ),
+        "tool_format": src.get("tool_format") if src.get("tool_format") in TOOL_FORMATS
+        else DEFAULTS["tool_format"],
         "providers": slots,
     }
 
@@ -184,6 +191,7 @@ def _active(cfg: dict[str, Any]) -> dict[str, Any]:
         "unload_after_s": cfg["unload_after_s"],
         "context_max": cfg["context_max"],
         "model_size": slot["model_size"],
+        "tool_format": cfg["tool_format"],
         "api_key": slot["api_key"],
     }
 
@@ -311,6 +319,10 @@ def update(patch: dict[str, Any]) -> dict[str, Any]:
             cfg["context_max"] = _clamp_int(
                 patch["context_max"], CONTEXT_MIN, CONTEXT_MAX, cfg["context_max"],
             )
+        if "tool_format" in patch:
+            if patch["tool_format"] not in TOOL_FORMATS:
+                raise ConfigError("tool_format must be auto, native or json")
+            cfg["tool_format"] = patch["tool_format"]
         if "api_key" in patch:
             key = patch["api_key"]
             if key is None:

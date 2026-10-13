@@ -1,0 +1,77 @@
+"""The chat's turn log: replayed exactly, shortened rarely and only forward."""
+from __future__ import annotations
+
+from engine.ai import chatlog as cl
+
+
+def _turn(n: int, result: str = "r" * 2000) -> list[dict]:
+    call = {"id": f"c{n}", "tool": "search", "args": {"query": "x"}, "args_text": "{}"}
+    return [
+        cl.user_entry(f"q{n}", f"q{n} (sent)"),
+        cl.step_entry("", [call]),
+        cl.results_entry([{"id": f"c{n}", "tool": "search", "text": f"search:\n{result}"}],
+                         "\n\ntail"),
+        cl.step_entry(f"a{n}", []),
+    ]
+
+
+def test_render_replays_what_was_sent():
+    log = _turn(1)
+    msgs = cl.render(log, {})
+    assert [m["role"] for m in msgs] == ["user", "assistant", "tool", "assistant"]
+    assert msgs[0]["content"] == "q1 (sent)"
+    assert msgs[2]["items"][0]["content"].startswith("search:") and msgs[2]["tail"] == "\n\ntail"
+    # A nudge after a user message joins it rather than making two in a row.
+    joined = cl.render([cl.user_entry("a", "a"), cl.note_entry("go")], {})
+    assert joined == [{"role": "user", "content": "a\n\ngo"}]
+
+
+def test_fit_masks_old_results_then_drops_whole_turns():
+    log = [e for n in range(6) for e in _turn(n)]
+    meta = cl.fit(log, {}, 10**6)
+    assert meta == {}
+    meta = cl.fit(log, {}, 8000)
+    starts = [i for i, e in enumerate(log) if e["kind"] == "user"]
+    assert meta["masked_before"] == starts[-cl.KEEP_TURNS] and "dropped_before" not in meta
+    msgs = cl.render(log, meta)
+    tools = [m for m in msgs if m["role"] == "tool"]
+    assert "older result left out" in tools[0]["items"][0]["content"]
+    assert "older result left out" not in tools[-1]["items"][0]["content"]
+    # Fitting again with the same limit changes nothing: the prefix stays put.
+    assert cl.fit(log, meta, 8000) == meta
+    tight = cl.fit(log, meta, 2600)
+    assert tight["dropped_before"] in starts
+    msgs = cl.render(log, tight)
+    assert msgs[0]["content"].startswith(cl.DROPPED_NOTE)
+    assert msgs[-1]["content"] == "a5"
+
+
+def test_last_reply_and_title():
+    log = _turn(1)
+    assert cl.last_reply(log) == "a1"
+    json_step = cl.step_entry('{"message": "hi"}', [], answer={"message": "hi", "calls": []})
+    assert cl.last_reply([json_step]) == "hi"
+    assert cl.title_for("  hello\n world ") == "hello world"
+    assert len(cl.title_for("x" * 200)) == 60
+
+
+def test_events_and_library_changes():
+    meta = {"proposals": {"p1": {"title": "Add hats", "status": None}}}
+    meta2, line = cl.apply_events(meta, [{"pid": "p1", "status": "applied"},
+                                         {"pid": "p7", "status": "applied"},
+                                         {"pid": "p1", "status": "bogus"}])
+    assert line == 'Since your last message the user p1 "Add hats" applied.'
+    assert meta2["proposals"]["p1"]["status"] == "applied"
+    assert meta["proposals"]["p1"]["status"] is None
+    assert cl.apply_events(meta2, [{"pid": "p1", "status": "applied"}])[1] == ""
+    old = {"a": ["Hair", "wildcard", "1"], "b": ["Eyes", "wildcard", "1"]}
+    new = {"a": ["Hair", "wildcard", "2"], "c": ["Pose", "wildcard", "1"]}
+    line = cl.library_changes(old, new)
+    assert line == ("Library changed since the last message: new: Pose (c, wildcard); "
+                    "changed: Hair (a); removed: Eyes (b).")
+    assert cl.library_changes({}, new) == ""
+    assert cl.library_changes(new, new) == ""
+
+
+def test_dumps_is_stable():
+    assert cl.dumps({"b": 1, "a": "é"}) == '{"a": "é", "b": 1}'

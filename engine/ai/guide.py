@@ -123,7 +123,18 @@ def _example_chat() -> str:
     return "\n".join(lines) + "\n"
 
 
+def _example_chat_native() -> str:
+    lines = [f'Example. User: "{EXAMPLE_CHAT_REQUEST}"']
+    for step in EXAMPLE_CHAT_STEPS:
+        calls = ", ".join(f"{c['tool']} {json.dumps(c['args'], ensure_ascii=False)}"
+                          for c in step["calls"])
+        lines.append(f"You think: {step['plan']} You call: {calls}")
+    lines.append("(then a last answer, with no call, saying what the test showed)")
+    return "\n".join(lines) + "\n"
+
+
 EXAMPLES_CHAT = "\n" + _example_chat()
+EXAMPLES_CHAT_NATIVE = "\n" + _example_chat_native()
 
 
 def text(*, slim: bool = False) -> str:

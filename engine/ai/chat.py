@@ -33,25 +33,20 @@ from engine.ai import library_vars
 from engine.ai import patterns as ai_patterns
 from engine.ai import refs as ai_refs
 from engine.ai import search_index as ai_search
+from engine.ai import tools as ai_tools
 from engine.ai import use as ai_use
 from engine.ai import wildcard as ai_wildcard
 from engine.ai import wildcard_edit as ai_wildcard_edit
-from engine.ai.chat_tools import GUIDE_RUN, GUIDE_TOOLS, MoreTools, _num, _reach, _reach_text
+from engine.ai.chat_tools import MoreTools, _num, _reach, _reach_text
 from engine.modules.constraint_handler import ConstraintHandler
 from engine.modules.derivation_handler import DerivationHandler
 from engine.modules.wildcard_handler import WildcardHandler
 
-READ_TOOLS = ("search", "read", "variables", "docs_search", "docs_read", "run_test")
-CHANGE_TOOLS = (
-    "create_wildcard", "add_options", "edit_options", "create_fixed_values", "edit_values",
-    "create_combine", "edit_combine", "create_derivation", "add_rules", "edit_rules",
-    "create_constraint", "edit_constraint", "create_template", "edit_template",
-    "create_bundle", "edit_bundle", "update_info", "open", "plan_pack",
-)
+READ_TOOLS = ai_tools.READ
+CHANGE_TOOLS = ai_tools.CHANGE
 #: Tools that change one existing item (its id is `args.id`).
 ITEM_TOOLS = ("add_options", "edit_options", "edit_values", "edit_combine", "add_rules",
               "edit_rules", "edit_constraint", "edit_template", "edit_bundle", "update_info")
-
 #: Manager pages `open` can go to: route name → what it is for.
 APP_PAGES: dict[str, str] = {
     "dashboard": "overview of the library",
@@ -130,7 +125,8 @@ MAX_STEPS = 6
 MAX_CALLS_PER_STEP = 8
 MAX_PROPOSALS = 12
 MAX_MESSAGE = 4000
-MAX_TURNS = 20
+#: User messages one chat holds; older turns are shortened or left out first.
+MAX_TURNS = 100
 MAX_TURN_CHARS = 6000
 MAX_OVERVIEW_ITEMS = 150
 MAX_SEARCH = 25
@@ -140,29 +136,9 @@ MAX_READ_OPTIONS = 150
 _REF = re.compile(r"\[\[([^\[\]\n]{1,80})\]\]")
 _IDENT = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]{0,63}$")
 
-STEP_SCHEMA: dict[str, Any] = {
-    "type": "object", "additionalProperties": False,
-    "required": ["plan", "message", "calls"],
-    "properties": {
-        # Written first, so the model decides before it calls. Never shown;
-        # it stays in the step history the model sees next.
-        "plan": {"type": "string"},
-        "message": {"type": "string"},
-        "calls": {
-            "type": "array",
-            "items": {
-                "type": "object", "additionalProperties": False,
-                "required": ["tool", "args"],
-                "properties": {
-                    "tool": {"type": "string", "enum": list(TOOLS)},
-                    "args": {"type": "string"},
-                },
-            },
-        },
-    },
-}
+STEP_SCHEMA: dict[str, Any] = ai_tools.step_schema(list(TOOLS))
 
-SYSTEM_HEAD = """\
+SYSTEM_INTRO = """\
 You are the assistant inside Wildcard Pipeline's library manager. Wildcard \
 Pipeline is a ComfyUI extension that builds image-generation prompts from \
 modules that run in order and set $variables:
@@ -187,8 +163,11 @@ something, propose it. Never ask "should I proceed?" or "want me to?": a \
 proposal already waits for the user's Apply, so asking first only makes \
 them say yes twice. When the user says yes, make the calls. Answer the \
 user's actual question with what you found: no greeting, no list of what you \
-can do, and while you still have calls to make, leave "message" empty.
+can do.
 
+"""
+#: How a JSON-mode model answers.
+FORMAT_JSON = """While you still have calls to make, leave "message" empty. \
 Answer with JSON: {"plan": one or two sentences for yourself: what the \
 user wants, which features fit (see "Which feature for which job") and what \
 you'll call next, "message": what you say to the user now, "calls": tools \
@@ -199,62 +178,33 @@ message for the user. Keep messages short and plain. Write every library \
 item you mention as [[its exact name]]: the user sees a chip that opens it. \
 Markdown works: **bold**, lists with "- ", `code` for $variables. \
 Wherever a tool takes an id you can also give the item's exact name.
-
-Read tools:
-- search {"query": words, "type": optional module type, "bundle" or \
-"template", "tag": optional tag}: items ranked by how well their name, \
-variable, tags, description AND content (option texts, values, rules) \
-match, with matching options as examples. Broad subjects widen on their \
-own ("character" also finds hair, eyes, outfits). Search the subject, not \
-the user's whole sentence. Empty query lists everything of that type.
-- read {"id": item id}: one item in full (numbered options with tags, \
-negatives and groups, numbered rules, a bundle's children with their use \
-settings, …).
-- variables {}: every variable the library sets, with its options.
-- docs_search {"query": words}: the docs sections that match, with a snippet.
-- docs_read {"page": docs page id, "section": optional section title}: the \
-page's text.
-""" + GUIDE_RUN + """
-
-Change tools (each becomes a proposal):
-- create_wildcard {"name", "var": variable name without $ ("" for a \
-vocabulary), "description", "tags": [library tags], "category": name or "", \
-"options": [{"text", "weight": 1, "tags": [option tags], "negative": "", \
-"fallback": false}], "axes": [{"name", "kind": "classify"|"accepts", "tags"}] \
-or [], "null_weight": 0}
-- add_options {"id": wildcard id, "options": [same as above], "axes"?}
-- edit_options {"id": wildcard id, "remove": [option numbers], "rewrite": \
-[{"n": number, "text"}], "retag": [{"n": number, "tags": [option tags]}], \
-"weights": [{"n": number, "weight": 0-100}], "negatives": [{"n": number, \
-"negative": text or ""}], "fallback": option number (0 for none), \
-"null_weight": weight of the empty option (0 removes it), "axes": [{"name", \
-"kind", "tags"}] to group existing tags}: change options that exist. The \
-numbers are the ones read shows. Leave out what you don't change.
-- create_derivation {"name", "description", "tags", "category", "rules": \
-[{"summary", "branches": [{"match": "all"|"any", "conditions": [{"var", "op": \
-equals|not_equals|contains|matches|exists|not_exists|is_set|is_unset|\
-is_empty|is_not_empty, "value"}], "actions": [{"target_var", "mode": \
-replace|append|prepend|negative|negative_replace, "value"}]}], \
-"else_actions": [actions]}]}. There is no "not contains": test "contains" \
-and act in else_actions.
-- add_rules {"id": derivation id, "rules": [same as above]}
-- create_constraint {"name", "source_id", "target_id", "rules": [{"source": \
-"#tag" or option text, "target": "#tag" or option text, "effect": \
-exclude|reduce|boost|only, "factor", "reason"}], "reach": "all" | "first" | \
-"next N"}
-""" + GUIDE_TOOLS + """- update_info {"id", "description": new text or omit, "tags_add": [], \
-"tags_remove": [], "category": name or omit, "rating": "safe"|"nsfw" or omit}
-- plan_pack {"description": what the pack makes, its parts and its rules, \
-in the user's words plus what they answered}: a button that hands the \
-description to the Pack builder, which plans, builds, tests and installs a \
-whole pack (wildcards, rules, constraints, a template) on its own. Use it \
-when the user wants a new pack or a whole set of modules for one subject; \
-use the create tools for one or a few items.
-- open {"id"} for an item's editor, {"doc": docs page id} for a docs page, \
-or {"page": manager page, "section": settings section}: a button that goes \
-there.
-
 """
+#: How a model with native tool calling answers.
+FORMAT_NATIVE = """\
+Use the tools: read tools run at once and their results come back to you; \
+then continue. Change tools each make a proposal card. Before your first \
+call, think in a sentence about what the user wants, which features fit \
+(see "Which feature for which job") and what you'll call. When you are \
+done, answer the user in plain text without calling a tool. Keep messages \
+short and plain. Write every library item you mention as [[its exact \
+name]]: the user sees a chip that opens it. Markdown works: **bold**, lists \
+with "- ", `code` for $variables. Wherever a tool takes an id you can also \
+give the item's exact name.
+"""
+
+
+def tools_section(names: list[str] | None = None) -> str:
+    """The JSON-mode list of tools, generated from the registry."""
+    chosen = ai_tools.tools(names if names is not None
+                            else ai_tools.toolset(None, scoped=False))
+    out = "Read tools:\n" + ai_tools.prompt_lines(chosen, "read") + "\n"
+    change = ai_tools.prompt_lines(chosen, "change")
+    if change:
+        out += "\nChange tools (each becomes a proposal):\n" + change + "\n"
+    return out + "\n"
+
+
+SYSTEM_HEAD = SYSTEM_INTRO + FORMAT_JSON + "\n" + tools_section()
 SYSTEM_TAIL = """
 Per-use settings ("use" on bundle items and run_test items): """ + ai_use.GUIDE + """
 
@@ -277,17 +227,26 @@ the user's message shows the last run; use run_test to try changes.
 SYSTEM_PROMPT = SYSTEM_HEAD + ai_guide.text() + SYSTEM_TAIL
 
 
-def system_prompt(*, slim: bool = False, examples: bool = True) -> str:
+def system_prompt(*, slim: bool = False, examples: bool = True, native: bool = False,
+                  tools: list[str] | None = None) -> str:
     """The chat's instructions. `slim` (small models) keeps the tools and
     the core guide but leaves out the coherence notes and the docs and page
-    tables (docs_search still finds pages), about a third shorter."""
+    tables (docs_search still finds pages), about a third shorter.
+    `native`: the tools travel as native declarations, so the prompt says
+    how to use them instead of listing them. `tools`: the names this chat
+    offers (default: all)."""
     pages = "\n".join(f"- {k}: {v}" for k, v in APP_PAGES.items())
-    shown = ai_guide.EXAMPLES_CHAT if examples else ""
+    if native:
+        head = SYSTEM_INTRO + FORMAT_NATIVE + "\n"
+        shown = ai_guide.EXAMPLES_CHAT_NATIVE if examples else ""
+    else:
+        head = SYSTEM_INTRO + FORMAT_JSON + "\n" + tools_section(tools)
+        shown = ai_guide.EXAMPLES_CHAT if examples else ""
     if slim:
-        return (SYSTEM_HEAD + ai_guide.text(slim=True) + shown + SYSTEM_TAIL
+        return (head + ai_guide.text(slim=True) + shown + SYSTEM_TAIL
                 + "\nDocs: find pages with docs_search. Manager pages: "
                 + ", ".join(APP_PAGES))
-    return (f"{SYSTEM_HEAD}{ai_guide.text()}{shown}{SYSTEM_TAIL}\n"
+    return (f"{head}{ai_guide.text()}{shown}{SYSTEM_TAIL}\n"
             f"Docs pages (id: title):\n{ai_docs.contents()}\n\n"
             f"Manager pages:\n{pages}")
 
@@ -331,41 +290,6 @@ def parse_step(raw: Any) -> tuple[str, list[dict[str, Any]]]:
         if isinstance(c, dict) and c.get("tool") in TOOLS:
             calls.append({"tool": c["tool"], "args": c.get("args", "")})
     return message.strip()[:MAX_MESSAGE], calls[:MAX_CALLS_PER_STEP]
-
-
-def parse_turns(raw: Any) -> list[dict[str, str]]:
-    """The conversation the manager sends: alternating user/assistant
-    messages, ending with the user's new one."""
-    if not isinstance(raw, list) or not raw:
-        raise ValueError("say something first")
-    if len(raw) > MAX_TURNS * 2:
-        raise ValueError("this chat is long; start a new one to keep it focused")
-    turns: list[dict[str, str]] = []
-    for m in raw:
-        if not isinstance(m, dict) or m.get("role") not in ("user", "assistant"):
-            raise ValueError("each message needs a role")
-        text = m.get("content")
-        if not isinstance(text, str):
-            raise ValueError("each message needs text")
-        if len(text) > MAX_TURN_CHARS:
-            text = text[:MAX_TURN_CHARS] + " …"
-        turns.append({"role": m["role"], "content": text})
-    if turns[-1]["role"] != "user" or not turns[-1]["content"].strip():
-        raise ValueError("say something first")
-    return turns
-
-
-def history_pairs(turns: list[dict[str, str]]) -> list[tuple[str, Any]]:
-    """Earlier turns as (user, answer) pairs for `complete_json`."""
-    pairs: list[tuple[str, Any]] = []
-    pending: str | None = None
-    for t in turns[:-1]:
-        if t["role"] == "user":
-            pending = t["content"] if pending is None else pending + "\n\n" + t["content"]
-        elif pending is not None:
-            pairs.append((pending, {"message": t["content"], "calls": []}))
-            pending = None
-    return pairs
 
 
 class Library(MoreTools):

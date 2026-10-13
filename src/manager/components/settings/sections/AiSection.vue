@@ -15,7 +15,7 @@ import type { SelectOption } from "../../ui/select-types";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
 import { api } from "../../../api/client";
-import type { AiModelSize, AiProviderId, AiTestResult } from "../../../api/types";
+import type { AiModelSize, AiProviderId, AiTestResult, AiToolFormat } from "../../../api/types";
 import { useAiConfig } from "../../../composables/useAiConfig";
 import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../ai-models";
 
@@ -174,6 +174,16 @@ async function commitContext(): Promise<void> {
   if (!Number.isFinite(n)) { contextDraft.value = config.value?.context_max ?? 16384; return; }
   contextDraft.value = n;
   if (n !== config.value?.context_max) await patch({ context_max: n });
+}
+
+const toolFormatOptions: SelectOption[] = [
+  { value: "auto", label: "Automatic" },
+  { value: "native", label: "Native tool calls" },
+  { value: "json", label: "JSON steps" },
+];
+async function setToolFormat(v: string | number | null): Promise<void> {
+  if (typeof v !== "string" || v === config.value?.tool_format) return;
+  await patch({ tool_format: v as AiToolFormat });
 }
 
 /* ── Provider / on-off ───────────────────────────────────────────────── */
@@ -386,7 +396,7 @@ const off = computed(() => !config.value?.enabled);
             v-if="isLocal"
             form
             label="Most context to use"
-            hint="Tokens of context a request may ask for. Ollama is told how much each request needs, up to this. Lower it if the model runs out of GPU memory; 16k or more keeps the chat's instructions whole. LM Studio and llama.cpp set this when the model loads, so set it there too."
+            hint="Tokens of context the assistant uses. Ollama gets this much for the whole chat (changing it reloads the model, which throws away what it already read); drafts ask for what they need, up to this. Lower it if the model runs out of GPU memory; 16k or more keeps the chat's instructions whole. LM Studio and llama.cpp set this when the model loads, so set it there too."
             setting-key="ai-context"
             for="ai-context"
           >
@@ -443,6 +453,24 @@ const off = computed(() => !config.value?.enabled);
               data-test="ai-unload"
               @blur="commitUnload"
               @keydown.enter="commitUnload"
+            />
+          </SettingRow>
+        </SettingGroup>
+
+        <SettingGroup title="Advanced">
+          <SettingRow
+            form
+            label="Tool format"
+            hint="How the chat calls its tools. Native tool calls are what most models are trained for; the JSON step format works with any model. Automatic uses native calls when the server says the model supports them. Applies to new chats."
+            setting-key="ai-tool-format"
+          >
+            <Select
+              :model-value="config.tool_format"
+              :options="toolFormatOptions"
+              :filterable="false"
+              aria-label="Tool format"
+              data-test="ai-tool-format"
+              @update:model-value="setToolFormat"
             />
           </SettingRow>
         </SettingGroup>
