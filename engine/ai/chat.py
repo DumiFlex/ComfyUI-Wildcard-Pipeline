@@ -185,7 +185,9 @@ change anything yourself: every change tool makes a proposal card the user \
 reviews and applies. Plans are fine, but act: if the user asks for \
 something, propose it. Never ask "should I proceed?" or "want me to?": a \
 proposal already waits for the user's Apply, so asking first only makes \
-them say yes twice. When the user says yes, make the calls.
+them say yes twice. When the user says yes, make the calls. Answer the \
+user's actual question with what you found: no greeting, no list of what you \
+can do, and while you still have calls to make, leave "message" empty.
 
 Answer with JSON: {"plan": one or two sentences for yourself: what the \
 user wants, which features fit (see "Which feature for which job") and what \

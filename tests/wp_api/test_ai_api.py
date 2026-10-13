@@ -636,11 +636,47 @@ async def test_chat_stops_after_max_steps(wp_client, fake_llm):
     ai_config.update({"enabled": True, "provider": "lmstudio",
                       "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
     fake_llm.chat_steps.extend(
-        [{"message": "", "calls": [{"tool": "variables", "args": "{}"}]}] * 10)
+        [{"message": "", "calls": [{"tool": "search", "args": json.dumps({"query": f"q{i}"})}]}
+         for i in range(10)])
     resp = await wp_client.post("/wp/api/ai/chat", json={
         "messages": [{"role": "user", "content": "loop"}]})
     body = await resp.json()
-    assert len(body["steps"]) == 6 and "ran out of steps" in body["message"]
+    # The last step is told to answer; calling again stops the turn.
+    assert len(body["steps"]) == 5 and "kept looking" in body["message"]
+
+
+async def test_chat_stops_repeating_the_same_call(wp_client, fake_llm):
+    """Rocinante re-ran one search every step and never answered."""
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    same = {"message": "I'll search your library.",
+            "calls": [{"tool": "search", "args": json.dumps({"query": "character"})}]}
+    fake_llm.chat_steps.extend([same, same, {"message": "You have Hair Color.", "calls": []}])
+    resp = await wp_client.post("/wp/api/ai/chat", json={
+        "messages": [{"role": "user", "content": "what does my library set up for characters?"}]})
+    body = await resp.json()
+    assert body["message"] == "You have Hair Color."
+    assert len(body["steps"]) == 1
+    sent = [s["body"]["messages"][-1]["content"] for s in fake_llm.seen
+            if s["body"]["response_format"]["json_schema"]["name"] == "chat_step"]
+    # Every results message carries the question; after a repeat, tools are over.
+    assert "what does my library set up for characters?" in sent[1]
+    assert "already made this exact call" in sent[2] and "No more tool calls" in sent[2]
+
+
+async def test_chat_answer_is_the_step_that_stops_calling(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.chat_steps.extend([
+        {"message": "I'll search your library.",
+         "calls": [{"tool": "search", "args": json.dumps({"query": "hair"})}]},
+        {"message": "", "calls": []},
+    ])
+    resp = await wp_client.post("/wp/api/ai/chat", json={
+        "messages": [{"role": "user", "content": "hair?"}]})
+    body = await resp.json()
+    # Only the promise was said: it's the fallback, not "Done.".
+    assert body["message"] == "I'll search your library."
 
 
 async def test_chat_acts_when_the_user_says_yes_instead_of_asking_again(wp_client, fake_llm):
