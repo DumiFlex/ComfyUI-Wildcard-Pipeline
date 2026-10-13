@@ -32,6 +32,7 @@ from engine.ai import guide as ai_guide
 from engine.ai import library_vars
 from engine.ai import patterns as ai_patterns
 from engine.ai import refs as ai_refs
+from engine.ai import search_index as ai_search
 from engine.ai import use as ai_use
 from engine.ai import wildcard as ai_wildcard
 from engine.ai import wildcard_edit as ai_wildcard_edit
@@ -45,7 +46,7 @@ CHANGE_TOOLS = (
     "create_wildcard", "add_options", "edit_options", "create_fixed_values", "edit_values",
     "create_combine", "edit_combine", "create_derivation", "add_rules", "edit_rules",
     "create_constraint", "edit_constraint", "create_template", "edit_template",
-    "create_bundle", "edit_bundle", "update_info", "open",
+    "create_bundle", "edit_bundle", "update_info", "open", "plan_pack",
 )
 #: Tools that change one existing item (its id is `args.id`).
 ITEM_TOOLS = ("add_options", "edit_options", "edit_values", "edit_combine", "add_rules",
@@ -67,6 +68,7 @@ APP_PAGES: dict[str, str] = {
     "whats-new": "release notes", "community": "community packs",
 }
 MAX_PAGE_NOTE = 1500
+MAX_PACK_DESCRIPTION = 2000
 #: Changes run_test can try (the rest change names, tags or open pages).
 CHECKABLE_TOOLS = (
     "create_wildcard", "add_options", "edit_options", "create_fixed_values", "edit_values",
@@ -79,6 +81,49 @@ CHECK_NUDGE = (
     "with \"proposed\": true on a stack that uses them (with a template if one fits), "
     "then tell the user what it showed and fix anything it flags."
 )
+#: Sent once when an answer asks leave to do what it could just propose,
+#: or answers the user's "yes" by asking again. Small models do this in a
+#: loop: proposals are already the asking.
+GO_NUDGE = (
+    "Don't ask the user whether to go ahead: every change tool only makes a "
+    "proposal card they Apply or Dismiss, so proposing IS asking. Make the "
+    "calls now (plan_pack for a whole new pack, the create tools for a few "
+    "items). Only if you truly can't continue without the user's choice, ask "
+    "that one question again with \"calls\": []."
+)
+_ASKS_LEAVE = re.compile(
+    r"\b(?:should|shall|may|can) i (?:go ahead|proceed|start|continue|create|build|make|"
+    r"add|set (?:it|them|this) up)\b|\b(?:do you )?want me to\b|\bwould you like me to\b|"
+    r"\bready (?:for me )?to (?:proceed|start|build)\b|\bshall we (?:proceed|start|begin)\b",
+    re.IGNORECASE,
+)
+_GO_AHEAD = re.compile(
+    r"^(?:yes|yeah|yep|yup|sure|ok|okay|go|go ahead|go for it|do it|proceed|please|"
+    r"sounds good|let'?s go|build it|create it|make it|start|continue|y)\b[\s\w,.!']{0,30}$",
+    re.IGNORECASE,
+)
+
+
+def asks_leave(message: str) -> bool:
+    """The answer asks permission instead of proposing ("Should I proceed?")."""
+    return bool(_ASKS_LEAVE.search(message or ""))
+
+
+def is_go_ahead(text: str) -> bool:
+    """The user's message is a short yes ("yes", "ok do it", "go ahead")."""
+    t = re.sub(r"\s+", " ", text or "").strip()
+    return 0 < len(t) <= 40 and bool(_GO_AHEAD.match(t))
+
+
+def stalls(said: str, user_text: str, last_answer: str) -> bool:
+    """A step that ended with no calls but should have acted: it asks leave,
+    it repeats its last answer, or it met the user's yes with more talk."""
+    if asks_leave(said) or (is_go_ahead(user_text) and asks_leave(last_answer)):
+        return True
+    norm = lambda t: re.sub(r"\W+", " ", t or "").strip().lower()  # noqa: E731
+    return bool(last_answer) and norm(said) == norm(last_answer)
+
+
 TOOLS = READ_TOOLS + CHANGE_TOOLS
 
 MAX_STEPS = 6
@@ -89,7 +134,10 @@ MAX_TURNS = 20
 MAX_TURN_CHARS = 6000
 MAX_OVERVIEW_ITEMS = 150
 MAX_SEARCH = 25
+_FIELD_NAMES = {"name": "name", "var": "variable", "tags": "tags", "desc": "description",
+                "content": "options/content"}
 MAX_READ_OPTIONS = 150
+_REF = re.compile(r"\[\[([^\[\]\n]{1,80})\]\]")
 _IDENT = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]{0,63}$")
 
 STEP_SCHEMA: dict[str, Any] = {
@@ -135,7 +183,11 @@ questions about Wildcard Pipeline itself. You can read the library and the \
 built-in docs, run stacks on the engine, and propose changes. You never \
 change anything yourself: every change tool makes a proposal card the user \
 reviews and applies. Plans are fine, but act: if the user asks for \
-something, propose it.
+something, propose it. Never ask "should I proceed?" or "want me to?": a \
+proposal already waits for the user's Apply, so asking first only makes \
+them say yes twice. When the user says yes, make the calls. Answer the \
+user's actual question with what you found: no greeting, no list of what you \
+can do, and while you still have calls to make, leave "message" empty.
 
 Answer with JSON: {"plan": one or two sentences for yourself: what the \
 user wants, which features fit (see "Which feature for which job") and what \
@@ -143,13 +195,18 @@ you'll call next, "message": what you say to the user now, "calls": tools \
 to run}. Each call is {"tool": name, "args": a JSON object written as a \
 string}. Read tools run at once and you get their results in the next \
 message; then continue. When you are done, answer with "calls": [] and a \
-message for the user. Keep messages short and plain; refer to items by name. \
+message for the user. Keep messages short and plain. Write every library \
+item you mention as [[its exact name]]: the user sees a chip that opens it. \
+Markdown works: **bold**, lists with "- ", `code` for $variables. \
 Wherever a tool takes an id you can also give the item's exact name.
 
 Read tools:
-- search {"query": text, "type": optional module type, "bundle" or \
-"template", "tag": optional tag}: items whose name, description or tags \
-match. Empty query lists everything of that type.
+- search {"query": words, "type": optional module type, "bundle" or \
+"template", "tag": optional tag}: items ranked by how well their name, \
+variable, tags, description AND content (option texts, values, rules) \
+match, with matching options as examples. Broad subjects widen on their \
+own ("character" also finds hair, eyes, outfits). Search the subject, not \
+the user's whole sentence. Empty query lists everything of that type.
 - read {"id": item id}: one item in full (numbered options with tags, \
 negatives and groups, numbered rules, a bundle's children with their use \
 settings, …).
@@ -187,6 +244,12 @@ exclude|reduce|boost|only, "factor", "reason"}], "reach": "all" | "first" | \
 "next N"}
 """ + GUIDE_TOOLS + """- update_info {"id", "description": new text or omit, "tags_add": [], \
 "tags_remove": [], "category": name or omit, "rating": "safe"|"nsfw" or omit}
+- plan_pack {"description": what the pack makes, its parts and its rules, \
+in the user's words plus what they answered}: a button that hands the \
+description to the Pack builder, which plans, builds, tests and installs a \
+whole pack (wildcards, rules, constraints, a template) on its own. Use it \
+when the user wants a new pack or a whole set of modules for one subject; \
+use the create tools for one or a few items.
 - open {"id"} for an item's editor, {"doc": docs page id} for a docs page, \
 or {"page": manager page, "section": settings section}: a button that goes \
 there.
@@ -461,39 +524,71 @@ class Library(MoreTools):
 
     # ── read tools ───────────────────────────────────────────────────────
 
+    def message_refs(self, message: str) -> dict[str, dict[str, str]]:
+        """The [[Name]] / [[id]] mentions in an answer that name a real item
+        (not one only proposed), so the manager can show them as chips."""
+        refs: dict[str, dict[str, str]] = {}
+        for raw in _REF.findall(message or "")[:60]:
+            row = self._find(raw)
+            if row is None or row.get("_proposed") or raw in refs:
+                continue
+            refs[raw] = {"id": row["id"], "type": self._kind(row),
+                         "name": str(row.get("name") or raw)}
+        return refs
+
     def search(self, args: dict[str, Any]) -> str:
         query = _short(args.get("query"), 100).lower()
         type_ = _short(args.get("type"), 30).lower()
         tag = _short(args.get("tag"), 40).lower().lstrip("#")
-        hits: list[str] = []
-        total = 0
-        for r in [*self.modules.values(), *self.bundles.values(), *self.templates.values()]:
+        own, widened = ai_search.expand(query)
+        phrase = query.strip()
+        ranked: list[tuple[float, int, dict[str, Any], list[str], list[str]]] = []
+        rows = [*self.modules.values(), *self.bundles.values(), *self.templates.values()]
+        for n, r in enumerate(rows):
             kind = self._kind(r)
             if type_ and type_ not in (kind, kind.replace("_", " ")):
                 continue
             tags = [t for t in r.get("tags") or [] if isinstance(t, str)]
             if tag and tag not in (t.lower() for t in tags):
                 continue
-            hay = " ".join([str(r.get("name") or ""), str(r.get("description") or ""), *tags])
-            if r.get("type") == "wildcard" and isinstance(r.get("payload"), dict):
-                hay += " " + str(r["payload"].get("var_binding") or "")
-            if query and query not in hay.lower():
-                continue
-            total += 1
-            if len(hits) < MAX_SEARCH:
-                cat = self.categories.get(r.get("category_id") or "", "")
-                extra = []
-                if cat:
-                    extra.append(f"category {cat}")
-                if tags:
-                    extra.append("tags " + ", ".join(tags))
-                if r.get("description"):
-                    extra.append(_short(r["description"], 80))
-                hits.append(f"- {self._line(r)}" + (f" ({'; '.join(extra)})" if extra else ""))
-        if not hits:
+            where: list[str] = []
+            snips: list[str] = []
+            points = 0.0
+            if own:
+                entry = ai_search.Entry(r)
+                points, where = ai_search.score(entry, own, widened, phrase)
+                if points <= 0:
+                    continue
+                if "content" in where:
+                    snips = ai_search.snippets(entry, own, widened, phrase)
+            ranked.append((points, -n, r, where, snips))
+        if not ranked:
             return "no matches"
-        more = f"\n- … {total - len(hits)} more" if total > len(hits) else ""
-        return f"{total} match{'es' if total != 1 else ''}:\n" + "\n".join(hits) + more
+        ranked.sort(key=lambda x: (x[0], x[1]), reverse=True)
+        hits: list[str] = []
+        for _points, _n, r, where, snips in ranked[:MAX_SEARCH]:
+            cat = self.categories.get(r.get("category_id") or "", "")
+            tags = [t for t in r.get("tags") or [] if isinstance(t, str)]
+            extra = []
+            if cat:
+                extra.append(f"category {cat}")
+            if tags:
+                extra.append("tags " + ", ".join(tags))
+            if r.get("description"):
+                extra.append(_short(r["description"], 80))
+            if where:
+                extra.append("matched in " + ", ".join(_FIELD_NAMES[w] for w in where))
+            line = f"- {self._line(r)}" + (f" ({'; '.join(extra)})" if extra else "")
+            if snips:
+                line += "\n    e.g. " + " | ".join(_short(t, 90) for t in snips)
+            hits.append(line)
+        total = len(ranked)
+        more = f"\n- … {total - len(hits)} more (narrow the query or give a type)" \
+            if total > len(hits) else ""
+        head = f"{total} match{'es' if total != 1 else ''}"
+        if widened:
+            head += " (best first; broad words widened to related ones)"
+        return head + ":\n" + "\n".join(hits) + more
 
     def read(self, args: dict[str, Any]) -> str:
         r = self.get(args.get("id"))
@@ -982,6 +1077,19 @@ class Library(MoreTools):
             "preview": [], "warnings": [],
             "op": {"op": "open", "kind": kind if kind in ("bundle", "template") else "module",
                    "type": kind, "id": r["id"]},
+        }
+
+    def plan_pack(self, args: dict[str, Any]) -> dict[str, Any]:
+        text = args.get("description")
+        text = text.strip() if isinstance(text, str) else ""
+        if len(text) < 10:
+            raise ValueError("describe the pack: what it makes, its parts and its rules")
+        text = text[:MAX_PACK_DESCRIPTION]
+        return {
+            "title": "Plan this pack in the Pack builder", "summary": "pack",
+            "preview": [_short(text, 300)], "warnings": [],
+            "op": {"op": "open", "kind": "pack", "type": "pack", "id": "pack-builder",
+                   "description": text},
         }
 
     def _adopt(self, proposal: dict[str, Any]) -> None:

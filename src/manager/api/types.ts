@@ -1114,7 +1114,9 @@ export type AiChatOp =
     }
   | { op: "open"; kind: "module" | "bundle" | "template"; type: string; id: string }
   | { op: "open"; kind: "doc"; type: "doc"; id: string }
-  | { op: "open"; kind: "page"; type: "page"; id: string; section?: string };
+  | { op: "open"; kind: "page"; type: "page"; id: string; section?: string }
+  /** Hands a description to the Pack builder, which plans the pack. */
+  | { op: "open"; kind: "pack"; type: "pack"; id: string; description: string };
 
 /** A change the assistant proposes. Nothing is saved until Apply. */
 export interface AiChatProposal {
@@ -1135,7 +1137,12 @@ export interface AiChatResult {
   /** What the model looked at or tried, for the "worked on" lines. */
   steps: Array<{ tool: string; note: string; ok: boolean }>;
   model: string;
+  /** [[Name]] mentions in `message` that name a real item. */
+  refs?: Record<string, AiChatRef>;
 }
+
+/** A library item an assistant message mentions. */
+export interface AiChatRef { id: string; type: string; name: string }
 
 /* ── Pack builder ───────────────────────────────────────────────────── */
 

@@ -14,6 +14,7 @@ const props = defineProps<{
   hint?: string;
   settingKey?: string;
   stacked?: boolean;
+  form?: boolean;
   /** Control id, so the label is a real <label for>. */
   for?: string;
 }>();
@@ -26,7 +27,7 @@ const targeted = computed(() => !!props.settingKey && route?.hash === `#${props.
   <div
     :id="settingKey"
     class="wp-set-row"
-    :class="{ 'wp-set-row--stacked': stacked, 'wp-set-row--target': targeted }"
+    :class="{ 'wp-set-row--stacked': stacked, 'wp-set-row--form': form, 'wp-set-row--target': targeted }"
     :data-setting="settingKey"
   >
     <div class="wp-set-row__text">
@@ -78,10 +79,30 @@ const targeted = computed(() => !!props.settingKey && route?.hash === `#${props.
   align-items: center;
   gap: var(--wp-space-4);
   max-width: 55%;
+  /* A long status next to a button wraps instead of pushing it out. */
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .wp-set-row--stacked .wp-set-row__control { max-width: none; flex-wrap: wrap; }
 .wp-set-row__control :deep(.wp-select) { min-width: 200px; }
+.wp-set-row--form {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  column-gap: var(--wp-space-6);
+  row-gap: 4px;
+  align-items: center;
+  padding: var(--wp-space-4) var(--wp-space-6);
+}
+.wp-set-row--form .wp-set-row__text { display: contents; }
+.wp-set-row--form .wp-set-row__label { grid-column: 1; grid-row: 1; font-weight: 500; color: var(--wp-text-muted); }
+.wp-set-row--form .wp-set-row__control { grid-column: 2; grid-row: 1; max-width: none; justify-content: flex-start; }
+.wp-set-row--form .wp-set-row__hint { grid-column: 2; grid-row: 2; margin: 0; }
+.wp-set-row--form :deep(.wp-set-row__extra) { grid-column: 1 / -1; }
 @media (max-width: 720px) {
+  .wp-set-row--form { grid-template-columns: minmax(0, 1fr); }
+  .wp-set-row--form .wp-set-row__label,
+  .wp-set-row--form .wp-set-row__control,
+  .wp-set-row--form .wp-set-row__hint { grid-column: 1; grid-row: auto; }
   .wp-set-row { flex-direction: column; align-items: stretch; }
   .wp-set-row__control { max-width: none; }
 }

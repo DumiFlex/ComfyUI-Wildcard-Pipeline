@@ -628,18 +628,92 @@ async def test_chat_validation_and_off(wp_client, fake_llm):
     long = {"messages": [{"role": "user", "content": "x"}] * 41}
     assert (await wp_client.post("/wp/api/ai/chat", json=long)).status == 400
     resp = await wp_client.post("/wp/api/ai/chat", json=body)
-    assert (await resp.json()) == {"message": "Done.", "proposals": [], "steps": [], "model": "m1"}
+    assert (await resp.json()) == {"message": "Done.", "proposals": [], "steps": [], "model": "m1",
+                                  "refs": {}}
 
 
 async def test_chat_stops_after_max_steps(wp_client, fake_llm):
     ai_config.update({"enabled": True, "provider": "lmstudio",
                       "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
     fake_llm.chat_steps.extend(
-        [{"message": "", "calls": [{"tool": "variables", "args": "{}"}]}] * 10)
+        [{"message": "", "calls": [{"tool": "search", "args": json.dumps({"query": f"q{i}"})}]}
+         for i in range(10)])
     resp = await wp_client.post("/wp/api/ai/chat", json={
         "messages": [{"role": "user", "content": "loop"}]})
     body = await resp.json()
-    assert len(body["steps"]) == 6 and "ran out of steps" in body["message"]
+    # The last step is told to answer; calling again stops the turn.
+    assert len(body["steps"]) == 5 and "kept looking" in body["message"]
+
+
+async def test_chat_stops_repeating_the_same_call(wp_client, fake_llm):
+    """Rocinante re-ran one search every step and never answered."""
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    same = {"message": "I'll search your library.",
+            "calls": [{"tool": "search", "args": json.dumps({"query": "character"})}]}
+    fake_llm.chat_steps.extend([same, same, {"message": "You have Hair Color.", "calls": []}])
+    resp = await wp_client.post("/wp/api/ai/chat", json={
+        "messages": [{"role": "user", "content": "what does my library set up for characters?"}]})
+    body = await resp.json()
+    assert body["message"] == "You have Hair Color."
+    assert len(body["steps"]) == 1
+    sent = [s["body"]["messages"][-1]["content"] for s in fake_llm.seen
+            if s["body"]["response_format"]["json_schema"]["name"] == "chat_step"]
+    # Every results message carries the question; after a repeat, tools are over.
+    assert "what does my library set up for characters?" in sent[1]
+    assert "already made this exact call" in sent[2] and "No more tool calls" in sent[2]
+
+
+async def test_chat_answer_is_the_step_that_stops_calling(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.chat_steps.extend([
+        {"message": "I'll search your library.",
+         "calls": [{"tool": "search", "args": json.dumps({"query": "hair"})}]},
+        {"message": "", "calls": []},
+    ])
+    resp = await wp_client.post("/wp/api/ai/chat", json={
+        "messages": [{"role": "user", "content": "hair?"}]})
+    body = await resp.json()
+    # Only the promise was said: it's the fallback, not "Done.".
+    assert body["message"] == "I'll search your library."
+
+
+async def test_chat_acts_when_the_user_says_yes_instead_of_asking_again(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    asked = "I'll build a medieval pack. Should I proceed with creating these items?"
+    fake_llm.chat_steps.extend([
+        {"message": asked, "calls": []},
+        {"message": "Here it is.", "calls": [{"tool": "plan_pack", "args": json.dumps(
+            {"description": "Medieval fantasy character: hair, eyes, outfit, scene, pose"})}]},
+    ])
+    resp = await wp_client.post("/wp/api/ai/chat", json={
+        "messages": [{"role": "user", "content": "build a medieval character pack"},
+                     {"role": "assistant", "content": asked},
+                     {"role": "user", "content": "yes"}],
+        "page": {"route": "pack-builder", "note": "Pack builder, nothing planned yet"}})
+    assert resp.status == 200, await resp.text()
+    body = await resp.json()
+    assert body["message"] == "Here it is."
+    (card,) = body["proposals"]
+    assert card["op"] == {"op": "open", "kind": "pack", "type": "pack", "id": "pack-builder",
+                          "description": "Medieval fantasy character: hair, eyes, outfit, "
+                                         "scene, pose"}
+    # The repeat was sent back once with the nudge, then the calls came.
+    assert ai_chat.GO_NUDGE in fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+
+
+async def test_chat_nudges_only_once(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.chat_steps.extend(
+        [{"message": "Want me to use your hair wildcard or a new one?", "calls": []}] * 3)
+    resp = await wp_client.post("/wp/api/ai/chat", json={
+        "messages": [{"role": "user", "content": "add hair"}]})
+    body = await resp.json()
+    assert body["message"] == "Want me to use your hair wildcard or a new one?"
+    assert len(fake_llm.chat_steps) == 1
 
 
 PACK_PLAN = {

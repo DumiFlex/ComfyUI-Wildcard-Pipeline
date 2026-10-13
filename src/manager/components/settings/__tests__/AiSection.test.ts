@@ -118,10 +118,20 @@ describe("Settings › AI assistant", () => {
     vi.mocked(api.ai.config).mockResolvedValue(cfg({ keys_saved: ["anthropic"] }));
     const w = mount(AiSection, { global: { plugins: [router] } });
     await flushPromises();
-    const sel = w.findAllComponents(Select).find((c) => c.attributes("data-test") === "ai-provider");
-    const opts = (sel?.props("options") ?? []) as { value: string; label: string }[];
-    expect(opts.find((o) => o.value === "anthropic")?.label).toContain("key saved");
-    expect(opts.find((o) => o.value === "openai")?.label).not.toContain("key saved");
+    expect(w.find('[data-test="ai-provider-anthropic"] [data-test="ai-provider-key-saved"]').exists()).toBe(true);
+    expect(w.find('[data-test="ai-provider-openai"] [data-test="ai-provider-key-saved"]').exists()).toBe(false);
+    expect(w.get('[data-test="ai-provider-anthropic"]').text()).toContain("Cloud");
+    expect(w.get('[data-test="ai-provider-ollama"]').text()).toContain("Local");
+  });
+
+  it("switches provider from its button", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({}));
+    vi.mocked(api.ai.saveConfig).mockImplementation(async (p) => cfg(p as Partial<AiConfig>));
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    await w.get('[data-test="ai-provider-lmstudio"]').trigger("click");
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ provider: "lmstudio" });
   });
 
   it("warns when a local server loaded the model with a small context", async () => {
@@ -134,7 +144,8 @@ describe("Settings › AI assistant", () => {
     await flushPromises();
     await w.get('[data-test="ai-test"]').trigger("click");
     await flushPromises();
-    expect(w.text()).toContain("loaded with only 4096 tokens of context");
+    expect(w.text()).toContain("only 4k context");
+    expect(w.get('[data-test="ai-context-low"]').text()).toContain("loaded with 4k of context");
   });
 
   it("saves the model size and the context cap", async () => {
@@ -147,6 +158,17 @@ describe("Settings › AI assistant", () => {
     size!.vm.$emit("update:modelValue", "small");
     await flushPromises();
     expect(api.ai.saveConfig).toHaveBeenCalledWith({ model_size: "small" });
+    const pick = (name: string) => w.findAllComponents(Select).find((c) => c.attributes("data-test") === name)!;
+    // Presets: 16k is a preset, so no number box until Custom.
+    expect(w.find('[data-test="ai-context"]').exists()).toBe(false);
+    pick("ai-context-preset").vm.$emit("update:modelValue", 32768);
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ context_max: 32768 });
+    pick("ai-unload-preset").vm.$emit("update:modelValue", 300);
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ unload_after_s: 300 });
+    pick("ai-context-preset").vm.$emit("update:modelValue", "custom");
+    await flushPromises();
     const ctx = w.get('[data-test="ai-context"] input, input[data-test="ai-context"]');
     await ctx.setValue(1000);
     await ctx.trigger("blur");

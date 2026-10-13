@@ -37,14 +37,14 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       <DocKeyList
         :items="[
           { term: 'Enable', desc: 'Turns the assistant on. While it is off, the AI button in the editors is hidden and the model routes refuse every call.' },
-          { term: 'Provider', desc: 'Ollama, LM Studio, llama.cpp, Claude, OpenAI, or Custom for any other OpenAI-compatible server. Each provider remembers its own address, model and key, so you can switch back and forth without typing them again.' },
+          { term: 'Provider', desc: 'One button each for Ollama, LM Studio, llama.cpp, Claude, OpenAI, or Other for any OpenAI-compatible server, marked Local or Cloud (a key icon means a key is saved). Each provider remembers its own address, model and key, so you can switch back and forth without typing them again.' },
           { term: 'Server address', desc: 'Filled in for each provider; change it if your server runs on another port or machine.' },
           { term: 'API key', desc: 'Only needed for Claude, OpenAI or a server that asks for one. It is stored on ComfyUI\'s side and never shown again; Remove deletes it. WP_AI_API_KEY, ANTHROPIC_API_KEY or OPENAI_API_KEY in the environment work too.' },
           { term: 'Model', desc: 'Picked from the list your server reports (refresh after downloading a new one), or typed in.' },
-          { term: 'Unload after', desc: 'For local servers: how many idle seconds before the model leaves the GPU, so ComfyUI gets its memory back. 0 unloads right away.' },
+          { term: 'Unload after', desc: 'For local servers: how long an idle model stays loaded before it leaves the GPU, so ComfyUI gets its memory back. Pick a preset (right after each answer, 30 seconds up to 1 hour) or Custom to type the seconds.' },
           { term: 'Model size', desc: 'How much the assistant asks of the model. Small models (under 20B) get shorter instructions, smaller tool results and steadier settings; large ones and hosted models get everything. Automatic reads the size from the model\'s name; set it when the name doesn\'t say.' },
-          { term: 'Most context to use', desc: 'For Ollama: the assistant asks for as much context as each request needs, up to this many tokens (16384 by default). Ollama\'s own default is far smaller and silently cuts the instructions off. Lower it if the model no longer fits on your GPU.' },
-          { term: 'Test connection', desc: 'Lists the models, then asks the chosen one for a tiny JSON answer, and tells you whether it worked and how long it took. For LM Studio and llama.cpp it also reads how much context the model was loaded with and warns when it is under 8192 tokens, since the assistant\'s instructions alone need more.' },
+          { term: 'Most context to use', desc: 'For Ollama: the assistant asks for as much context as each request needs, up to this many tokens (16384 by default). Ollama\'s own default is far smaller and silently cuts the instructions off. Lower it if the model no longer fits on your GPU. Presets go from 4k to 128k (1k is 1024 tokens); Custom takes any number.' },
+          { term: 'Test connection', desc: 'Lists the models, then asks the chosen one for a tiny JSON answer, and tells you whether it worked and how long it took. For LM Studio and llama.cpp it also reads how much context the model was loaded with and warns when it is under 16k, since the chat\'s instructions, a few turns and the answer need that much. These servers fix the context when they load the model, so set it there (in LM Studio: the Context Length in the model\'s load settings) and load the model again.' },
         ]"
       />
     </DocSection>
@@ -172,7 +172,14 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         The <b>AI</b> button in the top bar (shown once the assistant is on) opens a chat on the
         right. Ask about your library ("which wildcards set $outfit?", "what's missing for a
         fantasy pack?"), ask how something works, or ask for a change. The assistant searches and
-        reads your items and these docs itself; the lines above each reply say what it looked at.
+        reads your items and these docs itself; the lines above each reply say what it looked at. Its
+        search reads what items hold, not only their names and tags: option texts, values and
+        rules count, and broad subjects widen on their own, so "characters" also finds hair, eye
+        and outfit wildcards. Replies use simple formatting (bold, lists, code), and every item it
+        mentions is a chip you click to open it. Prompt syntax in a reply is coloured the way the
+        editors colour it: each $variable in its own colour, {a|b} picks, @{…} references, LoRA
+        and embedding tags, and #tags. A line starting with "Tip:" or "Warning:" stands out as a
+        note.
       </p>
       <p>
         It sees the page you're on. In an editor it reads the item as it is in the editor, unsaved
@@ -197,7 +204,10 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           filter, never empty, hold for a whole Loop run, internal), or add, remove and change its
           items,</li>
         <li>change an item's description, tags, category or rating,</li>
-        <li>open an item's editor, a docs page or a manager page such as a Settings section.</li>
+        <li>open an item's editor, a docs page or a manager page such as a Settings section,</li>
+        <li>hand a whole new pack to the Pack builder: <b>Plan it</b> on the card opens the Pack
+          builder with the pack described and starts the plan (a plan already there is kept and
+          the description waits in its box).</li>
       </ul>
       <p>
         It can also <b>run a stack on the engine</b> before it answers: modules and bundles from
@@ -217,7 +227,9 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         modules it runs the stack with them before it answers, so the reply says what the change
         does. It can propose several items that depend on each other in one answer (a wildcard
         and a constraint on it); the later card waits until the first is applied. An answer that
-        comes back garbled is asked for again once, with the problem named.
+        comes back garbled is asked for again once, with the problem named. It doesn't ask "should I go
+        ahead?" before proposing, since the card is already the asking; if it does, or answers your
+        "yes" by asking again, it is told once to make the change.
       </p>
       <p>
         Each card lists what it changes and warns about anything it left out (a duplicate option, a

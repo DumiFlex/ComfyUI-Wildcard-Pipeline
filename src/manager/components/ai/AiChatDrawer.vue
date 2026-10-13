@@ -13,10 +13,12 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import Button from "../ui/Button.vue";
+import AiMessage from "./AiMessage.vue";
 import { useAiChat, type ChatAssistantEntry } from "../../composables/useAiChat";
 import { useAiConfig } from "../../composables/useAiConfig";
 import type { AiChatPage, AiChatProposal } from "../../api/types";
 import { currentPageNote, openEditor } from "../../composables/useOpenEditor";
+import { usePackBuilder } from "../../composables/usePackBuilder";
 
 const EDIT_ROUTES: Record<string, string> = {
   wildcard: "wildcards-edit",
@@ -136,6 +138,7 @@ function target(entry: ChatAssistantEntry, p: AiChatProposal): RouteLocationRaw 
   if (op.op === "open" && op.kind === "doc") {
     return { name: "documentation-page", params: { page: op.id } };
   }
+  if (op.op === "open" && op.kind === "pack") return { name: "pack-builder" };
   if (op.op === "open" && op.kind === "page") {
     return op.id === "settings"
       ? { name: "settings", params: { section: op.section ?? "" } }
@@ -146,8 +149,30 @@ function target(entry: ChatAssistantEntry, p: AiChatProposal): RouteLocationRaw 
 }
 
 function openItem(entry: ChatAssistantEntry, p: AiChatProposal): void {
+  const op = p.op;
+  if (op.op === "open" && op.kind === "pack") {
+    planPack(op.description);
+    return;
+  }
   const t = target(entry, p);
   if (t) void router.push(t);
+}
+
+/** Put the description in the Pack builder and plan it. A plan already
+ *  there is kept: the text goes into its box for the user to send. */
+function planPack(description: string): void {
+  const pb = usePackBuilder();
+  const fresh = pb.phase.value === "plan" && !pb.plan.value && !pb.convo.loading.value;
+  pb.convo.instruction.value = description;
+  void router.push({ name: "pack-builder" });
+  if (fresh) void pb.askPlan();
+}
+
+function openLabel(p: AiChatProposal): string {
+  const op = p.op;
+  if (op.op !== "open") return "Open";
+  return op.kind === "doc" ? "Open the docs" : op.kind === "page" ? "Go there"
+    : op.kind === "pack" ? "Plan it" : "Open";
 }
 
 function toEditor(p: AiChatProposal): boolean {
@@ -224,7 +249,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
               {{ s.note }}
             </li>
           </ul>
-          <p class="wp-ai-chat__text">{{ entry.result.message }}</p>
+          <AiMessage :text="entry.result.message" :refs="entry.result.refs" />
 
           <article
             v-for="p in entry.result.proposals"
@@ -253,7 +278,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
             <p v-if="entry.errors[p.pid]" class="wp-ai-chat__error" role="alert">{{ entry.errors[p.pid] }}</p>
             <div class="wp-ai-chat__actions">
               <template v-if="p.op.op === 'open'">
-                <Button size="sm" icon="pi-arrow-up-right" data-test="ai-chat-open" @click="openItem(entry, p)">{{ p.op.kind === "doc" ? "Open the docs" : p.op.kind === "page" ? "Go there" : "Open" }}</Button>
+                <Button size="sm" icon="pi-arrow-up-right" data-test="ai-chat-open" @click="openItem(entry, p)">{{ openLabel(p) }}</Button>
               </template>
               <template v-else-if="entry.status[p.pid] === 'applied'">
                 <span class="wp-ai-chat__done"><i class="pi pi-check" aria-hidden="true" /> Applied</span>
@@ -372,7 +397,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__steps li { font-size: 11px; color: var(--wp-text-dim); display: flex; gap: 6px; align-items: baseline; overflow-wrap: anywhere; }
 .wp-ai-chat__steps li[data-ok="false"] { color: var(--wp-warn); }
 .wp-ai-chat__steps .pi { font-size: 10px; }
-.wp-ai-chat__text { margin: 0; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .wp-ai-chat__card {
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 35%, var(--wp-border));
   border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px;

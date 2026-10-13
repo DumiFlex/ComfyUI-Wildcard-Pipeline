@@ -6,6 +6,7 @@ import AiChatDrawer from "../AiChatDrawer.vue";
 import { api } from "../../../api/client";
 import { _resetAiConfigForTests } from "../../../composables/useAiConfig";
 import { _resetAiChatForTests, chatMessages, useAiChat } from "../../../composables/useAiChat";
+import { _resetPackBuilderForTests, usePackBuilder } from "../../../composables/usePackBuilder";
 import type { AiChatResult, AiConfig } from "../../../api/types";
 import { defineComponent, ref } from "vue";
 import {
@@ -20,7 +21,7 @@ const CONFIG = {
 
 vi.mock("../../../api/client", () => ({
   api: {
-    ai: { config: vi.fn(), chat: vi.fn() },
+    ai: { config: vi.fn(), chat: vi.fn(), packPlan: vi.fn() },
     modules: { create: vi.fn(), update: vi.fn(), delete: vi.fn() },
     bundles: { update: vi.fn() },
     categories: { create: vi.fn() },
@@ -72,6 +73,7 @@ function makeRouter() {
       { path: "/docs/:page", name: "documentation-page", component: { template: "<div />" } },
       { path: "/settings/:section?", name: "settings", component: { template: "<div />" } },
       { path: "/test", name: "test", component: { template: "<div />" } },
+      { path: "/pack-builder", name: "pack-builder", component: { template: "<div />" } },
     ],
   });
   return r;
@@ -270,6 +272,51 @@ describe("AiChatDrawer", () => {
     expect(vi.mocked(api.ai.chat).mock.calls[0][0].page).toEqual({
       route: "documentation-page", doc: "combine",
     });
+    w.unmount();
+  });
+
+  it("hands a pack to the Pack builder and starts the plan", async () => {
+    _resetPackBuilderForTests();
+    vi.mocked(api.ai.packPlan).mockReset().mockReturnValue(new Promise(() => {}));
+    vi.mocked(api.ai.chat).mockResolvedValueOnce({
+      message: "Here it is.", model: "m", steps: [],
+      proposals: [{
+        pid: "p1", tool: "plan_pack", title: "Plan this pack in the Pack builder", summary: "pack",
+        preview: ["Medieval character"], warnings: [], after: null,
+        op: { op: "open", kind: "pack", type: "pack", id: "pack-builder", description: "Medieval character" },
+      }],
+    });
+    const { w, router } = await mountIt();
+    await w.get('[data-test="ai-chat-input"]').setValue("yes");
+    await w.get('[data-test="ai-chat-send"]').trigger("click");
+    await flushPromises();
+    const open = w.get('[data-test="ai-chat-open"]');
+    expect(open.text()).toBe("Plan it");
+    await open.trigger("click");
+    await flushPromises();
+    expect(router.currentRoute.value.name).toBe("pack-builder");
+    expect(usePackBuilder().convo.instruction.value).toBe("Medieval character");
+    expect(vi.mocked(api.ai.packPlan).mock.calls[0][0]).toMatchObject({ instruction: "Medieval character" });
+    w.unmount();
+  });
+
+  it("renders Markdown and opens mentioned items from their chips", async () => {
+    vi.mocked(api.ai.chat).mockResolvedValueOnce({
+      message: "**Characters:**\n- [[Hair Color]] sets `$hair`\n- [[Gone]]", model: "m", steps: [], proposals: [],
+      refs: { "Hair Color": { id: "w1", type: "wildcard", name: "Hair Color" } },
+    });
+    const { w, router } = await mountIt();
+    await w.get('[data-test="ai-chat-input"]').setValue("characters?");
+    await w.get('[data-test="ai-chat-send"]').trigger("click");
+    await flushPromises();
+    const msg = w.get('[data-test="ai-msg"]');
+    expect(msg.find("ul").exists()).toBe(true);
+    expect(msg.find("code").text()).toBe("$hair");
+    const chips = msg.findAll(".wp-ai-msg__chip");
+    expect(chips.map((c) => c.text())).toEqual(["Hair Color", "Gone"]);
+    await chips[0].trigger("click");
+    await flushPromises();
+    expect(router.currentRoute.value.fullPath).toBe("/wildcards/w1/edit");
     w.unmount();
   });
 });

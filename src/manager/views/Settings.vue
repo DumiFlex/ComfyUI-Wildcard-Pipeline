@@ -47,6 +47,8 @@ const COMPONENTS: Record<SectionId, Component> = {
 };
 
 const active = computed<SectionId>(() => (isSectionId(props.section) ? props.section : "general"));
+/** Sections laid out in two columns, so they use the page's full width. */
+const WIDE = new Set<SectionId>(["ai"]);
 const activeDef = computed(() => SECTIONS.find((s) => s.id === active.value) ?? SECTIONS[0]);
 
 const query = ref("");
@@ -88,7 +90,7 @@ watch(() => [active.value, route.hash], () => { void revealHash(); }, { immediat
 </script>
 
 <template>
-  <div class="wp-page wp-settings">
+  <div class="wp-page wp-settings" :data-wide="!searching && WIDE.has(active) ? 'true' : undefined">
     <aside class="wp-settings__nav" aria-label="Settings sections">
       <h1 class="wp-settings__title">Settings</h1>
       <div class="wp-settings__search">
@@ -201,6 +203,9 @@ watch(() => [active.value, route.hash], () => { void revealHash(); }, { immediat
   font-weight: 600;
 }
 .wp-settings__main { min-width: 0; max-width: 780px; }
+/* A section with a side column (AI assistant) takes the page's full width. */
+.wp-settings[data-wide="true"] { max-width: none; }
+.wp-settings[data-wide="true"] .wp-settings__main { max-width: none; }
 .wp-settings__head { margin-bottom: var(--wp-space-6); }
 .wp-settings__h2 { font-size: 18px; margin: 0; }
 .wp-settings__blurb { margin: 4px 0 0; font-size: var(--wp-text-sm); color: var(--wp-text-dim); }

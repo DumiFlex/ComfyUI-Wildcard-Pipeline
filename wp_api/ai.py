@@ -724,11 +724,20 @@ async def post_organize(request: web.Request) -> web.Response:
     return json_ok(result)
 
 
-def _tool_results(results: list[str]) -> str:
-    return (
-        "Tool results:\n" + "\n\n".join(results)
-        + "\n\nContinue. When you are done, answer with \"calls\": [] and your message."
-    )
+def _tool_results(results: list[str], question: str = "", last: bool = False) -> str:
+    """The results of a step, sent back as the next message. The user's
+    question goes with them: once a step's results are the newest message,
+    small models forget what was asked and answer with a greeting."""
+    asked = f"\n\nThe user's message you are answering: \"{ai_budget.clip(question, 600)}\"" \
+        if question else ""
+    if last:
+        tail = ("\n\nNo more tool calls. Answer the user's message now from these results, "
+                "with \"calls\": [] and a message that gives the actual answer.")
+    else:
+        tail = ("\n\nIf these results answer the user's message, answer now with "
+                "\"calls\": [] and a message that gives the actual answer. Otherwise make "
+                "the next calls. Never repeat a call you already made.")
+    return "Tool results:\n" + "\n\n".join(results) + asked + tail
 
 
 async def _chat_step(
@@ -800,10 +809,17 @@ async def post_chat(request: web.Request) -> web.Response:
     if note:
         user = f"{user}\n\n{note}"
 
+    question = turns[-1]["content"]
     proposals: list[dict[str, Any]] = []
     steps: list[dict[str, Any]] = []
     message = ""
+    interim = ""
+    seen: set[str] = set()
+    forced = False
     checked = False
+    nudged = False
+    last_answer = next((t["content"] for t in reversed(turns[:-1])
+                        if t["role"] == "assistant"), "")
     for step in range(ai_chat.MAX_STEPS):
         history = ai_budget.fit_history(history, prof["history_chars"])
         try:
@@ -813,17 +829,37 @@ async def post_chat(request: web.Request) -> web.Response:
                 return json_error(e.message, status=e.status)
             message = f"(Stopped early: {e.message})"
             break
-        if said:
+        # A message sent along with calls is usually "I'll search…": keep it
+        # only as a fallback, so the answer is the step that stops calling.
+        if said and not calls:
             message = said
+        elif said:
+            interim = said
+        if forced and calls:
+            # Told to answer and called again anyway: stop on what it said.
+            message = message or (
+                "I kept looking without getting to an answer. Try asking more specifically, "
+                "or name the item.")
+            break
         if any(c["tool"] == "run_test" for c in calls):
             checked = True
         history.append((user, answer))
         results: list[str] = []
         needs_reply = False
+        repeats = 0
         for call in calls:
             tool = call["tool"]
             try:
                 args = ai_chat.parse_args(call["args"])
+                key = tool + _json.dumps(args, sort_keys=True, ensure_ascii=False)
+                if tool not in ai_chat.CHANGE_TOOLS and key in seen:
+                    # Small models re-run the same search every step.
+                    repeats += 1
+                    needs_reply = True
+                    results.append(f"{tool}: you already made this exact call; its results "
+                                   "are above. Don't repeat it.")
+                    continue
+                seen.add(key)
                 if tool in ai_chat.CHANGE_TOOLS and len(proposals) >= ai_chat.MAX_PROPOSALS:
                     raise ValueError("too many changes in one answer; stop here")
                 out = lib.run(tool, args)
@@ -842,24 +878,38 @@ async def post_chat(request: web.Request) -> web.Response:
                 results.append(f"{tool}: proposal {out['pid']} shown to the user: {out['title']}")
                 steps.append({"tool": tool, "note": out["title"], "ok": True})
         if not needs_reply:
+            # Asked leave instead of proposing, or met "yes" with more talk:
+            # tell it once to act. Small models loop on "Should I proceed?".
+            if (not calls and not proposals and not nudged
+                    and step < ai_chat.MAX_STEPS - 1
+                    and ai_chat.stalls(said, turns[-1]["content"], last_answer)):
+                nudged = True
+                message = ""  # the stalled question isn't the answer
+                user = ai_chat.GO_NUDGE
+                continue
             # Changes were proposed but never tried: ask for one check
             # before the answer stands, so "done" means it ran.
             if (not checked and step < ai_chat.MAX_STEPS - 1
                     and any(p["tool"] in ai_chat.CHECKABLE_TOOLS for p in proposals)):
                 checked = True
-                user = (_tool_results(results) + "\n\n" if results else "") \
+                user = (_tool_results(results, question) + "\n\n" if results else "") \
                     + ai_chat.CHECK_NUDGE
                 continue
             break
         if step == ai_chat.MAX_STEPS - 1:
-            message = message or "I ran out of steps before finishing; ask me to continue."
+            message = (message or interim
+                       or "I ran out of steps before finishing; ask me to continue.")
             break
-        user = _tool_results(results)
+        # Only repeats, or one step left: no more tools, answer now.
+        forced = (calls and repeats == len(calls)) or step == ai_chat.MAX_STEPS - 2
+        user = _tool_results(results, question, last=bool(forced))
 
     if not message:
-        message = "Here's what I'd change." if proposals else "Done."
+        message = interim if interim and proposals else (
+            "Here's what I'd change." if proposals else interim or "Done.")
     return json_ok({
         "message": message, "proposals": proposals, "steps": steps, "model": cfg["model"],
+        "refs": lib.message_refs(message),
     })
 
 
