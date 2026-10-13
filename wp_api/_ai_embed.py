@@ -41,6 +41,8 @@ def enabled(cfg: dict[str, Any]) -> bool:
 def _cfg(cfg: dict[str, Any]) -> dict[str, Any]:
     out = dict(cfg)
     out["base_url"] = cfg.get("embed_base_url") or cfg["base_url"]
+    # The key goes only where it was given for (engine/ai/config.py).
+    out["api_key"] = cfg.get("embed_api_key", "")
     return out
 
 

@@ -15,6 +15,14 @@ The key can also come from the environment so it never touches disk:
 ``WP_AI_API_KEY`` for any provider, else ``ANTHROPIC_API_KEY`` /
 ``OPENAI_API_KEY`` for those two presets. An env key wins over a saved one.
 
+A key is only ever sent to the address it was given for. A saved key
+remembers the origin (scheme, host, port) it was saved with; change the
+address and the key stays saved but isn't sent until it's pasted again for
+the new one (or the address changes back). Env keys go to their provider's
+own host, and ``WP_AI_API_KEY`` to the preset's host or to
+``WP_AI_API_KEY_HOST``. Otherwise anything that can change the address (a
+page using the local API) could have the key sent to its own server.
+
 Each provider keeps its own address, model and key under ``providers``, so
 switching from Claude to Ollama and back doesn't lose the Claude key. Files
 written before that (flat ``base_url`` / ``model`` / ``api_key``) are read
@@ -132,6 +140,29 @@ def check_base_url(url: str) -> str:
     return url
 
 
+def origin(url: str) -> str:
+    """`scheme://host:port` of an address, lowercased, default ports filled
+    in; "" for no address. Keys are bound to this."""
+    parts = urllib.parse.urlsplit(url.strip())
+    scheme = parts.scheme.lower()
+    if scheme not in ("http", "https") or not parts.hostname:
+        return ""
+    try:
+        port = parts.port or (443 if scheme == "https" else 80)
+    except ValueError:
+        return ""
+    return f"{scheme}://{parts.hostname.lower()}:{port}"
+
+
+def _host(org: str) -> str:
+    """What Settings shows for an origin: the host, with a port that isn't
+    the default."""
+    parts = urllib.parse.urlsplit(org)
+    default = 443 if parts.scheme == "https" else 80
+    host = parts.hostname or ""
+    return host if parts.port in (None, default) else f"{host}:{parts.port}"
+
+
 def _clamp_int(value: Any, lo: int, hi: int, default: int) -> int:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return default
@@ -154,7 +185,10 @@ def _normalize_slot(raw: Any) -> dict[str, str]:
         embed_url = check_base_url(embed_url)
     except ConfigError:
         embed_url = ""
+    key_origin = src.get("key_origin") if isinstance(src.get("key_origin"), str) else None
     return {"base_url": base_url, "model": model.strip()[:200], "api_key": key.strip(),
+            # None: a key saved before keys were bound; bound on read.
+            "key_origin": key_origin if key.strip() else "",
             "model_size": size, "embed_model": embed_model.strip()[:200],
             "embed_base_url": embed_url}
 
@@ -171,6 +205,10 @@ def _normalize(raw: Any) -> dict[str, Any]:
         # A file from before per-provider slots: its flat fields belong to
         # the provider it was saved with.
         slots[provider] = _normalize_slot(src)
+    for pid, slot in slots.items():
+        if slot["key_origin"] is None:
+            # Saved before keys were bound: bind it to where it is used now.
+            slot["key_origin"] = origin(slot["base_url"] or PRESETS[pid]["base_url"])
     return {
         "enabled": src.get("enabled") is True,
         "provider": provider,
@@ -202,6 +240,7 @@ def _active(cfg: dict[str, Any]) -> dict[str, Any]:
         "embed_model": slot["embed_model"],
         "embed_base_url": slot["embed_base_url"],
         "api_key": slot["api_key"],
+        "key_origin": slot["key_origin"],
     }
 
 
@@ -233,12 +272,26 @@ def _write(cfg: dict[str, Any]) -> None:
         raise
 
 
-def _env_key(provider: str) -> str:
+def _env_key(provider: str) -> tuple[str, str]:
+    """(key, the origin it may go to) from the environment, or ("", "")."""
     key = os.environ.get("WP_AI_API_KEY", "").strip()
     if key:
-        return key
+        host = os.environ.get("WP_AI_API_KEY_HOST", "").strip()
+        return key, origin(host or PRESETS[provider]["base_url"])
     env = PRESETS[provider].get("key_env")
-    return os.environ.get(env, "").strip() if env else ""
+    key = os.environ.get(env, "").strip() if env else ""
+    return (key, origin(PRESETS[provider]["base_url"])) if key else ("", "")
+
+
+def _key_for(cfg: dict[str, Any], url: str) -> str:
+    """The key to send to `url`: only one given for that origin."""
+    org = origin(url)
+    if not org:
+        return ""
+    env_key, env_origin = _env_key(cfg["provider"])
+    if env_key:
+        return env_key if env_origin == org else ""
+    return cfg["api_key"] if cfg["api_key"] and cfg["key_origin"] == org else ""
 
 
 def load_effective() -> dict[str, Any]:
@@ -251,12 +304,14 @@ def load_effective() -> dict[str, Any]:
     preset = PRESETS[cfg["provider"]]
     out = copy.deepcopy(cfg)
     out["base_url"] = cfg["base_url"] or preset["base_url"]
-    out["api_key"] = _env_key(cfg["provider"]) or cfg["api_key"]
+    out["api_key"] = _key_for(cfg, out["base_url"])
     out["api"] = preset["api"]
     out["local"] = preset["local"]
     if preset["api"] == "anthropic":
         out["embed_model"] = ""
     out["embed_base_url"] = cfg["embed_base_url"] or out["base_url"]
+    out["embed_api_key"] = _key_for(cfg, out["embed_base_url"])
+    out.pop("key_origin", None)
     return out
 
 
@@ -265,9 +320,16 @@ def public_view() -> dict[str, Any]:
     with _lock:
         stored = _read()
     cfg = _active(stored)
-    env_key = bool(_env_key(cfg["provider"]))
-    view = {k: v for k, v in cfg.items() if k != "api_key"}
-    view["key_set"] = env_key or bool(cfg["api_key"])
+    env_key = bool(_env_key(cfg["provider"])[0])
+    base = cfg["base_url"] or PRESETS[cfg["provider"]]["base_url"]
+    view = {k: v for k, v in cfg.items() if k not in ("api_key", "key_origin")}
+    view["key_set"] = bool(_key_for(cfg, base))
+    # A key that is saved (or in the environment) but for another address:
+    # Settings says where, and that it isn't sent here.
+    elsewhere = cfg["key_origin"] if cfg["api_key"] else ""
+    if env_key:
+        elsewhere = _env_key(cfg["provider"])[1]
+    view["key_for_host"] = _host(elsewhere) if elsewhere and not view["key_set"] else None
     # What "auto" means for the chosen model, so Settings can say it.
     view["model_size_auto"] = budget.model_size({
         "model": cfg["model"], "local": PRESETS[cfg["provider"]]["local"],
@@ -277,7 +339,7 @@ def public_view() -> dict[str, Any]:
     # the user switches to one. Never the keys themselves.
     view["keys_saved"] = sorted(
         pid for pid, slot in stored["providers"].items()
-        if slot["api_key"] or _env_key(pid)
+        if slot["api_key"] or _env_key(pid)[0]
     )
     view["presets"] = {
         pid: {k: p[k] for k in ("label", "api", "local", "needs_key", "base_url")}
@@ -356,5 +418,9 @@ def update(patch: dict[str, Any]) -> dict[str, Any]:
             if len(key) > 512:
                 raise ConfigError("that key is too long")
             slot["api_key"] = key
+            # Bound to the address it was given for (applied above when
+            # the same request changes both).
+            where = slot["base_url"] or PRESETS[cfg["provider"]]["base_url"]
+            slot["key_origin"] = origin(where) if key else ""
         _write(_normalize(cfg))
     return public_view()

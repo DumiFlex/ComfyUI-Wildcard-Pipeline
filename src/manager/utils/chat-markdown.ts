@@ -6,8 +6,24 @@
  * fences, "> " quotes. Inline: **bold**, *italic* / _italic_, `code`, and
  * [[Name]] item mentions, which the chat turns into chips that open the item.
  * Anything else stays as text, so a model that writes no Markdown reads the
- * same as before.
+ * same as before. Links, images and HTML are never made: `![](url)` would
+ * have the browser fetch a URL carrying chat data with no click.
  */
+
+/* Hidden characters: Unicode tag characters (except inside an emoji flag),
+   bidi controls, zero-width and other invisible format characters. Mirrors
+   `engine/ai/safety.py`; the server strips them already, this is for
+   anything that reaches the page another way. */
+const INVISIBLE = /[\u00ad\u180e\u200b\u200c\u200e\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff\u{e0100}-\u{e01ef}]/gu;
+const TAGS = /(\u{1f3f4}?)([\u{e0000}-\u{e007f}]+)/gu;
+
+export function stripInvisible(text: string): string {
+  if (!/[^\x00-\x7f]/.test(text)) return text;
+  return text
+    .replace(TAGS, (_m, flag: string, run: string) =>
+      flag && run.endsWith("\u{e007f}") && [...run].length <= 8 ? flag + run : flag)
+    .replace(INVISIBLE, "");
+}
 
 export type Inline =
   | { t: "text"; v: string }
@@ -49,7 +65,7 @@ const BOLD_LINE = /^\s*\*\*([^*]+)\*\*:?\s*$/;
 
 export function parseMarkdown(text: string): Block[] {
   const blocks: Block[] = [];
-  const lines = (text ?? "").replace(/\r\n?/g, "\n").split("\n");
+  const lines = stripInvisible(text ?? "").replace(/\r\n?/g, "\n").split("\n");
   let para: string[] = [];
   let list: { t: "ul" | "ol"; items: Inline[][] } | null = null;
   const flushPara = (): void => {

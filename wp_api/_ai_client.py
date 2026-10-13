@@ -23,6 +23,13 @@ routes. What that person can and cannot do:
   Settings action, which on an open ComfyUI is reachable by the same people
   who can already queue arbitrary workflows on it.
 
+  Have the key sent to their own server — no. A key is bound to the origin
+  it was saved for (engine/ai/config.py) and sent nowhere else, so changing
+  the address stops the key being sent; redirects are never followed. The
+  `/wp/api/ai/*` routes also refuse cross-site requests, `Origin: null`,
+  DNS-rebinding hosts and non-JSON bodies (wp_api/_ai_guard.py), whatever
+  ComfyUI's own flags are.
+
   Spend the user's credits — yes, while the feature is enabled. That is the
   cost of the feature on an exposed ComfyUI, and why it is off by default and
   the Settings page says so. A semaphore caps concurrent calls at two, and
@@ -147,7 +154,15 @@ async def _request(
     url = _url(cfg, path)
     try:
         async with _session(url, timeout) as s:
-            async with s.request(method, url, json=body, headers=_headers(cfg)) as resp:
+            # Never follow a redirect: aiohttp drops `Authorization` on one
+            # but keeps Claude's `x-api-key`, and the key belongs to this
+            # address only.
+            async with s.request(method, url, json=body, headers=_headers(cfg),
+                                 allow_redirects=False) as resp:
+                if 300 <= resp.status < 400:
+                    where = resp.headers.get("Location", "")[:200]
+                    raise AIError(f"the server redirected to {where or 'another address'}. "
+                                  "Use that address in Settings instead.")
                 data = await _read_json(resp)
                 if resp.status >= 400:
                     raise _upstream_error(resp.status, data)

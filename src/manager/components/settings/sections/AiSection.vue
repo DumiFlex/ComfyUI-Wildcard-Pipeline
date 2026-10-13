@@ -447,7 +447,13 @@ const off = computed(() => !config.value?.enabled);
             </template>
             <span v-if="keySaved" class="wp-set-pill" data-tone="ok">Saved</span>
             <span v-else-if="config.key_set" class="wp-set-pill" data-tone="ok" data-test="ai-key-set">{{ config.key_from_env ? "From environment" : "Key saved" }}</span>
+            <span v-else-if="config.key_for_host" class="wp-set-pill" data-tone="warn" data-test="ai-key-elsewhere">Saved for {{ config.key_for_host }}</span>
           </SettingRow>
+          <p v-if="config.key_for_host && !config.key_set" class="wp-ai-set__ctx" role="status" data-test="ai-key-elsewhere-note">
+            The key was saved for {{ config.key_for_host }}, so it isn't sent to this address. A key
+            only ever goes to the address it was given for; paste it again to use it here, or set
+            the address back.
+          </p>
 
           <SettingRow form label="Test connection" hint="Lists the server's models and asks the chosen one for a tiny JSON answer." setting-key="ai-test">
             <Button size="sm" :loading="testing" :disabled="off" data-test="ai-test" @click="runTest">Test connection</Button>

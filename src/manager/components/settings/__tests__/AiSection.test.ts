@@ -25,7 +25,7 @@ const PRESETS: AiConfig["presets"] = {
 function cfg(over: Partial<AiConfig> = {}): AiConfig {
   return {
     enabled: false, provider: "ollama", base_url: "", model: "", unload_after_s: 60,
-    context_max: 16384, model_size: "auto", model_size_auto: "medium", tool_format: "auto", embed_model: "", embed_base_url: "",
+    context_max: 16384, model_size: "auto", model_size_auto: "medium", tool_format: "auto", embed_model: "", embed_base_url: "", key_for_host: null,
     key_set: false, key_from_env: false, keys_saved: [], presets: PRESETS, ...over,
   };
 }
@@ -274,5 +274,14 @@ describe("Settings › AI assistant", () => {
     expect(w.get('[data-test="ai-test-result"]').text()).toContain("embeddings ✓ (768)");
     expect(w.get('[data-test="ai-test-result"]').attributes("data-tone")).toBe("warn");
     expect(w.get('[data-test="ai-embed-swapped"]').text()).toContain("OLLAMA_MAX_LOADED_MODELS");
+  });
+
+  it("says when the saved key belongs to another address", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({ provider: "anthropic", key_set: false, key_for_host: "api.anthropic.com" }));
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    expect(w.get('[data-test="ai-key-elsewhere"]').text()).toBe("Saved for api.anthropic.com");
+    expect(w.get('[data-test="ai-key-elsewhere-note"]').text()).toContain("isn't sent to this address");
+    expect(w.find('[data-test="ai-key-set"]').exists()).toBe(false);
   });
 });

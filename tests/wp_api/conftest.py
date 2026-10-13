@@ -4,6 +4,7 @@ from aiohttp import web
 
 from engine.db.connection import get_connection
 from engine.db.migrations import migrate
+from tests.wp_api._ai_fakes import _isolated_ai, fake_llm  # noqa: F401 - AI fixtures
 from wp_api import register_routes
 
 

@@ -832,6 +832,9 @@ export interface AiConfig {
   embed_base_url: string;
   key_set: boolean;
   key_from_env: boolean;
+  /** A key is saved (or set in the environment) for another address, so it
+   *  isn't sent to this one: the host it belongs to. */
+  key_for_host: string | null;
   /** Providers that already have a key (saved or from the environment).
    *  Each provider keeps its own address, model and key. */
   keys_saved: AiProviderId[];

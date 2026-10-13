@@ -55,7 +55,8 @@ async def test_ollama_batch_embed(embed_server):
 
 
 async def test_openai_embed_keeps_order_and_sends_key(embed_server):
-    vecs = await _ai_embed.embed(_cfg(embed_server, "openai", api_key="sk-x"), ["a", "b", "c"])
+    cfg = _cfg(embed_server, "openai", embed_api_key="sk-x")
+    vecs = await _ai_embed.embed(cfg, ["a", "b", "c"])
     assert [v[0] for v in vecs] == [0.0, 1.0, 2.0]
     assert embed_server.seen[-1]["auth"] == "Bearer sk-x"
 

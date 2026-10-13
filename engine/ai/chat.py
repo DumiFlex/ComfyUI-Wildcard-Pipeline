@@ -33,6 +33,7 @@ from engine.ai import index as ai_index
 from engine.ai import library_vars
 from engine.ai import patterns as ai_patterns
 from engine.ai import refs as ai_refs
+from engine.ai import safety as ai_safety
 from engine.ai import search_index as ai_search
 from engine.ai import tools as ai_tools
 from engine.ai import use as ai_use
@@ -211,6 +212,8 @@ Per-use settings ("use" on bundle items and run_test items): """ + ai_use.GUIDE 
 
 Read an item before changing it. Don't add commentary about content; the \
 output is data for the user's own library.
+
+""" + ai_safety.UNTRUSTED_RULE + """
 
 Questions about Wildcard Pipeline (how something works, what a warning \
 means, where a setting is, what a page says): search and read the docs \
