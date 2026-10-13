@@ -32,6 +32,7 @@ from engine.ai import guide as ai_guide
 from engine.ai import library_vars
 from engine.ai import patterns as ai_patterns
 from engine.ai import refs as ai_refs
+from engine.ai import search_index as ai_search
 from engine.ai import use as ai_use
 from engine.ai import wildcard as ai_wildcard
 from engine.ai import wildcard_edit as ai_wildcard_edit
@@ -133,7 +134,10 @@ MAX_TURNS = 20
 MAX_TURN_CHARS = 6000
 MAX_OVERVIEW_ITEMS = 150
 MAX_SEARCH = 25
+_FIELD_NAMES = {"name": "name", "var": "variable", "tags": "tags", "desc": "description",
+                "content": "options/content"}
 MAX_READ_OPTIONS = 150
+_REF = re.compile(r"\[\[([^\[\]\n]{1,80})\]\]")
 _IDENT = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]{0,63}$")
 
 STEP_SCHEMA: dict[str, Any] = {
@@ -189,13 +193,18 @@ you'll call next, "message": what you say to the user now, "calls": tools \
 to run}. Each call is {"tool": name, "args": a JSON object written as a \
 string}. Read tools run at once and you get their results in the next \
 message; then continue. When you are done, answer with "calls": [] and a \
-message for the user. Keep messages short and plain; refer to items by name. \
+message for the user. Keep messages short and plain. Write every library \
+item you mention as [[its exact name]]: the user sees a chip that opens it. \
+Markdown works: **bold**, lists with "- ", `code` for $variables. \
 Wherever a tool takes an id you can also give the item's exact name.
 
 Read tools:
-- search {"query": text, "type": optional module type, "bundle" or \
-"template", "tag": optional tag}: items whose name, description or tags \
-match. Empty query lists everything of that type.
+- search {"query": words, "type": optional module type, "bundle" or \
+"template", "tag": optional tag}: items ranked by how well their name, \
+variable, tags, description AND content (option texts, values, rules) \
+match, with matching options as examples. Broad subjects widen on their \
+own ("character" also finds hair, eyes, outfits). Search the subject, not \
+the user's whole sentence. Empty query lists everything of that type.
 - read {"id": item id}: one item in full (numbered options with tags, \
 negatives and groups, numbered rules, a bundle's children with their use \
 settings, …).
@@ -513,39 +522,71 @@ class Library(MoreTools):
 
     # ── read tools ───────────────────────────────────────────────────────
 
+    def message_refs(self, message: str) -> dict[str, dict[str, str]]:
+        """The [[Name]] / [[id]] mentions in an answer that name a real item
+        (not one only proposed), so the manager can show them as chips."""
+        refs: dict[str, dict[str, str]] = {}
+        for raw in _REF.findall(message or "")[:60]:
+            row = self._find(raw)
+            if row is None or row.get("_proposed") or raw in refs:
+                continue
+            refs[raw] = {"id": row["id"], "type": self._kind(row),
+                         "name": str(row.get("name") or raw)}
+        return refs
+
     def search(self, args: dict[str, Any]) -> str:
         query = _short(args.get("query"), 100).lower()
         type_ = _short(args.get("type"), 30).lower()
         tag = _short(args.get("tag"), 40).lower().lstrip("#")
-        hits: list[str] = []
-        total = 0
-        for r in [*self.modules.values(), *self.bundles.values(), *self.templates.values()]:
+        own, widened = ai_search.expand(query)
+        phrase = query.strip()
+        ranked: list[tuple[float, int, dict[str, Any], list[str], list[str]]] = []
+        rows = [*self.modules.values(), *self.bundles.values(), *self.templates.values()]
+        for n, r in enumerate(rows):
             kind = self._kind(r)
             if type_ and type_ not in (kind, kind.replace("_", " ")):
                 continue
             tags = [t for t in r.get("tags") or [] if isinstance(t, str)]
             if tag and tag not in (t.lower() for t in tags):
                 continue
-            hay = " ".join([str(r.get("name") or ""), str(r.get("description") or ""), *tags])
-            if r.get("type") == "wildcard" and isinstance(r.get("payload"), dict):
-                hay += " " + str(r["payload"].get("var_binding") or "")
-            if query and query not in hay.lower():
-                continue
-            total += 1
-            if len(hits) < MAX_SEARCH:
-                cat = self.categories.get(r.get("category_id") or "", "")
-                extra = []
-                if cat:
-                    extra.append(f"category {cat}")
-                if tags:
-                    extra.append("tags " + ", ".join(tags))
-                if r.get("description"):
-                    extra.append(_short(r["description"], 80))
-                hits.append(f"- {self._line(r)}" + (f" ({'; '.join(extra)})" if extra else ""))
-        if not hits:
+            where: list[str] = []
+            snips: list[str] = []
+            points = 0.0
+            if own:
+                entry = ai_search.Entry(r)
+                points, where = ai_search.score(entry, own, widened, phrase)
+                if points <= 0:
+                    continue
+                if "content" in where:
+                    snips = ai_search.snippets(entry, own, widened, phrase)
+            ranked.append((points, -n, r, where, snips))
+        if not ranked:
             return "no matches"
-        more = f"\n- … {total - len(hits)} more" if total > len(hits) else ""
-        return f"{total} match{'es' if total != 1 else ''}:\n" + "\n".join(hits) + more
+        ranked.sort(key=lambda x: (x[0], x[1]), reverse=True)
+        hits: list[str] = []
+        for _points, _n, r, where, snips in ranked[:MAX_SEARCH]:
+            cat = self.categories.get(r.get("category_id") or "", "")
+            tags = [t for t in r.get("tags") or [] if isinstance(t, str)]
+            extra = []
+            if cat:
+                extra.append(f"category {cat}")
+            if tags:
+                extra.append("tags " + ", ".join(tags))
+            if r.get("description"):
+                extra.append(_short(r["description"], 80))
+            if where:
+                extra.append("matched in " + ", ".join(_FIELD_NAMES[w] for w in where))
+            line = f"- {self._line(r)}" + (f" ({'; '.join(extra)})" if extra else "")
+            if snips:
+                line += "\n    e.g. " + " | ".join(_short(t, 90) for t in snips)
+            hits.append(line)
+        total = len(ranked)
+        more = f"\n- … {total - len(hits)} more (narrow the query or give a type)" \
+            if total > len(hits) else ""
+        head = f"{total} match{'es' if total != 1 else ''}"
+        if widened:
+            head += " (best first; broad words widened to related ones)"
+        return head + ":\n" + "\n".join(hits) + more
 
     def read(self, args: dict[str, Any]) -> str:
         r = self.get(args.get("id"))

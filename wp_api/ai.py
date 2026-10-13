@@ -871,6 +871,7 @@ async def post_chat(request: web.Request) -> web.Response:
         message = "Here's what I'd change." if proposals else "Done."
     return json_ok({
         "message": message, "proposals": proposals, "steps": steps, "model": cfg["model"],
+        "refs": lib.message_refs(message),
     })
 
 

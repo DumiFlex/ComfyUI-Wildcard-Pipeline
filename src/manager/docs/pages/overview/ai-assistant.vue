@@ -41,9 +41,9 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           { term: 'Server address', desc: 'Filled in for each provider; change it if your server runs on another port or machine.' },
           { term: 'API key', desc: 'Only needed for Claude, OpenAI or a server that asks for one. It is stored on ComfyUI\'s side and never shown again; Remove deletes it. WP_AI_API_KEY, ANTHROPIC_API_KEY or OPENAI_API_KEY in the environment work too.' },
           { term: 'Model', desc: 'Picked from the list your server reports (refresh after downloading a new one), or typed in.' },
-          { term: 'Unload after', desc: 'For local servers: how many idle seconds before the model leaves the GPU, so ComfyUI gets its memory back. 0 unloads right away.' },
+          { term: 'Unload after', desc: 'For local servers: how long an idle model stays loaded before it leaves the GPU, so ComfyUI gets its memory back. Pick a preset (right after each answer, 30 seconds up to 1 hour) or Custom to type the seconds.' },
           { term: 'Model size', desc: 'How much the assistant asks of the model. Small models (under 20B) get shorter instructions, smaller tool results and steadier settings; large ones and hosted models get everything. Automatic reads the size from the model\'s name; set it when the name doesn\'t say.' },
-          { term: 'Most context to use', desc: 'For Ollama: the assistant asks for as much context as each request needs, up to this many tokens (16384 by default). Ollama\'s own default is far smaller and silently cuts the instructions off. Lower it if the model no longer fits on your GPU.' },
+          { term: 'Most context to use', desc: 'For Ollama: the assistant asks for as much context as each request needs, up to this many tokens (16384 by default). Ollama\'s own default is far smaller and silently cuts the instructions off. Lower it if the model no longer fits on your GPU. Presets go from 4k to 128k (1k is 1024 tokens); Custom takes any number.' },
           { term: 'Test connection', desc: 'Lists the models, then asks the chosen one for a tiny JSON answer, and tells you whether it worked and how long it took. For LM Studio and llama.cpp it also reads how much context the model was loaded with and warns when it is under 16k, since the chat\'s instructions, a few turns and the answer need that much. These servers fix the context when they load the model, so set it there (in LM Studio: the Context Length in the model\'s load settings) and load the model again.' },
         ]"
       />
@@ -172,7 +172,11 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         The <b>AI</b> button in the top bar (shown once the assistant is on) opens a chat on the
         right. Ask about your library ("which wildcards set $outfit?", "what's missing for a
         fantasy pack?"), ask how something works, or ask for a change. The assistant searches and
-        reads your items and these docs itself; the lines above each reply say what it looked at.
+        reads your items and these docs itself; the lines above each reply say what it looked at. Its
+        search reads what items hold, not only their names and tags: option texts, values and
+        rules count, and broad subjects widen on their own, so "characters" also finds hair, eye
+        and outfit wildcards. Replies use simple formatting (bold, lists, code), and every item it
+        mentions is a chip you click to open it.
       </p>
       <p>
         It sees the page you're on. In an editor it reads the item as it is in the editor, unsaved

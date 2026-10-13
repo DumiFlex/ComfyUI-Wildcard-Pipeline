@@ -128,6 +128,45 @@ async function setSize(v: string | number | null): Promise<void> {
 }
 const contextDraft = ref<number>(16384);
 watch(() => config.value?.context_max, (v) => { if (typeof v === "number") contextDraft.value = v; }, { immediate: true });
+/* Presets for both numbers; "Custom" (or a saved value that isn't one)
+   shows the number box next to the dropdown. */
+const CUSTOM = "custom";
+const CONTEXT_PRESETS = [4096, 8192, 16384, 24576, 32768, 65536, 131072];
+const contextCustom = ref(false);
+const contextOptions = computed<SelectOption[]>(() => [
+  ...CONTEXT_PRESETS.map((n) => ({
+    value: n,
+    label: `${n / 1024}k · ${n.toLocaleString("en-US")} tokens${n === 16384 ? " (recommended)" : ""}`,
+  })),
+  { value: CUSTOM, label: "Custom…" },
+]);
+const contextChoice = computed(() =>
+  !contextCustom.value && CONTEXT_PRESETS.includes(contextDraft.value) ? contextDraft.value : CUSTOM);
+async function pickContext(v: string | number | null): Promise<void> {
+  if (v === CUSTOM) { contextCustom.value = true; return; }
+  if (typeof v !== "number") return;
+  contextCustom.value = false;
+  contextDraft.value = v;
+  await commitContext();
+}
+const UNLOAD_PRESETS: Array<[number, string]> = [
+  [0, "Right after each answer"], [30, "30 seconds"], [60, "1 minute"], [300, "5 minutes"],
+  [600, "10 minutes"], [1800, "30 minutes"], [3600, "1 hour"],
+];
+const unloadCustom = ref(false);
+const unloadOptions: SelectOption[] = [
+  ...UNLOAD_PRESETS.map(([value, label]) => ({ value, label })),
+  { value: CUSTOM, label: "Custom…" },
+];
+const unloadChoice = computed(() =>
+  !unloadCustom.value && UNLOAD_PRESETS.some(([n]) => n === unloadDraft.value) ? unloadDraft.value : CUSTOM);
+async function pickUnload(v: string | number | null): Promise<void> {
+  if (v === CUSTOM) { unloadCustom.value = true; return; }
+  if (typeof v !== "number") return;
+  unloadCustom.value = false;
+  unloadDraft.value = v;
+  await commitUnload();
+}
 async function commitContext(): Promise<void> {
   const n = Math.min(131072, Math.max(4096, Math.round(Number(contextDraft.value))));
   if (!Number.isFinite(n)) { contextDraft.value = config.value?.context_max ?? 16384; return; }
@@ -316,11 +355,20 @@ const off = computed(() => !config.value?.enabled);
       <SettingRow
         v-if="isLocal"
         label="Most context to use"
-        hint="Tokens of context a request may ask for. Ollama is told how much each request needs, up to this. Lower it if the model runs out of GPU memory; 16384 or more keeps the chat's instructions whole. LM Studio and llama.cpp set this when the model loads, so set it there too."
+        hint="Tokens of context a request may ask for. Ollama is told how much each request needs, up to this. Lower it if the model runs out of GPU memory; 16k (16384 tokens) or more keeps the chat's instructions whole. Pick Custom to type any number. LM Studio and llama.cpp set this when the model loads, so set it there too."
         setting-key="ai-context"
         for="ai-context"
       >
+        <Select
+          :model-value="contextChoice"
+          :options="contextOptions"
+          :filterable="false"
+          aria-label="Most context to use"
+          data-test="ai-context-preset"
+          @update:model-value="pickContext"
+        />
         <Input
+          v-if="contextChoice === CUSTOM"
           id="ai-context"
           v-model.number="contextDraft"
           type="number"
@@ -342,7 +390,16 @@ const off = computed(() => !config.value?.enabled);
         setting-key="ai-unload"
         for="ai-unload"
       >
+        <Select
+          :model-value="unloadChoice"
+          :options="unloadOptions"
+          :filterable="false"
+          aria-label="Unload the model after"
+          data-test="ai-unload-preset"
+          @update:model-value="pickUnload"
+        />
         <Input
+          v-if="unloadChoice === CUSTOM"
           id="ai-unload"
           v-model.number="unloadDraft"
           type="number"

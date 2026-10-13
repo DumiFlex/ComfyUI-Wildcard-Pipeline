@@ -299,4 +299,24 @@ describe("AiChatDrawer", () => {
     expect(vi.mocked(api.ai.packPlan).mock.calls[0][0]).toMatchObject({ instruction: "Medieval character" });
     w.unmount();
   });
+
+  it("renders Markdown and opens mentioned items from their chips", async () => {
+    vi.mocked(api.ai.chat).mockResolvedValueOnce({
+      message: "**Characters:**\n- [[Hair Color]] sets `$hair`\n- [[Gone]]", model: "m", steps: [], proposals: [],
+      refs: { "Hair Color": { id: "w1", type: "wildcard", name: "Hair Color" } },
+    });
+    const { w, router } = await mountIt();
+    await w.get('[data-test="ai-chat-input"]').setValue("characters?");
+    await w.get('[data-test="ai-chat-send"]').trigger("click");
+    await flushPromises();
+    const msg = w.get('[data-test="ai-msg"]');
+    expect(msg.find("ul").exists()).toBe(true);
+    expect(msg.find("code").text()).toBe("$hair");
+    const chips = msg.findAll(".wp-ai-msg__chip");
+    expect(chips.map((c) => c.text())).toEqual(["Hair Color", "Gone"]);
+    await chips[0].trigger("click");
+    await flushPromises();
+    expect(router.currentRoute.value.fullPath).toBe("/wildcards/w1/edit");
+    w.unmount();
+  });
 });

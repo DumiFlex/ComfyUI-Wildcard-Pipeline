@@ -247,3 +247,29 @@ def test_plan_pack_hands_the_description_to_the_pack_builder():
     with pytest.raises(ValueError, match="describe the pack"):
         lib.run("plan_pack", {"description": "x"})
     assert "plan_pack" in chat.system_prompt(slim=True)
+
+
+def _wc(id_, name, var, opts, tags=()):
+    return {"id": id_, "type": "wildcard", "name": name, "description": "", "tags": list(tags),
+            "payload": {"var_binding": var, "options": [
+                {"id": f"o{i}", "value": v, "weight": 1} for i, v in enumerate(opts)]}}
+
+
+def test_search_reads_content_and_widens_broad_subjects():
+    lib = chat.Library([
+        _wc("aaaa0001", "Waifus", "subject", [
+            "roxy migurdia, long hair, blue hair, braid, blue eyes",
+            "genshin lumine, blonde hair, yellow eyes, hair flower"]),
+        _wc("aaaa0002", "Eye color", "eyes", ["blue eyes", "green eyes"]),
+        _wc("aaaa0003", "Weather", "weather", ["rain", "snow"]),
+    ], [], [])
+    out = lib.search({"query": "characters"})
+    assert "Weather" not in out
+    assert "Waifus" in out and "Eye color" in out and "roxy migurdia" in out
+    assert "matched in" in out
+    # The query's own words beat widened ones; a name hit beats content.
+    first = lib.search({"query": "lumine"}).splitlines()[1]
+    assert "Waifus" in first
+    assert lib.search({"query": "eye color"}).splitlines()[1].startswith("- aaaa0002")
+    assert lib.search({"query": "zzz"}) == "no matches"
+    assert "3 matches" in lib.search({"query": "", "type": "wildcard"})

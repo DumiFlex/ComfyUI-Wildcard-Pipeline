@@ -148,6 +148,17 @@ describe("Settings › AI assistant", () => {
     size!.vm.$emit("update:modelValue", "small");
     await flushPromises();
     expect(api.ai.saveConfig).toHaveBeenCalledWith({ model_size: "small" });
+    const pick = (name: string) => w.findAllComponents(Select).find((c) => c.attributes("data-test") === name)!;
+    // Presets: 16k is a preset, so no number box until Custom.
+    expect(w.find('[data-test="ai-context"]').exists()).toBe(false);
+    pick("ai-context-preset").vm.$emit("update:modelValue", 32768);
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ context_max: 32768 });
+    pick("ai-unload-preset").vm.$emit("update:modelValue", 300);
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ unload_after_s: 300 });
+    pick("ai-context-preset").vm.$emit("update:modelValue", "custom");
+    await flushPromises();
     const ctx = w.get('[data-test="ai-context"] input, input[data-test="ai-context"]');
     await ctx.setValue(1000);
     await ctx.trigger("blur");

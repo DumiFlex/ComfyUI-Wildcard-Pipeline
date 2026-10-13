@@ -1137,7 +1137,12 @@ export interface AiChatResult {
   /** What the model looked at or tried, for the "worked on" lines. */
   steps: Array<{ tool: string; note: string; ok: boolean }>;
   model: string;
+  /** [[Name]] mentions in `message` that name a real item. */
+  refs?: Record<string, AiChatRef>;
 }
+
+/** A library item an assistant message mentions. */
+export interface AiChatRef { id: string; type: string; name: string }
 
 /* ── Pack builder ───────────────────────────────────────────────────── */
 

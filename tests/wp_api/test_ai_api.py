@@ -628,7 +628,8 @@ async def test_chat_validation_and_off(wp_client, fake_llm):
     long = {"messages": [{"role": "user", "content": "x"}] * 41}
     assert (await wp_client.post("/wp/api/ai/chat", json=long)).status == 400
     resp = await wp_client.post("/wp/api/ai/chat", json=body)
-    assert (await resp.json()) == {"message": "Done.", "proposals": [], "steps": [], "model": "m1"}
+    assert (await resp.json()) == {"message": "Done.", "proposals": [], "steps": [], "model": "m1",
+                                  "refs": {}}
 
 
 async def test_chat_stops_after_max_steps(wp_client, fake_llm):

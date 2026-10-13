@@ -13,6 +13,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import Button from "../ui/Button.vue";
+import AiMessage from "./AiMessage.vue";
 import { useAiChat, type ChatAssistantEntry } from "../../composables/useAiChat";
 import { useAiConfig } from "../../composables/useAiConfig";
 import type { AiChatPage, AiChatProposal } from "../../api/types";
@@ -248,7 +249,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
               {{ s.note }}
             </li>
           </ul>
-          <p class="wp-ai-chat__text">{{ entry.result.message }}</p>
+          <AiMessage :text="entry.result.message" :refs="entry.result.refs" />
 
           <article
             v-for="p in entry.result.proposals"
@@ -396,7 +397,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__steps li { font-size: 11px; color: var(--wp-text-dim); display: flex; gap: 6px; align-items: baseline; overflow-wrap: anywhere; }
 .wp-ai-chat__steps li[data-ok="false"] { color: var(--wp-warn); }
 .wp-ai-chat__steps .pi { font-size: 10px; }
-.wp-ai-chat__text { margin: 0; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .wp-ai-chat__card {
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 35%, var(--wp-border));
   border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px;
