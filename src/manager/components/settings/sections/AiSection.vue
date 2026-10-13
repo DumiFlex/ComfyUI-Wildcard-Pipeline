@@ -6,7 +6,7 @@
  * (`/wp/api/ai/config`), and the API key is write-only: the page can set or
  * remove it, never read it back.
  */
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Toggle from "../../ui/Toggle.vue";
 import Select from "../../ui/Select.vue";
 import Input from "../../ui/Input.vue";
@@ -15,7 +15,7 @@ import type { SelectOption } from "../../ui/select-types";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
 import { api } from "../../../api/client";
-import type { AiModelSize, AiProviderId, AiTestResult, AiToolFormat } from "../../../api/types";
+import type { AiIndexStatus, AiModelSize, AiProviderId, AiTestResult, AiToolFormat } from "../../../api/types";
 import { useAiConfig } from "../../../composables/useAiConfig";
 import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../ai-models";
 
@@ -186,6 +186,88 @@ async function setToolFormat(v: string | number | null): Promise<void> {
   await patch({ tool_format: v as AiToolFormat });
 }
 
+/* ── Meaning search ──────────────────────────────────────────────────── */
+/* Claude has no embeddings API, so meaning search needs another provider. */
+const embedPossible = computed(() => config.value?.provider !== "anthropic");
+/** Names that look like embedding models, so the dropdown offers them first. */
+const EMBED_NAME = /embed|bge|minilm|e5-|gte-|nomic|arctic/i;
+const OFF = "";
+const embedOptions = computed<SelectOption[]>(() => {
+  const names = models.value.filter((m) => EMBED_NAME.test(m));
+  const cur = config.value?.embed_model;
+  if (cur && !names.includes(cur)) names.unshift(cur);
+  return [{ value: OFF, label: "Off" }, ...names.map((m) => ({ value: m, label: m })), { value: CUSTOM, label: "Type a name…" }];
+});
+const embedTyping = ref(false);
+const embedDraft = ref("");
+watch(() => config.value?.embed_model, (v) => { embedDraft.value = v ?? ""; }, { immediate: true });
+const embedChoice = computed(() => (embedTyping.value ? CUSTOM : config.value?.embed_model ?? OFF));
+async function commitEmbedModel(name: string): Promise<void> {
+  const v = name.trim();
+  if (!config.value || v === config.value.embed_model) { embedTyping.value = false; return; }
+  if (await patch({ embed_model: v })) {
+    embedTyping.value = false;
+    test.value = null;
+    void loadIndex();
+  }
+}
+async function pickEmbed(v: string | number | null): Promise<void> {
+  if (v === CUSTOM) { embedTyping.value = true; return; }
+  await commitEmbedModel(typeof v === "string" ? v : "");
+}
+const embedAddressDraft = ref("");
+watch(() => config.value?.embed_base_url, (v) => { embedAddressDraft.value = v ?? ""; }, { immediate: true });
+async function commitEmbedAddress(): Promise<void> {
+  if (!config.value || embedAddressDraft.value.trim() === config.value.embed_base_url) return;
+  if (!(await patch({ embed_base_url: embedAddressDraft.value.trim() }))) {
+    embedAddressDraft.value = config.value.embed_base_url;
+  }
+}
+
+/* ── Library index ───────────────────────────────────────────────────── */
+const index = ref<AiIndexStatus | null>(null);
+const indexError = ref("");
+const rebuilding = ref(false);
+let indexTimer: number | undefined;
+async function loadIndex(): Promise<void> {
+  window.clearTimeout(indexTimer);
+  if (!config.value?.enabled) { index.value = null; return; }
+  try {
+    index.value = await api.ai.index();
+    indexError.value = "";
+  } catch (err) {
+    indexError.value = err instanceof Error ? err.message : "Couldn't read the index";
+  }
+  /* While vectors are being made, show them coming in. */
+  if (index.value?.filling) indexTimer = window.setTimeout(() => { void loadIndex(); }, 3000);
+}
+async function rebuildIndex(): Promise<void> {
+  rebuilding.value = true;
+  try {
+    index.value = await api.ai.rebuildIndex();
+    indexError.value = "";
+    if (index.value.filling) indexTimer = window.setTimeout(() => { void loadIndex(); }, 3000);
+  } catch (err) {
+    indexError.value = err instanceof Error ? err.message : "Couldn't rebuild the index";
+  } finally {
+    rebuilding.value = false;
+  }
+}
+onBeforeUnmount(() => window.clearTimeout(indexTimer));
+watch(() => config.value?.enabled, () => { void loadIndex(); }, { immediate: true });
+const indexSummary = computed(() => {
+  const i = index.value;
+  if (!i) return "";
+  if (!i.available) return "This Python has no SQLite full-text search, so the chat searches without an index.";
+  const parts = [`${i.items.toLocaleString("en-US")} item${i.items === 1 ? "" : "s"} indexed`];
+  if (i.embed_model) {
+    parts.push(i.vectors >= i.items
+      ? "all searchable by meaning"
+      : `${i.vectors.toLocaleString("en-US")} searchable by meaning${i.filling ? " (adding the rest…)" : ""}`);
+  }
+  return parts.join(" · ");
+});
+
 /* ── Provider / on-off ───────────────────────────────────────────────── */
 async function setProvider(id: string | number | null): Promise<void> {
   if (typeof id !== "string" || id === config.value?.provider) return;
@@ -227,9 +309,15 @@ const testSummary = computed(() => {
   if (t.model_found === false) parts.push("model not in the server's list");
   if (t.context_low) parts.push(`only ${Math.round((t.context ?? 0) / 1024)}k context`);
   else if (t.context) parts.push(`${Math.round(t.context / 1024)}k context`);
+  if (t.embed) parts.push(t.embed.ok ? `embeddings ✓ (${t.embed.dims})` : "embeddings ✗");
   return parts.join(" · ");
 });
-const testTone = computed(() => (!test.value ? "" : test.value.ok && test.value.json_ok !== false && !test.value.context_low ? "ok" : "warn"));
+const testTone = computed(() => {
+  const t = test.value;
+  if (!t) return "";
+  const embedOk = !t.embed || (t.embed.ok && !t.embed.swapped);
+  return t.ok && t.json_ok !== false && !t.context_low && embedOk ? "ok" : "warn";
+});
 
 const off = computed(() => !config.value?.enabled);
 </script>
@@ -373,6 +461,15 @@ const off = computed(() => !config.value?.enabled);
             server fixes this when it loads the model, so set the context length there (in LM Studio,
             in the model's load settings) and load it again.
           </p>
+          <p v-if="test?.embed && !test.embed.ok" class="wp-ai-set__ctx" role="status" data-test="ai-embed-error">
+            The embedding model didn't answer: {{ test.embed.error }}
+          </p>
+          <p v-else-if="test?.embed?.swapped" class="wp-ai-set__ctx" role="status" data-test="ai-embed-swapped">
+            Loading the embedding model pushed the chat model out of memory, so every search would
+            reload it and throw away what it had read. Ollama keeps only one model loaded here (its
+            default on Windows with a Radeon GPU). Set <code>OLLAMA_MAX_LOADED_MODELS=2</code> on the
+            Ollama machine and restart it, or turn meaning search off.
+          </p>
         </SettingGroup>
 
         <SettingGroup title="How the model runs">
@@ -454,6 +551,83 @@ const off = computed(() => !config.value?.enabled);
               @blur="commitUnload"
               @keydown.enter="commitUnload"
             />
+          </SettingRow>
+        </SettingGroup>
+
+        <SettingGroup title="Search">
+          <SettingRow
+            form
+            label="Embedding model"
+            :hint="embedPossible
+              ? 'Meaning search: the chat also finds items by what they mean, so “warm colors” finds amber and crimson. Needs a small embedding model, like nomic-embed-text or embeddinggemma on Ollama, or text-embedding-3-small on OpenAI. Off keeps search to words.'
+              : 'Claude has no embeddings API, so the chat searches by words. Pick a local server or OpenAI for meaning search.'"
+            setting-key="ai-embed-model"
+            for="ai-embed-model"
+          >
+            <Select
+              v-if="!embedTyping"
+              :model-value="embedChoice"
+              :options="embedOptions"
+              :filterable="false"
+              :disabled="!embedPossible"
+              aria-label="Embedding model"
+              data-test="ai-embed-model"
+              class="wp-ai-set__fill"
+              @update:model-value="pickEmbed"
+            />
+            <Input
+              v-else
+              id="ai-embed-model"
+              v-model="embedDraft"
+              placeholder="e.g. nomic-embed-text"
+              aria-label="Embedding model name"
+              data-test="ai-embed-model-input"
+              class="wp-ai-set__fill wp-ai-set__mono"
+              @blur="commitEmbedModel(embedDraft)"
+              @keydown.enter="commitEmbedModel(embedDraft)"
+            />
+          </SettingRow>
+
+          <SettingRow
+            v-if="embedPossible && config.embed_model"
+            form
+            label="Embedding server"
+            hint="Leave empty to use the server above. llama.cpp serves embeddings from a second server started with --embeddings, so type that one's address."
+            setting-key="ai-embed-address"
+            for="ai-embed-address"
+          >
+            <Input
+              id="ai-embed-address"
+              v-model="embedAddressDraft"
+              :placeholder="config.base_url || preset?.base_url || ''"
+              class="wp-ai-set__fill wp-ai-set__mono"
+              aria-label="Embedding server address"
+              data-test="ai-embed-address"
+              @blur="commitEmbedAddress"
+              @keydown.enter="commitEmbedAddress"
+            />
+          </SettingRow>
+
+          <SettingRow
+            form
+            label="Library index"
+            hint="The chat searches your library through this index and hands the model the items a message seems to be about. It keeps itself up to date; rebuild it if search seems off."
+            setting-key="ai-index"
+          >
+            <span class="wp-ai-set__index" data-test="ai-index-status">
+              {{ off ? "Turn the assistant on to build it." : indexError || indexSummary || "Reading…" }}
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              icon="pi-refresh"
+              :loading="rebuilding"
+              :disabled="off || !index?.available || index?.filling"
+              data-test="ai-index-rebuild"
+              @click="rebuildIndex"
+            >
+              Rebuild
+            </Button>
           </SettingRow>
         </SettingGroup>
 
@@ -570,6 +744,8 @@ const off = computed(() => !config.value?.enabled);
 }
 .wp-ai-set__result[data-tone="warn"] { color: var(--wp-warn); }
 .wp-ai-set__result i { font-size: 12px; flex: none; }
+.wp-ai-set__ctx code { font-family: var(--wp-font-mono); font-size: 12px; }
+.wp-ai-set__index { flex: 1 1 200px; min-width: 0; font-size: var(--wp-text-sm); color: var(--wp-text-muted); }
 .wp-ai-set__ctx {
   margin: 0;
   padding: var(--wp-space-4) var(--wp-space-6);

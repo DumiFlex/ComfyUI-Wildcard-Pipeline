@@ -1111,3 +1111,84 @@ async def test_stop_closes_the_model_request(wp_app, aiohttp_server, unused_tcp_
             await asyncio.wait_for(closed.wait(), 5)
     finally:
         await runner.cleanup()
+
+
+async def test_chat_hands_the_model_likely_items_and_searches_the_index(wp_client, fake_llm):
+    """Clear matches for the message go under it, once per chat; `search`
+    and `read` answer from the library index, with what uses each item."""
+    from engine.ai import index as ai_index
+
+    if not ai_index.has_fts5():
+        pytest.skip("SQLite without FTS5")
+    src, tgt = await _two_wildcards(wp_client)
+    resp = await wp_client.post("/wp/api/modules", json={
+        "type": "combine", "name": "Loadout", "description": "", "category_id": None,
+        "tags": [], "payload": {"output_var": "loadout", "template": "$class with $weapon"}})
+    assert resp.status == 201, await resp.text()
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "search", "args": '{"query": "staff"}'},
+                                  {"tool": "read", "args": json.dumps({"id": tgt})}]},
+        {"message": "Done.", "calls": []},
+        {"message": "Sure.", "calls": []},
+    ])
+    first = await _chat(wp_client, "add more weapons like the longsword")
+    msgs = fake_llm.seen[-1]["body"]["messages"]
+    sent = msgs[1]["content"]
+    assert sent.startswith("add more weapons like the longsword\n\nPossibly relevant items")
+    assert f"Weapon ({tgt}, wildcard, $weapon, 2 options)" in sent
+    assert "used by Loadout" in sent
+    results = msgs[-1]["content"]
+    assert "Weapon" in results and "e.g. oak staff" in results
+    assert "Used by: Loadout" in results
+    # Already handed over: a follow-up about the same item doesn't repeat it.
+    await _chat(wp_client, "more weapons please", chat_id=first["chat_id"])
+    last = fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+    assert last == "more weapons please"
+
+
+async def test_index_status_rebuild_and_meaning_search(wp_client, fake_llm):
+    """Meaning search embeds the library in the background, reports progress,
+    and Test connection checks the embedding model."""
+    import asyncio
+
+    from engine.ai import index as ai_index
+    from wp_api import _ai_embed
+
+    if not ai_index.has_fts5():
+        pytest.skip("SQLite without FTS5")
+    await _two_wildcards(wp_client)
+    status = await (await wp_client.get("/wp/api/ai/index")).json()
+    assert status == {"available": True, "items": 2, "embed_model": None, "vectors": 0,
+                      "filling": False}
+
+    calls: list[list[str]] = []
+
+    async def fake_embed(cfg, texts):
+        calls.append(texts)
+        return [[1.0, float(len(t) % 7), 0.5] for t in texts]
+
+    _ai_embed._QUERY_CACHE.clear()
+    original = _ai_embed.embed
+    _ai_embed.embed = fake_embed
+    try:
+        ai_config.update({"enabled": True, "provider": "lmstudio",
+                          "base_url": str(fake_llm.make_url("/v1")), "model": "m1",
+                          "embed_model": "nomic"})
+        await wp_client.get("/wp/api/ai/index")
+        for _ in range(50):
+            status = await (await wp_client.get("/wp/api/ai/index")).json()
+            if status["vectors"] == 2 and not status["filling"]:
+                break
+            await asyncio.sleep(0.02)
+        assert status["vectors"] == 2 and status["embed_model"] == "nomic"
+        assert any("Weapon" in t for t in calls[0])
+        rebuilt = await (await wp_client.post("/wp/api/ai/index/rebuild")).json()
+        assert rebuilt["items"] == 2
+        test = await (await wp_client.post("/wp/api/ai/test")).json()
+        assert test["embed"] == {"ok": True, "dims": 3, "error": None, "swapped": False}
+    finally:
+        _ai_embed.embed = original
+    with pytest.raises(ai_config.ConfigError):
+        ai_config.update({"provider": "anthropic", "embed_model": "x"})

@@ -29,6 +29,7 @@ from engine.ai import derivation as ai_derivation
 from engine.ai import describe as ai_describe
 from engine.ai import docs as ai_docs
 from engine.ai import guide as ai_guide
+from engine.ai import index as ai_index
 from engine.ai import library_vars
 from engine.ai import patterns as ai_patterns
 from engine.ai import refs as ai_refs
@@ -317,6 +318,13 @@ class Library(MoreTools):
         #: saved row (`use_editor`); changes to it go into that editor.
         self.editor_id: str | None = None
         self.editor_dirty = False
+        #: The library index (`engine.ai.index`), synced by the route; None
+        #: means search scores every row in Python.
+        self.index: ai_index.Index | None = None
+        #: Meaning search: the embedding model, and the vector of the query
+        #: the next `search` runs (the route embeds it; tools are sync).
+        self.embed_model = ""
+        self.qvec: list[float] | None = None
 
     def use_editor(self, editor: Any) -> None:
         """Read the open editor's version of its item instead of the saved
@@ -465,15 +473,13 @@ class Library(MoreTools):
         type_ = _short(args.get("type"), 30).lower()
         tag = _short(args.get("tag"), 40).lower().lstrip("#")
         own, widened = ai_search.expand(query)
+        if self.index is not None and own:
+            return self._search_index(query, type_, tag)
         phrase = query.strip()
         ranked: list[tuple[float, int, dict[str, Any], list[str], list[str]]] = []
         rows = [*self.modules.values(), *self.bundles.values(), *self.templates.values()]
         for n, r in enumerate(rows):
-            kind = self._kind(r)
-            if type_ and type_ not in (kind, kind.replace("_", " ")):
-                continue
-            tags = [t for t in r.get("tags") or [] if isinstance(t, str)]
-            if tag and tag not in (t.lower() for t in tags):
+            if not self._fits(r, type_, tag):
                 continue
             where: list[str] = []
             snips: list[str] = []
@@ -489,23 +495,8 @@ class Library(MoreTools):
         if not ranked:
             return "no matches"
         ranked.sort(key=lambda x: (x[0], x[1]), reverse=True)
-        hits: list[str] = []
-        for _points, _n, r, where, snips in ranked[:MAX_SEARCH]:
-            cat = self.categories.get(r.get("category_id") or "", "")
-            tags = [t for t in r.get("tags") or [] if isinstance(t, str)]
-            extra = []
-            if cat:
-                extra.append(f"category {cat}")
-            if tags:
-                extra.append("tags " + ", ".join(tags))
-            if r.get("description"):
-                extra.append(_short(r["description"], 80))
-            if where:
-                extra.append("matched in " + ", ".join(_FIELD_NAMES[w] for w in where))
-            line = f"- {self._line(r)}" + (f" ({'; '.join(extra)})" if extra else "")
-            if snips:
-                line += "\n    e.g. " + " | ".join(_short(t, 90) for t in snips)
-            hits.append(line)
+        hits = [self._hit_line(r, [_FIELD_NAMES[w] for w in where], snips)
+                for _points, _n, r, where, snips in ranked[:MAX_SEARCH]]
         total = len(ranked)
         more = f"\n- … {total - len(hits)} more (narrow the query or give a type)" \
             if total > len(hits) else ""
@@ -513,6 +504,77 @@ class Library(MoreTools):
         if widened:
             head += " (best first; broad words widened to related ones)"
         return head + ":\n" + "\n".join(hits) + more
+
+    def _fits(self, r: dict[str, Any], type_: str, tag: str) -> bool:
+        kind = self._kind(r)
+        if type_ and type_ not in (kind, kind.replace("_", " ")):
+            return False
+        tags = [t for t in r.get("tags") or [] if isinstance(t, str)]
+        return not tag or tag in (t.lower() for t in tags)
+
+    def _hit_line(self, r: dict[str, Any], where: list[str], snips: list[str],
+                  used: int = 0) -> str:
+        cat = self.categories.get(r.get("category_id") or "", "")
+        tags = [t for t in r.get("tags") or [] if isinstance(t, str)]
+        extra = []
+        if cat:
+            extra.append(f"category {cat}")
+        if tags:
+            extra.append("tags " + ", ".join(tags))
+        if r.get("description"):
+            extra.append(_short(r["description"], 80))
+        if used:
+            extra.append(f"used by {used} item{'s' if used != 1 else ''}")
+        if where:
+            extra.append("matched in " + ", ".join(where))
+        line = f"- {self._line(r)}" + (f" ({'; '.join(extra)})" if extra else "")
+        if snips:
+            line += "\n    e.g. " + " | ".join(_short(t, 90) for t in snips)
+        return line
+
+    def _search_index(self, query: str, type_: str, tag: str) -> str:
+        """`search` over the library index (saved items), plus any item this
+        chat proposed or the open editor changed, scored the old way."""
+        assert self.index is not None
+        fetch = MAX_SEARCH * (4 if tag or type_ else 1) + 1
+        qvec, self.qvec = self.qvec, None
+        hits = [h for h in self.index.search(query, limit=fetch, qvec=qvec,
+                                             model=self.embed_model)
+                if (r := self.get(h.id)) is not None and not r.get("_proposed")
+                and h.id != self.editor_id and self._fits(r, type_, tag)]
+        own, widened = ai_search.expand(query)
+        fresh: list[tuple[float, dict[str, Any], list[str], list[str]]] = []
+        for r in [*self.modules.values(), *self.bundles.values(), *self.templates.values()]:
+            if not (r.get("_proposed") or r.get("id") == self.editor_id):
+                continue
+            if not self._fits(r, type_, tag):
+                continue
+            entry = ai_search.Entry(r)
+            points, where = ai_search.score(entry, own, widened, query.strip())
+            if points > 0:
+                snips = ai_search.snippets(entry, own, widened, query.strip()) \
+                    if "content" in where else []
+                fresh.append((points, r, [_FIELD_NAMES[w] for w in where], snips))
+        fresh.sort(key=lambda x: -x[0])
+        if not hits and not fresh:
+            return "no matches"
+        lines = [self._hit_line(r, where, snips) + " (changed in this chat)"
+                 for _p, r, where, snips in fresh[:5]]
+        for h in hits[:MAX_SEARCH - len(lines)]:
+            row = self.get(h.id)
+            assert row is not None
+            where = ["name/variable/tags/description"] if h.strong else []
+            if h.snippets:
+                where.append("options/content")
+            if not where and h.cosine is not None:
+                where.append(f"meaning ({h.cosine:.2f})")
+            lines.append(self._hit_line(row, where, h.snippets,
+                                        used=len(h.facts.get("used_by") or [])))
+        more = len(hits) + len(fresh) > len(lines)
+        head = f"{len(lines)}{'+' if more else ''} match{'es' if len(lines) != 1 else ''}"
+        head += " (best first" + ("; broad words widened to related ones" if widened else "") + ")"
+        tail = "\n- … more (narrow the query or give a type)" if more else ""
+        return head + ":\n" + "\n".join(lines) + tail
 
     def read(self, args: dict[str, Any]) -> str:
         r = self.get(args.get("id"))
@@ -528,6 +590,11 @@ class Library(MoreTools):
         if kind != "template":
             lines.append(f"Rating: {r.get('content_rating') or 'safe'}")
         lines.extend(self.read_body(kind, r))
+        facts = self.index.facts(r["id"]) if self.index is not None else None
+        if facts and facts.get("used_by"):
+            lines.append("Used by: " + ", ".join(facts["used_by"]))
+        if facts and facts.get("in_bundles"):
+            lines.append("In bundles: " + ", ".join(facts["in_bundles"]))
         return "\n".join(lines)
 
     def variables(self, _args: dict[str, Any]) -> str:

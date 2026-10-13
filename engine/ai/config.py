@@ -148,8 +148,15 @@ def _normalize_slot(raw: Any) -> dict[str, str]:
     model = src.get("model") if isinstance(src.get("model"), str) else ""
     key = src.get("api_key") if isinstance(src.get("api_key"), str) else ""
     size = src.get("model_size") if src.get("model_size") in MODEL_SIZES else "auto"
+    embed_model = src.get("embed_model") if isinstance(src.get("embed_model"), str) else ""
+    embed_url = src.get("embed_base_url") if isinstance(src.get("embed_base_url"), str) else ""
+    try:
+        embed_url = check_base_url(embed_url)
+    except ConfigError:
+        embed_url = ""
     return {"base_url": base_url, "model": model.strip()[:200], "api_key": key.strip(),
-            "model_size": size}
+            "model_size": size, "embed_model": embed_model.strip()[:200],
+            "embed_base_url": embed_url}
 
 
 def _normalize(raw: Any) -> dict[str, Any]:
@@ -192,6 +199,8 @@ def _active(cfg: dict[str, Any]) -> dict[str, Any]:
         "context_max": cfg["context_max"],
         "model_size": slot["model_size"],
         "tool_format": cfg["tool_format"],
+        "embed_model": slot["embed_model"],
+        "embed_base_url": slot["embed_base_url"],
         "api_key": slot["api_key"],
     }
 
@@ -245,6 +254,9 @@ def load_effective() -> dict[str, Any]:
     out["api_key"] = _env_key(cfg["provider"]) or cfg["api_key"]
     out["api"] = preset["api"]
     out["local"] = preset["local"]
+    if preset["api"] == "anthropic":
+        out["embed_model"] = ""
+    out["embed_base_url"] = cfg["embed_base_url"] or out["base_url"]
     return out
 
 
@@ -306,6 +318,17 @@ def update(patch: dict[str, Any]) -> dict[str, Any]:
             if not isinstance(patch["model"], str):
                 raise ConfigError("model must be a string")
             slot["model"] = patch["model"].strip()[:200]
+        if "embed_model" in patch:
+            if not isinstance(patch["embed_model"], str):
+                raise ConfigError("embed_model must be a string")
+            if patch["embed_model"].strip() and PRESETS[cfg["provider"]]["api"] == "anthropic":
+                raise ConfigError("Claude has no embeddings API; meaning search needs a "
+                                  "local server or OpenAI")
+            slot["embed_model"] = patch["embed_model"].strip()[:200]
+        if "embed_base_url" in patch:
+            if not isinstance(patch["embed_base_url"], str):
+                raise ConfigError("embed_base_url must be a string")
+            slot["embed_base_url"] = check_base_url(patch["embed_base_url"])
         if "unload_after_s" in patch:
             cfg["unload_after_s"] = _clamp_int(
                 patch["unload_after_s"], UNLOAD_AFTER_MIN, UNLOAD_AFTER_MAX,

@@ -45,6 +45,9 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           { term: 'Model size', desc: 'How much the assistant asks of the model. Small models (under 20B) get shorter instructions, smaller tool results and steadier settings; large ones and hosted models get everything. Automatic reads the size from the model\'s name; set it when the name doesn\'t say.' },
           { term: 'Most context to use', desc: 'Tokens of context the assistant uses (16384 by default). Ollama gets exactly this much for the whole chat, because changing it reloads the model and throws away what it already read; drafts ask for what they need, up to this. Ollama\'s own default is far smaller and silently cuts the instructions off. Lower it if the model no longer fits on your GPU. Presets go from 4k to 128k (1k is 1024 tokens); Custom takes any number.' },
           { term: 'Tool format', desc: 'Under Advanced: how the chat calls its tools. Native tool calls are what most models are trained for; JSON steps work with any model. Automatic asks the server whether the model supports tool calls (Ollama, LM Studio and llama.cpp say so; Claude and OpenAI always do) and falls back to JSON steps when a server refuses them. A chat keeps the format it started with.' },
+          { term: 'Embedding model', desc: 'Under Search: turns on meaning search, so the chat also finds items by what they mean (“warm colors” finds a wildcard of amber and crimson). Pick a small embedding model your server has, such as nomic-embed-text or embeddinggemma on Ollama, or text-embedding-3-small on OpenAI; the list shows the names that look like embedding models, and Type a name takes any other. Off (the default) keeps search to words, which already covers most questions. Claude has no embeddings API, so it is not offered there. Your library is embedded in the background a few dozen items at a time, so a chat never waits for it.' },
+          { term: 'Embedding server', desc: 'Shown once an embedding model is picked. Leave it empty to use the server above; a llama.cpp server only serves embeddings when started with --embeddings, so run a second one and put its address here.' },
+          { term: 'Library index', desc: 'How many items the chat\'s search index holds and, with meaning search on, how many are searchable by meaning. The index lives next to your library database (wildcard-pipeline.ai-index.db) and keeps itself up to date; Rebuild throws it away and builds it again.' },
           { term: 'Test connection', desc: 'Lists the models, then asks the chosen one for a tiny JSON answer, and tells you whether it worked and how long it took. For LM Studio and llama.cpp it also reads how much context the model was loaded with and warns when it is under 16k, since the chat\'s instructions, a few turns and the answer need that much. These servers fix the context when they load the model, so set it there (in LM Studio: the Context Length in the model\'s load settings) and load the model again.' },
         ]"
       />
@@ -181,6 +184,15 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         editors colour it: each $variable in its own colour, {a|b} picks, @{…} references, LoRA
         and embedding tags, and #tags. A line starting with "Tip:" or "Warning:" stands out as a
         note.
+      </p>
+      <p>
+        Before the model answers, the chat searches your library for what your message seems to be
+        about and hands it a short note of the best matches (name, variable, options, what uses
+        it), so "make the outfit wildcard warmer" starts from the right item without a search
+        step. Only clear matches go in, since a model given loosely related items answers worse,
+        and a short reply like "yes, do it" adds nothing. A how-to question also gets pointers to
+        the docs sections that answer it. The search runs on an index of your library (SQLite
+        full-text search), so it stays quick with thousands of items.
       </p>
       <p>
         It sees the page you're on. In an editor it reads the item as it is in the editor, unsaved
@@ -406,7 +418,9 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         Runner's stack and last results). The fixed values, combine and template panels send the
         item and the variables your library sets. The pack builder sends your description, a sample prompt if you gave one,
         a summary of your library's conventions (option style, tags, variables, negatives and the
-        wildcards worth reusing) and, for each item, what the pack has built so far. Each chat
+        wildcards worth reusing) and, for each item, what the pack has built so far. With meaning search on, the text of each item (name, variable, tags, description and its
+        first options) and your search phrases go to the embedding server; with a local server
+        that stays on your PC. Each chat
         message sends the chat so far again (the provider may cache it for a few minutes to
         charge less); the chat itself is stored only in ComfyUI's own database on your PC.
       </p>

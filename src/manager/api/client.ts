@@ -5,7 +5,7 @@ import type {
   CategoryCreateInput, CategoryRow,
   DatabaseConfig, DatabaseConfigUpdate,
   BackupEntry, BackupList, ServerSettings, ServerSettingsPatch,
-  AiConfig, AiConfigPatch, AiTestResult, AiWildcardDraftRequest, AiWildcardDraftResult,
+  AiConfig, AiConfigPatch, AiTestResult, AiIndexStatus, AiWildcardDraftRequest, AiWildcardDraftResult,
   AiWildcardEditRequest,
   AiWildcardEditResult,
   AiDerivationDraftRequest,
@@ -419,6 +419,12 @@ export const api = {
     },
     test() {
       return request<AiTestResult>("/wp/api/ai/test", { method: "POST" });
+    },
+    index() {
+      return request<AiIndexStatus>("/wp/api/ai/index", { method: "GET" });
+    },
+    rebuildIndex() {
+      return request<AiIndexStatus>("/wp/api/ai/index/rebuild", { method: "POST" });
     },
     draftWildcard(body: AiWildcardDraftRequest, signal?: AbortSignal) {
       return request<AiWildcardDraftResult>("/wp/api/ai/wildcard/draft", {

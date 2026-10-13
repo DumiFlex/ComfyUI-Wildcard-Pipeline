@@ -77,17 +77,18 @@ def _snippet(text: str, terms: list[str]) -> str:
     return ("…" if start else "") + s + ("…" if start + SNIPPET < len(text) else "")
 
 
-def search(query: str) -> str:
+def _scored(query: str) -> list[tuple[float, float, dict[str, Any], dict[str, Any]]]:
+    """(score, share of the query's terms matched, page, section), best first."""
     terms = list(dict.fromkeys(_terms(query)))
     if not terms:
-        return "Pages:\n" + contents()
+        return []
     secs = _sections()
     n = max(1, len(secs))
     idf = {}
     for t in terms:
         df = sum(1 for _p, _s, title, head, body in secs if t in title or t in head or t in body)
         idf[t] = math.log((n + 1) / (df + 1)) + 0.1
-    scored: list[tuple[float, dict[str, Any], dict[str, Any]]] = []
+    scored: list[tuple[float, float, dict[str, Any], dict[str, Any]]] = []
     for p, sec, title, head, body in secs:
         score = 0.0
         hit = 0
@@ -97,13 +98,61 @@ def search(query: str) -> str:
                 hit += 1
                 score += tf * idf[t]
         if score > 0:
-            scored.append((score * (hit / len(terms)) ** 2, p, sec))
+            share = hit / len(terms)
+            scored.append((score * share ** 2, share, p, sec))
     scored.sort(key=lambda x: -x[0])
+    return scored
+
+
+def _raw_terms(query: str) -> list[str]:
+    return [t for t in _WORD.findall(query.lower()) if t not in _STOP and len(t) > 1]
+
+
+def search(query: str) -> str:
+    if not _terms(query):
+        return "Pages:\n" + contents()
+    scored = _scored(query)
     if not scored:
         return "no matches; the pages are:\n" + contents()
-    raw_terms = [t for t in _WORD.findall(query.lower()) if t not in _STOP and len(t) > 1]
+    raw_terms = _raw_terms(query)
     return "\n".join(f"- {p['id']} › {sec['title']}: {_snippet(sec['text'], raw_terms)}"
-                     for _score, p, sec in scored[:MAX_HITS])
+                     for _score, _share, p, sec in scored[:MAX_HITS])
+
+
+#: Docs sections handed to the model up front: only when they cover most of
+#: a question of at least this many terms.
+RETRIEVE_MIN_TERMS = 2
+RETRIEVE_MIN_SHARE = 0.67
+
+
+_QUESTION = re.compile(
+    r"^\s*(how|what|why|where|when|which|can|could|does|do|is|are|should|explain)\b|\?",
+    re.IGNORECASE)
+
+
+def retrieve(query: str, *, seen: set[str], limit: int = 2) -> tuple[str, list[str]]:
+    """Up to `limit` docs sections a question is clearly about, as
+    "- page › section" pointers (no text: a wrong section quoted at length
+    misleads more than a pointer the model can choose to read), and their
+    keys ("page#section"). Only for questions."""
+    from engine.ai.index import query_words  # the request words left out
+    if not _QUESTION.search(query) or len(query_words(query)) < RETRIEVE_MIN_TERMS:
+        return "", []
+    scored = _scored(query)
+    if not scored:
+        return "", []
+    best = scored[0][0]
+    lines: list[str] = []
+    keys: list[str] = []
+    for score, share, p, sec in scored[:6]:
+        key = f"{p['id']}#{sec['title']}"
+        if share < RETRIEVE_MIN_SHARE or score < best * 0.5 or key in seen:
+            continue
+        lines.append(f"- {p['id']} › {sec['title']}")
+        keys.append(key)
+        if len(lines) >= limit:
+            break
+    return "\n".join(lines), keys
 
 
 def read(page_id: Any, section: Any = None) -> str:

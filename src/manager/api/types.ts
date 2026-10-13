@@ -826,6 +826,10 @@ export interface AiConfig {
   /** How the chat calls tools: native tool calls, the JSON step format, or
    *  automatic (native where the server says the model takes tools). */
   tool_format: AiToolFormat;
+  /** Meaning search: the embedding model ("" = off). */
+  embed_model: string;
+  /** Where the embedding model runs ("" = the server address). */
+  embed_base_url: string;
   key_set: boolean;
   key_from_env: boolean;
   /** Providers that already have a key (saved or from the environment).
@@ -846,6 +850,8 @@ export interface AiConfigPatch {
   context_max?: number;
   model_size?: "auto" | AiModelSize;
   tool_format?: AiToolFormat;
+  embed_model?: string;
+  embed_base_url?: string;
   /** Write-only. `""` removes the saved key. */
   api_key?: string;
 }
@@ -862,6 +868,21 @@ export interface AiTestResult {
   /** True when that is too small for the assistant's instructions. */
   context_low: boolean;
   error: string | null;
+  /** The embedding model's check, when meaning search is on. `swapped`:
+   *  Ollama unloaded the chat model to load it. */
+  embed?: { ok: boolean; dims: number | null; error: string | null; swapped: boolean } | null;
+}
+
+/** The chat's library index (`GET /wp/api/ai/index`). */
+export interface AiIndexStatus {
+  /** False when ComfyUI's Python has no SQLite full-text search. */
+  available: boolean;
+  items: number;
+  embed_model: string | null;
+  /** Items with a vector from that model. */
+  vectors: number;
+  /** Vectors are being made right now. */
+  filling: boolean;
 }
 
 /** One earlier turn of an AI conversation, sent back with a follow-up so the

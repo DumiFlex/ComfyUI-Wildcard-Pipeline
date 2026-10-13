@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import asyncio
 import json as _json
+import sqlite3
 from typing import Any
 
 from aiohttp import web
@@ -48,7 +49,9 @@ from engine.ai import config as ai_config
 from engine.ai import constraint as ai_constraint
 from engine.ai import derivation as ai_derivation
 from engine.ai import describe as ai_describe
+from engine.ai import docs as ai_docs
 from engine.ai import followup as ai_followup
+from engine.ai import index as ai_index
 from engine.ai import library_vars, text_items
 from engine.ai import organize as ai_organize
 from engine.ai import pack as ai_pack
@@ -67,7 +70,7 @@ from engine.db.repositories import (
     TemplateRepository,
 )
 from engine.importer import commit_import
-from wp_api import _ai_chat, _ai_client
+from wp_api import _ai_chat, _ai_client, _ai_embed
 from wp_api._helpers import cancel_on_disconnect, db_session, json_error, json_ok
 from wp_api._validators import validate_wildcard_name
 
@@ -133,7 +136,9 @@ async def post_test(request: web.Request) -> web.Response:
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
-    return json_ok(await _ai_client.probe(cfg))
+    result = await _ai_client.probe(cfg)
+    result["embed"] = await _ai_embed.check(cfg) if result.get("ok") else None
+    return json_ok(result)
 
 
 def _turns(body: dict[str, Any]) -> list[dict[str, Any]] | web.Response:
@@ -801,6 +806,130 @@ def _more_tools(meta: dict[str, Any]) -> str:
             + "\n" + ai_tools.prompt_lines(rest, "change")).strip()
 
 
+#: One library index per library database file (see `engine.ai.index`).
+_INDEXES: dict[str, ai_index.Index | None] = {}
+#: Ids and docs sections a chat remembers having handed the model.
+MAX_SHOWN = 400
+
+
+def _synced_index(conn: Any, lib: ai_chat.Library) -> ai_index.Index | None:
+    """The library index, brought up to date with the saved rows; None when
+    SQLite has no FTS5 or the index can't be used (search then scores rows
+    in Python, as before)."""
+    idx = _library_index_for(conn)
+    if idx is None:
+        return None
+    key = str(ai_index.index_path(ai_index.library_path(conn)) or "")
+    rows = [*lib.modules.values(), *lib.bundles.values(), *lib.templates.values()]
+    try:
+        idx.sync(rows, lib._kind)
+    except sqlite3.Error:
+        _INDEXES.pop(key, None)
+        return None
+    return idx
+
+
+async def _query_vector(lib: ai_chat.Library, cfg: dict[str, Any],
+                        text: str) -> list[float] | None:
+    """The query's vector when meaning search is on and some items have
+    vectors already; else None (keywords only)."""
+    if lib.index is None or not lib.embed_model:
+        return None
+    try:
+        if lib.index.vector_count(lib.embed_model) == 0:
+            return None
+    except sqlite3.Error:
+        return None
+    return await _ai_embed.query_vector(cfg, text)
+
+
+def _library_index_for(conn: Any) -> ai_index.Index | None:
+    path = ai_index.index_path(ai_index.library_path(conn))
+    key = str(path or "")
+    if key not in _INDEXES:
+        _INDEXES[key] = ai_index.open_index(path)
+    return _INDEXES[key]
+
+
+async def _retrieval(lib: ai_chat.Library, text: str, meta: dict[str, Any],
+                     prof: dict[str, Any], cfg: dict[str, Any]) -> str:
+    """What the library index and the docs say this message is about, for
+    the end of the message (never the system prompt: the request prefix
+    stays the same). Gated; items and sections this chat already got are
+    left out. Large models get names only: they search well, and every
+    token here is paid on every later request of a cloud chat."""
+    shown = set(meta.get("shown") or [])
+    parts: list[str] = []
+    new: list[str] = []
+    if lib.index is not None:
+        skip = shown | ({lib.editor_id} if lib.editor_id else set())
+        qvec = await _query_vector(lib, cfg, text)
+        try:
+            block, ids = ai_index.retrieve(lib.index, text, seen=skip,
+                                           limit=4 if prof["slim"] else 6,
+                                           full=prof["size"] != "large",
+                                           qvec=qvec, model=lib.embed_model)
+        except sqlite3.Error:
+            block, ids = "", []
+        if block:
+            parts.append(block)
+            new.extend(ids)
+    dblock, keys = ai_docs.retrieve(text, seen={k[4:] for k in shown if k.startswith("doc:")})
+    if dblock:
+        parts.append("Docs sections that may answer this (docs_read them before answering):\n"
+                     + dblock)
+        new.extend("doc:" + k for k in keys)
+    if new:
+        meta["shown"] = [*(meta.get("shown") or []), *new][-MAX_SHOWN:]
+    return "\n\n".join(parts)
+
+
+def _index_status(idx: ai_index.Index | None, cfg: dict[str, Any]) -> dict[str, Any]:
+    model = cfg.get("embed_model") if _ai_embed.enabled(cfg) else ""
+    if idx is None:
+        return {"available": False, "items": 0, "embed_model": model or None,
+                "vectors": 0, "filling": False}
+    return {"available": True, "items": idx.count(), "embed_model": model or None,
+            "vectors": idx.vector_count(model) if model else 0,
+            "filling": _ai_embed.filling(idx)}
+
+
+def _index_sync(request: web.Request) -> ai_index.Index | None:
+    with db_session(request) as conn:
+        lib = ai_chat.Library(
+            ModuleRepository(conn).list(), BundleRepository(conn).list(),
+            CategoryRepository(conn).list(), TemplateRepository(conn).list(),
+        )
+        return _synced_index(conn, lib)
+
+
+async def get_index(request: web.Request) -> web.Response:
+    """The chat's library index: how many items it holds and, with meaning
+    search on, how many have vectors. Brings it up to date first."""
+    cfg = ai_config.load_effective()
+    idx = _index_sync(request)
+    if idx is not None and cfg.get("enabled"):
+        _ai_embed.fill_in_background(cfg, idx)
+    return json_ok(_index_status(idx, cfg))
+
+
+async def post_index_rebuild(request: web.Request) -> web.Response:
+    """Throw the index away and build it again (vectors too)."""
+    cfg = ai_config.load_effective()
+    with db_session(request) as conn:
+        idx = _library_index_for(conn)
+    if idx is None:
+        return json_error("this Python's SQLite has no full-text search (FTS5); "
+                          "the chat searches without an index", status=409)
+    if _ai_embed.filling(idx):
+        return json_error("the library is being embedded; try again when it's done", status=409)
+    idx.clear()
+    idx = _index_sync(request)
+    if idx is not None and cfg.get("enabled"):
+        _ai_embed.fill_in_background(cfg, idx)
+    return json_ok(_index_status(idx, cfg))
+
+
 async def post_chat(request: web.Request) -> web.Response:
     """Body: {message, chat_id?, page?: {route, id?, doc?, note?, editor?},
     events?: [{pid, status}]}.
@@ -836,6 +965,7 @@ async def post_chat(request: web.Request) -> web.Response:
             ModuleRepository(conn).list(), BundleRepository(conn).list(),
             CategoryRepository(conn).list(), TemplateRepository(conn).list(),
         )
+        lib.index = _synced_index(conn, lib)
         chat: dict[str, Any] | None = None
         log: list[dict[str, Any]] = []
         if chat_id:
@@ -846,6 +976,9 @@ async def post_chat(request: web.Request) -> web.Response:
                 chat = None
     if sum(1 for e in log if e.get("kind") == "user") >= ai_chat.MAX_TURNS:
         return json_error("this chat is long; start a new one to keep it focused", status=400)
+    if lib.index is not None and _ai_embed.enabled(cfg):
+        lib.embed_model = cfg["embed_model"]
+        _ai_embed.fill_in_background(cfg, lib.index)
     prof = ai_budget.profile(cfg)
     rows = [*lib.modules.values(), *lib.bundles.values(), *lib.templates.values()]
     fp_now = ai_chatlog.fingerprint(rows, lib._kind)
@@ -872,7 +1005,8 @@ async def post_chat(request: web.Request) -> web.Response:
         note = ""  # still on the same page: it is in the history already
     elif note:
         meta["page_note"] = note
-    sent = "\n\n".join(x for x in (since, changes, text, note) if x)
+    hints = await _retrieval(lib, text, meta, prof, cfg)
+    sent = "\n\n".join(x for x in (since, changes, text, note, hints) if x)
     new: list[dict[str, Any]] = [ai_chatlog.user_entry(text, sent)]
 
     num_ctx = int(cfg.get("context_max") or ai_budget.CONTEXT_DEFAULT)
@@ -973,6 +1107,8 @@ async def post_chat(request: web.Request) -> web.Response:
                 if tool == "more_tools":
                     out: Any = _more_tools(meta)
                 else:
+                    if tool == "search":
+                        lib.qvec = await _query_vector(lib, cfg, str(args.get("query") or ""))
                     out = lib.run(tool, args)
             except ValueError as e:
                 errors[tool] = errors.get(tool, 0) + 1
@@ -1239,6 +1375,8 @@ async def post_pack_install(request: web.Request) -> web.Response:
 
 def register(router: web.UrlDispatcher) -> None:
     router.add_get("/wp/api/ai/config", get_config)
+    router.add_get("/wp/api/ai/index", get_index)
+    router.add_post("/wp/api/ai/index/rebuild", post_index_rebuild)
     router.add_put("/wp/api/ai/config", put_config)
     router.add_post("/wp/api/ai/models", cancel_on_disconnect(post_models))
     router.add_post("/wp/api/ai/test", cancel_on_disconnect(post_test))
