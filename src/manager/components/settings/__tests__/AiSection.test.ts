@@ -134,7 +134,8 @@ describe("Settings › AI assistant", () => {
     await flushPromises();
     await w.get('[data-test="ai-test"]').trigger("click");
     await flushPromises();
-    expect(w.text()).toContain("loaded with only 4096 tokens of context");
+    expect(w.text()).toContain("only 4k context");
+    expect(w.get('[data-test="ai-context-low"]').text()).toContain("loaded with 4k of context");
   });
 
   it("saves the model size and the context cap", async () => {

@@ -174,7 +174,7 @@ const testSummary = computed(() => {
   parts.push(t.json_ok ? "JSON answers ✓" : "JSON answers ✗ (try another model)");
   if (t.latency_ms !== null) parts.push(`${(t.latency_ms / 1000).toFixed(1)} s`);
   if (t.model_found === false) parts.push("model not in the server's list");
-  if (t.context_low) parts.push(`loaded with only ${t.context} tokens of context: reload it with 16k or more, or the assistant forgets its instructions`);
+  if (t.context_low) parts.push(`only ${Math.round((t.context ?? 0) / 1024)}k context`);
   else if (t.context) parts.push(`${Math.round(t.context / 1024)}k context`);
   return parts.join(" · ");
 });
@@ -361,6 +361,12 @@ const off = computed(() => !config.value?.enabled);
         <span v-if="test" class="wp-set-pill" :data-tone="testTone" data-test="ai-test-result">{{ testSummary }}</span>
         <Button size="sm" :loading="testing" :disabled="off" data-test="ai-test" @click="runTest">Test connection</Button>
       </SettingRow>
+      <p v-if="test?.context_low" class="wp-ai-set__ctx" role="status" data-test="ai-context-low">
+        The model was loaded with {{ Math.round((test.context ?? 0) / 1024) }}k of context. The chat
+        needs 16k or more: its instructions, a few turns and the answer don't fit in less. The
+        server fixes this when it loads the model, so set the context length there (in LM Studio,
+        in the model's load settings) and load it again.
+      </p>
     </SettingGroup>
 
     <SettingGroup title="Where your data goes">
@@ -405,6 +411,13 @@ const off = computed(() => !config.value?.enabled);
 </template>
 
 <style scoped>
+.wp-ai-set__ctx {
+  margin: 0;
+  padding: var(--wp-space-4) var(--wp-space-6);
+  font-size: var(--wp-text-sm);
+  color: var(--wp-warn);
+  border-top: 1px solid var(--wp-border);
+}
 .wp-ai-set__wide { width: 320px; max-width: 100%; }
 .wp-ai-set__key { width: 240px; max-width: 100%; }
 .wp-ai-set__privacy {

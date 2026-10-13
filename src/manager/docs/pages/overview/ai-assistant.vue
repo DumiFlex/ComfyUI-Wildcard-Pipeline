@@ -44,7 +44,7 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           { term: 'Unload after', desc: 'For local servers: how many idle seconds before the model leaves the GPU, so ComfyUI gets its memory back. 0 unloads right away.' },
           { term: 'Model size', desc: 'How much the assistant asks of the model. Small models (under 20B) get shorter instructions, smaller tool results and steadier settings; large ones and hosted models get everything. Automatic reads the size from the model\'s name; set it when the name doesn\'t say.' },
           { term: 'Most context to use', desc: 'For Ollama: the assistant asks for as much context as each request needs, up to this many tokens (16384 by default). Ollama\'s own default is far smaller and silently cuts the instructions off. Lower it if the model no longer fits on your GPU.' },
-          { term: 'Test connection', desc: 'Lists the models, then asks the chosen one for a tiny JSON answer, and tells you whether it worked and how long it took. For LM Studio and llama.cpp it also reads how much context the model was loaded with and warns when it is under 8192 tokens, since the assistant\'s instructions alone need more.' },
+          { term: 'Test connection', desc: 'Lists the models, then asks the chosen one for a tiny JSON answer, and tells you whether it worked and how long it took. For LM Studio and llama.cpp it also reads how much context the model was loaded with and warns when it is under 16k, since the chat\'s instructions, a few turns and the answer need that much. These servers fix the context when they load the model, so set it there (in LM Studio: the Context Length in the model\'s load settings) and load the model again.' },
         ]"
       />
     </DocSection>
@@ -197,7 +197,10 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           filter, never empty, hold for a whole Loop run, internal), or add, remove and change its
           items,</li>
         <li>change an item's description, tags, category or rating,</li>
-        <li>open an item's editor, a docs page or a manager page such as a Settings section.</li>
+        <li>open an item's editor, a docs page or a manager page such as a Settings section,</li>
+        <li>hand a whole new pack to the Pack builder: <b>Plan it</b> on the card opens the Pack
+          builder with the pack described and starts the plan (a plan already there is kept and
+          the description waits in its box).</li>
       </ul>
       <p>
         It can also <b>run a stack on the engine</b> before it answers: modules and bundles from
@@ -217,7 +220,9 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         modules it runs the stack with them before it answers, so the reply says what the change
         does. It can propose several items that depend on each other in one answer (a wildcard
         and a constraint on it); the later card waits until the first is applied. An answer that
-        comes back garbled is asked for again once, with the problem named.
+        comes back garbled is asked for again once, with the problem named. It doesn't ask "should I go
+        ahead?" before proposing, since the card is already the asking; if it does, or answers your
+        "yes" by asking again, it is told once to make the change.
       </p>
       <p>
         Each card lists what it changes and warns about anything it left out (a duplicate option, a

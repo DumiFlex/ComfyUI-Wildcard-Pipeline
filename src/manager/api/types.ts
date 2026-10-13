@@ -1114,7 +1114,9 @@ export type AiChatOp =
     }
   | { op: "open"; kind: "module" | "bundle" | "template"; type: string; id: string }
   | { op: "open"; kind: "doc"; type: "doc"; id: string }
-  | { op: "open"; kind: "page"; type: "page"; id: string; section?: string };
+  | { op: "open"; kind: "page"; type: "page"; id: string; section?: string }
+  /** Hands a description to the Pack builder, which plans the pack. */
+  | { op: "open"; kind: "pack"; type: "pack"; id: string; description: string };
 
 /** A change the assistant proposes. Nothing is saved until Apply. */
 export interface AiChatProposal {

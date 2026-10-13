@@ -642,6 +642,43 @@ async def test_chat_stops_after_max_steps(wp_client, fake_llm):
     assert len(body["steps"]) == 6 and "ran out of steps" in body["message"]
 
 
+async def test_chat_acts_when_the_user_says_yes_instead_of_asking_again(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    asked = "I'll build a medieval pack. Should I proceed with creating these items?"
+    fake_llm.chat_steps.extend([
+        {"message": asked, "calls": []},
+        {"message": "Here it is.", "calls": [{"tool": "plan_pack", "args": json.dumps(
+            {"description": "Medieval fantasy character: hair, eyes, outfit, scene, pose"})}]},
+    ])
+    resp = await wp_client.post("/wp/api/ai/chat", json={
+        "messages": [{"role": "user", "content": "build a medieval character pack"},
+                     {"role": "assistant", "content": asked},
+                     {"role": "user", "content": "yes"}],
+        "page": {"route": "pack-builder", "note": "Pack builder, nothing planned yet"}})
+    assert resp.status == 200, await resp.text()
+    body = await resp.json()
+    assert body["message"] == "Here it is."
+    (card,) = body["proposals"]
+    assert card["op"] == {"op": "open", "kind": "pack", "type": "pack", "id": "pack-builder",
+                          "description": "Medieval fantasy character: hair, eyes, outfit, "
+                                         "scene, pose"}
+    # The repeat was sent back once with the nudge, then the calls came.
+    assert ai_chat.GO_NUDGE in fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+
+
+async def test_chat_nudges_only_once(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.chat_steps.extend(
+        [{"message": "Want me to use your hair wildcard or a new one?", "calls": []}] * 3)
+    resp = await wp_client.post("/wp/api/ai/chat", json={
+        "messages": [{"role": "user", "content": "add hair"}]})
+    body = await resp.json()
+    assert body["message"] == "Want me to use your hair wildcard or a new one?"
+    assert len(fake_llm.chat_steps) == 1
+
+
 PACK_PLAN = {
     "title": "Seasons", "summary": "Outfits by season.", "rating": "safe",
     "questions": [{"question": "How many?", "choices": ["Few", "Many"]}],

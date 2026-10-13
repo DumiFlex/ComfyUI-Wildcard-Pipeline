@@ -45,7 +45,7 @@ CHANGE_TOOLS = (
     "create_wildcard", "add_options", "edit_options", "create_fixed_values", "edit_values",
     "create_combine", "edit_combine", "create_derivation", "add_rules", "edit_rules",
     "create_constraint", "edit_constraint", "create_template", "edit_template",
-    "create_bundle", "edit_bundle", "update_info", "open",
+    "create_bundle", "edit_bundle", "update_info", "open", "plan_pack",
 )
 #: Tools that change one existing item (its id is `args.id`).
 ITEM_TOOLS = ("add_options", "edit_options", "edit_values", "edit_combine", "add_rules",
@@ -67,6 +67,7 @@ APP_PAGES: dict[str, str] = {
     "whats-new": "release notes", "community": "community packs",
 }
 MAX_PAGE_NOTE = 1500
+MAX_PACK_DESCRIPTION = 2000
 #: Changes run_test can try (the rest change names, tags or open pages).
 CHECKABLE_TOOLS = (
     "create_wildcard", "add_options", "edit_options", "create_fixed_values", "edit_values",
@@ -79,6 +80,49 @@ CHECK_NUDGE = (
     "with \"proposed\": true on a stack that uses them (with a template if one fits), "
     "then tell the user what it showed and fix anything it flags."
 )
+#: Sent once when an answer asks leave to do what it could just propose,
+#: or answers the user's "yes" by asking again. Small models do this in a
+#: loop: proposals are already the asking.
+GO_NUDGE = (
+    "Don't ask the user whether to go ahead: every change tool only makes a "
+    "proposal card they Apply or Dismiss, so proposing IS asking. Make the "
+    "calls now (plan_pack for a whole new pack, the create tools for a few "
+    "items). Only if you truly can't continue without the user's choice, ask "
+    "that one question again with \"calls\": []."
+)
+_ASKS_LEAVE = re.compile(
+    r"\b(?:should|shall|may|can) i (?:go ahead|proceed|start|continue|create|build|make|"
+    r"add|set (?:it|them|this) up)\b|\b(?:do you )?want me to\b|\bwould you like me to\b|"
+    r"\bready (?:for me )?to (?:proceed|start|build)\b|\bshall we (?:proceed|start|begin)\b",
+    re.IGNORECASE,
+)
+_GO_AHEAD = re.compile(
+    r"^(?:yes|yeah|yep|yup|sure|ok|okay|go|go ahead|go for it|do it|proceed|please|"
+    r"sounds good|let'?s go|build it|create it|make it|start|continue|y)\b[\s\w,.!']{0,30}$",
+    re.IGNORECASE,
+)
+
+
+def asks_leave(message: str) -> bool:
+    """The answer asks permission instead of proposing ("Should I proceed?")."""
+    return bool(_ASKS_LEAVE.search(message or ""))
+
+
+def is_go_ahead(text: str) -> bool:
+    """The user's message is a short yes ("yes", "ok do it", "go ahead")."""
+    t = re.sub(r"\s+", " ", text or "").strip()
+    return 0 < len(t) <= 40 and bool(_GO_AHEAD.match(t))
+
+
+def stalls(said: str, user_text: str, last_answer: str) -> bool:
+    """A step that ended with no calls but should have acted: it asks leave,
+    it repeats its last answer, or it met the user's yes with more talk."""
+    if asks_leave(said) or (is_go_ahead(user_text) and asks_leave(last_answer)):
+        return True
+    norm = lambda t: re.sub(r"\W+", " ", t or "").strip().lower()  # noqa: E731
+    return bool(last_answer) and norm(said) == norm(last_answer)
+
+
 TOOLS = READ_TOOLS + CHANGE_TOOLS
 
 MAX_STEPS = 6
@@ -135,7 +179,9 @@ questions about Wildcard Pipeline itself. You can read the library and the \
 built-in docs, run stacks on the engine, and propose changes. You never \
 change anything yourself: every change tool makes a proposal card the user \
 reviews and applies. Plans are fine, but act: if the user asks for \
-something, propose it.
+something, propose it. Never ask "should I proceed?" or "want me to?": a \
+proposal already waits for the user's Apply, so asking first only makes \
+them say yes twice. When the user says yes, make the calls.
 
 Answer with JSON: {"plan": one or two sentences for yourself: what the \
 user wants, which features fit (see "Which feature for which job") and what \
@@ -187,6 +233,12 @@ exclude|reduce|boost|only, "factor", "reason"}], "reach": "all" | "first" | \
 "next N"}
 """ + GUIDE_TOOLS + """- update_info {"id", "description": new text or omit, "tags_add": [], \
 "tags_remove": [], "category": name or omit, "rating": "safe"|"nsfw" or omit}
+- plan_pack {"description": what the pack makes, its parts and its rules, \
+in the user's words plus what they answered}: a button that hands the \
+description to the Pack builder, which plans, builds, tests and installs a \
+whole pack (wildcards, rules, constraints, a template) on its own. Use it \
+when the user wants a new pack or a whole set of modules for one subject; \
+use the create tools for one or a few items.
 - open {"id"} for an item's editor, {"doc": docs page id} for a docs page, \
 or {"page": manager page, "section": settings section}: a button that goes \
 there.
@@ -982,6 +1034,19 @@ class Library(MoreTools):
             "preview": [], "warnings": [],
             "op": {"op": "open", "kind": kind if kind in ("bundle", "template") else "module",
                    "type": kind, "id": r["id"]},
+        }
+
+    def plan_pack(self, args: dict[str, Any]) -> dict[str, Any]:
+        text = args.get("description")
+        text = text.strip() if isinstance(text, str) else ""
+        if len(text) < 10:
+            raise ValueError("describe the pack: what it makes, its parts and its rules")
+        text = text[:MAX_PACK_DESCRIPTION]
+        return {
+            "title": "Plan this pack in the Pack builder", "summary": "pack",
+            "preview": [_short(text, 300)], "warnings": [],
+            "op": {"op": "open", "kind": "pack", "type": "pack", "id": "pack-builder",
+                   "description": text},
         }
 
     def _adopt(self, proposal: dict[str, Any]) -> None:

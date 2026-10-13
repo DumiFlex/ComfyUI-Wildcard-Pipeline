@@ -337,8 +337,8 @@ _PROBE_SCHEMA = {
 }
 
 
-#: Below this the chat's own instructions don't fit.
-CONTEXT_WARN = 8192
+#: Below this the chat's instructions, a few turns and its answer don't fit.
+CONTEXT_WARN = 16384
 
 
 async def server_context(cfg: dict[str, Any]) -> int | None:

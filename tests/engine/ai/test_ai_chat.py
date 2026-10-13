@@ -225,3 +225,25 @@ def test_docs_tools_and_open_targets():
         lib.run("open", {"page": "nowhere"})
     assert "Docs pages" in chat.system_prompt() and "- combine: Combine." in chat.system_prompt()
     assert chat.args_note("docs_read", {"page": "combine"}) == "Read the docs: Combine"
+
+
+def test_stalls_spots_asking_leave_and_repeats():
+    asked = "I'll create these. Should I proceed with creating these items?"
+    assert chat.asks_leave(asked)
+    assert chat.asks_leave("Would you like me to build it?")
+    assert not chat.asks_leave("Here are three proposals.")
+    assert chat.is_go_ahead("yes") and chat.is_go_ahead("ok, go ahead!")
+    assert not chat.is_go_ahead("Medieval, with appearance, background, scene and poses")
+    assert chat.stalls("Done thinking.", "yes", asked)
+    assert not chat.stalls("Glad it helped.", "ok thanks", "Applied the change.")
+    assert chat.stalls("Same answer again.", "hmm", "Same answer, again!")
+
+
+def test_plan_pack_hands_the_description_to_the_pack_builder():
+    lib = chat.Library([], [], [])
+    out = lib.run("plan_pack", {"description": "  Medieval fantasy character pack  "})
+    assert out["op"] == {"op": "open", "kind": "pack", "type": "pack", "id": "pack-builder",
+                         "description": "Medieval fantasy character pack"}
+    with pytest.raises(ValueError, match="describe the pack"):
+        lib.run("plan_pack", {"description": "x"})
+    assert "plan_pack" in chat.system_prompt(slim=True)

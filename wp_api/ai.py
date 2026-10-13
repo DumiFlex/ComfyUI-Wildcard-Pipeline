@@ -804,6 +804,9 @@ async def post_chat(request: web.Request) -> web.Response:
     steps: list[dict[str, Any]] = []
     message = ""
     checked = False
+    nudged = False
+    last_answer = next((t["content"] for t in reversed(turns[:-1])
+                        if t["role"] == "assistant"), "")
     for step in range(ai_chat.MAX_STEPS):
         history = ai_budget.fit_history(history, prof["history_chars"])
         try:
@@ -842,6 +845,14 @@ async def post_chat(request: web.Request) -> web.Response:
                 results.append(f"{tool}: proposal {out['pid']} shown to the user: {out['title']}")
                 steps.append({"tool": tool, "note": out["title"], "ok": True})
         if not needs_reply:
+            # Asked leave instead of proposing, or met "yes" with more talk:
+            # tell it once to act. Small models loop on "Should I proceed?".
+            if (not calls and not proposals and not nudged
+                    and step < ai_chat.MAX_STEPS - 1
+                    and ai_chat.stalls(said, turns[-1]["content"], last_answer)):
+                nudged = True
+                user = ai_chat.GO_NUDGE
+                continue
             # Changes were proposed but never tried: ask for one check
             # before the answer stands, so "done" means it ran.
             if (not checked and step < ai_chat.MAX_STEPS - 1
