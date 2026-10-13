@@ -37,7 +37,7 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       <DocKeyList
         :items="[
           { term: 'Enable', desc: 'Turns the assistant on. While it is off, the AI button in the editors is hidden and the model routes refuse every call.' },
-          { term: 'Provider', desc: 'Ollama, LM Studio, llama.cpp, Claude, OpenAI, or Custom for any other OpenAI-compatible server. Each provider remembers its own address, model and key, so you can switch back and forth without typing them again.' },
+          { term: 'Provider', desc: 'One button each for Ollama, LM Studio, llama.cpp, Claude, OpenAI, or Other for any OpenAI-compatible server, marked Local or Cloud (a key icon means a key is saved). Each provider remembers its own address, model and key, so you can switch back and forth without typing them again.' },
           { term: 'Server address', desc: 'Filled in for each provider; change it if your server runs on another port or machine.' },
           { term: 'API key', desc: 'Only needed for Claude, OpenAI or a server that asks for one. It is stored on ComfyUI\'s side and never shown again; Remove deletes it. WP_AI_API_KEY, ANTHROPIC_API_KEY or OPENAI_API_KEY in the environment work too.' },
           { term: 'Model', desc: 'Picked from the list your server reports (refresh after downloading a new one), or typed in.' },
@@ -176,7 +176,10 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         search reads what items hold, not only their names and tags: option texts, values and
         rules count, and broad subjects widen on their own, so "characters" also finds hair, eye
         and outfit wildcards. Replies use simple formatting (bold, lists, code), and every item it
-        mentions is a chip you click to open it.
+        mentions is a chip you click to open it. Prompt syntax in a reply is coloured the way the
+        editors colour it: each $variable in its own colour, {a|b} picks, @{…} references, LoRA
+        and embedding tags, and #tags. A line starting with "Tip:" or "Warning:" stands out as a
+        note.
       </p>
       <p>
         It sees the page you're on. In an editor it reads the item as it is in the editor, unsaved

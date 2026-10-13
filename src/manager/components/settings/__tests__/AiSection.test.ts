@@ -118,10 +118,20 @@ describe("Settings › AI assistant", () => {
     vi.mocked(api.ai.config).mockResolvedValue(cfg({ keys_saved: ["anthropic"] }));
     const w = mount(AiSection, { global: { plugins: [router] } });
     await flushPromises();
-    const sel = w.findAllComponents(Select).find((c) => c.attributes("data-test") === "ai-provider");
-    const opts = (sel?.props("options") ?? []) as { value: string; label: string }[];
-    expect(opts.find((o) => o.value === "anthropic")?.label).toContain("key saved");
-    expect(opts.find((o) => o.value === "openai")?.label).not.toContain("key saved");
+    expect(w.find('[data-test="ai-provider-anthropic"] [data-test="ai-provider-key-saved"]').exists()).toBe(true);
+    expect(w.find('[data-test="ai-provider-openai"] [data-test="ai-provider-key-saved"]').exists()).toBe(false);
+    expect(w.get('[data-test="ai-provider-anthropic"]').text()).toContain("Cloud");
+    expect(w.get('[data-test="ai-provider-ollama"]').text()).toContain("Local");
+  });
+
+  it("switches provider from its button", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({}));
+    vi.mocked(api.ai.saveConfig).mockImplementation(async (p) => cfg(p as Partial<AiConfig>));
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    await w.get('[data-test="ai-provider-lmstudio"]').trigger("click");
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ provider: "lmstudio" });
   });
 
   it("warns when a local server loaded the model with a small context", async () => {
