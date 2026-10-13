@@ -296,7 +296,30 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         your model server (and Claude or OpenAI) can reuse what it already read instead of
         reading the whole chat again; that makes follow-ups faster and, on a paid provider,
         cheaper. In a long chat, old tool results shrink to their first line and, if needed, the
-        oldest turns are left out. Chats are kept in ComfyUI's library database (the newest 100).
+        oldest turns are left out.
+      </p>
+      <p>
+        Answers appear as the model writes them, with the items it reads listed above as it goes
+        and a line saying what it is doing (thinking, writing, summarising). <b>Stop</b> ends the
+        answer. <b>Try again</b> under the last reply asks the same message again for a new
+        answer, which replaces the old one; it waits until you undo any change you applied from
+        that answer.
+      </p>
+      <p>
+        <b>Chats</b> in the chat's header lists your saved chats, newest first and grouped by day,
+        with a search over their titles and everything said in them. Click one to carry on where
+        you left off: its cards show as you left them (applied, dismissed). Each row can be
+        renamed, pinned or deleted (delete asks first). A chat is named after its first message.
+        ComfyUI keeps the newest 100 chats in the library database, plus every pinned one.
+      </p>
+      <p>
+        The bar under the message box shows how much of the model's memory (its context window)
+        the chat uses: the tokens the last request sent against what the model holds. "~" means
+        it's an estimate, and "about" means the size is a cloud model's usual one rather than one
+        your server reported. Past three quarters full, the older messages are summarised into a
+        short note (what you want, decisions, items made and their ids, open questions) and the
+        last few turns stay whole; the bar turns amber from there. <b>Compact</b> next to it does
+        that now. The summary is written by your own model and kept with the chat.
       </p>
       <DocCallout variant="tip">
         Chat works best with a model that follows instructions well; use one of the builder

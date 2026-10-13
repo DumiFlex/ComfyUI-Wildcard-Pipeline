@@ -20,17 +20,26 @@ const CONFIG = {
   presets: { ollama: { label: "Ollama", api: "ollama", local: true, needs_key: false, base_url: "" } },
 } as unknown as AiConfig;
 
-vi.mock("../../../api/client", () => ({
-  api: {
-    ai: { config: vi.fn(), chat: vi.fn(), packPlan: vi.fn(), models: vi.fn(), saveConfig: vi.fn() },
-    modules: { create: vi.fn(), update: vi.fn(), delete: vi.fn() },
-    bundles: { update: vi.fn() },
-    categories: { create: vi.fn() },
-  },
-  ApiError: class ApiError extends Error {
-    constructor(public status: number, message: string) { super(message); }
-  },
-}));
+vi.mock("../../../api/client", () => {
+  const chat = vi.fn();
+  return {
+    api: {
+      ai: {
+        config: vi.fn(), chat,
+        // The drawer streams; the tests answer through `chat`.
+        chatStream: vi.fn((body: unknown, _on: unknown, signal?: AbortSignal) => chat(body, signal)),
+        patchChat: vi.fn(() => Promise.resolve({})), chats: vi.fn(), getChat: vi.fn(),
+        deleteChat: vi.fn(), compactChat: vi.fn(), packPlan: vi.fn(), models: vi.fn(), saveConfig: vi.fn(),
+      },
+      modules: { create: vi.fn(), update: vi.fn(), delete: vi.fn() },
+      bundles: { update: vi.fn() },
+      categories: { create: vi.fn() },
+    },
+    ApiError: class ApiError extends Error {
+      constructor(public status: number, message: string) { super(message); }
+    },
+  };
+});
 
 const RESULT: AiChatResult = {
   chat_id: "c1",
@@ -102,6 +111,7 @@ describe("AiChatDrawer", () => {
     _resetAiActionsForTests();
     vi.mocked(api.ai.config).mockResolvedValue(CONFIG);
     vi.mocked(api.ai.chat).mockReset().mockResolvedValue(RESULT);
+    vi.mocked(api.ai.patchChat).mockClear();
     vi.mocked(api.ai.models).mockReset().mockResolvedValue({ models: ["m", "big-27b", "nomic-embed-text"] });
     vi.mocked(api.ai.saveConfig).mockReset().mockImplementation(
       async (patch) => ({ ...CONFIG, ...patch }) as AiConfig);
@@ -172,9 +182,13 @@ describe("AiChatDrawer", () => {
     expect(vi.mocked(api.ai.chat).mock.calls[1][0]).toEqual({
       message: "thanks", chat_id: "c1", page: { route: "wildcards-edit", id: "new1" },
       events: [
-        { pid: "p1", status: "applied" }, { pid: "p2", status: "undone" },
+        { pid: "p1", status: "applied", created: "new1" }, { pid: "p2", status: "undone" },
         { pid: "p3", status: "dismissed" },
       ],
+    });
+    // Each card action is saved with the chat at once, for reopening it.
+    expect(api.ai.patchChat).toHaveBeenCalledWith("c1", {
+      events: [{ pid: "p1", status: "applied", created: "new1" }],
     });
     await w.get('[data-test="ai-chat-input"]').setValue("again");
     await w.get('[data-test="ai-chat-send"]').trigger("click");
@@ -505,6 +519,143 @@ describe("AiChatDrawer", () => {
     expect(document.documentElement.style.getPropertyValue("--wp-ai-chat-w")).toBe("456px");
     await grip.trigger("dblclick");
     expect(grip.attributes("aria-valuenow")).toBe("440");
+    w.unmount();
+  });
+
+  it("shows the answer while it is written", async () => {
+    let finish: (r: AiChatResult) => void = () => undefined;
+    vi.mocked(api.ai.chatStream).mockImplementationOnce(async (_body, onEvent) => {
+      onEvent({ type: "step", n: 1 });
+      onEvent({ type: "thinking" });
+      onEvent({ type: "tool", step: { tool: "read", note: "Read Weather", ok: true } });
+      onEvent({ type: "text", v: "Weather has **two** options" });
+      return new Promise<AiChatResult>((resolve) => { finish = resolve; });
+    });
+    const { w } = await mountIt();
+    await w.get('[data-test="ai-chat-input"]').setValue("what is in Weather?");
+    await w.get('[data-test="ai-chat-send"]').trigger("click");
+    await flushPromises();
+    const live = w.get('[data-test="ai-chat-live"]');
+    expect(live.text()).toContain("Read Weather");
+    expect(live.get("strong").text()).toBe("two");
+    expect(live.get('[data-test="ai-chat-loading"]').text()).toBe("Writing…");
+    finish({ ...RESULT, proposals: [], message: "Weather has two options." });
+    await flushPromises();
+    expect(w.find('[data-test="ai-chat-live"]').exists()).toBe(false);
+    expect(w.get('[data-test="ai-chat-reply"]').text()).toContain("Weather has two options.");
+    w.unmount();
+  });
+
+  it("runs the last message again, unless a change from it was applied", async () => {
+    const { w } = await mountIt();
+    await w.get('[data-test="ai-chat-input"]').setValue("make weather");
+    await w.get('[data-test="ai-chat-send"]').trigger("click");
+    await flushPromises();
+    vi.mocked(api.ai.chat).mockResolvedValueOnce({ ...RESULT, proposals: [], message: "Second try." });
+    await w.get('[data-test="ai-chat-retry"]').trigger("click");
+    await flushPromises();
+    expect(vi.mocked(api.ai.chat).mock.calls[1][0]).toEqual({
+      chat_id: "c1", retry: true, message: "", page: { route: "dashboard" },
+    });
+    const replies = w.findAll('[data-test="ai-chat-reply"]');
+    expect(replies).toHaveLength(1);
+    expect(replies[0].text()).toContain("Second try.");
+
+    vi.mocked(api.ai.chat).mockResolvedValueOnce(RESULT);
+    await w.get('[data-test="ai-chat-retry"]').trigger("click");
+    await flushPromises();
+    await w.get('[data-test="ai-chat-apply"]').trigger("click");
+    await flushPromises();
+    const again = w.get('[data-test="ai-chat-retry"]');
+    expect(again.attributes("disabled")).toBeDefined();
+    expect(again.attributes("title")).toContain("Undo the changes");
+    w.unmount();
+  });
+
+  it("puts the old answer back when a retry fails", async () => {
+    const { w } = await mountIt();
+    await w.get('[data-test="ai-chat-input"]').setValue("make weather");
+    await w.get('[data-test="ai-chat-send"]').trigger("click");
+    await flushPromises();
+    vi.mocked(api.ai.chat).mockRejectedValueOnce(new Error("undo the changes you applied from that answer first"));
+    await w.get('[data-test="ai-chat-retry"]').trigger("click");
+    await flushPromises();
+    expect(w.findAll('[data-test="ai-chat-proposal"]')).toHaveLength(3);
+    expect(w.get('[data-test="ai-chat-error"]').text()).toContain("undo the changes");
+    w.unmount();
+  });
+
+  it("lists saved chats, reopens one, pins, renames and deletes", async () => {
+    const today = new Date().toISOString();
+    vi.mocked(api.ai.chats).mockResolvedValue({ chats: [
+      { id: "c7", title: "Hair colours", pinned: true, turns: 2, created_at: today, updated_at: today },
+      { id: "c8", title: "Cyberpunk pack", pinned: false, turns: 1, created_at: today, updated_at: today },
+    ] });
+    vi.mocked(api.ai.getChat).mockResolvedValue({
+      id: "c7", title: "Hair colours", pinned: true, updated_at: today, waiting: false,
+      context: { used: 2000, window: 8192, estimated: false, about: false, compactions: 0 },
+      turns: [
+        { role: "user", text: "make weather" },
+        { role: "assistant", view: { ...RESULT, chat_id: undefined } as never,
+          status: { p1: "applied" }, created: { p1: "w1" } },
+      ],
+    });
+    vi.mocked(api.ai.deleteChat).mockResolvedValue({ deleted: true });
+    const { w } = await mountIt();
+    await w.get('[data-test="ai-chat-list"]').trigger("click");
+    await flushPromises();
+    expect(w.findAll(".wp-ai-chats__label").map((h) => h.text())).toEqual(["Pinned", "Today"]);
+    const rows = w.findAll('[data-test="ai-chats-row"]');
+    expect(rows.map((r) => r.get('[data-test="ai-chats-open"]').text())).toEqual([
+      "Hair colours2 messages", "Cyberpunk pack1 message"]);
+
+    await rows[1].get('[data-test="ai-chats-pin"]').trigger("click");
+    await flushPromises();
+    expect(api.ai.patchChat).toHaveBeenCalledWith("c8", { pinned: true });
+
+    await rows[1].get('[data-test="ai-chats-rename"]').trigger("click");
+    const box = w.get('[data-test="ai-chats-rename-input"]');
+    await box.setValue("Neon city");
+    await box.trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    expect(api.ai.patchChat).toHaveBeenCalledWith("c8", { title: "Neon city" });
+
+    await w.findAll('[data-test="ai-chats-row"]')[1].get('[data-test="ai-chats-delete"]').trigger("click");
+    await w.get('[data-test="ai-chats-confirm"]').trigger("click");
+    await flushPromises();
+    expect(api.ai.deleteChat).toHaveBeenCalledWith("c8");
+    expect(w.findAll('[data-test="ai-chats-row"]')).toHaveLength(1);
+
+    await w.get('[data-test="ai-chats-open"]').trigger("click");
+    await flushPromises();
+    expect(api.ai.getChat).toHaveBeenCalledWith("c7");
+    expect(useAiChat().chatId.value).toBe("c7");
+    expect(w.get('[data-test="ai-chat-user"]').text()).toBe("make weather");
+    const cards = w.findAll('[data-test="ai-chat-proposal"]');
+    expect(cards[0].attributes("data-status")).toBe("applied");
+    expect(w.get('[data-test="ai-chat-meter"]').text()).toContain("2.0k of 8.2k tokens");
+    w.unmount();
+  });
+
+  it("shows how full the window is and compacts on request", async () => {
+    vi.mocked(api.ai.chat).mockResolvedValue({ ...RESULT, proposals: [],
+      context: { used: 6400, window: 8192, estimated: true, about: false, compactions: 0 } });
+    vi.mocked(api.ai.compactChat).mockResolvedValue({ compacted: true,
+      context: { used: 2100, window: 8192, estimated: true, about: false, compactions: 1 } });
+    const { w } = await mountIt();
+    expect(w.find('[data-test="ai-chat-meter"]').exists()).toBe(false);
+    await w.get('[data-test="ai-chat-input"]').setValue("hi");
+    await w.get('[data-test="ai-chat-send"]').trigger("click");
+    await flushPromises();
+    const meter = w.get('[data-test="ai-chat-meter"]');
+    expect(meter.text()).toContain("~6.4k of 8.2k tokens");
+    expect(meter.attributes("data-high")).toBeDefined();
+    expect(meter.attributes("title")).toContain("(estimated)");
+    await w.get('[data-test="ai-chat-compact"]').trigger("click");
+    await flushPromises();
+    expect(api.ai.compactChat).toHaveBeenCalledWith("c1");
+    expect(w.get('[data-test="ai-chat-meter"]').text()).toContain("~2.1k");
+    expect(w.find('[data-test="ai-chat-compact"]').exists()).toBe(false);
     w.unmount();
   });
 });

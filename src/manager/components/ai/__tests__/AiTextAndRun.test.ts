@@ -17,18 +17,27 @@ const CONFIG = {
   presets: { ollama: { label: "Ollama", api: "ollama", local: true, needs_key: false, base_url: "" } },
 } as unknown as AiConfig;
 
-vi.mock("../../../api/client", () => ({
-  api: {
-    ai: { config: vi.fn(), chat: vi.fn(), draftText: vi.fn() },
-    modules: { create: vi.fn(), update: vi.fn(), delete: vi.fn() },
-    bundles: { create: vi.fn(), update: vi.fn(), delete: vi.fn() },
-    templates: { create: vi.fn(), update: vi.fn(), delete: vi.fn() },
-    categories: { create: vi.fn() },
-  },
-  ApiError: class ApiError extends Error {
-    constructor(public status: number, message: string) { super(message); }
-  },
-}));
+vi.mock("../../../api/client", () => {
+  const chat = vi.fn();
+  return {
+    api: {
+      ai: {
+        config: vi.fn(), chat,
+        // The drawer streams; the tests answer through `chat`.
+        chatStream: vi.fn((body: unknown, _on: unknown, signal?: AbortSignal) => chat(body, signal)),
+        patchChat: vi.fn(() => Promise.resolve({})), chats: vi.fn(), getChat: vi.fn(),
+        deleteChat: vi.fn(), compactChat: vi.fn(), draftText: vi.fn(),
+      },
+      modules: { create: vi.fn(), update: vi.fn(), delete: vi.fn() },
+      bundles: { create: vi.fn(), update: vi.fn(), delete: vi.fn() },
+      templates: { create: vi.fn(), update: vi.fn(), delete: vi.fn() },
+      categories: { create: vi.fn() },
+    },
+    ApiError: class ApiError extends Error {
+      constructor(public status: number, message: string) { super(message); }
+    },
+  };
+});
 
 beforeEach(() => {
   setActivePinia(createPinia());

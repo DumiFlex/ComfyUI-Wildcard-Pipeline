@@ -15,11 +15,17 @@
  * work to a page's AI feature) and on web searches: page tools run here
  * (`useAiActions`), a search waits for the user's Allow or Deny, and the
  * answers carry the turn on (`AiChatResume`) until nothing waits.
+ *
+ * Answers stream in (`api.ai.chatStream`): `live` holds what the model has
+ * written so far and what it is doing, until the finished answer replaces
+ * it. Stored chats can be reopened (`load`), the last message run again
+ * (`retry`), and older turns summarised to make room (`compact`).
  */
 import { computed, ref, shallowRef, triggerRef } from "vue";
 import { api, ApiError } from "../api/client";
 import type {
-  AiCallAnswer, AiChatEvent, AiChatPage, AiChatProposal, AiChatResult, AiPendingCall,
+  AiCallAnswer, AiChatContext, AiChatEvent, AiChatPage, AiChatProposal, AiChatResult,
+  AiChatRetry, AiChatRequest, AiChatResume, AiChatStreamEvent, AiPendingCall,
 } from "../api/types";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
@@ -75,9 +81,49 @@ const asking = shallowRef<ReadonlySet<string>>(new Set());
 const approvals = new Map<string, (choice: SearchApproval | null) => void>();
 /** Page tools running now (their labels), for the status line. */
 const running = ref("");
+/** The answer being written: its text so far, what the model is doing,
+ *  and the steps it has taken. Cleared when the answer arrives. */
+export interface LiveAnswer {
+  text: string;
+  status: string;
+  thinking: boolean;
+  steps: Array<{ tool: string; note: string; ok: boolean }>;
+}
+const EMPTY_LIVE: LiveAnswer = { text: "", status: "", thinking: false, steps: [] };
+const live = shallowRef<LiveAnswer>(EMPTY_LIVE);
+/** How full the model's window is (from the last answer). */
+const context = ref<AiChatContext | null>(null);
+const compacting = ref(false);
 
-function record(pid: string, status: AiChatEvent["status"]): void {
-  pending = [...pending.filter((e) => e.pid !== pid), { pid, status }];
+function record(pid: string, status: AiChatEvent["status"], created?: string): void {
+  const ev: AiChatEvent = created ? { pid, status, created } : { pid, status };
+  pending = [...pending.filter((e) => e.pid !== pid), ev];
+  // Saved now too, so the chat reopens with its cards as they are.
+  const id = chatId.value;
+  if (id) void api.ai.patchChat(id, { events: [ev] }).catch(() => undefined);
+}
+
+function onEvent(ev: AiChatStreamEvent): void {
+  const cur = live.value;
+  if (ev.type === "step") live.value = { ...cur, text: "", thinking: false, status: "" };
+  else if (ev.type === "text") live.value = { ...cur, text: ev.v, thinking: false };
+  else if (ev.type === "thinking") live.value = { ...cur, thinking: true };
+  else if (ev.type === "status") live.value = { ...cur, status: ev.v };
+  else if (ev.type === "tool") live.value = { ...cur, steps: [...cur.steps, ev.step] };
+}
+
+/** One request of a turn, streamed. */
+async function turn(
+  body: AiChatRequest | AiChatResume | AiChatRetry, signal: AbortSignal,
+): Promise<AiChatResult> {
+  live.value = EMPTY_LIVE;
+  try {
+    const result = await api.ai.chatStream(body, onEvent, signal);
+    if (result.context) context.value = result.context;
+    return result;
+  } finally {
+    live.value = EMPTY_LIVE;
+  }
 }
 
 function touch(): void {
@@ -106,7 +152,7 @@ async function send(page?: AiChatPage): Promise<void> {
   const events = pending;
   const id = chatId.value;
   try {
-    const result = await api.ai.chat({
+    const result = await turn({
       message: text,
       ...(id ? { chat_id: id } : {}),
       ...(page ? { page } : {}),
@@ -137,6 +183,100 @@ async function send(page?: AiChatPage): Promise<void> {
   }
 }
 
+/** Index of the last user message, or -1. */
+function lastUserIndex(): number {
+  for (let i = entries.value.length - 1; i >= 0; i--) {
+    if (entries.value[i].role === "user") return i;
+  }
+  return -1;
+}
+
+/** Why the last answer can't be run again, else "". */
+function retryBlocked(): string {
+  const start = lastUserIndex();
+  if (start < 0 || !chatId.value) return "Nothing to try again";
+  const applied = entries.value.slice(start + 1).some((e) => e.role === "assistant"
+    && Object.values(e.status).some((st) => st === "applied" || st === "editor"));
+  return applied ? "Undo the changes you applied from this answer first" : "";
+}
+
+/** Run the last message again: its answer goes, a new one comes. */
+async function retry(page?: AiChatPage): Promise<void> {
+  if (loading.value || retryBlocked()) return;
+  const id = chatId.value;
+  if (!id) return;
+  const before = entries.value;
+  entries.value = before.slice(0, lastUserIndex() + 1);
+  error.value = "";
+  const mine = new AbortController();
+  controller = mine;
+  loading.value = true;
+  const snap = page?.editor ? editorJson() : undefined;
+  const events = pending;
+  try {
+    const result = await turn({
+      chat_id: id, retry: true, message: "",
+      ...(page ? { page } : {}),
+      ...(events.length ? { events } : {}),
+    }, mine.signal);
+    pending = pending.filter((e) => !events.includes(e));
+    entries.value = [
+      ...entries.value,
+      {
+        role: "assistant", result, status: {}, created: {}, errors: {},
+        ...(snap ? { editorSnap: snap } : {}),
+      },
+    ];
+    await carryOn(result, mine.signal);
+  } catch (err) {
+    // The old answer is still the stored one: show it again.
+    if (entries.value.length === lastUserIndex() + 1) entries.value = before;
+    if (err instanceof DOMException && err.name === "AbortError") return;
+    error.value = err instanceof Error ? err.message : "Something went wrong";
+  } finally {
+    if (controller === mine) {
+      controller = null;
+      loading.value = false;
+      running.value = "";
+    }
+  }
+}
+
+/** Reopen a stored chat. */
+async function load(id: string): Promise<void> {
+  if (loading.value) return;
+  const chat = await api.ai.getChat(id);
+  reset();
+  chatId.value = chat.id;
+  context.value = chat.context;
+  entries.value = chat.turns.map((t): ChatEntry => t.role === "user"
+    ? { role: "user", text: t.text }
+    : {
+        role: "assistant",
+        result: {
+          chat_id: chat.id, message: t.view.message ?? "", proposals: t.view.proposals ?? [],
+          steps: t.view.steps ?? [], model: t.view.model ?? "", refs: t.view.refs ?? {},
+          pending: t.view.pending ?? [],
+        },
+        status: { ...t.status }, created: { ...t.created }, errors: {},
+      });
+}
+
+/** Summarise this chat's older turns now. Returns an error message, or "". */
+async function compact(): Promise<string> {
+  const id = chatId.value;
+  if (!id || loading.value || compacting.value) return "";
+  compacting.value = true;
+  try {
+    context.value = (await api.ai.compactChat(id)).context;
+    return "";
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  } finally {
+    compacting.value = false;
+  }
+}
+
 /** Put a message that got no answer back in the box, to send again. */
 function unsent(next: ChatEntry[], text: string): void {
   if (entries.value[entries.value.length - 1] === next[next.length - 1]) {
@@ -157,7 +297,7 @@ async function carryOn(first: AiChatResult, signal: AbortSignal): Promise<void> 
     if (!answers) return;
     const page = host?.page();
     const snap = page?.editor ? editorJson() : undefined;
-    result = await api.ai.chat({
+    result = await turn({
       chat_id: result.chat_id, results: answers, ...(page ? { page } : {}),
     }, signal);
     entries.value = [
@@ -230,6 +370,8 @@ function reset(): void {
   error.value = "";
   chatId.value = null;
   pending = [];
+  context.value = null;
+  live.value = EMPTY_LIVE;
 }
 
 /** Why a proposal can't be applied yet, else "". */
@@ -273,6 +415,10 @@ async function apply(entry: ChatAssistantEntry, p: AiChatProposal): Promise<void
         : op.kind === "template" ? await templates.create({ ...op.body, ...extra })
           : await modules.create({ ...op.body, ...extra });
       entry.created[p.pid] = row.id;
+      entry.status[p.pid] = "applied";
+      record(p.pid, "applied", row.id);
+      touch();
+      return;
     } else if (op.op === "update") {
       const body = { ...op.body };
       if (op.new_category) body.category_id = (await categoryId(op.new_category)) ?? null;
@@ -357,8 +503,10 @@ const started = computed(() => entries.value.length > 0);
 
 export function useAiChat() {
   return {
-    open, input, entries, loading, error, started, queued, chatId, asking, running,
+    open, input, entries, loading, error, started, queued, chatId, asking, running, live,
+    context, compacting,
     send, stop, reset, apply, undo, dismiss, blockedReason, ask, answerSearch, attach,
+    retry, retryBlocked, load, compact,
   };
 }
 

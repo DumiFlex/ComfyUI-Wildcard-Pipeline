@@ -14,6 +14,11 @@
  * open, through the router it hands to `useAiChat.attach`. A web search the
  * model asks for shows its exact query with Allow once / Allow for this
  * chat / Deny; nothing leaves the machine before the user picks.
+ *
+ * Chats opens the stored chats (`AiChatList`); the answer being written
+ * shows as it streams in; Try again runs the last message again; the meter
+ * under the box says how full the model's window is, with Compact to
+ * summarise older turns.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { isNavigationFailure, useRoute, useRouter, type RouteLocationRaw } from "vue-router";
@@ -22,6 +27,7 @@ import Select, { type SelectOption } from "../ui/Select.vue";
 import { api } from "../../api/client";
 import AiMessage from "./AiMessage.vue";
 import AiPointer from "./AiPointer.vue";
+import AiChatList from "./AiChatList.vue";
 import { useAiChat, type ChatAssistantEntry, type SearchApproval } from "../../composables/useAiChat";
 import { clearPointer, EDIT_ROUTES } from "../../composables/useAiActions";
 import { useAiConfig } from "../../composables/useAiConfig";
@@ -102,6 +108,77 @@ async function pickModel(v: string | number | null): Promise<void> {
 
 watch(() => chat.entries.value.length, () => { modelNote.value = ""; });
 
+/* ── Stored chats ── */
+
+const showList = ref(false);
+
+async function pickChat(id: string): Promise<void> {
+  showList.value = false;
+  if (id === chat.chatId.value) return;
+  try {
+    await chat.load(id);
+    scrollDown();
+  } catch (err) {
+    chat.error.value = `Couldn't open that chat: ${err instanceof Error ? err.message : String(err)}`;
+  }
+}
+
+function onDeleted(id: string): void {
+  if (id === chat.chatId.value) chat.reset();
+}
+
+function newChat(): void {
+  showList.value = false;
+  chat.reset();
+}
+
+/* ── Retry, the live answer, the meter ── */
+
+const canRetry = computed(() => {
+  const last = chat.entries.value[chat.entries.value.length - 1];
+  return !chat.loading.value && last?.role === "assistant" && !!chat.chatId.value;
+});
+
+function retry(): void {
+  void chat.retry(page());
+}
+
+const liveStatus = computed(() => {
+  const l = chat.live.value;
+  if (chat.running.value) return `${chat.running.value}…`;
+  if (l.status) return `${l.status}…`;
+  if (l.text) return "Writing…";
+  if (l.thinking) return "Thinking…";
+  return "Working… it may read a few items first.";
+});
+
+/** Compact is offered from here; amber from where it happens by itself. */
+const OFFER_COMPACT = 0.5;
+const AUTO_COMPACT = 0.75;
+
+function short(n: number): string {
+  return n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k` : String(n);
+}
+
+const meter = computed(() => {
+  const c = chat.context.value;
+  if (!c || !c.window) return null;
+  const ratio = Math.min(1, c.used / c.window);
+  const label = `${c.estimated ? "~" : ""}${short(c.used)} of ${c.about ? "about " : ""}${short(c.window)} tokens`;
+  const why = [
+    `The last request used ${c.used.toLocaleString()} tokens${c.estimated ? " (estimated)" : ""}`,
+    `of the ${c.window.toLocaleString()} the model holds${c.about ? " (a cloud model's usual size)" : ""}.`,
+    `Past ${Math.round(AUTO_COMPACT * 100)}% the older messages are summarised to make room.`,
+    c.compactions ? `Summarised ${c.compactions === 1 ? "once" : `${c.compactions} times`} so far.` : "",
+  ].filter(Boolean).join(" ");
+  return { ratio, label, why, high: ratio >= AUTO_COMPACT, offer: ratio >= OFFER_COMPACT };
+});
+
+async function compact(): Promise<void> {
+  const err = await chat.compact();
+  chat.error.value = err ? `Couldn't summarise: ${err}` : "";
+}
+
 const suggestions = computed(() => {
   if (route.name === "documentation-page") return DOC_SUGGESTIONS;
   if (route.name === "test") return TEST_SUGGESTIONS;
@@ -126,6 +203,7 @@ function page(): AiChatPage {
 }
 
 function send(): void {
+  showList.value = false;
   void chat.send(page());
 }
 
@@ -249,7 +327,7 @@ function scrollDown(): void {
   });
 }
 
-watch(() => [chat.entries.value.length, chat.loading.value], scrollDown);
+watch(() => [chat.entries.value.length, chat.loading.value, chat.live.value], scrollDown);
 
 function onGlobalKey(ev: KeyboardEvent): void {
   if (ev.key === "Escape" && chat.open.value && !chat.loading.value) chat.open.value = false;
@@ -303,11 +381,21 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
       <Button
         variant="ghost"
         size="sm"
+        icon="pi-comments"
+        :aria-pressed="showList"
+        :disabled="chat.loading.value"
+        data-test="ai-chat-list"
+        title="Your saved chats"
+        @click="showList = !showList"
+      >Chats</Button>
+      <Button
+        variant="ghost"
+        size="sm"
         icon="pi-plus"
-        :disabled="!chat.started.value && !chat.loading.value"
+        :disabled="!chat.started.value && !chat.loading.value && !showList"
         data-test="ai-chat-new"
         title="Start a new chat"
-        @click="chat.reset"
+        @click="newChat"
       >New chat</Button>
       <button
         type="button"
@@ -319,7 +407,10 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
     </header>
     <p v-if="modelNote" class="wp-ai-chat__model-note" role="status" data-test="ai-chat-model-note">{{ modelNote }}</p>
 
-    <div id="wp-ai-chat-body" ref="scroller" class="wp-ai-chat__body" data-test="ai-chat-body">
+    <div v-if="showList" class="wp-ai-chat__body" data-test="ai-chat-list-view">
+      <AiChatList :current="chat.chatId.value" @pick="pickChat" @deleted="onDeleted" />
+    </div>
+    <div v-show="!showList" id="wp-ai-chat-body" ref="scroller" class="wp-ai-chat__body" data-test="ai-chat-body">
       <div v-if="!chat.started.value" class="wp-ai-chat__empty" data-test="ai-chat-empty">
         <p>Ask about your library, or ask for a change. The assistant reads what you have and proposes changes as cards; nothing is saved until you press Apply.</p>
         <button
@@ -424,10 +515,31 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
         </div>
       </template>
 
-      <p v-if="chat.loading.value && !chat.asking.value.size" class="wp-ai-chat__status" role="status" data-test="ai-chat-loading">
-        <i class="pi pi-spin pi-spinner" aria-hidden="true" />
-        {{ chat.running.value ? `${chat.running.value}…` : "Working… it may read a few items first." }}
-      </p>
+      <div v-if="canRetry" class="wp-ai-chat__again">
+        <Button
+          variant="ghost"
+          size="sm"
+          icon="pi-refresh"
+          :disabled="!!chat.retryBlocked()"
+          :title="chat.retryBlocked() || 'Ask the same message again for a new answer'"
+          data-test="ai-chat-retry"
+          @click="retry"
+        >Try again</Button>
+      </div>
+
+      <div v-if="chat.loading.value && !chat.asking.value.size" class="wp-ai-chat__reply wp-ai-chat__live" data-test="ai-chat-live">
+        <ul v-if="chat.live.value.steps.length" class="wp-ai-chat__steps">
+          <li v-for="(s, j) in chat.live.value.steps" :key="j" :data-ok="s.ok ? 'true' : 'false'">
+            <i :class="['pi', s.ok ? 'pi-check' : 'pi-exclamation-circle']" aria-hidden="true" />
+            {{ s.note }}
+          </li>
+        </ul>
+        <AiMessage v-if="chat.live.value.text" :text="chat.live.value.text" />
+        <p class="wp-ai-chat__status" role="status" data-test="ai-chat-loading">
+          <i class="pi pi-spin pi-spinner" aria-hidden="true" />
+          {{ liveStatus }}
+        </p>
+      </div>
     </div>
 
     <footer class="wp-ai-chat__foot">
@@ -444,7 +556,28 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
         @keydown="onKeydown"
       ></textarea>
       <div class="wp-ai-chat__controls">
-        <span class="wp-ai-chat__hint">Enter sends, Shift+Enter starts a new line. Changes wait for your Apply.</span>
+        <span v-if="meter && chat.started.value" class="wp-ai-chat__meter" :data-high="meter.high || undefined" :title="meter.why" data-test="ai-chat-meter">
+          <span
+            class="wp-ai-chat__meter-bar"
+            role="meter"
+            aria-label="Context used"
+            :aria-valuenow="Math.round(meter.ratio * 100)"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            :aria-valuetext="meter.label"
+          ><span :style="{ width: `${Math.max(2, meter.ratio * 100)}%` }" /></span>
+          <span class="wp-ai-chat__meter-label">{{ meter.label }}</span>
+          <button
+            v-if="meter.offer && !chat.loading.value"
+            type="button"
+            class="wp-ai-chat__compact"
+            :disabled="chat.compacting.value"
+            data-test="ai-chat-compact"
+            title="Summarise the older messages now to make room"
+            @click="compact"
+          >{{ chat.compacting.value ? "Summarising…" : "Compact" }}</button>
+        </span>
+        <span v-else class="wp-ai-chat__hint">Enter sends, Shift+Enter starts a new line. Changes wait for your Apply.</span>
         <Button v-if="chat.loading.value" size="sm" icon="pi-stop" data-test="ai-chat-stop" @click="chat.stop">Stop</Button>
         <Button
           v-else
@@ -560,4 +693,22 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__controls { display: flex; align-items: center; gap: 10px; }
 .wp-ai-chat__hint { flex: 1; font-size: 11px; color: var(--wp-text-dim); }
 .wp-ai-chat__error { margin: 0; font-size: 12px; color: var(--wp-danger); }
+.wp-ai-chat__again { display: flex; justify-content: flex-start; margin-top: -6px; }
+.wp-ai-chat__live :deep(.wp-ai-msg) { opacity: 0.92; }
+.wp-ai-chat__meter {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px;
+  font-size: 11px; color: var(--wp-text-dim);
+}
+.wp-ai-chat__meter-bar {
+  flex: 0 0 72px; height: 5px; border-radius: 3px; overflow: hidden; background: var(--wp-bg-2);
+  border: 1px solid var(--wp-border);
+}
+.wp-ai-chat__meter-bar > span { display: block; height: 100%; background: var(--wp-accent-500); transition: width 200ms; }
+.wp-ai-chat__meter[data-high] .wp-ai-chat__meter-bar > span { background: var(--wp-warn); }
+.wp-ai-chat__meter[data-high] .wp-ai-chat__meter-label { color: var(--wp-warn); }
+.wp-ai-chat__meter-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wp-ai-chat__compact {
+  border: 0; background: none; padding: 0; font-size: 11px; color: var(--wp-accent-text); cursor: pointer;
+}
+.wp-ai-chat__compact:disabled { color: var(--wp-text-dim); cursor: default; }
 </style>

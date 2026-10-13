@@ -1136,6 +1136,8 @@ export interface AiChatPage {
 export interface AiChatEvent {
   pid: string;
   status: "applied" | "editor" | "dismissed" | "undone" | "failed";
+  /** The row an applied create made, so a reopened chat can Open it. */
+  created?: string;
 }
 
 /** One chat turn. The server keeps the chat: send only the new message and
@@ -1143,6 +1145,15 @@ export interface AiChatEvent {
 export interface AiChatRequest {
   message: string;
   chat_id?: string;
+  page?: AiChatPage;
+  events?: AiChatEvent[];
+}
+
+/** Run the chat's last message again: its answer is dropped first. */
+export interface AiChatRetry {
+  chat_id: string;
+  retry: true;
+  message: "";
   page?: AiChatPage;
   events?: AiChatEvent[];
 }
@@ -1233,7 +1244,63 @@ export interface AiChatResult {
   refs?: Record<string, AiChatRef>;
   /** Calls the turn waits on; answer them with `AiChatResume`. */
   pending?: AiPendingCall[];
+  /** How full the model's window is, for the meter. */
+  context?: AiChatContext;
 }
+
+/** The meter: tokens the last request used against what the model holds.
+ *  `estimated` when the provider gave no count; `about` when the window is
+ *  a cloud model's usual size rather than one the server reported. */
+export interface AiChatContext {
+  used: number;
+  window: number;
+  estimated: boolean;
+  about: boolean;
+  /** How many times older turns were summarised. */
+  compactions: number;
+}
+
+/** A stored chat in the list. Times are ISO strings. */
+export interface AiChatSummary {
+  id: string;
+  title: string;
+  pinned: boolean;
+  turns: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** One turn of a reopened chat, as the user saw it. */
+export type AiChatTurn =
+  | { role: "user"; text: string }
+  | {
+      role: "assistant";
+      view: Omit<AiChatResult, "chat_id">;
+      status: Record<string, "applied" | "editor" | "dismissed" | "failed">;
+      created: Record<string, string>;
+    };
+
+export interface AiChatDetail {
+  id: string;
+  title: string;
+  pinned: boolean;
+  updated_at: string;
+  model?: string;
+  turns: AiChatTurn[];
+  /** The chat paused on a page tool or search when it was left. */
+  waiting: boolean;
+  context: AiChatContext;
+}
+
+/** What a streamed chat turn sends while the model works. */
+export type AiChatStreamEvent =
+  | { type: "step"; n?: number }
+  | { type: "status"; v: string }
+  | { type: "thinking" }
+  | { type: "text"; v: string }
+  | { type: "tool"; step: { tool: string; note: string; ok: boolean } }
+  | { type: "done"; result: AiChatResult }
+  | { type: "error"; status: number; message: string };
 
 /** A library item an assistant message mentions. */
 export interface AiChatRef { id: string; type: string; name: string }
