@@ -78,6 +78,9 @@ const targeted = computed(() => !!props.settingKey && route?.hash === `#${props.
   align-items: center;
   gap: var(--wp-space-4);
   max-width: 55%;
+  /* A long status next to a button wraps instead of pushing it out. */
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .wp-set-row--stacked .wp-set-row__control { max-width: none; flex-wrap: wrap; }
 .wp-set-row__control :deep(.wp-select) { min-width: 200px; }

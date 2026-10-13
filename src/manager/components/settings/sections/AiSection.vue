@@ -358,7 +358,7 @@ const off = computed(() => !config.value?.enabled);
       </SettingRow>
 
       <SettingRow label="Test connection" hint="Lists the server's models and asks the chosen one for a tiny JSON answer." setting-key="ai-test">
-        <span v-if="test" class="wp-set-pill" :data-tone="testTone" data-test="ai-test-result">{{ testSummary }}</span>
+        <span v-if="test" class="wp-set-pill wp-ai-set__result" :data-tone="testTone" data-test="ai-test-result">{{ testSummary }}</span>
         <Button size="sm" :loading="testing" :disabled="off" data-test="ai-test" @click="runTest">Test connection</Button>
       </SettingRow>
       <p v-if="test?.context_low" class="wp-ai-set__ctx" role="status" data-test="ai-context-low">
@@ -411,6 +411,9 @@ const off = computed(() => !config.value?.enabled);
 </template>
 
 <style scoped>
+/* The test result can be a long error: let it wrap inside the row. */
+.wp-ai-set__result { white-space: normal; min-width: 0; border-radius: var(--wp-radius-md); align-items: baseline; }
+.wp-ai-set__result::before { flex: none; transform: translateY(-1px); }
 .wp-ai-set__ctx {
   margin: 0;
   padding: var(--wp-space-4) var(--wp-space-6);
