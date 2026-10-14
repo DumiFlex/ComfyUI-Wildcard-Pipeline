@@ -134,7 +134,7 @@ onBeforeUnmount(() => {
           :alt="alt ?? caption"
           class="wp-doc-img-lightbox__img"
         />
-        <figcaption class="wp-doc-img-lightbox__cap">{{ caption }}</figcaption>
+        <p class="wp-doc-img-lightbox__cap">{{ caption }}</p>
       </div>
     </Transition>
   </Teleport>
