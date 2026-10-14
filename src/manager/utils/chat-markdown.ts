@@ -10,6 +10,11 @@
  * `code`, backslash escapes and [[Name]] item mentions, which the chat turns
  * into chips that open the item. Anything else stays as text.
  *
+ * A quote opening with a GitHub alert (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`,
+ * `[!WARNING]`, `[!CAUTION]`) or `> **Note**` / `> **Warning**` carries a
+ * `tone` and shows as a callout. `closeOpen` tidies a reply still streaming;
+ * `plainText` is a reply for the clipboard.
+ *
  * Links, images and HTML are never made: `![](url)` would have the browser
  * fetch a URL carrying chat data with no click. A link keeps its text (the
  * address goes in a tooltip), an image its alt text, and HTML stays text.
@@ -41,6 +46,8 @@ export type Inline =
   /** Shown as its text only; `href` goes in a tooltip, never followed. */
   | { t: "link"; c: Inline[]; href: string };
 
+export type Tone = "tip" | "warn";
+
 export type Align = "left" | "center" | "right" | null;
 
 export interface ListItem {
@@ -54,7 +61,8 @@ export type Block =
   | { t: "h"; level: number; c: Inline[] }
   | { t: "list"; ordered: boolean; start: number; items: ListItem[] }
   | { t: "pre"; lang: string; v: string }
-  | { t: "quote"; blocks: Block[] }
+  /** `tone`: a GitHub alert / `**Note**` quote, shown as a callout. */
+  | { t: "quote"; blocks: Block[]; tone?: Tone }
   | { t: "table"; align: Align[]; head: Inline[][]; rows: Inline[][][] }
   | { t: "hr" };
 
@@ -113,6 +121,8 @@ const ITEM = /^( *)([-*+•]|\d{1,9}[.)])(?:[ \t]+(.*)|[ \t]*)$/;
 const QUOTE = /^ {0,3}>[ ]?(.*)$/;
 const TABLE_RULE = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
 const TASK = /^\[([ xX])\][ \t]+(.*)$/;
+/** `[!NOTE] text` or `**Note** text` on a quote's first line. */
+const ALERT = /^\s*(?:\[!(note|tip|important|warning|caution)\]|\*\*(note|tip|important|warning|caution):?\*\*:?)(?:[ \t]+(.*))?$/i;
 
 function indentOf(line: string): number {
   return line.length - line.replace(/^\s+/, "").length;
@@ -251,7 +261,17 @@ function parseBlocks(lines: string[], depth: number, inItem = false): Block[] {
         inner.push(q ? q[1] : lines[i]);
         i++;
       }
-      blocks.push({ t: "quote", blocks: depth > 6 ? [{ t: "p", c: parseInline(inner.join("\n")) }] : parseBlocks(inner, depth + 1) });
+      const alert = ALERT.exec(inner[0] ?? "");
+      let tone: Tone | undefined;
+      if (alert) {
+        tone = /warn|caution/i.test(alert[1] ?? alert[2]) ? "warn" : "tip";
+        const rest = (alert[3] ?? "").trim();
+        if (rest) inner[0] = rest;
+        else inner.shift();
+      }
+      const quote: Block = { t: "quote", blocks: depth > 6 ? [{ t: "p", c: parseInline(inner.join("\n")) }] : parseBlocks(inner, depth + 1) };
+      if (tone) quote.tone = tone;
+      blocks.push(quote);
       continue;
     }
 
@@ -320,4 +340,58 @@ function parseList(lines: string[], start: number, depth: number, out: Block[]):
   }
   out.push({ t: "list", ordered, start: ordered ? Math.min(parseInt(first[2], 10), 1e6) : 1, items });
   return i;
+}
+
+/* ── Streaming + clipboard ─────────────────────────────────────────────── */
+
+const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})/;
+
+/**
+ * A reply still streaming, made safe to parse: an unfinished `[[` mention at
+ * the end is dropped until its `]]` arrives, and an odd `` ` ``, `**` or `~~`
+ * on the last line is closed (or dropped when nothing follows it yet), so
+ * half a bold word doesn't show its stars. Text inside an open code fence is
+ * left alone. Only for the live answer: a finished one is parsed as is.
+ */
+export function closeOpen(text: string): string {
+  let open = false;
+  for (const line of text.split("\n")) if (FENCE_LINE.test(line)) open = !open;
+  if (open) return text;
+  const cut = text.lastIndexOf("\n") + 1;
+  const head = text.slice(0, cut);
+  let line = text.slice(cut);
+  if (FENCE_LINE.test(line)) return text;
+  const mention = line.lastIndexOf("[[");
+  if (mention >= 0 && line.indexOf("]]", mention) < 0) line = line.slice(0, mention).trimEnd();
+
+  // Markers still open on the line, by where they opened.
+  const opened: Array<{ at: number; mark: string }> = [];
+  const ticks = [...line.matchAll(/`/g)].map((m) => m.index ?? 0);
+  if (ticks.length % 2 === 1) opened.push({ at: ticks[ticks.length - 1], mark: "`" });
+  // Code spans hide their stars and tildes.
+  const bare = line.replace(/`[^`]*`/g, (m) => "x".repeat(m.length));
+  const end = opened.length ? opened[0].at : bare.length;
+  for (const mark of ["**", "~~"]) {
+    const at: number[] = [];
+    for (let i = bare.indexOf(mark); i >= 0 && i < end; i = bare.indexOf(mark, i + 2)) at.push(i);
+    if (at.length % 2 === 1) opened.push({ at: at[at.length - 1], mark });
+  }
+  opened.sort((a, b) => b.at - a.at);
+  for (const { at, mark } of opened) {
+    // Nothing after the marker yet: hide it rather than close an empty run.
+    if (!line.slice(at + mark.length).trim()) line = line.slice(0, at).trimEnd();
+    else line = line.trimEnd() + mark;
+  }
+  return head + line;
+}
+
+const MENTION = /\[\[([^[\]\n]{1,80})\]\]/g;
+
+/** A reply as text for the clipboard: `[[id#Name]]` mentions become the
+ *  item's name (from `refs` when known); the rest stays Markdown. */
+export function plainText(markdown: string, refs?: Record<string, { name: string }>): string {
+  return markdown.replace(MENTION, (_m, label: string) => {
+    const key = label.trim();
+    return refs?.[key]?.name ?? (key.includes("#") ? key.slice(key.indexOf("#") + 1) : key);
+  });
 }

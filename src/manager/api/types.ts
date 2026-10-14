@@ -1178,7 +1178,15 @@ export interface AiChatPage {
 }
 
 /** What the user did with a proposal card since the last message. */
-export interface AiChatEvent {
+/** The user used one of a card's own fixes (`AiCardFix.key`). */
+export interface AiChatFixEvent {
+  pid: string;
+  fix: string;
+  /** The fix's label, for the line the model reads. */
+  label?: string;
+}
+
+export interface AiChatStatusEvent {
   pid: string;
   status: "applied" | "editor" | "dismissed" | "undone" | "failed" | "opened" | "replaced";
   /** The row an applied create made, so a reopened chat can Open it. */
@@ -1186,6 +1194,8 @@ export interface AiChatEvent {
   /** Options the user unticked on the card before applying it. */
   left_out?: number;
 }
+
+export type AiChatEvent = AiChatStatusEvent | AiChatFixEvent;
 
 /** One chat turn. The server keeps the chat: send only the new message and
  *  the `chat_id` it returned (none starts a new chat). */
@@ -1198,11 +1208,12 @@ export interface AiChatRequest {
   images?: Array<{ data: string }>;
 }
 
-/** Run the chat's last message again: its answer is dropped first. */
+/** Run the chat's last message again: its answer is dropped first. A
+ *  non-empty `message` replaces the message (the user edited it). */
 export interface AiChatRetry {
   chat_id: string;
   retry: true;
-  message: "";
+  message: string;
   page?: AiChatPage;
   events?: AiChatEvent[];
 }
@@ -1212,13 +1223,44 @@ export interface AiChatRetry {
 export type AiCallAnswer =
   | { id: string; text: string }
   | { id: string; denied: true }
-  | { id: string; approve: "once" | "chat" };
+  | { id: string; approve: "once" | "chat" }
+  | { id: string; answers: AiAskAnswer[] };
+
+/** One answer of an `ask` question, as the server checked it. */
+export interface AiAskChoice {
+  label: string;
+  hint?: string;
+}
+
+/** One question the model asked (`engine/ai/ask.py`). */
+export interface AiAskQuestion {
+  header: string;
+  question: string;
+  multi: boolean;
+  choices: AiAskChoice[];
+}
+
+/** The user's answer to question `q` (numbers count from 0): the choices
+ *  picked, their own words, or "decide for me". Only numbers go back; the
+ *  server reads the labels from the call it stored. */
+export type AiAskAnswer =
+  | { q: number; picked: number[] }
+  | { q: number; other: string }
+  | { q: number; decide: true };
+
+/** What an answered ask shows: each header with its answer, or that the
+ *  user answered in their next message instead. */
+export interface AiAskAnswered {
+  answers?: Array<{ header: string; answer: string }>;
+  own?: boolean;
+}
 
 /** Carries a paused turn on once its calls are answered. */
 export interface AiChatResume {
   chat_id: string;
   results: AiCallAnswer[];
   page?: AiChatPage;
+  events?: AiChatEvent[];
 }
 
 /** A call the turn waits on: a page tool for the browser to run, or a web
@@ -1238,7 +1280,9 @@ export type AiPendingCall =
   | { id: string; tool: "show_test"; label: string; args: AiShowTestArgs }
   | { id: string; tool: "use_panel"; label: string;
       args: { id: string; type: string; panel: string; request: string } }
-  | { id: string; tool: "web_search"; label: string; args: { query: string } };
+  | { id: string; tool: "web_search"; label: string; args: { query: string } }
+  | { id: string; tool: "ask"; label: string;
+      args: { questions: AiAskQuestion[]; settled?: string[] } };
 
 /** One "worked on" line; a run_test step carries its run as a card. */
 export interface AiChatStep {
@@ -1382,6 +1426,16 @@ export interface AiChatProposal {
   /** "low": the server judged it small (descriptions, tags, categories),
    *  so auto-apply may apply it. */
   risk?: "low";
+  /** Warnings the card can fix by itself (`engine/ai/lint.py::fixes`);
+   *  the rest are fixed by asking the model. */
+  fixes?: AiCardFix[];
+}
+
+export interface AiCardFix {
+  /** The warning (one of `warnings`) this fixes. */
+  warning: string;
+  key: string;
+  label: string;
 }
 
 export interface AiChatResult {
@@ -1401,6 +1455,9 @@ export interface AiChatResult {
   refs?: Record<string, AiChatRef>;
   /** Calls the turn waits on; answer them with `AiChatResume`. */
   pending?: AiPendingCall[];
+  /** A reopened chat: what the user answered to this answer's `ask`
+   *  questions, by call id. */
+  answered?: Record<string, AiAskAnswered>;
   /** How full the model's window is, for the meter. */
   context?: AiChatContext;
 }

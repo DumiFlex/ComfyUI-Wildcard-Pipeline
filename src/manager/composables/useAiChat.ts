@@ -14,7 +14,9 @@
  * A turn can pause on page tools (open a page, point at something, hand
  * work to a page's AI feature) and on web searches: page tools run here
  * (`useAiActions`), a search waits for the user's Allow or Deny, and the
- * answers carry the turn on (`AiChatResume`) until nothing waits.
+ * answers carry the turn on (`AiChatResume`) until nothing waits. Questions
+ * the model asks (`ask`) don't hold the turn: they show in the chat
+ * (`AiAsk.vue`), and the user clicks answers (`answerAsk`) or just types.
  *
  * Answers stream in (`api.ai.chatStream`): `live` holds what the model has
  * written so far and what it is doing, until the finished answer replaces
@@ -24,8 +26,8 @@
 import { computed, ref, shallowRef, triggerRef } from "vue";
 import { api, ApiError } from "../api/client";
 import type {
-  AiChatStep, AiTestCard, AiCallAnswer, AiChatContext, AiChatEvent, AiChatPage, AiChatProposal, AiChatResult,
-  AiChatRetry, AiChatRequest, AiChatResume, AiChatStreamEvent, AiPendingCall,
+  AiChatStep, AiTestCard, AiCallAnswer, AiChatContext, AiChatEvent, AiChatStatusEvent, AiChatPage, AiChatProposal, AiChatResult,
+  AiChatRetry, AiChatRequest, AiChatResume, AiChatStreamEvent, AiPendingCall, AiAskAnswer, AiAskAnswered, AiAskQuestion,
 } from "../api/types";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
@@ -67,7 +69,11 @@ export interface ChatAssistantEntry {
   /** Options the user unticked on a card, by proposal: left out when it is
    *  applied or opened in an editor. */
   skip?: Record<string, string[]>;
+  /** What the user answered to this answer's questions (`ask`), by call id. */
+  answered?: Record<string, AiAskAnswered>;
 }
+
+export type AskCall = Extract<AiPendingCall, { tool: "ask" }>;
 
 export type ChatEntry = ChatUserEntry | ChatAssistantEntry;
 
@@ -81,6 +87,9 @@ const entries = shallowRef<ChatEntry[]>([]);
 const MAX_AUTO = 20;
 const loading = ref(false);
 const error = ref("");
+/** The composer holds the last message, edited: Send runs it again in
+ *  place of the old one (`editLast`). */
+const editing = ref(false);
 let controller: AbortController | null = null;
 
 /** The server's id for this chat; null until the first answer. */
@@ -113,10 +122,10 @@ const attachments = shallowRef<ChatImage[]>([]);
 const vision = ref<boolean | null>(null);
 const visionModel = ref("");
 
-function record(pid: string, status: AiChatEvent["status"], created?: string, leftOut = 0): void {
-  const ev: AiChatEvent = created ? { pid, status, created } : { pid, status };
+function record(pid: string, status: AiChatStatusEvent["status"], created?: string, leftOut = 0): void {
+  const ev: AiChatStatusEvent = created ? { pid, status, created } : { pid, status };
   if (leftOut > 0) ev.left_out = leftOut;
-  pending = [...pending.filter((e) => e.pid !== pid), ev];
+  pending = [...pending.filter((e) => e.pid !== pid || "fix" in e), ev];
   // Saved now too, so the chat reopens with its cards as they are.
   const id = chatId.value;
   if (id) void api.ai.patchChat(id, { events: [ev] }).catch(() => undefined);
@@ -206,10 +215,24 @@ async function send(page?: AiChatPage): Promise<void> {
   const text = input.value.trim();
   const pics = attachments.value;
   if ((!text && !pics.length) || loading.value) return;
+  if (editing.value && text) {
+    const why = retryBlocked();
+    if (why) {
+      error.value = why;
+      return;
+    }
+    await retry(page, text);
+    return;
+  }
+  const waiting = openAsks();
   const user: ChatUserEntry = pics.length
     ? { role: "user", text, images: pics.map((p) => p.url) }
     : { role: "user", text };
   const next: ChatEntry[] = [...entries.value, user];
+  if (waiting) {
+    // Typed instead of clicking: the message answers the questions.
+    for (const c of waiting.calls) waiting.entry.answered = { ...waiting.entry.answered, [c.id]: { own: true } };
+  }
   entries.value = next;
   input.value = "";
   attachments.value = [];
@@ -236,6 +259,10 @@ async function send(page?: AiChatPage): Promise<void> {
     await carryOn(result, mine.signal);
   } catch (err) {
     unsent(next, text, pics);
+    if (waiting) {
+      for (const c of waiting.calls) delete waiting.entry.answered?.[c.id];
+      touch();
+    }
     if (err instanceof DOMException && err.name === "AbortError") return;
     error.value = err instanceof ApiError || err instanceof Error ? err.message : "Something went wrong";
   } finally {
@@ -264,13 +291,22 @@ function retryBlocked(): string {
   return applied ? "Undo the changes you applied from this answer first" : "";
 }
 
-/** Run the last message again: its answer goes, a new one comes. */
-async function retry(page?: AiChatPage): Promise<void> {
+/** Run the last message again: its answer goes, a new one comes. With
+ *  `text` (an edited last message) that text runs instead. */
+async function retry(page?: AiChatPage, text = ""): Promise<void> {
   if (loading.value || retryBlocked()) return;
   const id = chatId.value;
   if (!id) return;
   const before = entries.value;
-  entries.value = before.slice(0, lastUserIndex() + 1);
+  const at = lastUserIndex();
+  const kept = before.slice(0, at + 1);
+  const old = kept[at];
+  if (text && old?.role === "user") {
+    kept[at] = old.images?.length ? { role: "user", text, images: old.images } : { role: "user", text };
+    input.value = "";
+    editing.value = false;
+  }
+  entries.value = kept;
   error.value = "";
   const mine = new AbortController();
   controller = mine;
@@ -279,7 +315,7 @@ async function retry(page?: AiChatPage): Promise<void> {
   const events = pending;
   try {
     const result = await turn({
-      chat_id: id, retry: true, message: "",
+      chat_id: id, retry: true, message: text,
       ...(page ? { page } : {}),
       ...(events.length ? { events } : {}),
     }, mine.signal);
@@ -289,6 +325,11 @@ async function retry(page?: AiChatPage): Promise<void> {
   } catch (err) {
     // The old answer is still the stored one: show it again.
     if (entries.value.length === lastUserIndex() + 1) entries.value = before;
+    if (text && !input.value) {
+      // The edit didn't run: back in the box to send again.
+      input.value = text;
+      editing.value = true;
+    }
     if (err instanceof DOMException && err.name === "AbortError") return;
     error.value = err instanceof Error ? err.message : "Something went wrong";
   } finally {
@@ -317,6 +358,7 @@ async function load(id: string): Promise<void> {
           pending: t.view.pending ?? [],
         },
         status: { ...t.status }, created: { ...t.created }, errors: {},
+        ...(t.view.answered ? { answered: { ...t.view.answered } } : {}),
       });
 }
 
@@ -389,6 +431,8 @@ async function checkVision(): Promise<void> {
 async function carryOn(first: AiChatResult, signal: AbortSignal): Promise<void> {
   let result = first;
   while (result.pending?.length) {
+    // Questions wait for the user without holding the chat (`answerAsk`).
+    if (result.pending.some((c) => c.tool === "ask")) return;
     const entry = entries.value[entries.value.length - 1];
     if (entry?.role !== "assistant") return;
     const answers = await answerCalls(entry, result.pending, signal);
@@ -446,6 +490,101 @@ function answerSearch(id: string, choice: SearchApproval): void {
   approvals.get(id)?.(choice);
 }
 
+/** The questions of an answer (`ask`). */
+function askCalls(entry: ChatAssistantEntry): AskCall[] {
+  return (entry.result.pending ?? []).filter((c): c is AskCall => c.tool === "ask");
+}
+
+/** The questions the chat waits on: the latest answer's, unanswered. */
+function openAsks(): { entry: ChatAssistantEntry; calls: AskCall[] } | null {
+  const entry = entries.value[entries.value.length - 1];
+  if (entry?.role !== "assistant") return null;
+  const calls = askCalls(entry).filter((c) => !entry.answered?.[c.id]);
+  return calls.length ? { entry, calls } : null;
+}
+
+/** How answers read once sent, as the server words them for the model:
+ *  "Style: Anime · Negatives: you decide". */
+export function askAnswered(questions: AiAskQuestion[], answers: AiAskAnswer[]): AiAskAnswered {
+  return {
+    answers: questions.map((q, i) => {
+      const a = answers.find((x) => x.q === i);
+      let answer = "you decide";
+      if (a && "other" in a && a.other.trim()) answer = `"${a.other.trim()}"`;
+      else if (a && "picked" in a) {
+        const labels = [...new Set(a.picked)].map((n) => q.choices[n]?.label).filter((l): l is string => !!l);
+        if (labels.length) answer = (q.multi ? labels : labels.slice(0, 1)).join(", ");
+      }
+      return { header: q.header, answer };
+    }),
+  };
+}
+
+/** Send the user's answers to the questions the turn waits on; the turn
+ *  goes on from there. Questions left out are the model's to decide. */
+async function answerAsk(callId: string, answers: AiAskAnswer[]): Promise<void> {
+  const waiting = openAsks();
+  const call = waiting?.calls.find((c) => c.id === callId);
+  const id = chatId.value;
+  if (!waiting || !call || !id || loading.value) return;
+  const { entry } = waiting;
+  entry.answered = { ...entry.answered, [callId]: askAnswered(call.args.questions, answers) };
+  touch();
+  error.value = "";
+  const mine = new AbortController();
+  controller = mine;
+  loading.value = true;
+  const page = host?.page();
+  const snap = page?.editor ? editorJson() : undefined;
+  const events = pending;
+  try {
+    const result = await turn({
+      chat_id: id, results: [{ id: callId, answers }],
+      ...(page ? { page } : {}),
+      ...(events.length ? { events } : {}),
+    }, mine.signal);
+    pending = pending.filter((e) => !events.includes(e));
+    await pushAnswer(result, snap);
+    await carryOn(result, mine.signal);
+  } catch (err) {
+    // Not sent: the questions can be answered again.
+    if (entries.value[entries.value.length - 1] === entry) {
+      delete entry.answered?.[callId];
+      touch();
+    }
+    if (err instanceof DOMException && err.name === "AbortError") return;
+    error.value = err instanceof Error ? err.message : "Something went wrong";
+  } finally {
+    if (controller === mine) {
+      controller = null;
+      loading.value = false;
+      running.value = "";
+    }
+  }
+}
+
+/** Why the last message can't be edited, else "" (as `retryBlocked`). */
+function editBlocked(): string {
+  return retryBlocked();
+}
+
+/** Put the last message back in the box; Send runs it again with the new
+ *  text in place of the old (its answer goes, as with Retry). */
+function editLast(): void {
+  if (loading.value || editBlocked()) return;
+  const last = entries.value[lastUserIndex()];
+  if (last?.role !== "user") return;
+  input.value = last.text;
+  editing.value = true;
+}
+
+/** Leave editing: the box empties and Send sends a new message again. */
+function cancelEdit(): void {
+  if (!editing.value) return;
+  editing.value = false;
+  input.value = "";
+}
+
 /** The drawer hands over how to navigate and read the page. */
 /** A test card's "Open in Test Runner": the same run, on the page. */
 async function openTest(card: AiTestCard): Promise<string> {
@@ -472,6 +611,7 @@ function reset(): void {
   stop();
   entries.value = [];
   error.value = "";
+  editing.value = false;
   chatId.value = null;
   pending = [];
   context.value = null;
@@ -801,6 +941,44 @@ function ask(text: string): void {
   queued.value = text;
 }
 
+/** Make one of the card's own fixes (`p.fixes`). The server makes it on
+ *  the card it stored, so reopening the chat and later answers see the
+ *  fixed card, and hands back the new body; the model hears it with the
+ *  next message. */
+async function fix(entry: ChatAssistantEntry, p: AiChatProposal, key: string): Promise<void> {
+  const f = p.fixes?.find((x) => x.key === key);
+  const id = chatId.value;
+  if (!f || !id || entry.status[p.pid]) return;
+  delete entry.errors[p.pid];
+  try {
+    const out = await api.ai.patchChat(id, { events: [{ pid: p.pid, fix: key }] });
+    const body = out.fixed?.[p.pid];
+    if (!body) throw new Error("This card can't be fixed any more");
+    p.op = { ...p.op, body } as AiChatProposal["op"];
+    p.warnings = p.warnings.filter((w) => w !== f.warning);
+    p.fixes = (p.fixes ?? []).filter((x) => x.key !== key);
+    pending = [...pending, { pid: p.pid, fix: key, label: f.label }];
+  } catch (err) {
+    entry.errors[p.pid] = err instanceof Error ? err.message : String(err);
+  }
+  touch();
+}
+
+async function fixAll(entry: ChatAssistantEntry, p: AiChatProposal): Promise<void> {
+  for (const f of [...(p.fixes ?? [])]) {
+    await fix(entry, p, f.key);
+    if (entry.errors[p.pid]) return;
+  }
+}
+
+/** A warning the card can't fix by itself goes back to the model, which
+ *  answers with a new card that replaces this one. */
+function askFix(p: AiChatProposal, warning: string): void {
+  if (loading.value) return;
+  input.value = `Fix card ${p.pid} ("${p.title}"): ${warning}`;
+  void send();
+}
+
 function dismiss(entry: ChatAssistantEntry, p: AiChatProposal): void {
   entry.status[p.pid] = "dismissed";
   record(p.pid, "dismissed");
@@ -812,10 +990,11 @@ const started = computed(() => entries.value.length > 0);
 export function useAiChat() {
   return {
     open, input, entries, loading, error, started, queued, chatId, asking, running, live,
-    context, compacting,
-    send, stop, reset, apply, applyAll, chainOf, linkWarnings, undo, dismiss, blockedReason, ask, answerSearch, attach,
+    context, compacting, editing,
+    send, stop, reset, apply, applyAll, fix, fixAll, askFix, chainOf, linkWarnings, undo, dismiss, blockedReason, ask, answerSearch, attach,
     toggleOption, setAllOptions, openInEditor, openTest,
     retry, retryBlocked, load, compact,
+    askCalls, answerAsk, editLast, editBlocked, cancelEdit,
     attachments, vision, visionModel, addFiles, removeAttachment, checkVision,
   };
 }

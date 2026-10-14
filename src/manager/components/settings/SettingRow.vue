@@ -83,7 +83,7 @@ const targeted = computed(() => !!props.settingKey && route?.hash === `#${props.
   flex-wrap: wrap;
   justify-content: flex-end;
 }
-.wp-set-row--stacked .wp-set-row__control { max-width: none; flex-wrap: wrap; }
+.wp-set-row--stacked .wp-set-row__control { max-width: none; flex-wrap: wrap; justify-content: flex-start; }
 .wp-set-row__control :deep(.wp-select) { min-width: 200px; }
 .wp-set-row--form {
   display: grid;

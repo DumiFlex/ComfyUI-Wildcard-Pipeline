@@ -102,6 +102,17 @@ async def fake_llm(aiohttp_server):
         seen.append({"path": request.path, "headers": dict(request.headers), "body": body})
         if request.headers.get("x-api-key") != "sk-ant":
             return web.json_response({"error": {"message": "invalid x-api-key"}}, status=401)
+        if str(body.get("model")).startswith(("claude-strict", "claude-opus-5-5")):
+            # The newest models: no sampling settings, no forced tool choice.
+            if "temperature" in body:
+                return web.json_response({"error": {
+                    "message": "temperature is deprecated for this model."}}, status=400)
+            if (body.get("tool_choice") or {}).get("type") in ("tool", "any"):
+                return web.json_response({"error": {
+                    "message": "tool_choice: forced tool use is not supported."}}, status=400)
+            if body.get("tool_choice") == {"type": "auto"}:
+                return web.json_response({"content": [
+                    {"type": "text", "text": "```json\n" + json.dumps(ANSWER) + "\n```"}]})
         if any(t.get("name") == "search" for t in body.get("tools") or []):
             return web.json_response({
                 "content": [{"type": "text", "text": "Hi from Claude."}],

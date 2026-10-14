@@ -541,7 +541,9 @@ export const api = {
       return request<AiChatDetail>(`/wp/api/ai/chats/${encodeURIComponent(id)}`, { method: "GET" });
     },
     patchChat(id: string, body: { title?: string; pinned?: boolean; events?: AiChatEvent[] }) {
-      return request<{ id: string; title: string; pinned: boolean }>(
+      return request<{ id: string; title: string; pinned: boolean;
+        /** New card bodies for fix events, by pid. */
+        fixed?: Record<string, Record<string, unknown>> }>(
         `/wp/api/ai/chats/${encodeURIComponent(id)}`,
         { method: "PATCH", body: JSON.stringify(body) },
       );

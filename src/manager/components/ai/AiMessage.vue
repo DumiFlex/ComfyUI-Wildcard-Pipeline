@@ -7,17 +7,25 @@
  * Prompt syntax in the text is coloured the way the editors colour it:
  * `$variables` in their own hashed colour, `{a|b}` picks, `{2$$, $$…}`
  * multi-picks, `@{…}` references, `<lora:…>` / `embedding:` runs and
- * `#tags`. A line opening with "Tip:", "Note:" or "Warning:" is a callout.
+ * `#tags`. A line opening with "Tip:", "Note:" or "Warning:" is a callout,
+ * and so is a quote opening with a GitHub alert (`> [!NOTE]`, `> [!WARNING]`).
+ * A code span that is only a key combo (`Ctrl+Enter`) shows as keys, and a
+ * code block longer than FOLD_AT lines folds.
+ *
+ * `live`: the answer is still streaming. Open `**` / `` ` `` / `[[` at the
+ * end are closed first (`closeOpen`), and the words added since the last
+ * update fade in (never inside code; off with reduced motion).
  */
-import { computed, h, ref, type VNode } from "vue";
+import { computed, h, ref, watch, type VNode } from "vue";
 import { useRouter } from "vue-router";
 import { KIND_ICON_MAP } from "../../../components/shared/kind-icons";
 import type { AiChatRef } from "../../api/types";
-import { parseMarkdown, type Block, type Inline, type ListItem } from "../../utils/chat-markdown";
+import { closeOpen, parseMarkdown, type Block, type Inline, type ListItem, type Tone } from "../../utils/chat-markdown";
+import { copyText } from "../../utils/clipboard";
 import { tokenizeRich } from "@/widgets/richTokenize";
 import { varColorIndex } from "../../../components/shared/var-color";
 
-const props = defineProps<{ text: string; refs?: Record<string, AiChatRef> }>();
+const props = defineProps<{ text: string; refs?: Record<string, AiChatRef>; live?: boolean }>();
 const router = useRouter();
 
 const EDIT_ROUTES: Record<string, string> = {
@@ -26,7 +34,84 @@ const EDIT_ROUTES: Record<string, string> = {
   template: "templates-edit",
 };
 
-function chip(label: string): VNode {
+/* ── Live fade ─────────────────────────────────────────────────────────
+   While streaming, a marker goes in the text where the new words start.
+   Rendering drops it, and every text run after it is wrapped in a span
+   that fades in. Each update keys those spans afresh so they replay. */
+const MARK = "\u{e000}";
+const MARKS = /\u{e000}/gu;
+const unmark = (v: string): string => (v.includes(MARK) ? v.replace(MARKS, "") : v);
+/** Lines the marker would break: fences, table rules, `---` rules. */
+const NO_MARK_LINE = /^\s*(?:`{3}|~{3}|[|:\s-]+$|[*_=\s-]+$)/;
+/** List, quote, heading and task markup at a line's start. */
+const LINE_MARKUP = /^\s*(?:(?:#{1,6}|>|[-*+•]|\d{1,9}[.)]|\[[ xX]\])[ \t]+)*/;
+
+/** Where to put the marker for text that grew from `before`: just before
+ *  the space that opens the first new word, never inside a line's markup
+ *  or first word (block patterns look there), else -1. */
+function markAt(text: string, before: string): number {
+  if (before.length >= text.length || !text.startsWith(before)) return -1;
+  let at = before.length;
+  while (at > 0 && !/\s/.test(text[at - 1])) at--;
+  if (at > 0 && text[at - 1] !== "\n") at--; // onto the space before the word
+  const start = text.lastIndexOf("\n", at - 1) + 1;
+  const lineEnd = text.indexOf("\n", start);
+  const line = text.slice(start, lineEnd < 0 ? text.length : lineEnd);
+  if (NO_MARK_LINE.test(line)) return -1;
+  // The end of the line's first word after its markup.
+  const markup = LINE_MARKUP.exec(line)?.[0].length ?? 0;
+  const word = /^\S+/.exec(line.slice(markup));
+  const minAt = start + markup + (word ? word[0].length : 0);
+  if (at < minAt) at = minAt;
+  return at < start + line.length && /\s/.test(text[at]) ? at : -1;
+}
+
+let before = "";
+watch(() => props.text, (_now, old) => { before = old ?? ""; }, { flush: "sync" });
+
+/** Render state: past the marker yet, and how many fade spans so far.
+ *  Spans are keyed by where the marker sits, so only new words replay. */
+let fading = false;
+let fadeKey = 0;
+let fadeAt = -1;
+
+function fade(parts: Array<VNode | string>): Array<VNode | string> {
+  if (!parts.length) return parts;
+  return [h("span", { class: "wp-ai-msg__new", key: `n${fadeAt}.${fadeKey++}` }, parts)];
+}
+
+/** Text with the marker taken out; what follows it fades. */
+function liveText(v: string): Array<VNode | string> {
+  if (fading) return fade(syntax(unmark(v)));
+  const at = v.indexOf(MARK);
+  if (at < 0) return syntax(v);
+  fading = true;
+  return [...syntax(v.slice(0, at)), ...fade(syntax(unmark(v.slice(at))))];
+}
+
+/** Code shows no fade, but the words after it do. */
+function codeText(v: string): string {
+  if (v.includes(MARK)) fading = true;
+  return unmark(v);
+}
+
+/* ── Keys ─────────────────────────────────────────────────────────────── */
+
+const MOD = "Ctrl|Control|Cmd|Command|Alt|Option|Opt|Shift|Meta|Win|Super|⌘|⌥|⇧|⌃";
+const KEY = "Enter|Return|Esc|Escape|Tab|Space|Backspace|Delete|Del|Insert|Home|End|PgUp|PgDn|PageUp|PageDown"
+  + "|Up|Down|Left|Right|Click|Left-click|Right-click|Middle-click|Double-click|Drag|Scroll|Wheel|F\\d{1,2}|[A-Za-z0-9]|[-=,./;'`\\[\\]]";
+/** `Ctrl+Enter`, `Shift + Click`, or a lone named key (`Enter`, `Esc`, `F5`). */
+const KEYS = new RegExp(`^(?:(?:${MOD})\\s*\\+\\s*)+(?:${MOD}|${KEY})$|^(?:Enter|Esc|Escape|Backspace|F\\d{1,2})$`, "i");
+
+function keys(v: string): VNode | null {
+  if (v.length > 40 || !KEYS.test(v.trim())) return null;
+  const parts = v.trim().split(/\s*\+\s*/);
+  return h("span", { class: "wp-ai-msg__keys", "data-test": "ai-msg-keys" },
+    parts.flatMap((k, i) => (i ? ["+", h("kbd", k)] : [h("kbd", k)])));
+}
+
+function chip(raw: string): VNode {
+  const label = unmark(raw);
   const found = props.refs?.[label];
   if (found && !found.id) {
     return h("span", {
@@ -92,14 +177,17 @@ function syntax(text: string): Array<VNode | string> {
 function inline(nodes: Inline[]): Array<VNode | string> {
   return nodes.flatMap((n) => {
     switch (n.t) {
-      case "text": return syntax(n.v);
+      case "text": return props.live ? liveText(n.v) : syntax(n.v);
       case "b": return [h("strong", inline(n.c))];
       case "i": return [h("em", inline(n.c))];
       case "s": return [h("s", inline(n.c))];
-      case "code": return [h("code", { class: "wp-ai-msg__code" }, syntax(n.v))];
+      case "code": {
+        const v = codeText(n.v);
+        return [keys(v) ?? h("code", { class: "wp-ai-msg__code" }, syntax(v))];
+      }
       case "ref": return [chip(n.v)];
       // Never followed: the text, with the address in a tooltip.
-      case "link": return [h("span", { class: "wp-ai-msg__link", title: n.href }, inline(n.c))];
+      case "link": return [h("span", { class: "wp-ai-msg__link", title: unmark(n.href) }, inline(n.c))];
     }
   });
 }
@@ -107,24 +195,47 @@ function inline(nodes: Inline[]): Array<VNode | string> {
 const copied = ref<string | null>(null);
 
 function copy(v: string): void {
-  void navigator.clipboard?.writeText(v).then(() => {
+  void copyText(v).then((ok) => {
+    if (!ok) return;
     copied.value = v;
     setTimeout(() => { if (copied.value === v) copied.value = null; }, 1500);
   });
 }
 
-function pre(lang: string, v: string): VNode {
+/** Blocks longer than FOLD_AT lines show FOLD_SHOW of them until opened. */
+const FOLD_AT = 20;
+const FOLD_SHOW = 12;
+const unfolded = ref(new Set<string>());
+
+function toggleFold(v: string): void {
+  const next = new Set(unfolded.value);
+  if (next.has(v)) next.delete(v);
+  else next.add(v);
+  unfolded.value = next;
+}
+
+function pre(lang: string, raw: string): VNode {
+  const v = codeText(raw);
   const done = copied.value === v;
+  const lines = v.split("\n");
+  // A block still streaming isn't folded: it would fold under the reader.
+  const foldable = !props.live && lines.length > FOLD_AT;
+  const open = !foldable || unfolded.value.has(v);
+  const shown = open ? v : lines.slice(0, FOLD_SHOW).join("\n");
   return h("div", { class: "wp-ai-msg__codeblock" }, [
     h("div", { class: "wp-ai-msg__codehead" }, [
-      h("span", lang || "text"),
+      h("span", unmark(lang) || "text"),
       h("button", {
         type: "button", class: "wp-ai-msg__copy", "data-test": "ai-msg-copy",
         "aria-label": done ? "Copied" : "Copy code", title: done ? "Copied" : "Copy",
         onClick: () => copy(v),
       }, [h("i", { class: done ? "pi pi-check" : "pi pi-copy", "aria-hidden": "true" })]),
     ]),
-    h("pre", { class: "wp-ai-msg__pre" }, syntax(v)),
+    h("pre", { class: "wp-ai-msg__pre", "data-folded": open ? undefined : "true" }, syntax(shown)),
+    foldable ? h("button", {
+      type: "button", class: "wp-ai-msg__fold", "data-test": "ai-msg-fold", "aria-expanded": open ? "true" : "false",
+      onClick: () => toggleFold(v),
+    }, open ? "Show fewer lines" : `Show all ${lines.length} lines`) : null,
   ]);
 }
 
@@ -178,10 +289,18 @@ function calloutOf(c: Inline[]): { tone: "tip" | "warn"; rest: Inline[] } | null
   return null;
 }
 
-function callout(tone: "tip" | "warn", rest: Inline[]): VNode {
-  return h("p", { class: "wp-ai-msg__callout", "data-tone": tone }, [
-    h("i", { class: tone === "warn" ? "pi pi-exclamation-triangle" : "pi pi-lightbulb", "aria-hidden": "true" }),
-    h("span", inline(rest)),
+function calloutIcon(tone: Tone): VNode {
+  return h("i", { class: tone === "warn" ? "pi pi-exclamation-triangle" : "pi pi-lightbulb", "aria-hidden": "true" });
+}
+
+function callout(tone: Tone, rest: Inline[]): VNode {
+  return h("p", { class: "wp-ai-msg__callout", "data-tone": tone }, [calloutIcon(tone), h("span", inline(rest))]);
+}
+
+/** A GitHub alert quote: the callout look around all of its blocks. */
+function calloutBlocks(tone: Tone, blocks: Block[]): VNode {
+  return h("div", { class: "wp-ai-msg__callout", "data-tone": tone, "data-test": "ai-msg-alert" }, [
+    calloutIcon(tone), h("div", { class: "wp-ai-msg__callout-body" }, blocks.map(block)),
   ]);
 }
 
@@ -200,6 +319,7 @@ function block(b: Block): VNode {
         : h("ul", b.items.map(item));
     case "pre": return pre(b.lang, b.v);
     case "quote": {
+      if (b.tone) return calloutBlocks(b.tone, b.blocks);
       // "> Tip: …" is a callout too.
       const only = b.blocks.length === 1 && b.blocks[0].t === "p" ? calloutOf(b.blocks[0].c) : null;
       return only ? callout(only.tone, only.rest) : h("blockquote", b.blocks.map(block));
@@ -209,12 +329,24 @@ function block(b: Block): VNode {
   }
 }
 
-const blocks = computed(() => parseMarkdown(props.text));
-const Body = () => blocks.value.map(block);
+const parsed = computed((): { blocks: Block[]; at: number } => {
+  if (!props.live) return { blocks: parseMarkdown(props.text), at: -1 };
+  const at = markAt(props.text, before);
+  const closed = closeOpen(props.text);
+  // closeOpen only changes the end; the marker goes in when it's before that.
+  const ok = at >= 0 && at < closed.length && closed.startsWith(props.text.slice(0, at));
+  return { blocks: parseMarkdown(ok ? closed.slice(0, at) + MARK + closed.slice(at) : closed), at: ok ? at : -1 };
+});
+const Body = () => {
+  fading = false;
+  fadeKey = 0;
+  fadeAt = parsed.value.at;
+  return parsed.value.blocks.map(block);
+};
 </script>
 
 <template>
-  <div class="wp-ai-msg" data-test="ai-msg"><Body /></div>
+  <div class="wp-ai-msg" :class="{ 'wp-ai-msg--live': live }" data-test="ai-msg"><Body /></div>
 </template>
 
 <style scoped>
@@ -294,6 +426,30 @@ const Body = () => blocks.value.map(block);
 }
 .wp-ai-msg :deep(.wp-ai-msg__callout i) { font-size: 12px; color: var(--wp-accent-text); }
 .wp-ai-msg :deep(.wp-ai-msg__callout[data-tone="warn"] i) { color: var(--wp-warn); }
+.wp-ai-msg :deep(div.wp-ai-msg__callout) { align-items: flex-start; }
+.wp-ai-msg :deep(div.wp-ai-msg__callout > i) { margin-top: 3px; }
+.wp-ai-msg :deep(.wp-ai-msg__callout-body) { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.wp-ai-msg :deep(.wp-ai-msg__keys) { white-space: nowrap; color: var(--wp-text-muted); }
+.wp-ai-msg :deep(.wp-ai-msg__keys kbd) {
+  display: inline-block; padding: 0 5px; margin: 0 1px; min-width: 1.6em; text-align: center;
+  font-family: var(--wp-font-mono, ui-monospace, monospace); font-size: 11px; line-height: 1.6; color: var(--wp-text);
+  background: var(--wp-bg-2); border: 1px solid var(--wp-border); border-bottom-width: 2px; border-radius: var(--wp-radius-sm);
+}
+.wp-ai-msg :deep(.wp-ai-msg__pre[data-folded]) {
+  mask-image: linear-gradient(to bottom, #000 70%, transparent);
+}
+.wp-ai-msg :deep(.wp-ai-msg__fold) {
+  display: block; width: 100%; padding: 3px 8px; border: 0; border-top: 1px solid var(--wp-border);
+  background: transparent; color: var(--wp-text-muted); font: inherit; font-size: 11px; text-align: left; cursor: pointer;
+}
+.wp-ai-msg :deep(.wp-ai-msg__fold:hover) { color: var(--wp-text); background: var(--wp-bg-2); }
+.wp-ai-msg :deep(.wp-ai-msg__fold:focus-visible) { outline: 2px solid var(--wp-accent-500); outline-offset: -2px; }
+.wp-ai-msg--live :deep(.wp-ai-msg__new) { animation: wp-ai-msg-fade 150ms ease-out; }
+.wp-ai-msg--live > :deep(:last-child:not(.wp-ai-msg__codeblock)) { animation: wp-ai-msg-fade 150ms ease-out; }
+@keyframes wp-ai-msg-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .wp-ai-msg--live :deep(.wp-ai-msg__new), .wp-ai-msg--live > :deep(:last-child:not(.wp-ai-msg__codeblock)) { animation: none; }
+}
 .wp-ai-msg :deep(.wp-ai-msg__chip[data-missing]) { cursor: default; color: var(--wp-text-muted); background: transparent; border-color: var(--wp-border); }
 .wp-ai-msg :deep(.wp-ai-msg__chip[data-pending]) { cursor: default; border-style: dashed; }
 </style>

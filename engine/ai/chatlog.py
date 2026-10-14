@@ -299,6 +299,18 @@ def apply_events(meta: dict[str, Any], events: Any) -> tuple[dict[str, Any], str
         if not isinstance(ev, dict):
             continue
         pid, status = ev.get("pid"), ev.get("status")
+        fix = ev.get("fix")
+        if isinstance(pid, str) and pid in proposals and isinstance(fix, str):
+            # The user used one of the card's own fixes (`lint.fixes`).
+            info = dict(proposals[pid])
+            done = list(info.get("fixes") or [])
+            if fix not in done and len(done) < 8:
+                info["fixes"] = [*done, fix]
+                proposals[pid] = info
+                label = ev.get("label") if isinstance(ev.get("label"), str) else fix
+                said.append(f"{pid} \"{info.get('title', '')}\": used the card's fix "
+                            f"\"{label[:60]}\" (the card changed; the user still has to apply it)")
+            continue
         if not isinstance(pid, str) or pid not in proposals or status not in _STATUS_WORDS:
             continue
         info = dict(proposals[pid])
@@ -399,12 +411,37 @@ def display(entries: list[dict[str, Any]], meta: dict[str, Any]) -> list[dict[st
                                   for im in e["images"]]
             out.append(turn)
         elif kind == "shown" and isinstance(e.get("view"), dict):
-            status, created = status_of(e["view"])
-            out.append({"role": "assistant", "view": e["view"], "status": status,
+            view = answered_view(fixed_view(e["view"], meta), meta)
+            status, created = status_of(view)
+            out.append({"role": "assistant", "view": view, "status": status,
                         "created": created})
         span.append(e)
     close()
     return out
+
+
+def answered_view(view: dict[str, Any], meta: dict[str, Any]) -> dict[str, Any]:
+    """A shown answer with what the user answered to its `ask` questions
+    (`meta["asked"]`, call id -> answers), as ``view["answered"]``."""
+    asked = meta.get("asked") or {}
+    ids = [c.get("id") for c in view.get("pending") or []
+           if isinstance(c, dict) and c.get("tool") == "ask" and c.get("id") in asked]
+    if not ids:
+        return view
+    return {**view, "answered": {i: asked[i] for i in ids}}
+
+
+def fixed_view(view: dict[str, Any], meta: dict[str, Any]) -> dict[str, Any]:
+    """A shown answer with the card fixes the user used made (`meta["fixes"]`,
+    pid -> keys), so a reopened chat shows its cards as they were left."""
+    fixes = meta.get("fixes") or {}
+    props = view.get("proposals") or []
+    if not fixes or not any(isinstance(p, dict) and p.get("pid") in fixes for p in props):
+        return view
+    from engine.ai import lint
+    return {**view, "proposals": [
+        lint.with_fixes(p, list(fixes.get(p.get("pid")) or []))
+        if isinstance(p, dict) and p.get("pid") in fixes else p for p in props]}
 
 
 def last_turn_start(entries: list[dict[str, Any]]) -> int | None:

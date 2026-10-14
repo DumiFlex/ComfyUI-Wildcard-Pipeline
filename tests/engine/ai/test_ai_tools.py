@@ -10,8 +10,8 @@ from engine.ai import chat, client_tools, tools
 
 def test_every_tool_has_code_and_a_matching_prompt_line():
     for t in tools.TOOLS:
-        assert t.kind in ("read", "change", "client", "web")
-        if t.kind in ("client", "web"):
+        assert t.kind in ("read", "change", "client", "web", "ask")
+        if t.kind in ("client", "web", "ask"):
             # Checked here, run by the browser (or the server once allowed).
             assert t.name in client_tools._PREPARE, t.name
         else:

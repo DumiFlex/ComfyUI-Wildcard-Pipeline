@@ -554,6 +554,24 @@ TOOLS: list[Tool] = [
         ("wildcards", "text", "rules", "bundles"),
     ),
     Tool(
+        "ask", "ask",
+        "Ask the user up to 4 short questions with answers they click, only when the answer "
+        "changes what you will build and you can't read it from the library or the page. "
+        "Never ask permission, and never ask again what the user already answered.",
+        '{"questions": [{"header": 1-3 words, "question": text, "choices": ["Label", '
+        '"Label: hint", 2-5 of them], "multi": true if several apply}]}: shows the questions '
+        "with clickable answers and waits. Last call in its step, never with change tools.",
+        obj({"questions": arr(obj({
+            "header": s("1-3 words, e.g. Style"),
+            "question": s("one sentence"),
+            "choices": arr(any_of(s("a label, or 'Label: hint'"),
+                                  obj({"label": s(), "hint": s("one line")}, ("label",))),
+                           "2 to 5 answers, most likely first"),
+            "multi": b("several answers may apply"),
+        }), "1 to 4 questions")}, ("questions",)),
+        ("core",),
+    ),
+    Tool(
         "web_search", "web",
         "Search the web with the user's search engine. The user sees the query and allows "
         "it first; you get short result snippets. Use it on your own whenever facts would "
@@ -575,6 +593,7 @@ CHANGE = tuple(t.name for t in TOOLS if t.kind == "change")
 #: Run in the browser, or need the user's OK: the turn pauses for them.
 CLIENT = tuple(t.name for t in TOOLS if t.kind == "client")
 WEB = tuple(t.name for t in TOOLS if t.kind == "web")
+ASK = tuple(t.name for t in TOOLS if t.kind == "ask")
 
 #: Groups a small model gets on each page, besides "core". Keys are route
 #: names with their -new / -edit suffix removed.

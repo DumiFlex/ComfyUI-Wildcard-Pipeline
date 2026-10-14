@@ -64,7 +64,7 @@ def abilities() -> dict[str, Any]:
         tools = [t for t in catalog.TOOLS if group in t.groups and t.name not in seen
                  and t.name != "more_tools"]
         if group == "core":
-            tools = [t for t in tools if t.kind in ("read", "client")]
+            tools = [t for t in tools if t.kind in ("read", "client", "ask")]
         if not tools:
             continue
         seen.update(t.name for t in tools)

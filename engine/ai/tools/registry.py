@@ -27,7 +27,9 @@ from typing import Any
 #:   the turn pauses until the browser posts the result back.
 #: web: leaves the machine (web search); the turn pauses until the user
 #:   allows it, then the server runs it.
-KINDS = ("read", "change", "client", "web")
+#: ask: questions shown in the chat (`engine/ai/ask.py`); the turn pauses
+#:   until the user answers them.
+KINDS = ("read", "change", "client", "web", "ask")
 
 
 @dataclass(frozen=True)

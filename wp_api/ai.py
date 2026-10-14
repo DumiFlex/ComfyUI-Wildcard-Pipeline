@@ -43,6 +43,7 @@ from typing import Any
 from aiohttp import web
 
 from engine.ai import about as ai_about
+from engine.ai import ask as ai_ask
 from engine.ai import budget as ai_budget
 from engine.ai import chat as ai_chat
 from engine.ai import chatlog as ai_chatlog
@@ -56,6 +57,7 @@ from engine.ai import docs as ai_docs
 from engine.ai import followup as ai_followup
 from engine.ai import index as ai_index
 from engine.ai import library_vars, text_items
+from engine.ai import lint as ai_lint
 from engine.ai import organize as ai_organize
 from engine.ai import pack as ai_pack
 from engine.ai import patterns as ai_patterns
@@ -961,7 +963,8 @@ async def _maybe_compact(cfg: dict[str, Any], log: list[dict[str, Any]], meta: d
             await emit({"type": "status",
                         "v": "Couldn't summarize; trimming older results instead"})
         return {**meta, "compact_failed": cut}
-    text = ai_safety.strip_invisible(ai_compact.finish(summary, ai_compact.ids_in(log, meta, cut)))
+    text = ai_safety.strip_invisible(ai_compact.finish(
+        summary, ai_compact.ids_in(log, meta, cut), meta.get("decisions")))
     return ai_compact.apply(meta, text, cut)
 
 
@@ -1131,6 +1134,9 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     """Body: {message, chat_id?, page?: {route, id?, doc?, note?, editor?},
     events?: [{pid, status}], retry?: true}.
 
+    `retry` runs the last message again; with a non-empty `message` it runs
+    that text instead (the user edited their last message).
+
     The server keeps the chat (`ai_chats`), so the browser sends only the new
     message; without a `chat_id` (or with one that's gone) a new chat starts.
     `events` say what the user did with earlier proposal cards (applied,
@@ -1151,7 +1157,9 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     resume = isinstance(answers, list)
     text = body.get("message")
     retry = bool(body.get("retry")) and not resume
-    if retry:
+    # Edit last message: a retry that brings new text for that message.
+    edited = retry and isinstance(text, str) and bool(text.strip())
+    if retry and not edited:
         text = "(retry)"  # replaced by the turn's own message below
     images: list[dict[str, Any]] = []
     if not resume and not retry:
@@ -1204,7 +1212,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                for pid in turn_pids):
             return json_error("undo the changes you applied from that answer first",
                               status=409)
-        text = str(log[retried_from].get("text") or "")
+        if not edited:
+            text = str(log[retried_from].get("text") or "")
         images = list(log[retried_from].get("images") or [])
         log = log[:retried_from]
         m = dict(chat["meta"])
@@ -1281,6 +1290,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         meta = await _maybe_compact(cfg, log, meta, prof, num_ctx, window,
                                     len(snapshot) + 12000, emit)
     if not resume:
+        meta.pop("asks", None)  # ask pauses are counted per user message
+        meta.pop("pointed", None)  # so are the parts already highlighted
         hints = await _retrieval(lib, text, meta, prof, cfg) if text else ""
         pics = _ai_images.note(len(images)) if images else ""
         sent = ai_safety.strip_invisible(
@@ -1292,6 +1303,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     pids = [int(p[1:]) for p in meta.get("proposals") or {} if p[1:].isdigit()]
     lib._next_pid = max(pids, default=0)
     lib.earlier_proposals = dict(meta.get("proposals") or {})
+    lib.decisions = list(meta.get("decisions") or [])  # what `ask` may not ask again
     _adopt_earlier(lib, log, meta)
     proposals: list[dict[str, Any]] = []
     tool_use = {"calls": 0, "salvaged": 0}
@@ -1417,7 +1429,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         items: list[dict[str, Any]] = []
         needs_reply = False
         repeats = 0
-        for call in calls:
+        for at, call in enumerate(calls):
             tool = call["tool"]
 
             def result(out: str, call: dict[str, Any] = call,
@@ -1442,8 +1454,41 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
             try:
                 raw = call["args"] if isinstance(call.get("args"), dict) else call["args_text"]
                 args, arg_notes = ai_tools.check_args(spec, ai_chat.parse_args(raw))
+                if tool in ai_tools.ASK:
+                    problem = ai_ask.step_problem(calls, at, change=ai_chat.CHANGE_TOOLS,
+                                                  pause=ai_chat.PAUSE_TOOLS)
+                    if problem:
+                        raise ValueError(problem)
+                    if int(meta.get("asks") or 0) >= ai_ask.MAX_ASKS:
+                        needs_reply = True
+                        result(ai_ask.TOO_MANY)
+                        steps.append({"tool": tool, "note": "Decided without asking again",
+                                      "ok": True})
+                        continue
+                    try:
+                        cargs, label = ai_client_tools.prepare(lib, tool, args)
+                    except ai_ask.Settled as done:
+                        needs_reply = True
+                        result(str(done))
+                        steps.append({"tool": tool, "note": "Already answered", "ok": True})
+                        continue
+                    meta["asks"] = int(meta.get("asks") or 0) + 1
+                    pause.append({"id": call["id"], "tool": tool, "args": cargs, "label": label})
+                    steps.append({"tool": tool, "note": label, "ok": True})
+                    continue
                 if tool in ai_chat.PAUSE_TOOLS:
                     cargs, label = ai_client_tools.prepare(lib, tool, args)
+                    if tool == "highlight":
+                        anchors = sorted(p["anchor"] for p in cargs["points"])
+                        pointed = list(meta.get("pointed") or [])
+                        if anchors in pointed:
+                            # Small models point at the same part again and
+                            # again instead of answering.
+                            needs_reply = True
+                            result(ai_chat.POINTED_AGAIN)
+                            steps.append({"tool": tool, "note": label, "ok": True})
+                            continue
+                        meta["pointed"] = [*pointed, anchors]
                     if tool in ai_tools.WEB and meta.get("web_ok"):
                         # Allowed for this chat already: search now.
                         result(await _web_result(cfg, cargs["query"]))
@@ -1535,8 +1580,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                     message = message or interim or (
                         "(The model used up its output limit before answering; thinking "
                         "models do this. Try again, raise the output limit, or turn its "
-                        "thinking off.)" if cut else "(The model gave an empty answer. Try "
-                        "again, or ask another way.)")
+                        "thinking off.)" if cut else _done_line(steps))
                     break
                 empty_nudged = True
                 new.append(ai_chatlog.note_entry(ai_chat.EMPTY_NUDGE))
@@ -1704,11 +1748,20 @@ async def patch_chat(request: web.Request) -> web.Response:
         except ChatNotFound:
             return json_error("that chat is gone", status=404)
         events = body.get("events")
+        bodies: dict[str, Any] = {}
+        log: list[dict[str, Any]] | None = None
         if isinstance(events, list) and events:
             meta = dict(chat["meta"])
             seen = dict(meta.get("shown_status") or {})
             for ev in events[:200]:
                 if not isinstance(ev, dict) or not isinstance(ev.get("pid"), str):
+                    continue
+                if isinstance(ev.get("fix"), str):
+                    if log is None:
+                        log = repo.messages(chat["id"])
+                    fixed = _record_fix(log, meta, ev["pid"][:12], ev["fix"][:40])
+                    if fixed is not None:
+                        bodies[ev["pid"][:12]] = fixed
                     continue
                 if ev.get("status") not in ("applied", "editor", "dismissed", "failed", "undone",
                                             "opened"):
@@ -1722,7 +1775,34 @@ async def patch_chat(request: web.Request) -> web.Response:
                 seen[ev["pid"][:12]] = entry
             meta["shown_status"] = seen
             repo.set_meta(chat["id"], meta)
-    return json_ok({"id": chat["id"], "title": chat["title"], "pinned": chat["pinned"]})
+    out: dict[str, Any] = {"id": chat["id"], "title": chat["title"], "pinned": chat["pinned"]}
+    if bodies:
+        out["fixed"] = bodies
+    return json_ok(out)
+
+
+def _record_fix(log: list[dict[str, Any]], meta: dict[str, Any], pid: str,
+                key: str) -> dict[str, Any] | None:
+    """Make one of card ``pid``'s own fixes (`lint.fixes`) and remember it,
+    so reopening the chat and later answers see the card as fixed. Returns
+    the card's new op body, or None when the card has no such fix."""
+    card = None
+    for e in log:
+        if e.get("kind") == "shown":
+            for p in (e.get("view") or {}).get("proposals") or []:
+                if isinstance(p, dict) and p.get("pid") == pid:
+                    card = p
+    if card is None or key not in {f.get("key") for f in card.get("fixes") or []
+                                   if isinstance(f, dict)}:
+        return None
+    fixes = dict(meta.get("fixes") or {})
+    keys = list(fixes.get(pid) or [])
+    if key not in keys:
+        keys.append(key)
+    fixes[pid] = keys
+    meta["fixes"] = fixes
+    body = ai_lint.fixed_body(card, keys)
+    return body if body is not None else (card.get("op") or {}).get("body")
 
 
 async def delete_chat(request: web.Request) -> web.Response:
@@ -1780,13 +1860,18 @@ def _adopt_earlier(lib: Any, log: list[dict[str, Any]], meta: dict[str, Any]) ->
             if not pid or (model_status.get(pid) or {}).get("status") or (
                     shown_status.get(pid) or {}).get("status"):
                 continue
-            lib.adopt_earlier(p)
+            keys = (meta.get("fixes") or {}).get(pid)
+            lib.adopt_earlier(ai_lint.with_fixes(p, list(keys)) if keys else p)
 
 
 def _done_line(steps: list[dict[str, Any]]) -> str:
     """The answer when the model said nothing after acting: what it did,
     never a bare "Done."."""
     did = [str(x.get("note")) for x in steps if x.get("ok") and x.get("note")]
+    pointed = [n[len("Pointed at "):] for n in did if n.startswith("Pointed at ")]
+    if pointed:
+        # "Where is X?" answered by pointing: say so in words.
+        return f"It's highlighted on the page: {pointed[-1]}."
     if did:
         return "Done: " + "; ".join(did[-3:]) + "."
     return "(The model gave an empty answer. Try again, or ask another way.)"
@@ -1807,6 +1892,18 @@ async def _paused_results(
                 meta["web_ok"] = True
             # Its step line was shown when the turn paused: not again.
             text = await _web_result(cfg, c["args"]["query"])
+        elif c["tool"] in ai_tools.ASK:
+            # Answered with the buttons, or with the user's next message.
+            asked = dict(meta.get("asked") or {})
+            if answer.get("cancelled"):
+                text = ai_ask.OWN_WORDS
+                asked[c["id"]] = {"own": True}
+            else:
+                got_ = ai_ask.answers(c["args"], answer)
+                text = ai_ask.result_text(c["args"], got_)
+                meta["decisions"] = ai_ask.settle(meta.get("decisions"), got_)
+                asked[c["id"]] = ai_ask.shown(got_)
+            meta["asked"] = asked
         else:
             text = ai_client_tools.result_text(c["tool"], answer)
             if answer.get("denied"):

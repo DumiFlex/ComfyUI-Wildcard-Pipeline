@@ -106,6 +106,35 @@ async def test_anthropic_draft_uses_forced_tool(wp_client, fake_llm):
     assert sent["headers"]["anthropic-version"] == "2023-06-01"
 
 
+async def test_newest_claude_gets_no_temperature_and_no_forced_tool(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "anthropic", "api_key": "sk-ant",
+                      "base_url": str(fake_llm.make_url("/anthropic")),
+                      "model": "claude-opus-5-5"})
+    resp = await wp_client.post("/wp/api/ai/wildcard/draft", json=_draft_body())
+    assert resp.status == 200, await resp.text()
+    # Known model: fitted up front, one request, the text answer parsed.
+    assert [o["value"] for o in (await resp.json())["options"]] == ["silver hair"]
+    assert len(fake_llm.seen) == 1
+    sent = fake_llm.seen[-1]["body"]
+    assert "temperature" not in sent and sent["tool_choice"] == {"type": "auto"}
+    assert "calling the submit tool" in sent["system"]
+
+
+async def test_unknown_claude_is_fitted_after_its_400_and_remembered(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "anthropic", "api_key": "sk-ant",
+                      "base_url": str(fake_llm.make_url("/anthropic")),
+                      "model": "claude-strict-9"})
+    resp = await wp_client.post("/wp/api/ai/wildcard/draft", json=_draft_body())
+    assert resp.status == 200, await resp.text()
+    assert [o["value"] for o in (await resp.json())["options"]] == ["silver hair"]
+    # Refused temperature, then the forced choice, then answered.
+    assert len(fake_llm.seen) == 3
+    fake_llm.seen.clear()
+    resp = await wp_client.post("/wp/api/ai/wildcard/draft", json=_draft_body())
+    assert resp.status == 200
+    assert len(fake_llm.seen) == 1  # remembered
+
+
 async def test_upstream_auth_error_is_short_and_keyless(wp_client, fake_llm):
     ai_config.update({"enabled": True, "provider": "anthropic", "api_key": "wrong",
                       "base_url": str(fake_llm.make_url("/anthropic")), "model": "claude-x"})
@@ -1004,6 +1033,17 @@ async def test_chat_asks_claude_to_cache_the_stable_prefix(wp_client, fake_llm):
     assert body["system"][0]["cache_control"] == {"type": "ephemeral"}
     assert "The library now:" in body["system"][0]["text"]
     assert "tool_choice" not in body and body["tools"][0]["name"] == "search"
+
+
+async def test_chat_with_newest_claude_drops_temperature(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "anthropic", "api_key": "sk-ant",
+                      "base_url": str(fake_llm.make_url("/anthropic")),
+                      "model": "claude-opus-5-5"})
+    out = await _chat(wp_client, "hello")
+    assert out["message"] == "Hi from Claude."
+    body = fake_llm.seen[-1]["body"]
+    assert "temperature" not in body and "tool_choice" not in body
+    assert len(body["system"]) == 1  # nothing added after the cached block
 
 
 async def test_stop_closes_the_model_request(wp_app, aiohttp_server, unused_tcp_port):

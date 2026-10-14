@@ -159,11 +159,13 @@ watch(() => [active.value, route.hash], () => { void revealHash(); }, { immediat
      sideways when a wide section (AI assistant) opens. */
   max-width: none;
 }
+/* Sticky at the scroll area's own top: a larger offset than the page's top
+   padding pushed the list below the section heading before any scroll. */
 .wp-settings__nav {
   position: sticky;
-  top: var(--wp-space-6);
+  top: 0;
 }
-.wp-settings__title { font-size: 20px; margin: 0 0 var(--wp-space-5); }
+.wp-settings__title { font-size: 20px; line-height: 28px; margin: 0 0 var(--wp-space-5); }
 .wp-settings__search {
   display: flex;
   align-items: center;
@@ -204,11 +206,11 @@ watch(() => [active.value, route.hash], () => { void revealHash(); }, { immediat
   color: var(--wp-accent-text);
   font-weight: 600;
 }
-.wp-settings__main { min-width: 0; max-width: 960px; }
+.wp-settings__main { min-width: 0; max-width: 1100px; }
 /* A section with a side column (AI assistant) takes the rest of the width. */
 .wp-settings[data-wide="true"] .wp-settings__main { max-width: none; }
 .wp-settings__head { margin-bottom: var(--wp-space-6); }
-.wp-settings__h2 { font-size: 18px; margin: 0; }
+.wp-settings__h2 { font-size: 18px; line-height: 28px; margin: 0; }
 .wp-settings__blurb { margin: 4px 0 0; font-size: var(--wp-text-sm); color: var(--wp-text-dim); }
 .wp-settings__results { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--wp-space-3); }
 .wp-settings__result {

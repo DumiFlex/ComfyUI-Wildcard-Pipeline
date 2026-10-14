@@ -637,7 +637,7 @@ async def _post(cfg: dict[str, Any], path: str, body: dict[str, Any], *, kind: s
         plain = await client.stream_request(cfg, path, body=streamed, on_obj=on)
     except AIError as e:
         if e.upstream is not None and 400 <= e.upstream < 500 and e.upstream not in (
-                401, 403, 404, 429):
+                401, 403, 404, 429) and not (kind == "anthropic" and client.claude_refused(e)):
             # Maybe it's the streaming it refused: ask once more without,
             # and remember only when that works.
             plain = await client._request(cfg, "POST", path, body=body,
@@ -730,9 +730,12 @@ async def _step_anthropic(cfg: dict[str, Any], system: str, log: list[dict[str, 
     else:
         body["tools"] = [{"name": client._TOOL_NAME, "description": "Submit the chat_step.",
                           "input_schema": schema}]
-        body["tool_choice"] = {"type": "tool", "name": client._TOOL_NAME}
-    data = await _post(cfg, "/messages", body, kind="anthropic", emit=emit,
-                       show=fmt == "native")
+
+    async def send(b: dict[str, Any]) -> Any:
+        return await _post(cfg, "/messages", b, kind="anthropic", emit=emit,
+                           show=fmt == "native")
+    data = await client.claude_send(cfg, body, send,
+                                    forced_tool=client._TOOL_NAME if fmt == "json" else None)
     if not isinstance(data, dict):
         raise AIError("the model didn't return an answer")
     if data.get("stop_reason") == "refusal":
@@ -748,6 +751,10 @@ async def _step_anthropic(cfg: dict[str, Any], system: str, log: list[dict[str, 
             if block.get("type") == "tool_use":
                 answer = block.get("input")
                 return _json_step(chatlog.dumps(answer), answer, usage)
+        text = client.claude_text(blocks)
+        if text.strip():
+            # Asked in words (no forced choice), the answer may come as text.
+            return _json_step(text, client._parse_text_json(text), usage)
         raise AIError("the model didn't return the expected answer")
     text = "\n".join(str(b.get("text") or "") for b in blocks if b.get("type") == "text")
     calls = [{"id": str(b.get("id") or new_call_id()), "tool": str(b.get("name")),

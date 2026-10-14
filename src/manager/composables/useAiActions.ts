@@ -515,6 +515,8 @@ export async function runCall(call: AiPendingCall, host: AiActionHost): Promise<
       }
       case "web_search":
         return "couldn't: web search runs on the server";
+      case "ask":
+        return "couldn't: questions are answered in the chat";
       default: {
         const args = call.args as Record<string, unknown>;
         const here = delegates.get(call.tool);

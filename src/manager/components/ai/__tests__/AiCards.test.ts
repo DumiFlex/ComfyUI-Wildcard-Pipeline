@@ -62,6 +62,55 @@ describe("AiCardView", () => {
   });
 });
 
+describe("AiCardView with a lot in it", () => {
+  const tags = (pre: string, n: number) => Array.from({ length: n }, (_, i) => `${pre}${i}`);
+  function big(): AiChatProposal {
+    const matrix: Record<string, Record<string, { mode: string; factor?: number }>> = {};
+    for (const f of tags("from", 30)) {
+      matrix[f] = Object.fromEntries(tags("to", 30).map((t) => [t, { mode: "boost", factor: 2 }]));
+    }
+    const exceptions = tags("pair", 25).map((s) => ({ source: s, target: "x".repeat(600), mode: "exclude" }));
+    return constraint(matrix, exceptions);
+  }
+
+  it("caps a 30 x 30 matrix and 25 pairs on the card", () => {
+    const w = mount(AiCardView, { props: { view: cardView(big())! } });
+    const grid = w.get('[data-test="ai-card-matrix"]');
+    // 6 target columns + the row header + one "+24" column.
+    expect(grid.findAll("thead th")).toHaveLength(8);
+    expect(grid.get("thead th:last-child").text()).toBe("+24");
+    expect(grid.findAll("tbody tr")).toHaveLength(8);
+    const more = w.findAll('[data-test="ai-card-more"]').map((m) => m.text());
+    expect(more).toEqual(["+22 more source tags", "+17 more rules"]);
+  });
+
+  it("shows every row and column in the full view", () => {
+    const w = mount(AiCardView, { props: { view: cardView(big())!, full: true } });
+    const grid = w.get('[data-test="ai-card-matrix"]');
+    expect(grid.findAll("thead th")).toHaveLength(31);
+    expect(grid.findAll("tbody tr")).toHaveLength(30);
+    expect(w.find('[data-test="ai-card-more"]').exists()).toBe(false);
+  });
+
+  it("caps 40 rules of 6 branches with 5 actions each", () => {
+    const p = constraint({});
+    const branch = { condition: { var: "a", op: "equals", value: "b" },
+      action: { target_var: "x", mode: "replace", value: "1" },
+      extra_actions: Array.from({ length: 4 }, (_, i) => ({ target_var: `y${i}`, mode: "append", value: "2" })) };
+    (p.op as unknown as { body: Record<string, unknown> }).body = {
+      type: "derivation", name: "Big", payload: { rules: Array.from({ length: 40 }, (_, i) => ({
+        id: `r${i}`, branches: Array.from({ length: 6 }, () => branch) })) },
+    };
+    const w = mount(AiCardView, { props: { view: cardView(p)! } });
+    expect(w.findAll(".wp-ai-card-view__branch")).toHaveLength(3 * 4);
+    expect(w.text()).toContain("+2 more branches");
+    expect(w.text()).toContain("+2 more");
+    expect(w.get('[data-test="ai-card-more"]').text()).toBe("+37 more rules");
+    const full = mount(AiCardView, { props: { view: cardView(p)!, full: true } });
+    expect(full.findAll(".wp-ai-card-view__branch")).toHaveLength(240);
+  });
+});
+
 const CARD: TestCard = {
   kind: "test", runs: 40, failed: 0, compared: true, seeds: 40,
   stack: [{ module: "aaaa0001" }],
@@ -91,5 +140,24 @@ describe("AiTestCard", () => {
   it("can't open a run of cards only", () => {
     const w = mount(AiTestCard, { props: { card: { ...CARD, stack: [] } } });
     expect(w.get('[data-test="ai-test-open"]').attributes("disabled")).toBeDefined();
+  });
+});
+
+describe("AiTestCard with a lot in it", () => {
+  const many: TestCard = {
+    ...CARD,
+    never: Array.from({ length: 12 }, (_, i) => ({ name: `W${i}`, values: ["a", "b"], more: 0 })),
+    warnings: Array.from({ length: 25 }, (_, i) => ({ text: `warning ${i}`, count: 1 })),
+  };
+
+  it("caps notes on the card and shows them all full", () => {
+    const w = mount(AiTestCard, { props: { card: many } });
+    expect(w.findAll('[data-test="ai-test-never"]').length).toBeLessThanOrEqual(3);
+    expect(w.text()).toMatch(/\+\d+ more in the full view/);
+    expect(w.find('[data-test="ai-test-zoom"]').exists()).toBe(true);
+    const full = mount(AiTestCard, { props: { card: many, full: true } });
+    expect(full.findAll('[data-test="ai-test-never"]')).toHaveLength(12);
+    expect(full.text()).toContain("warning 24");
+    expect(full.find('[data-test="ai-test-zoom"]').exists()).toBe(false);
   });
 });

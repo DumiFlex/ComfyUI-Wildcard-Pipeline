@@ -376,3 +376,31 @@ async def test_an_auth_error_is_not_retried_without_streaming(streamer):
         await _ai_chat._post(_cfg(streamer), "/chat/completions", {"model": "m"},
                              kind="openai", emit=None, show=False)
     assert len(streamer.state["seen"]) == 1
+
+
+async def test_a_card_fix_changes_the_card_reopens_fixed_and_tells_the_model(wp_client, fake_llm):
+    _on(fake_llm)
+    fake_llm.chat_steps.append({"message": "Here.", "calls": [{"tool": "create_wildcard",
+        "args": json.dumps({"name": "Pose", "var": "pose", "options": [
+            {"text": "standing"}, {"text": "close-up, sitting"}, {"text": "full body"}]})}]})
+    first = await _chat(wp_client, "make poses")
+    card = first["proposals"][0]
+    [fix] = card["fixes"]
+    assert fix["key"] == "scope:camera"
+    url = f"/wp/api/ai/chats/{first['chat_id']}"
+    out = await _json(await wp_client.patch(url, json={"events": [
+        {"pid": card["pid"], "fix": fix["key"]}, {"pid": card["pid"], "fix": "nope"}]}))
+    body = out["fixed"][card["pid"]]
+    assert [o["value"] for o in body["payload"]["options"]] == ["standing", "sitting"]
+    assert body["id"] == card["op"]["body"]["id"]
+
+    chat = await _json(await wp_client.get(url))
+    shown = chat["turns"][1]["view"]["proposals"][0]
+    assert shown["op"]["body"] == body and shown["fixes"] == []
+    assert fix["warning"] not in shown["warnings"]
+
+    fake_llm.chat_steps.append({"message": "Ok.", "calls": []})
+    await _chat(wp_client, "thanks", chat_id=first["chat_id"],
+                events=[{"pid": card["pid"], "fix": fix["key"], "label": fix["label"]}])
+    sent = json.dumps(fake_llm.seen[-1]["body"])
+    assert "used the card's fix" in sent and "Remove camera words" in sent

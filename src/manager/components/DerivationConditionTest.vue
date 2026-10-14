@@ -230,23 +230,28 @@ function set(patch: Partial<DerivationCondition>): void {
 }
 .dvr-op-row { display: flex; gap: 6px; align-items: stretch; min-width: 0; }
 .dvr-op-row .dvr-op { flex: 1; }
+/* NOT sits flush with the operator Select: same height, radius, surface
+ * and border, so the pair reads as one control. On, it takes the accent
+ * like the refinement switch's active segment. */
 .dvr-not {
   flex: none;
-  padding: 0 9px;
-  border-radius: 999px;
-  border: 1px solid var(--wp-border, #2a2d35);
-  background: transparent;
-  color: var(--wp-text-muted, #9ca3af);
-  font: 700 10.5px var(--wp-font-sans, sans-serif);
-  letter-spacing: 0.06em;
+  min-width: 44px;
+  padding: 0 10px;
+  border-radius: var(--wp-radius-sm);
+  border: 1px solid var(--wp-border, rgba(255, 255, 255, 0.08));
+  background: var(--wp-bg-2);
+  color: var(--wp-text-dim, #9ca3af);
+  font: 600 11px var(--wp-font-sans, sans-serif);
+  letter-spacing: 0.05em;
   cursor: pointer;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
-.dvr-not:hover { color: var(--wp-text, #fff); border-color: var(--wp-text-muted, #9ca3af); }
-.dvr-not--on {
-  border-color: var(--wp-danger, #e5484d);
-  color: var(--wp-danger, #e5484d);
-  background: color-mix(in srgb, var(--wp-danger, #e5484d) 14%, transparent);
+.dvr-not:hover { color: var(--wp-text, #fff); background: var(--wp-bg-1); }
+.dvr-not--on,
+.dvr-not--on:hover {
+  border-color: color-mix(in srgb, var(--wp-accent, #6366f1) 60%, transparent);
+  color: var(--wp-text, #fff);
+  background: color-mix(in srgb, var(--wp-accent, #6366f1) 30%, var(--wp-bg-2));
 }
 .dvr-not:focus-visible { outline: 2px solid var(--wp-accent-500, #6366f1); outline-offset: 2px; }
 .dvr-op-cell {

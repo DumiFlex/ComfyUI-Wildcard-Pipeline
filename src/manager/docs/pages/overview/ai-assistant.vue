@@ -185,7 +185,25 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         mentions is a chip you click to open it. Prompt syntax in a reply is coloured the way the
         editors colour it: each $variable in its own colour, {a|b} picks, @{…} references, LoRA
         and embedding tags, and #tags. A line starting with "Tip:" or "Warning:" stands out as a
-        note.
+        note, and so does a GitHub-style alert (a quote starting [!NOTE], [!TIP], [!IMPORTANT],
+        [!WARNING] or [!CAUTION]). Keys such as <code>Ctrl+Enter</code> show as keyboard keys, and a
+        code block longer than 20 lines is folded with a Show all button. While an answer streams
+        in, half-written bold or code is shown closed and new words fade in (not with reduced
+        motion). The copy button under an answer copies it as Markdown, with item chips as their
+        names. The pencil on your last message puts it back in the box to edit and send again,
+        replacing the answer (Esc cancels); it is not offered once you applied a card from that
+        answer.
+      </p>
+      <p>
+        When a request could go several ways that change the result (a style, how many, which
+        item), the assistant asks before it builds: up to four short questions under its answer,
+        each with a few answers to click (some take several), <b>Other…</b> for your own words
+        and <b>Decide for me</b>. A single question sends on the click; otherwise press
+        <b>Send answers</b> (questions left open are the assistant's to decide). Number keys pick
+        in the focused question. You can also just type your answer in the chat box. Answers are
+        remembered
+        for the rest of the chat, so it doesn't ask the same thing twice, and it asks at most twice
+        per message before deciding itself and saying what it assumed.
       </p>
       <p>
         Drag the chat's left edge to make it wider or narrower (or focus the edge and use the
@@ -256,7 +274,13 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         option twice, has weights so far apart that some options never come up, when a
         derivation is a value-by-value lookup a constraint would do more simply, and when a
         constraint rules options out of a wildcard that has no fallback. The model reads the
-        same warnings and replaces its card when they're right.
+        same warnings and replaces its card when they're right. A warning the card can settle
+        by itself has a <b>Fix it</b> button that says what it does (<b>Remove camera words</b>
+        drops the parts of options that name the other concept, <b>Merge the repeats</b> joins
+        duplicate options and adds up their weights, <b>Even out the weights</b> lifts the rarest
+        options to a tenth of the most common one); <b>Fix all</b> runs every one. The card
+        changes in place, you still apply it, and the assistant is told what you fixed. Any other
+        warning has <b>Ask to fix</b>, which asks the assistant for a corrected card.
       </p>
       <p>
         It can <b>show you around</b>. It opens an item's editor, a docs page or a manager page
@@ -315,7 +339,10 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       <p>
         Each card lists what it changes and warns about anything it left out (a duplicate option, a
         variable nothing sets). <b>Undo</b> on an applied card puts back what it replaced, or
-        deletes what it created. <b>Dismiss</b> tells the assistant you said no. When two cards
+        deletes what it created. <b>Dismiss</b> tells the assistant you said no. A long card
+        shows its first options, rules, tags and warnings with a "+N more" line; the magnifier
+        in its top right corner opens the whole card in a larger window, with the same Apply,
+        Open in editor and Dismiss buttons. When two cards
         change the same item, the second builds on the first, so apply them in order. The chat
         stays when you close the drawer; <b>New chat</b> starts over.
       </p>

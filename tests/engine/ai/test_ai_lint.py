@@ -89,3 +89,45 @@ def test_constraint_needs_fallback_on_target():
     item["payload"]["exceptions"][0]["mode"] = "reduce"
     target["payload"]["options"][1].pop("fallback")
     assert lint.check(CREATE, item, rows.get) == []
+
+
+def test_scope_fix_strips_the_other_concept():
+    item = _wc("Pose", ["standing", "close-up, sitting", "full body", "kneeling, upper body"])
+    op = {"op": "create", "body": item}
+    warns = lint.check(op, item, _none)
+    [fix] = lint.fixes(op, item, None, warns)
+    assert fix["key"] == "scope:camera" and fix["label"] == "Remove camera words"
+    assert fix["warning"] in warns
+    body = lint.apply_fix(item, fix["key"], set(fix["only"]))
+    # "full body" only set the camera, so it goes; the rest keep their pose.
+    assert [o["value"] for o in body["payload"]["options"]] == ["standing", "sitting", "kneeling"]
+    card = {"op": op, "warnings": warns, "fixes": [fix]}
+    after = lint.with_fixes(card, ["scope:camera"])
+    assert after["fixes"] == [] and fix["warning"] not in after["warnings"]
+    assert after["op"]["body"] == body and card["op"]["body"] == item
+
+
+def test_dupe_and_weight_fixes():
+    item = _wc("Weather", ["rain", "Rain", "sun", "fog"],
+               **{"sun": {"weight": 100}, "rain": {"weight": 2}})
+    op = {"op": "create", "body": item}
+    warns = lint.check(op, item, _none)
+    keys = [f["key"] for f in lint.fixes(op, item, None, warns)]
+    assert keys == ["dupes", "weights"]
+    card = {"op": op, "warnings": warns, "fixes": lint.fixes(op, item, None, warns)}
+    body = lint.fixed_body(card, keys)
+    opts = body["payload"]["options"]
+    assert [o["value"] for o in opts] == ["rain", "sun", "fog"]
+    assert opts[0]["weight"] == 10 and opts[2]["weight"] == 10  # 3 merged, then raised
+    assert lint.fixed_body(card, ["nope"]) is None
+
+
+def test_model_only_warnings_carry_no_fix():
+    target = _wc("Outfit", ["coat", "shirt"])
+    target["id"] = "t1"
+    item = {"type": "constraint", "name": "S", "payload": {
+        "target_wildcard_id": "t1",
+        "exceptions": [{"source": "a", "target": "coat", "mode": "exclude"}]}}
+    op = {"op": "create", "body": item}
+    warns = lint.check(op, item, {"t1": target}.get)
+    assert warns and lint.fixes(op, item, None, warns) == []
