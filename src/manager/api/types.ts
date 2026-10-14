@@ -1656,6 +1656,16 @@ export interface AiPackPlan {
   warnings: string[];
   /** "Extend with AI": the bundle the plan adds to. */
   base?: { id: string; name: string; nested: boolean; sets: string[] };
+  /** Variables the user's open canvas sets (Injector rows, the Loop). */
+  canvas?: AiCanvasVar[];
+}
+
+/** A variable an open ComfyUI canvas sets at run time, as the canvas tab
+ *  reports it to the manager (`utils/canvas-facts.ts`). */
+export interface AiCanvasVar {
+  name: string;
+  source: "injector" | "loop" | "model";
+  about?: string;
 }
 
 export interface AiPackPlanRequest extends AiConversational {
@@ -1680,10 +1690,16 @@ export interface AiPackPlanRequest extends AiConversational {
 }
 
 /** A change a finding can make to the plan without the model. */
-export type AiPackPatch =
+export type AiPackPatch = (
   | { op: "edit"; key: string; set: Partial<Omit<AiPackItem, "key" | "id">> }
   | { op: "add"; item: Partial<AiPackItem> & { kind: AiPackKind } }
-  | { op: "remove"; key: string };
+  | { op: "remove"; key: string }
+  /** A plan-wide field, e.g. pointing a stray anchor at a set variable. */
+  | { op: "plan"; set: Partial<Pick<AiPackPlan, "anchor">> }
+) & {
+  /** The button's words when the server picked them ("Use $scene"). */
+  label?: string;
+};
 
 /** One thing the plan review found. `fix`: it would break the pack or
  *  leave a rule doing nothing; `tip`: it would make prompts more coherent. */

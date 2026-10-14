@@ -25,7 +25,7 @@ def test_every_tool_has_code_and_a_matching_prompt_line():
 def test_prompt_lists_tools_from_the_registry():
     head = chat.system_prompt(slim=True)
     for t in tools.TOOLS:
-        if t.name != "more_tools" and t.kind != "web" and t.name not in tools.DELETE:
+        if t.name != "more_tools" and t.kind != "web" and t.name not in tools.DELETE + tools.VOCAB:
             assert f"- {t.name} " in head
     assert "- web_search " not in head and "Page tools (run in the user's browser" in head
     native = chat.system_prompt(slim=True, native=True)

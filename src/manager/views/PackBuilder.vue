@@ -24,6 +24,7 @@ import PackPlanList from "../components/pack/PackPlanList.vue";
 import PackQuestions from "../components/pack/PackQuestions.vue";
 import PackSettings from "../components/pack/PackSettings.vue";
 import { registerPageNote } from "../composables/useOpenEditor";
+import { useAiChat } from "../composables/useAiChat";
 import { mentionsImages, usePackBuilder, type ItemStatus } from "../composables/usePackBuilder";
 import WpCheck from "../../components/shared/WpCheck.vue";
 import { useAiConfig } from "../composables/useAiConfig";
@@ -42,13 +43,25 @@ registerPageNote(() => {
   const items = plan.items.map((it) => `${it.name} (${it.kind}${it.var ? ` $${it.var}` : ""})`).join(", ");
   const check = pb.check.value;
   const problems = check ? Object.values(check.problems).flat().slice(0, 5) : [];
+  const draft = pb.draft.value ?? plan;
   return [
     `Pack builder, step ${pb.phase.value}, pack "${plan.title}": ${items}`,
+    draft.anchor ? `Anchor $${draft.anchor}` : "",
+    draft.inputs.length ? `Inputs from a WP Context Injector: ${draft.inputs.map((i) => `$${i.var}`).join(", ")}` : "",
+    draft.canvas?.length ? `Set on the user's canvas: ${draft.canvas.map((c) => `$${c.name} (${c.source})`).join(", ")}` : "",
+    draft.warnings.length ? `Planner notes: ${draft.warnings.slice(0, 6).join("; ")}` : "",
     pb.target.value ? `Extending the bundle ${pb.target.value.name}` : "",
     check ? `Test run: ${check.runs} seeds; ${problems.length ? `problems: ${problems.join("; ")}` : "no problems"}` : "",
   ].filter(Boolean).join(". ");
 });
 const { convo } = pb;
+const chat = useAiChat();
+
+/** Ask the chat what a warning means here and what to do about it. */
+function explain(warning: string, item?: AiPackItem): void {
+  const about = item ? ` about ${item.kind.replace("_", " ")} "${item.name}"` : "";
+  chat.ask(`Explain this pack builder warning${about} and what I can do about it: "${warning}"`);
+}
 const { config, ready } = useAiConfig();
 const router = useRouter();
 const toast = useToast();
@@ -588,8 +601,11 @@ function stopExtending(): void {
             </li>
           </ul>
         </div>
-        <ul v-if="draft?.warnings.length" class="wp-pack__warnings">
-          <li v-for="(w, j) in draft.warnings" :key="j"><i class="pi pi-info-circle" aria-hidden="true" /> {{ w }}</li>
+        <ul v-if="draft?.warnings.length" class="wp-pack__warnings" data-test="pack-plan-notes">
+          <li v-for="(w, j) in draft.warnings" :key="j">
+            <i class="pi pi-info-circle" aria-hidden="true" /> <span>{{ w }}</span>
+            <button type="button" class="wp-pack__mini" :disabled="chat.loading.value" title="Ask the assistant what this means" data-test="pack-explain" @click="explain(w)">Explain</button>
+          </li>
         </ul>
         <div class="wp-pack__row">
           <span class="wp-pack__spacer" />
@@ -679,7 +695,11 @@ function stopExtending(): void {
             <ul v-if="problems(i.key).length" class="wp-pack__warnings">
               <li v-for="(w, j) in problems(i.key)" :key="j">
                 <i class="pi pi-exclamation-triangle" aria-hidden="true" /> <span>{{ w }}</span>
-                <button v-if="!pb.working.value" type="button" class="wp-pack__mini" data-test="pack-problem-dismiss" @click="pb.dismissNote(i.key, w)">Dismiss</button>
+                <template v-if="!pb.working.value">
+                  <button v-if="i.kind !== 'library'" type="button" class="wp-pack__mini" title="Build this item again with the warning as the note" data-test="pack-problem-fix" @click="pb.rebuild(i.key, w)">Fix with AI</button>
+                  <button type="button" class="wp-pack__mini" :disabled="chat.loading.value" title="Ask the assistant what this means" data-test="pack-problem-explain" @click="explain(w, i)">Explain</button>
+                  <button type="button" class="wp-pack__mini" data-test="pack-problem-dismiss" @click="pb.dismissNote(i.key, w)">Dismiss</button>
+                </template>
               </li>
             </ul>
             <ul v-if="quality(i.key).length" class="wp-pack__findings" data-test="pack-quality">
@@ -717,7 +737,10 @@ function stopExtending(): void {
             <template v-for="i in builtItems" :key="i.key">
               <li v-for="(w, j) in problems(i.key)" :key="j"><span><b>{{ i.name }}:</b> {{ w }}</span></li>
             </template>
-            <li v-for="(n, j) in pb.check.value.notes" :key="`n${j}`">{{ n }}</li>
+            <li v-for="(n, j) in pb.check.value.notes" :key="`n${j}`">
+              <span>{{ n }}</span>
+              <button type="button" class="wp-pack__mini" :disabled="chat.loading.value" data-test="pack-note-explain" @click="explain(n)">Explain</button>
+            </li>
           </ul>
           <div v-for="v in pb.check.value.variables.slice(0, 6)" :key="v.var" class="wp-pack__var">
             <code>${{ v.var }}</code>
@@ -962,6 +985,7 @@ function stopExtending(): void {
 .wp-pack__fixbox { display: flex; gap: 6px; margin: 4px 0 6px 120px; }
 .wp-pack__fixbox input { flex: 1; min-width: 0; }
 .wp-pack__mini { margin-left: auto; flex: none; border: 0; background: none; padding: 0 4px; font-size: 11px; color: var(--wp-text-dim); cursor: pointer; }
+.wp-pack__mini + .wp-pack__mini { margin-left: 0; }
 .wp-pack__mini:hover { color: var(--wp-text); }
 .wp-pack__warnings li { display: flex; gap: 6px; align-items: baseline; }
 .wp-pack__warnings li > span { min-width: 0; overflow-wrap: anywhere; }

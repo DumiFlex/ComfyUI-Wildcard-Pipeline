@@ -115,6 +115,7 @@ export function applyPatch(plan: AiPackPlan, patch: AiPackPatch): AiPackPlan {
   if (patch.op === "remove") {
     return { ...plan, items: plan.items.filter((i) => i.key !== patch.key) };
   }
+  if (patch.op === "plan") return { ...plan, ...patch.set };
   if (patch.op === "edit") {
     return {
       ...plan,

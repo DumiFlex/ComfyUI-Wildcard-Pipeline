@@ -105,7 +105,35 @@ def test_wildcards_hear_what_reads_them_and_the_style():
     assert plan["style"] == "sentences" and plan["anchor"] == "season"
     bad = pack.compile_plan({"title": "x", "anchor": "nothing", "items": [
         _item(name="A", var="a")]})
-    assert bad["anchor"] == "" and bad["style"] == "tags"
+    # Kept: the review offers the fix instead of dropping it silently.
+    assert bad["anchor"] == "nothing" and bad["style"] == "tags"
+    fix = [f for f in pack.review_plan(bad) if "anchor" in f["text"]]
+    assert fix and fix[0]["level"] == "fix"
+    assert fix[0]["patch"] == {"op": "plan", "set": {"anchor": ""}, "label": "Clear it"}
+
+
+def test_the_anchor_check_knows_runtime_canvas_and_stand_ins():
+    def plan(anchor, **kw):
+        return pack.compile_plan({"title": "x", "anchor": anchor, "items": [
+            _item(name="Background Setting", var="scene"), _item(name="Pose", var="pose")]},
+            **kw)
+    for ok in ("model_variant", "iteration", "scene"):
+        assert not [f for f in pack.review_plan(plan(ok)) if "anchor" in f["text"]], ok
+    canvas = [{"name": "page", "source": "loop"}, {"name": "lora_trigger",
+                                                  "source": "injector", "about": "x"},
+              {"name": "bad", "source": "browser"}]
+    p = plan("page", canvas=canvas)
+    assert [c["name"] for c in p["canvas"]] == ["page", "lora_trigger"]
+    assert not [f for f in pack.review_plan(p) if "anchor" in f["text"]]
+    assert pack.pins(p) == {"lora_trigger": "lora trigger"}
+    assert "$page: the WP Context Loop" in pack.review_prompt(p, [])
+    # $setting isn't set, but the Background Setting wildcard means the same.
+    [f] = [f for f in pack.review_plan(plan("setting")) if "anchor" in f["text"]]
+    assert f["patch"] == {"op": "plan", "set": {"anchor": "scene"}, "label": "Use $scene"}
+    # A plan sent back keeps its canvas unless the request brings new ones.
+    again = pack.compile_plan(p)
+    assert again["canvas"] == p["canvas"]
+    assert pack.compile_plan(p, canvas=[])["canvas"] == []
 
 
 def test_review_finds_what_would_break_or_clash():

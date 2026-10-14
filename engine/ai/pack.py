@@ -52,6 +52,7 @@ from engine.ai import library_vars, text_items
 from engine.ai import patterns as ai_patterns
 from engine.ai import refs as ai_refs
 from engine.ai import use as ai_use
+from engine.ai import vocab as ai_vocab
 from engine.ai import wildcard as ai_wildcard
 from engine.modules.combine_handler import CombineHandler
 from engine.modules.constraint_handler import ConstraintHandler
@@ -268,14 +269,15 @@ $variables, and its standing negative).
   - section: the section name it belongs to ("" when there are none).
   - use: how the bundle uses this item, or "". """ + ai_use.GUIDE + """
 Every variable a derivation, combine or template reads must be set by an \
-item or be an input ($iteration, the WP Context Loop's iteration \
-number, is always there too). A constraint's tags must be tags its two \
+item or be an input. The run-time variables ($iteration, $iteration_total, \
+$model_family, $model_variant, $model_name) and any listed as "set on the \
+user's canvas" are always there too. A constraint's tags must be tags its two \
 wildcards carry. Each wildcard is about one thing: a pose wildcard holds \
 poses, not hair or camera angles. Variable names: letters, digits and _. \
 Plan what the request needs, up to 60 items. Don't add commentary; the \
 output is data for the user's own library.
 
-""" + ai_guide.WHICH + "\n" + ai_guide.COHERENCE
+""" + ai_guide.WHICH + "\n" + ai_guide.NODES + "\n" + ai_guide.COHERENCE
 
 
 class PlanError(ValueError):
@@ -372,7 +374,7 @@ def _match_previous(it: dict[str, Any], kind: str, name: str, var: str,
 def compile_plan(
     raw: Any, library: list[dict[str, Any]] | None = None, *,
     previous: Any = None, decisions: Any = None, settings: Any = None,
-    base: dict[str, Any] | None = None,
+    base: dict[str, Any] | None = None, canvas: Any = None,
 ) -> dict[str, Any]:
     """The model's plan (or one the manager sends back) as a checked plan:
     ``{title, summary, rating, style, model, anchor, questions, assumptions,
@@ -589,16 +591,17 @@ def compile_plan(
     style = raw.get("style") if raw.get("style") in STYLES else "tags"
     if cfg["style"] != "auto":
         style = cfg["style"]
+    # An anchor nothing sets is kept: the review offers the fix (it knows
+    # the run-time, canvas and bundle variables this check would miss).
     anchor = _var(raw.get("anchor"))
-    if anchor and anchor not in {i["var"] for i in kept if i["var"]} \
-            and anchor not in {i["var"] for i in inputs}:
-        warnings.append(f"The anchor ${anchor} isn't set by the pack")
-        anchor = ""
     out_base = {} if base is None else {"base": {
         "id": base["id"], "name": base["name"], "nested": bool(base.get("nested")),
         "sets": sorted(set(base.get("sets") or {}) | {b["var"] for b in base_items})}}
+    if canvas is None:
+        canvas = raw.get("canvas")
     return {
         **out_base,
+        "canvas": canvas_vars(canvas),
         "title": _clean(raw.get("title"), MAX_NAME) or (base or {}).get("name") or "AI pack",
         "summary": _clean(raw.get("summary"), 300),
         "rating": rating,
@@ -914,7 +917,7 @@ def plan_prompt(instruction: str, *, library_note: str = "", sample: str = "",
                 settings: dict[str, Any] | None = None,
                 decisions: list[dict[str, str]] | None = None,
                 library: list[dict[str, Any]] | None = None, images: int = 0,
-                web: bool = False) -> str:
+                web: bool = False, loras: str = "") -> str:
     """The plan request: what the user asked, their settings and answers,
     their library's conventions and reusable items, optionally a prompt
     they like to rebuild as a pack, and reference images."""
@@ -939,6 +942,8 @@ def plan_prompt(instruction: str, *, library_note: str = "", sample: str = "",
                     "\"image 2\" means the second.")
     out += "\n\n" + settings_note(cfg)
     out += "\n" + WEB_LINES[web]
+    if loras:
+        out += "\n\n" + loras
     if decisions:
         out += "\n\n" + decisions_note(decisions)
     if cfg["library"] != "new":
@@ -1073,6 +1078,89 @@ _SETS = re.compile(r"\b(?:set|sets|add|adds|append|appends|prepend|put|puts|make
                    r"[^$.;]{0,40}\$([a-zA-Z_][a-zA-Z0-9_]*)", re.I)
 #: Set by the engine or the canvas, not by an item.
 RUNTIME_VARS = {"iteration", "iteration_total", "model_family", "model_variant", "model_name"}
+#: Words that name the same slot, for pointing a stray anchor at a variable
+#: the pack does set ($setting → $scene).
+_SAME_SLOT = [
+    {"setting", "scene", "location", "place", "background", "environment", "backdrop"},
+    {"character", "subject", "person", "girl", "boy", "hero", "protagonist", "race"},
+    {"class", "role", "job", "archetype", "profession"},
+    {"season", "weather", "time", "time_of_day"},
+    {"theme", "style", "mood", "genre", "vibe", "aesthetic"},
+    {"outfit", "clothes", "clothing", "attire", "costume", "wear"},
+]
+
+
+def known_vars(plan: dict[str, Any]) -> set[str]:
+    """Every variable the plan's rules may read: what its items, inputs and
+    derivations set, the bundle it extends, the user's canvas (Injector
+    rows, the Loop's renamed variables) and the run-time ones."""
+    items = plan["items"]
+    sets = {i["var"] for i in items if i["var"]} | {i["var"] for i in plan.get("inputs") or []}
+    sets |= set((plan.get("base") or {}).get("sets") or [])
+    sets |= {c["name"] for c in plan.get("canvas") or []}
+    for i in items:
+        # A derivation may set more than its main variable; any it names
+        # counts, so the check never asks for one it already makes.
+        if i["kind"] == "derivation":
+            sets |= set(_SETS.findall(i.get("about") or ""))
+    return sets | RUNTIME_VARS
+
+
+def _slot_words(text: str) -> set[str]:
+    words = {w.rstrip("s") for w in re.findall(r"[a-z]+", text.lower().replace("_", " "))}
+    out = set(words)
+    for group in _SAME_SLOT:
+        if words & {g.rstrip("s") for g in group}:
+            out |= {g.rstrip("s") for g in group}
+    return out
+
+
+def anchor_stand_in(plan: dict[str, Any], anchor: str) -> dict[str, Any] | None:
+    """The picked item that most likely means the same slot as an anchor
+    nothing sets (by its variable, name or section), or None."""
+    want = _slot_words(anchor)
+    best, score = None, 0
+    for i in plan["items"]:
+        if i["kind"] not in ("wildcard", "library") or not i["var"]:
+            continue
+        have = _slot_words(" ".join([i["var"], i["name"], i.get("section") or ""]))
+        n = len(want & have)
+        if n > score:
+            best, score = i, n
+    return best
+
+
+CANVAS_SOURCES = ("injector", "loop", "model")
+MAX_CANVAS = 40
+
+
+def canvas_vars(raw: Any) -> list[dict[str, str]]:
+    """Variables the user's open canvas sets at run time, as the manager
+    reports them: ``[{name, source, about}]`` (source injector, loop or
+    model). Anything else drops."""
+    out: list[dict[str, str]] = []
+    for v in raw if isinstance(raw, list) else []:
+        if not isinstance(v, dict):
+            continue
+        name = _var(v.get("name"))
+        source = v.get("source") if v.get("source") in CANVAS_SOURCES else ""
+        if name and source and not any(x["name"] == name for x in out):
+            out.append({"name": name, "source": source, "about": _clean(v.get("about"), 120)})
+    return out[:MAX_CANVAS]
+
+
+_CANVAS_LABEL = {"injector": "a WP Context Injector row", "loop": "the WP Context Loop",
+                 "model": "WP Model Info"}
+
+
+def canvas_note(canvas: list[dict[str, str]]) -> str:
+    """The canvas variables as a prompt line (data, not instructions)."""
+    if not canvas:
+        return ""
+    return ("Set on the user's canvas at run time (count as set; read them, don't make "
+            "items for them):\n" + "\n".join(
+                f"- ${c['name']}: {_CANVAS_LABEL[c['source']]}"
+                + (f" ({c['about']})" if c.get("about") else "") for c in canvas))
 
 
 def review_plan(plan: dict[str, Any],
@@ -1082,8 +1170,9 @@ def review_plan(plan: dict[str, Any],
     break the pack or leave a rule doing nothing; "tip" findings make it
     more coherent. A finding with a ``patch`` can be applied to the plan
     without the model (``{op: "edit", key, set: {field: value}}``,
-    ``{op: "add", item}`` or ``{op: "remove", key}``); the others go to the
-    planner when the user asks for them to be fixed. Deterministic."""
+    ``{op: "add", item}``, ``{op: "remove", key}`` or ``{op: "plan", set:
+    {anchor}, label}`` for a plan-wide field); the others go to the planner
+    when the user asks for them to be fixed. Deterministic."""
     items = plan["items"]
     out: list[dict[str, Any]] = []
 
@@ -1096,14 +1185,20 @@ def review_plan(plan: dict[str, Any],
         out.append(f)
 
     wild = {i["var"]: i for i in items if is_wild(i)}
-    sets = {i["var"] for i in items if i["var"]} | {i["var"] for i in plan.get("inputs") or []}
-    sets |= set((plan.get("base") or {}).get("sets") or [])
-    for i in items:
-        # A derivation may set more than its main variable; any it names
-        # counts, so the check never asks for one it already makes.
-        if i["kind"] == "derivation":
-            sets |= set(_SETS.findall(i.get("about") or ""))
-    known = sets | RUNTIME_VARS
+    known = known_vars(plan)
+    anchor = plan.get("anchor") or ""
+    if anchor and anchor not in known:
+        stand_in = anchor_stand_in(plan, anchor)
+        if stand_in is not None:
+            add(None, "fix", f"The anchor ${anchor} isn't set by anything in the pack; "
+                f"{stand_in['name']} (${stand_in['var']}) looks like the same thing, so "
+                "the other picks can follow it instead",
+                {"op": "plan", "set": {"anchor": stand_in["var"]},
+                 "label": f"Use ${stand_in['var']}"})
+        else:
+            add(None, "fix", f"The anchor ${anchor} isn't set by anything in the pack, so "
+                "nothing can follow it; add an item for it (Fix with AI) or clear it",
+                {"op": "plan", "set": {"anchor": ""}, "label": "Clear it"})
     for i in items:
         if i["kind"] in ("derivation", "combine", "template"):
             missing = [v for v in _reads(i.get("about") or "") if v not in known]
@@ -1152,8 +1247,7 @@ def review_plan(plan: dict[str, Any],
     if len(picks) >= 3 and not rules:
         add(None, "tip", "Nothing links the picks, so they can clash (a winter scene in "
             "sandals); add a constraint or a derivation from the anchor")
-    anchor = plan.get("anchor") or ""
-    if anchor and len(picks) >= 3:
+    if anchor and anchor in known and len(picks) >= 3:
         linked = {anchor}
         for _ in range(len(items)):
             for i in rules:
@@ -1219,7 +1313,7 @@ colours), a negative setting the plan ignores. item is the item's name, or \
 request, else "tip". Say exactly what to change. At most 8 findings; [] \
 when the plan is good. Don't repeat the checker's findings; they are listed.
 
-""" + ai_guide.WHICH + "\n" + ai_guide.COHERENCE
+""" + ai_guide.WHICH + "\n" + ai_guide.NODES + "\n" + ai_guide.COHERENCE
 
 
 def review_prompt(plan: dict[str, Any], found: list[dict[str, Any]],
@@ -1228,6 +1322,8 @@ def review_prompt(plan: dict[str, Any], found: list[dict[str, Any]],
         + _plan_lines(plan) + ["", settings_note(plan.get("settings") or {})]
     if plan.get("decisions"):
         lines.append(decisions_note(plan["decisions"]))
+    if plan.get("canvas"):
+        lines.append(canvas_note(plan["canvas"]))
     if found:
         lines.append("The checker already found: " + " ".join(f["text"] for f in found))
     return "\n".join(lines)
@@ -1344,7 +1440,8 @@ def _built_rows(plan: dict[str, Any], built: dict[str, Any]) -> list[dict[str, A
 
 
 def _catalog(plan: dict[str, Any], built: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    cat = library_vars.build_catalog(_built_rows(plan, built), inputs=plan.get("inputs"))
+    cat = library_vars.build_catalog(_built_rows(plan, built), inputs=plan.get("inputs"),
+                                     canvas=plan.get("canvas"))
     # Planned variables not built yet still count as known.
     for i in plan["items"]:
         if i["var"] and i["var"] not in cat and i["kind"] != "constraint":
@@ -1608,6 +1705,47 @@ def compile_item(
             "preview": preview, "warnings": warnings, "repair": repair_note(warnings)}
 
 
+def item_texts(payload: dict[str, Any]) -> list[str]:
+    """A built wildcard's option texts or fixed values' texts."""
+    out = [o.get("value") for o in payload.get("options") or [] if isinstance(o, dict)]
+    out += [v.get("value") for v in payload.get("values") or [] if isinstance(v, dict)]
+    return [t for t in out if isinstance(t, str)]
+
+
+def tag_check_note(plan: dict[str, Any], kind: str, payload: dict[str, Any],
+                   lookup: ai_vocab.Lookup | None, kinds: set[str]) -> str:
+    """Tags a built item's options use that the user's Danbooru list lacks
+    (tag-style packs, while the tag lookup is on); "" when all are known.
+    A note, not a repair: artist names and new tags are real too."""
+    if plan.get("style") != "tags" or kind not in ("wildcard", "fixed_values"):
+        return ""
+    missing = ai_vocab.unknown_tags(lookup, kinds, item_texts(payload))
+    if not missing:
+        return ""
+    shown = ", ".join(missing[:8]) + (f" and {len(missing) - 8} more" if len(missing) > 8
+                                      else "")
+    return f"Not in your Danbooru tag list: {shown}"
+
+
+def item_vocab_note(plan: dict[str, Any], key: str, lookup: ai_vocab.Lookup | None,
+                    kinds: set[str]) -> str:
+    """Real tags for a tag-style wildcard's subject, for its build request."""
+    item = _item(plan, key)
+    if plan.get("style") != "tags" or item["kind"] not in ("wildcard", "fixed_values"):
+        return ""
+    # Prefix search: the subject's own words and the about's (``red`` finds
+    # red_hair), the most telling first.
+    text = f"{item['name']} {item['var']} {' '.join(item['tags'])} {item['about']}"
+    words = [w for w in re.findall(r"[a-z]+", text.lower().replace("_", " "))
+             if w not in _STOP][:16]
+    return ai_vocab.vocab_note(lookup, kinds, words)
+
+
+_STOP = {"the", "and", "with", "type", "list", "option", "options", "pack", "wildcard",
+         "vocabulary", "preset", "style", "values", "for", "from", "each", "that", "this",
+         "never", "empty", "sometimes", "none", "tag", "tags", "its", "are", "one"}
+
+
 #: Compile warnings worth one automatic rebuild: the item doesn't fit the
 #: rest of the pack (a rule tests a value or tag that isn't there).
 _REPAIRABLE = re.compile(r"has no option|No option carries|unknown tag|nothing sets|"
@@ -1744,9 +1882,13 @@ def _template(plan: dict[str, Any], built: dict[str, Any]) -> tuple[dict[str, An
 
 
 def pins(plan: dict[str, Any]) -> dict[str, str]:
-    """Each input's example, as the check pins it."""
-    return {i["var"]: i["example"] or i["var"].replace("_", " ")
-            for i in plan.get("inputs") or []}
+    """Each input's example, as the check pins it, and each canvas Injector
+    variable (its value isn't known here, so its name stands in)."""
+    out = {c["name"]: c["name"].replace("_", " ") for c in plan.get("canvas") or []
+           if c["source"] == "injector"}
+    out.update({i["var"]: i["example"] or i["var"].replace("_", " ")
+                for i in plan.get("inputs") or []})
+    return out
 
 
 def render(text: str, negative: str, ctx: dict[str, Any]) -> tuple[str, str]:

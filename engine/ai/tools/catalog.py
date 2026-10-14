@@ -108,6 +108,20 @@ TOOLS: list[Tool] = [
         ("core",),
     ),
     Tool(
+        "lookup", "read",
+        "Look up the user's own vocabulary: Danbooru tags from their tag list (with post "
+        "counts), or their LoRA and embedding files. Check tags before writing tag-style "
+        "options, and name real LoRAs instead of guessing.",
+        '{"kind": "tags", "loras" or "embeddings", "query": a start of a name, or for tags '
+        'several tags joined by ", " to check each}: tags list the most used ones that '
+        "start with the query (or say which of yours aren't real tags); loras / embeddings "
+        "list the user's files that match.",
+        obj({"kind": s("tags, loras or embeddings"),
+             "query": s("a word or start of a name; for tags, several tags joined by "
+                        "\", \" checks each one")}, ("kind", "query")),
+        ("vocab",),
+    ),
+    Tool(
         "run_test", "read",
         "Run a stack of modules and bundles on the engine over many seeds: each variable's "
         "top values, options never picked, warnings and sample prompts. Use it to check a "
@@ -615,24 +629,28 @@ DEFAULT_GROUPS = ("wildcards", "constraints", "derivations", "pack")
 #: Offered only while Settings › AI assistant › "Let the assistant delete
 #: items" is on (`sync_delete`).
 DELETE = tuple(t.name for t in TOOLS if "delete" in t.groups)
+#: Offered only while a LoRA, embedding or tag autocomplete source is on
+#: and has data (`engine/ai/vocab.py`).
+VOCAB = tuple(t.name for t in TOOLS if "vocab" in t.groups)
 
 
 def toolset(route: str | None, *, scoped: bool, web: bool = False,
-            delete: bool = False) -> list[str]:
+            delete: bool = False, vocab: bool = False) -> list[str]:
     """Tool names a new chat offers. Unscoped (medium and large models):
     all of them. Scoped (small models): the core tools, the page's groups
     and `more_tools`, in catalog order so the list is stable. `web`: web
     search is set up (Settings › AI assistant), so `web_search` is offered.
-    `delete`: deleting is allowed, so `delete_items` is offered."""
+    `delete`: deleting is allowed, so `delete_items` is offered. `vocab`: a
+    lookup source is on, so `lookup` is offered."""
     if not scoped:
         return [t.name for t in TOOLS if t.name != "more_tools" and (web or t.kind != "web")
-                and (delete or t.name not in DELETE)]
+                and (delete or t.name not in DELETE) and (vocab or t.name not in VOCAB)]
     key = str(route or "")
     for suffix in ("-new", "-edit"):
         if key.endswith(suffix):
             key = key[: -len(suffix)]
     groups = {"core", *PAGE_GROUPS.get(key, DEFAULT_GROUPS), *(("web",) if web else ()),
-              *(("delete",) if delete else ())}
+              *(("delete",) if delete else ()), *(("vocab",) if vocab else ())}
     names = [t.name for t in TOOLS if groups.intersection(t.groups)]
     return [*names, "more_tools"]
 
