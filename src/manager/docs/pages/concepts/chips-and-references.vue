@@ -10,7 +10,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
 const chipStates = [
   {
     term: "Resolved",
-    desc: "The chip points at something real. A ref chip is tinted with the colour of the module it points at (violet ✦ for a wildcard) and hovering it shows the target's id and option count. A var chip (⌘) is tinted by its name, and hovering it says which module writes it, or that it binds at runtime.",
+    desc: "The chip points at something real. A ref chip is tinted with the colour of the module it points at (violet ✦ for a wildcard) and hovering it shows the target's id and option count.",
   },
   {
     term: "Filtered",
@@ -29,47 +29,49 @@ const chipStates = [
     title="Chips & references"
     icon="pi pi-tag"
     tone="neutral"
-    blurb="What the chips in text fields are, the three states they show, the @{…} reference syntax, and the sub-category filter grammar (not / and / or / parentheses)."
+    blurb="How text fields show variables (coloured text) and references (chips), the three states a chip shows, the @{…} reference syntax, and the sub-category filter grammar (not / and / or / parentheses)."
   >
-    <DocSection title="What a chip is">
+    <DocSection title="Variables and chips">
       <p>
-        Text fields that understand pipeline syntax show each <VarToken>$name</VarToken> and each
-        <VarToken kind="ref">@{…}</VarToken> reference as a <b>chip</b>: a small tinted pill instead of raw characters. A chip is one unit. The caret
-        steps over it in one move and Backspace deletes it whole, so you can't half-delete a
-        reference and leave broken syntax behind.
-      </p>
-      <p>
-        Under the chip the field still stores plain text. Copying a chip copies its syntax, and
-        pasting that syntax anywhere turns back into the same chip. There are two kinds:
+        Text fields that understand pipeline syntax colour what they recognise. Two kinds of
+        token matter here:
       </p>
       <ul>
         <li>
-          <b>Var chips</b> (<VarToken>$mood</VarToken>, <VarToken>$outfit.SHOES</VarToken>) read a
-          variable from the Context. They appear where variables can be read: combine and
-          derivation text and the Prompt Assembler template. Each name keeps the same colour
-          everywhere, so the chip in a combine matches the one in the Assembler's variable strip.
+          <b>Variables</b> (<VarToken>$mood</VarToken>, <VarToken>$outfit.SHOES</VarToken>) read a
+          variable from the Context. They are ordinary text in their own colour, wherever
+          variables can be read: combine and derivation text and the Prompt Assembler template.
+          You edit them like any other word. Each name keeps the same colour everywhere, so
+          <VarToken>$mood</VarToken> in a combine matches the one in the Assembler's variable
+          strip. Hover one to see which module writes it, or that it binds at runtime.
         </li>
         <li>
           <b>Ref chips</b> (<VarToken kind="ref">@{abcd1234#Mood}</VarToken>) embed a fresh pick
           from another module. They appear where references work: wildcard options and derivation
-          actions. They show the target's name, not its id.
+          actions. A chip shows the target's name, not its id, and it is one unit: the caret steps
+          over it in one move and Backspace deletes it whole, so you can't half-delete a reference
+          and leave broken syntax behind.
         </li>
       </ul>
+      <p>
+        Under the chip the field still stores plain text. Copying a chip copies its syntax, and
+        pasting that syntax anywhere turns back into the same chip.
+      </p>
     </DocSection>
 
     <DocSection title="The three states">
       <DocKeyList :items="chipStates" />
       <DocCallout variant="tip">
-        A var chip never turns red just because nothing produces it yet: variables can be set at
-        run time (by an injector, a loop, or a Context further up the chain), so an unknown name
-        stays a normal chip. Its hover says <i>binds at runtime</i>, and on the canvas <i>no
-        upstream producer</i> when the graph really has none. The one var-chip warning is an
-        accessor like <VarToken>$outfit.SHOES</VarToken> whose axis the wildcard doesn't declare,
-        which is underlined because it would render empty.
+        A variable never turns red in the library just because nothing produces it yet:
+        variables can be set at run time (by an injector, a loop, or a Context further up the
+        chain). Its hover says <i>binds at runtime</i>. On the canvas, where the graph is known,
+        a name nothing upstream writes is red with a wavy underline and its hover says <i>no
+        upstream producer</i>. An accessor like <VarToken>$outfit.SHOES</VarToken> whose axis
+        the wildcard doesn't declare is underlined too, because it would render empty.
       </DocCallout>
     </DocSection>
 
-    <DocSection title="Making chips (and placeholders)">
+    <DocSection title="Inserting variables and chips (and placeholders)">
       <p>
         Type <b>$</b> to open the variable list, or <b>@</b> to open the module list. Keep typing
         to narrow the list, then pick with Enter or a click.
@@ -83,7 +85,7 @@ const chipStates = [
       <p>
         <b>Placeholders.</b> To use a variable nothing produces yet, type
         <VarToken>$</VarToken> and the name, e.g. <VarToken>$lighting</VarToken>, then a space or
-        a comma (or press Enter when the list is empty). The name becomes a chip right away and is
+        a comma (or press Enter when the list is empty). The name is
         filled in by
         whatever module later writes <VarToken>$lighting</VarToken>. Until then it renders empty
         and the Assembler marks it as missing, which is a handy to-do marker while you build a

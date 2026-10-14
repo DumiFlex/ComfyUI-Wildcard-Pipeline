@@ -1,6 +1,7 @@
 <!-- src/manager/components/RefChip.vue -->
 <script setup lang="ts">
-import { computed, inject, ref, onBeforeUnmount } from "vue";
+import { computed, inject, ref, onBeforeUnmount, watch } from "vue";
+import { varColorIndex } from "../../components/shared/var-color";
 import { KIND_ICON_MAP } from "../../components/shared/kind-icons";
 import { parse, readsAs, matches } from "@/manager/parsing/subcatFilter";
 import { splitRefFilter } from "@/widgets/richTokenize";
@@ -101,6 +102,12 @@ interface Props {
    *  safe direction, since a caller that forgets the prop is exactly the
    *  caller with no handler wired. */
   remappable?: boolean;
+  /** Card-only mode. The host draws the `$name` itself as coloured text (an
+   *  editable run, not an atom) and hands the hovered element in here; the
+   *  chip renders nothing of its own and shows its hover card next to that
+   *  element while it is set. `null` closes the card the usual way (after the
+   *  short bridge delay, so the pointer can still reach it). */
+  cardAnchor?: HTMLElement | null;
 }
 
 /** Structural mirror of `extension/graph.ts:VarProducer`, declared locally so
@@ -150,6 +157,7 @@ const props = withDefaults(defineProps<Props>(), {
   producer: undefined,
   graphAware: false,
   remappable: false,
+  cardAnchor: undefined,
 });
 
 
@@ -327,6 +335,9 @@ const isKindAware = computed(() =>
 const toneStyle = computed<Record<string, string>>(() => {
   const out: Record<string, string> = {};
   if (isKindAware.value) out["--wp-refchip-tone"] = KIND_TONE[props.moduleKind];
+  // A `$var` is drawn as coloured text, in the same per-name colour the
+  // template text, the assembler's variable strip and the `$` popover use.
+  if (!isRef.value) out["--wp-refchip-var-tone"] = `var(--wp-var-${varColorIndex(props.name)})`;
   return out;
 });
 
@@ -472,6 +483,14 @@ function onEnter(ev: MouseEvent): void {
   }, HOVER_DELAY_MS);
 }
 
+// Card-only mode: the host tells us which element is hovered. Same open delay
+// and the same close bridge as a real chip, so both behave alike.
+watch(() => props.cardAnchor, (el) => {
+  if (props.cardAnchor === undefined) return;
+  if (el) onEnter({ currentTarget: el } as unknown as MouseEvent);
+  else onLeave();
+}, { immediate: true });
+
 function onLeave(): void {
   if (hoverTimer !== undefined) window.clearTimeout(hoverTimer);
   hoverTimer = undefined;
@@ -530,6 +549,7 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
       'wp-refchip--ref': kind === 'ref',
       'wp-refchip--unresolved': !resolved,
       'wp-refchip--filtered': isFiltered,
+      'wp-refchip--card-only': cardAnchor !== undefined,
     }"
     :style="toneStyle"
     :title="filterTitle"
@@ -764,11 +784,30 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
   background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 45%, transparent);
   color: var(--wp-text, #e7e7ee);
 }
-.wp-refchip--var {
-  background: color-mix(in srgb, var(--wp-success, #22c55e) 15%, transparent);
-  border-color: color-mix(in srgb, var(--wp-success, #22c55e) 50%, transparent);
-  color: var(--wp-success);
+/* A `$var` is syntax-coloured text, not a boxed chip (Dumi, 2026-10-14: the
+   green chip served no purpose, the hover card is what matters). No fill, no
+   border, no icon, and the surrounding text's own font, so it sits in the
+   sentence like any word; the colour is the variable's own `--wp-var-N`. */
+.wp-refchip.wp-refchip--var {
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: var(--wp-weight-semibold, 600);
+  color: var(--wp-refchip-var-tone, var(--wp-accent-text));
+  cursor: help;
 }
+.wp-refchip--var > .wp-refchip__icon { display: none; }
+/* No name (a bare `$`): the danger colour with a wavy rule, still no box. */
+.wp-refchip--var.wp-refchip--unresolved {
+  background: none;
+  color: var(--wp-danger, #ef4444);
+  text-decoration: underline wavy color-mix(in srgb, var(--wp-danger, #ef4444) 70%, transparent);
+  text-underline-offset: 3px;
+}
+.wp-refchip--var.wp-refchip--unresolved:hover { background: none; }
+.wp-refchip--card-only { display: none; }
 /* Ref chip tone is sourced from `--wp-refchip-tone` — set per-instance
  * via inline style when `moduleKind` differs from `wildcard`. The
  * fallback to `--wp-kind-wildcard` keeps legacy (no-prop) callers on

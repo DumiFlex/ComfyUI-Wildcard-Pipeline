@@ -297,25 +297,52 @@ const refsEnabled = computed(() => props.surface === "wildcard" || props.allowNe
  * surface-derived default keeps the two aligned and lets a caller be explicit
  * rather than adding a third name to a growing condition.
  */
-/**
- * Surfaces that render `$var` as coloured text rather than a chip.
- *
- * Only the prompt template. Everywhere else a chip is honest — the module
- * editors let you click one to re-pick what it points at, so the border and
- * fill are advertising a real affordance. A template is prose you are writing,
- * the chip advertises nothing, and its box breaks the line rhythm of the
- * sentence at 10px inside 12px text.
- */
-const FLAT_VAR_SURFACES = new Set(["assembler"]);
-
 const PRODUCER_SURFACES = new Set(["wildcard", "fixed_values"]);
-const flatVars = computed(() => FLAT_VAR_SURFACES.has(props.surface ?? "combine"));
 
 const varsEnabled = computed(() => {
   if (props.allowVars === "on") return true;
   if (props.allowVars === "off") return false;
   return !PRODUCER_SURFACES.has(props.surface ?? "combine");
 });
+
+/**
+ * `$var` renders as coloured, editable text on every surface that reads vars.
+ *
+ * It used to be an atomic chip everywhere but the prompt template. Dumi
+ * (2026-10-14): the chip served no purpose; its one real feature was the hover
+ * card, and that works on text too (`onHostOver`). As text it edits like the
+ * prose around it: the caret goes inside, Backspace removes one letter, and
+ * the box no longer breaks the line rhythm. Nested `@{}` refs stay chips,
+ * because they hide an id behind a name and open a picker on click.
+ */
+const flatVars = computed(() => varsEnabled.value);
+
+/** The `$name` run under the pointer, for its hover card. The run is text in
+ *  the editable host (see `flatVars`), so the card is a card-only RefChip that
+ *  the host aims at the hovered span. */
+const varHover = ref<HTMLElement | null>(null);
+/** What the card shows. Kept after the pointer leaves, so the card does not
+ *  blank out during its short close delay. */
+const varHoverInfo = ref<{ name: string; index?: number; axis?: string }>({ name: "" });
+
+function onHostOver(ev: MouseEvent): void {
+  const target = ev.target as Element | null;
+  const el = target?.closest?.(".wp-rt-var") as HTMLElement | null;
+  if (!el || !flatVars.value) {
+    if (varHover.value) varHover.value = null;
+    return;
+  }
+  if (varHover.value === el) return;
+  const raw = (el.textContent ?? "").replace(ZWSP_RE, "").replace(/^\$/, "");
+  const parts = varAccessorParts(raw);
+  if (!parts.base) return;
+  varHoverInfo.value = { name: parts.base, index: parts.index, axis: parts.axis };
+  varHover.value = el;
+}
+
+function onHostLeave(): void {
+  varHover.value = null;
+}
 
 const emit = defineEmits<{
   "update:modelValue": [value: string];
@@ -815,19 +842,11 @@ function chipRefAtom(atom: RefAtom): RefAtomX {
 
 function parseForSurface(text: string): Atom[] {
   const atoms = parse(text);
-  const collapseSet: Set<"var" | "ref"> =
-    props.surface === "wildcard"
-      ? new Set(["var"])
-      // fixed_values and assembler both keep `$name` as literal text, for
-      // opposite reasons. fixed_values PRODUCES bindings, so a `$var` read is
-      // meaningless there. The assembler reads them constantly — but a
-      // template is prose, and an atomic chip in prose behaves like an object:
-      // one Backspace deletes the whole token, the caret cannot enter it, and
-      // it takes a pointer cursor. Collapsed, it is ordinary editable text
-      // that happens to be coloured.
-      : props.surface === "fixed_values" || props.surface === "assembler"
-        ? new Set(["var", "ref"])
-        : new Set(["ref"]);
+  // `$name` is always literal text in the atom stream: coloured where the
+  // surface reads vars (`flatVars`), plain where it produces them (wildcard,
+  // fixed_values). An atomic chip in prose behaved like an object: one
+  // Backspace deleted the whole token and the caret could not enter it.
+  const collapseSet: Set<"var" | "ref"> = new Set(["var", "ref"]);
   // Action-value derivation inputs (allowNestedRefs) chipify `@{}` refs like
   // the wildcard surface does — drop `ref` from the collapse set so they
   // settle into chips instead of staying literal text.
@@ -3447,6 +3466,8 @@ function onHostKeydown(ev: KeyboardEvent): void {
       @paste="onHostPaste"
       @copy="onHostCopy"
       @cut="onHostCut"
+      @mouseover="onHostOver"
+      @mouseleave="onHostLeave"
     >
       <template v-for="(atom, idx) in atoms" :key="idx">
         <RefChip
@@ -3481,6 +3502,21 @@ function onHostKeydown(ev: KeyboardEvent): void {
         ></span>
       </template>
     </div>
+
+    <!-- Hover card for the `$name` run under the pointer. -->
+    <RefChip
+      v-if="flatVars && varHoverInfo.name"
+      kind="var"
+      :card-anchor="varHover"
+      :name="varHoverInfo.name"
+      :index="varHoverInfo.index"
+      :axis="varHoverInfo.axis"
+      :resolved="true"
+      :in-scope="varSuggestions.includes(varHoverInfo.name)"
+      :producer="varProducers?.get(varHoverInfo.name)"
+      :graph-aware="graphAware"
+      data-test="rt-var-card"
+    />
 
     <!-- Resize grip, replacing `resize: vertical`.
          The native resizer recomputes height from an origin it captured at

@@ -10,10 +10,11 @@
  * again re-asks, Start over drops the conversation. The requests that led to
  * the shown answer are listed above it, with arrows to flip between answers.
  */
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import Button from "../ui/Button.vue";
 import AiImagePicker from "./AiImagePicker.vue";
 import AiWorking from "./AiWorking.vue";
+import ChatCompletions from "./ChatCompletions.vue";
 import { useAiConfig } from "../../composables/useAiConfig";
 import type { AiImages } from "../../composables/useAiImages";
 
@@ -46,6 +47,8 @@ interface Props {
   research?: string[];
   searching?: boolean;
 }
+/** The instruction box, for its `@` / `$` / tag completions. */
+const box = ref<HTMLTextAreaElement | null>(null);
 const props = withDefaults(defineProps<Props>(), {
   asked: () => [], answerIndex: 0, answerCount: 0, hint: "You review everything first.",
 });
@@ -133,6 +136,7 @@ function onKeydown(ev: KeyboardEvent): void {
       </span>
     </div>
     <textarea
+      ref="box"
       v-model="instruction"
       class="wp-textarea wp-ai-frame__input"
       :rows="answered || optional ? 1 : 2"
@@ -143,6 +147,7 @@ function onKeydown(ev: KeyboardEvent): void {
       @keydown="onKeydown"
       @paste="onPaste"
     ></textarea>
+    <ChatCompletions :target="box" />
     <AiImagePicker v-if="images" :images="images" :disabled="loading" compact />
     <div class="wp-ai-frame__controls">
       <slot name="controls" />

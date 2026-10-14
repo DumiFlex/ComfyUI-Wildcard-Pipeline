@@ -627,6 +627,37 @@ VECTOR_MIN = 0.55
 VECTOR_NEAR_BEST = 0.05
 
 
+#: An item the user picked from the chat box's `@` menu: `[[id#Name]]` (the
+#: same form the chat writes its own mentions in) or a raw `@{id…}` ref.
+_MENTION = re.compile(r"\[\[([0-9a-f]{8})(?:#[^\]]*)?\]\]|@\{([0-9a-f]{8})[^}]*\}")
+MAX_MENTIONS = 8
+
+
+def mentioned(idx: Index, message: str, *, full: bool) -> tuple[str, list[str]]:
+    """The items the user named by id in this message, as a block for the
+    message tail, so the model has the exact item and need not search for it.
+    Unlike `retrieve` this is not gated and not skipped when already shown:
+    the user pointed at these on purpose. Unknown ids are said to be unknown."""
+    ids: list[str] = []
+    for m in _MENTION.finditer(message):
+        mid = m.group(1) or m.group(2)
+        if mid not in ids:
+            ids.append(mid)
+    if not ids:
+        return "", []
+    lines = ["Items the user picked by id in this message (exactly the ones they mean; "
+             "no need to search for them, read one for its full content):"]
+    known: list[str] = []
+    for mid in ids[:MAX_MENTIONS]:
+        f = idx.facts(mid)
+        if f is None:
+            lines.append(f"- {mid}: not in the library (deleted, or never there)")
+            continue
+        lines.append("- " + facts_line(mid, f, full=full))
+        known.append(mid)
+    return "\n".join(lines), known
+
+
 def retrieve(idx: Index, message: str, *, seen: set[str], limit: int, full: bool,
              qvec: list[float] | None = None, model: str = "") -> tuple[str, list[str]]:
     """A short "possibly relevant" block for the user's message, and the

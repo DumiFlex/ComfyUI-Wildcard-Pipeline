@@ -1234,6 +1234,14 @@ async def _retrieval(lib: ai_chat.Library, text: str, meta: dict[str, Any],
     parts: list[str] = []
     new: list[str] = []
     if lib.index is not None:
+        try:
+            mblock, mids = ai_index.mentioned(lib.index, text, full=prof["size"] != "large")
+        except sqlite3.Error:
+            mblock, mids = "", []
+        if mblock:
+            parts.append(mblock)
+            new.extend(m for m in mids if m not in shown)
+            shown |= set(mids)
         skip = shown | ({lib.editor_id} if lib.editor_id else set())
         qvec = await _query_vector(lib, cfg, text)
         try:

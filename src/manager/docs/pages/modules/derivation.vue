@@ -13,8 +13,8 @@ const conditionOps = [
   { term: "equals / not equals", desc: "Matches when the variable's value is (or isn't) exactly the text you provide. Case-sensitive." },
   { term: "contains / does not contain", desc: "Matches when the variable's value includes the text you provide somewhere inside it (or doesn't)." },
   { term: "matches / does not match", desc: "Matches using a regular expression — for flexible pattern-based conditions. A broken pattern never matches either way." },
-  { term: "NOT", desc: "The NOT switch next to a test turns it around: is → is not, contains → does not contain, matches → does not match, exists → does not exist (with has value it becomes is unset). Does not contain and does not match need schema 10, so a pack using them installs only on this version or newer." },
-  { term: "exists / not exists", desc: "Matches when the variable is present in the Context (or absent), regardless of its value. Under exists, a switch narrows it: any, is empty (present but empty, e.g. a wildcard that rolled its null option) or has value." },
+  { term: "NOT", desc: "The NOT switch next to a test turns it around: is → is not, contains → does not contain, matches → does not match, exists → does not exist. Does not contain and does not match need schema 10, so a pack using them installs only on this version or newer." },
+  { term: "exists / not exists", desc: "Matches when the variable is present in the Context (or absent), regardless of its value. Under exists, a switch narrows it: any, is empty (present but empty, e.g. a wildcard that rolled its null option) or has value. Under NOT exists there is nothing to narrow, so the switch is hidden. An older test stored as is unset (missing or empty) still shows the switch on has value, so it keeps its meaning until you pick any." },
   { term: "is set / is unset", desc: "is set matches when the variable is present and non-empty; is unset matches when it's absent or empty." },
 ];
 

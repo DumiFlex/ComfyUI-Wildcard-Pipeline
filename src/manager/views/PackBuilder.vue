@@ -21,6 +21,7 @@ import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
 import AiImagePicker from "../components/ai/AiImagePicker.vue";
 import AiWorking from "../components/ai/AiWorking.vue";
+import ChatCompletions from "../components/ai/ChatCompletions.vue";
 import PackFindings from "../components/pack/PackFindings.vue";
 import PackPlanList from "../components/pack/PackPlanList.vue";
 import PackQuestions from "../components/pack/PackQuestions.vue";
@@ -94,6 +95,8 @@ function onSettingsKey(ev: KeyboardEvent): void {
 onMounted(() => window.addEventListener("keydown", onSettingsKey));
 onBeforeUnmount(() => window.removeEventListener("keydown", onSettingsKey));
 const editBox = ref<HTMLTextAreaElement | null>(null);
+const requestBox = ref<HTMLTextAreaElement | null>(null);
+const sampleBox = ref<HTMLTextAreaElement | null>(null);
 /** A short note under the edit box after a click put text in it. */
 const flash = ref("");
 let flashTimer: ReturnType<typeof setTimeout> | null = null;
@@ -421,6 +424,7 @@ function stopExtending(): void {
           </template>
         </p>
         <textarea
+          ref="requestBox"
           v-model="convo.instruction.value"
           class="wp-textarea wp-pack__request"
           rows="5"
@@ -430,6 +434,7 @@ function stopExtending(): void {
           :disabled="convo.loading.value"
           @keydown="onKey($event, toSettings)"
         ></textarea>
+        <ChatCompletions :target="requestBox" />
         <button
           type="button"
           class="wp-pack__toggle"
@@ -439,6 +444,7 @@ function stopExtending(): void {
         ><i :class="['pi', showSample ? 'pi-chevron-down' : 'pi-chevron-right']" aria-hidden="true" /> Start from a prompt you like</button>
         <template v-if="showSample">
           <textarea
+            ref="sampleBox"
             v-model="pb.sample.value"
             class="wp-textarea wp-pack__request"
             rows="3"
@@ -447,6 +453,7 @@ function stopExtending(): void {
             data-test="pack-sample"
             :disabled="convo.loading.value"
           ></textarea>
+          <ChatCompletions :target="sampleBox" />
           <p class="wp-pack__dim">The plan splits it into slots, reuses your wildcards where they fit and builds the rest, so the pack makes more prompts like it.</p>
         </template>
         <p class="wp-pack__label">Reference images</p>
@@ -565,6 +572,7 @@ function stopExtending(): void {
             :disabled="convo.loading.value"
             @keydown="onKey($event, pb.refinePlan)"
           ></textarea>
+          <ChatCompletions :target="editBox" />
           <p v-if="flash" class="wp-pack__flash-note" role="status" data-test="pack-edit-note"><i class="pi pi-arrow-up" aria-hidden="true" /> {{ flash }}</p>
           <button
             type="button"
