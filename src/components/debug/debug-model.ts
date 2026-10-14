@@ -293,6 +293,7 @@ export const OP_LABELS: Record<string, string> = {
   starts_with: "starts with",
   ends_with: "ends with",
   matches: "matches",
+  not_matches: "doesn't match",
   exists: "exists",
   not_exists: "doesn't exist",
   is_set: "is set",

@@ -17,6 +17,7 @@ import { useCascadeApply } from "../cascade/useCascadeApply";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useDeleteConfirm } from "../composables/useDeleteConfirm";
+import { registerPageNote } from "../composables/useOpenEditor";
 import type { CategoryRow } from "../api/types";
 
 const store = useCategoryStore();
@@ -57,6 +58,29 @@ onMounted(refresh);
 function moduleCount(row: CategoryRow): number {
   return countsByCategory.value.get(row.id) ?? 0;
 }
+
+// Tell the AI chat what the table shows, so "this category" means the one
+// on screen (the row being edited, else the list).
+const NOTE_MAX = 40;
+registerPageNote(() => {
+  const rows = store.items;
+  if (!rows.length) return "Categories page: no categories yet";
+  const listed = rows.slice(0, NOTE_MAX).map((r) => {
+    const n = moduleCount(r);
+    const look = [r.color || "no color", r.icon ? `icon ${r.icon}` : "no icon"].join(", ");
+    return `${r.name} (${r.id}): ${look}, ${n} module${n === 1 ? "" : "s"}`;
+  });
+  const bits = [
+    `Categories page, ${rows.length} categor${rows.length === 1 ? "y" : "ies"}: ${listed.join("; ")}${rows.length > NOTE_MAX ? "; …" : ""}`,
+  ];
+  const ed = editing.value;
+  if (ed) {
+    const row = rows.find((r) => r.id === ed.id);
+    bits.push(`Editing ${row?.name ?? ed.id} (${ed.id}), unsaved: name "${ed.name}", ${ed.color}${ed.icon ? `, icon ${ed.icon}` : ""}`);
+  }
+  if (newName.value.trim()) bits.push(`New category form holds "${newName.value.trim()}" (not added yet)`);
+  return bits.join(". ");
+});
 
 function reportError(e: unknown, summary: string) {
   const msg = e instanceof ApiError ? e.message : String(e);
@@ -195,6 +219,8 @@ async function saveEdit() {
           variant="ghost"
           icon="pi pi-refresh"
           aria-label="Refresh categories"
+          data-ai-anchor="refresh"
+          data-ai-label="Refresh button"
           :disabled="store.loading"
           :class="{ 'wp-refresh-btn--spin': store.loading }"
           @click="refresh"
@@ -202,7 +228,7 @@ async function saveEdit() {
       </div>
     </div>
 
-    <Card title="New category">
+    <Card title="New category" data-ai-anchor="new-category" data-ai-label="New category form">
       <!-- Icon and colour lead, name follows. They compose the chip the user
            is building, and reading left-to-right now matches what the chip
            will look like — the icon sits before the label there too. -->
@@ -230,19 +256,21 @@ async function saveEdit() {
           variant="primary"
           icon="pi-plus"
           data-test="add-category-btn"
+          data-ai-anchor="add-category"
+          data-ai-label="Add category button"
           @click="add"
         >Add</Button>
       </div>
     </Card>
 
     <div class="wp-table-wrap wp-table-wrap--scroll">
-      <table class="wp-table wp-table--sticky-head">
+      <table class="wp-table wp-table--sticky-head" data-ai-anchor="categories" data-ai-label="Categories table">
         <thead>
           <tr>
             <th class="wp-cat-col--icon">Icon</th>
             <th class="wp-cat-col--color">Color</th>
             <th>Name</th>
-            <th class="wp-cat-col--count">Modules</th>
+            <th class="wp-cat-col--count" data-ai-anchor="counts" data-ai-label="Module counts">Modules</th>
             <th class="wp-cat-col--actions">Actions</th>
           </tr>
         </thead>

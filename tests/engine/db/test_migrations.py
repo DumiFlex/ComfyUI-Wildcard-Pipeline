@@ -30,10 +30,10 @@ def test_migrate_records_version(tmp_path):
     conn = get_connection(tmp_path / "v2.db")
     migrate(conn)
     # Keep this assertion in sync with the highest-numbered migration in
-    # ``engine/db/migrations_sql``. (019_template_negative.py is current
+    # ``engine/db/migrations_sql``. (021_ai_chat_pins.py is current
     # head.)
-    assert current_version(conn) == 19
-    assert head_version() == 19
+    assert current_version(conn) == 21
+    assert head_version() == 21
     conn.close()
 
 

@@ -129,7 +129,7 @@ onMounted(loadLibrary);
 // categories/templates refs (the export listing renders from them), so
 // the parent's loadLibrary — which only refills the import-side refs —
 // can't refresh this tab. Exposing loadLibrary lets Refresh reload both.
-defineExpose({ loadLibrary });
+defineExpose({ loadLibrary, noteSummary });
 
 // ---------- Selection state ----------
 
@@ -416,6 +416,19 @@ const allSelectedIds = computed<Set<string>>(() => {
   }
   return s;
 });
+
+/** What the picker holds, for the AI chat's page note (the parent view
+ *  registers the note): the count and the first few picked items. */
+function noteSummary(): string {
+  const picked = [...allSelectedIds.value].slice(0, 20).map((id) => {
+    const row = libraryRowById.value.get(id);
+    return row ? `${row.name} (${row.type}, ${id})` : id;
+  });
+  const bits = [`${totalSelected.value} of ${totalRowsCount.value} items picked for export`];
+  if (rowQuery.value.trim()) bits.push(`filter "${rowQuery.value.trim()}"`);
+  if (picked.length) bits.push(`picked: ${picked.join(", ")}${totalSelected.value > picked.length ? ", …" : ""}`);
+  return bits.join("; ");
+}
 
 /**
  * Outgoing refs from `id` that aren't currently selected. Only surfaced

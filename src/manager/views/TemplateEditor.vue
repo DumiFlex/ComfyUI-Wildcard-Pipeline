@@ -15,6 +15,7 @@ import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
+import { usePanelAction, viaPanel } from "../composables/usePanelAction";
 import Card from "../components/ui/Card.vue";
 import Field from "../components/ui/Field.vue";
 import RichTextInput from "../components/RichTextInput.vue";
@@ -23,6 +24,9 @@ import AiTextPanel from "../components/ai/AiTextPanel.vue";
 import { useAiConfig } from "../composables/useAiConfig";
 import { useToast } from "../composables/useToast";
 import { useReturnTo } from "../composables/useReturnTo";
+import {
+  registerOpenEditor, draftCreateId, draftSaved, type StagedDraft,
+} from "../composables/useOpenEditor";
 import { useTemplateStore } from "../stores/templateStore";
 import { useCategoryStore } from "../stores/categoryStore";
 
@@ -73,6 +77,29 @@ function snapshot(): string {
 }
 const dirty = computed(() => snapshot() !== baseline.value);
 
+/** Load a stored template's text into the editor (saved row or chat draft). */
+function loadContent(src: { template_string?: unknown; negative_template?: unknown }): void {
+  templateString.value = typeof src.template_string === "string" ? src.template_string : "";
+  negativeOriginal.value = typeof src.negative_template === "string" ? src.negative_template : null;
+  negativeTemplate.value = negativeOriginal.value ?? "";
+}
+
+/** Templates carry no rating; the chat spec wants one, so it stays "safe". */
+const contentRating = ref<"safe" | "nsfw">("safe");
+// The chat reads and edits this item's info here; its text stays on Save.
+// A new template fills from a draft the chat staged (see onMounted).
+const fillFromChat = registerOpenEditor({
+  id: editingId.value ?? undefined, type: "template", dirty: () => dirty.value,
+  name, description, tags, categoryId, contentRating,
+});
+// The chat's `use_panel`: Describe, or ask the Draft with AI panel.
+const identityCard = ref<InstanceType<typeof IdentityCard> | null>(null);
+const aiPanelRef = ref<InstanceType<typeof AiTextPanel> | null>(null);
+usePanelAction({ id: () => editingId.value, identity: identityCard, panels: { draft: viaPanel(aiOpen, aiPanelRef) } });
+/** The chat's draft this new template was opened with (Save creates it at
+ *  the id the card reserved, if any, and marks the card applied). */
+let chatDraft: StagedDraft | null = null;
+
 onMounted(async () => {
   loading.value = true;
   try {
@@ -83,11 +110,25 @@ onMounted(async () => {
       description.value = row.description;
       categoryId.value = row.category_id;
       tags.value = [...row.tags];
-      templateString.value = row.template_string;
-      negativeOriginal.value = row.negative_template ?? null;
-      negativeTemplate.value = row.negative_template ?? "";
+      loadContent(row);
     }
     baseline.value = snapshot();
+    // "Open in editor" on a chat card: the proposed template, unsaved. Its
+    // text sits at the top level of a template create body.
+    if (!editingId.value) {
+      chatDraft = fillFromChat();
+      if (chatDraft) {
+        const body: Record<string, unknown> = { ...chatDraft.body };
+        loadContent(body);
+        toast.push({
+          severity: "info",
+          summary: "From the assistant",
+          detail: chatDraft.newCategory
+            ? `Check it and Save to keep it. It suggested a new category, "${chatDraft.newCategory}": create it from the Category picker if you want it.`
+            : "Check it and Save to keep it.",
+        });
+      }
+    }
   } catch (e) {
     toast.push({ severity: "error", summary: "Load failed", detail: String(e), life: 4000 });
   } finally {
@@ -114,7 +155,11 @@ async function save() {
           : negativeTemplate.value,
     };
     if (editingId.value) await store.update(editingId.value, body);
-    else await store.create(body);
+    else {
+      const created = await store.create({ ...draftCreateId(chatDraft), ...body });
+      draftSaved(chatDraft, created?.id);
+      chatDraft = null;
+    }
     negativeOriginal.value = body.negative_template;
     baseline.value = snapshot();
     toast.push({ severity: "success", summary: "Saved", detail: name.value });
@@ -144,6 +189,7 @@ function cancel() {
     <div v-if="loading" class="wp-dim wp-tpl-editor__loading">Loading template…</div>
     <template v-else>
       <IdentityCard
+        ref="identityCard"
         ai-kind="template"
         :ai-payload="() => ({ template: templateString, negative: negativeTemplate })"
         :name="name"
@@ -167,6 +213,7 @@ function cancel() {
           >AI</Button>
         </template>
         <AiTextPanel
+          ref="aiPanelRef"
           v-if="aiOpen && ai.config.value?.enabled"
           kind="template"
           :item="{ id: editingId ?? undefined, name, description, tags, template_string: templateString, negative_template: negativeTemplate }"

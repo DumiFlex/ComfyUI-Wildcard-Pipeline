@@ -10,7 +10,7 @@
  *
  * The parent owns the values; this component is dumb and emits patches.
  */
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import Card from "./ui/Card.vue";
 import Field from "./ui/Field.vue";
 import Input from "./ui/Input.vue";
@@ -139,6 +139,18 @@ function addTag() {
 function removeTag(t: string) {
   emit("update:tags", props.tags.filter((x) => x !== t));
 }
+
+const describer = ref<InstanceType<typeof AiDescribePanel> | null>(null);
+
+/** The chat's `use_panel` "describe": open Describe and ask there. */
+async function describe(text: string): Promise<string> {
+  if (!aiAvailable.value) return "couldn't: the assistant is off for this item";
+  aiOpen.value = true;
+  await nextTick();
+  return describer.value ? describer.value.run(text) : "couldn't: Describe didn't open";
+}
+
+defineExpose({ describe });
 </script>
 
 <template>
@@ -148,13 +160,14 @@ function removeTag(t: string) {
         size="sm"
         :variant="aiOpen ? 'secondary' : 'ghost'"
         icon="pi-microchip-ai"
-        data-test="identity-ai"
+        data-test="identity-ai" data-ai-anchor="describe-ai" data-ai-label="AI: suggest a name, description and tags"
         title="Write a description and tags with AI"
         @click="aiOpen = !aiOpen"
       >Describe</Button>
     </template>
     <AiDescribePanel
       v-if="aiOpen && aiAvailable && aiKind && aiPayload"
+      ref="describer"
       :kind="aiKind"
       :name="name"
       :description="description"
@@ -191,7 +204,7 @@ function removeTag(t: string) {
           placeholder="None"
           clearable
           aria-label="Category"
-          data-test="identity-category"
+          data-test="identity-category" data-ai-anchor="category" data-ai-label="Category"
           @update:model-value="(v) => emit('update:categoryId', (v as string | null) ?? null)"
         />
       </Field>
@@ -225,7 +238,7 @@ function removeTag(t: string) {
           :rows="3"
           placeholder="What does this module do?"
           aria-label="Description"
-          data-test="identity-description"
+          data-test="identity-description" data-ai-anchor="description" data-ai-label="Description"
           @update:model-value="(v) => emit('update:description', v)"
         />
       </Field>
@@ -235,7 +248,7 @@ function removeTag(t: string) {
           <Input
             v-model="tagDraft"
             placeholder="Type a tag and press Enter…"
-            data-test="identity-tag-input"
+            data-test="identity-tag-input" data-ai-anchor="tags" data-ai-label="Library tags"
             @keydown.enter.prevent="addTag"
           />
           <Button

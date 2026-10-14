@@ -923,10 +923,9 @@ const PAGE = 150;
 .wp-pack__btn:disabled { opacity: 0.45; cursor: default; }
 .wp-pack__error { padding: var(--wp-space-4) var(--wp-space-5); border: 1px solid var(--wp-danger); border-radius: var(--wp-radius-sm); color: var(--wp-danger); background: color-mix(in oklab, var(--wp-danger) 8%, transparent); }
 
-@media (max-width: 1100px) {
-  .wp-pack__grid { grid-template-columns: minmax(0, 1fr); }
-  .wp-pack__domains { position: static; flex-direction: row; flex-wrap: wrap; max-height: none; }
-  .wp-pack__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .wp-pack__fidelity { grid-column: 1 / -1; }
-}
+/* Page area narrower than 900px (usePageWidth; the chat can take the rest). */
+.wp-content[data-lt~="900"] .wp-pack__grid { grid-template-columns: minmax(0, 1fr); }
+.wp-content[data-lt~="900"] .wp-pack__domains { position: static; flex-direction: row; flex-wrap: wrap; max-height: none; }
+.wp-content[data-lt~="900"] .wp-pack__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.wp-content[data-lt~="900"] .wp-pack__fidelity { grid-column: 1 / -1; }
 </style>

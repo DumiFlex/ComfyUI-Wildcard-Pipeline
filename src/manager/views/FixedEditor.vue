@@ -15,6 +15,7 @@ import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import SendToTestRunner from "../components/SendToTestRunner.vue";
 import IdentityCard from "../components/IdentityCard.vue";
+import { usePanelAction, viaPanel } from "../composables/usePanelAction";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
@@ -36,7 +37,9 @@ import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { moveSelected, nudge, type MoveTarget } from "../utils/option-list-ops";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
 import { useEditorDraft } from "../composables/useEditorDraft";
-import { registerOpenEditor } from "../composables/useOpenEditor";
+import {
+  registerOpenEditor, draftCreateId, draftSaved, type StagedDraft,
+} from "../composables/useOpenEditor";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -187,11 +190,28 @@ const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => bulkPending.value || aiPending.value || snapshot() !== baseline.value,
 );
 
-// The chat reads and edits this item's info here; its payload stays on Save.
-registerOpenEditor({
+/** Load a stored payload's values into the editor (saved row or chat draft). */
+function loadPayload(p: Record<string, unknown>): void {
+  const rows = Array.isArray(p.values) ? (p.values as NamedValue[]) : [];
+  values.value = rows.map(toNamedValue);
+}
+
+// The chat reads and edits this item's info here; an existing item's payload
+// stays on Save. A new item takes the payload of a draft the chat staged.
+const fillFromChat = registerOpenEditor({
   id: props.id, type: "fixed_values", dirty: () => dirty.value,
   name, description, tags, categoryId, contentRating,
+  ...(props.id ? {} : {
+    setPayload: (p: Record<string, unknown>) => { if (Array.isArray(p.values)) loadPayload(p); },
+  }),
 });
+// The chat's `use_panel`: Describe, or ask the Draft with AI panel.
+const identityCard = ref<InstanceType<typeof IdentityCard> | null>(null);
+const aiPanelRef = ref<InstanceType<typeof AiTextPanel> | null>(null);
+usePanelAction({ id: () => props.id, identity: identityCard, panels: { draft: viaPanel(aiOpen, aiPanelRef) } });
+/** The chat's draft this new item was opened with (Save creates it at the
+ *  id the card reserved and marks the card applied). */
+let chatDraft: StagedDraft | null = null;
 
 const draft = useEditorDraft({
   kind: "fixed_values",
@@ -231,8 +251,7 @@ onMounted(async () => {
       categoryId.value = row.category_id;
       tags.value = row.tags;
       contentRating.value = row.content_rating ?? "safe";
-      const rows = (row.payload as { values?: NamedValue[] }).values ?? [];
-      values.value = rows.map(toNamedValue);
+      loadPayload((row.payload ?? {}) as Record<string, unknown>);
       historyEntries.value = readHistory(row.payload);
       recent.push({ id: props.id, kind: "fixed_values", name: name.value });
     } catch {
@@ -241,7 +260,23 @@ onMounted(async () => {
     }
   }
   baseline.value = snapshot();
+  // "Open in editor" on a chat card: the proposed values, unsaved.
+  if (!props.id) {
+    chatDraft = fillFromChat();
+    chatDraftNote(chatDraft);
+  }
 });
+
+function chatDraftNote(d: StagedDraft | null): void {
+  if (!d) return;
+  toast.push({
+    severity: "info",
+    summary: "From the assistant",
+    detail: d.newCategory
+      ? `Check it and Save to keep it. It suggested a new category, "${d.newCategory}": create it from the Category picker if you want it.`
+      : "Check it and Save to keep it.",
+  });
+}
 
 function addValue() {
   values.value.push({
@@ -484,14 +519,16 @@ async function save() {
       historyEntries.value = nextHistory;
       recent.push({ id: props.id, kind: "fixed_values", name: name.value });
     } else {
-      // New mode: the new row id is not surfaced here; mount-time push fires
-      // next time the user opens this item.
-      await moduleStore.create({
+      // New mode: a chat draft is created at the id its card reserved.
+      const created = await moduleStore.create({
+        ...draftCreateId(chatDraft),
         type: "fixed_values",
         name: name.value, description: description.value,
         category_id: categoryId.value, tags: tags.value, payload,
         content_rating: contentRating.value,
       });
+      draftSaved(chatDraft, created?.id);
+      chatDraft = null;
     }
     draft.discard();
     setSaveState("saved", 1500);
@@ -573,6 +610,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
       >Delete</Button>
     </template>
     <IdentityCard
+      ref="identityCard"
       ai-kind="fixed_values"
       :ai-payload="() => ({ values })"
       :name="name"
@@ -630,6 +668,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
       <template #subheader>
       <div v-if="bulkAddOpen || (aiOpen && ai.config.value?.enabled) || (bulkActive && bulkCount > 0)" class="wpc-bulk-controls">
         <AiTextPanel
+          ref="aiPanelRef"
           v-if="aiOpen && ai.config.value?.enabled"
           kind="fixed_values"
           :item="{ id: props.id, name, description, tags, payload: { values: aiValues } }"

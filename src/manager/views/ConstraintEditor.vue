@@ -17,6 +17,7 @@ import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import SendToTestRunner from "../components/SendToTestRunner.vue";
 import IdentityCard from "../components/IdentityCard.vue";
+import { usePanelAction, viaPanel } from "../composables/usePanelAction";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
@@ -39,7 +40,9 @@ import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
 import { useEditorDraft } from "../composables/useEditorDraft";
-import { registerOpenEditor } from "../composables/useOpenEditor";
+import {
+  registerOpenEditor, draftCreateId, draftSaved, type StagedDraft,
+} from "../composables/useOpenEditor";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -214,11 +217,34 @@ const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => aiPending.value || snapshot() !== baseline.value,
 );
 
-// The chat reads and edits this item's info here; its payload stays on Save.
-registerOpenEditor({
+// The chat reads and edits this item's info here; an existing item's payload
+// stays on Save. A new item takes the payload of a draft the chat staged.
+const fillFromChat = registerOpenEditor({
   id: props.id, type: "constraint", dirty: () => dirty.value,
   name, description, tags, categoryId, contentRating,
+  ...(props.id ? {} : {
+    setPayload: (p: Record<string, unknown>) => loadPayload(p as Partial<ConstraintPayload>),
+  }),
 });
+// The chat's `use_panel`: Describe, or ask the Draft with AI panel.
+const identityCard = ref<InstanceType<typeof IdentityCard> | null>(null);
+const aiPanelRef = ref<InstanceType<typeof AiConstraintPanel> | null>(null);
+usePanelAction({ id: () => props.id, identity: identityCard, panels: {
+  draft: async (text) => {
+    if (!sourceWildcardId.value || !targetWildcardId.value) {
+      return "couldn't: pick the source and target wildcards first";
+    }
+    if (refMissing.value) return "couldn't: the source or target wildcard is missing; fix it first";
+    return viaPanel(aiOpen, aiPanelRef)(text);
+  },
+} });
+/** The chat's draft this new constraint was opened with (Save creates it at
+ *  the id the card reserved and marks the card applied). */
+let chatDraft: StagedDraft | null = null;
+/** Wildcard ids a chat draft names that weren't in the library when it
+ *  opened: wildcards other cards propose. They read "not created yet"
+ *  (not "missing"), and Save waits for them. */
+const pendingWildcardIds = ref<string[]>([]);
 
 const draft = useEditorDraft({
   kind: "constraint",
@@ -879,6 +905,36 @@ function normalizeTargetSelect(raw: unknown): LibTargetSelect {
   return { mode: "all" };
 }
 
+/** Load a stored payload into the editor (saved row, history entry or chat
+ *  draft). Ids, matrix, exceptions and reach are kept as given even when a
+ *  wildcard isn't in the library (deleted, or a chat card not applied yet). */
+function loadPayload(p: Partial<ConstraintPayload>): void {
+  sourceWildcardId.value = p.source_wildcard_id ?? null;
+  targetWildcardId.value = p.target_wildcard_id ?? null;
+  sourceWildcardName.value = p.source_wildcard_name ?? null;
+  targetWildcardName.value = p.target_wildcard_name ?? null;
+  matrix.value = normalizeMatrix(p.matrix);
+  exceptions.value = normalizeExceptions(p.exceptions);
+  targetSelect.value = normalizeTargetSelect(p.target_select);
+  rehydrateExceptionsFromIds();
+}
+
+const PENDING_NOTE = "Not created yet: apply its card first";
+function missingMessage(pending: boolean): string {
+  return pending ? PENDING_NOTE : "Not in the library: pick another wildcard";
+}
+
+/** A chat-draft wildcard id that isn't in the library yet. */
+function isPendingWildcard(id: string | null): boolean {
+  return !!id && pendingWildcardIds.value.includes(id) && isDangling(id);
+}
+const pendingSource = computed(() => isPendingWildcard(sourceWildcardId.value));
+const pendingTarget = computed(() => isPendingWildcard(targetWildcardId.value));
+/** Every missing side is one a chat card will create: no reattach banner
+ *  (nothing was deleted), just the "not created yet" notes. */
+const onlyPendingMissing = computed(() =>
+  (!danglingSource.value || pendingSource.value) && (!danglingTarget.value || pendingTarget.value));
+
 onMounted(async () => {
   await Promise.all([categoryStore.fetchAll(), moduleStore.fetchCatalog()]);
   if (props.id) {
@@ -889,19 +945,11 @@ onMounted(async () => {
       categoryId.value = row.category_id;
       tags.value = row.tags;
       contentRating.value = row.content_rating ?? "safe";
-      const p = row.payload as Partial<ConstraintPayload>;
-      sourceWildcardId.value = p.source_wildcard_id ?? null;
-      targetWildcardId.value = p.target_wildcard_id ?? null;
-      sourceWildcardName.value = p.source_wildcard_name ?? null;
-      targetWildcardName.value = p.target_wildcard_name ?? null;
-      matrix.value = normalizeMatrix(p.matrix);
-      exceptions.value = normalizeExceptions(p.exceptions);
-      targetSelect.value = normalizeTargetSelect(p.target_select);
-      // Refresh exception value-strings from source_id / target_id in case
-      // an upstream wildcard's option value was renamed since this
+      // Also refreshes exception value-strings from source_id / target_id in
+      // case an upstream wildcard's option value was renamed since this
       // constraint was last opened. Re-anchor baseline below so this
       // doesn't flag the editor as dirty.
-      rehydrateExceptionsFromIds();
+      loadPayload(row.payload as Partial<ConstraintPayload>);
       historyEntries.value = readHistory(row.payload);
       recent.push({ id: props.id, kind: "constraint", name: name.value });
     } catch {
@@ -910,7 +958,29 @@ onMounted(async () => {
     }
   }
   baseline.value = snapshot();
+  // "Open in editor" on a chat card: the proposed constraint, unsaved.
+  if (!props.id) {
+    chatDraft = fillFromChat();
+    if (chatDraft) {
+      pendingWildcardIds.value = [sourceWildcardId.value, targetWildcardId.value]
+        .filter((id): id is string => !!id && isDangling(id));
+    }
+    chatDraftNote(chatDraft);
+  }
 });
+
+function chatDraftNote(d: StagedDraft | null): void {
+  if (!d) return;
+  const waiting = pendingWildcardIds.value.length;
+  const parts = ["Check it and Save to keep it."];
+  if (d.newCategory) {
+    parts.push(`It suggested a new category, "${d.newCategory}": create it from the Category picker if you want it.`);
+  }
+  if (waiting) {
+    parts.push(`Its ${waiting === 1 ? "wildcard isn't" : "wildcards aren't"} created yet: apply ${waiting === 1 ? "its card" : "their cards"} in the chat first.`);
+  }
+  toast.push({ severity: "info", summary: "From the assistant", detail: parts.join(" ") });
+}
 
 function onMatrixUpdate(next: ConstraintMatrix) {
   matrix.value = next;
@@ -1087,15 +1157,7 @@ function applyRestore(entry: ModuleHistoryEntry): void {
   description.value = entry.description ?? "";
   categoryId.value = entry.category_id ?? null;
   tags.value = entry.tags ? [...entry.tags] : [];
-  const p = (entry.payload ?? {}) as Partial<ConstraintPayload>;
-  sourceWildcardId.value = p.source_wildcard_id ?? null;
-  targetWildcardId.value = p.target_wildcard_id ?? null;
-  sourceWildcardName.value = p.source_wildcard_name ?? null;
-  targetWildcardName.value = p.target_wildcard_name ?? null;
-  matrix.value = normalizeMatrix(p.matrix);
-  exceptions.value = normalizeExceptions(p.exceptions);
-  targetSelect.value = normalizeTargetSelect(p.target_select);
-  rehydrateExceptionsFromIds();
+  loadPayload((entry.payload ?? {}) as Partial<ConstraintPayload>);
   toast.push({
     severity: "info",
     summary: "Version restored",
@@ -1105,6 +1167,22 @@ function applyRestore(entry: ModuleHistoryEntry): void {
 }
 
 async function save() {
+  // A new constraint can't point at a wildcard that doesn't exist yet (a
+  // chat card not applied): refuse, rather than create a broken one.
+  if (!isEdit.value && (danglingSource.value || danglingTarget.value)) {
+    // Its card may have been applied since the library was loaded.
+    try { await moduleStore.fetchCatalog(); } catch { /* keep the cached library */ }
+  }
+  if (!isEdit.value && (danglingSource.value || danglingTarget.value)) {
+    showErrors.value = true;
+    toast.push({
+      severity: "warn",
+      summary: "Wildcard not created yet",
+      detail: "This constraint's source or target wildcard doesn't exist yet. Apply its card in the chat first, then Save.",
+      life: 5000,
+    });
+    return;
+  }
   if (validationErrors.value.length > 0) {
     showErrors.value = true;
     return;
@@ -1157,9 +1235,9 @@ async function save() {
       historyEntries.value = nextHistory;
       recent.push({ id: props.id, kind: "constraint", name: name.value });
     } else {
-      // New mode: the new row id is not surfaced here; mount-time push fires
-      // next time the user opens this item.
-      await moduleStore.create({
+      // New mode: a chat draft is created at the id its card reserved.
+      const created = await moduleStore.create({
+        ...draftCreateId(chatDraft),
         type: "constraint",
         name: name.value,
         description: description.value,
@@ -1168,6 +1246,8 @@ async function save() {
         content_rating: contentRating.value,
         payload: newPayload,
       });
+      draftSaved(chatDraft, created?.id);
+      chatDraft = null;
     }
     draft.discard();
     setSaveState("saved", 1500);
@@ -1215,6 +1295,13 @@ const validationErrors = computed<EditorFieldError[]>(() => {
   }
   if (!targetWildcardId.value) {
     out.push({ field: "editor-section-wildcards", label: "Target wildcard", message: "Required" });
+  }
+  // New mode only: an edit may keep a stranded ref (read-only recovery).
+  if (!props.id && danglingSource.value) {
+    out.push({ field: "editor-section-wildcards", label: "Source wildcard", message: missingMessage(pendingSource.value) });
+  }
+  if (!props.id && danglingTarget.value) {
+    out.push({ field: "editor-section-wildcards", label: "Target wildcard", message: missingMessage(pendingTarget.value) });
   }
   return out;
 });
@@ -1273,6 +1360,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
     </template>
     <div id="editor-section-identity">
       <IdentityCard
+        ref="identityCard"
         ai-kind="constraint"
         :ai-payload="() => ({ source_wildcard_id: sourceWildcardId, target_wildcard_id: targetWildcardId, source_wildcard_name: resolvedSourceName, target_wildcard_name: resolvedTargetName, matrix, exceptions })"
         :name="name"
@@ -1289,7 +1377,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
     </div>
 
     <ConstraintReattachSection
-      v-if="hasDangling"
+      v-if="hasDangling && !onlyPendingMissing"
       :dangling-source="danglingSource"
       :dangling-target="danglingTarget"
       :source-uuid="sourceWildcardId ?? ''"
@@ -1335,7 +1423,8 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
             <i class="pi pi-lock cn-locked__icon" aria-hidden="true" />
             <span class="cn-locked__body">
               <span class="cn-locked__name">{{ resolvedSourceName || "—" }}</span>
-              <span v-if="danglingSource" class="cn-locked__sub">{{ sourceShortId }} · missing</span>
+              <span v-if="pendingSource" class="cn-locked__sub" data-test="source-pending">{{ sourceWildcardId }} · {{ PENDING_NOTE }}</span>
+              <span v-else-if="danglingSource" class="cn-locked__sub">{{ sourceShortId }} · missing</span>
             </span>
           </div>
           <Select
@@ -1361,7 +1450,8 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
             <i class="pi pi-lock cn-locked__icon" aria-hidden="true" />
             <span class="cn-locked__body">
               <span class="cn-locked__name">{{ resolvedTargetName || "—" }}</span>
-              <span v-if="danglingTarget" class="cn-locked__sub">{{ targetShortId }} · missing</span>
+              <span v-if="pendingTarget" class="cn-locked__sub" data-test="target-pending">{{ targetWildcardId }} · {{ PENDING_NOTE }}</span>
+              <span v-else-if="danglingTarget" class="cn-locked__sub">{{ targetShortId }} · missing</span>
             </span>
           </div>
           <Select
@@ -1469,6 +1559,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
         </template>
       </template>
       <AiConstraintPanel
+        ref="aiPanelRef"
         v-if="aiOpen && ai.config.value?.enabled && sourceWildcardId && targetWildcardId && !refMissing"
         :source-wildcard-id="sourceWildcardId"
         :target-wildcard-id="targetWildcardId"
@@ -1501,7 +1592,11 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
         <!-- With the keys-fallback filling the axes for a stranded ref, this
              branch only fires when the reconstructed axes are ALSO empty —
              i.e. a deleted wildcard whose constraint has no saved rules. -->
-        <template v-if="refMissing">
+        <template v-if="refMissing && onlyPendingMissing">
+          The source or target wildcard isn't created yet — apply its card in
+          the chat to edit the matrix here.
+        </template>
+        <template v-else-if="refMissing">
           The source or target wildcard was deleted and this constraint has no
           saved rules — reattach a live wildcard to restore the matrix.
         </template>

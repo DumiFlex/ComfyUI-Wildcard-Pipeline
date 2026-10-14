@@ -4,7 +4,7 @@
  * the four edits (AiEditPanel). Both stay mounted (v-show) so switching tabs
  * doesn't lose a draft the user is still reviewing.
  */
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import SegControl, { type SegOption } from "../settings/SegControl.vue";
 import AiDraftPanel from "./AiDraftPanel.vue";
 import AiEditPanel from "./AiEditPanel.vue";
@@ -51,7 +51,7 @@ const { config } = useAiConfig();
 const modelLabel = computed(() => config.value?.model ?? "");
 const isLocal = computed(() => {
   const c = config.value;
-  return c ? c.presets[c.provider].local : true;
+  return c ? c.local ?? c.presets[c.provider].local : true;
 });
 
 const editRows = computed(() => {
@@ -66,6 +66,27 @@ watch(() => draftPending.value || editPending.value, (v) => emit("update:pending
 function onApply(changes: AiWildcardEditChange[]): void {
   emit("apply-edits", editAction.value, changes);
 }
+
+const drafter = ref<InstanceType<typeof AiDraftPanel> | null>(null);
+
+/** Draft options on the Add tab (the chat's `draft_options`). */
+async function draft(instruction: string, count: number): Promise<string> {
+  mode.value = "add";
+  await nextTick();
+  return drafter.value ? drafter.value.run(instruction, count) : "couldn't: the Add tab didn't open";
+}
+
+const editor = ref<InstanceType<typeof AiEditPanel> | null>(null);
+
+/** One of the edits (the chat's `use_panel`): switch to its tab and ask. It
+ *  works on the selected options, or all of them when none are. */
+async function edit(action: AiWildcardEditAction, text: string): Promise<string> {
+  mode.value = action;
+  await nextTick();
+  return editor.value ? editor.value.run(text) : "couldn't: the edit tab didn't open";
+}
+
+defineExpose({ draft, edit });
 </script>
 
 <template>
@@ -81,6 +102,7 @@ function onApply(changes: AiWildcardEditChange[]): void {
     </div>
     <AiDraftPanel
       v-show="mode === 'add'"
+      ref="drafter"
       :name="name"
       :var-binding="varBinding"
       :existing-values="options.map((o) => o.value)"
@@ -94,6 +116,7 @@ function onApply(changes: AiWildcardEditChange[]): void {
     />
     <AiEditPanel
       v-show="mode !== 'add'"
+      ref="editor"
       :action="editAction"
       :name="name"
       :var-binding="varBinding"

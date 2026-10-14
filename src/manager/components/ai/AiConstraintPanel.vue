@@ -80,6 +80,8 @@ const convo = useAiConversation<AiConstraintDraftResult, Ctx>({
     : "The model didn't write any rules.",
 });
 const { instruction, loading, error, result } = convo;
+/** The chat's `use_panel` (see useAiConversation `chat`). */
+defineExpose({ run: (text: string) => convo.chat(text) });
 watch(result, () => { unticked.value = new Set(); });
 
 const count = computed(() => (result.value?.cells.length ?? 0) + (result.value?.exceptions.length ?? 0));

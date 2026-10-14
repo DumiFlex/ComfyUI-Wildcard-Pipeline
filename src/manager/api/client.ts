@@ -5,7 +5,7 @@ import type {
   CategoryCreateInput, CategoryRow,
   DatabaseConfig, DatabaseConfigUpdate,
   BackupEntry, BackupList, ServerSettings, ServerSettingsPatch,
-  AiConfig, AiConfigPatch, AiTestResult, AiWildcardDraftRequest, AiWildcardDraftResult,
+  AiConfig, AiConfigPatch, AiTestResult, AiIndexStatus, AiWildcardDraftRequest, AiWildcardDraftResult,
   AiWildcardEditRequest,
   AiWildcardEditResult,
   AiDerivationDraftRequest,
@@ -17,7 +17,14 @@ import type {
   AiOrganizeRequest,
   AiOrganizeResult,
   AiChatRequest,
+  AiChatResume,
   AiChatResult,
+  AiChatRetry,
+  AiChatContext,
+  AiChatDetail,
+  AiChatEvent,
+  AiChatStreamEvent,
+  AiChatSummary,
   AiPackBuilt,
   AiPackCheck,
   AiPackInstallResult,
@@ -101,6 +108,51 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new ApiError(resp.status, message);
   }
   return body as T;
+}
+
+/** POST a chat turn with `stream: true` and read its NDJSON events. */
+async function streamChat(
+  body: object, onEvent: (event: AiChatStreamEvent) => void, signal?: AbortSignal,
+): Promise<AiChatResult> {
+  const resp = await fetch("/wp/api/ai/chat", {
+    method: "POST", body: JSON.stringify(body), signal,
+    headers: { "content-type": "application/json" },
+  });
+  checkStartupId(resp);
+  if (!resp.ok || !resp.body) {
+    let err: unknown = null;
+    try { err = await resp.json(); } catch { err = null; }
+    throw new ApiError(resp.status,
+      (err as { error?: string } | null)?.error ?? `request failed (${resp.status})`);
+  }
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  // Set from inside `take`, so declared wide (TS would narrow them to null).
+  const got: { result: AiChatResult | null; failure: ApiError | null } = { result: null, failure: null };
+  const take = (line: string): void => {
+    if (!line.trim()) return;
+    let event: AiChatStreamEvent;
+    try { event = JSON.parse(line) as AiChatStreamEvent; } catch { return; }
+    if (event.type === "done") got.result = event.result;
+    else if (event.type === "error") got.failure = new ApiError(event.status, event.message);
+    else onEvent(event);
+  };
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let nl = buf.indexOf("\n");
+    while (nl >= 0) {
+      take(buf.slice(0, nl));
+      buf = buf.slice(nl + 1);
+      nl = buf.indexOf("\n");
+    }
+  }
+  take(buf + decoder.decode());
+  if (got.failure) throw got.failure;
+  if (!got.result) throw new ApiError(502, "the answer stopped before it finished");
+  return got.result;
 }
 
 function qs(params: Record<string, string | number | boolean | undefined>): string {
@@ -414,11 +466,20 @@ export const api = {
         method: "PUT", body: JSON.stringify(patch),
       });
     },
-    models() {
-      return request<{ models: string[] }>("/wp/api/ai/models", { method: "POST" });
+    /** The chat server's models, or with `"embed"` the embedding server's. */
+    models(of: "chat" | "embed" = "chat") {
+      return request<{ models: string[] }>("/wp/api/ai/models", {
+        method: "POST", body: JSON.stringify(of === "embed" ? { for: "embed" } : {}),
+      });
     },
     test() {
       return request<AiTestResult>("/wp/api/ai/test", { method: "POST" });
+    },
+    index() {
+      return request<AiIndexStatus>("/wp/api/ai/index", { method: "GET" });
+    },
+    rebuildIndex() {
+      return request<AiIndexStatus>("/wp/api/ai/index/rebuild", { method: "POST" });
     },
     draftWildcard(body: AiWildcardDraftRequest, signal?: AbortSignal) {
       return request<AiWildcardDraftResult>("/wp/api/ai/wildcard/draft", {
@@ -455,10 +516,47 @@ export const api = {
         method: "POST", body: JSON.stringify(body), signal,
       });
     },
-    chat(body: AiChatRequest, signal?: AbortSignal) {
+    chat(body: AiChatRequest | AiChatResume | AiChatRetry, signal?: AbortSignal) {
       return request<AiChatResult>("/wp/api/ai/chat", {
         method: "POST", body: JSON.stringify(body), signal,
       });
+    },
+    /** The chat turn streamed: `onEvent` gets each event while the model
+     *  works; resolves with the same result as `chat`. */
+    chatStream(
+      body: AiChatRequest | AiChatResume | AiChatRetry,
+      onEvent: (event: AiChatStreamEvent) => void,
+      signal?: AbortSignal,
+    ) {
+      return streamChat({ ...body, stream: true }, onEvent, signal);
+    },
+    /** Whether the chosen model sees images (null: the server didn't say). */
+    vision() {
+      return request<{ vision: boolean | null; model: string }>("/wp/api/ai/vision", { method: "GET" });
+    },
+    chats(q = "") {
+      return request<{ chats: AiChatSummary[] }>(`/wp/api/ai/chats${qs({ q })}`, { method: "GET" });
+    },
+    getChat(id: string) {
+      return request<AiChatDetail>(`/wp/api/ai/chats/${encodeURIComponent(id)}`, { method: "GET" });
+    },
+    patchChat(id: string, body: { title?: string; pinned?: boolean; events?: AiChatEvent[] }) {
+      return request<{ id: string; title: string; pinned: boolean;
+        /** New card bodies for fix events, by pid. */
+        fixed?: Record<string, Record<string, unknown>> }>(
+        `/wp/api/ai/chats/${encodeURIComponent(id)}`,
+        { method: "PATCH", body: JSON.stringify(body) },
+      );
+    },
+    deleteChat(id: string) {
+      return request<{ deleted: true }>(`/wp/api/ai/chats/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+    },
+    compactChat(id: string) {
+      return request<{ compacted: true; context: AiChatContext }>(
+        `/wp/api/ai/chats/${encodeURIComponent(id)}/compact`, { method: "POST" },
+      );
     },
     packPlan(body: AiPackPlanRequest, signal?: AbortSignal) {
       return request<AiPackPlanResult>("/wp/api/ai/pack/plan", {

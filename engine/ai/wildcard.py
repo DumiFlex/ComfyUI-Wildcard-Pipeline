@@ -516,6 +516,104 @@ def group_tags(payload: dict[str, Any], raw_axes: Any) -> dict[str, Any]:
     return {"payload": out, "preview": preview, "warnings": warnings}
 
 
+def edit_groups(payload: dict[str, Any], raw: Any) -> dict[str, Any]:
+    """Change a wildcard's tag groups as they are: ``[{"group", "rename",
+    "kind", "ungroup"}]``. Rename keeps its tags, kind switches classify /
+    accepts, ungroup sends its tags back to the loose tags. Same return
+    shape as `group_tags`."""
+    warnings: list[str] = []
+    preview: list[str] = []
+    groups = {k: list(v) for k, v in (payload.get("tag_groups") or {}).items()
+              if isinstance(v, list)}
+    kinds = dict(payload.get("tag_group_kinds") or {})
+    by_lower = {k.lower(): k for k in groups}
+    for x in raw if isinstance(raw, list) else []:
+        if not isinstance(x, dict):
+            continue
+        name = by_lower.get(str(x.get("group") or "").strip().lower())
+        if name is None:
+            warnings.append(f"no tag group {str(x.get('group') or '')[:30]!r}")
+            continue
+        if x.get("ungroup") is True:
+            groups.pop(name)
+            kinds.pop(name, None)
+            by_lower.pop(name.lower(), None)
+            preview.append(f"Ungroup {name}: its tags stay on the options")
+            continue
+        kind = x.get("kind")
+        if kind in ("classify", "accepts") and kind != kinds.get(name, "classify"):
+            kinds[name] = kind
+            preview.append(f"Group {name}: {kind}")
+        new = str(x.get("rename") or "").strip()[:40]
+        if new and new != name:
+            if new.lower() in by_lower and by_lower[new.lower()] != name:
+                warnings.append(f"a group named {new} exists; move the tags with axes instead")
+                continue
+            if new.lower() == "neg":
+                warnings.append("neg is reserved and can't name a group")
+                continue
+            groups = {(new if k == name else k): v for k, v in groups.items()}
+            kinds = {(new if k == name else k): v for k, v in kinds.items()}
+            by_lower.pop(name.lower(), None)
+            by_lower[new.lower()] = new
+            preview.append(f"Rename group {name} → {new}")
+    out = {"tag_groups": groups,
+           "tag_group_kinds": {k: kinds.get(k, "classify") for k in groups}}
+    return {"payload": out, "preview": preview, "warnings": warnings}
+
+
+def rename_option_tags(payload: dict[str, Any], renames: Any, drops: Any) -> dict[str, Any]:
+    """Rename option tags (``[{"from", "to"}]``; onto an existing tag merges
+    them) or drop them (``[tag]``) on every option, the tag list and the
+    groups. Same return shape as `group_tags`, plus ``"changed"``: the old
+    tag names, for the constraints that name them."""
+    warnings: list[str] = []
+    preview: list[str] = []
+    registry = [t for t in payload.get("sub_categories") or [] if isinstance(t, str)]
+    lower = {t.lower(): t for t in registry}
+    mapping: dict[str, str | None] = {}
+    for x in renames if isinstance(renames, list) else []:
+        if not isinstance(x, dict):
+            continue
+        old = lower.get(str(x.get("from") or "").strip().lstrip("#").lower())
+        new = str(x.get("to") or "").strip().lstrip("#")[:40]
+        if old is None:
+            warnings.append(f"no tag #{str(x.get('from') or '')[:30]} on this wildcard")
+            continue
+        if new and new != old:
+            mapping[old] = lower.get(new.lower(), new)
+            preview.append(f"#{old} → #{mapping[old]}"
+                           + (" (merge)" if new.lower() in lower else ""))
+    for raw in drops if isinstance(drops, list) else []:
+        old = lower.get(str(raw or "").strip().lstrip("#").lower())
+        if old is None:
+            warnings.append(f"no tag #{str(raw or '')[:30]} on this wildcard")
+            continue
+        mapping[old] = None
+        preview.append(f"Remove #{old} from every option")
+
+    def fix(tags: list[Any]) -> list[str]:
+        out: list[str] = []
+        for t in tags:
+            if not isinstance(t, str):
+                continue
+            t2 = mapping.get(t, t)
+            if t2 and t2 not in out:
+                out.append(t2)
+        return out
+    options = [{**o, "sub_categories": fix(o.get("sub_categories") or [])}
+               if isinstance(o, dict) and o.get("sub_categories") else o
+               for o in payload.get("options") or []]
+    groups = {k: fix(v) for k, v in (payload.get("tag_groups") or {}).items()
+              if isinstance(v, list)}
+    groups = {k: v for k, v in groups.items() if v}
+    out = {"sub_categories": fix(registry), "options": options, "tag_groups": groups,
+           "tag_group_kinds": {k: v for k, v in (payload.get("tag_group_kinds") or {}).items()
+                               if k in groups}}
+    return {"payload": out, "preview": preview, "warnings": warnings,
+            "changed": sorted(mapping)}
+
+
 clean_weight = _clean_weight
 
 

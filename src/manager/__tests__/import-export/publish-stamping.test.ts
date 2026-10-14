@@ -11,6 +11,7 @@ import {
   CURRENT_SCHEMA_VERSION,
   DERIVATION_CONDITIONS_SCHEMA_VERSION,
   FALLBACK_SCHEMA_VERSION,
+  NEGATED_TESTS_SCHEMA_VERSION,
   NEGATIVES_SCHEMA_VERSION,
   SP2B_SCHEMA_VERSION,
   SP3_REACH_SCHEMA_VERSION,
@@ -535,5 +536,29 @@ describe("schemaVersionForPayload — wildcard fallback option (v9)", () => {
     expect(schemaVersionForPayload({
       instance: { options: [{ id: "o1", value: "x", fallback: true }] },
     })).toBe(FALLBACK_SCHEMA_VERSION);
+  });
+});
+
+describe("schemaVersionForPayload — NOT-toggled derivation tests (v10)", () => {
+  function row(op: string, nested = false): Record<string, unknown> {
+    const test = { var: "a", op, value: "x" };
+    return {
+      id: "dv-001abc", type: "derivation", name: "d",
+      payload: { rules: [{ id: "r1", branches: [{
+        condition: nested ? { match: "any", conditions: [{ var: "b", op: "equals", value: "1" }, test] } : test,
+        action: { target_var: "c", mode: "replace", value: "y" },
+      }] }] },
+    };
+  }
+
+  it("stays at the chain head for the old negations", () => {
+    expect(schemaVersionForPayload(row("not_equals"))).toBe(CURRENT_SCHEMA_VERSION);
+    expect(schemaVersionForPayload(row("not_exists"))).toBe(CURRENT_SCHEMA_VERSION);
+  });
+
+  it("stamps NEGATED_TESTS (10) for not_contains / not_matches, nested and in bundles", () => {
+    expect(schemaVersionForPayload(row("not_contains"))).toBe(NEGATED_TESTS_SCHEMA_VERSION);
+    expect(schemaVersionForPayload(row("not_matches", true))).toBe(NEGATED_TESTS_SCHEMA_VERSION);
+    expect(schemaVersionForPayload({ children: [row("not_matches")] })).toBe(NEGATED_TESTS_SCHEMA_VERSION);
   });
 });

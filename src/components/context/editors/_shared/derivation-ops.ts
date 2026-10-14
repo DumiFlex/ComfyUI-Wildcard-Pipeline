@@ -29,6 +29,8 @@ export const DERIVATION_OPS = [
   "is_unset",
   "is_empty",
   "is_not_empty",
+  "not_contains",
+  "not_matches",
 ] as const;
 
 export type DerivationOp = (typeof DERIVATION_OPS)[number];
@@ -47,6 +49,8 @@ export const OP_LABELS: Record<DerivationOp, string> = {
   is_unset: "is unset",
   is_empty: "is empty",
   is_not_empty: "is not empty",
+  not_contains: "does not contain",
+  not_matches: "does not match (regex)",
 };
 
 /** Semantic tooltip text shown on hover of each option. Surfaced via
@@ -65,6 +69,8 @@ export const OP_TOOLTIPS: Record<DerivationOp, string> = {
   is_unset: "Variable is absent OR has an empty value",
   is_empty: "Variable resolved to an empty string (including the null option of a wildcard)",
   is_not_empty: "Variable resolved to a non-empty string",
+  not_contains: "The value is not a substring (case-sensitive)",
+  not_matches: "The Python regex (re.search) finds nothing; a broken pattern never fires",
 };
 
 /** Operator-specific placeholder for the condition-value input. Drives
@@ -82,6 +88,8 @@ export const OP_PLACEHOLDERS: Record<DerivationOp, string> = {
   is_unset: "no value needed",
   is_empty: "no value needed",
   is_not_empty: "no value needed",
+  not_contains: "cold",
+  not_matches: "^a.*z$",
 };
 
 /** Ops where the condition-value input is purely informational —

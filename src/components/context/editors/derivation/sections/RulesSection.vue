@@ -401,7 +401,9 @@ function opSymbol(op: string | undefined): string {
     case "equals": return "=";
     case "not_equals": return "≠";
     case "contains": return "contains";
+    case "not_contains": return "lacks";
     case "matches": return "matches";
+    case "not_matches": return "doesn't match";
     case "exists": return "exists";
     case "not_exists": return "absent";
     case "is_set": return "is set";

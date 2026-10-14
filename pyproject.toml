@@ -24,6 +24,8 @@ dev = [
     "pytest-asyncio>=0.23",
     # ComfyUI ships PyYAML; the wildcard file importer reads .yaml packs with it.
     "pyyaml>=6.0",
+    # ComfyUI ships Pillow; chat images are checked and re-encoded with it.
+    "pillow>=10.0",
     "ruff>=0.5",
 ]
 

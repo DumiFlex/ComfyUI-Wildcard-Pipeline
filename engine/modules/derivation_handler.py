@@ -46,6 +46,9 @@ _VALID_OPS = {
     # `is_empty` is "present and empty" (a wildcard that rolled its null
     # option); `is_not_empty` is "resolved to something non-empty".
     "is_empty", "is_not_empty",
+    # The editor's NOT toggle (schema v10): the negations of `contains` and
+    # `matches`, the only tests that had none.
+    "not_contains", "not_matches",
 }
 _VALID_MATCHES = {"all", "any"}
 _MISSING = object()
@@ -226,11 +229,16 @@ def _match_condition(condition: dict[str, Any], ctx: Any) -> bool:
         return actual != value
     if op == "contains":
         return value in actual
-    if op == "matches":
+    if op == "not_contains":
+        return value not in actual
+    if op in ("matches", "not_matches"):
         try:
-            return re.search(value, actual) is not None
+            hit = re.search(value, actual) is not None
         except re.error:
+            # A broken pattern matches nothing, so its negation holds nothing
+            # either: an invalid test never fires a branch.
             return False
+        return hit if op == "matches" else not hit
     return False
 
 

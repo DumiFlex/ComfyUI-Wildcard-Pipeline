@@ -115,6 +115,23 @@ function cancel(): void {
   emit("cancel");
 }
 
+/** The chat's `draft_options`: ask as if the user typed it, leave the
+ *  draft here for them to tick, and tell the chat what came back. */
+async function run(text: string, n: number): Promise<string> {
+  count.value = Math.min(100, Math.max(1, Math.round(n) || 10));
+  instruction.value = text;
+  await convo.ask();
+  const res = result.value;
+  if (!res || !res.options.length) return `couldn't: ${error.value || "the model didn't answer"}`;
+  const shown = res.options.slice(0, 15).map((o) => o.value).join("; ");
+  const more = res.options.length > 15 ? `; and ${res.options.length - 15} more` : "";
+  const skipped = skippedSummary.value ? ` Skipped: ${skippedSummary.value}.` : "";
+  return `drafted ${res.options.length} options in the wildcard's AI panel: ${shown}${more}.${skipped} `
+    + "Nothing is added yet: the user ticks the ones to keep and presses Add, then Save.";
+}
+
+defineExpose({ run });
+
 const skippedSummary = computed(() => {
   const s = result.value?.skipped ?? [];
   if (!s.length) return "";

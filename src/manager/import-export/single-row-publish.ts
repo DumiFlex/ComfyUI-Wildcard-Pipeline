@@ -32,6 +32,7 @@ import {
   CURRENT_SCHEMA_VERSION,
   DERIVATION_CONDITIONS_SCHEMA_VERSION,
   FALLBACK_SCHEMA_VERSION,
+  NEGATED_TESTS_SCHEMA_VERSION,
   NEGATIVES_SCHEMA_VERSION,
   SP2B_SCHEMA_VERSION,
   SP3_REACH_SCHEMA_VERSION,
@@ -258,8 +259,24 @@ export function usesFallbackOption(node: unknown): boolean {
 }
 
 /**
+ * True when ANY derivation test (nested groups included) uses `not_contains`
+ * or `not_matches`. Mirror of `engine/migrations/stamping.py:uses_negated_tests`.
+ */
+export function usesNegatedTests(node: unknown): boolean {
+  if (Array.isArray(node)) return node.some((child) => usesNegatedTests(child));
+  if (!isPlainObject(node)) return false;
+  if ((node.op === "not_contains" || node.op === "not_matches") && "var" in node) return true;
+  for (const value of Object.values(node)) {
+    if (value && typeof value === "object" && usesNegatedTests(value)) return true;
+  }
+  return false;
+}
+
+/**
  * Choose the community catalog `schema_version` to stamp for a payload — the
  * MAX version any feature in the payload requires:
+ *   - `NEGATED_TESTS_SCHEMA_VERSION` (10) when ANY derivation test uses
+ *     `not_contains` / `not_matches` (`usesNegatedTests`).
  *   - `FALLBACK_SCHEMA_VERSION` (9) when ANY wildcard option is flagged as
  *     the fallback (`usesFallbackOption`).
  *   - `NEGATIVES_SCHEMA_VERSION` (8) when ANY option, fixed value or combine
@@ -288,6 +305,7 @@ export function usesFallbackOption(node: unknown): boolean {
  * doesn't actually use a newer feature.
  */
 export function schemaVersionForPayload(payload: Record<string, unknown>): number {
+  if (usesNegatedTests(payload)) return NEGATED_TESTS_SCHEMA_VERSION;
   if (usesFallbackOption(payload)) return FALLBACK_SCHEMA_VERSION;
   if (usesNegatives(payload)) return NEGATIVES_SCHEMA_VERSION;
   if (usesDerivationConditions(payload)) return DERIVATION_CONDITIONS_SCHEMA_VERSION;

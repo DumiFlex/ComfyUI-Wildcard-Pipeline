@@ -277,7 +277,8 @@ onMounted(() => {
 }
 .wp-db__stat b { display: block; font-size: 15px; color: var(--wp-text); overflow-wrap: anywhere; }
 .wp-db__stat span { font-size: 11.5px; color: var(--wp-text-dim); }
-@media (max-width: 720px) { .wp-db__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* Page area narrower than 520px (usePageWidth; the chat can take the rest). */
+.wp-content[data-lt~="520"] .wp-db__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .wp-db__details {
   border-top: 1px solid var(--wp-border);
   padding: var(--wp-space-4) 0;

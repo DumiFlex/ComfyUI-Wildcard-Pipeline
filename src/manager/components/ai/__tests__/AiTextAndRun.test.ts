@@ -9,7 +9,7 @@ import { api } from "../../../api/client";
 import { _resetAiConfigForTests } from "../../../composables/useAiConfig";
 import { _resetAiChatForTests, useAiChat } from "../../../composables/useAiChat";
 import { _resetOpenEditorForTests } from "../../../composables/useOpenEditor";
-import type { AiChatResult, AiConfig, ScenarioRunResponse } from "../../../api/types";
+import type { AiChatRequest, AiChatResult, AiConfig, ScenarioRunResponse } from "../../../api/types";
 
 const CONFIG = {
   enabled: true, provider: "ollama", base_url: "", model: "m", unload_after_s: 60, context_max: 16384, model_size: "auto", model_size_auto: "small",
@@ -17,18 +17,27 @@ const CONFIG = {
   presets: { ollama: { label: "Ollama", api: "ollama", local: true, needs_key: false, base_url: "" } },
 } as unknown as AiConfig;
 
-vi.mock("../../../api/client", () => ({
-  api: {
-    ai: { config: vi.fn(), chat: vi.fn(), draftText: vi.fn() },
-    modules: { create: vi.fn(), update: vi.fn(), delete: vi.fn() },
-    bundles: { create: vi.fn(), update: vi.fn(), delete: vi.fn() },
-    templates: { create: vi.fn(), update: vi.fn(), delete: vi.fn() },
-    categories: { create: vi.fn() },
-  },
-  ApiError: class ApiError extends Error {
-    constructor(public status: number, message: string) { super(message); }
-  },
-}));
+vi.mock("../../../api/client", () => {
+  const chat = vi.fn();
+  return {
+    api: {
+      ai: {
+        config: vi.fn(), chat,
+        // The drawer streams; the tests answer through `chat`.
+        chatStream: vi.fn((body: unknown, _on: unknown, signal?: AbortSignal) => chat(body, signal)),
+        patchChat: vi.fn(() => Promise.resolve({})), chats: vi.fn(), getChat: vi.fn(),
+        deleteChat: vi.fn(), compactChat: vi.fn(), draftText: vi.fn(),
+      },
+      modules: { create: vi.fn(), update: vi.fn(), delete: vi.fn() },
+      bundles: { create: vi.fn(), update: vi.fn(), delete: vi.fn() },
+      templates: { create: vi.fn(), update: vi.fn(), delete: vi.fn() },
+      categories: { create: vi.fn() },
+    },
+    ApiError: class ApiError extends Error {
+      constructor(public status: number, message: string) { super(message); }
+    },
+  };
+});
 
 beforeEach(() => {
   setActivePinia(createPinia());
@@ -86,7 +95,7 @@ function makeRouter() {
 
 describe("AiRunBar + chat", () => {
   it("asks about the run, and the drawer sends it with the page", async () => {
-    const result: AiChatResult = { message: "It picks winter most.", model: "m", steps: [], proposals: [] };
+    const result: AiChatResult = { chat_id: "c1", message: "It picks winter most.", model: "m", steps: [], proposals: [] };
     vi.mocked(api.ai.chat).mockResolvedValue(result);
     const router = makeRouter();
     await router.push("/test");
@@ -100,8 +109,8 @@ describe("AiRunBar + chat", () => {
     const drawer = mount(AiChatDrawer, { global: { plugins: [router] }, attachTo: document.body });
     await flushPromises();
     expect(api.ai.chat).toHaveBeenCalledTimes(1);
-    const [body] = vi.mocked(api.ai.chat).mock.calls[0];
-    expect(body.messages[0].content).toContain("red scarf");
+    const body = vi.mocked(api.ai.chat).mock.calls[0][0] as AiChatRequest;
+    expect(body.message).toContain("red scarf");
     expect(body.page?.route).toBe("test");
     expect(drawer.text()).toContain("It picks winter most.");
     drawer.unmount();
@@ -112,7 +121,7 @@ describe("AiRunBar + chat", () => {
     vi.mocked(api.templates.delete).mockResolvedValue(undefined as never);
     vi.mocked(api.bundles.update).mockImplementation(async (id, b) => ({ id, ...b }) as never);
     vi.mocked(api.ai.chat).mockResolvedValue({
-      message: "Done.", model: "m", steps: [],
+      chat_id: "c1", message: "Done.", model: "m", steps: [],
       proposals: [
         {
           pid: "p1", tool: "create_template", title: "Create template Full", summary: "", preview: [],

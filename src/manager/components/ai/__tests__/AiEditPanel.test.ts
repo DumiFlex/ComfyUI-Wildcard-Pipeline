@@ -7,15 +7,17 @@ import { _resetAiConfigForTests } from "../../../composables/useAiConfig";
 import type { AiConfig, AiWildcardEditAction, WildcardOption } from "../../../api/types";
 
 const CONFIG: AiConfig = {
-  enabled: true, provider: "ollama", base_url: "", model: "qwen3.5:9b", unload_after_s: 60, context_max: 16384, model_size: "auto", model_size_auto: "small",
+  enabled: true, provider: "ollama", base_url: "", model: "qwen3.5:9b", unload_after_s: 60, context_max: 16384, model_size: "auto", model_size_auto: "small", tool_format: "auto", allow_delete: false, auto_apply: false,
+  embed_key_set: false, embed_key_own: false, local: true, thinking: "auto", embed_model: "", embed_base_url: "", embed_api: "auto", search_engine: "off", search_url: "", search_keys_saved: [], search_engines: { searxng: { label: "SearXNG", needs_key: false }, brave: { label: "Brave Search", needs_key: true }, tavily: { label: "Tavily", needs_key: true }, kagi: { label: "Kagi", needs_key: true } }, key_for_host: null,
   key_set: false, key_from_env: false, keys_saved: [],
   presets: {
-    anthropic: { label: "Claude", api: "anthropic", local: false, needs_key: true, base_url: "" },
-    openai: { label: "OpenAI", api: "openai", local: false, needs_key: true, base_url: "" },
-    ollama: { label: "Ollama", api: "ollama", local: true, needs_key: false, base_url: "" },
-    lmstudio: { label: "LM Studio", api: "openai", local: true, needs_key: false, base_url: "" },
-    llamacpp: { label: "llama.cpp", api: "openai", local: true, needs_key: false, base_url: "" },
-    custom: { label: "Other", api: "openai", local: true, needs_key: false, base_url: "" },
+    anthropic: { label: "Claude", api: "anthropic", local: false, needs_key: true, base_url: "", embeds: false, embed_model: "", embed_note: "" },
+    openai: { label: "OpenAI", api: "openai", local: false, needs_key: true, base_url: "", embeds: true, embed_model: "", embed_note: "" },
+    openrouter: { label: "OpenRouter", api: "openai", local: false, needs_key: true, base_url: "https://openrouter.ai/api/v1", embeds: true, embed_model: "", embed_note: "" },
+    ollama: { label: "Ollama", api: "ollama", local: true, needs_key: false, base_url: "", embeds: true, embed_model: "", embed_note: "" },
+    lmstudio: { label: "LM Studio", api: "openai", local: true, needs_key: false, base_url: "", embeds: true, embed_model: "", embed_note: "" },
+    llamacpp: { label: "llama.cpp", api: "openai", local: true, needs_key: false, base_url: "", embeds: false, embed_model: "", embed_note: "" },
+    custom: { label: "Other", api: "openai", local: true, needs_key: false, base_url: "", embeds: true, embed_model: "", embed_note: "" },
   },
 };
 

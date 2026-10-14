@@ -100,7 +100,10 @@ export type DerivationOp =
   | "is_set"
   | "is_unset"
   | "is_empty"
-  | "is_not_empty";
+  | "is_not_empty"
+  // The editor's NOT toggle (schema v10).
+  | "not_contains"
+  | "not_matches";
 /** `negative` (schema v8) is "Add to negative": the value is added to the
  *  target variable's negatives and the variable itself is left alone.
  *  `negative_replace` (v8) is "Replace negative": the value becomes the
@@ -285,6 +288,8 @@ export interface ModuleListResponse {
 }
 
 export interface ModuleCreateInput {
+  /** 8 hex: create at this id (a proposed module, or one Undo brings back). */
+  id?: string;
   type: ModuleType;
   name: string;
   description?: string;
@@ -343,6 +348,8 @@ export interface BundleListResponse {
 }
 
 export interface BundleCreateInput {
+  /** 8 hex: create at this id (Undo on a delete brings it back). */
+  id?: string;
   name: string;
   description?: string;
   color?: string | null;
@@ -392,6 +399,8 @@ export interface TemplateListResponse {
 }
 
 export interface TemplateCreateInput {
+  /** 8 hex: create at this id (Undo on a delete brings it back). */
+  id?: string;
   name: string;
   template_string?: string;
   negative_template?: string | null;
@@ -797,7 +806,10 @@ export interface ServerSettingsPatch {
 
 /* ── AI assistant (/wp/api/ai/*) ──────────────────────────────────────── */
 
-export type AiProviderId = "anthropic" | "openai" | "ollama" | "lmstudio" | "llamacpp" | "custom";
+export type AiProviderId = "anthropic" | "openai" | "openrouter" | "ollama" | "lmstudio" | "llamacpp" | "custom";
+/** How the embedding server is spoken to ("auto": like the chat server, or
+ *  guessed from another address). */
+export type AiEmbedApi = "auto" | "ollama" | "openai";
 
 export interface AiPreset {
   label: string;
@@ -806,6 +818,12 @@ export interface AiPreset {
   local: boolean;
   needs_key: boolean;
   base_url: string;
+  /** The chat server itself can embed (meaning search). */
+  embeds: boolean;
+  /** An embedding model to suggest, or "". */
+  embed_model: string;
+  /** What Settings says about embeddings with this provider, or "". */
+  embed_note: string;
 }
 
 /** The saved AI settings. The key itself is never sent back: `key_set` says
@@ -823,15 +841,52 @@ export interface AiConfig {
   model_size: "auto" | AiModelSize;
   /** What "auto" picks for the chosen model. */
   model_size_auto: AiModelSize;
+  /** How the chat calls tools: native tool calls, the JSON step format, or
+   *  automatic (native where the server says the model takes tools). */
+  tool_format: AiToolFormat;
+  /** "off" asks the server to skip a thinking model's reasoning. */
+  thinking: "auto" | "off";
+  /** Meaning search: the embedding model ("" = off). */
+  embed_model: string;
+  /** Where the embedding model runs ("" = the server address). */
+  embed_base_url: string;
+  embed_api: AiEmbedApi;
+  /** A key goes to the embedding server: the chat key (same address) or
+   *  one saved for it. */
+  embed_key_set: boolean;
+  /** A key is saved for the embedding server itself. */
+  embed_key_own: boolean;
+  /** The chat model runs on this machine or the home network (a local
+   *  preset pointed at an internet address is a cloud service). */
+  local: boolean;
   key_set: boolean;
   key_from_env: boolean;
+  /** A key is saved (or set in the environment) for another address, so it
+   *  isn't sent to this one: the host it belongs to. */
+  key_for_host: string | null;
   /** Providers that already have a key (saved or from the environment).
    *  Each provider keeps its own address, model and key. */
   keys_saved: AiProviderId[];
   presets: Record<AiProviderId, AiPreset>;
+  /** Web search for the chat ("off" by default). */
+  search_engine: AiSearchEngineId | "off";
+  /** The SearXNG address. */
+  search_url: string;
+  /** Engines with a key saved for their own address. Never the keys. */
+  search_keys_saved: AiSearchEngineId[];
+  search_engines: Record<AiSearchEngineId, { label: string; needs_key: boolean }>;
+  /** The chat may propose deleting items, categories and tags (each card
+   *  still needs its own confirm). Off by default. */
+  allow_delete: boolean;
+  /** Small changes (descriptions, tags, categories) from the chat apply
+   *  without a click, and can be undone. Off by default. */
+  auto_apply: boolean;
 }
 
+export type AiSearchEngineId = "searxng" | "brave" | "tavily" | "kagi";
+
 export type AiModelSize = "small" | "medium" | "large";
+export type AiToolFormat = "auto" | "native" | "json";
 
 export interface AiConfigPatch {
   enabled?: boolean;
@@ -841,8 +896,21 @@ export interface AiConfigPatch {
   unload_after_s?: number;
   context_max?: number;
   model_size?: "auto" | AiModelSize;
+  tool_format?: AiToolFormat;
+  thinking?: "auto" | "off";
+  embed_model?: string;
+  embed_base_url?: string;
+  embed_api?: AiEmbedApi;
+  /** Write-only, bound to the embedding server's address. `""` removes it. */
+  embed_api_key?: string;
   /** Write-only. `""` removes the saved key. */
   api_key?: string;
+  search_engine?: AiSearchEngineId | "off";
+  search_url?: string;
+  /** Write-only, for the chosen engine. `""` removes it. */
+  search_key?: string;
+  allow_delete?: boolean;
+  auto_apply?: boolean;
 }
 
 export interface AiTestResult {
@@ -857,6 +925,21 @@ export interface AiTestResult {
   /** True when that is too small for the assistant's instructions. */
   context_low: boolean;
   error: string | null;
+  /** The embedding model's check, when meaning search is on. `swapped`:
+   *  Ollama unloaded the chat model to load it. */
+  embed?: { ok: boolean; dims: number | null; error: string | null; swapped: boolean } | null;
+}
+
+/** The chat's library index (`GET /wp/api/ai/index`). */
+export interface AiIndexStatus {
+  /** False when ComfyUI's Python has no SQLite full-text search. */
+  available: boolean;
+  items: number;
+  embed_model: string | null;
+  /** Items with a vector from that model. */
+  vectors: number;
+  /** Vectors are being made right now. */
+  filling: boolean;
 }
 
 /** One earlier turn of an AI conversation, sent back with a follow-up so the
@@ -1066,14 +1149,13 @@ export interface AiOrganizeResult {
 
 /** One message of an assistant chat. Assistant messages carry the reply
  *  plus a line per proposal saying what the user did with it. */
-export interface AiChatMessage {
-  role: "user" | "assistant";
-  content: string;
-}
-
 /** The item open in an editor, as it stands (unsaved changes included). */
 export interface AiChatEditorState {
   id: string;
+  /** A new item, not saved yet: `id` is reserved for it and `type` says
+   *  what it is (the server has no row to read either from). */
+  new?: true;
+  type?: string;
   name: string;
   description: string;
   tags: string[];
@@ -1095,9 +1177,166 @@ export interface AiChatPage {
   editor?: AiChatEditorState;
 }
 
+/** What the user did with a proposal card since the last message. */
+/** The user used one of a card's own fixes (`AiCardFix.key`). */
+export interface AiChatFixEvent {
+  pid: string;
+  fix: string;
+  /** The fix's label, for the line the model reads. */
+  label?: string;
+}
+
+export interface AiChatStatusEvent {
+  pid: string;
+  status: "applied" | "editor" | "dismissed" | "undone" | "failed" | "opened" | "replaced";
+  /** The row an applied create made, so a reopened chat can Open it. */
+  created?: string;
+  /** Options the user unticked on the card before applying it. */
+  left_out?: number;
+}
+
+export type AiChatEvent = AiChatStatusEvent | AiChatFixEvent;
+
+/** One chat turn. The server keeps the chat: send only the new message and
+ *  the `chat_id` it returned (none starts a new chat). */
 export interface AiChatRequest {
-  messages: AiChatMessage[];
+  message: string;
+  chat_id?: string;
   page?: AiChatPage;
+  events?: AiChatEvent[];
+  /** Images as data URLs (`utils/chat-image.ts` shrinks them first). */
+  images?: Array<{ data: string }>;
+}
+
+/** Run the chat's last message again: its answer is dropped first. A
+ *  non-empty `message` replaces the message (the user edited it). */
+export interface AiChatRetry {
+  chat_id: string;
+  retry: true;
+  message: string;
+  page?: AiChatPage;
+  events?: AiChatEvent[];
+}
+
+/** The browser's answer to one call a paused turn waits on: what a page
+ *  tool did, that the user said no, or (web search) that they allowed it. */
+export type AiCallAnswer =
+  | { id: string; text: string }
+  | { id: string; denied: true }
+  | { id: string; approve: "once" | "chat" }
+  | { id: string; answers: AiAskAnswer[] };
+
+/** One answer of an `ask` question, as the server checked it. */
+export interface AiAskChoice {
+  label: string;
+  hint?: string;
+}
+
+/** One question the model asked (`engine/ai/ask.py`). */
+export interface AiAskQuestion {
+  header: string;
+  question: string;
+  multi: boolean;
+  choices: AiAskChoice[];
+}
+
+/** The user's answer to question `q` (numbers count from 0): the choices
+ *  picked, their own words, or "decide for me". Only numbers go back; the
+ *  server reads the labels from the call it stored. */
+export type AiAskAnswer =
+  | { q: number; picked: number[] }
+  | { q: number; other: string }
+  | { q: number; decide: true };
+
+/** What an answered ask shows: each header with its answer, or that the
+ *  user answered in their next message instead. */
+export interface AiAskAnswered {
+  answers?: Array<{ header: string; answer: string }>;
+  own?: boolean;
+}
+
+/** Carries a paused turn on once its calls are answered. */
+export interface AiChatResume {
+  chat_id: string;
+  results: AiCallAnswer[];
+  page?: AiChatPage;
+  events?: AiChatEvent[];
+}
+
+/** A call the turn waits on: a page tool for the browser to run, or a web
+ *  search for the user to allow. Args were checked by the server. */
+export type AiPendingCall =
+  | { id: string; tool: "open"; label: string;
+      args: { doc: string } | { page: string; section?: string } | { id: string; type: string }
+        | { proposal: string } }
+  | { id: string; tool: "read_page"; label: string; args: { within?: string } }
+  | { id: string; tool: "highlight"; label: string;
+      args: { points: Array<{ anchor: string; caption: string; text?: string }> }
+        | { anchor: string; caption: string } }
+  | { id: string; tool: "select_rows"; label: string; args: { ids: string[] } }
+  | { id: string; tool: "organize"; label: string; args: { ids: string[]; note: string } }
+  | { id: string; tool: "draft_options"; label: string;
+      args: { id: string; instruction: string; count: number } }
+  | { id: string; tool: "show_test"; label: string; args: AiShowTestArgs }
+  | { id: string; tool: "use_panel"; label: string;
+      args: { id: string; type: string; panel: string; request: string } }
+  | { id: string; tool: "web_search"; label: string; args: { query: string } }
+  | { id: string; tool: "ask"; label: string;
+      args: { questions: AiAskQuestion[]; settled?: string[] } };
+
+/** One "worked on" line; a run_test step carries its run as a card. */
+export interface AiChatStep {
+  tool: string;
+  note: string;
+  ok: boolean;
+  card?: AiTestCard;
+}
+
+/** A run_test as data (`chat_tools._test_card`). `was` is the share before
+ *  the proposed changes, when the run compared them. */
+export interface AiTestCard {
+  kind: "test";
+  runs: number;
+  failed: number;
+  compared: boolean;
+  seeds: number;
+  /** The saved items of the run, for "Open in Test Runner". */
+  stack: Array<{ module: string } | { bundle: string }>;
+  pins?: Record<string, string>;
+  vars: Array<{ name: string; distinct: number; internal?: boolean;
+    tops: Array<{ v: string; pct: number; was?: number }> }>;
+  never: Array<{ name: string; values: string[]; more: number }>;
+  warnings: Array<{ text: string; count: number }>;
+  prompts: Array<{ p: string; n?: string }>;
+}
+
+/** What the chat's `show_test` sets up in the Test Runner. Everything past
+ *  `stack` and `seeds` is optional (older stored calls carry only those). */
+export interface AiShowTestArgs {
+  stack: ScenarioStackItem[];
+  seeds: number;
+  /** Run consecutive seeds from here instead of random ones. */
+  from?: number;
+  /** Variables set from outside, like an Injector. */
+  pins?: Record<string, string>;
+  /** The variable the results show first. */
+  output?: string;
+  /** Save the scenario under this name after it runs. */
+  save?: string;
+  /** Set it up without running. */
+  run?: boolean;
+}
+
+/** Tokens the last model step used, as the provider reported them. */
+export interface AiChatUsage {
+  prompt?: number;
+  /** Prompt tokens the provider reused from its cache. */
+  cached?: number;
+  /** Ollama: prompt tokens it had to read (the rest came from its cache). */
+  evaluated?: number;
+  output?: number;
+  /** The answer stopped at the output limit. */
+  cut?: boolean;
 }
 
 export type AiChatOp =
@@ -1116,7 +1355,53 @@ export type AiChatOp =
   | { op: "open"; kind: "doc"; type: "doc"; id: string }
   | { op: "open"; kind: "page"; type: "page"; id: string; section?: string }
   /** Hands a description to the Pack builder, which plans the pack. */
-  | { op: "open"; kind: "pack"; type: "pack"; id: string; description: string };
+  | { op: "open"; kind: "pack"; type: "pack"; id: string; description: string }
+  | {
+      op: "categories"; kind: "categories"; create: string[];
+      rename: Array<{ id: string; from: string; to: string }>;
+      /** Colors and icons: on a new category by name; on one that exists
+       *  by id, with what it had for Undo. */
+      styles?: Array<{
+        name: string; id?: string; color?: string; icon?: string;
+        before?: { color: string | null; icon: string | null };
+      }>;
+    }
+  /** One change to many items (`update_many`). `to_new`: into the
+   *  category the card creates (`new_category`). */
+  | {
+      op: "bulk"; kind: "bulk"; new_category: string;
+      items: Array<{
+        kind: "module" | "bundle" | "template"; id: string; name: string; to_new?: boolean;
+        body: { category_id?: string | null; tags?: string[]; content_rating?: "safe" | "nsfw" };
+        before: { category_id?: string | null; tags?: string[]; content_rating?: string };
+      }>;
+    }
+  | {
+      op: "tags"; kind: "tags";
+      /** `members`: each item that has `from`, with its tags before. */
+      rename: Array<{ from: string; to: string; merge: boolean; members: AiTagMember[] }>;
+    }
+  /** Needs Settings › AI assistant › "Let the assistant delete items" and
+   *  a confirm on the card. Undo creates the items again at their ids. */
+  | {
+      op: "delete"; kind: "delete";
+      items: Array<{
+        kind: "module" | "bundle" | "template"; type: string; id: string; name: string;
+        row: Record<string, unknown>;
+      }>;
+      categories: Array<{
+        id: string; name: string; color: string | null; icon: string | null;
+        sort_order: number; members: Array<{ kind: "module" | "bundle" | "template"; id: string }>;
+      }>;
+      tags: Array<{ tag: string; members: AiTagMember[] }>;
+    };
+
+/** An item a tag change touches, with its tags as they were. */
+export interface AiTagMember {
+  kind: "module" | "bundle" | "template";
+  id: string;
+  tags: string[];
+}
 
 /** A change the assistant proposes. Nothing is saved until Apply. */
 export interface AiChatProposal {
@@ -1128,21 +1413,117 @@ export interface AiChatProposal {
   warnings: string[];
   /** The proposal this one builds on (same item); apply that first. */
   after: string | null;
+  /** Every card this one points at (a constraint between two new
+   *  wildcards needs both); `after` is the last of them. */
+  needs?: string[];
+  /** Names of the items the card points at, by id (a constraint's source
+   *  and target, proposed ones too). */
+  names?: Record<string, string>;
+  /** An earlier answer's unapplied card this one replaces (an edit of an
+   *  item that card would create). */
+  replaces?: string;
   op: AiChatOp;
+  /** "low": the server judged it small (descriptions, tags, categories),
+   *  so auto-apply may apply it. */
+  risk?: "low";
+  /** Warnings the card can fix by itself (`engine/ai/lint.py::fixes`);
+   *  the rest are fixed by asking the model. */
+  fixes?: AiCardFix[];
+}
+
+export interface AiCardFix {
+  /** The warning (one of `warnings`) this fixes. */
+  warning: string;
+  key: string;
+  label: string;
 }
 
 export interface AiChatResult {
+  chat_id: string;
   message: string;
   proposals: AiChatProposal[];
   /** What the model looked at or tried, for the "worked on" lines. */
-  steps: Array<{ tool: string; note: string; ok: boolean }>;
+  steps: AiChatStep[];
   model: string;
+  /** How this chat calls tools. */
+  format?: "native" | "json";
+  /** Tool calls this answer made, and how many of them the server rescued
+   *  from text (a native-mode model that wrote its calls out). */
+  tool_use?: { calls: number; salvaged: number };
+  usage?: AiChatUsage;
   /** [[Name]] mentions in `message` that name a real item. */
   refs?: Record<string, AiChatRef>;
+  /** Calls the turn waits on; answer them with `AiChatResume`. */
+  pending?: AiPendingCall[];
+  /** A reopened chat: what the user answered to this answer's `ask`
+   *  questions, by call id. */
+  answered?: Record<string, AiAskAnswered>;
+  /** How full the model's window is, for the meter. */
+  context?: AiChatContext;
 }
 
+/** The meter: tokens the last request used against what the model holds.
+ *  `estimated` when the provider gave no count; `about` when the window is
+ *  a cloud model's usual size rather than one the server reported. */
+export interface AiChatContext {
+  used: number;
+  window: number;
+  estimated: boolean;
+  about: boolean;
+  /** How many times older turns were summarised. */
+  compactions: number;
+}
+
+/** A stored chat in the list. Times are ISO strings. */
+export interface AiChatSummary {
+  id: string;
+  title: string;
+  pinned: boolean;
+  turns: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** One turn of a reopened chat, as the user saw it. */
+export type AiChatTurn =
+  | { role: "user"; text: string; images?: string[] }
+  | {
+      role: "assistant";
+      view: Omit<AiChatResult, "chat_id">;
+      status: Record<string, "applied" | "editor" | "dismissed" | "failed">;
+      created: Record<string, string>;
+    };
+
+export interface AiChatDetail {
+  id: string;
+  title: string;
+  pinned: boolean;
+  updated_at: string;
+  model?: string;
+  turns: AiChatTurn[];
+  /** The chat paused on a page tool or search when it was left. */
+  waiting: boolean;
+  context: AiChatContext;
+}
+
+/** What a streamed chat turn sends while the model works. */
+export type AiChatStreamEvent =
+  | { type: "step"; n?: number }
+  | { type: "status"; v: string }
+  | { type: "thinking" }
+  | { type: "text"; v: string }
+  | { type: "tool"; step: { tool: string; note: string; ok: boolean } }
+  | { type: "done"; result: AiChatResult }
+  | { type: "error"; status: number; message: string };
+
 /** A library item an assistant message mentions. */
-export interface AiChatRef { id: string; type: string; name: string }
+/** An item an answer mentions. `shared`: that many items have this name
+ *  and the answer didn't say which, so the chip opens nothing. */
+export interface AiChatRef {
+  id: string; type: string; name: string; shared?: string;
+  /** The card (pid) that creates it: not in the library yet. */
+  pending?: string;
+}
 
 /* ── Pack builder ───────────────────────────────────────────────────── */
 

@@ -1,7 +1,11 @@
 """Shared helpers for wp_api route handlers."""
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import functools
 import hashlib
+from collections.abc import Awaitable, Callable
 from contextlib import contextmanager
 from typing import Any
 
@@ -33,6 +37,45 @@ def db_session(request: web.Request):
         yield conn
     finally:
         conn.close()
+
+
+#: How often a long handler checks whether its client is still there.
+DISCONNECT_POLL_S = 0.2
+
+
+def cancel_on_disconnect(
+    handler: Callable[[web.Request], Awaitable[web.StreamResponse]],
+) -> Callable[[web.Request], Awaitable[web.StreamResponse]]:
+    """Stop a long handler when its client goes away.
+
+    aiohttp (and so ComfyUI) does not cancel a handler when the browser
+    aborts its request, so a stopped AI request kept asking the model, step
+    after step, and held the model slot for the next one. Cancelling the
+    handler cancels its upstream request too, which closes that connection;
+    model servers stop generating when their client disconnects (llama.cpp's
+    `should_stop`, Ollama's request context).
+    """
+
+    @functools.wraps(handler)
+    async def wrapped(request: web.Request) -> web.StreamResponse:
+        task = asyncio.ensure_future(handler(request))
+        try:
+            while True:
+                done, _ = await asyncio.wait({task}, timeout=DISCONNECT_POLL_S)
+                if done:
+                    return task.result()
+                transport = request.transport
+                if transport is None or transport.is_closing():
+                    task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError, Exception):
+                        await task
+                    # Nobody reads this; 499 is nginx's "client closed request".
+                    return web.Response(status=499)
+        except asyncio.CancelledError:
+            task.cancel()
+            raise
+
+    return wrapped
 
 
 def json_ok(data: Any, *, status: int = 200) -> web.Response:

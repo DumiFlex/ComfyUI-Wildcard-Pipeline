@@ -28,6 +28,7 @@ import RelativeDate from "./RelativeDate.vue";
 import EmptyState from "./ui/EmptyState.vue";
 import { useCommunityUpdateStore } from "../stores/communityUpdateStore";
 import { registerPageNote } from "../composables/useOpenEditor";
+import { registerAiAction } from "../composables/useAiActions";
 import type { UpdateEntry } from "../stores/communityUpdateStore";
 import CommunityUpdateDialog from "./CommunityUpdateDialog.vue";
 import { matchesTags, type TagMatchMode } from "../utils/library-tags";
@@ -442,6 +443,38 @@ registerPageNote(() => {
   return bits.join(". ");
 });
 
+// The chat's `select_rows` and `organize` act on the rows this list holds.
+function listed(args: Record<string, unknown>): string[] {
+  const ids = Array.isArray(args.ids) ? args.ids.filter((x): x is string => typeof x === "string") : [];
+  const have = new Set(props.items.map((r) => r.id));
+  return ids.filter((id) => have.has(id));
+}
+function holdsAll(args: Record<string, unknown>): boolean {
+  const ids = Array.isArray(args.ids) ? args.ids : [];
+  return ids.length > 0 && listed(args).length === ids.length;
+}
+function selectFromChat(args: Record<string, unknown>): string {
+  const ids = listed(args);
+  selected.value = new Set(ids);
+  const hidden = ids.filter((id) => !filteredItems.value.some((r) => r.id === id)).length;
+  const names = props.items.filter((r) => selected.value.has(r.id)).slice(0, 20)
+    .map((r) => r.name ?? r.id).join(", ");
+  return `selected ${ids.length} row${ids.length === 1 ? "" : "s"}: ${names}`
+    + (hidden ? ` (${hidden} hidden by the list's filters)` : "");
+}
+registerAiAction("select_rows", async (args) => selectFromChat(args), holdsAll);
+
+const organizer = ref<{ run: (note: string) => Promise<string> } | null>(null);
+registerAiAction("organize", async (args) => {
+  if (!canOrganize.value) return "couldn't: Organize with AI is off on this list";
+  selectFromChat(args);
+  organizeOpen.value = true;
+  const end = Date.now() + 4000;
+  while (!organizer.value && Date.now() < end) await new Promise((r) => setTimeout(r, 60));
+  if (!organizer.value) return "couldn't: the Organize window didn't open";
+  return organizer.value.run(typeof args.note === "string" ? args.note : "");
+}, holdsAll);
+
 const focusedRowId = ref<string | null>(null);
 // The <tbody> is the keyboard entry point. We move REAL DOM focus onto
 // rows so :focus-visible tracks our roving-tabindex state (see
@@ -715,7 +748,7 @@ defineExpose({
 
     <!-- Toolbar -->
     <div class="wp-page-toolbar">
-      <div class="wp-page-toolbar__search wp-input-group">
+      <div class="wp-page-toolbar__search wp-input-group" data-ai-anchor="search" data-ai-label="Search the list">
         <span class="wp-input-group__addon"><i class="pi pi-search" aria-hidden="true" /></span>
         <input
           class="wp-input"
@@ -798,7 +831,7 @@ defineExpose({
     </Transition>
 
     <!-- Bulk-select bar -->
-    <div v-if="selected.size" class="wp-bulk-bar" data-test="bulk-bar">
+    <div v-if="selected.size" class="wp-bulk-bar" data-test="bulk-bar" data-ai-anchor="bulk-bar" data-ai-label="Bulk actions for the selected rows">
       <span class="wp-bulk-bar__count">
         <strong>{{ selected.size }}</strong> selected
         <span v-if="offPageSelectedCount > 0" class="wp-dim wp-bulk-bar__hint">
@@ -824,7 +857,7 @@ defineExpose({
         @click="tagRemoveOpen = true">Remove tag</Button>
       <Button v-if="!hideBulkSetCategory" variant="ghost" size="sm" icon="pi-folder" data-test="bulk-set-category-open"
         @click="categoryOpen = true">Set category</Button>
-      <Button v-if="canOrganize" variant="ghost" size="sm" icon="pi-microchip-ai" data-test="bulk-ai-organize"
+      <Button v-if="canOrganize" variant="ghost" size="sm" icon="pi-microchip-ai" data-test="bulk-ai-organize" data-ai-anchor="organize" data-ai-label="Organize with AI"
         @click="organizeOpen = true">Organize with AI</Button>
       <Button variant="ghost" size="sm" data-test="bulk-clear"
         @click="selected = new Set()">Clear</Button>
@@ -839,6 +872,7 @@ defineExpose({
       </template>
       <AiOrganizePanel
         v-if="organizeOpen"
+        ref="organizer"
         :rows="selectedItems"
         @applied="onOrganized"
         @close="organizeOpen = false"
@@ -1042,7 +1076,7 @@ defineExpose({
       tabindex="0"
       @keydown="onTableKeydown"
     >
-      <table class="wp-table wp-table--sticky-head" :class="{ 'wp-table--empty': showEmptyRow }">
+      <table class="wp-table wp-table--sticky-head" data-ai-anchor="rows" data-ai-label="The list" :class="{ 'wp-table--empty': showEmptyRow }">
         <thead>
           <tr>
             <th scope="col" class="wp-table__select">

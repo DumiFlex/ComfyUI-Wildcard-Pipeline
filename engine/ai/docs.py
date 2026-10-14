@@ -29,8 +29,72 @@ def pages() -> list[dict[str, Any]]:
     try:
         data = json.loads(INDEX_PATH.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return []
-    return [p for p in data.get("pages") or [] if isinstance(p, dict) and p.get("id")]
+        data = {}
+    out = [p for p in data.get("pages") or [] if isinstance(p, dict) and p.get("id")]
+    return [*out, abilities()]
+
+
+#: Jobs the assistant's tools are listed under, by tool group, in order.
+_JOBS: tuple[tuple[str, str], ...] = (
+    ("core", "Reading the library and the docs"),
+    ("wildcards", "Wildcards"),
+    ("fixed-values", "Fixed values"),
+    ("combines", "Combines"),
+    ("derivations", "Derivations"),
+    ("constraints", "Constraints"),
+    ("bundles", "Bundles"),
+    ("templates", "Templates"),
+    ("lists", "Organizing the library"),
+    ("pack", "Packs"),
+    ("test", "Testing"),
+    ("delete", "Deleting (only while Settings allows it)"),
+    ("web", "Web search (only when set up; each search asks first)"),
+)
+
+
+def abilities() -> dict[str, Any]:
+    """A docs page written from the tool catalog itself: what the assistant
+    can do, by job, and how its answers look. It can't drift from the tools
+    the assistant really has."""
+    from engine.ai.tools import catalog  # the catalog imports chat modules
+
+    seen: set[str] = set()
+    lines: list[str] = []
+    for group, title in _JOBS:
+        tools = [t for t in catalog.TOOLS if group in t.groups and t.name not in seen
+                 and t.name != "more_tools"]
+        if group == "core":
+            tools = [t for t in tools if t.kind in ("read", "client", "ask")]
+        if not tools:
+            continue
+        seen.update(t.name for t in tools)
+        lines.append(f"{title}:\n" + "\n".join(f"- {t.name}: {t.summary}" for t in tools))
+    rest = [t for t in catalog.TOOLS if t.name not in seen and t.name != "more_tools"]
+    if rest:
+        lines.append("Also:\n" + "\n".join(f"- {t.name}: {t.summary}" for t in rest))
+    return {
+        "id": "assistant-tools",
+        "title": "What the assistant can do",
+        "blurb": "Every tool the AI assistant has, by job, and how its answers look.",
+        "sections": [
+            {"title": "Tools by job", "text": "\n\n".join(lines)},
+            {"title": "How changes work", "text": (
+                "Read tools run at once. Every change tool makes a proposal card; nothing "
+                "changes until the user applies it (or, with Settings › AI assistant › "
+                "Apply small changes automatically on, a low-risk card such as new tags or a new "
+                "category applies itself, with Undo). Cards that create items keep their "
+                "ids while the chat is open, so later cards can already point at them. "
+                "Small models get the tools for the page they are on plus more_tools, "
+                "which lists the rest.")},
+            {"title": "How answers look", "text": (
+                "Items show as chips: the model writes [[id#Name]] and the user sees the "
+                "name, which opens the item. The chat shows **bold**, *italic*, lists, "
+                "`code`, ``` blocks, tables and ### headings, and a paragraph starting "
+                "Tip: or Warning: as a highlighted box. Under each answer the chat says "
+                "which model wrote it and whether it used native tool calls or JSON "
+                "steps.")},
+        ],
+    }
 
 
 def page(page_id: Any) -> dict[str, Any] | None:
@@ -77,17 +141,18 @@ def _snippet(text: str, terms: list[str]) -> str:
     return ("…" if start else "") + s + ("…" if start + SNIPPET < len(text) else "")
 
 
-def search(query: str) -> str:
+def _scored(query: str) -> list[tuple[float, float, dict[str, Any], dict[str, Any]]]:
+    """(score, share of the query's terms matched, page, section), best first."""
     terms = list(dict.fromkeys(_terms(query)))
     if not terms:
-        return "Pages:\n" + contents()
+        return []
     secs = _sections()
     n = max(1, len(secs))
     idf = {}
     for t in terms:
         df = sum(1 for _p, _s, title, head, body in secs if t in title or t in head or t in body)
         idf[t] = math.log((n + 1) / (df + 1)) + 0.1
-    scored: list[tuple[float, dict[str, Any], dict[str, Any]]] = []
+    scored: list[tuple[float, float, dict[str, Any], dict[str, Any]]] = []
     for p, sec, title, head, body in secs:
         score = 0.0
         hit = 0
@@ -97,13 +162,61 @@ def search(query: str) -> str:
                 hit += 1
                 score += tf * idf[t]
         if score > 0:
-            scored.append((score * (hit / len(terms)) ** 2, p, sec))
+            share = hit / len(terms)
+            scored.append((score * share ** 2, share, p, sec))
     scored.sort(key=lambda x: -x[0])
+    return scored
+
+
+def _raw_terms(query: str) -> list[str]:
+    return [t for t in _WORD.findall(query.lower()) if t not in _STOP and len(t) > 1]
+
+
+def search(query: str) -> str:
+    if not _terms(query):
+        return "Pages:\n" + contents()
+    scored = _scored(query)
     if not scored:
         return "no matches; the pages are:\n" + contents()
-    raw_terms = [t for t in _WORD.findall(query.lower()) if t not in _STOP and len(t) > 1]
+    raw_terms = _raw_terms(query)
     return "\n".join(f"- {p['id']} › {sec['title']}: {_snippet(sec['text'], raw_terms)}"
-                     for _score, p, sec in scored[:MAX_HITS])
+                     for _score, _share, p, sec in scored[:MAX_HITS])
+
+
+#: Docs sections handed to the model up front: only when they cover most of
+#: a question of at least this many terms.
+RETRIEVE_MIN_TERMS = 2
+RETRIEVE_MIN_SHARE = 0.67
+
+
+_QUESTION = re.compile(
+    r"^\s*(how|what|why|where|when|which|can|could|does|do|is|are|should|explain)\b|\?",
+    re.IGNORECASE)
+
+
+def retrieve(query: str, *, seen: set[str], limit: int = 2) -> tuple[str, list[str]]:
+    """Up to `limit` docs sections a question is clearly about, as
+    "- page › section" pointers (no text: a wrong section quoted at length
+    misleads more than a pointer the model can choose to read), and their
+    keys ("page#section"). Only for questions."""
+    from engine.ai.index import query_words  # the request words left out
+    if not _QUESTION.search(query) or len(query_words(query)) < RETRIEVE_MIN_TERMS:
+        return "", []
+    scored = _scored(query)
+    if not scored:
+        return "", []
+    best = scored[0][0]
+    lines: list[str] = []
+    keys: list[str] = []
+    for score, share, p, sec in scored[:6]:
+        key = f"{p['id']}#{sec['title']}"
+        if share < RETRIEVE_MIN_SHARE or score < best * 0.5 or key in seen:
+            continue
+        lines.append(f"- {p['id']} › {sec['title']}")
+        keys.append(key)
+        if len(lines) >= limit:
+            break
+    return "\n".join(lines), keys
 
 
 def read(page_id: Any, section: Any = None) -> str:

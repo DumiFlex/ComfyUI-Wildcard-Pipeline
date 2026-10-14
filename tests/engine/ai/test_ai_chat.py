@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from engine.ai import chat
+from engine.ai import chat, client_tools
 
 
 def _lib():
@@ -41,18 +41,6 @@ def test_parse_args_and_step():
     assert msg == "hi" and calls == [{"tool": "read", "args": "{}"}]
     with pytest.raises(ValueError):
         chat.parse_step("nope")
-
-
-def test_turns_and_history():
-    turns = chat.parse_turns([
-        {"role": "user", "content": "a"}, {"role": "assistant", "content": "b"},
-        {"role": "user", "content": "c"},
-    ])
-    assert chat.history_pairs(turns) == [("a", {"message": "b", "calls": []})]
-    for bad in ([], [{"role": "assistant", "content": "x"}], [{"role": "user", "content": 1}],
-                [{"role": "user", "content": "  "}]):
-        with pytest.raises(ValueError):
-            chat.parse_turns(bad)
 
 
 def test_overview_search_read_variables():
@@ -145,8 +133,8 @@ def test_rules_constraint_info_open():
     assert op["body"]["content_rating"] == "nsfw"
     with pytest.raises(ValueError):
         lib.run("update_info", {"id": "bbbb0001", "tags_add": ["kit"]})
-    o = lib.run("open", {"id": "bbbb0001"})
-    assert o["op"] == {"op": "open", "kind": "bundle", "type": "bundle", "id": "bbbb0001"}
+    assert client_tools.prepare(lib, "open", {"id": "bbbb0001"})[0] == {
+        "id": "bbbb0001", "type": "bundle"}
     with pytest.raises(ValueError):
         lib.run("delete_everything", {})
 
@@ -217,12 +205,13 @@ def test_docs_tools_and_open_targets():
     assert text.startswith("Combine (combine)") and "Template override" in text
     with pytest.raises(ValueError):
         lib.run("docs_read", {"page": "nope"})
-    assert lib.run("open", {"doc": "combine"})["op"] == {
-        "op": "open", "kind": "doc", "type": "doc", "id": "combine"}
-    page = lib.run("open", {"page": "settings", "section": "ai"})["op"]
-    assert page["kind"] == "page" and page["id"] == "settings" and page["section"] == "ai"
-    with pytest.raises(ValueError):
-        lib.run("open", {"page": "nowhere"})
+    assert client_tools.prepare(lib, "open", {"doc": "combine"})[0] == {"doc": "combine"}
+    page, label = client_tools.prepare(lib, "open", {"page": "settings", "section": "ai"})
+    assert page == {"page": "settings", "section": "ai"} and label == "Opened settings › ai"
+    for bad in ({"page": "nowhere"}, {"page": "settings", "section": "x"},
+                {"page": "javascript:alert(1)"}, {"doc": "../../etc/passwd"}):
+        with pytest.raises(ValueError):
+            client_tools.prepare(lib, "open", bad)
     assert "Docs pages" in chat.system_prompt() and "- combine: Combine." in chat.system_prompt()
     assert chat.args_note("docs_read", {"page": "combine"}) == "Read the docs: Combine"
 
@@ -237,6 +226,12 @@ def test_stalls_spots_asking_leave_and_repeats():
     assert chat.stalls("Done thinking.", "yes", asked)
     assert not chat.stalls("Glad it helped.", "ok thanks", "Applied the change.")
     assert chat.stalls("Same answer again.", "hmm", "Same answer, again!")
+    # A full answer that ends by offering more answered the question.
+    long = "Here's what I found in your pose pools. " * 10 + "Want me to propose changes?"
+    assert not chat.stalls(long, "what do my pose pools look like?", "")
+    assert chat.unfinished("Here's a quick summary of the key concepts:")
+    assert not chat.unfinished("Done: two cards.")
+    assert chat.read_budget("small") < chat.read_budget("large")
 
 
 def test_plan_pack_hands_the_description_to_the_pack_builder():

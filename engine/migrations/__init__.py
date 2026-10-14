@@ -20,8 +20,9 @@ CURRENT_SCHEMA_VERSION = 2
 # identical to v2), v4 is the additive `target_select` constraint reach, v5
 # is the additive `accepts` tag-axis kind, v6 the constraint `only` rule and
 # v7 derivation AND/OR condition groups plus the `is_empty`/`is_not_empty` ops,
-# v8 send-to-negative (`negative` text + the derivation `negative` mode);
-# all are handled natively, so a
+# v8 send-to-negative (`negative` text + the derivation `negative` mode),
+# v9 the wildcard fallback option and v10 the derivation `not_contains` /
+# `not_matches` tests; all are handled natively, so a
 # payload at CURRENT < v <= MAX_KNOWN installs AS-IS with no migration.
 # Mirror of TS `MAX_KNOWN_SCHEMA_VERSION` in
 # `src/manager/import-export/migrations.ts`.
@@ -29,7 +30,7 @@ CURRENT_SCHEMA_VERSION = 2
 # MAINTENANCE CONTRACT: bump this whenever the TS `schemaVersionForPayload()`
 # learns to stamp a new (higher) version — otherwise this commit-side
 # re-validate will reject the very shapes the runtime just learned to produce.
-MAX_KNOWN_SCHEMA_VERSION = 9
+MAX_KNOWN_SCHEMA_VERSION = 10
 
 # Feature stamps (mirror of the TS constants beside MAX_KNOWN). Each is the
 # catalog version a payload needs once it uses that feature; see
@@ -45,6 +46,8 @@ DERIVATION_CONDITIONS_SCHEMA_VERSION = 7
 NEGATIVES_SCHEMA_VERSION = 8
 # wildcard fallback option: an option flagged `fallback: true`
 FALLBACK_SCHEMA_VERSION = 9
+# derivation NOT toggle: a test using `not_contains` or `not_matches`
+NEGATED_TESTS_SCHEMA_VERSION = 10
 
 _CHAIN = {
     0: migrate_v0_to_v1,

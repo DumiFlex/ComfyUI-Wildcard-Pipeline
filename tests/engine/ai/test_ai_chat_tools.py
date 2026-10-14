@@ -63,7 +63,7 @@ def test_tools_are_listed_and_guide_is_in_the_prompt():
                  "create_template", "edit_template", "edit_rules", "edit_constraint",
                  "create_bundle", "edit_bundle", "run_test"):
         assert tool in chat.TOOLS and f"- {tool} " in chat.SYSTEM_PROMPT
-    assert "not_contains" not in chat.SYSTEM_PROMPT
+    assert "not_contains" in chat.SYSTEM_PROMPT  # schema v10 NOT toggle
     assert guide.WHICH.splitlines()[0] in chat.SYSTEM_PROMPT
     assert "pick 2-3" in chat.SYSTEM_PROMPT
 

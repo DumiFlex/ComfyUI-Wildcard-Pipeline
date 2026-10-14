@@ -27,7 +27,8 @@ import { useAiConfig } from "../composables/useAiConfig";
 import TraceDrawer from "../components/test-runner/TraceDrawer.vue";
 import InspectorDrawer from "../components/test-runner/InspectorDrawer.vue";
 import { useScenarioWorkbench } from "../composables/useScenarioWorkbench";
-import { registerPageNote } from "../composables/useOpenEditor";
+import { currentPageNote, registerPageNote } from "../composables/useOpenEditor";
+import { registerAiAction } from "../composables/useAiActions";
 import { useDeleteConfirm } from "../composables/useDeleteConfirm";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { buildUuidToName } from "../utils/wildcardSyntax";
@@ -167,7 +168,19 @@ const uses = computed(() => {
   return { id, name };
 });
 
+let markReady: () => void = () => {};
+/** Resolves once the page has loaded the library and opened its scenario. */
+const ready = new Promise<void>((resolve) => { markReady = resolve; });
+
 onMounted(async () => {
+  try {
+    await openFirst();
+  } finally {
+    markReady();
+  }
+});
+
+async function openFirst(): Promise<void> {
   await wb.loadLibrary();
   const item = deepLinkItem();
   const using = usesId.value
@@ -181,6 +194,41 @@ onMounted(async () => {
   } else if (wb.scenarios.value.length) {
     wb.openScenario(wb.scenarios.value[0]);
   }
+}
+
+// The chat's `show_test`: set the stack (seeds, pins, output) up as a quick
+// run where the user can see it, run it unless told not to, save it when
+// named, and tell the chat what came out (the same text as the page note).
+registerAiAction("show_test", async (args) => {
+  await ready;
+  if (wb.dirty.value && draft.value.stack.length) {
+    return "couldn't: the open scenario has unsaved changes; ask the user to save or discard them first";
+  }
+  const stack = (Array.isArray(args.stack) ? args.stack : []) as ScenarioStackItem[];
+  if (!stack.length) return "couldn't: the stack is empty";
+  const count = Math.min(500, Math.max(1, Number(args.seeds) || 20));
+  wb.newQuickRun(stack[0]);
+  draft.value.stack = stack.map((item) => ({ ...item }));
+  const from = typeof args.from === "number" ? Math.max(0, Math.floor(args.from)) : null;
+  draft.value.seeds = from !== null ? { from, count } : { random: true, count };
+  const pins = args.pins && typeof args.pins === "object" ? args.pins as Record<string, unknown> : {};
+  draft.value.pins = Object.fromEntries(Object.entries(pins).map(([k, v]) => [k, String(v)]));
+  if (typeof args.output === "string" && args.output) draft.value.output_var = args.output;
+  if (typeof args.save === "string" && args.save) draft.value.name = args.save;
+  const notes: string[] = [];
+  if (args.run !== false) {
+    await wb.run();
+    if (wb.runError.value) return `couldn't run it: ${wb.runError.value}`;
+  }
+  if (typeof args.save === "string" && args.save) {
+    notes.push((await wb.save()) ? `saved it as the scenario "${args.save}"` : "couldn't save it");
+  }
+  if (args.run === false) {
+    return `set it up in the Test Runner without running${notes.length ? `; ${notes.join("; ")}` : ""}. `
+      + "The user presses Run when ready.";
+  }
+  return `ran it in the Test Runner, where the user sees the results${notes.length ? `; ${notes.join("; ")}` : ""}. `
+    + currentPageNote();
 });
 
 /* ---------------------------- actions ----------------------------- */
@@ -287,13 +335,15 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
           :disabled="!draft.stack.length"
           :loading="wb.running.value"
           title="Ctrl + Enter"
-          data-test="run-btn"
+          data-test="run-btn" data-ai-anchor="run" data-ai-label="Run button"
           @click="wb.run()"
         >{{ wb.running.value ? "Running…" : "Run" }}</Button>
       </div>
 
       <div class="wp-tr__content">
         <StackBuilder
+          data-ai-anchor="stack"
+          data-ai-label="Stack: the modules and bundles to run"
           v-model:stack="draft.stack"
           v-model:pins="draft.pins"
           :views="wb.stackViews.value"
@@ -313,7 +363,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
           <p v-if="result.missing.length" class="wp-tr__missing" data-test="missing">
             Skipped {{ result.missing.length }} item{{ result.missing.length === 1 ? "" : "s" }} no longer in the library.
           </p>
-          <div class="wp-tr__stats" data-test="run-stats">
+          <div class="wp-tr__stats" data-test="run-stats" data-ai-anchor="run-stats" data-ai-label="Run summary: runs, seeds, failures">
             <div><span>Runs</span><strong>{{ result.runs }}</strong><em>{{ seedLabel(wb.ranSeeds.value ?? draft.seeds) }}</em></div>
             <div><span>Unique outputs</span><strong>{{ uniqueOutputs ?? "none" }}</strong><em>{{ wb.outputVar.value ? `of $${wb.outputVar.value}` : "no output variable" }}</em></div>
             <div><span>Warnings</span><strong :data-warn="warningCount + result.failed ? 'true' : 'false'">{{ warningCount + result.failed }}</strong><em>{{ result.failed ? `${result.failed} runs failed` : result.warnings.length ? `${result.warnings.length} kinds` : "none reported" }}</em></div>
@@ -322,7 +372,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 
           <AiRunBar v-if="ai.ready.value" :result="result" />
           <section class="wp-tr__results" aria-label="Results">
-            <div class="wp-tr__tabs" role="tablist">
+            <div class="wp-tr__tabs" role="tablist" data-ai-anchor="result-tabs" data-ai-label="Result tabs: variables, outputs, samples, warnings, compare">
               <button
                 v-for="t in TABS"
                 :key="t.id"
@@ -467,8 +517,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 .wp-tr__count[data-tone="ok"] { background: color-mix(in oklab, var(--wp-success) 16%, transparent); color: var(--wp-success); }
 .wp-tr__count[data-tone="warn"] { background: color-mix(in oklab, var(--wp-warn) 16%, transparent); color: var(--wp-warn); }
 .wp-tr__pane { padding: var(--wp-space-6); }
-@media (max-width: 900px) {
-  .wp-tr { grid-template-columns: 1fr; height: auto; }
-  .wp-tr__main { overflow: visible; }
-}
+/* Page area narrower than 700px (usePageWidth; the chat can take the rest). */
+.wp-content[data-lt~="700"] .wp-tr { grid-template-columns: 1fr; height: auto; }
+.wp-content[data-lt~="700"] .wp-tr__main { overflow: visible; }
 </style>

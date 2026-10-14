@@ -1780,8 +1780,10 @@ function matchDerivationCondition(
   if (op === "equals") return actual === value;
   if (op === "not_equals") return actual !== value;
   if (op === "contains") return actual.includes(value);
-  if (op === "matches") {
-    try { return new RegExp(value).test(actual); } catch { return false; }
+  if (op === "not_contains") return !actual.includes(value);
+  if (op === "matches" || op === "not_matches") {
+    // A broken pattern fires neither (mirrors engine derivation_handler).
+    try { return new RegExp(value).test(actual) === (op === "matches"); } catch { return false; }
   }
   return false;
 }

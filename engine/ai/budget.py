@@ -108,26 +108,3 @@ def clip(text: str, limit: int) -> str:
     left = text[cut:].count("\n") + 1
     return (text[:cut] + f"\n… ({left} more lines left out to save room; "
             "read a narrower part if you need them)")
-
-
-def fit_history(history: list[tuple[str, Any]], limit: int,
-                keep_last: int = 1) -> list[tuple[str, Any]]:
-    """Shorten the oldest tool results until the history fits `limit`.
-
-    The model keeps every step's own answer (what it called and said); only
-    the results it was shown are cut, oldest first, down to their first
-    line. The last `keep_last` steps stay whole.
-    """
-    def size(h: list[tuple[str, Any]]) -> int:
-        return prompt_chars("", h, "")
-
-    out = list(history)
-    for i in range(max(0, len(out) - keep_last)):
-        if size(out) <= limit:
-            break
-        asked, answer = out[i]
-        if len(asked) > 400:
-            first = asked.split("\n", 2)
-            head = "\n".join(first[:2])[:300]
-            out[i] = (head + "\n… (older tool results left out to save room)", answer)
-    return out

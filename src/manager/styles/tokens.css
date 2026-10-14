@@ -1544,7 +1544,8 @@ input, textarea, select { font: inherit; }
 
 /* ---------- Stat cards ---------- */
 .wp-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-@media (max-width: 880px) { .wp-stats { grid-template-columns: repeat(2, 1fr); } }
+/* Page area narrower than 680px (usePageWidth; the chat can take the rest). */
+.wp-content[data-lt~="680"] .wp-stats { grid-template-columns: repeat(2, 1fr); }
 .wp-stat {
   background: var(--wp-bg-1);
   border: 1px solid var(--wp-border);

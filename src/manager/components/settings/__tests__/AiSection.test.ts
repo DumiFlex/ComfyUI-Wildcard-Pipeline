@@ -6,29 +6,33 @@ import Select from "../../ui/Select.vue";
 import { SUGGESTED_LOCAL_MODELS } from "../ai-models";
 import { api } from "../../../api/client";
 import { _resetAiConfigForTests } from "../../../composables/useAiConfig";
-import type { AiConfig } from "../../../api/types";
+import type { AiConfig, AiIndexStatus } from "../../../api/types";
 
 vi.mock("../../../api/client", () => ({
-  api: { ai: { config: vi.fn(), saveConfig: vi.fn(), models: vi.fn(), test: vi.fn() } },
+  api: { ai: { config: vi.fn(), saveConfig: vi.fn(), models: vi.fn(), test: vi.fn(), index: vi.fn(), rebuildIndex: vi.fn() } },
   ApiError: class ApiError extends Error {},
 }));
 
 const PRESETS: AiConfig["presets"] = {
-  anthropic: { label: "Claude", api: "anthropic", local: false, needs_key: true, base_url: "https://api.anthropic.com" },
-  openai: { label: "OpenAI", api: "openai", local: false, needs_key: true, base_url: "https://api.openai.com/v1" },
-  ollama: { label: "Ollama", api: "ollama", local: true, needs_key: false, base_url: "http://127.0.0.1:11434" },
-  lmstudio: { label: "LM Studio", api: "openai", local: true, needs_key: false, base_url: "http://127.0.0.1:1234/v1" },
-  llamacpp: { label: "llama.cpp", api: "openai", local: true, needs_key: false, base_url: "http://127.0.0.1:8080/v1" },
-  custom: { label: "Other", api: "openai", local: true, needs_key: false, base_url: "" },
+  anthropic: { label: "Claude", api: "anthropic", local: false, needs_key: true, base_url: "https://api.anthropic.com", embeds: false, embed_model: "", embed_note: "Claude has no embeddings." },
+  openai: { label: "OpenAI", api: "openai", local: false, needs_key: true, base_url: "https://api.openai.com/v1", embeds: true, embed_model: "", embed_note: "" },
+  openrouter: { label: "OpenRouter", api: "openai", local: false, needs_key: true, base_url: "https://openrouter.ai/api/v1", embeds: true, embed_model: "", embed_note: "" },
+  ollama: { label: "Ollama", api: "ollama", local: true, needs_key: false, base_url: "http://127.0.0.1:11434", embeds: true, embed_model: "", embed_note: "" },
+  lmstudio: { label: "LM Studio", api: "openai", local: true, needs_key: false, base_url: "http://127.0.0.1:1234/v1", embeds: true, embed_model: "", embed_note: "" },
+  llamacpp: { label: "llama.cpp", api: "openai", local: true, needs_key: false, base_url: "http://127.0.0.1:8080/v1", embeds: false, embed_model: "", embed_note: "" },
+  custom: { label: "Other", api: "openai", local: true, needs_key: false, base_url: "", embeds: true, embed_model: "", embed_note: "" },
 };
 
 function cfg(over: Partial<AiConfig> = {}): AiConfig {
   return {
     enabled: false, provider: "ollama", base_url: "", model: "", unload_after_s: 60,
-    context_max: 16384, model_size: "auto", model_size_auto: "medium",
-    key_set: false, key_from_env: false, keys_saved: [], presets: PRESETS, ...over,
+    context_max: 16384, model_size: "auto", model_size_auto: "medium", tool_format: "auto", thinking: "auto", allow_delete: false, auto_apply: false, embed_model: "", embed_base_url: "", embed_api: "auto", search_engine: "off", search_url: "", search_keys_saved: [], search_engines: { searxng: { label: "SearXNG", needs_key: false }, brave: { label: "Brave Search", needs_key: true }, tavily: { label: "Tavily", needs_key: true }, kagi: { label: "Kagi", needs_key: true } }, key_for_host: null,
+    key_set: false, key_from_env: false, keys_saved: [], presets: PRESETS, embed_key_set: false, embed_key_own: false,
+    local: PRESETS[over.provider ?? "ollama"].local, ...over,
   };
 }
+
+const INDEX: AiIndexStatus = { available: true, items: 120, embed_model: null, vectors: 0, filling: false };
 
 const router = createRouter({ history: createMemoryHistory(), routes: [{ path: "/", component: { template: "<div/>" } }] });
 
@@ -39,6 +43,8 @@ describe("Settings › AI assistant", () => {
     vi.mocked(api.ai.saveConfig).mockReset();
     vi.mocked(api.ai.models).mockReset().mockResolvedValue({ models: ["a", "b"] });
     vi.mocked(api.ai.test).mockReset();
+    vi.mocked(api.ai.index).mockReset().mockResolvedValue(INDEX);
+    vi.mocked(api.ai.rebuildIndex).mockReset();
   });
 
   it("starts off, with Test connection disabled and the local privacy note", async () => {
@@ -114,6 +120,21 @@ describe("Settings › AI assistant", () => {
     expect(api.ai.models).toHaveBeenCalled();
   });
 
+  it("saves the permissions, both off by default", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg());
+    vi.mocked(api.ai.saveConfig).mockImplementation(async (p) => cfg(p as Partial<AiConfig>));
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    expect(w.get('[data-test="ai-allow-delete"] [aria-checked]').attributes("aria-checked")).toBe("false");
+    expect(w.get('[data-test="ai-auto-apply"] [aria-checked]').attributes("aria-checked")).toBe("false");
+    await w.get('[data-test="ai-allow-delete"]').trigger("click");
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ allow_delete: true });
+    await w.get('[data-test="ai-auto-apply"]').trigger("click");
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ auto_apply: true });
+  });
+
   it("marks cloud providers that already have a saved key", async () => {
     vi.mocked(api.ai.config).mockResolvedValue(cfg({ keys_saved: ["anthropic"] }));
     const w = mount(AiSection, { global: { plugins: [router] } });
@@ -148,6 +169,22 @@ describe("Settings › AI assistant", () => {
     expect(w.get('[data-test="ai-context-low"]').text()).toContain("loaded with 4k of context");
   });
 
+  it("saves the tool format", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({ enabled: true, model: "m" }));
+    vi.mocked(api.ai.saveConfig).mockImplementation(async (p) => cfg({ enabled: true, model: "m", ...p }));
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    const fmt = w.findAllComponents(Select).find((c) => c.attributes("data-test") === "ai-tool-format")!;
+    expect(fmt.props("modelValue")).toBe("auto");
+    fmt.vm.$emit("update:modelValue", "json");
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ tool_format: "json" });
+    vi.mocked(api.ai.saveConfig).mockClear();
+    fmt.vm.$emit("update:modelValue", "json");
+    await flushPromises();
+    expect(api.ai.saveConfig).not.toHaveBeenCalled();
+  });
+
   it("saves the model size and the context cap", async () => {
     vi.mocked(api.ai.config).mockResolvedValue(cfg({ enabled: true, model: "qwen3.6:27b" }));
     vi.mocked(api.ai.saveConfig).mockImplementation(async (p) => cfg({ enabled: true, ...p }));
@@ -174,5 +211,145 @@ describe("Settings › AI assistant", () => {
     await ctx.trigger("blur");
     await flushPromises();
     expect(api.ai.saveConfig).toHaveBeenCalledWith({ context_max: 4096 });
+  });
+
+  it("turns meaning search on from the embedding model list", async () => {
+    vi.mocked(api.ai.models).mockResolvedValue({ models: ["qwen3.5:9b", "nomic-embed-text:latest"] });
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({ enabled: true, model: "qwen3.5:9b" }));
+    vi.mocked(api.ai.saveConfig).mockImplementation(async (p) => cfg({ enabled: true, model: "qwen3.5:9b", ...p }));
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    const embed = w.findAllComponents(Select).find((c) => c.attributes("data-test") === "ai-embed-model")!;
+    // Only names that look like embedding models are offered.
+    const values = (embed.props("options") as Array<{ value: unknown }>).map((o) => o.value);
+    expect(values).toEqual(["", "nomic-embed-text:latest", "custom"]);
+    // The embedding server row is always there; its type only for another server.
+    expect(w.find('[data-test="ai-embed-address"]').exists()).toBe(true);
+    expect(w.find('[data-test="ai-embed-api"]').exists()).toBe(false);
+    vi.mocked(api.ai.index).mockResolvedValue({ ...INDEX, embed_model: "nomic-embed-text:latest", vectors: 32, filling: true });
+    embed.vm.$emit("update:modelValue", "nomic-embed-text:latest");
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ embed_model: "nomic-embed-text:latest" });
+    expect(w.find('[data-test="ai-embed-address"]').exists()).toBe(true);
+    expect(w.get('[data-test="ai-index-status"]').text()).toBe("120 items indexed · 32 searchable by meaning (adding the rest…)");
+    expect(w.get('[data-test="ai-index-rebuild"]').attributes("disabled")).toBeDefined();
+    w.unmount();
+  });
+
+  it("sets up web search: an engine, then its key or address", async () => {
+    let saved = cfg({ enabled: true, model: "a" });
+    vi.mocked(api.ai.config).mockResolvedValue(saved);
+    vi.mocked(api.ai.saveConfig).mockImplementation(async (p) => {
+      const keys = p.search_key ? [saved.search_engine as "brave"] : saved.search_keys_saved;
+      saved = { ...saved, ...p, search_keys_saved: keys } as AiConfig;
+      return saved;
+    });
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    const engine = w.findAllComponents(Select).find((c) => c.attributes("data-test") === "ai-search-engine")!;
+    expect((engine.props("options") as Array<{ value: unknown }>).map((o) => o.value))
+      .toEqual(["off", "searxng", "brave", "tavily", "kagi"]);
+    expect(w.find('[data-test="ai-search-key"]').exists()).toBe(false);
+    engine.vm.$emit("update:modelValue", "brave");
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ search_engine: "brave" });
+    await w.get('[data-test="ai-search-key"]').setValue("bk-1");
+    await w.get('[data-test="ai-search-key-save"]').trigger("click");
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ search_key: "bk-1" });
+    expect(w.get('[data-test="ai-search-key-set"]').text()).toBe("Key saved");
+    engine.vm.$emit("update:modelValue", "searxng");
+    await flushPromises();
+    await w.get('[data-test="ai-search-url"]').setValue("http://127.0.0.1:8888");
+    await w.get('[data-test="ai-search-url"]').trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ search_url: "http://127.0.0.1:8888" });
+    w.unmount();
+  });
+
+  it("types an embedding model name", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({ enabled: true, model: "a" }));
+    vi.mocked(api.ai.saveConfig).mockImplementation(async (p) => cfg({ enabled: true, model: "a", ...p }));
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    w.findAllComponents(Select).find((c) => c.attributes("data-test") === "ai-embed-model")!.vm.$emit("update:modelValue", "custom");
+    await flushPromises();
+    const input = w.get('[data-test="ai-embed-model-input"] input, input[data-test="ai-embed-model-input"]');
+    await input.setValue("embeddinggemma");
+    await input.trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ embed_model: "embeddinggemma" });
+  });
+
+  it("has no meaning search for Claude", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({ enabled: true, provider: "anthropic", model: "c" }));
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    const embed = w.findAllComponents(Select).find((c) => c.attributes("data-test") === "ai-embed-model")!;
+    expect(embed.props("disabled")).toBe(true);
+    expect(w.text()).toContain("Claude has no embeddings.");
+  });
+
+  it("embeds on another server with Claude, of the type the user picks", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({
+      enabled: true, provider: "anthropic", model: "c", embed_base_url: "http://127.0.0.1:11434",
+    }));
+    vi.mocked(api.ai.saveConfig).mockImplementation(async (p) => cfg({
+      enabled: true, provider: "anthropic", model: "c", embed_base_url: "http://127.0.0.1:11434", ...p,
+    }));
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    const embed = w.findAllComponents(Select).find((c) => c.attributes("data-test") === "ai-embed-model")!;
+    expect(embed.props("disabled")).toBe(false);
+    expect(api.ai.models).toHaveBeenCalledWith("embed");
+    const kind = w.findAllComponents(Select).find((c) => c.attributes("data-test") === "ai-embed-api")!;
+    kind.vm.$emit("update:modelValue", "ollama");
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ embed_api: "ollama" });
+  });
+
+  it("shows the index and rebuilds it", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({ enabled: true, model: "a" }));
+    vi.mocked(api.ai.rebuildIndex).mockResolvedValue({ ...INDEX, items: 121 });
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    expect(w.get('[data-test="ai-index-status"]').text()).toBe("120 items indexed");
+    await w.get('[data-test="ai-index-rebuild"]').trigger("click");
+    await flushPromises();
+    expect(api.ai.rebuildIndex).toHaveBeenCalled();
+    expect(w.get('[data-test="ai-index-status"]').text()).toBe("121 items indexed");
+  });
+
+  it("says when there is no full-text search", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({ enabled: true, model: "a" }));
+    vi.mocked(api.ai.index).mockResolvedValue({ ...INDEX, available: false, items: 0 });
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    expect(w.get('[data-test="ai-index-status"]').text()).toContain("no SQLite full-text search");
+    expect(w.get('[data-test="ai-index-rebuild"]').attributes("disabled")).toBeDefined();
+  });
+
+  it("warns when the embedding model pushes the chat model out", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({ enabled: true, model: "a", embed_model: "nomic-embed-text" }));
+    vi.mocked(api.ai.test).mockResolvedValue({
+      ok: true, models: ["a"], model_found: true, json_ok: true, latency_ms: 900, context: null, context_low: false,
+      error: null, embed: { ok: true, dims: 768, error: null, swapped: true },
+    });
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    await w.get('[data-test="ai-test"]').trigger("click");
+    await flushPromises();
+    expect(w.get('[data-test="ai-test-result"]').text()).toContain("embeddings ✓ (768)");
+    expect(w.get('[data-test="ai-test-result"]').attributes("data-tone")).toBe("warn");
+    expect(w.get('[data-test="ai-embed-swapped"]').text()).toContain("OLLAMA_MAX_LOADED_MODELS");
+  });
+
+  it("says when the saved key belongs to another address", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({ provider: "anthropic", key_set: false, key_for_host: "api.anthropic.com" }));
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    expect(w.get('[data-test="ai-key-elsewhere"]').text()).toBe("Saved for api.anthropic.com");
+    expect(w.get('[data-test="ai-key-elsewhere-note"]').text()).toContain("isn't sent to this address");
+    expect(w.find('[data-test="ai-key-set"]').exists()).toBe(false);
   });
 });

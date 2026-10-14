@@ -134,8 +134,7 @@ function star(): void {
   gap: var(--wp-space-2);
   flex: none;
 }
-@media (max-width: 760px) {
-  .wp-star { flex-wrap: wrap; }
-  .wp-star__actions { width: 100%; justify-content: flex-end; }
-}
+/* Page area narrower than 560px (usePageWidth; the chat can take the rest). */
+.wp-content[data-lt~="560"] .wp-star { flex-wrap: wrap; }
+.wp-content[data-lt~="560"] .wp-star__actions { width: 100%; justify-content: flex-end; }
 </style>

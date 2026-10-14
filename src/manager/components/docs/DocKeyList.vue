@@ -39,7 +39,6 @@ defineProps<{ items: { term: string; desc: string }[] }>();
   line-height: 1.6;
   font-size: 13px;
 }
-@media (max-width: 600px) {
-  .wp-doc-keys__row { grid-template-columns: 1fr; gap: 5px; }
-}
+/* Page area narrower than 400px (usePageWidth; the chat can take the rest). */
+.wp-content[data-lt~="400"] .wp-doc-keys__row { grid-template-columns: 1fr; gap: 5px; }
 </style>

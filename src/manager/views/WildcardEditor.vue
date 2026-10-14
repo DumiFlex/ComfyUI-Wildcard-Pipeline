@@ -12,13 +12,14 @@
  * Save flow appends a snapshot to `payload.history` (utils/history.ts) so
  * the EditorFrame's history button works on the next mount.
  */
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import type { SaveState, EditorFieldError } from "../components/EditorFrame.types";
 import { useRouter, useRoute } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import SendToTestRunner from "../components/SendToTestRunner.vue";
 import IdentityCard from "../components/IdentityCard.vue";
+import { usePanelAction } from "../composables/usePanelAction";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
@@ -37,7 +38,10 @@ import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
 import { useEditorDraft } from "../composables/useEditorDraft";
-import { registerOpenEditor } from "../composables/useOpenEditor";
+import {
+  registerOpenEditor, draftCreateId, draftSaved, type StagedDraft,
+} from "../composables/useOpenEditor";
+import { registerAiAction } from "../composables/useAiActions";
 import DraftBanner from "../components/DraftBanner.vue";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
@@ -241,15 +245,61 @@ const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => bulkPending.value || aiPending.value || snapshot() !== baseline.value,
 );
 
-registerOpenEditor({
+/** The chat's draft this new wildcard was opened with (Save creates it at
+ *  the id the card reserved and marks the card applied). */
+let chatDraft: StagedDraft | null = null;
+const fillFromChat = registerOpenEditor({
   id: props.id, type: "wildcard", dirty: () => dirty.value,
   name, description, tags, categoryId, contentRating,
   payload: () => currentPayload() as unknown as Record<string, unknown>,
   setPayload: (p) => {
     const next = p as Partial<WildcardPayload>;
-    if (Array.isArray(next.options)) options.value = next.options as typeof options.value;
+    if (Array.isArray(next.options)) {
+      options.value = next.options.map((o) => ({
+        ...o, sub_categories: Array.isArray(o.sub_categories) ? [...o.sub_categories] : [],
+      })) as typeof options.value;
+    }
     if (Array.isArray(next.sub_categories)) subCategories.value = [...next.sub_categories];
-    if (next.tag_groups) tagGroups.value = next.tag_groups;
+    if (next.tag_groups) {
+      tagGroups.value = normalizeTagGroups(next.tag_groups, subCategories.value);
+      tagGroupKinds.value = normalizeTagGroupKinds(next.tag_group_kinds, tagGroups.value);
+    }
+    if (typeof next.var_binding === "string" && next.var_binding) varBinding.value = next.var_binding;
+  },
+});
+
+// The chat's `draft_options`: open the AI panel on Add and draft there, so
+// the user picks what to keep exactly as if they had asked the panel.
+const aiPanel = ref<InstanceType<typeof AiWildcardPanel> | null>(null);
+registerAiAction("draft_options", async (args) => {
+  if (!ai.config.value?.enabled) return "couldn't: the assistant is off";
+  aiDraftOpen.value = true;
+  await nextTick();
+  if (!aiPanel.value) return "couldn't: the AI panel didn't open";
+  return aiPanel.value.draft(String(args.instruction ?? ""), Number(args.count) || 10);
+}, (args) => !!props.id && args.id === props.id);
+
+// The chat's `use_panel`: Describe, or one of the AI panel's tabs (Add drafts
+// new options; the edits work on the selected options, or all of them).
+const identityCard = ref<InstanceType<typeof IdentityCard> | null>(null);
+async function viaEdit(action: AiWildcardEditAction, text: string): Promise<string> {
+  aiDraftOpen.value = true;
+  await nextTick();
+  return aiPanel.value ? aiPanel.value.edit(action, text) : "couldn't: the AI panel didn't open";
+}
+usePanelAction({
+  id: () => props.id,
+  identity: identityCard,
+  panels: {
+    add: async (text) => {
+      aiDraftOpen.value = true;
+      await nextTick();
+      return aiPanel.value ? aiPanel.value.draft(text, 10) : "couldn't: the AI panel didn't open";
+    },
+    remove: (text) => viaEdit("remove", text),
+    rewrite: (text) => viaEdit("rewrite", text),
+    retag: (text) => viaEdit("retag", text),
+    reweight: (text) => viaEdit("reweight", text),
   },
 });
 
@@ -1053,7 +1103,23 @@ onMounted(async () => {
   // sub-category panel to the user's chosen default.
   subcatOpen.value = resolveSubcatDefaultOpen();
   baseline.value = snapshot();
+  // "Open in editor" on a chat card: the proposed wildcard, unsaved.
+  if (!props.id) {
+    chatDraft = fillFromChat();
+    chatDraftNote(chatDraft);
+  }
 });
+
+function chatDraftNote(d: StagedDraft | null): void {
+  if (!d) return;
+  toast.push({
+    severity: "info",
+    summary: "From the assistant",
+    detail: d.newCategory
+      ? `Check it and Save to keep it. It suggested a new category, "${d.newCategory}": create it from the Category picker if you want it.`
+      : "Check it and Save to keep it.",
+  });
+}
 
 /** Drop a sub-category from local draft state: the registry, every
  *  option's membership, AND any axis that lists it. Mirrors the server
@@ -1937,16 +2003,18 @@ async function save() {
       historyEntries.value = nextHistory;
       recent.push({ id: props.id, kind: "wildcard", name: name.value });
     } else {
-      // New mode: moduleStore.create() does not expose the new id on the
-      // returned row in a way that's stable across mock/real backends.
-      // The next time the user opens this item the mount-time push fires.
-      await moduleStore.create({
+      // New mode: the mount-time recent push fires next time the item opens.
+      // A chat draft is created at the id its card reserved.
+      const created = await moduleStore.create({
+        ...draftCreateId(chatDraft),
         type: "wildcard",
         name: name.value, description: description.value,
         category_id: categoryId.value, tags: tags.value,
         payload: newPayload,
         content_rating: contentRating.value,
       });
+      draftSaved(chatDraft, created?.id);
+      chatDraft = null;
     }
     draft.discard();
     setSaveState("saved", 1500);
@@ -2075,6 +2143,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
     </template>
     <div id="editor-section-identity">
       <IdentityCard
+        ref="identityCard"
         ai-kind="wildcard"
         :ai-payload="() => ({ var_binding: varBinding, sub_categories: subCategories, options })"
         :name="name"
@@ -2356,7 +2425,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
             aria-label="Filter options"
             spellcheck="false"
             autocomplete="off"
-            data-test="wc-opt-search"
+            data-test="wc-opt-search" data-ai-anchor="opt-search" data-ai-label="Search the options"
           />
           <button
             v-if="optQuery"
@@ -2421,7 +2490,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
           size="sm"
           variant="ghost"
           icon="pi-clipboard"
-          data-test="wc-bulk-add"
+          data-test="wc-bulk-add" data-ai-anchor="bulk-add" data-ai-label="Bulk add button"
           @click="bulkAddOpen = !bulkAddOpen"
         >Bulk add</Button>
         <Button
@@ -2429,7 +2498,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
           size="sm"
           :variant="aiDraftOpen ? 'secondary' : 'ghost'"
           icon="pi-microchip-ai"
-          data-test="wc-ai-draft"
+          data-test="wc-ai-draft" data-ai-anchor="ai-panel-button" data-ai-label="AI button (draft or edit options)"
           @click="aiDraftOpen = !aiDraftOpen"
         >AI</Button>
         <Button
@@ -2440,13 +2509,14 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
           data-test="wc-add-null"
           @click="addNullOption"
         >Add null</Button>
-        <Button size="sm" variant="primary" icon="pi-plus" data-test="wc-add-opt" @click="addOption">
+        <Button size="sm" variant="primary" icon="pi-plus" data-test="wc-add-opt" data-ai-anchor="add-option" data-ai-label="Add option button" @click="addOption">
           Add option
         </Button>
       </template>
       <template #subheader>
       <div v-if="aiDraftOpen && ai.config.value?.enabled" class="wpc-bulk-controls">
         <AiWildcardPanel
+          ref="aiPanel"
           :name="name"
           :var-binding="varBinding"
           :options="options"
@@ -2498,7 +2568,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
         <p v-if="bulkNote" class="wpc-bulk-note" role="status">{{ bulkNote }}</p>
       </div>
       </template>
-      <table class="wp-table wp-options-table">
+      <table class="wp-table wp-options-table" data-ai-anchor="options" data-ai-label="Options list">
         <thead>
           <tr>
             <th v-if="bulkMode" scope="col" class="opt-col-check">

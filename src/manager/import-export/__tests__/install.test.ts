@@ -330,13 +330,13 @@ describe("installEnvelope — natively-supported future versions install as-is",
     expect(opts[1].fallback).toBe(true);
   });
 
-  it("rejects a v10 envelope (> MAX_KNOWN) at parse with the future-version error", async () => {
-    const v10Envelope = {
-      schema_version: 10,
+  it("rejects a v11 envelope (> MAX_KNOWN) at parse with the future-version error", async () => {
+    const v11Envelope = {
+      schema_version: 11,
       bundles: [], wildcards: [], fixed_values: [], combines: [], derivations: [], constraints: [], categories: [], templates: [],
     };
     const { importExport, seen } = fakeCommit();
-    const result = await installEnvelope({ envelope: v10Envelope }, { importExport });
+    const result = await installEnvelope({ envelope: v11Envelope }, { importExport });
 
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("parse_failed");

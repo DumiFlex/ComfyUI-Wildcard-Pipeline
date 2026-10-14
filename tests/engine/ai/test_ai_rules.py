@@ -117,6 +117,9 @@ def test_derivation_warns_and_skips():
         {"summary": "regex", "branches": [{"match": "all",
             "conditions": [{"var": "class", "op": "matches", "value": "("}],
             "actions": [_A("b")]}], "else_actions": []},
+        {"summary": "not regex", "branches": [{"match": "all",
+            "conditions": [{"var": "class", "op": "not_matches", "value": "(red"}],
+            "actions": [_A("b")]}], "else_actions": []},
         {"summary": "empty", "branches": [], "else_actions": []},
     ]), catalog=cat)
     [r] = out["rules"]
@@ -129,7 +132,7 @@ def test_derivation_warns_and_skips():
         "action": {"target_var": "song", "mode": "replace", "value": "silence"},
     }
     assert "IF ($class equals \"bard\" and $mood is_set)" in r["summary"]
-    assert [s["text"] for s in out["skipped"]] == ["bad var", "ref", "regex", "empty"]
+    assert [s["text"] for s in out["skipped"]] == ["bad var", "ref", "regex", "not regex", "empty"]
     with pytest.raises(ValueError):
         ai_derivation.compile_rules({"nope": 1}, catalog=cat)
 

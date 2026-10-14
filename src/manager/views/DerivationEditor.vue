@@ -13,6 +13,7 @@ import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import SendToTestRunner from "../components/SendToTestRunner.vue";
 import IdentityCard from "../components/IdentityCard.vue";
+import { usePanelAction, viaPanel } from "../composables/usePanelAction";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
@@ -31,7 +32,9 @@ import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
 import { useEditorDraft } from "../composables/useEditorDraft";
-import { registerOpenEditor } from "../composables/useOpenEditor";
+import {
+  registerOpenEditor, draftCreateId, draftSaved, type StagedDraft,
+} from "../composables/useOpenEditor";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
 import { useRecentStore } from "../stores/recentStore";
@@ -157,7 +160,10 @@ const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => aiPending.value || snapshot() !== baseline.value,
 );
 
-registerOpenEditor({
+/** The chat's draft this new derivation was opened with (Save creates it at
+ *  the id the card reserved and marks the card applied). */
+let chatDraft: StagedDraft | null = null;
+const fillFromChat = registerOpenEditor({
   id: props.id, type: "derivation", dirty: () => dirty.value,
   name, description, tags, categoryId, contentRating,
   payload: () => currentPayload() as unknown as Record<string, unknown>,
@@ -166,6 +172,10 @@ registerOpenEditor({
     if (Array.isArray(next.rules)) rules.value = next.rules.map(migrateRule);
   },
 });
+// The chat's `use_panel`: Describe, or ask the Draft with AI panel.
+const identityCard = ref<InstanceType<typeof IdentityCard> | null>(null);
+const aiPanelRef = ref<InstanceType<typeof AiDerivationPanel> | null>(null);
+usePanelAction({ id: () => props.id, identity: identityCard, panels: { draft: viaPanel(aiOpen, aiPanelRef) } });
 
 const draft = useEditorDraft({
   kind: "derivation",
@@ -363,6 +373,17 @@ onMounted(async () => {
     }
   }
   baseline.value = snapshot();
+  // "Open in editor" on a chat card: the proposed derivation, unsaved.
+  const fromChat = props.id ? null : fillFromChat();
+  chatDraft = fromChat;
+  if (fromChat) {
+    toast.push({
+      severity: "info", summary: "From the assistant",
+      detail: fromChat.newCategory
+        ? `Check it and Save to keep it. It suggested a new category, "${fromChat.newCategory}": create it from the Category picker if you want it.`
+        : "Check it and Save to keep it.",
+    });
+  }
 });
 
 function addAiRules(incoming: DerivationRule[]): void {
@@ -510,9 +531,9 @@ async function save() {
       historyEntries.value = nextHistory;
       recent.push({ id: props.id, kind: "derivation", name: name.value });
     } else {
-      // New mode: the new row id is not surfaced here; mount-time push fires
-      // next time the user opens this item.
-      await moduleStore.create({
+      // New mode: a chat draft is created at the id its card reserved.
+      const created = await moduleStore.create({
+        ...draftCreateId(chatDraft),
         type: "derivation",
         name: name.value,
         description: description.value,
@@ -521,6 +542,8 @@ async function save() {
         content_rating: contentRating.value,
         payload: newPayload,
       });
+      draftSaved(chatDraft, created?.id);
+      chatDraft = null;
     }
     draft.discard();
     setSaveState("saved", 1500);
@@ -602,6 +625,7 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
       >Delete</Button>
     </template>
     <IdentityCard
+      ref="identityCard"
       ai-kind="derivation"
       :ai-payload="() => ({ rules })"
       :name="name"
@@ -693,6 +717,7 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
         </div>
       </template>
       <AiDerivationPanel
+        ref="aiPanelRef"
         v-if="aiOpen && ai.config.value?.enabled"
         :name="name"
         :rules="rules"

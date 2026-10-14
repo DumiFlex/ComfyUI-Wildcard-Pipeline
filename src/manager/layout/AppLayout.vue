@@ -4,6 +4,7 @@ import { RouterView } from "vue-router";
 import AppTopbar from "./AppTopbar.vue";
 import AppSidebar from "./AppSidebar.vue";
 import StaleBanner from "../components/StaleBanner.vue";
+import { usePageWidth } from "../composables/usePageWidth";
 import ErrorBoundary from "../components/ErrorBoundary.vue";
 import ToastHost from "../components/ui/ToastHost.vue";
 import TweaksPanel from "../components/TweaksPanel.vue";
@@ -161,6 +162,9 @@ function onVisibilityChange(): void {
   }
 }
 
+const pageEl = ref<HTMLElement | null>(null);
+usePageWidth(pageEl);
+
 onMounted(() => {
   window.addEventListener("keydown", onKeydown);
   window.addEventListener("wp:server-restarted", onServerRestarted);
@@ -296,7 +300,7 @@ onBeforeUnmount(() => {
       :data-ai-chat="aiChat.open.value || undefined"
     >
       <AppSidebar @action="onNavAction" />
-      <main id="wp-main" class="wp-content" tabindex="-1">
+      <main id="wp-main" ref="pageEl" class="wp-content" tabindex="-1">
         <ErrorBoundary>
           <RouterView v-slot="{ Component, route }">
             <Transition name="route-fade" mode="out-in">
@@ -352,7 +356,7 @@ onBeforeUnmount(() => {
 
 /* Wide screens make room for the assistant chat instead of covering the page. */
 @media (min-width: 1200px) {
-  .wp-body[data-ai-chat] > .wp-content { margin-right: min(440px, 100vw); }
+  .wp-body[data-ai-chat] > .wp-content { margin-right: min(var(--wp-ai-chat-w, 440px), 100vw); }
 }
 
 @media (prefers-reduced-motion: reduce) {

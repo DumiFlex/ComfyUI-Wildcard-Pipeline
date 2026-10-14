@@ -898,6 +898,13 @@ describe("collectUpstreamResolved derivation condition groups", () => {
     expect(collectUpstreamResolved(groupGraph({ var: "time", op: "is_empty", value: "" }), asm).light).toBe("hard");
   });
 
+  it("previews the NOT-toggled tests (schema v10)", () => {
+    expect(collectUpstreamResolved(groupGraph({ var: "time", op: "not_contains", value: "day" }), asm).light).toBe("soft");
+    expect(collectUpstreamResolved(groupGraph({ var: "time", op: "not_contains", value: "nig" }), asm).light).toBe("hard");
+    expect(collectUpstreamResolved(groupGraph({ var: "time", op: "not_matches", value: "^n" }), asm).light).toBe("hard");
+    expect(collectUpstreamResolved(groupGraph({ var: "time", op: "not_matches", value: "(" }), asm).light).toBe("hard");
+  });
+
   it("an \"Add to negative\" action leaves the variable's value alone", () => {
     const g = groupGraph(mood);
     const ctxNode = g._nodes[0];

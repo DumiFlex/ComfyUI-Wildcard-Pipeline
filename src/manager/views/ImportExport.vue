@@ -58,6 +58,7 @@ import type {
 import type { RawPayload } from "../import-export/migrations";
 import type { IntegrityWarning } from "../import-export/parse";
 import { newShortId } from "../utils/ids";
+import { registerPageNote } from "../composables/useOpenEditor";
 
 type Mode = "export" | "import" | "packs";
 const MODES: readonly Mode[] = ["export", "import", "packs"];
@@ -228,6 +229,62 @@ const perItemIssues = ref<PerItemIssue[]>([]);
 const pendingSelection = ref<SelectedEntity[]>([]);
 
 const resolveWarningsStore = useResolveWarnings();
+
+/** The last commit / undo outcome, one line, for the AI chat's page note
+ *  (the toasts that say it are gone after a few seconds). */
+const lastResult = ref("");
+
+const MODE_LABEL: Record<Mode, string> = {
+  export: "Export", import: "Import", packs: "Wildcard packs",
+};
+
+/** What a parsed payload holds, by bucket ("3 wildcards, 1 bundle"). */
+function payloadCounts(payload: RawPayload): string {
+  const parts: string[] = [];
+  for (const kind of ALL_KINDS) {
+    const n = payload[BUCKET_FOR_KIND[kind]].length;
+    if (n) parts.push(`${n} ${BUCKET_FOR_KIND[kind].replace("_", " ")}`);
+  }
+  return parts.join(", ") || "nothing";
+}
+
+// Tell the AI chat which tab is open and what's staged, so "this file" or
+// "these" mean what's on screen.
+registerPageNote(() => {
+  const bits = [`Import / Export page, ${MODE_LABEL[mode.value]} tab`];
+  if (mode.value === "export") {
+    const summary = exportTabRef.value?.noteSummary?.();
+    if (summary) bits.push(summary);
+  } else {
+    const st = importState.value;
+    if (st) {
+      bits.push(`A file is loaded (schema v${st.payload.schema_version}): ${payloadCounts(st.payload)}`);
+      const names: string[] = [];
+      for (const kind of ALL_KINDS) {
+        for (const row of st.payload[BUCKET_FOR_KIND[kind]]) {
+          const name = (row as { name?: unknown }).name;
+          if (typeof row.id === "string" && typeof name === "string") names.push(`${name} (${kind}, ${row.id})`);
+        }
+      }
+      if (names.length) bits.push(`In it: ${names.slice(0, 30).join(", ")}${names.length > 30 ? ", …" : ""}`);
+      if (st.migratedCount) bits.push(`${st.migratedCount} migrated from an older shape`);
+      if (st.integrityWarnings.length) bits.push(`${st.integrityWarnings.length} integrity warning(s)`);
+    } else {
+      bits.push(mode.value === "packs" ? "No pack loaded yet" : "No file loaded yet");
+    }
+    if (importSelection.value) {
+      bits.push(`${importSelection.value.size} picked to import${importCommitting.value ? ", committing now" : ""}`);
+    }
+    if (conflictsOpen.value) {
+      bits.push(`Conflict dialog open: ${batchConflicts.value.length} collision(s), ${perItemIssues.value.length} other issue(s)`);
+    }
+    if (upgradeNames.value.length) {
+      bits.push(`Just imported wildcards: ${upgradeNames.value.slice(0, 20).join(", ")}`);
+    }
+  }
+  if (lastResult.value) bits.push(`Last result: ${lastResult.value}`);
+  return bits.join(". ");
+});
 
 type RawPayloadArrayKey = Exclude<keyof RawPayload, "schema_version">;
 const BUCKET_FOR_KIND: Record<EntityKind, RawPayloadArrayKey> = {
@@ -751,6 +808,7 @@ async function runCommit(resolution: {
       detail: "All selected items are duplicates of existing library entries.",
       life: 4000,
     });
+    lastResult.value = "nothing imported: every selected item duplicates a library entry";
     clearImport();
     return;
   }
@@ -798,6 +856,7 @@ async function runCommit(resolution: {
       action: { label: "Undo", run: () => undoImport(undoId) },
       life: 8000,
     });
+    lastResult.value = `import committed: ${added} added, ${replaced} replaced, ${renamed} renamed`;
     importState.value = null;
     importSelection.value = null;
     pendingSelection.value = [];
@@ -818,6 +877,7 @@ async function runCommit(resolution: {
       detail: message,
       life: 5000,
     });
+    lastResult.value = `import failed: ${message}`;
   } finally {
     importCommitting.value = false;
   }
@@ -839,6 +899,7 @@ async function undoImport(undoEntryId: string): Promise<void> {
     ]);
     resolveWarningsStore.clearByType("broken_ref_on_import");
     toast.push({ severity: "info", summary: "Import undone", life: 4000 });
+    lastResult.value = "the last import was undone";
   } catch (err) {
     const message = err instanceof ApiError
       ? `${err.status}: ${err.message}`
@@ -846,6 +907,7 @@ async function undoImport(undoEntryId: string): Promise<void> {
     toast.push({
       severity: "error", summary: "Undo failed", detail: message, life: 5000,
     });
+    lastResult.value = `undo failed: ${message}`;
   }
 }
 
@@ -873,6 +935,8 @@ function clearImport() {
           variant="ghost"
           icon="pi pi-refresh"
           aria-label="Refresh library"
+          data-ai-anchor="refresh"
+          data-ai-label="Refresh button"
           :disabled="refreshing"
           :class="{ 'wp-refresh-btn--spin': refreshing }"
           @click="onRefresh"
@@ -880,7 +944,7 @@ function clearImport() {
       </div>
     </div>
 
-    <div class="wp-tabs wp-io-tabs" role="tablist" aria-label="Import / Export mode">
+    <div class="wp-tabs wp-io-tabs" role="tablist" aria-label="Import / Export mode" data-ai-anchor="tabs" data-ai-label="Export, Import and Wildcard packs tabs">
       <button
         type="button" role="tab" class="wp-tab"
         :data-active="mode === 'export' ? 'true' : 'false'"
@@ -915,6 +979,8 @@ function clearImport() {
       v-if="mode === 'export'"
       class="wp-io-export-pane"
       data-test="io-export-pane"
+      data-ai-anchor="export"
+      data-ai-label="Export picker"
     >
       <ExportTab ref="exportTabRef" />
     </div>
@@ -924,6 +990,8 @@ function clearImport() {
       v-else
       class="wp-io-import-pane"
       :data-test="mode === 'packs' ? 'io-packs-pane' : 'io-import-pane'"
+      data-ai-anchor="import"
+      :data-ai-label="mode === 'packs' ? 'Wildcard pack converter' : 'Import a file'"
     >
       <!-- After a pack import: hand the new lists to the assistant. -->
       <div
@@ -973,12 +1041,16 @@ function clearImport() {
         :library-rows="libraryRowsForPicker"
         :select-all="mode === 'packs'"
         data-test="io-import-picker"
+        data-ai-anchor="import-picker"
+        data-ai-label="Pick what to import"
         @selection-ready="onImportSelectionReady"
       />
       <div
         v-if="importSelection && !conflictsOpen"
         class="wp-io-import-stash"
         data-test="io-import-stash"
+        data-ai-anchor="import-stash"
+        data-ai-label="Picked items, ready to import"
       >
         <p class="wp-io-import-stash__line">
           <template v-if="importCommitting">

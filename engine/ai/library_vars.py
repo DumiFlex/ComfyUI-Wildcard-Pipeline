@@ -93,6 +93,14 @@ def _action_targets(rule: Any) -> list[str]:
     return out
 
 
+def derivation_targets(payload: dict[str, Any]) -> list[str]:
+    """Every variable a derivation's rules write (not negatives-only)."""
+    out: list[str] = []
+    for rule in payload.get("rules") or []:
+        out += [t for t in _action_targets(rule) if t not in out]
+    return out
+
+
 def build_catalog(
     modules: list[dict[str, Any]], *, inputs: list[dict[str, Any]] | None = None,
 ) -> dict[str, dict[str, Any]]:
