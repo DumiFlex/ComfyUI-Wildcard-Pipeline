@@ -501,8 +501,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 .wp-tr__count[data-tone="ok"] { background: color-mix(in oklab, var(--wp-success) 16%, transparent); color: var(--wp-success); }
 .wp-tr__count[data-tone="warn"] { background: color-mix(in oklab, var(--wp-warn) 16%, transparent); color: var(--wp-warn); }
 .wp-tr__pane { padding: var(--wp-space-6); }
-@media (max-width: 900px) {
-  .wp-tr { grid-template-columns: 1fr; height: auto; }
-  .wp-tr__main { overflow: visible; }
-}
+/* Page area narrower than 700px (usePageWidth; the chat can take the rest). */
+.wp-content[data-lt~="700"] .wp-tr { grid-template-columns: 1fr; height: auto; }
+.wp-content[data-lt~="700"] .wp-tr__main { overflow: visible; }
 </style>

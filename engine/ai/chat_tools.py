@@ -249,7 +249,7 @@ class MoreTools:
         out = text_items.compile_fixed({"values": args.get("values") or []})
         meta = self._meta(args)  # type: ignore[attr-defined]
         clash = [v["name"] for v in out["payload"]["values"] if v["name"] in self.catalog]  # type: ignore[attr-defined]
-        warnings = [f"${n} is already set elsewhere in the library" for n in clash[:4]]
+        warnings = [self.var_clash(n) for n in clash[:4]]  # type: ignore[attr-defined]
         return {
             "title": f"Create fixed values {name}",
             "summary": _plural(len(out["payload"]["values"]), "value"),
@@ -291,7 +291,7 @@ class MoreTools:
         meta = self._meta(args)  # type: ignore[attr-defined]
         warnings = list(out["warnings"])
         if var in cat:
-            warnings.insert(0, f"${var} is already set elsewhere in the library")
+            warnings.insert(0, self.var_clash(var))  # type: ignore[attr-defined]
         return {
             "title": f"Create combine {name}", "summary": f"sets ${var}",
             "preview": out["preview"], "warnings": warnings,
@@ -380,7 +380,18 @@ class MoreTools:
         gone = {n for n in (_num(v, len(rules)) for v in args.get("remove") or []) if n}
         for n in sorted(gone):
             preview.append(f"− {n}. {self._show(ai_derivation.describe_rule(rules[n - 1]))}")
-        rules = [x for i, x in enumerate(rules, 1) if i not in gone]
+        # Moves name rules by the numbers read showed; rules run top to bottom.
+        order = list(range(1, len(rules) + 1))
+        for x in args.get("move") or []:
+            if not isinstance(x, dict):
+                continue
+            n, to = _num(x.get("n"), len(rules)), _num(x.get("to"), len(rules))
+            if n is None or to is None or n == to or n in gone:
+                continue
+            order.remove(n)
+            order.insert(to - 1, n)
+            preview.append(f"Move rule {n} to place {to}")
+        rules = [rules[i - 1] for i in order if i not in gone]
         if not preview:
             raise ValueError("that changes nothing" + "".join(f"; {w}" for w in warnings[:3]))
         payload = {**copy.deepcopy(old), "rules": rules}

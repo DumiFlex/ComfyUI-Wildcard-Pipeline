@@ -156,10 +156,17 @@ def compile_fixed(
         except ValueError as e:
             skipped.append({"text": name, "reason": str(e)})
             continue
+        row = by_name.get(name)
+        # On a value that exists, a left-out text keeps it and a left-out
+        # negative keeps that ("negative": "" clears it), so the model can
+        # change just one of the two.
+        if row is not None:
+            value = value or str(row.get("value") or "")
+            if "negative" not in item:
+                negative = str(row.get("negative") or "")
         if not value:
             skipped.append({"text": name, "reason": "empty"})
             continue
-        row = by_name.get(name)
         if row is None:
             row = {"id": _new_id(taken), "name": name}
             rows.append(row)

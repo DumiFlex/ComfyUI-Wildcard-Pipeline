@@ -229,11 +229,10 @@ watch(() => [active.value, route.hash], () => { void revealHash(); }, { immediat
 .wp-settings__result-label { font-weight: 600; font-size: var(--wp-text-sm); }
 .wp-settings__result-hint { font-size: 12px; color: var(--wp-text-dim); }
 
-@media (max-width: 860px) {
-  .wp-settings { grid-template-columns: minmax(0, 1fr); gap: var(--wp-space-5); }
-  .wp-settings__nav { position: static; }
-  .wp-settings__sections { flex-direction: row; flex-wrap: wrap; }
-}
+/* Page area narrower than 660px (usePageWidth; the chat can take the rest). */
+.wp-content[data-lt~="660"] .wp-settings { grid-template-columns: minmax(0, 1fr); gap: var(--wp-space-5); }
+.wp-content[data-lt~="660"] .wp-settings__nav { position: static; }
+.wp-content[data-lt~="660"] .wp-settings__sections { flex-direction: row; flex-wrap: wrap; }
 </style>
 
 <style>

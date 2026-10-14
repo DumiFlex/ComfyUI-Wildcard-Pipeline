@@ -34,7 +34,15 @@ function chip(label: string): VNode {
       title: `${found.shared ?? "Several"} items are called ${found.name}; the answer didn't say which`,
     }, found.name);
   }
-  if (!found) return h("span", { class: "wp-ai-msg__chip", "data-missing": "true" }, label);
+  // `[[id#Name]]`: the name is what reads when the id is unknown.
+  if (!found) return h("span", { class: "wp-ai-msg__chip", "data-missing": "true" }, label.includes("#") ? label.slice(label.indexOf("#") + 1) : label);
+  if (found.pending) {
+    const icon0 = KIND_ICON_MAP[found.type as keyof typeof KIND_ICON_MAP] ?? "pi pi-circle";
+    return h("span", {
+      class: "wp-ai-msg__chip", "data-pending": "true", "data-test": "ai-msg-chip-pending",
+      title: `${found.name} isn't in your library yet: apply its card to create it`,
+    }, [h("i", { class: icon0, "aria-hidden": "true" }), found.name]);
+  }
   const icon = KIND_ICON_MAP[found.type as keyof typeof KIND_ICON_MAP] ?? "pi pi-circle";
   const route = EDIT_ROUTES[found.type];
   return h("button", {
@@ -143,21 +151,45 @@ function item(it: ListItem): VNode {
   ]);
 }
 
-const CALLOUT = /^(tip|note|warning|careful|heads up)\s*:\s*/i;
+const CALLOUT = /^(?:💡|⚠️?|ℹ️?)?\s*(tip|note|warning|careful|heads up)\s*:\s*/i;
+const CALLOUT_EMOJI = /^(💡|⚠️?)\s*/u;
+
+/** A paragraph that opens with "Tip:" / "Warning:" (also written bold,
+ *  "**Tip:**", or as a 💡 / ⚠️ line): its tone and the rest of it. */
+function calloutOf(c: Inline[]): { tone: "tip" | "warn"; rest: Inline[] } | null {
+  const first = c[0];
+  if (first?.t === "text") {
+    const m = CALLOUT.exec(first.v);
+    if (m) return { tone: /warn|careful/i.test(m[1]) ? "warn" : "tip", rest: [{ t: "text", v: first.v.slice(m[0].length) }, ...c.slice(1)] };
+    const e = CALLOUT_EMOJI.exec(first.v);
+    if (e) return { tone: e[1].startsWith("⚠") ? "warn" : "tip", rest: [{ t: "text", v: first.v.slice(e[0].length) }, ...c.slice(1)] };
+  }
+  // "**Tip:** text" or "**Tip**: text".
+  if ((first?.t === "b" || first?.t === "i") && first.c.length === 1 && first.c[0].t === "text") {
+    const label = first.c[0].v.trim();
+    const after = c[1]?.t === "text" ? c[1].v : "";
+    const m = /^(tip|note|warning|careful|heads up)\s*:?$/i.exec(label);
+    if (m && (label.endsWith(":") || after.trimStart().startsWith(":"))) {
+      const rest = c.slice(1);
+      if (rest[0]?.t === "text") rest[0] = { t: "text", v: rest[0].v.replace(/^\s*:?\s*/, "") };
+      return { tone: /warn|careful/i.test(m[1]) ? "warn" : "tip", rest };
+    }
+  }
+  return null;
+}
+
+function callout(tone: "tip" | "warn", rest: Inline[]): VNode {
+  return h("p", { class: "wp-ai-msg__callout", "data-tone": tone }, [
+    h("i", { class: tone === "warn" ? "pi pi-exclamation-triangle" : "pi pi-lightbulb", "aria-hidden": "true" }),
+    h("span", inline(rest)),
+  ]);
+}
 
 function block(b: Block): VNode {
   switch (b.t) {
     case "p": {
-      const first = b.c[0];
-      const m = first?.t === "text" ? CALLOUT.exec(first.v) : null;
-      if (first?.t === "text" && m) {
-        const tone = /warn|careful/i.test(m[1]) ? "warn" : "tip";
-        const rest: Inline[] = [{ t: "text", v: first.v.slice(m[0].length) }, ...b.c.slice(1)];
-        return h("p", { class: "wp-ai-msg__callout", "data-tone": tone }, [
-          h("i", { class: tone === "warn" ? "pi pi-exclamation-triangle" : "pi pi-lightbulb", "aria-hidden": "true" }),
-          h("span", inline(rest)),
-        ]);
-      }
+      const co = calloutOf(b.c);
+      if (co) return callout(co.tone, co.rest);
       return h("p", inline(b.c));
     }
     // Message headings sit under the drawer's own, so they start at h3.
@@ -167,7 +199,11 @@ function block(b: Block): VNode {
         ? h("ol", b.start !== 1 ? { start: b.start } : {}, b.items.map(item))
         : h("ul", b.items.map(item));
     case "pre": return pre(b.lang, b.v);
-    case "quote": return h("blockquote", b.blocks.map(block));
+    case "quote": {
+      // "> Tip: …" is a callout too.
+      const only = b.blocks.length === 1 && b.blocks[0].t === "p" ? calloutOf(b.blocks[0].c) : null;
+      return only ? callout(only.tone, only.rest) : h("blockquote", b.blocks.map(block));
+    }
     case "table": return table(b);
     case "hr": return h("hr");
   }
@@ -259,4 +295,5 @@ const Body = () => blocks.value.map(block);
 .wp-ai-msg :deep(.wp-ai-msg__callout i) { font-size: 12px; color: var(--wp-accent-text); }
 .wp-ai-msg :deep(.wp-ai-msg__callout[data-tone="warn"] i) { color: var(--wp-warn); }
 .wp-ai-msg :deep(.wp-ai-msg__chip[data-missing]) { cursor: default; color: var(--wp-text-muted); background: transparent; border-color: var(--wp-border); }
+.wp-ai-msg :deep(.wp-ai-msg__chip[data-pending]) { cursor: default; border-style: dashed; }
 </style>

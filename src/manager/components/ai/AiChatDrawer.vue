@@ -29,6 +29,7 @@ import Button from "../ui/Button.vue";
 import Select, { type SelectOption } from "../ui/Select.vue";
 import { api } from "../../api/client";
 import AiMessage from "./AiMessage.vue";
+import AiCardView from "./AiCardView.vue";
 import AiPointer from "./AiPointer.vue";
 import AiChatList from "./AiChatList.vue";
 import { useAiChat, type ChatAssistantEntry, type SearchApproval } from "../../composables/useAiChat";
@@ -39,7 +40,7 @@ import type { AiChatPage, AiChatProposal, AiPendingCall } from "../../api/types"
 import { currentPageNote, openEditor } from "../../composables/useOpenEditor";
 import { usePackBuilder } from "../../composables/usePackBuilder";
 import { useCategoryStore } from "../../stores/categoryStore";
-import { cardMeta, cardOptions, draftRoute, otherPreview, type CardOption } from "../../composables/aiCards";
+import { cardMeta, cardOptions, cardView, draftRoute, otherPreview, type CardOption } from "../../composables/aiCards";
 
 const PREVIEW_LINES = 6;
 const SUGGESTIONS = [
@@ -341,17 +342,28 @@ function onKeydown(ev: KeyboardEvent): void {
 
 /** The model that wrote reply `i`, shown on the first reply and whenever
  *  the model changed since the reply before. */
+const FORMAT_LABEL = { native: "native tool calls", json: "JSON steps" } as const;
+
+/** Who answered and how it calls tools, on the first reply and whenever
+ *  either changes. */
 function byLine(i: number): string {
   const entries = chat.entries.value;
   const here = entries[i];
   if (here?.role !== "assistant" || !here.result.model) return "";
+  const said = (e: typeof here): string =>
+    e.result.format ? `${e.result.model} · ${FORMAT_LABEL[e.result.format]}` : e.result.model;
   for (let j = i - 1; j >= 0; j--) {
     const e = entries[j];
-    if (e?.role === "assistant" && e.result.model) {
-      return e.result.model === here.result.model ? "" : here.result.model;
-    }
+    if (e?.role === "assistant" && e.result.model) return said(e) === said(here) ? "" : said(here);
   }
-  return here.result.model;
+  return said(here);
+}
+
+/** Calls the model wrote out as text instead of calling (the server ran
+ *  them anyway): a sign it handles native tools poorly. */
+function rescued(i: number): number {
+  const e = chat.entries.value[i];
+  return e?.role === "assistant" ? e.result.tool_use?.salvaged ?? 0 : 0;
 }
 
 function key(i: number, p: AiChatProposal): string {
@@ -605,6 +617,15 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
           <p v-if="byLine(i)" class="wp-ai-chat__by" data-test="ai-chat-by" :title="`Answered by ${byLine(i)}`">
             <i class="pi pi-microchip-ai" aria-hidden="true" /> {{ byLine(i) }}
           </p>
+          <p
+            v-if="rescued(i)"
+            class="wp-ai-chat__by"
+            data-tone="warn"
+            data-test="ai-chat-rescued"
+            title="The model wrote these calls as text instead of calling its tools. They ran anyway; if it keeps happening, set Settings › AI assistant › Tool format to JSON steps."
+          >
+            <i class="pi pi-exclamation-triangle" aria-hidden="true" /> {{ rescued(i) }} tool call{{ rescued(i) === 1 ? "" : "s" }} written as text
+          </p>
           <ul v-if="entry.result.steps.length" class="wp-ai-chat__steps" data-test="ai-chat-steps">
             <li v-for="(s, j) in entry.result.steps" :key="j" :data-ok="s.ok ? 'true' : 'false'">
               <i :class="['pi', s.ok ? 'pi-check' : 'pi-exclamation-circle']" aria-hidden="true" />
@@ -699,18 +720,20 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
                 @click="toggle(i, p)"
               >{{ expanded.has(key(i, p)) ? "Show less" : `Show all ${cardOptions(p)!.length}` }}</button>
             </div>
-            <ul v-if="otherLines(i, p).length" class="wp-ai-chat__preview">
+            <AiCardView v-if="cardView(p)" :view="cardView(p)!" />
+            <ul v-else-if="otherLines(i, p).length" class="wp-ai-chat__preview">
               <li v-for="(line, j) in otherLines(i, p)" :key="j">{{ line }}</li>
             </ul>
             <button
-              v-if="!cardOptions(p) && p.preview.length > PREVIEW_LINES"
+              v-if="!cardOptions(p) && !cardView(p) && p.preview.length > PREVIEW_LINES"
               type="button"
               class="wp-ai-chat__more"
               data-test="ai-chat-more"
               @click="toggle(i, p)"
             >{{ expanded.has(key(i, p)) ? "Show less" : `Show all ${p.preview.length}` }}</button>
-            <ul v-if="p.warnings.length" class="wp-ai-chat__warnings">
-              <li v-for="(w, j) in p.warnings" :key="j"><i class="pi pi-exclamation-triangle" aria-hidden="true" /> {{ w }}</li>
+            <ul v-if="p.warnings.length || chat.linkWarnings(entry, p).length" class="wp-ai-chat__warnings">
+              <li v-for="w in chat.linkWarnings(entry, p)" :key="w" data-test="ai-chat-link-warning"><i class="pi pi-exclamation-triangle" aria-hidden="true" /> {{ w }}</li>
+              <li v-for="(w, j) in p.warnings" :key="j"><i class="pi pi-exclamation-triangle" aria-hidden="true" /> <AiMessage v-if="w.includes('[[')" class="wp-ai-chat__warning-text" :text="w" :refs="entry.result.refs" /><template v-else>{{ w }}</template></li>
             </ul>
             <p v-if="entry.errors[p.pid]" class="wp-ai-chat__error" role="alert">{{ entry.errors[p.pid] }}</p>
             <div class="wp-ai-chat__actions">
@@ -767,6 +790,16 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
                   @click="chat.openInEditor(entry, p)"
                 >Open in editor</Button>
                 <Button
+                  v-if="chat.blockedReason(entry, p) && chat.chainOf(entry, p).length"
+                  variant="primary"
+                  size="sm"
+                  icon="pi-check"
+                  :title="`Applies ${chat.chainOf(entry, p).map((x) => x.p.title).join(', ')} first`"
+                  data-test="ai-chat-apply-all"
+                  @click="chat.applyAll(entry, p)"
+                >Apply all {{ chat.chainOf(entry, p).length + 1 }}</Button>
+                <Button
+                  v-else
                   variant="primary"
                   size="sm"
                   icon="pi-check"
@@ -968,6 +1001,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
   border: 0; background: none; padding: 0; font: inherit; font-size: 11px; color: var(--wp-accent-text);
   cursor: pointer; text-decoration: underline;
 }
+.wp-ai-chat__by[data-tone="warn"] { color: var(--wp-warning, #d9a400); }
 .wp-ai-chat__by {
   display: flex; align-items: center; gap: 5px; margin: 0 0 4px;
   font-family: var(--wp-font-mono, monospace); font-size: 11px; color: var(--wp-text-dim);
@@ -1021,6 +1055,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
   font-family: var(--wp-font-mono, monospace); font-size: 12px; overflow-wrap: anywhere;
 }
 .wp-ai-chat__more { align-self: flex-start; border: 0; background: none; padding: 0; font-size: 12px; color: var(--wp-accent-text); cursor: pointer; }
+.wp-ai-chat__warning-text { display: inline; }
+.wp-ai-chat__warning-text :deep(p) { display: inline; margin: 0; }
 .wp-ai-chat__warnings { list-style: none; margin: 0; padding: 0; font-size: 12px; color: var(--wp-warn); display: flex; flex-direction: column; gap: 2px; }
 .wp-ai-chat__actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .wp-ai-chat__done { font-size: 12px; color: var(--wp-success); margin-right: auto; display: inline-flex; gap: 5px; align-items: center; }

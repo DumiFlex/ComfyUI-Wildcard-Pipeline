@@ -107,7 +107,7 @@ function toggle(name: string): void {
   color: var(--wp-accent-text); font-size: var(--wp-text-xs); margin-left: var(--wp-space-3);
 }
 .wp-trv__link:focus-visible { outline: 2px solid var(--wp-border-focus); }
-.wp-trv__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: var(--wp-space-6); }
+.wp-trv__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(400px, 100%), 1fr)); gap: var(--wp-space-6); }
 .wp-trv__var {
   background: var(--wp-bg-1); border: 1px solid var(--wp-border); border-radius: var(--wp-radius);
   padding: var(--wp-space-5) var(--wp-space-6); display: flex; flex-direction: column; gap: var(--wp-space-3);

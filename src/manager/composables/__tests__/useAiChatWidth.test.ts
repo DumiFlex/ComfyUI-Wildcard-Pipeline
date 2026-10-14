@@ -19,11 +19,12 @@ describe("useAiChatWidth", () => {
   afterEach(() => document.documentElement.style.removeProperty("--wp-ai-chat-w"));
 
   it("keeps the width between the minimum and what leaves the page room", () => {
-    expect(maxWidth(1600)).toBe(960);
-    expect(maxWidth(1000)).toBe(640);
+    expect(maxWidth(1600)).toBe(840);
+    expect(maxWidth(1200)).toBe(440);
+    expect(maxWidth(1000)).toBe(AI_CHAT_MIN);
     expect(maxWidth(500)).toBe(AI_CHAT_MIN);
     expect(clampWidth(100, 1600)).toBe(AI_CHAT_MIN);
-    expect(clampWidth(5000, 1000)).toBe(640);
+    expect(clampWidth(5000, 1200)).toBe(440);
     expect(clampWidth(Number.NaN)).toBe(AI_CHAT_DEFAULT);
   });
 
@@ -49,7 +50,7 @@ describe("useAiChatWidth", () => {
     key("ArrowRight", true);
     expect(api.width.value).toBe(392);
     key("End");
-    expect(api.width.value).toBe(960);
+    expect(api.width.value).toBe(840);
     key("Home");
     expect(api.width.value).toBe(AI_CHAT_MIN);
     api.reset();
@@ -58,14 +59,14 @@ describe("useAiChatWidth", () => {
   });
 
   it("fits a smaller window without forgetting the chosen width", () => {
-    localStorage.setItem("wp-ai-chat-width", "900");
+    localStorage.setItem("wp-ai-chat-width", "800");
     const { api } = host();
-    expect(api.width.value).toBe(900);
-    Object.defineProperty(window, "innerWidth", { value: 1000, configurable: true });
+    expect(api.width.value).toBe(800);
+    Object.defineProperty(window, "innerWidth", { value: 1200, configurable: true });
     window.dispatchEvent(new Event("resize"));
-    expect(api.width.value).toBe(640);
+    expect(api.width.value).toBe(440);
     Object.defineProperty(window, "innerWidth", { value: 1600, configurable: true });
     window.dispatchEvent(new Event("resize"));
-    expect(api.width.value).toBe(900);
+    expect(api.width.value).toBe(800);
   });
 });

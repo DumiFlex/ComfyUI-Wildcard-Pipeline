@@ -157,7 +157,8 @@ describe("AiChatDrawer", () => {
     const cards = w.findAll('[data-test="ai-chat-proposal"]');
     expect(cards).toHaveLength(3);
     // The third builds on the second, so it waits.
-    expect(cards[2].get('[data-test="ai-chat-apply"]').attributes("disabled")).toBeDefined();
+    expect(cards[2].find('[data-test="ai-chat-apply"]').exists()).toBe(false);
+    expect(cards[2].get('[data-test="ai-chat-apply-all"]').text()).toBe("Apply all 2");
     expect(cards[2].text()).toContain('Apply "Add 1 options to Outfit" first');
 
     await cards[0].get('[data-test="ai-chat-apply"]').trigger("click");
@@ -517,7 +518,22 @@ describe("AiChatDrawer", () => {
     w.unmount();
   });
 
+  it("applies a card and the cards it needs, in order", async () => {
+    const { w } = await mountIt();
+    await w.get('[data-test="ai-chat-input"]').setValue("make weather and more outfits");
+    await w.get('[data-test="ai-chat-input"]').trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    const cards = w.findAll('[data-test="ai-chat-proposal"]');
+    await cards[2].get('[data-test="ai-chat-apply-all"]').trigger("click");
+    await flushPromises();
+    expect(cards[1].attributes("data-status")).toBe("applied");
+    expect(cards[2].attributes("data-status")).toBe("applied");
+    expect(cards[0].attributes("data-status")).toBe("pending");
+    w.unmount();
+  });
+
   it("resizes from its left edge", async () => {
+    Object.defineProperty(window, "innerWidth", { value: 1600, configurable: true });
     const { w } = await mountIt();
     const grip = w.get('[data-test="ai-chat-grip"]');
     expect(grip.attributes("role")).toBe("separator");

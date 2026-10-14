@@ -37,7 +37,9 @@ import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
 import { useEditorDraft } from "../composables/useEditorDraft";
-import { registerOpenEditor, type StagedDraft } from "../composables/useOpenEditor";
+import {
+  registerOpenEditor, draftCreateId, draftSaved, type StagedDraft,
+} from "../composables/useOpenEditor";
 import { registerAiAction } from "../composables/useAiActions";
 import DraftBanner from "../components/DraftBanner.vue";
 import { useReturnTo } from "../composables/useReturnTo";
@@ -242,6 +244,9 @@ const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => bulkPending.value || aiPending.value || snapshot() !== baseline.value,
 );
 
+/** The chat's draft this new wildcard was opened with (Save creates it at
+ *  the id the card reserved and marks the card applied). */
+let chatDraft: StagedDraft | null = null;
 const fillFromChat = registerOpenEditor({
   id: props.id, type: "wildcard", dirty: () => dirty.value,
   name, description, tags, categoryId, contentRating,
@@ -1074,7 +1079,10 @@ onMounted(async () => {
   subcatOpen.value = resolveSubcatDefaultOpen();
   baseline.value = snapshot();
   // "Open in editor" on a chat card: the proposed wildcard, unsaved.
-  if (!props.id) chatDraftNote(fillFromChat());
+  if (!props.id) {
+    chatDraft = fillFromChat();
+    chatDraftNote(chatDraft);
+  }
 });
 
 function chatDraftNote(d: StagedDraft | null): void {
@@ -1970,16 +1978,18 @@ async function save() {
       historyEntries.value = nextHistory;
       recent.push({ id: props.id, kind: "wildcard", name: name.value });
     } else {
-      // New mode: moduleStore.create() does not expose the new id on the
-      // returned row in a way that's stable across mock/real backends.
-      // The next time the user opens this item the mount-time push fires.
-      await moduleStore.create({
+      // New mode: the mount-time recent push fires next time the item opens.
+      // A chat draft is created at the id its card reserved.
+      const created = await moduleStore.create({
+        ...draftCreateId(chatDraft),
         type: "wildcard",
         name: name.value, description: description.value,
         category_id: categoryId.value, tags: tags.value,
         payload: newPayload,
         content_rating: contentRating.value,
       });
+      draftSaved(chatDraft, created?.id);
+      chatDraft = null;
     }
     draft.discard();
     setSaveState("saved", 1500);

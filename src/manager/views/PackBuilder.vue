@@ -557,7 +557,8 @@ function openTemplate(): void {
 .wp-pack__off { color: var(--wp-text-muted); }
 .wp-pack__describe { max-width: 760px; }
 .wp-pack__grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
-@media (max-width: 1000px) { .wp-pack__grid { grid-template-columns: minmax(0, 1fr); } }
+/* Page area narrower than 800px (usePageWidth; the chat can take the rest). */
+.wp-content[data-lt~="800"] .wp-pack__grid { grid-template-columns: minmax(0, 1fr); }
 .wp-pack__col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .wp-pack__hint { margin: 0 0 10px; color: var(--wp-text-muted); font-size: 13px; }
 .wp-pack__request { width: 100%; resize: vertical; font-size: 13px; }

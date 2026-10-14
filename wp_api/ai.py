@@ -1286,6 +1286,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     lib.earlier_proposals = dict(meta.get("proposals") or {})
     _adopt_earlier(lib, log, meta)
     proposals: list[dict[str, Any]] = []
+    tool_use = {"calls": 0, "salvaged": 0}
     steps: list[dict[str, Any]] = first_steps
     pause: list[dict[str, Any]] = []
     message = ""
@@ -1368,6 +1369,10 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         said = ai_safety.strip_invisible(st["message"])[:ai_chat.MAX_MESSAGE]
         calls = st["calls"][:ai_chat.MAX_CALLS_PER_STEP]
         dropped = len(st["calls"]) - len(calls)
+        # How the model called its tools this answer, for the drawer's badge.
+        tool_use["calls"] += len(calls)
+        if st.get("salvaged"):
+            tool_use["salvaged"] += len(calls)
         new.append(ai_chatlog.step_entry(ai_safety.strip_invisible(st["text"]), calls,
                                          answer=st["answer"], usage=usage,
                                          model=str(cfg.get("model") or "")))
@@ -1492,8 +1497,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                     gone = meta["proposals"].get(out["replaces"])
                     if gone is not None:
                         meta["proposals"][out["replaces"]] = {**gone, "status": "replaced"}
-                result(f"{tool}: proposal {out['pid']} shown to the user: {out['title']}"
-                       + extra)
+                result(ai_chat.proposal_note(tool, out) + extra)
                 steps.append({"tool": tool, "note": out["title"], "ok": True})
         if emit:
             for s_ in steps[sent_steps:]:
@@ -1591,8 +1595,10 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     meta["model"] = cfg.get("model")
     out: dict[str, Any] = {
         "message": message, "proposals": proposals, "steps": steps,
-        "model": cfg["model"], "format": fmt, "usage": usage,
-        "refs": lib.message_refs(message),
+        "model": cfg["model"], "format": fmt, "usage": usage, "tool_use": tool_use,
+        # Card warnings name items too ("$coat is already set by [[id#Coat]]").
+        "refs": lib.message_refs("\n".join([message, *(w for p_ in proposals
+                                                          for w in p_.get("warnings") or [])])),
         # Calls for the browser to run (or the user to allow) before the
         # turn goes on; it posts their results back as `results`.
         "pending": [{k: c[k] for k in ("id", "tool", "args", "label")} for c in pause],
@@ -1600,7 +1606,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     # What the user saw, for reopening the chat later (the model never
     # reads it).
     new.append(ai_chatlog.shown_entry({k: out[k] for k in (
-        "message", "proposals", "steps", "refs", "model", "pending")}))
+        "message", "proposals", "steps", "refs", "model", "pending", "format", "tool_use")}))
     out["context"] = _context(cfg, meta, log + new, len(system_for()), usage, window)
     with db_session(request) as conn:
         repo = ChatRepository(conn)

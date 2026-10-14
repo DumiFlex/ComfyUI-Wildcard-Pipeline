@@ -406,12 +406,15 @@ def _usage_anthropic(data: dict[str, Any]) -> dict[str, Any]:
 def _native_step(text: Any, calls: list[dict[str, Any]], names: set[str],
                  usage: dict[str, Any]) -> dict[str, Any]:
     text = strip_thinking(text if isinstance(text, str) else "")
+    salvaged = False
     if not calls:
         calls = salvage_calls(text, names)
         if calls:
             text = ""
+            salvaged = True
     return {"text": text, "calls": calls, "answer": None, "usage": usage,
-            "message": "" if calls else text, "plan": text if calls else ""}
+            "message": "" if calls else text, "plan": text if calls else "",
+            "salvaged": salvaged}
 
 
 def _json_step(raw_text: str, answer: Any, usage: dict[str, Any]) -> dict[str, Any]:

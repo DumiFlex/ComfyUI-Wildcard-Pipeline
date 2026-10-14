@@ -37,7 +37,9 @@ import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
 import { useEditorDraft } from "../composables/useEditorDraft";
-import { registerOpenEditor } from "../composables/useOpenEditor";
+import {
+  registerOpenEditor, draftCreateId, draftSaved, type StagedDraft,
+} from "../composables/useOpenEditor";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -266,11 +268,32 @@ const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => aiPending.value || snapshot() !== baseline.value,
 );
 
-// The chat reads and edits this item's info here; its payload stays on Save.
-registerOpenEditor({
+/** Load a stored payload into the editor (saved row or chat draft). An empty
+ *  output var falls back to the item's name, as a new combine's does. */
+function loadPayload(p: Partial<CombinePayload>, itemName: string): void {
+  template.value = p.template ?? "";
+  negative.value = p.negative ?? "";
+  const o = (p.output_var ?? "").replace(/^\$+/, "");
+  if (o.trim()) {
+    outputVar.value = o;
+    outputVarTouched.value = true;
+  } else {
+    outputVar.value = toIdentifier(itemName);
+  }
+}
+
+// The chat reads and edits this item's info here; an existing item's payload
+// stays on Save. A new item takes the payload of a draft the chat staged.
+const fillFromChat = registerOpenEditor({
   id: props.id, type: "combine", dirty: () => dirty.value,
   name, description, tags, categoryId, contentRating,
+  ...(props.id ? {} : {
+    setPayload: (p: Record<string, unknown>) => loadPayload(p as Partial<CombinePayload>, name.value),
+  }),
 });
+/** The chat's draft this new combine was opened with (Save creates it at the
+ *  id the card reserved and marks the card applied). */
+let chatDraft: StagedDraft | null = null;
 
 const draft = useEditorDraft({
   kind: "combine",
@@ -418,16 +441,7 @@ onMounted(async () => {
       categoryId.value = row.category_id;
       tags.value = row.tags;
       contentRating.value = row.content_rating ?? "safe";
-      const p = row.payload as Partial<CombinePayload>;
-      template.value = p.template ?? "";
-      negative.value = p.negative ?? "";
-      const o = (p.output_var ?? "").replace(/^\$+/, "");
-      if (o.trim()) {
-        outputVar.value = o;
-        outputVarTouched.value = true;
-      } else {
-        outputVar.value = toIdentifier(row.name);
-      }
+      loadPayload(row.payload as Partial<CombinePayload>, row.name);
       savedOutputVar.value = outputVar.value;
       historyEntries.value = readHistory(row.payload);
       recent.push({ id: props.id, kind: "combine", name: name.value });
@@ -437,7 +451,23 @@ onMounted(async () => {
     }
   }
   baseline.value = snapshot();
+  // "Open in editor" on a chat card: the proposed combine, unsaved.
+  if (!props.id) {
+    chatDraft = fillFromChat();
+    chatDraftNote(chatDraft);
+  }
 });
+
+function chatDraftNote(d: StagedDraft | null): void {
+  if (!d) return;
+  toast.push({
+    severity: "info",
+    summary: "From the assistant",
+    detail: d.newCategory
+      ? `Check it and Save to keep it. It suggested a new category, "${d.newCategory}": create it from the Category picker if you want it.`
+      : "Check it and Save to keep it.",
+  });
+}
 
 function applyRestore(entry: ModuleHistoryEntry): void {
   name.value = entry.name;
@@ -532,9 +562,9 @@ async function save() {
       historyEntries.value = nextHistory;
       recent.push({ id: props.id, kind: "combine", name: name.value });
     } else {
-      // New mode: the new row id is not surfaced here; mount-time push fires
-      // next time the user opens this item.
-      await moduleStore.create({
+      // New mode: a chat draft is created at the id its card reserved.
+      const created = await moduleStore.create({
+        ...draftCreateId(chatDraft),
         type: "combine",
         name: name.value,
         description: description.value,
@@ -543,6 +573,8 @@ async function save() {
         content_rating: contentRating.value,
         payload: newPayload,
       });
+      draftSaved(chatDraft, created?.id);
+      chatDraft = null;
     }
     draft.discard();
     setSaveState("saved", 1500);

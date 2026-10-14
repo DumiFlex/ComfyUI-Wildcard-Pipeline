@@ -100,7 +100,10 @@ export type DerivationOp =
   | "is_set"
   | "is_unset"
   | "is_empty"
-  | "is_not_empty";
+  | "is_not_empty"
+  // The editor's NOT toggle (schema v10).
+  | "not_contains"
+  | "not_matches";
 /** `negative` (schema v8) is "Add to negative": the value is added to the
  *  target variable's negatives and the variable itself is left alone.
  *  `negative_replace` (v8) is "Replace negative": the value becomes the
@@ -1264,6 +1267,22 @@ export type AiChatOp =
   | {
       op: "categories"; kind: "categories"; create: string[];
       rename: Array<{ id: string; from: string; to: string }>;
+      /** Colors and icons: on a new category by name; on one that exists
+       *  by id, with what it had for Undo. */
+      styles?: Array<{
+        name: string; id?: string; color?: string; icon?: string;
+        before?: { color: string | null; icon: string | null };
+      }>;
+    }
+  /** One change to many items (`update_many`). `to_new`: into the
+   *  category the card creates (`new_category`). */
+  | {
+      op: "bulk"; kind: "bulk"; new_category: string;
+      items: Array<{
+        kind: "module" | "bundle" | "template"; id: string; name: string; to_new?: boolean;
+        body: { category_id?: string | null; tags?: string[]; content_rating?: "safe" | "nsfw" };
+        before: { category_id?: string | null; tags?: string[]; content_rating?: string };
+      }>;
     }
   | {
       op: "tags"; kind: "tags";
@@ -1302,6 +1321,12 @@ export interface AiChatProposal {
   warnings: string[];
   /** The proposal this one builds on (same item); apply that first. */
   after: string | null;
+  /** Every card this one points at (a constraint between two new
+   *  wildcards needs both); `after` is the last of them. */
+  needs?: string[];
+  /** Names of the items the card points at, by id (a constraint's source
+   *  and target, proposed ones too). */
+  names?: Record<string, string>;
   /** An earlier answer's unapplied card this one replaces (an edit of an
    *  item that card would create). */
   replaces?: string;
@@ -1320,6 +1345,9 @@ export interface AiChatResult {
   model: string;
   /** How this chat calls tools. */
   format?: "native" | "json";
+  /** Tool calls this answer made, and how many of them the server rescued
+   *  from text (a native-mode model that wrote its calls out). */
+  tool_use?: { calls: number; salvaged: number };
   usage?: AiChatUsage;
   /** [[Name]] mentions in `message` that name a real item. */
   refs?: Record<string, AiChatRef>;
@@ -1386,7 +1414,11 @@ export type AiChatStreamEvent =
 /** A library item an assistant message mentions. */
 /** An item an answer mentions. `shared`: that many items have this name
  *  and the answer didn't say which, so the chip opens nothing. */
-export interface AiChatRef { id: string; type: string; name: string; shared?: string }
+export interface AiChatRef {
+  id: string; type: string; name: string; shared?: string;
+  /** The card (pid) that creates it: not in the library yet. */
+  pending?: string;
+}
 
 /* ── Pack builder ───────────────────────────────────────────────────── */
 

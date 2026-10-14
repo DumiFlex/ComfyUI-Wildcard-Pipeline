@@ -145,20 +145,45 @@ describe("DerivationRuleCard.vue", () => {
     expect(prefixes[0].text()).toBe("$");
   });
 
-  it("op dropdown lists 6 visible base ops (refinement surfaced via segmented switch)", () => {
-    // 2026-05-24 final design: dropdown shows 4 compare ops + 2 presence
-    // ops. When `exists` is selected an inline segmented switch appears
-    // with positions any / is empty / has value, mapping to ops
-    // exists / is_empty / is_set respectively. `not_exists` has no
-    // refinement (no value to check when key is absent).
+  it("op dropdown lists the 4 plain tests; NOT turns them around", () => {
+    // 2026-10 design: the dropdown shows equals / contains / matches /
+    // exists, and a NOT toggle beside it stores the negated op. Under
+    // `exists` a segmented switch picks any / is empty / has value.
     const wrap = mountCard(makeRule(), 0);
     const selectComp = wrap.find('[data-test="cond-op-0-0"]')
       .findComponent({ name: "Select" });
     const opts = selectComp.props("options") as Array<{ value: string }>;
-    const values = opts.map((o) => o.value);
-    expect(values).toEqual([
-      "equals", "not_equals", "contains", "matches", "exists", "not_exists",
-    ]);
+    expect(opts.map((o) => o.value)).toEqual(["equals", "contains", "matches", "exists"]);
+  });
+
+  it.each([
+    ["equals", "not_equals"], ["contains", "not_contains"], ["matches", "not_matches"],
+    ["exists", "not_exists"], ["is_set", "is_unset"], ["is_empty", "is_unset"],
+    ["not_contains", "contains"], ["is_unset", "is_set"],
+  ] as const)("NOT on %s stores %s", async (from, to) => {
+    const rule = makeRule({
+      branches: [{
+        condition: { var: "x", op: from, value: "v" },
+        action: { target_var: "out", mode: "replace", value: "v" },
+      }],
+    });
+    const wrap = mountCard(rule, 0);
+    await wrap.find('[data-test="cond-not-0-0"]').trigger("click");
+    const emitted = JSON.stringify(wrap.emitted());
+    expect(emitted).toContain(`"op":"${to}"`);
+  });
+
+  it("an old negated op shows as its plain test with NOT on", () => {
+    const rule = makeRule({
+      branches: [{
+        condition: { var: "x", op: "not_equals", value: "v" },
+        action: { target_var: "out", mode: "replace", value: "v" },
+      }],
+    });
+    const wrap = mountCard(rule, 0);
+    expect(wrap.find('[data-test="cond-not-0-0"]').attributes("aria-pressed")).toBe("true");
+    const selectComp = wrap.find('[data-test="cond-op-0-0"]').findComponent({ name: "Select" });
+    expect(selectComp.props("modelValue")).toBe("equals");
   });
 
   it("each op option carries a tooltip via title attribute", () => {
@@ -316,8 +341,8 @@ describe("DerivationRuleCard.vue", () => {
     expect(wrap.find('[data-test="cond-refinement-0-0"]').exists()).toBe(true);
   });
 
-  it("refinement switch is hidden for compare ops + not_exists", () => {
-    for (const op of ["equals", "not_equals", "contains", "matches", "not_exists"] as const) {
+  it("refinement switch is hidden for compare ops", () => {
+    for (const op of ["equals", "not_equals", "contains", "matches", "not_contains"] as const) {
       const rule = makeRule({
         branches: [{
           condition: { var: "x", op, value: "" },

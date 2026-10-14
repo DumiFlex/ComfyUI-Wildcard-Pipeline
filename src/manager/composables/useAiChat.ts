@@ -35,7 +35,7 @@ import { openEditor, stageDraft } from "./useOpenEditor";
 import { useAiConfig } from "./useAiConfig";
 import { applyManage, isManageOp, undoManage } from "./aiManageOps";
 import { EDIT_ROUTES, runCall, type AiActionHost } from "./useAiActions";
-import { cardOptions, draftRoute, withoutOptions } from "./aiCards";
+import { cardOptions, draftRoute, draftType, withoutOptions } from "./aiCards";
 import { MAX_IMAGES, prepareImage, type ChatImage } from "../utils/chat-image";
 
 /** The user's answer to a web search the model asked for. */
@@ -483,11 +483,87 @@ function blockedReason(entry: ChatAssistantEntry, p: AiChatProposal): string {
       return "The editor changed since; ask again";
     }
   }
-  if (!p.after || entry.status[p.after] === "applied" || entry.status[p.after] === "editor") {
-    return "";
+  for (const need of needsOf(p)) {
+    const found = cardOf(entry, need);
+    const st = found?.entry.status[need];
+    if (st === "applied" || st === "editor" || st === "replaced") continue;
+    const title = found?.p.title ?? "the earlier change";
+    if (st === "dismissed") return `"${title}" was dismissed, and this card points at it`;
+    return `Apply "${title}" first`;
   }
-  const first = entry.result.proposals.find((x) => x.pid === p.after);
-  return `Apply "${first?.title ?? "the earlier change"}" first`;
+  return "";
+}
+
+/** The cards a card needs applied first, in order. */
+function needsOf(p: AiChatProposal): string[] {
+  return p.needs?.length ? p.needs : p.after ? [p.after] : [];
+}
+
+/** A card by id: in this answer or an earlier one of this chat. */
+function cardOf(entry: ChatAssistantEntry, pid: string): { entry: ChatAssistantEntry; p: AiChatProposal } | null {
+  for (const e of [entry, ...entries.value]) {
+    if (e.role !== "assistant") continue;
+    const p = e.result.proposals.find((x) => x.pid === pid);
+    if (p) return { entry: e, p };
+  }
+  return null;
+}
+
+/** The unapplied cards `p` needs (and what they need), first to last:
+ *  what "Apply all" applies before it. Empty when one was dismissed. */
+function chainOf(entry: ChatAssistantEntry, p: AiChatProposal): Array<{ entry: ChatAssistantEntry; p: AiChatProposal }> {
+  const out: Array<{ entry: ChatAssistantEntry; p: AiChatProposal }> = [];
+  const seen = new Set<string>();
+  const walk = (e: ChatAssistantEntry, card: AiChatProposal): boolean => {
+    for (const need of needsOf(card)) {
+      if (seen.has(need)) continue;
+      seen.add(need);
+      const found = cardOf(e, need);
+      if (!found) return false;
+      const st = found.entry.status[need];
+      if (st === "applied" || st === "editor" || st === "replaced") continue;
+      if (st) return false;
+      if (!walk(found.entry, found.p)) return false;
+      out.push(found);
+    }
+    return true;
+  };
+  return walk(entry, p) ? out : [];
+}
+
+/** Rules on a new constraint card that point at options the user unticked
+ *  on the wildcard card it needs: those rules would do nothing. */
+function linkWarnings(entry: ChatAssistantEntry, p: AiChatProposal): string[] {
+  const op = p.op;
+  if (op.op !== "create" || op.kind !== "module" || op.body.type !== "constraint") return [];
+  const payload = op.body.payload as { source_wildcard_id?: string; target_wildcard_id?: string;
+    exceptions?: Array<{ source?: string; target?: string; source_id?: string; target_id?: string }> };
+  const out: string[] = [];
+  for (const need of needsOf(p)) {
+    const found = cardOf(entry, need);
+    if (!found || found.p.op.op !== "create") continue;
+    const wid = (found.p.op.body as { id?: string }).id;
+    const skip = skipped(found.entry, found.p);
+    if (!wid || !skip.size) continue;
+    const side = wid === payload.source_wildcard_id ? "source" : wid === payload.target_wildcard_id ? "target" : "";
+    if (!side) continue;
+    const lost = (payload.exceptions ?? []).filter((e) => skip.has(String(e[`${side}_id`] ?? "")))
+      .map((e) => e[side] ?? "");
+    if (lost.length) {
+      out.push(`Rules for ${lost.slice(0, 4).join(", ")} point at options unticked on "${found.p.title}"; they'll do nothing`);
+    }
+  }
+  return out;
+}
+
+/** Apply the cards `p` needs, in order, then `p`. Stops at the first that
+ *  fails (its card shows why). */
+async function applyAll(entry: ChatAssistantEntry, p: AiChatProposal): Promise<void> {
+  for (const step of chainOf(entry, p)) {
+    await apply(step.entry, step.p);
+    if (step.entry.status[step.p.pid] !== "applied") return;
+  }
+  await apply(entry, p);
 }
 
 async function categoryId(name: string | undefined): Promise<string | null | undefined> {
@@ -527,10 +603,21 @@ async function openInEditor(entry: ChatAssistantEntry, p: AiChatProposal): Promi
   const op = withoutOptions(p.op, skip);
   delete entry.errors[p.pid];
   try {
-    if (op.op === "create" && op.kind === "module") {
+    if (op.op === "create") {
       const route = draftRoute(p);
       if (!route) return;
-      stageDraft({ type: op.body.type, body: { ...op.body }, newCategory: op.new_category || undefined });
+      const reserved = (op.body as { id?: unknown }).id;
+      stageDraft({
+        type: draftType(p), body: { ...op.body }, newCategory: op.new_category || undefined,
+        ...(typeof reserved === "string" && op.kind === "module" ? { id: reserved } : {}),
+        // Save in the editor applies the card.
+        onSaved: (id) => {
+          entry.created[p.pid] = id;
+          entry.status[p.pid] = "applied";
+          record(p.pid, "applied", id, skip.size);
+          touch();
+        },
+      });
       if (!(await host.navigate({ name: route }))) {
         stageDraft({ type: "", body: {} });
         entry.errors[p.pid] = "Couldn't open the editor: the page you're on has unsaved changes.";
@@ -578,7 +665,7 @@ async function openProposal(current: ChatAssistantEntry, pid: string): Promise<s
     const status = entry.status[pid];
     if (status && status !== "opened") return `couldn't: that card is already ${status}`;
     if (p.op.op === "create" && !draftRoute(p)) {
-      return "couldn't: only new wildcards and derivations open unsaved; the user has to apply this card";
+      return "couldn't: this card doesn't open in an editor; the user has to apply it";
     }
     if (p.op.op !== "create" && !(p.op.op === "update" && p.op.kind === "module")) {
       return "couldn't: this card doesn't open in an editor; the user has to apply it";
@@ -716,7 +803,7 @@ export function useAiChat() {
   return {
     open, input, entries, loading, error, started, queued, chatId, asking, running, live,
     context, compacting,
-    send, stop, reset, apply, undo, dismiss, blockedReason, ask, answerSearch, attach,
+    send, stop, reset, apply, applyAll, chainOf, linkWarnings, undo, dismiss, blockedReason, ask, answerSearch, attach,
     toggleOption, setAllOptions, openInEditor,
     retry, retryBlocked, load, compact,
     attachments, vision, visionModel, addFiles, removeAttachment, checkVision,

@@ -3,12 +3,12 @@
  * One derivation test — "WHEN $var is <op> [value]". Rendered once per test by
  * DerivationConditionEditor, which arranges tests into AND / OR groups.
  *
- * The op dropdown lists the 6 base ops. Emptiness refinement (`is_empty` /
- * `is_set`) is surfaced via a segmented switch shown only when `exists` is
- * selected — three positions:
- *   • "any"       → bare `exists` (key in ctx, value irrelevant)
- *   • "is empty"  → `is_empty`  (key in ctx AND value === "")
- *   • "has value" → `is_set`    (key in ctx AND value !== "")
+ * The op dropdown lists the plain tests (equals, contains, matches, exists);
+ * the NOT toggle beside it turns the test around (not_equals, not_contains,
+ * not_matches, not_exists). Under `exists` a segmented switch refines it:
+ *   • "any"       → `exists` (key in ctx, value irrelevant); NOT → `not_exists`
+ *   • "is empty"  → `is_empty` (key in ctx AND value === "")
+ *   • "has value" → `is_set` (key in ctx AND value !== ""); NOT → `is_unset`
  * This lets users tell "did this wildcard run?" from "did it run and resolve
  * to the null option?" from "did it run and produce a value?".
  */
@@ -46,42 +46,53 @@ const emit = defineEmits<{ "update:modelValue": [value: DerivationCondition] }>(
 
 defineSlots<{ lead?(): unknown; actions?(): unknown }>();
 
-const VISIBLE_OPS: DerivationOp[] = [
-  "equals", "not_equals", "contains", "matches", "exists", "not_exists",
-];
-const OP_OPTIONS: Array<{ label: string; value: DerivationOp; title: string }> =
-  VISIBLE_OPS.map((op) => ({ label: OP_LABELS[op], value: op, title: OP_TOOLTIPS[op] }));
-
-/** Dropdown op: the refinement variants of `exists` (is_set / is_empty) and
- *  `not_exists` (is_unset / is_not_empty) collapse onto their base op. */
-function displayedOp(op: DerivationOp): DerivationOp {
-  if (op === "is_set" || op === "is_empty") return "exists";
-  if (op === "is_unset" || op === "is_not_empty") return "not_exists";
-  return op;
-}
+/** The dropdown lists the plain tests; the NOT toggle beside it picks the
+ *  negated op (equals → not_equals, contains → not_contains, …). */
+type BaseOp = "equals" | "contains" | "matches" | "exists";
+const BASE_OPS: BaseOp[] = ["equals", "contains", "matches", "exists"];
+const OP_OPTIONS: Array<{ label: string; value: BaseOp; title: string }> =
+  BASE_OPS.map((op) => ({ label: OP_LABELS[op], value: op, title: OP_TOOLTIPS[op] }));
 
 type EmptinessRefinement = "any" | "empty" | "value";
 
-function emptinessFor(op: DerivationOp): EmptinessRefinement {
-  if (op === "is_empty") return "empty";
-  if (op === "is_set" || op === "is_not_empty") return "value";
-  return "any";
+interface Parts { base: BaseOp; not: boolean; refinement: EmptinessRefinement }
+
+/** A stored op as dropdown test + NOT + (for exists) any / empty / has value. */
+function partsOf(op: DerivationOp): Parts {
+  switch (op) {
+    case "not_equals": return { base: "equals", not: true, refinement: "any" };
+    case "not_contains": return { base: "contains", not: true, refinement: "any" };
+    case "not_matches": return { base: "matches", not: true, refinement: "any" };
+    case "not_exists": return { base: "exists", not: true, refinement: "any" };
+    case "is_empty": return { base: "exists", not: false, refinement: "empty" };
+    case "is_set":
+    case "is_not_empty": return { base: "exists", not: false, refinement: "value" };
+    case "is_unset": return { base: "exists", not: true, refinement: "value" };
+    case "equals": case "contains": case "matches": case "exists":
+      return { base: op, not: false, refinement: "any" };
+  }
 }
 
-/** Compose the storage op from base + refinement. `not_exists` has no
- *  refinement: the var being absent dominates any emptiness question. */
-function composeOp(base: DerivationOp, refinement: EmptinessRefinement): DerivationOp {
-  if (base === "exists") {
-    if (refinement === "empty") return "is_empty";
-    if (refinement === "value") return "is_set";
-    return "exists";
+/** The stored op for dropdown test + NOT + refinement. "Has value" is
+ *  stored as `is_set` (same test as `is_not_empty`), NOT has value as
+ *  `is_unset` (missing or empty). NOT + "is empty" has no op of its own,
+ *  so NOT on that refinement turns into NOT has value. */
+function composeOp(p: Parts): DerivationOp {
+  if (p.base === "exists") {
+    if (p.refinement === "empty") return p.not ? "is_unset" : "is_empty";
+    if (p.refinement === "value") return p.not ? "is_unset" : "is_set";
+    return p.not ? "not_exists" : "exists";
   }
-  if (base === "not_exists") return "not_exists";
-  return base;
+  if (!p.not) return p.base;
+  return p.base === "equals" ? "not_equals" : p.base === "contains" ? "not_contains" : "not_matches";
+}
+
+function change(patch: Partial<Parts>): void {
+  set({ op: composeOp({ ...partsOf(props.modelValue.op), ...patch }) });
 }
 
 function supportsRefinement(op: DerivationOp): boolean {
-  return displayedOp(op) === "exists";
+  return partsOf(op).base === "exists";
 }
 
 /** Python regex flavour, matching the engine's `re.search`. */
@@ -112,14 +123,26 @@ function set(patch: Partial<DerivationCondition>): void {
       </div>
       <span class="dvr-label">is</span>
       <div class="dvr-op-cell">
-        <Select
-          :model-value="displayedOp(modelValue.op)"
-          :options="OP_OPTIONS"
-          class="dvr-op"
-          :data-test="`cond-op-${testId}`"
-          :aria-label="`Condition operator for ${a11yName}`"
-          @update:model-value="(v) => set({ op: v as DerivationOp })"
-        />
+        <div class="dvr-op-row">
+          <button
+            type="button"
+            class="dvr-not"
+            :class="{ 'dvr-not--on': partsOf(modelValue.op).not }"
+            :aria-pressed="partsOf(modelValue.op).not"
+            :aria-label="`Negate the test for ${a11yName}`"
+            :title="partsOf(modelValue.op).not ? 'NOT: the test holds when this is false. Click to turn off.' : 'Turn the test around: does NOT equal, contain, match or exist'"
+            :data-test="`cond-not-${testId}`"
+            @click="change({ not: !partsOf(modelValue.op).not })"
+          >NOT</button>
+          <Select
+            :model-value="partsOf(modelValue.op).base"
+            :options="OP_OPTIONS"
+            class="dvr-op"
+            :data-test="`cond-op-${testId}`"
+            :aria-label="`Condition operator for ${a11yName}`"
+            @update:model-value="(v) => change({ base: v as BaseOp, refinement: 'any' })"
+          />
+        </div>
         <div
           v-if="supportsRefinement(modelValue.op)"
           class="dvr-refinement"
@@ -130,29 +153,30 @@ function set(patch: Partial<DerivationCondition>): void {
           <button
             type="button"
             class="dvr-refinement__btn"
-            :class="{ 'dvr-refinement__btn--active': emptinessFor(modelValue.op) === 'any' }"
-            :aria-pressed="emptinessFor(modelValue.op) === 'any'"
+            :class="{ 'dvr-refinement__btn--active': partsOf(modelValue.op).refinement === 'any' }"
+            :aria-pressed="partsOf(modelValue.op).refinement === 'any'"
             :data-test="`cond-refinement-any-${testId}`"
             title="Just check that the variable is set in the context (value irrelevant)"
-            @click="set({ op: composeOp('exists', 'any') })"
+            @click="change({ refinement: 'any' })"
           >any</button>
           <button
+            v-if="!partsOf(modelValue.op).not"
             type="button"
             class="dvr-refinement__btn"
-            :class="{ 'dvr-refinement__btn--active': emptinessFor(modelValue.op) === 'empty' }"
-            :aria-pressed="emptinessFor(modelValue.op) === 'empty'"
+            :class="{ 'dvr-refinement__btn--active': partsOf(modelValue.op).refinement === 'empty' }"
+            :aria-pressed="partsOf(modelValue.op).refinement === 'empty'"
             :data-test="`cond-refinement-empty-${testId}`"
             title="Variable is set AND its value is empty (e.g. wildcard rolled the null option)"
-            @click="set({ op: composeOp('exists', 'empty') })"
+            @click="change({ refinement: 'empty' })"
           >∅ is empty</button>
           <button
             type="button"
             class="dvr-refinement__btn"
-            :class="{ 'dvr-refinement__btn--active': emptinessFor(modelValue.op) === 'value' }"
-            :aria-pressed="emptinessFor(modelValue.op) === 'value'"
+            :class="{ 'dvr-refinement__btn--active': partsOf(modelValue.op).refinement === 'value' }"
+            :aria-pressed="partsOf(modelValue.op).refinement === 'value'"
             :data-test="`cond-refinement-value-${testId}`"
             title="Variable is set AND its value is non-empty"
-            @click="set({ op: composeOp('exists', 'value') })"
+            @click="change({ refinement: 'value' })"
           >✓ has value</button>
         </div>
       </div>
@@ -176,7 +200,7 @@ function set(patch: Partial<DerivationCondition>): void {
           @update:model-value="(v) => set({ value: v })"
         />
         <a
-          v-if="modelValue.op === 'matches'"
+          v-if="modelValue.op === 'matches' || modelValue.op === 'not_matches'"
           class="dvr-regex-help"
           :href="REGEX_HELP_URL"
           target="_blank"
@@ -204,6 +228,27 @@ function set(patch: Partial<DerivationCondition>): void {
    * the visual; just ensure it stretches into its grid column. */
   min-width: 0;
 }
+.dvr-op-row { display: flex; gap: 6px; align-items: stretch; min-width: 0; }
+.dvr-op-row .dvr-op { flex: 1; }
+.dvr-not {
+  flex: none;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid var(--wp-border, #2a2d35);
+  background: transparent;
+  color: var(--wp-text-muted, #9ca3af);
+  font: 700 10.5px var(--wp-font-sans, sans-serif);
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.dvr-not:hover { color: var(--wp-text, #fff); border-color: var(--wp-text-muted, #9ca3af); }
+.dvr-not--on {
+  border-color: var(--wp-danger, #e5484d);
+  color: var(--wp-danger, #e5484d);
+  background: color-mix(in srgb, var(--wp-danger, #e5484d) 14%, transparent);
+}
+.dvr-not:focus-visible { outline: 2px solid var(--wp-accent-500, #6366f1); outline-offset: 2px; }
 .dvr-op-cell {
   /* Wraps the op Select + the optional "must have value" tick. The
    * tick is absolute-positioned below the Select so its presence

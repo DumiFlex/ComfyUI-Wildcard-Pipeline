@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 from aiohttp import web
@@ -514,7 +515,7 @@ async def test_chat_uses_the_open_editor_and_the_docs(wp_client, fake_llm):
     assert [s["note"] for s in body["steps"][:2]] == [
         'Searched the docs for "constraint exclude"', "Read Weapon (draft)"]
     first, second = fake_llm.seen[-2:]
-    assert "Docs pages (id: title)" in first["body"]["messages"][0]["content"]
+    assert "Docs pages (id: title" in first["body"]["messages"][0]["content"]
     asked = first["body"]["messages"][-1]["content"]
     assert "with unsaved changes" in asked and "On screen: 2 options shown" in asked
     results = second["body"]["messages"][-1]["content"]
@@ -917,7 +918,9 @@ async def test_chat_native_tools_keep_the_turn_for_the_follow_up(wp_client, fake
         {"content": "It has 2 options."},
     ])
     first = await _chat(wp_client, "what weapons do I have?", page={"route": "wildcards"})
-    assert first["format"] == "native" and first["message"] == "You have [[Weapon]]."
+    # The server writes the chip by id, so it keeps pointing at this Weapon.
+    assert first["format"] == "native" and re.fullmatch(
+        r"You have \[\[[0-9a-f]{8}#Weapon\]\]\.", first["message"])
     assert first["usage"] == {"prompt": 900, "output": 20, "cached": 800}
     turn1 = fake_llm.seen[-1]["body"]
     assert "response_format" not in turn1 and turn1["tool_choice"] == "auto"

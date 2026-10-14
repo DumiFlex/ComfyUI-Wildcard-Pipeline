@@ -5,6 +5,8 @@ A payload is stamped with the LOWEST catalog version its features need, so
 an older consumer can still install everything that doesn't use a newer
 feature:
 
+- ``NEGATED_TESTS_SCHEMA_VERSION`` (10): a derivation test uses
+  ``not_contains`` or ``not_matches`` (the editor's NOT toggle).
 - ``FALLBACK_SCHEMA_VERSION`` (9): a wildcard option is flagged
   ``fallback: true`` (also used when nothing else is left to pick).
 - ``NEGATIVES_SCHEMA_VERSION`` (8): a wildcard option, fixed value or
@@ -39,6 +41,7 @@ from engine.migrations import (
     CURRENT_SCHEMA_VERSION,
     DERIVATION_CONDITIONS_SCHEMA_VERSION,
     FALLBACK_SCHEMA_VERSION,
+    NEGATED_TESTS_SCHEMA_VERSION,
     NEGATIVES_SCHEMA_VERSION,
     SP2B_SCHEMA_VERSION,
     SP3_REACH_SCHEMA_VERSION,
@@ -216,6 +219,24 @@ def uses_fallback_option(node: Any) -> bool:
     )
 
 
+_V10_CONDITION_OPS = ("not_contains", "not_matches")
+
+
+def uses_negated_tests(node: Any) -> bool:
+    """Any derivation test (at any depth, nested groups included) using
+    ``not_contains`` or ``not_matches``."""
+    if isinstance(node, list):
+        return any(uses_negated_tests(child) for child in node)
+    if not isinstance(node, dict):
+        return False
+    if node.get("op") in _V10_CONDITION_OPS and "var" in node:
+        return True
+    return any(
+        isinstance(value, (dict, list)) and uses_negated_tests(value)
+        for value in node.values()
+    )
+
+
 def uses_sp2b_grammar(node: Any) -> bool:
     """Range-count or ``~`` multi-pick anywhere in the serialised payload."""
     text = json.dumps(node, ensure_ascii=False, default=str)
@@ -224,6 +245,8 @@ def uses_sp2b_grammar(node: Any) -> bool:
 
 def schema_version_for_payload(payload: Any) -> int:
     """The lowest catalog version that covers every feature in ``payload``."""
+    if uses_negated_tests(payload):
+        return NEGATED_TESTS_SCHEMA_VERSION
     if uses_fallback_option(payload):
         return FALLBACK_SCHEMA_VERSION
     if uses_negatives(payload):

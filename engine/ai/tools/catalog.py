@@ -7,6 +7,7 @@ the two name the same arguments.
 """
 from __future__ import annotations
 
+from engine.ai.chat_manage import CATEGORY_ICONS
 from engine.ai.tools.registry import Tool, any_of, arr, b, n, obj, s
 
 _META = {
@@ -26,15 +27,19 @@ _ACTION = obj({
     "mode": s("replace, append, prepend, negative or negative_replace"),
     "value": s(),
 }, ("target_var", "value"))
+_COND_OP = s("equals, not_equals, contains, not_contains, matches, not_matches, exists, "
+              "not_exists, is_empty, is_not_empty (has a value) or is_unset (missing or empty)")
 _RULE = obj({
     "summary": s("what the rule does, in a few words"),
     "branches": arr(obj({
         "match": s("all or any"),
         "conditions": arr(obj({
-            "var": s(), "op": s("equals, not_equals, contains, matches, exists, not_exists, "
-                                "is_set, is_unset, is_empty or is_not_empty"),
-            "value": s(),
-        }, ("var", "op"))),
+            "var": s("variable name; may read name.0, name.AXIS or name.neg"),
+            "op": _COND_OP, "value": s(),
+            "match": s("for a nested group: all or any"),
+            "conditions": arr(obj({"var": s(), "op": _COND_OP, "value": s()}, ("var", "op")),
+                              "a nested group's tests, instead of var/op/value"),
+        })),
         "actions": arr(_ACTION),
     })),
     "else_actions": arr(_ACTION),
@@ -123,8 +128,12 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         "more_tools", "read",
-        "List the tools this chat hasn't offered yet and make them available.",
-        "{}: the tools not listed here (other module types), which you can call after.",
+        "List the tools this chat hasn't offered yet and make them available. Call it first "
+        "whenever the job needs a tool you don't have (a combine, a bundle, a template…); "
+        "never fake one item type with another's tool.",
+        "{}: the tools not listed here (other module types), which you can call after. Call "
+        "it whenever the job needs a tool you don't have; never fake one item type with "
+        "another's tool.",
         obj(),
         (),
     ),
@@ -154,12 +163,16 @@ TOOLS: list[Tool] = [
     Tool(
         "edit_options", "change",
         "Propose changes to a wildcard's existing options by the numbers read shows: remove, "
-        "rewrite, retag, reweight, negatives, fallback, empty option, tag groups.",
+        "rewrite, retag, reweight, negatives, fallback, empty option, tag groups (make, "
+        "rename, ungroup, switch kind), rename or drop tags.",
         '{"id": wildcard id, "remove": [option numbers], "rewrite": [{"n": number, "text"}], '
         '"retag": [{"n": number, "tags": [option tags]}], "weights": [{"n": number, '
         '"weight": 0-100}], "negatives": [{"n": number, "negative": text or ""}], '
         '"fallback": option number (0 for none), "null_weight": weight of the empty option '
-        '(0 removes it), "axes": [{"name", "kind", "tags"}] to group existing tags}: change '
+        '(0 removes it), "axes": [{"name", "kind", "tags"}] to group existing tags (a tag '
+        'moves out of its old group), "groups": [{"group", "rename", "kind": classify|accepts, '
+        '"ungroup": true}] to change groups as they are, "rename_tags": [{"from", "to"}] '
+        '(onto an existing tag merges), "drop_tags": [tags] to take off every option}: change '
         "options that exist. The numbers are the ones read shows. Leave out what you don't "
         "change.",
         obj({
@@ -171,18 +184,39 @@ TOOLS: list[Tool] = [
             "fallback": n("option number, 0 for none", integer=True),
             "null_weight": n("weight of the empty option, 0 removes it"),
             "axes": arr(_AXIS),
+            "groups": arr(obj({"group": s("tag group name"), "rename": s("new name"),
+                               "kind": s("classify or accepts"),
+                               "ungroup": b("send its tags back to loose tags")},
+                              ("group",))),
+            "rename_tags": arr(obj({"from": s("option tag"), "to": s("new tag")},
+                                   ("from", "to"))),
+            "drop_tags": arr(s("option tag")),
         }, ("id",)),
         ("wildcards",),
     ),
     Tool(
         "create_derivation", "change",
-        "Propose a new derivation: IF/ELSE rules that set or change variables from others.",
+        "Propose a new derivation: rules that set or change variables from others. Each "
+        "rule runs on its own; its branches are IF, ELIF, ELIF… (the first whose test holds "
+        "runs its actions) and else_actions is its ELSE. A branch's test is one condition or "
+        "several joined by match all (AND) / any (OR), and a condition can itself be a "
+        "nested group. A branch can run several actions in order.",
         '{"name", "description", "tags", "category", "rules": [{"summary", "branches": '
         '[{"match": "all"|"any", "conditions": [{"var", "op": equals|not_equals|contains|'
-        "matches|exists|not_exists|is_set|is_unset|is_empty|is_not_empty, \"value\"}], "
-        '"actions": [{"target_var", "mode": replace|append|prepend|negative|'
-        'negative_replace, "value"}]}], "else_actions": [actions]}]}. There is no "not '
-        'contains": test "contains" and act in else_actions.',
+        "not_contains|matches|not_matches|exists|not_exists|is_empty|is_not_empty|is_unset, "
+        '"value"} or a '
+        'nested group {"match", "conditions": [tests]}], "actions": [{"target_var", "mode": '
+        'replace|append|prepend|negative|negative_replace, "value"}]}], "else_actions": '
+        '[actions]}]}. var may read name.0, name.AXIS or name.neg. Branches are IF, ELIF…; '
+        'else_actions is the ELSE. Example, "mage or warlock with a staff gets a robe, '
+        'rogues get a cloak, else armor": {"branches": [{"match": "all", "conditions": '
+        '[{"match": "any", "conditions": [{"var": "class", "op": "equals", "value": "mage"}, '
+        '{"var": "class", "op": "equals", "value": "warlock"}]}, {"var": "weapon", "op": '
+        '"contains", "value": "staff"}], "actions": [{"target_var": "outfit", "mode": '
+        '"replace", "value": "robe"}]}, {"conditions": [{"var": "class", "op": "equals", '
+        '"value": "rogue"}], "actions": [{"target_var": "outfit", "mode": "replace", '
+        '"value": "cloak"}]}], "else_actions": [{"target_var": "outfit", "mode": '
+        '"replace", "value": "armor"}]}.',
         obj({"name": s(), **_META, "rules": arr(_RULE)}, ("name", "rules")),
         ("derivations",),
     ),
@@ -220,10 +254,11 @@ TOOLS: list[Tool] = [
     Tool(
         "edit_values", "change",
         "Propose changes to fixed values that exist: set or remove variables.",
-        '{"id", "set": [same as values; a name that exists is replaced], "remove": [variable '
-        "names]}",
+        '{"id", "set": [same as values; on a name that exists, a left-out value or negative '
+        'stays as it is and "negative": "" clears it], "remove": [variable names]}',
         obj({"id": s("fixed values id or name"), "set": arr(obj({
-            "name": s(), "value": s(), "negative": s()}, ("name", "value"))),
+            "name": s(), "value": s("left out on a name that exists: keep it"),
+            "negative": s("left out: keep it; \"\": clear it")}, ("name",))),
             "remove": arr(s("variable name"))}, ("id",)),
         ("fixed-values",),
     ),
@@ -266,11 +301,14 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         "edit_rules", "change",
-        "Propose replacing or removing a derivation's rules by the numbers read shows.",
+        "Propose replacing, moving or removing a derivation's rules by the numbers read "
+        "shows (rules run top to bottom).",
         '{"id": derivation id, "replace": [{"n": rule number, "rule": a rule like in '
-        'add_rules}], "remove": [rule numbers]}',
+        'add_rules}], "move": [{"n": rule number, "to": its new place}], "remove": [rule '
+        'numbers]}',
         obj({"id": s("derivation id or name"),
              "replace": arr(obj({"n": n(integer=True), "rule": _RULE}, ("n", "rule"))),
+             "move": arr(obj({"n": n(integer=True), "to": n(integer=True)}, ("n", "to"))),
              "remove": _NUMS}, ("id",)),
         ("derivations",),
     ),
@@ -307,22 +345,53 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         "update_info", "change",
-        "Propose a new description, tags, category or rating for any item.",
-        '{"id", "description": new text or omit, "tags_add": [], "tags_remove": [], '
-        '"category": name or omit, "rating": "safe"|"nsfw" or omit}',
-        obj({"id": s("item id or name"), "description": s(), "tags_add": arr(s()),
-             "tags_remove": arr(s()), "category": s(), "rating": s("safe or nsfw")},
+        "Propose a new name, description, tags, category or rating for any item.",
+        '{"id", "name": new name or omit, "description": new text or omit, "tags_add": [], '
+        '"tags_remove": [], "category": name, "none" to take it out of its category, or '
+        'omit, "rating": "safe"|"nsfw" or omit}. For many items at once use update_many.',
+        obj({"id": s("item id or name"), "name": s("new name"), "description": s(),
+             "tags_add": arr(s()), "tags_remove": arr(s()),
+             "category": s("category name, or none to remove it"),
+             "rating": s("safe or nsfw")},
             ("id",)),
         ("core",),
     ),
     Tool(
         "edit_categories", "change",
-        "Propose new categories, or renaming categories that exist.",
-        '{"create": [category names], "rename": [{"from": name, "to": new name}]}: makes '
-        "or renames categories. Put items in a category with update_info.",
-        obj({"create": arr(s("category name")),
-             "rename": arr(obj({"from": s("category name"), "to": s("new name")},
-                               ("from", "to")))}),
+        "Propose new categories, or renaming or recoloring categories that exist (name, "
+        "color, icon).",
+        '{"create": [name or {"name", "color", "icon"}], "rename": [{"from": name, "to": new '
+        'name (optional), "color", "icon"}]}: makes, renames or restyles categories. Color: '
+        "#rrggbb or a word like teal; icon: one of " + ", ".join(CATEGORY_ICONS) + ". Put "
+        "items in a category with update_info or update_many.",
+        obj({"create": arr(any_of(s("category name"), obj(
+                {"name": s("category name"), "color": s("#rrggbb or a color word"),
+                 "icon": s("icon name")}, ("name",)))),
+             "rename": arr(obj({"from": s("category name"), "to": s("new name"),
+                                "color": s("#rrggbb or a color word"),
+                                "icon": s("icon name")}, ("from",)))}),
+        ("lists",),
+    ),
+    Tool(
+        "find_duplicates", "read",
+        "List items that share a name (same type) or have the same content under "
+        "different names, each marked identical or not.",
+        '{"type"?: wildcard|fixed_values|combine|derivation|constraint|bundle|template}: '
+        "sets of duplicates, to tidy the library.",
+        obj({"type": s("only this type")}),
+        ("lists",),
+    ),
+    Tool(
+        "update_many", "change",
+        "Propose one change to many items at once: move them into a category (or out of "
+        "one), add or remove library tags, or set their rating.",
+        '{"ids": [ids or names, up to 100], "category": name or "none", "tags_add": [], '
+        '"tags_remove": [], "rating": "safe"|"nsfw"}: one card for all of them; give only '
+        "what changes.",
+        obj({"ids": arr(s("item id or name")),
+             "category": s("category name, or none to remove it"),
+             "tags_add": arr(s()), "tags_remove": arr(s()), "rating": s("safe or nsfw")},
+            ("ids",)),
         ("lists",),
     ),
     Tool(
@@ -458,7 +527,7 @@ WEB = tuple(t.name for t in TOOLS if t.kind == "web")
 #: Groups a small model gets on each page, besides "core". Keys are route
 #: names with their -new / -edit suffix removed.
 PAGE_GROUPS: dict[str, tuple[str, ...]] = {
-    "all": ("lists", "wildcards", "pack"),
+    "all": ("lists", "wildcards", "constraints", "derivations", "pack"),
     "wildcards": ("wildcards", "pack", "lists"),
     "fixed-values": ("fixed-values", "lists"),
     "combines": ("combines", "lists"),
@@ -469,7 +538,7 @@ PAGE_GROUPS: dict[str, tuple[str, ...]] = {
     "test": ("wildcards", "derivations", "constraints", "test"),
     "pack-builder": ("pack", "wildcards"),
 }
-DEFAULT_GROUPS = ("wildcards", "pack")
+DEFAULT_GROUPS = ("wildcards", "constraints", "derivations", "pack")
 
 
 #: Offered only while Settings › AI assistant › "Let the assistant delete

@@ -45,6 +45,12 @@ export interface StagedDraft {
   /** A category the card would create; the editor can't pick it until it
    *  exists, so the editor says so. */
   newCategory?: string;
+  /** The id the card reserved: Save creates the item at it, so other cards
+   *  that already point at it (a constraint, a bundle, an @{id} ref) work. */
+  id?: string;
+  /** Called with the new id once Save created it: the card counts as
+   *  applied. */
+  onSaved?: (id: string) => void;
 }
 let staged: StagedDraft | null = null;
 
@@ -97,6 +103,17 @@ export function registerOpenEditor(spec: OpenEditorSpec): () => StagedDraft | nu
     if (editor.value === entry) editor.value = null;
   });
   return () => null;
+}
+
+/** What a new-item editor's create call adds for a draft from the chat:
+ *  the reserved id, so the item lands where other cards expect it. */
+export function draftCreateId(d: StagedDraft | null | undefined): { id?: string } {
+  return d?.id ? { id: d.id } : {};
+}
+
+/** Tell the chat its draft was saved (Save = Apply). */
+export function draftSaved(d: StagedDraft | null | undefined, id: string | undefined): void {
+  if (d && id) d.onSaved?.(id);
 }
 
 /** Register what the current view shows, as a short line or two. */

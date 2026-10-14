@@ -133,7 +133,9 @@ import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
 import { useEditorDraft } from "../composables/useEditorDraft";
-import { registerOpenEditor } from "../composables/useOpenEditor";
+import {
+  registerOpenEditor, draftCreateId, draftSaved, type StagedDraft,
+} from "../composables/useOpenEditor";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useBundleStore } from "../stores/bundleStore";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -342,11 +344,26 @@ const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => bundleSnapshot() !== bundleBaseline.value,
 );
 
-// The chat reads and edits this item's info here; its payload stays on Save.
-registerOpenEditor({
+// The chat reads and edits this item's info here; its children stay on Save.
+// A new bundle fills from a draft the chat staged (see onMounted).
+const fillFromChat = registerOpenEditor({
   id: props.id, type: "bundle", dirty: () => dirty.value,
   name, description, tags, categoryId, contentRating,
 });
+/** The chat's draft this new bundle was opened with (Save creates it at the
+ *  id the card reserved, if any, and marks the card applied). */
+let chatDraft: StagedDraft | null = null;
+
+/** Load stored children + colour into the editor (saved row or chat draft):
+ *  each child is copied so edits never touch the source. */
+function loadContent(src: { children?: unknown; color?: unknown }): void {
+  color.value = (typeof src.color === "string" && src.color) || defaultColor.value;
+  children.value = Array.isArray(src.children)
+    ? src.children
+      .filter((c): c is Record<string, unknown> => !!c && typeof c === "object")
+      .map((c) => ({ ...c }))
+    : [];
+}
 
 const draft = useEditorDraft({
   kind: "bundle",
@@ -452,6 +469,21 @@ onMounted(async () => {
   }
   if (!props.id) {
     bundleBaseline.value = bundleSnapshot();
+    // "Open in editor" on a chat card: the proposed bundle, unsaved. Name,
+    // description and tags come in through the spec; the children (and a
+    // colour, if any) sit at the top level of a bundle create body.
+    chatDraft = fillFromChat();
+    if (chatDraft) {
+      const body: Record<string, unknown> = { ...chatDraft.body };
+      loadContent(body);
+      toast.push({
+        severity: "info",
+        summary: "From the assistant",
+        detail: chatDraft.newCategory
+          ? `Check it and Save to keep it. It suggested a new category, "${chatDraft.newCategory}": create it from the Category picker if you want it.`
+          : "Check it and Save to keep it.",
+      });
+    }
     return;
   }
   loading.value = true;
@@ -460,13 +492,10 @@ onMounted(async () => {
     original.value = row;
     name.value = row.name;
     description.value = row.description ?? "";
-    color.value = row.color || defaultColor.value;
     categoryId.value = row.category_id;
     tags.value = [...(row.tags ?? [])];
     contentRating.value = row.content_rating ?? "safe";
-    children.value = Array.isArray(row.children)
-      ? row.children.map((c) => ({ ...(c as Record<string, unknown>) }))
-      : [];
+    loadContent(row);
     baselineByChildId.value = snapshotBaseline(children.value);
     recent.push({ id: props.id, kind: "bundle", name: name.value });
   } catch (e) {
@@ -512,7 +541,9 @@ async function save() {
       // Create a brand-new bundle directly in the manager. (Previously
       // gated to the Context-wrap flow; the add-child picker builds the
       // same child shape edit-mode saves, so authoring here is safe.)
-      const created = await store.create(body);
+      const created = await store.create({ ...draftCreateId(chatDraft), ...body });
+      draftSaved(chatDraft, created?.id);
+      chatDraft = null;
       bundleBaseline.value = bundleSnapshot();
       draft.discard();
       recent.push({ id: created.id, kind: "bundle", name: created.name });
@@ -1230,10 +1261,12 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
 
 .wp-bundle-children-grid {
   display: grid;
-  grid-template-columns: minmax(380px, 1fr) minmax(420px, 1.4fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
   gap: var(--wp-space-5);
   align-items: start;
 }
+/* Page area narrower than 860px (usePageWidth): the list over the editor. */
+.wp-content[data-lt~="860"] .wp-bundle-children-grid { grid-template-columns: minmax(0, 1fr); }
 .wp-bundle-children-stack {
   display: flex;
   flex-direction: column;

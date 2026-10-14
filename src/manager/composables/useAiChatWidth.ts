@@ -13,8 +13,9 @@ import { onBeforeUnmount, onMounted, ref } from "vue";
 export const AI_CHAT_DEFAULT = 440;
 export const AI_CHAT_MIN = 340;
 const AI_CHAT_MAX = 960;
-/** Room the page keeps beside the drawer. */
-const PAGE_MIN = 360;
+/** Room the sidebar and page keep beside the drawer: a page area of about
+ *  520px (usePageWidth's narrow layouts), so no page is squeezed past them. */
+const PAGE_MIN = 760;
 const KEY = "wp-ai-chat-width";
 const VAR = "--wp-ai-chat-w";
 /** Keyboard step; Shift moves four. */

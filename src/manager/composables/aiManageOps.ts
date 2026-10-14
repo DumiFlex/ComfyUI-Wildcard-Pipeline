@@ -1,6 +1,7 @@
 /**
  * Apply and Undo for the chat's library-management cards: categories, tag
- * renames and deletes (`edit_categories`, `edit_tags`, `delete_items`).
+ * renames, bulk changes and deletes (`edit_categories`, `edit_tags`,
+ * `update_many`, `delete_items`).
  *
  * Each goes through the user's normal stores and endpoints, step by step.
  * When a step fails, what already ran is undone before the error shows, so
@@ -16,17 +17,19 @@ import { useBundleStore } from "../stores/bundleStore";
 import { useTemplateStore } from "../stores/templateStore";
 import { useCategoryStore } from "../stores/categoryStore";
 
-export type ManageOp = Extract<AiChatOp, { op: "categories" | "tags" | "delete" }>;
+export type ManageOp = Extract<AiChatOp, { op: "categories" | "tags" | "delete" | "bulk" }>;
 type Kind = "module" | "bundle" | "template";
 
 export function isManageOp(op: AiChatOp): op is ManageOp {
-  return op.op === "categories" || op.op === "tags" || op.op === "delete";
+  return op.op === "categories" || op.op === "tags" || op.op === "delete" || op.op === "bulk";
 }
 
 /** A step that ran, and how to take it back. */
 type Step = () => Promise<void>;
 
-async function update(kind: Kind, id: string, body: { tags?: string[]; category_id?: string | null }): Promise<void> {
+type ItemBody = { tags?: string[]; category_id?: string | null; content_rating?: "safe" | "nsfw" };
+
+async function update(kind: Kind, id: string, body: ItemBody): Promise<void> {
   if (kind === "module") await useModuleStore().update(id, body);
   else if (kind === "bundle") await useBundleStore().update(id, body);
   else await useTemplateStore().update(id, body);
@@ -75,6 +78,34 @@ export async function applyManage(op: ManageOp): Promise<void> {
       ...op.rename.map((r) => async (): Promise<Step> => {
         await cats.update(r.id, { name: r.to });
         return async () => { await cats.update(r.id, { name: r.from }); };
+      }),
+      ...(op.styles ?? []).map((st) => async (): Promise<Step | null> => {
+        const row = st.id ? cats.items.find((c) => c.id === st.id)
+          : cats.items.find((c) => sameName(c.name, st.name));
+        if (!row) return null;
+        const look = { ...(st.color ? { color: st.color } : {}), ...(st.icon ? { icon: st.icon } : {}) };
+        await cats.update(row.id, look);
+        const before = st.before;
+        return before ? async () => { await cats.update(row.id, { color: before.color, icon: before.icon }); } : null;
+      }),
+    ]);
+    return;
+  }
+  if (op.op === "bulk") {
+    let catId: string | null = null;
+    await run([
+      async (): Promise<Step | null> => {
+        if (!op.new_category) return null;
+        const have = cats.items.find((c) => sameName(c.name, op.new_category));
+        if (have) { catId = have.id; return null; }
+        const row = await cats.create({ name: op.new_category });
+        catId = row.id;
+        return () => cats.remove(row.id);
+      },
+      ...op.items.map((it) => async (): Promise<Step> => {
+        const body: ItemBody = it.to_new ? { ...it.body, category_id: catId } : it.body;
+        await update(it.kind, it.id, body);
+        return () => update(it.kind, it.id, it.before as ItemBody);
       }),
     ]);
     return;
@@ -167,9 +198,20 @@ export async function undoManage(op: ManageOp): Promise<void> {
   const cats = useCategoryStore();
   if (op.op === "categories") {
     for (const r of [...op.rename].reverse()) await cats.update(r.id, { name: r.from });
+    for (const st of op.styles ?? []) {
+      if (st.id && st.before) await cats.update(st.id, { color: st.before.color, icon: st.before.icon });
+    }
     for (const name of op.create) {
       const row = cats.items.find((c) => sameName(c.name, name));
       if (row) await cats.remove(row.id);
+    }
+    return;
+  }
+  if (op.op === "bulk") {
+    for (const it of [...op.items].reverse()) await update(it.kind, it.id, it.before as ItemBody);
+    if (op.new_category) {
+      const row = cats.items.find((c) => sameName(c.name, op.new_category));
+      if (row) await cats.remove(row.id).catch(() => undefined);
     }
     return;
   }

@@ -96,12 +96,15 @@ whose conditions hold runs its actions; if none holds, else_actions run (leave \
 else_actions empty for no else). Separate rules run independently, one after \
 another.
 
-Conditions (var is a variable name, no $):
+Conditions (var is a variable name, no $; it may also read $name.0, \
+$name.AXIS or $name.neg as name.0, name.AXIS, name.neg):
 - equals / not_equals: exact, case-sensitive text match. Use the option text \
 exactly as listed.
-- contains: value is a substring. matches: value is a regular expression.
-- exists / not_exists: the variable was set at all. is_set / is_unset: set and \
-non-empty / unset or empty. is_empty / is_not_empty. These take value "".
+- contains / not_contains: value is (not) a substring. matches / \
+not_matches: value is a regular expression that does (not) match.
+- exists / not_exists: the variable was set at all. is_empty: set but empty \
+(a wildcard rolled its empty option). is_not_empty: has a value. is_unset: \
+missing or empty. These take value "".
 - match "all" needs every condition, "any" needs one.
 
 Actions:
@@ -183,6 +186,22 @@ def _var_name(raw: Any) -> str | None:
     return name if _IDENT.match(name) and not name.startswith("__") else None
 
 
+#: What a condition may read: a variable, or one through an accessor the
+#: engine reads in conditions ($x.0, $x.AXIS, $x.neg, $x.0.neg).
+_COND_VAR = re.compile(
+    r"^([a-zA-Z_][a-zA-Z0-9_]{0,63})((?:\.(?:\d{1,3}|[a-zA-Z_][a-zA-Z0-9_]{0,39})){0,2})$")
+
+
+def _cond_var(raw: Any) -> tuple[str, str] | None:
+    """``(what the condition reads, its base variable)`` or None."""
+    if not isinstance(raw, str):
+        return None
+    m = _COND_VAR.match(raw.strip().lstrip("$").strip())
+    if m is None or m.group(1).startswith("__"):
+        return None
+    return m.group(1) + m.group(2), m.group(1)
+
+
 def _flat(text: Any) -> str:
     return re.sub(r"\s+", " ", text).strip() if isinstance(text, str) else ""
 
@@ -259,17 +278,10 @@ def _compile_rule(
     for b in (item.get("branches") or [])[:MAX_BRANCHES]:
         if not isinstance(b, dict):
             continue
-        conds = [
-            c for c in (_compile_condition(x, catalog, warnings)
-                        for x in (b.get("conditions") or [])[:MAX_CONDITIONS])
-            if c is not None
-        ]
+        condition = _compile_group(b, catalog, warnings, 0)
         actions = _compile_actions(b.get("actions"), catalog, warnings, refs)
-        if not conds or not actions:
+        if condition is None or not actions:
             continue
-        condition = conds[0] if len(conds) == 1 else {
-            "match": "any" if b.get("match") == "any" else "all", "conditions": conds,
-        }
         branch: dict[str, Any] = {"condition": condition, "action": actions[0]}
         if len(actions) > 1:
             branch["extra_actions"] = actions[1:]
@@ -286,21 +298,50 @@ def _compile_rule(
     return rule
 
 
+#: How deep the chat may nest condition groups ("a and (b or c)").
+MAX_GROUP_DEPTH = 3
+
+
+def _compile_group(
+    g: dict[str, Any], catalog: dict[str, dict[str, Any]], warnings: list[str], depth: int,
+) -> dict[str, Any] | None:
+    """A branch's (or group's) conditions as one condition: a single test
+    stays bare, several become an all/any group. A condition that holds
+    ``conditions`` itself is a nested group."""
+    conds = [
+        c for c in (_compile_condition(x, catalog, warnings, depth)
+                    for x in (g.get("conditions") or [])[:MAX_CONDITIONS])
+        if c is not None
+    ]
+    if not conds:
+        return None
+    if len(conds) == 1:
+        return conds[0]
+    return {"match": "any" if g.get("match") == "any" else "all", "conditions": conds}
+
+
 def _compile_condition(
-    c: Any, catalog: dict[str, dict[str, Any]], warnings: list[str],
+    c: Any, catalog: dict[str, dict[str, Any]], warnings: list[str], depth: int = 0,
 ) -> dict[str, Any] | None:
     if not isinstance(c, dict):
         return None
-    var = _var_name(c.get("var"))
+    if isinstance(c.get("conditions"), list) and "var" not in c:
+        if depth + 1 >= MAX_GROUP_DEPTH:
+            raise _Drop(f"groups nest at most {MAX_GROUP_DEPTH} deep")
+        return _compile_group(c, catalog, warnings, depth + 1)
+    got = _cond_var(c.get("var"))
     op = c.get("op")
-    if var is None:
+    if got is None:
         raise _Drop(f"{c.get('var')!r} isn't a variable name")
+    var, base = got
     if op not in _VALID_OPS:
         raise _Drop(f"unknown test {op!r}")
     value = "" if op in _NO_VALUE_OPS else _flat(c.get("value"))[:MAX_VALUE_LEN]
-    entry = catalog.get(var)
+    entry = catalog.get(base)
     if entry is None:
-        warnings.append(unset_note(var))
+        warnings.append(unset_note(base))
+    elif var != base:
+        entry = None  # an accessor reads part of it, not one of its options
     if value.startswith("$") and op not in _NO_VALUE_OPS:
         read = value[1:]
         if not _IDENT.match(read.split(".")[0]):

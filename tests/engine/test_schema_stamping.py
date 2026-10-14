@@ -7,6 +7,8 @@ from engine.migrations import (
     CURRENT_SCHEMA_VERSION,
     DERIVATION_CONDITIONS_SCHEMA_VERSION,
     FALLBACK_SCHEMA_VERSION,
+    MAX_KNOWN_SCHEMA_VERSION,
+    NEGATED_TESTS_SCHEMA_VERSION,
     NEGATIVES_SCHEMA_VERSION,
     SP2B_SCHEMA_VERSION,
     SP3_REACH_SCHEMA_VERSION,
@@ -233,3 +235,24 @@ def test_fallback_option_needs_v9():
     assert schema_version_for_payload({"children": [row]}) == FALLBACK_SCHEMA_VERSION
     instance = {"instance": {"options": [{"id": "o1", "value": "x", "fallback": True}]}}
     assert schema_version_for_payload(instance) == FALLBACK_SCHEMA_VERSION
+
+
+def _negated_row(op, nested=False):
+    test = {"var": "a", "op": op, "value": "x"}
+    cond = ({"match": "any", "conditions": [{"var": "b", "op": "equals", "value": "1"}, test]}
+            if nested else test)
+    return {"id": "dddddddd", "type": "derivation", "name": "d", "payload": {"rules": [{
+        "id": "r1", "branches": [{"condition": cond, "action": {
+            "target_var": "c", "mode": "replace", "value": "y"}}]}]}}
+
+
+@pytest.mark.parametrize("op,nested,expected", [
+    ("not_equals", False, CURRENT_SCHEMA_VERSION),
+    ("not_exists", False, CURRENT_SCHEMA_VERSION),
+    ("not_contains", False, NEGATED_TESTS_SCHEMA_VERSION),
+    ("not_matches", True, NEGATED_TESTS_SCHEMA_VERSION),
+])
+def test_negated_tests_need_v10(op, nested, expected):
+    assert schema_version_for_payload(_negated_row(op, nested)) == expected
+    assert schema_version_for_payload({"children": [_negated_row(op, nested)]}) == expected
+    assert MAX_KNOWN_SCHEMA_VERSION >= NEGATED_TESTS_SCHEMA_VERSION
