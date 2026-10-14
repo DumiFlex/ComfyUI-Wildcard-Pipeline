@@ -203,7 +203,7 @@ def _side(raw: Any, view: dict[str, Any], tag_lower: dict[str, str]) -> tuple[st
     text = raw.strip()
     if text.startswith("#"):
         tag = tag_lower.get(text[1:].strip().lower())
-        return ("tag", tag) if tag else None
+        return ("tag", tag) if tag else _by_word(text[1:], view)
     m = re.fullmatch(r"([STst])?\s*(\d+)", text)
     if m:
         short = f"{view['prefix']}{int(m.group(2))}"
@@ -218,7 +218,21 @@ def _side(raw: Any, view: dict[str, Any], tag_lower: dict[str, str]) -> tuple[st
     return ("tag", tag) if tag else None
 
 
+def _by_word(word: str, view: dict[str, Any]) -> tuple[str, Any] | None:
+    """A tag the wildcard doesn't have ("#snow", "#plate_armor") as the
+    options whose text says it ("light snow", "heavy plate armor"), so the
+    rule still lands instead of being left out."""
+    w = word.strip().lower().replace("_", " ").replace("-", " ")
+    if len(w) < 3:
+        return None
+    pat = re.compile(r"\b" + re.escape(w) + r"s?\b")
+    hits = [o for o in view["options"] if pat.search(o["value"].lower())]
+    return ("options", hits) if hits else None
+
+
 def _label(side: tuple[str, Any]) -> str:
+    if side[0] == "options":
+        return " / ".join(o["value"] for o in side[1][:3]) + ("…" if len(side[1]) > 3 else "")
     return f"#{side[1]}" if side[0] == "tag" else side[1]["value"]
 
 
@@ -281,8 +295,10 @@ def compile_rules(
             })
             continue
 
-        srcs = [s[1]] if s[0] == "option" else [o for o in source["options"] if s[1] in o["tags"]]
-        tgts = [t[1]] if t[0] == "option" else [o for o in target["options"] if t[1] in o["tags"]]
+        srcs = [s[1]] if s[0] == "option" else s[1] if s[0] == "options" else [
+            o for o in source["options"] if s[1] in o["tags"]]
+        tgts = [t[1]] if t[0] == "option" else t[1] if t[0] == "options" else [
+            o for o in target["options"] if t[1] in o["tags"]]
         pairs = [(a, b) for a in srcs for b in tgts]
         if not pairs:
             skipped.append({"text": shown, "reason": "no option carries that tag"})

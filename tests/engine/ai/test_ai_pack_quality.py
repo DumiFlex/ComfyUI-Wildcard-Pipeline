@@ -529,3 +529,70 @@ def test_a_pick_only_a_rule_reads_is_flagged_and_no_empty_spellings():
         "action": {"target_var": "place", "mode": "append", "value": ", calm"}}]}]}}
     probs = pack.check_pack(plan, built, seeds=10)["problems"][keys["Prompt"]]
     assert any("$light (Light) never reaches the prompt" in t for t in probs)
+
+
+# ── Round 6 of the real-model run ───────────────────────────────────────
+
+
+def test_a_rule_on_a_tag_the_target_lacks_lands_on_options_that_say_it():
+    from engine.ai import constraint as ai_constraint
+    src = ai_constraint.side_view({"payload": {"options": [
+        {"id": "a", "value": "tundra", "sub_categories": ["cold"]},
+        {"id": "b", "value": "desert", "sub_categories": ["hot"]},
+        {"id": "c", "value": "forest", "sub_categories": ["mild"]}],
+        "sub_categories": ["cold", "hot", "mild"]}}, "S")
+    tgt = ai_constraint.side_view({"payload": {"options": [
+        {"id": "x", "value": "light snow", "sub_categories": ["cold_ok"]},
+        {"id": "y", "value": "clear sky", "sub_categories": ["clear"]}],
+        "sub_categories": ["cold_ok", "clear"]}}, "T")
+    out = ai_constraint.compile_rules({"rules": [
+        {"source": "#hot", "target": "#snow", "effect": "exclude", "factor": 0, "reason": ""},
+        {"source": "#cold", "target": "#snow", "effect": "boost", "factor": 2, "reason": ""}]},
+        source=src, target=tgt)
+    pairs = {(e["exception"]["source"], e["exception"]["mode"]) for e in out["exceptions"]}
+    assert pairs == {("desert", "exclude"), ("tundra", "boost")} and out["skipped"] == []
+    # "Snow only in cold places": the forest, with no rule, is shut out too.
+    payload = {"matrix": {}, "exceptions": [e["exception"] for e in out["exceptions"]]}
+    said = pack._strict_rules({"name": "Snow", "about": "#snow only in #cold"}, payload, src)
+    assert any(e["source"] == "forest" and e["mode"] == "exclude"
+               for e in payload["exceptions"])
+    assert said and "light snow for forest" in said[0]
+
+
+def test_weight_clauses_add_up_and_templates_drop_reads_a_combine_holds():
+    from engine.ai import use as ai_use
+    payload = {"options": [{"id": "a", "value": "long hair", "sub_categories": ["long_hair"]},
+                           {"id": "c", "value": "pixie cut", "sub_categories": ["short_hair"]}]}
+    inst, _ = ai_use.parse_use("weight long_hair=3; weight short_hair=1", kind="wildcard",
+                               payload=payload)
+    assert inst["option_weights"] == {"a": 3, "c": 1}
+    raw = _raw()
+    raw["items"].insert(-1, _item(kind="combine", name="Who", var="who", about="$race $hair"))
+    plan = pack.compile_plan(raw)
+    built = _built(plan)
+    keys = {i["name"]: i["key"] for i in plan["items"]}
+    built[keys["Who"]] = {"id": "abcd7777", "payload": {
+        "template": "$race, $hair", "output_var": "who", "input_vars": ["race", "hair"]}}
+    out = pack.compile_item(plan, keys["Prompt"], built, {
+        "template": "$race, $hair, $who, $outfit, $place, $light", "negative": ""})
+    assert out["payload"]["template_string"] == "$who, $outfit, $place, $light"
+    assert any("Dropped $race, $hair: $who (Who) already holds them" in w
+               for w in out["warnings"])
+    # $negatives in a template's plan isn't a variable the pack must set.
+    tpl = next(i for i in plan["items"] if i["kind"] == "template")
+    tpl["about"] += ", negative: lowres, $negatives"
+    assert not any("$negatives" in f["text"] for f in pack.review_plan(plan))
+
+
+def test_per_case_rules_merge_into_one_after_a_split_merges():
+    raw = _raw(items=[
+        _item(name="Biome", var="biome", tags=["forest", "desert", "ocean"]),
+        *[_item(name=f"{c.title()} Animal", var=f"{c}_animal") for c in ("forest", "desert",
+                                                                       "ocean")],
+        *[_item(kind="constraint", name=f"{c} match", source="biome", target=f"{c}_animal",
+                about=f"#{c} gets only #{c}") for c in ("forest", "desert", "ocean")],
+        _item(kind="template", name="T", about="$forest_animal $desert_animal $ocean_animal")])
+    plan = pack.compile_plan(raw)
+    rules = [i for i in plan["items"] if i["kind"] == "constraint"]
+    assert len(rules) == 1 and (rules[0]["source"], rules[0]["target"]) == ("biome", "animal")
+    assert rules[0]["about"].count("gets only") == 3

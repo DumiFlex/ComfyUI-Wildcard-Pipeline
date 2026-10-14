@@ -361,7 +361,8 @@ def _weight(rest: str, out: dict[str, Any], kind: str,
             payload: dict[str, Any] | None) -> None:
     if not rest:
         raise ValueError("write weight N=W, e.g. weight 3=2.5")
-    weights: dict[str, float] = {}
+    # Several "weight" clauses add up ("weight long_hair=3; weight short_hair=1").
+    weights: dict[str, float] = dict(out.get("option_weights") or {})
     for item in _items(rest):
         m = re.fullmatch(r"(.+?)\s*=\s*(\S+)", item, re.S)
         if not m:

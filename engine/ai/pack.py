@@ -1590,6 +1590,13 @@ def _merge_splits(raw_items: list[dict[str, Any]],
                         x[side] = role
         src = _var(source.get("var"))
         source["tags"] = list(dict.fromkeys([*(source.get("tags") or []), *cases]))
+        # The per-case rules now all link the same two wildcards: one rule.
+        same = [x for x in items if x.get("kind") == "constraint"
+                and _var(x.get("source")) == src and _var(x.get("target")) == role]
+        if len(same) > 1:
+            same[0]["about"] = "; ".join(dict.fromkeys(
+                str(x.get("about") or "").strip() for x in same if x.get("about")))[:MAX_ABOUT]
+            items = [x for x in items if x not in same[1:]]
         if not any(x.get("kind") == "constraint" and _var(x.get("source")) == src
                    and _var(x.get("target")) == role for x in items):
             items.insert(items.index(merged), {
@@ -1664,7 +1671,8 @@ def review_plan(plan: dict[str, Any],
             "between them")
     for i in items:
         if i["kind"] in ("derivation", "combine", "template"):
-            missing = [v for v in _reads(i.get("about") or "") if v not in known]
+            missing = [v for v in _reads(i.get("about") or "") if v not in known
+                       and not (v == "negatives" and i["kind"] == "template")]
             if missing:
                 add(i, "fix", f"{i['name']} reads ${', $'.join(missing)}, which nothing in "
                     "the pack sets; add an item or an input for it")
@@ -2248,10 +2256,36 @@ def compile_item(
     else:
         out = text_items.compile_template(answer, catalog=_catalog(plan, built))
         payload, preview, warnings = out["payload"], out["preview"], out["warnings"]
+        payload, said = _drop_double_reads(plan, built, payload)
+        warnings = [*warnings, *said]
         if plan.get("style") == "tags":
             payload = {**payload, "template_string": tag_commas(payload["template_string"])}
     return {"key": key, "id": mid, "kind": kind, "payload": payload,
             "preview": preview, "warnings": warnings, "repair": repair_note(warnings)}
+
+
+def _drop_double_reads(plan: dict[str, Any], built: dict[str, Any],
+                       payload: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """A template that reads a combine and what the combine joins prints it
+    twice ("$race, $class, $race_class"): the separate reads go."""
+    text = payload["template_string"]
+    said: list[str] = []
+    shown = set(text_items.reads(text))
+    for c in plan["items"]:
+        if c["kind"] != "combine" or c["key"] not in built or c["var"] not in shown:
+            continue
+        joined = [v for v in built[c["key"]]["payload"].get("input_vars") or []
+                  if v in shown and v != c["var"]]
+        for v in joined:
+            text = re.sub(r"(?:^|\s*,\s*|\s+)\$" + re.escape(v) + r"\b(?![.\w])", "", text,
+                          count=0).lstrip(" ,")
+        if joined:
+            shown -= set(joined)
+            said.append(f"Dropped ${', $'.join(joined)}: ${c['var']} ({c['name']}) already "
+                        "holds them")
+    if not said:
+        return payload, []
+    return {**payload, "template_string": text}, said
 
 
 def _append_onto_nothing(plan: dict[str, Any], key: str, built: dict[str, Any],
@@ -2320,7 +2354,7 @@ def _strict_rules(item: dict[str, Any], payload: dict[str, Any],
         if not any(r.get("mode") in ("only", "exclude") for r in rules):
             return ["The plan says \"only\", but no rule is an only or exclude rule, so every "
                     "other pair still goes through"]
-        filled = _fill_only(matrix, source)
+        filled = _fill_only(matrix, source) + _fill_only_exceptions(payload, source)
         if filled:
             said.append("Excluded " + ", ".join(filled[:6]) + (" and more" if len(filled) > 6
                                                                else "")
@@ -2335,6 +2369,39 @@ def _strict_rules(item: dict[str, Any], payload: dict[str, Any],
     if reduce:
         said.append("Made its reduce rules exclude: the plan says the pairs never go together")
     return said
+
+
+#: Exceptions an "only" fill may add.
+MAX_FILLED = 150
+
+
+def _fill_only_exceptions(payload: dict[str, Any],
+                          source: dict[str, Any] | None) -> list[str]:
+    """`_fill_only` for option pairs: a target option some source options
+    exclude and others allow is excluded from the source options with no
+    rule for it."""
+    excs = payload["exceptions"]
+    opts = [o for o in (source or {}).get("options") or [] if isinstance(o, dict)]
+    by_target: dict[str, dict[str, Any]] = {}
+    for e in excs:
+        by_target.setdefault(e.get("target"), {})[e.get("source")] = e
+    out: list[str] = []
+    for t, rows in by_target.items():
+        modes = {e.get("mode") for e in rows.values()}
+        if "exclude" not in modes or not modes & {"boost", "only", "allow"}:
+            continue
+        sample = next(iter(rows.values()))
+        for o in opts:
+            if o["value"] in rows or len(out) >= MAX_FILLED:
+                continue
+            exc = {"source": o["value"], "target": t, "mode": "exclude", "factor": 0}
+            if o.get("id"):
+                exc["source_id"] = o["id"]
+            if sample.get("target_id"):
+                exc["target_id"] = sample["target_id"]
+            excs.append(exc)
+            out.append(f"{t} for {o['value']}")
+    return out
 
 
 def _fill_only(matrix: dict[str, dict[str, Any]],
@@ -2402,6 +2469,7 @@ _STOP = {"the", "and", "with", "type", "list", "option", "options", "pack", "wil
 #: rest of the pack (a rule tests a value or tag that isn't there).
 _REPAIRABLE = re.compile(r"has no option|No option carries|unknown tag|nothing sets|"
                          r"already rolls|no rule is an only|joins picks with|"
+                         r"isn't an option or tag|"
                          r"isn't set|not a variable|doesn't set|which no", re.I)
 
 
@@ -2923,7 +2991,7 @@ def _repeats(plan: dict[str, Any], built: dict[str, Any], runs: list[dict[str, A
                     words[pair] += [f"${v}: {c}" for c in dup if f"${v}: {c}" not in words[pair]]
                     break
     out: dict[str, str] = {}
-    need = max(1, len(runs) // 4)
+    need = max(2, len(runs) // 6)
     items = {i["key"]: i for i in plan["items"]}
     for (a, b), n in seen.items():
         if n < need or b in out:
