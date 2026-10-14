@@ -286,7 +286,9 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // 462,555 bytes before it. Same "guide, not a cap" rule as above.
 // RAISED 464 -> 468 KB on 2026-10-07 for the zoom's Details panel and the
 // frame-click zoom (lazy picker chunk); the branch sat at 476,239 bytes.
-const TOTAL_LIMIT = 468 * 1024;     // 468 KB
+// RAISED 468 -> 472 KB on 2026-10-14 for the Split loading mark in the canvas
+// modals (Load template, Push to library); Dumi asked for it everywhere.
+const TOTAL_LIMIT = 472 * 1024;     // 472 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;
