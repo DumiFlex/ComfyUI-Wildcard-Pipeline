@@ -170,10 +170,10 @@ function announce(list: AiPointer[]): string {
           :style="drawn[i] ? { top: `${drawn[i].cap.top}px`, left: `${drawn[i].cap.left}px` } : undefined"
         >
           <i
-            class="pi"
+            class="pi wp-ai-pointer__icon"
             :class="drawn[i]?.off === 'up' ? 'pi-arrow-up' : drawn[i]?.off === 'down' ? 'pi-arrow-down' : 'pi-microchip-ai'"
           />
-          <b v-if="pointers.length > 1">{{ i + 1 }}.</b> {{ p.caption || "Scroll to see it" }}
+          <span class="wp-ai-pointer__text"><b v-if="pointers.length > 1">{{ i + 1 }}.</b> {{ p.caption || "Scroll to see it" }}</span>
         </div>
       </template>
     </div>
@@ -217,6 +217,12 @@ function announce(list: AiPointer[]): string {
   box-shadow: 0 6px 18px rgb(0 0 0 / 30%);
 }
 .wp-ai-pointer__caption[data-off] { opacity: 0.92; }
+/* Icon and text side by side with a real gap. Inline, the template's
+   whitespace between the icon and the number was condensed away, so the
+   icon sat on top of "1." (Dumi's report, 2026-10-14). */
+.wp-ai-pointer__caption { display: flex; align-items: flex-start; gap: 6px; }
+.wp-ai-pointer__icon { flex: none; width: 14px; font-size: 13px; line-height: 1.3; text-align: center; }
+.wp-ai-pointer__text { min-width: 0; }
 .wp-sr-only {
   position: absolute;
   width: 1px;

@@ -88,11 +88,20 @@ function composeOp(p: Parts): DerivationOp {
 }
 
 function change(patch: Partial<Parts>): void {
-  set({ op: composeOp({ ...partsOf(props.modelValue.op), ...patch }) });
+  // Turning NOT on drops the refinement: "does not exist" has nothing left to
+  // refine, so NOT exists is always the plain `not_exists`.
+  const next = patch.not === true ? { ...patch, refinement: "any" as const } : patch;
+  set({ op: composeOp({ ...partsOf(props.modelValue.op), ...next }) });
 }
 
+/** The any / is empty / has value switch shows under a plain `exists` only.
+ *  Under NOT it is hidden: a missing variable has no value to ask about. The
+ *  one exception is an `is_unset` already stored (written before NOT, or by
+ *  hand): it is "missing OR empty", a different test from `not_exists`, so its
+ *  switch stays until the user picks "any". */
 function supportsRefinement(op: DerivationOp): boolean {
-  return partsOf(op).base === "exists";
+  const p = partsOf(op);
+  return p.base === "exists" && (!p.not || op === "is_unset");
 }
 
 /** Python regex flavour, matching the engine's `re.search`. */
@@ -270,11 +279,11 @@ function set(patch: Partial<DerivationCondition>): void {
  * stored op (exists / is_empty / is_set). */
 .dvr-refinement {
   position: absolute;
-  top: calc(100% + var(--wp-space-2));
+  top: calc(100% + var(--wp-space-3));
   right: 0;
   display: inline-flex;
   gap: 0;
-  font: 9px var(--wp-font-sans, sans-serif);
+  font: 10px/1.4 var(--wp-font-sans, sans-serif); /* audit-exempt: micro segmented switch */
   white-space: nowrap;
   z-index: 1;
   border-radius: 4px;
@@ -283,7 +292,7 @@ function set(patch: Partial<DerivationCondition>): void {
   background: color-mix(in srgb, var(--wp-text) 2%, transparent);
 }
 .dvr-refinement__btn {
-  padding: 2px 7px;
+  padding: 2px 8px;
   background: transparent;
   border: 0;
   border-right: 1px solid var(--wp-border, #2a2d35);
@@ -307,8 +316,11 @@ function set(patch: Partial<DerivationCondition>): void {
  * Without this, the absolute-positioned tick would overlap the
  * VALUE row beneath. Bumps the value-row's top margin only when the
  * grid has the `--has-tick` modifier set by the template. */
+/* Switch height (~18px) + its 6px offset + an 8px gap above VALUE, less
+ * the grid's own 4px bottom margin. Was 16px, which left the switch
+ * sitting on the VALUE box's top border. */
 .dvr-grid--has-tick + .dvr-value-row {
-  margin-top: var(--wp-space-6);
+  margin-top: 28px; /* audit-exempt: clears the absolute refinement switch */
 }
 .dvr-regex-help {
   display: inline-flex;
