@@ -27,7 +27,7 @@ describe("INSTANCE_FIELDS_PER_KIND registry", () => {
       //   - locked_seed (parity with wildcard + fixed_values)
       //   - seed_scope (iteration-aware hold/vary control)
       //   - internal (existing hide-from-prompt toggle)
-      "template_override", "variable_binding", "locked_seed", "seed_scope", "internal",
+      "template_override", "negative_override", "variable_binding", "locked_seed", "seed_scope", "internal",
     ]);
     expect(INSTANCE_FIELDS_PER_KIND.derivation).toEqual([
       // Tier-D modal expansion (2026-05-10): per-rule + per-branch

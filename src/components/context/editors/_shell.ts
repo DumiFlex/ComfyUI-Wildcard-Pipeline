@@ -15,7 +15,7 @@ export type InstanceFieldKey =
   | "exclude_null"
   | "pick_min" | "pick_max" | "pick_separator" | "pick_independent"
   | "mode" | "pinned_option_id" | "match_variable" | "locked_seed" | "seed_scope" | "internal" | "values_overrides"
-  | "template_override"
+  | "template_override" | "negative_override"
   | "disabled_rule_ids"
   // Derivation tier-D modal expansion (2026-05-10 cycle)
   | "disabled_branch_keys"
@@ -54,7 +54,7 @@ export const INSTANCE_FIELDS_PER_KIND: Record<ModuleEntryKind, readonly Instance
     "match_variable",
   ],
   fixed_values: ["values_overrides", "enabled_options", "locked_seed", "seed_scope"],
-  combine: ["template_override", "variable_binding", "locked_seed", "seed_scope", "internal"],
+  combine: ["template_override", "negative_override", "variable_binding", "locked_seed", "seed_scope", "internal"],
   derivation: [
     // Tier-D modal expansion (2026-05-10):
     //   - rule-group overrides (cleared by Reset btn)
@@ -94,7 +94,7 @@ export const FRAME_OVERRIDABLE_FIELDS: Record<ModuleEntryKind, readonly Instance
   wildcard: ["enabled_options", "option_weights", "category_filter", "exclude_null",
     "locked_seed", "pick_min", "pick_max", "pick_separator", "pick_independent"],
   fixed_values: ["values_overrides", "enabled_options", "locked_seed"],
-  combine: ["template_override", "locked_seed"],
+  combine: ["template_override", "negative_override", "locked_seed"],
   derivation: ["disabled_rule_ids", "disabled_branch_keys", "action_value_overrides",
     "condition_value_overrides", "rule_order_override", "locked_seed"],
   constraint: ["disabled_exception_keys", "disabled_matrix_cells", "cell_mode_overrides",

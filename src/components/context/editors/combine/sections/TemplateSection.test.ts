@@ -19,7 +19,14 @@ const RichTextInputStub = {
   template: `<div class="wp-rt-stub" :data-model-value="modelValue"></div>`,
 };
 
-const globalStubs = { RichTextInput: RichTextInputStub };
+const NegativeFieldStub = {
+  name: "NegativeField",
+  props: ["modelValue", "placeholder", "label", "alwaysOpen", "testId"],
+  emits: ["update:modelValue"],
+  template: `<div class="wp-neg-stub" :data-model-value="modelValue"></div>`,
+};
+
+const globalStubs = { RichTextInput: RichTextInputStub, NegativeField: NegativeFieldStub };
 
 function makeModule(overrides: Partial<ModuleEntry> = {}): ModuleEntry {
   return {
@@ -316,5 +323,40 @@ describe("combine TemplateSection", () => {
     // `$mood.0` -> first item "serene"; bare `$mood` -> joined list. The whole
     // list never leaks into the `.0` slot.
     expect(pane.text()).toBe("serene | serene, sleepy");
+  });
+
+  describe("negative", () => {
+    const withNeg = (instance: ModuleEntry["instance"] = {}) => makeModule({
+      payload: { output_var: "final_prompt", template: "$style portrait", negative: "cropped" },
+      instance,
+    });
+    const mountNeg = (m: ModuleEntry) => mount(TemplateSection, {
+      props: { module: m }, global: { stubs: globalStubs },
+    });
+
+    it("shows the library negative, then the instance override", () => {
+      expect(mountNeg(withNeg()).findComponent(NegativeFieldStub).props("modelValue")).toBe("cropped");
+      expect(mountNeg(withNeg({ negative_override: "blurry" }))
+        .findComponent(NegativeFieldStub).props("modelValue")).toBe("blurry");
+      expect(mountNeg(withNeg({ negative_override: "" }))
+        .findComponent(NegativeFieldStub).props("modelValue")).toBe("");
+    });
+
+    it("typing writes negative_override; typing back the library text collapses it", async () => {
+      const w = mountNeg(withNeg());
+      const field = w.findComponent(NegativeFieldStub);
+      field.vm.$emit("update:modelValue", "blurry");
+      field.vm.$emit("update:modelValue", "cropped");
+      field.vm.$emit("update:modelValue", undefined);
+      const ups = w.emitted("update")!.map((e) => (e[0] as Partial<ModuleEntry>).instance?.negative_override);
+      expect(ups).toEqual(["blurry", null, ""]);
+    });
+
+    it("reset button only shows when overridden and clears the override", async () => {
+      expect(mountNeg(withNeg()).find("[data-test='tpl-neg-reset']").exists()).toBe(false);
+      const w = mountNeg(withNeg({ negative_override: "blurry" }));
+      await w.find("[data-test='tpl-neg-reset']").trigger("click");
+      expect((w.emitted("update")![0][0] as Partial<ModuleEntry>).instance?.negative_override).toBeNull();
+    });
   });
 });

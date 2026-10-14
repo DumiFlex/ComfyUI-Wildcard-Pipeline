@@ -77,6 +77,8 @@ INSTANCE_SCHEMAS: dict[str, dict[str, InstanceFieldType]] = {
         #   - locked_seed: pin {a|b|c} resolution
         #   - internal: hide-from-prompt toggle
         "template_override": "string",
+        # Send-to-negative (schema v8): replaces payload.negative ("" clears).
+        "negative_override": "string",
         "variable_binding": "string",
         "locked_seed": "number",
         # Iteration seed scope: hold/vary control (parity with wildcard).

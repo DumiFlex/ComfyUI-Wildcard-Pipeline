@@ -4,6 +4,7 @@ import {
   rowOverrideKind,
   rowEnabled,
   shapeValuesPatch,
+  effectiveNegative,
   withRowKeys,
   type LibraryRow,
   type DraftRow,
@@ -97,6 +98,32 @@ describe("defaults helpers", () => {
       // values_overrides shape stays full; otherwise re-enabling would lose the row entirely.
       expect(out).toHaveLength(2);
       expect(out!.map((r) => r.id)).toEqual(["v1", "v2"]);
+    });
+
+    it("writes a negative only for rows whose negative changed (\"\" clears)", () => {
+      const lib = [
+        { id: "v1", name: "lens", value: "85mm", negative: "blur" },
+        { id: "v2", name: "angle", value: "wide" },
+      ];
+      const draft: DraftRow[] = [
+        { id: "v1", name: "lens", value: "85mm", enabled: true, libraryId: "v1", negative: "" },
+        { id: "v2", name: "angle", value: "wide", enabled: true, libraryId: "v2", negative: "" },
+      ];
+      expect(shapeValuesPatch(draft, lib)).toEqual([
+        { id: "v1", name: "lens", value: "85mm", negative: "" },
+        { id: "v2", name: "angle", value: "wide" },
+      ]);
+      draft[0].negative = "blur";
+      expect(shapeValuesPatch(draft, lib)).toBeNull();
+      draft.push({ id: "n1", name: "mood", value: "calm", enabled: true, libraryId: null, negative: "angry" });
+      expect(shapeValuesPatch(draft, lib)![2]).toEqual({ id: "n1", name: "mood", value: "calm", negative: "angry" });
+    });
+
+    it("effectiveNegative prefers the override row's own key", () => {
+      const lib = { id: "v1", name: "lens", value: "85mm", negative: "blur" };
+      expect(effectiveNegative(lib, undefined)).toBe("blur");
+      expect(effectiveNegative(lib, { id: "v1", name: "lens", value: "85mm" })).toBe("blur");
+      expect(effectiveNegative(lib, { id: "v1", name: "lens", value: "85mm", negative: "" })).toBe("");
     });
   });
 });

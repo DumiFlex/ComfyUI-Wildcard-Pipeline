@@ -186,6 +186,15 @@ def test_fixed_value_and_combine_negatives():
     assert schema_version_for_payload(combine) == NEGATIVES_SCHEMA_VERSION
 
 
+def test_combine_negative_override_in_a_bundle_child():
+    def bundle(override):
+        return {"children": [{"id": "abababab", "type": "combine", "name": "c",
+                              "payload": {"template": "$a", "output_var": "c"},
+                              "instance": {"negative_override": override}}]}
+    assert schema_version_for_payload(bundle("blurry")) == NEGATIVES_SCHEMA_VERSION
+    assert schema_version_for_payload(bundle("")) == CURRENT_SCHEMA_VERSION
+
+
 def test_add_to_negative_action_and_bundle_child():
     row = _derivation_row(_TEST)
     row["payload"]["rules"][0]["branches"][0]["action"]["mode"] = "negative"

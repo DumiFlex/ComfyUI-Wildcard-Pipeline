@@ -864,7 +864,7 @@ export interface ModuleEntry {
      * this field — their edits go straight into `payload.values`
      * because there's no library state to preserve.
      */
-    values_overrides?: Array<{ id: string; name: string; value: string }> | null;
+    values_overrides?: Array<{ id: string; name: string; value: string; negative?: string }> | null;
     /**
      * Combine per-instance template override. When set, the engine
      * reads this string in place of `payload.template`. Empty/null =
@@ -872,6 +872,12 @@ export interface ModuleEntry {
      * library template. Engine reads in `combine_handler.py:64-65`.
      */
     template_override?: string | null;
+    /**
+     * Combine per-instance negative override (schema v8 send-to-negative).
+     * A string replaces `payload.negative` ("" clears it); null/absent =
+     * library default. Engine reads in `combine_handler.py`.
+     */
+    negative_override?: string | null;
     /**
      * Per-instance disable list for derivation rules. Engine skips rules
      * whose `id` matches any entry. Null/absent = all rules active.

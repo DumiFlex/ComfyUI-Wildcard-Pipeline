@@ -2,7 +2,8 @@
 
 Reads payload.template (or instance.template_override when set), resolves
 all $var / {a|b|c} / {N$$sep$$...} constructs against the runtime ctx,
-binds the result to payload.output_var.
+binds the result to payload.output_var. Its own negative is
+payload.negative, or instance.negative_override when that is a string.
 
 Surface-gated: combine resolves $var (it's the consumer) but not @{uuid}
 (refs only resolve from wildcard option values — RefOutOfSurfaceError).
@@ -132,7 +133,10 @@ class CombineHandler(ModuleHandler):
         # Send-to-negative: the phrase carries the negatives of every variable
         # its template rendered, plus its own (resolved quietly on the
         # combine's negative stream so its {a|b} never shifts the value's).
-        own = negatives.clean_negative(payload.get("negative"))
+        # instance.negative_override wins like template_override ("" clears).
+        neg_override = instance.get("negative_override")
+        own = negatives.clean_negative(
+            neg_override if isinstance(neg_override, str) else payload.get("negative"))
         entries = negatives.entries_for_reads(ctx, col.reads)
         entries += negatives.own_entries(
             [own] if own else [], resolve_ctx,

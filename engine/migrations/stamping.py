@@ -182,16 +182,18 @@ def uses_derivation_conditions(node: Any) -> bool:
 
 
 def uses_negatives(node: Any) -> bool:
-    """Any non-empty ``negative`` string, or a derivation action whose mode is
+    """Any non-empty ``negative`` (or a combine instance's
+    ``negative_override``) string, or a derivation action whose mode is
     ``negative``, at any depth. An empty negative is stored as absent and
     never needs v8."""
     if isinstance(node, list):
         return any(uses_negatives(child) for child in node)
     if not isinstance(node, dict):
         return False
-    neg = node.get("negative")
-    if isinstance(neg, str) and neg.strip():
-        return True
+    for key in ("negative", "negative_override"):
+        neg = node.get(key)
+        if isinstance(neg, str) and neg.strip():
+            return True
     if node.get("mode") in ("negative", "negative_replace") and "target_var" in node:
         return True
     extra = node.get("extra_actions")
