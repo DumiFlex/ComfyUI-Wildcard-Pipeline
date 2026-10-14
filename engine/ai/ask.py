@@ -272,14 +272,18 @@ def result_text(cargs: dict[str, Any], got: list[dict[str, Any]]) -> str:
     return text
 
 
-def settle(decisions: Any, got: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def settle(decisions: Any, got: list[dict[str, Any]], call: str = "") -> list[dict[str, Any]]:
     """The chat's decisions with these answers added (a header answered
-    again replaces its old answer), at most MAX_DECISIONS."""
+    again replaces its old answer), at most MAX_DECISIONS. `call` is the ask
+    call's id, so Try again can drop the answers its turn gave."""
     out = [d for d in decisions if isinstance(d, dict)] if isinstance(decisions, list) else []
     for a in got:
         out = [d for d in out if str(d.get("header") or "").lower() != a["header"].lower()]
-        out.append({"header": a["header"], "question": a["question"], "answer": a["answer"],
-                    "by": a["by"]})
+        d = {"header": a["header"], "question": a["question"], "answer": a["answer"],
+             "by": a["by"]}
+        if call:
+            d["call"] = call
+        out.append(d)
     return out[-MAX_DECISIONS:]
 
 

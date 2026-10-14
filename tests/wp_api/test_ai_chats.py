@@ -37,6 +37,9 @@ async def test_chats_are_listed_searched_renamed_pinned_and_deleted(wp_client, f
     found = (await _json(await wp_client.get("/wp/api/ai/chats?q=Sure")))["chats"]
     assert [c["id"] for c in found] == [b["chat_id"]]
     assert (await _json(await wp_client.get("/wp/api/ai/chats?q=%25")))["chats"] == []
+    # Only the words count, not the stored JSON around them.
+    for q in ("kind", "proposals", "steps"):
+        assert (await _json(await wp_client.get(f"/wp/api/ai/chats?q={q}")))["chats"] == []
 
     # Renaming and pinning don't make a chat newer, but pins come first.
     out = await _json(await wp_client.patch(f"/wp/api/ai/chats/{a['chat_id']}",
@@ -454,3 +457,39 @@ async def test_a_card_fix_changes_the_card_reopens_fixed_and_tells_the_model(wp_
                 events=[{"pid": card["pid"], "fix": fix["key"], "label": fix["label"]}])
     sent = json.dumps(fake_llm.seen[-1]["body"])
     assert "used the card's fix" in sent and "Remove camera words" in sent
+
+
+async def test_retry_drops_the_old_turns_card_fixes(wp_client, fake_llm):
+    _on(fake_llm)
+    step = {"message": "Here.", "calls": [{"tool": "create_wildcard",
+        "args": json.dumps({"name": "Pose", "var": "pose", "options": [
+            {"text": "standing"}, {"text": "close-up, sitting"}, {"text": "full body"}]})}]}
+    fake_llm.chat_steps.append(step)
+    first = await _chat(wp_client, "make poses")
+    card = first["proposals"][0]
+    url = f"/wp/api/ai/chats/{first['chat_id']}"
+    await _json(await wp_client.patch(url, json={"events": [
+        {"pid": card["pid"], "fix": card["fixes"][0]["key"]}]}))
+    fake_llm.chat_steps.append(step)
+    again = await _chat(wp_client, "", chat_id=first["chat_id"], retry=True)
+    # Same pid, new card: the fix made to the discarded one doesn't carry over.
+    assert again["proposals"][0]["pid"] == card["pid"]
+    chat = await _json(await wp_client.get(url))
+    shown = chat["turns"][1]["view"]["proposals"][0]
+    assert len(shown["op"]["body"]["payload"]["options"]) == 3 and shown["fixes"]
+
+
+async def test_a_second_request_for_a_busy_chat_is_refused(wp_client, fake_llm):
+    from wp_api import ai as ai_routes
+    _on(fake_llm)
+    fake_llm.chat_steps.append({"message": "Hi!", "calls": []})
+    first = await _chat(wp_client, "hello")
+    ai_routes._BUSY.add(first["chat_id"])
+    try:
+        out = await _json(await wp_client.post("/wp/api/ai/chat", json={
+            "message": "again", "chat_id": first["chat_id"]}), 409)
+        assert "still answering" in out["error"]
+    finally:
+        ai_routes._BUSY.discard(first["chat_id"])
+    fake_llm.chat_steps.append({"message": "Back.", "calls": []})
+    assert (await _chat(wp_client, "again", chat_id=first["chat_id"]))["message"] == "Back."

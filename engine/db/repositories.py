@@ -1365,8 +1365,10 @@ class ChatRepository:
         if q:
             like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
             sql += (" WHERE c.title LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM ai_chat_messages m "
-                    "WHERE m.chat_id = c.id AND (m.body LIKE '%\"kind\": \"user\"%' "
-                    "OR m.body LIKE '%\"kind\": \"shown\"%') AND m.body LIKE ? ESCAPE '\\')")
+                    "WHERE m.chat_id = c.id AND CASE json_extract(m.body, '$.kind') "
+                    "WHEN 'user' THEN json_extract(m.body, '$.text') "
+                    "WHEN 'shown' THEN json_extract(m.body, '$.view.message') END "
+                    "LIKE ? ESCAPE '\\')")
             args += [like, like]
         sql += f" ORDER BY {pinned} DESC, c.updated_at DESC, c.id;"
         return [{"id": r["id"], "title": r["title"], "pinned": bool(r["pinned"]),

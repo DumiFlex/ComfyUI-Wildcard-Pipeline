@@ -350,7 +350,7 @@ def _compile_condition(
             warnings.append(unset_note(read.split(".")[0]))
     elif "@{" in value or ai_refs.has_pick(value):
         raise _Drop("a condition compares with plain text or one $variable, not a pick")
-    if op == "matches":
+    if op in ("matches", "not_matches"):
         try:
             re.compile(value)
         except re.error:

@@ -1107,7 +1107,7 @@ async def post_chat(request: web.Request) -> web.StreamResponse:
     if isinstance(body, web.Response):
         return body
     if not body.get("stream"):
-        return await _chat_turn(request, body, None)
+        return await _one_turn(request, body, None)
     resp = web.StreamResponse(headers={
         "Content-Type": "application/x-ndjson", "Cache-Control": "no-store",
         "X-Content-Type-Options": "nosniff"})
@@ -1116,7 +1116,7 @@ async def post_chat(request: web.Request) -> web.StreamResponse:
     async def emit(event: dict[str, Any]) -> None:
         await resp.write((_json.dumps(event, ensure_ascii=False) + "\n").encode("utf-8"))
 
-    out = await _chat_turn(request, body, emit)
+    out = await _one_turn(request, body, emit)
     try:
         data = _json.loads(out.text or "{}")
     except ValueError:
@@ -1128,6 +1128,26 @@ async def post_chat(request: web.Request) -> web.StreamResponse:
         await emit({"type": "done", "result": data})
     await resp.write_eof()
     return resp
+
+
+# Chats with a turn running. A second request for the same chat (another
+# tab, a resume racing a new message) would build on the same log and both
+# would append, so it is refused instead.
+_BUSY: set[str] = set()
+
+
+async def _one_turn(request: web.Request, body: dict[str, Any], emit: Any) -> web.Response:
+    chat_id = body.get("chat_id")
+    if not isinstance(chat_id, str) or not chat_id:
+        return await _chat_turn(request, body, emit)
+    if chat_id in _BUSY:
+        return json_error("this chat is still answering; wait for it or press Stop",
+                          status=409)
+    _BUSY.add(chat_id)
+    try:
+        return await _chat_turn(request, body, emit)
+    finally:
+        _BUSY.discard(chat_id)
 
 
 async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> web.Response:
@@ -1215,12 +1235,24 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         if not edited:
             text = str(log[retried_from].get("text") or "")
         images = list(log[retried_from].get("images") or [])
+        log_cut = log[retried_from:]
         log = log[:retried_from]
         m = dict(chat["meta"])
         m.pop("pending", None)
         m["proposals"] = {k: v for k, v in (m.get("proposals") or {}).items()
                           if k not in turn_pids}
         m["shown_status"] = {k: v for k, v in shown_status.items() if k not in turn_pids}
+        # Pids and call ids get reused by the new turn: drop what the old one
+        # left behind (card fixes, answered asks), and keep masking out of it.
+        turn_calls = {c.get("id") for e in log_cut for c in e.get("calls") or []
+                      if isinstance(c, dict)}
+        m["fixes"] = {k: v for k, v in (m.get("fixes") or {}).items() if k not in turn_pids}
+        m["asked"] = {k: v for k, v in (m.get("asked") or {}).items() if k not in turn_calls}
+        m["decisions"] = [d for d in m.get("decisions") or []
+                          if not (isinstance(d, dict) and d.get("call") in turn_calls)]
+        for key in ("masked_before", "dropped_before"):
+            if int(m.get(key) or 0) > retried_from:
+                m[key] = retried_from
         chat = {**chat, "meta": m}
     paused = (chat or {}).get("meta", {}).get("pending") if chat else None
     if resume:
@@ -1903,7 +1935,7 @@ async def _paused_results(
             else:
                 got_ = ai_ask.answers(c["args"], answer)
                 text = ai_ask.result_text(c["args"], got_)
-                meta["decisions"] = ai_ask.settle(meta.get("decisions"), got_)
+                meta["decisions"] = ai_ask.settle(meta.get("decisions"), got_, c["id"])
                 asked[c["id"]] = ai_ask.shown(got_)
             meta["asked"] = asked
         else:

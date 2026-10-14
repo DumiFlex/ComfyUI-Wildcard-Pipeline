@@ -97,17 +97,43 @@ describe("aiManageOps", () => {
     expect(api.categories.delete).not.toHaveBeenCalled();
   });
 
+  it("a failed delete puts categories back before their items, so items keep them", async () => {
+    useCategoryStore().items = [{ id: "clothes", name: "Clothes", color: "#f00", icon: null, sort_order: 2 }];
+    vi.mocked(api.categories.create).mockResolvedValue({
+      id: "clothes2", name: "Clothes", color: "#f00", icon: null, sort_order: 2 });
+    vi.mocked(api.libraryTags.delete).mockRejectedValueOnce(new Error("boom"));
+    await expect(applyManage(DELETE)).rejects.toThrow("boom");
+    // The category came back (under a new id) and the recreated item is in it.
+    expect(api.modules.create).toHaveBeenCalledWith(expect.objectContaining({
+      id: "aaaa0001", category_id: "clothes2" }));
+    expect(api.bundles.update).toHaveBeenCalledWith("bbbb0001", { category_id: "clothes2" });
+  });
+
+  it("a bulk card's Undo leaves a category that already existed", async () => {
+    useCategoryStore().items = [{ id: "outfits", name: "Outfits", color: null, icon: null, sort_order: 0 }];
+    const op: ManageOp = { op: "bulk", kind: "bulk", new_category: "Outfits",
+      items: [{ kind: "module", id: "aaaa0001", name: "Outfit", to_new: true, body: {}, before: { category_id: null } }] } as unknown as ManageOp;
+    const made = await applyManage(op);
+    expect(made).toEqual([]);
+    await undoManage(op, made);
+    expect(api.categories.delete).not.toHaveBeenCalled();
+    expect(api.modules.update).toHaveBeenLastCalledWith("aaaa0001", { category_id: null });
+  });
+
   it("creates and renames categories, and renames tags with Undo", async () => {
     const cats = useCategoryStore();
     cats.items = [{ id: "places", name: "Places", color: null, icon: null, sort_order: 0 }];
     vi.mocked(api.categories.create).mockResolvedValue({ id: "weather", name: "Weather", color: null, icon: null, sort_order: 0 });
     const op: ManageOp = { op: "categories", kind: "categories", create: ["Weather", "places"],
                            rename: [{ id: "places", from: "Places", to: "Spots" }] };
-    await applyManage(op);
+    const made = await applyManage(op);
+    expect(made).toEqual(["weather"]);
     expect(api.categories.create).toHaveBeenCalledOnce();
     expect(api.categories.update).toHaveBeenCalledWith("places", { name: "Spots" });
-    await undoManage(op);
+    await undoManage(op, made);
     expect(api.categories.update).toHaveBeenLastCalledWith("places", { name: "Places" });
+    // Only what apply made goes: "places" already existed.
+    expect(api.categories.delete).toHaveBeenCalledOnce();
     expect(api.categories.delete).toHaveBeenCalledWith("weather");
 
     const tags: ManageOp = { op: "tags", kind: "tags", rename: [{ from: "warm", to: "hot", merge: false,

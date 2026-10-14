@@ -852,7 +852,14 @@ async function apply(entry: ChatAssistantEntry, p0: AiChatProposal): Promise<voi
   delete entry.errors[p.pid];
   try {
     if (isManageOp(op)) {
-      await applyManage(op);
+      const made = await applyManage(op);
+      // The categories it made, so Undo removes only those (kept for this
+      // session; a reopened chat's Undo finds them by name).
+      entry.created[p.pid] = made.join(",");
+      entry.status[p.pid] = "applied";
+      record(p.pid, "applied", undefined, skip.size);
+      touch();
+      return;
     } else if (op.op === "create") {
       const cid = await categoryId(op.new_category);
       const extra = cid === undefined ? {} : { category_id: cid };
@@ -909,7 +916,9 @@ async function undo(entry: ChatAssistantEntry, p: AiChatProposal): Promise<void>
   if (entry.status[p.pid] !== "applied" || op.op === "open") return;
   try {
     if (isManageOp(op)) {
-      await undoManage(op);
+      const made = entry.created[p.pid];
+      await undoManage(op, made === undefined ? undefined : made.split(",").filter(Boolean));
+      delete entry.created[p.pid];
     } else if (op.op === "create") {
       const id = entry.created[p.pid];
       if (id && op.kind === "bundle") await useBundleStore().remove(id);
