@@ -64,7 +64,7 @@ async def test_a_reopened_chat_shows_what_the_user_saw(wp_client, fake_llm):
     fake_llm.chat_steps.append({"message": "Here.", "calls": [
         {"tool": "update_info", "args": json.dumps({"id": tgt, "tags_add": ["gear"]})}]})
     first = await _chat(wp_client, "tag Weapon as gear")
-    assert first["context"]["window"] == 4096 and first["context"]["used"] > 0
+    assert first["context"]["window"] == 65536 and first["context"]["used"] > 0
     pid = first["proposals"][0]["pid"]
     await _json(await wp_client.patch(f"/wp/api/ai/chats/{first['chat_id']}", json={
         "events": [{"pid": pid, "status": "applied", "created": "abcd1234"},
@@ -76,7 +76,7 @@ async def test_a_reopened_chat_shows_what_the_user_saw(wp_client, fake_llm):
     assert reply["role"] == "assistant" and reply["view"]["message"] == "Here."
     assert reply["view"]["proposals"][0]["pid"] == pid
     assert reply["status"] == {pid: "applied"} and reply["created"] == {pid: "abcd1234"}
-    assert chat["context"]["window"] == 4096
+    assert chat["context"]["window"] == 65536
 
 
 async def test_retry_runs_the_last_message_again(wp_client, fake_llm):
@@ -129,6 +129,7 @@ def _long_chat_steps(fake_llm, n):
 async def test_a_long_chat_is_compacted_into_a_summary(wp_client, fake_llm):
     src, tgt = await _two_wildcards(wp_client)
     _on(fake_llm, context_max=4096)
+    fake_llm.overrides["_ctx"] = 4096
     fake_llm.overrides["summary"] = {"summary": (
         "What the user wants:\n- a weapon list\nDecisions made:\nnone")}
     fake_llm.chat_steps.append({"message": "Read it.", "calls": [
@@ -153,6 +154,7 @@ async def test_a_long_chat_is_compacted_into_a_summary(wp_client, fake_llm):
 
 async def test_compact_now_and_its_refusals(wp_client, fake_llm):
     _on(fake_llm)
+    fake_llm.overrides["_ctx"] = 4096
     fake_llm.overrides["summary"] = {"summary": "What the user wants:\n- short answers please"}
     _long_chat_steps(fake_llm, 5)
     out = await _chat(wp_client, "one")
@@ -493,3 +495,48 @@ async def test_a_second_request_for_a_busy_chat_is_refused(wp_client, fake_llm):
         ai_routes._BUSY.discard(first["chat_id"])
     fake_llm.chat_steps.append({"message": "Back.", "calls": []})
     assert (await _chat(wp_client, "again", chat_id=first["chat_id"]))["message"] == "Back."
+
+
+def _sent_tools(fake_llm):
+    return [t["function"]["name"] for t in fake_llm.seen[-1]["body"].get("tools") or []]
+
+
+async def test_a_new_chat_fits_the_window_the_model_was_loaded_with(wp_client, fake_llm):
+    await _two_wildcards(wp_client)
+    # Roomy: every tool and the whole prompt.
+    _on(fake_llm, model="tooly")
+    await _chat(wp_client, "How do constraints work?")
+    full = _sent_tools(fake_llm)
+    assert "Docs pages (id: title" in fake_llm.seen[-1]["body"]["messages"][0]["content"]
+    # 16k can't hold all 37 tool declarations and the full instructions.
+    fake_llm.overrides["_ctx"] = 16384
+    _on(fake_llm, model="tooly", context_max=16384)
+    out = await _chat(wp_client, "How do constraints work?")
+    lean = _sent_tools(fake_llm)
+    assert "more_tools" in lean and len(lean) < len(full)
+    assert "Docs pages (id: title" not in fake_llm.seen[-1]["body"]["messages"][0]["content"]
+    assert out["context"]["window"] == 16384
+    # The chat keeps the level it started at.
+    await _chat(wp_client, "and exceptions?", chat_id=out["chat_id"])
+    assert _sent_tools(fake_llm) == lean
+
+
+async def test_a_refused_long_first_request_is_retried_leaner(wp_client, fake_llm):
+    await _two_wildcards(wp_client)
+    _on(fake_llm, model="tooly")
+    fake_llm.overrides["_overflow"] = 1
+    fake_llm.chat_steps.append({"content": "Constraints link two lists."})
+    out = await _chat(wp_client, "How do constraints work?")
+    assert out["message"] == "Constraints link two lists."
+    refused, retried = fake_llm.seen[-2:]
+    assert len(retried["body"]["tools"]) < len(refused["body"]["tools"])
+
+
+async def test_a_window_too_small_even_when_lean_says_what_to_load(wp_client, fake_llm):
+    await _two_wildcards(wp_client)
+    _on(fake_llm, model="tooly")
+    fake_llm.overrides["_overflow"] = 5
+    resp = await wp_client.post("/wp/api/ai/chat", json={"message": "How do constraints work?"})
+    err = (await _json(resp, 400))["error"]
+    assert "loaded with 16,384 tokens of context" in err
+    assert "about 17,339" in err and "at least 32,768" in err

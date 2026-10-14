@@ -35,3 +35,25 @@ def test_clip():
     out = budget.clip(text, 100)
     assert out.startswith("line 0") and "more lines left out" in out
     assert budget.clip("short", 100) == "short"
+
+
+def test_a_window_fit_leaves_room_for_a_turn():
+    # 16k tokens is about 52k characters; the turn's reserve comes off it.
+    assert budget.fits(30000, 16384)
+    assert not budget.fits(50000, 16384)
+    assert budget.room_chars(16384, 50000) == 2000  # never below the floor
+    assert budget.room_chars(65536, 30000) > 150000
+    assert budget.suggest_window(50000) == 32768
+
+
+def test_overflow_reads_the_servers_own_count():
+    lmstudio = ('the server answered 500: Engine protocol predict request returned 400: '
+                '{"error":{"code":400,"message":"request (17339 tokens) exceeds the available '
+                'context size (16384 tokens), try increasing it","type":"exceed_context_size_'
+                'error","n_prompt_tokens":17339,"n_ctx":16')
+    assert budget.overflow(lmstudio) == (17339, 16384)
+    assert budget.overflow('{"n_prompt_tokens": 9000, "n_ctx": 8192}') == (9000, 8192)
+    assert budget.overflow("This model's maximum context length is 16384 tokens. However, "
+                           "you requested 17339 tokens (17000 in the messages)") == (17339, 16384)
+    assert budget.overflow("exceed_context_size_error") == (0, 0)
+    assert budget.overflow("the server refused the API key") is None

@@ -177,6 +177,7 @@ async def test_at_most_two_asks_per_message(wp_client, fake_llm):
 
 async def test_compaction_keeps_the_settled_answers(wp_client, fake_llm):
     _on(fake_llm)
+    fake_llm.overrides["_ctx"] = 4096
     fake_llm.overrides["summary"] = {"summary": "What the user wants:\n- a pack"}
     fake_llm.chat_steps.extend([_ask_step(), {"message": "ok", "calls": []}])
     first = await _chat(wp_client, "pack")

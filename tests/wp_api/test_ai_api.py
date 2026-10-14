@@ -874,6 +874,7 @@ async def test_chat_sees_templates_and_runs_stacks(wp_client, fake_llm):
 
 
 async def test_connection_test_warns_about_a_small_loaded_context(wp_client, fake_llm):
+    fake_llm.overrides["_ctx"] = 4096
     ai_config.update({"enabled": True, "provider": "lmstudio",
                       "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
     body = await (await wp_client.post("/wp/api/ai/test")).json()
