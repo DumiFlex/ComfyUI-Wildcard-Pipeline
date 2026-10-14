@@ -1989,7 +1989,8 @@ async def post_pack_change(request: web.Request) -> web.Response:
 async def post_pack_review(request: web.Request) -> web.Response:
     """Body: {plan, ai?, request?}. The plan checked against the guide
     before it is built; with ``ai`` the model reviews it too. Returns
-    {findings, note}."""
+    {findings, note, plan}: ``plan`` is the plan as the server reads it
+    (hand-added items get their keys and reserved ids)."""
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
@@ -2013,7 +2014,8 @@ async def post_pack_review(request: web.Request) -> web.Response:
         except _ai_client.AIError as e:
             return json_error(e.message, status=e.status)
         findings += ai_pack.compile_review(answer, plan)
-    return json_ok({"findings": findings, "note": ai_pack.review_note(findings)})
+    return json_ok({"findings": findings, "note": ai_pack.review_note(findings),
+                    "plan": plan})
 
 
 async def post_pack_item(request: web.Request) -> web.Response:

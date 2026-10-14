@@ -1422,17 +1422,23 @@ export interface AiChatRef {
 
 /* ── Pack builder ───────────────────────────────────────────────────── */
 
-/** `library`: a wildcard the user already has, used as it is. */
+/** `library`: a wildcard or fixed values the user already has, used as it is. */
 export type AiPackKind =
   | "wildcard" | "library" | "fixed_values" | "derivation" | "combine" | "constraint"
   | "template";
 
 export interface AiPackItem {
   key: string;
+  /** The module id reserved for it when the plan was made (a library
+   *  item's is the library row's), so refs and rules can point at it
+   *  before it is built. */
+  id: string;
   kind: AiPackKind;
   name: string;
   /** The variable it sets ("" for constraints and the template). */
   var: string;
+  /** The sub-bundle it goes in ("" for the pack bundle itself). */
+  section: string;
   about: string;
   /** Options to write (wildcards only). */
   count: number;
@@ -1443,8 +1449,10 @@ export interface AiPackItem {
   target: string;
   /** Per-use settings on the bundle ("pick 2-3; hold"), or "". */
   use: string;
-  /** The library wildcard a `library` item uses ("" otherwise). */
+  /** The library row a `library` item uses ("" otherwise). */
   library_id: string;
+  /** That row's type: "wildcard" or "fixed_values". */
+  library_type: string;
 }
 
 /** A value the pack reads but doesn't set: a WP Context Injector row. */
@@ -1453,6 +1461,41 @@ export interface AiPackInput {
   about: string;
   /** What the check pins it to. */
   example: string;
+}
+
+/** What the user picks before planning; every plan request carries them. */
+export interface AiPackSettings {
+  /** reuse: library items that fit go in as they are; inspire: everything
+   *  new, written like the library; new: ignore the library. */
+  library: "reuse" | "inspire" | "new";
+  /** auto: a standing negative plus option negatives where they help. */
+  negatives: "auto" | "template" | "none";
+  /** sections: a sub-bundle per section inside the pack bundle. */
+  structure: "sections" | "flat";
+  style: "auto" | "tags" | "sentences";
+  rating: "auto" | "safe" | "nsfw";
+  /** Options per wildcard, 0 for the planner's choice. */
+  count: number;
+}
+
+export interface AiPackQuestion {
+  /** A short label ("Outfits"). */
+  header: string;
+  question: string;
+  /** More than one choice may be picked. */
+  multi: boolean;
+  choices: string[];
+}
+
+/** A question the user already answered; never asked again. */
+export interface AiPackDecision {
+  question: string;
+  answer: string;
+}
+
+export interface AiPackSection {
+  name: string;
+  about: string;
 }
 
 export interface AiPackPlan {
@@ -1465,8 +1508,15 @@ export interface AiPackPlan {
   model: string;
   /** The variable the other picks follow, or "". */
   anchor: string;
-  questions: Array<{ question: string; choices: string[] }>;
+  questions: AiPackQuestion[];
+  /** What the planner guessed instead of asking. */
+  assumptions: string[];
+  /** Web searches the planner would like to run (needs the user's OK). */
+  research: string[];
+  decisions: AiPackDecision[];
+  settings: AiPackSettings;
   inputs: AiPackInput[];
+  sections: AiPackSection[];
   items: AiPackItem[];
   /** What the checker left out of the model's plan. */
   warnings: string[];
@@ -1476,17 +1526,37 @@ export interface AiPackPlanRequest extends AiConversational {
   instruction: string;
   /** A prompt the user likes, to rebuild as a pack. */
   sample?: string;
+  settings?: AiPackSettings;
+  decisions?: AiPackDecision[];
+  /** The plan as the user sees it now (hand edits included). */
+  previous?: AiPackPlan;
+  /** Reference images (JPEG data URLs), for a vision model. */
+  images?: string[];
+  /** Search results the user allowed, for the planner to use. */
+  web?: Array<{ query: string; text: string }>;
+  /** Searches already run or skipped, never asked for again. */
+  searched?: string[];
+  /** "Extend with AI": the bundle the plan adds to. */
+  bundle_id?: string;
 }
+
+/** A change a finding can make to the plan without the model. */
+export type AiPackPatch =
+  | { op: "edit"; key: string; set: Partial<Omit<AiPackItem, "key" | "id">> }
+  | { op: "add"; item: Partial<AiPackItem> & { kind: AiPackKind } }
+  | { op: "remove"; key: string };
 
 /** One thing the plan review found. `fix`: it would break the pack or
  *  leave a rule doing nothing; `tip`: it would make prompts more coherent. */
 export interface AiPackFinding {
+  id: string;
   /** The plan item it is about, or "" for the whole pack. */
   key: string;
   level: "fix" | "tip";
   text: string;
   /** "model" when the model's review found it. */
   by?: "model";
+  patch?: AiPackPatch;
 }
 
 export interface AiPackPlanResult {
@@ -1495,12 +1565,22 @@ export interface AiPackPlanResult {
   answer: Record<string, unknown>;
   /** The plan checked against the guide. */
   review: AiPackFinding[];
+  /** Web search is set up, so research can run. */
+  web?: boolean;
 }
 
 export interface AiPackReview {
   findings: AiPackFinding[];
   /** The findings as a refine request for the planner. */
   note: string;
+  /** The plan as the server reads it. */
+  plan: AiPackPlan;
+}
+
+export interface AiPackChangeResult {
+  plan: AiPackPlan;
+  review: AiPackFinding[];
+  model: string;
 }
 
 /** Built items by plan key. A template's payload is
@@ -1536,6 +1616,8 @@ export interface AiPackInstallResult {
   undo_entry_id: string;
   ids: Record<string, string>;
   bundle_id: string;
+  /** One per section: the bundles inside the pack bundle. */
+  sub_bundles: Array<{ id: string; name: string }>;
   template_id: string;
   tag: string;
   /** How to wire the pack on the canvas. */

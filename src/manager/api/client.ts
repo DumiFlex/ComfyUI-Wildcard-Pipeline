@@ -26,6 +26,7 @@ import type {
   AiChatStreamEvent,
   AiChatSummary,
   AiPackBuilt,
+  AiPackChangeResult,
   AiPackCheck,
   AiPackInstallResult,
   AiPackItemResult,
@@ -569,7 +570,17 @@ export const api = {
         method: "POST", body: JSON.stringify(body), signal,
       });
     },
-    packReview(body: { plan: AiPackPlan; ai?: boolean }, signal?: AbortSignal) {
+    packChange(body: { plan: AiPackPlan; key?: string; instruction: string }, signal?: AbortSignal) {
+      return request<AiPackChangeResult>("/wp/api/ai/pack/change", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    packSearch(body: { queries: string[] }, signal?: AbortSignal) {
+      return request<{ results: Array<{ query: string; text: string }> }>("/wp/api/ai/pack/search", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    packReview(body: { plan: AiPackPlan; ai?: boolean; request?: string }, signal?: AbortSignal) {
       return request<AiPackReview>("/wp/api/ai/pack/review", {
         method: "POST", body: JSON.stringify(body), signal,
       });
