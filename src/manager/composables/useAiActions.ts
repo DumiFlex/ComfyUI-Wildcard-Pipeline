@@ -514,7 +514,9 @@ export async function runCall(call: AiPendingCall, host: AiActionHost): Promise<
         return await highlight(points);
       }
       case "web_search":
-        return "couldn't: web search runs on the server";
+      case "read_result":
+      case "danbooru":
+        return "couldn't: web calls run on the server";
       case "ask":
         return "couldn't: questions are answered in the chat";
       default: {

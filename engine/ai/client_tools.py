@@ -260,6 +260,29 @@ def _web_search(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
     return {"query": query}, f"Web search: {query}"
 
 
+def _same_url(a: str, b: str) -> bool:
+    return a.rstrip("/").lower() == b.rstrip("/").lower()
+
+
+def _read_result(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    url = _text(args.get("url"), 500).strip("<>[]() ")
+    # Only links a search the user allowed in this chat returned.
+    seen = list(getattr(lib, "web_urls", None) or [])
+    hit = next((u for u in seen if _same_url(u, url)), None)
+    if hit is None:
+        raise ValueError("read_result only reads links from your web_search results in this "
+                         "chat; search first, then pass one of their links exactly")
+    short = hit.split("://", 1)[-1]
+    return {"url": hit}, "Read page: " + (short if len(short) <= 80 else short[:79] + "…")
+
+
+def _danbooru(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    tag = "_".join(_text(args.get("tag"), 120).lower().split())
+    if len(tag) < 2 or "," in tag:
+        raise ValueError("danbooru looks up one tag, e.g. {\"tag\": \"hatsune_miku\"}")
+    return {"tag": tag}, f"Danbooru: {tag}"
+
+
 def _ask(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
     # The chat's settled answers ride on the library for the turn.
     return ai_ask.prepare(args, getattr(lib, "decisions", None))
@@ -269,6 +292,7 @@ _PREPARE = {
     "open": _open, "read_page": _read_page, "highlight": _highlight,
     "select_rows": _select_rows, "organize": _organize, "draft_options": _draft_options,
     "show_test": _show_test, "use_panel": _use_panel, "web_search": _web_search, "ask": _ask,
+    "read_result": _read_result, "danbooru": _danbooru,
 }
 
 #: Longest browser answer kept for the model.

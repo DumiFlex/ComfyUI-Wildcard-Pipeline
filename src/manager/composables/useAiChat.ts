@@ -39,6 +39,7 @@ import { applyManage, isManageOp, undoManage } from "./aiManageOps";
 import { EDIT_ROUTES, runCall, type AiActionHost } from "./useAiActions";
 import { cardOptions, draftRoute, draftType, withoutOptions } from "./aiCards";
 import { MAX_IMAGES, prepareImage, type ChatImage } from "../utils/chat-image";
+import { isWebCall } from "../utils/web-calls";
 
 /** The user's answer to a web search the model asked for. */
 export type SearchApproval = "once" | "chat" | "deny";
@@ -452,7 +453,7 @@ async function answerCalls(
   const out: AiCallAnswer[] = [];
   for (const call of calls) {
     if (signal.aborted) return null;
-    if (call.tool === "web_search") {
+    if (isWebCall(call)) {
       const choice = await approval(call.id, signal);
       if (!choice) return null;
       entry.approved = { ...entry.approved, [call.id]: choice };

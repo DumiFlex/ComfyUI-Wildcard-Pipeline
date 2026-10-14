@@ -875,6 +875,18 @@ export interface AiConfig {
   /** Engines with a key saved for their own address. Never the keys. */
   search_keys_saved: AiSearchEngineId[];
   search_engines: Record<AiSearchEngineId, { label: string; needs_key: boolean }>;
+  /** How read_result fetches a page from an allowed search ("off" stops it). */
+  reader_engine: AiReaderId | "off";
+  /** The Crawl4AI / Firecrawl address ("" = Firecrawl's hosted API). */
+  reader_url: string;
+  reader_keys_saved: AiReaderId[];
+  reader_engines: Record<AiReaderId, {
+    label: string; needs_key: boolean; needs_url: boolean; base_url: string;
+  }>;
+  /** The Danbooru tag lookup (wiki, aliases, related tags). Off by default. */
+  danbooru_lookup: boolean;
+  /** Web searches, page reads and Danbooru lookups run without asking. */
+  web_always_allow: boolean;
   /** The chat may propose deleting items, categories and tags (each card
    *  still needs its own confirm). Off by default. */
   allow_delete: boolean;
@@ -884,6 +896,7 @@ export interface AiConfig {
 }
 
 export type AiSearchEngineId = "searxng" | "brave" | "tavily" | "kagi";
+export type AiReaderId = "builtin" | "crawl4ai" | "firecrawl";
 
 export type AiModelSize = "small" | "medium" | "large";
 export type AiToolFormat = "auto" | "native" | "json";
@@ -909,6 +922,12 @@ export interface AiConfigPatch {
   search_url?: string;
   /** Write-only, for the chosen engine. `""` removes it. */
   search_key?: string;
+  reader_engine?: AiReaderId | "off";
+  reader_url?: string;
+  /** Write-only, for the chosen page reader. `""` removes it. */
+  reader_key?: string;
+  danbooru_lookup?: boolean;
+  web_always_allow?: boolean;
   allow_delete?: boolean;
   auto_apply?: boolean;
 }
@@ -1302,6 +1321,8 @@ export type AiPendingCall =
   | { id: string; tool: "use_panel"; label: string;
       args: { id: string; type: string; panel: string; request: string } }
   | { id: string; tool: "web_search"; label: string; args: { query: string } }
+  | { id: string; tool: "read_result"; label: string; args: { url: string } }
+  | { id: string; tool: "danbooru"; label: string; args: { tag: string } }
   | { id: string; tool: "ask"; label: string;
       args: { questions: AiAskQuestion[]; settled?: string[] } };
 
