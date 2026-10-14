@@ -11,9 +11,9 @@
  */
 import { computed } from "vue";
 import Button from "../ui/Button.vue";
-import Icon from "../ui/Icon.vue";
 import Modal from "../ui/Modal.vue";
 import type { MaintenanceOp, MaintenanceResult } from "../../api/types";
+import LoadingMark from "@/components/shared/LoadingMark.vue";
 
 type Phase = "confirm" | "loading" | "result-ok" | "result-error";
 
@@ -83,7 +83,7 @@ function onClose(): void { emit("close"); }
     </div>
 
     <div v-else-if="phase === 'loading'" class="wp-maintop wp-maintop--loading" data-test="maintop-spinner">
-      <Icon name="spin pi-spinner" :size="18" />
+      <LoadingMark :size="18" decorative />
       <span>Running {{ op }}…</span>
     </div>
 

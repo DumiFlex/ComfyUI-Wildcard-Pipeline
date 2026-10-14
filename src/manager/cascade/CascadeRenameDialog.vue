@@ -8,6 +8,7 @@ import Input from "../components/ui/Input.vue";
 import Modal from "../components/ui/Modal.vue";
 import { useCascadeApply, type CascadeApplyRequest } from "./useCascadeApply";
 import { validateSubcatName, validateRefGrammarName, validateVariableName } from "../validation/names";
+import LoadingMark from "@/components/shared/LoadingMark.vue";
 
 interface Props {
   open: boolean;
@@ -144,7 +145,7 @@ function onOpenUpdate(v: boolean): void {
     @update:open="onOpenUpdate"
   >
     <div v-if="loading" class="wp-cascade-rename__body">
-      <p class="wp-cascade-rename__msg">Scanning impact…</p>
+      <p class="wp-cascade-rename__msg"><LoadingMark>Scanning impact…</LoadingMark></p>
     </div>
     <div v-else class="wp-cascade-rename__body">
       <label class="wp-cascade-rename__field">

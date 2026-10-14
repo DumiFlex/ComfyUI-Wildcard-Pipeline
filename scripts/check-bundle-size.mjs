@@ -286,10 +286,13 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // 462,555 bytes before it. Same "guide, not a cap" rule as above.
 // RAISED 464 -> 468 KB on 2026-10-07 for the zoom's Details panel and the
 // frame-click zoom (lazy picker chunk); the branch sat at 476,239 bytes.
-// RAISED 468 -> 472 KB on 2026-10-14 for negatives on node fixed values and
+// RAISED 468 -> 472 KB on 2026-10-14 for the Split loading mark in the canvas
+// modals (Load template, Push to library); Dumi asked for it everywhere.
+// RAISED 472 -> 476 KB on 2026-10-14 for negatives on node fixed values and
 // combines (NegativeField in their lazy editor chunks) and the chat round;
-// the branch sat at 480,789 bytes. Same "guide, not a cap" rule as above.
-const TOTAL_LIMIT = 472 * 1024;     // 472 KB
+// the branch sat at 483,532 bytes.
+// Same "guide, not a cap" rule as above.
+const TOTAL_LIMIT = 476 * 1024;     // 476 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;
