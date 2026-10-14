@@ -98,6 +98,67 @@ def prompt_chars(system: str, history: list[tuple[str, Any]], user: str,
     return total
 
 
+#: Room a chat keeps beside its fixed part (instructions, tools, library
+#: summary): the answer, the user's message and a tool result.
+CHAT_RESERVE = 4096
+#: How lean a new chat's fixed part gets when the model's window is small,
+#: leanest last: the size's own prompt; the small-model prompt and tool set
+#: with a 40-item library summary; that with a 12-item summary and no
+#: examples. A chat keeps the level it started with (`meta["lean"]`), so
+#: its prompt prefix stays the same for caching.
+LEVELS: tuple[dict[str, Any], ...] = (
+    {},
+    {"slim": True, "overview": 40},
+    {"slim": True, "overview": 12, "examples": False},
+)
+
+
+def fits(fixed_chars: int, window: int) -> bool:
+    """Whether a chat whose fixed part is `fixed_chars` leaves room for a
+    turn in a `window`-token model."""
+    return tokens(fixed_chars) + CHAT_RESERVE <= window
+
+
+def room_chars(window: int, fixed_chars: int) -> int:
+    """Characters of history and tool results a turn can carry beside the
+    fixed part (never under 2000, so the newest result still shows)."""
+    return max(2000, int((window - tokens(fixed_chars) - CHAT_RESERVE) * CHARS_PER_TOKEN))
+
+
+def suggest_window(fixed_chars: int) -> int:
+    """The smallest power-of-two window a chat with this fixed part runs in."""
+    need = tokens(fixed_chars) + CHAT_RESERVE * 2
+    size = CONTEXT_MIN
+    while size < need and size < CONTEXT_MAX:
+        size *= 2
+    return size
+
+
+_OVERFLOW = (
+    # llama.cpp / LM Studio: "request (17339 tokens) exceeds the available
+    # context size (16384 tokens)", with n_prompt_tokens / n_ctx alongside.
+    re.compile(r"request \((\d+) tokens\) exceeds the available context size \((\d+) tokens\)"),
+    re.compile(r'"n_prompt_tokens"\s*:\s*(\d+)\s*,\s*"n_ctx"\s*:\s*(\d+)'),
+    # OpenAI-style servers (vLLM, OpenRouter): "maximum context length is
+    # 16384 tokens. However, you requested 17339 tokens".
+    re.compile(r"maximum context length is (\d+) tokens.{0,80}?requested (\d+) tokens", re.S),
+)
+
+
+def overflow(message: str) -> tuple[int, int] | None:
+    """(prompt tokens, window) when a server refused a request for not
+    fitting its context window, else None."""
+    for i, rx in enumerate(_OVERFLOW):
+        m = rx.search(message or "")
+        if m:
+            a, b = int(m.group(1)), int(m.group(2))
+            return (b, a) if i == 2 else (a, b)
+    if re.search(r"exceed_context_size|context (?:size|length|window) exceeded", message or "",
+                 re.I):
+        return (0, 0)
+    return None
+
+
 def clip(text: str, limit: int) -> str:
     """Keep the start of a long tool result and say what was left out."""
     if len(text) <= limit:

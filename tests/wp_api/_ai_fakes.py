@@ -59,6 +59,15 @@ async def fake_llm(aiohttp_server):
     async def openai_chat(request):
         body = await request.json()
         seen.append({"path": request.path, "headers": dict(request.headers), "body": body})
+        if overrides.get("_overflow"):
+            # LM Studio refusing a prompt longer than the loaded window.
+            overrides["_overflow"] -= 1
+            detail = json.dumps({"error": {
+                "code": 400, "message": "request (17339 tokens) exceeds the available context "
+                "size (16384 tokens), try increasing it", "type": "exceed_context_size_error",
+                "n_prompt_tokens": 17339, "n_ctx": 16384}})
+            return web.json_response(
+                {"error": "Engine protocol predict request returned 400: " + detail}, status=500)
         if "tools" in body and body.get("model") == "refuser":
             return web.json_response({"error": {"message": "this model has no tool support"}},
                                      status=400)
@@ -119,7 +128,9 @@ async def fake_llm(aiohttp_server):
     async def lmstudio_model(request):
         mid = request.match_info["mid"]
         caps = ["tool_use"] if mid == "tooly" else []
-        out = {"id": mid, "loaded_context_length": 4096, "capabilities": caps}
+        # A roomy window unless a test sets a small one (`overrides["_ctx"]`).
+        out = {"id": mid, "loaded_context_length": overrides.get("_ctx", 65536),
+               "capabilities": caps}
         if mid in ("eyes", "blind"):
             out["type"] = "vlm" if mid == "eyes" else "llm"
         return web.json_response(out)
