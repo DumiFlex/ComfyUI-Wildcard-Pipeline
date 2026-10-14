@@ -102,6 +102,7 @@ describe("PackBuilder", () => {
   it("plans, refines with answers, builds in order, repairs, installs", async () => {
     const { w, router } = await mountIt();
     await w.get('[data-test="pack-request"]').setValue("season outfits");
+    await w.get('[data-test="pack-next"]').trigger("click");
     await w.get('[data-test="pack-plan"]').trigger("click");
     await flushPromises();
     expect(vi.mocked(api.ai.packPlan).mock.calls[0][0]).toEqual({
@@ -167,6 +168,7 @@ describe("PackBuilder", () => {
     await w.get('[data-test="pack-request"]').setValue("more like this");
     await w.get('[data-test="pack-sample-toggle"]').trigger("click");
     await w.get('[data-test="pack-sample"]').setValue("1girl, red hair, beach");
+    await w.get('[data-test="pack-next"]').trigger("click");
     await w.get('[data-test="pack-plan"]').trigger("click");
     await flushPromises();
     expect(vi.mocked(api.ai.packPlan).mock.calls[0][0]).toEqual({
@@ -200,6 +202,7 @@ describe("PackBuilder", () => {
     });
     const { w } = await mountIt();
     await w.get('[data-test="pack-request"]').setValue("season outfits");
+    await w.get('[data-test="pack-next"]').trigger("click");
     await w.get('[data-test="pack-plan"]').trigger("click");
     await flushPromises();
     await w.get('[data-test="pack-build"]').trigger("click");

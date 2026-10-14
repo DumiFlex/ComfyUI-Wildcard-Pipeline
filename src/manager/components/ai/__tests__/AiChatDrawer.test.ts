@@ -562,7 +562,8 @@ describe("AiChatDrawer", () => {
     const live = w.get('[data-test="ai-chat-live"]');
     expect(live.text()).toContain("Read Weather");
     expect(live.get("strong").text()).toBe("two");
-    expect(live.get('[data-test="ai-chat-loading"]').text()).toBe("Writing…");
+    expect(live.get('[data-test="ai-working-detail"]').text()).toBe("Writing…");
+    expect(live.get('[data-test="ai-chat-loading"]').attributes("data-tempo")).toBe("fast");
     finish({ ...RESULT, proposals: [], message: "Weather has two options." });
     await flushPromises();
     expect(w.find('[data-test="ai-chat-live"]').exists()).toBe(false);

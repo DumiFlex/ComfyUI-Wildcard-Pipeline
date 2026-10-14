@@ -81,7 +81,7 @@ from engine.db.repositories import (
     TemplateRepository,
 )
 from engine.importer import commit_import
-from wp_api import _ai_chat, _ai_client, _ai_embed, _ai_images, _ai_search
+from wp_api import _ai_chat, _ai_client, _ai_embed, _ai_images, _ai_progress, _ai_search
 from wp_api._ai_guard import guarded
 from wp_api._helpers import cancel_on_disconnect, db_session, json_error, json_ok
 from wp_api._validators import validate_wildcard_name
@@ -2207,14 +2207,23 @@ async def post_pack_plan(request: web.Request) -> web.Response:
     web_on = _ai_search.enabled(cfg)
     searched = [q for q in (body.get("searched") or []) if isinstance(q, str)][:12] \
         if isinstance(body.get("searched"), list) else []
+    # A follow-up sends the images again only when they changed (or the
+    # user asked), so the first request's prompt keeps the count it had.
+    first_images = len(images)
+    if turns and isinstance(body.get("image_count"), int) \
+            and not isinstance(body.get("image_count"), bool):
+        first_images = max(0, min(int(body["image_count"]), 8))
     first = ai_pack.plan_prompt(
         ai_followup.first_instruction(turns, instruction), library_note=lib_note,
         sample=sample, settings=settings, decisions=[] if turns else decisions,
-        library=library, images=len(images), web=web_on)
+        library=library, images=first_images, web=web_on)
     if base is not None:
         first = ai_pack.base_note(base) + "\n\n" + first
     follow = ai_pack.refine_text(instruction, decisions, settings, body.get("web"),
                                  searched) if turns else instruction
+    if turns and first_images and not images:
+        follow += ("\n\nThe reference images aren't attached again; keep what you took "
+                   "from them unless asked otherwise.")
     answer: Any = None
     try:
         answer = await _ask(
@@ -2239,10 +2248,27 @@ async def post_pack_plan(request: web.Request) -> web.Response:
         plan["research"] = []
     plan["research"] = [q for q in plan["research"]
                         if not any(q.lower() == s.lower() for s in searched)]
+    if not images and not first_images:
+        plan["from_images"] = []
     if isinstance(answer, dict):
         answer.pop(_ai_client.CUT_OFF, None)  # never replayed to the model
     return json_ok({"plan": plan, "model": cfg["model"], "answer": answer,
-                    "review": ai_pack.review_plan(plan, library), "web": web_on})
+                    "review": ai_pack.review_plan(plan, library), "web": web_on,
+                    "context": await _plan_context(cfg, first, turns, follow, answer,
+                                                   len(images))})
+
+
+async def _plan_context(cfg: dict[str, Any], first: str, turns: list[dict[str, Any]],
+                        follow: str, answer: Any, images: int) -> dict[str, Any]:
+    """The pack plan's meter, like the chat's: about how much of the model's
+    window the last request and its answer took (every refine sends the
+    whole conversation again, so it grows)."""
+    history, user = ai_followup.conversation(first, turns, follow)
+    chars = ai_budget.prompt_chars(ai_pack.PLAN_SYSTEM, history, user, ai_pack.PLAN_SCHEMA)
+    chars += len(_json.dumps(answer, ensure_ascii=False)) if answer is not None else 0
+    return {"used": ai_budget.tokens(chars) + 1000 * images,
+            "window": await _window(cfg, {}), "estimated": True,
+            "about": not cfg.get("local")}
 
 
 async def post_pack_search(request: web.Request) -> web.Response:
@@ -2499,12 +2525,20 @@ async def post_bundle_split(request: web.Request) -> web.Response:
     return json_ok({"groups": groups, "model": cfg["model"]})
 
 
+async def get_progress(request: web.Request) -> web.Response:
+    """What the request named by this id is doing (`_ai_progress`)."""
+    view = _ai_progress.view(request.match_info["pid"])
+    if view is None:
+        return json_error("no such request", status=404)
+    return json_ok(view)
+
+
 def register(router: web.UrlDispatcher) -> None:
     def add(method: str, path: str, handler: Any, *, cut_short: bool = True) -> None:
         # Every AI route: our own request checks (wp_api/_ai_guard.py), and
         # model calls stop when the browser goes away.
         h = cancel_on_disconnect(handler) if cut_short else handler
-        router.add_route(method, path, guarded(h))
+        router.add_route(method, path, guarded(_ai_progress.track(h)))
 
     add("GET", "/wp/api/ai/config", get_config, cut_short=False)
     add("PUT", "/wp/api/ai/config", put_config, cut_short=False)
@@ -2523,6 +2557,7 @@ def register(router: web.UrlDispatcher) -> None:
     add("POST", "/wp/api/ai/organize", post_organize)
     add("POST", "/wp/api/ai/chat", post_chat)
     add("GET", "/wp/api/ai/vision", get_vision)
+    add("GET", "/wp/api/ai/progress/{pid}", get_progress, cut_short=False)
     add("GET", "/wp/api/ai/chats", get_chats, cut_short=False)
     add("GET", "/wp/api/ai/chats/{chat_id}", get_chat, cut_short=False)
     add("PATCH", "/wp/api/ai/chats/{chat_id}", patch_chat, cut_short=False)

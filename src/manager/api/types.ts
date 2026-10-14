@@ -1447,6 +1447,9 @@ export interface AiChatProposal {
   /** "low": the server judged it small (descriptions, tags, categories),
    *  so auto-apply may apply it. */
   risk?: "low";
+  /** Warnings (some of `warnings`) that only inform: what was kept, what
+   *  to apply first. They get no Ask to fix. */
+  notes?: string[];
   /** Warnings the card can fix by itself (`engine/ai/lint.py::fixes`);
    *  the rest are fixed by asking the model. */
   fixes?: AiCardFix[];
@@ -1640,6 +1643,8 @@ export interface AiPackPlan {
   questions: AiPackQuestion[];
   /** What the planner guessed instead of asking. */
   assumptions: string[];
+  /** What the planner took from the reference images (none without). */
+  from_images?: string[];
   /** Web searches the planner would like to run (needs the user's OK). */
   research: string[];
   decisions: AiPackDecision[];
@@ -1661,8 +1666,11 @@ export interface AiPackPlanRequest extends AiConversational {
   decisions?: AiPackDecision[];
   /** The plan as the user sees it now (hand edits included). */
   previous?: AiPackPlan;
-  /** Reference images (JPEG data URLs), for a vision model. */
+  /** Reference images (JPEG data URLs), for a vision model. A follow-up
+   *  sends them only when they changed or the user asked to. */
   images?: string[];
+  /** A follow-up: how many images went with the first request. */
+  image_count?: number;
   /** Search results the user allowed, for the planner to use. */
   web?: Array<{ query: string; text: string }>;
   /** Searches already run or skipped, never asked for again. */
@@ -1698,6 +1706,8 @@ export interface AiPackPlanResult {
   review: AiPackFinding[];
   /** Web search is set up, so research can run. */
   web?: boolean;
+  /** About how much of the model's window the request and its answer took. */
+  context?: Pick<AiChatContext, "used" | "window" | "estimated" | "about">;
 }
 
 export interface AiPackReview {

@@ -88,6 +88,7 @@ function onPaste(ev: ClipboardEvent): void {
           class="wp-ai-images__thumb"
         >
           <img :src="img.url" :alt="img.name">
+          <span v-if="images.images.value.length > 1" class="wp-ai-images__num" :title="`Image ${i + 1}: call it that in your request`" data-test="ai-image-num">{{ i + 1 }}</span>
           <button
             type="button"
             class="wp-ai-images__remove"
@@ -136,6 +137,10 @@ function onPaste(ev: ClipboardEvent): void {
 .wp-ai-images__remove {
   position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%;
   background: rgb(0 0 0 / 0.65); color: #fff; cursor: pointer; font-size: 9px; display: grid; place-items: center;
+}
+.wp-ai-images__num {
+  position: absolute; left: 2px; bottom: 2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px;
+  background: rgb(0 0 0 / 0.65); color: #fff; font-size: 10px; font-weight: 600; line-height: 16px; text-align: center;
 }
 .wp-ai-images__add { font-size: 12px; color: var(--wp-text-muted); display: inline-flex; gap: 6px; align-items: center; }
 .wp-ai-images__hint, .wp-ai-images__blind { margin: 0; font-size: 12px; color: var(--wp-text-dim); }

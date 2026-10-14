@@ -27,7 +27,7 @@ import type {
   AiPackItemResult, AiPackKind, AiPackPatch, AiPackPlan, AiPackPlanResult, AiPackQuestion,
   AiPackSettings,
 } from "../api/types";
-import { useAiConversation } from "./useAiConversation";
+import { pendingResearch, useAiConversation } from "./useAiConversation";
 import { useAiImages } from "./useAiImages";
 
 export type ItemStatus =
@@ -134,6 +134,12 @@ export function applyPatch(plan: AiPackPlan, patch: AiPackPatch): AiPackPlan {
   return { ...plan, items: [...plan.items.slice(0, at), item, ...plan.items.slice(at)] };
 }
 
+/** An update that talks about the reference images, so they go along
+ *  again ("a skirt like the one in image 2"). */
+export function mentionsImages(text: string): boolean {
+  return /\b(images?|pictures?|photos?|pics?|screenshots?|references?|reference images?)\b/i.test(text);
+}
+
 /** What one question's pick says, or "" when it isn't answered. */
 export function pickAnswer(pick: QuestionPick | undefined): string {
   if (!pick) return "";
@@ -158,8 +164,33 @@ interface PlanView {
 const views = new WeakMap<AiPackPlanResult, PlanView>();
 const view = shallowRef<PlanView | null>(null);
 
-const settings = ref<AiPackSettings>({ ...DEFAULT_SETTINGS });
+/** The pack settings are kept in this browser, so the Settings step
+ *  starts from what was chosen last time. */
+const SETTINGS_KEY = "wp-pack-settings";
+
+function savedSettings(): AiPackSettings {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null") as Partial<AiPackSettings> | null;
+    if (!raw || typeof raw !== "object") return { ...DEFAULT_SETTINGS };
+    const out = { ...DEFAULT_SETTINGS };
+    for (const k of Object.keys(DEFAULT_SETTINGS) as Array<keyof AiPackSettings>) {
+      if (typeof raw[k] === typeof DEFAULT_SETTINGS[k]) (out as Record<string, unknown>)[k] = raw[k];
+    }
+    return out;
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+const settings = ref<AiPackSettings>(savedSettings());
+watch(settings, (v) => {
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(v)); } catch { /* private window */ }
+}, { deep: true });
 const decisions = ref<AiPackDecision[]>([]);
+/** Decisions the user took back to answer again in words (by question):
+ *  still listed, not sent as settled, dropped once the next plan comes. */
+const reopened = ref(new Set<string>());
+const settled = computed(() => decisions.value.filter((d) => !reopened.value.has(d.question)));
 const picks = ref<Record<string, QuestionPick>>({});
 /** Search results the user allowed, waiting to go with the next request. */
 const webResults = shallowRef<Array<{ query: string; text: string }>>([]);
@@ -167,6 +198,14 @@ const webResults = shallowRef<Array<{ query: string; text: string }>>([]);
 const searched = ref<string[]>([]);
 const searching = ref(false);
 const images = useAiImages();
+/** Send the reference images with the next update even if they didn't
+ *  change. Off: they go with the first plan and again only when the user
+ *  adds or removes one, since each costs about 1,000 tokens a request. */
+const resendImages = ref(false);
+/** The images last sent (their URLs joined), and how many went with the
+ *  conversation's first request (its prompt says so on every replay). */
+let sentImages = "";
+let firstImages = 0;
 const target = ref<PackTarget | null>(null);
 
 const states = shallowRef<Record<string, ItemState>>({});
@@ -197,13 +236,21 @@ const convo = useAiConversation<AiPackPlanResult, null>({
   capture: () => null,
   send: ({ instruction, history }, signal) => {
     const followUp = !!history;
+    const urls = images.urls() ?? [];
+    const key = urls.join("|");
+    const withImages = !followUp || key !== sentImages || resendImages.value
+      || mentionsImages(instruction);
+    if (withImages) sentImages = key;
+    if (!followUp) firstImages = urls.length;
+    resendImages.value = false;
     return api.ai.packPlan({
       instruction, ...(history ? { history } : {}),
       ...(sample.value.trim() ? { sample: sample.value.trim() } : {}),
       settings: settings.value,
-      ...(decisions.value.length ? { decisions: decisions.value } : {}),
+      ...(settled.value.length ? { decisions: settled.value } : {}),
       ...(followUp && sendPrevious ? { previous: sendPrevious } : {}),
-      ...(images.urls() ? { images: images.urls() } : {}),
+      ...(withImages && urls.length ? { images: urls } : {}),
+      ...(followUp && firstImages ? { image_count: firstImages } : {}),
       ...(followUp && webResults.value.length ? { web: webResults.value } : {}),
       ...(searched.value.length ? { searched: searched.value } : {}),
       ...(target.value ? { bundle_id: target.value.id } : {}),
@@ -262,9 +309,57 @@ const plan = computed<AiPackPlan | null>(() => {
 /** Open questions this round. */
 const questions = computed<AiPackQuestion[]>(() => draft.value?.questions ?? []);
 /** Research the planner asked for that hasn't run or been skipped. */
-const research = computed<string[]>(() => {
-  const done = new Set(searched.value.map((q) => q.toLowerCase()));
-  return (draft.value?.research ?? []).filter((q) => !done.has(q.toLowerCase()));
+const research = computed<string[]>(() => pendingResearch(
+  convo.chain.value.map((r) => r.plan.research), searched.value));
+
+/** How an item differs from the plan before this round: new, or changed
+ *  (which parts), so a refine shows what it touched. */
+export interface PlanChange {
+  kind: "new" | "changed";
+  what: string[];
+}
+
+const CHANGE_FIELDS: Array<[keyof AiPackItem, string]> = [
+  ["name", "name"], ["var", "variable"], ["kind", "kind"], ["about", "description"],
+  ["count", "options"], ["section", "section"], ["tags", "tags"], ["source", "source"],
+  ["target", "target"], ["use", "use"],
+];
+
+/** The plan the user saw before this round, or null on the first one. */
+const before = computed<AiPackItem[] | null>(() => {
+  const chain = convo.chain.value;
+  const prev = chain.length > 1 ? chain[chain.length - 2] : null;
+  if (!prev) return null;
+  const v = viewFor(prev);
+  return v.draft.items.filter((i) => !v.removed.has(i.key));
+});
+
+const changes = computed<Record<string, PlanChange>>(() => {
+  const old = before.value;
+  const res = convo.result.value;
+  if (!old || !res) return {};
+  const byKey = new Map(old.map((i) => [i.key, i]));
+  const out: Record<string, PlanChange> = {};
+  for (const i of res.plan.items) {
+    const was = byKey.get(i.key);
+    if (!was) {
+      out[i.key] = { kind: "new", what: [] };
+      continue;
+    }
+    const what = CHANGE_FIELDS.filter(([f]) => JSON.stringify(i[f] ?? "") !== JSON.stringify(was[f] ?? ""))
+      .map(([, label]) => label);
+    if (what.length) out[i.key] = { kind: "changed", what };
+  }
+  return out;
+});
+
+/** Items the last round took out of the plan, by name. */
+const dropped = computed<string[]>(() => {
+  const old = before.value;
+  const res = convo.result.value;
+  if (!old || !res) return [];
+  const now = new Set(res.plan.items.map((i) => i.key));
+  return old.filter((i) => !now.has(i.key) && !i.existing).map((i) => (i.var ? `$${i.var}` : i.name));
 });
 
 /** What the review found, minus dismissed ones and ones about removed
@@ -343,14 +438,25 @@ function pendingDecisions(): AiPackDecision[] {
 
 const answeredCount = computed(() => pendingDecisions().length);
 
-/** Take a decision back: it leaves the list and its question goes into
- *  the edit box, to answer again in words. */
-function reopenDecision(i: number): void {
+/** Take a decision back: its question goes into the edit box, to answer
+ *  again in words; it stays listed, marked, until the next plan. Clicking
+ *  it again puts it back as it was. */
+function reopenDecision(i: number): boolean {
   const d = decisions.value[i];
-  if (!d) return;
-  decisions.value = decisions.value.filter((_, j) => j !== i);
-  convo.instruction.value = [convo.instruction.value.trim(), `About "${d.question}": `]
-    .filter(Boolean).join("\n");
+  if (!d) return false;
+  const line = `About "${d.question}": `;
+  const next = new Set(reopened.value);
+  if (next.has(d.question)) {
+    next.delete(d.question);
+    reopened.value = next;
+    convo.instruction.value = convo.instruction.value.split("\n")
+      .filter((l) => !l.startsWith(line.trim())).join("\n");
+    return false;
+  }
+  next.add(d.question);
+  reopened.value = next;
+  convo.instruction.value = [convo.instruction.value.trim(), line].filter(Boolean).join("\n");
+  return true;
 }
 
 /** Put a guess the planner made into the edit box, to correct it. */
@@ -371,6 +477,7 @@ function mergeDecisions(add: AiPackDecision[]): void {
 async function askPlan(): Promise<void> {
   error.value = "";
   decisions.value = [];
+  reopened.value = new Set();
   picks.value = {};
   webResults.value = [];
   searched.value = [];
@@ -382,7 +489,7 @@ async function askPlan(): Promise<void> {
 /** Send this round's answers, the edit box, any allowed search results
  *  and the plan as edited, as a follow-up. */
 async function refinePlan(): Promise<void> {
-  if (!convo.result.value || convo.loading.value) return;
+  if (!convo.result.value || convo.loading.value || awaitingSearch.value) return;
   const answers = pendingDecisions();
   const typed = convo.instruction.value.trim();
   const text = typed
@@ -391,20 +498,31 @@ async function refinePlan(): Promise<void> {
         : edited.value ? "I edited the plan; keep my changes and fill any gaps they leave." : "");
   if (!text) return;
   const before = decisions.value;
+  const was = reopened.value;
+  if (was.size) {
+    decisions.value = decisions.value.filter((d) => !was.has(d.question));
+    reopened.value = new Set();
+  }
   mergeDecisions(answers);
   sendPrevious = plan.value ?? undefined;
   convo.instruction.value = text;
   await convo.refine();
   if (convo.error.value) {
     decisions.value = before;
+    reopened.value = was;
     convo.instruction.value = typed;
     return;
   }
   webResults.value = [];
 }
 
+/** The planner asked to search the web and the user hasn't said yes or
+ *  no: what it finds may change the questions and the plan, so answers,
+ *  updates and Build wait for it. */
+const awaitingSearch = computed(() => research.value.length > 0);
+
 /** Ask the model for the next round of questions with no other change. */
-const canRefine = computed(() => !convo.loading.value && !!convo.result.value && (
+const canRefine = computed(() => !convo.loading.value && !!convo.result.value && !awaitingSearch.value && (
   !!convo.instruction.value.trim() || answeredCount.value > 0 || webResults.value.length > 0
   || edited.value));
 
@@ -862,6 +980,7 @@ function reset(): void {
   convo.clear();
   convo.instruction.value = "";
   decisions.value = [];
+  reopened.value = new Set();
   picks.value = {};
   webResults.value = [];
   searched.value = [];
@@ -900,10 +1019,10 @@ const summary = computed(() => {
 export function usePackBuilder() {
   return {
     convo, plan, draft, removed, edited, states, phase, working, stage, current, check,
-    installed, error, builtCount, summary, askPlan, refinePlan, canRefine, removeItem, build,
+    installed, error, builtCount, summary, askPlan, refinePlan, canRefine, awaitingSearch, removeItem, build,
     rebuild, stop, install, undoInstall, backToPlan, reset, sample, findings, reviewing,
     reviewPlan, fixFindings, settings, decisions, picks, questions, answeredCount, choose,
-    setOther, decideFor, decideAll, pickFor, reopenDecision, changeAssumption, editItem,
+    setOther, decideFor, decideAll, pickFor, reopenDecision, changeAssumption, editItem, changes, dropped, reopened, resendImages,
     addItem, editPlan, applyFinding, dismissFinding, selected, toggleSelected, changeItem,
     changing, research, allowResearch, skipResearch, searching, webResults, images, target,
     extendBundle, skipCurrent, skipItem, dismissNote, dismissedNotes,

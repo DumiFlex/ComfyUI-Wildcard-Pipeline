@@ -129,6 +129,13 @@ async function addWithAi(): Promise<void> {
                 <code v-if="i.kind !== 'template'">{{ label(i) }}</code>
                 {{ i.kind === 'template' || i.var ? i.name : '' }}
                 <i v-if="pb.changing.value === i.key" class="pi pi-spin pi-spinner" aria-hidden="true" />
+                <span
+                  v-if="pb.changes.value[i.key]"
+                  class="wp-pack-list__change"
+                  :data-change="pb.changes.value[i.key].kind"
+                  :title="pb.changes.value[i.key].kind === 'new' ? 'Added this round' : `Changed this round: ${pb.changes.value[i.key].what.join(', ')}`"
+                  data-test="pack-item-changed"
+                ><i :class="['pi', pb.changes.value[i.key].kind === 'new' ? 'pi-plus' : 'pi-pencil']" aria-hidden="true" />{{ pb.changes.value[i.key].kind === 'new' ? 'new' : pb.changes.value[i.key].what.slice(0, 2).join(', ') }}</span>
               </span>
               <span v-if="i.about" class="wp-pack-list__about">{{ i.about }}</span>
               <span v-if="meta(i).length || i.tags.length" class="wp-pack-list__meta">
@@ -213,6 +220,12 @@ li[data-existing] .wp-pack-list__kind { color: var(--wp-text-muted); background:
 .wp-pack-list__main:disabled { cursor: default; }
 .wp-pack-list__name { font-size: 13px; overflow-wrap: anywhere; }
 .wp-pack-list__name code { color: var(--wp-kind-wildcard); font-size: 12px; }
+.wp-pack-list__change {
+  display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 0 6px; border-radius: 4px;
+  font-size: 10px; font-weight: 500; vertical-align: 1px; color: var(--wp-accent-text); border: 1px solid var(--wp-accent-400);
+}
+.wp-pack-list__change[data-change="new"] { color: var(--wp-success); border-color: color-mix(in srgb, var(--wp-success) 60%, transparent); }
+.wp-pack-list__change .pi { font-size: 9px; }
 .wp-pack-list__about {
   font-size: 12px; color: var(--wp-text-muted); overflow-wrap: anywhere;
   display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;

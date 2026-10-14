@@ -37,6 +37,8 @@ import AiTestCard from "./AiTestCard.vue";
 import AiCardPreview from "./AiCardPreview.vue";
 import AiPointer from "./AiPointer.vue";
 import AiChatList from "./AiChatList.vue";
+import AiWorking from "./AiWorking.vue";
+import type { AiPhase } from "../../api/ai-progress";
 import { useAiChat, type ChatAssistantEntry, type SearchApproval } from "../../composables/useAiChat";
 import { clearPointer, EDIT_ROUTES } from "../../composables/useAiActions";
 import { useAiConfig } from "../../composables/useAiConfig";
@@ -301,6 +303,11 @@ const canRetry = computed(() => {
 function retry(): void {
   void chat.retry(page());
 }
+
+const livePhase = computed<AiPhase>(() => {
+  const l = chat.live.value;
+  return l.text ? "writing" : l.thinking ? "thinking" : "reading";
+});
 
 const liveStatus = computed(() => {
   const l = chat.live.value;
@@ -863,12 +870,13 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
               data-test="ai-chat-more"
               @click="toggle(i, p)"
             >{{ expanded.has(key(i, p)) ? "Show less" : `Show all ${p.preview.length}` }}</button>
+            <p v-if="p.replaces" class="wp-ai-chat__note" data-test="ai-chat-replaces"><i class="pi pi-info-circle" aria-hidden="true" /> Replaces the earlier card, which wasn't applied</p>
             <ul v-if="p.warnings.length || chat.linkWarnings(entry, p).length" class="wp-ai-chat__warnings">
               <li v-for="w in chat.linkWarnings(entry, p)" :key="w" data-test="ai-chat-link-warning"><i class="pi pi-exclamation-triangle" aria-hidden="true" /> {{ w }}</li>
-              <li v-for="(w, j) in shownWarnings(i, p)" :key="j" data-test="ai-chat-warning">
-                <i class="pi pi-exclamation-triangle" aria-hidden="true" />
+              <li v-for="(w, j) in shownWarnings(i, p)" :key="j" data-test="ai-chat-warning" :data-note="p.notes?.includes(w) ? 'true' : undefined">
+                <i :class="['pi', p.notes?.includes(w) ? 'pi-info-circle' : 'pi-exclamation-triangle']" aria-hidden="true" />
                 <span class="wp-ai-chat__warning-body"><AiMessage v-if="w.includes('[[')" class="wp-ai-chat__warning-text" :text="w" :refs="entry.result.refs" /><template v-else>{{ w }}</template></span>
-                <template v-if="!entry.status[p.pid] && p.op.op !== 'delete'">
+                <template v-if="!entry.status[p.pid] && p.op.op !== 'delete' && !p.notes?.includes(w)">
                   <button
                     v-if="fixFor(p, w)"
                     type="button"
@@ -993,10 +1001,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
           </li>
         </ul>
         <AiMessage v-if="chat.live.value.text" :text="chat.live.value.text" live />
-        <p class="wp-ai-chat__status" role="status" data-test="ai-chat-loading">
-          <i class="pi pi-spin pi-spinner" aria-hidden="true" />
-          {{ liveStatus }}
-        </p>
+        <AiWorking class="wp-ai-chat__status" :text="liveStatus" :phase="livePhase" :size="22" data-test="ai-chat-loading" />
       </div>
     </div>
 
@@ -1254,9 +1259,11 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__more { align-self: flex-start; border: 0; background: none; padding: 0; font-size: 12px; color: var(--wp-accent-text); cursor: pointer; }
 .wp-ai-chat__warning-text { display: inline; }
 .wp-ai-chat__warning-text :deep(p) { display: inline; margin: 0; }
+.wp-ai-chat__note { margin: 0; font-size: 12px; color: var(--wp-text-muted); display: flex; align-items: baseline; gap: 6px; }
 .wp-ai-chat__warnings { list-style: none; margin: 0; padding: 0; font-size: 12px; color: var(--wp-warn); display: flex; flex-direction: column; gap: 2px; }
 .wp-ai-chat__warnings li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; }
 .wp-ai-chat__warning-body { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+.wp-ai-chat__warnings li[data-note="true"] { color: var(--wp-text-muted); }
 .wp-ai-chat__warn-more { justify-content: flex-end; }
 /* Fix it: a small outlined action in the warning's tone, at the end of its line. */
 .wp-ai-chat__fix {

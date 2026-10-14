@@ -13,17 +13,19 @@
  * before offering Install. "Extend with AI" on a bundle opens this page
  * aimed at that bundle (`pb.target`).
  */
-import { computed, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
 import AiImagePicker from "../components/ai/AiImagePicker.vue";
+import AiWorking from "../components/ai/AiWorking.vue";
 import PackFindings from "../components/pack/PackFindings.vue";
 import PackPlanList from "../components/pack/PackPlanList.vue";
 import PackQuestions from "../components/pack/PackQuestions.vue";
 import PackSettings from "../components/pack/PackSettings.vue";
 import { registerPageNote } from "../composables/useOpenEditor";
-import { usePackBuilder, type ItemStatus } from "../composables/usePackBuilder";
+import { mentionsImages, usePackBuilder, type ItemStatus } from "../composables/usePackBuilder";
+import WpCheck from "../../components/shared/WpCheck.vue";
 import { useAiConfig } from "../composables/useAiConfig";
 import { useToast } from "../composables/useToast";
 import { useModuleStore } from "../stores/moduleStore";
@@ -55,6 +57,83 @@ const bundleStore = useBundleStore();
 const templateStore = useTemplateStore();
 const open = ref(new Set<string>());
 const showSettings = ref(false);
+/** On the Settings step (after Describe, before the first plan). */
+const settingUp = ref(false);
+
+function startOver(): void {
+  pb.reset();
+  settingUp.value = false;
+}
+
+function toSettings(): void {
+  if (convo.instruction.value.trim()) settingUp.value = true;
+}
+
+function onSettingsKey(ev: KeyboardEvent): void {
+  if (settingUp.value && !result.value && ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
+    ev.preventDefault();
+    void pb.askPlan();
+  }
+}
+onMounted(() => window.addEventListener("keydown", onSettingsKey));
+onBeforeUnmount(() => window.removeEventListener("keydown", onSettingsKey));
+const editBox = ref<HTMLTextAreaElement | null>(null);
+/** A short note under the edit box after a click put text in it. */
+const flash = ref("");
+let flashTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Show where a click's text went: scroll to the edit box, focus it with
+ *  the caret at the end, and light it up for a moment. */
+async function pointAtEdit(note: string): Promise<void> {
+  await nextTick();
+  const el = editBox.value;
+  if (el) {
+    el.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    el.focus({ preventScroll: true });
+    el.setSelectionRange(el.value.length, el.value.length);
+  }
+  flash.value = note;
+  if (flashTimer) clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => { flash.value = ""; }, 6000);
+}
+
+function reopen(i: number): void {
+  if (pb.reopenDecision(i)) void pointAtEdit("Added to Change the plan: finish the sentence, then Update plan. Click the decision again to keep it.");
+}
+
+function correct(text: string): void {
+  pb.changeAssumption(text);
+  void pointAtEdit("Added to Change the plan: say what it should be, then Update plan.");
+}
+
+function short(n: number): string {
+  return n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k` : String(n);
+}
+
+/** How full the model's window was on the last plan request. Every
+ *  refine resends the conversation, so it grows round by round. */
+const meter = computed(() => {
+  const c = result.value?.context;
+  if (!c || !c.window) return null;
+  const ratio = Math.min(1, c.used / c.window);
+  return {
+    pct: Math.max(2, Math.round(ratio * 100)),
+    level: ratio >= 0.85 ? "full" : ratio >= 0.6 ? "high" : "ok",
+    label: `${c.estimated ? "~" : ""}${short(c.used)} of ${c.about ? "about " : ""}${short(c.window)} tokens`,
+    why: `The last plan request and its answer took about ${c.used.toLocaleString()} of the ${c.window.toLocaleString()} tokens the model holds.`
+      + " Each update sends the whole conversation again; near the top, Start over with what you decided in the request.",
+  };
+});
+
+const imagesMentioned = computed(() => mentionsImages(convo.instruction.value));
+
+const changedCount = computed(() => Object.keys(pb.changes.value).length);
+const changedLine = computed(() => {
+  const all = Object.values(pb.changes.value);
+  const fresh = all.filter((c) => c.kind === "new").length;
+  const edited = all.length - fresh;
+  return [fresh ? `${fresh} new` : "", edited ? `${edited} changed` : ""].filter(Boolean).join(", ");
+});
 const fixing = ref("");
 const fixNote = ref("");
 
@@ -90,7 +169,8 @@ const installable = computed(() => builtItems.value.some(
   (i) => i.kind !== "template" && pb.states.value[i.key]?.result,
 ));
 const steps = computed(() => [
-  { label: "Describe", done: !!result.value, on: !result.value },
+  { label: "Describe", done: !!result.value || settingUp.value, on: !result.value && !settingUp.value },
+  { label: "Settings", done: !!result.value, on: !result.value && settingUp.value },
   { label: "Plan", done: pb.phase.value !== "plan", on: !!result.value && pb.phase.value === "plan" },
   { label: "Build & check", done: pb.phase.value === "installed", on: pb.phase.value === "build" },
   { label: "Install", done: pb.phase.value === "installed", on: false },
@@ -264,6 +344,35 @@ function stopExtending(): void {
       <RouterLink to="/settings/ai">Settings › AI assistant</RouterLink>.
     </p>
 
+    <!-- ── Settings (between describe and plan; kept for next time) ─── -->
+    <div v-else-if="!result && settingUp" class="wp-pack__describe">
+      <Card title="Pack settings" data-test="pack-settings-step">
+        <p class="wp-pack__hint">
+          <i class="pi pi-sliders-h wp-pack__hint-icon" aria-hidden="true" />
+          How the pack is built. Your choices are kept for the next pack, so next time this is one
+          click. You can still change them later under <b>Change the plan</b>; the next update
+          follows them.
+        </p>
+        <PackSettings v-model="pb.settings.value" detailed :disabled="convo.loading.value" />
+        <div class="wp-pack__row">
+          <Button variant="ghost" size="sm" icon="pi-arrow-left" :disabled="convo.loading.value" data-test="pack-back" @click="settingUp = false">Back</Button>
+          <span class="wp-pack__spacer" />
+          <span class="wp-pack__dim">Ctrl+Enter plans it.</span>
+          <Button v-if="convo.loading.value" size="sm" icon="pi-stop" @click="pb.stop">Stop</Button>
+          <Button
+            v-else
+            variant="primary"
+            icon="pi-microchip-ai"
+            :disabled="!convo.instruction.value.trim()"
+            data-test="pack-plan" data-ai-anchor="pack-plan" data-ai-label="Plan it button"
+            @click="pb.askPlan"
+          >Plan it</Button>
+        </div>
+        <AiWorking v-if="convo.loading.value" class="wp-pack__status" label="Planning" data-test="pack-working" />
+        <p v-if="convo.error.value" class="wp-pack__error" role="alert">{{ convo.error.value }}</p>
+      </Card>
+    </div>
+
     <!-- ── Describe ─────────────────────────────────────────────────── -->
     <div v-else-if="!result" class="wp-pack__describe">
       <Card :title="pb.target.value ? 'What should it add?' : 'Describe the pack'">
@@ -286,7 +395,7 @@ function stopExtending(): void {
           aria-label="Describe the pack"
           data-test="pack-request" data-ai-anchor="pack-request" data-ai-label="Describe the pack"
           :disabled="convo.loading.value"
-          @keydown="onKey($event, pb.askPlan)"
+          @keydown="onKey($event, toSettings)"
         ></textarea>
         <button
           type="button"
@@ -313,30 +422,16 @@ function stopExtending(): void {
           :disabled="convo.loading.value"
           hint="The planner reads subject, outfit, setting, palette, lighting and style from them and plans slots that make more pictures like these."
         />
-        <button
-          type="button"
-          class="wp-pack__toggle"
-          :aria-expanded="showSettings"
-          data-test="pack-settings-toggle"
-          @click="showSettings = !showSettings"
-        ><i :class="['pi', showSettings ? 'pi-chevron-down' : 'pi-chevron-right']" aria-hidden="true" /> Pack settings <span class="wp-pack__dim">· {{ settingsLine }}</span></button>
-        <PackSettings v-if="showSettings" v-model="pb.settings.value" class="wp-pack__settings" :disabled="convo.loading.value" />
         <div class="wp-pack__row">
-          <span class="wp-pack__dim">Ctrl+Enter plans it. Nothing is saved until you install.</span>
-          <Button v-if="convo.loading.value" size="sm" icon="pi-stop" @click="pb.stop">Stop</Button>
+          <span class="wp-pack__dim">Ctrl+Enter goes on. Nothing is saved until you install.</span>
           <Button
-            v-else
             variant="primary"
-            icon="pi-microchip-ai"
+            icon="pi-arrow-right"
             :disabled="!convo.instruction.value.trim()"
-            data-test="pack-plan" data-ai-anchor="pack-plan" data-ai-label="Plan it button"
-            @click="pb.askPlan"
-          >Plan it</Button>
+            data-test="pack-next" data-ai-anchor="pack-next" data-ai-label="Next: pack settings button"
+            @click="toSettings"
+          >Next: pack settings</Button>
         </div>
-        <p v-if="convo.loading.value" class="wp-pack__status" role="status">
-          <i class="pi pi-spin pi-spinner" aria-hidden="true" /> Planning… local models can take a minute.
-        </p>
-        <p v-if="convo.error.value" class="wp-pack__error" role="alert">{{ convo.error.value }}</p>
       </Card>
     </div>
 
@@ -350,28 +445,37 @@ function stopExtending(): void {
           <div class="wp-pack__row">
             <span v-if="convo.count.value > 1" class="wp-pack__nav">
               <button type="button" aria-label="Earlier plan" :disabled="convo.index.value <= 0 || busy" @click="convo.go(-1)"><i class="pi pi-chevron-left" aria-hidden="true" /></button>
-              Plan {{ convo.index.value + 1 }} of {{ convo.count.value }}
+              Plan {{ convo.index.value + 1 }} of {{ convo.count.value }}<span v-if="convo.branchedFrom.value" class="wp-pack__dim" title="Made by changing an earlier plan; the plans after that one are kept" data-test="pack-branch"> · from plan {{ convo.branchedFrom.value }}</span>
               <button type="button" aria-label="Later plan" :disabled="convo.index.value >= convo.count.value - 1 || busy" @click="convo.go(1)"><i class="pi pi-chevron-right" aria-hidden="true" /></button>
             </span>
             <span class="wp-pack__spacer" />
-            <Button variant="ghost" size="sm" data-test="pack-reset" @click="pb.reset">Start over</Button>
+            <span v-if="meter" class="wp-pack__meter" :data-level="meter.level" :title="meter.why" data-test="pack-meter">
+              <span class="wp-pack__meter-bar"><span :style="{ width: `${meter.pct}%` }" /></span>
+              {{ meter.label }}
+            </span>
+            <Button size="sm" icon="pi-refresh" :disabled="busy" title="Drop this plan and start from your request again" data-test="pack-reset" @click="startOver">Start over</Button>
           </div>
         </Card>
-        <Card v-if="pb.questions.value.length" :title="`Questions from the assistant · ${pb.questions.value.length}`">
-          <PackQuestions />
-        </Card>
-        <Card v-if="pb.research.value.length" title="The assistant wants to search the web" data-test="pack-research">
+        <section v-if="pb.research.value.length" class="wp-pack__ask-web" aria-label="Web search request" data-test="pack-research">
+          <header class="wp-pack__ask-web-head">
+            <i class="pi pi-globe" aria-hidden="true" />
+            <span>The assistant wants to search the web first</span>
+          </header>
+          <p class="wp-pack__ask-web-why">What it finds can change the questions and the plan, so answers, plan updates and Build wait for your answer here.</p>
           <ul class="wp-pack__research">
             <li v-for="q in pb.research.value" :key="q"><i class="pi pi-search" aria-hidden="true" /> {{ q }}</li>
           </ul>
-          <p class="wp-pack__dim">Only the search words leave your machine; the results are read as reference, never as instructions.</p>
+          <p class="wp-pack__dim">Only the search words leave your machine; the results are read as reference, never as instructions.<template v-if="pb.answeredCount.value"> Your answers so far go along.</template></p>
           <div class="wp-pack__row">
             <span class="wp-pack__spacer" />
-            <Button size="sm" variant="ghost" :disabled="busy" data-test="pack-research-skip" @click="pb.skipResearch">Skip</Button>
-            <Button size="sm" icon="pi-search" :loading="pb.searching.value" :disabled="busy" data-test="pack-research-allow" @click="pb.allowResearch">Allow and update the plan</Button>
+            <Button size="sm" variant="ghost" :disabled="busy" data-test="pack-research-skip" @click="pb.skipResearch">Skip the search</Button>
+            <Button size="sm" variant="primary" icon="pi-search" :loading="pb.searching.value" :disabled="busy" data-test="pack-research-allow" @click="pb.allowResearch">Search and update the plan</Button>
           </div>
+        </section>
+        <Card v-if="pb.questions.value.length" :title="`Questions from the assistant · ${pb.questions.value.length}`">
+          <PackQuestions />
         </Card>
-        <Card v-if="pb.decisions.value.length || draft?.assumptions.length" title="Decided and assumed" data-test="pack-decisions">
+        <Card v-if="pb.decisions.value.length || draft?.assumptions.length || draft?.from_images?.length" title="Decided and assumed" data-test="pack-decisions">
           <div v-if="pb.decisions.value.length" class="wp-pack__chips">
             <span class="wp-pack__dim">You decided:</span>
             <button
@@ -379,11 +483,25 @@ function stopExtending(): void {
               :key="d.question"
               type="button"
               class="wp-pack__chip"
-              :title="`${d.question} Click to change it.`"
+              :title="pb.reopened.value.has(d.question) ? 'Being answered again in Change the plan. Click to keep it as it was.' : `${d.question} Click to change it.`"
               :disabled="busy"
+              :data-reopened="pb.reopened.value.has(d.question) ? 'true' : undefined"
               data-test="pack-decision"
-              @click="pb.reopenDecision(i)"
-            ><b>{{ d.question.length > 40 ? d.question.slice(0, 38) + '…' : d.question }}</b> {{ d.answer }}</button>
+              @click="reopen(i)"
+            ><i v-if="pb.reopened.value.has(d.question)" class="pi pi-pencil" aria-hidden="true" /><b>{{ d.question.length > 40 ? d.question.slice(0, 38) + '…' : d.question }}</b> {{ d.answer }}</button>
+          </div>
+          <div v-if="draft?.from_images?.length" class="wp-pack__chips" data-test="pack-from-images">
+            <span class="wp-pack__dim"><i class="pi pi-image" aria-hidden="true" /> From your images:</span>
+            <button
+              v-for="a in draft.from_images"
+              :key="a"
+              type="button"
+              class="wp-pack__chip wp-pack__chip--image"
+              title="What the assistant read from your reference images. Click to correct it."
+              :disabled="busy"
+              data-test="pack-from-image"
+              @click="correct(a)"
+            ><i class="pi pi-image" aria-hidden="true" /> {{ a }}</button>
           </div>
           <div v-if="draft?.assumptions.length" class="wp-pack__chips">
             <span class="wp-pack__dim">The assistant assumed:</span>
@@ -395,7 +513,7 @@ function stopExtending(): void {
               title="Click to correct it"
               :disabled="busy"
               data-test="pack-assumption"
-              @click="pb.changeAssumption(a)"
+              @click="correct(a)"
             >{{ a }}</button>
           </div>
         </Card>
@@ -404,8 +522,9 @@ function stopExtending(): void {
         </Card>
         <Card title="Change the plan">
           <textarea
+            ref="editBox"
             v-model="convo.instruction.value"
-            class="wp-textarea wp-pack__request"
+            :class="['wp-textarea', 'wp-pack__request', { 'wp-pack__request--flash': flash }]"
             rows="2"
             placeholder="Add a $time_of_day wildcard with day, dusk and night…"
             aria-label="Change the plan"
@@ -413,6 +532,7 @@ function stopExtending(): void {
             :disabled="convo.loading.value"
             @keydown="onKey($event, pb.refinePlan)"
           ></textarea>
+          <p v-if="flash" class="wp-pack__flash-note" role="status" data-test="pack-edit-note"><i class="pi pi-arrow-up" aria-hidden="true" /> {{ flash }}</p>
           <button
             type="button"
             class="wp-pack__toggle"
@@ -421,9 +541,14 @@ function stopExtending(): void {
             @click="showSettings = !showSettings"
           ><i :class="['pi', showSettings ? 'pi-chevron-down' : 'pi-chevron-right']" aria-hidden="true" /> Settings and images <span class="wp-pack__dim">· {{ settingsLine }}{{ pb.images.images.value.length ? ` · ${pb.images.images.value.length} image${pb.images.images.value.length === 1 ? '' : 's'}` : '' }}</span></button>
           <template v-if="showSettings">
+            <p class="wp-pack__dim wp-pack__settings">Changes here apply from the next update: <b>Update plan</b> reworks the plan to follow them. A removed image isn't sent again, but what the planner already took from it stays unless you ask it to drop it.</p>
             <PackSettings v-model="pb.settings.value" class="wp-pack__settings" :disabled="convo.loading.value" />
             <AiImagePicker :images="pb.images" :disabled="convo.loading.value" compact class="wp-pack__settings" />
           </template>
+          <label v-if="pb.images.images.value.length" class="wp-pack__resend" data-test="pack-resend-images">
+            <WpCheck :model-value="pb.resendImages.value || imagesMentioned" :disabled="imagesMentioned || convo.loading.value" @update:model-value="(v: boolean) => (pb.resendImages.value = v)" />
+            <span>Show the images again with this update<span class="wp-pack__dim"> · {{ imagesMentioned ? 'your text mentions them, so they go along' : 'about 1,000 tokens each; otherwise they go only when you add or remove one' }}</span></span>
+          </label>
           <div class="wp-pack__row">
             <span class="wp-pack__dim">Your answers, edits and removed items go along.</span>
             <Button v-if="convo.loading.value" size="sm" icon="pi-stop" @click="pb.stop">Stop</Button>
@@ -436,9 +561,6 @@ function stopExtending(): void {
               @click="pb.refinePlan"
             >Update plan</Button>
           </div>
-          <p v-if="convo.loading.value" class="wp-pack__status" role="status">
-            <i class="pi pi-spin pi-spinner" aria-hidden="true" /> Updating the plan…
-          </p>
           <p v-if="convo.error.value" class="wp-pack__error" role="alert">{{ convo.error.value }}</p>
           <p v-if="pb.error.value" class="wp-pack__error" role="alert">{{ pb.error.value }}</p>
         </Card>
@@ -451,6 +573,12 @@ function stopExtending(): void {
         </p>
         <p v-if="draft?.summary" class="wp-pack__dim">{{ draft.summary }}</p>
         <p v-if="shape" class="wp-pack__shape" data-test="pack-shape">{{ shape }}</p>
+        <AiWorking v-if="convo.loading.value || pb.searching.value" class="wp-pack__plan-working" :label="pb.searching.value ? 'Searching the web' : 'Updating the plan'" :size="34" data-test="pack-working" />
+        <p v-if="pb.awaitingSearch.value" class="wp-pack__waiting" data-test="pack-waiting-search"><i class="pi pi-globe" aria-hidden="true" /> Waiting for your answer on the web search; this plan may change.</p>
+        <p v-if="changedCount || pb.dropped.value.length" class="wp-pack__changed" data-test="pack-changed">
+          <i class="pi pi-history" aria-hidden="true" />
+          <span>This round: <template v-if="changedCount">{{ changedLine }}</template><template v-if="pb.dropped.value.length"><template v-if="changedCount">; </template>removed {{ pb.dropped.value.join(", ") }}</template>.</span>
+        </p>
         <PackPlanList />
         <div v-if="draft?.inputs?.length" class="wp-pack__inputs" data-test="pack-inputs">
           <p class="wp-pack__dim">Set from outside (a WP Context Injector row each):</p>
@@ -468,7 +596,8 @@ function stopExtending(): void {
           <Button
             variant="primary"
             icon="pi-cog"
-            :disabled="!keptCount || busy"
+            :disabled="!keptCount || busy || pb.awaitingSearch.value"
+            :title="pb.awaitingSearch.value ? 'Answer the web search first' : undefined"
             data-test="pack-build" data-ai-anchor="pack-build" data-ai-label="Build button"
             @click="pb.build"
           >Build this pack</Button>
@@ -570,7 +699,7 @@ function stopExtending(): void {
           </li>
         </ul>
         <p v-if="pb.working.value" class="wp-pack__status" role="status" data-test="pack-stage">
-          <i class="pi pi-spin pi-spinner" aria-hidden="true" /> {{ pb.stage.value }}
+          <AiWorking :label="pb.stage.value" />
           <Button v-if="pb.current.value" size="sm" variant="ghost" icon="pi-forward" data-test="pack-skip-stage" @click="pb.skipCurrent">Skip this item</Button>
           <Button size="sm" variant="ghost" icon="pi-stop" @click="pb.stop">Stop</Button>
         </p>
@@ -780,13 +909,50 @@ function stopExtending(): void {
 .wp-pack__research { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .wp-pack__research .pi { font-size: 11px; color: var(--wp-text-dim); }
 .wp-pack__chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.wp-pack__chips + .wp-pack__chips { margin-top: 8px; }
+.wp-pack__chips + .wp-pack__chips { margin-top: 10px; }
+.wp-pack__chips > .wp-pack__dim { flex-basis: 100%; }
+.wp-pack__plan-working {
+  margin: 4px 0 10px; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--wp-accent-400); background: var(--wp-accent-glow);
+}
+.wp-pack__plan-working ~ :deep(.wp-pack-list) { opacity: 0.55; transition: opacity 0.2s; }
 .wp-pack__chip {
-  max-width: 100%; padding: 3px 9px; border-radius: 999px; font-size: 12px; cursor: pointer; text-align: left;
+  max-width: 100%; padding: 4px 10px; border-radius: 10px; line-height: 1.45; font-size: 12px; cursor: pointer; text-align: left;
   border: 1px solid var(--wp-border); background: var(--wp-bg-2); color: var(--wp-text); overflow-wrap: anywhere;
 }
 .wp-pack__chip b { font-weight: 600; color: var(--wp-text-muted); }
 .wp-pack__chip--guess { border-style: dashed; color: var(--wp-text-muted); }
+.wp-pack__chip--image { border-color: color-mix(in srgb, #33d6c6 45%, var(--wp-border)); }
+.wp-pack__chip .pi { font-size: 11px; margin-right: 4px; }
+.wp-pack__chip--image .pi, .wp-pack__dim .pi-image { color: #33d6c6; }
+.wp-pack__chip[data-reopened="true"] { border-color: var(--wp-accent-400); color: var(--wp-text-muted); text-decoration: line-through; text-decoration-color: var(--wp-accent-400); }
+.wp-pack__chip[data-reopened="true"] .pi { color: var(--wp-accent-text); text-decoration: none; }
+/* The web search ask: answered before anything else moves on. */
+.wp-pack__ask-web {
+  display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border-radius: 10px;
+  border: 1px solid var(--wp-accent-400); background: linear-gradient(135deg, var(--wp-accent-glow), transparent 70%);
+  box-shadow: 0 0 0 3px var(--wp-accent-glow);
+  animation: wp-pack-ask-in 0.5s ease-out, wp-pack-ask-pulse 2.4s ease-in-out 0.5s 3;
+}
+.wp-pack__ask-web-head { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--wp-text); }
+.wp-pack__ask-web-head .pi { color: var(--wp-accent-text); font-size: 16px; }
+.wp-pack__ask-web-why { margin: 0; font-size: 12px; color: var(--wp-text-muted); }
+@keyframes wp-pack-ask-in { from { opacity: 0; transform: translateY(-6px); } }
+@keyframes wp-pack-ask-pulse { 50% { box-shadow: 0 0 0 6px var(--wp-accent-glow); } }
+.wp-pack__waiting, .wp-pack__changed { margin: 6px 0; display: flex; gap: 6px; align-items: baseline; font-size: 12px; color: var(--wp-text-muted); }
+.wp-pack__waiting { color: var(--wp-accent-text); }
+.wp-pack__request--flash { animation: wp-pack-flash 1.6s ease-out; border-color: var(--wp-accent-400); }
+@keyframes wp-pack-flash { 0%, 30% { box-shadow: 0 0 0 4px var(--wp-accent-glow); } 100% { box-shadow: 0 0 0 0 transparent; } }
+.wp-pack__resend { display: flex; gap: 8px; align-items: flex-start; margin-top: 8px; font-size: 12px; cursor: pointer; }
+.wp-pack__flash-note { margin: 4px 0 0; font-size: 12px; color: var(--wp-accent-text); display: flex; gap: 6px; align-items: baseline; }
+.wp-pack__meter { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--wp-text-dim); margin-right: 8px; }
+.wp-pack__meter-bar { width: 56px; height: 4px; border-radius: 2px; background: var(--wp-bg-2); overflow: hidden; }
+.wp-pack__meter-bar span { display: block; height: 100%; background: var(--wp-accent); }
+.wp-pack__meter[data-level="high"] .wp-pack__meter-bar span { background: var(--wp-warn); }
+.wp-pack__meter[data-level="full"] .wp-pack__meter-bar span { background: var(--wp-danger); }
+@media (prefers-reduced-motion: reduce) {
+  .wp-pack__ask-web, .wp-pack__request--flash { animation: none; }
+}
 .wp-pack__edited { font-size: 10px; font-weight: 500; padding: 1px 6px; border-radius: 4px; color: var(--wp-accent-text); border: 1px solid var(--wp-accent-400); }
 .wp-pack__icon-btn {
   flex: none; width: 26px; height: 26px; border: 0; border-radius: 6px; background: none;

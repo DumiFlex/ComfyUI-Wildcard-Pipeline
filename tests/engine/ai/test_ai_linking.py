@@ -66,3 +66,13 @@ def test_an_edit_of_an_unapplied_card_replaces_it_at_the_same_id():
     assert p["op"]["body"]["id"] == "dddd0001"
     assert [o["value"] for o in p["op"]["body"]["payload"]["options"]] == ["plate", "leather"]
     assert lib.earlier_proposals["p1"]["status"] == "replaced"
+    assert not any("earlier card" in w for w in p["warnings"])
+
+
+def test_warnings_that_only_inform_are_notes_without_ask_to_fix():
+    lib = _lib()
+    lib.run("add_options", {"id": "aaaa0001", "options": [{"text": "sword"}]})
+    p = lib.run("add_options", {"id": "aaaa0001", "options": [{"text": "axe"}]})
+    first = p["warnings"][0]
+    assert first.startswith("Builds on the earlier change")
+    assert p["notes"] == [first]

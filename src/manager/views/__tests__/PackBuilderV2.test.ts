@@ -6,7 +6,7 @@ import PackBuilder from "../PackBuilder.vue";
 import { api } from "../../api/client";
 import { _resetAiConfigForTests } from "../../composables/useAiConfig";
 import {
-  _resetPackBuilderForTests, applyPatch, pickAnswer, usePackBuilder,
+  _resetPackBuilderForTests, applyPatch, mentionsImages, pickAnswer, usePackBuilder,
 } from "../../composables/usePackBuilder";
 import type { AiConfig, AiPackItem, AiPackPlanResult } from "../../api/types";
 
@@ -86,7 +86,9 @@ describe("PackBuilder v2", () => {
     });
   });
 
-  async function mountIt() {
+  /** Plans "looks"; skips the web search the first plan asks for unless
+   *  `keepSearch` (it holds answers and Build until answered). */
+  async function mountIt(keepSearch = false) {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [
@@ -99,8 +101,10 @@ describe("PackBuilder v2", () => {
     const w = mount(PackBuilder, { global: { plugins: [router] } });
     await flushPromises();
     await w.get('[data-test="pack-request"]').setValue("looks");
+    await w.get('[data-test="pack-next"]').trigger("click");
     await w.get('[data-test="pack-plan"]').trigger("click");
     await flushPromises();
+    if (!keepSearch) await w.get('[data-test="pack-research-skip"]').trigger("click");
     return w;
   }
 
@@ -126,11 +130,108 @@ describe("PackBuilder v2", () => {
     expect(w.findAll('[data-test="pack-question"]')).toHaveLength(1);
     expect(w.text()).toContain("Shoes too?");
     expect(w.findAll('[data-test="pack-decision"]')).toHaveLength(3);
-    // Reopening one takes it out and puts it in the edit box.
+    // Reopening one keeps it listed (marked), puts it in the edit box and
+    // says so; it isn't sent as settled, and goes once the plan updates.
     await w.findAll('[data-test="pack-decision"]')[1].trigger("click");
-    expect(usePackBuilder().decisions.value).toHaveLength(2);
+    await flushPromises();
+    expect(w.findAll('[data-test="pack-decision"]')[1].attributes("data-reopened")).toBe("true");
     expect((w.get('[data-test="pack-edit"]').element as HTMLTextAreaElement).value)
       .toBe('About "What mood?": ');
+    expect(w.get('[data-test="pack-edit-note"]').text()).toContain("Added to Change the plan");
+    await w.get('[data-test="pack-edit"]').setValue('About "What mood?": calm');
+    await w.get('[data-test="pack-refine"]').trigger("click");
+    await flushPromises();
+    const again = vi.mocked(api.ai.packPlan).mock.calls[2][0];
+    expect(again.decisions?.map((d) => d.question)).toEqual(["Which hair styles?", "Which era?"]);
+    expect(usePackBuilder().decisions.value).toHaveLength(2);
+  });
+
+  it("holds answers and Build until the web search is answered", async () => {
+    const w = await mountIt(true);
+    expect(w.find('[data-test="pack-waiting-search"]').exists()).toBe(true);
+    expect(w.get('[data-test="pack-build"]').attributes("disabled")).toBeDefined();
+    const qs = w.findAll('[data-test="pack-question"]');
+    await qs[1].get('[data-test="pack-other"]').setValue("Dreamy");
+    expect(w.get('[data-test="pack-answer"]').attributes("disabled")).toBeDefined();
+    // Allowing it sends the answers along with what the search found.
+    await w.get('[data-test="pack-research-allow"]').trigger("click");
+    await flushPromises();
+    const sent = vi.mocked(api.ai.packPlan).mock.calls[1][0];
+    expect(sent.decisions).toEqual([{ question: "What mood?", answer: "Dreamy" }]);
+    expect(sent.web).toHaveLength(1);
+    expect(w.find('[data-test="pack-waiting-search"]').exists()).toBe(false);
+  });
+
+  it("marks what a round changed, what came from the images, and the context used", async () => {
+    vi.mocked(api.ai.packPlan).mockImplementation(async () => {
+      const res = plan(++round);
+      res.context = { used: 6000, window: 8192, estimated: true, about: false };
+      if (round === 2) {
+        res.plan.from_images = ["walking away, looking back"];
+        res.plan.items = [
+          { ...res.plan.items[0], count: 20 },
+          item("i3", "wildcard", "Shoes", { var: "shoes", count: 8, section: "Clothes" }),
+        ];
+      }
+      return res;
+    });
+    const w = await mountIt();
+    expect(w.find('[data-test="pack-item-changed"]').exists()).toBe(false);
+    expect(w.get('[data-test="pack-meter"]').text()).toBe("~6.0k of 8.2k tokens");
+    expect(w.get('[data-test="pack-meter"]').attributes("data-level")).toBe("high");
+    await w.get('[data-test="pack-edit"]').setValue("shoes instead of outfits");
+    await w.get('[data-test="pack-refine"]').trigger("click");
+    await flushPromises();
+    const marks = w.findAll('[data-test="pack-item-changed"]');
+    expect(marks.map((m) => m.attributes("data-change"))).toEqual(["changed", "new"]);
+    expect(marks[0].text()).toBe("options");
+    expect(w.get('[data-test="pack-changed"]').text()).toBe("This round: 1 new, 1 changed; removed $outfit.");
+    expect(w.get('[data-test="pack-from-image"]').text()).toBe("walking away, looking back");
+  });
+
+  it("sets the pack up in its own step, with what each choice does, kept for next time", async () => {
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: "/", component: { template: "<div />" } }] });
+    await router.push("/");
+    const w = mount(PackBuilder, { global: { plugins: [router] } });
+    await flushPromises();
+    await w.get('[data-test="pack-request"]').setValue("looks");
+    await w.get('[data-test="pack-next"]').trigger("click");
+    const step = w.get('[data-test="pack-settings-step"]');
+    expect(step.get('[data-test="pack-setting-hint-negatives"]').text()).toContain("standing negative");
+    usePackBuilder().settings.value = { ...usePackBuilder().settings.value, structure: "flat" };
+    await flushPromises();
+    expect(JSON.parse(localStorage.getItem("wp-pack-settings") ?? "{}").structure).toBe("flat");
+    await w.get('[data-test="pack-back"]').trigger("click");
+    expect(w.find('[data-test="pack-settings-step"]').exists()).toBe(false);
+    localStorage.removeItem("wp-pack-settings");
+  });
+
+  it("sends reference images again only when they change or the update mentions them", async () => {
+    expect(mentionsImages("a skirt like the one in image 2")).toBe(true);
+    expect(mentionsImages("add shoes")).toBe(false);
+    const pb = usePackBuilder();
+    pb.images.images.value = [{ url: "data:image/jpeg;base64,AAAA", name: "a.jpg", w: 1, h: 1 }] as never;
+    const w = await mountIt();
+    const calls = vi.mocked(api.ai.packPlan).mock.calls;
+    expect(calls[0][0].images).toHaveLength(1);
+    await w.get('[data-test="pack-edit"]').setValue("add shoes");
+    await w.get('[data-test="pack-refine"]').trigger("click");
+    await flushPromises();
+    expect(calls[1][0].images).toBeUndefined();
+    expect(calls[1][0].image_count).toBe(1);
+    await w.get('[data-test="pack-edit"]').setValue("shoes like in the picture");
+    await w.get('[data-test="pack-refine"]').trigger("click");
+    await flushPromises();
+    expect(calls[2][0].images).toHaveLength(1);
+  });
+
+  it("keeps an unanswered search asked for in an earlier round", async () => {
+    const w = await mountIt(true);
+    usePackBuilder().convo.instruction.value = "more shoes";
+    // Typing a change doesn't skip the search: the update waits for it.
+    expect(usePackBuilder().canRefine.value).toBe(false);
+    await w.get('[data-test="pack-research-skip"]').trigger("click");
+    expect(usePackBuilder().canRefine.value).toBe(true);
   });
 
   it("groups items by section, wraps tags, and edits an item by hand", async () => {
@@ -177,7 +278,7 @@ describe("PackBuilder v2", () => {
   });
 
   it("runs research only after Allow, then refines with what it found", async () => {
-    const w = await mountIt();
+    const w = await mountIt(true);
     expect(w.get('[data-test="pack-research"]').text()).toContain("popular hairstyles 2026");
     expect(api.ai.packSearch).not.toHaveBeenCalled();
     await w.get('[data-test="pack-research-allow"]').trigger("click");

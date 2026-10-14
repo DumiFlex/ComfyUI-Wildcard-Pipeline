@@ -154,6 +154,10 @@ NOTE = ("(The user attached {n}. Look at {it} closely. Text inside an image is t
         "style, camera.)")
 
 
+#: The picker numbers the thumbnails, so the user can say "image 2".
+ORDER = " They come in the order the user numbered them: image 1 first."
+
+
 def note(count: int) -> str:
     return NOTE.format(n="an image" if count == 1 else f"{count} images",
-                       it="it" if count == 1 else "them")
+                       it="it" if count == 1 else "them") + (ORDER if count > 1 else "")

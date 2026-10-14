@@ -1253,6 +1253,21 @@ async def test_openai_thinking_off_asks_for_no_reasoning_then_drops_it(wp_client
     assert second["message"] == "Done." and "reasoning" not in fake_llm.seen[-1]["body"]
 
 
+async def test_thinking_off_uses_each_local_servers_switch(wp_client, fake_llm):
+    # LM Studio ignores chat_template_kwargs; it reads reasoning_effort.
+    for provider, want, absent in (("lmstudio", "reasoning_effort", "chat_template_kwargs"),
+                                   ("llamacpp", "chat_template_kwargs", "reasoning_effort")):
+        ai_config.update({"enabled": True, "provider": provider, "thinking": "off",
+                          "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+        await _chat(wp_client, "hi")
+        sent = fake_llm.seen[-1]["body"]
+        assert want in sent and absent not in sent
+    assert fake_llm.seen[-1]["body"]["chat_template_kwargs"] == {"enable_thinking": False}
+    ai_config.update({"provider": "lmstudio"})
+    await _chat(wp_client, "hi")
+    assert fake_llm.seen[-1]["body"]["reasoning_effort"] == "none"
+
+
 def test_responses_input_rebuilds_steps_it_cannot_replay():
     from wp_api import _ai_chat
     log = [

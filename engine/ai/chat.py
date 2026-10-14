@@ -1669,8 +1669,6 @@ class Library(MoreTools, ManageTools):
                           "body": body}
         proposal["replaces"] = old_pid
         proposal["title"] = str(old.get("title") or proposal.get("title") or "")
-        proposal["warnings"] = [f"Replaces the earlier card ({old_pid}), which wasn't applied",
-                                *proposal.get("warnings", [])]
         pid = proposal["pid"]
         self.modules[body["id"]] = {**copy.deepcopy(body), "_proposed": pid}
         self._created[body["id"]] = pid
@@ -1748,7 +1746,20 @@ class Library(MoreTools, ManageTools):
                     f"Builds on the earlier change to {op.get('name')}; apply that one first",
                     *proposal["warnings"],
                 ]
+        notes = [w for w in proposal["warnings"] if isinstance(w, str) and _NOTE.match(w)]
+        if notes:
+            proposal["notes"] = notes
         return proposal
+
+
+#: Card warnings that only tell the user something (what was kept, what to
+#: apply first, what to check by hand): asking the model changes nothing, so
+#: they get no Ask to fix button.
+_NOTE = re.compile(
+    r"Kept .*: a constraint points at it$"
+    r"|.* may name the old tags; check its rules$"
+    r"|Points at the new item "
+    r"|Builds on the earlier change to ")
 
 
 def proposal_note(tool: str, proposal: dict[str, Any]) -> str:
