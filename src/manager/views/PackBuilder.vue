@@ -607,7 +607,7 @@ function stopExtending(): void {
         <p v-if="draft?.summary" class="wp-pack__dim">{{ draft.summary }}</p>
         <p v-if="shape" class="wp-pack__shape" data-test="pack-shape">{{ shape }}</p>
         <div v-if="draft" class="wp-pack__run" data-test="pack-run">
-          <span class="wp-pack__dim">Runs as</span>
+          <span class="wp-pack__dim wp-pack__run-label">Runs as</span>
           <Select
             size="sm"
             :model-value="run.mode"
@@ -920,6 +920,7 @@ function stopExtending(): void {
 .wp-pack__kind[data-kind="fixed_values"] { color: var(--wp-kind-fixed); background: var(--wp-kind-fixed-bg); }
 .wp-pack__run { display: flex; align-items: center; gap: 8px; margin: 2px 0 8px; font-size: 12.5px; }
 .wp-pack__run-frames { width: 72px; }
+.wp-pack__run-label { white-space: nowrap; }
 .wp-pack__inputs { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 8px; }
 .wp-pack__inputs p { margin: 0; font-size: 12px; }
 .wp-pack__inputs ul { margin: 0; padding-left: 18px; font-size: 12.5px; display: flex; flex-direction: column; gap: 3px; }
