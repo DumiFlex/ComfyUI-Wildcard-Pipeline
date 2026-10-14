@@ -6,7 +6,8 @@
  * draws it. Hidden behind a line of text when the model can't see images
  * (compact: hidden altogether, so the Draft panels stay small).
  */
-import { onMounted, ref } from "vue";
+import { onMounted, ref, watch } from "vue";
+import { useAiConfig } from "../../composables/useAiConfig";
 import { checkVision, type AiImages } from "../../composables/useAiImages";
 
 const props = withDefaults(defineProps<{
@@ -21,6 +22,9 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const over = ref(false);
 
 onMounted(() => { void checkVision(); });
+// A new model (Settings, the chat's model picker) may see images or not.
+const { config } = useAiConfig();
+watch(() => config.value?.model, () => { void checkVision(); });
 
 function pick(): void {
   if (!props.disabled) fileInput.value?.click();

@@ -980,6 +980,8 @@ async function onSplit(groups: SplitGroup[]): Promise<void> {
       made.push({ group: g, row });
     }
   } catch (err) {
+    // All or nothing: the ones already made would sit unused in the library.
+    await Promise.allSettled(made.map(({ row }) => api.bundles.delete(row.id)));
     toast.push({
       severity: "error", summary: "Couldn't make the sub-bundles",
       detail: err instanceof Error ? err.message : String(err), life: 6000,

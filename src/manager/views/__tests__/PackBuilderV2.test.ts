@@ -151,6 +151,20 @@ describe("PackBuilder v2", () => {
     expect(w.find('[data-test="pack-edited"]').exists()).toBe(true);
   });
 
+  it("keeps a hand-added item the server's recheck leaves out", async () => {
+    vi.mocked(api.ai.packReview).mockImplementation(async ({ plan: p }) => ({
+      findings: [], note: "",
+      plan: { ...p, items: p.items.filter((i) => i.name), warnings: ["Left out a blank item."] },
+    }));
+    const w = await mountIt();
+    const key = usePackBuilder().addItem("constraint");
+    await new Promise((r) => setTimeout(r, 450));
+    await flushPromises();
+    expect(api.ai.packReview).toHaveBeenCalled();
+    expect(usePackBuilder().draft.value?.items.some((i) => i.key === key)).toBe(true);
+    expect(w.findAll('[data-test="pack-item"]')).toHaveLength(3);
+  });
+
   it("applies a finding's fix without the model and dismisses others", async () => {
     const w = await mountIt();
     expect(w.findAll('[data-test="pack-item"]')).toHaveLength(2);

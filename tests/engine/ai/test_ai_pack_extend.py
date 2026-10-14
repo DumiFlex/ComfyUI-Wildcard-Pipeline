@@ -131,3 +131,54 @@ def test_use_lines_name_options_by_number():
     payload = {"options": [{"id": "a1", "value": "a"}, {"id": "b2", "value": "b"},
                            {"id": "c3", "value": "c"}], "sub_categories": []}
     assert pack.item_instance(item, payload) == {"enabled_options": ["a1", "c3"]}
+
+
+def test_a_new_source_moves_in_ahead_of_its_constraint():
+    base = _base()
+    plan = pack.compile_plan(_raw([
+        {"kind": "wildcard", "name": "Style", "var": "style", "count": 4, "tags": ["dark"],
+         "section": "Look"},
+        {"kind": "constraint", "name": "Style → Weapon", "source": "style", "target": "weapon",
+         "about": "#dark never gets #blade"},
+    ]), LIB, base=base)
+    key = {i["name"]: i["key"] for i in plan["items"]}
+    built = {}
+    for i in plan["items"]:
+        if i["kind"] == "library":
+            row = next(r for r in LIB if r["id"] == i["id"])
+            built[i["key"]] = {"id": row["id"], "payload": row["payload"]}
+        elif i["kind"] == "wildcard":
+            built[i["key"]] = {"id": i["id"], "payload": _wild(i["id"], i["name"], i["var"])[
+                "payload"]}
+    style_id = next(i["id"] for i in plan["items"] if i["name"] == "Style")
+    built[key["Style → Weapon"]] = {"id": plan["items"][-1]["id"], "payload": {
+        "source_wildcard_id": style_id, "target_wildcard_id": "bbbb0001", "rules": []}}
+    names = [m["name"] for m in pack.extend_chain(plan, built, base)]
+    assert names.index("Style") < names.index("Style → Weapon") < names.index("Weapon")
+    ops = pack.extend_ops(plan, built, base, taken={"aaaa0001", "bbbb0001"},
+                          template_ids=set(), bundle_ids={"dddd0001", "eeee0001"})
+    # The "Look" section it left is empty, so no sub-bundle is made for it.
+    assert not ops["sub_bundles"]
+    by_id = {r["id"]: r["new_content"] for r in ops["replaces"]}
+    assert [c["meta"]["name"] for c in by_id["dddd0001"]["children"]] == [
+        "Style", "Style → Weapon", "Weapon"]
+
+
+def test_nsfw_items_make_the_extended_bundle_nsfw():
+    base = _base()
+    plan = pack.compile_plan(_raw([
+        {"kind": "wildcard", "name": "Mood", "var": "mood", "count": 4}]), LIB, base=base)
+    built = {}
+    for i in plan["items"]:
+        if i["kind"] == "library":
+            row = next(r for r in LIB if r["id"] == i["id"])
+            built[i["key"]] = {"id": row["id"], "payload": row["payload"]}
+        else:
+            built[i["key"]] = {"id": i["id"], "payload": _wild(i["id"], i["name"], i["var"])[
+                "payload"]}
+    kw = {"taken": {"aaaa0001", "bbbb0001"}, "template_ids": set(),
+          "bundle_ids": {"dddd0001", "eeee0001"}}
+    safe = pack.extend_ops(plan, built, base, **kw)
+    assert all("content_rating" not in r["new_content"] for r in safe["replaces"])
+    nsfw = pack.extend_ops({**plan, "rating": "nsfw"}, built, base, **kw)
+    assert {r["new_content"]["content_rating"] for r in nsfw["replaces"]} == {"nsfw"}

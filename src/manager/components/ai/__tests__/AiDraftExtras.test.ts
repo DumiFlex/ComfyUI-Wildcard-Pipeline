@@ -1,5 +1,5 @@
-import { flushPromises, mount } from "@vue/test-utils";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AiDraftPanel from "../AiDraftPanel.vue";
 import { api } from "../../../api/client";
 import { _resetAiConfigForTests } from "../../../composables/useAiConfig";
@@ -33,6 +33,8 @@ function png(name: string): File {
   return new File(["x"], name, { type: "image/png" });
 }
 
+enableAutoUnmount(afterEach);
+
 describe("Draft with AI images", () => {
   beforeEach(() => {
     _resetAiConfigForTests();
@@ -57,6 +59,19 @@ describe("Draft with AI images", () => {
     expect(draft.mock.calls[0][0].images).toEqual([
       "data:image/jpeg;base64,a.png", "data:image/jpeg;base64,b.png",
     ]);
+  });
+
+  it("asks again whether the model sees images after the model changes", async () => {
+    const { useAiConfig } = await import("../../../composables/useAiConfig");
+    vision.mockReset().mockResolvedValueOnce({ vision: false, model: "qwen3" })
+      .mockResolvedValueOnce({ vision: true, model: "gemma3" });
+    const w = mountPanel();
+    await flushPromises();
+    expect(w.find('[data-test="ai-images"]').exists()).toBe(false);
+    useAiConfig().config.value = { model: "gemma3" } as never;
+    await flushPromises();
+    expect(vision).toHaveBeenCalledTimes(2);
+    expect(w.find('[data-test="ai-images"]').exists()).toBe(true);
   });
 
   it("hides the picker and sends no images for a model that can't see", async () => {
@@ -94,7 +109,14 @@ describe("Draft with AI images", () => {
     expect(body.web).toEqual([{ query: "genshin characters", text: "web_search: Furina" }]);
     expect(body.searched).toEqual(["genshin characters"]);
     expect(body.history).toHaveLength(1);
+    expect(body.skipped).toBeUndefined();
     expect(w.find('[data-test="ai-research"]').exists()).toBe(false);
+
+    // The results stay with later follow-ups.
+    await w.get('[data-test="ai-instruction"]').setValue("more");
+    await w.get('[data-test="ai-refine"]').trigger("click");
+    await flushPromises();
+    expect(draft.mock.calls[2][0].web).toEqual(body.web);
   });
 
   it("skipping hides the searches and tells later requests", async () => {
@@ -115,5 +137,11 @@ describe("Draft with AI images", () => {
     await flushPromises();
     expect(draft.mock.calls[1][0].searched).toEqual(["a query"]);
     expect(draft.mock.calls[1][0].web).toBeUndefined();
+    expect(draft.mock.calls[1][0].skipped).toBe(true);
+    // Said once.
+    await w.get('[data-test="ai-instruction"]').setValue("again");
+    await w.get('[data-test="ai-refine"]').trigger("click");
+    await flushPromises();
+    expect(draft.mock.calls[2][0].skipped).toBeUndefined();
   });
 });

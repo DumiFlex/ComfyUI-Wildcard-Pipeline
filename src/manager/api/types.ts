@@ -958,12 +958,14 @@ export interface AiConversational {
   history?: AiTurn[];
   /** Reference images (shrunk data URLs) sent with the newest message. */
   images?: string[];
-  /** Web results the user allowed (`api.ai.packSearch`), sent with the
-   *  follow-up that asks the model to use them. */
+  /** Web results the user allowed in this conversation
+   *  (`api.ai.packSearch`), sent with every later request. */
   web?: AiWebResult[];
   /** Searches already run or skipped in this conversation: the model isn't
-   *  offered them again, and an empty `web` with these means "skipped". */
+   *  offered them again. */
   searched?: string[];
+  /** The user skipped the last answer's searches (sent once). */
+  skipped?: boolean;
 }
 
 export interface AiWebResult {

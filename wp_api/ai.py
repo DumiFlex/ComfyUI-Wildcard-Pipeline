@@ -87,6 +87,8 @@ from wp_api._validators import validate_wildcard_name
 _MAX_BODY_BYTES = 512 * 1024
 #: Requests that may carry reference images (a few shrunk JPEGs).
 _MAX_IMAGE_BODY_BYTES = 6 * 1024 * 1024
+#: Pack routes carry the plan and every built item (up to 60 payloads).
+_MAX_PACK_BODY_BYTES = 8 * 1024 * 1024
 #: Time one chat answer may take, checked before each step: a step that
 #: started finishes (each model call has its own timeout), and once the time
 #: is up the model gets one last step to answer from what it has. Local
@@ -201,7 +203,8 @@ class _Web:
     def __init__(self, cfg: dict[str, Any], body: dict[str, Any]) -> None:
         self.on = _ai_search.enabled(cfg)
         self.searched = _str_list(body.get("searched"), limit=12)
-        self.note = ai_research.note(body.get("web"), self.searched) if self.on else ""
+        self.note = (ai_research.note(body.get("web"), body.get("skipped") is True)
+                     if self.on else "")
 
     def schema(self, schema: dict[str, Any]) -> dict[str, Any]:
         return ai_research.with_research(schema) if self.on else schema
@@ -2001,6 +2004,7 @@ async def post_pack_plan(request: web.Request) -> web.Response:
             system=ai_pack.PLAN_SYSTEM, schema=ai_pack.PLAN_SCHEMA,
             schema_name="pack_plan", temperature=0.4, images=images or None,
             image_note=False,  # plan_prompt says how to use them
+            partial=True,  # a cut-off plan keeps the items it finished
         )
         plan = ai_pack.compile_plan(answer, library=library, previous=previous,
                                     decisions=decisions, settings=settings, base=base)
@@ -2017,6 +2021,8 @@ async def post_pack_plan(request: web.Request) -> web.Response:
         plan["research"] = []
     plan["research"] = [q for q in plan["research"]
                         if not any(q.lower() == s.lower() for s in searched)]
+    if isinstance(answer, dict):
+        answer.pop(_ai_client.CUT_OFF, None)  # never replayed to the model
     return json_ok({"plan": plan, "model": cfg["model"], "answer": answer,
                     "review": ai_pack.review_plan(plan, library), "web": web_on})
 
@@ -2052,7 +2058,7 @@ async def post_pack_change(request: web.Request) -> web.Response:
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
-    body = await _body(request)
+    body = await _body(request, limit=_MAX_PACK_BODY_BYTES)
     if isinstance(body, web.Response):
         return body
     instruction = _instruction(body, "say what to change")
@@ -2093,7 +2099,7 @@ async def post_pack_review(request: web.Request) -> web.Response:
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
-    body = await _body(request)
+    body = await _body(request, limit=_MAX_PACK_BODY_BYTES)
     if isinstance(body, web.Response):
         return body
     library = _reusable(request)
@@ -2126,7 +2132,7 @@ async def post_pack_item(request: web.Request) -> web.Response:
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
-    body = await _body(request)
+    body = await _body(request, limit=_MAX_PACK_BODY_BYTES)
     if isinstance(body, web.Response):
         return body
     library = _reusable(request)
@@ -2175,7 +2181,7 @@ async def post_pack_check(request: web.Request) -> web.Response:
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
-    body = await _body(request)
+    body = await _body(request, limit=_MAX_PACK_BODY_BYTES)
     if isinstance(body, web.Response):
         return body
     library = _reusable(request)
@@ -2202,7 +2208,7 @@ async def post_pack_install(request: web.Request) -> web.Response:
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
-    body = await _body(request)
+    body = await _body(request, limit=_MAX_PACK_BODY_BYTES)
     if isinstance(body, web.Response):
         return body
     library = _reusable(request)

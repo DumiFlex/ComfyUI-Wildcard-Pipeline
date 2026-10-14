@@ -66,13 +66,14 @@ type Ctx = { action: AiWildcardEditAction; rows: WildcardOption[]; tags: string[
 const pics = useAiImages();
 const convo = useAiConversation<AiWildcardEditResult, Ctx>({
   capture: () => ({ action: props.action, rows: editable.value, tags: props.existingTags }),
-  send: ({ instruction, history, ctx, web, searched }, signal) => api.ai.editWildcard({
+  send: ({ instruction, history, ctx, web, searched, skipped }, signal) => api.ai.editWildcard({
     action: ctx.action,
     instruction,
     history,
     images: pics.urls(),
     web,
     searched,
+    skipped,
     wildcard: {
       name: props.name,
       var_binding: props.varBinding,

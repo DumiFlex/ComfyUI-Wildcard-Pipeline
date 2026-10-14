@@ -459,7 +459,7 @@ async def complete_json(
     cfg: dict[str, Any], *, system: str, user: str, schema: dict[str, Any],
     schema_name: str, temperature: float = 0.8, max_tokens: int = 8192,
     history: list[tuple[str, Any]] | None = None, num_ctx: int | None = None,
-    images: list[dict[str, Any]] | None = None,
+    images: list[dict[str, Any]] | None = None, partial: bool = False,
 ) -> Any:
     """One request, one JSON object back, shaped by `schema` where supported.
 
@@ -468,7 +468,25 @@ async def complete_json(
     follow-up, and the model sees its own earlier answers. `images` are
     checked images (`_ai_images.clean`: ``{media_type, data}``) sent with
     the request; the caller decides whether the model can see them.
+
+    An answer the server cut off at its limit is an error, unless `partial`
+    says the caller can use what came before the cut (marked `CUT_OFF`).
     """
+    answer = await _complete_json(
+        cfg, system=system, user=user, schema=schema, schema_name=schema_name,
+        temperature=temperature, max_tokens=max_tokens, history=history,
+        num_ctx=num_ctx, images=images)
+    if not partial and isinstance(answer, dict) and answer.get(CUT_OFF):
+        raise AIError(CUT_OFF_MESSAGE)
+    return answer
+
+
+async def _complete_json(
+    cfg: dict[str, Any], *, system: str, user: str, schema: dict[str, Any],
+    schema_name: str, temperature: float, max_tokens: int,
+    history: list[tuple[str, Any]] | None, num_ctx: int | None,
+    images: list[dict[str, Any]] | None,
+) -> Any:
     _require_model(cfg)
     history = history or []
     if _semaphore.locked():
@@ -488,15 +506,15 @@ async def complete_json(
                 }],
                 "tool_choice": {"type": "tool", "name": _TOOL_NAME},
             })
+            if isinstance(data, dict) and data.get("stop_reason") == "max_tokens":
+                # A tool call cut off mid-way is not the answer it started.
+                raise AIError(CUT_OFF_MESSAGE)
             blocks = data.get("content") if isinstance(data, dict) else None
             for block in blocks or []:
                 if isinstance(block, dict) and block.get("type") == "tool_use":
                     return block.get("input")
             if isinstance(data, dict) and data.get("stop_reason") == "refusal":
                 raise AIError("the model declined this request", status=422)
-            if isinstance(data, dict) and data.get("stop_reason") == "max_tokens":
-                raise AIError("the model's answer was cut off at its output limit. Ask for "
-                              "fewer options.")
             raise AIError("the model didn't return the expected answer")
 
         if cfg["api"] == "ollama":

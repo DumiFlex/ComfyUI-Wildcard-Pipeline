@@ -54,8 +54,8 @@ const copy = computed(() => COPY[props.kind]);
 const pics = useAiImages();
 const convo = useAiConversation<AiTextDraftResult, { item: Item }>({
   capture: () => ({ item: JSON.parse(JSON.stringify(props.item)) as Item }),
-  send: ({ instruction, history, ctx, web, searched }, signal) => api.ai.draftText({
-    kind: props.kind, instruction, history, item: ctx.item, images: pics.urls(), web, searched,
+  send: ({ instruction, history, ctx, web, searched, skipped }, signal) => api.ai.draftText({
+    kind: props.kind, instruction, history, item: ctx.item, images: pics.urls(), web, searched, skipped,
   }, signal),
   emptyMessage: (res) => res.preview.length ? "" : "The model didn't write anything usable.",
 });

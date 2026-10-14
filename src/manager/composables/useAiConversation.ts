@@ -16,7 +16,9 @@
  * like (`research`). They show as a card under the answer: Search runs them
  * (`api.ai.packSearch`) and refines with the results, Skip hides them. Both
  * go in `searched`, sent with every later request, so the model isn't
- * offered the same searches again.
+ * offered the same searches again. Allowed results go with every later
+ * request too (`web`), so the facts outlive the follow-up that used them; a
+ * skip is said once, on the next request (`skipped`).
  */
 import { computed, ref, shallowRef } from "vue";
 import { api, ApiError } from "../api/client";
@@ -36,7 +38,10 @@ export interface AiConversationOptions<Res, Ctx> {
   capture: () => Ctx;
   /** `history` is undefined for a fresh request, so it stays out of the body. */
   send: (
-    req: { instruction: string; history?: AiTurn[]; ctx: Ctx; web?: AiWebResult[]; searched?: string[] },
+    req: {
+      instruction: string; history?: AiTurn[]; ctx: Ctx;
+      web?: AiWebResult[]; searched?: string[]; skipped?: boolean;
+    },
     signal: AbortSignal,
   ) => Promise<Res>;
   /** What the user did with an answer (which items they kept), sent along
@@ -61,6 +66,10 @@ export function useAiConversation<Res extends { answer: Record<string, unknown>;
   /** Searches run or skipped in this conversation. */
   const searched = ref<string[]>([]);
   const searching = ref(false);
+  /** Results of every search the user allowed in this conversation. */
+  let webResults: AiWebResult[] = [];
+  /** The user skipped searches since the last request. */
+  let skipped = false;
 
   const current = computed(() => exchanges.value[index.value] ?? null);
   const result = computed<Res | null>(() => current.value?.result ?? null);
@@ -76,19 +85,22 @@ export function useAiConversation<Res extends { answer: Record<string, unknown>;
   });
 
   async function request(
-    text: string, history: AiTurn[], ctx: Ctx, fresh: boolean, web?: AiWebResult[],
+    text: string, history: AiTurn[], ctx: Ctx, fresh: boolean,
   ): Promise<boolean> {
     controller?.abort();
     const mine = new AbortController();
     controller = mine;
     loading.value = true;
     error.value = "";
+    const skip = skipped;
     try {
       const res = await opts.send({
         instruction: text, history: history.length ? history : undefined, ctx,
-        ...(web ? { web } : {}),
+        ...(webResults.length ? { web: [...webResults] } : {}),
         ...(searched.value.length ? { searched: [...searched.value] } : {}),
+        ...(skip ? { skipped: true } : {}),
       }, mine.signal);
+      skipped = false;
       const entry = { instruction: text, history, ctx, result: res };
       exchanges.value = fresh ? [entry] : [...exchanges.value, entry];
       index.value = exchanges.value.length - 1;
@@ -109,7 +121,7 @@ export function useAiConversation<Res extends { answer: Record<string, unknown>;
   /** A new conversation from the request box. */
   async function ask(): Promise<void> {
     const text = instruction.value.trim();
-    searched.value = [];
+    forgetSearches();
     if (await request(text, [], opts.capture(), true)) instruction.value = "";
   }
 
@@ -119,7 +131,7 @@ export function useAiConversation<Res extends { answer: Record<string, unknown>;
     if (text && await followUp(text)) instruction.value = "";
   }
 
-  async function followUp(text: string, web?: AiWebResult[]): Promise<boolean> {
+  async function followUp(text: string): Promise<boolean> {
     const cur = current.value;
     if (!cur) return false;
     const note = opts.note?.(cur.result) ?? "";
@@ -128,7 +140,7 @@ export function useAiConversation<Res extends { answer: Record<string, unknown>;
       { instruction: cur.instruction, answer: cur.result.answer, ...(note ? { note } : {}) },
     ];
     if (history.length > MAX_TURNS) history = [history[0], ...history.slice(1 - MAX_TURNS)];
-    return request(text, history, cur.ctx, false, web);
+    return request(text, history, cur.ctx, false);
   }
 
   /** Run the searches the shown answer asks for, then refine with them. */
@@ -140,7 +152,8 @@ export function useAiConversation<Res extends { answer: Record<string, unknown>;
     try {
       const { results } = await api.ai.packSearch({ queries });
       searched.value = [...searched.value, ...queries];
-      await followUp(USE_SEARCHES, results);
+      webResults = [...webResults, ...results];
+      await followUp(USE_SEARCHES);
     } catch (err) {
       error.value = err instanceof ApiError || err instanceof Error ? err.message : "The search failed";
     } finally {
@@ -150,7 +163,15 @@ export function useAiConversation<Res extends { answer: Record<string, unknown>;
 
   /** Hide the searches; the model isn't offered them again. */
   function skipResearch(): void {
+    if (!research.value.length) return;
     searched.value = [...searched.value, ...research.value];
+    skipped = true;
+  }
+
+  function forgetSearches(): void {
+    searched.value = [];
+    webResults = [];
+    skipped = false;
   }
 
   /** The shown answer's request again, same context. */
@@ -172,7 +193,7 @@ export function useAiConversation<Res extends { answer: Record<string, unknown>;
     exchanges.value = [];
     index.value = -1;
     error.value = "";
-    searched.value = [];
+    forgetSearches();
   }
 
   /** Back to an empty request box holding the first request, to edit. */

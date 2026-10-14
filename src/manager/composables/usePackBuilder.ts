@@ -489,8 +489,9 @@ function scheduleRecheck(): void {
   }, RECHECK_MS);
 }
 
-/** The server reads the edited plan: findings for it, and items it can't
- *  use (left out, with a warning) drop out of the draft. */
+/** The server reads the edited plan: findings for it, and its cleaned
+ *  copy of each item. An item it leaves out (one still being filled in by
+ *  hand) stays in the draft as the user has it; its warning says why. */
 async function recheck(): Promise<void> {
   const res = convo.result.value;
   const p = plan.value;
@@ -500,9 +501,7 @@ async function recheck(): Promise<void> {
     const got = await api.ai.packReview(withTarget({ plan: p }));
     if (convo.result.value !== res || view.value?.draft !== v.draft) return;
     const server = new Map(got.plan.items.map((i) => [i.key, i]));
-    const items = v.draft.items
-      .map((i) => (v.removed.has(i.key) ? i : server.get(i.key)))
-      .filter((i): i is AiPackItem => !!i);
+    const items = v.draft.items.map((i) => (v.removed.has(i.key) ? i : server.get(i.key) ?? i));
     const warnings = [...new Set([...v.draft.warnings, ...got.plan.warnings])];
     setView({
       draft: { ...v.draft, items, warnings, sections: got.plan.sections },

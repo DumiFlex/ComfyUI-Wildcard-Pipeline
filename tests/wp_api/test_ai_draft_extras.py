@@ -88,7 +88,13 @@ async def test_draft_asks_to_search_only_when_web_search_is_set_up(wp_client, fa
         "searched": ["genshin characters", "b"]})).json()
     assert "Fur coats" in fake_llm.seen[-1]["body"]["messages"][-1]["content"]
     assert again["research"] == ["c"]
-    # Skipped: the model is told so.
+    # Skipped: the model is told so, once; searched alone (after an allowed
+    # search) says nothing about skipping.
     await wp_client.post("/wp/api/ai/text/draft", json={
-        "kind": "template", "instruction": "x", "item": {}, "searched": ["b"]})
+        "kind": "template", "instruction": "x", "item": {}, "searched": ["b"], "skipped": True})
     assert "chose not to search" in fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+    await wp_client.post("/wp/api/ai/text/draft", json={
+        "kind": "template", "instruction": "x", "item": {}, "searched": ["b"],
+        "web": [{"query": "b", "text": "web_search: Fur coats"}]})
+    last = fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+    assert "chose not to search" not in last and "Fur coats" in last

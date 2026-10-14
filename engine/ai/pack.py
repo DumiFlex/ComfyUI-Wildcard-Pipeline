@@ -2142,6 +2142,25 @@ def _before_target(seq: list[dict[str, Any]], m: dict[str, Any]) -> int | None:
     return next((n for n, x in enumerate(seq) if x.get("id") == tgt), None)
 
 
+def _take_new_source(m: dict[str, Any], new: set[int], outer: list[dict[str, Any]],
+                     subs: dict[str, list[dict[str, Any]]],
+                     made: dict[str, list[dict[str, Any]]]) -> dict[str, Any] | None:
+    """A new constraint's source wildcard when it is new too, taken out of
+    where it was placed (a section it leaves empty goes too), else None."""
+    src = (m.get("payload") or {}).get("source_wildcard_id")
+    for seq in [outer, *subs.values(), *made.values()]:
+        for n, x in enumerate(seq):
+            if id(x) in new and x.get("id") == src:
+                del seq[n]
+                for sec, items in list(made.items()):
+                    if not items:
+                        del made[sec]
+                        outer[:] = [c for c in outer if c.get("section") != sec
+                                    or c.get("type") != "bundle"]
+                return x
+    return None
+
+
 def _extend_layout(plan: dict[str, Any], built: dict[str, Any],
                    base: dict[str, Any]) -> dict[str, Any]:
     """Where each new module goes when extending, shared by the check and
@@ -2156,14 +2175,24 @@ def _extend_layout(plan: dict[str, Any], built: dict[str, Any],
     made: dict[str, list[dict[str, Any]]] = {}
     changed: set[str] = set()
     keys = [k for k in run_order(plan, built) if k in built]
+    new: set[int] = set()
     for m, key in zip(chain_modules(plan, built), keys, strict=True):
         i = items[key]
         if i.get("existing"):
             continue
+        new.add(id(m))
         placed = False
         for name, seq in [("", outer), *subs.items()]:
             at = _before_target(seq, m)
             if at is not None:
+                # A new source wildcard was appended after the bundle's
+                # target: it moves in just ahead, so source, constraint,
+                # target run in that order.
+                src = _take_new_source(m, new, outer, subs, made)
+                if src is not None:
+                    at = _before_target(seq, m) or 0
+                    seq.insert(at, src)
+                    at += 1
                 seq.insert(at, m)
                 changed.add(name)
                 placed = True
@@ -2249,10 +2278,14 @@ def extend_ops(
             outer.append(_child(c) if "_uid" in c else c)
 
     def content(row: dict[str, Any], children: list[Any]) -> dict[str, Any]:
-        return {"name": row["name"], "description": row.get("description") or "",
-                "color": row.get("color"), "category_id": row.get("category_id"),
-                "tags": list(dict.fromkeys([*(row.get("tags") or []), tag])),
-                "is_favorite": bool(row.get("is_favorite")), "children": children}
+        out = {"name": row["name"], "description": row.get("description") or "",
+               "color": row.get("color"), "category_id": row.get("category_id"),
+               "tags": list(dict.fromkeys([*(row.get("tags") or []), tag])),
+               "is_favorite": bool(row.get("is_favorite")), "children": children}
+        # NSFW items make the bundle NSFW; a safe plan leaves its rating be.
+        if plan["rating"] == "nsfw":
+            out["content_rating"] = "nsfw"
+        return out
     replaces = [{"kind": "bundle", "id": base["subs"][name]["id"],
                  "new_content": content(base["subs"][name], kids(lay["subs"][name]))}
                 for name in lay["subs"] if name in lay["changed"]]

@@ -54,7 +54,7 @@ const convo = useAiConversation<AiWildcardDraftResult, Ctx>({
     tags: props.existingTags,
     tagGroups: props.tagGroups,
   }),
-  send: ({ instruction, history, ctx, web, searched }, signal) => {
+  send: ({ instruction, history, ctx, web, searched, skipped }, signal) => {
     const n = Math.min(100, Math.max(1, Math.round(Number(count.value) || 10)));
     count.value = n;
     return api.ai.draftWildcard({
@@ -63,6 +63,7 @@ const convo = useAiConversation<AiWildcardDraftResult, Ctx>({
       images: pics.urls(),
       web,
       searched,
+      skipped,
       count: n,
       wildcard: {
         name: props.name,

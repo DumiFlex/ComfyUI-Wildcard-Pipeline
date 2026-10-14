@@ -9,17 +9,22 @@
  */
 import { computed, ref } from "vue";
 import { api } from "../api/client";
+import { useAiConfig } from "./useAiConfig";
 import { MAX_IMAGES, prepareImage, type ChatImage } from "../utils/chat-image";
 
 /** What the server said about the chosen model, shared by every list. */
 const vision = ref<boolean | null>(null);
 const visionModel = ref("");
 let checked: Promise<void> | null = null;
+/** The chosen model when the server was last asked. */
+let checkedFor: string | null = null;
 
-/** Ask the server once whether the chosen model sees images. `force`
- *  asks again (after the model changed). */
+/** Ask the server whether the chosen model sees images: once per model
+ *  (asked again after the model changed), or again when `force`d. */
 export function checkVision(force = false): Promise<void> {
-  if (!checked || force) {
+  const model = useAiConfig().config.value?.model ?? "";
+  if (!checked || force || model !== checkedFor) {
+    checkedFor = model;
     checked = Promise.resolve().then(() => api.ai.vision()).then(
       (got) => { vision.value = got.vision; visionModel.value = got.model; },
       () => { vision.value = null; },
@@ -99,4 +104,5 @@ export function _resetAiImagesForTests(): void {
   vision.value = null;
   visionModel.value = "";
   checked = null;
+  checkedFor = null;
 }

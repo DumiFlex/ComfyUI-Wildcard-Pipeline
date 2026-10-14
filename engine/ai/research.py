@@ -7,7 +7,8 @@ templates) offer the model a `research` list in its answer: up to
 characters, a real art style's vocabulary). The answer is then held back:
 the panel shows the searches, the user allows or skips them, and the same
 request goes again with the results (or with a note that the user
-skipped), so the model never searches on its own. One round per ask; the
+skipped), so the model never searches on its own. Allowed results go
+with every later request of the conversation. One round per ask; the
 pack builder's plan step does the same with its own `research` field.
 
 Derivation and constraint panels don't offer it: their rules work on the
@@ -61,10 +62,8 @@ def take(answer: Any, searched: list[str] | None = None) -> tuple[Any, list[str]
     return rest, out[:MAX_RESEARCH]
 
 
-def note(results: Any, searched: list[str]) -> str:
-    """What goes with the request after the user answered the search card:
-    the results they allowed, or that they skipped."""
-    text = web_note(results)
-    if text:
-        return text
-    return SKIPPED if searched else ""
+def note(results: Any, skipped: bool = False) -> str:
+    """What goes with a request: the results the user allowed in this
+    conversation (sent with every later request, so the facts outlive the
+    follow-up that used them), and that they skipped the last searches."""
+    return "\n\n".join(t for t in (web_note(results), SKIPPED if skipped else "") if t)
