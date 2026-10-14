@@ -1550,25 +1550,28 @@ class Library(MoreTools, ManageTools):
 
     def _adopt(self, proposal: dict[str, Any]) -> None:
         """Make a proposed new item visible to the rest of this answer, so
-        later calls can name it, point at it and run it. A module gets the
-        id it will be created with; a bundle or template, which nothing
-        points at by id, is only findable by name here."""
+        later calls can name it, point at it and run it. Each gets the id
+        it will be created with, so a card that points at it (a nested
+        @{id}, a bundle child, a sub-bundle) waits for it and still points
+        at it once both are applied."""
         op, pid = proposal["op"], proposal["pid"]
         body = op["body"]
-        if op["kind"] == "module":
+        taken = {*self.modules, *self.bundles, *self.templates}
+        new_id = secrets.token_hex(4)
+        while new_id in taken:
             new_id = secrets.token_hex(4)
-            while new_id in self.modules:
-                new_id = secrets.token_hex(4)
+        if op["kind"] == "module":
             body["id"] = new_id
             self.modules[new_id] = {**copy.deepcopy(body), "id": new_id, "_proposed": pid}
             self.names[new_id] = str(body.get("name") or "")
             self._catalog = None
             self._created[new_id] = pid
             self._pending[new_id] = (pid, self.modules[new_id])
-        elif op["kind"] == "bundle":
-            self.bundles[pid] = {**copy.deepcopy(body), "id": pid, "_proposed": pid}
-        elif op["kind"] == "template":
-            self.templates[pid] = {**copy.deepcopy(body), "id": pid, "_proposed": pid}
+        elif op["kind"] in ("bundle", "template"):
+            body["id"] = new_id
+            rows = self.bundles if op["kind"] == "bundle" else self.templates
+            rows[new_id] = {**copy.deepcopy(body), "id": new_id, "_proposed": pid}
+            self._created[new_id] = pid
 
     def adopt_earlier(self, proposal: dict[str, Any]) -> None:
         """Make a new module an earlier answer proposed (and the user hasn't

@@ -159,3 +159,15 @@ def test_web_search_joins_and_leaves_a_chat_with_the_setting():
     assert "web_search" in on and ai_tools.sync_delete(on, True, ai_tools.WEB) is on
     assert "web_search" not in ai_tools.sync_delete(on, False, ai_tools.WEB)
     assert "without being asked" in ai_tools.BY_NAME["web_search"].summary
+
+
+def test_a_new_bundle_nests_in_a_bundle_from_the_same_answer():
+    lib = _lib()
+    inner = lib.run("create_bundle", {"name": "Inner", "items": ["Season", "Outfit"]})
+    iid = inner["op"]["body"]["id"]
+    assert len(iid) == 8 and iid not in ("p1",)
+    outer = lib.run("create_bundle", {"name": "Outer2", "items": ["Inner", "Look"]})
+    assert outer["op"]["body"]["children"][0]["id"] == iid
+    assert outer["after"] == inner["pid"]
+    tpl = lib.run("create_template", {"name": "Shot", "template": "$season"})
+    assert len(tpl["op"]["body"]["id"]) == 8
