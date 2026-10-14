@@ -1757,6 +1757,8 @@ export interface AiPackCheck {
   /** Variety advice: options never picked, too few distinct values, one
    *  value taking most runs. */
   quality: Array<{ key: string; text: string }>;
+  /** Item keys in the order they run (and install). */
+  order?: string[];
 }
 
 export interface AiPackInstallResult {

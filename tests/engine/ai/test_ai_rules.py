@@ -289,3 +289,18 @@ def test_describe_summaries_and_answer():
     ]
     with pytest.raises(ValueError):
         ai_describe.compile_answer({"description": "", "tags": []}, current=[], library=[])
+
+
+def test_constraint_prompt_shows_tag_groups_and_only_keeps_named_targets():
+    wc = {"name": "Outfit", "payload": {
+        "var_binding": "outfit", "sub_categories": ["summer", "spring", "dress"],
+        "tag_groups": {"season": ["summer", "spring"], "kind": ["dress"]},
+        "tag_group_kinds": {"season": "accepts"},
+        "options": [{"id": "o1", "value": "sundress", "sub_categories": ["summer", "dress"]}]}}
+    side = ai_constraint.side_view(wc, "T")
+    assert {"name": "season", "kind": "accepts", "tags": ["summer", "spring"]} in side["groups"]
+    text = ai_constraint.build_prompt(instruction="x", source=side, target=side, existing=[])
+    assert "ACCEPTS group season: #summer, #spring" in text
+    assert "CLASSIFY group kind: #dress" in text
+    # The prompt agrees with the engine: reduce/boost rules keep their target.
+    assert "only, reduce or boost rule" in ai_constraint.SYSTEM_PROMPT

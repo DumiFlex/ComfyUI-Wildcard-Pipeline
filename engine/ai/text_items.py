@@ -94,13 +94,18 @@ def build_prompt(
     *, kind: str, instruction: str, name: str, catalog_text: str,
     description: str = "", labels: list[str] | None = None, current: str = "",
     out_var: str = "",
+    others: dict[str, str] | None = None,
 ) -> str:
     what = {"fixed_values": "Fixed values", "combine": "Combine",
             "template": "Prompt template"}[kind]
     lines = [f"{what}: {name or '(unnamed)'}"]
     lines.extend(about.lines(description, labels or []))
     if out_var:
-        lines.append(f"It sets ${out_var}.")
+        lines.append(f"It sets ${out_var}." if kind != "fixed_values" else
+                     f"Its main value is ${out_var}: always set it.")
+    if others:
+        lines.append("Other items set these; don't set them here: " + ", ".join(
+            f"${v} ({n})" for v, n in list(others.items())[:40]) + ".")
     if current:
         lines.append("It holds now:")
         lines.append(current)

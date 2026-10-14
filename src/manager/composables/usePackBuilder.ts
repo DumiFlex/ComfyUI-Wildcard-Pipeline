@@ -656,7 +656,15 @@ async function fixFindings(): Promise<void> {
   const open = findings.value;
   const list = selected.value.size ? open.filter((f) => selected.value.has(f.id)) : open;
   if (!list.length) return;
-  const note = "Revise the plan to fix these: " + list.map((f) => `- ${f.text}.`).join(" ");
+  // Numbered, each with its item, so a small model works through all of
+  // them instead of fixing the first and calling it done.
+  const names = new Map((plan.value?.items ?? []).map((i) => [i.key, i.name]));
+  const note = "Revise the plan to fix ALL of these, one by one:\n" + list.map((f, n) => {
+    const name = f.key ? names.get(f.key) : "";
+    return `${n + 1}. ${name ? `${name}: ` : ""}${f.text.replace(/\.\s*$/, "")}.`;
+  }).join("\n") + "\nWhere one asks for a new item (a constraint, a derivation, a wildcard), "
+    + "add it to the plan; where one asks to change an item, change that item.";
+  const recheck = list.some((f) => f.by === "model");
   convo.instruction.value = [convo.instruction.value.trim(), note].filter(Boolean).join("\n");
   const v = view.value;
   if (v) {
@@ -666,6 +674,9 @@ async function fixFindings(): Promise<void> {
   }
   selected.value = new Set();
   await refinePlan();
+  // The model's own findings are checked again on the new plan, so one it
+  // didn't fix shows up again instead of quietly disappearing.
+  if (recheck && !convo.error.value) await reviewPlan();
 }
 
 /** Have the model rewrite one item (or add items, with no key) as asked;

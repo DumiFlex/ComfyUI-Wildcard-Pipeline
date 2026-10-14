@@ -51,8 +51,8 @@ a variable, bundle a wildcard whose options are its values with "match \
 $var" and make that wildcard the constraint's source.
 - Grouping a big pack → sub-bundles (one level) inside one bundle, e.g. \
 Outfit and Scene sub-bundles in a Character bundle. A constraint goes in \
-the same sub-bundle as its source wildcard, so it follows that copy when \
-the wildcard is used twice.
+the same sub-bundle as its target wildcard, just before it; its source runs \
+earlier (the same sub-bundle or one before).
 """
 
 COHERENCE = """\

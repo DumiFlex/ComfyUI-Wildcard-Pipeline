@@ -187,10 +187,30 @@ const settingsLine = computed(() => {
   ].filter(Boolean).join(" · ");
 });
 
+/** Whether the problem a rebuild was asked to fix is still in the check:
+ *  "fixed:" then would claim a fix that didn't happen. */
+function stillThere(key: string): boolean {
+  const asked = pb.states.value[key]?.fixed ?? [];
+  const now = problems(key);
+  return asked.some((t) => now.includes(t));
+}
+
 const RANK: Record<AiPackItem["kind"], number> = {
-  fixed_values: 0, library: 1, wildcard: 1, derivation: 2, combine: 3, constraint: 4, template: 5,
+  fixed_values: 0, library: 1, wildcard: 1, derivation: 2, combine: 3, constraint: 1, template: 5,
 };
+/** Where an item sits in the list: run order once the check has run (what
+ *  install keeps); before that, by kind, with a constraint just ahead of
+ *  its target wildcard, where it runs. */
 function order(i: AiPackItem): number {
+  const ran = pb.check.value?.order;
+  if (ran?.length) {
+    const at = ran.indexOf(i.key);
+    return at >= 0 ? at : ran.length + RANK[i.kind] * 1000 + items.value.indexOf(i);
+  }
+  if (i.kind === "constraint") {
+    const target = items.value.find((x) => x.var === i.target && x.kind !== "constraint");
+    if (target) return order(target) - 0.5;
+  }
   return RANK[i.kind] * 1000 + items.value.indexOf(i);
 }
 
@@ -622,8 +642,13 @@ function stopExtending(): void {
               <span class="wp-pack__kind" :data-kind="i.kind">{{ kindLabel(i) }}</span>
               <button type="button" class="wp-pack__item-main wp-pack__expand" :aria-expanded="open.has(i.key)" @click="toggle(i.key)">
                 <span class="wp-pack__item-name">{{ i.name }}</span>
-                <span v-if="pb.states.value[i.key].fixed?.length && status(i.key) !== 'fixing'" class="wp-pack__fixed">
-                  fixed: {{ pb.states.value[i.key].fixed?.[0] }}
+                <span
+                  v-if="pb.states.value[i.key].fixed?.length && status(i.key) !== 'fixing'"
+                  class="wp-pack__fixed"
+                  :data-still="stillThere(i.key) ? 'true' : undefined"
+                  data-test="pack-fixed"
+                >
+                  {{ stillThere(i.key) ? "still: " : "fixed: " }}{{ pb.states.value[i.key].fixed?.[0] }}
                 </span>
               </button>
               <span class="wp-pack__item-meta">{{ builtMeta(i) }}</span>
@@ -873,7 +898,8 @@ function stopExtending(): void {
 .wp-pack__state[data-status="building"], .wp-pack__state[data-status="fixing"] { color: var(--wp-accent-text); }
 .wp-pack__built .wp-pack__state .pi-exclamation-triangle { color: var(--wp-warn); }
 .wp-pack__built + .wp-pack__built > .wp-pack__item { border-top: 1px solid var(--wp-border); }
-.wp-pack__fixed { font-size: 12px; color: var(--wp-warn); }
+.wp-pack__fixed { font-size: 12px; color: var(--wp-success); }
+.wp-pack__fixed[data-still="true"] { color: var(--wp-warn); }
 .wp-pack__detail { padding: 0 0 8px 120px; }
 .wp-pack__preview { margin: 0; padding: 6px 8px 6px 22px; font-size: 12px; border-radius: 6px; background: var(--wp-bg-1); display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
 .wp-pack__ok { margin: 0 0 10px; color: var(--wp-success); font-size: 13px; display: flex; gap: 6px; align-items: center; }

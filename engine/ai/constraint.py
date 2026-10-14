@@ -69,8 +69,20 @@ Effects:
 - exclude: when the source side is picked, the target side can't be. factor 0.
 - reduce: makes the target side rarer. factor between 0 and 1 (0.3 = much rarer).
 - boost: makes it more likely. factor above 1 (2 = twice as likely).
-- only: when the source side is picked, ONLY targets with an "only" rule from \
-the same source side stay possible; everything else is shut out. factor 1.
+- only: when the source side is picked, the target sides this source side \
+names stay possible and every other target option is shut out. factor 1. \
+"Names" means any rule from that source side: an only, reduce or boost rule \
+keeps its target (reduce and boost with their own odds), so "only boots, and \
+sandals rarely" is an only rule for #boots plus a reduce rule for #sandals. \
+Don't mix only and reduce/boost on one source side unless you mean that.
+
+Tag groups: a wildcard's tags can be grouped. In a CLASSIFY group a tag says \
+what the option IS, and a rule on it applies when the option has it. In an \
+ACCEPTS group the tags are alternatives the option offers (a dress that goes \
+with "summer" or "spring"): on the source, each run rolls one of them, and the \
+rule follows the rolled one; on the target, an option stays possible when the \
+source allows any of its alternatives. Key rules that should match picks on \
+the accepts group's tags.
 
 Only write the rules the request asks for. Give each a reason of a few words. \
 Don't add commentary; the output is data for the user's own library.\
@@ -98,12 +110,20 @@ def side_view(wildcard: dict[str, Any], prefix: str) -> dict[str, Any]:
     for i, o in enumerate(options, 1):
         o["short"] = f"{prefix}{i}"
     tags = [t for t in payload.get("sub_categories") or [] if isinstance(t, str)]
+    kinds = payload.get("tag_group_kinds")
+    kinds = kinds if isinstance(kinds, dict) else {}
+    raw_groups = payload.get("tag_groups")
+    raw_groups = raw_groups if isinstance(raw_groups, dict) else {}
+    groups = [{"name": str(g), "kind": "accepts" if kinds.get(g) == "accepts" else "classify",
+               "tags": [t for t in members if isinstance(t, str)]}
+              for g, members in raw_groups.items() if isinstance(members, list) and members]
     description, labels = about.clean(wildcard.get("description"), wildcard.get("tags"))
     return {
         "name": wildcard.get("name") if isinstance(wildcard.get("name"), str) else "",
         "var": payload.get("var_binding") if isinstance(payload.get("var_binding"), str) else "",
         "options": options,
         "tags": tags,
+        "groups": groups,
         "prefix": prefix,
         "description": description,
         "labels": labels,
@@ -125,6 +145,9 @@ def build_prompt(
         lines.append(f"{label} wildcard: {side['name'] or '(unnamed)'}{var}")
         lines.extend(about.lines(side["description"], side["labels"], indent="  "))
         lines.append(f"Tags: {', '.join('#' + t for t in side['tags']) or 'none'}")
+        for g in side.get("groups") or []:
+            lines.append(f"  {g['kind'].upper()} group {g['name']}: "
+                         + ", ".join("#" + t for t in g["tags"]))
         for o in side["options"]:
             tags = f"  [{', '.join('#' + t for t in o['tags'])}]" if o["tags"] else ""
             lines.append(f"{o['short']}. {o['value']}{tags}")

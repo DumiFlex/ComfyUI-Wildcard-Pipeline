@@ -80,6 +80,8 @@ MAX_ABOUT = 600
 MAX_NAME = 80
 MAX_TEMPLATE = 4000
 CHECK_SEEDS = 200
+#: Runs compared to find two variables that are copies of each other.
+TWIN_SEEDS = 12
 SAMPLE_PROMPTS = 3
 #: Sections below this many items go in one bundle even when sections are on.
 MIN_SECTIONED = 6
@@ -1147,6 +1149,17 @@ def review_plan(plan: dict[str, Any],
         if c["source"] in after and reaches(c["source"], c["target"], {c["source"]}):
             add(c, "fix", f"{c['name']} closes a loop of constraints ({c['target']} already "
                 f"comes before {c['source']}), so it can't apply")
+    # A preset that also sets what another item sets: one overwrites the other.
+    owner = {i["var"]: i for i in items
+             if i["var"] and i["kind"] not in ("constraint", "template", "fixed_values")}
+    for i in (x for x in items if x["kind"] == "fixed_values"):
+        clash = [v for v in dict.fromkeys(_SETS.findall(i.get("about") or "")
+                                          + _reads(i.get("about") or ""))
+                 if v in owner and v != i["var"]]
+        if clash:
+            add(i, "fix", f"{i['name']} also sets ${', $'.join(clash)}, which "
+                f"{', '.join(dict.fromkeys(owner[v]['name'] for v in clash))} already "
+                "set; keep it to values nothing else sets")
     rules = [i for i in items if i["kind"] in ("constraint", "derivation")]
     picks = [i for i in items if i["kind"] in ("wildcard", "library") and i["var"]]
     if len(picks) >= 3 and not rules:
@@ -1252,7 +1265,10 @@ def review_note(findings: list[dict[str, Any]]) -> str:
     """Findings as a refine request for the planner."""
     if not findings:
         return ""
-    return "Revise the plan to fix these: " + " ".join(f"- {f['text']}." for f in findings)
+    return ("Revise the plan to fix ALL of these, one by one:\n"
+            + "\n".join(f"{n}. {f['text'].rstrip('. ')}." for n, f in enumerate(findings, 1))
+            + "\nWhere one asks for a new item (a constraint, a derivation, a wildcard), add it "
+            "to the plan; where one asks to change an item, change that item.")
 
 
 def follow_up_note(plan: dict[str, Any]) -> str:
@@ -1483,7 +1499,8 @@ def item_request(
             negative_line(plan, kind) if kind in ("template", "fixed_values") else "") + fix,
         name=item["name"],
         catalog_text=library_vars.describe(cat), description=_pack_line(plan),
-        out_var=item["var"] if kind == "combine" else "",
+        out_var=item["var"] if kind in ("combine", "fixed_values") else "",
+        others=owners(plan, key) if kind == "fixed_values" else None,
     )
     system, schema, name = {
         "fixed_values": (text_items.FIXED_SYSTEM, text_items.FIXED_SCHEMA, "fixed_values"),
@@ -1492,6 +1509,14 @@ def item_request(
     }[kind]
     return {"system": system, "user": user, "schema": schema, "schema_name": name,
             "temperature": 0.4}
+
+
+def owners(plan: dict[str, Any], key: str) -> dict[str, str]:
+    """Each variable another plan item sets as its main one → that item's
+    name. A fixed values preset must leave these alone: setting $hair_style
+    there too overwrites (or is overwritten by) the Hair Style wildcard."""
+    return {i["var"]: i["name"] for i in plan["items"]
+            if i["key"] != key and i["var"] and i["kind"] not in ("constraint", "template")}
 
 
 def _constraint_sides(
@@ -1594,6 +1619,18 @@ def compile_item(
     elif kind == "fixed_values":
         out = text_items.compile_fixed(answer)
         payload, preview, warnings = out["payload"], out["preview"], out["warnings"]
+        # Values another item already sets are left out: two writers of one
+        # variable means one overwrites the other.
+        own = owners(plan, key)
+        kept = [v for v in payload["values"] if v["name"] not in own]
+        for v in payload["values"]:
+            if v["name"] in own:
+                warnings.append(f"Left out ${v['name']}: {own[v['name']]} sets it")
+        if not kept:
+            raise ValueError("every value it set is set by another item")
+        if len(kept) != len(payload["values"]):
+            payload = {**payload, "values": kept}
+            preview = [p for p in preview if not any(p.startswith(f"${n} = ") for n in own)]
         names = [v["name"] for v in payload["values"]]
         if item["var"] not in names:
             warnings.append(f"It doesn't set ${item['var']}")
@@ -1767,7 +1804,8 @@ def check_pack(
 ) -> dict[str, Any]:
     """Run the pack on the engine. Returns ``{runs, failed, problems:
     {key: [text]}, notes: [text], variables: [{var, distinct, top}],
-    prompts: [{seed, text, negative}]}``. ``problems`` are what an item's
+    prompts: [{seed, text, negative}], order: [key]}`` (``order``: the
+    items in run order). ``problems`` are what an item's
     repair gets told; ``notes`` are pack-wide. Inputs are pinned to their
     examples; refs resolve against the pack and ``library``. With ``base``
     the bundle being extended runs too, as it will after install."""
@@ -1783,6 +1821,10 @@ def check_pack(
     for i in plan["items"]:
         if i["key"] in built:
             by_id[built[i["key"]]["id"]] = i["key"]
+    # Runtime warnings name the instance ("pack.3"), not the module id.
+    for m in modules:
+        if m.get("_uid") and m.get("id") in by_id:
+            by_id[str(m["_uid"])] = by_id[m["id"]]
     problems: dict[str, list[str]] = {}
     notes: list[str] = []
     quality: list[dict[str, str]] = []
@@ -1818,6 +1860,28 @@ def check_pack(
             variables.append({"var": i["var"], "distinct": v["distinct"], "top": top})
             if i["kind"] == "wildcard" and i["key"] in built and total:
                 quality += _variety(i, built[i["key"]]["payload"], v, total, plan)
+    # Two variables that hold the same text run after run: one is a copy.
+    owned = [i for i in plan["items"] if i["var"] and i["key"] in built
+             and i["kind"] not in ("constraint", "template")]
+    runs: list[dict[str, Any]] = []
+    for seed in seed_list[:TWIN_SEEDS]:
+        try:
+            runs.append(PipelineEngine().run(copy.deepcopy(modules),
+                                             ctx={**pinned, "__wp_catalog__": catalog}, seed=seed))
+        except Exception:  # noqa: BLE001 - a failed run is reported above
+            continue
+    seen: list[dict[str, Any]] = []
+    for i in owned:
+        vals = [str(ctx.get(i["var"]) or "").strip() for ctx in runs]
+        if not runs or not all(vals):
+            continue
+        twin = next((o for o in seen if o["vals"] == vals), None)
+        if twin is not None:
+            problems.setdefault(i["key"], []).append(
+                f"${i['var']} always holds the same text as ${twin['var']}; drop one or make "
+                "them say different things")
+        else:
+            seen.append({"var": i["var"], "vals": vals})
     tpl = _template(plan, built)
     prompts: list[dict[str, Any]] = []
     if tpl is not None:
@@ -1843,8 +1907,13 @@ def check_pack(
             problems.setdefault(item["key"], []).append(
                 "the prompt shows { } or @{ } as written: a variable it reads holds a pick "
                 "the Assembler can't make")
+    # The items in the order they run (the order install keeps), for the
+    # Build list: build order puts every constraint last, which reads wrong.
+    order = list(dict.fromkeys(by_id[str(m["_uid"])] for m in modules
+                               if str(m.get("_uid")) in by_id))
     return {"runs": report["runs"], "failed": report["failed"], "problems": problems,
-            "notes": notes, "variables": variables, "prompts": prompts, "quality": quality}
+            "notes": notes, "variables": variables, "prompts": prompts, "quality": quality,
+            "order": order}
 
 
 def _variety(item: dict[str, Any], payload: dict[str, Any], v: dict[str, Any],
