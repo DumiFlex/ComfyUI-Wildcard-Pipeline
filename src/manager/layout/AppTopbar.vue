@@ -153,7 +153,7 @@ function openPalette(): void {
       v-else-if="chatBusy"
       inline
       :size="20"
-      text="the chat is answering"
+      text="The chat is answering"
       :phase="aiChat.live.value.text ? 'writing' : aiChat.live.value.thinking ? 'thinking' : 'reading'"
       class="wp-topbar__ai-working"
       data-test="topbar-ai-working"

@@ -417,7 +417,9 @@ describe("Settings › AI assistant suggested models per provider", () => {
     expect(suggestionsFor("custom", true)?.key).toBe("local");
     expect(suggestionsFor("custom", false)).toBeNull();
     expect(suggestionsFor("anthropic", false)?.key).toBe("anthropic");
-    expect(suggestionsFor("openrouter", false)?.groups[0].models.every((m) => m.price)).toBe(true);
+    // OpenRouter prices change, so its models link to their page instead.
+    const or = suggestionsFor("openrouter", false)?.groups[0].models ?? [];
+    expect(or.every((m) => !m.price && m.pageUrl === `https://openrouter.ai/${m.name}`)).toBe(true);
     const all = Object.values(SUGGESTED_MODELS).flatMap((gs) => gs.flatMap((g) => g.models));
     expect(all.filter((m) => m.tested).map((m) => m.name)).toEqual([SUGGESTED_LOCAL_MODELS[0].name]);
     for (const m of all) expect(`${m.goodFor}`).not.toMatch(/\u2014/);

@@ -1,6 +1,6 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import AiWorking, { formatElapsed } from "../AiWorking.vue";
+import AiWorking, { formatElapsed, pickVariant } from "../AiWorking.vue";
 import { activeAiRequests, endAiRequest, startAiRequest, watchesProgress } from "../../../api/ai-progress";
 import { api } from "../../../api/client";
 
@@ -14,12 +14,39 @@ describe("AiWorking", () => {
   it("shows a finished line and the phase's tempo", () => {
     const w = mount(AiWorking, { props: { text: "Writing…", phase: "writing" } });
     expect(w.get('[data-test="ai-working-detail"]').text()).toBe("Writing…");
-    expect(w.get('[data-test="ai-working-word"]').text()).toMatch(/…$/);
+    // One line: what is happening first, then the time.
+    expect(w.get('[data-test="ai-working-word"]').text()).toBe("Writing…");
     expect(w.get('[data-test="ai-working-time"]').text()).toBe("0s");
     expect(w.attributes("data-tempo")).toBe("fast");
-    // The logo is drawn, not a spinner icon.
+    expect(w.attributes("aria-label")).toBe("Writing…");
+    // The logo's sparkles are drawn, not a spinner icon.
     expect(w.findAll(".wp-aiw__star")).toHaveLength(3);
-    expect(w.find(".wp-aiw__tail").exists()).toBe(true);
+  });
+
+  it("mixes playful words with what is really happening", async () => {
+    vi.useFakeTimers();
+    const w = mount(AiWorking, { props: { text: "Searching the library…", phase: "thinking", variant: "orbit" } });
+    const word = () => w.get('[data-test="ai-working-word"]').text();
+    expect(word()).toBe("Searching the library…");
+    vi.advanceTimersByTime(3500);
+    await flushPromises();
+    expect(word()).not.toBe("Searching the library…");
+    vi.advanceTimersByTime(7000);
+    await flushPromises();
+    expect(word()).toBe("Searching the library…");
+    // A new status is said straight away.
+    vi.advanceTimersByTime(3500);
+    await w.setProps({ text: "Writing…", phase: "writing" });
+    expect(word()).toBe("Writing…");
+    expect(w.findAll(".wp-aiw__dot")).toHaveLength(4);
+    w.unmount();
+  });
+
+  it("picks the typing stars most often", () => {
+    expect([0, 0.39, 0.45, 0.65, 0.95].map(pickVariant)).toEqual(["typing", "typing", "shuffle", "orbit", "burst"]);
+    for (const v of ["typing", "shuffle", "orbit", "burst"] as const) {
+      expect(mount(AiWorking, { props: { text: "x", variant: v } }).findAll(".wp-aiw__star")).toHaveLength(3);
+    }
   });
 
   it("polls the newest AI request and says what the model is doing", async () => {
@@ -32,6 +59,7 @@ describe("AiWorking", () => {
     await flushPromises();
     expect(fetchMock).toHaveBeenCalledWith(`/wp/api/ai/progress/${id}`);
     expect(w.get('[data-test="ai-working-detail"]').text()).toBe("Planning: request 2, writing, about 420 tokens");
+    expect(w.get('[data-test="ai-working-word"]').text()).toBe("Writing · 420 tokens…");
     expect(w.attributes("data-tempo")).toBe("fast");
     vi.advanceTimersByTime(2100);
     await flushPromises();

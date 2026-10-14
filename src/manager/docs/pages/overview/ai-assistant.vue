@@ -578,9 +578,10 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         it: the planner splits it into slots, one wildcard each.
       </p>
       <p>
-        While the model works, the animated logo shows a changing word and the time so far, with
-        what the model is doing under it: reading the prompt, thinking, or writing (with about
-        how many tokens so far). The same line sits in the top bar on every page while any AI
+        While the model works, one line shows our sparkles animated, a changing word and the time
+        so far. Every few words, and whenever it changes, the word is what the model is really
+        doing: reading the prompt, thinking, or writing (with about how many tokens so far). Hover
+        it for the whole status. The same line sits in the top bar on every page while any AI
         request runs, so you can leave the page and still see it working.
       </p>
       <DocCallout variant="tip">

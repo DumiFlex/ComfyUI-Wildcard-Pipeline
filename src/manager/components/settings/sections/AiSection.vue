@@ -972,7 +972,7 @@ const off = computed(() => !config.value?.enabled);
                 <div class="wp-ai-set__model-head">
                   <code>{{ suggestedName(m) }}</code>
                   <span v-if="m.tested" class="wp-ai-set__tested" data-test="ai-model-tested">Tested</span>
-                  <span class="wp-ai-set__vram" :title="m.vram ? 'GPU memory' : 'USD per million tokens, input / output'">{{ m.vram ?? m.price }}</span>
+                  <span v-if="m.vram || m.price" class="wp-ai-set__vram" :title="m.vram ? 'GPU memory' : 'USD per million tokens, input / output'">{{ m.vram ?? m.price }}</span>
                 </div>
                 <div class="wp-ai-set__muted">
                   {{ m.goodFor }}.
@@ -980,6 +980,7 @@ const off = computed(() => !config.value?.enabled);
                     <a v-if="m.ollamaUrl && config.provider === 'ollama'" :href="m.ollamaUrl" target="_blank" rel="noopener noreferrer" data-test="ai-model-ollama">Ollama</a>
                     <a :href="m.hfUrl" target="_blank" rel="noopener noreferrer" data-test="ai-model-hf">Hugging Face</a>
                   </span>
+                  <a v-if="m.pageUrl" :href="m.pageUrl" target="_blank" rel="noopener noreferrer" data-test="ai-model-page">Price and details</a>
                 </div>
               </li>
             </ul>

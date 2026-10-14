@@ -33,6 +33,8 @@ export interface SuggestedModel {
   price?: string;
   /** The model's Ollama page, when there is one. */
   ollamaUrl?: string;
+  /** The model's page on the provider (OpenRouter), where its current price is. */
+  pageUrl?: string;
   /** The model's Hugging Face repo (the weights LM Studio and llama.cpp users start from). */
   hfUrl?: string;
   /** Tried with Wildcard Pipeline, not only read about. */
@@ -116,10 +118,10 @@ export const SUGGESTED_MODELS: Record<SuggestGroupKey, SuggestionGroup[]> = {
     title: "Unmoderated picks",
     note: "These support tools and structured output. Roleplay fine-tunes on OpenRouter (Cydonia and others) have no tool support, so they only work for drafting.",
     models: [
-      { name: "qwen/qwen3.6-35b-a3b", price: "$0.10 / $0.95", use: "building", goodFor: "Strong all-rounder that also sees images" },
-      { name: "z-ai/glm-5.3-flash", price: "$0.036 / $0.90", use: "building", goodFor: "Very cheap input, long context" },
-      { name: "deepseek/deepseek-v3.2", price: "$0.26 / $0.80", use: "building", goodFor: "Reasoning is off by default, so answers come quickly" },
-      { name: "deepseek/deepseek-v4-flash", price: "$0.091 / $0.182", use: "building", goodFor: "The cheapest output; it can't turn thinking off" },
+      { name: "qwen/qwen3.6-35b-a3b", pageUrl: "https://openrouter.ai/qwen/qwen3.6-35b-a3b", use: "building", goodFor: "Strong all-rounder that also sees images" },
+      { name: "z-ai/glm-5.3-flash", pageUrl: "https://openrouter.ai/z-ai/glm-5.3-flash", use: "building", goodFor: "Very cheap input, long context" },
+      { name: "deepseek/deepseek-v3.2", pageUrl: "https://openrouter.ai/deepseek/deepseek-v3.2", use: "building", goodFor: "Reasoning is off by default, so answers come quickly" },
+      { name: "deepseek/deepseek-v4-flash", pageUrl: "https://openrouter.ai/deepseek/deepseek-v4-flash", use: "building", goodFor: "The cheapest output; it can't turn thinking off" },
     ],
   }],
 };
@@ -128,7 +130,7 @@ const INTROS: Record<SuggestGroupKey, string> = {
   local: "Uncensored models you run yourself. Download one from Hugging Face.",
   anthropic: "Prices are USD per million tokens, input / output.",
   openai: "Prices are USD per million tokens, input / output.",
-  openrouter: "OpenRouter reaches many more models. Most need credits; free :free models are rate-limited. anthropic/* and openai/* models are moderated there. Prices are USD per million tokens, input / output.",
+  openrouter: "OpenRouter reaches many more models. Most need credits; free :free models are rate-limited. anthropic/* and openai/* models are moderated there. Prices change often, so check them on each model's page.",
 };
 
 const LOCAL_INTROS: Partial<Record<string, string>> = {
