@@ -230,6 +230,34 @@ def _by_word(word: str, view: dict[str, Any]) -> tuple[str, Any] | None:
     return ("options", hits) if hits else None
 
 
+def _split_sides(rules: list[Any]) -> list[dict[str, Any]]:
+    """A rule naming several tags on one side ("#hot, #dry, #sand") as one
+    rule per tag, so the ones that exist land and the rest are skipped
+    one by one instead of the whole rule."""
+    out: list[dict[str, Any]] = []
+    for item in rules:
+        if not isinstance(item, dict):
+            continue
+        sides = []
+        for key in ("source", "target"):
+            raw = item.get(key)
+            parts = [p.strip() for p in re.split(r"\s*(?:,|/|\bor\b|\band\b|\+)\s*", raw)
+                     if p.strip()] if isinstance(raw, str) and raw.count("#") > 1 else []
+            sides.append(parts or [raw])
+        for a in sides[0]:
+            for b in sides[1]:
+                out.append({**item, "source": a, "target": b})
+    return out[:MAX_RULES * 2]
+
+
+def _carried(side: tuple[str, Any] | None, view: dict[str, Any]) -> tuple[str, Any] | None:
+    """A tag the wildcard lists but no option carries reads as the options
+    whose text says it, like a tag it doesn't list."""
+    if side is None or side[0] != "tag" or any(side[1] in o["tags"] for o in view["options"]):
+        return side
+    return _by_word(side[1], view) or side
+
+
 def _label(side: tuple[str, Any]) -> str:
     if side[0] == "options":
         return " / ".join(o["value"] for o in side[1][:3]) + ("…" if len(side[1]) > 3 else "")
@@ -260,15 +288,17 @@ def compile_rules(
     seen_cells: set[tuple[str, str]] = set()
     seen_pairs: set[tuple[str, str]] = set()
 
-    for item in raw["rules"][:MAX_RULES]:
-        if not isinstance(item, dict):
-            continue
-        s = _side(item.get("source"), source, src_tags)
-        t = _side(item.get("target"), target, tgt_tags)
+    for item in _split_sides(raw["rules"][:MAX_RULES]):
+        s = _carried(_side(item.get("source"), source, src_tags), source)
+        t = _carried(_side(item.get("target"), target, tgt_tags), target)
         shown = f"{item.get('source')} → {item.get('target')}"[:80]
         if s is None or t is None:
             which = "source" if s is None else "target"
-            skipped.append({"text": shown, "reason": f"the {which} isn't an option or tag"})
+            have = (source if s is None else target)["tags"]
+            # The tags it does have, so a rebuild picks from them.
+            skipped.append({"text": shown, "reason": f"the {which} isn't an option or tag"
+                            + (f" (its tags: #{', #'.join(have[:12])})" if have else
+                               " (it has no tags: name options by number)")})
             continue
         effect = item.get("effect")
         if effect not in EFFECTS:

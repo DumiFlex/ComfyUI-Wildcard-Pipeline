@@ -207,8 +207,8 @@ def test_constraint_compiles_cells_exceptions_and_expansion():
                                     "factor": 1, "source_id": "c1", "target_id": "w2"}
     assert len(excs) == 2
     assert [x["reason"] for x in out["skipped"]] == [
-        "the source isn't an option or tag", "the source isn't an option or tag",
-    ]
+        "the source isn't an option or tag (its tags: #magic, #melee)",
+    ] * 2
 
 
 def test_constraint_tag_to_option_expands_per_option():

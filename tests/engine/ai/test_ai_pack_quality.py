@@ -268,7 +268,8 @@ def test_inputs_the_request_never_asked_for_and_picks_in_examples():
     assert "$character_lora" not in plan["items"][-1]["about"]
     assert any("the request names no LoRA" in w for w in plan["warnings"])
     kept = pack.compile_plan(raw, request="use my character LoRA")
-    assert len(kept["inputs"]) == 2
+    # Only what the request names stays an input: nothing asked for a style.
+    assert [i["var"] for i in kept["inputs"]] == ["character_lora"]
     # Nothing says the user brings anything: the pack rolls it instead.
     rolled = pack.compile_plan(raw, request="fantasy people in places")
     assert rolled["inputs"] == []
@@ -596,3 +597,117 @@ def test_per_case_rules_merge_into_one_after_a_split_merges():
     rules = [i for i in plan["items"] if i["kind"] == "constraint"]
     assert len(rules) == 1 and (rules[0]["source"], rules[0]["target"]) == ("biome", "animal")
     assert rules[0]["about"].count("gets only") == 3
+
+
+# --- seventh real-model run -------------------------------------------------
+
+def test_a_split_named_role_first_merges_and_its_selector_goes():
+    cases = ("forest", "desert", "arctic")
+    raw = _raw(items=[
+        _item(name="Biome", var="biome", tags=list(cases)),
+        *[_item(name=f"Animal {c.title()}", var=f"animal_{c}") for c in cases],
+        _item(kind="derivation", name="Select Animal", var="animal",
+              about="Set $animal to $animal_{$biome}"),
+        *[_item(kind="constraint", name=f"{c} rule", source="biome", target=f"animal_{c}",
+                about=f"#{c} gets only #{c}") for c in cases],
+        _item(kind="template", name="T", about="$biome, $animal_, $animal")])
+    plan = pack.compile_plan(raw)
+    kinds = {(i["kind"], i["var"]) for i in plan["items"] if i["var"]}
+    assert ("wildcard", "animal") in kinds and ("derivation", "animal") not in kinds
+    assert not any(i["var"].startswith("animal_") for i in plan["items"])
+    tpl = next(i for i in plan["items"] if i["kind"] == "template")
+    assert "$animal_" not in tpl["about"] and tpl["about"].count("$animal") == 1
+    assert any("Select Animal" in w for w in plan["warnings"])
+
+
+def test_a_rule_naming_several_target_tags_lands_the_ones_that_exist():
+    from engine.ai import constraint
+    view = lambda prefix, opts: {"prefix": prefix, "tags": ["hot"], "options": [  # noqa: E731
+        {"short": f"{prefix}{n}", "id": f"{prefix.lower()}{n}", "value": v, "tags": t}
+        for n, (v, t) in enumerate(opts, 1)]}
+    src = view("S", [("desert", ["hot"]), ("arctic", [])])
+    tgt = view("T", [("camel", []), ("polar bear", [])])
+    tgt["tags"] = ["dry"]  # listed, carried by nothing
+    out = constraint.compile_rules({"rules": [
+        {"source": "S1", "target": "#dry, #camel, #sand", "effect": "boost"}]},
+        source=src, target=tgt)
+    landed = {e["exception"]["target"] for e in out["exceptions"]}
+    assert landed == {"camel"}
+    assert any("#sand" in s["text"] for s in out["skipped"])
+
+
+def test_weight_others_sets_every_unweighted_option():
+    from engine.ai import use as ai_use
+    payload = {"options": [{"id": "a", "value": "black", "sub_categories": ["solid"]},
+                           {"id": "b", "value": "ombre", "sub_categories": []},
+                           {"id": "c", "value": "white", "sub_categories": ["solid"]}]}
+    out, notes = ai_use.parse_use("weight solid=3, others=1", kind="wildcard", payload=payload)
+    assert not notes and out["option_weights"] == {"a": 3, "b": 1, "c": 3}
+
+
+def test_an_input_the_request_doesnt_name_is_rolled_even_with_give_words():
+    raw = _raw(inputs=[{"var": "character_gender", "about": "gender", "example": "Female"},
+                       {"var": "pose", "about": "how they stand", "example": "sitting"}])
+    raw["items"][-1]["about"] = "$race, $hair, $character_gender, $pose"
+    plan = pack.compile_plan(raw, request="anime girls in poses I type")
+    assert [i["var"] for i in plan["inputs"]] == ["pose"]
+    assert any(i["var"] == "character_gender" and i["kind"] == "wildcard"
+               for i in plan["items"])
+
+
+def test_options_tagged_by_season_follow_the_season_pick():
+    raw = _raw(items=[
+        _item(name="Season", var="season", tags=["winter", "summer", "autumn"]),
+        _item(name="Tops", var="tops", tags=["winter", "summer", "casual"]),
+        _item(kind="constraint", name="No parka in summer", source="season", target="tops",
+              about="#summer never gets parka"),
+        _item(name="Shoes", var="shoes", tags=["winter", "summer"]),
+        _item(kind="template", name="T", about="$season, $tops, $shoes")])
+    plan = pack.compile_plan(raw)
+    rules = {(i["source"], i["target"]): i["about"] for i in plan["items"]
+             if i["kind"] == "constraint"}
+    assert "#winter gets only #winter" in rules[("season", "tops")]
+    assert "parka" in rules[("season", "tops")]
+    assert "#summer gets only #summer" in rules[("season", "shoes")]
+
+
+def test_a_weapon_that_fits_the_class_gets_a_rule():
+    raw = _raw(items=[
+        _item(name="Class", var="class", tags=["warrior", "mage"]),
+        _item(name="Weapon", var="weapon"),
+        _item(kind="template", name="T", about="$class, $weapon")])
+    plan = pack.compile_plan(raw, request="fantasy heroes with a weapon that fits the class")
+    rule = next(i for i in plan["items"] if i["kind"] == "constraint")
+    assert (rule["source"], rule["target"]) == ("class", "weapon")
+    assert any("the request says one fits the other" in w for w in plan["warnings"])
+
+
+def test_two_wildcards_for_one_thing_are_a_review_fix():
+    raw = _raw(items=[
+        _item(name="Hair Color Base", var="hair_color_base"),
+        _item(name="Hair Color Variation", var="hair_color_variation"),
+        _item(name="Hair Length", var="hair_length"),
+        _item(name="Hair Style", var="hair_style"),
+        _item(kind="template", name="T",
+              about="$hair_length, $hair_style, $hair_color_base, $hair_color_variation")])
+    found = [f["text"] for f in pack.review_plan(pack.compile_plan(raw))
+             if "both pick" in f["text"]]
+    assert len(found) == 1 and "hair color" in found[0]
+
+
+def test_an_outfit_that_already_names_the_shoes_is_a_problem():
+    raw = _raw(items=[
+        _item(name="Outfit", var="outfit"), _item(name="Shoes", var="shoes"),
+        _item(kind="template", name="T", about="$outfit, $shoes")])
+    plan = pack.compile_plan(raw)
+    built = _built(plan)
+    keys = {i["var"]: i["key"] for i in plan["items"] if i["var"]}
+    built[keys["outfit"]]["payload"]["options"] = [
+        {"id": "o1", "value": "casual wear, chinos, loafers", "weight": 1},
+        {"id": "o2", "value": "t-shirt, jeans, sneakers", "weight": 1}]
+    built[keys["shoes"]]["payload"]["options"] = [
+        {"id": "s1", "value": "sneakers", "weight": 1},
+        {"id": "s2", "value": "leather loafers", "weight": 1},
+        {"id": "s3", "value": "boots", "weight": 1}]
+    out = pack._overlaps(plan, built, "$outfit, $shoes")
+    assert "sneakers" in out[keys["outfit"]] and keys["shoes"] not in out

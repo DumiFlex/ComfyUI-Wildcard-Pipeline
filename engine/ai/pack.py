@@ -364,6 +364,21 @@ _GIVEN = re.compile(r"\b(my|mine|our|i'?ll|i will|i give|i type|i pick|i choose|
                     r"any character|fill in|lora)\b|lora", re.I)
 
 
+_GENERIC = {"character", "subject", "person", "input", "name", "prompt", "text", "base",
+            "main", "user", "custom", "given"}
+
+
+def _names_input(var: str, request: str) -> bool:
+    """Whether the request names what the input is ("my character's
+    gender" for $character_gender): its own words, or its generic word
+    ("character") when it has nothing else."""
+    parts = [p for p in var.lower().split("_") if len(p) >= 3]
+    own = [p for p in parts if p not in _GENERIC] or parts
+    low = request.lower()
+    return any(re.search(r"\b" + re.escape(p.rstrip("s")) + r"(?:s|es|'s)?\b", low)
+               for p in own)
+
+
 def _inputs(raw: Any, warnings: list[str]) -> list[dict[str, str]]:
     out: list[dict[str, str]] = []
     for i in raw if isinstance(raw, list) else []:
@@ -556,10 +571,13 @@ def compile_plan(
     # An input that shares its variable with a wildcard a constraint needs
     # would leave the constraint without its wildcard: the wildcard wins.
     raw_items = [dict(x) for x in raw["items"] if isinstance(x, dict)]
-    if request and inputs and not _GIVEN.search(request):
+    if request and inputs:
         # Nothing in the request says the user brings it: the pack rolls it.
         have = {_var(x.get("var")) for x in raw_items}
+        given = bool(_GIVEN.search(request))
         for i in list(inputs):
+            if given and _names_input(i["var"], request):
+                continue
             inputs.remove(i)
             if i["var"] in have:
                 warnings.append(f"Dropped the input ${i['var']}: the pack sets it")
@@ -577,6 +595,9 @@ def compile_plan(
             if isinstance(x.get("about"), str):
                 x["about"] = pat.sub("", x["about"])
     raw_items = _merge_splits(raw_items, warnings)
+    raw_items = _case_rules(raw_items, warnings)
+    if request:
+        raw_items = _fit_rules(raw_items, request, warnings)
     known_sides = {_var(x.get("var")): _clean(x.get("name"), MAX_NAME)
                    for x in raw_items if _var(x.get("var"))}
     known_sides.update({i["var"]: i["var"] for i in inputs})
@@ -1517,8 +1538,10 @@ def _split_groups(wild: list[dict[str, Any]],
     by_role: dict[str, dict[str, dict[str, Any]]] = {}
     for w in wild:
         parts = _var(w.get("var")).lower().split("_")
-        if len(parts) >= 2 and parts[0] and "_".join(parts[1:]):
+        if len(parts) >= 2 and parts[0] and parts[-1]:
+            # $winter_tops (case first) and $animal_desert (case last).
             by_role.setdefault("_".join(parts[1:]), {})[parts[0]] = w
+            by_role.setdefault("_".join(parts[:-1]) + "_", {})[parts[-1]] = w
     words = " ".join(f"{o.get('name') or ''} {o.get('about') or ''} "
                      + " ".join(str(t) for t in o.get("tags") or [])
                      for o in others).lower()
@@ -1526,12 +1549,44 @@ def _split_groups(wild: list[dict[str, Any]],
     for role, cases in by_role.items():
         if len(cases) < 2:
             continue
-        grid = any(r != role and len(set(cases) & set(c)) >= 2 for r, c in by_role.items())
+        grid = any(r != role and r.endswith("_") == role.endswith("_")
+                   and len(set(cases) & set(c)) >= 2 for r, c in by_role.items())
         named = sum(1 for c in cases if re.search(r"\b" + re.escape(c) + r"\b", words))
         # Another item must name the cases ("upper_body" / "lower_body" next
         # to each other is two subjects, not a split by case).
         if grid and named >= 2 or len(cases) >= 3 and named >= 3:
-            out.append((role, cases))
+            out.append((role.rstrip("_"), cases))
+    # One wildcard can only be in one group: the bigger split wins.
+    out.sort(key=lambda g: -len(g[1]))
+    seen: set[int] = set()
+    kept = []
+    for role, cases in out:
+        if not any(id(w) in seen for w in cases.values()):
+            seen.update(id(w) for w in cases.values())
+            kept.append((role, cases))
+    return kept
+
+
+_MODIFIERS = {"base", "main", "primary", "secondary", "variation", "variant", "alt",
+              "extra", "accent", "second", "alternate", "other", "additional"}
+
+
+def _twin_picks(wild: list[dict[str, Any]]) -> list[tuple[dict[str, Any], dict[str, Any], str]]:
+    """Two wildcards for one thing ($hair_color_base, $hair_color_variation;
+    $hair_color, $hair_color_alt): ``[(first, second, "hair color")]``."""
+    out = []
+    for n, a in enumerate(wild):
+        pa = a["var"].split("_")
+        for b in wild[n + 1:]:
+            pb = b["var"].split("_")
+            k = 0
+            while k < min(len(pa), len(pb)) and pa[k] == pb[k]:
+                k += 1
+            if k < 2:
+                continue
+            ra, rb = pa[k:], pb[k:]
+            if all(len(r) <= 1 and (not r or r[0] in _MODIFIERS) for r in (ra, rb)):
+                out.append((a, b, " ".join(pa[:k])))
     return out
 
 
@@ -1556,8 +1611,21 @@ def _merge_splits(raw_items: list[dict[str, Any]],
     items = list(raw_items)
     for role, cases in groups:
         members = list(cases.values())
-        if role in taken and not any(_var(m.get("var")) == role for m in members):
-            continue
+        old_vars = [_var(m.get("var")) for m in members]
+        holder = next((x for x in items if _var(x.get("var")) == role
+                       and x not in members), None)
+        if holder is not None:
+            # A "Select Animal" item that picks among the parts by case is
+            # what the merged wildcard does itself: it goes.
+            text = f"{holder.get('about') or ''} {holder.get('use') or ''}"
+            if holder.get("kind") in ("derivation", "combine") and (
+                    sum(1 for v in old_vars if f"${v}" in text) >= 2
+                    or _dynamic_ref(role).search(text)):
+                items.remove(holder)
+                warnings.append(f"Left out {holder.get('name') or role}: the merged "
+                                f"{role.replace('_', ' ')} wildcard picks by case itself")
+            else:
+                continue
         names = set(cases)
         source = next((x for x in wild if x not in members and x not in sum(
             (list(c.values()) for _, c in groups), []) and (
@@ -1578,12 +1646,12 @@ def _merge_splits(raw_items: list[dict[str, Any]],
         items = [x for x in items if x not in members]
         items.insert(at, merged)
         taken.add(role)
-        old_vars = [_var(m.get("var")) for m in members]
         pat = re.compile(r"\$(?:" + "|".join(map(re.escape, old_vars)) + r")\b")
         for x in items:
             for field in ("about", "use"):
                 if isinstance(x.get(field), str):
-                    x[field] = _once(pat.sub(f"${role}", x[field]), role)
+                    x[field] = _once(_dynamic_ref(role).sub(
+                        f"${role}", pat.sub(f"${role}", x[field])), role)
             if x.get("kind") == "constraint":
                 for side in ("source", "target"):
                     if _var(x.get(side)) in old_vars:
@@ -1608,6 +1676,117 @@ def _merge_splits(raw_items: list[dict[str, Any]],
             "Merged " + ", ".join(str(m.get("name") or m.get("var")) for m in members)
             + f" into one {merged['name']} wildcard tagged by case, kept to the "
             f"{source.get('name') or src} pick by a constraint")
+    return items
+
+
+def _dynamic_ref(role: str) -> re.Pattern[str]:
+    """A read that builds the name from another pick ("$animal_{$biome}",
+    "$animal_<biome>", or the "$animal_" left of it): no such variable."""
+    return re.compile(r"\$" + re.escape(role) + r"_(?:\{[^}]*\}|<[^>]*>|\[[^\]]*\]|"
+                      r"\$\w+)?(?!\w)")
+
+
+def _names(x: dict[str, Any], words: list[str]) -> list[str]:
+    """The ``words`` an item names in its tags, name or about."""
+    text = " ".join([str(x.get("name") or ""), str(x.get("about") or ""),
+                     *(str(t) for t in x.get("tags") or [])]).lower().replace("_", " ")
+    return [w for w in words
+            if re.search(r"\b" + re.escape(w.replace("_", " ")) + r"s?\b", text)]
+
+
+def _case_rules(raw_items: list[dict[str, Any]],
+                warnings: list[str]) -> list[dict[str, Any]]:
+    """Options tagged by the cases another pick names (tops tagged winter /
+    summer next to a season wildcard) follow that pick: a "#winter gets
+    only #winter" rule is added, or added to the rule already between
+    them. Tags nothing enforces leave a wool sweater in summer."""
+    wild = [x for x in raw_items if x.get("kind") == "wildcard" and _var(x.get("var"))]
+    items = list(raw_items)
+    for w in wild:
+        tags = [str(t).lower() for t in w.get("tags") or [] if str(t).strip()]
+        if len(tags) < 2:
+            continue
+        # The pick that decides comes first in the plan (season, then tops).
+        for src in wild[:wild.index(w)]:
+            cases = _names(src, tags)
+            own = {str(t).lower() for t in src.get("tags") or []}
+            # The source must be about the cases: two of its own tags, or
+            # three of them in its name or description.
+            if len(set(cases) & own) < 2 and len(cases) < 3:
+                continue
+            sv, tv = _var(src.get("var")), _var(w.get("var"))
+            if any(x.get("kind") == "constraint" and _var(x.get("source")) == tv
+                   and _var(x.get("target")) == sv for x in items):
+                continue
+            rule = next((x for x in items if x.get("kind") == "constraint"
+                         and _var(x.get("source")) == sv and _var(x.get("target")) == tv),
+                        None)
+            about = str((rule or {}).get("about") or "")
+            missing = [c for c in cases if not re.search(
+                "#" + re.escape(c) + r"\b[^;]*#" + re.escape(c) + r"\b", about.lower())]
+            if not missing:
+                continue
+            said = "; ".join(f"#{c} gets only #{c}" for c in missing)
+            if rule is None:
+                items.insert(items.index(w), {
+                    "kind": "constraint", "name": f"{src.get('name') or sv} → "
+                    f"{w.get('name') or tv}", "source": sv, "target": tv, "about": said,
+                    "section": w.get("section") or "", "use": ""})
+                warnings.append(f"Added a rule keeping {w.get('name') or tv} to the "
+                                f"{src.get('name') or sv} pick: its options are tagged "
+                                + ", ".join(f"#{c}" for c in missing))
+            else:
+                rule["about"] = (about.rstrip("; ") + "; " + said if about else said
+                                 )[:MAX_ABOUT]
+                warnings.append(f"{rule.get('name') or 'A rule'} now also keeps "
+                                f"{w.get('name') or tv} to its #"
+                                + ", #".join(missing) + " options")
+    return items
+
+
+_FITS = re.compile(
+    r"\b([a-z]+)\s+(?:that\s+|which\s+|to\s+)?(?:fits?|fitting|match(?:es|ing)?|"
+    r"suits?|suited\s+to|suiting|goes\s+with|go\s+with|right\s+for|"
+    r"appropriate\s+(?:to|for)|depends?\s+on|follows?)\s+(?:the\s+|their\s+|his\s+|"
+    r"her\s+|its\s+|each\s+|a\s+)?([a-z]+)", re.I)
+
+
+def _fit_rules(raw_items: list[dict[str, Any]], request: str,
+               warnings: list[str]) -> list[dict[str, Any]]:
+    """"A weapon that fits the class": a constraint from the class pick to
+    the weapon pick when the plan has both and nothing links them."""
+    wild = [x for x in raw_items if x.get("kind") == "wildcard" and _var(x.get("var"))]
+
+    def find(word: str) -> dict[str, Any] | None:
+        forms = {word.lower(), word.lower()[:-1] if word.lower().endswith("s") else "",
+                 word.lower()[:-2] if word.lower().endswith("es") else ""} - {""}
+        if len(word) < 3:
+            return None
+        hits = [x for x in wild if forms & {
+            f for p in _var(x.get("var")).split("_")
+            for f in (p, p[:-1] if p.endswith("s") else p)}]
+        return hits[0] if len(hits) == 1 else None
+
+    items = list(raw_items)
+    for m in _FITS.finditer(request):
+        tgt, src = find(m.group(1)), find(m.group(2))
+        if tgt is None or src is None or tgt is src:
+            continue
+        sv, tv = _var(src.get("var")), _var(tgt.get("var"))
+        if any(x.get("kind") == "constraint" and {_var(x.get("source")),
+                                                  _var(x.get("target"))} == {sv, tv}
+               for x in items):
+            continue
+        items.insert(items.index(tgt), {
+            "kind": "constraint", "name": f"{src.get('name') or sv} → {tgt.get('name') or tv}",
+            "source": sv, "target": tv,
+            "about": f"each {src.get('name') or sv} gets only the {tgt.get('name') or tv} "
+                     "options that fit it; exclude the ones that don't",
+            "section": tgt.get("section") or "", "use": ""})
+        if src.get("tags") and not tgt.get("tags"):
+            tgt["tags"] = list(src["tags"])
+        warnings.append(f"Added a rule from {src.get('name') or sv} to "
+                        f"{tgt.get('name') or tv}: the request says one fits the other")
     return items
 
 
@@ -1669,6 +1848,11 @@ def review_plan(plan: dict[str, Any],
             f"lists them all or shows the wrong one; make one {role.replace('_', ' ')} "
             "wildcard with the cases as tags, and a constraint from the pick that decides "
             "between them")
+    for a, b, what in _twin_picks(list(wild.values())):
+        add(b, "fix", f"{a['name']} and {b['name']} both pick the {what}, so the prompt "
+            f"shows two; make one wildcard, or have {b['name']} add only what "
+            f"{a['name']} doesn't say "
+            "(highlights, a pattern), never a second one")
     for i in items:
         if i["kind"] in ("derivation", "combine", "template"):
             missing = [v for v in _reads(i.get("about") or "") if v not in known
@@ -2888,6 +3072,8 @@ def check_pack(
                 prompts.append({"seed": seed, "text": f"(failed: {exc})", "negative": ""})
         for k, said in _repeats(plan, built, runs, text, neg).items():
             problems.setdefault(k, []).append(said)
+        for k, said in _overlaps(plan, built, text).items():
+            problems.setdefault(k, []).append(said)
         for said in _unseen(plan, built, runs, text, neg):
             if not any(said.split(")")[0] in p for p in problems.get(item["key"], [])):
                 problems.setdefault(item["key"], []).append(said)
@@ -2936,6 +3122,36 @@ def _unseen(plan: dict[str, Any], built: dict[str, Any], runs: list[dict[str, An
         if had and had * 2 >= len(runs) and not seen:
             out.append(f"${i['var']} ({i['name']}) never reaches the prompt: what reads it "
                        "doesn't print it; read it here too")
+    return out
+
+
+def _overlaps(plan: dict[str, Any], built: dict[str, Any], text: str) -> dict[str, str]:
+    """A wildcard whose options already name what another one the prompt
+    shows picks (an outfit "…, chinos, loafers" next to a shoes pick):
+    ``{key: problem}``. Two shoes then show in one prompt."""
+    shown = set(_reads(text))
+    wild = [(i, [str(o.get("value") or "") for o in built[i["key"]]["payload"].get(
+        "options") or [] if isinstance(o, dict)]) for i in plan["items"]
+        if is_wild(i) and i["key"] in built and i["var"] in shown]
+    out: dict[str, str] = {}
+    for a, a_opts in wild:
+        a_chunks = {c for o in a_opts for c in _chunks(o)}
+        a_heads = {c.split()[-1] for c in a_chunks}
+        for b, b_opts in wild:
+            if b is a or a["key"] in out:
+                continue
+            b_chunks = [c for o in b_opts for c in sorted(_chunks(o))[:1]]
+            heads = [c.split()[-1] for c in b_chunks]
+            # A head noun most of B's options share ("hair") names B's
+            # subject, not one pick: only full matches count for it.
+            hits = sorted({c for c, h in zip(b_chunks, heads, strict=True) if c in a_chunks
+                           or (heads.count(h) * 2 <= len(heads) and h in a_heads
+                               and len(h) >= 4)})
+            if len(hits) >= 2:
+                out[a["key"]] = (
+                    f"its options already name what ${b['var']} ({b['name']}) picks: "
+                    + ", ".join(f'"{h}"' for h in hits[:4])
+                    + f"; leave those to {b['name']}, or the prompt shows two")
     return out
 
 

@@ -363,6 +363,7 @@ def _weight(rest: str, out: dict[str, Any], kind: str,
         raise ValueError("write weight N=W, e.g. weight 3=2.5")
     # Several "weight" clauses add up ("weight long_hair=3; weight short_hair=1").
     weights: dict[str, float] = dict(out.get("option_weights") or {})
+    rest_w: float | None = None
     for item in _items(rest):
         m = re.fullmatch(r"(.+?)\s*=\s*(\S+)", item, re.S)
         if not m:
@@ -371,6 +372,10 @@ def _weight(rest: str, out: dict[str, Any], kind: str,
         if w < 0 or w > MAX_WEIGHT:
             raise ValueError(f"a weight is between 0 and {MAX_WEIGHT:g}, not {m.group(2)}")
         w = int(w) if w.is_integer() else w
+        if _OTHERS.fullmatch(m.group(1).strip().lower()):
+            # "others=1": every option the clause doesn't weigh itself.
+            rest_w = w
+            continue
         tagged = _tagged(m.group(1), payload)
         if tagged:
             # "long_hair=3": every option carrying the tag.
@@ -378,7 +383,14 @@ def _weight(rest: str, out: dict[str, Any], kind: str,
                 weights[oid] = w
             continue
         weights[_option_id(m.group(1), payload)] = w
+    if rest_w is not None:
+        for o in _options(payload) or []:
+            weights.setdefault(str(o.get("id")), rest_w)
     out["option_weights"] = weights
+
+
+_OTHERS = re.compile(r"(?:all\s+)?(?:the\s+)?(?:others?|rest|everything\s+else|"
+                     r"other\s+options|else|\*)")
 
 
 def _tagged(ref: str, payload: dict[str, Any] | None) -> list[str]:
