@@ -427,39 +427,60 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       <p>
         <b>Pack builder</b> in the sidebar (shown once the assistant is on) makes a complete pack
         from one description: wildcards, fixed values, derivation rules, combines, constraints
-        between wildcards and a prompt template, filed into one bundle. It can also make
-        vocabulary wildcards that other options draw from (<code>@{Colors:warm}</code>), give an
-        item per-use settings in the bundle ("pick 2-3", "hold"), and plan inputs: values the
-        pack reads but you set, like the subject, through a WP Context Injector row.
+        between wildcards and a prompt template, filed into one bundle (with a sub-bundle per
+        section, so each part can be reused on its own). It can also make vocabulary wildcards
+        that other options draw from (<code>@{Colors:warm}</code>), give an item per-use settings
+        in the bundle ("pick 2-3", "hold"), and plan inputs: values the pack reads but you set,
+        like the subject, through a WP Context Injector row. A pack holds up to 60 items.
       </p>
       <ol>
         <li><b>Describe</b> what the pack makes and the rules between its parts ("elves never use
-          guns, mages get robes").</li>
-        <li><b>Plan.</b> The assistant lists every item it will build, by variable, and may ask up
-          to three questions. Inputs are listed under the plan. Click an answer, remove items you don't want (the ✕ on a row), or
-          type a change, then press <b>Update plan</b>. Nothing is built yet. Above the items, a
-          line says how the pack is written (tags or sentences), which checkpoint family it is
-          for, and the variable everything follows. Items marked <b>yours</b> are wildcards from
-          your library the pack reuses instead of building a copy.</li>
-        <li><b>Plan review.</b> Before anything is built, the plan is checked for what would
-          break: a template or rule that reads a variable nothing sets, a constraint keyed on a tag
+          guns, mages get robes"). <b>Settings and images</b> holds the pack settings and
+          reference images (drop, paste or pick up to 4; needs a model that sees images):
+          <DocKeyList
+            :items="[
+              { term: 'Your library', desc: 'Reuse what fits (wildcards and fixed values you already have, marked yours), New, in its style (built fresh but written like your library), or Everything new.' },
+              { term: 'Negatives', desc: 'Standing + per option (a standing negative in the template and negatives on options that need them), Template only, or None.' },
+              { term: 'Structure', desc: 'Sub-bundle per section, or One bundle.' },
+              { term: 'Written as', desc: 'Tags or Natural phrases, or let the planner decide from your request and library.' },
+              { term: 'Rating', desc: 'Safe or NSFW, or let the planner decide.' },
+              { term: 'Options per wildcard', desc: 'How many options each wildcard gets; Auto lets the planner size each one.' },
+            ]"
+          />
+        </li>
+        <li><b>Plan.</b> The assistant lists every item it will build, grouped by section, and
+          asks what it can't guess. Some questions take several answers; every question has an
+          <b>Other</b> box for your own answer and <b>Decide for me</b>; <b>Decide the rest</b>
+          leaves the open ones to the model. <b>Send answers</b> updates the plan. Answered
+          questions show as chips under <b>You decided</b> and are never asked again (click one
+          to change it), and the guesses the model made are listed under <b>The assistant
+          assumed</b>, each one changeable. Click an item to edit it by hand (name, variable,
+          section, tags, what it holds, per-use settings), ask the AI to change just that item,
+          remove it, or <b>Add an item</b> (described for the AI, or blank). Your edits are kept
+          when the plan updates. When web search is set up, the planner may ask to search
+          (a franchise's characters, an era's clothing): <b>Allow and update the plan</b> runs
+          the searches and revises the plan with what they found, <b>Skip</b> doesn't.</li>
+        <li><b>Plan review.</b> The plan is checked as you edit it for what would break: a
+          template or rule that reads a variable nothing sets, a constraint keyed on a tag
           neither wildcard lists, two constraints that loop, wildcards that ignore the pack's
-          anchor, picks that nothing links. <b>Review with AI</b> asks the model for a second
-          opinion, and <b>Fix these in the plan</b> sends the findings back as a change.</li>
+          anchor, picks that nothing links. Each finding has <b>Apply</b> (a fix you can see
+          before it lands) and <b>Dismiss</b>; tick some and press <b>Fix with AI</b>, or
+          <b>Fix all with AI</b>. <b>Review with AI</b> asks the model for a second opinion.</li>
         <li><b>Build &amp; check.</b> Each item is written in its own request, wildcards first so
-          rules can use their tags. Then the pack runs 200 seeds on the real engine. An item with
-          a problem (a rule that never applies, a variable nothing sets) is rebuilt with the
-          problem as a note, up to twice, and the row says what was fixed. An item whose answer
-          fails is asked again once with the error, and one that doesn't fit what it reads (a rule
-          testing for an option its wildcard lacks) is rebuilt once with that named. The run also
-          flags options that never came up or that take most of the picks; rebuild the item to
-          spread them. Click a row to see what
-          it holds; the refresh button builds that one again. The test run shows each variable's
-          most common values and a few sample prompts.</li>
+          rules can use their tags; every item has its id reserved in the plan, so references,
+          nested wildcards and linked constraints point at items before they are built. An item
+          that takes longer than 4 minutes is stopped and marked; <b>Skip this item</b> moves on
+          right away, and the row's buttons retry it, rebuild it with a note, or leave it out.
+          Then the pack runs 200 seeds on the real engine. An item with a problem (a rule that
+          never applies, a variable nothing sets) is rebuilt with the problem as a note, up to
+          twice, and the row says what was fixed. The run also flags options that never came up
+          or that take most of the picks. Click a row to see what it holds. The test run shows
+          each variable's most common values and a few sample prompts.</li>
         <li><b>Install</b> adds the modules, the template and a bundle that runs them in the right
-          order, all tagged with the pack's name so they show up together under Tags, and says how
-          to wire it on the canvas (the bundle in a WP Context, the template in a WP Prompt
-          Assembler, an Injector row per input). <b>Undo</b> removes all of it.</li>
+          order (with a sub-bundle per section), all tagged with the pack's name so they show up
+          together under Tags, and says how to wire it on the canvas (the bundle in a WP Context,
+          the template in a WP Prompt Assembler, an Injector row per input). <b>Undo</b> removes
+          all of it.</li>
       </ol>
       <p>
         The planner reads your library's conventions first: whether your options are tags or
@@ -470,8 +491,41 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       </p>
       <DocCallout variant="tip">
         Building a pack takes one request per item, so a local model needs a few minutes. Use a
-        builder model; a small one may leave an item unbuilt, which you can rebuild or remove.
+        builder model; a small one may leave an item unbuilt, which you can retry, rebuild or
+        leave out.
       </DocCallout>
+    </DocSection>
+
+    <DocSection title="Extend a bundle and make sub-bundles">
+      <p>
+        A bundle works with the modules in it, so its editor has two AI tools of its own (save
+        the bundle first):
+      </p>
+      <DocKeyList
+        :items="[
+          { term: 'Extend with AI', desc: 'Opens the Pack builder on the bundle: describe what to add (\'a weather wildcard the outfits follow\'). Its modules are listed as in bundle and its variables count as set, so new items read them; its sub-bundles are the plan\'s sections. The plan can use library items too, and per-use settings for each new item. Install adds the new modules where they belong (a new constraint goes right before the wildcard it limits) and updates the bundle and its sub-bundles; Undo puts the bundle back as it was.' },
+          { term: 'Make sub-bundles', desc: 'Give children a sub-bundle name (typed, picked from the list, or Suggest with AI, optionally with how to group them). Children with the same name become one sub-bundle, placed where the first of them was. The AI only groups children that sit next to each other, so the bundle runs in the same order; a group you make by hand with a gap is flagged, since the children after the gap would run earlier. Save the bundle to keep the change. A bundle that sits inside another can\'t hold sub-bundles (two levels at most).' },
+        ]"
+      />
+    </DocSection>
+
+    <DocSection title="Reference images and web search in Draft with AI">
+      <p>
+        Every <b>Draft with AI</b> panel (wildcard Add and edit tabs, derivation and constraint
+        rules, fixed values, combines and templates) takes reference images when the model can
+        see them: paste them into the request box, drop them on the image strip under it, or
+        click it to pick (up to 4). They go with each request of that panel until you remove them,
+        so "options from this photo" or "rules that keep these outfits together" work. The strip
+        is hidden for a model that can't see images.
+      </p>
+      <p>
+        When web search is set up (<b>Settings › AI assistant › Web search</b>), the wildcard and
+        text panels may ask to search the web for facts the model doesn't know well (a game's
+        characters, an artist's style). The answer shows anyway, with a line naming the searches:
+        <b>Search and refine</b> runs them and revises the answer with what they found, <b>No
+        thanks</b> hides them and the model isn't offered them again. Nothing is searched until
+        you press it.
+      </p>
     </DocSection>
 
     <DocSection title="Refine an answer">
@@ -540,9 +594,11 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         assistant reads to answer, the results of stacks it runs (they run on your PC) and a
         short note of what the page shows (the open editor's item, a list's selection, the Test
         Runner's stack and last results). The fixed values, combine and template panels send the
-        item and the variables your library sets. The pack builder sends your description, a sample prompt if you gave one,
-        a summary of your library's conventions (option style, tags, variables, negatives and the
-        wildcards worth reusing) and, for each item, what the pack has built so far. With meaning search on, the text of each item (name, variable, tags, description and its
+        item and the variables your library sets. The pack builder sends your description, your
+        settings and answers, a sample prompt if you gave one, a summary of your library's
+        conventions (option style, tags, variables, negatives and the wildcards worth reusing),
+        the bundle's modules when you extend one, and, for each item, what the pack has built so
+        far. Bundle sub-bundle suggestions send the children's names, types and variables. With meaning search on, the text of each item (name, variable, tags, description and its
         first options) and your search phrases go to the embedding server; with a local server
         that stays on your PC. A web search you allow sends only its search words to the search
         engine you picked. Images you attach go to the model with the message they belong to,
