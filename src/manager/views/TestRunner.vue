@@ -168,6 +168,10 @@ const uses = computed(() => {
   return { id, name };
 });
 
+/** The quick run as it was opened (Send to Test Runner, or the chat's last
+ *  `show_test`): replacing it loses nothing the user did. */
+let untouched = "";
+
 let markReady: () => void = () => {};
 /** Resolves once the page has loaded the library and opened its scenario. */
 const ready = new Promise<void>((resolve) => { markReady = resolve; });
@@ -190,6 +194,7 @@ async function openFirst(): Promise<void> {
     wb.openScenario(using);
   } else if (item) {
     wb.newQuickRun(item);
+    untouched = JSON.stringify(draft.value);
     void wb.run();
   } else if (wb.scenarios.value.length) {
     wb.openScenario(wb.scenarios.value[0]);
@@ -201,21 +206,47 @@ async function openFirst(): Promise<void> {
 // named, and tell the chat what came out (the same text as the page note).
 registerAiAction("show_test", async (args) => {
   await ready;
-  if (wb.dirty.value && draft.value.stack.length) {
-    return "couldn't: the open scenario has unsaved changes; ask the user to save or discard them first";
-  }
   const stack = (Array.isArray(args.stack) ? args.stack : []) as ScenarioStackItem[];
   if (!stack.length) return "couldn't: the stack is empty";
   const count = Math.min(500, Math.max(1, Number(args.seeds) || 20));
-  wb.newQuickRun(stack[0]);
-  draft.value.stack = stack.map((item) => ({ ...item }));
+  /** Add / remove keep the open run's seeds and pins unless given. */
+  const editing = args.change === "add" || args.change === "remove";
+  const idOf = (i: ScenarioStackItem): string => ("module" in i ? i.module : i.bundle);
+  if (editing) {
+    // Edit the open stack in place (saved scenario or quick run alike):
+    // the user asked for this change, so nothing of theirs is lost.
+    const ids = new Set(stack.map(idOf));
+    if (args.change === "add") {
+      const have = new Set(draft.value.stack.map(idOf));
+      const fresh = stack.filter((i) => !have.has(idOf(i))).map((i) => ({ ...i }));
+      if (!fresh.length) return "couldn't: those are already on the stack";
+      draft.value.stack = [...draft.value.stack, ...fresh];
+    } else {
+      const kept = draft.value.stack.filter((i) => !ids.has(idOf(i)));
+      if (kept.length === draft.value.stack.length) return "couldn't: none of those are on the stack";
+      if (!kept.length) return "couldn't: that would empty the stack; replace it instead";
+      draft.value.stack = kept;
+    }
+  } else {
+    const userEdited = draft.value.id ? wb.dirty.value : JSON.stringify(draft.value) !== untouched;
+    if (wb.dirty.value && draft.value.stack.length && userEdited) {
+      return "couldn't: the open scenario has unsaved changes; ask the user to save or discard them first";
+    }
+    wb.newQuickRun(stack[0]);
+    draft.value.stack = stack.map((item) => ({ ...item }));
+  }
   const from = typeof args.from === "number" ? Math.max(0, Math.floor(args.from)) : null;
-  draft.value.seeds = from !== null ? { from, count } : { random: true, count };
-  const pins = args.pins && typeof args.pins === "object" ? args.pins as Record<string, unknown> : {};
-  draft.value.pins = Object.fromEntries(Object.entries(pins).map(([k, v]) => [k, String(v)]));
+  if (!editing || from !== null || typeof args.seeds === "number") {
+    draft.value.seeds = from !== null ? { from, count } : { random: true, count };
+  }
+  const pins = args.pins && typeof args.pins === "object" ? args.pins as Record<string, unknown> : null;
+  if (!editing || pins) {
+    draft.value.pins = Object.fromEntries(Object.entries(pins ?? {}).map(([k, v]) => [k, String(v)]));
+  }
   if (typeof args.output === "string" && args.output) draft.value.output_var = args.output;
   if (typeof args.save === "string" && args.save) draft.value.name = args.save;
-  const notes: string[] = [];
+  // What the server added to the stack (a constraint's wildcards), said back.
+  const notes: string[] = Array.isArray(args.notes) ? args.notes.filter((n): n is string => typeof n === "string") : [];
   if (args.run !== false) {
     await wb.run();
     if (wb.runError.value) return `couldn't run it: ${wb.runError.value}`;
@@ -223,6 +254,7 @@ registerAiAction("show_test", async (args) => {
   if (typeof args.save === "string" && args.save) {
     notes.push((await wb.save()) ? `saved it as the scenario "${args.save}"` : "couldn't save it");
   }
+  untouched = JSON.stringify(draft.value);
   if (args.run === false) {
     return `set it up in the Test Runner without running${notes.length ? `; ${notes.join("; ")}` : ""}. `
       + "The user presses Run when ready.";

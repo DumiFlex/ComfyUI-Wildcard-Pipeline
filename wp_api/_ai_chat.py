@@ -519,11 +519,18 @@ def _usage_anthropic(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _native_step(text: Any, calls: list[dict[str, Any]], names: set[str],
-                 usage: dict[str, Any]) -> dict[str, Any]:
-    text = strip_thinking(text if isinstance(text, str) else "")
+                 usage: dict[str, Any], reasoning: Any = "") -> dict[str, Any]:
+    raw = text if isinstance(text, str) else ""
+    text = strip_thinking(raw)
     salvaged = False
     if not calls:
         calls = salvage_calls(text, names)
+        if not calls and not text:
+            # Nothing outside the reasoning: Qwen-style models sometimes
+            # write their call inside it (in <think>, or the server's
+            # reasoning field) and end the turn there.
+            calls = salvage_calls(raw, names) or salvage_calls(
+                reasoning if isinstance(reasoning, str) else "", names)
         if calls:
             text = ""
             salvaged = True
@@ -622,8 +629,13 @@ def _openai_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
                 continue
             if d.get("refusal"):
                 msg["refusal"] = d["refusal"]
-            if d.get("reasoning_content") or d.get("reasoning"):
+            think = d.get("reasoning_content") or d.get("reasoning")
+            if think:
                 await live.thinking()
+                if isinstance(think, str):
+                    # Kept for one thing only: a call written in the
+                    # reasoning when the answer came back empty.
+                    msg["reasoning_content"] = (msg.get("reasoning_content") or "") + think
             text = d.get("content")
             if isinstance(text, str) and text:
                 msg["content"] += text
@@ -697,6 +709,9 @@ def _ollama_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
         m = obj.get("message") if isinstance(obj.get("message"), dict) else {}
         if m.get("thinking"):
             await live.thinking()
+            if isinstance(m["thinking"], str):
+                got = data["message"].get("thinking") or ""
+                data["message"]["thinking"] = got + m["thinking"]
         text = m.get("content")
         if isinstance(text, str) and text:
             data["message"]["content"] += text
@@ -963,7 +978,7 @@ async def _step_ollama(cfg: dict[str, Any], system: str, log: list[dict[str, Any
                           "args": args if isinstance(args, dict) else None,
                           "args_text": args if isinstance(args, str)
                           else chatlog.dumps(args or {})})
-    return _native_step(msg.get("content"), calls, allowed, usage)
+    return _native_step(msg.get("content"), calls, allowed, usage, msg.get("thinking"))
 
 
 async def _step_responses(cfg: dict[str, Any], system: str, log: list[dict[str, Any]],
@@ -1112,4 +1127,5 @@ async def _step_openai(cfg: dict[str, Any], system: str, log: list[dict[str, Any
             calls.append({"id": str(c.get("id") or new_call_id()), "tool": fn["name"],
                           "args": raw if isinstance(raw, dict) else None,
                           "args_text": raw if isinstance(raw, str) else chatlog.dumps(raw or {})})
-    return _native_step(message.get("content"), calls, allowed, usage)
+    return _native_step(message.get("content"), calls, allowed, usage,
+                        message.get("reasoning_content") or message.get("reasoning"))

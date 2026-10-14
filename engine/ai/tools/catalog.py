@@ -535,12 +535,18 @@ TOOLS: list[Tool] = [
         "show_test", "client",
         "Set up the Test Runner with a stack (seeds, pinned variables) and run it, so the "
         "user sees the results; it can save it as a scenario.",
-        '{"stack": [names or ids of modules and bundles], "seeds": how many runs (20), '
+        '{"stack": [names or ids of modules and bundles], "change": "replace" (the default: '
+        'a new stack), "add" (put these after what is there) or "remove" (take these out of '
+        'the stack that is open), "seeds": how many runs (20), '
         '"from": first seed for a fixed run (random when left out), "pins": {"var": value '
         'set from outside}, "output": variable to show first, "save": scenario name to save '
         'it as, "run": false to only set it up}: opens the Test Runner with that set-up and '
-        "runs it for the user to see. Use run_test to check something yourself.",
-        obj({"stack": arr(s("name or id")), "seeds": n("how many runs", integer=True),
+        "runs it for the user to see. The stack runs in order: put what sets a variable "
+        "before what reads it; a constraint gets its source and target wildcards added. Use "
+        "run_test to check something yourself.",
+        obj({"stack": arr(s("name or id")),
+             "change": s("replace, add or remove", enum=["replace", "add", "remove"]),
+             "seeds": n("how many runs", integer=True),
              "from": n("first seed (fixed seeds)", integer=True),
              "pins": obj(desc="variable -> value set from outside, like an Injector"),
              "output": s("variable to show first"), "save": s("save as a scenario named"),

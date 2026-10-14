@@ -213,8 +213,20 @@ def _show_test(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
             raise ValueError(f"{row.get('name')} is a template; the stack takes modules and "
                              "bundles")
         stack.append({"bundle": row["id"]} if kind == "bundle" else {"module": row["id"]})
+    change = _text(args.get("change"), 10).lower() or "replace"
+    if change not in ("replace", "add", "remove"):
+        raise ValueError("change is replace, add or remove")
+    needs = getattr(lib, "with_needs", None)
+    added: list[str] = []
+    if needs is not None and change != "remove":
+        ids, added = needs([x.get("module") or x.get("bundle") or "" for x in stack])
+        stack = [{"bundle": i} if i in lib.bundles else {"module": i} for i in ids][:MAX_STACK]
     seeds = args.get("seeds") if isinstance(args.get("seeds"), int) else 20
     out: dict[str, Any] = {"stack": stack, "seeds": max(1, min(500, seeds))}
+    if change != "replace":
+        out["change"] = change
+        if not isinstance(args.get("seeds"), int):
+            out.pop("seeds")  # keep the open run's seeds
     if isinstance(args.get("from"), int) and not isinstance(args.get("from"), bool):
         out["from"] = max(0, args["from"])
     pins = args.get("pins")
@@ -231,8 +243,14 @@ def _show_test(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
     n = len(stack)
     what = f"{n} item" + ("" if n == 1 else "s")
     label = (f"Ran {what} in the Test Runner" if run else f"Set up {what} in the Test Runner")
+    if change == "add":
+        label = f"Added {what} to the Test Runner" + (" and ran it" if run else "")
+    elif change == "remove":
+        label = f"Took {what} out of the Test Runner" + (" and ran it" if run else "")
     if out.get("save"):
         label += f", saved as {out['save']}"
+    if added:
+        out["notes"] = added
     return out, label
 
 

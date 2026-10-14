@@ -1310,6 +1310,8 @@ export interface AiChatStep {
   tool: string;
   note: string;
   ok: boolean;
+  /** What the model said before calling its tools (`note` is the text). */
+  say?: boolean;
   card?: AiTestCard;
 }
 
@@ -1540,7 +1542,7 @@ export type AiChatStreamEvent =
   | { type: "status"; v: string }
   | { type: "thinking" }
   | { type: "text"; v: string }
-  | { type: "tool"; step: { tool: string; note: string; ok: boolean } }
+  | { type: "tool"; step: AiChatStep }
   | { type: "done"; result: AiChatResult }
   | { type: "error"; status: number; message: string };
 

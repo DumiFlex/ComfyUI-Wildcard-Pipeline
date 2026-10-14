@@ -1509,6 +1509,10 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     checked = False
     nudged = False
     empty_nudged = False
+    #: Ask the next step with the model's thinking off: set by the empty
+    #: nudge, since a thinking model that came back empty once tends to
+    #: think itself out of an answer again.
+    think_off = False
     #: The answer a nudge set aside: shown if the nudged step comes back empty.
     set_aside = ""
     #: A cut answer waiting for the step that continues it, and how many
@@ -1545,7 +1549,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
             await emit({"type": "step", "n": step + 1})
         try:
             st = await asyncio.wait_for(
-                _chat_step(cfg, system=system_for(), log=rendered, fmt=fmt,
+                _chat_step({**cfg, "thinking": "off"} if think_off else cfg,
+                           system=system_for(), log=rendered, fmt=fmt,
                            names=meta["tools"], prof=prof, num_ctx=num_ctx,
                            cache_key=cache_key, emit=emit),
                 timeout=STEP_SECONDS)
@@ -1584,6 +1589,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 return json_error(e.message + hint, status=e.status)
             message = f"(Stopped early: {e.message})"
             break
+        think_off = False
         step += 1
         ran += 1
         usage = st["usage"]
@@ -1621,6 +1627,10 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 message += "\n\n*(Cut off: the model stopped before finishing.)*"
         elif said:
             interim = said
+            # What it said before acting stays on screen above its steps
+            # (it streamed live), instead of vanishing when the calls start.
+            if not any(x.get("say") and x.get("note") == said for x in steps):
+                steps.append({"tool": "say", "note": said, "ok": True, "say": True})
         if forced and calls:
             # Told to answer and called again anyway: stop on what it said.
             message = message or (
@@ -1789,7 +1799,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                         "models do this. Try again, raise the output limit, or turn its "
                         "thinking off.)" if cut else _done_line(steps))
                     break
-                empty_nudged = True
+                empty_nudged = think_off = True
                 new.append(ai_chatlog.note_entry(ai_chat.EMPTY_NUDGE))
                 continue
             if (not calls and not proposals and not nudged and not cut
@@ -2077,7 +2087,8 @@ def _adopt_earlier(lib: Any, log: list[dict[str, Any]], meta: dict[str, Any]) ->
 def _done_line(steps: list[dict[str, Any]]) -> str:
     """The answer when the model said nothing after acting: what it did,
     never a bare "Done."."""
-    did = [str(x.get("note")) for x in steps if x.get("ok") and x.get("note")]
+    did = [str(x.get("note")) for x in steps
+           if x.get("ok") and x.get("note") and not x.get("say")]
     pointed = [n[len("Pointed at "):] for n in did if n.startswith("Pointed at ")]
     if pointed:
         # "Where is X?" answered by pointing: say so in words.

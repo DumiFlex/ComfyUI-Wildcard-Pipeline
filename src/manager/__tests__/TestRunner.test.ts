@@ -64,6 +64,15 @@ vi.mock("../api/client", () => {
 
 import TestRunner from "../views/TestRunner.vue";
 import { api } from "../api/client";
+import { runCall } from "../composables/useAiActions";
+import type { AiActionHost } from "../composables/useAiActions";
+
+const host: AiActionHost = {
+  navigate: () => Promise.resolve(true), hasRoute: () => true, page: () => ({ route: "test" }),
+};
+const showTest = (args: Record<string, unknown>) =>
+  runCall({ id: "c1", tool: "show_test", args } as never, host);
+
 
 beforeEach(async () => {
   setActivePinia(createPinia());
@@ -275,5 +284,26 @@ describe("TestRunner.vue", () => {
     await flushPromises();
     expect(api.scenarios.remove).toHaveBeenCalledWith("sc000001");
     expect(wrap.findAll('[data-test="scenario-row"]')).toHaveLength(0);
+  });
+
+  it("the chat's show_test adds to or takes out of the open stack, keeping its seeds", async () => {
+    const wrap = await mountRunner();
+    expect(await showTest({ stack: [{ module: "dddddddd" }], change: "remove", run: false }))
+      .toContain("set it up");
+    await flushPromises();
+    expect(wrap.findAll('[data-test="stack-card"]')).toHaveLength(2);
+    expect(await showTest({ stack: [{ module: "dddddddd" }], change: "remove", run: false }))
+      .toContain("none of those");
+    await showTest({ stack: [{ module: "dddddddd" }, { module: "aabbccdd" }], change: "add", run: false });
+    await flushPromises();
+    expect(wrap.findAll('[data-test="stack-card"]')).toHaveLength(3);
+    // Still the saved scenario, with its own seeds (from 0, 2 runs).
+    expect(wrap.find('[data-test="scenario-name"]').text()).toBe("Portrait");
+  });
+
+  it("show_test replaces its own quick run without asking", async () => {
+    await mountRunner();
+    await showTest({ stack: [{ module: "aabbccdd" }], run: false });
+    expect(await showTest({ stack: [{ module: "cccccccc" }], run: false })).toContain("set it up");
   });
 });

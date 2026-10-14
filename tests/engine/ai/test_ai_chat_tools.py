@@ -291,3 +291,42 @@ def test_pins_feed_inputs():
                                      "input_vars": ["who"]}}], [], [])
     out = lib.run("run_test", {"stack": ["Say"], "pins": {"$who": "world"}, "seeds": 5})
     assert '$said: "hello world" 100%' in out
+
+
+# ── a constraint's stack needs ──────────────────────────────────────────
+
+
+def test_with_needs_adds_a_constraints_wildcards_in_run_order():
+    lib = _lib()
+    ids, notes = lib.with_needs(["aaaa0004"])
+    assert ids == ["aaaa0002", "aaaa0004", "aaaa0001"]
+    assert "Season and Outfit" in notes[0]
+    # Target first: the constraint moves ahead of it.
+    ids, notes = lib.with_needs(["aaaa0002", "aaaa0001", "aaaa0004"])
+    assert ids == ["aaaa0002", "aaaa0004", "aaaa0001"] and "moved" in notes[0]
+    # In a bundle on the stack counts as there.
+    assert lib.with_needs(["bbbb0001", "aaaa0004"])[0] == ["bbbb0001", "aaaa0004"]
+
+
+def test_run_test_and_show_test_take_the_constraint_alone():
+    from engine.ai import client_tools
+    lib = _lib()
+    out = lib.run_test({"stack": ["Season → Outfit"], "seeds": 5})
+    assert "added Season and Outfit" in out
+    args, _ = client_tools.prepare(lib, "show_test", {"stack": ["aaaa0004"]})
+    assert args["stack"] == [{"module": "aaaa0002"}, {"module": "aaaa0004"},
+                             {"module": "aaaa0001"}]
+    assert args["notes"]
+
+
+def test_show_test_add_and_remove_keep_the_open_seeds():
+    from engine.ai import client_tools
+    lib = _lib()
+    args, label = client_tools.prepare(lib, "show_test", {"stack": ["Quality"], "change": "add"})
+    assert args["change"] == "add" and "seeds" not in args and label.startswith("Added 1 item")
+    # Taking a constraint out never pulls its wildcards out with it.
+    args, label = client_tools.prepare(lib, "show_test", {"stack": ["aaaa0004"],
+                                                          "change": "remove", "seeds": 5})
+    assert args["stack"] == [{"module": "aaaa0004"}] and args["seeds"] == 5
+    with pytest.raises(ValueError):
+        client_tools.prepare(lib, "show_test", {"stack": ["Quality"], "change": "swap"})

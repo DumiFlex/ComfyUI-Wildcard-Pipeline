@@ -42,7 +42,7 @@ async def test_a_page_tool_pauses_the_turn_and_its_answer_continues_it(wp_client
         ("open", {"id": tgt, "type": "wildcard"}),
         ("highlight", {"points": [{"anchor": "a2", "caption": "the options"}]}),
     ]
-    assert [s["note"] for s in first["steps"]] == [
+    assert [s["note"] for s in first["steps"] if not s.get("say")] == [
         "Read Weapon", "Opened Weapon", "Pointed at the options"]
     opened, pointed = first["pending"]
     done = await _resume(wp_client, first["chat_id"], [

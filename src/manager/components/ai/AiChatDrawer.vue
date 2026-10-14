@@ -762,10 +762,15 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
             <i class="pi pi-exclamation-triangle" aria-hidden="true" /> {{ rescued(i) }} tool call{{ rescued(i) === 1 ? "" : "s" }} written as text
           </p>
           <ul v-if="entry.result.steps.length" class="wp-ai-chat__steps" data-test="ai-chat-steps">
-            <li v-for="(s, j) in entry.result.steps" :key="j" :data-ok="s.ok ? 'true' : 'false'">
-              <i :class="['pi', s.ok ? 'pi-check' : 'pi-exclamation-circle']" aria-hidden="true" />
-              {{ s.note }}
-            </li>
+            <template v-for="(s, j) in entry.result.steps" :key="j">
+              <li v-if="s.say" v-show="s.note !== entry.result.message" class="wp-ai-chat__said" data-test="ai-chat-said">
+                <AiMessage :text="s.note" :refs="entry.result.refs" />
+              </li>
+              <li v-else :data-ok="s.ok ? 'true' : 'false'">
+                <i :class="['pi', s.ok ? 'pi-check' : 'pi-exclamation-circle']" aria-hidden="true" />
+                {{ s.note }}
+              </li>
+            </template>
           </ul>
           <AiTestCard
             v-for="(card, j) in testCards(entry.result.steps)"
@@ -784,8 +789,12 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
             :disabled="chat.loading.value"
             @answer="(a) => chat.answerAsk(c.id, a)"
           />
-          <div v-if="entry.result.message.trim()" class="wp-ai-chat__msg-tools">
+          <div
+            v-if="entry.result.message.trim() || (canRetry && i === chat.entries.value.length - 1)"
+            class="wp-ai-chat__msg-tools"
+          >
             <button
+              v-if="entry.result.message.trim()"
               type="button"
               class="wp-ai-chat__icon-btn"
               :aria-label="copied === i ? 'Copied' : 'Copy this answer'"
@@ -793,6 +802,16 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
               data-test="ai-chat-copy"
               @click="copyAnswer(i, entry.result.message, entry.result.refs)"
             ><i :class="['pi', copied === i ? 'pi-check' : 'pi-copy']" aria-hidden="true" /></button>
+            <Button
+              v-if="canRetry && i === chat.entries.value.length - 1"
+              variant="ghost"
+              size="sm"
+              icon="pi-refresh"
+              :disabled="!!chat.retryBlocked()"
+              :title="chat.retryBlocked() || 'Ask the same message again for a new answer'"
+              data-test="ai-chat-retry"
+              @click="retry"
+            >Try again</Button>
           </div>
 
           <article
@@ -1012,24 +1031,15 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
         </div>
       </template>
 
-      <div v-if="canRetry" class="wp-ai-chat__again">
-        <Button
-          variant="ghost"
-          size="sm"
-          icon="pi-refresh"
-          :disabled="!!chat.retryBlocked()"
-          :title="chat.retryBlocked() || 'Ask the same message again for a new answer'"
-          data-test="ai-chat-retry"
-          @click="retry"
-        >Try again</Button>
-      </div>
-
       <div v-if="chat.loading.value && !chat.asking.value.size" class="wp-ai-chat__reply wp-ai-chat__live" data-test="ai-chat-live">
         <ul v-if="chat.live.value.steps.length" class="wp-ai-chat__steps">
-          <li v-for="(s, j) in chat.live.value.steps" :key="j" :data-ok="s.ok ? 'true' : 'false'">
-            <i :class="['pi', s.ok ? 'pi-check' : 'pi-exclamation-circle']" aria-hidden="true" />
-            {{ s.note }}
-          </li>
+          <template v-for="(s, j) in chat.live.value.steps" :key="j">
+            <li v-if="s.say" class="wp-ai-chat__said"><AiMessage :text="s.note" /></li>
+            <li v-else :data-ok="s.ok ? 'true' : 'false'">
+              <i :class="['pi', s.ok ? 'pi-check' : 'pi-exclamation-circle']" aria-hidden="true" />
+              {{ s.note }}
+            </li>
+          </template>
         </ul>
         <AiMessage v-if="chat.live.value.text" :text="chat.live.value.text" live />
         <AiWorking class="wp-ai-chat__status" :text="liveStatus" :phase="livePhase" :size="22" data-test="ai-chat-loading" />
@@ -1265,6 +1275,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__steps li { font-size: 11px; color: var(--wp-text-dim); display: flex; gap: 6px; align-items: baseline; overflow-wrap: anywhere; }
 .wp-ai-chat__steps li[data-ok="false"] { color: var(--wp-warn); }
 .wp-ai-chat__steps .pi { font-size: 10px; }
+/* Text the model wrote before acting: a normal-size paragraph between the steps. */
+.wp-ai-chat__steps li.wp-ai-chat__said { display: block; font-size: 13px; color: var(--wp-text); margin: 4px 0; }
 .wp-ai-chat__card {
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 35%, var(--wp-border));
   border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px;
@@ -1284,7 +1296,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__edit { position: absolute; left: -28px; bottom: 2px; opacity: 0.5; }
 .wp-ai-chat__user:hover .wp-ai-chat__edit, .wp-ai-chat__edit:focus-visible { opacity: 1; }
 .wp-ai-chat__editing { margin: 0 0 4px; font-size: 12px; color: var(--wp-text-muted); display: flex; gap: 8px; }
-.wp-ai-chat__msg-tools { display: flex; gap: 2px; margin-top: -4px; }
+.wp-ai-chat__msg-tools { display: flex; align-items: center; gap: 4px; margin-top: -4px; }
 .wp-ai-chat__icon-btn {
   display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px;
   border: 0; border-radius: 4px; background: none; color: var(--wp-text-dim); cursor: pointer; font-size: 12px;
@@ -1357,7 +1369,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__image-ideas { display: flex; flex-wrap: wrap; gap: 6px; }
 .wp-ai-chat__suggestion--small { padding: 4px 8px; font-size: 12px; }
 .wp-ai-chat__attach:disabled { opacity: 0.45; cursor: default; }
-.wp-ai-chat__again { display: flex; justify-content: flex-start; margin-top: -6px; }
 .wp-ai-chat__live :deep(.wp-ai-msg) { opacity: 0.92; }
 .wp-ai-chat__meter {
   flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px;

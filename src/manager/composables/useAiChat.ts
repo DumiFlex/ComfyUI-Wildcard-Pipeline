@@ -141,7 +141,10 @@ function onEvent(ev: AiChatStreamEvent): void {
   else if (ev.type === "text") live.value = { ...cur, text: ev.v, thinking: false };
   else if (ev.type === "thinking") live.value = { ...cur, thinking: true };
   else if (ev.type === "status") live.value = { ...cur, status: ev.v };
-  else if (ev.type === "tool") live.value = { ...cur, steps: [...cur.steps, ev.step] };
+  else if (ev.type === "tool") {
+    // A "say" step is the text that just streamed: it moves into the list.
+    live.value = { ...cur, steps: [...cur.steps, ev.step], ...(ev.step.say ? { text: "" } : {}) };
+  }
 }
 
 /** One request of a turn, streamed. */

@@ -665,6 +665,14 @@ class Library(MoreTools, ManageTools):
                             "isn't in the library yet. Tell the user it needs applying first "
                             f"(or open it unsaved with open {{\"proposal\": \"{pid}\"}}); "
                             "don't guess its id")
+            pool = [*self.modules.values(), *self.bundles.values(), *self.templates.values()]
+            same = [r for r in pool if str(r.get("name") or "").lower() == low]
+            if len(same) > 1:
+                # Two items share the name: say which, so the next call
+                # takes an id instead of searching and guessing again.
+                return (f"{len(same)} items are named {key!r}: " + ", ".join(
+                    f"{r['id']} ({self._kind(r).replace('_', ' ')})" for r in same[:6])
+                    + "; call again with the id of the one you mean")
         return f"no {what} {key!r}; search for it, or check the id"
 
     def _resolve(self, args: dict[str, Any], *keys: str) -> dict[str, Any]:
