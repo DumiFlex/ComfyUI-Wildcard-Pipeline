@@ -136,3 +136,26 @@ def test_bundle_use_names_options_by_number():
     inst = p["op"]["body"]["children"][1]["instance"]
     assert inst["enabled_options"] == ["o2", "o3"] and inst["pinned_option_id"] == "o2"
     assert "pin 2" in "".join(p["preview"])
+
+
+def test_ollama_gets_reserved_parameter_names_aliased():
+    from engine.ai.tools import BY_NAME, registry
+    [tool] = registry.native([BY_NAME["update_info"]], "ollama")
+    props = tool["function"]["parameters"]["properties"]
+    assert "description_" in props and "description" not in props
+    [plain] = registry.native([BY_NAME["update_info"]], "openai")
+    assert "description" in plain["function"]["parameters"]["properties"]
+    args = {"id": "x", "description": "d", "items": [{"type": "wildcard"}]}
+    there = registry.alias_args(args)
+    assert there == {"id": "x", "description_": "d", "items": [{"type_": "wildcard"}]}
+    assert registry.alias_args(there, back=True) == args
+
+
+def test_web_search_joins_and_leaves_a_chat_with_the_setting():
+    from engine.ai import tools as ai_tools
+    names = ai_tools.toolset("dashboard", scoped=False, web=False)
+    assert "web_search" not in names
+    on = ai_tools.sync_delete(names, True, ai_tools.WEB)
+    assert "web_search" in on and ai_tools.sync_delete(on, True, ai_tools.WEB) is on
+    assert "web_search" not in ai_tools.sync_delete(on, False, ai_tools.WEB)
+    assert "without being asked" in ai_tools.BY_NAME["web_search"].summary

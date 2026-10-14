@@ -556,9 +556,14 @@ TOOLS: list[Tool] = [
     Tool(
         "web_search", "web",
         "Search the web with the user's search engine. The user sees the query and allows "
-        "it first; you get short result snippets.",
+        "it first; you get short result snippets. Use it on your own whenever facts would "
+        "make the answer better, without being asked: a character, franchise, outfit, art "
+        "style, artist, place or era you don't know well; which tags a model family (Pony, "
+        "Illustrious, Flux) understands; a new model or LoRA. Search before you write the "
+        "options, not after; asking costs the user one click, guessing costs a wrong pack.",
         '{"query": a short search, no private details}: searches the web with the user\'s '
-        "own engine after the user allows the query; returns a few snippets with links.",
+        "own engine after the user allows the query; returns a few snippets with links. "
+        "Call it yourself when references would help; don't wait to be asked.",
         obj({"query": s("a short search")}, ("query",)),
         ("web",),
     ),
@@ -613,14 +618,14 @@ def toolset(route: str | None, *, scoped: bool, web: bool = False,
     return [*names, "more_tools"]
 
 
-def sync_delete(names: list[str], allowed: bool) -> list[str]:
-    """A chat's tool list with the delete tools added or removed to match
-    the setting now, in catalog order (unchanged when it already matches,
-    so the cached prompt prefix stays)."""
+def sync_delete(names: list[str], allowed: bool, group: tuple[str, ...] = DELETE) -> list[str]:
+    """A chat's tool list with the delete tools (or another ``group``)
+    added or removed to match the setting now, in catalog order (unchanged
+    when it already matches, so the cached prompt prefix stays)."""
     have = set(names)
-    if allowed == have.issuperset(DELETE) and (allowed or not have.intersection(DELETE)):
+    if allowed == have.issuperset(group) and (allowed or not have.intersection(group)):
         return names
-    want = (have | set(DELETE)) if allowed else (have - set(DELETE))
+    want = (have | set(group)) if allowed else (have - set(group))
     return [t.name for t in TOOLS if t.name in want]
 
 

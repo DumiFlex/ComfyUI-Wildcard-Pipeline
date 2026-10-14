@@ -384,8 +384,12 @@ async def complete_json(
                 "stream": False,
                 "format": schema,
                 "keep_alive": f"{int(cfg.get('unload_after_s', 60))}s",
+                # Ollama thinks by default when `think` is left out, so a
+                # JSON answer waited on a long hidden essay first.
+                "think": False,
                 "options": {
                     "temperature": temperature,
+                    "num_predict": 8192,
                     # Ollama's default window is 2-4k tokens and it cuts a
                     # longer prompt without saying so, so size it per request.
                     # A chat's own window when given: a new size reloads the

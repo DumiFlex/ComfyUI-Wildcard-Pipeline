@@ -467,6 +467,8 @@ class Library(MoreTools, ManageTools):
         #: saved row (`use_editor`); changes to it go into that editor.
         self.editor_id: str | None = None
         self.editor_dirty = False
+        #: The editor's item is new: never saved, only its id is reserved.
+        self.editor_new = False
         #: The library index (`engine.ai.index`), synced by the route; None
         #: means search scores every row in Python.
         self.index: ai_index.Index | None = None
@@ -483,6 +485,8 @@ class Library(MoreTools, ManageTools):
             return
         item_id = editor["id"]
         saved = self.modules.get(item_id) or self.bundles.get(item_id)
+        if saved is None and editor.get("new") is True:
+            saved = self._add_unsaved(item_id, editor.get("type"))
         if saved is None:
             return
         row = dict(saved)
@@ -506,6 +510,23 @@ class Library(MoreTools, ManageTools):
             self.bundles[item_id] = row
         self.editor_id = item_id
         self.editor_dirty = bool(editor.get("dirty"))
+
+    def _add_unsaved(self, item_id: str, kind: Any) -> dict[str, Any] | None:
+        """A new item open in its editor, never saved: a blank row at the id
+        the editor reserved (Save creates it there), filled by the editor's
+        fields. Changes to it go into the editor; nothing is created here."""
+        if not re.fullmatch(r"[0-9a-f]{8}", item_id) or self.get(item_id) is not None:
+            return None
+        row: dict[str, Any] = {"id": item_id, "name": "", "description": "", "tags": [],
+                               "category_id": None, "content_rating": "safe"}
+        if kind == "bundle":
+            self.bundles[item_id] = row = {**row, "children": []}
+        elif kind in ("wildcard", "fixed_values", "combine", "derivation", "constraint"):
+            self.modules[item_id] = row = {**row, "type": kind, "payload": {}}
+        else:
+            return None
+        self.editor_new = True
+        return row
 
     @property
     def catalog(self) -> dict[str, dict[str, Any]]:
@@ -567,7 +588,14 @@ class Library(MoreTools, ManageTools):
         lines: list[str] = []
         item = self.get(page.get("id")) if isinstance(page.get("id"), str) else None
         doc = ai_docs.page(page.get("doc")) if page.get("doc") else None
-        if item is not None:
+        if item is None and self.editor_new and self.editor_id:
+            new = self.get(self.editor_id) or {}
+            name = new.get("name") or "(unnamed)"
+            lines.append(f"The user has a new {self._kind(new)} \"{name}\" "
+                         f"({self.editor_id}) open in its editor, not saved yet: read it by that "
+                         "id; changes to it go into the editor, and it is created there (at that "
+                         "id) only when the user saves.")
+        elif item is not None:
             line = f"The user has {self._kind(item)} \"{item.get('name')}\" ({item['id']}) open"
             if item["id"] == self.editor_id:
                 line += (" in its editor, with unsaved changes" if self.editor_dirty
@@ -1658,6 +1686,10 @@ class Library(MoreTools, ManageTools):
                 if len(deps) > 1:
                     proposal["needs"] = deps
         proposal["warnings"] = [*proposal.get("warnings", []), *self._broken_links(op)]
+        if self.editor_new and self.editor_id and op.get("id") != self.editor_id \
+                and self.editor_id in json.dumps(op.get("body") or {}):
+            proposal["warnings"].append(f"Points at the new item {self.editor_id}, which exists "
+                                        "only once the user saves it in its editor")
         base = self._current(op["id"])[0] if op["op"] == "update" else None
         if op["op"] in ("create", "update"):
             body = op.get("body") or {}

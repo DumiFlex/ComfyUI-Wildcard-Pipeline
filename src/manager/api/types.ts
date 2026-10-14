@@ -1152,6 +1152,10 @@ export interface AiOrganizeResult {
 /** The item open in an editor, as it stands (unsaved changes included). */
 export interface AiChatEditorState {
   id: string;
+  /** A new item, not saved yet: `id` is reserved for it and `type` says
+   *  what it is (the server has no row to read either from). */
+  new?: true;
+  type?: string;
   name: string;
   description: string;
   tags: string[];

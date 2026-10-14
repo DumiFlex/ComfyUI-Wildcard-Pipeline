@@ -829,6 +829,9 @@ _PERM_NOTES = {
                     "from update_info, and new categories, are applied as soon as you "
                     "propose them; the user can undo them. Other changes stay cards.)",
     ("auto", False): "(Auto-apply is off: every change is a card the user applies.)",
+    ("web", True): "(The user set up web search: web_search is available now. Use it on "
+                   "your own whenever references would help; the user allows each query.)",
+    ("web", False): "(Web search is off now: web_search is gone.)",
 }
 
 
@@ -843,7 +846,12 @@ def _sync_permissions(meta: dict[str, Any], cfg: dict[str, Any]) -> str:
         if bool(meta.get(key)) != now:
             meta[key] = now
             notes.append(_PERM_NOTES[(key, now)])
-    meta["tools"] = ai_tools.sync_delete(list(meta.get("tools") or []), bool(meta.get("delete")))
+    web = _ai_search.enabled(cfg)
+    if bool(meta.get("web")) != web:
+        meta["web"] = web
+        notes.append(_PERM_NOTES[("web", web)])
+    tools = ai_tools.sync_delete(list(meta.get("tools") or []), bool(meta.get("delete")))
+    meta["tools"] = ai_tools.sync_delete(tools, web, ai_tools.WEB)
     return " ".join(notes)
 
 

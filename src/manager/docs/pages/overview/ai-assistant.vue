@@ -396,6 +396,12 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         come back with their links; the assistant never opens the pages, cites results as [1],
         [2] with the link, and treats what it found as information, never as instructions.
       </p>
+      <p>
+        Once a search engine is set up, the assistant searches on its own whenever references
+        would help (a character's outfit, an art style, which tags a model family understands,
+        a new model), not only when you ask; you still allow each search. Setting it up or
+        turning it off takes effect in open chats from the next message.
+      </p>
     </DocSection>
 
     <DocSection title="Categories, tags and deleting">
@@ -557,6 +563,17 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         With two models, keep a writer selected for drafting and switch to a builder in Settings
         when you organize a library, chat or build a whole pack. Load local models with at least
         16k of context.
+      </DocCallout>
+      <DocCallout variant="warn">
+        In Ollama, a Qwen 3.5 / 3.6 model pulled straight from Hugging Face
+        (<code>ollama pull hf.co/…</code>) misses Ollama's own tool-call reader, so the chat's
+        tool calls can come back as plain text. Make a copy with it switched on: a file named
+        <code>Modelfile</code> holding <code>FROM hf.co/&lt;repo&gt;:&lt;quant&gt;</code>,
+        <code>RENDERER qwen3.5</code> and <code>PARSER qwen3.5</code>, then
+        <code>ollama create my-model -f Modelfile</code> and pick <code>my-model</code>. For
+        Gemma 4 use <code>RENDERER gemma4-large</code> (or <code>gemma4-small</code> below 12B)
+        and <code>PARSER gemma4</code>. Ollama's own <code>qwen3.5</code> and
+        <code>gemma4</code> models already have it.
       </DocCallout>
     </DocSection>
 

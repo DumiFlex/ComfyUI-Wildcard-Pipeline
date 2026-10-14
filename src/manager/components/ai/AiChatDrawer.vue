@@ -38,7 +38,7 @@ import { clearPointer, EDIT_ROUTES } from "../../composables/useAiActions";
 import { useAiConfig } from "../../composables/useAiConfig";
 import { useAiChatWidth } from "../../composables/useAiChatWidth";
 import type { AiChatPage, AiChatProposal, AiChatStep, AiPendingCall, AiTestCard as TestCard } from "../../api/types";
-import { currentPageNote, openEditor } from "../../composables/useOpenEditor";
+import { currentPageNote, editorForPage } from "../../composables/useOpenEditor";
 import { usePackBuilder } from "../../composables/usePackBuilder";
 import { useCategoryStore } from "../../stores/categoryStore";
 import { cardMeta, cardOptions, cardView, draftRoute, otherPreview, type CardOption } from "../../composables/aiCards";
@@ -299,8 +299,8 @@ function page(): AiChatPage {
   }
   const note = currentPageNote();
   if (note) out.note = note;
-  const ed = openEditor();
-  if (ed && ed.id === out.id) out.editor = ed.read();
+  const ed = editorForPage(out.id);
+  if (ed) out.editor = ed;
   return out;
 }
 
@@ -804,8 +804,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
                   variant="secondary"
                   size="sm"
                   icon="pi-pencil"
-                  :disabled="!!chat.blockedReason(entry, p) || (!!cardOptions(p) && keptCount(entry, p) === 0)"
-                  :title="p.op.op === 'create' ? 'Open it in a new editor to check and change it before saving' : 'Put it into the item\'s editor, unsaved'"
+                  :disabled="(p.op.op !== 'create' && !!chat.blockedReason(entry, p)) || (!!cardOptions(p) && keptCount(entry, p) === 0)"
+                  :title="p.op.op === 'create' ? 'Open it in a new editor to check and change it before saving (links to cards not applied yet are kept)' : 'Put it into the item\'s editor, unsaved'"
                   data-test="ai-chat-open-editor"
                   @click="chat.openInEditor(entry, p)"
                 >Open in editor</Button>
