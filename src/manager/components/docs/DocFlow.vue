@@ -7,10 +7,14 @@
  * of PipelineDiagram. Each box is tinted by its `tone` via `toneVar`, exposed
  * as the `--wp-doc-flow-tone` custom property so the border + icon pick it up.
  *
- * Stages wrap gracefully on narrow widths. Arrows are decorative
- * (aria-hidden); the boxes carry the meaning.
+ * Stages wrap gracefully on narrow widths. The drawn row is hidden from
+ * screen readers and the docs index; a hidden sentence reads it out in
+ * order ("A (sub) → label → B"), with the figure's description from
+ * `docs/figures.ts` when it has a `figure` id.
  */
+import { computed } from "vue";
 import { type DocTone, toneVar } from "../../docs/registry";
+import DocFigureText from "./DocFigureText.vue";
 
 export interface DocFlowStage {
   /** PrimeIcons class, e.g. "pi pi-sitemap". */
@@ -29,7 +33,15 @@ const props = defineProps<{
   arrows?: string[];
   /** Optional dim caption centered below the flow. */
   caption?: string;
+  /** Key of its written description in `docs/figures.ts`. */
+  figure?: string;
 }>();
+
+const steps = computed(() => props.stages.map((s, i) => {
+  const box = s.sub ? `${s.name} (${s.sub})` : s.name;
+  const arrow = i < props.stages.length - 1 ? arrowLabel(i) : "";
+  return arrow ? `${box} → ${arrow.toLowerCase()}` : box;
+}).join(" → "));
 
 function boxStyle(stage: DocFlowStage): Record<string, string> {
   return { "--wp-doc-flow-tone": toneVar(stage.tone ?? "neutral") };
@@ -42,7 +54,7 @@ function arrowLabel(index: number): string {
 
 <template>
   <div class="wp-doc-flow">
-    <div class="wp-doc-flow__row">
+    <div class="wp-doc-flow__row" aria-hidden="true">
       <template v-for="(stage, i) in props.stages" :key="i">
         <div class="wp-doc-flow__stage">
           <div class="wp-doc-flow__box" :style="boxStyle(stage)">
@@ -61,7 +73,8 @@ function arrowLabel(index: number): string {
         </div>
       </template>
     </div>
-    <div v-if="props.caption" class="wp-doc-flow__cap">{{ props.caption }}</div>
+    <div v-if="props.caption" class="wp-doc-flow__cap" aria-hidden="true">{{ props.caption }}</div>
+    <DocFigureText :figure="props.figure" :caption="props.caption" :flow="steps" />
   </div>
 </template>
 

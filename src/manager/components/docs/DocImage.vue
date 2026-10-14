@@ -16,6 +16,7 @@
  * stay non-clickable (there's nothing to zoom into).
  */
 import { computed, onBeforeUnmount, ref, watch } from "vue";
+import DocFigureText from "./DocFigureText.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -108,6 +109,7 @@ onBeforeUnmount(() => {
     </div>
     <figcaption class="wp-doc-img__cap">{{ caption }}</figcaption>
   </figure>
+  <DocFigureText :figure="src" :caption="caption" />
 
   <Teleport to="body">
     <Transition name="wp-doc-img-lightbox">

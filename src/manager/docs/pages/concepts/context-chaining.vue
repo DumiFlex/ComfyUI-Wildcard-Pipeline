@@ -17,7 +17,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
     blurb="Layer multiple Contexts together — each one inherits the upstream map and overrides what it needs. Last write wins."
   >
     <DocSection title="The flow">
-      <DocFlow
+      <DocFlow figure="context-chaining-flow"
         :stages="[
           { icon: 'pi pi-sitemap', name: 'WP Context A', sub: 'rolls $vars', tone: 'node' },
           { icon: 'pi pi-sitemap', name: 'WP Context B', sub: 'adds / overrides', tone: 'node' },
@@ -50,7 +50,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
       <DocImage
         src="images/docs/context-chaining.png"
         ratio="16 / 7"
-        caption="Two WP Context nodes chained into a Prompt Assembler. Upstream Context publishes Starter subject + Starter style. Downstream Context adds an Override style row (orange MOD-flagged border) plus its own Starter subject — last-write-wins, so the assembler reads the override $style while $subject still flows through unchanged. Right pane shows the assembler resolving 'a picture of a cat, in the style of bold ink art' from those two upstream chips."
+        caption="Two WP Context nodes chained into a Prompt Assembler. The upstream Context publishes Starter subject + Starter style. The downstream Context holds a single Override Style row (OVERRIDE badge) that writes $style again. Last write wins, so the assembler reads the override $style while $subject flows through unchanged, resolving 'A picture of a cat, in the style of minimalist line art'."
       />
     </DocSection>
 

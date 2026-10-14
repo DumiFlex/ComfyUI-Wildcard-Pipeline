@@ -5,6 +5,7 @@ import DocCallout from "../../../components/docs/DocCallout.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
+import DocFigureText from "../../../components/docs/DocFigureText.vue";
 import picksDiagram from "../../images/how-picks-carry-over.webp";
 
 const ports = [
@@ -57,7 +58,7 @@ const settings = [
     </DocSection>
 
     <DocSection title="Where it goes">
-      <DocFlow
+      <DocFlow figure="wp-image-filter-flow"
         :stages="[
           { icon: 'pi pi-images', name: 'KSampler + VAE Decode', sub: 'images, latent', tone: 'neutral' },
           { icon: 'pi pi-filter', name: 'WP Image Filter', sub: 'you pick', tone: 'node' },
@@ -125,6 +126,7 @@ const settings = [
       <figure class="wp-doc-figure">
         <img :src="picksDiagram" alt="How the picks carry over: images, latents, masks, conditioning and prompt text of picked frames go on; an edited prompt is re-encoded and a painted mask goes to the masks output." loading="lazy">
       </figure>
+      <DocFigureText figure="images/how-picks-carry-over.webp" caption="How the picks carry over" />
     </DocSection>
 
     <DocSection title="Settings on the node">
