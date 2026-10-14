@@ -55,12 +55,12 @@ describe("RichTextInput.vue", () => {
     wrap.unmount();
   });
 
-  it("chipifies a runtime-only $var when the user types a word-boundary char", async () => {
+  it("colours a runtime-only $var as text when the user types a word-boundary char", async () => {
     // The static suggestion list is empty (the runtime var doesn't exist yet
     // in any module's catalog) but typing `$runtimeVar` + space should still
-    // produce a var chip. Without this settle path the token would stay raw
-    // text forever — vars created downstream / via overrides could never get
-    // a chip.
+    // render it as a coloured `.wp-rt-var` run. `$var` is never a chip any
+    // more — typing must not "chipify" it — but the boundary settle still
+    // re-renders the token so runtime vars get their colour.
     const wrap = mount(RichTextInput, {
       props: { modelValue: "", varSuggestions: [] },
       attachTo: document.body,
@@ -71,23 +71,25 @@ describe("RichTextInput.vue", () => {
     const span = (host.element as HTMLElement).querySelector(".wp-rt__text") as HTMLElement;
     span.textContent = "$runtimeVar";
     await host.trigger("input", { inputType: "insertText", data: "r" });
-    // Mid-token: still raw text, no chip yet.
-    expect(wrap.findAll(".wp-refchip--var")).toHaveLength(0);
+    // Mid-token: still raw text, no chip.
+    expect(wrap.findAll(".wp-refchip")).toHaveLength(0);
     // Now the boundary char.
     span.textContent = "$runtimeVar ";
     await host.trigger("input", { inputType: "insertText", data: " " });
     await flushPromises();
-    const chips = wrap.findAll(".wp-refchip--var");
-    expect(chips.length).toBe(1);
-    expect(chips[0].text()).toContain("$runtimeVar");
+    expect(wrap.findAll(".wp-refchip")).toHaveLength(0);
+    expect(wrap.findAll(".wp-rt-var").map((v) => v.text())).toEqual(["$runtimeVar"]);
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(events[events.length - 1]?.[0]).toBe("$runtimeVar ");
     wrap.unmount();
   });
 
-  it("Enter on a $-trigger with no suggestion match chipifies the typed query", async () => {
+  it("Enter on a $-trigger with no suggestion match commits the typed query as text", async () => {
     // Runtime / forward-declared vars never appear in varSuggestions, so
     // pressing Enter on `$runtimeVar` used to be a dead keystroke: the
-    // suggestion list was empty, the handler bailed, and the typed text
-    // stayed raw. Now we treat the typed query as the chip name directly.
+    // suggestion list was empty, the handler bailed. Now we treat the typed
+    // query as the var name directly — committed as text (vars never chip),
+    // with no newline and no chip.
     const wrap = mount(RichTextInput, {
       props: { modelValue: "", varSuggestions: [] },
       attachTo: document.body,
@@ -109,9 +111,10 @@ describe("RichTextInput.vue", () => {
     // Now press Enter.
     await host.trigger("keydown", { key: "Enter" });
     await flushPromises();
-    const chips = wrap.findAll(".wp-refchip--var");
-    expect(chips.length).toBe(1);
-    expect(chips[0].text()).toContain("$runtimeVar");
+    expect(wrap.findAll(".wp-refchip")).toHaveLength(0);
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(events[events.length - 1]?.[0]).toBe("$runtimeVar");
+    expect((host.element.textContent ?? "").replace(/\u200b/g, "")).toBe("$runtimeVar");
     wrap.unmount();
   });
 
@@ -119,7 +122,7 @@ describe("RichTextInput.vue", () => {
     // Regression: probeAutocomplete stopped scanning back at `.`, so after
     // `$mood.0` the popover was closed and Enter fell through to a newline on
     // the multiline combine surface — splitting the token. The accessor-aware
-    // probe keeps the popover open so Enter chipifies the var instead.
+    // probe keeps the popover open so Enter commits the var instead.
     const wrap = mount(RichTextInput, {
       props: { modelValue: "", surface: "combine", multiline: true, varSuggestions: [] },
       attachTo: document.body,
@@ -138,9 +141,7 @@ describe("RichTextInput.vue", () => {
     await host.trigger("input", { inputType: "insertText", data: "0" });
     await host.trigger("keydown", { key: "Enter" });
     await flushPromises();
-    const chips = wrap.findAll(".wp-refchip--var");
-    expect(chips.length).toBe(1);
-    expect(chips[0].text()).toContain("$mood.0");
+    expect(wrap.findAll(".wp-refchip")).toHaveLength(0);
     const events = wrap.emitted("update:modelValue") ?? [];
     const last = String(events[events.length - 1]?.[0] ?? "");
     expect(last).toBe("$mood.0");        // no newline split
@@ -202,7 +203,7 @@ describe("RichTextInput.vue", () => {
     expect(chips[1].text()).toContain("deadbeef");
   });
 
-  it("renders RefChip atoms for $var tokens in template surface, ignores @{uuid}", () => {
+  it("renders $var tokens as coloured text in template surface, ignores @{uuid}", () => {
     const wrap = mount(RichTextInput, {
       props: {
         modelValue: "$person sees @{aabbccdd}",
@@ -211,11 +212,12 @@ describe("RichTextInput.vue", () => {
         uuidToName: new Map([["aabbccdd", "color"]]),
       },
     });
-    const chips = wrap.findAll(".wp-refchip");
-    // Only the $person var chip — @{uuid} stays as plain text on
-    // template surfaces (no nested wildcard expansion at runtime).
-    expect(chips.length).toBe(1);
-    expect(chips[0].text()).toContain("$person");
+    // No chips at all: `$person` is a coloured text run, and @{uuid} stays
+    // as plain text on template surfaces (no nested wildcard expansion at
+    // runtime).
+    expect(wrap.findAll(".wp-refchip")).toHaveLength(0);
+    expect(wrap.findAll(".wp-rt__text .wp-rt-var").map((v) => v.text())).toEqual(["$person"]);
+    expect(wrap.find(".wp-rt__host").text()).toContain("@{aabbccdd}");
   });
 
   it("renders $$ escapes as literal text without classifying as a var chip", () => {
@@ -392,18 +394,24 @@ describe("RichTextInput.vue", () => {
     // where the anchors survive. Settling a chip is a structural apply — it
     // splits one text atom into text + chip + text — and it happens on nearly
     // every keystroke that closes a token. Swapping the host there would cost
-    // a caret restore per settle on Chromium for no reason at all.
+    // a caret restore per settle on Chromium for no reason at all. (`$var`
+    // no longer chips, so a `@{uuid}` ref on the wildcard surface is the
+    // token that still settles into an atom.)
     const wrap = mount(RichTextInput, {
-      props: { modelValue: "", varSuggestions: [] },
+      props: {
+        modelValue: "",
+        surface: "wildcard",
+        uuidToName: new Map([["aabbccdd", "color"]]),
+      },
       attachTo: document.body,
     });
     const before = wrap.find(".wp-rt__host").element;
     const span = (before as HTMLElement).querySelector(".wp-rt__text") as HTMLElement;
-    span.textContent = "$runtimeVar ";
+    span.textContent = "@{aabbccdd} ";
     await wrap.find(".wp-rt__host").trigger("input", { inputType: "insertText", data: " " });
     await flushPromises();
     // The settle landed...
-    expect(wrap.findAll(".wp-refchip--var")).toHaveLength(1);
+    expect(wrap.findAll(".wp-refchip--ref")).toHaveLength(1);
     // ...on the very same host element.
     expect(wrap.find(".wp-rt__host").element).toBe(before);
     wrap.unmount();
@@ -427,19 +435,20 @@ describe("RichTextInput.vue", () => {
     wrap.unmount();
   });
 
-  it("a var chip hover claims scope only when the name is in the suggestion pool", async () => {
+  it("a $var hover card claims scope only when the name is in the suggestion pool", async () => {
     // The popover used to read `resolved ? "produced upstream" : …`, and for
     // a var `resolved` is merely `name.length > 0` — so EVERY var claimed an
     // upstream producer. Meaningless in the SPA (no graph) and unverified on
     // the canvas.
-    // RefChip gates its popover behind a 280ms hover intent delay.
+    // The `$name` run is text; hovering it aims a card-only RefChip at it,
+    // which gates its card behind a 280ms hover intent delay.
     vi.useFakeTimers();
     const hoverText = async (modelValue: string): Promise<string> => {
       const w = mount(RichTextInput, {
         props: { modelValue, varSuggestions: ["person"] },
         attachTo: document.body,
       });
-      await w.find(".wp-refchip").trigger("mouseenter");
+      await w.find(".wp-rt-var").trigger("mouseover");
       vi.advanceTimersByTime(300);
       await nextTick();
       const text = document.body.querySelector('[data-test="refchip-hover"]')?.textContent ?? "";
@@ -531,11 +540,16 @@ describe("RichTextInput.vue", () => {
     // would have typed to make it, so the probe cannot tell the two apart from
     // the string alone. Only the DOM can, which is what `triggerIsInsideChip`
     // consults.
+    //
+    // `$var` is no longer a chip (a caret behind `$style_fx` text IS editing
+    // the name, so filtering there is right), so this pins the same guard on
+    // the atom that still exists: a `@{uuid}` ref chip on the wildcard surface.
     const wrap = mount(RichTextInput, {
       props: {
-        modelValue: "$style_fx ",
-        surface: "combine",
-        varSuggestions: ["style_fx", "style_fx_alt"],
+        modelValue: "@{aabbccdd} ",
+        surface: "wildcard",
+        refSuggestions: ["aabbccdd", "aabbccee"],
+        uuidToName: new Map([["aabbccdd", "style_fx"], ["aabbccee", "style_fx_alt"]]),
       },
       attachTo: document.body,
     });
@@ -543,7 +557,7 @@ describe("RichTextInput.vue", () => {
     const host = wrap.find(".wp-rt__host");
     const hostEl = host.element as HTMLElement;
     // Sanity: the chip rendered, so the caret really can sit behind an atom.
-    expect(hostEl.querySelectorAll(".wp-refchip--var").length).toBe(1);
+    expect(hostEl.querySelectorAll(".wp-refchip--ref").length).toBe(1);
 
     // Caret AFTER the trailing space, so Backspace removes the space and
     // leaves the caret flush against the chip — the exact reported sequence.
@@ -563,7 +577,7 @@ describe("RichTextInput.vue", () => {
     wrap.unmount();
   });
 
-  it("a var chip hover names its producing module and node", async () => {
+  it("a $var hover card names its producing module and node", async () => {
     // "in scope" told the user a name existed, not where its value comes from —
     // useless when several near-identical modules bind the same var.
     vi.useFakeTimers();
@@ -583,7 +597,7 @@ describe("RichTextInput.vue", () => {
       attachTo: document.body,
     });
     try {
-      await wrap.find(".wp-refchip").trigger("mouseenter");
+      await wrap.find(".wp-rt-var").trigger("mouseover");
       vi.advanceTimersByTime(300);
       await nextTick();
       const card = document.body.querySelector('[data-test="refchip-hover"]');
@@ -607,7 +621,7 @@ describe("RichTextInput.vue", () => {
       attachTo: document.body,
     });
     try {
-      await wrap.find(".wp-refchip").trigger("mouseenter");
+      await wrap.find(".wp-rt-var").trigger("mouseover");
       vi.advanceTimersByTime(300);
       await nextTick();
       expect(document.body.querySelector('[data-test="refchip-hover"]')?.textContent)
@@ -627,7 +641,7 @@ describe("RichTextInput.vue", () => {
       attachTo: document.body,
     });
     try {
-      await wrap.find(".wp-refchip").trigger("mouseenter");
+      await wrap.find(".wp-rt-var").trigger("mouseover");
       vi.advanceTimersByTime(300);
       await nextTick();
       const text = document.body.querySelector('[data-test="refchip-hover"]')?.textContent ?? "";
@@ -652,7 +666,7 @@ describe("RichTextInput.vue", () => {
       attachTo: document.body,
     });
     try {
-      await wrap.find(".wp-refchip").trigger("mouseenter");
+      await wrap.find(".wp-rt-var").trigger("mouseover");
       vi.advanceTimersByTime(300);
       await nextTick();
       const text = document.body.querySelector('[data-test="refchip-hover"]')?.textContent ?? "";
@@ -683,7 +697,7 @@ describe("RichTextInput.vue", () => {
       attachTo: document.body,
     });
     try {
-      await wrap.find(".wp-refchip").trigger("mouseenter");
+      await wrap.find(".wp-rt-var").trigger("mouseover");
       vi.advanceTimersByTime(300);
       await nextTick();
       const text = document.body.querySelector('[data-test="refchip-hover"]')?.textContent ?? "";
@@ -925,7 +939,7 @@ describe("RichTextInput.vue", () => {
     wrap.unmount();
   });
 
-  it("autocomplete-pick preserves earlier chips when trigger sits after a chip", async () => {
+  it("autocomplete-pick preserves earlier vars when trigger sits after one", async () => {
     // Reproduces the "template breaks after each edit" bug. The user has
     // a chip + trailing text containing a `$te` trigger. Previous code
     // stored acStart as the offset INSIDE the local text node, but the
@@ -943,9 +957,12 @@ describe("RichTextInput.vue", () => {
     const host = wrap.find(".wp-rt__host").element as HTMLElement;
     // Place the selection at the end of the trailing text span (after
     // `$te`). The wp-rt__text spans hold the trailing run.
+    // `$outfit` is a coloured run INSIDE the text span, so descend to the
+    // span's deepest last text node.
     const spans = host.querySelectorAll(".wp-rt__text");
     const trailing = spans[spans.length - 1] as HTMLElement;
-    const tn = trailing.firstChild as Text | null;
+    let tn: Node | null = trailing.lastChild;
+    while (tn?.lastChild) tn = tn.lastChild;
     const sel = window.getSelection();
     const range = document.createRange();
     if (tn) {
@@ -963,9 +980,10 @@ describe("RichTextInput.vue", () => {
       .__applyAutocompleteForTest("test");
     await flushPromises();
     const events = wrap.emitted("update:modelValue") ?? [];
-    // The earlier chip + comma must survive — only the typed `$te` trigger
-    // fragment gets replaced with the picked `$test` chip.
+    // The earlier var + comma must survive — only the typed `$te` trigger
+    // fragment gets replaced with the picked `$test`.
     expect(events[events.length - 1]?.[0]).toBe("$outfit, $test");
+    expect(wrap.findAll(".wp-refchip")).toHaveLength(0);
     wrap.unmount();
   });
 
@@ -1086,35 +1104,40 @@ describe("RichTextInput.vue", () => {
 
   // --- SP2a: $var.K list-accessor chip stability ---
 
-  it("preserves the .K accessor when a $mood.0 chip round-trips through readHostAsText", async () => {
+  it("preserves the .K accessor when a $mood.0 run round-trips through readHostAsText", async () => {
     // Bug A regression: readHostAsText dropped atom.index, so any edit that
     // re-read the host (input/blur/settle) silently rewrote `$mood.0`→`$mood`.
+    // `$mood.0` is now a coloured run inside the one text span; editing the
+    // trailing text must keep the accessor intact.
     const wrap = mount(RichTextInput, {
       props: { modelValue: "a $mood.0 b", surface: "combine", varSuggestions: ["mood"] },
       attachTo: document.body,
     });
     const host = wrap.find(".wp-rt__host");
-    const spans = (host.element as HTMLElement).querySelectorAll(".wp-rt__text");
-    const trailing = spans[spans.length - 1];
-    trailing.textContent = " bz";
+    const run = (host.element as HTMLElement).querySelector(".wp-rt-var") as HTMLElement;
+    expect(run.textContent).toBe("$mood.0");
+    // Type `z` at the end of the trailing " b" text node.
+    const tail = run.nextSibling as Text;
+    tail.textContent = (tail.textContent ?? "").replace(" b", " bz");
     await host.trigger("input");
     const events = wrap.emitted("update:modelValue") ?? [];
     expect(events[events.length - 1]?.[0]).toBe("a $mood.0 bz");
     wrap.unmount();
   });
 
-  it("Backspace after a $mood.0 chip deletes the whole accessor atomically", async () => {
-    // Bug B regression: the chip-delete regex stopped at the identifier, so
-    // `$mood.0` fell through to single-char delete (removing `0`→`$mood.`).
+  it("Backspace after $mood.0 deletes one char of the accessor (vars are text, not atoms)", async () => {
+    // Formerly Bug B: the chip-delete regex stopped at the identifier and the
+    // chip had to go whole. `$mood.0` is now editable text, so Backspace
+    // right after it takes exactly the `0` and leaves the rest alone.
     const wrap = mount(RichTextInput, {
       props: { modelValue: "a $mood.0 b", surface: "combine", varSuggestions: ["mood"] },
       attachTo: document.body,
     });
     const host = wrap.find(".wp-rt__host").element as HTMLElement;
     host.focus();
-    const spans = host.querySelectorAll(".wp-rt__text");
-    const trailing = spans[spans.length - 1];
-    const tn = trailing.firstChild;
+    // Caret at the start of the " b" text node right after the `$mood.0` run.
+    const run = host.querySelector(".wp-rt-var") as HTMLElement;
+    const tn = run.nextSibling;
     const range = document.createRange();
     if (tn) range.setStart(tn, 0);
     range.collapse(true);
@@ -1123,7 +1146,8 @@ describe("RichTextInput.vue", () => {
     if (tn) sel?.addRange(range);
     await wrap.find(".wp-rt__host").trigger("keydown", { key: "Backspace" });
     const events = wrap.emitted("update:modelValue") ?? [];
-    expect(events[events.length - 1]?.[0]).toBe("a  b");
+    expect(events[events.length - 1]?.[0]).toBe("a $mood. b");
+    expect(wrap.findAll(".wp-refchip")).toHaveLength(0);
     wrap.unmount();
   });
 
@@ -1221,12 +1245,10 @@ describe("RichTextInput.vue", () => {
     wrap.unmount();
   });
 
-  it("unsettled $var renders as plain text in the editor — no inline highlight, only the chip colors", async () => {
-    // User feedback (2026-06-09): a half-typed `$var` needs no separate
-    // colour — the absence of a chip already signals "not committed yet".
-    // After an edit re-renders the raw token through textAtomHtml, it must
-    // NOT carry the `.wp-rt-var` inline highlight. Settled chips keep their
-    // green; the read-only preview is unaffected.
+  it("an edited $var renders as coloured text in the editor — never a chip", async () => {
+    // `$var` has no chip state any more (2026-10-14): on every surface that
+    // reads vars, an edit that re-renders the token through textAtomHtml
+    // gives it the `.wp-rt-var` colour, and Backspace never seals a chip.
     const wrap = mount(RichTextInput, {
       props: { modelValue: "", surface: "combine", multiline: true, varSuggestions: ["mood"] },
       attachTo: document.body,
@@ -1245,18 +1267,18 @@ describe("RichTextInput.vue", () => {
     sel?.addRange(range);
     await host.trigger("keydown", { key: "Backspace" });
     await flushPromises();
-    // Raw "$mood" survived as text — not chipified, not inline-highlighted.
+    // Raw "$mood" survived as coloured text — not chipified.
     expect(wrap.findAll(".wp-refchip").length).toBe(0);
-    expect(hostEl.innerHTML).not.toContain("wp-rt-var");
+    expect(Array.from(hostEl.querySelectorAll(".wp-rt-var")).map((n) => n.textContent))
+      .toEqual(["$mood"]);
     expect((hostEl.textContent ?? "").replace(/​/g, "")).toBe("$mood");
     wrap.unmount();
   });
 
-  it("typing $mood.0 does not chip prematurely on the dot; settles on the next boundary", async () => {
+  it("typing $mood.0 never chips; on the next boundary it reads as ONE `$mood.0` run", async () => {
     // Symptom #1 regression: `.` was a settle delimiter, so `$mood` chipped
-    // the instant the user typed `.`, stranding the accessor. `.` is no
-    // longer a settle char — the token waits for the digit + a real boundary,
-    // then chips as a single `$mood.0`.
+    // the instant the user typed `.`, stranding the accessor. Vars no longer
+    // chip at all; after the boundary the whole `$mood.0` is one coloured run.
     const wrap = mount(RichTextInput, {
       props: { modelValue: "", surface: "combine", varSuggestions: [] },
       attachTo: document.body,
@@ -1265,13 +1287,12 @@ describe("RichTextInput.vue", () => {
     const span = (host.element as HTMLElement).querySelector(".wp-rt__text") as HTMLElement;
     span.textContent = "$mood.";
     await host.trigger("input", { inputType: "insertText", data: "." });
-    expect(wrap.findAll(".wp-refchip--var")).toHaveLength(0);  // no premature chip
+    expect(wrap.findAll(".wp-refchip")).toHaveLength(0);  // no chip
     span.textContent = "$mood.0 ";
     await host.trigger("input", { inputType: "insertText", data: " " });
     await flushPromises();
-    const chips = wrap.findAll(".wp-refchip--var");
-    expect(chips.length).toBe(1);
-    expect(chips[0].text()).toContain("$mood.0");
+    expect(wrap.findAll(".wp-refchip")).toHaveLength(0);
+    expect(wrap.findAll(".wp-rt-var").map((v) => v.text())).toEqual(["$mood.0"]);
     const events = wrap.emitted("update:modelValue") ?? [];
     expect(events[events.length - 1]?.[0]).toBe("$mood.0 ");
     wrap.unmount();
@@ -1374,17 +1395,20 @@ describe("RichTextInput.vue", () => {
     wrap.unmount();
   });
 
-  it("Delete (forward) immediately before a chip removes it atomically", async () => {
+  it("Delete (forward) immediately before a $var removes only the `$`", async () => {
     const wrap = mount(RichTextInput, {
       props: { modelValue: "$x hello", varSuggestions: ["x"] },
       attachTo: document.body,
     });
     const host = wrap.find(".wp-rt__host");
-    // Place caret at offset 0 (before the $x chip in raw text).
+    // Place caret at offset 0 (before `$x` in raw text). `$x` is a coloured
+    // run inside the text span, so descend to the first text node.
     const range = document.createRange();
     const sp = (host.element as HTMLElement).querySelector(".wp-rt__text");
-    if (sp && sp.firstChild) {
-      range.setStart(sp.firstChild, 0);
+    let first: Node | null = sp?.firstChild ?? null;
+    while (first?.firstChild) first = first.firstChild;
+    if (first) {
+      range.setStart(first, 0);
       range.collapse(true);
       const sel = window.getSelection();
       sel?.removeAllRanges();
@@ -1393,8 +1417,9 @@ describe("RichTextInput.vue", () => {
     await host.trigger("keydown", { key: "Delete" });
     await flushPromises();
     const events = wrap.emitted("update:modelValue") ?? [];
-    // After forward-delete on the chip, only " hello" remains.
-    expect(events[events.length - 1]?.[0]).toBe(" hello");
+    // Vars are text: forward-delete takes one char, not the whole token.
+    expect(events[events.length - 1]?.[0]).toBe("x hello");
+    expect(wrap.findAll(".wp-rt-var")).toHaveLength(0);
     wrap.unmount();
   });
 
@@ -1693,11 +1718,18 @@ describe("allowNestedRefs — derivation action-value @{} reuse", () => {
     wrap.unmount();
   });
 
-  it("derivation + allowNestedRefs: $var STILL chips (both kinds settle)", () => {
+  it("derivation + allowNestedRefs: $var renders as coloured text while @{uuid} chips", () => {
     const wrap = mount(RichTextInput, {
-      props: { modelValue: "$mood", surface: "derivation", allowNestedRefs: true },
+      props: {
+        modelValue: "$mood @{aabbccdd}",
+        surface: "derivation",
+        allowNestedRefs: true,
+        uuidToName: new Map([["aabbccdd", "color"]]),
+      },
     });
-    expect(wrap.findAll(".wp-refchip--var").length).toBe(1);
+    expect(wrap.findAll(".wp-refchip--var").length).toBe(0);
+    expect(wrap.findAll(".wp-rt-var").map((v) => v.text())).toEqual(["$mood"]);
+    expect(wrap.findAll(".wp-refchip--ref").length).toBe(1);
     wrap.unmount();
   });
 

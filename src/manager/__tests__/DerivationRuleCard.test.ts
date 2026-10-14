@@ -158,7 +158,7 @@ describe("DerivationRuleCard.vue", () => {
 
   it.each([
     ["equals", "not_equals"], ["contains", "not_contains"], ["matches", "not_matches"],
-    ["exists", "not_exists"], ["is_set", "is_unset"], ["is_empty", "is_unset"],
+    ["exists", "not_exists"], ["is_set", "not_exists"], ["is_empty", "not_exists"],
     ["not_contains", "contains"], ["is_unset", "is_set"],
   ] as const)("NOT on %s stores %s", async (from, to) => {
     const rule = makeRule({
@@ -339,6 +339,31 @@ describe("DerivationRuleCard.vue", () => {
     });
     const wrap = mountCard(rule, 0);
     expect(wrap.find('[data-test="cond-refinement-0-0"]').exists()).toBe(true);
+  });
+
+  it("refinement switch is hidden under NOT exists", () => {
+    const rule = makeRule({
+      branches: [{
+        condition: { var: "x", op: "not_exists", value: "" },
+        action: { target_var: "out", mode: "replace", value: "v" },
+      }],
+    });
+    const wrap = mountCard(rule, 0);
+    expect(wrap.find('[data-test="cond-refinement-0-0"]').exists()).toBe(false);
+  });
+
+  it("a stored is_unset keeps its switch so it is not silently rewritten", async () => {
+    const rule = makeRule({
+      branches: [{
+        condition: { var: "x", op: "is_unset", value: "" },
+        action: { target_var: "out", mode: "replace", value: "v" },
+      }],
+    });
+    const wrap = mountCard(rule, 0);
+    expect(wrap.find('[data-test="cond-refinement-value-0-0"]').classes())
+      .toContain("dvr-refinement__btn--active");
+    await wrap.find('[data-test="cond-refinement-any-0-0"]').trigger("click");
+    expect(JSON.stringify(wrap.emitted())).toContain('"op":"not_exists"');
   });
 
   it("refinement switch is hidden for compare ops", () => {

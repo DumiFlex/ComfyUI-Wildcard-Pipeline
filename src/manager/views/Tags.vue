@@ -264,7 +264,7 @@ registerPageNote(() => {
                 :title="`Show items tagged '${c.tag}'`"
                 @click="open(c)"
               >
-                <Chip tone="success">{{ c.tag }}</Chip>
+                <Chip tone="accent">{{ c.tag }}</Chip>
               </button>
             </td>
             <td class="wp-mono">{{ c.modules || "—" }}</td>

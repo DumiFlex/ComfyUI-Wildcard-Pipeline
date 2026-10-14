@@ -1003,7 +1003,7 @@ defineExpose({
       </Chip>
       <Chip
         v-for="t in filter.tags ?? []" :key="t"
-        tone="success"
+        tone="accent"
         removable
         @remove="removeTag(t)"
       >
