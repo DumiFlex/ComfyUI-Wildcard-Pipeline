@@ -1231,9 +1231,53 @@ export type AiPendingCall =
   | { id: string; tool: "organize"; label: string; args: { ids: string[]; note: string } }
   | { id: string; tool: "draft_options"; label: string;
       args: { id: string; instruction: string; count: number } }
-  | { id: string; tool: "show_test"; label: string;
-      args: { stack: Array<{ module: string } | { bundle: string }>; seeds: number } }
+  | { id: string; tool: "show_test"; label: string; args: AiShowTestArgs }
+  | { id: string; tool: "use_panel"; label: string;
+      args: { id: string; type: string; panel: string; request: string } }
   | { id: string; tool: "web_search"; label: string; args: { query: string } };
+
+/** One "worked on" line; a run_test step carries its run as a card. */
+export interface AiChatStep {
+  tool: string;
+  note: string;
+  ok: boolean;
+  card?: AiTestCard;
+}
+
+/** A run_test as data (`chat_tools._test_card`). `was` is the share before
+ *  the proposed changes, when the run compared them. */
+export interface AiTestCard {
+  kind: "test";
+  runs: number;
+  failed: number;
+  compared: boolean;
+  seeds: number;
+  /** The saved items of the run, for "Open in Test Runner". */
+  stack: Array<{ module: string } | { bundle: string }>;
+  pins?: Record<string, string>;
+  vars: Array<{ name: string; distinct: number; internal?: boolean;
+    tops: Array<{ v: string; pct: number; was?: number }> }>;
+  never: Array<{ name: string; values: string[]; more: number }>;
+  warnings: Array<{ text: string; count: number }>;
+  prompts: Array<{ p: string; n?: string }>;
+}
+
+/** What the chat's `show_test` sets up in the Test Runner. Everything past
+ *  `stack` and `seeds` is optional (older stored calls carry only those). */
+export interface AiShowTestArgs {
+  stack: ScenarioStackItem[];
+  seeds: number;
+  /** Run consecutive seeds from here instead of random ones. */
+  from?: number;
+  /** Variables set from outside, like an Injector. */
+  pins?: Record<string, string>;
+  /** The variable the results show first. */
+  output?: string;
+  /** Save the scenario under this name after it runs. */
+  save?: string;
+  /** Set it up without running. */
+  run?: boolean;
+}
 
 /** Tokens the last model step used, as the provider reported them. */
 export interface AiChatUsage {
@@ -1341,7 +1385,7 @@ export interface AiChatResult {
   message: string;
   proposals: AiChatProposal[];
   /** What the model looked at or tried, for the "worked on" lines. */
-  steps: Array<{ tool: string; note: string; ok: boolean }>;
+  steps: AiChatStep[];
   model: string;
   /** How this chat calls tools. */
   format?: "native" | "json";

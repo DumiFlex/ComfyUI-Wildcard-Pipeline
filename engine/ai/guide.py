@@ -14,7 +14,8 @@ Text grammar (the compilers check it and say what to fix):
 - $name reads a variable; $name.0 the first of a multi-pick; $name.AXIS the \
 rolled tag of an accepts group; $name.neg its negative words. $$ is a literal $.
 - {a|b|c} picks one each run; {2$$, $$a|b|c} picks 2 joined by ", "; \
-{1-3$$ and $$a|b|c} picks 1 to 3.
+{1-3$$ and $$a|b|c} picks 1 to 3; {2~$$, $$a|b|c} may pick the same \
+one twice.
 - @{Wildcard name} draws from another wildcard; @{Name:warm and not wet} only \
 from its options with those tags; @{Name!null} never its empty option.
 Where each works: wildcard options and negatives: picks and @{…}, no $. \
@@ -45,11 +46,26 @@ use "hold". A value rules need but the prompt shouldn't show → use "internal".
 - A value from outside (subject typed by the user, an LLM's text) → it's set \
 by a WP Context Injector row; read it like any variable. Per-checkpoint \
 differences → rules on $model_family / $model_variant (WP Model Info node). \
-WP Context Loop sets $iteration and $iteration_total.
+WP Context Loop sets $iteration and $iteration_total. To key a constraint on such \
+a variable, bundle a wildcard whose options are its values with "match \
+$var" and make that wildcard the constraint's source.
+- Grouping a big pack → sub-bundles (one level) inside one bundle, e.g. \
+Outfit and Scene sub-bundles in a Character bundle.
 """
 
 COHERENCE = """\
 Making prompts coherent:
+- Keep a wildcard to its one concept. A pose wildcard holds poses: no hair, \
+outfit, camera framing or body shape unless the user asks. Read the request's \
+flavour inside that concept (poses for "presenting" can include looking \
+back, hand on hip, bent over); the other concepts get their own wildcards.
+- Use the simplest feature that does the job: a constraint with an exception \
+or two before a derivation, tags and one matrix row before a rule per \
+option, an option's weight before a duplicate. A derivation is for text \
+that depends on picks, never a lookup table of value → value.
+- Reuse what the library has (search first) before creating; build only \
+what the user asked for, and say what else could help instead of adding it.
+- Size lists to the job: 8-30 options for a wildcard unless asked.
 - Pick the anchor first (setting, season, character class), then constrain \
 or derive the rest from it, so details agree with it.
 - Tag options by what rules need to test (season, formality, material), not \
@@ -59,6 +75,9 @@ target a fallback so it never comes out empty.
 - Weights for realism: common things weight 2-3, rare ones 0.5.
 - Match the model's style: Danbooru tags for Pony/Illustrious/SDXL anime, \
 short sentences for Flux and other natural-language models.
+- Every template gets a standing negative (lowres, watermark, bad anatomy, \
+… for the model's style) with $negatives where the used variables' \
+negatives go; when a pack or answer has none, say so once and offer it.
 - Negatives follow usage: put a negative on the option that invites it \
 ("strawberry blonde" → "fruit"), standing negatives (lowres, watermark) in \
 the template's negative with $negatives where the used ones go.

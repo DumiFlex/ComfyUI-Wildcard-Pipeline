@@ -31,6 +31,7 @@ from engine.ai import docs as ai_docs
 from engine.ai import guide as ai_guide
 from engine.ai import index as ai_index
 from engine.ai import library_vars
+from engine.ai import lint as ai_lint
 from engine.ai import patterns as ai_patterns
 from engine.ai import refs as ai_refs
 from engine.ai import safety as ai_safety
@@ -454,6 +455,8 @@ class Library(MoreTools, ManageTools):
         #: Items this answer's read tools looked at, in order: a name several
         #: items share links to the one the model read (`link_items`).
         self.touched: list[str] = []
+        #: The last run_test as card data (`chat_tools._test_card`), taken by the route.
+        self.last_card: dict[str, Any] | None = None
         #: Create cards from earlier answers the user hasn't applied, by pid:
         #: edits to them come back as a card that replaces them.
         self._earlier_ops: dict[str, dict[str, Any]] = {}
@@ -931,8 +934,48 @@ class Library(MoreTools, ManageTools):
             lines.append("In bundles: " + ", ".join(facts["in_bundles"]))
         return "\n".join(lines)
 
-    def variables(self, _args: dict[str, Any]) -> str:
+    def variables(self, args: dict[str, Any]) -> str:
+        var = _short(args.get("var"), 60).lstrip("$").split(".")[0]
+        if var:
+            # One variable: who sets it and who reads it ("what breaks if…").
+            writers = [r for r in self.modules.values() if var in self._writes(r)]
+            readers = self.readers(var)
+            if not writers and not readers:
+                return f"nothing sets or reads ${var}"
+            entry = library_vars.describe({var: self.catalog[var]}) if var in self.catalog \
+                else ""
+            lines = [entry] if entry else []
+            lines.append("Set by: " + (", ".join(self._chip(r) for r in writers[:12])
+                                       or "nothing in the library (an Injector or the "
+                                       "Model Info / Loop node may set it)"))
+            lines.append("Read by: " + (", ".join(self._chip(r) for r in readers[:20])
+                                        or "nothing"))
+            return "\n".join(lines)
         return library_vars.describe(self.catalog) or "the library sets no variables yet"
+
+    @staticmethod
+    def _writes(r: dict[str, Any]) -> set[str]:
+        p = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+        out = {p.get("var_binding"), p.get("output_var")}
+        out |= {v.get("name") for v in p.get("values") or [] if isinstance(v, dict)}
+        if r.get("type") == "derivation":
+            out |= set(library_vars.derivation_targets(p))
+        return {v for v in out if isinstance(v, str) and v}
+
+    def readers(self, var: str) -> list[dict[str, Any]]:
+        """Items that read ``$var``: conditions, $var in any text, templates."""
+        pat = re.compile(r"\$" + re.escape(var) + r"(?![A-Za-z0-9_])")
+        out = []
+        for r in [*self.modules.values(), *self.templates.values()]:
+            if r.get("_proposed"):
+                continue
+            text = json.dumps({k: r.get(k) for k in ("payload", "template_string",
+                                                      "negative_template")},
+                              ensure_ascii=False)
+            if pat.search(text) or (r.get("type") == "derivation" and re.search(
+                    r'"var": "' + re.escape(var) + r'(\.[^"]*)?"', text)):
+                out.append(r)
+        return out
 
     def docs_search(self, args: dict[str, Any]) -> str:
         return ai_docs.search(_short(args.get("query"), 200))
@@ -1176,10 +1219,41 @@ class Library(MoreTools, ManageTools):
                                         cp.get("target_wildcard_id"))):
                     tag_warnings.append(f"{self._chip(m)} may name the old tags; check "
                                         "its rules")
+        order = [i for i in range(len(rows)) if i not in gone]
+        for x in args.get("move") or []:
+            # Original numbers, like edit_rules: where read showed them.
+            n = _num(x.get("n"), len(rows)) if isinstance(x, dict) else None
+            to = _num(x.get("to"), len(rows)) if isinstance(x, dict) else None
+            if n is None or to is None or n - 1 not in order:
+                skipped.append({"text": f"move {x.get('n') if isinstance(x, dict) else x}",
+                                "reason": "no such option, or no place to move it to"})
+                continue
+            order.remove(n - 1)
+            order.insert(min(to - 1, len(order)), n - 1)
+            preview.append(f"Moved {self._show(rows[n - 1].get('value')) or '∅'} to "
+                           f"{min(to, len(order))}")
+        var_warnings: list[str] = []
+        if args.get("var"):
+            var = _short(args.get("var"), 60).lstrip("$")
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", var):
+                raise ValueError(f"${var} isn't a variable name (letters, digits, _)")
+            was = str(old.get("var_binding") or "")
+            if var != was:
+                payload["var_binding"] = var
+                preview.append(f"Sets ${var}" + (f" instead of ${was}" if was else ""))
+                clash = self.var_clash(var)
+                if clash:
+                    var_warnings.append(clash)
+                readers = [x for x in self.readers(was) if x.get("id") != r["id"]] if was else []
+                if readers:
+                    var_warnings.append(
+                        f"Still read as ${was} by " + ", ".join(
+                            self._chip(x) for x in readers[:6])
+                        + ": change them too (or they get nothing)")
         if not preview and not isinstance(args.get("null_weight"), (int, float)):
             raise ValueError("that changes nothing" + _skipped(skipped)
                              + (f" ({len(kept)} options are used by constraints)" if kept else ""))
-        payload["options"] = [o for i, o in enumerate(rows) if i not in gone]
+        payload["options"] = [rows[i] for i in order]
         null_w = args.get("null_weight")
         if isinstance(null_w, (int, float)) and not isinstance(null_w, bool):
             preview += self._null_weight(payload, null_w, refs)
@@ -1189,7 +1263,7 @@ class Library(MoreTools, ManageTools):
             payload["sub_categories"] = list(dict.fromkeys([*registry, *new_tags]))
         WildcardHandler.validate_payload(payload)
         warnings = [f"Kept {_short(v, 60)}: a constraint points at it" for v in kept[:8]]
-        warnings += tag_warnings[:4]
+        warnings += tag_warnings[:4] + var_warnings
         n = len(preview)
         return {
             "title": f"Change {n} option{'s' if n != 1 else ''} in {r.get('name')}",
@@ -1584,6 +1658,13 @@ class Library(MoreTools, ManageTools):
                 if len(deps) > 1:
                     proposal["needs"] = deps
         proposal["warnings"] = [*proposal.get("warnings", []), *self._broken_links(op)]
+        base = self._current(op["id"])[0] if op["op"] == "update" else None
+        if op["op"] in ("create", "update"):
+            body = op.get("body") or {}
+            item = {**(base or {}), **body}
+            if isinstance(body.get("payload"), dict) and base:
+                item["payload"] = {**(base.get("payload") or {}), **body["payload"]}
+            proposal["warnings"] += ai_lint.check(op, item, self.get, base)
         # Names of the items the card points at, for its view (a constraint's
         # source and target, a bundle's children), proposed ones included.
         named = {}
@@ -1621,7 +1702,14 @@ def proposal_note(tool: str, proposal: dict[str, Any]) -> str:
     if needs:
         head += (f". It needs card{'s' if len(needs) > 1 else ''} {', '.join(needs)} applied "
                  "first (its Apply all button does that)")
-    return head + ". Tell the user you proposed it and what to apply; don't say you made it."
+    head += ". Tell the user you proposed it and what to apply; don't say you made it."
+    warns = [w for w in proposal.get("warnings") or [] if isinstance(w, str)]
+    if warns:
+        # The card shows these too; the model reads them to fix its card.
+        head += ("\nThe card warns: " + " | ".join(_short(w, 240) for w in warns[:4])
+                 + "\nIf a warning is right, call the same tool again for this item "
+                 "(it replaces the card); if it's what the user asked for, say so.")
+    return head
 
 
 def _skip_notes(skipped: list[dict[str, str]]) -> list[str]:
@@ -1666,4 +1754,6 @@ def args_note(tool: str, args: dict[str, Any], lib: Library | None = None) -> st
         return "Looked for duplicates" + (f" among {kind}s" if kind else "")
     if tool == "more_tools":
         return "Looked up more tools"
+    if tool == "variables" and args.get("var"):
+        return f"Looked up ${_short(args.get('var'), 40).lstrip('$')}"
     return "Listed the library's variables"

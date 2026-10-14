@@ -10,7 +10,7 @@
  *
  * The parent owns the values; this component is dumb and emits patches.
  */
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import Card from "./ui/Card.vue";
 import Field from "./ui/Field.vue";
 import Input from "./ui/Input.vue";
@@ -139,6 +139,18 @@ function addTag() {
 function removeTag(t: string) {
   emit("update:tags", props.tags.filter((x) => x !== t));
 }
+
+const describer = ref<InstanceType<typeof AiDescribePanel> | null>(null);
+
+/** The chat's `use_panel` "describe": open Describe and ask there. */
+async function describe(text: string): Promise<string> {
+  if (!aiAvailable.value) return "couldn't: the assistant is off for this item";
+  aiOpen.value = true;
+  await nextTick();
+  return describer.value ? describer.value.run(text) : "couldn't: Describe didn't open";
+}
+
+defineExpose({ describe });
 </script>
 
 <template>
@@ -155,6 +167,7 @@ function removeTag(t: string) {
     </template>
     <AiDescribePanel
       v-if="aiOpen && aiAvailable && aiKind && aiPayload"
+      ref="describer"
       :kind="aiKind"
       :name="name"
       :description="description"

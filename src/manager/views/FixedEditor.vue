@@ -15,6 +15,7 @@ import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import SendToTestRunner from "../components/SendToTestRunner.vue";
 import IdentityCard from "../components/IdentityCard.vue";
+import { usePanelAction, viaPanel } from "../composables/usePanelAction";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
@@ -204,6 +205,10 @@ const fillFromChat = registerOpenEditor({
     setPayload: (p: Record<string, unknown>) => { if (Array.isArray(p.values)) loadPayload(p); },
   }),
 });
+// The chat's `use_panel`: Describe, or ask the Draft with AI panel.
+const identityCard = ref<InstanceType<typeof IdentityCard> | null>(null);
+const aiPanelRef = ref<InstanceType<typeof AiTextPanel> | null>(null);
+usePanelAction({ id: () => props.id, identity: identityCard, panels: { draft: viaPanel(aiOpen, aiPanelRef) } });
 /** The chat's draft this new item was opened with (Save creates it at the
  *  id the card reserved and marks the card applied). */
 let chatDraft: StagedDraft | null = null;
@@ -605,6 +610,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
       >Delete</Button>
     </template>
     <IdentityCard
+      ref="identityCard"
       ai-kind="fixed_values"
       :ai-payload="() => ({ values })"
       :name="name"
@@ -662,6 +668,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
       <template #subheader>
       <div v-if="bulkAddOpen || (aiOpen && ai.config.value?.enabled) || (bulkActive && bulkCount > 0)" class="wpc-bulk-controls">
         <AiTextPanel
+          ref="aiPanelRef"
           v-if="aiOpen && ai.config.value?.enabled"
           kind="fixed_values"
           :item="{ id: props.id, name, description, tags, payload: { values: aiValues } }"

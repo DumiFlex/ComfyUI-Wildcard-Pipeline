@@ -19,6 +19,7 @@ import { useRouter, useRoute } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import SendToTestRunner from "../components/SendToTestRunner.vue";
 import IdentityCard from "../components/IdentityCard.vue";
+import { usePanelAction } from "../composables/usePanelAction";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
@@ -277,6 +278,30 @@ registerAiAction("draft_options", async (args) => {
   if (!aiPanel.value) return "couldn't: the AI panel didn't open";
   return aiPanel.value.draft(String(args.instruction ?? ""), Number(args.count) || 10);
 }, (args) => !!props.id && args.id === props.id);
+
+// The chat's `use_panel`: Describe, or one of the AI panel's tabs (Add drafts
+// new options; the edits work on the selected options, or all of them).
+const identityCard = ref<InstanceType<typeof IdentityCard> | null>(null);
+async function viaEdit(action: AiWildcardEditAction, text: string): Promise<string> {
+  aiDraftOpen.value = true;
+  await nextTick();
+  return aiPanel.value ? aiPanel.value.edit(action, text) : "couldn't: the AI panel didn't open";
+}
+usePanelAction({
+  id: () => props.id,
+  identity: identityCard,
+  panels: {
+    add: async (text) => {
+      aiDraftOpen.value = true;
+      await nextTick();
+      return aiPanel.value ? aiPanel.value.draft(text, 10) : "couldn't: the AI panel didn't open";
+    },
+    remove: (text) => viaEdit("remove", text),
+    rewrite: (text) => viaEdit("rewrite", text),
+    retag: (text) => viaEdit("retag", text),
+    reweight: (text) => viaEdit("reweight", text),
+  },
+});
 
 const draft = useEditorDraft({
   kind: "wildcard",
@@ -2118,6 +2143,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
     </template>
     <div id="editor-section-identity">
       <IdentityCard
+        ref="identityCard"
         ai-kind="wildcard"
         :ai-payload="() => ({ var_binding: varBinding, sub_categories: subCategories, options })"
         :name="name"

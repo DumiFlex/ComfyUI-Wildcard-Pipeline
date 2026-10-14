@@ -222,16 +222,42 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           set their negatives, pick the fallback, change how often the empty option comes up and
           group tags,</li>
         <li>create or change fixed values, a combine or a prompt template,</li>
-        <li>create a derivation, add rules, or replace and remove rules by number,</li>
-        <li>create a constraint between two wildcards, or change its rules and its reach,</li>
+        <li>reorder a wildcard's options or change the variable it sets (it warns about items
+          still reading the old name), rename a fixed value, or change a combine's variable,</li>
+        <li>create a derivation, add rules, or replace, move and remove rules by number; a rule's
+          tests can be joined with AND / OR, nested in groups, and use "does not contain" / "does
+          not match",</li>
+        <li>create a constraint between two wildcards, or change its rules, its reach, or the
+          wildcard on either side (rules the new wildcard can't match are dropped),</li>
         <li>create a bundle in the right running order with per-use settings (pick 2-3, a tag
-          filter, never empty, hold for a whole Loop run, internal), or add, remove and change its
-          items,</li>
-        <li>change an item's description, tags, category or rating,</li>
+          filter, never empty, hold for a whole Loop run, internal, only some options, per-use
+          weights, a pinned option, a locked seed, rules or branches off, a constraint's reach),
+          group a pack into sub-bundles (one level deep), or add, remove, switch off and change
+          its items,</li>
+        <li>change an item's description, tags, category or rating, find duplicates, and tell
+          you what sets and what reads a variable before you rename it,</li>
         <li>hand a whole new pack to the Pack builder: <b>Plan it</b> on the card opens the Pack
           builder with the pack described and starts the plan (a plan already there is kept and
           the description waits in its box).</li>
       </ul>
+      <p>
+        The assistant only ever proposes: until you apply a card, the item doesn't exist, and the
+        assistant says "I've proposed" rather than "I made". A card for something new already
+        carries the id the item will get, so cards that point at it (a constraint between two new
+        wildcards, a bundle of new modules) are linked from the start. A card that needs others
+        says so and its <b>Apply all</b> button applies them in order. <b>Open in editor</b> on a
+        create card fills the new-item editor with it, so you can look and change things first;
+        Save creates it at the card's id and marks the card applied. A constraint opened this way
+        keeps its rules for wildcards that are still cards, and asks you to apply those first.
+      </p>
+      <p>
+        Every card is checked before you see it. Besides what it left out, a card warns when a
+        wildcard mixes concepts (a pose list that also sets the camera or body shape), lists an
+        option twice, has weights so far apart that some options never come up, when a
+        derivation is a value-by-value lookup a constraint would do more simply, and when a
+        constraint rules options out of a wildcard that has no fallback. The model reads the
+        same warnings and replaces its card when they're right.
+      </p>
       <p>
         It can <b>show you around</b>. It opens an item's editor, a docs page or a manager page
         (a Settings section, the Test Runner) itself, reads what the page offers, and points at
@@ -241,10 +267,13 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       </p>
       <p>
         It can also <b>hand work to the page's own AI features</b>, so you review the result
-        where you would anyway: it opens a wildcard's AI panel and drafts options there (you tick
-        the ones to keep and press Add), opens <b>Organize with AI</b> on the rows it means, or
-        runs a stack in the Test Runner where you see the results. The chat is told what came
-        back. A Test Runner scenario with unsaved changes is never replaced, and an editor with
+        where you would anyway: it opens an item and asks one of its AI panels as if you typed
+        it (<b>Describe</b> for the name, description and tags, a wildcard's Add, Remove,
+        Rewrite, Retag and Weights tabs, <b>Draft with AI</b> in the other editors), opens
+        <b>Organize with AI</b> on the rows it means, or sets up the Test Runner (the stack,
+        how many seeds, a fixed first seed, pinned values, the variable to show) and runs it,
+        or saves it as a scenario. Nothing is applied from a panel until you apply it there.
+        The chat is told what came back. A Test Runner scenario with unsaved changes is never replaced, and an editor with
         unsaved changes asks before the chat moves you elsewhere.
       </p>
       <p>
@@ -252,7 +281,10 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         your library, with pinned values and a template for sample prompts. It reads each
         variable's most common values, options that never came up and warnings, and with its own
         proposals swapped in it reports what moves ("wool coat 40% → 0%"). Ask it to check a
-        change and it tries it first. Running changes nothing in your library.
+        change and it tries it first. Running changes nothing in your library. Each run shows
+        in the chat as a card: the top values of each variable as bars (before and after, when
+        it compared), options never picked, warnings and sample prompts, with <b>Open in Test
+        Runner</b> to run the same stack there.
       </p>
       <p>
         A change to the item open in your editor goes into the editor, and you keep it with

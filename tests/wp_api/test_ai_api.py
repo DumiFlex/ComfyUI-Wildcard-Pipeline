@@ -833,6 +833,10 @@ async def test_chat_sees_templates_and_runs_stacks(wp_client, fake_llm):
     body = await resp.json()
     assert [s["tool"] for s in body["steps"]] == ["run_test", "edit_template"]
     assert body["steps"][0]["note"] == "Ran Class, Weapon on 20 seeds"
+    card = body["steps"][0]["card"]
+    assert card["kind"] == "test" and card["runs"] == 20 and len(card["stack"]) == 2
+    assert {v["name"] for v in card["vars"]} >= {"class", "weapon"}
+    assert card["prompts"] and "card" not in body["steps"][1]
     [prop] = body["proposals"]
     assert prop["op"]["kind"] == "template" and prop["op"]["op"] == "update"
     assert prop["op"]["body"]["negative_template"] == "$negatives, lowres"

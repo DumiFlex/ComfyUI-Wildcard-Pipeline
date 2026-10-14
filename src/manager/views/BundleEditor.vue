@@ -119,6 +119,7 @@ import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import SendToTestRunner from "../components/SendToTestRunner.vue";
 import IdentityCard from "../components/IdentityCard.vue";
+import { usePanelAction } from "../composables/usePanelAction";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
@@ -350,6 +351,9 @@ const fillFromChat = registerOpenEditor({
   id: props.id, type: "bundle", dirty: () => dirty.value,
   name, description, tags, categoryId, contentRating,
 });
+// The chat's `use_panel`: a bundle has only Describe.
+const identityCard = ref<InstanceType<typeof IdentityCard> | null>(null);
+usePanelAction({ id: () => props.id, identity: identityCard, panels: {} });
 /** The chat's draft this new bundle was opened with (Save creates it at the
  *  id the card reserved, if any, and marks the card applied). */
 let chatDraft: StagedDraft | null = null;
@@ -1098,6 +1102,7 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
     <template v-else>
       <div id="editor-section-identity">
         <IdentityCard
+          ref="identityCard"
           ai-kind="bundle"
           :ai-payload="() => children"
           :name="name"

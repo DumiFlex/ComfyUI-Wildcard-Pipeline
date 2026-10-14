@@ -17,6 +17,7 @@ import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import SendToTestRunner from "../components/SendToTestRunner.vue";
 import IdentityCard from "../components/IdentityCard.vue";
+import { usePanelAction, viaPanel } from "../composables/usePanelAction";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
@@ -225,6 +226,18 @@ const fillFromChat = registerOpenEditor({
     setPayload: (p: Record<string, unknown>) => loadPayload(p as Partial<ConstraintPayload>),
   }),
 });
+// The chat's `use_panel`: Describe, or ask the Draft with AI panel.
+const identityCard = ref<InstanceType<typeof IdentityCard> | null>(null);
+const aiPanelRef = ref<InstanceType<typeof AiConstraintPanel> | null>(null);
+usePanelAction({ id: () => props.id, identity: identityCard, panels: {
+  draft: async (text) => {
+    if (!sourceWildcardId.value || !targetWildcardId.value) {
+      return "couldn't: pick the source and target wildcards first";
+    }
+    if (refMissing.value) return "couldn't: the source or target wildcard is missing; fix it first";
+    return viaPanel(aiOpen, aiPanelRef)(text);
+  },
+} });
 /** The chat's draft this new constraint was opened with (Save creates it at
  *  the id the card reserved and marks the card applied). */
 let chatDraft: StagedDraft | null = null;
@@ -1347,6 +1360,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
     </template>
     <div id="editor-section-identity">
       <IdentityCard
+        ref="identityCard"
         ai-kind="constraint"
         :ai-payload="() => ({ source_wildcard_id: sourceWildcardId, target_wildcard_id: targetWildcardId, source_wildcard_name: resolvedSourceName, target_wildcard_name: resolvedTargetName, matrix, exceptions })"
         :name="name"
@@ -1545,6 +1559,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
         </template>
       </template>
       <AiConstraintPanel
+        ref="aiPanelRef"
         v-if="aiOpen && ai.config.value?.enabled && sourceWildcardId && targetWildcardId && !refMissing"
         :source-wildcard-id="sourceWildcardId"
         :target-wildcard-id="targetWildcardId"

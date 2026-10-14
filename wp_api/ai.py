@@ -1485,8 +1485,13 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 needs_reply = True
                 result(f"{tool} {_json.dumps(args, ensure_ascii=False, sort_keys=True)[:200]}:\n"
                        + ai_budget.clip(out, prof["result_chars"]) + extra)
-                steps.append({"tool": tool, "note": ai_chat.args_note(tool, args, lib),
-                              "ok": True})
+                step_ = {"tool": tool, "note": ai_chat.args_note(tool, args, lib), "ok": True}
+                card = getattr(lib, "last_card", None) if tool == "run_test" else None
+                if card:
+                    # The run as a card the user can open in the Test Runner.
+                    step_["card"] = card
+                    lib.last_card = None
+                steps.append(step_)
             else:
                 # Hidden characters can't ride into the library on a card.
                 out = ai_safety.clean(out)

@@ -5,9 +5,33 @@
  * IF / ELIF / ELSE per rule, fixed values as a table, a combine or template
  * as its text. Read-only; "Open in editor" is where it gets changed.
  */
-import type { CardView } from "../../composables/aiCards";
+import { computed } from "vue";
+import type { CardView, ConstraintRowView } from "../../composables/aiCards";
 
-defineProps<{ view: CardView }>();
+const props = defineProps<{ view: CardView }>();
+
+/** Tag rules as a grid (source tags down, target tags across) once there
+ *  are two or more of each, the way the constraint editor's matrix reads. */
+const grid = computed(() => {
+  const v = props.view;
+  if (v.kind !== "constraint") return null;
+  const cells = v.rows.filter((r) => r.byTag);
+  const from = [...new Set(cells.map((r) => r.from))];
+  const to = [...new Set(cells.map((r) => r.to))];
+  if (from.length < 2 || to.length < 2) return null;
+  const at = (f: string, t: string): ConstraintRowView | undefined => cells.find((r) => r.from === f && r.to === t);
+  return { from, to, at };
+});
+const pairs = computed(() => (props.view.kind === "constraint"
+  ? props.view.rows.filter((r) => !grid.value || !r.byTag) : []));
+
+function cellText(r: ConstraintRowView | undefined): string {
+  if (!r) return "·";
+  if (r.effect === "exclude") return "never";
+  if (r.effect === "only") return "only";
+  if ((r.effect === "boost" || r.effect === "reduce") && r.factor !== null) return `×${r.factor}`;
+  return r.effect;
+}
 
 const EFFECTS: Record<string, string> = {
   exclude: "never", reduce: "less likely", boost: "more likely", only: "only these", allow: "no change",
@@ -25,9 +49,25 @@ function effectText(effect: string, factor: number | null): string {
       <p class="wp-ai-card-view__line">
         When <b>{{ view.source }}</b> picks…, <b>{{ view.target }}</b>{{ view.reach ? ` (${view.reach})` : "" }}:
       </p>
-      <table class="wp-ai-card-view__table">
+      <table v-if="grid" class="wp-ai-card-view__grid" data-test="ai-card-matrix">
+        <thead>
+          <tr>
+            <th />
+            <th v-for="t in grid.to" :key="t" scope="col" class="wp-ai-card-view__tag">{{ t }}</th>
+          </tr>
+        </thead>
         <tbody>
-          <tr v-for="(r, i) in view.rows" :key="i">
+          <tr v-for="f in grid.from" :key="f">
+            <th scope="row" class="wp-ai-card-view__tag">{{ f }}</th>
+            <td v-for="t in grid.to" :key="t" :data-effect="grid.at(f, t)?.effect ?? ''">
+              {{ cellText(grid.at(f, t)) }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <table v-if="pairs.length" class="wp-ai-card-view__table">
+        <tbody>
+          <tr v-for="(r, i) in pairs" :key="i">
             <td><span :class="r.byTag ? 'wp-ai-card-view__tag' : undefined">{{ r.from }}</span></td>
             <td aria-hidden="true">→</td>
             <td><span :class="r.byTag ? 'wp-ai-card-view__tag' : undefined">{{ r.to }}</span></td>
@@ -73,6 +113,13 @@ function effectText(effect: string, factor: number | null): string {
 <style scoped>
 .wp-ai-card-view { font-size: 12.5px; display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 6px; background: var(--wp-bg-sunken, rgb(0 0 0 / 15%)); }
 .wp-ai-card-view__line { margin: 0; }
+.wp-ai-card-view__grid { border-collapse: collapse; font-size: 11.5px; }
+.wp-ai-card-view__grid th, .wp-ai-card-view__grid td { padding: 2px 6px; border: 1px solid var(--wp-border); text-align: center; font-weight: 400; }
+.wp-ai-card-view__grid th[scope="row"] { text-align: left; }
+.wp-ai-card-view__grid td { color: var(--wp-text-dim); }
+.wp-ai-card-view__grid td[data-effect="exclude"] { color: var(--wp-danger, #e5484d); }
+.wp-ai-card-view__grid td[data-effect="boost"], .wp-ai-card-view__grid td[data-effect="only"] { color: var(--wp-success, #46a758); }
+.wp-ai-card-view__grid td[data-effect="reduce"] { color: var(--wp-warn); }
 .wp-ai-card-view__table { border-collapse: collapse; width: 100%; }
 .wp-ai-card-view__table td { padding: 2px 6px 2px 0; vertical-align: top; overflow-wrap: anywhere; }
 .wp-ai-card-view__tag { color: var(--wp-accent-400, var(--wp-accent-500)); }

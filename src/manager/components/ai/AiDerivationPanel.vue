@@ -46,6 +46,8 @@ const convo = useAiConversation<AiDerivationDraftResult, { rules: DerivationRule
     : "The model didn't write any rules.",
 });
 const { instruction, loading, error, result } = convo;
+/** The chat's `use_panel` (see useAiConversation `chat`). */
+defineExpose({ run: (text: string) => convo.chat(text) });
 watch(result, () => { unticked.value = new Set(); });
 
 const pending = computed(() => loading.value || (result.value?.rules.length ?? 0) > 0);

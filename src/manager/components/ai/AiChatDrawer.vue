@@ -30,13 +30,14 @@ import Select, { type SelectOption } from "../ui/Select.vue";
 import { api } from "../../api/client";
 import AiMessage from "./AiMessage.vue";
 import AiCardView from "./AiCardView.vue";
+import AiTestCard from "./AiTestCard.vue";
 import AiPointer from "./AiPointer.vue";
 import AiChatList from "./AiChatList.vue";
 import { useAiChat, type ChatAssistantEntry, type SearchApproval } from "../../composables/useAiChat";
 import { clearPointer, EDIT_ROUTES } from "../../composables/useAiActions";
 import { useAiConfig } from "../../composables/useAiConfig";
 import { useAiChatWidth } from "../../composables/useAiChatWidth";
-import type { AiChatPage, AiChatProposal, AiPendingCall } from "../../api/types";
+import type { AiChatPage, AiChatProposal, AiChatStep, AiPendingCall, AiTestCard as TestCard } from "../../api/types";
 import { currentPageNote, openEditor } from "../../composables/useOpenEditor";
 import { usePackBuilder } from "../../composables/usePackBuilder";
 import { useCategoryStore } from "../../stores/categoryStore";
@@ -62,6 +63,18 @@ const EDITOR_SUGGESTIONS = [
 ];
 
 const chat = useAiChat();
+
+/** The run_test steps' cards, in order. */
+function testCards(steps: AiChatStep[]): TestCard[] {
+  return steps.flatMap((x) => (x.card ? [x.card] : []));
+}
+
+const testError = ref("");
+async function openTest(card: TestCard): Promise<void> {
+  testError.value = "";
+  const out = await chat.openTest(card);
+  if (out.startsWith("couldn't")) testError.value = `Couldn't open it: ${out.slice(10)}`;
+}
 const { config, save: saveConfig } = useAiConfig();
 const route = useRoute();
 const router = useRouter();
@@ -632,6 +645,13 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
               {{ s.note }}
             </li>
           </ul>
+          <AiTestCard
+            v-for="(card, j) in testCards(entry.result.steps)"
+            :key="`t${j}`"
+            :card="card"
+            @open="openTest(card)"
+          />
+          <p v-if="testError" class="wp-ai-chat__warning" role="status">{{ testError }}</p>
           <AiMessage :text="entry.result.message" :refs="entry.result.refs" />
 
           <article
