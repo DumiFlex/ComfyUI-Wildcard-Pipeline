@@ -38,7 +38,7 @@ const item = (key: string, kind: AiPackItem["kind"], name: string, extra: Partia
   source: "", target: "", use: "", library_id: "", library_type: "", ...extra,
 });
 
-const SETTINGS = { library: "reuse", negatives: "auto", structure: "sections", style: "auto", rating: "auto", count: 0, run: "single", frames: 4, loras: "none", model: "any", inputs: "auto" } as const;
+const SETTINGS = { library: "reuse", negatives: "auto", structure: "sections", style: "auto", rating: "auto", count: 0, model: "any" } as const;
 
 function plan(round: number): AiPackPlanResult {
   return {
@@ -107,6 +107,21 @@ describe("PackBuilder v2", () => {
     if (!keepSearch) await w.get('[data-test="pack-research-skip"]').trigger("click");
     return w;
   }
+
+  it("shows how the plan runs and lets the user change it by hand", async () => {
+    const w = await mountIt();
+    const pb = usePackBuilder();
+    const mode = w.findAllComponents({ name: "Select" }).find((c) => c.attributes("data-test") === "pack-run-mode")!;
+    expect(mode.props("modelValue")).toBe("single");
+    expect(w.find('[data-test="pack-run-frames"]').exists()).toBe(false);
+    mode.vm.$emit("update:modelValue", "story");
+    await flushPromises();
+    expect(pb.draft.value?.run).toEqual({ mode: "story", frames: 4 });
+    const frames = w.get('[data-test="pack-run-frames"] input, input[data-test="pack-run-frames"]');
+    await frames.setValue("30");
+    expect(pb.draft.value?.run).toEqual({ mode: "story", frames: 12 });
+    expect(pb.edited.value).toBe(true);
+  });
 
   it("takes several choices, typed answers and 'decide for me', then asks new questions only", async () => {
     const w = await mountIt();

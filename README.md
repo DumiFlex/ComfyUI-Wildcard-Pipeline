@@ -149,8 +149,9 @@ Open it from the ComfyUI sidebar. It's where your modules live between workflows
   connect with AI** has the chat tag the new lists, link them with constraints and
   bundle them. The assistant knows how the nodes work (the Loop, Injector,
   Model Info) and, while their autocomplete is on, your Danbooru tag list,
-  LoRAs and embeddings; packs can be stories over a Loop, sweep sheets,
-  LoRA-ready or per model family. Optional web search, page reading and a
+  LoRAs and embeddings; the pack builder reads stories over a Loop,
+  sweep sheets and LoRA inputs from your description, and can adapt to the
+  model family. Optional web search, page reading and a
   Danbooru tag lookup each ask before anything leaves your PC. If an
   answer is close, type a follow-up and press **Refine** to revise it instead of
   starting over. You review every change first, and nothing is saved until you

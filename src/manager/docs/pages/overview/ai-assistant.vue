@@ -553,7 +553,8 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           you can say "the skirt in image 2".</li>
         <li><b>Settings.</b> <b>Next: pack settings</b> opens the pack settings, each with a line
           saying what the chosen option does. They are kept in this browser, so next time
-          <b>Plan it</b> is the only click needed:
+          <b>Plan it</b> is the only click needed. They are preferences that hold for any pack;
+          what a pack is about (its subject, LoRAs, a story) comes from your description:
           <DocKeyList
             :items="[
               { term: 'Your library', desc: 'Reuse what fits (wildcards and fixed values you already have, marked yours), New, in its style (built fresh but written like your library), or Everything new.' },
@@ -562,10 +563,7 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
               { term: 'Written as', desc: 'Tags or Natural phrases, or let the planner decide from your request and library.' },
               { term: 'Rating', desc: 'Safe or NSFW, or let the planner decide.' },
               { term: 'Options per wildcard', desc: 'How many options each wildcard gets; Auto lets the planner size each one.' },
-              { term: 'Run style', desc: 'Single images; Story over a Loop (a WP Context Loop plays the frames in order, a story beat per frame from $iteration, with the character and outfit held; Story frames sets how many); or Sweep sheet (2 or 3 short wildcards made as Loop sweep axes, the rest held).' },
-              { term: 'LoRAs', desc: 'None; Style LoRA (an input $style_lora with the <lora:…> tag and its trigger words, read first); Character LoRA (a random character as usual, plus an input $character_lora that replaces it when you wire one in); or both.' },
               { term: 'Model', desc: 'Any model, or Per model family: quality and negative tags per model (Pony score tags, Illustrious / NoobAI tags) chosen from $model_variant, set by a WP Model Info node.' },
-              { term: 'Subject', desc: 'Planner decides, or I give it: an input $subject you wire from a WP Context Injector, with no subject wildcard.' },
             ]"
           />
         </li>
@@ -578,7 +576,16 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           assumed</b>, each one changeable. Click an item to edit it by hand (name, variable,
           section, tags, what it holds, per-use settings), ask the AI to change just that item,
           remove it, or <b>Add an item</b> (described for the AI, or blank). Your edits are kept
-          when the plan updates. <b>Settings and images</b> under <b>Change the plan</b> changes the
+          when the plan updates. The planner also reads from your description how the pack runs
+          and what it takes from outside, and asks when it can't tell. <b>Runs as</b> under the
+          title shows Single images, <b>Story over a Loop</b> (a WP Context Loop plays the frames
+          in order, a story beat per frame from <code>$iteration</code>, with the character and
+          outfit held; change the number of frames there) or <b>Sweep sheet</b> (2 or 3 short
+          wildcards as Loop sweep axes, the rest held), and you can change it by hand. A subject
+          you give it ("my OC") or a LoRA you name (a character, an outfit, a style, any kind)
+          becomes an input you wire from a WP Context Injector; a LoRA that stands in for a
+          random pick (a character LoRA for the rolled character) gets a rule that swaps it in
+          when it is set, so left empty the random pick stays. <b>Settings and images</b> under <b>Change the plan</b> changes the
           settings and images for the next update, which reworks the plan to follow them. Images
           go with the first plan and again only when you add or remove one, when your update
           mentions them ("like the photo"), or when you tick <b>Show the images again</b>; each
@@ -601,8 +608,8 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         <li><b>Plan review.</b> The plan is checked as you edit it for what would break: a
           template or rule that reads a variable nothing sets, a constraint keyed on a tag
           neither wildcard lists, two constraints that loop, wildcards that ignore the pack's
-          anchor, picks that nothing links, and what the settings need (a story without a beat
-          from <code>$iteration</code>, a LoRA setting without its input). Variables your canvas
+          anchor, picks that nothing links, a story without a beat from <code>$iteration</code>, a LoRA
+          input that nothing reads or that doesn't swap in for the pick it stands for. Variables your canvas
           or the run sets (<code>$iteration</code>, <code>$model_variant</code>, Injector rows)
           count as set. An anchor nothing sets is a finding too, with <b>Use $x</b> when the pack
           sets something close, else <b>Clear it</b>. Each finding has <b>Apply</b> (a fix you can

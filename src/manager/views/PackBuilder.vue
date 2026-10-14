@@ -17,6 +17,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
+import Input from "../components/ui/Input.vue";
+import Select from "../components/ui/Select.vue";
 import AiImagePicker from "../components/ai/AiImagePicker.vue";
 import AiWorking from "../components/ai/AiWorking.vue";
 import PackFindings from "../components/pack/PackFindings.vue";
@@ -32,7 +34,7 @@ import { useToast } from "../composables/useToast";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import { useTemplateStore } from "../stores/templateStore";
-import type { AiPackItem } from "../api/types";
+import type { AiPackItem, AiPackRun } from "../api/types";
 import LoadingMark from "@/components/shared/LoadingMark.vue";
 
 const pb = usePackBuilder();
@@ -264,6 +266,23 @@ const shape = computed(() => {
   ].filter(Boolean).join(" · ");
 });
 const showSample = ref(!!pb.sample.value);
+
+// How the pack runs is read from the request (or asked); this lets the
+// user correct it by hand.
+const RUN_OPTIONS = [
+  { value: "single", label: "Single images", title: "Every run is its own random prompt." },
+  { value: "story", label: "Story over a Loop", title: "A WP Context Loop plays the frames in order: a story beat per frame from $iteration, the cast held." },
+  { value: "sweep", label: "Sweep sheet", title: "A few short wildcards as Loop sweep axes; everything else held." },
+];
+const run = computed<AiPackRun>(() => draft.value?.run ?? { mode: "single", frames: 0 });
+function setRunMode(mode: AiPackRun["mode"]): void {
+  pb.editPlan({ run: { mode, frames: mode === "story" ? run.value.frames || 4 : 0 } });
+}
+function setRunFrames(v: string | number): void {
+  const n = Math.round(Number(v));
+  // The server keeps it within 2–12.
+  pb.editPlan({ run: { mode: "story", frames: Number.isFinite(n) && n > 0 ? Math.max(2, Math.min(12, n)) : 4 } });
+}
 
 function toggle(key: string): void {
   const next = new Set(open.value);
@@ -587,6 +606,34 @@ function stopExtending(): void {
         </p>
         <p v-if="draft?.summary" class="wp-pack__dim">{{ draft.summary }}</p>
         <p v-if="shape" class="wp-pack__shape" data-test="pack-shape">{{ shape }}</p>
+        <div v-if="draft" class="wp-pack__run" data-test="pack-run">
+          <span class="wp-pack__dim">Runs as</span>
+          <Select
+            size="sm"
+            :model-value="run.mode"
+            :options="RUN_OPTIONS"
+            :filterable="false"
+            :disabled="convo.loading.value"
+            aria-label="How the pack runs"
+            data-test="pack-run-mode"
+            @update:model-value="(v) => setRunMode(v as AiPackRun['mode'])"
+          />
+          <template v-if="run.mode === 'story'">
+            <Input
+              type="number"
+              size="sm"
+              class="wp-pack__run-frames"
+              :model-value="run.frames"
+              :min="2"
+              :max="12"
+              :disabled="convo.loading.value"
+              aria-label="Story frames"
+              data-test="pack-run-frames"
+              @update:model-value="setRunFrames"
+            />
+            <span class="wp-pack__dim">frames</span>
+          </template>
+        </div>
         <AiWorking v-if="convo.loading.value || pb.searching.value" class="wp-pack__plan-working" :label="pb.searching.value ? 'Searching the web' : 'Updating the plan'" :size="34" data-test="pack-working" />
         <p v-if="pb.awaitingSearch.value" class="wp-pack__waiting" data-test="pack-waiting-search"><i class="pi pi-globe" aria-hidden="true" /> Waiting for your answer on the web search; this plan may change.</p>
         <p v-if="changedCount || pb.dropped.value.length" class="wp-pack__changed" data-test="pack-changed">
@@ -871,6 +918,8 @@ function stopExtending(): void {
   color: var(--wp-kind-wildcard); background: var(--wp-kind-wildcard-bg);
 }
 .wp-pack__kind[data-kind="fixed_values"] { color: var(--wp-kind-fixed); background: var(--wp-kind-fixed-bg); }
+.wp-pack__run { display: flex; align-items: center; gap: 8px; margin: 2px 0 8px; font-size: 12.5px; }
+.wp-pack__run-frames { width: 72px; }
 .wp-pack__inputs { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 8px; }
 .wp-pack__inputs p { margin: 0; font-size: 12px; }
 .wp-pack__inputs ul { margin: 0; padding-left: 18px; font-size: 12.5px; display: flex; flex-direction: column; gap: 3px; }

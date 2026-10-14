@@ -10,20 +10,17 @@ function last(e: unknown[][] | undefined): AiPackSettings {
 }
 
 describe("PackSettings", () => {
-  it("offers the run style, LoRA, model and subject settings, and frames for a story", async () => {
+  it("holds only preferences that apply to any pack", async () => {
     const w = mount(PackSettings, { props: { modelValue: { ...DEFAULT_SETTINGS }, detailed: true } });
-    const sel = (key: string) => w.findAllComponents(Select).find((c) => c.attributes("data-test") === `pack-setting-${key}`)!;
-    for (const key of ["run", "loras", "model", "inputs"]) expect(sel(key).exists()).toBe(true);
-    expect((sel("loras").props("options") as Array<{ value: unknown }>).map((o) => o.value))
-      .toEqual(["none", "style", "character", "both"]);
-    expect(w.find('[data-test="pack-setting-frames"]').exists()).toBe(false);
-    sel("run").vm.$emit("update:modelValue", "story");
-    const story = last(w.emitted("update:modelValue"));
-    expect(story.run).toBe("story");
-    await w.setProps({ modelValue: story });
-    expect(w.get('[data-test="pack-setting-hint-run"]').text()).toContain("story beat per frame");
-    const frames = w.get('[data-test="pack-setting-frames"] input, input[data-test="pack-setting-frames"]');
-    await frames.setValue("30");
-    expect((last(w.emitted("update:modelValue"))).frames).toBe(12);
+    const keys = w.findAllComponents(Select).map((c) => c.attributes("data-test"));
+    expect(keys).toEqual(["library", "negatives", "structure", "style", "rating", "model"]
+      .map((k) => `pack-setting-${k}`));
+    // What a pack is about (subject, LoRAs, a story) is the planner's, not a setting.
+    for (const k of ["run", "loras", "inputs", "frames"]) {
+      expect(w.find(`[data-test="pack-setting-${k}"]`).exists()).toBe(false);
+    }
+    const model = w.findAllComponents(Select).find((c) => c.attributes("data-test") === "pack-setting-model")!;
+    model.vm.$emit("update:modelValue", "family");
+    expect(last(w.emitted("update:modelValue")).model).toBe("family");
   });
 });
