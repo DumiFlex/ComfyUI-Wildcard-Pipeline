@@ -576,6 +576,7 @@ def compile_plan(
         for x in raw_items:
             if isinstance(x.get("about"), str):
                 x["about"] = pat.sub("", x["about"])
+    raw_items = _merge_splits(raw_items, warnings)
     known_sides = {_var(x.get("var")): _clean(x.get("name"), MAX_NAME)
                    for x in raw_items if _var(x.get("var"))}
     known_sides.update({i["var"]: i["var"] for i in inputs})
@@ -1507,25 +1508,115 @@ def _settings_findings(plan: dict[str, Any], add: Any) -> None:
                 "pack's own quality words.")})
 
 
-def _split_sets(wild: list[dict[str, Any]]) -> list[tuple[str, list[dict[str, Any]]]]:
-    """Wildcards that are one subject split per case ($spring_top,
-    $summer_top, $winter_top): three or more sharing a role word, whose
-    case words are tags another wildcard carries (the season's), so it isn't
-    $hair_color next to $eye_color."""
-    groups: dict[str, list[dict[str, Any]]] = {}
+def _split_groups(wild: list[dict[str, Any]],
+                  others: list[dict[str, Any]]) -> list[tuple[str, dict[str, dict[str, Any]]]]:
+    """``[(role, {case: item})]`` for wildcards that split one subject per
+    case ($winter_tops, $summer_tops): a role whose cases also split another
+    role (a grid: tops and shoes per season), or three or more cases that
+    another item names (the season wildcard's tags or words)."""
+    by_role: dict[str, dict[str, dict[str, Any]]] = {}
     for w in wild:
-        parts = w["var"].lower().split("_")
-        if len(parts) >= 2:
-            groups.setdefault("_".join(parts[1:]), []).append(w)
-    out: list[tuple[str, list[dict[str, Any]]]] = []
-    for role, group in groups.items():
-        if len(group) < 3:
+        parts = _var(w.get("var")).lower().split("_")
+        if len(parts) >= 2 and parts[0] and "_".join(parts[1:]):
+            by_role.setdefault("_".join(parts[1:]), {})[parts[0]] = w
+    words = " ".join(f"{o.get('name') or ''} {o.get('about') or ''} "
+                     + " ".join(str(t) for t in o.get("tags") or [])
+                     for o in others).lower()
+    out = []
+    for role, cases in by_role.items():
+        if len(cases) < 2:
             continue
-        cases = {g["var"].lower().split("_")[0] for g in group}
-        tags = {t.lower() for w in wild if w not in group for t in w.get("tags") or []}
-        if len(cases & tags) >= 3:
-            out.append((role, group))
+        grid = any(r != role and len(set(cases) & set(c)) >= 2 for r, c in by_role.items())
+        named = sum(1 for c in cases if re.search(r"\b" + re.escape(c) + r"\b", words))
+        # Another item must name the cases ("upper_body" / "lower_body" next
+        # to each other is two subjects, not a split by case).
+        if grid and named >= 2 or len(cases) >= 3 and named >= 3:
+            out.append((role, cases))
     return out
+
+
+def _case_namers(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Items that may name the cases a split is by: anything but the split
+    wildcards themselves (their own names say "Winter Tops")."""
+    return [x for x in items if x.get("kind") != "wildcard"
+            or len(_var(x.get("var")).split("_")) < 2]
+
+
+def _merge_splits(raw_items: list[dict[str, Any]],
+                  warnings: list[str]) -> list[dict[str, Any]]:
+    """One subject split into a wildcard per case becomes one wildcard
+    tagged by case, the reads of the parts read it, and a constraint from
+    the wildcard that names the cases (the season) keeps each case's
+    options to it. Without that the prompt lists every case's picks."""
+    wild = [x for x in raw_items if x.get("kind") == "wildcard" and _var(x.get("var"))]
+    groups = _split_groups(wild, _case_namers(raw_items))
+    if not groups:
+        return raw_items
+    taken = {_var(x.get("var")) for x in raw_items}
+    items = list(raw_items)
+    for role, cases in groups:
+        members = list(cases.values())
+        if role in taken and not any(_var(m.get("var")) == role for m in members):
+            continue
+        names = set(cases)
+        source = next((x for x in wild if x not in members and x not in sum(
+            (list(c.values()) for _, c in groups), []) and (
+            len(names & {str(t).lower() for t in x.get("tags") or []}) >= 2
+            or sum(1 for c in names if re.search(r"\b" + re.escape(c) + r"\b",
+                                                 f"{x.get('name')} {x.get('about')}".lower()))
+            >= 2)), None)
+        if source is None:
+            continue  # nothing to key the cases on: the review flags it instead
+        merged = {
+            "kind": "wildcard", "name": role.replace("_", " ").title(), "var": role,
+            "about": f"{role.replace('_', ' ')} for each case ({', '.join(cases)}); tag every "
+                     "option with the case it fits. " + " ".join(
+                         str(m.get("about") or "")[:120] for m in members),
+            "count": min(MAX_COUNT, sum(int(m.get("count") or 0) for m in members) or 0),
+            "tags": list(cases), "section": members[0].get("section") or "", "use": ""}
+        at = items.index(members[0])
+        items = [x for x in items if x not in members]
+        items.insert(at, merged)
+        taken.add(role)
+        old_vars = [_var(m.get("var")) for m in members]
+        pat = re.compile(r"\$(?:" + "|".join(map(re.escape, old_vars)) + r")\b")
+        for x in items:
+            for field in ("about", "use"):
+                if isinstance(x.get(field), str):
+                    x[field] = _once(pat.sub(f"${role}", x[field]), role)
+            if x.get("kind") == "constraint":
+                for side in ("source", "target"):
+                    if _var(x.get(side)) in old_vars:
+                        x[side] = role
+        src = _var(source.get("var"))
+        source["tags"] = list(dict.fromkeys([*(source.get("tags") or []), *cases]))
+        if not any(x.get("kind") == "constraint" and _var(x.get("source")) == src
+                   and _var(x.get("target")) == role for x in items):
+            items.insert(items.index(merged), {
+                "kind": "constraint", "name": f"{source.get('name') or src} → "
+                f"{merged['name']}", "source": src, "target": role,
+                "about": "; ".join(f"#{c} gets only #{c}" for c in cases),
+                "section": merged["section"], "use": ""})
+        warnings.append(
+            "Merged " + ", ".join(str(m.get("name") or m.get("var")) for m in members)
+            + f" into one {merged['name']} wildcard tagged by case, kept to the "
+            f"{source.get('name') or src} pick by a constraint")
+    return items
+
+
+def _once(text: str, var: str) -> str:
+    """A merged variable read once: "$tops, $tops OR $tops" → "$tops"."""
+    pat = re.compile(r"(\s*(?:,|;|\bor\b|\bOR\b|\band\b|\+)?\s*)\$" + re.escape(var)
+                     + r"\b")
+    seen = False
+
+    def sub(m: re.Match[str]) -> str:
+        nonlocal seen
+        if seen:
+            return ""
+        seen = True
+        return m.group(0)
+    return pat.sub(sub, text)
 
 
 def review_plan(plan: dict[str, Any],
@@ -1564,7 +1655,8 @@ def review_plan(plan: dict[str, Any],
             add(None, "fix", f"The anchor ${anchor} isn't set by anything in the pack, so "
                 "nothing can follow it; add an item for it (Fix with AI) or clear it",
                 {"op": "plan", "set": {"anchor": ""}, "label": "Clear it"})
-    for role, group in _split_sets(list(wild.values())):
+    for role, group in [(r, list(c.values())) for r, c in _split_groups(
+            list(wild.values()), _case_namers(items))]:
         add(group[0], "fix", ", ".join(g["name"] for g in group) + f" split one subject "
             f"({role.replace('_', ' ')}) into a wildcard per case, so the prompt either "
             f"lists them all or shows the wrong one; make one {role.replace('_', ' ')} "
@@ -2119,10 +2211,10 @@ def compile_item(
             "target_wildcard_id": built[by_var[item["target"]]["key"]]["id"],
             "matrix": matrix, "exceptions": [e["exception"] for e in compiled["exceptions"]],
         }
-        warnings += _strict_rules(item, payload)
+        warnings += _strict_rules(item, payload, src)
         ConstraintHandler.validate_payload(payload)
-        preview = [f"#{c['source_tag']} → #{c['target_tag']}: {c['cell']['mode']}"
-                   for c in compiled["cells"]] + [
+        preview = [f"#{st} → #{tt}: {cell['mode']}" for st, row in payload["matrix"].items()
+                   for tt, cell in row.items()] + [
             f"{e['exception']['source']} → {e['exception']['target']}: "
             f"{e['exception']['mode']}" for e in compiled["exceptions"]]
         warnings += [f"Left out {s['text'][:60]}: {s['reason']}"
@@ -2207,26 +2299,62 @@ _SOFT = re.compile(r"\b(rarely|rarer|less|fewer|seldom|unlikely|sometimes|reduce
                    r"usually|often)\b", re.I)
 
 
-def _strict_rules(item: dict[str, Any], payload: dict[str, Any]) -> list[str]:
+def _strict_rules(item: dict[str, Any], payload: dict[str, Any],
+                  source: dict[str, Any] | None = None) -> list[str]:
     """The plan says "never" (or "only") and the model wrote rules that just
-    make the target rarer: a "never" turns its reduce rules into excludes
-    (in place; boosts it added stay); an "only" with no only or exclude
-    rule is sent back, since it lets every other pair through."""
-    about = item.get("about") or ""
-    cells = [c for row in payload["matrix"].values() for c in row.values()
-             if isinstance(c, dict)]
+    make the target rarer. "Never": reduce rules become excludes (in place;
+    boosts stay), and a near-zero reduce does even when other words soften
+    the plan. "Only" with excludes for some source tags: the source tags
+    with no rule for that target tag get an exclude too (snow only in cold
+    biomes excludes snow from every biome that isn't boosted for it). An
+    "only" with neither is sent back."""
+    text = f"{item.get('name') or ''}. {item.get('about') or ''}"
+    matrix = payload["matrix"]
+    cells = [c for row in matrix.values() for c in row.values() if isinstance(c, dict)]
     rules = cells + list(payload["exceptions"])
-    if not rules or _SOFT.search(about):
+    if not rules:
         return []
-    if _ONLY.search(about) and not any(r.get("mode") in ("only", "exclude") for r in rules):
-        return ["The plan says \"only\", but no rule is an only or exclude rule, so every "
-                "other pair still goes through"]
-    reduce = [r for r in rules if r.get("mode") == "reduce"]
-    if not reduce or not _NEVER.search(about) or _ONLY.search(about):
+    said: list[str] = []
+    soft = bool(_SOFT.search(item.get("about") or ""))
+    if _ONLY.search(text) and not soft:
+        if not any(r.get("mode") in ("only", "exclude") for r in rules):
+            return ["The plan says \"only\", but no rule is an only or exclude rule, so every "
+                    "other pair still goes through"]
+        filled = _fill_only(matrix, source)
+        if filled:
+            said.append("Excluded " + ", ".join(filled[:6]) + (" and more" if len(filled) > 6
+                                                               else "")
+                        + ": the plan says only, so every other source shuts it out")
+        return said
+    if not _NEVER.search(text):
         return []
+    reduce = [r for r in rules if r.get("mode") == "reduce"
+              and (not soft or float(r.get("factor") or 0) <= 0.2)]
     for r in reduce:
         r["mode"], r["factor"] = "exclude", 0
-    return ["Made its reduce rules exclude: the plan says the pairs never go together"]
+    if reduce:
+        said.append("Made its reduce rules exclude: the plan says the pairs never go together")
+    return said
+
+
+def _fill_only(matrix: dict[str, dict[str, Any]],
+               source: dict[str, Any] | None) -> list[str]:
+    """For each target tag some source tags exclude and others allow (boost
+    or only), exclude it from the source tags with no rule for it."""
+    tags = [t for t in (source or {}).get("tags") or [] if isinstance(t, str)]
+    targets = {t for row in matrix.values() for t in row}
+    out: list[str] = []
+    for t in sorted(targets):
+        modes = {s: row[t].get("mode") for s, row in matrix.items()
+                 if isinstance(row.get(t), dict)}
+        if "exclude" not in modes.values() or not any(
+                m in ("boost", "only", "allow") for m in modes.values()):
+            continue
+        for s in tags:
+            if s not in modes:
+                matrix.setdefault(s, {})[t] = {"mode": "exclude", "factor": 0}
+                out.append(f"#{t} for #{s}")
+    return out
 
 
 def item_texts(payload: dict[str, Any]) -> list[str]:
@@ -2692,6 +2820,9 @@ def check_pack(
                 prompts.append({"seed": seed, "text": f"(failed: {exc})", "negative": ""})
         for k, said in _repeats(plan, built, runs, text, neg).items():
             problems.setdefault(k, []).append(said)
+        for said in _unseen(plan, built, runs, text, neg):
+            if not any(said.split(")")[0] in p for p in problems.get(item["key"], [])):
+                problems.setdefault(item["key"], []).append(said)
         if braces:
             problems.setdefault(item["key"], []).append(
                 "the prompt shows { } or @{ } as written: a variable it reads holds a pick "
@@ -2708,6 +2839,36 @@ def check_pack(
 def _chunks(text: str) -> set[str]:
     return {c for c in (re.sub(r"\s+", " ", x).strip().lower() for x in text.split(","))
             if len(c) >= 3}
+
+
+def _unseen(plan: dict[str, Any], built: dict[str, Any], runs: list[dict[str, Any]],
+            text: str, neg: str) -> list[str]:
+    """Picks that are set but never show in the prompt: only a rule reads
+    them, to decide something else (the time of day only picks the
+    lighting). The image never says it, which is rarely what was asked."""
+    shown: list[str] = []
+    for ctx in runs:
+        try:
+            shown.append(render(text, neg, ctx)[0].lower())
+        except Exception:  # noqa: BLE001 - a failed run is reported elsewhere
+            shown.append("")
+    out: list[str] = []
+    for i in plan["items"]:
+        if not is_wild(i) or i["key"] not in built or "internal" in (i.get("use") or ""):
+            continue
+        seen = had = 0
+        for ctx, prompt in zip(runs, shown, strict=True):
+            value = str(ctx.get(i["var"]) or "").strip().lower()
+            if not value:
+                continue
+            had += 1
+            chunks = list(_chunks(value)) or [value]
+            if any(c in prompt for c in chunks):
+                seen += 1
+        if had and had * 2 >= len(runs) and not seen:
+            out.append(f"${i['var']} ({i['name']}) never reaches the prompt: what reads it "
+                       "doesn't print it; read it here too")
+    return out
 
 
 def _repeats(plan: dict[str, Any], built: dict[str, Any], runs: list[dict[str, Any]],

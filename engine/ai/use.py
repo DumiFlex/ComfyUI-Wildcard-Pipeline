@@ -70,6 +70,10 @@ _ALIASES = {
     "lock seed": "seed", "locked seed": "seed", "rule off": "rules off",
     "branch off": "branches off",
 }
+#: Other ways a model writes "no empty".
+_NO_EMPTY = {"exclude null", "exclude_null", "!null", "never empty", "not empty", "non empty",
+             "non-empty", "no null", "filter not empty", "filter non empty",
+             "filter not null"}
 #: Instance keys `parse_use` writes for these clauses (besides the old ones).
 WRITES = (
     "enabled_options", "option_weights", "mode", "pinned_option_id", "locked_seed",
@@ -114,10 +118,10 @@ def parse_use(
                 clause = _ALIASES[alias] + clause[len(alias):]
                 low = clause.lower()
                 break
+        if low in _NO_EMPTY:
+            clause = low = "no empty"
         word = next((w for w in sorted(_KINDS, key=len, reverse=True)
                      if low == w or low.startswith(w + " ")), None)
-        if word is None and low in ("exclude null", "exclude_null", "!null", "never empty"):
-            word = "no empty"
         if word is None:
             notes.append(f"{clause!r} isn't a setting")
             continue

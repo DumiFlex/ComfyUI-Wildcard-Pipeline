@@ -416,7 +416,25 @@ def test_one_subject_split_per_case_is_a_review_fix_and_or_templates_warn():
         _item(name="Hair Color", var="hair_color"), _item(name="Eye Color", var="eye_color"),
         _item(name="Skin Color", var="skin_color"),
         _item(kind="template", name="T", about="$spring_top OR $summer_top")])
-    found = [f["text"] for f in pack.review_plan(pack.compile_plan(raw))]
+    plan = pack.compile_plan(raw)
+    # Merged into one Top wildcard tagged by case, kept to the season.
+    top = next(i for i in plan["items"] if i["var"] == "top")
+    assert top["tags"] == ["spring", "summer", "winter"]
+    assert not any(i["var"].endswith("_top") for i in plan["items"])
+    rule = next(i for i in plan["items"] if i["kind"] == "constraint")
+    assert (rule["source"], rule["target"]) == ("season", "top")
+    assert "#winter gets only #winter" in rule["about"]
+    tpl = next(i for i in plan["items"] if i["kind"] == "template")
+    assert tpl["about"] == "$top"
+    assert any("Merged Spring Top, Summer Top, Winter Top into one Top" in w
+               for w in plan["warnings"])
+    assert {i["var"] for i in plan["items"]} >= {"hair_color", "eye_color", "skin_color"}
+    # A plan sent in already built (no merge): the review says it.
+    items = [*(i for i in plan["items"] if i["var"] != "top" and i["kind"] != "constraint")]
+    shown = {**plan, "items": [*items, *[{**top, "key": f"x{n}", "var": f"{s}_top",
+                                          "name": f"{s.title()} Top"}
+                                         for n, s in enumerate(("spring", "summer", "winter"))]]}
+    found = [f["text"] for f in pack.review_plan(shown)]
     assert any("Spring Top, Summer Top, Winter Top split one subject (top)" in t for t in found)
     assert not any("Hair Color" in t and "split" in t for t in found)
     out = text_items.compile_template({"template": "$spring_top OR $summer_top",
@@ -443,3 +461,71 @@ def test_a_rule_adding_words_the_variable_holds_is_flagged():
     report = pack.check_pack(plan, built, seeds=10)
     assert any("adds words the variable already holds" in t and "thick fog" in t
                for t in report["problems"][keys["Fog"]])
+
+
+# ── Round 5 of the real-model run ───────────────────────────────────────
+
+
+def test_a_grid_split_by_season_merges_and_its_rules_follow():
+    raw = _raw(items=[
+        _item(name="Season", var="season", about="winter, summer or mild weather"),
+        *[_item(name=f"{c.title()} {r.title()}", var=f"{c}_{r}")
+          for c in ("winter", "summer", "mild") for r in ("tops", "shoes")],
+        _item(kind="constraint", name="No Sandals In Winter", source="season",
+              target="$shoes", about="#winter never gets #sandals"),
+        _item(kind="template", name="T",
+              about="$winter_tops, $summer_tops, $mild_tops, $winter_shoes, $summer_shoes, "
+                    "$mild_shoes")])
+    plan = pack.compile_plan(raw)
+    wild = {i["var"]: i for i in plan["items"] if i["kind"] == "wildcard"}
+    assert set(wild) == {"season", "tops", "shoes"}
+    assert wild["season"]["tags"] == ["winter", "summer", "mild"]
+    rules = [(i["source"], i["target"]) for i in plan["items"] if i["kind"] == "constraint"]
+    assert ("season", "tops") in rules and rules.count(("season", "shoes")) == 1
+    assert next(i for i in plan["items"] if i["kind"] == "template")["about"] == \
+        "$tops, $shoes"
+    # Two subjects side by side, with nothing naming them as cases: kept.
+    side = pack.compile_plan(_raw(items=[
+        *[_item(name=f"{c} {r}", var=f"{c}_{r}") for c in ("upper", "lower")
+          for r in ("body", "color")], _item(kind="template", name="T", about="$upper_body")]))
+    assert {"upper_body", "lower_body"} <= {i["var"] for i in side["items"]}
+
+
+def test_only_fills_the_sources_left_open_and_near_zero_never_excludes():
+    raw = _raw()
+    raw["items"][2]["tags"] = ["elf", "orc", "human", "dwarf"]
+    raw["items"][1]["about"] = "#armor only for #orc"
+    plan = pack.compile_plan(raw)
+    built = _built(plan)
+    key = next(i["key"] for i in plan["items"] if i["kind"] == "constraint")
+    answer = {"rules": [
+        {"source": "#orc", "target": "#armor", "effect": "boost", "factor": 2, "reason": ""},
+        {"source": "#elf", "target": "#armor", "effect": "exclude", "factor": 0, "reason": ""}]}
+    out = pack.compile_item(plan, key, built, answer)
+    m = out["payload"]["matrix"]
+    assert m["human"]["armor"]["mode"] == m["dwarf"]["armor"]["mode"] == "exclude"
+    assert m["orc"]["armor"]["mode"] == "boost"
+    assert any("Excluded #armor for #human" in w for w in out["warnings"])
+    idx = [i["key"] for i in plan["items"]].index(key)
+    plan["items"][idx]["about"] = "elves never wear armor, orcs mostly do"
+    tiny = {"rules": [{"source": "#elf", "target": "#armor", "effect": "reduce",
+                       "factor": 0.1, "reason": ""}]}
+    assert pack.compile_item(plan, key, built, tiny)["payload"]["matrix"]["elf"]["armor"][
+        "mode"] == "exclude"
+
+
+def test_a_pick_only_a_rule_reads_is_flagged_and_no_empty_spellings():
+    from engine.ai import use as ai_use
+    assert ai_use.parse_use("filter not empty", kind="wildcard", tags=[])[0] == {
+        "exclude_null": True}
+    plan = pack.compile_plan(_raw())
+    built = _built(plan)
+    keys = {i["name"]: i["key"] for i in plan["items"]}
+    built[keys["Prompt"]]["payload"]["template_string"] = "$race, $hair, $outfit, $place"
+    plan["items"].insert(-1, {**plan["items"][3], "key": "i90", "id": "abcd9090",
+                              "kind": "derivation", "name": "Mood", "var": "mood"})
+    built["i90"] = {"id": "abcd9090", "payload": {"rules": [{"id": "r1", "branches": [{
+        "condition": {"var": "light", "op": "exists", "value": ""},
+        "action": {"target_var": "place", "mode": "append", "value": ", calm"}}]}]}}
+    probs = pack.check_pack(plan, built, seeds=10)["problems"][keys["Prompt"]]
+    assert any("$light (Light) never reaches the prompt" in t for t in probs)
