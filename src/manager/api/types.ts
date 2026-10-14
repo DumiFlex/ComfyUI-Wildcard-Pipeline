@@ -958,6 +958,17 @@ export interface AiConversational {
   history?: AiTurn[];
   /** Reference images (shrunk data URLs) sent with the newest message. */
   images?: string[];
+  /** Web results the user allowed (`api.ai.packSearch`), sent with the
+   *  follow-up that asks the model to use them. */
+  web?: AiWebResult[];
+  /** Searches already run or skipped in this conversation: the model isn't
+   *  offered them again, and an empty `web` with these means "skipped". */
+  searched?: string[];
+}
+
+export interface AiWebResult {
+  query: string;
+  text: string;
 }
 
 export interface AiDraftOption {
@@ -992,6 +1003,9 @@ export interface AiWildcardDraftResult {
   model: string;
   /** The model's raw answer, for a follow-up's `history`. */
   answer: Record<string, unknown>;
+  /** Web searches the model would like to run (only when web search is set
+   *  up); the panel asks the user before running them. */
+  research?: string[];
 }
 
 export type AiWildcardEditAction = "remove" | "rewrite" | "retag" | "reweight";
@@ -1030,6 +1044,9 @@ export interface AiWildcardEditResult {
   model: string;
   /** The model's raw answer, for a follow-up's `history`. */
   answer: Record<string, unknown>;
+  /** Web searches the model would like to run (only when web search is set
+   *  up); the panel asks the user before running them. */
+  research?: string[];
 }
 
 export interface AiDerivationDraftRequest extends AiConversational {
@@ -1662,6 +1679,9 @@ export interface AiTextDraftResult {
   warnings: string[];
   model: string;
   answer: Record<string, unknown>;
+  /** Web searches the model would like to run (only when web search is set
+   *  up); the panel asks the user before running them. */
+  research?: string[];
 }
 
 /* ── Tag autocomplete ─────────────────────────────────────────────────── */

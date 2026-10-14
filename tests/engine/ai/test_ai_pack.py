@@ -176,8 +176,14 @@ async def test_run_pack_and_eval_report():
 
     by_name = {i["name"]: i for i in PLAN["items"]}
 
-    async def complete(*, system, user, schema, schema_name, temperature):
+    refines = []
+
+    async def complete(*, system, user, schema, schema_name, temperature, history=None):
         if schema_name == "pack_plan":
+            if history:
+                # Questions left to the model come back decided.
+                refines.append(user)
+                return {**PLAN, "questions": []}
             return PLAN
         for name, answer in ANSWERS.items():
             item = by_name[name]
@@ -196,6 +202,7 @@ async def test_run_pack_and_eval_report():
     rows = await evals.evaluate(complete, ["fantasy"], seeds=20)
     [row] = rows
     assert row["plan"] and row["built"] == row["items"] == 6 and row["clean"], row
+    assert len(refines) == 1 and "decide for me" in refines[0].lower()
     text = evals.report(rows, "fake")
     assert "Packs with a clean test run: 1 / 1" in text and "portrait of" in text
 

@@ -3,13 +3,20 @@
 Four steps, each its own request so a small local model stays on track:
 
 1. **Plan.** The model writes an outline (`PLAN_SCHEMA`): the pack's title,
-   up to three questions it can't guess, the run-time inputs it expects
-   (variables a WP Context Injector brings in), and a list of items by name
-   and variable (wildcards, fixed values, derivations, combines,
-   constraints, one template), each with an optional per-use line (`use`:
-   "pick 2-3; hold", see `use.py`). A wildcard with no variable is a
-   vocabulary other options point at with ``@{Name:tag}``. `compile_plan`
-   checks it and gives every item a key.
+   questions it can't guess (single or multi choice; the user may also type
+   their own answer or leave one to the model), the assumptions it made,
+   web searches it would like (run only after the user allows them),
+   optional sections (each becomes a sub-bundle), the run-time inputs it
+   expects, and up to `MAX_ITEMS` items by name and variable (wildcards,
+   library items, fixed values, derivations, combines, constraints, one
+   template), each with an optional per-use line (`use`: "pick 2-3; hold",
+   see `use.py`). The user's settings (`SETTINGS`: library reuse,
+   negatives, structure, style, rating, size) and answered questions
+   (`decisions`) go with every request, so answered questions are never
+   asked again. `compile_plan` checks the plan, gives every item a key and
+   a reserved module id (kept across refines and hand edits, so refs and
+   constraints can point at items not built yet), and `review_plan` lists
+   findings with patches the user can apply one by one.
 2. **Build.** One call per item in `build_order`, with the same prompts and
    checkers the editor panels and the chat use (`wildcard.compile_spec`,
    `derivation`, `constraint`, `text_items`). Later items see what earlier
@@ -18,8 +25,11 @@ Four steps, each its own request so a small local model stays on track:
 3. **Check.** `check_pack` runs the pack on the real engine for a few
    hundred seeds and lists, per item, what went wrong, plus sample prompts.
 4. **Install.** `install_ops` turns the pack into one import commit (the
-   modules, the template and a bundle, tagged as one collection), so one
-   undo removes all of it.
+   modules, the template, a bundle and one sub-bundle per section, tagged
+   as one collection), so one undo removes all of it. Extending an open
+   bundle (`bundle_base`, `extend_ops`) lists its children as existing
+   items, adds the new ones where they belong and replaces the changed
+   bundles in the same undoable commit.
 
 The model never writes ids, `sub_categories`, `@{uuid}` refs or rule ids
 (it names wildcards; `refs.compile_text` turns names into ids); every
@@ -852,7 +862,9 @@ def inventory_note(rows: list[dict[str, Any]]) -> str:
 
 
 WEB_LINES = {
-    True: "- Web search is on: list searches in research when facts from the web would help.",
+    True: ("- Web search is on: list searches in research whenever facts from the web "
+           "would make the pack more accurate (real names, styles, eras); don't wait "
+           "to be asked. The user allows each search first."),
     False: "- Web search is off: research is [].",
 }
 
@@ -2264,19 +2276,38 @@ def extend_ops(
 Complete = Any
 
 
+#: What the manager sends for a question the user leaves to the model
+#: (`usePackBuilder.ts:DECIDE_ANSWER`).
+DECIDE_ANSWER = "Your call (decide for me)"
+
+
 async def run_pack(
     complete: Complete, instruction: str, *, seeds: int = 100, repairs: int = 2,
-    library: list[dict[str, Any]] | None = None,
+    library: list[dict[str, Any]] | None = None, settings: Any = None,
 ) -> dict[str, Any]:
     """Plan, build, check and repair a pack the way the manager does, for
-    the eval script. Returns ``{plan, built, check, log, failed}``; ``failed``
-    lists the items that never built. Raises PlanError when the plan fails."""
+    the eval script. Questions in the first plan are all left to the model
+    ("Decide for me") and the plan is refined once, as a user who clicks
+    "Decide the rest" would. Returns ``{plan, built, check, log, failed}``;
+    ``failed`` lists the items that never built. Raises PlanError when the
+    plan fails."""
     log: list[str] = []
+    cfg = parse_settings(settings)
     lib_note = ai_patterns.note(ai_patterns.summarize(library or []))
-    answer = await complete(system=PLAN_SYSTEM,
-                            user=plan_prompt(instruction, library_note=lib_note),
+    first = plan_prompt(instruction, library_note=lib_note, settings=cfg, library=library)
+    answer = await complete(system=PLAN_SYSTEM, user=first,
                             schema=PLAN_SCHEMA, schema_name="pack_plan", temperature=0.4)
-    plan = compile_plan(answer, library=library)
+    plan = compile_plan(answer, library=library, settings=cfg)
+    if plan["questions"]:
+        decisions = [{"question": q["question"], "answer": DECIDE_ANSWER}
+                     for q in plan["questions"]]
+        log.append(f"plan: left {len(decisions)} question(s) to the model")
+        follow = refine_text("I answered your questions.", decisions, cfg)
+        answer = await complete(system=PLAN_SYSTEM, user=follow, history=[(first, answer)],
+                                schema=PLAN_SCHEMA, schema_name="pack_plan",
+                                temperature=0.4)
+        plan = compile_plan(answer, library=library, previous=plan,
+                            decisions=decisions, settings=cfg)
     log += [f"plan: {w}" for w in plan["warnings"]]
     built: dict[str, dict[str, Any]] = {}
     failed: list[str] = []

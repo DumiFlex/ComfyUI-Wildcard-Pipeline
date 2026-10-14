@@ -64,6 +64,7 @@ from engine.ai import organize as ai_organize
 from engine.ai import pack as ai_pack
 from engine.ai import patterns as ai_patterns
 from engine.ai import refs as ai_refs
+from engine.ai import research as ai_research
 from engine.ai import safety as ai_safety
 from engine.ai import tools as ai_tools
 from engine.ai import wildcard as ai_wildcard
@@ -179,14 +180,37 @@ def _turns(body: dict[str, Any]) -> list[dict[str, Any]] | web.Response:
 
 async def _ask(
     cfg: dict[str, Any], *, first: str, turns: list[dict[str, Any]], instruction: str,
-    image_note: bool = True, **kwargs: Any,
+    image_note: bool = True, extra: str = "", **kwargs: Any,
 ) -> Any:
     """`complete_json` with the conversation so far, when there is one.
-    Reference images (`images=`) go with the newest message, which says so."""
+    Reference images (`images=`) go with the newest message, which says so;
+    `extra` (web results) is added to it too."""
     history, user = ai_followup.conversation(first, turns, instruction)
+    if extra:
+        user = f"{user}\n\n{extra}"
     if image_note and kwargs.get("images"):
         user = f"{user}\n\n{_ai_images.note(len(kwargs['images']))}"
     return await _ai_client.complete_json(cfg, user=user, history=history, **kwargs)
+
+
+class _Web:
+    """Web search on a Draft with AI request (`engine/ai/research.py`):
+    whether to offer the model a `research` list, and the results or skip
+    note the user's answer to the last search card adds."""
+
+    def __init__(self, cfg: dict[str, Any], body: dict[str, Any]) -> None:
+        self.on = _ai_search.enabled(cfg)
+        self.searched = _str_list(body.get("searched"), limit=12)
+        self.note = ai_research.note(body.get("web"), self.searched) if self.on else ""
+
+    def schema(self, schema: dict[str, Any]) -> dict[str, Any]:
+        return ai_research.with_research(schema) if self.on else schema
+
+    def system(self, system: str) -> str:
+        return f"{system}\n\n{ai_research.PROMPT}" if self.on else system
+
+    def take(self, answer: Any) -> tuple[Any, list[str]]:
+        return ai_research.take(answer, self.searched) if self.on else (answer, [])
 
 
 def _wildcards(request: web.Request) -> list[dict[str, Any]]:
@@ -228,6 +252,7 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
     images = await _request_images(cfg, body)
     if isinstance(images, web.Response):
         return images
+    webs = _Web(cfg, body)
 
     instruction = body.get("instruction")
     if not isinstance(instruction, str) or not instruction.strip():
@@ -270,12 +295,14 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
     try:
         answer = await _ask(
             cfg, first=first, turns=turns, instruction=instruction,
-            system=ai_wildcard.SYSTEM_PROMPT, schema=ai_wildcard.OPTIONS_SCHEMA,
+            system=webs.system(ai_wildcard.SYSTEM_PROMPT),
+            schema=webs.schema(ai_wildcard.OPTIONS_SCHEMA),
             schema_name="wildcard_options",
-            images=images or None,
+            images=images or None, extra=webs.note,
         )
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
+    answer, research = webs.take(answer)
 
     try:
         result = ai_wildcard.compile_options(
@@ -293,6 +320,7 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
         )
     result["model"] = cfg["model"]
     result["answer"] = answer
+    result["research"] = research
     return json_ok(result)
 
 
@@ -312,6 +340,7 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
     images = await _request_images(cfg, body)
     if isinstance(images, web.Response):
         return images
+    webs = _Web(cfg, body)
 
     action = body.get("action")
     if action not in ai_edit.ACTIONS:
@@ -373,14 +402,15 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
     try:
         answer = await _ask(
             cfg, first=first, turns=turns, instruction=instruction,
-            system=ai_edit.system_prompt(action),
-            schema=ai_edit.SCHEMAS[action], schema_name=f"wildcard_{action}",
+            system=webs.system(ai_edit.system_prompt(action)),
+            schema=webs.schema(ai_edit.SCHEMAS[action]), schema_name=f"wildcard_{action}",
             # Edits should be faithful to the request, not creative.
             temperature=0.3,
-            images=images or None,
+            images=images or None, extra=webs.note,
         )
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
+    answer, research = webs.take(answer)
     try:
         result = ai_edit.compile_edit(action, answer, options=rows, registry=tags,
                                       refs=refs, self_id=self_id)
@@ -394,6 +424,7 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
     result["action"] = action
     result["model"] = cfg["model"]
     result["answer"] = answer
+    result["research"] = research
     return json_ok(result)
 
 
@@ -498,6 +529,7 @@ async def post_text_draft(request: web.Request) -> web.Response:
     images = await _request_images(cfg, body)
     if isinstance(images, web.Response):
         return images
+    webs = _Web(cfg, body)
     kind = body.get("kind")
     if kind not in _TEXT_KINDS:
         return json_error("kind must be fixed_values, combine or template", status=400)
@@ -542,10 +574,12 @@ async def post_text_draft(request: web.Request) -> web.Response:
     system, schema, schema_name = _TEXT_KINDS[kind]
     try:
         answer = await _ask(cfg, first=first, turns=turns, instruction=instruction,
-                            system=system, schema=schema, schema_name=schema_name,
-                            temperature=0.5, images=images or None)
+                            system=webs.system(system), schema=webs.schema(schema),
+                            schema_name=schema_name, temperature=0.5,
+                            images=images or None, extra=webs.note)
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
+    answer, research = webs.take(answer)
     try:
         if kind == "fixed_values":
             result = text_items.compile_fixed(answer, existing=payload)
@@ -561,6 +595,7 @@ async def post_text_draft(request: web.Request) -> web.Response:
         )
     result["model"] = cfg["model"]
     result["answer"] = answer
+    result["research"] = research
     return json_ok(result)
 
 
@@ -1974,8 +2009,8 @@ async def post_pack_plan(request: web.Request) -> web.Response:
 
 
 async def post_pack_search(request: web.Request) -> web.Response:
-    """Body: {queries}. Runs the searches the planner asked for, after the
-    user allowed them in the pack builder. Returns {results: [{query,
+    """Body: {queries}. Runs the searches the pack planner or a Draft with
+    AI panel asked for, after the user allowed them. Returns {results: [{query,
     text}]}; the text is labelled as untrusted for the model."""
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):

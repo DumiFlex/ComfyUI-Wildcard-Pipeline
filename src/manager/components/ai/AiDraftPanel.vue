@@ -54,13 +54,15 @@ const convo = useAiConversation<AiWildcardDraftResult, Ctx>({
     tags: props.existingTags,
     tagGroups: props.tagGroups,
   }),
-  send: ({ instruction, history, ctx }, signal) => {
+  send: ({ instruction, history, ctx, web, searched }, signal) => {
     const n = Math.min(100, Math.max(1, Math.round(Number(count.value) || 10)));
     count.value = n;
     return api.ai.draftWildcard({
       instruction,
       history,
       images: pics.urls(),
+      web,
+      searched,
       count: n,
       wildcard: {
         name: props.name,
@@ -167,6 +169,10 @@ const skippedSummary = computed(() => {
     @go="convo.go"
     @stop="convo.stop"
     @close="cancel"
+    :research="convo.research.value"
+    :searching="convo.searching.value"
+    @allow-research="convo.allowResearch"
+    @skip-research="convo.skipResearch"
   >
     <template #controls>
       <label class="wp-ai-draft__count" for="wp-ai-draft-count">

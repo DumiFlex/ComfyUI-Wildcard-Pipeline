@@ -13,7 +13,7 @@ vi.mock("../../../utils/chat-image", async (orig) => ({
 }));
 
 vi.mock("../../../api/client", () => ({
-  api: { ai: { config: vi.fn(), draftWildcard: vi.fn(), vision: vi.fn() } },
+  api: { ai: { config: vi.fn(), draftWildcard: vi.fn(), vision: vi.fn(), packSearch: vi.fn() } },
   ApiError: class ApiError extends Error {
     constructor(public status: number, message: string) { super(message); }
   },
@@ -68,5 +68,52 @@ describe("Draft with AI images", () => {
     await w.get('[data-test="ai-run"]').trigger("click");
     await flushPromises();
     expect(draft.mock.calls[0][0].images).toBeUndefined();
+  });
+
+  it("asks before searching the web, then refines with the results", async () => {
+    vision.mockResolvedValue({ vision: null, model: "m" });
+    const search = vi.mocked(api.ai.packSearch);
+    search.mockResolvedValue({ results: [{ query: "genshin characters", text: "web_search: Furina" }] });
+    draft.mockResolvedValueOnce({
+      options: [{ value: "Amber", weight: 1, tags: [], negative: "" }], new_tags: [], skipped: [],
+      model: "m", answer: { options: [] }, research: ["genshin characters"],
+    });
+    const w = mountPanel();
+    await flushPromises();
+    await w.get('[data-test="ai-instruction"]').setValue("genshin characters");
+    await w.get('[data-test="ai-run"]').trigger("click");
+    await flushPromises();
+    expect(w.get('[data-test="ai-research"]').text()).toContain("genshin characters");
+    expect(search).not.toHaveBeenCalled();
+
+    await w.get('[data-test="ai-research-allow"]').trigger("click");
+    await flushPromises();
+    expect(search).toHaveBeenCalledWith({ queries: ["genshin characters"] });
+    const body = draft.mock.calls[1][0];
+    expect(body.instruction).toBe("Use what the searches found.");
+    expect(body.web).toEqual([{ query: "genshin characters", text: "web_search: Furina" }]);
+    expect(body.searched).toEqual(["genshin characters"]);
+    expect(body.history).toHaveLength(1);
+    expect(w.find('[data-test="ai-research"]').exists()).toBe(false);
+  });
+
+  it("skipping hides the searches and tells later requests", async () => {
+    vision.mockResolvedValue({ vision: null, model: "m" });
+    draft.mockResolvedValue({
+      options: [{ value: "Amber", weight: 1, tags: [], negative: "" }], new_tags: [], skipped: [],
+      model: "m", answer: {}, research: ["a query"],
+    });
+    const w = mountPanel();
+    await flushPromises();
+    await w.get('[data-test="ai-instruction"]').setValue("x");
+    await w.get('[data-test="ai-run"]').trigger("click");
+    await flushPromises();
+    await w.get('[data-test="ai-research-skip"]').trigger("click");
+    expect(w.find('[data-test="ai-research"]').exists()).toBe(false);
+    await w.get('[data-test="ai-instruction"]').setValue("shorter");
+    await w.get('[data-test="ai-refine"]').trigger("click");
+    await flushPromises();
+    expect(draft.mock.calls[1][0].searched).toEqual(["a query"]);
+    expect(draft.mock.calls[1][0].web).toBeUndefined();
   });
 });

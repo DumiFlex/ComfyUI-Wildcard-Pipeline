@@ -1,5 +1,6 @@
-"""Reference images on the Draft with AI routes: sent with the newest
-message, refused for a model that can't see them, checked like the chat's."""
+"""Draft with AI extras: reference images sent with the newest message
+(refused for a model that can't see them) and web searches the model may
+ask for when web search is set up."""
 from __future__ import annotations
 
 from engine.ai import config as ai_config
@@ -58,3 +59,36 @@ async def test_draft_images_refused_for_a_blind_model_or_bad_data(wp_client, fak
     resp = await wp_client.post("/wp/api/ai/wildcard/draft",
                                 json={**_draft_body(), "images": ["data:image/png;base64,AAAA"]})
     assert resp.status == 400
+
+
+async def test_draft_asks_to_search_only_when_web_search_is_set_up(wp_client, fake_llm,
+                                                                   monkeypatch):
+    from tests.wp_api._ai_fakes import ANSWER as WILDCARD_ANSWER
+    _on(fake_llm, "m1")
+    fake_llm.overrides["wildcard_options"] = {**WILDCARD_ANSWER, "research": ["x"]}
+    off = await (await wp_client.post("/wp/api/ai/wildcard/draft", json=_draft_body())).json()
+    assert off["research"] == []
+    sent = fake_llm.seen[-1]["body"]
+    assert "research" not in sent["response_format"]["json_schema"]["schema"]["properties"]
+
+    monkeypatch.setattr("wp_api._ai_search.enabled", lambda cfg: True)
+    fake_llm.overrides["wildcard_options"] = {
+        **WILDCARD_ANSWER, "research": ["  genshin  characters ", "Genshin characters", "b", "c"]}
+    on = await (await wp_client.post("/wp/api/ai/wildcard/draft", json=_draft_body())).json()
+    # The answer still shows; the searches wait for the user.
+    assert [o["value"] for o in on["options"]] == ["silver hair"]
+    assert on["research"] == ["genshin characters", "b"] and "research" not in on["answer"]
+    sent = fake_llm.seen[-1]["body"]
+    assert "research" in sent["response_format"]["json_schema"]["schema"]["required"]
+    assert "Web search is on" in sent["messages"][0]["content"]
+
+    # Allowed: the results go with the follow-up, searched ones aren't asked again.
+    again = await (await wp_client.post("/wp/api/ai/wildcard/draft", json={
+        **_draft_body(), "web": [{"query": "b", "text": "web_search: Fur coats"}],
+        "searched": ["genshin characters", "b"]})).json()
+    assert "Fur coats" in fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+    assert again["research"] == ["c"]
+    # Skipped: the model is told so.
+    await wp_client.post("/wp/api/ai/text/draft", json={
+        "kind": "template", "instruction": "x", "item": {}, "searched": ["b"]})
+    assert "chose not to search" in fake_llm.seen[-1]["body"]["messages"][-1]["content"]
