@@ -6,7 +6,7 @@ import { _resetAiConfigForTests } from "../../../composables/useAiConfig";
 import type { AiConfig } from "../../../api/types";
 
 const CONFIG: AiConfig = {
-  enabled: true, provider: "ollama", base_url: "", model: "qwen3.5:9b", unload_after_s: 60, context_max: 16384, model_size: "auto", model_size_auto: "small", tool_format: "auto", embed_model: "", embed_base_url: "", search_engine: "off", search_url: "", search_keys_saved: [], search_engines: { searxng: { label: "SearXNG", needs_key: false }, brave: { label: "Brave Search", needs_key: true }, tavily: { label: "Tavily", needs_key: true }, kagi: { label: "Kagi", needs_key: true } }, key_for_host: null,
+  enabled: true, provider: "ollama", base_url: "", model: "qwen3.5:9b", unload_after_s: 60, context_max: 16384, model_size: "auto", model_size_auto: "small", tool_format: "auto", allow_delete: false, auto_apply: false, embed_model: "", embed_base_url: "", search_engine: "off", search_url: "", search_keys_saved: [], search_engines: { searxng: { label: "SearXNG", needs_key: false }, brave: { label: "Brave Search", needs_key: true }, tavily: { label: "Tavily", needs_key: true }, kagi: { label: "Kagi", needs_key: true } }, key_for_host: null,
   key_set: false, key_from_env: false, keys_saved: [],
   presets: {
     anthropic: { label: "Claude", api: "anthropic", local: false, needs_key: true, base_url: "" },

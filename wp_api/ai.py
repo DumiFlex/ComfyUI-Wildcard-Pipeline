@@ -810,10 +810,39 @@ def _final_step(fmt: str, message: str) -> dict[str, Any]:
                                  answer=answer, synthetic=True)
 
 
+#: Told to the model when the user changes a permission mid-chat.
+_PERM_NOTES = {
+    ("delete", True): "(The user turned on deleting: delete_items is available now. Use it "
+                      "only for what they ask to delete.)",
+    ("delete", False): "(The user turned off deleting: delete_items is gone. If they ask to "
+                       "delete something, tell them it is off in Settings › AI assistant.)",
+    ("auto", True): "(The user turned on auto-apply: description, tag and category changes "
+                    "from update_info, and new categories, are applied as soon as you "
+                    "propose them; the user can undo them. Other changes stay cards.)",
+    ("auto", False): "(Auto-apply is off: every change is a card the user applies.)",
+}
+
+
+def _sync_permissions(meta: dict[str, Any], cfg: dict[str, Any]) -> str:
+    """Bring the chat's tool list in line with Settings › AI assistant ›
+    Permissions, and say what changed (once, in the message tail, so the
+    cached prefix only moves when the user flips a switch). No tool can
+    change these settings."""
+    notes = []
+    for key, flag in (("delete", "allow_delete"), ("auto", "auto_apply")):
+        now = bool(cfg.get(flag))
+        if bool(meta.get(key)) != now:
+            meta[key] = now
+            notes.append(_PERM_NOTES[(key, now)])
+    meta["tools"] = ai_tools.sync_delete(list(meta.get("tools") or []), bool(meta.get("delete")))
+    return " ".join(notes)
+
+
 def _more_tools(meta: dict[str, Any]) -> str:
     offered = set(meta.get("tools") or [])
     rest = [t for t in ai_tools.TOOLS if t.name not in offered
-            and (t.kind != "web" or meta.get("web"))]
+            and (t.kind != "web" or meta.get("web"))
+            and (t.name not in ai_tools.DELETE or meta.get("delete"))]
     if not rest:
         return "every tool is already available"
     meta["tools"] = [t.name for t in ai_tools.TOOLS if t.name in offered or t in rest]
@@ -1154,8 +1183,12 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         meta: dict[str, Any] = {
             "format": fmt, "proposals": {}, "fingerprint": {},
             "tools": ai_tools.toolset(page.get("route") if page else None, scoped=prof["slim"],
-                                      web=_ai_search.enabled(cfg)),
+                                      web=_ai_search.enabled(cfg),
+                                      delete=bool(cfg.get("allow_delete"))),
             "web": _ai_search.enabled(cfg),
+            "delete": bool(cfg.get("allow_delete")),
+            # Told in the first message's tail when on (_sync_permissions).
+            "auto": False,
         }
         snapshot = ai_safety.strip_invisible(lib.overview(limit=40 if prof["slim"] else None))
     else:
@@ -1167,6 +1200,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
             fmt = cfg["tool_format"]
     if page:
         lib.use_editor(page.get("editor"))
+    lib.allow_delete = bool(cfg.get("allow_delete"))
+    perms = _sync_permissions(meta, cfg)
     meta, since = ai_chatlog.apply_events(meta, body.get("events"))
     changes = ai_chatlog.library_changes(meta.get("fingerprint") or {}, fp_now)
     note = lib.page_note(page)
@@ -1188,7 +1223,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         tail = ""
         if resume:
             step = int(paused.get("step") or 0)
-            tail = "".join("\n\n" + x for x in (since, changes, note) if x) + _results_tail(
+            tail = "".join("\n\n" + x for x in (since, changes, perms, note) if x)
+            tail += _results_tail(
                 text, last=step >= ai_chat.MAX_STEPS - 1, native=fmt == "native")
         new.append(ai_chatlog.results_entry(items, tail))
     num_ctx = int(cfg.get("context_max") or ai_budget.CONTEXT_DEFAULT)
@@ -1200,7 +1236,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         hints = await _retrieval(lib, text, meta, prof, cfg) if text else ""
         pics = _ai_images.note(len(images)) if images else ""
         sent = ai_safety.strip_invisible(
-            "\n\n".join(x for x in (since, changes, text, pics, note, hints) if x))
+            "\n\n".join(x for x in (since, changes, perms, text, pics, note, hints) if x))
         new.append(ai_chatlog.user_entry(text, sent, images))
         meta = ai_chatlog.move_images(log + new, meta)
 

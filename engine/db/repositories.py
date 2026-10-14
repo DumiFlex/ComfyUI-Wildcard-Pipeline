@@ -958,8 +958,18 @@ class TemplateRepository:
         tags: list[str] | None = None,
         is_favorite: bool = False,
         negative_template: str | None = None,
+        id: str | None = None,
     ) -> dict[str, Any]:
-        tid = self._gen_id()
+        if id is None:
+            tid = self._gen_id()
+        else:
+            if not isinstance(id, str) or len(id) != _ID_HEX_LEN or not all(
+                c in "0123456789abcdef" for c in id
+            ):
+                raise ValueError(
+                    f"id must be a {_ID_HEX_LEN}-char lowercase-hex string"
+                )
+            tid = id
         now = _now()
         with self._conn:
             self._conn.execute(

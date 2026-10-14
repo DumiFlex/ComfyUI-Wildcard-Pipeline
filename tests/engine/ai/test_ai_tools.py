@@ -25,7 +25,7 @@ def test_every_tool_has_code_and_a_matching_prompt_line():
 def test_prompt_lists_tools_from_the_registry():
     head = chat.system_prompt(slim=True)
     for t in tools.TOOLS:
-        if t.name != "more_tools" and t.kind != "web":
+        if t.name != "more_tools" and t.kind != "web" and t.name not in tools.DELETE:
             assert f"- {t.name} " in head
     assert "- web_search " not in head and "Page tools (run in the user's browser" in head
     native = chat.system_prompt(slim=True, native=True)
@@ -43,6 +43,21 @@ def test_toolsets():
     # Web search only once the user set up an engine.
     assert "web_search" not in tools.toolset(None, scoped=False)
     assert "web_search" in tools.toolset(None, scoped=False, web=True)
+    # Deleting only once the user allowed it, scoped or not.
+    assert "delete_items" not in tools.toolset(None, scoped=False)
+    assert "delete_items" not in tools.toolset("all", scoped=True)
+    assert "delete_items" in tools.toolset(None, scoped=False, delete=True)
+    assert "delete_items" in tools.toolset("all", scoped=True, delete=True)
+    assert "edit_tags" in tools.toolset("all", scoped=True)
+
+
+def test_sync_delete_adds_and_removes_in_catalog_order():
+    base = tools.toolset(None, scoped=False)
+    on = tools.sync_delete(base, True)
+    assert on == tools.toolset(None, scoped=False, delete=True)
+    assert tools.sync_delete(on, True) is on  # unchanged: same list back
+    assert tools.sync_delete(on, False) == base
+    assert tools.sync_delete(base, False) is base
     assert "web_search" in tools.toolset("wildcards", scoped=True, web=True)
     lists = tools.toolset("all", scoped=True)
     assert "select_rows" in lists and "organize" in lists and "show_test" not in lists

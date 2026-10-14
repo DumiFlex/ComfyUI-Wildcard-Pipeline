@@ -366,6 +366,32 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       </p>
     </DocSection>
 
+    <DocSection title="Categories, tags and deleting">
+      <p>
+        Ask the chat to make or rename categories ("make a Weather category", "rename Clothes to
+        Outfits") or to rename library tags everywhere ("rename #warm to #cozy"). Renaming a tag
+        to one you already have merges the two, as on the Tags page. Each change is a card;
+        Undo puts every item's tags and categories back.
+      </p>
+      <p>
+        Deleting is off until you turn on <b>Let the assistant delete items</b> in
+        <b>Settings › AI assistant › Permissions</b>. Then the chat can propose deleting
+        modules, bundles, templates, categories and tags, up to 10 items per card. A delete card
+        says what uses each item (bundles, constraints, wildcards that point at it) and asks you
+        to confirm before anything goes. Undo brings everything back as it was saved: items at
+        the same ids, so references to them work again, categories with their items, and tags on
+        the items that had them. Saved workflows keep their own copy of a deleted module, as with
+        a delete from the list.
+      </p>
+      <p>
+        <b>Apply small changes automatically</b>, in the same place, applies new
+        descriptions, tags and categories on items, and new categories, without a click. Each card says
+        <b>Applied automatically</b> and keeps its Undo. Ratings, content changes, renames and
+        deletes always wait for you. Both switches are off by default, and the assistant can't
+        change them.
+      </p>
+    </DocSection>
+
     <DocSection title="Tidy up an imported wildcard pack">
       <p>
         Packs converted from Dynamic Prompts, Prompt Post-Processor or Impact files arrive as flat
@@ -535,9 +561,11 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       <p>
         The assistant can't do anything you don't see. It has a fixed set of tools: it searches
         and reads your library and these docs, runs test stacks in memory, and proposes changes
-        as cards. It can't delete items, touch files, change its own settings, install or
-        publish packs, or open web pages, and nothing is saved until you press
-        <b>Apply</b>. It reaches the internet only through web search, which you turn on and
+        as cards. It can't touch files, change its own settings, install or publish packs, or
+        open web pages, and nothing is saved until you press <b>Apply</b> (or, when you turn on
+        <b>Apply small changes automatically</b>, until it proposes a description, tag or
+        category, which you can undo). It can only propose deleting when you allow it, and every
+        delete waits for your confirm. It reaches the internet only through web search, which you turn on and
         allow search by search. Opening pages and pointing at things needs no permission, since
         they change nothing. Its replies can't contain links, images or HTML, so a reply can't send
         your data anywhere when it is shown.

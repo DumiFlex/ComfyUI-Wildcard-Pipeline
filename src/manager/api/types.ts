@@ -285,6 +285,8 @@ export interface ModuleListResponse {
 }
 
 export interface ModuleCreateInput {
+  /** 8 hex: create at this id (a proposed module, or one Undo brings back). */
+  id?: string;
   type: ModuleType;
   name: string;
   description?: string;
@@ -343,6 +345,8 @@ export interface BundleListResponse {
 }
 
 export interface BundleCreateInput {
+  /** 8 hex: create at this id (Undo on a delete brings it back). */
+  id?: string;
   name: string;
   description?: string;
   color?: string | null;
@@ -392,6 +396,8 @@ export interface TemplateListResponse {
 }
 
 export interface TemplateCreateInput {
+  /** 8 hex: create at this id (Undo on a delete brings it back). */
+  id?: string;
   name: string;
   template_string?: string;
   negative_template?: string | null;
@@ -846,6 +852,12 @@ export interface AiConfig {
   /** Engines with a key saved for their own address. Never the keys. */
   search_keys_saved: AiSearchEngineId[];
   search_engines: Record<AiSearchEngineId, { label: string; needs_key: boolean }>;
+  /** The chat may propose deleting items, categories and tags (each card
+   *  still needs its own confirm). Off by default. */
+  allow_delete: boolean;
+  /** Small changes (descriptions, tags, categories) from the chat apply
+   *  without a click, and can be undone. Off by default. */
+  auto_apply: boolean;
 }
 
 export type AiSearchEngineId = "searxng" | "brave" | "tavily" | "kagi";
@@ -870,6 +882,8 @@ export interface AiConfigPatch {
   search_url?: string;
   /** Write-only, for the chosen engine. `""` removes it. */
   search_key?: string;
+  allow_delete?: boolean;
+  auto_apply?: boolean;
 }
 
 export interface AiTestResult {
@@ -1217,7 +1231,37 @@ export type AiChatOp =
   | { op: "open"; kind: "doc"; type: "doc"; id: string }
   | { op: "open"; kind: "page"; type: "page"; id: string; section?: string }
   /** Hands a description to the Pack builder, which plans the pack. */
-  | { op: "open"; kind: "pack"; type: "pack"; id: string; description: string };
+  | { op: "open"; kind: "pack"; type: "pack"; id: string; description: string }
+  | {
+      op: "categories"; kind: "categories"; create: string[];
+      rename: Array<{ id: string; from: string; to: string }>;
+    }
+  | {
+      op: "tags"; kind: "tags";
+      /** `members`: each item that has `from`, with its tags before. */
+      rename: Array<{ from: string; to: string; merge: boolean; members: AiTagMember[] }>;
+    }
+  /** Needs Settings › AI assistant › "Let the assistant delete items" and
+   *  a confirm on the card. Undo creates the items again at their ids. */
+  | {
+      op: "delete"; kind: "delete";
+      items: Array<{
+        kind: "module" | "bundle" | "template"; type: string; id: string; name: string;
+        row: Record<string, unknown>;
+      }>;
+      categories: Array<{
+        id: string; name: string; color: string | null; icon: string | null;
+        sort_order: number; members: Array<{ kind: "module" | "bundle" | "template"; id: string }>;
+      }>;
+      tags: Array<{ tag: string; members: AiTagMember[] }>;
+    };
+
+/** An item a tag change touches, with its tags as they were. */
+export interface AiTagMember {
+  kind: "module" | "bundle" | "template";
+  id: string;
+  tags: string[];
+}
 
 /** A change the assistant proposes. Nothing is saved until Apply. */
 export interface AiChatProposal {
@@ -1230,6 +1274,9 @@ export interface AiChatProposal {
   /** The proposal this one builds on (same item); apply that first. */
   after: string | null;
   op: AiChatOp;
+  /** "low": the server judged it small (descriptions, tags, categories),
+   *  so auto-apply may apply it. */
+  risk?: "low";
 }
 
 export interface AiChatResult {

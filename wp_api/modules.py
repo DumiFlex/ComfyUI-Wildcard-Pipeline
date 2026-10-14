@@ -263,6 +263,10 @@ async def create_module(request: web.Request) -> web.Response:
                 is_favorite=bool(body.get("is_favorite", False)),
                 content_rating=body.get("content_rating", "safe"),
             )
+            if given is not None:
+                # Back at an id it had (Undo on the AI chat's delete card):
+                # the bundles its delete flagged find it again.
+                _unflag_orphaned_in_bundles(conn, given)
     except ValueError as e:
         return json_error(str(e), status=400)
     except sqlite3.IntegrityError as e:
@@ -514,6 +518,29 @@ def _flag_orphaned_in_bundles(conn, module_id: str) -> list[str]:
                 new_children.append(next_child)
             else:
                 new_children.append(child)
+        if rewritten:
+            bundle_repo.update(bundle["id"], children=new_children)
+            affected.append(bundle["id"])
+    return affected
+
+
+def _unflag_orphaned_in_bundles(conn: sqlite3.Connection, module_id: str) -> list[str]:
+    """Undo `_flag_orphaned_in_bundles` for a module that is back."""
+    bundle_repo = BundleRepository(conn)
+    affected: list[str] = []
+    for bundle in bundle_repo.list():
+        children = bundle.get("children") or []
+        if not isinstance(children, list):
+            continue
+        rewritten = False
+        new_children: list[dict] = []
+        for child in children:
+            meta = child.get("meta") if isinstance(child, dict) else None
+            if isinstance(meta, dict) and child.get("id") == module_id and meta.get("orphaned"):
+                meta = {k: v for k, v in meta.items() if k not in ("orphaned", "orphaned_at")}
+                child = {**child, "meta": meta}
+                rewritten = True
+            new_children.append(child)
         if rewritten:
             bundle_repo.update(bundle["id"], children=new_children)
             affected.append(bundle["id"])

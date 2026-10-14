@@ -39,6 +39,7 @@ from engine.ai import tools as ai_tools
 from engine.ai import use as ai_use
 from engine.ai import wildcard as ai_wildcard
 from engine.ai import wildcard_edit as ai_wildcard_edit
+from engine.ai.chat_manage import ManageTools
 from engine.ai.chat_tools import MoreTools, _num, _reach, _reach_text
 from engine.modules.constraint_handler import ConstraintHandler
 from engine.modules.derivation_handler import DerivationHandler
@@ -196,9 +197,11 @@ change anything yourself: every change tool makes a proposal card the user \
 reviews and applies. Plans are fine, but act: if the user asks for \
 something, propose it. Never ask "should I proceed?" or "want me to?": a \
 proposal already waits for the user's Apply, so asking first only makes \
-them say yes twice. When the user says yes, make the calls. Answer the \
-user's actual question with what you found: no greeting, no list of what you \
-can do.
+them say yes twice. When the user says yes, make the calls. Deleting \
+needs the delete_items tool; when it isn't in your tools, tell the user \
+deleting is off in Settings › AI assistant › Permissions (you can't turn it \
+on). Answer the user's actual question with what you found: no greeting, no \
+list of what you can do.
 
 """
 #: How a JSON-mode model answers.
@@ -346,7 +349,7 @@ def parse_step(raw: Any) -> tuple[str, list[dict[str, Any]]]:
     return message.strip()[:MAX_MESSAGE], calls[:MAX_CALLS_PER_STEP]
 
 
-class Library(MoreTools):
+class Library(MoreTools, ManageTools):
     """The rows one chat request may look at, plus the change compilers."""
 
     def __init__(self, modules: list[dict[str, Any]], bundles: list[dict[str, Any]],
@@ -356,6 +359,9 @@ class Library(MoreTools):
         self.bundles = {b["id"]: b for b in bundles if isinstance(b.get("id"), str)}
         self.templates = {t["id"]: t for t in templates or [] if isinstance(t.get("id"), str)}
         self.categories = {c["id"]: c["name"] for c in categories}
+        self.category_rows = {c["id"]: dict(c) for c in categories}
+        #: Settings › AI assistant › "Let the assistant delete items".
+        self.allow_delete = False
         self.cat_by_lower = {c["name"].lower(): c["id"] for c in categories}
         self.names = {i: m.get("name") or "" for i, m in self.modules.items()}
         self.tags = ai_describe.library_tags([*modules, *bundles, *(templates or [])])
@@ -1102,6 +1108,9 @@ class Library(MoreTools):
             "summary": f"{kind} info",
             "preview": preview,
             "warnings": [],
+            # Auto-apply may apply it: a rating change stays a normal card,
+            # because it changes what people see.
+            **({} if "content_rating" in body else {"risk": "low"}),
             "op": {"op": "update", "kind": kind, "type": self._kind(r), "id": r["id"],
                    "name": r.get("name"), "body": body, "before": before,
                    "new_category": new_cat},

@@ -65,6 +65,26 @@ const router = useRouter();
 const scroller = ref<HTMLElement | null>(null);
 const box = ref<HTMLTextAreaElement | null>(null);
 const expanded = ref(new Set<string>());
+/** Delete cards showing their confirm step. */
+const confirming = ref(new Set<string>());
+
+function setConfirm(i: number, p: AiChatProposal, on: boolean): void {
+  const next = new Set(confirming.value);
+  if (on) next.add(key(i, p));
+  else next.delete(key(i, p));
+  confirming.value = next;
+}
+
+async function confirmDelete(i: number, entry: ChatAssistantEntry, p: AiChatProposal): Promise<void> {
+  setConfirm(i, p, false);
+  await chat.apply(entry, p);
+}
+
+/** How many things a delete card removes, for its confirm line. */
+function deleteCount(p: AiChatProposal): number {
+  const op = p.op;
+  return op.op === "delete" ? op.items.length + op.categories.length + op.tags.length : 0;
+}
 const size = useAiChatWidth();
 
 const modelLabel = computed(() => config.value?.model ?? "");
@@ -351,6 +371,7 @@ function target(entry: ChatAssistantEntry, p: AiChatProposal): RouteLocationRaw 
       ? { name: "settings", params: { section: op.section ?? "" } }
       : { name: op.id };
   }
+  if (op.op !== "update" && op.op !== "open") return null;
   const name = EDIT_ROUTES[op.type];
   return name ? { name, params: { id: op.id } } : null;
 }
@@ -555,6 +576,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
             :key="p.pid"
             class="wp-ai-chat__card"
             :data-status="entry.status[p.pid] ?? 'pending'"
+            :data-kind="p.op.op === 'delete' ? 'delete' : undefined"
             data-test="ai-chat-proposal"
           >
             <div class="wp-ai-chat__card-head">
@@ -580,16 +602,33 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
                 <Button size="sm" icon="pi-arrow-up-right" data-test="ai-chat-open" @click="openItem(entry, p)">{{ openLabel(p) }}</Button>
               </template>
               <template v-else-if="entry.status[p.pid] === 'applied'">
-                <span class="wp-ai-chat__done"><i class="pi pi-check" aria-hidden="true" /> Applied</span>
+                <span class="wp-ai-chat__done" :data-test="entry.auto?.[p.pid] ? 'ai-chat-auto-applied' : undefined"><i class="pi pi-check" aria-hidden="true" /> {{ p.op.op === "delete" ? "Deleted" : entry.auto?.[p.pid] ? "Applied automatically" : "Applied" }}</span>
                 <Button variant="ghost" size="sm" data-test="ai-chat-undo" @click="chat.undo(entry, p)">Undo</Button>
                 <Button v-if="target(entry, p)" variant="ghost" size="sm" icon="pi-arrow-up-right" data-test="ai-chat-open" @click="openItem(entry, p)">Open</Button>
               </template>
               <template v-else-if="entry.status[p.pid] === 'editor'">
-                <span class="wp-ai-chat__done" data-test="ai-chat-in-editor"><i class="pi pi-check" aria-hidden="true" /> In the editor. Save there to keep it.</span>
+                <span class="wp-ai-chat__done" data-test="ai-chat-in-editor"><i class="pi pi-check" aria-hidden="true" /> {{ entry.auto?.[p.pid] ? "Put in the editor automatically." : "In the editor." }} Save there to keep it.</span>
                 <Button variant="ghost" size="sm" data-test="ai-chat-undo" @click="chat.undo(entry, p)">Undo</Button>
               </template>
               <template v-else-if="entry.status[p.pid] === 'dismissed'">
                 <span class="wp-ai-chat__dismissed">Dismissed</span>
+              </template>
+              <template v-else-if="p.op.op === 'delete' && confirming.has(key(i, p))">
+                <span class="wp-ai-chat__confirm" role="alert" data-test="ai-chat-delete-question">Delete {{ deleteCount(p) === 1 ? "it" : `these ${deleteCount(p)}` }}? Undo brings {{ deleteCount(p) === 1 ? "it" : "them" }} back.</span>
+                <Button variant="ghost" size="sm" data-test="ai-chat-delete-cancel" @click="setConfirm(i, p, false)">Cancel</Button>
+                <Button variant="danger" size="sm" icon="pi-trash" data-test="ai-chat-delete-confirm" @click="confirmDelete(i, entry, p)">Delete</Button>
+              </template>
+              <template v-else-if="p.op.op === 'delete'">
+                <span v-if="chat.blockedReason(entry, p)" class="wp-ai-chat__blocked">{{ chat.blockedReason(entry, p) }}</span>
+                <Button variant="ghost" size="sm" data-test="ai-chat-dismiss" @click="chat.dismiss(entry, p)">Dismiss</Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon="pi-trash"
+                  :disabled="!!chat.blockedReason(entry, p)"
+                  data-test="ai-chat-delete"
+                  @click="setConfirm(i, p, true)"
+                >Delete…</Button>
               </template>
               <template v-else>
                 <span v-if="chat.blockedReason(entry, p)" class="wp-ai-chat__blocked">{{ chat.blockedReason(entry, p) }}</span>
@@ -792,6 +831,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 }
 .wp-ai-chat__card[data-status="applied"], .wp-ai-chat__card[data-status="editor"] { border-color: color-mix(in oklab, var(--wp-success) 50%, var(--wp-border)); }
 .wp-ai-chat__card[data-status="dismissed"] { opacity: 0.6; }
+.wp-ai-chat__card[data-kind="delete"][data-status="pending"] { border-color: color-mix(in oklab, var(--wp-danger) 40%, var(--wp-border)); }
+.wp-ai-chat__confirm { margin-right: auto; font-size: 12px; color: var(--wp-danger); }
 .wp-ai-chat__card[data-status="failed"] { border-color: color-mix(in oklab, var(--wp-danger) 50%, var(--wp-border)); }
 .wp-ai-chat__card-head { display: flex; flex-direction: column; gap: 1px; }
 .wp-ai-chat__card-title { font-weight: 600; font-size: 13px; }

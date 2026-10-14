@@ -95,6 +95,10 @@ DEFAULTS: dict[str, Any] = {
     # says the model takes them, else the JSON step format), "native" or
     # "json".
     "tool_format": "auto",
+    # Permissions (Settings › AI assistant › Permissions). No tool can read
+    # or change these.
+    "allow_delete": False,
+    "auto_apply": False,
 }
 TOOL_FORMATS = ("auto", "native", "json")
 
@@ -232,6 +236,8 @@ def _normalize(raw: Any) -> dict[str, Any]:
         ),
         "tool_format": src.get("tool_format") if src.get("tool_format") in TOOL_FORMATS
         else DEFAULTS["tool_format"],
+        "allow_delete": src.get("allow_delete") is True,
+        "auto_apply": src.get("auto_apply") is True,
         "providers": slots,
         "search": _normalize_search(src.get("search")),
     }
@@ -272,6 +278,8 @@ def _active(cfg: dict[str, Any]) -> dict[str, Any]:
         "context_max": cfg["context_max"],
         "model_size": slot["model_size"],
         "tool_format": cfg["tool_format"],
+        "allow_delete": cfg["allow_delete"],
+        "auto_apply": cfg["auto_apply"],
         "embed_model": slot["embed_model"],
         "embed_base_url": slot["embed_base_url"],
         "api_key": slot["api_key"],
@@ -417,10 +425,11 @@ def update(patch: dict[str, Any]) -> dict[str, Any]:
         raise ConfigError("body must be an object")
     with _lock:
         cfg = _read()
-        if "enabled" in patch:
-            if not isinstance(patch["enabled"], bool):
-                raise ConfigError("enabled must be true or false")
-            cfg["enabled"] = patch["enabled"]
+        for flag in ("enabled", "allow_delete", "auto_apply"):
+            if flag in patch:
+                if not isinstance(patch[flag], bool):
+                    raise ConfigError(f"{flag} must be true or false")
+                cfg[flag] = patch[flag]
         if "provider" in patch:
             if patch["provider"] not in PRESETS:
                 raise ConfigError(f"unknown provider {patch['provider']!r}")

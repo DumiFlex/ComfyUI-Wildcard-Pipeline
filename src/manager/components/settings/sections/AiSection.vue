@@ -671,6 +671,33 @@ const off = computed(() => !config.value?.enabled);
           </SettingRow>
         </SettingGroup>
 
+        <SettingGroup title="Permissions" note="The assistant can't change these itself.">
+          <SettingRow
+            label="Let the assistant delete items"
+            hint="The chat can propose deleting modules, bundles, templates, categories and tags. Each delete card still asks you to confirm, and Undo brings everything back. Off by default."
+            setting-key="ai-allow-delete"
+          >
+            <Toggle
+              :model-value="config.allow_delete"
+              aria-label="Let the assistant delete items"
+              data-test="ai-allow-delete"
+              @update:model-value="(v: boolean) => patch({ allow_delete: v })"
+            />
+          </SettingRow>
+          <SettingRow
+            label="Apply small changes automatically"
+            hint="New descriptions, tags and categories from the chat are applied without a click. Each card says it was applied and keeps its Undo. Ratings, content, renames and deletes always wait for you. Off by default."
+            setting-key="ai-auto-apply"
+          >
+            <Toggle
+              :model-value="config.auto_apply"
+              aria-label="Apply small changes automatically"
+              data-test="ai-auto-apply"
+              @update:model-value="(v: boolean) => patch({ auto_apply: v })"
+            />
+          </SettingRow>
+        </SettingGroup>
+
         <SettingGroup title="Web search">
           <SettingRow
             form

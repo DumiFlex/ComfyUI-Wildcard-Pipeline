@@ -316,6 +316,37 @@ TOOLS: list[Tool] = [
         ("core",),
     ),
     Tool(
+        "edit_categories", "change",
+        "Propose new categories, or renaming categories that exist.",
+        '{"create": [category names], "rename": [{"from": name, "to": new name}]}: makes '
+        "or renames categories. Put items in a category with update_info.",
+        obj({"create": arr(s("category name")),
+             "rename": arr(obj({"from": s("category name"), "to": s("new name")},
+                               ("from", "to")))}),
+        ("lists",),
+    ),
+    Tool(
+        "edit_tags", "change",
+        "Propose renaming library tags everywhere; renaming to a tag that exists merges them.",
+        '{"rename": [{"from": tag, "to": new tag}]}: renames library tags on every item that '
+        "has them; a \"to\" that exists merges the two. Add or remove a tag on one item with "
+        "update_info.",
+        obj({"rename": arr(obj({"from": s("library tag"), "to": s("new tag")},
+                               ("from", "to")))}, ("rename",)),
+        ("lists",),
+    ),
+    Tool(
+        "delete_items", "change",
+        "Propose deleting library items, categories or library tags. The user confirms on the "
+        "card and can undo it.",
+        '{"items": [names or ids], "categories": [names], "tags": [library tags]}: a card that '
+        "deletes them once the user confirms it (Undo brings them back). Only for what the "
+        "user asked to delete. Items keep working in saved workflows.",
+        obj({"items": arr(s("item name or id")), "categories": arr(s("category name")),
+             "tags": arr(s("library tag"))}),
+        ("delete",),
+    ),
+    Tool(
         "plan_pack", "change",
         "Hand a pack description to the Pack builder, which plans, builds, tests and installs "
         "a whole pack. Use it for a new pack or a whole set of modules for one subject.",
@@ -424,20 +455,40 @@ PAGE_GROUPS: dict[str, tuple[str, ...]] = {
 DEFAULT_GROUPS = ("wildcards", "pack")
 
 
-def toolset(route: str | None, *, scoped: bool, web: bool = False) -> list[str]:
+#: Offered only while Settings › AI assistant › "Let the assistant delete
+#: items" is on (`sync_delete`).
+DELETE = tuple(t.name for t in TOOLS if "delete" in t.groups)
+
+
+def toolset(route: str | None, *, scoped: bool, web: bool = False,
+            delete: bool = False) -> list[str]:
     """Tool names a new chat offers. Unscoped (medium and large models):
     all of them. Scoped (small models): the core tools, the page's groups
     and `more_tools`, in catalog order so the list is stable. `web`: web
-    search is set up (Settings › AI assistant), so `web_search` is offered."""
+    search is set up (Settings › AI assistant), so `web_search` is offered.
+    `delete`: deleting is allowed, so `delete_items` is offered."""
     if not scoped:
-        return [t.name for t in TOOLS if t.name != "more_tools" and (web or t.kind != "web")]
+        return [t.name for t in TOOLS if t.name != "more_tools" and (web or t.kind != "web")
+                and (delete or t.name not in DELETE)]
     key = str(route or "")
     for suffix in ("-new", "-edit"):
         if key.endswith(suffix):
             key = key[: -len(suffix)]
-    groups = {"core", *PAGE_GROUPS.get(key, DEFAULT_GROUPS), *(("web",) if web else ())}
+    groups = {"core", *PAGE_GROUPS.get(key, DEFAULT_GROUPS), *(("web",) if web else ()),
+              *(("delete",) if delete else ())}
     names = [t.name for t in TOOLS if groups.intersection(t.groups)]
     return [*names, "more_tools"]
+
+
+def sync_delete(names: list[str], allowed: bool) -> list[str]:
+    """A chat's tool list with the delete tools added or removed to match
+    the setting now, in catalog order (unchanged when it already matches,
+    so the cached prompt prefix stays)."""
+    have = set(names)
+    if allowed == have.issuperset(DELETE) and (allowed or not have.intersection(DELETE)):
+        return names
+    want = (have | set(DELETE)) if allowed else (have - set(DELETE))
+    return [t.name for t in TOOLS if t.name in want]
 
 
 def tools(names: list[str]) -> list[Tool]:

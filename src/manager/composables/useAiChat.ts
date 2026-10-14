@@ -32,6 +32,8 @@ import { useBundleStore } from "../stores/bundleStore";
 import { useTemplateStore } from "../stores/templateStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { openEditor } from "./useOpenEditor";
+import { useAiConfig } from "./useAiConfig";
+import { applyManage, isManageOp, undoManage } from "./aiManageOps";
 import { runCall, type AiActionHost } from "./useAiActions";
 import { MAX_IMAGES, prepareImage, type ChatImage } from "../utils/chat-image";
 
@@ -59,6 +61,8 @@ export interface ChatAssistantEntry {
   editorSnap?: { id: string; json: string };
   /** The user's answers to the web searches this answer asked for. */
   approved?: Record<string, SearchApproval>;
+  /** Cards auto-apply applied (Settings › AI assistant › Permissions). */
+  auto?: Record<string, true>;
 }
 
 export type ChatEntry = ChatUserEntry | ChatAssistantEntry;
@@ -69,6 +73,8 @@ const input = ref("");
  *  context as soon as it is open. */
 const queued = ref("");
 const entries = shallowRef<ChatEntry[]>([]);
+/** Most cards auto-apply applies from one answer. */
+const MAX_AUTO = 20;
 const loading = ref(false);
 const error = ref("");
 let controller: AbortController | null = null;
@@ -138,6 +144,35 @@ function touch(): void {
   triggerRef(entries);
 }
 
+/** Show an answer, then apply its small changes when auto-apply is on. */
+async function pushAnswer(result: AiChatResult, snap?: { id: string; json: string }): Promise<void> {
+  const entry: ChatAssistantEntry = {
+    role: "assistant", result, status: {}, created: {}, errors: {},
+    ...(snap ? { editorSnap: snap } : {}),
+  };
+  entries.value = [...entries.value, entry];
+  await autoApply(entry);
+}
+
+/** Apply the cards the server marked low risk, in order, when the user
+ *  turned auto-apply on. A blocked card (it waits on another, or the
+ *  editor changed) stays a card. At most MAX_AUTO per answer. */
+async function autoApply(entry: ChatAssistantEntry): Promise<void> {
+  if (!useAiConfig().config.value?.auto_apply) return;
+  let n = 0;
+  for (const p of entry.result.proposals) {
+    if (n >= MAX_AUTO) break;
+    if (p.risk !== "low" || entry.status[p.pid] || blockedReason(entry, p)) continue;
+    await apply(entry, p);
+    const st = entry.status[p.pid];
+    if (st === "applied" || st === "editor") {
+      entry.auto = { ...entry.auto, [p.pid]: true };
+      n += 1;
+    }
+  }
+  if (n) touch();
+}
+
 function editorJson(): { id: string; json: string } | undefined {
   const ed = openEditor();
   if (!ed) return undefined;
@@ -176,13 +211,7 @@ async function send(page?: AiChatPage): Promise<void> {
       chatId.value = result.chat_id;
       pending = pending.filter((e) => !events.includes(e));
     }
-    entries.value = [
-      ...entries.value,
-      {
-        role: "assistant", result, status: {}, created: {}, errors: {},
-        ...(snap ? { editorSnap: snap } : {}),
-      },
-    ];
+    await pushAnswer(result, snap);
     await carryOn(result, mine.signal);
   } catch (err) {
     unsent(next, text, pics);
@@ -234,13 +263,7 @@ async function retry(page?: AiChatPage): Promise<void> {
       ...(events.length ? { events } : {}),
     }, mine.signal);
     pending = pending.filter((e) => !events.includes(e));
-    entries.value = [
-      ...entries.value,
-      {
-        role: "assistant", result, status: {}, created: {}, errors: {},
-        ...(snap ? { editorSnap: snap } : {}),
-      },
-    ];
+    await pushAnswer(result, snap);
     await carryOn(result, mine.signal);
   } catch (err) {
     // The old answer is still the stored one: show it again.
@@ -354,13 +377,7 @@ async function carryOn(first: AiChatResult, signal: AbortSignal): Promise<void> 
     result = await turn({
       chat_id: result.chat_id, results: answers, ...(page ? { page } : {}),
     }, signal);
-    entries.value = [
-      ...entries.value,
-      {
-        role: "assistant", result, status: {}, created: {}, errors: {},
-        ...(snap ? { editorSnap: snap } : {}),
-      },
-    ];
+    await pushAnswer(result, snap);
   }
 }
 
@@ -432,6 +449,9 @@ function reset(): void {
 /** Why a proposal can't be applied yet, else "". */
 function blockedReason(entry: ChatAssistantEntry, p: AiChatProposal): string {
   const op = p.op;
+  if (op.op === "delete" && !entry.status[p.pid] && !useAiConfig().config.value?.allow_delete) {
+    return "Deleting is turned off in Settings › AI assistant";
+  }
   if (op.op === "update" && op.basis === "editor" && !entry.status[p.pid]) {
     const ed = openEditor();
     if (!ed || ed.id !== op.id) return `Open ${op.name} in its editor to apply`;
@@ -463,7 +483,9 @@ async function apply(entry: ChatAssistantEntry, p: AiChatProposal): Promise<void
   const templates = useTemplateStore();
   delete entry.errors[p.pid];
   try {
-    if (op.op === "create") {
+    if (isManageOp(op)) {
+      await applyManage(op);
+    } else if (op.op === "create") {
       const cid = await categoryId(op.new_category);
       const extra = cid === undefined ? {} : { category_id: cid };
       const row = op.kind === "bundle" ? await bundles.create({ ...op.body, ...extra })
@@ -518,7 +540,9 @@ async function undo(entry: ChatAssistantEntry, p: AiChatProposal): Promise<void>
   }
   if (entry.status[p.pid] !== "applied" || op.op === "open") return;
   try {
-    if (op.op === "create") {
+    if (isManageOp(op)) {
+      await undoManage(op);
+    } else if (op.op === "create") {
       const id = entry.created[p.pid];
       if (id && op.kind === "bundle") await useBundleStore().remove(id);
       else if (id && op.kind === "template") await useTemplateStore().remove(id);
@@ -532,6 +556,7 @@ async function undo(entry: ChatAssistantEntry, p: AiChatProposal): Promise<void>
       await useBundleStore().update(op.id, op.before);
     }
     delete entry.status[p.pid];
+    if (entry.auto) delete entry.auto[p.pid];
     record(p.pid, "undone");
   } catch (err) {
     entry.errors[p.pid] = err instanceof Error ? err.message : String(err);

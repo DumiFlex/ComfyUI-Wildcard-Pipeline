@@ -25,7 +25,7 @@ const PRESETS: AiConfig["presets"] = {
 function cfg(over: Partial<AiConfig> = {}): AiConfig {
   return {
     enabled: false, provider: "ollama", base_url: "", model: "", unload_after_s: 60,
-    context_max: 16384, model_size: "auto", model_size_auto: "medium", tool_format: "auto", embed_model: "", embed_base_url: "", search_engine: "off", search_url: "", search_keys_saved: [], search_engines: { searxng: { label: "SearXNG", needs_key: false }, brave: { label: "Brave Search", needs_key: true }, tavily: { label: "Tavily", needs_key: true }, kagi: { label: "Kagi", needs_key: true } }, key_for_host: null,
+    context_max: 16384, model_size: "auto", model_size_auto: "medium", tool_format: "auto", allow_delete: false, auto_apply: false, embed_model: "", embed_base_url: "", search_engine: "off", search_url: "", search_keys_saved: [], search_engines: { searxng: { label: "SearXNG", needs_key: false }, brave: { label: "Brave Search", needs_key: true }, tavily: { label: "Tavily", needs_key: true }, kagi: { label: "Kagi", needs_key: true } }, key_for_host: null,
     key_set: false, key_from_env: false, keys_saved: [], presets: PRESETS, ...over,
   };
 }
@@ -116,6 +116,21 @@ describe("Settings › AI assistant", () => {
     await flushPromises();
     expect(api.ai.saveConfig).toHaveBeenCalledWith({ enabled: true });
     expect(api.ai.models).toHaveBeenCalled();
+  });
+
+  it("saves the permissions, both off by default", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg());
+    vi.mocked(api.ai.saveConfig).mockImplementation(async (p) => cfg(p as Partial<AiConfig>));
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    expect(w.get('[data-test="ai-allow-delete"] [aria-checked]').attributes("aria-checked")).toBe("false");
+    expect(w.get('[data-test="ai-auto-apply"] [aria-checked]').attributes("aria-checked")).toBe("false");
+    await w.get('[data-test="ai-allow-delete"]').trigger("click");
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ allow_delete: true });
+    await w.get('[data-test="ai-auto-apply"]').trigger("click");
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ auto_apply: true });
   });
 
   it("marks cloud providers that already have a saved key", async () => {
