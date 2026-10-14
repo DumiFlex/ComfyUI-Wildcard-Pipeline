@@ -18,6 +18,7 @@ line of ``;``-separated clauses, which this module turns into instance keys:
     only options 1,3,"red"  enabled_options (option ids; the rest are off)
     off options 2,4       enabled_options (every option but those)
     weight 3=2.5, 4=0     option_weights (replaces those options' weights)
+    weight long_hair=3    … every option carrying that tag
     pin 2                 mode "pinned" + pinned_option_id (always that one)
     seed 1234             locked_seed (the same pick whatever the run seed)
     rules off 2,3         derivation: disabled_rule_ids; constraint:
@@ -364,8 +365,28 @@ def _weight(rest: str, out: dict[str, Any], kind: str,
         w = _number(m.group(2), "a weight")
         if w < 0 or w > MAX_WEIGHT:
             raise ValueError(f"a weight is between 0 and {MAX_WEIGHT:g}, not {m.group(2)}")
-        weights[_option_id(m.group(1), payload)] = int(w) if w.is_integer() else w
+        w = int(w) if w.is_integer() else w
+        tagged = _tagged(m.group(1), payload)
+        if tagged:
+            # "long_hair=3": every option carrying the tag.
+            for oid in tagged:
+                weights[oid] = w
+            continue
+        weights[_option_id(m.group(1), payload)] = w
     out["option_weights"] = weights
+
+
+def _tagged(ref: str, payload: dict[str, Any] | None) -> list[str]:
+    """The ids of the options carrying tag ``ref`` (``long_hair`` or
+    ``#long_hair``), when it names a tag and not an option."""
+    opts = _options(payload)
+    word = ref.strip().lstrip("#").strip().lower().replace(" ", "_")
+    if opts is None or not word or ref.strip().isdigit() or any(
+            str(o.get("id")) == word or " ".join(str(o.get("value", "")).split()).lower()
+            == word for o in opts):
+        return []
+    return [str(o.get("id")) for o in opts if word in {
+        str(t).lower().replace(" ", "_") for t in o.get("sub_categories") or []}]
 
 
 def _pin(rest: str, out: dict[str, Any], kind: str,
@@ -611,7 +632,8 @@ $model_variant" (take the option whose text equals that variable), "hold" \
 stays), "internal" (rules can read it, the prompt doesn't show it), "as \
 $other" (bind it to another variable). Wildcard options, by their number in \
 read (or "quoted text", or #id): "only options 1,3" (the rest off here), \
-"off options 2,4", "weight 3=2.5, 4=0" (this use's weights), "pin 2" (always \
+"off options 2,4", "weight 3=2.5, 4=0" (this use's weights; a tag in place \
+of a number weights every option carrying it), "pin 2" (always \
 that option). "seed 1234" (wildcard, combine, fixed values, derivation: the \
 same result whatever the run seed). Derivation: "rules off 2", "branches \
 off 2.2, 2.else" (rule 2's second branch and its ELSE; branch 1 is the IF, \

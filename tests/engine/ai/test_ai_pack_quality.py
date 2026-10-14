@@ -262,13 +262,19 @@ def test_inputs_the_request_never_asked_for_and_picks_in_examples():
         {"var": "character_lora", "about": "a LoRA", "example": "<lora:x:0.8>"},
         {"var": "style_preset", "about": "a style", "example": "@{Style:cinematic}, film"}])
     raw["items"][-1]["about"] = "$race, $hair, $character_lora, $style_preset"
-    plan = pack.compile_plan(raw, request="fantasy people in places")
+    plan = pack.compile_plan(raw, request="fantasy people in a style I type")
     assert [i["var"] for i in plan["inputs"]] == ["style_preset"]
     assert plan["inputs"][0]["example"] == "film"
     assert "$character_lora" not in plan["items"][-1]["about"]
     assert any("the request names no LoRA" in w for w in plan["warnings"])
     kept = pack.compile_plan(raw, request="use my character LoRA")
     assert len(kept["inputs"]) == 2
+    # Nothing says the user brings anything: the pack rolls it instead.
+    rolled = pack.compile_plan(raw, request="fantasy people in places")
+    assert rolled["inputs"] == []
+    style = next(i for i in rolled["items"] if i["var"] == "style_preset")
+    assert style["kind"] == "wildcard" and "film" in style["about"]
+    assert any("Made the input $style_preset a wildcard" in w for w in rolled["warnings"])
 
 
 def test_never_rules_built_as_reduce_become_excludes_and_only_is_sent_back():
@@ -281,12 +287,12 @@ def test_never_rules_built_as_reduce_become_excludes_and_only_is_sent_back():
                          "factor": 0.1, "reason": "no"}]}
     out = pack.compile_item(plan, key, built, answer)
     assert out["payload"]["matrix"]["elf"]["armor"] == {"mode": "exclude", "factor": 0}
-    assert any("Made its rules exclude" in w for w in out["warnings"])
+    assert any("Made its reduce rules exclude" in w for w in out["warnings"])
     plan["items"][[i["key"] for i in plan["items"]].index(key)]["about"] = \
         "#elf gets only #robe"
     out = pack.compile_item(plan, key, built, answer)
     assert out["payload"]["matrix"]["elf"]["armor"]["mode"] == "reduce"
-    assert "no rule is an only rule" in out["repair"]
+    assert "no rule is an only or exclude rule" in out["repair"]
     plan["items"][[i["key"] for i in plan["items"]].index(key)]["about"] = \
         "#elf rarely wears #armor"
     assert pack.compile_item(plan, key, built, answer)["repair"] == ""
@@ -347,3 +353,93 @@ def test_two_items_that_print_the_same_words_are_flagged():
     said = report["problems"][keys["Style"]]
     assert any("repeats words $quality (Quality)" in t and '"masterpiece"' in t for t in said)
     assert keys["Quality"] not in report["problems"]
+
+
+# ── Round 4 of the real-model run ───────────────────────────────────────
+
+
+def test_a_match_no_option_can_meet_is_left_out():
+    raw = _raw()
+    raw["items"][3]["use"] = "match $race"
+    plan = pack.compile_plan(raw)
+    built = _built(plan)
+    hair = next(i for i in plan["items"] if i["var"] == "hair")
+    out = pack.compile_item(plan, hair["key"], built, {"options": [
+        {"text": t, "weight": 1, "tags": [], "negative": ""} for t in ("bob cut", "braid")]})
+    assert any('Left out "match $race"' in w for w in out["warnings"])
+    built[hair["key"]] = {"id": out["id"], "payload": out["payload"]}
+    [mod] = [m for m in pack.chain_modules(plan, built) if m["id"] == out["id"]]
+    assert "match_variable" not in mod["instance"]
+    # An option that reads like a race keeps it.
+    built[hair["key"]]["payload"]["options"][0]["value"] = "race 1"
+    [mod] = [m for m in pack.chain_modules(plan, built) if m["id"] == out["id"]]
+    assert mod["instance"]["match_variable"] == "race"
+
+
+def test_a_weight_on_a_tag_weights_every_option_carrying_it():
+    from engine.ai import use as ai_use
+    payload = {"options": [{"id": "a", "value": "long hair", "sub_categories": ["long_hair"]},
+                           {"id": "b", "value": "very long hair",
+                            "sub_categories": ["long_hair"]},
+                           {"id": "c", "value": "pixie cut", "sub_categories": ["short_hair"]}]}
+    inst, notes = ai_use.parse_use("weight long_hair=3, #short_hair=1", kind="wildcard",
+                                   payload=payload)
+    assert inst["option_weights"] == {"a": 3, "b": 3, "c": 1} and notes == []
+    inst, _ = ai_use.parse_use('weight "pixie cut"=2', kind="wildcard", payload=payload)
+    assert inst["option_weights"] == {"c": 2}
+
+
+def test_never_and_only_hold_with_boosts_alongside():
+    raw = _raw()
+    raw["items"][1]["about"] = "#elf never uses #armor; boost #robe"
+    plan = pack.compile_plan(raw)
+    built = _built(plan)
+    key = next(i["key"] for i in plan["items"] if i["kind"] == "constraint")
+    answer = {"rules": [
+        {"source": "#elf", "target": "#armor", "effect": "reduce", "factor": 0.1, "reason": ""},
+        {"source": "#elf", "target": "#robe", "effect": "boost", "factor": 2, "reason": ""}]}
+    out = pack.compile_item(plan, key, built, answer)
+    assert out["payload"]["matrix"]["elf"]["armor"]["mode"] == "exclude"
+    assert out["payload"]["matrix"]["elf"]["robe"]["mode"] == "boost"
+    plan["items"][[i["key"] for i in plan["items"]].index(key)]["about"] = \
+        "#robe only for #elf"
+    assert "no rule is an only or exclude rule" in pack.compile_item(
+        plan, key, built, answer)["repair"]
+
+
+def test_one_subject_split_per_case_is_a_review_fix_and_or_templates_warn():
+    from engine.ai import text_items
+    raw = _raw(items=[
+        _item(name="Season", var="season", tags=["spring", "summer", "winter"]),
+        *[_item(name=f"{s.title()} Top", var=f"{s}_top") for s in ("spring", "summer",
+                                                                    "winter")],
+        _item(name="Hair Color", var="hair_color"), _item(name="Eye Color", var="eye_color"),
+        _item(name="Skin Color", var="skin_color"),
+        _item(kind="template", name="T", about="$spring_top OR $summer_top")])
+    found = [f["text"] for f in pack.review_plan(pack.compile_plan(raw))]
+    assert any("Spring Top, Summer Top, Winter Top split one subject (top)" in t for t in found)
+    assert not any("Hair Color" in t and "split" in t for t in found)
+    out = text_items.compile_template({"template": "$spring_top OR $summer_top",
+                                       "negative": ""})
+    assert any('joins picks with "or"' in w for w in out["warnings"])
+    assert "joins picks with" in pack.repair_note(out["warnings"])
+
+
+def test_a_rule_adding_words_the_variable_holds_is_flagged():
+    raw = _raw()
+    raw["items"].insert(-1, _item(kind="derivation", name="Fog", var="light",
+                                  about="append thick fog to $light"))
+    plan = pack.compile_plan(raw)
+    built = _built(plan)
+    keys = {i["name"]: i["key"] for i in plan["items"]}
+    light = next(i for i in plan["items"] if i["name"] == "Light")
+    for o in built[light["key"]]["payload"]["options"]:
+        o["value"] = "dim, thick fog"
+    built[keys["Fog"]] = {"id": next(i["id"] for i in plan["items"] if i["name"] == "Fog"),
+                          "payload": {"rules": [{"id": "r1", "branches": [{
+                              "condition": {"var": "light", "op": "exists", "value": ""},
+                              "action": {"target_var": "light", "mode": "append",
+                                         "value": ", thick fog"}}]}]}}
+    report = pack.check_pack(plan, built, seeds=10)
+    assert any("adds words the variable already holds" in t and "thick fog" in t
+               for t in report["problems"][keys["Fog"]])

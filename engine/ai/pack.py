@@ -324,7 +324,9 @@ item or be an input. The run-time variables ($iteration, $iteration_total, \
 $model_family, $model_variant, $model_name) and any listed as "set on the \
 user's canvas" are always there too. A constraint's tags must be tags its two \
 wildcards carry. Each wildcard is about one thing: a pose wildcard holds \
-poses, not hair or camera angles. Variable names: letters, digits and _. \
+poses, not hair or camera angles. Never make one wildcard per case of another \
+pick ($winter_top, $summer_top): make one $top wildcard with the cases as \
+tags and a constraint from the pick that decides. Variable names: letters, digits and _. \
 Plan what the request needs, up to 60 items. Don't add commentary; the \
 output is data for the user's own library.
 
@@ -355,6 +357,11 @@ def _tag(raw: Any) -> str:
 
 _PICKS = re.compile(r"@\{[^}]*\}|\{[^{}]*\|[^{}]*\}")
 _LORA = re.compile(r"lora|lycoris|locon", re.I)
+#: Words that say the user brings something at run time ("my OC", "a
+#: character I give it"): without one, the pack rolls everything itself.
+_GIVEN = re.compile(r"\b(my|mine|our|i'?ll|i will|i give|i type|i pick|i choose|given|"
+                    r"supplied|supply|provide[ds]?|typed?|inputs?|injector|own|whatever|"
+                    r"any character|fill in|lora)\b|lora", re.I)
 
 
 def _inputs(raw: Any, warnings: list[str]) -> list[dict[str, str]]:
@@ -549,6 +556,21 @@ def compile_plan(
     # An input that shares its variable with a wildcard a constraint needs
     # would leave the constraint without its wildcard: the wildcard wins.
     raw_items = [dict(x) for x in raw["items"] if isinstance(x, dict)]
+    if request and inputs and not _GIVEN.search(request):
+        # Nothing in the request says the user brings it: the pack rolls it.
+        have = {_var(x.get("var")) for x in raw_items}
+        for i in list(inputs):
+            inputs.remove(i)
+            if i["var"] in have:
+                warnings.append(f"Dropped the input ${i['var']}: the pack sets it")
+                continue
+            raw_items.insert(0, {
+                "kind": "wildcard", "name": i["var"].replace("_", " ").title(),
+                "var": i["var"], "about": (i["about"] or f"the {i['var']}") + (
+                    f" (for example {i['example']})" if i["example"] else ""),
+                "count": 0, "tags": [], "section": "", "use": ""})
+            warnings.append(f"Made the input ${i['var']} a wildcard: the request doesn't "
+                            "say you'll give it")
     for v in unasked:
         pat = re.compile(r",?\s*\$" + re.escape(v) + r"\b")
         for x in raw_items:
@@ -1485,6 +1507,27 @@ def _settings_findings(plan: dict[str, Any], add: Any) -> None:
                 "pack's own quality words.")})
 
 
+def _split_sets(wild: list[dict[str, Any]]) -> list[tuple[str, list[dict[str, Any]]]]:
+    """Wildcards that are one subject split per case ($spring_top,
+    $summer_top, $winter_top): three or more sharing a role word, whose
+    case words are tags another wildcard carries (the season's), so it isn't
+    $hair_color next to $eye_color."""
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for w in wild:
+        parts = w["var"].lower().split("_")
+        if len(parts) >= 2:
+            groups.setdefault("_".join(parts[1:]), []).append(w)
+    out: list[tuple[str, list[dict[str, Any]]]] = []
+    for role, group in groups.items():
+        if len(group) < 3:
+            continue
+        cases = {g["var"].lower().split("_")[0] for g in group}
+        tags = {t.lower() for w in wild if w not in group for t in w.get("tags") or []}
+        if len(cases & tags) >= 3:
+            out.append((role, group))
+    return out
+
+
 def review_plan(plan: dict[str, Any],
                 library: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     """Check a plan against the guide before anything is built:
@@ -1521,6 +1564,12 @@ def review_plan(plan: dict[str, Any],
             add(None, "fix", f"The anchor ${anchor} isn't set by anything in the pack, so "
                 "nothing can follow it; add an item for it (Fix with AI) or clear it",
                 {"op": "plan", "set": {"anchor": ""}, "label": "Clear it"})
+    for role, group in _split_sets(list(wild.values())):
+        add(group[0], "fix", ", ".join(g["name"] for g in group) + f" split one subject "
+            f"({role.replace('_', ' ')}) into a wildcard per case, so the prompt either "
+            f"lists them all or shows the wrong one; make one {role.replace('_', ' ')} "
+            "wildcard with the cases as tags, and a constraint from the pick that decides "
+            "between them")
     for i in items:
         if i["kind"] in ("derivation", "combine", "template"):
             missing = [v for v in _reads(i.get("about") or "") if v not in known]
@@ -2025,6 +2074,7 @@ def compile_item(
         preview = [ai_wildcard.option_line(o, idx) for o in payload["options"]]
         if item["use"]:
             warnings += _use_notes(item, payload)
+            warnings += _match_note(plan, built, item, payload)
     elif kind == "derivation":
         compiled = ai_derivation.compile_rules(answer, catalog=_catalog(plan, built),
                                                refs=ref_index(plan, built, library))
@@ -2154,27 +2204,29 @@ def _append_onto_nothing(plan: dict[str, Any], key: str, built: dict[str, Any],
 _NEVER = re.compile(r"\b(never|no|not|can'?t|cannot|excludes?|forbid\w*|without)\b", re.I)
 _ONLY = re.compile(r"\bonly\b", re.I)
 _SOFT = re.compile(r"\b(rarely|rarer|less|fewer|seldom|unlikely|sometimes|reduces?|mostly|"
-                   r"usually|often|more|boosts?|likely)\b", re.I)
+                   r"usually|often)\b", re.I)
 
 
 def _strict_rules(item: dict[str, Any], payload: dict[str, Any]) -> list[str]:
-    """The plan says "never" (or "only") and every rule the model wrote just
-    makes the target rarer: a "never" turns its rules into excludes (in
-    place); an "only" with no only rule is sent back."""
+    """The plan says "never" (or "only") and the model wrote rules that just
+    make the target rarer: a "never" turns its reduce rules into excludes
+    (in place; boosts it added stay); an "only" with no only or exclude
+    rule is sent back, since it lets every other pair through."""
     about = item.get("about") or ""
     cells = [c for row in payload["matrix"].values() for c in row.values()
              if isinstance(c, dict)]
     rules = cells + list(payload["exceptions"])
-    if not rules or _SOFT.search(about) or any(r.get("mode") != "reduce" for r in rules):
+    if not rules or _SOFT.search(about):
         return []
-    if _ONLY.search(about):
-        return ["The plan says \"only\", but no rule is an only rule: every rule just "
-                "makes the target rarer"]
-    if not _NEVER.search(about):
+    if _ONLY.search(about) and not any(r.get("mode") in ("only", "exclude") for r in rules):
+        return ["The plan says \"only\", but no rule is an only or exclude rule, so every "
+                "other pair still goes through"]
+    reduce = [r for r in rules if r.get("mode") == "reduce"]
+    if not reduce or not _NEVER.search(about) or _ONLY.search(about):
         return []
-    for r in rules:
+    for r in reduce:
         r["mode"], r["factor"] = "exclude", 0
-    return ["Made its rules exclude: the plan says the pairs never go together"]
+    return ["Made its reduce rules exclude: the plan says the pairs never go together"]
 
 
 def item_texts(payload: dict[str, Any]) -> list[str]:
@@ -2221,7 +2273,7 @@ _STOP = {"the", "and", "with", "type", "list", "option", "options", "pack", "wil
 #: Compile warnings worth one automatic rebuild: the item doesn't fit the
 #: rest of the pack (a rule tests a value or tag that isn't there).
 _REPAIRABLE = re.compile(r"has no option|No option carries|unknown tag|nothing sets|"
-                         r"already rolls|no rule is an only|"
+                         r"already rolls|no rule is an only|joins picks with|"
                          r"isn't set|not a variable|doesn't set|which no", re.I)
 
 
@@ -2305,13 +2357,39 @@ def _use_notes(item: dict[str, Any], payload: dict[str, Any]) -> list[str]:
     return [f"Use: {n}" for n in notes]
 
 
-def item_instance(item: dict[str, Any], payload: dict[str, Any] | None) -> dict[str, Any]:
-    """The item's use line as the instance its bundle child carries."""
+def _option_texts(payload: dict[str, Any] | None) -> set[str]:
+    return {" ".join(o["value"].split()).lower() for o in (payload or {}).get("options") or []
+            if isinstance(o, dict) and isinstance(o.get("value"), str) and o["value"].strip()}
+
+
+def _match_note(plan: dict[str, Any], built: dict[str, Any], item: dict[str, Any],
+                payload: dict[str, Any]) -> list[str]:
+    inst, _ = ai_use.parse_use(item["use"], kind="wildcard", payload=payload)
+    mv = inst.get("match_variable")
+    src = next((i for i in plan["items"] if is_wild(i) and i["var"] == mv
+                and i["key"] in built), None)
+    if src is None or _option_texts(payload) & _option_texts(built[src["key"]]["payload"]):
+        return []
+    return [f"Left out \"match ${mv}\": no option reads like one of {src['name']}'s, so "
+            "it would never match; the constraints decide instead"]
+
+
+def item_instance(item: dict[str, Any], payload: dict[str, Any] | None,
+                  values: dict[str, set[str]] | None = None) -> dict[str, Any]:
+    """The item's use line as the instance its bundle child carries.
+    ``values`` (the pack's wildcards' option texts by variable) drops a
+    "match $x" none of this wildcard's options can meet: every run would
+    skip the match and its constraint (a hair style "matching" $hair_length
+    when no style reads "long hair")."""
     if not item.get("use"):
         return {}
     tags = (payload or {}).get("sub_categories") if module_type(item) == "wildcard" else None
     inst, _notes = ai_use.parse_use(item["use"], kind=module_type(item), tags=tags,
                                     payload=payload)
+    mv = inst.get("match_variable")
+    if values and isinstance(mv, str) and mv in values and not (
+            _option_texts(payload) & values[mv]):
+        inst.pop("match_variable")
     return inst
 
 
@@ -2371,6 +2449,8 @@ def chain_modules(plan: dict[str, Any], built: dict[str, Any]) -> list[dict[str,
     """The built modules in run order, in the list shape the engine takes,
     each with its use line as its instance."""
     items = {i["key"]: i for i in plan["items"]}
+    values = {i["var"]: _option_texts(built[i["key"]]["payload"]) for i in plan["items"]
+              if is_wild(i) and i["key"] in built}
     out = []
     for n, key in enumerate(run_order(plan, built)):
         b = built.get(key)
@@ -2383,7 +2463,7 @@ def chain_modules(plan: dict[str, Any], built: dict[str, Any]) -> list[dict[str,
             "name": i["name"], "meta": {"name": i["name"], "library_name": i["name"]},
             "payload": copy.deepcopy(b["payload"]),
             "payload_hash": payload_hash(b["payload"]),
-            "instance": item_instance(i, b["payload"]),
+            "instance": item_instance(i, b["payload"], values),
         })
     return out
 
@@ -2666,6 +2746,21 @@ def _repeats(plan: dict[str, Any], built: dict[str, Any], runs: list[dict[str, A
                         words[(k, i["key"])].append(c)
         for pair in pairs:
             seen[pair] = seen.get(pair, 0) + 1
+        # A rule that adds words the variable already holds (a tundra rule
+        # adding "thick fog" to weather that rolled it).
+        for i, sets in writers:
+            if i["kind"] != "derivation":
+                continue
+            for v in sets:
+                parts = [re.sub(r"\s+", " ", x).strip().lower()
+                         for x in str(ctx.get(v) or "").split(",")]
+                dup = sorted({c for c in parts if len(c) >= 3 and parts.count(c) > 1} & twice)
+                if dup:
+                    pair = (i["key"], i["key"])
+                    seen[pair] = seen.get(pair, 0) + 1
+                    words.setdefault(pair, [])
+                    words[pair] += [f"${v}: {c}" for c in dup if f"${v}: {c}" not in words[pair]]
+                    break
     out: dict[str, str] = {}
     need = max(1, len(runs) // 4)
     items = {i["key"]: i for i in plan["items"]}
@@ -2673,6 +2768,10 @@ def _repeats(plan: dict[str, Any], built: dict[str, Any], runs: list[dict[str, A
         if n < need or b in out:
             continue
         shown = ", ".join(f'"{w}"' for w in words[(a, b)][:6])
+        if a == b:
+            out[b] = (f"it adds words the variable already holds, so the prompt says them "
+                      f"twice: {shown}; add only what isn't there, or replace it")
+            continue
         out[b] = (f"it repeats words ${items[a]['var']} ({items[a]['name']}) already puts in "
                   f"the prompt: {shown}; leave them to {items[a]['name']}")
     return out
@@ -3248,16 +3347,34 @@ async def run_pack(
     answer = await complete(system=PLAN_SYSTEM, user=first,
                             schema=PLAN_SCHEMA, schema_name="pack_plan", temperature=0.4)
     plan = compile_plan(answer, library=library, settings=cfg, request=instruction)
+    history = [(first, answer)]
+    decisions: list[dict[str, str]] = []
     if plan["questions"]:
         decisions = [{"question": q["question"], "answer": DECIDE_ANSWER}
                      for q in plan["questions"]]
         log.append(f"plan: left {len(decisions)} question(s) to the model")
         follow = refine_text("I answered your questions.", decisions, cfg)
-        answer = await complete(system=PLAN_SYSTEM, user=follow, history=[(first, answer)],
+        answer = await complete(system=PLAN_SYSTEM, user=follow, history=history,
                                 schema=PLAN_SCHEMA, schema_name="pack_plan",
                                 temperature=0.4)
+        history = [*history, (follow, answer)]
         plan = compile_plan(answer, library=library, previous=plan,
                             decisions=decisions, settings=cfg, request=instruction)
+    # The plan review's fixes, as a user pressing "Fix all" would send them.
+    fixes = [f for f in review_plan(plan, library) if f["level"] == "fix"]
+    if fixes:
+        log.append(f"plan: fixing {len(fixes)} review finding(s)")
+        note = review_note(fixes)
+        try:
+            answer = await complete(system=PLAN_SYSTEM, user=note, history=history,
+                                    schema=PLAN_SCHEMA, schema_name="pack_plan",
+                                    temperature=0.4)
+            plan = compile_plan(answer, library=library, previous=plan,
+                                decisions=decisions, settings=cfg, request=instruction)
+        except PlanError as e:
+            log.append(f"plan: the fixed plan couldn't be used ({e}); kept the last one")
+        left = [f["text"] for f in review_plan(plan, library) if f["level"] == "fix"]
+        log += [f"plan: still to fix: {t}" for t in left]
     log += [f"plan: {w}" for w in plan["warnings"]]
     built: dict[str, dict[str, Any]] = {}
     failed: list[str] = []

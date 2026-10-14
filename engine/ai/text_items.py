@@ -270,6 +270,9 @@ def compile_template(raw: Any, *, catalog: dict[str, Any] | None = None) -> dict
         warnings.append("Reads $" + ", $".join(unknown) + ", which nothing in the library sets")
     if not reads(text):
         warnings.append("It reads no variables, so it's the same every run")
+    if re.search(r"\$\w+[^$]{0,40}\s(?:OR|or)\s[^$]{0,40}\$", text):
+        warnings.append("It joins picks with \"or\", but the Assembler prints every one; "
+                        "read the one pick instead")
     return {"payload": {"template_string": text, "negative_template": negative},
             "preview": [text] + ([f"Negative: {negative}"] if negative else []),
             "warnings": warnings}
