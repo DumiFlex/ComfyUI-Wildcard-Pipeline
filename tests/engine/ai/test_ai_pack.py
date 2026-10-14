@@ -178,7 +178,7 @@ async def test_run_pack_and_eval_report():
 
     refines = []
 
-    async def complete(*, system, user, schema, schema_name, temperature, history=None):
+    async def complete(*, system, user, schema, schema_name, temperature, history=None, **_):
         if schema_name == "pack_plan":
             if history:
                 # Questions left to the model come back decided.

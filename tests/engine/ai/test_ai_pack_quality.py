@@ -234,3 +234,116 @@ def test_options_pointing_at_a_rolled_sibling_are_flagged_and_junk_dropped():
     assert any("points at Place, which the pack already rolls" in w for w in out["warnings"])
     assert all("@@" not in o["value"] for o in out["payload"]["options"])
     assert "already rolls" in out["repair"]
+
+
+# ── Round 3 of the real-model run ───────────────────────────────────────
+
+
+def test_library_references_that_name_the_library_are_not_made_new():
+    raw = _raw()
+    raw["items"].insert(0, _item(kind="library", name="User's Race Vocabulary",
+                                 about="the user's race words"))
+    raw["items"].insert(0, _item(kind="fixed_values", name="Quality", var="quality_tags",
+                                 about="masterpiece"))
+    raw["items"].insert(1, _item(kind="library", name="User's Quality Tags",
+                                 about="their quality tags"))
+    plan = pack.compile_plan(raw)
+    names = [i["name"] for i in plan["items"]]
+    assert not any("Vocabulary" in n for n in names) and "Quality Tags" not in names
+    assert any("Left out Race Vocabulary" in w for w in plan["warnings"])
+    # One warning for the quality tags, not "made new" and then "left out".
+    assert not any("Made Quality Tags new" in w for w in plan["warnings"])
+    assert any("Left out Quality Tags: $quality_tags is already set" in w
+               for w in plan["warnings"])
+
+
+def test_inputs_the_request_never_asked_for_and_picks_in_examples():
+    raw = _raw(inputs=[
+        {"var": "character_lora", "about": "a LoRA", "example": "<lora:x:0.8>"},
+        {"var": "style_preset", "about": "a style", "example": "@{Style:cinematic}, film"}])
+    raw["items"][-1]["about"] = "$race, $hair, $character_lora, $style_preset"
+    plan = pack.compile_plan(raw, request="fantasy people in places")
+    assert [i["var"] for i in plan["inputs"]] == ["style_preset"]
+    assert plan["inputs"][0]["example"] == "film"
+    assert "$character_lora" not in plan["items"][-1]["about"]
+    assert any("the request names no LoRA" in w for w in plan["warnings"])
+    kept = pack.compile_plan(raw, request="use my character LoRA")
+    assert len(kept["inputs"]) == 2
+
+
+def test_never_rules_built_as_reduce_become_excludes_and_only_is_sent_back():
+    raw = _raw()
+    raw["items"][1]["about"] = "#elf never wears #armor"
+    plan = pack.compile_plan(raw)
+    built = _built(plan)
+    key = next(i["key"] for i in plan["items"] if i["kind"] == "constraint")
+    answer = {"rules": [{"source": "#elf", "target": "#armor", "effect": "reduce",
+                         "factor": 0.1, "reason": "no"}]}
+    out = pack.compile_item(plan, key, built, answer)
+    assert out["payload"]["matrix"]["elf"]["armor"] == {"mode": "exclude", "factor": 0}
+    assert any("Made its rules exclude" in w for w in out["warnings"])
+    plan["items"][[i["key"] for i in plan["items"]].index(key)]["about"] = \
+        "#elf gets only #robe"
+    out = pack.compile_item(plan, key, built, answer)
+    assert out["payload"]["matrix"]["elf"]["armor"]["mode"] == "reduce"
+    assert "no rule is an only rule" in out["repair"]
+    plan["items"][[i["key"] for i in plan["items"]].index(key)]["about"] = \
+        "#elf rarely wears #armor"
+    assert pack.compile_item(plan, key, built, answer)["repair"] == ""
+
+
+def test_a_cut_off_rule_answer_keeps_what_it_finished_once():
+    raw = _raw()
+    raw["items"].insert(-1, _item(kind="derivation", name="Glow", var="glow",
+                                  about="when $race is elf, add soft glow to $glow"))
+    plan = pack.compile_plan(raw)
+    built = _built(plan)
+    key = next(i["key"] for i in plan["items"] if i["name"] == "Glow")
+    req = pack.item_request(plan, key, built)
+    assert req["partial"] is True and "Write each rule and each branch once" in req["system"]
+    branch = {"match": "all", "conditions": [{"var": "race", "op": "equals",
+                                              "value": "race 0"}],
+              "actions": [{"target_var": "glow", "mode": "append", "value": ", soft glow"}]}
+    rule = {"summary": "glow", "branches": [branch, branch], "else_actions": []}
+    out = pack.compile_item(plan, key, built, {"rules": [rule, rule], "_cut_off": True})
+    rules = out["payload"]["rules"]
+    assert len(rules) == 1 and len(rules[0]["branches"]) == 1
+    # Nothing else sets $glow, so the append becomes a set without its ", ".
+    action = rules[0]["branches"][0]["action"]
+    assert (action["mode"], action["value"]) == ("replace", "soft glow")
+    assert any("cut off" in w for w in out["warnings"])
+    assert any("Sets $glow instead of adding to it" in w for w in out["warnings"])
+
+
+def test_wildcards_hear_the_other_picks_and_constraint_only_picks_are_unseen():
+    plan = pack.compile_plan(_raw())
+    hair = next(i for i in plan["items"] if i["var"] == "hair")
+    user = pack.item_request(plan, hair["key"], {})["user"]
+    assert "Other picks in this pack" in user and "Outfit ($outfit)" in user
+    assert "Hair ($hair)" not in user.split("Other picks")[1]
+    built = _built(plan)
+    keys = {i["name"]: i["key"] for i in plan["items"]}
+    built[keys["Prompt"]]["payload"]["template_string"] = "$hair, $outfit, $place, $light"
+    probs = pack.check_pack(plan, built, seeds=10)["problems"][keys["Prompt"]]
+    assert any("doesn't read $race (Race): a constraint uses it" in t for t in probs)
+
+
+def test_two_items_that_print_the_same_words_are_flagged():
+    raw = _raw()
+    raw["items"].insert(0, _item(kind="fixed_values", name="Quality", var="quality",
+                                 about="q"))
+    raw["items"].insert(1, _item(kind="fixed_values", name="Style", var="style", about="s"))
+    raw["items"][-1]["about"] = "$quality, $style, $race, $hair, $outfit, $place, $light"
+    plan = pack.compile_plan(raw)
+    built = _built(plan)
+    keys = {i["name"]: i["key"] for i in plan["items"]}
+    ids = {i["name"]: i["id"] for i in plan["items"]}
+    built[keys["Quality"]] = {"id": ids["Quality"], "payload": {"values": [
+        {"id": "v1", "name": "quality", "value": "masterpiece, best quality"}]}}
+    built[keys["Style"]] = {"id": ids["Style"], "payload": {"values": [
+        {"id": "v2", "name": "style", "value": "anime style, masterpiece, best quality"}]}}
+    built[keys["Prompt"]]["payload"]["template_string"] = raw["items"][-1]["about"]
+    report = pack.check_pack(plan, built, seeds=10)
+    said = report["problems"][keys["Style"]]
+    assert any("repeats words $quality (Quality)" in t and '"masterpiece"' in t for t in said)
+    assert keys["Quality"] not in report["problems"]

@@ -2399,7 +2399,10 @@ async def post_pack_plan(request: web.Request) -> web.Response:
         )
         plan = ai_pack.compile_plan(answer, library=library, previous=previous,
                                     decisions=decisions, settings=settings, base=base,
-                                    canvas=canvas)
+                                    canvas=canvas, request=" ".join(
+                                        [first_text, instruction, sample, *(
+                                            str(d.get("answer") or "") for d in decisions
+                                            if isinstance(d, dict))]))
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
     except ai_pack.PlanError as e:

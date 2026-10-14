@@ -84,6 +84,12 @@ rule follows the rolled one; on the target, an option stays possible when the \
 source allows any of its alternatives. Key rules that should match picks on \
 the accepts group's tags.
 
+"Never" and "can't" are exclude, not reduce; "only" is an only rule (or an \
+exclude for every other side); reduce is for "rarely" and "less often". "X \
+only with A" (snow only in cold places) shuts X out everywhere else: from \
+every source side other than A, exclude X. Cover every source tag that \
+isn't A, not just a few.
+
 Only write the rules the request asks for. Give each a reason of a few words. \
 Don't add commentary; the output is data for the user's own library.\
 """

@@ -353,6 +353,10 @@ def _tag(raw: Any) -> str:
     return t if t and re.fullmatch(r"[a-z0-9_\-]+", t) else ""
 
 
+_PICKS = re.compile(r"@\{[^}]*\}|\{[^{}]*\|[^{}]*\}")
+_LORA = re.compile(r"lora|lycoris|locon", re.I)
+
+
 def _inputs(raw: Any, warnings: list[str]) -> list[dict[str, str]]:
     out: list[dict[str, str]] = []
     for i in raw if isinstance(raw, list) else []:
@@ -361,8 +365,11 @@ def _inputs(raw: Any, warnings: list[str]) -> list[dict[str, str]]:
         var = _var(i.get("var"))
         if not var or any(x["var"] == var for x in out):
             continue
-        out.append({"var": var, "about": _clean(i.get("about"), 200),
-                    "example": _clean(i.get("example"), 200)})
+        example = _clean(i.get("example"), 200)
+        if _PICKS.search(example):
+            # Pinned as typed, so a pick would land in the prompt as written.
+            example = _clean(_PICKS.sub("", example), 200).strip(" ,")
+        out.append({"var": var, "about": _clean(i.get("about"), 200), "example": example})
     if len(out) > MAX_INPUTS:
         warnings.append(f"Kept the first {MAX_INPUTS} inputs")
     return out[:MAX_INPUTS]
@@ -372,6 +379,11 @@ def _inputs(raw: Any, warnings: list[str]) -> list[dict[str, str]]:
 #: when it reads like a preset, else as a wildcard.
 _PRESETISH = re.compile(r"\b(preset|quality|fixed|standing)\b", re.I)
 _LIB_SUFFIX = re.compile(r"\s*\((?:user'?s? )?library\)\s*$", re.I)
+_USERS = re.compile(r"^(?:the )?(?:user'?s?|my|your)\s+", re.I)
+#: A library item that names the library itself ("User's Race Vocabulary",
+#: "Tag list") rather than content: nothing reads it, so making it new
+#: only adds a junk wildcard.
+_METAISH = re.compile(r"\b(vocabulary|vocab|library|tag ?list|word ?list|lists?)\b", re.I)
 
 
 _NEGATIVEISH = re.compile(r"\bnegatives?\b|negative_|_negatives?\b", re.I)
@@ -399,6 +411,13 @@ def _side(raw: Any, known: dict[str, str]) -> str:
         if name and name.lower() in text:
             return var
     return v
+
+
+def _reads_var(items: list[dict[str, Any]], me: dict[str, Any], var: str) -> bool:
+    """Whether another planned item mentions ``$var``."""
+    pat = re.compile(r"\$" + re.escape(var) + r"\b")
+    return any(x is not me and pat.search(f"{x.get('about') or ''} {x.get('use') or ''}")
+               for x in items)
 
 
 #: Library rows a "library" item may name, and the module type each becomes.
@@ -458,7 +477,7 @@ def _match_previous(it: dict[str, Any], kind: str, name: str, var: str,
 def compile_plan(
     raw: Any, library: list[dict[str, Any]] | None = None, *,
     previous: Any = None, decisions: Any = None, settings: Any = None,
-    base: dict[str, Any] | None = None, canvas: Any = None,
+    base: dict[str, Any] | None = None, canvas: Any = None, request: str = "",
 ) -> dict[str, Any]:
     """The model's plan (or one the manager sends back) as a checked plan:
     ``{title, summary, rating, style, model, anchor, questions, assumptions,
@@ -519,9 +538,22 @@ def compile_plan(
         warnings.append(f"Kept the first {MAX_SECTIONS} sections")
         sections = sections[:MAX_SECTIONS]
     inputs = _inputs(raw.get("inputs"), warnings)
+    unasked: list[str] = []
+    if request and not _LORA.search(request):
+        # A LoRA slot the request never asked for stays empty and leaves a
+        # gap in every prompt.
+        for i in [i for i in inputs if _LORA.search(i["var"])]:
+            inputs.remove(i)
+            unasked.append(i["var"])
+            warnings.append(f"Left out the input ${i['var']}: the request names no LoRA")
     # An input that shares its variable with a wildcard a constraint needs
     # would leave the constraint without its wildcard: the wildcard wins.
     raw_items = [dict(x) for x in raw["items"] if isinstance(x, dict)]
+    for v in unasked:
+        pat = re.compile(r",?\s*\$" + re.escape(v) + r"\b")
+        for x in raw_items:
+            if isinstance(x.get("about"), str):
+                x["about"] = pat.sub("", x["about"])
     known_sides = {_var(x.get("var")): _clean(x.get("name"), MAX_NAME)
                    for x in raw_items if _var(x.get("var"))}
     known_sides.update({i["var"]: i["var"] for i in inputs})
@@ -593,21 +625,25 @@ def compile_plan(
         about = _clean(it.get("about"), MAX_ABOUT)
         var = _var(it.get("var"))
         lib_row = None
+        made_new = ""
         if kind == "library":
             lib_row = _library_row(it, library) if cfg["library"] == "reuse" else None
             if lib_row is not None and lib_row["id"] in base_ids:
                 continue  # already in the bundle
             if lib_row is None:
                 # Make it new instead: leaving it out loses part of the pack.
-                name = _LIB_SUFFIX.sub("", name).strip()
+                name = _USERS.sub("", _LIB_SUFFIX.sub("", name).strip()).strip()
+                if _METAISH.search(name) and not (var and _reads_var(raw_items, it, var)):
+                    warnings.append(f"Left out {name or 'a library item'}: it isn't in the "
+                                    "library, and the pack's own items cover it")
+                    continue
                 var = var or _slug_var(name)
                 if not var:
                     warnings.append("Left out a library item with no name or variable")
                     continue
                 kind = "fixed_values" if _PRESETISH.search(f"{name} {about}") else "wildcard"
-                warnings.append(f"Made {name or '$' + var} new: " + (
-                    "the settings say to make everything new" if cfg["library"] != "reuse"
-                    else "nothing by that name in the library"))
+                made_new = "the settings say to make everything new" \
+                    if cfg["library"] != "reuse" else "nothing by that name in the library"
             else:
                 name, var = str(lib_row.get("name") or name), _row_var(lib_row)
         if kind == "template":
@@ -640,6 +676,8 @@ def compile_plan(
         if kind == "wildcard" and not var and name.lower() in names:
             warnings.append(f"Left out a second wildcard named {name}")
             continue
+        if made_new:
+            warnings.append(f"Made {name or '$' + var} new: {made_new}")
         prev = _match_previous(it, kind, name, var, prev_items, used_prev)
         if prev is not None:
             used_prev.add(prev["key"])
@@ -1851,7 +1889,8 @@ def item_request(
             + negative_line(plan, "wildcard") + style_examples(plan, item, library)
             + "".join(f"\nUsed by: {c}" for c in consumers(plan, item))
             + ("\nSpell options exactly as the items above test them, and give them the "
-               "tags those items key on." if consumers(plan, item) else "") + fix,
+               "tags those items key on." if consumers(plan, item) else "")
+            + _siblings_line(plan, item) + fix,
             count=item["count"], name=item["name"], var_binding=item["var"],
             existing_options=[], tags=item["tags"], refs_text=pointers,
         )
@@ -1865,9 +1904,11 @@ def item_request(
             catalog_text=library_vars.describe(_catalog(plan, built)),
             existing_rules=[], description=_pack_line(plan), refs_text=idx.describe(),
         )
-        return {"system": ai_derivation.SYSTEM_PROMPT, "user": user,
+        # A cut-off answer keeps the rules it finished (local models can
+        # loop on these until the output cap).
+        return {"system": ai_derivation.SYSTEM_PROMPT + _BRIEF, "user": user,
                 "schema": ai_derivation.SCHEMA, "schema_name": "derivation_rules",
-                "temperature": 0.3}
+                "temperature": 0.3, "partial": True}
     if kind == "constraint":
         src, tgt = _constraint_sides(plan, item, built)
         user = ai_constraint.build_prompt(
@@ -1895,6 +1936,21 @@ def item_request(
     }[kind]
     return {"system": system, "user": user, "schema": schema, "schema_name": name,
             "temperature": 0.4}
+
+
+def _siblings_line(plan: dict[str, Any], item: dict[str, Any]) -> str:
+    """The pack's other picks, so a hair style wildcard doesn't also roll
+    hair length or colour (the prompt then says both, and they disagree)."""
+    others = [i for i in plan["items"] if is_wild(i) and i["key"] != item["key"]]
+    if not others or not item["var"]:
+        return ""
+    return ("\nOther picks in this pack (each covers its own subject, so leave those out "
+            "of these options): " + "; ".join(
+                f"{i['name']} (${i['var']})" for i in others[:16]) + ".")
+
+
+_BRIEF = ("\n\nWrite each rule and each branch once, then stop: an answer that repeats "
+          "itself is cut off.")
 
 
 def owners(plan: dict[str, Any], key: str) -> dict[str, str]:
@@ -1975,9 +2031,24 @@ def compile_item(
         if not compiled["rules"]:
             raise ValueError("no usable rules" + "".join(
                 f"; {s['text'][:40]}: {s['reason']}" for s in compiled["skipped"][:3]))
-        payload = {"rules": [r["rule"] for r in compiled["rules"]]}
+        rules: list[dict[str, Any]] = []
+        seen_rules: set[str] = set()
+        for r in compiled["rules"]:
+            # A model stuck in a loop writes the same rule (or branch) again.
+            r["rule"]["branches"] = list({json.dumps(b, sort_keys=True): b for b in
+                                          r["rule"].get("branches") or []}.values())
+            same = json.dumps({k: v for k, v in r["rule"].items() if k != "id"},
+                              sort_keys=True)
+            if same not in seen_rules:
+                seen_rules.add(same)
+                rules.append(r["rule"])
+        payload = {"rules": rules}
+        if isinstance(answer, dict) and answer.get("_cut_off"):
+            warnings.append("The answer was cut off at the output limit; kept the rules it "
+                            "finished")
         payload, said = read_rolled(plan, built, payload)
         warnings += said
+        warnings += _append_onto_nothing(plan, key, built, payload)
         DerivationHandler.validate_payload(payload)
         preview = [ai_derivation.describe_rule(r) for r in payload["rules"]]
         warnings += list(dict.fromkeys(w for r in compiled["rules"] for w in r["warnings"]))
@@ -1998,6 +2069,7 @@ def compile_item(
             "target_wildcard_id": built[by_var[item["target"]]["key"]]["id"],
             "matrix": matrix, "exceptions": [e["exception"] for e in compiled["exceptions"]],
         }
+        warnings += _strict_rules(item, payload)
         ConstraintHandler.validate_payload(payload)
         preview = [f"#{c['source_tag']} → #{c['target_tag']}: {c['cell']['mode']}"
                    for c in compiled["cells"]] + [
@@ -2038,6 +2110,71 @@ def compile_item(
             payload = {**payload, "template_string": tag_commas(payload["template_string"])}
     return {"key": key, "id": mid, "kind": kind, "payload": payload,
             "preview": preview, "warnings": warnings, "repair": repair_note(warnings)}
+
+
+def _append_onto_nothing(plan: dict[str, Any], key: str, built: dict[str, Any],
+                         payload: dict[str, Any]) -> list[str]:
+    """An append (or prepend) to a variable nothing else sets adds to an
+    empty value, so the prompt shows its leading ", ". When one rule is all
+    that writes it (only one of its branches runs), those writes become
+    plain sets, in place."""
+    others = set(RUNTIME_VARS) | {i["var"] for i in plan.get("inputs") or []} \
+        | {c["name"] for c in plan.get("canvas") or []}
+    for i in plan["items"]:
+        if i["key"] == key or i.get("kind") in ("constraint", "template"):
+            continue
+        if i["var"]:
+            others.add(i["var"])
+        if i["kind"] == "derivation" and i["key"] in built:
+            others |= set(library_vars.derivation_targets(built[i["key"]]["payload"]))
+    writers: dict[str, list[tuple[int, dict[str, Any]]]] = {}
+    for n, rule in enumerate(payload["rules"]):
+        for clause in [*(rule.get("branches") or []), rule.get("else")]:
+            if not isinstance(clause, dict):
+                continue
+            for a in [clause.get("action"), *(clause.get("extra_actions") or [])]:
+                if isinstance(a, dict) and isinstance(a.get("target_var"), str):
+                    writers.setdefault(a["target_var"], []).append((n, a))
+    said: list[str] = []
+    for var, acts in writers.items():
+        if var in others or len({n for n, _ in acts}) != 1:
+            continue
+        flat = [a for _, a in acts]
+        if not any(a.get("mode") in ("append", "prepend") for a in flat) or any(
+                a.get("mode") not in ("append", "prepend", "replace") for a in flat):
+            continue
+        for a in flat:
+            if a.get("mode") in ("append", "prepend"):
+                a["mode"] = "replace"
+                a["value"] = str(a.get("value") or "").strip().strip(",").strip()
+        said.append(f"Sets ${var} instead of adding to it: nothing sets it before")
+    return said
+
+
+_NEVER = re.compile(r"\b(never|no|not|can'?t|cannot|excludes?|forbid\w*|without)\b", re.I)
+_ONLY = re.compile(r"\bonly\b", re.I)
+_SOFT = re.compile(r"\b(rarely|rarer|less|fewer|seldom|unlikely|sometimes|reduces?|mostly|"
+                   r"usually|often|more|boosts?|likely)\b", re.I)
+
+
+def _strict_rules(item: dict[str, Any], payload: dict[str, Any]) -> list[str]:
+    """The plan says "never" (or "only") and every rule the model wrote just
+    makes the target rarer: a "never" turns its rules into excludes (in
+    place); an "only" with no only rule is sent back."""
+    about = item.get("about") or ""
+    cells = [c for row in payload["matrix"].values() for c in row.values()
+             if isinstance(c, dict)]
+    rules = cells + list(payload["exceptions"])
+    if not rules or _SOFT.search(about) or any(r.get("mode") != "reduce" for r in rules):
+        return []
+    if _ONLY.search(about):
+        return ["The plan says \"only\", but no rule is an only rule: every rule just "
+                "makes the target rarer"]
+    if not _NEVER.search(about):
+        return []
+    for r in rules:
+        r["mode"], r["factor"] = "exclude", 0
+    return ["Made its rules exclude: the plan says the pairs never go together"]
 
 
 def item_texts(payload: dict[str, Any]) -> list[str]:
@@ -2084,7 +2221,7 @@ _STOP = {"the", "and", "with", "type", "list", "option", "options", "pack", "wil
 #: Compile warnings worth one automatic rebuild: the item doesn't fit the
 #: rest of the pack (a rule tests a value or tag that isn't there).
 _REPAIRABLE = re.compile(r"has no option|No option carries|unknown tag|nothing sets|"
-                         r"already rolls|"
+                         r"already rolls|no rule is an only|"
                          r"isn't set|not a variable|doesn't set|which no", re.I)
 
 
@@ -2473,6 +2610,8 @@ def check_pack(
                 prompts.append({"seed": seed, "text": prompt, "negative": negative})
             except Exception as exc:  # noqa: BLE001 - shown, not raised
                 prompts.append({"seed": seed, "text": f"(failed: {exc})", "negative": ""})
+        for k, said in _repeats(plan, built, runs, text, neg).items():
+            problems.setdefault(k, []).append(said)
         if braces:
             problems.setdefault(item["key"], []).append(
                 "the prompt shows { } or @{ } as written: a variable it reads holds a pick "
@@ -2484,6 +2623,59 @@ def check_pack(
     return {"runs": report["runs"], "failed": report["failed"], "problems": problems,
             "notes": notes, "variables": variables, "prompts": prompts, "quality": quality,
             "order": order}
+
+
+def _chunks(text: str) -> set[str]:
+    return {c for c in (re.sub(r"\s+", " ", x).strip().lower() for x in text.split(","))
+            if len(c) >= 3}
+
+
+def _repeats(plan: dict[str, Any], built: dict[str, Any], runs: list[dict[str, Any]],
+             text: str, neg: str) -> dict[str, str]:
+    """Two items that put the same words in the prompt ("masterpiece, best
+    quality" in two presets, a time of day and a lighting rule both saying
+    "golden hour"): ``{key of the later item: problem}``, when it happens
+    in at least a quarter of the runs."""
+    writers = [(i, item_io(i, built[i["key"]]["payload"])[1]) for i in plan["items"]
+               if i["key"] in built and i["kind"] in ("wildcard", "library", "fixed_values",
+                                                      "derivation")]
+    seen: dict[tuple[str, str], int] = {}
+    words: dict[tuple[str, str], list[str]] = {}
+    for ctx in runs:
+        try:
+            prompt = render(text, neg, ctx)[0]
+        except Exception:  # noqa: BLE001 - a failed run is reported elsewhere
+            continue
+        counts: dict[str, int] = {}
+        for c in (re.sub(r"\s+", " ", x).strip().lower() for x in prompt.split(",")):
+            counts[c] = counts.get(c, 0) + 1
+        twice = {c for c, n in counts.items() if n > 1 and len(c) >= 3}
+        if not twice:
+            continue
+        first: dict[str, str] = {}
+        pairs: set[tuple[str, str]] = set()
+        for i, sets in writers:
+            for c in sorted(set().union(*(_chunks(str(ctx.get(v) or "")) for v in sets))
+                            & twice):
+                k = first.setdefault(c, i["key"])
+                # A rule that adds to a variable another item set shares it.
+                if k != i["key"] and not (sets & dict(
+                        (w["key"], ws) for w, ws in writers)[k]):
+                    pairs.add((k, i["key"]))
+                    if c not in words.setdefault((k, i["key"]), []):
+                        words[(k, i["key"])].append(c)
+        for pair in pairs:
+            seen[pair] = seen.get(pair, 0) + 1
+    out: dict[str, str] = {}
+    need = max(1, len(runs) // 4)
+    items = {i["key"]: i for i in plan["items"]}
+    for (a, b), n in seen.items():
+        if n < need or b in out:
+            continue
+        shown = ", ".join(f'"{w}"' for w in words[(a, b)][:6])
+        out[b] = (f"it repeats words ${items[a]['var']} ({items[a]['name']}) already puts in "
+                  f"the prompt: {shown}; leave them to {items[a]['name']}")
+    return out
 
 
 def unread_notes(plan: dict[str, Any], built: dict[str, Any],
@@ -2506,7 +2698,16 @@ def unread_notes(plan: dict[str, Any], built: dict[str, Any],
                 or i["kind"] in ("constraint", "template"):
             continue
         sets = item_io(i, built[i["key"]]["payload"])[1]
-        if sets & (reads | ruled):
+        if sets & reads:
+            continue
+        if sets & ruled and tpl is not None:
+            # Other picks follow it, but the image never shows it (a
+            # constraint's target that nothing reads changes nothing).
+            problems.setdefault(tpl["key"], []).append(
+                f"it doesn't read ${i['var']} ({i['name']}): a constraint uses it, but the "
+                "prompt never shows it; read it")
+            continue
+        if sets & ruled:
             continue
         if i["kind"] in ("combine", "derivation"):
             notes.append(f"Nothing reads ${i['var']}, so {i['name']} does nothing")
@@ -3046,7 +3247,7 @@ async def run_pack(
     first = plan_prompt(instruction, library_note=lib_note, settings=cfg, library=library)
     answer = await complete(system=PLAN_SYSTEM, user=first,
                             schema=PLAN_SCHEMA, schema_name="pack_plan", temperature=0.4)
-    plan = compile_plan(answer, library=library, settings=cfg)
+    plan = compile_plan(answer, library=library, settings=cfg, request=instruction)
     if plan["questions"]:
         decisions = [{"question": q["question"], "answer": DECIDE_ANSWER}
                      for q in plan["questions"]]
@@ -3056,7 +3257,7 @@ async def run_pack(
                                 schema=PLAN_SCHEMA, schema_name="pack_plan",
                                 temperature=0.4)
         plan = compile_plan(answer, library=library, previous=plan,
-                            decisions=decisions, settings=cfg)
+                            decisions=decisions, settings=cfg, request=instruction)
     log += [f"plan: {w}" for w in plan["warnings"]]
     built: dict[str, dict[str, Any]] = {}
     failed: list[str] = []
