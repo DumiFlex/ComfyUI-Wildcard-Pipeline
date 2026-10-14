@@ -228,6 +228,24 @@ describe("PackBuilder v2", () => {
     expect(w.get('[data-test="pack-install"]').attributes("disabled")).toBeUndefined();
   });
 
+  it("extends a bundle: says so, sends its id, and keeps its items fixed", async () => {
+    usePackBuilder().extendBundle({ id: "bb000001", name: "Hero" });
+    vi.mocked(api.ai.packPlan).mockImplementation(async () => {
+      const p = plan(++round);
+      p.plan.base = { id: "bb000001", name: "Hero", nested: false, sets: ["class"] };
+      p.plan.items.unshift(item("e1", "library", "Class", {
+        var: "class", existing: true, library_id: "aaaa0001", library_type: "wildcard" }));
+      return p;
+    });
+    const w = await mountIt();
+    expect(vi.mocked(api.ai.packPlan).mock.calls[0][0].bundle_id).toBe("bb000001");
+    expect(w.get('[data-test="pack-target"]').text()).toContain("Extending Hero");
+    const first = w.findAll('[data-test="pack-item"]')[0];
+    expect(first.text()).toContain("in bundle");
+    expect(first.find('[data-test="pack-remove"]').exists()).toBe(false);
+    expect(first.get('[data-test="pack-item-open"]').attributes("disabled")).toBeDefined();
+  });
+
   it("sends the settings with the plan", async () => {
     const pb = usePackBuilder();
     pb.settings.value = { ...pb.settings.value, negatives: "none", structure: "flat", count: 20 };

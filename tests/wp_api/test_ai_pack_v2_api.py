@@ -194,3 +194,98 @@ async def test_cut_off_answers_say_so(wp_client, fake_llm):
     resp = await wp_client.post("/wp/api/ai/pack/plan", json={"instruction": "x"})
     assert resp.status == 502
     assert "cut off" in (await resp.json())["error"]
+
+
+async def test_extend_a_bundle_plans_into_it_and_installs_with_one_undo(wp_client, fake_llm):
+    from tests.wp_api.test_ai_api import _two_wildcards
+
+    _on(fake_llm)
+    src, tgt = await _two_wildcards(wp_client)
+    snaps = []
+    for mid in (src, tgt):
+        m = await (await wp_client.get(f"/wp/api/modules/{mid}")).json()
+        snaps.append({"id": m["id"], "type": "wildcard", "name": m["name"],
+                      "payload": m["payload"]})
+    resp = await wp_client.post("/wp/api/bundles", json={"name": "Hero", "children": snaps})
+    assert resp.status == 201
+    bundle = await resp.json()
+    fake_llm.overrides["pack_plan"] = {**PLAN, "anchor": "", "items": [
+        _item(kind="library", name="Class", var="class"),       # already in it: ignored
+        _item(name="Weapon", var="weapon"),                     # sets a variable it has
+        _item(name="Armor", var="armor", tags=["heavy"], section="Gear"),
+    ]}
+    out = await _plan(wp_client, bundle_id=bundle["id"])
+    plan = out["plan"]
+    assert "EXTENDING the bundle \"Hero\"" in fake_llm.seen[-1]["body"]["messages"][1]["content"]
+    assert [(i["key"], i.get("existing", False)) for i in plan["items"]] == [
+        ("e1", True), ("e2", True), (plan["items"][2]["key"], False)]
+    assert plan["items"][2]["name"] == "Armor"
+    assert any("already set by the bundle's Weapon" in w for w in plan["warnings"])
+    assert plan["base"]["name"] == "Hero"
+    # The review knows the bundle's variables and doesn't ask for a template.
+    resp = await wp_client.post("/wp/api/ai/pack/review", json={
+        "plan": plan, "bundle_id": bundle["id"]})
+    assert not any("no template" in f["text"] for f in (await resp.json())["findings"])
+
+    built: dict = {}
+    fake_llm.overrides["wildcard"] = {"options": [
+        {"text": f"armor {n}", "weight": 1, "tags": ["heavy"], "negative": ""} for n in range(4)]}
+    for i in plan["items"]:
+        resp = await wp_client.post("/wp/api/ai/pack/item", json={
+            "plan": plan, "built": built, "key": i["key"], "bundle_id": bundle["id"]})
+        assert resp.status == 200, await resp.text()
+        got = await resp.json()
+        built[i["key"]] = {"id": got["id"], "payload": got["payload"]}
+    resp = await wp_client.post("/wp/api/ai/pack/check", json={
+        "plan": plan, "built": built, "bundle_id": bundle["id"]})
+    report = await resp.json()
+    assert {v["var"] for v in report["variables"]} >= {"class", "weapon", "armor"}
+
+    resp = await wp_client.post("/wp/api/ai/pack/install", json={
+        "plan": plan, "built": built, "bundle_id": bundle["id"]})
+    assert resp.status == 200, await resp.text()
+    done = await resp.json()
+    assert done["bundle_id"] == bundle["id"]
+    assert [b["name"] for b in done["sub_bundles"]] == ["Hero · Gear"]
+    after = await (await wp_client.get(f"/wp/api/bundles/{bundle['id']}")).json()
+    assert [c["type"] for c in after["children"]] == ["wildcard", "wildcard", "bundle"]
+    assert after["children"][2]["children"][0]["meta"]["name"] == "Armor"
+    resp = await wp_client.post("/wp/api/import/undo",
+                                json={"undo_entry_id": done["undo_entry_id"]})
+    assert resp.status == 200, await resp.text()
+    back = await (await wp_client.get(f"/wp/api/bundles/{bundle['id']}")).json()
+    assert [c["id"] for c in back["children"]] == [src, tgt]
+
+
+async def test_extend_refuses_a_missing_bundle(wp_client, fake_llm):
+    _on(fake_llm)
+    fake_llm.overrides["pack_plan"] = PLAN
+    resp = await wp_client.post("/wp/api/ai/pack/plan", json={
+        "instruction": "x", "bundle_id": "deadbeef"})
+    assert resp.status == 404
+
+
+async def test_split_a_bundle_groups_neighbours_only(wp_client, fake_llm):
+    _on(fake_llm)
+    kids = [{"id": f"0000000{n}", "type": "wildcard", "meta": {"name": name},
+             "payload": {"var_binding": name.lower(), "options": []}}
+            for n, name in enumerate(["Hair", "Eyes", "Shirt", "Shoes", "Sky"])]
+    kids.insert(4, {"id": "bbbbbbbb", "type": "bundle", "name": "Extras"})
+    fake_llm.overrides["bundle_split"] = {
+        "sections": [{"name": "Body", "about": "the person"}, {"name": "Wear", "about": ""}],
+        "children": [{"index": 0, "section": "Body"}, {"index": 1, "section": "Body"},
+                     {"index": 2, "section": "Wear"}, {"index": 3, "section": "Wear"},
+                     {"index": 4, "section": "Wear"}, {"index": 5, "section": "Wear"}]}
+    resp = await wp_client.post("/wp/api/ai/bundle/split", json={
+        "name": "Look", "children": kids, "instruction": "by body part"})
+    assert resp.status == 200, await resp.text()
+    groups = (await resp.json())["groups"]
+    assert groups == [{"name": "Body", "about": "the person", "start": 0, "end": 1},
+                      {"name": "Wear", "about": "", "start": 2, "end": 3}]
+    sent = fake_llm.seen[-1]["body"]["messages"][1]["content"]
+    assert "4. bundle Extras (already a sub-bundle)" in sent and "by body part" in sent
+    fake_llm.overrides["bundle_split"] = {"sections": [], "children": []}
+    resp = await wp_client.post("/wp/api/ai/bundle/split", json={"name": "Look", "children": kids})
+    assert resp.status == 502
+    resp = await wp_client.post("/wp/api/ai/bundle/split", json={"name": "L", "children": kids[:2]})
+    assert resp.status == 400

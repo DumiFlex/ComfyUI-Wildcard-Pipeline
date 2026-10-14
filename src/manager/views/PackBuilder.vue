@@ -115,6 +115,7 @@ function order(i: AiPackItem): number {
 }
 
 function kindLabel(i: AiPackItem): string {
+  if (i.existing) return "in bundle";
   if (i.kind === "fixed_values") return "fixed";
   if (i.kind === "library") return "yours";
   return i.kind === "wildcard" && !i.var ? "vocabulary" : i.kind;

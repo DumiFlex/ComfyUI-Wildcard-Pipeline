@@ -24,6 +24,7 @@
     POST /wp/api/ai/pack/item       build one planned item (not saved)
     POST /wp/api/ai/pack/check      run the built pack on the engine
     POST /wp/api/ai/pack/install    install the pack as one undoable import
+    POST /wp/api/ai/bundle/split    group a bundle's children into sub-bundles
 
 Every drafting route also takes `history` (earlier turns of the same
 conversation, see `engine/ai/followup.py`) and returns the model's raw
@@ -46,6 +47,7 @@ from aiohttp import web
 
 from engine.ai import about as ai_about
 from engine.ai import budget as ai_budget
+from engine.ai import bundle_split as ai_split
 from engine.ai import chat as ai_chat
 from engine.ai import chatlog as ai_chatlog
 from engine.ai import client_tools as ai_client_tools
@@ -1824,12 +1826,30 @@ def _reusable(request: web.Request) -> list[dict[str, Any]]:
                 if m.get("type") in ai_pack.REUSABLE]
 
 
+def _pack_base(request: web.Request, body: dict[str, Any],
+               library: list[dict[str, Any]]) -> dict[str, Any] | None | web.Response:
+    """"Extend with AI": the bundle named by ``bundle_id``, read fresh on
+    every request (None without one)."""
+    bid = body.get("bundle_id")
+    if bid is None:
+        return None
+    if not isinstance(bid, str) or not bid:
+        return json_error("bundle_id must be a bundle id", status=400)
+    with db_session(request) as conn:
+        bundles = BundleRepository(conn).list()
+    bundle = next((b for b in bundles if b["id"] == bid), None)
+    if bundle is None:
+        return json_error("that bundle no longer exists", status=404)
+    return ai_pack.bundle_base(bundle, bundles, library)
+
+
 def _pack_body(
     body: dict[str, Any], library: list[dict[str, Any]] | None = None,
+    base: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]] | web.Response:
     """The plan and built items the manager sends back, checked again."""
     try:
-        plan = ai_pack.compile_plan(body.get("plan"), library=library)
+        plan = ai_pack.compile_plan(body.get("plan"), library=library, base=base)
     except ai_pack.PlanError as e:
         return json_error(f"the plan can't be used: {e}", status=400)
     return plan, ai_pack.parse_built(plan, body.get("built"))
@@ -1881,12 +1901,15 @@ async def post_pack_plan(request: web.Request) -> web.Response:
             modules, BundleRepository(conn).list(), TemplateRepository(conn).list()),
             reuse=False)
     library = [m for m in modules if m.get("type") in ai_pack.REUSABLE]
+    base = _pack_base(request, body, library)
+    if isinstance(base, web.Response):
+        return base
     previous = body.get("previous") if isinstance(body.get("previous"), dict) else None
     if turns and previous is not None:
         # The user may have edited the plan by hand: the model's last answer
         # is replayed as the plan they see now.
         try:
-            shown = ai_pack.compile_plan(previous, library=library)
+            shown = ai_pack.compile_plan(previous, library=library, base=base)
             turns[-1]["answer"] = ai_pack.plan_answer(shown)
         except ai_pack.PlanError:
             previous = None
@@ -1897,6 +1920,8 @@ async def post_pack_plan(request: web.Request) -> web.Response:
         ai_followup.first_instruction(turns, instruction), library_note=lib_note,
         sample=sample, settings=settings, decisions=[] if turns else decisions,
         library=library, images=len(images), web=web_on)
+    if base is not None:
+        first = ai_pack.base_note(base) + "\n\n" + first
     follow = ai_pack.refine_text(instruction, decisions, settings, body.get("web"),
                                  searched) if turns else instruction
     answer: Any = None
@@ -1907,7 +1932,7 @@ async def post_pack_plan(request: web.Request) -> web.Response:
             schema_name="pack_plan", temperature=0.4, images=images or None,
         )
         plan = ai_pack.compile_plan(answer, library=library, previous=previous,
-                                    decisions=decisions, settings=settings)
+                                    decisions=decisions, settings=settings, base=base)
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
     except ai_pack.PlanError as e:
@@ -1963,7 +1988,10 @@ async def post_pack_change(request: web.Request) -> web.Response:
     if isinstance(instruction, web.Response):
         return instruction
     library = _reusable(request)
-    parsed = _pack_body(body, library)
+    base = _pack_base(request, body, library)
+    if isinstance(base, web.Response):
+        return base
+    parsed = _pack_body(body, library, base)
     if isinstance(parsed, web.Response):
         return parsed
     plan, _built = parsed
@@ -1976,7 +2004,7 @@ async def post_pack_change(request: web.Request) -> web.Response:
             user=ai_pack.change_prompt(plan, key, instruction),
             schema=ai_pack.CHANGE_SCHEMA, schema_name="pack_change", temperature=0.4,
         )
-        new = ai_pack.apply_change(plan, key, answer, library)
+        new = ai_pack.apply_change(plan, key, answer, library, base)
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
     except ai_pack.PlanError as e:
@@ -1998,7 +2026,10 @@ async def post_pack_review(request: web.Request) -> web.Response:
     if isinstance(body, web.Response):
         return body
     library = _reusable(request)
-    parsed = _pack_body(body, library)
+    base = _pack_base(request, body, library)
+    if isinstance(base, web.Response):
+        return base
+    parsed = _pack_body(body, library, base)
     if isinstance(parsed, web.Response):
         return parsed
     plan, _built = parsed
@@ -2028,7 +2059,10 @@ async def post_pack_item(request: web.Request) -> web.Response:
     if isinstance(body, web.Response):
         return body
     library = _reusable(request)
-    parsed = _pack_body(body, library)
+    base = _pack_base(request, body, library)
+    if isinstance(base, web.Response):
+        return base
+    parsed = _pack_body(body, library, base)
     if isinstance(parsed, web.Response):
         return parsed
     plan, built = parsed
@@ -2074,7 +2108,10 @@ async def post_pack_check(request: web.Request) -> web.Response:
     if isinstance(body, web.Response):
         return body
     library = _reusable(request)
-    parsed = _pack_body(body, library)
+    base = _pack_base(request, body, library)
+    if isinstance(base, web.Response):
+        return base
+    parsed = _pack_body(body, library, base)
     if isinstance(parsed, web.Response):
         return parsed
     plan, built = parsed
@@ -2082,24 +2119,31 @@ async def post_pack_check(request: web.Request) -> web.Response:
         return json_error("nothing is built yet", status=400)
     loop = asyncio.get_running_loop()
     report = await loop.run_in_executor(
-        None, lambda: ai_pack.check_pack(plan, built, library=library))
+        None, lambda: ai_pack.check_pack(plan, built, library=library, base=base))
     return json_ok(report)
 
 
 async def post_pack_install(request: web.Request) -> web.Response:
-    """Body: {plan, built}. One import commit: the modules, the template and
-    a bundle, tagged as one collection. Returns the import's undo id."""
+    """Body: {plan, built, bundle_id?}. One import commit: the modules, the
+    template and a bundle, tagged as one collection; with ``bundle_id`` the
+    new items go into that bundle instead (it is replaced, so the same undo
+    puts it back). Returns the import's undo id."""
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
     body = await _body(request)
     if isinstance(body, web.Response):
         return body
-    parsed = _pack_body(body, _reusable(request))
+    library = _reusable(request)
+    base = _pack_base(request, body, library)
+    if isinstance(base, web.Response):
+        return base
+    parsed = _pack_body(body, library, base)
     if isinstance(parsed, web.Response):
         return parsed
     plan, built = parsed
-    if not any(i["key"] in built for i in plan["items"] if i["kind"] != "template"):
+    if not any(i["key"] in built for i in plan["items"]
+               if i["kind"] != "template" and not i.get("existing")):
         return json_error("nothing is built yet", status=400)
     for i in plan["items"]:
         if i["kind"] == "wildcard" and i["key"] in built:
@@ -2109,11 +2153,14 @@ async def post_pack_install(request: web.Request) -> web.Response:
     with db_session(request) as conn:
         def ids(table: str) -> set[str]:
             return {r[0] for r in conn.execute(f"SELECT id FROM {table};")}  # noqa: S608
-        ops = ai_pack.install_ops(
-            plan, built, taken=ids("modules") | ids("bundles"),
-            template_ids=ids("templates"), bundle_ids=ids("bundles"),
-        )
-        result = commit_import(conn, {"adds": ops["adds"]})
+        taken = ids("modules") | ids("bundles")
+        if base is None:
+            ops = ai_pack.install_ops(plan, built, taken=taken,
+                                      template_ids=ids("templates"), bundle_ids=ids("bundles"))
+        else:
+            ops = ai_pack.extend_ops(plan, built, base, taken=taken,
+                                     template_ids=ids("templates"), bundle_ids=ids("bundles"))
+        result = commit_import(conn, {"adds": ops["adds"], "replaces": ops["replaces"]})
     if not result.get("ok"):
         return json_error(result.get("error", "install failed"), status=400)
     return json_ok({
@@ -2121,6 +2168,40 @@ async def post_pack_install(request: web.Request) -> web.Response:
         "bundle_id": ops["bundle_id"], "sub_bundles": ops["sub_bundles"],
         "template_id": ops["template_id"], "tag": ops["tag"], "notes": ops["notes"],
     })
+
+
+async def post_bundle_split(request: web.Request) -> web.Response:
+    """Body: {name, children, instruction?}. The bundle editor's children
+    (unsaved edits included) grouped into sub-bundles by the model.
+    Returns {groups: [{name, about, start, end}]}: runs of neighbouring
+    children, so the run order never changes. Nothing is saved."""
+    cfg = _enabled_cfg()
+    if isinstance(cfg, web.Response):
+        return cfg
+    body = await _body(request)
+    if isinstance(body, web.Response):
+        return body
+    children = body.get("children")
+    if not isinstance(children, list) or not all(isinstance(c, dict) for c in children):
+        return json_error("children must be a list", status=400)
+    if len(children) < 3:
+        return json_error("a bundle needs at least 3 children to split", status=400)
+    if len(children) > ai_split.MAX_CHILDREN:
+        return json_error(f"at most {ai_split.MAX_CHILDREN} children", status=400)
+    name = body.get("name") if isinstance(body.get("name"), str) else ""
+    instruction = body.get("instruction") if isinstance(body.get("instruction"), str) else ""
+    try:
+        answer = await _ai_client.complete_json(
+            cfg, system=ai_split.SYSTEM,
+            user=ai_split.prompt(name, children, instruction[:1000]),
+            schema=ai_split.SCHEMA, schema_name="bundle_split", temperature=0.3,
+        )
+        groups = ai_split.compile_groups(answer, children)
+    except _ai_client.AIError as e:
+        return json_error(e.message, status=e.status)
+    except ai_split.SplitError as e:
+        return json_error(str(e), status=502)
+    return json_ok({"groups": groups, "model": cfg["model"]})
 
 
 def register(router: web.UrlDispatcher) -> None:
@@ -2138,6 +2219,7 @@ def register(router: web.UrlDispatcher) -> None:
     add("POST", "/wp/api/ai/test", post_test)
     add("POST", "/wp/api/ai/wildcard/draft", post_wildcard_draft)
     add("POST", "/wp/api/ai/pack/review", post_pack_review)
+    add("POST", "/wp/api/ai/bundle/split", post_bundle_split)
     add("POST", "/wp/api/ai/wildcard/edit", post_wildcard_edit)
     add("POST", "/wp/api/ai/derivation/draft", post_derivation_draft)
     add("POST", "/wp/api/ai/constraint/draft", post_constraint_draft)

@@ -1453,6 +1453,9 @@ export interface AiPackItem {
   library_id: string;
   /** That row's type: "wildcard" or "fixed_values". */
   library_type: string;
+  /** Already in the bundle "Extend with AI" adds to: shown, never built
+   *  into it again, not editable here. */
+  existing?: boolean;
 }
 
 /** A value the pack reads but doesn't set: a WP Context Injector row. */
@@ -1520,6 +1523,8 @@ export interface AiPackPlan {
   items: AiPackItem[];
   /** What the checker left out of the model's plan. */
   warnings: string[];
+  /** "Extend with AI": the bundle the plan adds to. */
+  base?: { id: string; name: string; nested: boolean; sets: string[] };
 }
 
 export interface AiPackPlanRequest extends AiConversational {
@@ -1622,6 +1627,15 @@ export interface AiPackInstallResult {
   tag: string;
   /** How to wire the pack on the canvas. */
   notes: string[];
+}
+
+/** One sub-bundle the AI suggests: children `start`..`end` (inclusive,
+ *  neighbours, so the run order never changes). */
+export interface AiBundleSplitGroup {
+  name: string;
+  about: string;
+  start: number;
+  end: number;
 }
 
 export interface AiTextDraftRequest extends AiConversational {

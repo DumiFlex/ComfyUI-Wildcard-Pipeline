@@ -25,6 +25,7 @@ import type {
   AiChatEvent,
   AiChatStreamEvent,
   AiChatSummary,
+  AiBundleSplitGroup,
   AiPackBuilt,
   AiPackChangeResult,
   AiPackCheck,
@@ -567,6 +568,15 @@ export const api = {
       signal?: AbortSignal,
     ) {
       return request<AiPackItemResult>("/wp/api/ai/pack/item", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    /** Group a bundle's children into sub-bundles (runs of neighbours). */
+    bundleSplit(
+      body: { name: string; children: Array<Record<string, unknown>>; instruction?: string },
+      signal?: AbortSignal,
+    ) {
+      return request<{ groups: AiBundleSplitGroup[]; model: string }>("/wp/api/ai/bundle/split", {
         method: "POST", body: JSON.stringify(body), signal,
       });
     },

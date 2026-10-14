@@ -357,6 +357,7 @@ def _match_previous(it: dict[str, Any], kind: str, name: str, var: str,
 def compile_plan(
     raw: Any, library: list[dict[str, Any]] | None = None, *,
     previous: Any = None, decisions: Any = None, settings: Any = None,
+    base: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The model's plan (or one the manager sends back) as a checked plan:
     ``{title, summary, rating, style, model, anchor, questions, assumptions,
@@ -370,7 +371,12 @@ def compile_plan(
     pointing at it across refines. "library" items must name a wildcard or
     fixed values in ``library``; their id is the library row's. Questions
     matching a decision are dropped. Raises PlanError when nothing usable
-    is left."""
+    is left.
+
+    With ``base`` ("Extend with AI", from ``bundle_base``) the bundle's own
+    wildcards and fixed values come first as ``existing`` library items
+    (keys ``e1``…), its variables count as set, and its sub-bundles are
+    sections; whatever the answer says about them is ignored."""
     if not isinstance(raw, dict) or not isinstance(raw.get("items"), list):
         raise PlanError("the plan had no items")
     cfg = parse_settings(settings if settings is not None else raw.get("settings"))
@@ -416,6 +422,20 @@ def compile_plan(
     ids: set[str] = set()
     sets: dict[str, str] = {i["var"]: "an input" for i in inputs}
     names: set[str] = set()
+    base_items = [dict(b) for b in (base or {}).get("items") or []]
+    base_ids = {b["id"] for b in base_items}
+    for b in base_items:
+        keys.add(b["key"])
+        ids.add(b["id"])
+        sets[b["var"]] = f"the bundle's {b['name']}"
+        if b["library_type"] == "wildcard":
+            names.add(b["name"].lower())
+        items.append(b)
+    for v, who in ((base or {}).get("sets") or {}).items():
+        sets.setdefault(v, f"the bundle's {who}")
+    for name in (base or {}).get("subs") or {}:
+        if not any(x["name"].lower() == name.lower() for x in sections):
+            sections.insert(0, {"name": name, "about": "already in the bundle"})
     used_prev: set[str] = set()
     sent_keys = {x.get("key") for x in raw["items"] if isinstance(x, dict)}
     next_key = 1
@@ -423,6 +443,8 @@ def compile_plan(
     for it in raw["items"]:
         if not isinstance(it, dict) or it.get("kind") not in KINDS:
             continue
+        if base is not None and (it.get("existing") or str(it.get("key") or "").startswith("e")):
+            continue  # the bundle's own items come from ``base``
         kind = it["kind"]
         name = _clean(it.get("name"), MAX_NAME)
         about = _clean(it.get("about"), MAX_ABOUT)
@@ -434,6 +456,8 @@ def compile_plan(
                                 "say to make everything new")
                 continue
             lib_row = _library_row(it, library)
+            if lib_row is not None and lib_row["id"] in base_ids:
+                continue  # already in the bundle
             if lib_row is None:
                 warnings.append(f"Left out {name or var or 'a library item'}: nothing by that "
                                 "name in the library")
@@ -516,8 +540,10 @@ def compile_plan(
             sets.setdefault(var, item["name"])
         if kind == "wildcard":
             names.add(item["name"].lower())
+        if base is not None and base.get("nested"):
+            item["section"] = ""  # a bundle inside a bundle can't hold sub-bundles
         items.append(item)
-        if len(items) >= MAX_ITEMS:
+        if len(items) - len(base_items) >= MAX_ITEMS:
             warnings.append(f"Kept the first {MAX_ITEMS} items")
             break
     wildcard_vars = {i["var"]: i for i in items if is_wild(i)}
@@ -536,6 +562,8 @@ def compile_plan(
         kept.append(i)
     if not any(is_wild(i) for i in kept):
         raise PlanError("the plan has no wildcards")
+    if base is not None and all(i.get("existing") for i in kept):
+        raise PlanError("the plan adds nothing to the bundle")
     used_sections = {i["section"] for i in kept if i["section"]}
     sections = [s for s in sections if s["name"] in used_sections]
     rating = raw.get("rating") if raw.get("rating") in ("safe", "nsfw") else "safe"
@@ -549,8 +577,12 @@ def compile_plan(
             and anchor not in {i["var"] for i in inputs}:
         warnings.append(f"The anchor ${anchor} isn't set by the pack")
         anchor = ""
+    out_base = {} if base is None else {"base": {
+        "id": base["id"], "name": base["name"], "nested": bool(base.get("nested")),
+        "sets": sorted(set(base.get("sets") or {}) | {b["var"] for b in base_items})}}
     return {
-        "title": _clean(raw.get("title"), MAX_NAME) or "AI pack",
+        **out_base,
+        "title": _clean(raw.get("title"), MAX_NAME) or (base or {}).get("name") or "AI pack",
         "summary": _clean(raw.get("summary"), 300),
         "rating": rating,
         "style": style,
@@ -582,7 +614,8 @@ def plan_answer(plan: dict[str, Any]) -> dict[str, Any]:
         "inputs": list(plan.get("inputs") or []),
         "sections": list(plan.get("sections") or []),
         "items": [{k: i.get(k, "" if k not in ("count", "tags") else (0 if k == "count" else []))
-                   for k in ITEM_SCHEMA["properties"]} for i in plan["items"]],
+                   for k in ITEM_SCHEMA["properties"]} for i in plan["items"]
+                  if not i.get("existing")],
     }
 
 
@@ -980,7 +1013,8 @@ def change_prompt(plan: dict[str, Any], key: str, instruction: str) -> str:
 
 
 def apply_change(plan: dict[str, Any], key: str, answer: Any,
-                 library: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+                 library: list[dict[str, Any]] | None = None,
+                 base: dict[str, Any] | None = None) -> dict[str, Any]:
     """The plan with item ``key`` replaced by the model's first item (it
     keeps the key and id) and any others added after it; with ``key`` ""
     the items are added at the end (before the template). Checked again."""
@@ -989,18 +1023,21 @@ def apply_change(plan: dict[str, Any], key: str, answer: Any,
     if not new:
         raise PlanError("the answer had no item")
     raw = plan_answer(plan)
+    own = [i for i in plan["items"] if not i.get("existing")]
     raw["items"] = [dict(i, key=p["key"], id=p["id"]) for i, p in zip(
-        raw["items"], plan["items"], strict=True)]
+        raw["items"], own, strict=True)]
     if key:
-        at = next(n for n, i in enumerate(plan["items"]) if i["key"] == key)
-        first = dict(new[0], key=key, id=plan["items"][at]["id"])
+        at = next((n for n, i in enumerate(own) if i["key"] == key), None)
+        if at is None:
+            raise PlanError("that item is already in the bundle; change it there")
+        first = dict(new[0], key=key, id=own[at]["id"])
         raw["items"][at:at + 1] = [first, *new[1:]]
     else:
         at = next((n for n, i in enumerate(raw["items"]) if i["kind"] == "template"),
                   len(raw["items"]))
         raw["items"][at:at] = new
     return compile_plan(raw, library, decisions=plan.get("decisions"),
-                        settings=plan.get("settings"))
+                        settings=plan.get("settings"), base=base)
 
 
 # ── review ──────────────────────────────────────────────────────────────
@@ -1036,6 +1073,7 @@ def review_plan(plan: dict[str, Any],
 
     wild = {i["var"]: i for i in items if is_wild(i)}
     sets = {i["var"] for i in items if i["var"]} | {i["var"] for i in plan.get("inputs") or []}
+    sets |= set((plan.get("base") or {}).get("sets") or [])
     for i in items:
         # A derivation may set more than its main variable; any it names
         # counts, so the check never asks for one it already makes.
@@ -1103,7 +1141,7 @@ def review_plan(plan: dict[str, Any],
         if len(loose) >= 2:
             add(None, "tip", f"{', '.join(loose[:4])} don't follow the anchor ${anchor}; "
                 "link the ones that should agree with it")
-    if not any(i["kind"] == "template" for i in items):
+    if not any(i["kind"] == "template" for i in items) and not plan.get("base"):
         reads = [f"${i['var']}" for i in items if i["var"] and i["kind"] != "constraint"
                  and not _vocab(i)]
         add(None, "fix", "There is no template, so nothing turns the variables into a prompt",
@@ -1700,17 +1738,18 @@ def render(text: str, negative: str, ctx: dict[str, Any]) -> tuple[str, str]:
 
 def check_pack(
     plan: dict[str, Any], built: dict[str, Any], *, seeds: int = CHECK_SEEDS,
-    library: list[dict[str, Any]] | None = None,
+    library: list[dict[str, Any]] | None = None, base: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run the pack on the engine. Returns ``{runs, failed, problems:
     {key: [text]}, notes: [text], variables: [{var, distinct, top}],
     prompts: [{seed, text, negative}]}``. ``problems`` are what an item's
     repair gets told; ``notes`` are pack-wide. Inputs are pinned to their
-    examples; refs resolve against the pack and ``library``."""
+    examples; refs resolve against the pack and ``library``. With ``base``
+    the bundle being extended runs too, as it will after install."""
     from engine.pipeline import PipelineEngine
     from engine.scenario import run_scenario
 
-    modules = chain_modules(plan, built)
+    modules = chain_modules(plan, built) if base is None else extend_chain(plan, built, base)
     rows = [*(r for r in library or [] if r.get("type") == "wildcard"),
             *(r for r in _built_rows(plan, built) if r["type"] == "wildcard")]
     catalog = ref_catalog(modules, rows)
@@ -1849,15 +1888,14 @@ def wiring_notes(plan: dict[str, Any],
     return out
 
 
-def install_ops(
-    plan: dict[str, Any], built: dict[str, Any], *, taken: set[str],
-    template_ids: set[str], bundle_ids: set[str],
+def _new_modules(
+    plan: dict[str, Any], built: dict[str, Any], *, taken: set[str], template_ids: set[str],
+    tag: str,
 ) -> dict[str, Any]:
-    """An import commit for the pack: ``{adds, ids: {key: id}, bundle_id,
-    template_id, tag, notes}``. Ids already in the library are swapped for
-    fresh ones; constraints, refs and the bundle follow. Vocabularies are
-    installed but stay out of the bundle (refs reach them)."""
-    tag = collection_tag(plan["title"])
+    """The built items as import adds: ``{fixed, adds, ids, template_id,
+    used}``. Ids already in the library are swapped for fresh ones, and
+    constraints and refs follow. Library items (and a bundle's own items
+    when extending) add nothing; only the bundle uses them."""
     remap: dict[str, str] = {}
     used = set(taken)
     for i in plan["items"]:
@@ -1896,15 +1934,33 @@ def install_ops(
             "id": b["id"], "name": i["name"], "description": i["about"], "tags": [tag],
             "payload": b["payload"], "content_rating": plan["rating"],
         }})
-    def child(m: dict[str, Any]) -> dict[str, Any]:
-        return {"id": m["id"], "type": m["type"], "enabled": True, "collapsed": False,
-                "meta": m["meta"], "payload": m["payload"], "payload_hash": m["payload_hash"],
-                "instance": m["instance"], "entries": []}
+    return {"fixed": fixed, "adds": adds, "ids": ids, "template_id": template_id,
+            "used": used}
 
+
+def _child(m: dict[str, Any]) -> dict[str, Any]:
+    """A chain module as a bundle child."""
+    return {"id": m["id"], "type": m["type"], "enabled": True, "collapsed": False,
+            "meta": m["meta"], "payload": m["payload"], "payload_hash": m["payload_hash"],
+            "instance": m["instance"], "entries": []}
+
+
+def install_ops(
+    plan: dict[str, Any], built: dict[str, Any], *, taken: set[str],
+    template_ids: set[str], bundle_ids: set[str],
+) -> dict[str, Any]:
+    """An import commit for the pack: ``{adds, ids: {key: id}, bundle_id,
+    sub_bundles, template_id, tag, notes}``. Ids already in the library are
+    swapped for fresh ones; constraints, refs and the bundle follow. With
+    sections, each becomes a sub-bundle inside the pack bundle, in an order
+    where every rule runs after what it reads."""
+    tag = collection_tag(plan["title"])
+    new = _new_modules(plan, built, taken=taken, template_ids=template_ids, tag=tag)
+    fixed, adds, used = new["fixed"], new["adds"], new["used"]
     by_key = {}
     for m, key in zip(chain_modules(plan, fixed), [k for k in run_order(plan, fixed)
                                                    if k in fixed], strict=True):
-        by_key[key] = child(m)
+        by_key[key] = _child(m)
     taken_bundles = set(bundle_ids) | used
     bundle_id = new_id(taken_bundles)
     sub_bundles: list[dict[str, Any]] = []
@@ -1923,6 +1979,7 @@ def install_ops(
                 children += kids
                 continue
             sid = new_id(taken_bundles)
+            taken_bundles.add(sid)
             label = f"{plan['title']} · {name}"[:MAX_NAME]
             sub_bundles.append({"id": sid, "name": label,
                                 "description": about.get(name) or f"{name} of {plan['title']}",
@@ -1936,9 +1993,268 @@ def install_ops(
         "id": bundle_id, "name": plan["title"], "description": plan["summary"],
         "tags": [tag], "children": children, "content_rating": plan["rating"],
     }})
-    return {"adds": adds, "ids": ids, "bundle_id": bundle_id,
+    return {"adds": adds, "replaces": [], "ids": new["ids"], "bundle_id": bundle_id,
             "sub_bundles": [{"id": b["id"], "name": b["name"]} for b in sub_bundles],
-            "template_id": template_id, "tag": tag, "notes": wiring_notes(plan, sub_bundles)}
+            "template_id": new["template_id"], "tag": tag,
+            "notes": wiring_notes(plan, sub_bundles)}
+
+
+# ── extend a bundle ("Extend with AI") ──────────────────────────────────
+
+#: Bundle lines the planner sees when extending one.
+MAX_BASE_LINES = 60
+
+
+def _module_sets(m: dict[str, Any]) -> list[str]:
+    """Variables one module sets."""
+    p = m.get("payload") if isinstance(m.get("payload"), dict) else {}
+    kind = m.get("type")
+    if kind == "wildcard":
+        return [p["var_binding"]] if isinstance(p.get("var_binding"), str) \
+            and p["var_binding"] else []
+    if kind == "fixed_values":
+        return [v["name"] for v in p.get("values") or []
+                if isinstance(v, dict) and isinstance(v.get("name"), str) and v["name"]]
+    if kind == "combine":
+        return [p["output_var"]] if isinstance(p.get("output_var"), str) \
+            and p["output_var"] else []
+    if kind == "derivation":
+        return [t for r in p.get("rules") or [] for t in library_vars._action_targets(r)]
+    return []
+
+
+def _module_name(m: dict[str, Any]) -> str:
+    meta = m.get("meta") if isinstance(m.get("meta"), dict) else {}
+    return str(meta.get("name") or meta.get("library_name") or m.get("name") or m.get("id"))
+
+
+def bundle_base(bundle: dict[str, Any], bundles: list[dict[str, Any]],
+                library: list[dict[str, Any]] | None) -> dict[str, Any]:
+    """What "Extend with AI" knows about the bundle it adds to: ``{id, name,
+    nested, row, subs: {name: bundle row}, modules: [(child, sub name)],
+    items, sets: {var: module name}}``. ``items`` are its wildcards and
+    fixed values that are in the library, as ``existing`` plan items, so
+    constraints and refs can use them; ``nested``: another bundle holds it,
+    so it can't hold sub-bundles itself."""
+    by_id = {b["id"]: b for b in bundles if isinstance(b, dict)}
+    nested = any(isinstance(c, dict) and c.get("type") == "bundle" and c.get("id") == bundle["id"]
+                 for b in bundles for c in b.get("children") or [])
+    lib = {r["id"]: r for r in library or [] if isinstance(r.get("id"), str)}
+    modules: list[tuple[dict[str, Any], str]] = []
+    subs: dict[str, dict[str, Any]] = {}
+    for c in bundle.get("children") or []:
+        if not isinstance(c, dict):
+            continue
+        if c.get("type") == "bundle":
+            sub = by_id.get(c.get("id"))
+            if sub is None:
+                continue
+            subs[sub["name"]] = sub
+            modules += [(m, sub["name"]) for m in sub.get("children") or []
+                        if isinstance(m, dict) and m.get("type") != "bundle"
+                        and isinstance(m.get("payload"), dict)]
+        elif isinstance(c.get("payload"), dict):
+            modules.append((c, ""))
+    items: list[dict[str, Any]] = []
+    sets: dict[str, str] = {}
+    for m, sub in modules:
+        for v in _module_sets(m):
+            sets.setdefault(v, _module_name(m))
+        row = lib.get(m.get("id"))
+        if m.get("type") not in REUSABLE or row is None:
+            continue
+        var = _row_var(row)
+        if not var or any(x["var"] == var for x in items):
+            continue
+        items.append({
+            "key": f"e{len(items) + 1}", "id": row["id"], "kind": "library",
+            "name": _clean(row.get("name"), MAX_NAME) or var, "var": var, "section": sub,
+            "about": _clean(row.get("description"), MAX_ABOUT), "count": 0,
+            "tags": [t for t in row["payload"].get("sub_categories") or []
+                     if isinstance(t, str)][:16] if row["type"] == "wildcard" else [],
+            "source": "", "target": "", "use": "", "library_id": row["id"],
+            "library_type": row["type"], "existing": True,
+        })
+    return {"id": bundle["id"], "name": str(bundle.get("name") or ""), "nested": nested,
+            "row": bundle, "subs": subs, "modules": modules, "items": items, "sets": sets}
+
+
+def base_note(base: dict[str, Any]) -> str:
+    """The bundle being extended, for the planner."""
+    lines = [f'You are EXTENDING the bundle "{base["name"]}". It already holds, in run order:']
+    for m, sub in base["modules"][:MAX_BASE_LINES]:
+        sets = _module_sets(m)
+        tags = (m.get("payload") or {}).get("sub_categories") if m.get("type") == "wildcard" \
+            else None
+        bits = [m.get("type", "module")]
+        if sets:
+            bits.append("sets $" + ", $".join(sets[:4]))
+        if tags:
+            bits.append("tags " + ", ".join(str(t) for t in tags[:8]))
+        lines.append(f"- {_module_name(m)} ({'; '.join(bits)})" + (f" [in {sub}]" if sub else ""))
+    if len(base["modules"]) > MAX_BASE_LINES:
+        lines.append(f"- … and {len(base['modules']) - MAX_BASE_LINES} more")
+    lines += [
+        "Plan ONLY what to add. Don't list what it already holds: those items are added to "
+        "the plan for you. Its variables are already set: read them freely, and never plan "
+        "a module that sets one of them again.",
+        "Constraints may use its wildcards as source or target, and new options may point "
+        "at its wildcards.",
+    ]
+    if base["nested"]:
+        lines.append("It sits inside another bundle, so it can't hold sub-bundles: leave "
+                     "every section empty.")
+    elif base["subs"]:
+        lines.append("To put a new item in one of its sub-bundles, use that sub-bundle's name "
+                     "as the section (" + ", ".join(base["subs"]) + "); a new section "
+                     "becomes a new sub-bundle.")
+    return "\n".join(lines)
+
+
+def _base_module(m: dict[str, Any], n: int) -> dict[str, Any]:
+    payload = copy.deepcopy(m["payload"])
+    return {"id": m["id"], "_uid": f"base.{n}", "enabled": m.get("enabled", True) is not False,
+            "type": m["type"], "name": _module_name(m),
+            "meta": m.get("meta") if isinstance(m.get("meta"), dict) else {},
+            "payload": payload, "payload_hash": m.get("payload_hash") or payload_hash(payload),
+            "instance": m.get("instance") if isinstance(m.get("instance"), dict) else {}}
+
+
+def _before_target(seq: list[dict[str, Any]], m: dict[str, Any]) -> int | None:
+    """Where a new constraint goes in a list holding its target: just
+    before the target (a constraint runs before the pick it limits)."""
+    if m.get("type") != "constraint":
+        return None
+    tgt = (m.get("payload") or {}).get("target_wildcard_id")
+    return next((n for n, x in enumerate(seq) if x.get("id") == tgt), None)
+
+
+def _extend_layout(plan: dict[str, Any], built: dict[str, Any],
+                   base: dict[str, Any]) -> dict[str, Any]:
+    """Where each new module goes when extending, shared by the check and
+    the install so what's tested is what's installed: ``{outer, subs,
+    made, changed}``. ``outer`` / ``subs[name]`` are the bundle's (and
+    its sub-bundles') children with the new chain modules placed in them;
+    ``made`` are new sections (each a list of chain modules), referenced
+    from ``outer`` as ``{"type": "bundle", "section": name}``."""
+    items = {i["key"]: i for i in plan["items"]}
+    outer: list[dict[str, Any]] = list(base["row"].get("children") or [])
+    subs = {name: list(row.get("children") or []) for name, row in base["subs"].items()}
+    made: dict[str, list[dict[str, Any]]] = {}
+    changed: set[str] = set()
+    keys = [k for k in run_order(plan, built) if k in built]
+    for m, key in zip(chain_modules(plan, built), keys, strict=True):
+        i = items[key]
+        if i.get("existing"):
+            continue
+        placed = False
+        for name, seq in [("", outer), *subs.items()]:
+            at = _before_target(seq, m)
+            if at is not None:
+                seq.insert(at, m)
+                changed.add(name)
+                placed = True
+                break
+        if placed:
+            continue
+        sec = i.get("section") or ""
+        if sec in subs:
+            subs[sec].append(m)
+            changed.add(sec)
+        elif sec and not base["nested"]:
+            if sec not in made:
+                made[sec] = []
+                outer.append({"type": "bundle", "section": sec})
+            made[sec].append(m)
+            changed.add("")
+        else:
+            outer.append(m)
+            changed.add("")
+    return {"outer": outer, "subs": subs, "made": made, "changed": changed}
+
+
+def extend_chain(plan: dict[str, Any], built: dict[str, Any],
+                 base: dict[str, Any]) -> list[dict[str, Any]]:
+    """The run order after extending: the bundle as it is, with the new
+    modules where the install puts them; a new constraint on one of its
+    wildcards goes just before that wildcard."""
+    lay = _extend_layout(plan, built, base)
+    new_ids = {id(m) for seq in [lay["outer"], *lay["subs"].values(), *lay["made"].values()]
+               for m in seq if "_uid" in m}
+    flat: list[dict[str, Any]] = []
+    for c in lay["outer"]:
+        if c.get("type") == "bundle":
+            sub = lay["made"].get(c.get("section")) if "section" in c else None
+            if sub is None:
+                sub = next((seq for name, seq in lay["subs"].items()
+                            if base["subs"][name]["id"] == c.get("id")), [])
+            flat += sub
+        else:
+            flat.append(c)
+    out = []
+    for n, m in enumerate(flat):
+        if id(m) in new_ids:
+            out.append(m)
+        elif isinstance(m.get("payload"), dict):
+            out.append(_base_module(m, n))
+    return out
+
+
+def extend_ops(
+    plan: dict[str, Any], built: dict[str, Any], base: dict[str, Any], *, taken: set[str],
+    template_ids: set[str], bundle_ids: set[str],
+) -> dict[str, Any]:
+    """An import commit that adds the new items to the bundle: new modules
+    and sub-bundles are added, and the bundle (and any of its sub-bundles
+    that gain items) is replaced with its new children, so one undo puts
+    it back. Items go in their section's sub-bundle, a new section makes a
+    new one, the rest go in the bundle itself; a new constraint on one of
+    its wildcards goes just before that wildcard."""
+    tag = collection_tag(plan["title"])
+    new = _new_modules(plan, built, taken=taken, template_ids=template_ids, tag=tag)
+    fixed, adds, used = new["fixed"], new["adds"], new["used"]
+    lay = _extend_layout(plan, fixed, base)
+    taken_bundles = set(bundle_ids) | used
+    about = {s["name"]: s.get("about", "") for s in plan.get("sections") or []}
+
+    def kids(seq: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [_child(m) if "_uid" in m else m for m in seq]
+    made: dict[str, dict[str, Any]] = {}
+    for sec, seq in lay["made"].items():
+        sid = new_id(taken_bundles)
+        taken_bundles.add(sid)
+        made[sec] = {"id": sid, "name": f"{base['name']} · {sec}"[:MAX_NAME],
+                     "description": about.get(sec) or f"{sec} of {base['name']}",
+                     "tags": [tag], "children": kids(seq), "content_rating": plan["rating"]}
+        adds.append({"kind": "bundle", "entity": made[sec]})
+    outer = []
+    for c in lay["outer"]:
+        if c.get("type") == "bundle" and "section" in c:
+            b = made[c["section"]]
+            outer.append({"id": b["id"], "type": "bundle", "name": b["name"], "color": None})
+        else:
+            outer.append(_child(c) if "_uid" in c else c)
+
+    def content(row: dict[str, Any], children: list[Any]) -> dict[str, Any]:
+        return {"name": row["name"], "description": row.get("description") or "",
+                "color": row.get("color"), "category_id": row.get("category_id"),
+                "tags": list(dict.fromkeys([*(row.get("tags") or []), tag])),
+                "is_favorite": bool(row.get("is_favorite")), "children": children}
+    replaces = [{"kind": "bundle", "id": base["subs"][name]["id"],
+                 "new_content": content(base["subs"][name], kids(lay["subs"][name]))}
+                for name in lay["subs"] if name in lay["changed"]]
+    replaces.append({"kind": "bundle", "id": base["id"],
+                     "new_content": content(base["row"], outer)})
+    notes = [f"\"{base['name']}\" now holds the new items; WP Context nodes that load it "
+             "pick them up when you insert it again."]
+    if made:
+        notes.append("New sub-bundles inside it: " + ", ".join(b["name"] for b in made.values())
+                     + ".")
+    if new["template_id"]:
+        notes.append("Load the new template in a WP Prompt Assembler to use the new variables.")
+    return {"adds": adds, "replaces": replaces, "ids": new["ids"], "bundle_id": base["id"],
+            "sub_bundles": [{"id": b["id"], "name": b["name"]} for b in made.values()],
+            "template_id": new["template_id"], "tag": tag, "notes": notes}
 
 
 # ── whole run (evals) ───────────────────────────────────────────────────
