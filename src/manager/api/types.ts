@@ -1147,6 +1147,8 @@ export interface AiChatRequest {
   chat_id?: string;
   page?: AiChatPage;
   events?: AiChatEvent[];
+  /** Images as data URLs (`utils/chat-image.ts` shrinks them first). */
+  images?: Array<{ data: string }>;
 }
 
 /** Run the chat's last message again: its answer is dropped first. */
@@ -1272,7 +1274,7 @@ export interface AiChatSummary {
 
 /** One turn of a reopened chat, as the user saw it. */
 export type AiChatTurn =
-  | { role: "user"; text: string }
+  | { role: "user"; text: string; images?: string[] }
   | {
       role: "assistant";
       view: Omit<AiChatResult, "chat_id">;

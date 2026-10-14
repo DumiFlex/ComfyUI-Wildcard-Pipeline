@@ -327,6 +327,27 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       </DocCallout>
     </DocSection>
 
+    <DocSection title="Send images">
+      <p>
+        With a model that sees images (a vision model, such as Gemma 3, Qwen2.5-VL, Llama 3.2
+        Vision, Claude or GPT-4o), attach up to 4 images to a message: the image button next to
+        Send, paste one into the message box, or drop files on the chat. Ask about them, or try
+        <b>Make wildcards from this image</b>: the assistant describes what matters for prompts
+        (subject, clothing, pose, setting, lighting, style, camera) in short tag-like phrases and
+        proposes wildcards or new options from them, as cards like any other change. Click an
+        image in the chat to see it larger.
+      </p>
+      <p>
+        Images are made smaller before they leave the browser (at most 1568 pixels on the long
+        side), which is all a model uses, and are saved again as JPEG, which drops camera details
+        and location. The model sees the newest 8 images of a chat; older ones are mentioned but
+        left out to save room. Each image counts towards the meter. The chat asks your server
+        whether the model sees images: when it says no, the image button is off and says so;
+        when the server doesn't say, you can still try, and the model's error shows if it can't.
+        Text inside an image is treated as your data, never as instructions.
+      </p>
+    </DocSection>
+
     <DocSection title="Search the web">
       <p>
         The chat can look things up on the web when you give it a search engine in
@@ -498,7 +519,9 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         wildcards worth reusing) and, for each item, what the pack has built so far. With meaning search on, the text of each item (name, variable, tags, description and its
         first options) and your search phrases go to the embedding server; with a local server
         that stays on your PC. A web search you allow sends only its search words to the search
-        engine you picked. Each chat
+        engine you picked. Images you attach go to the model with the message they belong to,
+        and stay in the chat; they are shrunk and re-saved first, which drops camera details
+        and location. Each chat
         message sends the chat so far again (the provider may cache it for a few minutes to
         charge less); the chat itself is stored only in ComfyUI's own database on your PC.
       </p>

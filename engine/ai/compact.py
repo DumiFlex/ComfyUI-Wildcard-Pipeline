@@ -72,7 +72,9 @@ def transcript(entries: list[dict[str, Any]], meta: dict[str, Any], cut: int) ->
     for e in entries[start:cut]:
         kind = e.get("kind")
         if kind == "user":
-            lines.append("User: " + str(e.get("text") or "").strip())
+            n = len(e.get("images") or [])
+            pics = f" [{n} image{'s' if n > 1 else ''}]" if n else ""
+            lines.append("User: " + str(e.get("text") or "").strip() + pics)
         elif kind == "step":
             for c in e.get("calls") or []:
                 lines.append(f"(assistant called {c.get('tool')} "

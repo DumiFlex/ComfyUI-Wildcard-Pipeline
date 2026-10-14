@@ -104,6 +104,59 @@ async def tool_support(cfg: dict[str, Any]) -> bool | None:
     return found
 
 
+_vision: dict[tuple[str, str, str], tuple[float, bool | None]] = {}
+#: OpenAI models that see images (others: unknown).
+_OPENAI_VISION = re.compile(r"^(gpt-4o|gpt-4\.1|gpt-4-turbo|gpt-5|o1|o3|o4|chatgpt-4o)|vision",
+                            re.I)
+
+
+async def vision_support(cfg: dict[str, Any]) -> bool | None:
+    """Whether the model sees images: True / False when the server says,
+    None when it doesn't (images are allowed then, and a refusal shows as
+    the server's error). See `/pr-drafts/ai-images-phase7.md`."""
+    model = str(cfg.get("model") or "")
+    if cfg["api"] == "anthropic":
+        return True
+    if not cfg.get("local"):
+        return True if _OPENAI_VISION.search(model) else None
+    key = (cfg["api"], cfg.get("base_url") or "", model)
+    hit = _vision.get(key)
+    if hit and time.monotonic() - hit[0] < _SUPPORT_TTL_S:
+        return hit[1]
+    found: bool | None = None
+    if cfg["api"] == "ollama":
+        try:
+            data = await client._request(cfg, "POST", "/api/show", body={"model": model},
+                                         timeout=client._LIST_TIMEOUT)
+            caps = data.get("capabilities") if isinstance(data, dict) else None
+            if isinstance(caps, list):
+                found = "vision" in caps
+        except AIError:
+            found = None
+    else:
+        root = re.sub(r"/v1$", "", cfg["base_url"].rstrip("/"))
+        rooted = {**cfg, "base_url": root}
+        quoted = urllib.parse.quote(model, safe="")
+        try:
+            data = await client._request(rooted, "GET", f"/api/v0/models/{quoted}",
+                                         timeout=client._LIST_TIMEOUT)
+            if isinstance(data, dict) and data.get("type") in ("vlm", "llm"):
+                found = data["type"] == "vlm"
+        except AIError:
+            found = None
+        if found is None:
+            try:
+                data = await client._request(rooted, "GET", "/props",
+                                             timeout=client._LIST_TIMEOUT)
+                mods = data.get("modalities") if isinstance(data, dict) else None
+                if isinstance(mods, dict) and "vision" in mods:
+                    found = bool(mods["vision"])
+            except AIError:
+                found = None
+    _vision[key] = (time.monotonic(), found)
+    return found
+
+
 async def pick_format(cfg: dict[str, Any]) -> str:
     """"native" or "json" for a new chat: the user's choice, else native
     where the server says the model takes tools, else JSON."""
@@ -122,7 +175,9 @@ def _merge_users(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if out and m["role"] == "user" and out[-1]["role"] == "user":
             prev = out[-1]["content"]
             if isinstance(prev, str) and isinstance(m["content"], str):
-                out[-1] = {"role": "user", "content": prev + "\n\n" + m["content"]}
+                images = [*out[-1].get("images", []), *m.get("images", [])]
+                out[-1] = {"role": "user", "content": prev + "\n\n" + m["content"],
+                           **({"images": images} if images else {})}
             else:
                 blocks = prev if isinstance(prev, list) else [{"type": "text", "text": prev}]
                 extra = m["content"] if isinstance(m["content"], list) else [
@@ -159,7 +214,18 @@ def openai_messages(system: str, log: list[dict[str, Any]], fmt: str,
     out: list[dict[str, Any]] = [{"role": "system", "content": system}]
     for m in log:
         if m["role"] == "user":
-            out.append({"role": "user", "content": m["content"]})
+            images = m.get("images") or []
+            if not images:
+                out.append({"role": "user", "content": m["content"]})
+            elif api == "ollama":
+                out.append({"role": "user", "content": m["content"],
+                            "images": [im["data"] for im in images]})
+            else:
+                out.append({"role": "user", "content": [
+                    {"type": "text", "text": m["content"]},
+                    *({"type": "image_url",
+                       "image_url": {"url": f"data:{im['media_type']};base64,{im['data']}"}}
+                      for im in images)]})
         elif m["role"] == "assistant":
             if fmt == "native" and m["calls"]:
                 if api == "ollama":
@@ -215,6 +281,10 @@ def anthropic_messages(log: list[dict[str, Any]], fmt: str) -> list[dict[str, An
             content.append({"type": "tool_result", "tool_use_id": pending, "content": "Shown."})
             pending = None
         if m["role"] == "user":
+            # Claude reads images best before the text about them.
+            content.extend({"type": "image", "source": {
+                "type": "base64", "media_type": im["media_type"], "data": im["data"]}}
+                for im in m.get("images") or [])
             content.append({"type": "text", "text": m["content"]})
         elif fmt == "native":
             for it in m["items"]:

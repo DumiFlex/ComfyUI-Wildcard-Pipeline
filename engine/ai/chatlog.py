@@ -10,7 +10,9 @@ model servers reuse what they already read (see
 Entries, oldest first:
 
 - ``{"kind": "user", "text": what the user typed, "sent": the message as
-  the model got it (with "since your last message", page note, …)}``
+  the model got it (with "since your last message", page note, …),
+  "images"?: [{"media_type", "data" (base64), "w", "h"}]}`` — images the
+  user attached, checked and re-encoded by `wp_api/_ai_images.py`.
 - ``{"kind": "step", "text": str, "calls": [{"id", "tool", "args",
   "args_text"}], "answer": the JSON-mode object or None, "usage": {…}}`` —
   one model step. `text` is what the model wrote (JSON mode: the raw JSON).
@@ -28,7 +30,9 @@ alternate the way strict chat templates (Mistral) require.
 Shortening is monotonic and stored in the chat's meta, never redone per
 request: `masked_before` (results before that entry show only their first
 line) and `dropped_before` (entries before it are left out). Each only ever
-moves forward, so once applied the prefix is stable again.
+moves forward, so once applied the prefix is stable again. Images follow
+the same rule with `images_before`: only the newest `MAX_IMAGES_SENT` go to
+the model, older ones become a line of text.
 """
 from __future__ import annotations
 
@@ -41,6 +45,14 @@ KEEP_TURNS = 3
 MAX_CHANGES_LISTED = 8
 DROPPED_NOTE = "(Earlier messages of this chat were left out to save room.)"
 SUMMARY_HEAD = "Earlier in this chat (a summary of messages left out to save room):\n"
+#: Images sent to the model per request; older ones become a line of text.
+MAX_IMAGES_SENT = 8
+#: Pixels per token of an image (Claude's estimate; close enough for the
+#: local encoders, which use fewer).
+IMAGE_PIXELS_PER_TOKEN = 750
+#: Characters per token, as `budget.CHARS_PER_TOKEN` (no import: budget
+#: is the higher layer).
+_CHARS_PER_TOKEN = 3.2
 
 
 def dumps(value: Any) -> str:
@@ -48,8 +60,43 @@ def dumps(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True)
 
 
-def user_entry(text: str, sent: str) -> dict[str, Any]:
-    return {"kind": "user", "text": text, "sent": sent}
+def user_entry(text: str, sent: str,
+               images: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    out: dict[str, Any] = {"kind": "user", "text": text, "sent": sent}
+    if images:
+        out["images"] = images
+    return out
+
+
+def _image_line(img: dict[str, Any]) -> str:
+    return (f"(An image the user sent earlier ({img.get('w')}×{img.get('h')}) was left out "
+            "to save room.)")
+
+
+def image_chars(img: dict[str, Any]) -> int:
+    """What an image costs a request, in characters (for the budget)."""
+    try:
+        px = int(img.get("w") or 0) * int(img.get("h") or 0)
+    except (TypeError, ValueError):
+        px = 0
+    return int(max(px, 200 * 200) / IMAGE_PIXELS_PER_TOKEN * _CHARS_PER_TOKEN)
+
+
+def move_images(entries: list[dict[str, Any]], meta: dict[str, Any]) -> dict[str, Any]:
+    """Meta with `images_before` moved forward (whole messages at a time)
+    until at most `MAX_IMAGES_SENT` images are sent."""
+    start = int(meta.get("images_before") or 0)
+    holders = [(i, len(e.get("images") or [])) for i, e in enumerate(entries)
+               if i >= start and e.get("kind") == "user" and e.get("images")]
+    total = sum(n for _, n in holders)
+    k = 0
+    while total > MAX_IMAGES_SENT and k < len(holders) - 1:
+        total -= holders[k][1]
+        k += 1
+        start = holders[k][0]
+    if start == int(meta.get("images_before") or 0):
+        return meta
+    return {**meta, "images_before": start}
 
 
 def step_entry(text: str, calls: list[dict[str, Any]], *, answer: Any = None,
@@ -92,6 +139,7 @@ def render(entries: list[dict[str, Any]], meta: dict[str, Any]) -> list[dict[str
     """
     masked = int(meta.get("masked_before") or 0)
     dropped = int(meta.get("dropped_before") or 0)
+    shown_from = int(meta.get("images_before") or 0)
     out: list[dict[str, Any]] = []
     first_user = True
     for i, e in enumerate(entries):
@@ -105,10 +153,19 @@ def render(entries: list[dict[str, Any]], meta: dict[str, Any]) -> list[dict[str
             elif first_user and dropped:
                 text = DROPPED_NOTE + "\n\n" + text
             first_user = False
+            images = [dict(im) for im in e.get("images") or []] if kind == "user" else []
+            if images and i < shown_from:
+                text = "\n".join(_image_line(im) for im in images) + "\n\n" + text
+                images = []
             if out and out[-1]["role"] == "user":
                 out[-1]["content"] += "\n\n" + text
+                if images:
+                    out[-1]["images"] = [*out[-1].get("images", []), *images]
             else:
-                out.append({"role": "user", "content": text})
+                msg: dict[str, Any] = {"role": "user", "content": text}
+                if images:
+                    msg["images"] = images
+                out.append(msg)
         elif kind == "step":
             out.append({"role": "assistant", "content": str(e.get("text") or ""),
                         "calls": list(e.get("calls") or []), "answer": e.get("answer")})
@@ -130,6 +187,7 @@ def size(messages: list[dict[str, Any]]) -> int:
             total += sum(len(it["content"]) + 40 for it in m["items"]) + len(m.get("tail") or "")
         else:
             total += len(m.get("content") or "")
+            total += sum(image_chars(im) for im in m.get("images") or [])
             for c in m.get("calls") or []:
                 total += len(c.get("args_text") or dumps(c.get("args") or {})) + 40
     return total
@@ -313,7 +371,11 @@ def display(entries: list[dict[str, Any]], meta: dict[str, Any]) -> list[dict[st
         if kind == "user":
             close()
             span = []
-            out.append({"role": "user", "text": str(e.get("text") or "")})
+            turn: dict[str, Any] = {"role": "user", "text": str(e.get("text") or "")}
+            if e.get("images"):
+                turn["images"] = [f"data:{im.get('media_type')};base64,{im.get('data')}"
+                                  for im in e["images"]]
+            out.append(turn)
         elif kind == "shown" and isinstance(e.get("view"), dict):
             status, created = status_of(e["view"])
             out.append({"role": "assistant", "view": e["view"], "status": status,

@@ -33,6 +33,7 @@ import { useTemplateStore } from "../stores/templateStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { openEditor } from "./useOpenEditor";
 import { runCall, type AiActionHost } from "./useAiActions";
+import { MAX_IMAGES, prepareImage, type ChatImage } from "../utils/chat-image";
 
 /** The user's answer to a web search the model asked for. */
 export type SearchApproval = "once" | "chat" | "deny";
@@ -42,6 +43,8 @@ export type ProposalStatus = "applied" | "editor" | "dismissed" | "failed";
 export interface ChatUserEntry {
   role: "user";
   text: string;
+  /** Attached images as data URLs. */
+  images?: string[];
 }
 
 export interface ChatAssistantEntry {
@@ -94,6 +97,11 @@ const live = shallowRef<LiveAnswer>(EMPTY_LIVE);
 /** How full the model's window is (from the last answer). */
 const context = ref<AiChatContext | null>(null);
 const compacting = ref(false);
+/** Images waiting to go with the next message. */
+const attachments = shallowRef<ChatImage[]>([]);
+/** Whether the chosen model sees images (null: the server didn't say). */
+const vision = ref<boolean | null>(null);
+const visionModel = ref("");
 
 function record(pid: string, status: AiChatEvent["status"], created?: string): void {
   const ev: AiChatEvent = created ? { pid, status, created } : { pid, status };
@@ -140,10 +148,15 @@ function editorJson(): { id: string; json: string } | undefined {
 
 async function send(page?: AiChatPage): Promise<void> {
   const text = input.value.trim();
-  if (!text || loading.value) return;
-  const next: ChatEntry[] = [...entries.value, { role: "user", text }];
+  const pics = attachments.value;
+  if ((!text && !pics.length) || loading.value) return;
+  const user: ChatUserEntry = pics.length
+    ? { role: "user", text, images: pics.map((p) => p.url) }
+    : { role: "user", text };
+  const next: ChatEntry[] = [...entries.value, user];
   entries.value = next;
   input.value = "";
+  attachments.value = [];
   error.value = "";
   const mine = new AbortController();
   controller = mine;
@@ -157,6 +170,7 @@ async function send(page?: AiChatPage): Promise<void> {
       ...(id ? { chat_id: id } : {}),
       ...(page ? { page } : {}),
       ...(events.length ? { events } : {}),
+      ...(pics.length ? { images: pics.map((p) => ({ data: p.url })) } : {}),
     }, mine.signal);
     if (chatId.value === id) {
       chatId.value = result.chat_id;
@@ -171,7 +185,7 @@ async function send(page?: AiChatPage): Promise<void> {
     ];
     await carryOn(result, mine.signal);
   } catch (err) {
-    unsent(next, text);
+    unsent(next, text, pics);
     if (err instanceof DOMException && err.name === "AbortError") return;
     error.value = err instanceof ApiError || err instanceof Error ? err.message : "Something went wrong";
   } finally {
@@ -250,7 +264,7 @@ async function load(id: string): Promise<void> {
   chatId.value = chat.id;
   context.value = chat.context;
   entries.value = chat.turns.map((t): ChatEntry => t.role === "user"
-    ? { role: "user", text: t.text }
+    ? (t.images?.length ? { role: "user", text: t.text, images: t.images } : { role: "user", text: t.text })
     : {
         role: "assistant",
         result: {
@@ -278,10 +292,50 @@ async function compact(): Promise<string> {
 }
 
 /** Put a message that got no answer back in the box, to send again. */
-function unsent(next: ChatEntry[], text: string): void {
+function unsent(next: ChatEntry[], text: string, pics: ChatImage[] = []): void {
   if (entries.value[entries.value.length - 1] === next[next.length - 1]) {
     entries.value = entries.value.slice(0, -1);
     input.value = text;
+    attachments.value = pics;
+  }
+}
+
+/** Shrink and attach image files (dropped, pasted or picked). Returns
+ *  what went wrong, or "". */
+async function addFiles(files: Iterable<File>): Promise<string> {
+  const list = [...files].filter((f) => f.type.startsWith("image/"));
+  if (!list.length) return "Only images can be attached";
+  if (vision.value === false) {
+    return `${visionModel.value || "This model"} can't see images. Pick a vision model (Gemma 3, Qwen2.5-VL, Llama 3.2 Vision, …) to send one.`;
+  }
+  const room = MAX_IMAGES - attachments.value.length;
+  if (room <= 0) return `At most ${MAX_IMAGES} images per message`;
+  const problems: string[] = [];
+  const added: ChatImage[] = [];
+  for (const f of list.slice(0, room)) {
+    try {
+      added.push(await prepareImage(f, f.name || "image"));
+    } catch (err) {
+      problems.push(err instanceof Error ? err.message : String(err));
+    }
+  }
+  attachments.value = [...attachments.value, ...added];
+  if (list.length > room) problems.push(`At most ${MAX_IMAGES} images per message`);
+  return problems.join(". ");
+}
+
+function removeAttachment(i: number): void {
+  attachments.value = attachments.value.filter((_, j) => j !== i);
+}
+
+/** Ask the server whether the chosen model sees images. */
+async function checkVision(): Promise<void> {
+  try {
+    const got = await api.ai.vision();
+    vision.value = got.vision;
+    visionModel.value = got.model;
+  } catch {
+    vision.value = null;
   }
 }
 
@@ -372,6 +426,7 @@ function reset(): void {
   pending = [];
   context.value = null;
   live.value = EMPTY_LIVE;
+  attachments.value = [];
 }
 
 /** Why a proposal can't be applied yet, else "". */
@@ -507,6 +562,7 @@ export function useAiChat() {
     context, compacting,
     send, stop, reset, apply, undo, dismiss, blockedReason, ask, answerSearch, attach,
     retry, retryBlocked, load, compact,
+    attachments, vision, visionModel, addFiles, removeAttachment, checkVision,
   };
 }
 
@@ -516,4 +572,6 @@ export function _resetAiChatForTests(): void {
   open.value = false;
   input.value = "";
   queued.value = "";
+  vision.value = null;
+  visionModel.value = "";
 }

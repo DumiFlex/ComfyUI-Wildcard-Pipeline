@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import asyncio
 import json as _json
+import re
 import sqlite3
 from typing import Any
 
@@ -73,7 +74,7 @@ from engine.db.repositories import (
     TemplateRepository,
 )
 from engine.importer import commit_import
-from wp_api import _ai_chat, _ai_client, _ai_embed, _ai_search
+from wp_api import _ai_chat, _ai_client, _ai_embed, _ai_images, _ai_search
 from wp_api._ai_guard import guarded
 from wp_api._helpers import cancel_on_disconnect, db_session, json_error, json_ok
 from wp_api._validators import validate_wildcard_name
@@ -1075,11 +1076,21 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     retry = bool(body.get("retry")) and not resume
     if retry:
         text = "(retry)"  # replaced by the turn's own message below
+    images: list[dict[str, Any]] = []
+    if not resume and not retry:
+        try:
+            images = _ai_images.clean(body.get("images"))
+        except _ai_images.ImageError as e:
+            return json_error(str(e), status=400)
+        if images and await _ai_chat.vision_support(cfg) is False:
+            return json_error(f"{cfg.get('model')} can't see images. Pick a vision model "
+                              "(Gemma 3, Qwen2.5-VL, Llama 3.2 Vision, …) to send one.",
+                              status=400)
     if not resume:
-        if not isinstance(text, str) or not text.strip():
+        if not isinstance(text, str):
             return json_error("say something first", status=400)
         text = ai_safety.strip_invisible(text).strip()
-        if not text:
+        if not text and not images:
             return json_error("say something first", status=400)
         if len(text) > ai_chat.MAX_TURN_CHARS:
             text = text[:ai_chat.MAX_TURN_CHARS] + " …"
@@ -1117,6 +1128,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
             return json_error("undo the changes you applied from that answer first",
                               status=409)
         text = str(log[retried_from].get("text") or "")
+        images = list(log[retried_from].get("images") or [])
         log = log[:retried_from]
         m = dict(chat["meta"])
         m.pop("pending", None)
@@ -1185,10 +1197,12 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         meta = await _maybe_compact(cfg, log, meta, prof, num_ctx, window,
                                     len(snapshot) + 12000, emit)
     if not resume:
-        hints = await _retrieval(lib, text, meta, prof, cfg)
+        hints = await _retrieval(lib, text, meta, prof, cfg) if text else ""
+        pics = _ai_images.note(len(images)) if images else ""
         sent = ai_safety.strip_invisible(
-            "\n\n".join(x for x in (since, changes, text, note, hints) if x))
-        new.append(ai_chatlog.user_entry(text, sent))
+            "\n\n".join(x for x in (since, changes, text, pics, note, hints) if x))
+        new.append(ai_chatlog.user_entry(text, sent, images))
+        meta = ai_chatlog.move_images(log + new, meta)
 
     cache_key = chat["id"] if chat else ""
     pids = [int(p[1:]) for p in meta.get("proposals") or {} if p[1:].isdigit()]
@@ -1259,7 +1273,10 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
             break
         except _ai_client.AIError as e:
             if not steps and not any(x.get("kind") == "step" for x in new):
-                return json_error(e.message, status=e.status)
+                hint = (" The model may not see images; pick a vision model."
+                        if images and re.search(r"image|vision|multimodal|mmproj",
+                                                e.message, re.I) else "")
+                return json_error(e.message + hint, status=e.status)
             message = f"(Stopped early: {e.message})"
             break
         step += 1
@@ -1477,7 +1494,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     with db_session(request) as conn:
         repo = ChatRepository(conn)
         if chat is None:
-            chat = repo.create(title=ai_chatlog.title_for(text), snapshot=snapshot, meta=meta)
+            chat = repo.create(title=ai_chatlog.title_for(text) if text else "Image",
+                               snapshot=snapshot, meta=meta)
         elif retried_from is not None:
             repo.truncate(chat["id"], retried_from, meta=meta)
         repo.append(chat["id"], new, meta=meta)
@@ -1489,6 +1507,15 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
 
 def _chat_id(request: web.Request) -> str:
     return str(request.match_info.get("chat_id") or "")[:40]
+
+
+async def get_vision(request: web.Request) -> web.Response:
+    """Whether the chosen model sees images: true, false, or null when the
+    server doesn't say."""
+    cfg = _enabled_cfg()
+    if isinstance(cfg, web.Response):
+        return cfg
+    return json_ok({"vision": await _ai_chat.vision_support(cfg), "model": cfg.get("model")})
 
 
 async def get_chats(request: web.Request) -> web.Response:
@@ -1842,6 +1869,7 @@ def register(router: web.UrlDispatcher) -> None:
     add("POST", "/wp/api/ai/describe", post_describe)
     add("POST", "/wp/api/ai/organize", post_organize)
     add("POST", "/wp/api/ai/chat", post_chat)
+    add("GET", "/wp/api/ai/vision", get_vision)
     add("GET", "/wp/api/ai/chats", get_chats, cut_short=False)
     add("GET", "/wp/api/ai/chats/{chat_id}", get_chat, cut_short=False)
     add("PATCH", "/wp/api/ai/chats/{chat_id}", patch_chat, cut_short=False)

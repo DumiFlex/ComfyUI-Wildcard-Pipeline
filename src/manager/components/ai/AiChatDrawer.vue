@@ -19,6 +19,9 @@
  * shows as it streams in; Try again runs the last message again; the meter
  * under the box says how full the model's window is, with Compact to
  * summarise older turns.
+ *
+ * Images can be attached (button, paste or drop) when the model sees them;
+ * they are shrunk in the browser first (`utils/chat-image.ts`).
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { isNavigationFailure, useRoute, useRouter, type RouteLocationRaw } from "vue-router";
@@ -97,6 +100,7 @@ async function pickModel(v: string | number | null): Promise<void> {
   if (typeof v !== "string" || !v || v === modelLabel.value || chat.loading.value) return;
   try {
     await saveConfig({ model: v });
+    void chat.checkVision();
     // The provider's cache holds this chat for the old model only.
     modelNote.value = chat.started.value
       ? `Now using ${v}. Its next answer reads this chat again from the start, so it may take longer. Start a new chat if it struggles.`
@@ -130,6 +134,68 @@ function onDeleted(id: string): void {
 function newChat(): void {
   showList.value = false;
   chat.reset();
+}
+
+/* ── Images ── */
+
+const IMAGE_SUGGESTIONS = [
+  "Make wildcards from this image",
+  "Add what's in this image to my wildcards",
+];
+const picker = ref<HTMLInputElement | null>(null);
+const dropping = ref(false);
+/** The user-message image shown large, as "entry:index". */
+const bigImage = ref("");
+
+const attachTitle = computed(() => chat.vision.value === false
+  ? `${chat.visionModel.value || "This model"} can't see images. Pick a vision model to send one.`
+  : "Attach images (or paste or drop them here)");
+
+async function attach(files: Iterable<File> | null | undefined): Promise<void> {
+  if (!files) return;
+  const problem = await chat.addFiles(files);
+  chat.error.value = problem;
+  if (!problem) box.value?.focus();
+}
+
+function onPick(ev: Event): void {
+  const input = ev.target as HTMLInputElement;
+  void attach(input.files ? [...input.files] : null);
+  input.value = "";
+}
+
+function onPaste(ev: ClipboardEvent): void {
+  const files = [...(ev.clipboardData?.files ?? [])].filter((f) => f.type.startsWith("image/"));
+  if (!files.length) return;
+  ev.preventDefault();
+  void attach(files);
+}
+
+function hasFiles(ev: DragEvent): boolean {
+  return [...(ev.dataTransfer?.types ?? [])].includes("Files");
+}
+
+function onDragOver(ev: DragEvent): void {
+  if (!hasFiles(ev) || chat.loading.value) return;
+  ev.preventDefault();
+  dropping.value = true;
+}
+
+function onDragLeave(ev: DragEvent): void {
+  const to = ev.relatedTarget as Node | null;
+  if (!to || !(ev.currentTarget as HTMLElement).contains(to)) dropping.value = false;
+}
+
+function onDrop(ev: DragEvent): void {
+  dropping.value = false;
+  if (!hasFiles(ev) || chat.loading.value) return;
+  ev.preventDefault();
+  void attach(ev.dataTransfer ? [...ev.dataTransfer.files] : null);
+}
+
+function toggleImage(i: number, j: number): void {
+  const k = `${i}:${j}`;
+  bigImage.value = bigImage.value === k ? "" : k;
 }
 
 /* ── Retry, the live answer, the meter ── */
@@ -334,6 +400,7 @@ function onGlobalKey(ev: KeyboardEvent): void {
 }
 onMounted(() => {
   void loadModels();
+  void chat.checkVision();
   scrollDown();
   void nextTick(() => box.value?.focus());
   window.addEventListener("keydown", onGlobalKey);
@@ -342,7 +409,20 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 </script>
 
 <template>
-  <aside class="wp-ai-chat" role="dialog" aria-label="AI assistant" data-test="ai-chat" :data-resizing="size.dragging.value || undefined">
+  <aside
+    class="wp-ai-chat"
+    role="dialog"
+    aria-label="AI assistant"
+    data-test="ai-chat"
+    :data-resizing="size.dragging.value || undefined"
+    @dragover="onDragOver"
+    @dragleave="onDragLeave"
+    @drop="onDrop"
+  >
+    <div v-if="dropping" class="wp-ai-chat__drop" data-test="ai-chat-drop">
+      <i class="pi pi-image" aria-hidden="true" />
+      {{ chat.vision.value === false ? attachTitle : "Drop images to attach them" }}
+    </div>
     <AiPointer />
     <div
       class="wp-ai-chat__grip"
@@ -424,7 +504,21 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
       </div>
 
       <template v-for="(entry, i) in chat.entries.value" :key="i">
-        <div v-if="entry.role === 'user'" class="wp-ai-chat__user" data-test="ai-chat-user">{{ entry.text }}</div>
+        <div v-if="entry.role === 'user'" class="wp-ai-chat__user" data-test="ai-chat-user">
+          <span v-if="entry.images?.length" class="wp-ai-chat__pics">
+            <button
+              v-for="(src, j) in entry.images"
+              :key="j"
+              type="button"
+              class="wp-ai-chat__pic"
+              :data-big="bigImage === `${i}:${j}` || undefined"
+              :aria-label="bigImage === `${i}:${j}` ? 'Show smaller' : 'Show larger'"
+              data-test="ai-chat-user-image"
+              @click="toggleImage(i, j)"
+            ><img :src="src" alt="" /></button>
+          </span>
+          <template v-if="entry.text">{{ entry.text }}</template>
+        </div>
         <div v-else class="wp-ai-chat__reply" data-test="ai-chat-reply">
           <ul v-if="entry.result.steps.length" class="wp-ai-chat__steps" data-test="ai-chat-steps">
             <li v-for="(s, j) in entry.result.steps" :key="j" :data-ok="s.ok ? 'true' : 'false'">
@@ -544,6 +638,23 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 
     <footer class="wp-ai-chat__foot">
       <p v-if="chat.error.value" class="wp-ai-chat__error" role="alert" data-test="ai-chat-error">{{ chat.error.value }}</p>
+      <div v-if="chat.attachments.value.length" class="wp-ai-chat__attached" data-test="ai-chat-attached">
+        <span v-for="(a, j) in chat.attachments.value" :key="j" class="wp-ai-chat__thumb" :title="`${a.name} · ${a.w}×${a.h}`">
+          <img :src="a.url" :alt="a.name" />
+          <button type="button" :aria-label="`Remove ${a.name}`" data-test="ai-chat-unattach" @click="chat.removeAttachment(j)"><i class="pi pi-times" aria-hidden="true" /></button>
+        </span>
+        <span v-if="chat.vision.value === null" class="wp-ai-chat__vision-note">Your server didn't say whether this model sees images.</span>
+      </div>
+      <div v-if="chat.attachments.value.length && !chat.input.value.trim()" class="wp-ai-chat__image-ideas">
+        <button
+          v-for="s in IMAGE_SUGGESTIONS"
+          :key="s"
+          type="button"
+          class="wp-ai-chat__suggestion wp-ai-chat__suggestion--small"
+          data-test="ai-chat-image-idea"
+          @click="suggest(s)"
+        >{{ s }}</button>
+      </div>
       <textarea
         ref="box"
         v-model="chat.input.value"
@@ -554,7 +665,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
         data-test="ai-chat-input"
         :disabled="chat.loading.value"
         @keydown="onKeydown"
+        @paste="onPaste"
       ></textarea>
+      <input ref="picker" type="file" accept="image/*" multiple hidden aria-label="Attach images" data-test="ai-chat-file" @change="onPick" />
       <div class="wp-ai-chat__controls">
         <span v-if="meter && chat.started.value" class="wp-ai-chat__meter" :data-high="meter.high || undefined" :title="meter.why" data-test="ai-chat-meter">
           <span
@@ -578,13 +691,22 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
           >{{ chat.compacting.value ? "Summarising…" : "Compact" }}</button>
         </span>
         <span v-else class="wp-ai-chat__hint">Enter sends, Shift+Enter starts a new line. Changes wait for your Apply.</span>
+        <button
+          type="button"
+          class="wp-ai-chat__close wp-ai-chat__attach"
+          :disabled="chat.loading.value || chat.vision.value === false"
+          :title="attachTitle"
+          :aria-label="attachTitle"
+          data-test="ai-chat-attach"
+          @click="picker?.click()"
+        ><i class="pi pi-image" aria-hidden="true" /></button>
         <Button v-if="chat.loading.value" size="sm" icon="pi-stop" data-test="ai-chat-stop" @click="chat.stop">Stop</Button>
         <Button
           v-else
           variant="primary"
           size="sm"
           icon="pi-send"
-          :disabled="!chat.input.value.trim()"
+          :disabled="!chat.input.value.trim() && !chat.attachments.value.length"
           data-test="ai-chat-send"
           @click="send"
         >Send</Button>
@@ -693,6 +815,32 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__controls { display: flex; align-items: center; gap: 10px; }
 .wp-ai-chat__hint { flex: 1; font-size: 11px; color: var(--wp-text-dim); }
 .wp-ai-chat__error { margin: 0; font-size: 12px; color: var(--wp-danger); }
+.wp-ai-chat__drop {
+  position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; gap: 8px;
+  align-items: center; justify-content: center; padding: 24px; text-align: center; pointer-events: none;
+  font-size: 13px; color: var(--wp-accent-text);
+  background: color-mix(in oklab, var(--wp-bg-1) 82%, transparent);
+  border: 2px dashed var(--wp-accent-500); border-radius: 8px;
+}
+.wp-ai-chat__drop .pi { font-size: 26px; }
+.wp-ai-chat__pics { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.wp-ai-chat__pic { padding: 0; border: 0; background: none; cursor: zoom-in; border-radius: 6px; overflow: hidden; line-height: 0; }
+.wp-ai-chat__pic img { width: 96px; height: 96px; object-fit: cover; display: block; }
+.wp-ai-chat__pic[data-big] { cursor: zoom-out; }
+.wp-ai-chat__pic[data-big] img { width: auto; height: auto; max-width: 100%; max-height: 60vh; object-fit: contain; }
+.wp-ai-chat__attached { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.wp-ai-chat__thumb { position: relative; width: 56px; height: 56px; border-radius: 6px; overflow: hidden; border: 1px solid var(--wp-border); }
+.wp-ai-chat__thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.wp-ai-chat__thumb button {
+  position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+  background: rgb(0 0 0 / 0.65); color: #fff;
+}
+.wp-ai-chat__thumb button .pi { font-size: 9px; }
+.wp-ai-chat__vision-note { font-size: 11px; color: var(--wp-text-dim); flex: 1; min-width: 120px; }
+.wp-ai-chat__image-ideas { display: flex; flex-wrap: wrap; gap: 6px; }
+.wp-ai-chat__suggestion--small { padding: 4px 8px; font-size: 12px; }
+.wp-ai-chat__attach:disabled { opacity: 0.45; cursor: default; }
 .wp-ai-chat__again { display: flex; justify-content: flex-start; margin-top: -6px; }
 .wp-ai-chat__live :deep(.wp-ai-msg) { opacity: 0.92; }
 .wp-ai-chat__meter {

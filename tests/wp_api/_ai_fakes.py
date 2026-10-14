@@ -77,9 +77,12 @@ async def fake_llm(aiohttp_server):
         return web.json_response({"choices": [{"message": {"content": text}}]})
 
     async def lmstudio_model(request):
-        caps = ["tool_use"] if request.match_info["mid"] == "tooly" else []
-        return web.json_response({"id": request.match_info["mid"], "loaded_context_length": 4096,
-                                  "capabilities": caps})
+        mid = request.match_info["mid"]
+        caps = ["tool_use"] if mid == "tooly" else []
+        out = {"id": mid, "loaded_context_length": 4096, "capabilities": caps}
+        if mid in ("eyes", "blind"):
+            out["type"] = "vlm" if mid == "eyes" else "llm"
+        return web.json_response(out)
 
     async def ollama_tags(request):
         return web.json_response({"models": [{"name": "qwen:9b"}]})

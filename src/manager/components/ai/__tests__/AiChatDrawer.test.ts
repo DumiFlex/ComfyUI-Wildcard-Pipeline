@@ -14,6 +14,13 @@ import {
 } from "../../../composables/useOpenEditor";
 import { _resetAiActionsForTests, pointer, registerAiAction } from "../../../composables/useAiActions";
 
+vi.mock("../../../utils/chat-image", async (orig) => ({
+  ...(await orig<typeof import("../../../utils/chat-image")>()),
+  // jsdom has no canvas: hand back a fixed shrunk image.
+  prepareImage: vi.fn(async (_f: Blob, name: string) => ({
+    url: "data:image/jpeg;base64,QUJD", w: 640, h: 480, name })),
+}));
+
 const CONFIG = {
   enabled: true, provider: "ollama", base_url: "", model: "m", unload_after_s: 60, context_max: 16384, model_size: "auto", model_size_auto: "small",
   key_set: false, key_from_env: false, keys_saved: [],
@@ -29,7 +36,7 @@ vi.mock("../../../api/client", () => {
         // The drawer streams; the tests answer through `chat`.
         chatStream: vi.fn((body: unknown, _on: unknown, signal?: AbortSignal) => chat(body, signal)),
         patchChat: vi.fn(() => Promise.resolve({})), chats: vi.fn(), getChat: vi.fn(),
-        deleteChat: vi.fn(), compactChat: vi.fn(), packPlan: vi.fn(), models: vi.fn(), saveConfig: vi.fn(),
+        deleteChat: vi.fn(), compactChat: vi.fn(), vision: vi.fn(), packPlan: vi.fn(), models: vi.fn(), saveConfig: vi.fn(),
       },
       modules: { create: vi.fn(), update: vi.fn(), delete: vi.fn() },
       bundles: { update: vi.fn() },
@@ -112,6 +119,7 @@ describe("AiChatDrawer", () => {
     vi.mocked(api.ai.config).mockResolvedValue(CONFIG);
     vi.mocked(api.ai.chat).mockReset().mockResolvedValue(RESULT);
     vi.mocked(api.ai.patchChat).mockClear();
+    vi.mocked(api.ai.vision).mockReset().mockResolvedValue({ vision: true, model: "m" });
     vi.mocked(api.ai.models).mockReset().mockResolvedValue({ models: ["m", "big-27b", "nomic-embed-text"] });
     vi.mocked(api.ai.saveConfig).mockReset().mockImplementation(
       async (patch) => ({ ...CONFIG, ...patch }) as AiConfig);
@@ -656,6 +664,59 @@ describe("AiChatDrawer", () => {
     expect(api.ai.compactChat).toHaveBeenCalledWith("c1");
     expect(w.get('[data-test="ai-chat-meter"]').text()).toContain("~2.1k");
     expect(w.find('[data-test="ai-chat-compact"]').exists()).toBe(false);
+    w.unmount();
+  });
+
+  it("attaches images by paste or drop and sends them", async () => {
+    const { w } = await mountIt();
+    const png = new File(["x"], "cat.png", { type: "image/png" });
+    await w.get('[data-test="ai-chat-input"]').trigger("paste", { clipboardData: { files: [png] } });
+    await flushPromises();
+    expect(w.findAll(".wp-ai-chat__thumb")).toHaveLength(1);
+    await w.get('[data-test="ai-chat"]').trigger("dragover", { dataTransfer: { types: ["Files"], files: [] } });
+    expect(w.find('[data-test="ai-chat-drop"]').exists()).toBe(true);
+    await w.get('[data-test="ai-chat"]').trigger("drop", {
+      dataTransfer: { types: ["Files"], files: [new File(["y"], "dog.jpg", { type: "image/jpeg" })] } });
+    await flushPromises();
+    expect(w.find('[data-test="ai-chat-drop"]').exists()).toBe(false);
+    expect(w.findAll(".wp-ai-chat__thumb")).toHaveLength(2);
+    await w.findAll('[data-test="ai-chat-unattach"]')[1].trigger("click");
+    // With an image and no text, Send is on and image ideas show.
+    expect(w.get('[data-test="ai-chat-send"]').attributes("disabled")).toBeUndefined();
+    await w.get('[data-test="ai-chat-image-idea"]').trigger("click");
+    expect((w.get('[data-test="ai-chat-input"]').element as HTMLTextAreaElement).value)
+      .toBe("Make wildcards from this image");
+    await w.get('[data-test="ai-chat-send"]').trigger("click");
+    await flushPromises();
+    expect(vi.mocked(api.ai.chat).mock.calls[0][0]).toMatchObject({
+      message: "Make wildcards from this image", images: [{ data: "data:image/jpeg;base64,QUJD" }] });
+    expect(w.findAll('[data-test="ai-chat-user-image"]')).toHaveLength(1);
+    expect(w.find(".wp-ai-chat__thumb").exists()).toBe(false);
+    w.unmount();
+  });
+
+  it("says a model can't see images instead of attaching them", async () => {
+    vi.mocked(api.ai.vision).mockResolvedValue({ vision: false, model: "rocinante" });
+    const { w } = await mountIt();
+    expect(w.get('[data-test="ai-chat-attach"]').attributes("disabled")).toBeDefined();
+    await w.get('[data-test="ai-chat-input"]').trigger("paste", {
+      clipboardData: { files: [new File(["x"], "a.png", { type: "image/png" })] } });
+    await flushPromises();
+    expect(w.find(".wp-ai-chat__thumb").exists()).toBe(false);
+    expect(w.get('[data-test="ai-chat-error"]').text()).toContain("rocinante can't see images");
+    w.unmount();
+  });
+
+  it("puts the images back when the message fails", async () => {
+    vi.mocked(api.ai.chat).mockRejectedValueOnce(new Error("server down"));
+    const { w } = await mountIt();
+    await w.get('[data-test="ai-chat-input"]').trigger("paste", {
+      clipboardData: { files: [new File(["x"], "a.png", { type: "image/png" })] } });
+    await flushPromises();
+    await w.get('[data-test="ai-chat-send"]').trigger("click");
+    await flushPromises();
+    expect(w.findAll(".wp-ai-chat__thumb")).toHaveLength(1);
+    expect(w.find('[data-test="ai-chat-user"]').exists()).toBe(false);
     w.unmount();
   });
 });

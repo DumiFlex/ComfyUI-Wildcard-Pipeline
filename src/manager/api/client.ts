@@ -527,6 +527,10 @@ export const api = {
     ) {
       return streamChat({ ...body, stream: true }, onEvent, signal);
     },
+    /** Whether the chosen model sees images (null: the server didn't say). */
+    vision() {
+      return request<{ vision: boolean | null; model: string }>("/wp/api/ai/vision", { method: "GET" });
+    },
     chats(q = "") {
       return request<{ chats: AiChatSummary[] }>(`/wp/api/ai/chats${qs({ q })}`, { method: "GET" });
     },
