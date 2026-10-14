@@ -57,7 +57,7 @@ def test_exif_is_dropped():
     ([_png()] * 5, "at most 4"),
     (["data:text/html;base64,PGI+"], "isn't a JPEG"),
     (["data:image/png;base64,@@@"], "isn't a JPEG"),
-    (["data:image/png;base64,QUJD="], "damaged"),
+    (["data:image/png;base64,QUJ"], "damaged"),
     (["data:image/png;base64," + base64.b64encode(b"GIF89a....").decode()], "says it is"),
     (["data:image/png;base64," + base64.b64encode(b"\x89PNG\r\n\x1a\nbroken").decode()],
      "couldn't be read"),
