@@ -65,6 +65,7 @@ from engine.ai import lint as ai_lint
 from engine.ai import organize as ai_organize
 from engine.ai import pack as ai_pack
 from engine.ai import patterns as ai_patterns
+from engine.ai import react as ai_react
 from engine.ai import refs as ai_refs
 from engine.ai import research as ai_research
 from engine.ai import safety as ai_safety
@@ -1397,6 +1398,20 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 m[key] = retried_from
         chat = {**chat, "meta": m}
     paused = (chat or {}).get("meta", {}).get("pending") if chat else None
+    reaction = ""
+    if (chat is not None and not resume and not retry and not paused and not images
+            and not body.get("events") and any(e.get("kind") == "step" for e in log)
+            and not ai_chatlog.last_reply(log).rstrip().endswith("?")):
+        reaction = ai_react.quick(text)
+    if reaction:
+        # Only thanks or praise: a reaction, no model call, and nothing the
+        # model will read (`aside` entries aren't rendered).
+        with db_session(request) as conn:
+            ChatRepository(conn).append(chat["id"], [ai_chatlog.aside_entry(text, reaction)],
+                                        meta=chat["meta"])
+        return json_ok({"chat_id": chat["id"], "aside": True, "reaction": reaction,
+                        "message": "", "proposals": [], "steps": [], "refs": {},
+                        "pending": [], "model": str(chat["meta"].get("model") or "")})
     if resume:
         if not paused:
             return json_error("nothing in this chat is waiting for an answer", status=409)
@@ -1726,6 +1741,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 needs_reply = True
                 result(f"{tool} {_json.dumps(args, ensure_ascii=False, sort_keys=True)[:200]}:\n"
                        + ai_budget.clip(out, prof["result_chars"]) + extra)
+                if tool == "react":
+                    continue  # shown on the user's message, not as a step
                 step_ = {"tool": tool, "note": ai_chat.args_note(tool, args, lib), "ok": True}
                 card = getattr(lib, "last_card", None) if tool == "run_test" else None
                 if card:
@@ -1760,6 +1777,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 # An empty answer: thinking models can spend the whole output
                 # allowance before writing anything.
                 cut = bool(usage.get("cut"))
+                if lib.reaction and not set_aside:
+                    break  # it reacted and had nothing to add: that's the answer
                 if set_aside:
                     # Nudged, and then nothing: the earlier answer stands.
                     message = set_aside
@@ -1821,7 +1840,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     if pause:
         pass  # the turn goes on when the browser answers
     else:
-        if not message:
+        if not message and not (lib.reaction and not proposals and not interim):
             message = interim if interim and proposals else (
                 "Here's what I'd change." if proposals else interim or set_aside
                 or _done_line(steps))
@@ -1848,10 +1867,13 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         # turn goes on; it posts their results back as `results`.
         "pending": [{k: c[k] for k in ("id", "tool", "args", "label")} for c in pause],
     }
+    if lib.reaction:
+        out["reaction"] = lib.reaction  # on the user's message
     # What the user saw, for reopening the chat later (the model never
     # reads it).
     new.append(ai_chatlog.shown_entry({k: out[k] for k in (
-        "message", "proposals", "steps", "refs", "model", "pending", "format", "tool_use")}))
+        "message", "proposals", "steps", "refs", "model", "pending", "format", "tool_use",
+        "reaction") if k in out}))
     out["context"] = _context(cfg, meta, log + new, fixed, usage, window)
     with db_session(request) as conn:
         repo = ChatRepository(conn)

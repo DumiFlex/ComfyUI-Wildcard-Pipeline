@@ -18,7 +18,9 @@ import { api } from "../../../api/client";
 import type { AiConfigPatch, AiEmbedApi, AiIndexStatus, AiModelSize, AiProviderId, AiTestResult, AiToolFormat } from "../../../api/types";
 import { useAiConfig } from "../../../composables/useAiConfig";
 import { SUGGESTIONS_SOURCE_NOTE, hfRepo, suggestionsFor, type SuggestedModel } from "../ai-models";
+import { useUiStore } from "../../../stores/uiStore";
 
+const ui = useUiStore();
 const { config, error, save } = useAiConfig();
 
 const PROVIDER_ORDER: AiProviderId[] = ["anthropic", "openai", "openrouter", "ollama", "lmstudio", "llamacpp", "custom"];
@@ -833,6 +835,21 @@ const off = computed(() => !config.value?.enabled);
             >
               Rebuild
             </Button>
+          </SettingRow>
+        </SettingGroup>
+
+        <SettingGroup title="Chat">
+          <SettingRow
+            label="Show Explain on selected text"
+            hint="Select text anywhere in the manager (docs, replies, warnings) and a small Explain / Ask bar appears above it. Ctrl+Shift+X explains the selection without it. The browser's right-click menu is left alone. Saved in this browser."
+            setting-key="ai-explain-chip"
+          >
+            <Toggle
+              :model-value="ui.explainChip"
+              aria-label="Show Explain on selected text"
+              data-test="ai-explain-chip"
+              @update:model-value="(v: boolean) => ui.setExplainChip(v)"
+            />
           </SettingRow>
         </SettingGroup>
 

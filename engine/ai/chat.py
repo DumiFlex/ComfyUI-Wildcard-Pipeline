@@ -33,6 +33,7 @@ from engine.ai import index as ai_index
 from engine.ai import library_vars
 from engine.ai import lint as ai_lint
 from engine.ai import patterns as ai_patterns
+from engine.ai import react as ai_react
 from engine.ai import refs as ai_refs
 from engine.ai import safety as ai_safety
 from engine.ai import search_index as ai_search
@@ -484,6 +485,8 @@ class Library(MoreTools, ManageTools):
         self.touched: list[str] = []
         #: The last run_test as card data (`chat_tools._test_card`), taken by the route.
         self.last_card: dict[str, Any] | None = None
+        #: The emoji `react` put on the user's message this turn, else "".
+        self.reaction = ""
         #: Create cards from earlier answers the user hasn't applied, by pid:
         #: edits to them come back as a card that replaces them.
         self._earlier_ops: dict[str, dict[str, Any]] = {}
@@ -1034,6 +1037,14 @@ class Library(MoreTools, ManageTools):
 
     def docs_search(self, args: dict[str, Any]) -> str:
         return ai_docs.search(_short(args.get("query"), 200))
+
+    def react(self, args: dict[str, Any]) -> str:
+        emoji = ai_react.clean(args.get("emoji"))
+        if not emoji:
+            return "react: pick one of " + " ".join(ai_react.REACTIONS)
+        self.reaction = emoji
+        return (f"Reacted {emoji} to the user's message. If that was all it needed, answer "
+                "with an empty message.")
 
     def docs_read(self, args: dict[str, Any]) -> str:
         return ai_docs.read(args.get("page"), args.get("section"))

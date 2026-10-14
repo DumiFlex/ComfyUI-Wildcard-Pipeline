@@ -1,3 +1,4 @@
+import { createPinia, setActivePinia } from "pinia";
 import { flushPromises, mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryHistory, createRouter } from "vue-router";
@@ -38,6 +39,7 @@ const router = createRouter({ history: createMemoryHistory(), routes: [{ path: "
 
 describe("Settings › AI assistant", () => {
   beforeEach(() => {
+    setActivePinia(createPinia());
     _resetAiConfigForTests();
     vi.mocked(api.ai.config).mockReset();
     vi.mocked(api.ai.saveConfig).mockReset();
@@ -360,6 +362,7 @@ describe("Settings › AI assistant", () => {
 
 describe("Settings › AI assistant suggested models per provider", () => {
   beforeEach(() => {
+    setActivePinia(createPinia());
     _resetAiConfigForTests();
     vi.mocked(api.ai.config).mockReset();
     vi.mocked(api.ai.models).mockReset().mockResolvedValue({ models: [] });

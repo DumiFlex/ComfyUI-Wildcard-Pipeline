@@ -13,6 +13,7 @@ import CommandPalette from "../components/CommandPalette.vue";
 import ShortcutsHelp from "../components/ShortcutsHelp.vue";
 import UnmetDepsDialog from "../components/UnmetDepsDialog.vue";
 import { useUiStore } from "../stores/uiStore";
+import { useAiConfig } from "../composables/useAiConfig";
 import { useAiChat } from "../composables/useAiChat";
 import { useCommandIndex } from "../composables/useCommandIndex";
 import { useRecentStore } from "../stores/recentStore";
@@ -36,9 +37,11 @@ import {
 
 const ui = useUiStore();
 const aiChat = useAiChat();
+const aiConfig = useAiConfig();
 // Loaded the first time the assistant opens, so the manager doesn't pay for
 // it when the assistant is off.
 const AiChatDrawer = defineAsyncComponent(() => import("../components/ai/AiChatDrawer.vue"));
+const AiSelectionChip = defineAsyncComponent(() => import("../components/ai/AiSelectionChip.vue"));
 const commandIndex = useCommandIndex();
 const recent = useRecentStore();
 const stale = useStaleStore();
@@ -318,6 +321,7 @@ onBeforeUnmount(() => {
       </main>
     </div>
     <AiChatDrawer v-if="aiChat.open.value" />
+    <AiSelectionChip v-if="aiConfig.ready.value" />
     <ToastHost />
     <TweaksPanel />
     <CommandPalette v-model:open="paletteOpen" :items="commandIndex" :recent-ids="recent.recentIds" />

@@ -47,27 +47,13 @@ import type { AiCardFix, AiChatPage, AiChatProposal, AiChatStep, AiPendingCall, 
 import { currentPageNote, editorForPage } from "../../composables/useOpenEditor";
 import { usePackBuilder } from "../../composables/usePackBuilder";
 import { useCategoryStore } from "../../stores/categoryStore";
+import { useModuleStore } from "../../stores/moduleStore";
+import { useBundleStore } from "../../stores/bundleStore";
+import { useTemplateStore } from "../../stores/templateStore";
+import { starterQuestions, type StarterLibrary } from "../../utils/chat-starters";
 import { cardMeta, cardOptions, cardView, draftRoute, otherPreview, type CardOption } from "../../composables/aiCards";
 
 const PREVIEW_LINES = 6;
-const SUGGESTIONS = [
-  "What does my library set up for characters?",
-  "Make a wildcard of weather with tags for warm and cold",
-  "How do constraints work?",
-];
-const DOC_SUGGESTIONS = [
-  "Explain this page in simpler words",
-  "Show me a small example of this",
-];
-const TEST_SUGGESTIONS = [
-  "Explain this run",
-  "Why do I never get some of these options?",
-];
-const EDITOR_SUGGESTIONS = [
-  "What could make this better?",
-  "Remove options that repeat each other",
-];
-
 const chat = useAiChat();
 
 /** The run_test steps' cards, in order. */
@@ -208,7 +194,7 @@ function onDeleted(id: string): void {
 
 function newChat(): void {
   showList.value = false;
-  chat.reset();
+  chat.startNew();
 }
 
 /* ── Images ── */
@@ -274,7 +260,21 @@ function toggleImage(i: number, j: number): void {
 }
 
 /** The latest user message, the one the pencil can edit. */
-const lastUserAt = computed(() => chat.entries.value.map((e) => e.role).lastIndexOf("user"));
+const lastUserAt = computed(() => {
+  const list = chat.entries.value;
+  for (let i = list.length - 1; i >= 0; i--) {
+    const e = list[i];
+    if (e.role === "user" && !e.aside) return i;
+  }
+  return -1;
+});
+
+/** An answer that was only a reaction: nothing to show but the emoji. */
+function quiet(entry: ChatAssistantEntry): boolean {
+  const r = entry.result;
+  return !!r.reaction && !r.message.trim() && !r.proposals.length && !r.steps.length
+    && !r.pending?.length;
+}
 /** The last answer still waits on questions (the box answers them too). */
 const waitingOnAsk = computed(() => {
   const last = chat.entries.value[chat.entries.value.length - 1];
@@ -345,12 +345,35 @@ async function compact(): Promise<void> {
   chat.error.value = err ? `Couldn't summarise: ${err}` : "";
 }
 
-const suggestions = computed(() => {
-  if (route.name === "documentation-page") return DOC_SUGGESTIONS;
-  if (route.name === "test") return TEST_SUGGESTIONS;
-  if (typeof route.params.id === "string" && route.params.id) return EDITOR_SUGGESTIONS;
-  return SUGGESTIONS;
+const moduleStore = useModuleStore();
+const bundleStore = useBundleStore();
+const templateStore = useTemplateStore();
+
+/** What the library holds, for starters that fit it. */
+const starterLibrary = computed<StarterLibrary>(() => {
+  const modules: Record<string, number> = {};
+  const perCategory = new Map<string, number>();
+  for (const m of moduleStore.catalog) {
+    modules[m.type] = (modules[m.type] ?? 0) + 1;
+    if (m.category_id) perCategory.set(m.category_id, (perCategory.get(m.category_id) ?? 0) + 1);
+  }
+  let top = "";
+  let most = 0;
+  for (const [id, n] of perCategory) if (n > most) { most = n; top = id; }
+  const topCategory = categories.items.find((c) => c.id === top)?.name;
+  return {
+    modules,
+    bundles: bundleStore.catalog.length,
+    templates: templateStore.catalog.length,
+    categories: categories.items.length,
+    ...(topCategory ? { topCategory } : {}),
+  };
 });
+
+const suggestions = computed(() => starterQuestions(
+  { name: String(route.name ?? ""), hasId: typeof route.params.id === "string" && !!route.params.id },
+  starterLibrary.value,
+));
 
 function page(): AiChatPage {
   const id = route.params.id;
@@ -693,7 +716,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
       </div>
 
       <template v-for="(entry, i) in chat.entries.value" :key="i">
-        <div v-if="entry.role === 'user'" class="wp-ai-chat__user" data-test="ai-chat-user">
+        <div v-if="entry.role === 'user'" class="wp-ai-chat__user" data-test="ai-chat-user" :data-reacted="entry.reaction ? 'true' : undefined">
           <span v-if="entry.images?.length" class="wp-ai-chat__pics">
             <button
               v-for="(src, j) in entry.images"
@@ -716,8 +739,16 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
             data-test="ai-chat-edit"
             @click="chat.editLast(); box?.focus()"
           ><i class="pi pi-pencil" aria-hidden="true" /></button>
+          <span
+            v-if="entry.reaction"
+            class="wp-ai-chat__reaction"
+            role="img"
+            :aria-label="`Reacted ${entry.reaction}`"
+            :title="entry.aside ? 'Reacted instead of answering' : 'Reacted to your message'"
+            data-test="ai-chat-reaction"
+          >{{ entry.reaction }}</span>
         </div>
-        <div v-else class="wp-ai-chat__reply" data-test="ai-chat-reply">
+        <div v-else-if="!quiet(entry)" class="wp-ai-chat__reply" data-test="ai-chat-reply">
           <p v-if="byLine(i)" class="wp-ai-chat__by" data-test="ai-chat-by" :title="`Answered by ${byLine(i)}`">
             <i class="pi pi-microchip-ai" aria-hidden="true" /> {{ byLine(i) }}
           </p>
@@ -1216,6 +1247,19 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
   background: color-mix(in oklab, var(--wp-accent-500) 18%, var(--wp-bg-2));
   white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; position: relative;
 }
+.wp-ai-chat__user[data-reacted] { margin-bottom: 10px; }
+.wp-ai-chat__reaction {
+  position: absolute; left: -8px; bottom: -12px; min-width: 24px; height: 22px; padding: 0 5px;
+  display: inline-flex; align-items: center; justify-content: center; border-radius: 11px;
+  font-size: 13px; line-height: 1; background: var(--wp-bg-1);
+  border: 1px solid var(--wp-border); box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
+  animation: wp-ai-chat-react 0.32s cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+@keyframes wp-ai-chat-react {
+  from { transform: scale(0.3); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .wp-ai-chat__reaction { animation: none; } }
 .wp-ai-chat__reply { display: flex; flex-direction: column; gap: 8px; }
 .wp-ai-chat__steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .wp-ai-chat__steps li { font-size: 11px; color: var(--wp-text-dim); display: flex; gap: 6px; align-items: baseline; overflow-wrap: anywhere; }

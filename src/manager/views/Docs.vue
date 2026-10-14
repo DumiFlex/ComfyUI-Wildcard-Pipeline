@@ -5,6 +5,7 @@ import { DOC_GROUPS, pagesByGroup, findPage, searchPages, toneVar, type DocGroup
 import { GITHUB_WIKI } from "../config/links";
 import { useAiConfig } from "../composables/useAiConfig";
 import { useAiChat } from "../composables/useAiChat";
+import { explainPrompt, selectedText } from "../composables/useSelectionAsk";
 
 const props = defineProps<{ page?: string }>();
 
@@ -14,10 +15,8 @@ const chat = useAiChat();
 /** Open the assistant chat with a question about this page (or the text the
  *  user selected on it), ready to send or edit. */
 function askAssistant(): void {
-  const picked = window.getSelection?.()?.toString().replace(/\s+/g, " ").trim() ?? "";
-  chat.input.value = picked
-    ? `Explain this in simpler words: "${picked.slice(0, 600)}"`
-    : "Explain this page in simpler words";
+  const picked = selectedText();
+  chat.input.value = picked ? explainPrompt(picked) : "Explain this page in simpler words";
   chat.open.value = true;
 }
 

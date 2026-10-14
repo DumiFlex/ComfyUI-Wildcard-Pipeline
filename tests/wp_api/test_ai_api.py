@@ -990,7 +990,7 @@ async def test_chat_reports_card_actions_and_library_changes(wp_client, fake_llm
     assert resp.status in (200, 201), await resp.text()
     fake_llm.chat_steps.append({"message": "More.", "calls": [
         {"tool": "update_info", "args": json.dumps({"id": tgt, "description": "Arms."})}]})
-    second = await _chat(wp_client, "thanks", chat_id=first["chat_id"],
+    second = await _chat(wp_client, "and the next one", chat_id=first["chat_id"],
                          events=[{"pid": "p1", "status": "applied"},
                                  {"pid": "p9", "status": "applied"}])
     sent = fake_llm.seen[-1]["body"]["messages"][-1]["content"]
@@ -1236,7 +1236,7 @@ async def test_openai_chat_tools_and_reasoning_carry_over(wp_client, fake_llm):
     assert turn2[at + 3]["type"] == "function_call_output"
     assert turn2[at + 3]["call_id"] == "call_x" and "Weapon" in turn2[at + 3]["output"]
     # Append-only: the next message starts with exactly what went before.
-    second = await _chat(wp_client, "thanks", chat_id=first["chat_id"])
+    second = await _chat(wp_client, "and the next one", chat_id=first["chat_id"])
     assert second["message"] == "Done."
     turn3 = fake_llm.seen[-1]["body"]["input"]
     assert turn3[:len(turn2)] == turn2

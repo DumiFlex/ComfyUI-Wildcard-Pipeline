@@ -108,6 +108,17 @@ TOOLS: list[Tool] = [
         ("core",),
     ),
     Tool(
+        "react", "read",
+        "Put one emoji on the user's message, like a chat reaction: for thanks, praise or "
+        "good news. With nothing else to say, react and write no reply.",
+        '{"emoji": one of 👍 ❤️ 🎉 😄 🙏 👀}: shows that emoji on the user\'s message. For '
+        "thanks or praise, react and leave your message empty; never react instead of "
+        "answering a question or a request.",
+        obj({"emoji": s("one of 👍 ❤️ 🎉 😄 🙏 👀", enum=["👍", "❤️", "🎉", "😄", "🙏", "👀"])},
+            ("emoji",)),
+        ("core",),
+    ),
+    Tool(
         "run_test", "read",
         "Run a stack of modules and bundles on the engine over many seeds: each variable's "
         "top values, options never picked, warnings and sample prompts. Use it to check a "

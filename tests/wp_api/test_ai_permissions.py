@@ -65,7 +65,7 @@ async def test_delete_tool_follows_the_setting_mid_chat(wp_client, fake_llm):
 
     # Told once: the next message doesn't repeat it.
     fake_llm.chat_steps.append({"message": "Ok.", "calls": []})
-    await _chat(wp_client, "thanks", chat_id=first["chat_id"])
+    await _chat(wp_client, "and the next one", chat_id=first["chat_id"])
     _, tail = _last_prompt(fake_llm)
     assert "turned on" not in tail
 

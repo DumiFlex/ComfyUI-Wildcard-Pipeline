@@ -346,7 +346,21 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         in its top right corner opens the whole card in a larger window, with the same Apply,
         Open in editor and Dismiss buttons. When two cards
         change the same item, the second builds on the first, so apply them in order. The chat
-        stays when you close the drawer; <b>New chat</b> starts over.
+        stays when you close the drawer; <b>New chat</b> starts over with an empty message box.
+      </p>
+      <p>
+        A new chat starts with a few questions that fit the page you're on and what your library
+        holds: on Constraints it offers "How do constraints work?" (and, with two or more
+        wildcards, which of them should rule each other out), in an editor it offers to improve
+        the open item, and on the home page it asks about your biggest category. <b>What can you
+        do?</b> fills in where a page has fewer. Clicking one puts it in the box to send or edit.
+      </p>
+      <p>
+        The assistant can react to a message with an emoji (👍 ❤️ 🎉 😄 🙏 👀) shown under it, like
+        a chat app. A message that is only thanks or praise ("thanks!", "perfect, ty", 👍) gets a
+        reaction straight away without asking the model, so it costs nothing and the model never
+        reads it. "Yes", "ok" or "do it" always go to the model, and so does any thanks right
+        after the assistant asked you something.
       </p>
       <p>
         The chat remembers everything it did, not just what it said: ComfyUI keeps each chat's
@@ -487,6 +501,15 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         top of the page list opens the chat ready to explain the page in simpler words. Select a
         part of the page first to ask about just that part. It doesn't guess: if the docs don't
         cover something, it says so.
+      </p>
+      <p>
+        Select text anywhere in the manager (a docs paragraph, a chat reply, a warning, a test
+        result) and a small bar appears above it. <b>Explain</b> sends it to the chat to explain
+        in simpler words, and <b>Ask</b> quotes it in the message box for your own question.
+        <code>Ctrl+Shift+X</code> explains the selection without the bar. The bar never shows in
+        text boxes or editors, where selecting is for editing, and the browser's right-click menu
+        is left alone. Turn it off with <b>Settings › AI assistant › Show Explain on selected
+        text</b>.
       </p>
     </DocSection>
 

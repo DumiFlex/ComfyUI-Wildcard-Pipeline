@@ -1484,6 +1484,10 @@ export interface AiChatResult {
   answered?: Record<string, AiAskAnswered>;
   /** How full the model's window is, for the meter. */
   context?: AiChatContext;
+  /** An emoji on the user's message (the model's `react`, or a thanks). */
+  reaction?: string;
+  /** The message was only thanks: it got `reaction` and no answer. */
+  aside?: boolean;
 }
 
 /** The meter: tokens the last request used against what the model holds.
@@ -1510,7 +1514,7 @@ export interface AiChatSummary {
 
 /** One turn of a reopened chat, as the user saw it. */
 export type AiChatTurn =
-  | { role: "user"; text: string; images?: string[] }
+  | { role: "user"; text: string; images?: string[]; reaction?: string; aside?: boolean }
   | {
       role: "assistant";
       view: Omit<AiChatResult, "chat_id">;

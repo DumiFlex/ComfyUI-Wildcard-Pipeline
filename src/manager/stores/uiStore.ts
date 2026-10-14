@@ -40,6 +40,8 @@ const STORAGE_KEY_START_PAGE = "wp-start-page";
 export const STORAGE_KEY_LAST_ROUTE = "wp-last-route";
 const STORAGE_KEY_MOTION = "wp-motion";
 const STORAGE_KEY_WHATS_NEW = "wp-whats-new-after-update";
+/** The "Explain" chip over selected text (AI assistant). */
+const STORAGE_KEY_EXPLAIN_CHIP = "wp-explain-chip";
 /** Anonymous usage pings from the Community tab (passed to the embed). */
 const STORAGE_KEY_USAGE_STATS = "wp-usage-stats";
 export const STORAGE_KEY_LAST_SEEN_VERSION = "wp-last-seen-version";
@@ -245,6 +247,7 @@ export const useUiStore = defineStore("ui", () => {
   const startPage = ref<StartPage>(readStoredEnum(STORAGE_KEY_START_PAGE, START_PAGES, "dashboard"));
   const motion = ref<MotionMode>(readStoredEnum(STORAGE_KEY_MOTION, MOTION_MODES, "auto"));
   const whatsNewAfterUpdate = ref<boolean>(readStoredEnum(STORAGE_KEY_WHATS_NEW, ["1", "0"] as const, "1") === "1");
+  const explainChip = ref<boolean>(readStoredEnum(STORAGE_KEY_EXPLAIN_CHIP, ["1", "0"] as const, "1") === "1");
   const usageStats = ref<boolean>(readStoredEnum(STORAGE_KEY_USAGE_STATS, ["1", "0"] as const, "1") === "1");
   const testRunnerDefaults = ref<TestRunnerDefaults>(readTestRunnerDefaults());
   const maxRefDepth = ref<number>(readStoredMaxRefDepth());
@@ -356,6 +359,10 @@ export const useUiStore = defineStore("ui", () => {
     whatsNewAfterUpdate.value = v;
     try { localStorage.setItem(STORAGE_KEY_WHATS_NEW, v ? "1" : "0"); } catch { /* ignore */ }
   }
+  function setExplainChip(v: boolean): void {
+    explainChip.value = v;
+    try { localStorage.setItem(STORAGE_KEY_EXPLAIN_CHIP, v ? "1" : "0"); } catch { /* ignore */ }
+  }
 
   function setUsageStats(v: boolean): void {
     usageStats.value = v;
@@ -436,6 +443,8 @@ export const useUiStore = defineStore("ui", () => {
     setMotion,
     whatsNewAfterUpdate,
     setWhatsNewAfterUpdate,
+    explainChip,
+    setExplainChip,
     usageStats,
     setUsageStats,
     testRunnerDefaults,

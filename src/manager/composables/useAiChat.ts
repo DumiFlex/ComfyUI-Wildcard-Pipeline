@@ -50,6 +50,10 @@ export interface ChatUserEntry {
   text: string;
   /** Attached images as data URLs. */
   images?: string[];
+  /** An emoji on this message: the model's `react`, or the one a thanks got. */
+  reaction?: string;
+  /** Only thanks: it got a reaction and no answer (the model never saw it). */
+  aside?: boolean;
 }
 
 export interface ChatAssistantEntry {
@@ -160,6 +164,18 @@ function touch(): void {
 
 /** Show an answer, then apply its small changes when auto-apply is on. */
 async function pushAnswer(result: AiChatResult, snap?: { id: string; json: string }): Promise<void> {
+  if (result.reaction) {
+    const at = lastUserIndex();
+    const user = entries.value[at];
+    if (user?.role === "user") entries.value[at] = { ...user, reaction: result.reaction };
+  }
+  if (result.aside) {
+    // Only thanks: the reaction is the whole answer.
+    const last = entries.value[entries.value.length - 1];
+    if (last?.role === "user") entries.value[entries.value.length - 1] = { ...last, aside: true };
+    touch();
+    return;
+  }
   const entry: ChatAssistantEntry = {
     role: "assistant", result, status: {}, created: {}, errors: {},
     ...(snap ? { editorSnap: snap } : {}),
@@ -274,10 +290,12 @@ async function send(page?: AiChatPage): Promise<void> {
   }
 }
 
-/** Index of the last user message, or -1. */
+/** Index of the last user message that got an answer (thanks that only
+ *  got a reaction don't count), or -1. */
 function lastUserIndex(): number {
   for (let i = entries.value.length - 1; i >= 0; i--) {
-    if (entries.value[i].role === "user") return i;
+    const e = entries.value[i];
+    if (e.role === "user" && !e.aside) return i;
   }
   return -1;
 }
@@ -349,13 +367,19 @@ async function load(id: string): Promise<void> {
   chatId.value = chat.id;
   context.value = chat.context;
   entries.value = chat.turns.map((t): ChatEntry => t.role === "user"
-    ? (t.images?.length ? { role: "user", text: t.text, images: t.images } : { role: "user", text: t.text })
+    ? {
+        role: "user", text: t.text,
+        ...(t.images?.length ? { images: t.images } : {}),
+        ...(t.reaction ? { reaction: t.reaction } : {}),
+        ...(t.aside ? { aside: true } : {}),
+      }
     : {
         role: "assistant",
         result: {
           chat_id: chat.id, message: t.view.message ?? "", proposals: t.view.proposals ?? [],
           steps: t.view.steps ?? [], model: t.view.model ?? "", refs: t.view.refs ?? {},
           pending: t.view.pending ?? [],
+          ...(t.view.reaction ? { reaction: t.view.reaction } : {}),
         },
         status: { ...t.status }, created: { ...t.created }, errors: {},
         ...(t.view.answered ? { answered: { ...t.view.answered } } : {}),
@@ -617,6 +641,13 @@ function reset(): void {
   context.value = null;
   live.value = EMPTY_LIVE;
   attachments.value = [];
+}
+
+/** New chat: an empty log and an empty box (reset alone keeps the draft). */
+function startNew(): void {
+  reset();
+  input.value = "";
+  queued.value = "";
 }
 
 /** Why a proposal can't be applied yet, else "". */
@@ -998,7 +1029,7 @@ const started = computed(() => entries.value.length > 0);
 
 export function useAiChat() {
   return {
-    open, input, entries, loading, error, started, queued, chatId, asking, running, live,
+    open, input, entries, loading, error, started, queued, chatId, asking, running, live, startNew,
     context, compacting, editing,
     send, stop, reset, apply, applyAll, fix, fixAll, askFix, chainOf, linkWarnings, undo, dismiss, blockedReason, ask, answerSearch, attach,
     toggleOption, setAllOptions, openInEditor, openTest,
