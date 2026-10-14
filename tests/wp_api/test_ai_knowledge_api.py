@@ -116,8 +116,7 @@ async def test_chat_offers_lookup_and_hears_the_canvas(wp_client, fake_llm, voca
     # The next message with lookups off takes the tool away, once.
     fake_llm.chat_steps.append({"message": "ok", "calls": []})
     resp = await wp_client.post("/wp/api/ai/chat", json={
-        # Not "thanks": a bare thank-you is answered without the model.
-        "message": "what about blue_hair?", "chat_id": body["chat_id"], "vocab": {},
+        "message": "and these?", "chat_id": body["chat_id"], "vocab": {},
         "canvas": [{"name": "lora_trigger", "source": "injector"}]})
     last = fake_llm.seen[-1]["body"]["messages"]
     assert "- lookup " not in last[0]["content"] or "lookup is gone" in last[-1]["content"]
