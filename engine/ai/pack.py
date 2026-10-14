@@ -1610,7 +1610,7 @@ def repair_note(warnings: list[str]) -> str:
 
 def _use_notes(item: dict[str, Any], payload: dict[str, Any]) -> list[str]:
     _inst, notes = ai_use.parse_use(item["use"], kind=module_type(item),
-                                    tags=payload.get("sub_categories") or [])
+                                    tags=payload.get("sub_categories") or [], payload=payload)
     return [f"Use: {n}" for n in notes]
 
 
@@ -1619,7 +1619,8 @@ def item_instance(item: dict[str, Any], payload: dict[str, Any] | None) -> dict[
     if not item.get("use"):
         return {}
     tags = (payload or {}).get("sub_categories") if module_type(item) == "wildcard" else None
-    inst, _notes = ai_use.parse_use(item["use"], kind=module_type(item), tags=tags)
+    inst, _notes = ai_use.parse_use(item["use"], kind=module_type(item), tags=tags,
+                                    payload=payload)
     return inst
 
 

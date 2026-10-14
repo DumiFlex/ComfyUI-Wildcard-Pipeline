@@ -124,3 +124,10 @@ def test_extend_ops_place_new_items_and_constraints_before_their_target():
             flat.append(c["meta"]["name"])
     assert flat == [m["name"] for m in chain]
     assert ops["sub_bundles"][0]["name"] == "Hero · World"
+
+
+def test_use_lines_name_options_by_number():
+    item = {"kind": "wildcard", "use": "only options 1,3", "var": "x"}
+    payload = {"options": [{"id": "a1", "value": "a"}, {"id": "b2", "value": "b"},
+                           {"id": "c3", "value": "c"}], "sub_categories": []}
+    assert pack.item_instance(item, payload) == {"enabled_options": ["a1", "c3"]}
