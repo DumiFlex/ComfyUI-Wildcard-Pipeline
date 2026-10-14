@@ -142,11 +142,26 @@ SETTINGS: dict[str, tuple[str, ...]] = {
     "structure": ("sections", "flat"),
     "style": ("auto", "tags", "sentences"),
     "rating": ("auto", "safe", "nsfw"),
+    # single: one image per run; story: frames of a WP Context Loop tell a
+    # story ($beat from $iteration, the cast held); sweep: a few short
+    # wildcards meant as Loop sweep axes, the rest held.
+    "run": ("single", "story", "sweep"),
+    # LoRAs the pack expects the user to wire from an Injector: a style
+    # LoRA, a character LoRA that replaces the random character, or both.
+    "loras": ("none", "style", "character", "both"),
+    # family: quality / negative tags per $model_variant (WP Model Info).
+    "model": ("any", "family"),
+    # subject: the user gives the subject through an Injector input.
+    "inputs": ("auto", "subject"),
 }
 DEFAULT_SETTINGS: dict[str, Any] = {
     "library": "reuse", "negatives": "auto", "structure": "sections", "style": "auto",
-    "rating": "auto", "count": 0,
+    "rating": "auto", "count": 0, "run": "single", "loras": "none", "model": "any",
+    "inputs": "auto", "frames": 4,
 }
+MIN_FRAMES, MAX_FRAMES = 2, 12
+#: Most options a sweep axis should have (the Loop sweeps every ticked one).
+MAX_SWEEP_OPTIONS = 6
 
 
 def parse_settings(raw: Any) -> dict[str, Any]:
@@ -159,6 +174,9 @@ def parse_settings(raw: Any) -> dict[str, Any]:
         n = raw.get("count")
         if isinstance(n, (int, float)) and not isinstance(n, bool) and n:
             out["count"] = max(MIN_COUNT, min(MAX_COUNT, int(n)))
+        f = raw.get("frames")
+        if isinstance(f, (int, float)) and not isinstance(f, bool):
+            out["frames"] = max(MIN_FRAMES, min(MAX_FRAMES, int(f)))
     return out
 
 
@@ -895,7 +913,58 @@ def settings_note(settings: dict[str, Any]) -> str:
     if cfg["count"]:
         lines.append(f"- Wildcards have about {cfg['count']} options each unless a slot "
                      "needs fewer.")
+    lines += run_lines(cfg)
     return "\n".join(lines)
+
+
+def run_lines(cfg: dict[str, Any]) -> list[str]:
+    """What the run style, LoRA, model and input settings ask of the plan."""
+    out: list[str] = []
+    if cfg["run"] == "story":
+        n = cfg["frames"]
+        out.append(
+            f"- Run style: a story over a WP Context Loop of {n} frames. Add a derivation "
+            "\"Story beat\" (var beat) that sets $beat from $iteration, one branch per frame "
+            "(equals \"1\", \"2\", …; $iteration is the frame number as text and there is no "
+            "greater-than, so a range is matches \"^[3-4]$\"), each beat one short step of "
+            "the scene. Give the character, outfit and anything else that must stay the "
+            "same in every frame use \"hold\". The template reads $beat. The Loop sets "
+            "$iteration at run time (count it as set).")
+    elif cfg["run"] == "sweep":
+        out.append(
+            "- Run style: a sweep sheet over a WP Context Loop. Plan 2 or 3 short wildcards "
+            f"as the sweep axes (one concept each, at most {MAX_SWEEP_OPTIONS} options, "
+            "\"sweep axis\" in their about) and give the other picks use \"hold\", so only "
+            "the axes change from frame to frame. The user ticks the axes' options on the "
+            "canvas.")
+    if cfg["loras"] in ("style", "both"):
+        out.append(
+            "- LoRAs: a style LoRA. Add an input style_lora (example \"<lora:FILE:0.8>, "
+            "trigger words\", with a real file from the user's LoRA list when one is "
+            "given) that the user wires from a WP Context Injector; the template reads "
+            "$style_lora first.")
+    if cfg["loras"] in ("character", "both"):
+        out.append(
+            "- LoRAs: a character LoRA that can replace the random character. Keep the "
+            "random character wildcard, add an input character_lora (example "
+            "\"<lora:FILE:0.8>, trigger words\") and a derivation \"Character LoRA\" whose "
+            "var is the character's: when $character_lora is set it replaces the "
+            "character with $character_lora, so the LoRA's trigger words stand in for the "
+            "random pick; left empty, the random character stays.")
+    if cfg["model"] == "family":
+        out.append(
+            "- Model: per model family. Add a derivation \"Model quality\" (var quality) "
+            "keyed on $model_variant: pony gets score_9, score_8_up, score_7_up; "
+            "illustrious and noobai get masterpiece, best quality, very aesthetic; else the "
+            "pack's own quality words. Its negative follows the same way. The template "
+            "reads $quality. A WP Model Info node sets $model_variant and $model_family at "
+            "run time (count them as set).")
+    if cfg["inputs"] == "subject":
+        out.append(
+            "- Inputs: the user gives the subject. Add an input subject (with an example) "
+            "from a WP Context Injector, read it in the template, and plan no subject "
+            "wildcard.")
+    return out
 
 
 def decisions_note(decisions: list[dict[str, str]]) -> str:
@@ -1163,6 +1232,87 @@ def canvas_note(canvas: list[dict[str, str]]) -> str:
                 + (f" ({c['about']})" if c.get("about") else "") for c in canvas))
 
 
+def _new_item(plan: dict[str, Any], kind: str, name: str, var: str, about: str,
+              section: str = "") -> dict[str, Any]:
+    return {"kind": kind, "name": name[:MAX_NAME], "var": var, "section": section,
+            "count": 0, "tags": [], "source": "", "target": "", "use": "", "about": about}
+
+
+def _mentions(items: list[dict[str, Any]], var: str) -> bool:
+    pat = re.compile(r"\$" + re.escape(var) + r"\b|\b" + re.escape(var) + r"\b", re.I)
+    return any(pat.search(i.get("about") or "") for i in items)
+
+
+def _character_var(items: list[dict[str, Any]]) -> str:
+    for i in items:
+        if is_wild(i) and re.search(r"character|person|girl|boy|subject", i["var"] + " "
+                                    + i["name"], re.I):
+            return i["var"]
+    return "character"
+
+
+def _settings_findings(plan: dict[str, Any], add: Any) -> None:
+    """What the run style, LoRA and model settings need and the plan lacks."""
+    cfg = parse_settings(plan.get("settings"))
+    items = plan["items"]
+    inputs = {i["var"] for i in plan.get("inputs") or []}
+    derivs = [i for i in items if i["kind"] == "derivation"]
+    if cfg["run"] == "story":
+        if not _mentions(derivs, "iteration"):
+            n = cfg["frames"]
+            add(None, "fix", "Story over a Loop needs a derivation that sets the story beat "
+                "from $iteration, or every frame looks the same",
+                {"op": "add", "item": _new_item(
+                    plan, "derivation", "Story beat", "beat",
+                    f"Sets $beat from $iteration, one branch per frame 1 to {n} (equals "
+                    "\"1\", \"2\", …), each one short step of the story in order.")})
+        if not any("hold" in (i.get("use") or "") for i in items if is_wild(i)):
+            add(None, "tip", "Nothing is held, so the character and outfit change every "
+                "frame of the story; set the ones that must stay to hold")
+    if cfg["run"] == "sweep":
+        for i in items:
+            if i["kind"] == "wildcard" and re.search(r"sweep", i.get("about") or "", re.I) \
+                    and (i.get("count") or 0) > MAX_SWEEP_OPTIONS + 2:
+                add(i, "tip", f"{i['name']} is a sweep axis with {i['count']} options; the "
+                    f"Loop makes a frame for each ticked one, so keep it to about "
+                    f"{MAX_SWEEP_OPTIONS}",
+                    {"op": "edit", "key": i["key"], "set": {"count": MAX_SWEEP_OPTIONS}})
+        if not any(re.search(r"sweep", i.get("about") or "", re.I) for i in items):
+            add(None, "tip", "No wildcard is marked as a sweep axis; say \"sweep axis\" in "
+                "the about of the 2 or 3 short ones to sweep")
+    wanted: list[tuple[str, str]] = []
+    if cfg["loras"] in ("style", "both"):
+        wanted.append(("style_lora", "The style LoRA and its trigger words"))
+    if cfg["loras"] in ("character", "both"):
+        wanted.append(("character_lora", "A character LoRA and its trigger words; empty "
+                       "keeps the random character"))
+    for var, about in wanted:
+        if var not in inputs:
+            add(None, "fix", f"The LoRA setting needs an input ${var} the user wires from a "
+                "WP Context Injector",
+                {"op": "plan", "set": {"inputs": [
+                    *(plan.get("inputs") or []),
+                    {"var": var, "about": about, "example": "<lora:FILE:0.8>, trigger"}]},
+                 "label": f"Add ${var}"})
+    if cfg["loras"] in ("character", "both") and not _mentions(derivs, "character_lora"):
+        char = _character_var(items)
+        add(None, "fix", "The character LoRA should replace the random character, so a "
+            "derivation must write $character_lora into $" + char + " when it is set",
+            {"op": "add", "item": _new_item(
+                plan, "derivation", "Character LoRA", char,
+                f"When $character_lora is set, replace ${char} with $character_lora; "
+                "otherwise leave the random pick.")})
+    if cfg["model"] == "family" and not _mentions(items, "model_variant") \
+            and not _mentions(items, "model_family"):
+        add(None, "fix", "Per model family needs a derivation keyed on $model_variant "
+            "(from a WP Model Info node)",
+            {"op": "add", "item": _new_item(
+                plan, "derivation", "Model quality", "quality",
+                "Sets $quality from $model_variant: pony → score_9, score_8_up, score_7_up; "
+                "illustrious or noobai → masterpiece, best quality, very aesthetic; else the "
+                "pack's own quality words.")})
+
+
 def review_plan(plan: dict[str, Any],
                 library: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     """Check a plan against the guide before anything is built:
@@ -1268,6 +1418,7 @@ def review_plan(plan: dict[str, Any],
                 "section": "", "count": 0, "tags": [], "source": "", "target": "", "use": "",
                 "about": "The final prompt reading " + ", ".join(reads[:20])
                 + ", in a natural order, with a standing negative."}})
+    _settings_findings(plan, add)
     # A new wildcard the library already has.
     if parse_settings(plan.get("settings"))["library"] == "reuse":
         lib = {}
@@ -1903,6 +2054,48 @@ def render(text: str, negative: str, ctx: dict[str, Any]) -> tuple[str, str]:
     return prompt, neg
 
 
+def loop_frames(plan: dict[str, Any]) -> int:
+    """Frames of the Loop a story pack runs over (0 for other run styles)."""
+    cfg = parse_settings(plan.get("settings"))
+    return int(cfg["frames"]) if cfg["run"] == "story" else 0
+
+
+def frame_of(seed: int, frames: int) -> int:
+    return (seed - 1) % frames + 1
+
+
+def frame_pins(frame: int, frames: int) -> dict[str, str]:
+    """What the Loop sets for one frame (1-based, as text)."""
+    return {"iteration": str(frame), "iteration_total": str(frames)}
+
+
+def _merge_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
+    """Scenario reports of the Loop's frames as one: runs, failures,
+    variable counts and warnings added up."""
+    out: dict[str, Any] = {"runs": 0, "failed": 0, "variables": {}, "warnings": []}
+    warns: dict[tuple[str, str], dict[str, Any]] = {}
+    for r in reports:
+        out["runs"] += r["runs"]
+        out["failed"] += r["failed"]
+        for name, v in r["variables"].items():
+            m = out["variables"].setdefault(name, {"counts": {}, "other": 0, "distinct": 0,
+                                                   "internal": v.get("internal", False)})
+            for value, n in v["counts"].items():
+                m["counts"][value] = m["counts"].get(value, 0) + n
+            m["other"] += v["other"]
+        for w in r["warnings"]:
+            key = (str(w.get("type", "")), str(w.get("message", "")))
+            if key in warns:
+                warns[key]["count"] += w["count"]
+            else:
+                warns[key] = dict(w)
+    for v in out["variables"].values():
+        v["counts"] = dict(sorted(v["counts"].items(), key=lambda kv: -kv[1]))
+        v["distinct"] = len(v["counts"]) + (1 if v["other"] else 0)
+    out["warnings"] = sorted(warns.values(), key=lambda g: -g["count"])
+    return out
+
+
 def check_pack(
     plan: dict[str, Any], built: dict[str, Any], *, seeds: int = CHECK_SEEDS,
     library: list[dict[str, Any]] | None = None, base: dict[str, Any] | None = None,
@@ -1932,8 +2125,18 @@ def check_pack(
     if missing:
         notes.append("Not built: " + ", ".join(missing))
     seed_list = list(range(1, max(1, seeds) + 1))
-    report = run_scenario(modules, seeds=seed_list, catalog=catalog, pins=pinned,
-                          sample_limit=0, value_limit=MAX_COUNT + 20)
+    frames = loop_frames(plan)
+    if frames:
+        # A story runs over a Loop: each seed plays one frame, so every beat
+        # is checked (the Loop sets $iteration at run time).
+        report = _merge_reports([
+            run_scenario(modules, seeds=[x for x in seed_list if frame_of(x, frames) == f],
+                         catalog=catalog, pins={**pinned, **frame_pins(f, frames)},
+                         sample_limit=0, value_limit=MAX_COUNT + 20)
+            for f in range(1, frames + 1) if any(frame_of(x, frames) == f for x in seed_list)])
+    else:
+        report = run_scenario(modules, seeds=seed_list, catalog=catalog, pins=pinned,
+                              sample_limit=0, value_limit=MAX_COUNT + 20)
     for w in report["warnings"]:
         key = by_id.get(str(w.get("owner_id") or w.get("module_id") or ""))
         detail = w.get("detail") if isinstance(w.get("detail"), dict) else {}
@@ -1964,7 +2167,8 @@ def check_pack(
     prompts: list[dict[str, Any]] = []
     if tpl is not None:
         item, text = tpl
-        set_vars = set(report["variables"]) | set(pinned)
+        set_vars = set(report["variables"]) | set(pinned) | (
+            {"iteration", "iteration_total"} if frames else set())
         unset = [v for v in _reads(text) if v not in set_vars]
         if unset:
             problems.setdefault(item["key"], []).append(
@@ -1973,8 +2177,10 @@ def check_pack(
         braces = 0
         for seed in seed_list[:SAMPLE_PROMPTS]:
             try:
+                frame = frame_pins(frame_of(seed, frames), frames) if frames else {}
                 ctx = PipelineEngine().run(copy.deepcopy(modules),
-                                           ctx={**pinned, "__wp_catalog__": catalog}, seed=seed)
+                                           ctx={**pinned, **frame, "__wp_catalog__": catalog},
+                                           seed=seed)
                 prompt, negative = render(text, neg, ctx)
                 if re.search(r"[{}]|@\{", prompt):
                     braces += 1
@@ -2050,6 +2256,16 @@ def wiring_notes(plan: dict[str, Any],
     if any(i["kind"] == "template" for i in plan["items"]):
         out.append("Add a WP Prompt Assembler after it and load the template "
                    f"\"{next(i['name'] for i in plan['items'] if i['kind'] == 'template')}\".")
+    cfg = parse_settings(plan.get("settings"))
+    if cfg["run"] == "story":
+        out.append(f"Put a WP Context Loop before the Context, count {cfg['frames']}: each "
+                   "frame plays the next story beat ($iteration).")
+    elif cfg["run"] == "sweep":
+        out.append("Put a WP Context Loop before the Context in sweep mode and tick the "
+                   "options of the sweep axes (the wildcards marked as axes).")
+    if cfg["model"] == "family":
+        out.append("Add a WP Model Info node fed from your checkpoint loader, above the "
+                   "Context, so the pack knows the model family.")
     if any("hold" in (i.get("use") or "") for i in plan["items"]):
         out.append("Items set to hold keep their pick across a WP Context Loop run.")
     return out

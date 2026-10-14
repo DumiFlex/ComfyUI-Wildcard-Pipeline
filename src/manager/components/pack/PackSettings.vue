@@ -1,8 +1,10 @@
 <script setup lang="ts">
 /**
  * PackSettings — what the user decides before the planner does: library
- * reuse, negatives, sub-bundles, writing style, rating and options per
- * wildcard. Sent with every plan request; no model involved.
+ * reuse, negatives, sub-bundles, writing style, rating, options per
+ * wildcard, and how the pack runs (single images, a story over a Loop, a
+ * sweep sheet), LoRAs, model families and inputs. Sent with every plan
+ * request; no model involved.
  */
 import Input from "../ui/Input.vue";
 import Select from "../ui/Select.vue";
@@ -17,7 +19,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ (e: "update:modelValue", v: AiPackSettings): void }>();
 
-type Field = Exclude<keyof AiPackSettings, "count">;
+type Field = Exclude<keyof AiPackSettings, "count" | "frames">;
 
 /** Each choice with a line saying what it does (shown under the field and
  *  as the option's tooltip). */
@@ -46,7 +48,28 @@ const FIELDS: Array<{ key: Field; label: string; about: string; options: Array<S
     { value: "safe", label: "Safe", hint: "Nothing explicit; the pack is marked Safe." },
     { value: "nsfw", label: "NSFW", hint: "Explicit content allowed; the pack is marked NSFW." },
   ] },
+  { key: "run", label: "Run style", about: "What one queue of the pack makes.", options: [
+    { value: "single", label: "Single images", hint: "Every run is its own random prompt." },
+    { value: "story", label: "Story over a Loop", hint: "A WP Context Loop plays the frames in order: a story beat per frame from $iteration, with the character and outfit held." },
+    { value: "sweep", label: "Sweep sheet", hint: "Two or three short wildcards made as Loop sweep axes; everything else held, so only the axes change." },
+  ] },
+  { key: "loras", label: "LoRAs", about: "LoRAs the pack expects you to wire in.", options: [
+    { value: "none", label: "None", hint: "No LoRA inputs." },
+    { value: "style", label: "Style LoRA", hint: "An input $style_lora (the <lora:…> tag and its trigger words) from a WP Context Injector, read first by the template." },
+    { value: "character", label: "Character LoRA", hint: "A random character as usual, plus an input $character_lora that replaces it when you wire one in." },
+    { value: "both", label: "Style + character", hint: "Both inputs." },
+  ] },
+  { key: "model", label: "Model", about: "Whether the pack adapts to the checkpoint.", options: [
+    { value: "any", label: "Any model", hint: "One set of quality and negative tags." },
+    { value: "family", label: "Per model family", hint: "Quality and negative tags per model (Pony score tags, Illustrious / NoobAI tags…) from a WP Model Info node." },
+  ] },
+  { key: "inputs", label: "Subject", about: "Where the subject comes from.", options: [
+    { value: "auto", label: "Planner decides", hint: "Wildcards for the subject unless your request names one." },
+    { value: "subject", label: "I give it", hint: "An input $subject you wire from a WP Context Injector; no subject wildcard." },
+  ] },
 ];
+
+const FRAMES_HINT = "How many frames the story has: the Loop's count.";
 
 const COUNT_HINT = "How many options each wildcard gets. Empty is Auto: the planner sizes each one.";
 
@@ -60,6 +83,12 @@ function options(f: (typeof FIELDS)[number]): SelectOption[] {
 
 function set<K extends keyof AiPackSettings>(key: K, value: AiPackSettings[K]): void {
   emit("update:modelValue", { ...props.modelValue, [key]: value });
+}
+
+function setFrames(v: string | number): void {
+  const n = Math.round(Number(v));
+  // The server keeps it within 2–12.
+  set("frames", Number.isFinite(n) && n > 0 ? Math.max(2, Math.min(12, n)) : 4);
 }
 
 function setCount(v: string | number): void {
@@ -101,6 +130,21 @@ function setCount(v: string | number): void {
         @update:model-value="setCount"
       />
       <span v-if="detailed" class="wp-pack-settings__hint">{{ COUNT_HINT }}</span>
+    </label>
+    <label v-if="modelValue.run === 'story'" class="wp-pack-settings__field">
+      <span class="wp-pack-settings__label">Story frames</span>
+      <Input
+        type="number"
+        size="sm"
+        :model-value="modelValue.frames"
+        :min="2"
+        :max="12"
+        :disabled="disabled"
+        aria-label="Story frames"
+        data-test="pack-setting-frames"
+        @update:model-value="setFrames"
+      />
+      <span v-if="detailed" class="wp-pack-settings__hint">{{ FRAMES_HINT }}</span>
     </label>
   </div>
 </template>

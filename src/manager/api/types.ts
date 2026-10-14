@@ -1629,6 +1629,18 @@ export interface AiPackSettings {
   rating: "auto" | "safe" | "nsfw";
   /** Options per wildcard, 0 for the planner's choice. */
   count: number;
+  /** single: one image per run; story: the frames of a WP Context Loop tell
+   *  a story ($beat from $iteration); sweep: short wildcards as sweep axes. */
+  run: "single" | "story" | "sweep";
+  /** Frames of the Loop a story runs over (2–12). */
+  frames: number;
+  /** LoRAs wired from an Injector: a style LoRA, a character LoRA that
+   *  replaces the random character, or both. */
+  loras: "none" | "style" | "character" | "both";
+  /** family: quality and negative tags per $model_variant (WP Model Info). */
+  model: "any" | "family";
+  /** subject: the user gives the subject through an Injector input. */
+  inputs: "auto" | "subject";
 }
 
 export interface AiPackQuestion {
@@ -1716,7 +1728,7 @@ export type AiPackPatch = (
   | { op: "add"; item: Partial<AiPackItem> & { kind: AiPackKind } }
   | { op: "remove"; key: string }
   /** A plan-wide field, e.g. pointing a stray anchor at a set variable. */
-  | { op: "plan"; set: Partial<Pick<AiPackPlan, "anchor">> }
+  | { op: "plan"; set: Partial<Pick<AiPackPlan, "anchor" | "inputs">> }
 ) & {
   /** The button's words when the server picked them ("Use $scene"). */
   label?: string;

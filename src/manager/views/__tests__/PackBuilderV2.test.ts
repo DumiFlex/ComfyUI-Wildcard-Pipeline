@@ -38,7 +38,7 @@ const item = (key: string, kind: AiPackItem["kind"], name: string, extra: Partia
   source: "", target: "", use: "", library_id: "", library_type: "", ...extra,
 });
 
-const SETTINGS = { library: "reuse", negatives: "auto", structure: "sections", style: "auto", rating: "auto", count: 0 } as const;
+const SETTINGS = { library: "reuse", negatives: "auto", structure: "sections", style: "auto", rating: "auto", count: 0, run: "single", frames: 4, loras: "none", model: "any", inputs: "auto" } as const;
 
 function plan(round: number): AiPackPlanResult {
   return {
