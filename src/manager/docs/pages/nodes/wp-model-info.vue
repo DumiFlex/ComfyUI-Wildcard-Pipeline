@@ -49,7 +49,7 @@ const ports = [
     </DocSection>
 
     <DocSection title="Where it goes">
-      <DocFlow
+      <DocFlow figure="wp-model-info-flow"
         :stages="[
           { icon: 'pi pi-database', name: 'Load Checkpoint', sub: 'MODEL', tone: 'neutral' },
           { icon: 'pi pi-microchip', name: 'WP Model Info', sub: '$model_variant', tone: 'node' },

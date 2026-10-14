@@ -432,14 +432,60 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         Every search asks you first. The chat shows the exact words it wants to search for, with
         <b>Allow once</b>, <b>Allow for this chat</b> (later searches in the same chat run without
         asking) and <b>Deny</b>. Only the search words leave your PC. Five short result snippets
-        come back with their links; the assistant never opens the pages, cites results as [1],
-        [2] with the link, and treats what it found as information, never as instructions.
+        come back with their links; the assistant cites results as [1], [2] with the link, and
+        treats what it found as information, never as instructions.
+      </p>
+      <p>
+        When a snippet isn't enough, the chat can ask to <b>read one result page</b>: only a link
+        one of its own allowed searches returned, never another address. It asks first like a
+        search ("Read this page?" with the link). <b>Read result pages</b> picks how: <b>Built
+        in</b> (the default) fetches the page from ComfyUI and keeps its visible text, cut to a
+        few thousand characters, and never opens an address on your own network; pages that need
+        JavaScript, a login or a browser check give little, and the chat falls back to the
+        snippet. If you run <b>Crawl4AI</b> or <b>Firecrawl</b> (or use Firecrawl's hosted API with
+        a key), pick it and give its address: it renders pages in a real browser first. Off
+        stops page reading.
+      </p>
+      <p>
+        <b>Danbooru tag lookup</b> (off by default) lets the chat ask danbooru.donmai.us about one
+        tag: its post count and category, its alias, what it implies, its wiki text and the tags
+        used with it most. It reads tags and wiki pages only, never posts or images, waits a
+        second between requests, and asks you first each time. For spellings and post counts the
+        chat uses your downloaded tag list instead (see below), which never leaves your PC.
+      </p>
+      <p>
+        <b>Don't ask before web calls</b> runs searches, page reads and Danbooru lookups without
+        the Allow card; you still see each one in the steps above the answer. It is your call: a
+        web page or an item could then steer what the chat sends out. Turning a web feature on
+        shows a short note of what leaves your machine; <b>Got it</b> hides it, and <b>Show
+        dismissed notices again</b> brings it back.
       </p>
       <p>
         Once a search engine is set up, the assistant searches on its own whenever references
         would help (a character's outfit, an art style, which tags a model family understands,
         a new model), not only when you ask; you still allow each search. Setting it up or
         turning it off takes effect in open chats from the next message.
+      </p>
+    </DocSection>
+
+    <DocSection title="Your tags, LoRAs and canvas">
+      <p>
+        The assistant knows how the nodes work: the WP Context Loop and its <code>$iteration</code>
+        / <code>$iteration_total</code>, sweeps and held picks, WP Context Injector rows (a LoRA's
+        trigger words, any socket value), WP Model Info's <code>$model_family</code>,
+        <code>$model_variant</code> and <code>$model_name</code>, and the Image Filter. With the
+        canvas open in another tab, the chat and the pack builder also know which variables your
+        canvas sets at run time (Injector rows, the Loop's variables, Model Info), so a pack
+        reading them isn't flagged as reading something nothing sets.
+      </p>
+      <p>
+        While an autocomplete source is on (<b>Settings › Autocomplete</b>), the chat can look in
+        it: your <b>Danbooru tag list</b> (once downloaded: real spellings with post counts, and
+        whether a tag exists at all), your <b>LoRA</b> files and your <b>embeddings</b>. The pack
+        builder uses them too: the planner gets your LoRA files that match the request, tag-style
+        wildcards get the tags your list knows for their subject, and built options with tags
+        your list doesn't have get a note on the item (never an error: artists and new tags
+        exist). Nothing of this leaves your PC except what the model reads.
       </p>
     </DocSection>
 
@@ -517,7 +563,8 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           you can say "the skirt in image 2".</li>
         <li><b>Settings.</b> <b>Next: pack settings</b> opens the pack settings, each with a line
           saying what the chosen option does. They are kept in this browser, so next time
-          <b>Plan it</b> is the only click needed:
+          <b>Plan it</b> is the only click needed. They are preferences that hold for any pack;
+          what a pack is about (its subject, LoRAs, a story) comes from your description:
           <DocKeyList
             :items="[
               { term: 'Your library', desc: 'Reuse what fits (wildcards and fixed values you already have, marked yours), New, in its style (built fresh but written like your library), or Everything new.' },
@@ -526,6 +573,7 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
               { term: 'Written as', desc: 'Tags or Natural phrases, or let the planner decide from your request and library.' },
               { term: 'Rating', desc: 'Safe or NSFW, or let the planner decide.' },
               { term: 'Options per wildcard', desc: 'How many options each wildcard gets; Auto lets the planner size each one.' },
+              { term: 'Model', desc: 'Any model, or Per model family: quality and negative tags per model (Pony score tags, Illustrious / NoobAI tags) chosen from $model_variant, set by a WP Model Info node.' },
             ]"
           />
         </li>
@@ -538,7 +586,16 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           assumed</b>, each one changeable. Click an item to edit it by hand (name, variable,
           section, tags, what it holds, per-use settings), ask the AI to change just that item,
           remove it, or <b>Add an item</b> (described for the AI, or blank). Your edits are kept
-          when the plan updates. <b>Settings and images</b> under <b>Change the plan</b> changes the
+          when the plan updates. The planner also reads from your description how the pack runs
+          and what it takes from outside, and asks when it can't tell. <b>Runs as</b> under the
+          title shows Single images, <b>Story over a Loop</b> (a WP Context Loop plays the frames
+          in order, a story beat per frame from <code>$iteration</code>, with the character and
+          outfit held; change the number of frames there) or <b>Sweep sheet</b> (2 or 3 short
+          wildcards as Loop sweep axes, the rest held), and you can change it by hand. A subject
+          you give it ("my OC") or a LoRA you name (a character, an outfit, a style, any kind)
+          becomes an input you wire from a WP Context Injector; a LoRA that stands in for a
+          random pick (a character LoRA for the rolled character) gets a rule that swaps it in
+          when it is set, so left empty the random pick stays. <b>Settings and images</b> under <b>Change the plan</b> changes the
           settings and images for the next update, which reworks the plan to follow them. Images
           go with the first plan and again only when you add or remove one, when your update
           mentions them ("like the photo"), or when you tick <b>Show the images again</b>; each
@@ -561,9 +618,15 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         <li><b>Plan review.</b> The plan is checked as you edit it for what would break: a
           template or rule that reads a variable nothing sets, a constraint keyed on a tag
           neither wildcard lists, two constraints that loop, wildcards that ignore the pack's
-          anchor, picks that nothing links. Each finding has <b>Apply</b> (a fix you can see
-          before it lands) and <b>Dismiss</b>; tick some and press <b>Fix with AI</b>, or
-          <b>Fix all with AI</b>. <b>Review with AI</b> asks the model for a second opinion.</li>
+          anchor, picks that nothing links, a story without a beat from <code>$iteration</code>, a LoRA
+          input that nothing reads or that doesn't swap in for the pick it stands for. Variables your canvas
+          or the run sets (<code>$iteration</code>, <code>$model_variant</code>, Injector rows)
+          count as set. An anchor nothing sets is a finding too, with <b>Use $x</b> when the pack
+          sets something close, else <b>Clear it</b>. Each finding has <b>Apply</b> (a fix you can
+          see before it lands) and <b>Dismiss</b>; tick some and press <b>Fix with AI</b>, or
+          <b>Fix all with AI</b>. <b>Review with AI</b> asks the model for a second opinion. Notes
+          the planner left (items it dropped) have <b>Explain</b>, which asks the chat what they
+          mean.</li>
         <li><b>Build &amp; check.</b> Each item is written in its own request, wildcards first so
           rules can use their tags; every item has its id reserved in the plan, so references,
           nested wildcards and linked constraints point at items before they are built. An item
@@ -572,8 +635,10 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           Then the pack runs 200 seeds on the real engine. An item with a problem (a rule that
           never applies, a variable nothing sets) is rebuilt with the problem as a note, up to
           twice, and the row says what was fixed. The run also flags options that never came up
-          or that take most of the picks. Click a row to see what it holds. The test run shows
-          each variable's most common values and a few sample prompts.</li>
+          or that take most of the picks. A problem on an item has <b>Fix with AI</b> (rebuild it
+          with the problem as a note), <b>Explain</b> and <b>Dismiss</b>. Click a row to see what
+          it holds. The test run shows each variable's most common values and a few sample
+          prompts; a story pack plays every frame of its Loop.</li>
         <li><b>Install</b> adds the modules, the template and a bundle that runs them in the right
           order (with a sub-bundle per section), all tagged with the pack's name so they show up
           together under Tags, and says how to wire it on the canvas (the bundle in a WP Context,
@@ -724,7 +789,8 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         far. Bundle sub-bundle suggestions send the children's names, types and variables. With meaning search on, the text of each item (name, variable, tags, description and its
         first options) and your search phrases go to the embedding server; with a local server
         that stays on your PC. A web search you allow sends only its search words to the search
-        engine you picked. Images you attach go to the model with the message they belong to,
+        engine you picked; a page read you allow fetches that page (from ComfyUI, or through your
+        Crawl4AI or Firecrawl server); a Danbooru lookup sends the one tag to Danbooru. Images you attach go to the model with the message they belong to,
         and stay in the chat; they are shrunk and re-saved first, which drops camera details
         and location. Each chat
         message sends the chat so far again (the provider may cache it for a few minutes to

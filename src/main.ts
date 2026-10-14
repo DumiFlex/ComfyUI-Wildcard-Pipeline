@@ -29,6 +29,7 @@ const {
   playgroundStoreMod,
   installClipboardShield,
   dimWidgetsWhileSkipped,
+  answerCanvasFacts,
   createApp,
   watch,
   loadToast,
@@ -145,6 +146,8 @@ settingsMod.applyA11yClasses(app);
 settingsMod.applyDisplayPrefs(app);
 settingsMod.watchA11ySystemPrefs();
 settingsMod.listenForManagerSettings(app);
+// The manager's AI asks which variables this canvas sets at run time.
+answerCanvasFacts(() => (app as unknown as { graph?: LiteGraphLike }).graph);
 // Wire the toast store to read its default lifeMs + suppress-info
 // filter from the settings store. Setter pattern avoids the circular
 // import that would form if toast-store imported from settings

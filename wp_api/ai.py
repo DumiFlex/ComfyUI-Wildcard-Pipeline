@@ -69,6 +69,7 @@ from engine.ai import refs as ai_refs
 from engine.ai import research as ai_research
 from engine.ai import safety as ai_safety
 from engine.ai import tools as ai_tools
+from engine.ai import vocab as ai_vocab
 from engine.ai import wildcard as ai_wildcard
 from engine.ai import wildcard_edit as ai_edit
 from engine.db.repositories import (
@@ -81,7 +82,16 @@ from engine.db.repositories import (
     TemplateRepository,
 )
 from engine.importer import commit_import
-from wp_api import _ai_chat, _ai_client, _ai_embed, _ai_images, _ai_progress, _ai_search
+from wp_api import (
+    _ai_chat,
+    _ai_client,
+    _ai_embed,
+    _ai_images,
+    _ai_progress,
+    _ai_search,
+    _ai_vocab,
+    _ai_web,
+)
 from wp_api._ai_guard import guarded
 from wp_api._helpers import cancel_on_disconnect, db_session, json_error, json_ok
 from wp_api._validators import validate_wildcard_name
@@ -901,7 +911,54 @@ _PERM_NOTES = {
     ("web", True): "(The user set up web search: web_search is available now. Use it on "
                    "your own whenever references would help; the user allows each query.)",
     ("web", False): "(Web search is off now: web_search is gone.)",
+    ("reader", True): "(read_result is available now: when a search snippet isn't enough, "
+                      "read one of its result pages; the user allows each read.)",
+    ("reader", False): "(Reading result pages is off now: read_result is gone.)",
+    ("danbooru", True): "(The user turned on the Danbooru lookup: danbooru looks up a tag's "
+                        "wiki, aliases, implications and related tags; the user allows each.)",
+    ("danbooru", False): "(The Danbooru lookup is off now: danbooru is gone.)",
 }
+
+
+async def _vocab_kinds(body: dict[str, Any]) -> set[str]:
+    """The lookup sources this request may use (`_ai_vocab.available`);
+    the first call may load the tag list, so it runs off the event loop."""
+    if not ai_vocab.flags(body.get("vocab")):
+        return set()
+    loop = asyncio.get_running_loop()
+    try:
+        return await loop.run_in_executor(None, _ai_vocab.available, body.get("vocab"))
+    except Exception:  # noqa: BLE001 - a broken tag file only turns the lookup off
+        return set()
+
+
+def _sync_vocab(meta: dict[str, Any], kinds: set[str]) -> str:
+    """Offer `lookup` while a source is on, and say which (once, in the
+    tail, when it changes)."""
+    now = sorted(kinds)
+    if list(meta.get("vocab") or []) == now:
+        return ""
+    meta["vocab"] = now
+    meta["tools"] = ai_tools.sync_delete(list(meta.get("tools") or []), bool(now),
+                                         ai_tools.VOCAB)
+    if not now:
+        return "(The user's tag, LoRA and embedding lookups are off now: lookup is gone.)"
+    names = ", ".join(ai_vocab.LABELS[k] for k in now)
+    return (f"(lookup can search the user's {names} now: check tag-style options with it "
+            "and name the user's real LoRAs.)")
+
+
+def _canvas_note(meta: dict[str, Any], body: dict[str, Any]) -> str:
+    """What the user's open canvas sets at run time, when it changed."""
+    canvas = ai_pack.canvas_vars(body.get("canvas"))
+    if not isinstance(body.get("canvas"), list):
+        return ""
+    names = [f"{c['source']}:{c['name']}" for c in canvas]
+    if names == list(meta.get("canvas") or []):
+        return ""
+    meta["canvas"] = names
+    return ai_pack.canvas_note(canvas) or "(No WP Context Injector, Loop or Model Info " \
+        "variables on the user's open canvas now.)"
 
 
 def _sync_permissions(meta: dict[str, Any], cfg: dict[str, Any]) -> str:
@@ -916,19 +973,27 @@ def _sync_permissions(meta: dict[str, Any], cfg: dict[str, Any]) -> str:
             meta[key] = now
             notes.append(_PERM_NOTES[(key, now)])
     web = _ai_search.enabled(cfg)
-    if bool(meta.get("web")) != web:
-        meta["web"] = web
-        notes.append(_PERM_NOTES[("web", web)])
+    flags = {"web": web, "reader": web and _ai_web.reader_ready(cfg),
+             "danbooru": bool(cfg.get("danbooru_lookup"))}
+    for key, now in flags.items():
+        if bool(meta.get(key)) != now:
+            meta[key] = now
+            notes.append(_PERM_NOTES[(key, now)])
     tools = ai_tools.sync_delete(list(meta.get("tools") or []), bool(meta.get("delete")))
-    meta["tools"] = ai_tools.sync_delete(tools, web, ai_tools.WEB)
+    tools = ai_tools.sync_delete(tools, web, ai_tools.WEB_SEARCH)
+    tools = ai_tools.sync_delete(tools, flags["reader"], ai_tools.READER)
+    meta["tools"] = ai_tools.sync_delete(tools, flags["danbooru"], ai_tools.DANBOORU)
     return " ".join(notes)
 
 
 def _more_tools(meta: dict[str, Any]) -> str:
     offered = set(meta.get("tools") or [])
     rest = [t for t in ai_tools.TOOLS if t.name not in offered
-            and (t.kind != "web" or meta.get("web"))
-            and (t.name not in ai_tools.DELETE or meta.get("delete"))]
+            and (t.kind != "web" or ai_tools.web_allowed(
+                t.name, web=bool(meta.get("web")), reader=bool(meta.get("reader")),
+                danbooru=bool(meta.get("danbooru"))))
+            and (t.name not in ai_tools.DELETE or meta.get("delete"))
+            and (t.name not in ai_tools.VOCAB or meta.get("vocab"))]
     if not rest:
         return "every tool is already available"
     meta["tools"] = [t.name for t in ai_tools.TOOLS if t.name in offered or t in rest]
@@ -1023,7 +1088,10 @@ def _open_chat(lib: Any, cfg: dict[str, Any], meta: dict[str, Any], base: dict[s
             meta.pop("lean", None)
         meta["tools"] = ai_tools.toolset(page.get("route") if page else None, scoped=slim,
                                          web=bool(meta.get("web")),
-                                         delete=bool(meta.get("delete")))
+                                         delete=bool(meta.get("delete")),
+                                         vocab=bool(meta.get("vocab")),
+                                         reader=bool(meta.get("reader")),
+                                         danbooru=bool(meta.get("danbooru")))
         limit = lean.get("overview") or (40 if slim else None)
         snapshot = ai_safety.strip_invisible(lib.overview(limit=limit))
         prof = {**base, "slim": slim}
@@ -1351,6 +1419,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
             text = text[:ai_chat.MAX_TURN_CHARS] + " …"
     page = body.get("page") if isinstance(body.get("page"), dict) else None
     chat_id = body.get("chat_id") if isinstance(body.get("chat_id"), str) else None
+    vocab_kinds = await _vocab_kinds(body)
 
     with db_session(request) as conn:
         lib = ai_chat.Library(
@@ -1419,12 +1488,18 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     fp_now = ai_chatlog.fingerprint(rows, lib._kind)
     if chat is None:
         fmt = await _ai_chat.pick_format(cfg)
+        web_on = _ai_search.enabled(cfg)
+        reader_on = web_on and _ai_web.reader_ready(cfg)
+        danbooru_on = bool(cfg.get("danbooru_lookup"))
         meta: dict[str, Any] = {
             "format": fmt, "proposals": {}, "fingerprint": {},
             "tools": ai_tools.toolset(page.get("route") if page else None, scoped=prof["slim"],
-                                      web=_ai_search.enabled(cfg),
-                                      delete=bool(cfg.get("allow_delete"))),
-            "web": _ai_search.enabled(cfg),
+                                      web=web_on,
+                                      delete=bool(cfg.get("allow_delete")),
+                                      vocab=bool(vocab_kinds), reader=reader_on,
+                                      danbooru=danbooru_on),
+            "vocab": sorted(vocab_kinds),
+            "web": web_on, "reader": reader_on, "danbooru": danbooru_on,
             "delete": bool(cfg.get("allow_delete")),
             # Told in the first message's tail when on (_sync_permissions).
             "auto": False,
@@ -1442,7 +1517,9 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     if page:
         lib.use_editor(page.get("editor"))
     lib.allow_delete = bool(cfg.get("allow_delete"))
-    perms = _sync_permissions(meta, cfg)
+    lib.vocab, lib.vocab_kinds = _ai_vocab.lookup, vocab_kinds
+    perms = " ".join(x for x in (_sync_permissions(meta, cfg), _sync_vocab(meta, vocab_kinds),
+                                 _canvas_note(meta, body)) if x)
     meta, since = ai_chatlog.apply_events(meta, body.get("events"))
     changes = ai_chatlog.library_changes(meta.get("fingerprint") or {}, fp_now)
     note = lib.page_note(page)
@@ -1489,6 +1566,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     lib._next_pid = max(pids, default=0)
     lib.earlier_proposals = dict(meta.get("proposals") or {})
     lib.decisions = list(meta.get("decisions") or [])  # what `ask` may not ask again
+    # Links read_result may open: the same list the searches fill.
+    lib.web_urls = meta.setdefault("web_urls", [])
     _adopt_earlier(lib, log, meta)
     proposals: list[dict[str, Any]] = []
     tool_use = {"calls": 0, "salvaged": 0}
@@ -1685,9 +1764,9 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                             steps.append({"tool": tool, "note": label, "ok": True})
                             continue
                         meta["pointed"] = [*pointed, anchors]
-                    if tool in ai_tools.WEB and meta.get("web_ok"):
-                        # Allowed for this chat already: search now.
-                        result(await _web_result(cfg, cargs["query"]))
+                    if tool in ai_tools.WEB and _web_pre_allowed(cfg, meta):
+                        # Allowed for this chat (or always): run it now.
+                        result(await _web_call(cfg, meta, tool, cargs))
                         needs_reply = True
                         steps.append({"tool": tool, "note": label, "ok": True})
                         continue
@@ -2087,7 +2166,7 @@ async def _paused_results(
             if answer["approve"] == "chat":
                 meta["web_ok"] = True
             # Its step line was shown when the turn paused: not again.
-            text = await _web_result(cfg, c["args"]["query"])
+            text = await _web_call(cfg, meta, c["tool"], c["args"])
         elif c["tool"] in ai_tools.ASK:
             # Answered with the buttons, or with the user's next message.
             asked = dict(meta.get("asked") or {})
@@ -2111,11 +2190,35 @@ async def _paused_results(
     return [by_id[i] for i in order], steps
 
 
-async def _web_result(cfg: dict[str, Any], query: str) -> str:
+#: Most result links a chat remembers for read_result.
+MAX_WEB_URLS = 60
+
+
+async def _web_result(cfg: dict[str, Any], query: str,
+                      urls: list[str] | None = None) -> str:
     try:
-        return "web_search: " + await _ai_search.search(cfg, query)
+        return "web_search: " + await _ai_search.search(cfg, query, urls)
     except _ai_client.AIError as e:
         return f"web_search: error: {e.message}"
+
+
+async def _web_call(cfg: dict[str, Any], meta: dict[str, Any], tool: str,
+                    args: dict[str, Any]) -> str:
+    """Run one allowed web tool on the server."""
+    if tool == "read_result":
+        return await _ai_web.read_page(cfg, str(args["url"]))
+    if tool == "danbooru":
+        return await _ai_web.danbooru(str(args["tag"]))
+    urls = meta.setdefault("web_urls", [])
+    out = await _web_result(cfg, str(args["query"]), urls)
+    del urls[:-MAX_WEB_URLS]
+    return out
+
+
+def _web_pre_allowed(cfg: dict[str, Any], meta: dict[str, Any]) -> bool:
+    """Web calls run without a card: allowed for this chat, or the user
+    chose "Don't ask before web calls" in Settings."""
+    return bool(meta.get("web_ok") or cfg.get("web_always_allow"))
 
 
 def _reusable(request: web.Request) -> list[dict[str, Any]]:
@@ -2142,13 +2245,21 @@ def _pack_base(request: web.Request, body: dict[str, Any],
     return ai_pack.bundle_base(bundle, bundles, library)
 
 
+def _canvas(body: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """The canvas variables the manager sent (``canvas``), or None when it
+    sent none (a plan sent back keeps the ones it had)."""
+    raw = body.get("canvas")
+    return raw if isinstance(raw, list) else None
+
+
 def _pack_body(
     body: dict[str, Any], library: list[dict[str, Any]] | None = None,
     base: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]] | web.Response:
     """The plan and built items the manager sends back, checked again."""
     try:
-        plan = ai_pack.compile_plan(body.get("plan"), library=library, base=base)
+        plan = ai_pack.compile_plan(body.get("plan"), library=library, base=base,
+                                    canvas=_canvas(body))
     except ai_pack.PlanError as e:
         return json_error(f"the plan can't be used: {e}", status=400)
     return plan, ai_pack.parse_built(plan, body.get("built"))
@@ -2204,11 +2315,13 @@ async def post_pack_plan(request: web.Request) -> web.Response:
     if isinstance(base, web.Response):
         return base
     previous = body.get("previous") if isinstance(body.get("previous"), dict) else None
+    canvas = _canvas(body) or []
     if turns and previous is not None:
         # The user may have edited the plan by hand: the model's last answer
         # is replayed as the plan they see now.
         try:
-            shown = ai_pack.compile_plan(previous, library=library, base=base)
+            shown = ai_pack.compile_plan(previous, library=library, base=base,
+                                         canvas=canvas)
             turns[-1]["answer"] = ai_pack.plan_answer(shown)
         except ai_pack.PlanError:
             previous = None
@@ -2221,14 +2334,24 @@ async def post_pack_plan(request: web.Request) -> web.Response:
     if turns and isinstance(body.get("image_count"), int) \
             and not isinstance(body.get("image_count"), bool):
         first_images = max(0, min(int(body["image_count"]), 8))
+    kinds = await _vocab_kinds(body)
+    first_text = ai_followup.first_instruction(turns, instruction)
+    loras = ai_vocab.loras_note(_ai_vocab.lookup, kinds,
+                                re.findall(r"[a-z]{3,}", f"{first_text} {sample}".lower()))
     first = ai_pack.plan_prompt(
-        ai_followup.first_instruction(turns, instruction), library_note=lib_note,
+        first_text, library_note=lib_note,
         sample=sample, settings=settings, decisions=[] if turns else decisions,
-        library=library, images=first_images, web=web_on)
+        library=library, images=first_images, web=web_on, loras=loras)
     if base is not None:
         first = ai_pack.base_note(base) + "\n\n" + first
     follow = ai_pack.refine_text(instruction, decisions, settings, body.get("web"),
                                  searched) if turns else instruction
+    canvas_line = ai_pack.canvas_note(ai_pack.canvas_vars(canvas))
+    if canvas_line:
+        if turns:
+            follow += "\n\n" + canvas_line
+        else:
+            first += "\n\n" + canvas_line
     if turns and first_images and not images:
         follow += ("\n\nThe reference images aren't attached again; keep what you took "
                    "from them unless asked otherwise.")
@@ -2242,7 +2365,8 @@ async def post_pack_plan(request: web.Request) -> web.Response:
             partial=True,  # a cut-off plan keeps the items it finished
         )
         plan = ai_pack.compile_plan(answer, library=library, previous=previous,
-                                    decisions=decisions, settings=settings, base=base)
+                                    decisions=decisions, settings=settings, base=base,
+                                    canvas=canvas)
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
     except ai_pack.PlanError as e:
@@ -2405,10 +2529,14 @@ async def post_pack_item(request: web.Request) -> web.Response:
         except ai_pack.PlanError as e:
             return json_error(str(e), status=400)
         return json_ok({**out, "repair": "", "model": cfg["model"]})
+    kinds = await _vocab_kinds(body)
     try:
         req = ai_pack.item_request(plan, key, built, note[:1500], library=library)
     except ai_pack.PlanError as e:
         return json_error(str(e), status=400)
+    vocab_line = ai_pack.item_vocab_note(plan, key, _ai_vocab.lookup, kinds)
+    if vocab_line:
+        req["user"] += "\n\n" + vocab_line
     try:
         answer = await _ai_client.complete_json(cfg, **req)
     except _ai_client.AIError as e:
@@ -2424,6 +2552,10 @@ async def post_pack_item(request: web.Request) -> web.Response:
             f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
             status=502,
         )
+    checked = ai_pack.tag_check_note(plan, out["kind"], out["payload"], _ai_vocab.lookup,
+                                     kinds)
+    if checked:
+        out["warnings"] = [*out["warnings"], checked]
     out["model"] = cfg["model"]
     return json_ok(out)
 

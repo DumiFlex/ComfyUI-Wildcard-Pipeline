@@ -139,6 +139,12 @@ DEFAULTS: dict[str, Any] = {
     # or change these.
     "allow_delete": False,
     "auto_apply": False,
+    # Web tools (Settings › AI assistant › Web search). The Danbooru lookup
+    # is off until the user turns it on; `web_always_allow` skips the Allow
+    # card for web searches, page reads and Danbooru lookups (the user's
+    # call, with a warning in Settings).
+    "danbooru_lookup": False,
+    "web_always_allow": False,
 }
 TOOL_FORMATS = ("auto", "native", "json")
 THINKING = ("auto", "off")
@@ -152,6 +158,20 @@ SEARCH_ENGINES: dict[str, dict[str, Any]] = {
               "needs_key": True},
     "tavily": {"label": "Tavily", "base_url": "https://api.tavily.com", "needs_key": True},
     "kagi": {"label": "Kagi", "base_url": "https://kagi.com", "needs_key": True},
+}
+
+#: How "read this result" fetches a page from an approved search. Built in
+#: is a plain HTTP fetch kept to its text (no browser, public addresses
+#: only); Crawl4AI and Firecrawl render pages in a browser on a server the
+#: user runs (Firecrawl also has a hosted API). Their key, when one is
+#: needed, is bound to their host like the search keys.
+READERS: dict[str, dict[str, Any]] = {
+    "builtin": {"label": "Built in (page text)", "base_url": "", "needs_key": False,
+                "needs_url": False},
+    "crawl4ai": {"label": "Crawl4AI (your server)", "base_url": "", "needs_key": False,
+                 "needs_url": True},
+    "firecrawl": {"label": "Firecrawl", "base_url": "https://api.firecrawl.dev",
+                  "needs_key": True, "needs_url": False},
 }
 
 _lock = threading.Lock()
@@ -290,6 +310,9 @@ def _normalize(raw: Any) -> dict[str, Any]:
         "auto_apply": src.get("auto_apply") is True,
         "providers": slots,
         "search": _normalize_search(src.get("search")),
+        "reader": _normalize_reader(src.get("reader")),
+        "danbooru_lookup": src.get("danbooru_lookup") is True,
+        "web_always_allow": src.get("web_always_allow") is True,
     }
 
 
@@ -312,6 +335,31 @@ def _normalize_search(raw: Any) -> dict[str, Any]:
     return {"engine": engine, "base_url": url, "keys": keys}
 
 
+def _normalize_reader(raw: Any) -> dict[str, Any]:
+    src = raw if isinstance(raw, dict) else {}
+    engine = src.get("engine") if src.get("engine") in (*READERS, "off") else "builtin"
+    url = src.get("base_url") if isinstance(src.get("base_url"), str) else ""
+    try:
+        url = check_base_url(url)
+    except ConfigError:
+        url = ""
+    keys: dict[str, dict[str, str]] = {}
+    raw_keys = src.get("keys") if isinstance(src.get("keys"), dict) else {}
+    for eid in READERS:
+        k = raw_keys.get(eid) if isinstance(raw_keys.get(eid), dict) else {}
+        key = k.get("api_key") if isinstance(k.get("api_key"), str) else ""
+        org = k.get("key_origin") if isinstance(k.get("key_origin"), str) else ""
+        if key.strip():
+            keys[eid] = {"api_key": key.strip(), "key_origin": org}
+    return {"engine": engine, "base_url": url, "keys": keys}
+
+
+def _reader_url(reader: dict[str, Any], engine: str) -> str:
+    if engine not in READERS:
+        return ""
+    return reader["base_url"] or READERS[engine]["base_url"]
+
+
 def _search_url(search: dict[str, Any], engine: str) -> str:
     return search["base_url"] if engine == "searxng" else SEARCH_ENGINES[engine]["base_url"]
 
@@ -331,6 +379,8 @@ def _active(cfg: dict[str, Any]) -> dict[str, Any]:
         "thinking": cfg["thinking"],
         "allow_delete": cfg["allow_delete"],
         "auto_apply": cfg["auto_apply"],
+        "danbooru_lookup": cfg["danbooru_lookup"],
+        "web_always_allow": cfg["web_always_allow"],
         "embed_model": slot["embed_model"],
         "embed_base_url": slot["embed_base_url"],
         "embed_api": slot["embed_api"],
@@ -477,6 +527,16 @@ def load_effective() -> dict[str, Any]:
             "api_key": key.get("api_key", "") if url and key.get("key_origin") == origin(url)
             else "",
         }
+    with _lock:
+        reader = _read()["reader"]
+    rengine = reader["engine"]
+    rurl = _reader_url(reader, rengine)
+    rkey = reader["keys"].get(rengine) or {}
+    out["reader"] = {
+        "engine": rengine, "base_url": rurl,
+        "api_key": rkey.get("api_key", "") if rurl and rkey.get("key_origin") == origin(rurl)
+        else "",
+    }
     return out
 
 
@@ -522,6 +582,15 @@ def public_view() -> dict[str, Any]:
         if k.get("key_origin") and k["key_origin"] == origin(_search_url(search, eid)))
     view["search_engines"] = {eid: {"label": e["label"], "needs_key": e["needs_key"]}
                               for eid, e in SEARCH_ENGINES.items()}
+    reader = stored["reader"]
+    view["reader_engine"] = reader["engine"]
+    view["reader_url"] = reader["base_url"]
+    view["reader_keys_saved"] = sorted(
+        eid for eid, k in reader["keys"].items()
+        if k.get("key_origin") and k["key_origin"] == origin(_reader_url(reader, eid)))
+    view["reader_engines"] = {eid: {"label": e["label"], "needs_key": e["needs_key"],
+                                    "needs_url": e["needs_url"], "base_url": e["base_url"]}
+                              for eid, e in READERS.items()}
     view["presets"] = {
         pid: {k: p[k] for k in ("label", "api", "local", "needs_key", "base_url", "embeds",
                                 "embed_model", "embed_note")}
@@ -543,7 +612,8 @@ def update(patch: dict[str, Any]) -> dict[str, Any]:
         raise ConfigError("body must be an object")
     with _lock:
         cfg = _read()
-        for flag in ("enabled", "allow_delete", "auto_apply"):
+        for flag in ("enabled", "allow_delete", "auto_apply", "danbooru_lookup",
+                     "web_always_allow"):
             if flag in patch:
                 if not isinstance(patch[flag], bool):
                     raise ConfigError(f"{flag} must be true or false")
@@ -626,6 +696,7 @@ def update(patch: dict[str, Any]) -> dict[str, Any]:
             where = slot["base_url"] or PRESETS[cfg["provider"]]["base_url"]
             slot["key_origin"] = origin(where) if key else ""
         _update_search(cfg["search"], patch)
+        _update_reader(cfg["reader"], patch)
         _write(_normalize(cfg))
     return public_view()
 
@@ -654,3 +725,33 @@ def _update_search(search: dict[str, Any], patch: dict[str, Any]) -> None:
                                       "key_origin": origin(_search_url(search, engine))}
         else:
             search["keys"].pop(engine, None)
+
+
+def _update_reader(reader: dict[str, Any], patch: dict[str, Any]) -> None:
+    if "reader_engine" in patch:
+        engine = patch["reader_engine"]
+        if engine != "off" and engine not in READERS:
+            raise ConfigError(f"unknown page reader {engine!r}")
+        if engine != reader["engine"]:
+            # Each reader has its own address; a Crawl4AI address is no
+            # Firecrawl server.
+            reader["base_url"] = ""
+        reader["engine"] = engine
+    if "reader_url" in patch:
+        if not isinstance(patch["reader_url"], str):
+            raise ConfigError("reader_url must be a string")
+        reader["base_url"] = check_base_url(patch["reader_url"])
+    if "reader_key" in patch:
+        engine = reader["engine"]
+        if engine not in ("crawl4ai", "firecrawl"):
+            raise ConfigError("pick Crawl4AI or Firecrawl first")
+        key = patch["reader_key"]
+        if key is None:
+            key = ""
+        if not isinstance(key, str) or len(key.strip()) > 512:
+            raise ConfigError("reader_key must be a string")
+        if key.strip():
+            reader["keys"][engine] = {"api_key": key.strip(),
+                                      "key_origin": origin(_reader_url(reader, engine))}
+        else:
+            reader["keys"].pop(engine, None)

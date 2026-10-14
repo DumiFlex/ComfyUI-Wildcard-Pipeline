@@ -37,6 +37,7 @@ _SOURCE_LABEL = {
     "model": "WP Model Info",
     "loop": "WP Context Loop",
     "input": "run-time input",
+    "injector": "WP Context Injector on the canvas",
 }
 #: What the WP Context Loop sets on every iteration (internal by default).
 LOOP_VARS = {
@@ -103,6 +104,7 @@ def derivation_targets(payload: dict[str, Any]) -> list[str]:
 
 def build_catalog(
     modules: list[dict[str, Any]], *, inputs: list[dict[str, Any]] | None = None,
+    canvas: list[dict[str, Any]] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Every variable the library sets → ``{name, sources, values, tags, axes}``.
 
@@ -110,7 +112,9 @@ def build_catalog(
     compares against); ``tags`` its tags; ``axes`` its "accepts" tag groups,
     readable as ``$name.AXIS``. The WP Model Info and WP Context Loop
     variables are always present; ``inputs`` (``{var, about}``) are run-time
-    inputs a request declares, set by a WP Context Injector.
+    inputs a request declares, set by a WP Context Injector. ``canvas``
+    (``{name, source, about}``, source injector / loop / model) are the
+    variables the user's open canvas sets, e.g. a renamed Loop variable.
     """
     out: dict[str, dict[str, Any]] = {}
     for m in modules:
@@ -151,6 +155,10 @@ def build_catalog(
     for i in inputs or []:
         if isinstance(i, dict) and isinstance(i.get("var"), str):
             _add(out, i["var"], "input", "", about=str(i.get("about") or "")[:MAX_ABOUT])
+    for c in canvas or []:
+        if isinstance(c, dict) and isinstance(c.get("name"), str) \
+                and c.get("source") in ("injector", "loop", "model"):
+            _add(out, c["name"], c["source"], "", about=str(c.get("about") or "")[:MAX_ABOUT])
     return out
 
 

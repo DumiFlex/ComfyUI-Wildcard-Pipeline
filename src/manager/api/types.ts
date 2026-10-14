@@ -875,6 +875,18 @@ export interface AiConfig {
   /** Engines with a key saved for their own address. Never the keys. */
   search_keys_saved: AiSearchEngineId[];
   search_engines: Record<AiSearchEngineId, { label: string; needs_key: boolean }>;
+  /** How read_result fetches a page from an allowed search ("off" stops it). */
+  reader_engine: AiReaderId | "off";
+  /** The Crawl4AI / Firecrawl address ("" = Firecrawl's hosted API). */
+  reader_url: string;
+  reader_keys_saved: AiReaderId[];
+  reader_engines: Record<AiReaderId, {
+    label: string; needs_key: boolean; needs_url: boolean; base_url: string;
+  }>;
+  /** The Danbooru tag lookup (wiki, aliases, related tags). Off by default. */
+  danbooru_lookup: boolean;
+  /** Web searches, page reads and Danbooru lookups run without asking. */
+  web_always_allow: boolean;
   /** The chat may propose deleting items, categories and tags (each card
    *  still needs its own confirm). Off by default. */
   allow_delete: boolean;
@@ -884,6 +896,7 @@ export interface AiConfig {
 }
 
 export type AiSearchEngineId = "searxng" | "brave" | "tavily" | "kagi";
+export type AiReaderId = "builtin" | "crawl4ai" | "firecrawl";
 
 export type AiModelSize = "small" | "medium" | "large";
 export type AiToolFormat = "auto" | "native" | "json";
@@ -909,6 +922,12 @@ export interface AiConfigPatch {
   search_url?: string;
   /** Write-only, for the chosen engine. `""` removes it. */
   search_key?: string;
+  reader_engine?: AiReaderId | "off";
+  reader_url?: string;
+  /** Write-only, for the chosen page reader. `""` removes it. */
+  reader_key?: string;
+  danbooru_lookup?: boolean;
+  web_always_allow?: boolean;
   allow_delete?: boolean;
   auto_apply?: boolean;
 }
@@ -1302,6 +1321,8 @@ export type AiPendingCall =
   | { id: string; tool: "use_panel"; label: string;
       args: { id: string; type: string; panel: string; request: string } }
   | { id: string; tool: "web_search"; label: string; args: { query: string } }
+  | { id: string; tool: "read_result"; label: string; args: { url: string } }
+  | { id: string; tool: "danbooru"; label: string; args: { tag: string } }
   | { id: string; tool: "ask"; label: string;
       args: { questions: AiAskQuestion[]; settled?: string[] } };
 
@@ -1608,6 +1629,14 @@ export interface AiPackSettings {
   rating: "auto" | "safe" | "nsfw";
   /** Options per wildcard, 0 for the planner's choice. */
   count: number;
+  /** family: quality and negative tags per $model_variant (WP Model Info). */
+  model: "any" | "family";
+}
+
+export interface AiPackRun {
+  mode: "single" | "story" | "sweep";
+  /** Frames of the Loop a story runs over (2–12); 0 otherwise. */
+  frames: number;
 }
 
 export interface AiPackQuestion {
@@ -1649,6 +1678,10 @@ export interface AiPackPlan {
   research: string[];
   decisions: AiPackDecision[];
   settings: AiPackSettings;
+  /** How the pack runs, read from the request: single images, a story a
+   *  WP Context Loop plays over `frames` frames ($beat from $iteration),
+   *  or a sweep sheet. */
+  run?: AiPackRun;
   inputs: AiPackInput[];
   sections: AiPackSection[];
   items: AiPackItem[];
@@ -1656,6 +1689,16 @@ export interface AiPackPlan {
   warnings: string[];
   /** "Extend with AI": the bundle the plan adds to. */
   base?: { id: string; name: string; nested: boolean; sets: string[] };
+  /** Variables the user's open canvas sets (Injector rows, the Loop). */
+  canvas?: AiCanvasVar[];
+}
+
+/** A variable an open ComfyUI canvas sets at run time, as the canvas tab
+ *  reports it to the manager (`utils/canvas-facts.ts`). */
+export interface AiCanvasVar {
+  name: string;
+  source: "injector" | "loop" | "model";
+  about?: string;
 }
 
 export interface AiPackPlanRequest extends AiConversational {
@@ -1680,10 +1723,16 @@ export interface AiPackPlanRequest extends AiConversational {
 }
 
 /** A change a finding can make to the plan without the model. */
-export type AiPackPatch =
+export type AiPackPatch = (
   | { op: "edit"; key: string; set: Partial<Omit<AiPackItem, "key" | "id">> }
   | { op: "add"; item: Partial<AiPackItem> & { kind: AiPackKind } }
-  | { op: "remove"; key: string };
+  | { op: "remove"; key: string }
+  /** A plan-wide field, e.g. pointing a stray anchor at a set variable. */
+  | { op: "plan"; set: Partial<Pick<AiPackPlan, "anchor" | "inputs" | "run">> }
+) & {
+  /** The button's words when the server picked them ("Use $scene"). */
+  label?: string;
+};
 
 /** One thing the plan review found. `fix`: it would break the pack or
  *  leave a rule doing nothing; `tip`: it would make prompts more coherent. */

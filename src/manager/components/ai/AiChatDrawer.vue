@@ -47,11 +47,12 @@ import { useAiChat, type ChatAssistantEntry, type SearchApproval } from "../../c
 import { clearPointer, EDIT_ROUTES } from "../../composables/useAiActions";
 import { useAiConfig } from "../../composables/useAiConfig";
 import { useAiChatWidth } from "../../composables/useAiChatWidth";
-import type { AiCardFix, AiChatPage, AiChatProposal, AiChatStep, AiPendingCall, AiTestCard as TestCard } from "../../api/types";
+import type { AiCardFix, AiChatPage, AiChatProposal, AiChatStep, AiTestCard as TestCard } from "../../api/types";
 import { currentPageNote, editorForPage } from "../../composables/useOpenEditor";
 import { usePackBuilder } from "../../composables/usePackBuilder";
 import { useCategoryStore } from "../../stores/categoryStore";
 import { cardMeta, cardOptions, cardView, draftRoute, otherPreview, type CardOption } from "../../composables/aiCards";
+import { isWebCall, webCallCard, type WebCall } from "../../utils/web-calls";
 
 const PREVIEW_LINES = 6;
 const SUGGESTIONS = [
@@ -392,10 +393,8 @@ chat.attach({
 onBeforeUnmount(() => chat.attach(null));
 watch(() => route.fullPath, () => clearPointer());
 
-type SearchCall = Extract<AiPendingCall, { tool: "web_search" }>;
-
-function searches(entry: ChatAssistantEntry): SearchCall[] {
-  return (entry.result.pending ?? []).filter((c): c is SearchCall => c.tool === "web_search");
+function searches(entry: ChatAssistantEntry): WebCall[] {
+  return (entry.result.pending ?? []).filter(isWebCall);
 }
 
 const ANSWERED: Record<SearchApproval, string> = {
@@ -785,10 +784,10 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
             data-test="ai-chat-search"
           >
             <div class="wp-ai-chat__card-head">
-              <span class="wp-ai-chat__card-title"><i class="pi pi-globe" aria-hidden="true" /> Search the web?</span>
-              <span class="wp-ai-chat__card-summary">Only this text goes to your search engine. Results come back as short snippets.</span>
+              <span class="wp-ai-chat__card-title"><i :class="['pi', webCallCard(c).icon]" aria-hidden="true" /> {{ webCallCard(c).title }}</span>
+              <span class="wp-ai-chat__card-summary">{{ webCallCard(c).summary }}</span>
             </div>
-            <p class="wp-ai-chat__query" data-test="ai-chat-search-query">{{ c.args.query }}</p>
+            <p class="wp-ai-chat__query" data-test="ai-chat-search-query">{{ webCallCard(c).text }}</p>
             <div class="wp-ai-chat__actions">
               <template v-if="chat.asking.value.has(c.id)">
                 <Button variant="ghost" size="sm" data-test="ai-chat-search-deny" @click="chat.answerSearch(c.id, 'deny')">Deny</Button>

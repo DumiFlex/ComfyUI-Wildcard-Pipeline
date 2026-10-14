@@ -48,7 +48,7 @@ const controls = [
     </DocSection>
 
     <DocSection title="The flow with WP Context Loop">
-      <DocFlow
+      <DocFlow figure="wp-seed-list-flow"
         :stages="[
           { icon: 'pi pi-replay', name: 'WP Context Loop', sub: 'N prompts', tone: 'node' },
           { icon: 'pi pi-clone', name: 'WP Seed List', sub: 'N seeds', tone: 'node' },

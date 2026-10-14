@@ -58,7 +58,7 @@ const rowOptions = [
     </DocSection>
 
     <DocSection title="The flow">
-      <DocFlow
+      <DocFlow figure="wp-context-injector-flow"
         :stages="[
           { icon: 'pi pi-sign-in', name: 'External node', sub: 'any output', tone: 'neutral' },
           { icon: 'pi pi-bolt', name: 'WP Context Injector', sub: 'names it $var', tone: 'node' },

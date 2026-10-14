@@ -21,6 +21,8 @@ function itemName(key: string): string {
 function patchLabel(f: AiPackFinding): string {
   const p = f.patch;
   if (!p) return "";
+  if (p.label) return p.label;
+  if (p.op === "plan") return "Apply";
   if (p.op === "add") return `Add ${p.item.kind === "template" ? "a template" : "it"}`;
   if (p.op === "remove") return "Remove it";
   return p.set.kind === "library" ? "Use yours" : "Apply";

@@ -46,7 +46,7 @@ const overridable = [
         the base. Think of it as a keyframe — most of the run follows the base, and you pin only the
         spots that need to differ.
       </p>
-      <DocFlow
+      <DocFlow figure="iteration-overrides-flow"
         :stages="[
           { icon: 'pi pi-sitemap', name: 'Base settings', sub: 'apply to all frames', tone: 'node' },
           { icon: 'pi pi-images', name: 'Frame #k override', sub: 'patches just frame k', tone: 'neutral' },

@@ -63,7 +63,7 @@ export const ITEM_TIME_LIMIT_MS = 4 * 60 * 1000;
 const RECHECK_MS = 400;
 export const DEFAULT_SETTINGS: AiPackSettings = {
   library: "reuse", negatives: "auto", structure: "sections", style: "auto", rating: "auto",
-  count: 0,
+  count: 0, model: "any",
 };
 export const DECIDE_ANSWER = "Your call (decide for me)";
 /** Mirrors `engine/ai/pack.py:build_order`: vocabularies (wildcards with
@@ -115,6 +115,7 @@ export function applyPatch(plan: AiPackPlan, patch: AiPackPatch): AiPackPlan {
   if (patch.op === "remove") {
     return { ...plan, items: plan.items.filter((i) => i.key !== patch.key) };
   }
+  if (patch.op === "plan") return { ...plan, ...patch.set };
   if (patch.op === "edit") {
     return {
       ...plan,
@@ -549,8 +550,8 @@ function addItem(kind: AiPackKind, section = ""): string {
   return item.key;
 }
 
-/** Edit plan-wide fields (title, summary, anchor, rating, style). */
-function editPlan(set: Partial<Pick<AiPackPlan, "title" | "summary" | "anchor" | "rating" | "style">>): void {
+/** Edit plan-wide fields (title, summary, anchor, rating, style, how it runs). */
+function editPlan(set: Partial<Pick<AiPackPlan, "title" | "summary" | "anchor" | "rating" | "style" | "run">>): void {
   const p = draft.value;
   if (p) editDraft({ ...p, ...set });
 }

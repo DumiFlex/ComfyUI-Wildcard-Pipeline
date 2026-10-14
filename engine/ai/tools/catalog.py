@@ -108,6 +108,20 @@ TOOLS: list[Tool] = [
         ("core",),
     ),
     Tool(
+        "lookup", "read",
+        "Look up the user's own vocabulary: Danbooru tags from their tag list (with post "
+        "counts), or their LoRA and embedding files. Check tags before writing tag-style "
+        "options, and name real LoRAs instead of guessing.",
+        '{"kind": "tags", "loras" or "embeddings", "query": a start of a name, or for tags '
+        'several tags joined by ", " to check each}: tags list the most used ones that '
+        "start with the query (or say which of yours aren't real tags); loras / embeddings "
+        "list the user's files that match.",
+        obj({"kind": s("tags, loras or embeddings"),
+             "query": s("a word or start of a name; for tags, several tags joined by "
+                        "\", \" checks each one")}, ("kind", "query")),
+        ("vocab",),
+    ),
+    Tool(
         "run_test", "read",
         "Run a stack of modules and bundles on the engine over many seeds: each variable's "
         "top values, options never picked, warnings and sample prompts. Use it to check a "
@@ -585,6 +599,26 @@ TOOLS: list[Tool] = [
         obj({"query": s("a short search")}, ("query",)),
         ("web",),
     ),
+    Tool(
+        "read_result", "web",
+        "Read the text of one page from your web search results when its snippet isn't "
+        "enough (a character's outfit, a model's recommended tags). The user allows it "
+        "first; you get the page's text, cut to a few thousand characters.",
+        '{"url": a link from your web_search results in this chat}: reads that page\'s '
+        "text after the user allows it. Only links your searches returned.",
+        obj({"url": s("a result link from web_search")}, ("url",)),
+        ("web",),
+    ),
+    Tool(
+        "danbooru", "web",
+        "Look one tag up on Danbooru: post count, category, alias, what it implies, its "
+        "wiki text and the tags used with it most. Use it to learn what a tag means or "
+        "which tags go with a character or outfit; for spellings, lookup is enough.",
+        '{"tag": one Danbooru tag, e.g. "hatsune_miku"}: the user allows it first; returns '
+        "the tag's wiki excerpt, aliases, implications and related tags.",
+        obj({"tag": s("one tag")}, ("tag",)),
+        ("danbooru",),
+    ),
 ]
 
 BY_NAME: dict[str, Tool] = {t.name: t for t in TOOLS}
@@ -615,25 +649,49 @@ DEFAULT_GROUPS = ("wildcards", "constraints", "derivations", "pack")
 #: Offered only while Settings › AI assistant › "Let the assistant delete
 #: items" is on (`sync_delete`).
 DELETE = tuple(t.name for t in TOOLS if "delete" in t.groups)
+#: Offered only while a LoRA, embedding or tag autocomplete source is on
+#: and has data (`engine/ai/vocab.py`).
+VOCAB = tuple(t.name for t in TOOLS if "vocab" in t.groups)
+#: Offered while web search is set up (web_search; read_result also needs
+#: a page reader) and while the Danbooru lookup is on.
+WEB_SEARCH = ("web_search",)
+READER = ("read_result",)
+DANBOORU = tuple(t.name for t in TOOLS if "danbooru" in t.groups)
+
+
+def web_allowed(name: str, *, web: bool, reader: bool, danbooru: bool) -> bool:
+    """Whether a kind "web" tool is offered with these settings."""
+    if name in READER:
+        return web and reader
+    if name in DANBOORU:
+        return danbooru
+    return web
 
 
 def toolset(route: str | None, *, scoped: bool, web: bool = False,
-            delete: bool = False) -> list[str]:
+            delete: bool = False, vocab: bool = False, reader: bool = False,
+            danbooru: bool = False) -> list[str]:
     """Tool names a new chat offers. Unscoped (medium and large models):
     all of them. Scoped (small models): the core tools, the page's groups
     and `more_tools`, in catalog order so the list is stable. `web`: web
     search is set up (Settings › AI assistant), so `web_search` is offered.
-    `delete`: deleting is allowed, so `delete_items` is offered."""
+    `delete`: deleting is allowed, so `delete_items` is offered. `vocab`: a
+    lookup source is on, so `lookup` is offered. `reader`: a page reader is
+    set (with `web`, `read_result`); `danbooru`: the Danbooru lookup is on."""
+    def on(t: Tool) -> bool:
+        return t.kind != "web" or web_allowed(t.name, web=web, reader=reader,
+                                              danbooru=danbooru)
     if not scoped:
-        return [t.name for t in TOOLS if t.name != "more_tools" and (web or t.kind != "web")
-                and (delete or t.name not in DELETE)]
+        return [t.name for t in TOOLS if t.name != "more_tools" and on(t)
+                and (delete or t.name not in DELETE) and (vocab or t.name not in VOCAB)]
     key = str(route or "")
     for suffix in ("-new", "-edit"):
         if key.endswith(suffix):
             key = key[: -len(suffix)]
     groups = {"core", *PAGE_GROUPS.get(key, DEFAULT_GROUPS), *(("web",) if web else ()),
-              *(("delete",) if delete else ())}
-    names = [t.name for t in TOOLS if groups.intersection(t.groups)]
+              *(("delete",) if delete else ()), *(("vocab",) if vocab else ())}
+    groups |= {"danbooru"} if danbooru else set()
+    names = [t.name for t in TOOLS if groups.intersection(t.groups) and on(t)]
     return [*names, "more_tools"]
 
 

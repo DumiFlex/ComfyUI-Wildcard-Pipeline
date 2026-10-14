@@ -54,7 +54,7 @@ const reachModes = [
     </DocSection>
 
     <DocSection title="The flow">
-      <DocFlow
+      <DocFlow figure="constraint-flow"
         :stages="[
           { icon: 'pi pi-sparkles', name: 'Source wildcard', sub: 'its pick', tone: 'wildcard' },
           { icon: 'pi pi-filter', name: 'Constraint', sub: 'reweights', tone: 'constraint' },

@@ -288,6 +288,10 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // frame-click zoom (lazy picker chunk); the branch sat at 476,239 bytes.
 // RAISED 468 -> 472 KB on 2026-10-14 for the Split loading mark in the canvas
 // modals (Load template, Push to library); Dumi asked for it everywhere.
+// The same 472 KB also covers the canvas-facts answer (the
+// manager's AI asks an open canvas which variables its Injector, Loop and
+// Model Info nodes set): ~0.6 KB in boot; with both, the total sits ~770
+// bytes under the gate. Same "guide, not a cap" rule as above.
 const TOTAL_LIMIT = 472 * 1024;     // 472 KB
 
 function gzipSize(path) {

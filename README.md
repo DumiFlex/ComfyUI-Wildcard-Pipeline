@@ -147,7 +147,12 @@ Open it from the ComfyUI sidebar. It's where your modules live between workflows
   reuses wildcards you already have, reviews the plan before building, and can
   start from a sample prompt you like. After a wildcard pack import, **Tag and
   connect with AI** has the chat tag the new lists, link them with constraints and
-  bundle them. If an
+  bundle them. The assistant knows how the nodes work (the Loop, Injector,
+  Model Info) and, while their autocomplete is on, your Danbooru tag list,
+  LoRAs and embeddings; the pack builder reads stories over a Loop,
+  sweep sheets and LoRA inputs from your description, and can adapt to the
+  model family. Optional web search, page reading and a
+  Danbooru tag lookup each ask before anything leaves your PC. If an
   answer is close, type a follow-up and press **Refine** to revise it instead of
   starting over. You review every change first, and nothing is saved until you
   press Save.
@@ -181,7 +186,8 @@ Everything runs locally. The extension only goes online to check for updates
 (you can turn this off in Settings), when you open the Community page, or when
 you choose to download the optional tag list for autocomplete. The optional AI
 assistant is off until you turn it on, and then talks only to the model server
-you choose (a local one keeps everything on your PC). Details are in
+you choose (a local one keeps everything on your PC), plus the search engine,
+page reader or Danbooru lookup if you set those up. Details are in
 [docs/network-access.md](docs/network-access.md).
 
 ## Contributing

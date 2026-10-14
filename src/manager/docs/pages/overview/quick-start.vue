@@ -81,7 +81,7 @@ function createStarterWildcard(): void {
       <DocImage
         src="images/docs/introduction-graph.png"
         ratio="16 / 6"
-        caption="The finished four-node chain on the canvas. WP Context carries one Starter subject row, output wires into WP Prompt Assembler (template 'a $subject', resolved preview 'a cat'), prompt feeds CLIP Text Encode (Prompt), CONDITIONING wires onward into KSampler. Press Queue and each run rolls a fresh subject through the same skeleton."
+        caption="The finished four-node chain on the canvas. WP Context carries one Starter subject row, output wires into WP Prompt Assembler (template 'picture of a $subject', resolved preview 'picture of a cat'), prompt feeds CLIP Text Encode (Prompt), CONDITIONING wires onward into KSampler. Press Queue and each run rolls a fresh subject through the same skeleton."
       />
     </DocSection>
 

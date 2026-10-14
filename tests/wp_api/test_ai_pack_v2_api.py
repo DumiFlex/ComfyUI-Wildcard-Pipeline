@@ -104,7 +104,7 @@ async def test_web_search_needs_the_setting(wp_client, fake_llm, monkeypatch):
     resp = await wp_client.post("/wp/api/ai/pack/search", json={"queries": ["x"]})
     assert resp.status == 400
 
-    async def fake_search(cfg, query):
+    async def fake_search(cfg, query, urls=None):
         return f'Web results for "{query}": [1] Fur coats: https://x.test'
     monkeypatch.setattr("wp_api._ai_search.enabled", lambda cfg: True)
     monkeypatch.setattr("wp_api._ai_search.search", fake_search)

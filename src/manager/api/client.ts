@@ -1,3 +1,4 @@
+import { aiRequestContext } from "../utils/ai-context";
 import type { CommitOk, CommitPayload } from "../import-export/commit";
 import { endAiRequest, startAiRequest, watchesProgress } from "./ai-progress";
 import type { WildcardFilesResult } from "../import-export/wildcard-files";
@@ -527,19 +528,19 @@ export const api = {
         method: "POST", body: JSON.stringify(body), signal,
       });
     },
-    chat(body: AiChatRequest | AiChatResume | AiChatRetry, signal?: AbortSignal) {
+    async chat(body: AiChatRequest | AiChatResume | AiChatRetry, signal?: AbortSignal) {
       return request<AiChatResult>("/wp/api/ai/chat", {
-        method: "POST", body: JSON.stringify(body), signal,
+        method: "POST", body: JSON.stringify({ ...(await aiRequestContext()), ...body }), signal,
       });
     },
     /** The chat turn streamed: `onEvent` gets each event while the model
      *  works; resolves with the same result as `chat`. */
-    chatStream(
+    async chatStream(
       body: AiChatRequest | AiChatResume | AiChatRetry,
       onEvent: (event: AiChatStreamEvent) => void,
       signal?: AbortSignal,
     ) {
-      return streamChat({ ...body, stream: true }, onEvent, signal);
+      return streamChat({ ...(await aiRequestContext()), ...body, stream: true }, onEvent, signal);
     },
     /** Whether the chosen model sees images (null: the server didn't say). */
     vision() {
@@ -569,17 +570,17 @@ export const api = {
         `/wp/api/ai/chats/${encodeURIComponent(id)}/compact`, { method: "POST" },
       );
     },
-    packPlan(body: AiPackPlanRequest, signal?: AbortSignal) {
+    async packPlan(body: AiPackPlanRequest, signal?: AbortSignal) {
       return request<AiPackPlanResult>("/wp/api/ai/pack/plan", {
-        method: "POST", body: JSON.stringify(body), signal,
+        method: "POST", body: JSON.stringify({ ...(await aiRequestContext()), ...body }), signal,
       });
     },
-    packItem(
+    async packItem(
       body: { plan: AiPackPlan; built: AiPackBuilt; key: string; note?: string },
       signal?: AbortSignal,
     ) {
       return request<AiPackItemResult>("/wp/api/ai/pack/item", {
-        method: "POST", body: JSON.stringify(body), signal,
+        method: "POST", body: JSON.stringify({ ...(await aiRequestContext()), ...body }), signal,
       });
     },
     /** Group a bundle's children into sub-bundles (runs of neighbours). */
@@ -591,9 +592,9 @@ export const api = {
         method: "POST", body: JSON.stringify(body), signal,
       });
     },
-    packChange(body: { plan: AiPackPlan; key?: string; instruction: string }, signal?: AbortSignal) {
+    async packChange(body: { plan: AiPackPlan; key?: string; instruction: string }, signal?: AbortSignal) {
       return request<AiPackChangeResult>("/wp/api/ai/pack/change", {
-        method: "POST", body: JSON.stringify(body), signal,
+        method: "POST", body: JSON.stringify({ ...(await aiRequestContext()), ...body }), signal,
       });
     },
     packSearch(body: { queries: string[] }, signal?: AbortSignal) {
@@ -601,14 +602,14 @@ export const api = {
         method: "POST", body: JSON.stringify(body), signal,
       });
     },
-    packReview(body: { plan: AiPackPlan; ai?: boolean; request?: string }, signal?: AbortSignal) {
+    async packReview(body: { plan: AiPackPlan; ai?: boolean; request?: string }, signal?: AbortSignal) {
       return request<AiPackReview>("/wp/api/ai/pack/review", {
-        method: "POST", body: JSON.stringify(body), signal,
+        method: "POST", body: JSON.stringify({ ...(await aiRequestContext()), ...body }), signal,
       });
     },
-    packCheck(body: { plan: AiPackPlan; built: AiPackBuilt }, signal?: AbortSignal) {
+    async packCheck(body: { plan: AiPackPlan; built: AiPackBuilt }, signal?: AbortSignal) {
       return request<AiPackCheck>("/wp/api/ai/pack/check", {
-        method: "POST", body: JSON.stringify(body), signal,
+        method: "POST", body: JSON.stringify({ ...(await aiRequestContext()), ...body }), signal,
       });
     },
     packInstall(body: { plan: AiPackPlan; built: AiPackBuilt }) {

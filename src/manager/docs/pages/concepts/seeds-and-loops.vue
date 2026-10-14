@@ -90,7 +90,7 @@ const strategies = [
     </DocSection>
 
     <DocSection title="The flow">
-      <DocFlow
+      <DocFlow figure="seeds-and-loops-flow"
         :stages="[
           { icon: 'pi pi-replay', name: 'WP Context Loop', sub: 'emits N', tone: 'node' },
           { icon: 'pi pi-sitemap', name: 'WP Context', sub: 'fresh roll each pass', tone: 'node' },
@@ -113,7 +113,7 @@ const strategies = [
         The cleanest fix is to also emit a list of seeds. Drop a <b>WP Seed List</b> between the
         loop and your sampler:
       </p>
-      <DocFlow
+      <DocFlow figure="seeds-and-loops-flow-2"
         :stages="[
           { icon: 'pi pi-replay', name: 'WP Context Loop', sub: 'N prompts', tone: 'node' },
           { icon: 'pi pi-clone', name: 'WP Seed List', sub: 'N seeds', tone: 'node' },
