@@ -107,7 +107,7 @@ async def test_chat_offers_lookup_and_hears_the_canvas(wp_client, fake_llm, voca
         "canvas": [{"name": "lora_trigger", "source": "injector"}]})
     assert resp.status == 200, await resp.text()
     body = await resp.json()
-    assert [s["tool"] for s in body["steps"]] == ["lookup"]
+    assert [s["tool"] for s in body["steps"] if not s.get("say")] == ["lookup"]
     first, second = fake_llm.seen[-2:]
     system = first["body"]["messages"][0]["content"]
     assert "- lookup " in system and "WP Context Loop" in system
@@ -116,7 +116,7 @@ async def test_chat_offers_lookup_and_hears_the_canvas(wp_client, fake_llm, voca
     # The next message with lookups off takes the tool away, once.
     fake_llm.chat_steps.append({"message": "ok", "calls": []})
     resp = await wp_client.post("/wp/api/ai/chat", json={
-        "message": "thanks", "chat_id": body["chat_id"], "vocab": {},
+        "message": "and these?", "chat_id": body["chat_id"], "vocab": {},
         "canvas": [{"name": "lora_trigger", "source": "injector"}]})
     last = fake_llm.seen[-1]["body"]["messages"]
     assert "- lookup " not in last[0]["content"] or "lookup is gone" in last[-1]["content"]
