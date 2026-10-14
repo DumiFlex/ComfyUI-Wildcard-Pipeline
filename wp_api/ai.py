@@ -18,10 +18,13 @@
                                     with tools and proposes changes; the
                                     server keeps the chat (`ai_chats`)
     POST /wp/api/ai/pack/plan       pack builder: an outline from a request
+    POST /wp/api/ai/pack/change     pack builder: rewrite or add one plan item
+    POST /wp/api/ai/pack/search     pack builder: run web searches the user allowed
     POST /wp/api/ai/pack/review     check a plan against the guide (+ model review)
     POST /wp/api/ai/pack/item       build one planned item (not saved)
     POST /wp/api/ai/pack/check      run the built pack on the engine
     POST /wp/api/ai/pack/install    install the pack as one undoable import
+    POST /wp/api/ai/bundle/split    group a bundle's children into sub-bundles
 
 Every drafting route also takes `history` (earlier turns of the same
 conversation, see `engine/ai/followup.py`) and returns the model's raw
@@ -45,6 +48,7 @@ from aiohttp import web
 from engine.ai import about as ai_about
 from engine.ai import ask as ai_ask
 from engine.ai import budget as ai_budget
+from engine.ai import bundle_split as ai_split
 from engine.ai import chat as ai_chat
 from engine.ai import chatlog as ai_chatlog
 from engine.ai import client_tools as ai_client_tools
@@ -62,6 +66,7 @@ from engine.ai import organize as ai_organize
 from engine.ai import pack as ai_pack
 from engine.ai import patterns as ai_patterns
 from engine.ai import refs as ai_refs
+from engine.ai import research as ai_research
 from engine.ai import safety as ai_safety
 from engine.ai import tools as ai_tools
 from engine.ai import wildcard as ai_wildcard
@@ -82,6 +87,10 @@ from wp_api._helpers import cancel_on_disconnect, db_session, json_error, json_o
 from wp_api._validators import validate_wildcard_name
 
 _MAX_BODY_BYTES = 512 * 1024
+#: Requests that may carry reference images (a few shrunk JPEGs).
+_MAX_IMAGE_BODY_BYTES = 6 * 1024 * 1024
+#: Pack routes carry the plan and every built item (up to 60 payloads).
+_MAX_PACK_BODY_BYTES = 8 * 1024 * 1024
 #: Time one chat answer may take, checked before each step: a step that
 #: started finishes (each model call has its own timeout), and once the time
 #: is up the model gets one last step to answer from what it has. Local
@@ -94,14 +103,15 @@ MAX_CONTINUE = 2
 STEP_SECONDS = 330
 
 
-async def _body(request: web.Request) -> dict[str, Any] | web.Response:
-    if request.content_length is not None and request.content_length > _MAX_BODY_BYTES:
+async def _body(request: web.Request, *,
+                limit: int = _MAX_BODY_BYTES) -> dict[str, Any] | web.Response:
+    if request.content_length is not None and request.content_length > limit:
         return json_error("request too large", status=413)
     try:
         raw = await request.read()
     except web.HTTPRequestEntityTooLarge:
         return json_error("request too large", status=413)
-    if len(raw) > _MAX_BODY_BYTES:
+    if len(raw) > limit:
         return json_error("request too large", status=413)
     if not raw:
         return {}
@@ -174,11 +184,38 @@ def _turns(body: dict[str, Any]) -> list[dict[str, Any]] | web.Response:
 
 async def _ask(
     cfg: dict[str, Any], *, first: str, turns: list[dict[str, Any]], instruction: str,
-    **kwargs: Any,
+    image_note: bool = True, extra: str = "", **kwargs: Any,
 ) -> Any:
-    """`complete_json` with the conversation so far, when there is one."""
+    """`complete_json` with the conversation so far, when there is one.
+    Reference images (`images=`) go with the newest message, which says so;
+    `extra` (web results) is added to it too."""
     history, user = ai_followup.conversation(first, turns, instruction)
+    if extra:
+        user = f"{user}\n\n{extra}"
+    if image_note and kwargs.get("images"):
+        user = f"{user}\n\n{_ai_images.note(len(kwargs['images']))}"
     return await _ai_client.complete_json(cfg, user=user, history=history, **kwargs)
+
+
+class _Web:
+    """Web search on a Draft with AI request (`engine/ai/research.py`):
+    whether to offer the model a `research` list, and the results or skip
+    note the user's answer to the last search card adds."""
+
+    def __init__(self, cfg: dict[str, Any], body: dict[str, Any]) -> None:
+        self.on = _ai_search.enabled(cfg)
+        self.searched = _str_list(body.get("searched"), limit=12)
+        self.note = (ai_research.note(body.get("web"), body.get("skipped") is True)
+                     if self.on else "")
+
+    def schema(self, schema: dict[str, Any]) -> dict[str, Any]:
+        return ai_research.with_research(schema) if self.on else schema
+
+    def system(self, system: str) -> str:
+        return f"{system}\n\n{ai_research.PROMPT}" if self.on else system
+
+    def take(self, answer: Any) -> tuple[Any, list[str]]:
+        return ai_research.take(answer, self.searched) if self.on else (answer, [])
 
 
 def _wildcards(request: web.Request) -> list[dict[str, Any]]:
@@ -214,9 +251,13 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
-    body = await _body(request)
+    body = await _body(request, limit=_MAX_IMAGE_BODY_BYTES)
     if isinstance(body, web.Response):
         return body
+    images = await _request_images(cfg, body)
+    if isinstance(images, web.Response):
+        return images
+    webs = _Web(cfg, body)
 
     instruction = body.get("instruction")
     if not isinstance(instruction, str) or not instruction.strip():
@@ -259,11 +300,14 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
     try:
         answer = await _ask(
             cfg, first=first, turns=turns, instruction=instruction,
-            system=ai_wildcard.SYSTEM_PROMPT, schema=ai_wildcard.OPTIONS_SCHEMA,
+            system=webs.system(ai_wildcard.SYSTEM_PROMPT),
+            schema=webs.schema(ai_wildcard.OPTIONS_SCHEMA),
             schema_name="wildcard_options",
+            images=images or None, extra=webs.note,
         )
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
+    answer, research = webs.take(answer)
 
     try:
         result = ai_wildcard.compile_options(
@@ -281,6 +325,7 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
         )
     result["model"] = cfg["model"]
     result["answer"] = answer
+    result["research"] = research
     return json_ok(result)
 
 
@@ -294,9 +339,13 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
-    body = await _body(request)
+    body = await _body(request, limit=_MAX_IMAGE_BODY_BYTES)
     if isinstance(body, web.Response):
         return body
+    images = await _request_images(cfg, body)
+    if isinstance(images, web.Response):
+        return images
+    webs = _Web(cfg, body)
 
     action = body.get("action")
     if action not in ai_edit.ACTIONS:
@@ -358,13 +407,15 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
     try:
         answer = await _ask(
             cfg, first=first, turns=turns, instruction=instruction,
-            system=ai_edit.system_prompt(action),
-            schema=ai_edit.SCHEMAS[action], schema_name=f"wildcard_{action}",
+            system=webs.system(ai_edit.system_prompt(action)),
+            schema=webs.schema(ai_edit.SCHEMAS[action]), schema_name=f"wildcard_{action}",
             # Edits should be faithful to the request, not creative.
             temperature=0.3,
+            images=images or None, extra=webs.note,
         )
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
+    answer, research = webs.take(answer)
     try:
         result = ai_edit.compile_edit(action, answer, options=rows, registry=tags,
                                       refs=refs, self_id=self_id)
@@ -378,6 +429,7 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
     result["action"] = action
     result["model"] = cfg["model"]
     result["answer"] = answer
+    result["research"] = research
     return json_ok(result)
 
 
@@ -400,9 +452,12 @@ async def post_derivation_draft(request: web.Request) -> web.Response:
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
-    body = await _body(request)
+    body = await _body(request, limit=_MAX_IMAGE_BODY_BYTES)
     if isinstance(body, web.Response):
         return body
+    images = await _request_images(cfg, body)
+    if isinstance(images, web.Response):
+        return images
     instruction = _instruction(body, "say what the rules should do")
     if isinstance(instruction, web.Response):
         return instruction
@@ -434,6 +489,7 @@ async def post_derivation_draft(request: web.Request) -> web.Response:
             cfg, first=first, turns=turns, instruction=instruction,
             system=ai_derivation.SYSTEM_PROMPT,
             schema=ai_derivation.SCHEMA, schema_name="derivation_rules", temperature=0.3,
+            images=images or None,
         )
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
@@ -472,9 +528,13 @@ async def post_text_draft(request: web.Request) -> web.Response:
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
-    body = await _body(request)
+    body = await _body(request, limit=_MAX_IMAGE_BODY_BYTES)
     if isinstance(body, web.Response):
         return body
+    images = await _request_images(cfg, body)
+    if isinstance(images, web.Response):
+        return images
+    webs = _Web(cfg, body)
     kind = body.get("kind")
     if kind not in _TEXT_KINDS:
         return json_error("kind must be fixed_values, combine or template", status=400)
@@ -519,10 +579,12 @@ async def post_text_draft(request: web.Request) -> web.Response:
     system, schema, schema_name = _TEXT_KINDS[kind]
     try:
         answer = await _ask(cfg, first=first, turns=turns, instruction=instruction,
-                            system=system, schema=schema, schema_name=schema_name,
-                            temperature=0.5)
+                            system=webs.system(system), schema=webs.schema(schema),
+                            schema_name=schema_name, temperature=0.5,
+                            images=images or None, extra=webs.note)
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
+    answer, research = webs.take(answer)
     try:
         if kind == "fixed_values":
             result = text_items.compile_fixed(answer, existing=payload)
@@ -538,6 +600,7 @@ async def post_text_draft(request: web.Request) -> web.Response:
         )
     result["model"] = cfg["model"]
     result["answer"] = answer
+    result["research"] = research
     return json_ok(result)
 
 
@@ -552,9 +615,12 @@ async def post_constraint_draft(request: web.Request) -> web.Response:
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
-    body = await _body(request)
+    body = await _body(request, limit=_MAX_IMAGE_BODY_BYTES)
     if isinstance(body, web.Response):
         return body
+    images = await _request_images(cfg, body)
+    if isinstance(images, web.Response):
+        return images
     instruction = _instruction(body, "say what the rules should do")
     if isinstance(instruction, web.Response):
         return instruction
@@ -593,6 +659,7 @@ async def post_constraint_draft(request: web.Request) -> web.Response:
             cfg, first=first, turns=turns, instruction=instruction,
             system=ai_constraint.SYSTEM_PROMPT,
             schema=ai_constraint.SCHEMA, schema_name="constraint_rules", temperature=0.3,
+            images=images or None,
         )
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
@@ -1956,24 +2023,68 @@ async def _web_result(cfg: dict[str, Any], query: str) -> str:
         return f"web_search: error: {e.message}"
 
 
+def _reusable(request: web.Request) -> list[dict[str, Any]]:
+    """Library rows a pack may reuse or point at: wildcards and fixed values."""
+    with db_session(request) as conn:
+        return [m for m in ModuleRepository(conn).list()
+                if m.get("type") in ai_pack.REUSABLE]
+
+
+def _pack_base(request: web.Request, body: dict[str, Any],
+               library: list[dict[str, Any]]) -> dict[str, Any] | None | web.Response:
+    """"Extend with AI": the bundle named by ``bundle_id``, read fresh on
+    every request (None without one)."""
+    bid = body.get("bundle_id")
+    if bid is None:
+        return None
+    if not isinstance(bid, str) or not bid:
+        return json_error("bundle_id must be a bundle id", status=400)
+    with db_session(request) as conn:
+        bundles = BundleRepository(conn).list()
+    bundle = next((b for b in bundles if b["id"] == bid), None)
+    if bundle is None:
+        return json_error("that bundle no longer exists", status=404)
+    return ai_pack.bundle_base(bundle, bundles, library)
+
+
 def _pack_body(
     body: dict[str, Any], library: list[dict[str, Any]] | None = None,
+    base: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]] | web.Response:
     """The plan and built items the manager sends back, checked again."""
     try:
-        plan = ai_pack.compile_plan(body.get("plan"), library=library)
+        plan = ai_pack.compile_plan(body.get("plan"), library=library, base=base)
     except ai_pack.PlanError as e:
         return json_error(f"the plan can't be used: {e}", status=400)
     return plan, ai_pack.parse_built(plan, body.get("built"))
 
 
+async def _request_images(cfg: dict[str, Any], body: dict[str, Any],
+                          ) -> list[dict[str, Any]] | web.Response:
+    """Reference images sent with a pack plan or Draft with AI request,
+    checked; refused when the model can't see them."""
+    try:
+        images = _ai_images.clean(body.get("images"))
+    except _ai_images.ImageError as e:
+        return json_error(str(e), status=400)
+    if images and await _ai_chat.vision_support(cfg) is False:
+        return json_error(f"{cfg.get('model')} can't see images. Pick a vision model "
+                          "(Gemma 3, Qwen2.5-VL, Llama 3.2 Vision, …) or remove them.",
+                          status=400)
+    return images
+
+
 async def post_pack_plan(request: web.Request) -> web.Response:
-    """Body: {instruction, history?}. An outline of the pack: title, up to
-    three questions and the items to build. Nothing is built yet."""
+    """Body: {instruction, history?, sample?, settings?, decisions?,
+    previous?, images?}. An outline of the pack: title, questions,
+    assumptions, sections and the items to build, each with a reserved
+    module id. ``decisions`` are questions already answered (never asked
+    again); ``previous`` is the plan being refined (its items keep their
+    keys and ids, and hand edits replace the model's last answer)."""
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
-    body = await _body(request)
+    body = await _body(request, limit=_MAX_IMAGE_BODY_BYTES)
     if isinstance(body, web.Response):
         return body
     instruction = _instruction(body, "describe the pack first")
@@ -1982,56 +2093,168 @@ async def post_pack_plan(request: web.Request) -> web.Response:
     turns = _turns(body)
     if isinstance(turns, web.Response):
         return turns
+    images = await _request_images(cfg, body)
+    if isinstance(images, web.Response):
+        return images
     sample = body.get("sample") if isinstance(body.get("sample"), str) else ""
+    settings = ai_pack.parse_settings(body.get("settings"))
+    decisions = ai_pack.parse_decisions(body.get("decisions"))
     with db_session(request) as conn:
         modules = ModuleRepository(conn).list()
         lib_note = ai_patterns.note(ai_patterns.summarize(
-            modules, BundleRepository(conn).list(), TemplateRepository(conn).list()))
-    library = [m for m in modules if m.get("type") == "wildcard"]
-    first = ai_pack.plan_prompt(ai_followup.first_instruction(turns, instruction),
-                                library_note=lib_note, sample=sample)
+            modules, BundleRepository(conn).list(), TemplateRepository(conn).list()),
+            reuse=False)
+    library = [m for m in modules if m.get("type") in ai_pack.REUSABLE]
+    base = _pack_base(request, body, library)
+    if isinstance(base, web.Response):
+        return base
+    previous = body.get("previous") if isinstance(body.get("previous"), dict) else None
+    if turns and previous is not None:
+        # The user may have edited the plan by hand: the model's last answer
+        # is replayed as the plan they see now.
+        try:
+            shown = ai_pack.compile_plan(previous, library=library, base=base)
+            turns[-1]["answer"] = ai_pack.plan_answer(shown)
+        except ai_pack.PlanError:
+            previous = None
+    web_on = _ai_search.enabled(cfg)
+    searched = [q for q in (body.get("searched") or []) if isinstance(q, str)][:12] \
+        if isinstance(body.get("searched"), list) else []
+    first = ai_pack.plan_prompt(
+        ai_followup.first_instruction(turns, instruction), library_note=lib_note,
+        sample=sample, settings=settings, decisions=[] if turns else decisions,
+        library=library, images=len(images), web=web_on)
+    if base is not None:
+        first = ai_pack.base_note(base) + "\n\n" + first
+    follow = ai_pack.refine_text(instruction, decisions, settings, body.get("web"),
+                                 searched) if turns else instruction
+    answer: Any = None
     try:
         answer = await _ask(
-            cfg, first=first, turns=turns, instruction=instruction,
+            cfg, first=first, turns=turns, instruction=follow,
             system=ai_pack.PLAN_SYSTEM, schema=ai_pack.PLAN_SCHEMA,
-            schema_name="pack_plan", temperature=0.4,
+            schema_name="pack_plan", temperature=0.4, images=images or None,
+            image_note=False,  # plan_prompt says how to use them
+            partial=True,  # a cut-off plan keeps the items it finished
         )
-        plan = ai_pack.compile_plan(answer, library=library)
+        plan = ai_pack.compile_plan(answer, library=library, previous=previous,
+                                    decisions=decisions, settings=settings, base=base)
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
     except ai_pack.PlanError as e:
+        if isinstance(answer, dict) and answer.get(_ai_client.CUT_OFF):
+            return json_error(_ai_client.CUT_OFF_MESSAGE, status=502)
         return json_error(
             f"the model's plan couldn't be used ({e}). Try again, or a larger model.",
             status=502,
         )
+    if not web_on:
+        plan["research"] = []
+    plan["research"] = [q for q in plan["research"]
+                        if not any(q.lower() == s.lower() for s in searched)]
+    if isinstance(answer, dict):
+        answer.pop(_ai_client.CUT_OFF, None)  # never replayed to the model
     return json_ok({"plan": plan, "model": cfg["model"], "answer": answer,
-                    "review": ai_pack.review_plan(plan)})
+                    "review": ai_pack.review_plan(plan, library), "web": web_on})
 
 
-async def post_pack_review(request: web.Request) -> web.Response:
-    """Body: {plan, ai?}. The plan checked against the guide before it is
-    built; with ``ai`` the model reviews it too. Returns {findings, note}."""
+async def post_pack_search(request: web.Request) -> web.Response:
+    """Body: {queries}. Runs the searches the pack planner or a Draft with
+    AI panel asked for, after the user allowed them. Returns {results: [{query,
+    text}]}; the text is labelled as untrusted for the model."""
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
     body = await _body(request)
     if isinstance(body, web.Response):
         return body
-    parsed = _pack_body(body, _wildcards(request))
+    if not _ai_search.enabled(cfg):
+        return json_error("web search is off (Settings › AI assistant › Web search)",
+                          status=400)
+    raw = body.get("queries")
+    queries = [q.strip()[:120] for q in raw if isinstance(q, str) and q.strip()] \
+        if isinstance(raw, list) else []
+    if not queries or len(queries) > ai_pack.MAX_RESEARCH:
+        return json_error(f"send 1 to {ai_pack.MAX_RESEARCH} searches", status=400)
+    results = []
+    for q in queries:
+        results.append({"query": q, "text": await _web_result(cfg, q)})
+    return json_ok({"results": results})
+
+
+async def post_pack_change(request: web.Request) -> web.Response:
+    """Body: {plan, key?, instruction}. One item rewritten by the model as
+    the user asks (or, with no key, items added); the rest of the plan
+    stays as it is. Returns {plan, review}."""
+    cfg = _enabled_cfg()
+    if isinstance(cfg, web.Response):
+        return cfg
+    body = await _body(request, limit=_MAX_PACK_BODY_BYTES)
+    if isinstance(body, web.Response):
+        return body
+    instruction = _instruction(body, "say what to change")
+    if isinstance(instruction, web.Response):
+        return instruction
+    library = _reusable(request)
+    base = _pack_base(request, body, library)
+    if isinstance(base, web.Response):
+        return base
+    parsed = _pack_body(body, library, base)
     if isinstance(parsed, web.Response):
         return parsed
     plan, _built = parsed
-    findings = ai_pack.review_plan(plan)
+    key = body.get("key") if isinstance(body.get("key"), str) else ""
+    if key and key not in {i["key"] for i in plan["items"]}:
+        return json_error("no such item in the plan", status=400)
+    try:
+        answer = await _ai_client.complete_json(
+            cfg, system=ai_pack.CHANGE_SYSTEM,
+            user=ai_pack.change_prompt(plan, key, instruction),
+            schema=ai_pack.CHANGE_SCHEMA, schema_name="pack_change", temperature=0.4,
+        )
+        new = ai_pack.apply_change(plan, key, answer, library, base)
+    except _ai_client.AIError as e:
+        return json_error(e.message, status=e.status)
+    except ai_pack.PlanError as e:
+        return json_error(f"the model's change couldn't be used ({e}). Try again.",
+                          status=502)
+    return json_ok({"plan": new, "answer": answer, "model": cfg["model"],
+                    "review": ai_pack.review_plan(new, library)})
+
+
+async def post_pack_review(request: web.Request) -> web.Response:
+    """Body: {plan, ai?, request?}. The plan checked against the guide
+    before it is built; with ``ai`` the model reviews it too. Returns
+    {findings, note, plan}: ``plan`` is the plan as the server reads it
+    (hand-added items get their keys and reserved ids)."""
+    cfg = _enabled_cfg()
+    if isinstance(cfg, web.Response):
+        return cfg
+    body = await _body(request, limit=_MAX_PACK_BODY_BYTES)
+    if isinstance(body, web.Response):
+        return body
+    library = _reusable(request)
+    base = _pack_base(request, body, library)
+    if isinstance(base, web.Response):
+        return base
+    parsed = _pack_body(body, library, base)
+    if isinstance(parsed, web.Response):
+        return parsed
+    plan, _built = parsed
+    findings = ai_pack.review_plan(plan, library)
     if body.get("ai") is True:
+        asked = body.get("request") if isinstance(body.get("request"), str) else ""
         try:
             answer = await _ai_client.complete_json(
-                cfg, system=ai_pack.REVIEW_SYSTEM, user=ai_pack.review_prompt(plan, findings),
+                cfg, system=ai_pack.REVIEW_SYSTEM,
+                user=ai_pack.review_prompt(plan, findings, asked),
                 schema=ai_pack.REVIEW_SCHEMA, schema_name="pack_review", temperature=0.3,
             )
         except _ai_client.AIError as e:
             return json_error(e.message, status=e.status)
         findings += ai_pack.compile_review(answer, plan)
-    return json_ok({"findings": findings, "note": ai_pack.review_note(findings)})
+    return json_ok({"findings": findings, "note": ai_pack.review_note(findings),
+                    "plan": plan})
 
 
 async def post_pack_item(request: web.Request) -> web.Response:
@@ -2040,11 +2263,14 @@ async def post_pack_item(request: web.Request) -> web.Response:
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
-    body = await _body(request)
+    body = await _body(request, limit=_MAX_PACK_BODY_BYTES)
     if isinstance(body, web.Response):
         return body
-    library = _wildcards(request)
-    parsed = _pack_body(body, library)
+    library = _reusable(request)
+    base = _pack_base(request, body, library)
+    if isinstance(base, web.Response):
+        return base
+    parsed = _pack_body(body, library, base)
     if isinstance(parsed, web.Response):
         return parsed
     plan, built = parsed
@@ -2086,11 +2312,14 @@ async def post_pack_check(request: web.Request) -> web.Response:
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
-    body = await _body(request)
+    body = await _body(request, limit=_MAX_PACK_BODY_BYTES)
     if isinstance(body, web.Response):
         return body
-    library = _wildcards(request)
-    parsed = _pack_body(body, library)
+    library = _reusable(request)
+    base = _pack_base(request, body, library)
+    if isinstance(base, web.Response):
+        return base
+    parsed = _pack_body(body, library, base)
     if isinstance(parsed, web.Response):
         return parsed
     plan, built = parsed
@@ -2098,24 +2327,31 @@ async def post_pack_check(request: web.Request) -> web.Response:
         return json_error("nothing is built yet", status=400)
     loop = asyncio.get_running_loop()
     report = await loop.run_in_executor(
-        None, lambda: ai_pack.check_pack(plan, built, library=library))
+        None, lambda: ai_pack.check_pack(plan, built, library=library, base=base))
     return json_ok(report)
 
 
 async def post_pack_install(request: web.Request) -> web.Response:
-    """Body: {plan, built}. One import commit: the modules, the template and
-    a bundle, tagged as one collection. Returns the import's undo id."""
+    """Body: {plan, built, bundle_id?}. One import commit: the modules, the
+    template and a bundle, tagged as one collection; with ``bundle_id`` the
+    new items go into that bundle instead (it is replaced, so the same undo
+    puts it back). Returns the import's undo id."""
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
-    body = await _body(request)
+    body = await _body(request, limit=_MAX_PACK_BODY_BYTES)
     if isinstance(body, web.Response):
         return body
-    parsed = _pack_body(body, _wildcards(request))
+    library = _reusable(request)
+    base = _pack_base(request, body, library)
+    if isinstance(base, web.Response):
+        return base
+    parsed = _pack_body(body, library, base)
     if isinstance(parsed, web.Response):
         return parsed
     plan, built = parsed
-    if not any(i["key"] in built for i in plan["items"] if i["kind"] != "template"):
+    if not any(i["key"] in built for i in plan["items"]
+               if i["kind"] != "template" and not i.get("existing")):
         return json_error("nothing is built yet", status=400)
     for i in plan["items"]:
         if i["kind"] == "wildcard" and i["key"] in built:
@@ -2125,18 +2361,55 @@ async def post_pack_install(request: web.Request) -> web.Response:
     with db_session(request) as conn:
         def ids(table: str) -> set[str]:
             return {r[0] for r in conn.execute(f"SELECT id FROM {table};")}  # noqa: S608
-        ops = ai_pack.install_ops(
-            plan, built, taken=ids("modules") | ids("bundles"),
-            template_ids=ids("templates"), bundle_ids=ids("bundles"),
-        )
-        result = commit_import(conn, {"adds": ops["adds"]})
+        taken = ids("modules") | ids("bundles")
+        if base is None:
+            ops = ai_pack.install_ops(plan, built, taken=taken,
+                                      template_ids=ids("templates"), bundle_ids=ids("bundles"))
+        else:
+            ops = ai_pack.extend_ops(plan, built, base, taken=taken,
+                                     template_ids=ids("templates"), bundle_ids=ids("bundles"))
+        result = commit_import(conn, {"adds": ops["adds"], "replaces": ops["replaces"]})
     if not result.get("ok"):
         return json_error(result.get("error", "install failed"), status=400)
     return json_ok({
         "undo_entry_id": result["undo_id"], "ids": ops["ids"],
-        "bundle_id": ops["bundle_id"], "template_id": ops["template_id"], "tag": ops["tag"],
-        "notes": ops["notes"],
+        "bundle_id": ops["bundle_id"], "sub_bundles": ops["sub_bundles"],
+        "template_id": ops["template_id"], "tag": ops["tag"], "notes": ops["notes"],
     })
+
+
+async def post_bundle_split(request: web.Request) -> web.Response:
+    """Body: {name, children, instruction?}. The bundle editor's children
+    (unsaved edits included) grouped into sub-bundles by the model.
+    Returns {groups: [{name, about, start, end}]}: runs of neighbouring
+    children, so the run order never changes. Nothing is saved."""
+    cfg = _enabled_cfg()
+    if isinstance(cfg, web.Response):
+        return cfg
+    body = await _body(request)
+    if isinstance(body, web.Response):
+        return body
+    children = body.get("children")
+    if not isinstance(children, list) or not all(isinstance(c, dict) for c in children):
+        return json_error("children must be a list", status=400)
+    if len(children) < 3:
+        return json_error("a bundle needs at least 3 children to split", status=400)
+    if len(children) > ai_split.MAX_CHILDREN:
+        return json_error(f"at most {ai_split.MAX_CHILDREN} children", status=400)
+    name = body.get("name") if isinstance(body.get("name"), str) else ""
+    instruction = body.get("instruction") if isinstance(body.get("instruction"), str) else ""
+    try:
+        answer = await _ai_client.complete_json(
+            cfg, system=ai_split.SYSTEM,
+            user=ai_split.prompt(name, children, instruction[:1000]),
+            schema=ai_split.SCHEMA, schema_name="bundle_split", temperature=0.3,
+        )
+        groups = ai_split.compile_groups(answer, children)
+    except _ai_client.AIError as e:
+        return json_error(e.message, status=e.status)
+    except ai_split.SplitError as e:
+        return json_error(str(e), status=502)
+    return json_ok({"groups": groups, "model": cfg["model"]})
 
 
 def register(router: web.UrlDispatcher) -> None:
@@ -2154,6 +2427,7 @@ def register(router: web.UrlDispatcher) -> None:
     add("POST", "/wp/api/ai/test", post_test)
     add("POST", "/wp/api/ai/wildcard/draft", post_wildcard_draft)
     add("POST", "/wp/api/ai/pack/review", post_pack_review)
+    add("POST", "/wp/api/ai/bundle/split", post_bundle_split)
     add("POST", "/wp/api/ai/wildcard/edit", post_wildcard_edit)
     add("POST", "/wp/api/ai/derivation/draft", post_derivation_draft)
     add("POST", "/wp/api/ai/constraint/draft", post_constraint_draft)
@@ -2168,6 +2442,8 @@ def register(router: web.UrlDispatcher) -> None:
     add("DELETE", "/wp/api/ai/chats/{chat_id}", delete_chat, cut_short=False)
     add("POST", "/wp/api/ai/chats/{chat_id}/compact", post_compact)
     add("POST", "/wp/api/ai/pack/plan", post_pack_plan)
+    add("POST", "/wp/api/ai/pack/change", post_pack_change)
+    add("POST", "/wp/api/ai/pack/search", post_pack_search)
     add("POST", "/wp/api/ai/pack/item", post_pack_item)
     add("POST", "/wp/api/ai/pack/check", post_pack_check)
     # Writes, so never cut short.

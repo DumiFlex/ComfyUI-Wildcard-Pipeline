@@ -356,6 +356,8 @@ async def list_models(cfg: dict[str, Any]) -> list[str]:
 
 
 _FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.DOTALL)
+_THINK = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+_TRAILING_COMMA = re.compile(r",(\s*[}\]])")
 
 
 def claude_text(blocks: Any) -> str:
@@ -363,30 +365,127 @@ def claude_text(blocks: Any) -> str:
                      if isinstance(b, dict) and b.get("type") == "text")
 
 
-def _parse_text_json(text: Any) -> Any:
-    """Models that ignore the schema sometimes wrap JSON in a code fence."""
+def strip_think(text: str) -> str:
+    """The answer without a reasoning block. Qwen-style templates open
+    <think> in the prompt, so only "</think>" comes back; an answer cut off
+    while thinking has only "<think>"."""
+    text = _THINK.sub("", text)
+    low = text.lower()
+    if "</think>" in low:
+        text = text[low.rindex("</think>") + len("</think>"):]
+    elif "<think>" in low:
+        text = text[:low.index("<think>")]
+    return text.strip()
+
+
+def repair_json(text: str) -> Any:
+    """Common breakage in a local model's JSON, fixed: trailing commas, and
+    an answer that stops mid-way (cut back to the last complete value, then
+    the open arrays and objects are closed). Raises ValueError when it still
+    isn't JSON."""
+    start = text.find("{")
+    if start == -1:
+        raise ValueError("no object")
+    text = text[start:]
+    # Each open container: [closer, expecting_key] (expecting_key only
+    # matters for objects).
+    stack: list[list[Any]] = []
+    in_str = esc = False
+    str_is_key = False
+    safe: tuple[int, list[str]] | None = None  # (cut position, closers)
+
+    def mark(pos: int) -> None:
+        nonlocal safe
+        safe = (pos, [f[0] for f in stack])
+
+    for i, ch in enumerate(text):
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+                if not str_is_key:
+                    mark(i + 1)
+            continue
+        if ch == '"':
+            in_str = True
+            str_is_key = bool(stack) and stack[-1][0] == "}" and stack[-1][1]
+        elif ch in "{[":
+            stack.append(["}" if ch == "{" else "]", ch == "{"])
+        elif ch in "}]":
+            if not stack:
+                break
+            stack.pop()
+            if not stack:
+                return json.loads(_TRAILING_COMMA.sub(r"\1", text[:i + 1]))
+            mark(i + 1)
+        elif ch == ":" and stack:
+            stack[-1][1] = False
+        elif ch == "," and stack:
+            if stack[-1][0] == "}":
+                stack[-1][1] = True
+            mark(i)
+    if safe is None:
+        raise ValueError("nothing complete")
+    pos, closers = safe
+    return json.loads(_TRAILING_COMMA.sub(r"\1", text[:pos].rstrip().rstrip(","))
+                      + "".join(reversed(closers)))
+
+
+#: Set on an answer repaired after the server cut it off at its limit.
+CUT_OFF = "_cut_off"
+CUT_OFF_MESSAGE = ("the model's answer was cut off at its output limit. Ask for less, or "
+                   "raise the context size in Settings › AI assistant.")
+
+
+def _parse_text_json(text: Any, *, cut_off: bool = False) -> Any:
+    """The JSON in a model's text answer. Models that ignore the schema wrap
+    it in a code fence or chat around it; reasoning models put a <think>
+    block first; a small model may leave a trailing comma or stop mid-way.
+    `cut_off` says the server stopped the answer at its token limit."""
     if not isinstance(text, str) or not text.strip():
-        raise AIError("the model returned an empty answer")
+        raise AIError("the model's answer was cut off before it wrote anything: give it a "
+                      "larger context or output limit" if cut_off
+                      else "the model returned an empty answer")
+    text = strip_think(text)
     m = _FENCE.match(text)
     if m:
         text = m.group(1)
     try:
         return json.loads(text)
     except ValueError:
-        # Last resort: the outermost {...} in a chatty answer.
-        start, end = text.find("{"), text.rfind("}")
-        if start != -1 and end > start:
-            try:
-                return json.loads(text[start:end + 1])
-            except ValueError:
-                pass
+        pass
+    # The outermost {...} in a chatty answer.
+    start, end = text.find("{"), text.rfind("}")
+    if start != -1 and end > start:
+        try:
+            return json.loads(text[start:end + 1])
+        except ValueError:
+            pass
+    try:
+        fixed = repair_json(text)
+    except ValueError:
+        pass
+    else:
+        if cut_off and isinstance(fixed, dict):
+            # What came before the cut, marked so a caller that can't use
+            # a partial answer can say why.
+            fixed[CUT_OFF] = True
+        return fixed
+    if cut_off:
+        raise AIError(CUT_OFF_MESSAGE)
     raise AIError("the model's answer wasn't valid JSON. A larger model may do better.")
 
 
-def _anthropic_messages(history: list[tuple[str, Any]], user: str) -> list[dict[str, Any]]:
+def _anthropic_messages(
+    history: list[tuple[str, Any]], user: str, images: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     """Earlier answers go back as the tool calls they were, each followed by
     its tool result, which is how the Messages API expects a forced tool
-    conversation to continue."""
+    conversation to continue. Images go with the last request, before its
+    text (Claude reads them best that way)."""
     messages: list[dict[str, Any]] = []
     pending: str | None = None
     for i, (asked, answer) in enumerate(history):
@@ -399,22 +498,38 @@ def _anthropic_messages(history: list[tuple[str, Any]], user: str) -> list[dict[
         messages.append({"role": "assistant", "content": [{
             "type": "tool_use", "id": pending, "name": _TOOL_NAME, "input": answer,
         }]})
+    pics = [{"type": "image", "source": {"type": "base64", "media_type": im["media_type"],
+                                         "data": im["data"]}} for im in images or []]
     if pending is None:
-        messages.append({"role": "user", "content": user})
+        messages.append({"role": "user", "content": [*pics, {"type": "text", "text": user}]
+                         if pics else user})
     else:
         messages.append({"role": "user", "content": [
             {"type": "tool_result", "tool_use_id": pending, "content": "Shown."},
-            {"type": "text", "text": user},
+            *pics, {"type": "text", "text": user},
         ]})
     return messages
 
 
-def _chat_messages(system: str, history: list[tuple[str, Any]], user: str) -> list[dict[str, Any]]:
+def _chat_messages(
+    system: str, history: list[tuple[str, Any]], user: str,
+    images: list[dict[str, Any]] | None = None, api: str = "openai",
+) -> list[dict[str, Any]]:
     messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
     for asked, answer in history:
         messages.append({"role": "user", "content": asked})
         messages.append({"role": "assistant", "content": json.dumps(answer, ensure_ascii=False)})
-    messages.append({"role": "user", "content": user})
+    if not images:
+        messages.append({"role": "user", "content": user})
+    elif api == "ollama":
+        messages.append({"role": "user", "content": user,
+                         "images": [im["data"] for im in images]})
+    else:
+        messages.append({"role": "user", "content": [
+            {"type": "text", "text": user},
+            *({"type": "image_url",
+               "image_url": {"url": f"data:{im['media_type']};base64,{im['data']}"}}
+              for im in images)]})
     return messages
 
 
@@ -429,15 +544,20 @@ def _official_openai(cfg: dict[str, Any]) -> bool:
 async def _responses_json(
     cfg: dict[str, Any], *, system: str, user: str, schema: dict[str, Any],
     schema_name: str, history: list[tuple[str, Any]],
+    images: list[dict[str, Any]] | None = None,
 ) -> Any:
     """`complete_json` on OpenAI's Responses API: the schema as `text.format`,
     nothing stored on OpenAI's side, no temperature (reasoning models refuse
-    it)."""
+    it). Images go with the last request as `input_image` parts."""
     items: list[dict[str, Any]] = []
     for asked, answer in history:
         items.append({"role": "user", "content": asked})
         items.append({"role": "assistant", "content": json.dumps(answer, ensure_ascii=False)})
-    items.append({"role": "user", "content": user})
+    items.append({"role": "user", "content": [
+        {"type": "input_text", "text": user},
+        *({"type": "input_image",
+           "image_url": f"data:{im['media_type']};base64,{im['data']}"} for im in images)]}
+        if images else {"role": "user", "content": user})
     data = await _request(cfg, "POST", "/responses", timeout=_COMPLETE_TIMEOUT, body={
         "model": cfg["model"],
         "instructions": system,
@@ -461,20 +581,42 @@ async def _responses_json(
                 texts.append(str(c.get("text") or ""))
     if details.get("reason") == "content_filter":
         raise AIError("the model declined this request", status=422)
-    return _parse_text_json("".join(texts))
+    return _parse_text_json("".join(texts),
+                            cut_off=details.get("reason") == "max_output_tokens")
 
 
 async def complete_json(
     cfg: dict[str, Any], *, system: str, user: str, schema: dict[str, Any],
     schema_name: str, temperature: float = 0.8, max_tokens: int = 8192,
     history: list[tuple[str, Any]] | None = None, num_ctx: int | None = None,
+    images: list[dict[str, Any]] | None = None, partial: bool = False,
 ) -> Any:
     """One request, one JSON object back, shaped by `schema` where supported.
 
     `history` holds earlier turns of the same conversation, oldest first, as
     (what was asked, the JSON the model answered). `user` is then the
-    follow-up, and the model sees its own earlier answers.
+    follow-up, and the model sees its own earlier answers. `images` are
+    checked images (`_ai_images.clean`: ``{media_type, data}``) sent with
+    the request; the caller decides whether the model can see them.
+
+    An answer the server cut off at its limit is an error, unless `partial`
+    says the caller can use what came before the cut (marked `CUT_OFF`).
     """
+    answer = await _complete_json(
+        cfg, system=system, user=user, schema=schema, schema_name=schema_name,
+        temperature=temperature, max_tokens=max_tokens, history=history,
+        num_ctx=num_ctx, images=images)
+    if not partial and isinstance(answer, dict) and answer.get(CUT_OFF):
+        raise AIError(CUT_OFF_MESSAGE)
+    return answer
+
+
+async def _complete_json(
+    cfg: dict[str, Any], *, system: str, user: str, schema: dict[str, Any],
+    schema_name: str, temperature: float, max_tokens: int,
+    history: list[tuple[str, Any]] | None, num_ctx: int | None,
+    images: list[dict[str, Any]] | None,
+) -> Any:
     _require_model(cfg)
     history = history or []
     if _semaphore.locked():
@@ -489,13 +631,16 @@ async def complete_json(
                 "max_tokens": max_tokens,
                 "temperature": temperature,
                 "system": system,
-                "messages": _anthropic_messages(history, user),
+                "messages": _anthropic_messages(history, user, images),
                 "tools": [{
                     "name": _TOOL_NAME,
                     "description": f"Submit the {schema_name}.",
                     "input_schema": schema,
                 }],
             }, send, forced_tool=_TOOL_NAME)
+            if isinstance(data, dict) and data.get("stop_reason") == "max_tokens":
+                # A tool call cut off mid-way is not the answer it started.
+                raise AIError(CUT_OFF_MESSAGE)
             blocks = data.get("content") if isinstance(data, dict) else None
             for block in blocks or []:
                 if isinstance(block, dict) and block.get("type") == "tool_use":
@@ -525,22 +670,26 @@ async def complete_json(
                     # A chat's own window when given: a new size reloads the
                     # model and throws its cache away.
                     "num_ctx": num_ctx or budget.num_ctx(
-                        budget.prompt_chars(system, history, user, schema),
+                        budget.prompt_chars(system, history, user, schema)
+                        # An image costs about a thousand tokens.
+                        + 4000 * len(images or []),
                         int(cfg.get("context_max") or budget.CONTEXT_DEFAULT),
                     ),
                 },
-                "messages": _chat_messages(system, history, user),
+                "messages": _chat_messages(system, history, user, images, "ollama"),
             })
             msg = data.get("message") if isinstance(data, dict) else None
-            return _parse_text_json(msg.get("content") if isinstance(msg, dict) else None)
+            return _parse_text_json(
+                msg.get("content") if isinstance(msg, dict) else None,
+                cut_off=isinstance(data, dict) and data.get("done_reason") == "length")
 
         if _official_openai(cfg):
             return await _responses_json(cfg, system=system, user=user, schema=schema,
-                                         schema_name=schema_name, history=history)
+                                         schema_name=schema_name, history=history, images=images)
 
         body: dict[str, Any] = {
             "model": cfg["model"],
-            "messages": _chat_messages(system, history, user),
+            "messages": _chat_messages(system, history, user, images),
             "response_format": {
                 "type": "json_schema",
                 "json_schema": {"name": schema_name, "schema": schema, "strict": True},
@@ -564,7 +713,8 @@ async def complete_json(
         message = choices[0].get("message") or {}
         if message.get("refusal"):
             raise AIError("the model declined this request", status=422)
-        return _parse_text_json(message.get("content"))
+        return _parse_text_json(message.get("content"),
+                                cut_off=choices[0].get("finish_reason") == "length")
 
 
 _PROBE_SCHEMA = {

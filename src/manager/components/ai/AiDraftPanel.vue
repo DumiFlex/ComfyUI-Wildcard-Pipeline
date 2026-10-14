@@ -16,6 +16,7 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "../ui/Button.vue";
 import Input from "../ui/Input.vue";
 import AiPanelFrame from "./AiPanelFrame.vue";
+import { useAiImages } from "../../composables/useAiImages";
 import { api } from "../../api/client";
 import type { AiDraftOption, AiWildcardDraftResult } from "../../api/types";
 import type { ParsedBulkOption } from "../../utils/bulkParse";
@@ -46,18 +47,23 @@ const count = ref<number>(10);
 const unticked = ref<Set<number>>(new Set());
 
 type Ctx = { values: string[]; tags: string[]; tagGroups?: Record<string, string[]> };
+const pics = useAiImages();
 const convo = useAiConversation<AiWildcardDraftResult, Ctx>({
   capture: () => ({
     values: props.existingValues.filter((v) => v.trim()),
     tags: props.existingTags,
     tagGroups: props.tagGroups,
   }),
-  send: ({ instruction, history, ctx }, signal) => {
+  send: ({ instruction, history, ctx, web, searched, skipped }, signal) => {
     const n = Math.min(100, Math.max(1, Math.round(Number(count.value) || 10)));
     count.value = n;
     return api.ai.draftWildcard({
       instruction,
       history,
+      images: pics.urls(),
+      web,
+      searched,
+      skipped,
       count: n,
       wildcard: {
         name: props.name,
@@ -144,6 +150,7 @@ const skippedSummary = computed(() => {
 <template>
   <AiPanelFrame
     v-model="instruction"
+    :images="pics"
     class="wp-ai-draft"
     data-test="ai-draft-panel"
     bare
@@ -163,6 +170,10 @@ const skippedSummary = computed(() => {
     @go="convo.go"
     @stop="convo.stop"
     @close="cancel"
+    :research="convo.research.value"
+    :searching="convo.searching.value"
+    @allow-research="convo.allowResearch"
+    @skip-research="convo.skipResearch"
   >
     <template #controls>
       <label class="wp-ai-draft__count" for="wp-ai-draft-count">

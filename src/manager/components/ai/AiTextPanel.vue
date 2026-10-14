@@ -10,6 +10,7 @@
 import { computed, onBeforeUnmount, watch } from "vue";
 import Button from "../ui/Button.vue";
 import AiPanelFrame from "./AiPanelFrame.vue";
+import { useAiImages } from "../../composables/useAiImages";
 import { api } from "../../api/client";
 import type { AiTextDraftRequest, AiTextDraftResult } from "../../api/types";
 import { useAiConversation } from "../../composables/useAiConversation";
@@ -50,10 +51,11 @@ const COPY: Record<Kind, { placeholder: string; verb: string; scope: string; app
 };
 const copy = computed(() => COPY[props.kind]);
 
+const pics = useAiImages();
 const convo = useAiConversation<AiTextDraftResult, { item: Item }>({
   capture: () => ({ item: JSON.parse(JSON.stringify(props.item)) as Item }),
-  send: ({ instruction, history, ctx }, signal) => api.ai.draftText({
-    kind: props.kind, instruction, history, item: ctx.item,
+  send: ({ instruction, history, ctx, web, searched, skipped }, signal) => api.ai.draftText({
+    kind: props.kind, instruction, history, item: ctx.item, images: pics.urls(), web, searched, skipped,
   }, signal),
   emptyMessage: (res) => res.preview.length ? "" : "The model didn't write anything usable.",
 });
@@ -83,6 +85,7 @@ function close(): void {
 <template>
   <AiPanelFrame
     v-model="instruction"
+    :images="pics"
     :placeholder="copy.placeholder"
     :verb="copy.verb"
     :scope="copy.scope"
@@ -99,6 +102,10 @@ function close(): void {
     @go="convo.go"
     @stop="convo.stop"
     @close="close"
+    :research="convo.research.value"
+    :searching="convo.searching.value"
+    @allow-research="convo.allowResearch"
+    @skip-research="convo.skipResearch"
   >
     <template v-if="result">
       <ul class="wp-ai-text" data-test="ai-text-results">

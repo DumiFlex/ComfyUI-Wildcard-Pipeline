@@ -10,6 +10,7 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "../ui/Button.vue";
 import AiPanelFrame from "./AiPanelFrame.vue";
+import { useAiImages } from "../../composables/useAiImages";
 import { api } from "../../api/client";
 import type { AiDerivationDraftResult, DerivationRule } from "../../api/types";
 import { ruleLines } from "../../utils/ai-rule-text";
@@ -30,11 +31,13 @@ const emit = defineEmits<{
 
 const unticked = ref<Set<number>>(new Set());
 
+const pics = useAiImages();
 const convo = useAiConversation<AiDerivationDraftResult, { rules: DerivationRule[] }>({
   capture: () => ({ rules: props.rules }),
   send: ({ instruction, history, ctx }, signal) => api.ai.draftDerivation({
     instruction,
     history,
+    images: pics.urls(),
     derivation: {
       name: props.name, description: props.description ?? "", tags: props.labels ?? [],
       rules: ctx.rules,
@@ -83,6 +86,7 @@ function close(): void {
 <template>
   <AiPanelFrame
     v-model="instruction"
+    :images="pics"
     placeholder="e.g. when $class is mage, set $title to Archmage and add robes; when it's a warrior, add a scar"
     verb="Write rules"
     scope="Knows every variable in your library."

@@ -12,7 +12,9 @@
  */
 import { computed } from "vue";
 import Button from "../ui/Button.vue";
+import AiImagePicker from "./AiImagePicker.vue";
 import { useAiConfig } from "../../composables/useAiConfig";
+import type { AiImages } from "../../composables/useAiImages";
 
 interface Props {
   placeholder: string;
@@ -35,6 +37,13 @@ interface Props {
   /** No box or title: the parent panel draws them (wildcard tabs). */
   bare?: boolean;
   hint?: string;
+  /** Reference images for the request (`useAiImages()`); a small picker
+   *  shows under the box, and images pasted into the box are added. */
+  images?: AiImages;
+  /** Web searches the shown answer asks for; a card lets the user run them
+   *  (then the answer is refined with the results) or skip them. */
+  research?: string[];
+  searching?: boolean;
 }
 const props = withDefaults(defineProps<Props>(), {
   asked: () => [], answerIndex: 0, answerCount: 0, hint: "You review everything first.",
@@ -48,6 +57,8 @@ const emit = defineEmits<{
   (e: "go", delta: number): void;
   (e: "stop"): void;
   (e: "close"): void;
+  (e: "allow-research"): void;
+  (e: "skip-research"): void;
 }>();
 
 const { config } = useAiConfig();
@@ -60,6 +71,15 @@ const canRun = computed(
   () => (props.optional || !!instruction.value.trim()) && !props.loading && !props.blocked,
 );
 const canRefine = computed(() => !!instruction.value.trim() && !props.loading);
+
+function onPaste(ev: ClipboardEvent): void {
+  if (!props.images || props.images.blind.value) return;
+  const files = [...(ev.clipboardData?.files ?? [])].filter((f) => f.type.startsWith("image/"));
+  if (files.length) {
+    ev.preventDefault();
+    void props.images.add(files);
+  }
+}
 
 function onKeydown(ev: KeyboardEvent): void {
   if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
@@ -120,7 +140,9 @@ function onKeydown(ev: KeyboardEvent): void {
       data-test="ai-instruction"
       :disabled="loading"
       @keydown="onKeydown"
+      @paste="onPaste"
     ></textarea>
+    <AiImagePicker v-if="images" :images="images" :disabled="loading" compact />
     <div class="wp-ai-frame__controls">
       <slot name="controls" />
       <span class="wp-ai-frame__hint">{{ answered ? "Refine keeps the conversation." : hint }} Ctrl+Enter {{ answered ? "refines" : "asks" }}.</span>
@@ -153,6 +175,15 @@ function onKeydown(ev: KeyboardEvent): void {
       <i class="pi pi-spin pi-spinner" aria-hidden="true" /> Asking {{ modelLabel || "the model" }}… local models can take a minute.
     </p>
     <p v-if="error" class="wp-ai-frame__error" role="alert" data-test="ai-error">{{ error }}</p>
+    <div v-if="answered && research?.length && !loading" class="wp-ai-frame__research" data-test="ai-research">
+      <i class="pi pi-globe" aria-hidden="true" />
+      <span class="wp-ai-frame__research-text">
+        The AI would like to search the web to improve this:
+        <q v-for="q in research" :key="q" class="wp-ai-frame__query">{{ q }}</q>
+      </span>
+      <Button variant="ghost" size="sm" :disabled="searching" data-test="ai-research-skip" @click="emit('skip-research')">No thanks</Button>
+      <Button size="sm" icon="pi-search" :loading="searching" data-test="ai-research-allow" @click="emit('allow-research')">Search and refine</Button>
+    </div>
     <slot />
   </div>
 </template>
@@ -169,6 +200,13 @@ function onKeydown(ev: KeyboardEvent): void {
   background: color-mix(in oklab, var(--wp-accent-500) 5%, var(--wp-bg-2));
 }
 .wp-ai-frame[data-bare="true"] { padding: 0; margin: 0; border: 0; background: none; }
+.wp-ai-frame__research {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px;
+  border: 1px solid var(--wp-border); border-radius: 6px; background: var(--wp-bg-1); font-size: 12px;
+}
+.wp-ai-frame__research > .pi { color: var(--wp-accent-text); }
+.wp-ai-frame__research-text { flex: 1 1 240px; min-width: 0; color: var(--wp-text-muted); overflow-wrap: anywhere; }
+.wp-ai-frame__query { color: var(--wp-text); margin-left: 4px; }
 .wp-ai-frame__head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .wp-ai-frame__title { font-weight: 600; color: var(--wp-accent-text); display: inline-flex; gap: 6px; align-items: center; }
 .wp-ai-frame__scope { font-size: 12px; color: var(--wp-text-muted); }

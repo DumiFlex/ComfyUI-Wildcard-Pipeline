@@ -925,7 +925,7 @@ async def test_pack_plan_sees_the_library_and_a_sample_and_gets_reviewed(wp_clie
     resp = await wp_client.post("/wp/api/ai/pack/review", json={"plan": body["plan"], "ai": True})
     assert resp.status == 200, await resp.text()
     review = await resp.json()
-    assert review["findings"][-1] == {"key": "", "level": "tip", "text": "Add a mood.",
+    assert review["findings"][-1] == {"id": "m1", "key": "", "level": "tip", "text": "Add a mood.",
                                       "by": "model"}
     assert review["note"].startswith("Revise the plan")
     resp = await wp_client.post("/wp/api/ai/pack/review", json={"plan": body["plan"]})

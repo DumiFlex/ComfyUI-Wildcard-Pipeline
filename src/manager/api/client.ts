@@ -8,6 +8,7 @@ import type {
   AiConfig, AiConfigPatch, AiTestResult, AiIndexStatus, AiWildcardDraftRequest, AiWildcardDraftResult,
   AiWildcardEditRequest,
   AiWildcardEditResult,
+  AiWebResult,
   AiDerivationDraftRequest,
   AiTextDraftRequest,
   AiTextDraftResult,
@@ -25,7 +26,9 @@ import type {
   AiChatEvent,
   AiChatStreamEvent,
   AiChatSummary,
+  AiBundleSplitGroup,
   AiPackBuilt,
+  AiPackChangeResult,
   AiPackCheck,
   AiPackInstallResult,
   AiPackItemResult,
@@ -571,7 +574,26 @@ export const api = {
         method: "POST", body: JSON.stringify(body), signal,
       });
     },
-    packReview(body: { plan: AiPackPlan; ai?: boolean }, signal?: AbortSignal) {
+    /** Group a bundle's children into sub-bundles (runs of neighbours). */
+    bundleSplit(
+      body: { name: string; children: Array<Record<string, unknown>>; instruction?: string },
+      signal?: AbortSignal,
+    ) {
+      return request<{ groups: AiBundleSplitGroup[]; model: string }>("/wp/api/ai/bundle/split", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    packChange(body: { plan: AiPackPlan; key?: string; instruction: string }, signal?: AbortSignal) {
+      return request<AiPackChangeResult>("/wp/api/ai/pack/change", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    packSearch(body: { queries: string[] }, signal?: AbortSignal) {
+      return request<{ results: AiWebResult[] }>("/wp/api/ai/pack/search", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    packReview(body: { plan: AiPackPlan; ai?: boolean; request?: string }, signal?: AbortSignal) {
       return request<AiPackReview>("/wp/api/ai/pack/review", {
         method: "POST", body: JSON.stringify(body), signal,
       });

@@ -18,7 +18,8 @@ vi.mock("../../api/client", () => ({
   api: {
     ai: {
       config: vi.fn(), packPlan: vi.fn(), packItem: vi.fn(), packCheck: vi.fn(), packInstall: vi.fn(),
-      packReview: vi.fn(),
+      packReview: vi.fn(), packChange: vi.fn(), packSearch: vi.fn(),
+      vision: vi.fn().mockResolvedValue({ vision: true, model: "m" }),
     },
     importExport: { undo: vi.fn() },
     modules: { list: vi.fn().mockResolvedValue([]) },
@@ -31,7 +32,8 @@ vi.mock("../../api/client", () => ({
 }));
 
 const item = (key: string, kind: AiPackItem["kind"], name: string, extra: Partial<AiPackItem> = {}): AiPackItem => ({
-  key, kind, name, var: "", about: `${name} about`, count: 0, tags: [], source: "", target: "", use: "", library_id: "", ...extra,
+  key, id: `0000000${key.slice(1)}`, kind, name, var: "", section: "", about: `${name} about`, count: 0, tags: [],
+  source: "", target: "", use: "", library_id: "", library_type: "", ...extra,
 });
 
 const PLAN: AiPackPlanResult = {
@@ -39,7 +41,9 @@ const PLAN: AiPackPlanResult = {
   plan: {
     title: "Seasons", summary: "Outfits by season.", rating: "safe", warnings: [],
     style: "tags", model: "", anchor: "season",
-    questions: [{ question: "How many?", choices: ["Few", "Many"] }],
+    questions: [{ header: "Size", question: "How many?", multi: false, choices: ["Few", "Many"] }],
+    assumptions: ["Daytime only"], research: [], decisions: [], sections: [],
+    settings: { library: "reuse", negatives: "auto", structure: "sections", style: "auto", rating: "auto", count: 0 },
     inputs: [],
     items: [
       item("i1", "template", "Scene"),
@@ -56,7 +60,7 @@ describe("PackBuilder", () => {
     _resetAiConfigForTests();
     _resetPackBuilderForTests();
     vi.mocked(api.ai.config).mockResolvedValue(CONFIG);
-    vi.mocked(api.ai.packPlan).mockReset().mockResolvedValue(PLAN);
+    vi.mocked(api.ai.packPlan).mockReset().mockImplementation(async () => structuredClone(PLAN));
     vi.mocked(api.ai.packItem).mockReset().mockImplementation(async ({ key, note }) => ({
       key, id: `id00000${key.slice(1)}`, kind: "wildcard",
       payload: key === "i1" ? { template_string: "x" } : { options: [1, 2], rules: [] },
@@ -73,7 +77,7 @@ describe("PackBuilder", () => {
         quality: [],
       });
     vi.mocked(api.ai.packInstall).mockReset().mockResolvedValue({
-      undo_entry_id: "u1", ids: {}, bundle_id: "b0000001", template_id: "t0000001", tag: "seasons",
+      undo_entry_id: "u1", ids: {}, bundle_id: "b0000001", sub_bundles: [], template_id: "t0000001", tag: "seasons",
       notes: ["Add a WP Context node and load the bundle."],
     });
     vi.mocked(api.importExport.undo).mockReset().mockResolvedValue({ ok: true });
@@ -100,7 +104,8 @@ describe("PackBuilder", () => {
     await w.get('[data-test="pack-request"]').setValue("season outfits");
     await w.get('[data-test="pack-plan"]').trigger("click");
     await flushPromises();
-    expect(vi.mocked(api.ai.packPlan).mock.calls[0][0]).toEqual({ instruction: "season outfits" });
+    expect(vi.mocked(api.ai.packPlan).mock.calls[0][0]).toEqual({
+      instruction: "season outfits", settings: PLAN.plan.settings });
     expect(w.findAll('[data-test="pack-item"]')).toHaveLength(4);
 
     await w.findAll('[data-test="pack-choice"]')[1].trigger("click");
@@ -108,8 +113,11 @@ describe("PackBuilder", () => {
     await w.get('[data-test="pack-refine"]').trigger("click");
     await flushPromises();
     const refine = vi.mocked(api.ai.packPlan).mock.calls[1][0];
-    expect(refine.instruction).toBe("Answers: How many? Many");
+    expect(refine.instruction).toBe("I answered your questions.");
+    expect(refine.decisions).toEqual([{ question: "How many?", answer: "Many" }]);
     expect(refine.history?.[0].note).toBe("they removed Scene");
+    // The plan as the user sees it goes along, minus the removed template.
+    expect(refine.previous?.items.map((i) => i.key)).toEqual(["i2", "i3", "i4"]);
 
     await w.findAll('[data-test="pack-remove"]')[0].trigger("click"); // drop the template again
     await w.get('[data-test="pack-build"]').trigger("click");
@@ -148,12 +156,12 @@ describe("PackBuilder", () => {
       ...PLAN,
       plan: { ...PLAN.plan, model: "pony", items: [
         ...PLAN.plan.items, item("i5", "library", "Hair", { var: "hair", library_id: "aaaa0001" })] },
-      review: [{ key: "i2", level: "fix", text: "keys on #rain, which neither lists" }],
+      review: [{ id: "r1", key: "i2", level: "fix", text: "keys on #rain, which neither lists" }],
     });
     vi.mocked(api.ai.packReview).mockReset().mockResolvedValue({
-      findings: [{ key: "i2", level: "fix", text: "keys on #rain, which neither lists" },
-        { key: "", level: "tip", text: "Add a mood", by: "model" }],
-      note: "",
+      findings: [{ id: "r1", key: "i2", level: "fix", text: "keys on #rain, which neither lists" },
+        { id: "m1", key: "", level: "tip", text: "Add a mood", by: "model" }],
+      note: "", plan: PLAN.plan,
     });
     const { w } = await mountIt();
     await w.get('[data-test="pack-request"]').setValue("more like this");
@@ -162,7 +170,7 @@ describe("PackBuilder", () => {
     await w.get('[data-test="pack-plan"]').trigger("click");
     await flushPromises();
     expect(vi.mocked(api.ai.packPlan).mock.calls[0][0]).toEqual({
-      instruction: "more like this", sample: "1girl, red hair, beach" });
+      instruction: "more like this", sample: "1girl, red hair, beach", settings: PLAN.plan.settings });
     expect(w.get('[data-test="pack-shape"]').text()).toBe(
       "Written as Danbooru-style tags · for pony · everything follows $season");
     expect(w.text()).toContain("yours");
@@ -171,7 +179,7 @@ describe("PackBuilder", () => {
     await w.get('[data-test="pack-review-ai"]').trigger("click");
     await flushPromises();
     expect(w.findAll('[data-test="pack-finding"]')).toHaveLength(2);
-    expect(w.text()).toContain("Add a mood · model");
+    expect(w.text()).toContain("Add a mood · AI review");
 
     await w.get('[data-test="pack-fix"]').trigger("click");
     await flushPromises();

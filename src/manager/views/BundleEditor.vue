@@ -129,6 +129,9 @@ import BundleChildRow from "../components/BundleChildRow.vue";
 import BundleChildPane from "../components/BundleChildPane.vue";
 import BundleAddChildModal from "../components/BundleAddChildModal.vue";
 import BundleReattachSection from "../components/BundleReattachSection.vue";
+import BundleSplitModal, { type SplitGroup } from "../components/BundleSplitModal.vue";
+import { useAiConfig } from "../composables/useAiConfig";
+import { usePackBuilder } from "../composables/usePackBuilder";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
@@ -944,6 +947,83 @@ const eligibleBundles = computed<BundleRow[]>(() => {
   });
 });
 
+/* ── sub-bundles and Extend with AI ──────────────────────────────────── */
+
+const { ready: aiReady } = useAiConfig();
+const splitOpen = ref(false);
+/** Another bundle holds this one, so it can't hold sub-bundles. */
+const nestedInOther = computed(() => !!props.id && store.catalog.some(
+  (b) => b.id !== props.id && (b.children ?? []).some(
+    (c) => typeof c === "object" && c !== null
+      && (c as { type?: string; id?: string }).type === "bundle"
+      && (c as { id?: string }).id === props.id,
+  ),
+));
+const canSplit = computed(() => children.value.filter((c) => c.type !== "bundle").length >= 2);
+
+/** Create one bundle per group and put a reference where its first child
+ *  was. The new bundles are saved now; this bundle's new children are an
+ *  unsaved edit like any other. */
+async function onSplit(groups: SplitGroup[]): Promise<void> {
+  splitOpen.value = false;
+  const made: Array<{ group: SplitGroup; row: BundleRow }> = [];
+  try {
+    for (const g of groups) {
+      const members = g.members.map((n) => children.value[n]).filter(Boolean);
+      const row = await api.bundles.create({
+        name: `${name.value || "Bundle"} · ${g.name}`,
+        description: g.about,
+        tags: [...tags.value],
+        content_rating: contentRating.value,
+        children: stripBundleChildrenForSave(members),
+      });
+      made.push({ group: g, row });
+    }
+  } catch (err) {
+    // All or nothing: the ones already made would sit unused in the library.
+    await Promise.allSettled(made.map(({ row }) => api.bundles.delete(row.id)));
+    toast.push({
+      severity: "error", summary: "Couldn't make the sub-bundles",
+      detail: err instanceof Error ? err.message : String(err), life: 6000,
+    });
+    return;
+  }
+  const firstOf = new Map<number, BundleRow>();
+  const taken = new Set<number>();
+  for (const { group, row } of made) {
+    firstOf.set(group.members[0], row);
+    for (const n of group.members) taken.add(n);
+  }
+  const next: Array<Record<string, unknown>> = [];
+  children.value.forEach((c, n) => {
+    const row = firstOf.get(n);
+    if (row) {
+      next.push({
+        id: row.id, type: "bundle", name: row.name, color: row.color ?? null,
+        children: Array.isArray(row.children) ? [...row.children] : [], _resolved_from: row.id,
+      });
+    } else if (!taken.has(n)) {
+      next.push(c);
+    }
+  });
+  children.value = next as typeof children.value;
+  selectedChildId.value = null;
+  void store.fetchCatalog().catch(() => undefined);
+  toast.push({
+    severity: "success",
+    summary: `Made ${made.length} sub-bundle${made.length === 1 ? "" : "s"}`,
+    detail: "Save this bundle to keep them in it.",
+    life: 6000,
+  });
+}
+
+/** Open the pack builder aimed at this bundle. */
+function extendWithAi(): void {
+  if (!props.id) return;
+  usePackBuilder().extendBundle({ id: props.id, name: name.value || "this bundle" });
+  void router.push({ name: "pack-builder" });
+}
+
 function onToggleChild(idx: number) {
   const next = [...children.value];
   const current = next[idx];
@@ -1142,6 +1222,23 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
       >
         <template #actions>
           <Button
+            v-if="isEdit && aiReady"
+            variant="ghost"
+            icon="pi-microchip-ai"
+            data-test="bd-extend-ai"
+            :disabled="dirty"
+            :title="dirty ? 'Save your changes first: the AI plans from the saved bundle' : 'Plan new modules into this bundle with the AI'"
+            @click="extendWithAi"
+          >Extend with AI</Button>
+          <Button
+            variant="ghost"
+            icon="pi-box"
+            data-test="bd-split-btn"
+            :disabled="!canSplit"
+            :title="!canSplit ? 'Needs at least two modules to group' : 'Group children into sub-bundles'"
+            @click="splitOpen = true"
+          >Make sub-bundles</Button>
+          <Button
             variant="ghost"
             icon="pi-clone"
             data-test="bd-extract-btn"
@@ -1196,6 +1293,14 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
         </div>
       </Card>
 
+      <BundleSplitModal
+        :open="splitOpen"
+        :bundle-name="name"
+        :children="children"
+        :nested="nestedInOther"
+        @close="splitOpen = false"
+        @apply="onSplit"
+      />
       <BundleAddChildModal
         :visible="addModalOpen"
         :modules="moduleStore.catalog"

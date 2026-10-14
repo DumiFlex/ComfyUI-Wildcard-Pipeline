@@ -134,8 +134,8 @@ def test_review_finds_what_would_break_or_clash():
     texts = " | ".join(f["text"] for f in pack.review_plan(lone))
     assert "Nothing links the picks" in texts and "no template" in texts
     model = pack.compile_review({"findings": [{"item": "a", "text": "Split it"}, {"x": 1}]}, lone)
-    assert model == [{"key": lone["items"][0]["key"], "level": "tip", "text": "Split it",
-                      "by": "model"}]
+    assert model == [{"id": "m1", "key": lone["items"][0]["key"], "level": "tip",
+                      "text": "Split it", "by": "model"}]
     assert "A · $a" in pack.review_prompt(lone, [])
 
 

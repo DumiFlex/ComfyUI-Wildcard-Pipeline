@@ -3,18 +3,27 @@
  * Pack builder — a whole pack from one description: plan, build and check
  * on the real engine, install as one undoable import.
  *
- * State and steps live in `usePackBuilder`; this page lays them out. The
- * plan is a conversation, so answering the model's questions or typing a
- * change refines it. Building goes item by item and each row shows what it
- * holds; the test run flags problems and the builder repairs them before
- * offering Install.
+ * State and steps live in `usePackBuilder`; this page lays them out, with
+ * the plan step split into `components/pack/*`. Settings and reference
+ * images go with every plan request. The planner's questions come in
+ * rounds and answers become decisions; the plan can be edited by hand or
+ * one item at a time with the AI; review findings apply, dismiss or go to
+ * the planner. Building goes item by item (each can be skipped, and has a
+ * time limit), the test run flags problems and the builder repairs them
+ * before offering Install. "Extend with AI" on a bundle opens this page
+ * aimed at that bundle (`pb.target`).
  */
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
+import AiImagePicker from "../components/ai/AiImagePicker.vue";
+import PackFindings from "../components/pack/PackFindings.vue";
+import PackPlanList from "../components/pack/PackPlanList.vue";
+import PackQuestions from "../components/pack/PackQuestions.vue";
+import PackSettings from "../components/pack/PackSettings.vue";
 import { registerPageNote } from "../composables/useOpenEditor";
-import { usePackBuilder } from "../composables/usePackBuilder";
+import { usePackBuilder, type ItemStatus } from "../composables/usePackBuilder";
 import { useAiConfig } from "../composables/useAiConfig";
 import { useToast } from "../composables/useToast";
 import { useModuleStore } from "../stores/moduleStore";
@@ -33,6 +42,7 @@ registerPageNote(() => {
   const problems = check ? Object.values(check.problems).flat().slice(0, 5) : [];
   return [
     `Pack builder, step ${pb.phase.value}, pack "${plan.title}": ${items}`,
+    pb.target.value ? `Extending the bundle ${pb.target.value.name}` : "",
     check ? `Test run: ${check.runs} seeds; ${problems.length ? `problems: ${problems.join("; ")}` : "no problems"}` : "",
   ].filter(Boolean).join(". ");
 });
@@ -44,16 +54,16 @@ const moduleStore = useModuleStore();
 const bundleStore = useBundleStore();
 const templateStore = useTemplateStore();
 const open = ref(new Set<string>());
+const showSettings = ref(false);
+const fixing = ref("");
+const fixNote = ref("");
 
 const modelLabel = computed(() => config.value?.model ?? "");
 const result = computed(() => convo.result.value);
-const fullPlan = computed(() => result.value?.plan ?? null);
-const items = computed(() => fullPlan.value?.items ?? []);
+const draft = computed(() => pb.draft.value);
+const items = computed(() => draft.value?.items ?? []);
 const keptCount = computed(() => pb.plan.value?.items.length ?? 0);
-const answered = computed(() => Object.keys(pb.answers.value).length > 0);
-const canRefine = computed(
-  () => (answered.value || !!convo.instruction.value.trim()) && !convo.loading.value,
-);
+const busy = computed(() => convo.loading.value || !!pb.changing.value || pb.searching.value);
 const builtItems = computed(() => {
   const p = pb.plan.value;
   if (!p) return [];
@@ -63,7 +73,10 @@ const builtItems = computed(() => {
 });
 const problemCount = computed(() => {
   const c = pb.check.value;
-  return c ? Object.values(c.problems).reduce((n, list) => n + list.length, 0) + c.notes.length : 0;
+  if (!c) return 0;
+  return Object.entries(c.problems)
+    .reduce((n, [k, list]) => n + list.filter((t) => !pb.dismissedNotes.value.has(`${k}:${t}`)).length, 0)
+    + c.notes.length;
 });
 const moduleCount = computed(
   () => builtItems.value.filter(
@@ -73,71 +86,82 @@ const moduleCount = computed(
 const hasTemplate = computed(
   () => builtItems.value.some((i) => i.kind === "template" && pb.states.value[i.key]?.result),
 );
+const installable = computed(() => builtItems.value.some(
+  (i) => i.kind !== "template" && pb.states.value[i.key]?.result,
+));
 const steps = computed(() => [
   { label: "Describe", done: !!result.value, on: !result.value },
   { label: "Plan", done: pb.phase.value !== "plan", on: !!result.value && pb.phase.value === "plan" },
   { label: "Build & check", done: pb.phase.value === "installed", on: pb.phase.value === "build" },
   { label: "Install", done: pb.phase.value === "installed", on: false },
 ]);
+const settingsLine = computed(() => {
+  const s = pb.settings.value;
+  return [
+    { reuse: "reuses your library", inspire: "new, in your library's style", new: "all new" }[s.library],
+    { auto: "negatives on", template: "template negative only", none: "no negatives" }[s.negatives],
+    s.structure === "sections" ? "sub-bundles" : "one bundle",
+    s.style === "auto" ? "" : s.style === "tags" ? "tags" : "phrases",
+    s.rating === "auto" ? "" : s.rating === "nsfw" ? "NSFW" : "safe",
+    s.count ? `${s.count} options each` : "",
+  ].filter(Boolean).join(" · ");
+});
 
 const RANK: Record<AiPackItem["kind"], number> = {
   fixed_values: 0, library: 1, wildcard: 1, derivation: 2, combine: 3, constraint: 4, template: 5,
 };
 function order(i: AiPackItem): number {
-  return RANK[i.kind] * 100 + items.value.indexOf(i);
+  return RANK[i.kind] * 1000 + items.value.indexOf(i);
 }
 
 function kindLabel(i: AiPackItem): string {
+  if (i.existing) return "in bundle";
   if (i.kind === "fixed_values") return "fixed";
   if (i.kind === "library") return "yours";
   return i.kind === "wildcard" && !i.var ? "vocabulary" : i.kind;
 }
 
-function label(i: AiPackItem): string {
-  if (i.kind === "constraint") return `$${i.source} → $${i.target}`;
-  return i.var ? `$${i.var}` : i.name;
+function status(key: string): ItemStatus {
+  return pb.states.value[key]?.status ?? "waiting";
 }
 
-function meta(i: AiPackItem): string {
-  if (i.kind === "library") {
-    return ["your wildcard, used as it is", i.use ? `use: ${i.use}` : ""].filter(Boolean).join(" · ");
-  }
-  if (i.kind === "wildcard") {
-    return [`${i.count} options`, i.tags.length ? `tags ${i.tags.map((t) => `#${t}`).join(" ")}` : "",
-      i.use ? `use: ${i.use}` : ""]
-      .filter(Boolean).join(" · ");
-  }
-  return i.use ? `use: ${i.use}` : "";
+function spinning(key: string): boolean {
+  const s = status(key);
+  return s === "building" || s === "fixing" || s === "retrying";
 }
+
+const STATUS_LABEL: Partial<Record<ItemStatus, string>> = {
+  retrying: "retrying", fixing: "fixing", skipped: "skipped", failed: "failed",
+};
 
 function builtMeta(i: AiPackItem): string {
   const r = pb.states.value[i.key]?.result;
-  if (!r) return "";
+  if (!r) return STATUS_LABEL[status(i.key)] ?? "";
   const p = r.payload as Record<string, unknown>;
-  if (i.kind === "wildcard" || i.kind === "library") return `${(p.options as unknown[]).length} options`;
-  if (i.kind === "fixed_values") {
-    const n = (p.values as unknown[]).length;
-    return `${n} value${n === 1 ? "" : "s"}`;
+  if ((i.kind === "wildcard" || i.kind === "library") && Array.isArray(p.options)) {
+    return `${p.options.length} options`;
   }
-  if (i.kind === "derivation") {
-    const n = (p.rules as unknown[]).length;
-    return `${n} rule${n === 1 ? "" : "s"}`;
+  if (Array.isArray(p.values)) return `${p.values.length} value${p.values.length === 1 ? "" : "s"}`;
+  if (i.kind === "derivation" && Array.isArray(p.rules)) {
+    return `${p.rules.length} rule${p.rules.length === 1 ? "" : "s"}`;
   }
   if (i.kind === "constraint") return `${r.preview.length} rule${r.preview.length === 1 ? "" : "s"}`;
   return "";
 }
 
 function problems(key: string): string[] {
-  return pb.check.value?.problems[key] ?? [];
+  return (pb.check.value?.problems[key] ?? []).filter((t) => !pb.dismissedNotes.value.has(`${key}:${t}`));
 }
 
 function quality(key: string): string[] {
-  return (pb.check.value?.quality ?? []).filter((q) => q.key === key).map((q) => q.text);
+  return (pb.check.value?.quality ?? [])
+    .filter((q) => q.key === key && !pb.dismissedNotes.value.has(`${key}:${q.text}`))
+    .map((q) => q.text);
 }
 
 const STYLE_LABEL = { tags: "Danbooru-style tags", sentences: "natural phrases" } as const;
 const shape = computed(() => {
-  const p = fullPlan.value;
+  const p = draft.value;
   if (!p) return "";
   return [
     `Written as ${STYLE_LABEL[p.style] ?? "tags"}`,
@@ -146,10 +170,6 @@ const shape = computed(() => {
   ].filter(Boolean).join(" · ");
 });
 const showSample = ref(!!pb.sample.value);
-const fixes = computed(() => pb.findings.value.filter((f) => f.level === "fix").length);
-function findingItem(key: string): string {
-  return items.value.find((i) => i.key === key)?.name ?? "";
-}
 
 function toggle(key: string): void {
   const next = new Set(open.value);
@@ -158,18 +178,23 @@ function toggle(key: string): void {
   open.value = next;
 }
 
-function pick(i: number, choice: string): void {
-  const next = { ...pb.answers.value };
-  if (next[i] === choice) delete next[i];
-  else next[i] = choice;
-  pb.answers.value = next;
-}
-
 function onKey(ev: KeyboardEvent, run: () => void): void {
   if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
     ev.preventDefault();
     run();
   }
+}
+
+function startFix(key: string): void {
+  fixing.value = fixing.value === key ? "" : key;
+  fixNote.value = "";
+}
+
+async function rebuildWith(key: string): Promise<void> {
+  const note = [fixNote.value.trim(), ...problems(key), ...quality(key)].filter(Boolean).join("; ");
+  fixing.value = "";
+  fixNote.value = "";
+  await pb.rebuild(key, note);
 }
 
 async function install(): Promise<void> {
@@ -182,7 +207,7 @@ async function install(): Promise<void> {
   ]);
   toast.push({
     severity: "success",
-    summary: `Installed ${fullPlan.value?.title ?? "the pack"}`,
+    summary: pb.target.value ? `Added to ${pb.target.value.name}` : `Installed ${draft.value?.title ?? "the pack"}`,
     detail: `Tagged #${res.tag}`,
     life: 8000,
     action: { label: "Undo", run: undo },
@@ -198,13 +223,15 @@ async function undo(): Promise<void> {
   }
 }
 
-function openBundle(): void {
-  const id = pb.installed.value?.bundle_id;
+function openBundle(id = pb.installed.value?.bundle_id): void {
   if (id) void router.push({ name: "bundles-edit", params: { id } });
 }
 function openTemplate(): void {
   const id = pb.installed.value?.template_id;
   if (id) void router.push({ name: "templates-edit", params: { id } });
+}
+function stopExtending(): void {
+  pb.target.value = null;
 }
 </script>
 
@@ -226,6 +253,12 @@ function openTemplate(): void {
       <span v-if="modelLabel" class="wp-pack__model">{{ modelLabel }}</span>
     </div>
 
+    <p v-if="pb.target.value" class="wp-pack__target" data-test="pack-target">
+      <i class="pi pi-box" aria-hidden="true" />
+      <span>Extending <b>{{ pb.target.value.name }}</b>: the plan adds to it, and installing puts the new modules and sub-bundles inside it.</span>
+      <button v-if="!result" type="button" class="wp-pack__link" @click="stopExtending">Make a new pack instead</button>
+    </p>
+
     <p v-if="!ready" class="wp-pack__off" data-test="pack-off">
       The pack builder needs the AI assistant. Turn it on and pick a model in
       <RouterLink to="/settings/ai">Settings › AI assistant</RouterLink>.
@@ -233,17 +266,23 @@ function openTemplate(): void {
 
     <!-- ── Describe ─────────────────────────────────────────────────── -->
     <div v-else-if="!result" class="wp-pack__describe">
-      <Card title="Describe the pack">
+      <Card :title="pb.target.value ? 'What should it add?' : 'Describe the pack'">
         <p class="wp-pack__hint">
-          Say what the pack should make and the rules between its parts. The assistant plans the
-          wildcards, fixed values, rules, constraints, combines and a template, builds them one at a time, tests them on
-          the engine, and installs everything as one collection you can undo.
+          <template v-if="pb.target.value">
+            Say what the bundle should gain: new slots, rules between what it has, a sub-bundle for a part of it.
+            The assistant sees what the bundle holds and plans only the additions.
+          </template>
+          <template v-else>
+            Say what the pack should make and the rules between its parts. The assistant plans the
+            wildcards, fixed values, rules, constraints, combines and a template, builds them one at a time, tests them on
+            the engine, and installs everything as one collection you can undo.
+          </template>
         </p>
         <textarea
           v-model="convo.instruction.value"
           class="wp-textarea wp-pack__request"
           rows="5"
-          placeholder="A fantasy character pack: race, class, an outfit and a weapon that fit the class. Elves never use guns. Give each character a title like 'Elven Archmage'."
+          :placeholder="pb.target.value ? 'Add weather that fits the season, and keep elves away from guns.' : `A fantasy character pack: race, class, an outfit and a weapon that fit the class. Elves never use guns. Give each character a title like 'Elven Archmage'.`"
           aria-label="Describe the pack"
           data-test="pack-request" data-ai-anchor="pack-request" data-ai-label="Describe the pack"
           :disabled="convo.loading.value"
@@ -268,6 +307,20 @@ function openTemplate(): void {
           ></textarea>
           <p class="wp-pack__dim">The plan splits it into slots, reuses your wildcards where they fit and builds the rest, so the pack makes more prompts like it.</p>
         </template>
+        <p class="wp-pack__label">Reference images</p>
+        <AiImagePicker
+          :images="pb.images"
+          :disabled="convo.loading.value"
+          hint="The planner reads subject, outfit, setting, palette, lighting and style from them and plans slots that make more pictures like these."
+        />
+        <button
+          type="button"
+          class="wp-pack__toggle"
+          :aria-expanded="showSettings"
+          data-test="pack-settings-toggle"
+          @click="showSettings = !showSettings"
+        ><i :class="['pi', showSettings ? 'pi-chevron-down' : 'pi-chevron-right']" aria-hidden="true" /> Pack settings <span class="wp-pack__dim">· {{ settingsLine }}</span></button>
+        <PackSettings v-if="showSettings" v-model="pb.settings.value" class="wp-pack__settings" :disabled="convo.loading.value" />
         <div class="wp-pack__row">
           <span class="wp-pack__dim">Ctrl+Enter plans it. Nothing is saved until you install.</span>
           <Button v-if="convo.loading.value" size="sm" icon="pi-stop" @click="pb.stop">Stop</Button>
@@ -296,45 +349,60 @@ function openTemplate(): void {
           </ol>
           <div class="wp-pack__row">
             <span v-if="convo.count.value > 1" class="wp-pack__nav">
-              <button type="button" aria-label="Earlier plan" :disabled="convo.index.value <= 0" @click="convo.go(-1)"><i class="pi pi-chevron-left" aria-hidden="true" /></button>
+              <button type="button" aria-label="Earlier plan" :disabled="convo.index.value <= 0 || busy" @click="convo.go(-1)"><i class="pi pi-chevron-left" aria-hidden="true" /></button>
               Plan {{ convo.index.value + 1 }} of {{ convo.count.value }}
-              <button type="button" aria-label="Later plan" :disabled="convo.index.value >= convo.count.value - 1" @click="convo.go(1)"><i class="pi pi-chevron-right" aria-hidden="true" /></button>
+              <button type="button" aria-label="Later plan" :disabled="convo.index.value >= convo.count.value - 1 || busy" @click="convo.go(1)"><i class="pi pi-chevron-right" aria-hidden="true" /></button>
             </span>
             <span class="wp-pack__spacer" />
             <Button variant="ghost" size="sm" data-test="pack-reset" @click="pb.reset">Start over</Button>
           </div>
         </Card>
-        <Card v-if="fullPlan?.questions.length" title="Questions from the assistant">
-          <div v-for="(q, i) in fullPlan.questions" :key="i" class="wp-pack__question" data-test="pack-question">
-            <p>{{ q.question }}</p>
-            <div class="wp-pack__choices">
-              <button
-                v-for="c in q.choices"
-                :key="c"
-                type="button"
-                class="wp-pack__choice"
-                :aria-pressed="pb.answers.value[i] === c"
-                data-test="pack-choice"
-                @click="pick(i, c)"
-              >{{ c }}</button>
-            </div>
-          </div>
+        <Card v-if="pb.questions.value.length" :title="`Questions from the assistant · ${pb.questions.value.length}`">
+          <PackQuestions />
         </Card>
-        <Card title="Plan review" data-test="pack-review">
-          <p v-if="!pb.findings.value.length" class="wp-pack__ok"><i class="pi pi-check" aria-hidden="true" /> Nothing to fix: every rule has what it needs.</p>
-          <ul v-else class="wp-pack__findings">
-            <li v-for="(f, j) in pb.findings.value" :key="j" :data-level="f.level" data-test="pack-finding">
-              <i :class="['pi', f.level === 'fix' ? 'pi-exclamation-triangle' : 'pi-lightbulb']" aria-hidden="true" />
-              <span><b v-if="f.key && findingItem(f.key)">{{ findingItem(f.key) }}: </b>{{ f.text }}<span v-if="f.by === 'model'" class="wp-pack__by"> · model</span></span>
-            </li>
+        <Card v-if="pb.research.value.length" title="The assistant wants to search the web" data-test="pack-research">
+          <ul class="wp-pack__research">
+            <li v-for="q in pb.research.value" :key="q"><i class="pi pi-search" aria-hidden="true" /> {{ q }}</li>
           </ul>
+          <p class="wp-pack__dim">Only the search words leave your machine; the results are read as reference, never as instructions.</p>
           <div class="wp-pack__row">
-            <span class="wp-pack__dim">{{ fixes ? `${fixes} to fix before building.` : 'Checked against the authoring guide.' }}</span>
-            <Button size="sm" variant="ghost" icon="pi-microchip-ai" :loading="pb.reviewing.value" :disabled="convo.loading.value" data-test="pack-review-ai" @click="pb.reviewPlan">Review with AI</Button>
-            <Button v-if="pb.findings.value.length" size="sm" icon="pi-wrench" :disabled="convo.loading.value" data-test="pack-fix" @click="pb.fixFindings">Fix these in the plan</Button>
+            <span class="wp-pack__spacer" />
+            <Button size="sm" variant="ghost" :disabled="busy" data-test="pack-research-skip" @click="pb.skipResearch">Skip</Button>
+            <Button size="sm" icon="pi-search" :loading="pb.searching.value" :disabled="busy" data-test="pack-research-allow" @click="pb.allowResearch">Allow and update the plan</Button>
           </div>
         </Card>
-        <Card title="Edit the plan">
+        <Card v-if="pb.decisions.value.length || draft?.assumptions.length" title="Decided and assumed" data-test="pack-decisions">
+          <div v-if="pb.decisions.value.length" class="wp-pack__chips">
+            <span class="wp-pack__dim">You decided:</span>
+            <button
+              v-for="(d, i) in pb.decisions.value"
+              :key="d.question"
+              type="button"
+              class="wp-pack__chip"
+              :title="`${d.question} Click to change it.`"
+              :disabled="busy"
+              data-test="pack-decision"
+              @click="pb.reopenDecision(i)"
+            ><b>{{ d.question.length > 40 ? d.question.slice(0, 38) + '…' : d.question }}</b> {{ d.answer }}</button>
+          </div>
+          <div v-if="draft?.assumptions.length" class="wp-pack__chips">
+            <span class="wp-pack__dim">The assistant assumed:</span>
+            <button
+              v-for="a in draft.assumptions"
+              :key="a"
+              type="button"
+              class="wp-pack__chip wp-pack__chip--guess"
+              title="Click to correct it"
+              :disabled="busy"
+              data-test="pack-assumption"
+              @click="pb.changeAssumption(a)"
+            >{{ a }}</button>
+          </div>
+        </Card>
+        <Card title="Plan review">
+          <PackFindings />
+        </Card>
+        <Card title="Change the plan">
           <textarea
             v-model="convo.instruction.value"
             class="wp-textarea wp-pack__request"
@@ -345,14 +413,25 @@ function openTemplate(): void {
             :disabled="convo.loading.value"
             @keydown="onKey($event, pb.refinePlan)"
           ></textarea>
+          <button
+            type="button"
+            class="wp-pack__toggle"
+            :aria-expanded="showSettings"
+            data-test="pack-settings-toggle"
+            @click="showSettings = !showSettings"
+          ><i :class="['pi', showSettings ? 'pi-chevron-down' : 'pi-chevron-right']" aria-hidden="true" /> Settings and images <span class="wp-pack__dim">· {{ settingsLine }}{{ pb.images.images.value.length ? ` · ${pb.images.images.value.length} image${pb.images.images.value.length === 1 ? '' : 's'}` : '' }}</span></button>
+          <template v-if="showSettings">
+            <PackSettings v-model="pb.settings.value" class="wp-pack__settings" :disabled="convo.loading.value" />
+            <AiImagePicker :images="pb.images" :disabled="convo.loading.value" compact class="wp-pack__settings" />
+          </template>
           <div class="wp-pack__row">
-            <span class="wp-pack__dim">Your answers and removed items go along.</span>
+            <span class="wp-pack__dim">Your answers, edits and removed items go along.</span>
             <Button v-if="convo.loading.value" size="sm" icon="pi-stop" @click="pb.stop">Stop</Button>
             <Button
               v-else
               size="sm"
               icon="pi-reply"
-              :disabled="!canRefine"
+              :disabled="!pb.canRefine.value"
               data-test="pack-refine"
               @click="pb.refinePlan"
             >Update plan</Button>
@@ -361,56 +440,35 @@ function openTemplate(): void {
             <i class="pi pi-spin pi-spinner" aria-hidden="true" /> Updating the plan…
           </p>
           <p v-if="convo.error.value" class="wp-pack__error" role="alert">{{ convo.error.value }}</p>
+          <p v-if="pb.error.value" class="wp-pack__error" role="alert">{{ pb.error.value }}</p>
         </Card>
       </div>
 
       <Card class="wp-pack__plan" :title="`Plan · ${keptCount} items`">
-        <p class="wp-pack__title">{{ fullPlan?.title }}
-          <span v-if="fullPlan?.rating === 'nsfw'" class="wp-pack__nsfw">NSFW</span>
+        <p class="wp-pack__title">{{ draft?.title }}
+          <span v-if="draft?.rating === 'nsfw'" class="wp-pack__nsfw">NSFW</span>
+          <span v-if="pb.edited.value" class="wp-pack__edited" data-test="pack-edited">edited by you</span>
         </p>
-        <p v-if="fullPlan?.summary" class="wp-pack__dim">{{ fullPlan.summary }}</p>
+        <p v-if="draft?.summary" class="wp-pack__dim">{{ draft.summary }}</p>
         <p v-if="shape" class="wp-pack__shape" data-test="pack-shape">{{ shape }}</p>
-        <ul class="wp-pack__items">
-          <li
-            v-for="i in items"
-            :key="i.key"
-            class="wp-pack__item"
-            :data-removed="pb.removed.value.has(i.key) ? 'true' : undefined"
-            data-test="pack-item"
-          >
-            <span class="wp-pack__kind" :data-kind="i.kind">{{ kindLabel(i) }}</span>
-            <span class="wp-pack__item-main">
-              <span class="wp-pack__item-name"><code v-if="i.kind !== 'template'">{{ label(i) }}</code> {{ i.kind === 'template' || i.var ? i.name : '' }}</span>
-              <span class="wp-pack__item-about" :title="i.about">{{ i.about }}</span>
-              <span v-if="meta(i)" class="wp-pack__item-meta">{{ meta(i) }}</span>
-            </span>
-            <button
-              type="button"
-              class="wp-pack__remove"
-              :aria-label="pb.removed.value.has(i.key) ? `Keep ${i.name}` : `Remove ${i.name}`"
-              :title="pb.removed.value.has(i.key) ? 'Keep it' : 'Leave it out'"
-              data-test="pack-remove"
-              @click="pb.removeItem(i.key)"
-            ><i :class="['pi', pb.removed.value.has(i.key) ? 'pi-undo' : 'pi-times']" aria-hidden="true" /></button>
-          </li>
-        </ul>
-        <div v-if="fullPlan?.inputs?.length" class="wp-pack__inputs" data-test="pack-inputs">
+        <PackPlanList />
+        <div v-if="draft?.inputs?.length" class="wp-pack__inputs" data-test="pack-inputs">
           <p class="wp-pack__dim">Set from outside (a WP Context Injector row each):</p>
           <ul>
-            <li v-for="inp in fullPlan.inputs" :key="inp.var">
+            <li v-for="inp in draft.inputs" :key="inp.var">
               <code>${{ inp.var }}</code> {{ inp.about }}<span v-if="inp.example" class="wp-pack__dim"> · tested as "{{ inp.example }}"</span>
             </li>
           </ul>
         </div>
-        <ul v-if="fullPlan?.warnings.length" class="wp-pack__warnings">
-          <li v-for="(w, j) in fullPlan.warnings" :key="j"><i class="pi pi-info-circle" aria-hidden="true" /> {{ w }}</li>
+        <ul v-if="draft?.warnings.length" class="wp-pack__warnings">
+          <li v-for="(w, j) in draft.warnings" :key="j"><i class="pi pi-info-circle" aria-hidden="true" /> {{ w }}</li>
         </ul>
         <div class="wp-pack__row">
           <span class="wp-pack__spacer" />
           <Button
             variant="primary"
             icon="pi-cog"
-            :disabled="!keptCount || convo.loading.value"
+            :disabled="!keptCount || busy"
             data-test="pack-build" data-ai-anchor="pack-build" data-ai-label="Build button"
             @click="pb.build"
           >Build this pack</Button>
@@ -422,39 +480,84 @@ function openTemplate(): void {
     <div v-else class="wp-pack__grid">
       <Card :title="`Built · ${pb.builtCount.value} of ${keptCount}`">
         <ul class="wp-pack__items">
-          <li v-for="i in builtItems" :key="i.key" class="wp-pack__built" data-test="pack-built">
+          <li v-for="i in builtItems" :key="i.key" class="wp-pack__built" data-test="pack-built" :data-status="status(i.key)">
             <div class="wp-pack__item">
-              <span class="wp-pack__state" :data-status="pb.states.value[i.key].status">
-                <i v-if="pb.states.value[i.key].status === 'building' || pb.states.value[i.key].status === 'fixing'" class="pi pi-spin pi-spinner" aria-hidden="true" />
-                <i v-else-if="pb.states.value[i.key].status === 'failed'" class="pi pi-times-circle" aria-hidden="true" />
-                <i v-else-if="pb.states.value[i.key].status === 'waiting'" class="pi pi-circle" aria-hidden="true" />
+              <span class="wp-pack__state" :data-status="status(i.key)">
+                <i v-if="spinning(i.key)" class="pi pi-spin pi-spinner" aria-hidden="true" />
+                <i v-else-if="status(i.key) === 'failed'" class="pi pi-times-circle" aria-hidden="true" />
+                <i v-else-if="status(i.key) === 'skipped'" class="pi pi-forward" aria-hidden="true" />
+                <i v-else-if="status(i.key) === 'waiting'" class="pi pi-circle" aria-hidden="true" />
                 <i v-else-if="problems(i.key).length" class="pi pi-exclamation-triangle" aria-hidden="true" />
                 <i v-else class="pi pi-check" aria-hidden="true" />
               </span>
               <span class="wp-pack__kind" :data-kind="i.kind">{{ kindLabel(i) }}</span>
               <button type="button" class="wp-pack__item-main wp-pack__expand" :aria-expanded="open.has(i.key)" @click="toggle(i.key)">
                 <span class="wp-pack__item-name">{{ i.name }}</span>
-                <span v-if="pb.states.value[i.key].fixed?.length && pb.states.value[i.key].status !== 'fixing'" class="wp-pack__fixed">
+                <span v-if="pb.states.value[i.key].fixed?.length && status(i.key) !== 'fixing'" class="wp-pack__fixed">
                   fixed: {{ pb.states.value[i.key].fixed?.[0] }}
                 </span>
               </button>
               <span class="wp-pack__item-meta">{{ builtMeta(i) }}</span>
               <button
-                v-if="!pb.working.value && pb.phase.value === 'build' && i.kind !== 'library'"
+                v-if="pb.current.value === i.key"
                 type="button"
-                class="wp-pack__remove"
-                :aria-label="`Rebuild ${i.name}`"
-                title="Build it again"
-                data-test="pack-rebuild"
-                @click="pb.rebuild(i.key, [...problems(i.key), ...quality(i.key)].join('; '))"
-              ><i class="pi pi-refresh" aria-hidden="true" /></button>
+                class="wp-pack__icon-btn"
+                :aria-label="`Skip ${i.name}`"
+                title="Skip this item"
+                data-test="pack-skip-current"
+                @click="pb.skipCurrent"
+              ><i class="pi pi-forward" aria-hidden="true" /></button>
+              <template v-else-if="!pb.working.value && pb.phase.value === 'build' && i.kind !== 'library'">
+                <button
+                  type="button"
+                  class="wp-pack__icon-btn"
+                  :aria-label="`Rebuild ${i.name}`"
+                  title="Build it again"
+                  data-test="pack-rebuild"
+                  @click="pb.rebuild(i.key, [...problems(i.key), ...quality(i.key)].join('; '))"
+                ><i class="pi pi-refresh" aria-hidden="true" /></button>
+                <button
+                  type="button"
+                  class="wp-pack__icon-btn"
+                  :aria-label="`Rebuild ${i.name} with a note`"
+                  title="Rebuild with a note"
+                  data-test="pack-fix-note"
+                  @click="startFix(i.key)"
+                ><i class="pi pi-pencil" aria-hidden="true" /></button>
+                <button
+                  v-if="!pb.states.value[i.key].result && status(i.key) !== 'skipped'"
+                  type="button"
+                  class="wp-pack__icon-btn"
+                  :aria-label="`Leave ${i.name} out`"
+                  title="Leave it out"
+                  data-test="pack-skip"
+                  @click="pb.skipItem(i.key)"
+                ><i class="pi pi-forward" aria-hidden="true" /></button>
+              </template>
             </div>
             <p v-if="pb.states.value[i.key].error" class="wp-pack__error">{{ pb.states.value[i.key].error }}</p>
+            <div v-if="fixing === i.key" class="wp-pack__fixbox">
+              <input
+                v-model="fixNote"
+                class="wp-input wp-input--sm"
+                placeholder="What to do differently (more variety, fewer colours, …)"
+                aria-label="Note for the rebuild"
+                data-test="pack-fix-input"
+                @keydown.enter.prevent="rebuildWith(i.key)"
+              >
+              <Button size="sm" icon="pi-refresh" data-test="pack-fix-go" @click="rebuildWith(i.key)">Rebuild</Button>
+            </div>
             <ul v-if="problems(i.key).length" class="wp-pack__warnings">
-              <li v-for="(w, j) in problems(i.key)" :key="j"><i class="pi pi-exclamation-triangle" aria-hidden="true" /> {{ w }}</li>
+              <li v-for="(w, j) in problems(i.key)" :key="j">
+                <i class="pi pi-exclamation-triangle" aria-hidden="true" /> <span>{{ w }}</span>
+                <button v-if="!pb.working.value" type="button" class="wp-pack__mini" data-test="pack-problem-dismiss" @click="pb.dismissNote(i.key, w)">Dismiss</button>
+              </li>
             </ul>
             <ul v-if="quality(i.key).length" class="wp-pack__findings" data-test="pack-quality">
-              <li v-for="(w, j) in quality(i.key)" :key="j" data-level="tip"><i class="pi pi-lightbulb" aria-hidden="true" /> <span>{{ w }}. Rebuild it to spread the picks.</span></li>
+              <li v-for="(w, j) in quality(i.key)" :key="j" data-level="tip">
+                <i class="pi pi-lightbulb" aria-hidden="true" /> <span>{{ w }}. Rebuild it to spread the picks.</span>
+                <button v-if="!pb.working.value" type="button" class="wp-pack__mini" @click="pb.dismissNote(i.key, w)">Dismiss</button>
+              </li>
             </ul>
             <div v-if="open.has(i.key) && pb.states.value[i.key].result" class="wp-pack__detail">
               <ul class="wp-pack__preview">
@@ -468,7 +571,12 @@ function openTemplate(): void {
         </ul>
         <p v-if="pb.working.value" class="wp-pack__status" role="status" data-test="pack-stage">
           <i class="pi pi-spin pi-spinner" aria-hidden="true" /> {{ pb.stage.value }}
+          <Button v-if="pb.current.value" size="sm" variant="ghost" icon="pi-forward" data-test="pack-skip-stage" @click="pb.skipCurrent">Skip this item</Button>
           <Button size="sm" variant="ghost" icon="pi-stop" @click="pb.stop">Stop</Button>
+        </p>
+        <p v-else-if="pb.phase.value === 'build'" class="wp-pack__summary" data-test="pack-summary">
+          {{ pb.summary.value.built }} built<template v-if="pb.summary.value.failed">, {{ pb.summary.value.failed }} failed</template><template v-if="pb.summary.value.skipped">, {{ pb.summary.value.skipped }} skipped</template><template v-if="pb.summary.value.waiting">, {{ pb.summary.value.waiting }} not built</template>.
+          <template v-if="pb.summary.value.failed">Retry a failed item, rebuild it with a note, or leave it out.</template>
         </p>
         <p v-if="pb.error.value" class="wp-pack__error" role="alert">{{ pb.error.value }}</p>
       </Card>
@@ -478,7 +586,7 @@ function openTemplate(): void {
           <p v-if="!problemCount" class="wp-pack__ok" data-test="pack-ok"><i class="pi pi-check" aria-hidden="true" /> No warnings, every variable set.</p>
           <ul v-else class="wp-pack__warnings" data-test="pack-problems">
             <template v-for="i in builtItems" :key="i.key">
-              <li v-for="(w, j) in problems(i.key)" :key="j"><b>{{ i.name }}:</b> {{ w }}</li>
+              <li v-for="(w, j) in problems(i.key)" :key="j"><span><b>{{ i.name }}:</b> {{ w }}</span></li>
             </template>
             <li v-for="(n, j) in pb.check.value.notes" :key="`n${j}`">{{ n }}</li>
           </ul>
@@ -500,9 +608,18 @@ function openTemplate(): void {
         </Card>
         <Card v-if="pb.phase.value === 'installed' && pb.installed.value" title="Installed">
           <p>
-            Added {{ moduleCount }} modules{{ hasTemplate ? ', a template' : '' }} and a bundle, tagged
+            Added {{ moduleCount }} module{{ moduleCount === 1 ? '' : 's' }}{{ hasTemplate ? ', a template' : '' }}
+            <template v-if="pb.target.value"> to <b>{{ pb.target.value.name }}</b></template><template v-else> and a bundle</template>, tagged
             <span class="wp-pack__tag">#{{ pb.installed.value.tag }}</span>.
           </p>
+          <div v-if="pb.installed.value.sub_bundles?.length" class="wp-pack__inputs" data-test="pack-subbundles">
+            <p class="wp-pack__dim">Sub-bundles inside it:</p>
+            <ul>
+              <li v-for="b in pb.installed.value.sub_bundles" :key="b.id">
+                <button type="button" class="wp-pack__link" @click="openBundle(b.id)">{{ b.name }}</button>
+              </li>
+            </ul>
+          </div>
           <div v-if="pb.installed.value.notes?.length" class="wp-pack__inputs" data-test="pack-wiring">
             <p class="wp-pack__dim">To use it on the canvas:</p>
             <ul>
@@ -510,7 +627,7 @@ function openTemplate(): void {
             </ul>
           </div>
           <div class="wp-pack__row">
-            <Button size="sm" icon="pi-box" data-test="pack-open-bundle" @click="openBundle">Open the bundle</Button>
+            <Button size="sm" icon="pi-box" data-test="pack-open-bundle" @click="openBundle()">Open the bundle</Button>
             <Button v-if="pb.installed.value.template_id" size="sm" icon="pi-file-edit" @click="openTemplate">Open the template</Button>
             <span class="wp-pack__spacer" />
             <Button variant="ghost" size="sm" data-test="pack-undo" @click="undo">Undo</Button>
@@ -518,19 +635,22 @@ function openTemplate(): void {
           </div>
         </Card>
         <Card v-else-if="!pb.working.value" title="Install">
-          <p>
-            Adds {{ moduleCount }} modules{{ hasTemplate ? ', the template' : '' }} and a bundle, tagged
-            <span class="wp-pack__tag">#{{ (fullPlan?.title ?? 'pack').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'ai-pack' }}</span>.
+          <p v-if="installable">
+            Adds {{ moduleCount }} module{{ moduleCount === 1 ? '' : 's' }}{{ hasTemplate ? ', the template' : '' }}
+            <template v-if="pb.target.value"> to <b>{{ pb.target.value.name }}</b></template><template v-else> and a bundle</template>, tagged
+            <span class="wp-pack__tag">#{{ (draft?.title ?? 'pack').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'ai-pack' }}</span>.
             One undo removes all of it.
+            <template v-if="pb.summary.value.failed + pb.summary.value.skipped"> {{ pb.summary.value.failed + pb.summary.value.skipped }} item{{ pb.summary.value.failed + pb.summary.value.skipped === 1 ? '' : 's' }} that didn't build stay out.</template>
           </p>
+          <p v-else class="wp-pack__dim" data-test="pack-nothing">Nothing is built yet, so there is nothing to install. Retry the failed items or go back to the plan.</p>
           <div class="wp-pack__row">
             <Button
               variant="primary"
               icon="pi-download"
-              :disabled="!moduleCount"
+              :disabled="!installable"
               data-test="pack-install" data-ai-anchor="pack-install" data-ai-label="Install button"
               @click="install"
-            >Install pack</Button>
+            >{{ pb.target.value ? 'Add to the bundle' : 'Install pack' }}</Button>
             <Button variant="ghost" data-test="pack-back" @click="pb.backToPlan">Back to plan</Button>
           </div>
         </Card>
@@ -611,7 +731,7 @@ function openTemplate(): void {
 .wp-pack__item-name { font-size: 13px; }
 .wp-pack__item-name code { color: var(--wp-kind-wildcard); font-size: 12px; }
 .wp-pack__item-about { font-size: 12px; color: var(--wp-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wp-pack__item-meta { font-size: 11px; color: var(--wp-text-dim); white-space: nowrap; }
+.wp-pack__item-meta { flex: none; max-width: 40%; font-size: 11px; color: var(--wp-text-dim); text-align: right; overflow-wrap: anywhere; }
 .wp-pack__remove {
   flex: none; width: 26px; height: 26px; border: 0; border-radius: 6px; background: none;
   color: var(--wp-text-dim); cursor: pointer;
@@ -649,4 +769,38 @@ function openTemplate(): void {
 .wp-pack__by { color: var(--wp-text-dim); }
 .wp-pack__kind[data-kind="library"] { color: var(--wp-success); background: color-mix(in oklab, var(--wp-success) 14%, transparent); }
 .wp-pack__tag { font-size: 12px; padding: 1px 7px; border-radius: 999px; border: 1px dashed var(--wp-accent-400); color: var(--wp-accent-text); }
+.wp-pack__target {
+  margin: 0; padding: 8px 12px; border-radius: 8px; font-size: 13px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap;
+  border: 1px solid color-mix(in oklab, var(--wp-accent-400) 45%, transparent);
+  background: color-mix(in oklab, var(--wp-accent-500) 8%, transparent);
+}
+.wp-pack__link { border: 0; background: none; padding: 0; color: var(--wp-accent-text); cursor: pointer; font: inherit; text-decoration: underline; }
+.wp-pack__label { margin: 12px 0 4px; font-size: 12px; color: var(--wp-text-muted); }
+.wp-pack__settings { margin-top: 8px; }
+.wp-pack__research { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.wp-pack__research .pi { font-size: 11px; color: var(--wp-text-dim); }
+.wp-pack__chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.wp-pack__chips + .wp-pack__chips { margin-top: 8px; }
+.wp-pack__chip {
+  max-width: 100%; padding: 3px 9px; border-radius: 999px; font-size: 12px; cursor: pointer; text-align: left;
+  border: 1px solid var(--wp-border); background: var(--wp-bg-2); color: var(--wp-text); overflow-wrap: anywhere;
+}
+.wp-pack__chip b { font-weight: 600; color: var(--wp-text-muted); }
+.wp-pack__chip--guess { border-style: dashed; color: var(--wp-text-muted); }
+.wp-pack__edited { font-size: 10px; font-weight: 500; padding: 1px 6px; border-radius: 4px; color: var(--wp-accent-text); border: 1px solid var(--wp-accent-400); }
+.wp-pack__icon-btn {
+  flex: none; width: 26px; height: 26px; border: 0; border-radius: 6px; background: none;
+  color: var(--wp-text-dim); cursor: pointer;
+}
+.wp-pack__icon-btn:hover { color: var(--wp-text); background: var(--wp-bg-2); }
+.wp-pack__fixbox { display: flex; gap: 6px; margin: 4px 0 6px 120px; }
+.wp-pack__fixbox input { flex: 1; min-width: 0; }
+.wp-pack__mini { margin-left: auto; flex: none; border: 0; background: none; padding: 0 4px; font-size: 11px; color: var(--wp-text-dim); cursor: pointer; }
+.wp-pack__mini:hover { color: var(--wp-text); }
+.wp-pack__warnings li { display: flex; gap: 6px; align-items: baseline; }
+.wp-pack__warnings li > span { min-width: 0; overflow-wrap: anywhere; }
+.wp-pack__summary { margin: 10px 0 0; font-size: 12.5px; color: var(--wp-text-muted); }
+.wp-pack__state[data-status="retrying"] { color: var(--wp-warn); }
+.wp-pack__state[data-status="skipped"] { color: var(--wp-text-dim); }
+.wp-pack__built[data-status="skipped"] .wp-pack__item-main { opacity: 0.55; }
 </style>

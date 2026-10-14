@@ -74,7 +74,10 @@ async def fake_llm(aiohttp_server):
         if schema_name == "chat_step":
             content = chat_steps.pop(0) if chat_steps else {"message": "Done.", "calls": []}
         text = content if isinstance(content, str) else json.dumps(content)
-        return web.json_response({"choices": [{"message": {"content": text}}]})
+        choice = {"message": {"content": text}}
+        if overrides.get("_finish"):
+            choice["finish_reason"] = overrides["_finish"]
+        return web.json_response({"choices": [choice]})
 
     async def openai_responses(request):
         """OpenAI's Responses API. `chat_steps` entries are written in the
