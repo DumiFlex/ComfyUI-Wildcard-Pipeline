@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  applyRow, matchItems, matchVars, mentionRefs, probeChat, type ChatRow, type MentionItem,
+  applyRow, matchItems, matchVars, mentionItems, mentionRefs, probeChat, type ChatRow, type MentionItem,
 } from "../utils/chat-completions";
 
 const ITEMS: MentionItem[] = [
@@ -75,5 +75,19 @@ describe("mentionRefs", () => {
     expect(mentionRefs("[[aaaa0001#Hairstyle]] and [[ffffffff#Gone]]", ITEMS)).toEqual({
       "aaaa0001#Hairstyle": { id: "aaaa0001", type: "wildcard", name: "Hairstyle" },
     });
+  });
+});
+
+describe("mentionItems", () => {
+  it("lists modules with their variable, then bundles", () => {
+    expect(mentionItems(
+      [{ id: "aaaa0001", name: "Hairstyle", type: "wildcard", payload: { var_binding: "$hair" } },
+        { id: "aaaa0004", name: "Rule", type: "derivation", payload: {} }],
+      [{ id: "bbbb0001", name: "Pack" }],
+    )).toEqual([
+      { id: "aaaa0001", name: "Hairstyle", kind: "wildcard", variable: "hair" },
+      { id: "aaaa0004", name: "Rule", kind: "derivation" },
+      { id: "bbbb0001", name: "Pack", kind: "bundle" },
+    ]);
   });
 });

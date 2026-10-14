@@ -21,7 +21,7 @@ import { useModuleStore } from "../../stores/moduleStore";
 import { useBundleStore } from "../../stores/bundleStore";
 import { collectLibraryVarHints } from "../../utils/library-suggestions";
 import {
-  applyRow, matchItems, matchVars, probeChat, rowText,
+  applyRow, matchItems, matchVars, mentionItems, probeChat, rowText,
   type ChatProbe, type ChatRow, type MentionItem, type VarItem,
 } from "../../utils/chat-completions";
 import { textareaCaretRect } from "../../utils/textarea-caret";
@@ -58,14 +58,7 @@ const open = computed(() => probe.value !== null && rows.value.length > 0);
 const listId = `wp-ai-ac-${Math.random().toString(36).slice(2, 8)}`;
 
 /** Every module and bundle, for the `@` menu. */
-const items = computed<MentionItem[]>(() => [
-  ...modules.catalog.map((m) => {
-    const p = (m.payload ?? {}) as { var_binding?: string; output_var?: string };
-    const variable = (p.var_binding || p.output_var || "").replace(/^\$+/, "").trim();
-    return { id: m.id, name: m.name, kind: m.type, ...(variable ? { variable } : {}) };
-  }),
-  ...bundles.catalog.map((b) => ({ id: b.id, name: b.name, kind: "bundle" })),
-]);
+const items = computed<MentionItem[]>(() => mentionItems(modules.catalog, bundles.catalog));
 
 const vars = computed<VarItem[]>(() =>
   collectLibraryVarHints(modules).map((h) => ({ name: h.label, kind: h.kind })));

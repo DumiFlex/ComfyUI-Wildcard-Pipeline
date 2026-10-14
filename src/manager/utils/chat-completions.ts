@@ -27,6 +27,21 @@ export interface MentionItem {
   variable?: string;
 }
 
+/** Every module and bundle as `@` menu items (and mention-chip lookups). */
+export function mentionItems(
+  modules: readonly { id: string; name: string; type: string; payload?: unknown }[],
+  bundles: readonly { id: string; name: string }[],
+): MentionItem[] {
+  return [
+    ...modules.map((m) => {
+      const p = (m.payload ?? {}) as { var_binding?: string; output_var?: string };
+      const variable = (p.var_binding || p.output_var || "").replace(/^\$+/, "").trim();
+      return { id: m.id, name: m.name, kind: m.type, ...(variable ? { variable } : {}) };
+    }),
+    ...bundles.map((b) => ({ id: b.id, name: b.name, kind: "bundle" })),
+  ];
+}
+
 /** A variable the `$` menu can offer, with what writes it. */
 export interface VarItem {
   name: string;
