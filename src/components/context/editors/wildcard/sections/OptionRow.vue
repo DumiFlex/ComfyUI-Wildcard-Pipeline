@@ -454,15 +454,9 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
           :data-uuid="tok.meta?.uuid"
           class="opt__tok opt__tok--chip"
         />
-        <RefChip
-          v-else-if="tok.kind === 'var'"
-          :kind="'var'"
-          :name="tok.raw.replace(/^\$/, '')"
-          :resolved="true"
-          :producer="varProducers?.get(tok.raw.replace(/^\$/, ''))"
-          graph-aware
-          class="opt__tok opt__tok--chip"
-        />
+        <!-- A `$name` in a wildcard option is NOT a read: the engine prints it
+             as written (wildcards set variables, they don't read them), so
+             it falls through to plain text like the library editor shows. -->
         <span
           v-else-if="tok.kind === 'dp-brace'"
           class="opt__tok opt__tok--brace"
