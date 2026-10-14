@@ -179,10 +179,13 @@ def _turns(body: dict[str, Any]) -> list[dict[str, Any]] | web.Response:
 
 async def _ask(
     cfg: dict[str, Any], *, first: str, turns: list[dict[str, Any]], instruction: str,
-    **kwargs: Any,
+    image_note: bool = True, **kwargs: Any,
 ) -> Any:
-    """`complete_json` with the conversation so far, when there is one."""
+    """`complete_json` with the conversation so far, when there is one.
+    Reference images (`images=`) go with the newest message, which says so."""
     history, user = ai_followup.conversation(first, turns, instruction)
+    if image_note and kwargs.get("images"):
+        user = f"{user}\n\n{_ai_images.note(len(kwargs['images']))}"
     return await _ai_client.complete_json(cfg, user=user, history=history, **kwargs)
 
 
@@ -219,9 +222,12 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
-    body = await _body(request)
+    body = await _body(request, limit=_MAX_IMAGE_BODY_BYTES)
     if isinstance(body, web.Response):
         return body
+    images = await _request_images(cfg, body)
+    if isinstance(images, web.Response):
+        return images
 
     instruction = body.get("instruction")
     if not isinstance(instruction, str) or not instruction.strip():
@@ -266,6 +272,7 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
             cfg, first=first, turns=turns, instruction=instruction,
             system=ai_wildcard.SYSTEM_PROMPT, schema=ai_wildcard.OPTIONS_SCHEMA,
             schema_name="wildcard_options",
+            images=images or None,
         )
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
@@ -299,9 +306,12 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
-    body = await _body(request)
+    body = await _body(request, limit=_MAX_IMAGE_BODY_BYTES)
     if isinstance(body, web.Response):
         return body
+    images = await _request_images(cfg, body)
+    if isinstance(images, web.Response):
+        return images
 
     action = body.get("action")
     if action not in ai_edit.ACTIONS:
@@ -367,6 +377,7 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
             schema=ai_edit.SCHEMAS[action], schema_name=f"wildcard_{action}",
             # Edits should be faithful to the request, not creative.
             temperature=0.3,
+            images=images or None,
         )
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
@@ -405,9 +416,12 @@ async def post_derivation_draft(request: web.Request) -> web.Response:
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
-    body = await _body(request)
+    body = await _body(request, limit=_MAX_IMAGE_BODY_BYTES)
     if isinstance(body, web.Response):
         return body
+    images = await _request_images(cfg, body)
+    if isinstance(images, web.Response):
+        return images
     instruction = _instruction(body, "say what the rules should do")
     if isinstance(instruction, web.Response):
         return instruction
@@ -439,6 +453,7 @@ async def post_derivation_draft(request: web.Request) -> web.Response:
             cfg, first=first, turns=turns, instruction=instruction,
             system=ai_derivation.SYSTEM_PROMPT,
             schema=ai_derivation.SCHEMA, schema_name="derivation_rules", temperature=0.3,
+            images=images or None,
         )
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
@@ -477,9 +492,12 @@ async def post_text_draft(request: web.Request) -> web.Response:
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
-    body = await _body(request)
+    body = await _body(request, limit=_MAX_IMAGE_BODY_BYTES)
     if isinstance(body, web.Response):
         return body
+    images = await _request_images(cfg, body)
+    if isinstance(images, web.Response):
+        return images
     kind = body.get("kind")
     if kind not in _TEXT_KINDS:
         return json_error("kind must be fixed_values, combine or template", status=400)
@@ -525,7 +543,7 @@ async def post_text_draft(request: web.Request) -> web.Response:
     try:
         answer = await _ask(cfg, first=first, turns=turns, instruction=instruction,
                             system=system, schema=schema, schema_name=schema_name,
-                            temperature=0.5)
+                            temperature=0.5, images=images or None)
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
     try:
@@ -557,9 +575,12 @@ async def post_constraint_draft(request: web.Request) -> web.Response:
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
-    body = await _body(request)
+    body = await _body(request, limit=_MAX_IMAGE_BODY_BYTES)
     if isinstance(body, web.Response):
         return body
+    images = await _request_images(cfg, body)
+    if isinstance(images, web.Response):
+        return images
     instruction = _instruction(body, "say what the rules should do")
     if isinstance(instruction, web.Response):
         return instruction
@@ -598,6 +619,7 @@ async def post_constraint_draft(request: web.Request) -> web.Response:
             cfg, first=first, turns=turns, instruction=instruction,
             system=ai_constraint.SYSTEM_PROMPT,
             schema=ai_constraint.SCHEMA, schema_name="constraint_rules", temperature=0.3,
+            images=images or None,
         )
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
@@ -1855,10 +1877,10 @@ def _pack_body(
     return plan, ai_pack.parse_built(plan, body.get("built"))
 
 
-async def _pack_images(cfg: dict[str, Any], body: dict[str, Any],
-                       ) -> list[dict[str, Any]] | web.Response:
-    """Reference images sent with a plan request, checked; refused when the
-    model can't see them."""
+async def _request_images(cfg: dict[str, Any], body: dict[str, Any],
+                          ) -> list[dict[str, Any]] | web.Response:
+    """Reference images sent with a pack plan or Draft with AI request,
+    checked; refused when the model can't see them."""
     try:
         images = _ai_images.clean(body.get("images"))
     except _ai_images.ImageError as e:
@@ -1889,7 +1911,7 @@ async def post_pack_plan(request: web.Request) -> web.Response:
     turns = _turns(body)
     if isinstance(turns, web.Response):
         return turns
-    images = await _pack_images(cfg, body)
+    images = await _request_images(cfg, body)
     if isinstance(images, web.Response):
         return images
     sample = body.get("sample") if isinstance(body.get("sample"), str) else ""
@@ -1930,6 +1952,7 @@ async def post_pack_plan(request: web.Request) -> web.Response:
             cfg, first=first, turns=turns, instruction=follow,
             system=ai_pack.PLAN_SYSTEM, schema=ai_pack.PLAN_SCHEMA,
             schema_name="pack_plan", temperature=0.4, images=images or None,
+            image_note=False,  # plan_prompt says how to use them
         )
         plan = ai_pack.compile_plan(answer, library=library, previous=previous,
                                     decisions=decisions, settings=settings, base=base)

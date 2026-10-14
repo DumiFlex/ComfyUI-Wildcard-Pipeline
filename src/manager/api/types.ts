@@ -956,6 +956,8 @@ export interface AiTurn {
 export interface AiConversational {
   /** Earlier turns, oldest first; `instruction` is then the follow-up. */
   history?: AiTurn[];
+  /** Reference images (shrunk data URLs) sent with the newest message. */
+  images?: string[];
 }
 
 export interface AiDraftOption {

@@ -10,6 +10,7 @@
 import { computed, onBeforeUnmount, watch } from "vue";
 import Button from "../ui/Button.vue";
 import AiPanelFrame from "./AiPanelFrame.vue";
+import { useAiImages } from "../../composables/useAiImages";
 import { api } from "../../api/client";
 import type { AiTextDraftRequest, AiTextDraftResult } from "../../api/types";
 import { useAiConversation } from "../../composables/useAiConversation";
@@ -50,10 +51,11 @@ const COPY: Record<Kind, { placeholder: string; verb: string; scope: string; app
 };
 const copy = computed(() => COPY[props.kind]);
 
+const pics = useAiImages();
 const convo = useAiConversation<AiTextDraftResult, { item: Item }>({
   capture: () => ({ item: JSON.parse(JSON.stringify(props.item)) as Item }),
   send: ({ instruction, history, ctx }, signal) => api.ai.draftText({
-    kind: props.kind, instruction, history, item: ctx.item,
+    kind: props.kind, instruction, history, item: ctx.item, images: pics.urls(),
   }, signal),
   emptyMessage: (res) => res.preview.length ? "" : "The model didn't write anything usable.",
 });
@@ -81,6 +83,7 @@ function close(): void {
 <template>
   <AiPanelFrame
     v-model="instruction"
+    :images="pics"
     :placeholder="copy.placeholder"
     :verb="copy.verb"
     :scope="copy.scope"

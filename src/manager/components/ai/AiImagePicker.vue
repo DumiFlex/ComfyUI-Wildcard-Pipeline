@@ -3,7 +3,8 @@
  * AiImagePicker — reference images for an AI request (pack builder plan
  * step, Draft with AI panels). Drop, paste or pick; thumbnails with a
  * remove button. State lives in the caller's `useAiImages()`; this only
- * draws it. Hidden behind a line of text when the model can't see images.
+ * draws it. Hidden behind a line of text when the model can't see images
+ * (compact: hidden altogether, so the Draft panels stay small).
  */
 import { onMounted, ref } from "vue";
 import { checkVision, type AiImages } from "../../composables/useAiImages";
@@ -49,7 +50,12 @@ function onPaste(ev: ClipboardEvent): void {
 </script>
 
 <template>
-  <div class="wp-ai-images" :data-compact="compact ? 'true' : undefined" data-test="ai-images">
+  <div
+    v-if="!(compact && images.blind.value)"
+    class="wp-ai-images"
+    :data-compact="compact ? 'true' : undefined"
+    data-test="ai-images"
+  >
     <p v-if="images.blind.value" class="wp-ai-images__blind">
       <i class="pi pi-eye-slash" aria-hidden="true" />
       {{ images.visionModel.value || 'This model' }} can't see images; pick a vision model in

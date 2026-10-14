@@ -20,7 +20,7 @@ let checked: Promise<void> | null = null;
  *  asks again (after the model changed). */
 export function checkVision(force = false): Promise<void> {
   if (!checked || force) {
-    checked = api.ai.vision().then(
+    checked = Promise.resolve().then(() => api.ai.vision()).then(
       (got) => { vision.value = got.vision; visionModel.value = got.model; },
       () => { vision.value = null; },
     );

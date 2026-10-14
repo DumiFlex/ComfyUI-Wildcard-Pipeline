@@ -11,6 +11,7 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "../ui/Button.vue";
 import AiPanelFrame from "./AiPanelFrame.vue";
+import { useAiImages } from "../../composables/useAiImages";
 import { api } from "../../api/client";
 import type {
   AiWildcardEditAction, AiWildcardEditChange, AiWildcardEditResult, WildcardOption,
@@ -62,12 +63,14 @@ const scopeLabel = computed(() => {
 });
 
 type Ctx = { action: AiWildcardEditAction; rows: WildcardOption[]; tags: string[] };
+const pics = useAiImages();
 const convo = useAiConversation<AiWildcardEditResult, Ctx>({
   capture: () => ({ action: props.action, rows: editable.value, tags: props.existingTags }),
   send: ({ instruction, history, ctx }, signal) => api.ai.editWildcard({
     action: ctx.action,
     instruction,
     history,
+    images: pics.urls(),
     wildcard: {
       name: props.name,
       var_binding: props.varBinding,
@@ -153,6 +156,7 @@ function fmtWeight(w: number | undefined): string {
 <template>
   <AiPanelFrame
     v-model="instruction"
+    :images="pics"
     class="wp-ai-edit"
     data-test="ai-edit-panel"
     bare

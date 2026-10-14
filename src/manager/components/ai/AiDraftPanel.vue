@@ -16,6 +16,7 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "../ui/Button.vue";
 import Input from "../ui/Input.vue";
 import AiPanelFrame from "./AiPanelFrame.vue";
+import { useAiImages } from "../../composables/useAiImages";
 import { api } from "../../api/client";
 import type { AiDraftOption, AiWildcardDraftResult } from "../../api/types";
 import type { ParsedBulkOption } from "../../utils/bulkParse";
@@ -46,6 +47,7 @@ const count = ref<number>(10);
 const unticked = ref<Set<number>>(new Set());
 
 type Ctx = { values: string[]; tags: string[]; tagGroups?: Record<string, string[]> };
+const pics = useAiImages();
 const convo = useAiConversation<AiWildcardDraftResult, Ctx>({
   capture: () => ({
     values: props.existingValues.filter((v) => v.trim()),
@@ -58,6 +60,7 @@ const convo = useAiConversation<AiWildcardDraftResult, Ctx>({
     return api.ai.draftWildcard({
       instruction,
       history,
+      images: pics.urls(),
       count: n,
       wildcard: {
         name: props.name,
@@ -144,6 +147,7 @@ const skippedSummary = computed(() => {
 <template>
   <AiPanelFrame
     v-model="instruction"
+    :images="pics"
     class="wp-ai-draft"
     data-test="ai-draft-panel"
     bare

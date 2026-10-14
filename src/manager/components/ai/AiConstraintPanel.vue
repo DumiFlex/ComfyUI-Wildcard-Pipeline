@@ -11,6 +11,7 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "../ui/Button.vue";
 import AiPanelFrame from "./AiPanelFrame.vue";
+import { useAiImages } from "../../composables/useAiImages";
 import ConstraintPreview from "../ConstraintPreview.vue";
 import SegControl, { type SegOption } from "../settings/SegControl.vue";
 import { mergeAiRules, type PreviewWildcard } from "../../utils/constraint-preview";
@@ -50,11 +51,13 @@ const MODE_LABEL: Record<ConstraintMode, string> = {
 const unticked = ref<Set<string>>(new Set());
 
 type Ctx = { matrix: ConstraintMatrix; exceptions: ConstraintException[] };
+const pics = useAiImages();
 const convo = useAiConversation<AiConstraintDraftResult, Ctx>({
   capture: () => ({ matrix: props.matrix, exceptions: props.exceptions }),
   send: ({ instruction, history, ctx }, signal) => api.ai.draftConstraint({
     instruction,
     history,
+    images: pics.urls(),
     constraint: {
       name: props.name ?? "",
       description: props.description ?? "",
@@ -138,6 +141,7 @@ function shown(v: string): string {
 <template>
   <AiPanelFrame
     v-model="instruction"
+    :images="pics"
     placeholder="e.g. mages never carry swords, warriors rarely get staves, and the crystal staff only goes with mages"
     verb="Write rules"
     :scope="`${sourceName || 'Source'} → ${targetName || 'Target'}`"

@@ -12,7 +12,9 @@
  */
 import { computed } from "vue";
 import Button from "../ui/Button.vue";
+import AiImagePicker from "./AiImagePicker.vue";
 import { useAiConfig } from "../../composables/useAiConfig";
+import type { AiImages } from "../../composables/useAiImages";
 
 interface Props {
   placeholder: string;
@@ -35,6 +37,9 @@ interface Props {
   /** No box or title: the parent panel draws them (wildcard tabs). */
   bare?: boolean;
   hint?: string;
+  /** Reference images for the request (`useAiImages()`); a small picker
+   *  shows under the box, and images pasted into the box are added. */
+  images?: AiImages;
 }
 const props = withDefaults(defineProps<Props>(), {
   asked: () => [], answerIndex: 0, answerCount: 0, hint: "You review everything first.",
@@ -60,6 +65,15 @@ const canRun = computed(
   () => (props.optional || !!instruction.value.trim()) && !props.loading && !props.blocked,
 );
 const canRefine = computed(() => !!instruction.value.trim() && !props.loading);
+
+function onPaste(ev: ClipboardEvent): void {
+  if (!props.images || props.images.blind.value) return;
+  const files = [...(ev.clipboardData?.files ?? [])].filter((f) => f.type.startsWith("image/"));
+  if (files.length) {
+    ev.preventDefault();
+    void props.images.add(files);
+  }
+}
 
 function onKeydown(ev: KeyboardEvent): void {
   if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
@@ -120,7 +134,9 @@ function onKeydown(ev: KeyboardEvent): void {
       data-test="ai-instruction"
       :disabled="loading"
       @keydown="onKeydown"
+      @paste="onPaste"
     ></textarea>
+    <AiImagePicker v-if="images" :images="images" :disabled="loading" compact />
     <div class="wp-ai-frame__controls">
       <slot name="controls" />
       <span class="wp-ai-frame__hint">{{ answered ? "Refine keeps the conversation." : hint }} Ctrl+Enter {{ answered ? "refines" : "asks" }}.</span>
