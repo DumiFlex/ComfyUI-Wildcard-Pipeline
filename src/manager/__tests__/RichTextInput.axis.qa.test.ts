@@ -34,6 +34,14 @@ function mountEditor(modelValue = "") {
   });
 }
 
+/** Inline style of the (single) `$name` run — where the unknown-axis warning
+ *  lives now that a var is coloured text, not a chip. */
+function varStyle(wrap: { find: (s: string) => { element: Element } }): string {
+  const span = (wrap.find(".wp-rt__host").element as HTMLElement).querySelector(".wp-rt-var");
+  expect(span).not.toBeNull();
+  return span?.getAttribute("style") ?? "";
+}
+
 /** Type `text` into the host's trailing text span and fire `input`, which is
  *  how a browser delivers a keystroke to a contenteditable. */
 async function typeInto(wrap: ReturnType<typeof mountEditor>, text: string) {
@@ -166,8 +174,12 @@ describe("axis authoring — editing an existing reference", () => {
     await nextTick();
     const html = (wrap.find(".wp-rt__host").element as HTMLElement).innerHTML;
     // The engine renders an undeclared axis as "", so the only symptom without
-    // a mark is a word missing from the prompt.
-    expect(html).toContain("wp-refchip__accessor--unknown");
+    // a mark is a word missing from the prompt. The run wears the warn colour
+    // and a wavy underline.
+    expect(html).toContain("wp-rt-var");
+    const style = varStyle(wrap);
+    expect(style).toContain("--wp-warn");
+    expect(style).toContain("wavy");
     wrap.unmount();
   });
 
@@ -182,8 +194,9 @@ describe("axis authoring — editing an existing reference", () => {
       attachTo: document.body,
     });
     await nextTick();
-    const html = (wrap.find(".wp-rt__host").element as HTMLElement).innerHTML;
-    expect(html).not.toContain("wp-refchip__accessor--unknown");
+    const style = varStyle(wrap);
+    expect(style).not.toContain("--wp-warn");
+    expect(style).not.toContain("wavy");
     wrap.unmount();
   });
 });
@@ -230,8 +243,9 @@ describe("stale node snapshots must not look like errors", () => {
       attachTo: document.body,
     });
     await nextTick();
-    const html = (wrap.find(".wp-rt__host").element as HTMLElement).innerHTML;
-    expect(html).not.toContain("wp-refchip__accessor--unknown");
+    const style = varStyle(wrap);
+    expect(style).not.toContain("--wp-warn");
+    expect(style).not.toContain("wavy");
     wrap.unmount();
   });
 
@@ -246,8 +260,9 @@ describe("stale node snapshots must not look like errors", () => {
       attachTo: document.body,
     });
     await nextTick();
-    const html = (wrap.find(".wp-rt__host").element as HTMLElement).innerHTML;
-    expect(html).toContain("wp-refchip__accessor--unknown");
+    const style = varStyle(wrap);
+    expect(style).toContain("--wp-warn");
+    expect(style).toContain("wavy");
     wrap.unmount();
   });
 });
@@ -296,7 +311,7 @@ describe("the host swap must not read as the user leaving the field", () => {
     wrap.unmount();
   });
 
-  it("a genuine blur still settles pending text into chips", async () => {
+  it("a genuine blur still settles pending text into a coloured var run", async () => {
     // The guard must be narrow: only the swap's own blur is ignored.
     const wrap = mountEditor("");
     await nextTick();
@@ -306,8 +321,14 @@ describe("the host swap must not read as the user leaving the field", () => {
     await host.trigger("input");
     await host.trigger("blur");
     await flushPromises();
-    expect((host.element as HTMLElement).querySelectorAll(".wp-refchip").length)
-      .toBeGreaterThan(0);
+    // `$var` no longer settles into a chip: the blur re-parses the text and
+    // it renders as a coloured `.wp-rt-var` run.
+    const live = wrap.find(".wp-rt__host").element as HTMLElement;
+    expect(live.querySelectorAll(".wp-refchip").length).toBe(0);
+    const runs = [...live.querySelectorAll(".wp-rt-var")].map((n) => n.textContent);
+    expect(runs).toContain("$outfit");
+    const ev = wrap.emitted("update:modelValue") ?? [];
+    expect(ev[ev.length - 1]?.[0]).toBe("$outfit");
     wrap.unmount();
   });
 });
@@ -324,9 +345,11 @@ describe("`$var.neg` — a variable's negatives", () => {
       attachTo: document.body,
     });
     await nextTick();
-    const html = (wrap.find(".wp-rt__host").element as HTMLElement).innerHTML;
-    expect(html).not.toContain("wp-refchip__accessor--unknown");
-    expect(html.match(/wp-refchip__accessor--neg/g)?.length).toBe(2);
+    const host = wrap.find(".wp-rt__host").element as HTMLElement;
+    const runs = [...host.querySelectorAll(".wp-rt-var")];
+    expect(runs.length).toBe(2);
+    for (const run of runs) expect(run.getAttribute("style") ?? "").not.toContain("--wp-warn");
+    expect(host.querySelectorAll(".wp-rt-var__accessor--neg").length).toBe(2);
     wrap.unmount();
   });
 

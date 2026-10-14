@@ -7,6 +7,7 @@ import { useLoadError } from "../composables/useLoadError";
 import { useBulkActions } from "../composables/useBulkActions";
 import { makeModuleStoreAdapter } from "../composables/bulkAdapters";
 import ModuleListView from "../components/ModuleListView.vue";
+import { varColorClass } from "../../components/shared/var-color";
 import SendToTestRunner from "../components/SendToTestRunner.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
 import ValidityIcon from "../components/ValidityIcon.vue";
@@ -322,11 +323,9 @@ function templateParts(row: ModuleRow): TemplatePart[] {
         <span v-if="!inputVars(row).length" class="wp-dim">no inputs</span>
         <span
           v-for="(v, i) in inputVars(row)" :key="i"
-          class="wp-input-var-chip"
-        >
-          <i :class="v.startsWith('@') ? 'pi pi-sparkles' : 'pi pi-tag'" />
-          {{ v }}
-        </span>
+          class="wp-input-var"
+          :class="v.startsWith('@') ? 'wp-input-var--ref' : varColorClass(v.replace(/^\$/, ''))"
+        >{{ v }}</span>
       </div>
     </template>
   </ModuleListView>
@@ -361,17 +360,12 @@ function templateParts(row: ModuleRow): TemplatePart[] {
   margin-top: var(--wp-space-4);
 }
 .wp-input-vars__label { font-size: var(--wp-text-xs); margin-right: var(--wp-space-2); }
-.wp-input-var-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--wp-space-2);
-  padding: var(--wp-space-1) var(--wp-space-4);
-  border-radius: 999px;
+/* Read variables as syntax-coloured names, not pills: each in its own
+   `--wp-var-N` colour, the same one the editors use. */
+.wp-input-var {
   font-size: var(--wp-text-xs);
-  background: color-mix(in oklab, var(--wp-accent-500) 14%, transparent);
-  color: var(--wp-accent-text);
-  border: 1px solid color-mix(in oklab, var(--wp-accent-500) 35%, transparent);
   font-family: var(--wp-font-mono);
+  font-weight: var(--wp-weight-semibold, 600);
 }
-.wp-input-var-chip .pi { font-size: 9.5px; } /* audit-exempt: micro icon inside a pill — below scale floor */
+.wp-input-var--ref { color: var(--wp-kind-wildcard); }
 </style>

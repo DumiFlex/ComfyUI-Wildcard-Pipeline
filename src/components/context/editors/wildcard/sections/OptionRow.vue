@@ -750,9 +750,8 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
   cursor: help;
 }
 .opt__tok--var {
-  background: color-mix(in srgb, var(--wp-success, #22c55e) 15%, transparent);
-  border-color: color-mix(in srgb, var(--wp-success, #22c55e) 50%, transparent);
-  color: var(--wp-success);
+  color: var(--wp-accent-text);
+  font-weight: 600;
 }
 /* Plain `{a|b|c}` inline-choice block — warn-tone yellow (matches the
  * SPA `wp-rt-dp-brace` palette in `manager/styles/rich-text.css`). */
