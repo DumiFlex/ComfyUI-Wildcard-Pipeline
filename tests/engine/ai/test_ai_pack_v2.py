@@ -96,7 +96,9 @@ def test_settings_override_the_model_and_gate_library_items():
     assert hair["kind"] == "library" and hair["id"] == "aaaaaaaa"
     assert plan["rating"] == "nsfw" and plan["style"] == "sentences"
     plan = pack.compile_plan(raw, lib, settings={"library": "new"})
-    assert not any(i["var"] == "hair" for i in plan["items"])
+    # Made new instead of left out, so the pack keeps its hair pick.
+    hair = next(i for i in plan["items"] if i["var"] == "hair")
+    assert hair["kind"] == "wildcard" and hair["id"] != "aaaaaaaa"
     assert any("make everything new" in w for w in plan["warnings"])
 
 

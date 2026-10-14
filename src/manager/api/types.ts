@@ -1665,6 +1665,15 @@ export interface AiPackSection {
   about: string;
 }
 
+export interface AiPackDropped {
+  kind: "constraint";
+  name: string;
+  source: string;
+  target: string;
+  about: string;
+  why: string;
+}
+
 export interface AiPackPlan {
   title: string;
   summary: string;
@@ -1693,6 +1702,10 @@ export interface AiPackPlan {
   items: AiPackItem[];
   /** What the checker left out of the model's plan. */
   warnings: string[];
+  /** Constraints the checker had to leave out (a side isn't a wildcard),
+   *  kept until one between the same variables is planned; the plan review
+   *  and the check both report them. */
+  dropped?: AiPackDropped[];
   /** "Extend with AI": the bundle the plan adds to. */
   base?: { id: string; name: string; nested: boolean; sets: string[] };
   /** Variables the user's open canvas sets (Injector rows, the Loop). */

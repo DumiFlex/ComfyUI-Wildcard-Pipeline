@@ -72,6 +72,8 @@ $eyes" → $look). Read variables as $name ($name.0 for the first of a \
 multi-pick, $name.AXIS for an accepts tag group's rolled tag, $name.neg for \
 a variable's negative words). {a|b} picks one of a or b each run. You can't \
 point at wildcards here (@{...} stays as written); read their variables. \
+In the tags style, put ", " between the variables it joins ("$hair, $eyes"), \
+since each holds its own tags. \
 negative: words this combine adds to the negative prompt when the prompt \
 uses it, or "". It also carries the negatives of the variables it reads.\
 """

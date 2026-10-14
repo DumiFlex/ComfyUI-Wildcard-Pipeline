@@ -201,10 +201,12 @@ async def test_run_pack_and_eval_report():
 
     rows = await evals.evaluate(complete, ["fantasy"], seeds=20)
     [row] = rows
-    assert row["plan"] and row["built"] == row["items"] == 6 and row["clean"], row
+    # The plan's "Bad" constraint (on $race, which no wildcard sets) was left
+    # out: that counts as the run's one problem instead of passing quietly.
+    assert row["plan"] and row["built"] == row["items"] == 6 and row["problems"] == 1, row
     assert len(refines) == 1 and "decide for me" in refines[0].lower()
     text = evals.report(rows, "fake")
-    assert "Packs with a clean test run: 1 / 1" in text and "portrait of" in text
+    assert "Packs with a clean test run: 0 / 1" in text and "portrait of" in text
 
     async def broken(**_kw):
         raise RuntimeError("down")
