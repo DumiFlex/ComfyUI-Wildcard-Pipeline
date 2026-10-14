@@ -33,7 +33,10 @@ describe("api.ai.chatStream", () => {
     const out = await api.ai.chatStream({ message: "hi" }, (e) => seen.push(e));
     expect(out).toEqual({ chat_id: "c1", message: "Hello" });
     expect(seen.map((e) => e.type)).toEqual(["step", "text", "text"]);
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ message: "hi", stream: true });
+    // Every AI request says which lookups are on (no canvas tab answers here).
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({
+      message: "hi", stream: true, vocab: { tags: false, loras: false, embeddings: false },
+    });
   });
 
   it("throws the error event, and a stream cut short", async () => {

@@ -17,6 +17,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
+import Input from "../components/ui/Input.vue";
+import Select from "../components/ui/Select.vue";
 import AiImagePicker from "../components/ai/AiImagePicker.vue";
 import AiWorking from "../components/ai/AiWorking.vue";
 import ChatCompletions from "../components/ai/ChatCompletions.vue";
@@ -25,6 +27,7 @@ import PackPlanList from "../components/pack/PackPlanList.vue";
 import PackQuestions from "../components/pack/PackQuestions.vue";
 import PackSettings from "../components/pack/PackSettings.vue";
 import { registerPageNote } from "../composables/useOpenEditor";
+import { useAiChat } from "../composables/useAiChat";
 import { mentionsImages, usePackBuilder, type ItemStatus } from "../composables/usePackBuilder";
 import WpCheck from "../../components/shared/WpCheck.vue";
 import { useAiConfig } from "../composables/useAiConfig";
@@ -32,7 +35,7 @@ import { useToast } from "../composables/useToast";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import { useTemplateStore } from "../stores/templateStore";
-import type { AiPackItem } from "../api/types";
+import type { AiPackItem, AiPackRun } from "../api/types";
 import LoadingMark from "@/components/shared/LoadingMark.vue";
 
 const pb = usePackBuilder();
@@ -44,13 +47,25 @@ registerPageNote(() => {
   const items = plan.items.map((it) => `${it.name} (${it.kind}${it.var ? ` $${it.var}` : ""})`).join(", ");
   const check = pb.check.value;
   const problems = check ? Object.values(check.problems).flat().slice(0, 5) : [];
+  const draft = pb.draft.value ?? plan;
   return [
     `Pack builder, step ${pb.phase.value}, pack "${plan.title}": ${items}`,
+    draft.anchor ? `Anchor $${draft.anchor}` : "",
+    draft.inputs.length ? `Inputs from a WP Context Injector: ${draft.inputs.map((i) => `$${i.var}`).join(", ")}` : "",
+    draft.canvas?.length ? `Set on the user's canvas: ${draft.canvas.map((c) => `$${c.name} (${c.source})`).join(", ")}` : "",
+    draft.warnings.length ? `Planner notes: ${draft.warnings.slice(0, 6).join("; ")}` : "",
     pb.target.value ? `Extending the bundle ${pb.target.value.name}` : "",
     check ? `Test run: ${check.runs} seeds; ${problems.length ? `problems: ${problems.join("; ")}` : "no problems"}` : "",
   ].filter(Boolean).join(". ");
 });
 const { convo } = pb;
+const chat = useAiChat();
+
+/** Ask the chat what a warning means here and what to do about it. */
+function explain(warning: string, item?: AiPackItem): void {
+  const about = item ? ` about ${item.kind.replace("_", " ")} "${item.name}"` : "";
+  chat.ask(`Explain this pack builder warning${about} and what I can do about it: "${warning}"`);
+}
 const { config, ready } = useAiConfig();
 const router = useRouter();
 const toast = useToast();
@@ -274,6 +289,23 @@ const shape = computed(() => {
   ].filter(Boolean).join(" · ");
 });
 const showSample = ref(!!pb.sample.value);
+
+// How the pack runs is read from the request (or asked); this lets the
+// user correct it by hand.
+const RUN_OPTIONS = [
+  { value: "single", label: "Single images", title: "Every run is its own random prompt." },
+  { value: "story", label: "Story over a Loop", title: "A WP Context Loop plays the frames in order: a story beat per frame from $iteration, the cast held." },
+  { value: "sweep", label: "Sweep sheet", title: "A few short wildcards as Loop sweep axes; everything else held." },
+];
+const run = computed<AiPackRun>(() => draft.value?.run ?? { mode: "single", frames: 0 });
+function setRunMode(mode: AiPackRun["mode"]): void {
+  pb.editPlan({ run: { mode, frames: mode === "story" ? run.value.frames || 4 : 0 } });
+}
+function setRunFrames(v: string | number): void {
+  const n = Math.round(Number(v));
+  // The server keeps it within 2–12.
+  pb.editPlan({ run: { mode: "story", frames: Number.isFinite(n) && n > 0 ? Math.max(2, Math.min(12, n)) : 4 } });
+}
 
 function toggle(key: string): void {
   const next = new Set(open.value);
@@ -602,6 +634,34 @@ function stopExtending(): void {
         </p>
         <p v-if="draft?.summary" class="wp-pack__dim">{{ draft.summary }}</p>
         <p v-if="shape" class="wp-pack__shape" data-test="pack-shape">{{ shape }}</p>
+        <div v-if="draft" class="wp-pack__run" data-test="pack-run">
+          <span class="wp-pack__dim wp-pack__run-label">Runs as</span>
+          <Select
+            size="sm"
+            :model-value="run.mode"
+            :options="RUN_OPTIONS"
+            :filterable="false"
+            :disabled="convo.loading.value"
+            aria-label="How the pack runs"
+            data-test="pack-run-mode"
+            @update:model-value="(v) => setRunMode(v as AiPackRun['mode'])"
+          />
+          <template v-if="run.mode === 'story'">
+            <Input
+              type="number"
+              size="sm"
+              class="wp-pack__run-frames"
+              :model-value="run.frames"
+              :min="2"
+              :max="12"
+              :disabled="convo.loading.value"
+              aria-label="Story frames"
+              data-test="pack-run-frames"
+              @update:model-value="setRunFrames"
+            />
+            <span class="wp-pack__dim">frames</span>
+          </template>
+        </div>
         <AiWorking v-if="convo.loading.value || pb.searching.value" class="wp-pack__plan-working" :label="pb.searching.value ? 'Searching the web' : 'Updating the plan'" :size="34" data-test="pack-working" />
         <p v-if="pb.awaitingSearch.value" class="wp-pack__waiting" data-test="pack-waiting-search"><i class="pi pi-globe" aria-hidden="true" /> Waiting for your answer on the web search; this plan may change.</p>
         <p v-if="changedCount || pb.dropped.value.length" class="wp-pack__changed" data-test="pack-changed">
@@ -617,8 +677,11 @@ function stopExtending(): void {
             </li>
           </ul>
         </div>
-        <ul v-if="draft?.warnings.length" class="wp-pack__warnings">
-          <li v-for="(w, j) in draft.warnings" :key="j"><i class="pi pi-info-circle" aria-hidden="true" /> {{ w }}</li>
+        <ul v-if="draft?.warnings.length" class="wp-pack__warnings" data-test="pack-plan-notes">
+          <li v-for="(w, j) in draft.warnings" :key="j">
+            <i class="pi pi-info-circle" aria-hidden="true" /> <span>{{ w }}</span>
+            <button type="button" class="wp-pack__mini" :disabled="chat.loading.value" title="Ask the assistant what this means" data-test="pack-explain" @click="explain(w)">Explain</button>
+          </li>
         </ul>
         <div class="wp-pack__row">
           <span class="wp-pack__spacer" />
@@ -713,7 +776,11 @@ function stopExtending(): void {
             <ul v-if="problems(i.key).length" class="wp-pack__warnings">
               <li v-for="(w, j) in problems(i.key)" :key="j">
                 <i class="pi pi-exclamation-triangle" aria-hidden="true" /> <span>{{ w }}</span>
-                <button v-if="!pb.working.value" type="button" class="wp-pack__mini" data-test="pack-problem-dismiss" @click="pb.dismissNote(i.key, w)">Dismiss</button>
+                <template v-if="!pb.working.value">
+                  <button v-if="i.kind !== 'library'" type="button" class="wp-pack__mini" title="Build this item again with the warning as the note" data-test="pack-problem-fix" @click="pb.rebuild(i.key, w)">Fix with AI</button>
+                  <button type="button" class="wp-pack__mini" :disabled="chat.loading.value" title="Ask the assistant what this means" data-test="pack-problem-explain" @click="explain(w, i)">Explain</button>
+                  <button type="button" class="wp-pack__mini" data-test="pack-problem-dismiss" @click="pb.dismissNote(i.key, w)">Dismiss</button>
+                </template>
               </li>
             </ul>
             <ul v-if="quality(i.key).length" class="wp-pack__findings" data-test="pack-quality">
@@ -751,7 +818,10 @@ function stopExtending(): void {
             <template v-for="i in builtItems" :key="i.key">
               <li v-for="(w, j) in problems(i.key)" :key="j"><span><b>{{ i.name }}:</b> {{ w }}</span></li>
             </template>
-            <li v-for="(n, j) in pb.check.value.notes" :key="`n${j}`">{{ n }}</li>
+            <li v-for="(n, j) in pb.check.value.notes" :key="`n${j}`">
+              <span>{{ n }}</span>
+              <button type="button" class="wp-pack__mini" :disabled="chat.loading.value" data-test="pack-note-explain" @click="explain(n)">Explain</button>
+            </li>
           </ul>
           <div v-for="v in pb.check.value.variables.slice(0, 6)" :key="v.var" class="wp-pack__var">
             <code>${{ v.var }}</code>
@@ -881,6 +951,9 @@ function stopExtending(): void {
   color: var(--wp-kind-wildcard); background: var(--wp-kind-wildcard-bg);
 }
 .wp-pack__kind[data-kind="fixed_values"] { color: var(--wp-kind-fixed); background: var(--wp-kind-fixed-bg); }
+.wp-pack__run { display: flex; align-items: center; gap: 8px; margin: 2px 0 8px; font-size: 12.5px; }
+.wp-pack__run-frames { width: 72px; }
+.wp-pack__run-label { white-space: nowrap; }
 .wp-pack__inputs { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 8px; }
 .wp-pack__inputs p { margin: 0; font-size: 12px; }
 .wp-pack__inputs ul { margin: 0; padding-left: 18px; font-size: 12.5px; display: flex; flex-direction: column; gap: 3px; }
@@ -997,6 +1070,7 @@ function stopExtending(): void {
 .wp-pack__fixbox { display: flex; gap: 6px; margin: 4px 0 6px 120px; }
 .wp-pack__fixbox input { flex: 1; min-width: 0; }
 .wp-pack__mini { margin-left: auto; flex: none; border: 0; background: none; padding: 0 4px; font-size: 11px; color: var(--wp-text-dim); cursor: pointer; }
+.wp-pack__mini + .wp-pack__mini { margin-left: 0; }
 .wp-pack__mini:hover { color: var(--wp-text); }
 .wp-pack__warnings li { display: flex; gap: 6px; align-items: baseline; }
 .wp-pack__warnings li > span { min-width: 0; overflow-wrap: anywhere; }

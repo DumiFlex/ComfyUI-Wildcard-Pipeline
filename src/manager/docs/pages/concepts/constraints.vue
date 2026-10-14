@@ -72,7 +72,7 @@ const reachModes = [
         lighting far more likely when the source rolled "summer", while cool tones become more
         likely when it rolled "winter".
       </p>
-      <DocFigure caption="Source rolls → constraint adjusts target pool → target rolls.">
+      <DocFigure figure="constraints-figure" caption="Source rolls → constraint adjusts target pool → target rolls.">
         <div class="wp-doc-constraint-flow">
           <div class="wp-doc-constraint-box wp-doc-constraint-box--source">
             <span class="wp-doc-constraint-label">Source wildcard</span>

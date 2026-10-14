@@ -40,7 +40,7 @@ const rules = [
         three variables' negative words; a face detailer Assembler that only renders
         <VarToken>$face</VarToken> gets only the face words from the same Context.
       </p>
-      <DocFlow
+      <DocFlow figure="negatives-flow"
         :stages="[
           { icon: 'pi pi-sparkles', name: 'Wildcard option', sub: 'negative: fruit', tone: 'wildcard' },
           { icon: 'pi pi-sitemap', name: '$hair', sub: 'carries it', tone: 'node' },

@@ -27,7 +27,7 @@ const PRESETS: AiConfig["presets"] = {
 function cfg(over: Partial<AiConfig> = {}): AiConfig {
   return {
     enabled: false, provider: "ollama", base_url: "", model: "", unload_after_s: 60,
-    context_max: 16384, model_size: "auto", model_size_auto: "medium", tool_format: "auto", thinking: "auto", allow_delete: false, auto_apply: false, embed_model: "", embed_base_url: "", embed_api: "auto", search_engine: "off", search_url: "", search_keys_saved: [], search_engines: { searxng: { label: "SearXNG", needs_key: false }, brave: { label: "Brave Search", needs_key: true }, tavily: { label: "Tavily", needs_key: true }, kagi: { label: "Kagi", needs_key: true } }, key_for_host: null,
+    context_max: 16384, model_size: "auto", model_size_auto: "medium", tool_format: "auto", thinking: "auto", allow_delete: false, auto_apply: false, embed_model: "", embed_base_url: "", embed_api: "auto", search_engine: "off", search_url: "", search_keys_saved: [], search_engines: { searxng: { label: "SearXNG", needs_key: false }, brave: { label: "Brave Search", needs_key: true }, tavily: { label: "Tavily", needs_key: true }, kagi: { label: "Kagi", needs_key: true } }, reader_engine: "builtin", reader_url: "", reader_keys_saved: [], reader_engines: { builtin: { label: "Built in (page text)", needs_key: false, needs_url: false, base_url: "" }, crawl4ai: { label: "Crawl4AI (your server)", needs_key: false, needs_url: true, base_url: "" }, firecrawl: { label: "Firecrawl", needs_key: true, needs_url: false, base_url: "https://api.firecrawl.dev" } }, danbooru_lookup: false, web_always_allow: false, key_for_host: null,
     key_set: false, key_from_env: false, keys_saved: [], presets: PRESETS, embed_key_set: false, embed_key_own: false,
     local: PRESETS[over.provider ?? "ollama"].local, ...over,
   };
@@ -270,6 +270,47 @@ describe("Settings › AI assistant", () => {
     await w.get('[data-test="ai-search-url"]').trigger("keydown", { key: "Enter" });
     await flushPromises();
     expect(api.ai.saveConfig).toHaveBeenCalledWith({ search_url: "http://127.0.0.1:8888" });
+    w.unmount();
+  });
+
+  it("lists every page reader, asks the Crawl4AI address, and the Danbooru and no-ask switches", async () => {
+    localStorage.removeItem("wp-ai-notices-dismissed");
+    let saved = cfg({ enabled: true, model: "a" });
+    vi.mocked(api.ai.config).mockResolvedValue(saved);
+    vi.mocked(api.ai.saveConfig).mockImplementation(async (p) => {
+      saved = { ...saved, ...p } as AiConfig;
+      return saved;
+    });
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    const readerSel = w.findAllComponents(Select).find((c) => c.attributes("data-test") === "ai-reader")!;
+    // Every preset, set up or not.
+    expect((readerSel.props("options") as Array<{ value: unknown }>).map((o) => o.value))
+      .toEqual(["off", "builtin", "crawl4ai", "firecrawl"]);
+    expect(w.find('[data-test="ai-reader-url"]').exists()).toBe(false);
+    readerSel.vm.$emit("update:modelValue", "crawl4ai");
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ reader_engine: "crawl4ai" });
+    await w.get('[data-test="ai-reader-url"]').setValue("http://127.0.0.1:11235");
+    await w.get('[data-test="ai-reader-url"]').trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ reader_url: "http://127.0.0.1:11235" });
+    expect(w.find('[data-test="ai-web-notice"]').exists()).toBe(false);
+    w.findAllComponents({ name: "Toggle" }).find((c) => c.attributes("data-test") === "ai-danbooru")!
+      .vm.$emit("update:modelValue", true);
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ danbooru_lookup: true });
+    // Turning a web feature on shows what leaves the machine, once.
+    expect(w.get('[data-test="ai-web-notice"]').text()).toContain("What leaves your machine");
+    await w.get('[data-test="ai-web-notice-dismiss"]').trigger("click");
+    expect(w.find('[data-test="ai-web-notice"]').exists()).toBe(false);
+    w.findAllComponents({ name: "Toggle" }).find((c) => c.attributes("data-test") === "ai-web-always")!
+      .vm.$emit("update:modelValue", true);
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ web_always_allow: true });
+    expect(w.get('[data-test="ai-always-notice"]').text()).toContain("No Allow card");
+    await w.get('[data-test="ai-notices-again"]').trigger("click");
+    expect(w.find('[data-test="ai-web-notice"]').exists()).toBe(true);
     w.unmount();
   });
 

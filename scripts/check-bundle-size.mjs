@@ -291,8 +291,10 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // RAISED 472 -> 476 KB on 2026-10-14 for negatives on node fixed values and
 // combines (NegativeField in their lazy editor chunks) and the chat round;
 // the branch sat at 483,532 bytes.
+// RAISED 476 -> 480 KB on 2026-10-14 when the AI knowledge round (canvas-facts
+// answer, ~0.6 KB in boot) landed on top of it.
 // Same "guide, not a cap" rule as above.
-const TOTAL_LIMIT = 476 * 1024;     // 476 KB
+const TOTAL_LIMIT = 480 * 1024;     // 480 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

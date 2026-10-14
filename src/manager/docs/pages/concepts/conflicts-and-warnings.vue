@@ -59,7 +59,7 @@ const commonFlags = [
       <DocImage
         src="images/docs/conflicts-warning.png"
         ratio="16 / 6"
-        caption="A four-node chain illustrating both sides of the warning system. WP Context (Starter subject + Starter style + Starter pairing, the pairing row carrying an orange CONFLICT badge) → WP Debug with the Warnings tab open showing the constraint-orphan-target message in plain English → WP Prompt Assembler resolving the prompt around the unmet constraint without aborting."
+        caption="A three-node chain showing both sides of the warning system. WP Context (Starter subject + Starter style + Starter pairing, the pairing row outlined in amber with a TGT MISSING badge because its target wildcard isn't in the chain) → WP Debug with the Warnings tab open on CONSTRAINT_NEVER_APPLIED → WP Prompt Assembler still resolving 'A picture of a cat, in the style of oil painting'. Warnings are advisory; the run carries on."
       />
     </DocSection>
 

@@ -15,7 +15,7 @@ from typing import Any
 
 INDEX_PATH = Path(__file__).with_name("docs_index.json")
 MAX_HITS = 6
-MAX_READ = 7000
+MAX_READ = 9000
 SNIPPET = 220
 _WORD = re.compile(r"[a-z0-9_$#@]+")
 _STOP = frozenset(
@@ -48,7 +48,11 @@ _JOBS: tuple[tuple[str, str], ...] = (
     ("pack", "Packs"),
     ("test", "Testing"),
     ("delete", "Deleting (only while Settings allows it)"),
-    ("web", "Web search (only when set up; each search asks first)"),
+    ("vocab", "Your tags, LoRAs and embeddings (only while their autocomplete is on)"),
+    ("web", "Web search and reading a result page (only when set up; each asks first "
+            "unless Settings says not to)"),
+    ("danbooru", "Danbooru tag lookup (only when turned on; each asks first unless "
+                 "Settings says not to)"),
 )
 
 

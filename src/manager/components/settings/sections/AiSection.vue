@@ -360,6 +360,74 @@ async function removeSearchKey(): Promise<void> {
   await patch({ search_key: "" });
 }
 
+/* Reading result pages: built in (plain page text), or the user's own
+ * Crawl4AI / Firecrawl server. Every preset is listed whatever is set up. */
+const readerOptions = computed<SelectOption[]>(() => [
+  { value: "off", label: "Off" },
+  ...Object.entries(config.value?.reader_engines ?? {}).map(([id, e]) => ({ value: id, label: e.label })),
+]);
+const reader = computed(() => {
+  const id = config.value?.reader_engine;
+  return id && id !== "off" ? config.value?.reader_engines[id] ?? null : null;
+});
+const readerKeySet = computed(() => {
+  const id = config.value?.reader_engine;
+  return !!id && id !== "off" && (config.value?.reader_keys_saved ?? []).includes(id);
+});
+async function setReader(v: string | number | null): Promise<void> {
+  if (typeof v === "string") await patch({ reader_engine: v as AiConfigPatch["reader_engine"] });
+}
+const readerUrlDraft = ref("");
+watch(() => config.value?.reader_url, (v) => { readerUrlDraft.value = v ?? ""; }, { immediate: true });
+async function commitReaderUrl(): Promise<void> {
+  if (!config.value || readerUrlDraft.value.trim() === config.value.reader_url) return;
+  if (!(await patch({ reader_url: readerUrlDraft.value.trim() }))) {
+    readerUrlDraft.value = config.value.reader_url;
+  }
+}
+const readerKeyDraft = ref("");
+async function commitReaderKey(): Promise<void> {
+  if (!readerKeyDraft.value.trim()) return;
+  if (await patch({ reader_key: readerKeyDraft.value.trim() })) readerKeyDraft.value = "";
+}
+async function removeReaderKey(): Promise<void> {
+  await patch({ reader_key: "" });
+}
+
+/* Safety notices: what leaves the machine once a web feature is on. The
+ * user can dismiss each one (remembered in this browser). */
+const NOTICE_KEY = "wp-ai-notices-dismissed";
+function readDismissed(): string[] {
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(NOTICE_KEY) ?? "[]");
+    return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+const dismissed = ref<string[]>(readDismissed());
+function dismissNotice(id: string): void {
+  dismissed.value = [...dismissed.value, id];
+  try {
+    localStorage.setItem(NOTICE_KEY, JSON.stringify(dismissed.value));
+  } catch {
+    /* private window: the notice comes back next time */
+  }
+}
+function showNoticesAgain(): void {
+  dismissed.value = [];
+  try {
+    localStorage.removeItem(NOTICE_KEY);
+  } catch {
+    /* nothing stored */
+  }
+}
+const webNotice = computed(() => !!config.value
+  && (config.value.search_engine !== "off" || config.value.danbooru_lookup)
+  && !dismissed.value.includes("web"));
+const alwaysNotice = computed(() => !!config.value?.web_always_allow
+  && !dismissed.value.includes("always"));
+
 const index = ref<AiIndexStatus | null>(null);
 const indexError = ref("");
 const rebuilding = ref(false);
@@ -884,7 +952,7 @@ const off = computed(() => !config.value?.enabled);
           <SettingRow
             form
             label="Search engine"
-            hint="Lets the chat look things up on the web. Each search shows you its exact words first, and you allow it once, for the chat, or not at all. Only short result snippets come back; pages are never opened."
+            hint="Lets the chat look things up on the web. Each search shows you its exact words first, and you allow it once, for the chat, or not at all. Short result snippets come back; a page is only read when you allow it (Read result pages)."
             setting-key="ai-search-engine"
           >
             <Select
@@ -939,6 +1007,111 @@ const off = computed(() => !config.value?.enabled);
             <Button v-if="searchKeySet" size="sm" variant="ghost" data-test="ai-search-key-remove" @click="removeSearchKey">Remove</Button>
             <span v-if="searchKeySet" class="wp-set-pill" data-tone="ok" data-test="ai-search-key-set">Key saved</span>
           </SettingRow>
+
+          <SettingRow
+            form
+            label="Read result pages"
+            hint="When a snippet isn't enough, the chat can ask to read one page its search returned (never any other link). Built in fetches the page from ComfyUI and keeps its text, a few thousand characters; it skips pages on your own network. Crawl4AI or Firecrawl render pages in a browser on a server you run (Firecrawl also has a hosted API), for sites that need JavaScript. Needs web search."
+            setting-key="ai-reader"
+          >
+            <Select
+              :model-value="config.reader_engine"
+              :options="readerOptions"
+              :filterable="false"
+              aria-label="Read result pages"
+              data-test="ai-reader"
+              @update:model-value="setReader"
+            />
+          </SettingRow>
+
+          <SettingRow
+            v-if="config.reader_engine === 'crawl4ai' || config.reader_engine === 'firecrawl'"
+            form
+            :label="`${reader?.label ?? 'Reader'} address`"
+            :hint="config.reader_engine === 'crawl4ai' ? 'Your Crawl4AI server, e.g. http://127.0.0.1:11235.' : 'Leave empty for Firecrawl\'s hosted API, or type your own Firecrawl server.'"
+            setting-key="ai-reader-url"
+            for="ai-reader-url"
+          >
+            <Input
+              id="ai-reader-url"
+              v-model="readerUrlDraft"
+              :placeholder="config.reader_engine === 'crawl4ai' ? 'http://127.0.0.1:11235' : 'https://api.firecrawl.dev'"
+              class="wp-ai-set__fill wp-ai-set__mono"
+              :aria-label="`${reader?.label ?? 'Reader'} address`"
+              data-test="ai-reader-url"
+              @blur="commitReaderUrl"
+              @keydown.enter="commitReaderUrl"
+            />
+          </SettingRow>
+
+          <SettingRow
+            v-if="config.reader_engine === 'crawl4ai' || config.reader_engine === 'firecrawl'"
+            form
+            :label="`${reader?.label ?? 'Reader'} key`"
+            :hint="config.reader_engine === 'firecrawl' ? 'Needed for the hosted API. Saved on the ComfyUI machine and only sent to this address.' : 'Only if your server asks for a token. Saved on the ComfyUI machine and only sent to this address.'"
+            setting-key="ai-reader-key"
+            for="ai-reader-key"
+          >
+            <Input
+              id="ai-reader-key"
+              v-model="readerKeyDraft"
+              type="password"
+              :placeholder="readerKeySet ? 'Paste a new key to replace it' : 'Paste your key'"
+              class="wp-ai-set__fill"
+              aria-label="Page reader key"
+              data-test="ai-reader-key"
+              @keydown.enter="commitReaderKey"
+            />
+            <Button size="sm" :disabled="!readerKeyDraft.trim()" data-test="ai-reader-key-save" @click="commitReaderKey">Save</Button>
+            <Button v-if="readerKeySet" size="sm" variant="ghost" data-test="ai-reader-key-remove" @click="removeReaderKey">Remove</Button>
+            <span v-if="readerKeySet" class="wp-set-pill" data-tone="ok">Key saved</span>
+          </SettingRow>
+
+          <SettingRow
+            label="Danbooru tag lookup"
+            hint="Lets the chat look a tag up on danbooru.donmai.us: what it means (wiki), its aliases, what it implies and the tags used with it most. Read only, tags and wiki only, never posts or images, one request a second. Each lookup asks you first. For spellings and post counts the downloaded tag list is enough and stays offline."
+            setting-key="ai-danbooru"
+          >
+            <Toggle
+              :model-value="config.danbooru_lookup"
+              aria-label="Danbooru tag lookup"
+              data-test="ai-danbooru"
+              @update:model-value="(v: boolean) => patch({ danbooru_lookup: v })"
+            />
+          </SettingRow>
+
+          <SettingRow
+            label="Don't ask before web calls"
+            hint="Web searches, page reads and Danbooru lookups run without the Allow card. The chat then decides what leaves your machine; you still see each one in its steps."
+            setting-key="ai-web-always"
+          >
+            <Toggle
+              :model-value="config.web_always_allow"
+              aria-label="Don't ask before web calls"
+              data-test="ai-web-always"
+              @update:model-value="(v: boolean) => patch({ web_always_allow: v })"
+            />
+          </SettingRow>
+
+          <div v-if="webNotice" class="wp-ai-set__ctx" role="note" data-test="ai-web-notice">
+            <p>
+              <strong>What leaves your machine.</strong> A web search sends its words to the engine you
+              picked; a page read fetches that page; a Danbooru lookup asks Danbooru about one tag. Those
+              services' own terms and laws apply, and what you search for and use is up to you. Text from
+              the web is handed to the model as data, never as instructions.
+            </p>
+            <Button size="sm" variant="ghost" data-test="ai-web-notice-dismiss" @click="dismissNotice('web')">Got it</Button>
+          </div>
+          <div v-if="alwaysNotice" class="wp-ai-set__ctx" role="note" data-test="ai-always-notice">
+            <p>
+              <strong>No Allow card.</strong> A web page or a library item could ask the model to search
+              for something you didn't mean to send. With this on, nothing stops that before it goes out.
+            </p>
+            <Button size="sm" variant="ghost" data-test="ai-always-notice-dismiss" @click="dismissNotice('always')">Got it</Button>
+          </div>
+          <p v-if="dismissed.length" class="wp-ai-set__muted">
+            <button type="button" class="wp-ai-set__link" data-test="ai-notices-again" @click="showNoticesAgain">Show dismissed notices again</button>
+          </p>
         </SettingGroup>
 
         <SettingGroup title="Advanced">
@@ -1067,6 +1240,14 @@ const off = computed(() => !config.value?.enabled);
   font-size: var(--wp-text-sm);
   color: var(--wp-warn);
   border-top: 1px solid var(--wp-border);
+}
+div.wp-ai-set__ctx { display: flex; align-items: flex-start; gap: var(--wp-space-4); }
+div.wp-ai-set__ctx p { margin: 0; flex: 1; color: var(--wp-text-muted); }
+div.wp-ai-set__ctx strong { color: var(--wp-text); }
+p.wp-ai-set__muted:has(.wp-ai-set__link) { padding: var(--wp-space-2) var(--wp-space-6); }
+.wp-ai-set__link {
+  padding: 0; border: 0; background: none; cursor: pointer;
+  font: inherit; color: var(--wp-accent); text-decoration: underline;
 }
 
 /* Side cards. */

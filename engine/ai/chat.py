@@ -39,6 +39,7 @@ from engine.ai import safety as ai_safety
 from engine.ai import search_index as ai_search
 from engine.ai import tools as ai_tools
 from engine.ai import use as ai_use
+from engine.ai import vocab as ai_vocab
 from engine.ai import wildcard as ai_wildcard
 from engine.ai import wildcard_edit as ai_wildcard_edit
 from engine.ai.chat_manage import ManageTools
@@ -506,6 +507,10 @@ class Library(MoreTools, ManageTools):
         #: the next `search` runs (the route embeds it; tools are sync).
         self.embed_model = ""
         self.qvec: list[float] | None = None
+        #: The user's tags, LoRAs and embeddings (`engine.ai.vocab`): the
+        #: route's lookup and the sources switched on with data behind them.
+        self.vocab: ai_vocab.Lookup | None = None
+        self.vocab_kinds: set[str] = set()
 
     def use_editor(self, editor: Any) -> None:
         """Read the open editor's version of its item instead of the saved
@@ -1056,6 +1061,15 @@ class Library(MoreTools, ManageTools):
 
     def docs_read(self, args: dict[str, Any]) -> str:
         return ai_docs.read(args.get("page"), args.get("section"))
+
+    def lookup(self, args: dict[str, Any]) -> str:
+        kind = str(args.get("kind") or "").strip().lower()
+        kind = {"tag": "tags", "lora": "loras", "embedding": "embeddings"}.get(kind, kind)
+        if kind not in ai_vocab.KINDS:
+            raise ValueError("kind is tags, loras or embeddings")
+        if self.vocab is None or kind not in self.vocab_kinds:
+            return ai_vocab.OFF[kind]
+        return ai_vocab.answer(self.vocab, kind, _short(args.get("query"), 400))
 
     # ── change tools → proposals ─────────────────────────────────────────
 

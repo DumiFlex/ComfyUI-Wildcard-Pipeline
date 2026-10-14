@@ -65,7 +65,7 @@ import StarterButton from "../../../components/docs/StarterButton.vue";
           assembled prompt and feeds it into your sampler.
         </li>
       </ul>
-      <DocFigure caption="Modules resolve inside WP Context → named $variables → WP Prompt Assembler → CLIP.">
+      <DocFigure figure="introduction-figure" caption="Modules resolve inside WP Context → named $variables → WP Prompt Assembler → CLIP.">
         <PipelineDiagram />
       </DocFigure>
     </DocSection>
@@ -92,7 +92,7 @@ import StarterButton from "../../../components/docs/StarterButton.vue";
       <DocImage
         src="images/docs/introduction-graph.png"
         ratio="16 / 6"
-        caption="The smallest working pipeline, end to end. WP Context with one Starter subject wildcard → WP Prompt Assembler holding template 'a $subject' (resolved preview shows 'a cat') → CLIP Text Encode (Prompt) → KSampler. Four nodes, one wildcard, one prompt: everything else in the docs is variations on this skeleton."
+        caption="The smallest working pipeline, end to end. WP Context with one Starter subject wildcard → WP Prompt Assembler holding template 'picture of a $subject' (resolved preview shows 'picture of a cat') → CLIP Text Encode (Prompt) → KSampler. Four nodes, one wildcard, one prompt: everything else in the docs is variations on this skeleton."
       />
     </DocSection>
 

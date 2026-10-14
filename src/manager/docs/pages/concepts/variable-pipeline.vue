@@ -181,7 +181,7 @@ import DocRef from "../../../components/docs/DocRef.vue";
     </DocSection>
 
     <DocSection title="The flow">
-      <DocFigure caption="Modules produce $vars inside a Context; the Assembler fills the template.">
+      <DocFigure figure="variable-pipeline-figure" caption="Modules produce $vars inside a Context; the Assembler fills the template.">
         <PipelineDiagram />
       </DocFigure>
     </DocSection>

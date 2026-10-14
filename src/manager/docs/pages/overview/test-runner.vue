@@ -23,7 +23,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
         wildcard's options all come up, that a constraint actually fires, or that a combine reads
         the variables you think it does, before you wire anything on the canvas.
       </p>
-      <DocFlow
+      <DocFlow figure="test-runner-flow"
         :stages="[
           { icon: 'pi pi-box', name: 'Scenario', sub: 'stack + pins + seeds', tone: 'neutral' },
           { icon: 'pi pi-play', name: 'Run', sub: 'real engine, seeded', tone: 'node' },

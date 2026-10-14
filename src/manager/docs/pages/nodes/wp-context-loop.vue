@@ -131,7 +131,7 @@ const controls = [
       <DocImage
         src="images/docs/wp-context-loop-grid.png"
         ratio="16 / 7"
-        caption="The full looped workflow rendered: WP Context Loop + WP Context + WP Prompt Assembler + a KSampler chain produce a 2×2 grid of four images, each labelled 'iteration 1 of 4' through 'iteration 4 of 4'. Subject + style vary per pass while the iteration counter increments — every image lands as a unique (prompt, seed) pair when a WP Seed List is wired alongside."
+        caption="The full looped workflow rendered: WP Context Loop + WP Context + WP Prompt Assembler feed a KSampler whose seeds come from a WP Seed List on the loop's config, and a second assembler ('iteration $iteration of $iteration_total') drives an Add Text Overlay. The result is a 2×2 grid of four portraits (a dog, a cat, a dog, a wolf) labelled 'iteration 1 of 4' through 'iteration 4 of 4': one image per pass, each with its own prompt and seed."
       />
     </DocSection>
 

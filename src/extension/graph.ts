@@ -2239,3 +2239,53 @@ export function findWildcardHomesElsewhere(
   const codenames = assignCodenames(contextIds);
   return holders.map((n) => codenames.get(String(n.id)) ?? baseCodename(n.id));
 }
+
+/** A variable this canvas sets at run time, for the manager's AI
+ *  (`extension/canvas-facts.ts`). */
+export interface CanvasVar {
+  name: string;
+  source: "injector" | "loop" | "model";
+  about: string;
+}
+
+/**
+ * Every run-time variable the canvas sets outside the library: enabled
+ * WP_ContextInjector rows, each WP_ContextLoop's (renamable) iteration
+ * variables and WP_ModelInfo's. Graph-wide, subgraphs included; bypassed
+ * and muted nodes are left out. Names only, plus a short "about" (the
+ * row's slot label, the loop's frame count): never the values, which can
+ * be anything the user wired in.
+ */
+export function collectCanvasVars(rootGraph: LiteGraphLike): CanvasVar[] {
+  const out: CanvasVar[] = [];
+  const add = (name: string, source: CanvasVar["source"], about: string): void => {
+    const n = name.trim();
+    if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(n) && !n.startsWith("__") && !out.some((v) => v.name === n)) {
+      out.push({ name: n, source, about });
+    }
+  };
+  for (const { node: n } of walkAllNodes(rootGraph)) {
+    if (isSkippedMode(n)) continue;
+    if (n.type === "WP_ContextInjector") {
+      const inj = parseCached<{
+        rows?: Array<{ binding?: string; enabled?: boolean; kind?: string; slot_label?: string }>;
+      }>(widgetValue(n, "wp_rows"), { rows: [] });
+      for (const row of inj.rows ?? []) {
+        if (row.enabled !== true) continue;
+        const from = row.kind === "general" ? "a template row" : `from ${row.slot_label?.trim() || "a wired socket"}`;
+        add(row.binding ?? "", "injector", from);
+      }
+    } else if (n.type === "WP_ContextLoop") {
+      const raw = widgetValue(n, "wp_context_loop_config");
+      const cfg = parseCached<{ iteration_var_name?: string }>(typeof raw === "string" ? raw : "", {});
+      const base = (cfg.iteration_var_name ?? "iteration").trim() || "iteration";
+      const count = n.widgets?.find((w) => w.name === "count")?.value;
+      const frames = typeof count === "number" ? `, ${count} frames` : "";
+      add(base, "loop", `frame number 1 to N${frames}`);
+      add(`${base}_total`, "loop", `number of frames${frames}`);
+    } else if (n.type === MODEL_INFO_NODE) {
+      for (const v of MODEL_VARS) add(v, "model", "");
+    }
+  }
+  return out.slice(0, 40);
+}

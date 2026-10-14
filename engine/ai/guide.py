@@ -43,12 +43,12 @@ keyed on it.
 a fallback option on the target. "2-3 of these" → use "pick 2-3", read \
 with $var (joined) or $var.0. A choice that should stay for a whole batch → \
 use "hold". A value rules need but the prompt shouldn't show → use "internal".
-- A value from outside (subject typed by the user, an LLM's text) → it's set \
-by a WP Context Injector row; read it like any variable. Per-checkpoint \
-differences → rules on $model_family / $model_variant (WP Model Info node). \
-WP Context Loop sets $iteration and $iteration_total. To key a constraint on such \
-a variable, bundle a wildcard whose options are its values with "match \
-$var" and make that wildcard the constraint's source.
+- A value from outside (subject typed by the user, an LLM's text, a LoRA \
+trigger) → a WP Context Injector row sets it; read it like any variable. \
+Per-checkpoint differences → rules on $model_family / $model_variant (WP \
+Model Info). A sequence over a WP Context Loop → rules on $iteration. To key \
+a constraint on such a variable, bundle a wildcard whose options are its \
+values with "match $var" and make that wildcard the constraint's source.
 - Grouping a big pack → sub-bundles (one level) inside one bundle, e.g. \
 Outfit and Scene sub-bundles in a Character bundle. A constraint goes in \
 the same sub-bundle as its target wildcard, just before it; its source runs \
@@ -86,6 +86,52 @@ the template's negative with $negatives where the used ones go.
 - Order a stack: producers (fixed values, wildcards), each constraint after \
 its source and before its target, derivations after what they read, \
 combines last; the template reads only what's set.
+"""
+
+NODES = """\
+The nodes on the user's ComfyUI canvas (what packs and answers can count on):
+- WP Context runs a stack (modules and bundles) and sets $variables; \
+Contexts chain, later ones read and override earlier ones. WP Prompt \
+Assembler renders a template from them (prompt and negative outputs; the \
+negative template's $negatives takes the negatives of the variables it used).
+- WP Context Injector: each row turns something from outside into a \
+$variable the user names: a socket value (a LoRA trigger string, an LLM's \
+text, a number) or a template over other variables. A pack expects such \
+values as inputs; the user may already set others on the canvas.
+- WP Context Loop: runs everything after it N times (frames), a fresh roll \
+each. Sets $iteration (1 to N, as text) and $iteration_total; the user can \
+rename them (e.g. $page, $page_total). Both are internal: rules read them, \
+but a template shows them only if the user turns that off, so put the frame \
+number in a prompt through a derivation or combine. A sequence or story \
+from one pack: derivations on $iteration (equals "1", or matches \
+"^[1-3]$" for a range; there is no greater-than) set a beat or scene per \
+frame, and "hold" keeps the character and outfit the same in every frame. \
+Sweep mode instead runs every combination of the options the user ticks in \
+chosen wildcards (a contact sheet), holding the other picks; it works best \
+on short single-concept wildcards. WP Seed List gives each frame its seed.
+- WP Model Info: $model_family (sdxl, sd15, sd3, flux, chroma, qwen_image, \
+hidream, lumina2, …), $model_variant (pony, illustrious, noobai, animagine, \
+or "" when the file name matches none) and $model_name (the checkpoint's \
+file name); internal, known only at run time. Key per-model wording or \
+quality tags on them ("match $model_variant", or a derivation).
+- LoRAs: <lora:name:0.8> in a prompt is plain text to the Assembler; a \
+prompt-LoRA loader node on the canvas loads it. Put the LoRA's trigger \
+words next to it. A character LoRA can replace a random character: a \
+derivation "when $character_lora is set, replace $character with it".
+- Also: WP Prompt Cleaner (tidies spacing, duplicates, empty groups), WP \
+Image Filter (pauses the run to pick images; Send to Loop keeps the picked \
+frames), WP Var to Int / Float / Bool (a variable into a number or switch \
+for another node, e.g. $cfg or $steps), WP Debug (shows every variable).
+"""
+
+NODES_SHORT = """\
+Nodes: WP Context Injector rows set $variables from outside (LoRA triggers, \
+LLM text). WP Context Loop runs N frames and sets $iteration / \
+$iteration_total (internal, renamable): derivations on $iteration make a \
+sequence, "hold" keeps a pick for the run; sweep mode runs every combination \
+of ticked options. WP Model Info sets $model_family, $model_variant (pony, \
+illustrious, noobai, animagine or "") and $model_name. <lora:name:0.8> is \
+prompt text a LoRA loader node reads.
 """
 
 CHAT = """create_bundle puts a stack in that order for you. Check with run_test before \
@@ -166,5 +212,5 @@ def text(*, slim: bool = False) -> str:
     """The chat's copy: everything, plus how to check with its tools. `slim`
     keeps the grammar and the feature choice and drops the rest."""
     if slim:
-        return "\n".join([SYNTAX, "", WHICH, CHAT])
-    return "\n".join([SYNTAX, "", WHICH, COHERENCE, CHAT])
+        return "\n".join([SYNTAX, "", WHICH, NODES_SHORT, CHAT])
+    return "\n".join([SYNTAX, "", WHICH, NODES, COHERENCE, CHAT])

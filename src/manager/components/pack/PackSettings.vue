@@ -1,8 +1,11 @@
 <script setup lang="ts">
 /**
  * PackSettings — what the user decides before the planner does: library
- * reuse, negatives, sub-bundles, writing style, rating and options per
- * wildcard. Sent with every plan request; no model involved.
+ * reuse, negatives, sub-bundles, writing style, rating, options per
+ * wildcard and whether it adapts to the model family: preferences that
+ * hold for any pack. What a pack is about (its subject, LoRAs, a story
+ * over a Loop) the planner reads from the request or asks. Sent with every
+ * plan request; no model involved.
  */
 import Input from "../ui/Input.vue";
 import Select from "../ui/Select.vue";
@@ -45,6 +48,10 @@ const FIELDS: Array<{ key: Field; label: string; about: string; options: Array<S
     { value: "auto", label: "Planner decides", hint: "Reads it from your request." },
     { value: "safe", label: "Safe", hint: "Nothing explicit; the pack is marked Safe." },
     { value: "nsfw", label: "NSFW", hint: "Explicit content allowed; the pack is marked NSFW." },
+  ] },
+  { key: "model", label: "Model", about: "Whether the pack adapts to the checkpoint.", options: [
+    { value: "any", label: "Any model", hint: "One set of quality and negative tags." },
+    { value: "family", label: "Per model family", hint: "Quality and negative tags per model (Pony score tags, Illustrious / NoobAI tags…) from a WP Model Info node." },
   ] },
 ];
 
