@@ -25,7 +25,7 @@ import time
 import urllib.parse
 from typing import Any
 
-from engine.ai import chatlog
+from engine.ai import chatlog, safety
 from engine.ai.tools import registry
 from wp_api import _ai_client as client
 from wp_api._ai_client import AIError
@@ -107,8 +107,8 @@ async def tool_support(cfg: dict[str, Any]) -> bool | None:
 
 _vision: dict[tuple[str, str, str], tuple[float, bool | None]] = {}
 #: OpenAI models that see images (others: unknown).
-_OPENAI_VISION = re.compile(r"^(gpt-4o|gpt-4\.1|gpt-4-turbo|gpt-5|o1|o3|o4|chatgpt-4o)|vision",
-                            re.I)
+_OPENAI_VISION = re.compile(
+    r"^(gpt-4o|gpt-4\.1|gpt-4-turbo|gpt-[5-9]|o1|o3|o4|chatgpt-4o)|vision", re.I)
 
 
 async def vision_support(cfg: dict[str, Any]) -> bool | None:
@@ -254,6 +254,110 @@ def openai_messages(system: str, log: list[dict[str, Any]], fmt: str,
     return _merge_users(out)
 
 
+def uses_responses(cfg: dict[str, Any]) -> bool:
+    """OpenAI's own API gets the Responses API: its newest models (GPT-6.1
+    Sol, GPT-6 Astra) take tools only there, and it carries their reasoning
+    from step to step (see `/pr-drafts/ai-openai-responses.md`). Other
+    OpenAI-compatible servers keep Chat Completions."""
+    if cfg.get("api") != "openai" or cfg.get("local"):
+        return False
+    host = (urllib.parse.urlsplit(str(cfg.get("base_url") or "")).hostname or "").lower()
+    return cfg.get("provider") == "openai" or host == "api.openai.com"
+
+
+#: Output items a Responses step keeps for replay (`raw` on the step).
+_RAW_TYPES = ("reasoning", "message", "function_call")
+
+
+def responses_raw(output: Any, keep_calls: set[str]) -> list[dict[str, Any]]:
+    """A Responses answer's items as they go back next time: reasoning
+    (only with its encrypted content, which `store: false` needs), the
+    message (with its `phase`) and the calls the loop kept. Item ids are
+    left out, since nothing is stored on OpenAI's side to point at."""
+    out: list[dict[str, Any]] = []
+    for it in output if isinstance(output, list) else []:
+        if not isinstance(it, dict) or it.get("type") not in _RAW_TYPES:
+            continue
+        kind = it["type"]
+        if kind == "reasoning":
+            if not it.get("encrypted_content") or not it.get("id"):
+                continue
+            out.append({"type": "reasoning", "id": it["id"],
+                        "summary": it.get("summary") if isinstance(it.get("summary"), list) else [],
+                        "encrypted_content": it["encrypted_content"]})
+        elif kind == "function_call":
+            if it.get("call_id") in keep_calls:
+                out.append({"type": "function_call", "call_id": it["call_id"],
+                            "name": it.get("name"), "arguments": it.get("arguments") or ""})
+        else:
+            parts = [{"type": "output_text",
+                      "text": safety.strip_invisible(str(c.get("text") or ""))}
+                     for c in it.get("content") or []
+                     if isinstance(c, dict) and c.get("type") == "output_text"]
+            if not parts:
+                continue
+            msg: dict[str, Any] = {"type": "message", "role": "assistant", "content": parts}
+            if it.get("phase") in ("commentary", "final_answer"):
+                msg["phase"] = it["phase"]
+            out.append(msg)
+    return out
+
+
+def responses_input(log: list[dict[str, Any]], fmt: str, model: str) -> list[dict[str, Any]]:
+    """The log as Responses API input items. A step this model wrote goes
+    back as the items it returned (reasoning included); anything else is
+    rebuilt from its text and calls."""
+    out: list[dict[str, Any]] = []
+    for m in log:
+        if m["role"] == "user":
+            images = m.get("images") or []
+            if not images:
+                out.append({"role": "user", "content": m["content"]})
+            else:
+                out.append({"role": "user", "content": [
+                    {"type": "input_text", "text": m["content"]},
+                    *({"type": "input_image", "detail": "auto",
+                       "image_url": f"data:{im['media_type']};base64,{im['data']}"}
+                      for im in images)]})
+        elif m["role"] == "assistant":
+            raw = m.get("raw") if m.get("model") == model else None
+            native_calls = m["calls"] if fmt == "native" else []
+            if isinstance(raw, list) and raw:
+                out.extend(raw)
+                have = {it.get("call_id") for it in raw if it.get("type") == "function_call"}
+            else:
+                if m["content"] or not native_calls:
+                    out.append({"role": "assistant", "content": m["content"]})
+                have = set()
+            # Calls salvaged from text, or a step from another model.
+            out.extend({"type": "function_call", "call_id": c["id"], "name": c["tool"],
+                        "arguments": _args_text(c)}
+                       for c in native_calls if c["id"] not in have)
+        elif fmt == "native":
+            items = m["items"]
+            for k, it in enumerate(items):
+                content = it["content"] + (m.get("tail") or "" if k == len(items) - 1 else "")
+                out.append({"type": "function_call_output", "call_id": it["id"],
+                            "output": content})
+        else:
+            out.append({"role": "user", "content": _json_results(m)})
+    return out
+
+
+def responses_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Chat Completions tool declarations in the Responses shape. `strict`
+    is off: Responses makes tools strict by default, and our schemas have
+    optional fields strict mode refuses."""
+    out = []
+    for t in tools:
+        fn = t.get("function") if isinstance(t.get("function"), dict) else t
+        out.append({"type": "function", "name": fn.get("name"),
+                    "description": fn.get("description") or "",
+                    "parameters": fn.get("parameters") or {"type": "object", "properties": {}},
+                    "strict": False})
+    return out
+
+
 def anthropic_messages(log: list[dict[str, Any]], fmt: str) -> list[dict[str, Any]]:
     """Claude's messages. JSON mode answers through the forced `submit`
     tool, so each answer is a tool_use the next user turn acknowledges."""
@@ -388,6 +492,15 @@ def _usage_openai(data: dict[str, Any]) -> dict[str, Any]:
     timings = data.get("timings") if isinstance(data.get("timings"), dict) else {}
     if out["cached"] is None and isinstance(timings.get("cache_n"), int):
         out["cached"] = timings["cache_n"]
+    return {k: v for k, v in out.items() if isinstance(v, int)}
+
+
+def _usage_responses(data: dict[str, Any]) -> dict[str, Any]:
+    u = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+    details = u.get("input_tokens_details") if isinstance(u.get("input_tokens_details"),
+                                                          dict) else {}
+    out = {"prompt": u.get("input_tokens"), "output": u.get("output_tokens"),
+           "cached": details.get("cached_tokens")}
     return {k: v for k, v in out.items() if isinstance(v, int)}
 
 
@@ -547,6 +660,34 @@ def _openai_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
     return data, on
 
 
+def _responses_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
+    """Responses API events: text deltas go live, the finished response
+    (`response.completed` / `.incomplete` / `.failed`) is the answer. Items
+    finished before a cut-off stream are kept from `output_item.done`."""
+    data: dict[str, Any] = {}
+    done: dict[int, dict[str, Any]] = {}
+
+    async def on(obj: dict[str, Any]) -> None:
+        kind = obj.get("type")
+        if kind == "error" or (kind is None and isinstance(obj.get("error"), dict | str)):
+            raise client._upstream_error(500, {"error": obj.get("error") or obj})
+        if kind == "response.output_text.delta":
+            if show and isinstance(obj.get("delta"), str):
+                await live.add(obj["delta"])
+        elif kind in ("response.reasoning_summary_text.delta", "response.reasoning_text.delta"):
+            await live.thinking()
+        elif kind == "response.output_item.done":
+            if isinstance(obj.get("item"), dict) and isinstance(obj.get("output_index"), int):
+                done[obj["output_index"]] = obj["item"]
+                data.setdefault("output", [])
+                data["output"] = [done[k] for k in sorted(done)]
+        elif kind in ("response.completed", "response.incomplete", "response.failed"):
+            if isinstance(obj.get("response"), dict):
+                data.update(obj["response"])
+
+    return data, on
+
+
 def _ollama_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
     data: dict[str, Any] = {"message": {"role": "assistant", "content": "", "tool_calls": []}}
 
@@ -628,7 +769,7 @@ async def _post(cfg: dict[str, Any], path: str, body: dict[str, Any], *, kind: s
                                      timeout=client._COMPLETE_TIMEOUT)
     live = _Live(emit)
     collect = {"openai": _openai_collect, "ollama": _ollama_collect,
-               "anthropic": _anthropic_collect}[kind]
+               "anthropic": _anthropic_collect, "responses": _responses_collect}[kind]
     data, on = collect(live, show)
     streamed = {**body, "stream": True}
     if kind == "openai":
@@ -656,7 +797,8 @@ async def _post(cfg: dict[str, Any], path: str, body: dict[str, Any], *, kind: s
     # connection, a server restarting. What came is kept, flagged as cut.
     if ((kind == "openai" and not data["choices"][0]["finish_reason"])
             or (kind == "ollama" and not data.get("_done"))
-            or (kind == "anthropic" and not data.get("stop_reason"))):
+            or (kind == "anthropic" and not data.get("stop_reason"))
+            or (kind == "responses" and not data.get("status"))):
         data["_early"] = True
     data.pop("_done", None)
     return data
@@ -701,6 +843,9 @@ async def step(
             if cfg["api"] == "anthropic":
                 return await _step_anthropic(cfg, system, log, fmt, tools, schema, temperature,
                                              max_tokens, allowed, emit)
+            if uses_responses(cfg):
+                return await _step_responses(cfg, system, log, fmt, tools, schema, cache_key,
+                                             allowed, emit)
             if cfg["api"] == "ollama":
                 return await _step_ollama(cfg, system, log, fmt, tools, schema, temperature,
                                           num_ctx, allowed, emit)
@@ -811,6 +956,85 @@ async def _step_ollama(cfg: dict[str, Any], system: str, log: list[dict[str, Any
                           "args_text": args if isinstance(args, str)
                           else chatlog.dumps(args or {})})
     return _native_step(msg.get("content"), calls, allowed, usage)
+
+
+async def _step_responses(cfg: dict[str, Any], system: str, log: list[dict[str, Any]],
+                          fmt: str, tools: list[dict[str, Any]], schema: dict[str, Any],
+                          cache_key: str, allowed: set[str],
+                          emit: Any = None) -> dict[str, Any]:
+    """One step on OpenAI's Responses API. Stateless (`store: false`): the
+    whole log goes every time, as with every other provider, with the
+    model's encrypted reasoning carried along so it keeps its train of
+    thought between tool calls. No temperature or output cap: reasoning
+    models refuse the first, and the second would count their reasoning."""
+    model = str(cfg["model"])
+    body: dict[str, Any] = {
+        "model": model,
+        "instructions": system,
+        "input": responses_input(log, fmt, model),
+        "store": False,
+        "include": ["reasoning.encrypted_content"],
+    }
+    if fmt == "native":
+        body["tools"] = responses_tools(tools)
+        body["tool_choice"] = "auto"
+        body["parallel_tool_calls"] = True
+    else:
+        body["text"] = {"format": {"type": "json_schema", "name": "chat_step",
+                                   "schema": schema, "strict": True}}
+    if cache_key:
+        body["prompt_cache_key"] = cache_key
+    if cfg.get("thinking") == "off":
+        body["reasoning"] = {"effort": "none"}
+    try:
+        data = await _post(cfg, "/responses", body, kind="responses", emit=emit,
+                           show=fmt == "native")
+    except AIError as e:
+        # A model that must reason refuses effort "none": ask again as is.
+        if not ("reasoning" in body and 400 <= (e.upstream or 0) < 500
+                and re.search(r"reasoning|effort", e.message, re.I)):
+            raise
+        body.pop("reasoning")
+        data = await _post(cfg, "/responses", body, kind="responses", emit=emit,
+                           show=fmt == "native")
+    if not isinstance(data, dict):
+        raise AIError("the model didn't return an answer")
+    if data.get("status") == "failed":
+        err = data.get("error") if isinstance(data.get("error"), dict) else {}
+        raise AIError(f"the model failed: {str(err.get('message') or 'no reason given')[:200]}")
+    output = [it for it in data.get("output") or [] if isinstance(it, dict)]
+    usage = _usage_responses(data)
+    reason = (data.get("incomplete_details") or {}).get("reason") if isinstance(
+        data.get("incomplete_details"), dict) else None
+    if reason == "content_filter":
+        raise AIError("the model declined this request", status=422)
+    if data.get("status") == "incomplete":
+        usage["cut"] = True
+    if data.get("_early"):
+        usage["early"] = True
+    texts: list[str] = []
+    calls: list[dict[str, Any]] = []
+    for it in output:
+        if it.get("type") == "message":
+            for c in it.get("content") or []:
+                if not isinstance(c, dict):
+                    continue
+                if c.get("type") == "refusal":
+                    raise AIError("the model declined this request", status=422)
+                if c.get("type") == "output_text":
+                    texts.append(str(c.get("text") or ""))
+        elif it.get("type") == "function_call" and isinstance(it.get("name"), str):
+            raw = it.get("arguments")
+            calls.append({"id": str(it.get("call_id") or new_call_id()), "tool": it["name"],
+                          "args": None,
+                          "args_text": raw if isinstance(raw, str) else chatlog.dumps(raw or {})})
+    text = "\n".join(t for t in texts if t)
+    if fmt == "json":
+        st = _json_step(text, client._parse_text_json(text), usage)
+    else:
+        st = _native_step(text, calls, allowed, usage)
+    st["raw"] = output
+    return st
 
 
 async def _step_openai(cfg: dict[str, Any], system: str, log: list[dict[str, Any]], fmt: str,

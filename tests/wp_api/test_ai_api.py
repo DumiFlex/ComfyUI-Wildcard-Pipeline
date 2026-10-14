@@ -1185,3 +1185,128 @@ async def test_index_status_rebuild_and_meaning_search(wp_client, fake_llm):
         _ai_embed.embed = original
     with pytest.raises(ai_config.ConfigError):
         ai_config.update({"provider": "anthropic", "embed_model": "x"})
+
+
+def _openai(fake_llm, **extra):
+    ai_config.update({"enabled": True, "provider": "openai", "api_key": "sk-o",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "gpt-6.1-sol",
+                      **extra})
+
+
+async def test_openai_draft_goes_through_the_responses_api(wp_client, fake_llm):
+    _openai(fake_llm)
+    resp = await wp_client.post("/wp/api/ai/wildcard/draft", json=_draft_body())
+    assert resp.status == 200, await resp.text()
+    assert [o["value"] for o in (await resp.json())["options"]] == ["silver hair"]
+    sent = fake_llm.seen[-1]
+    assert sent["path"] == "/v1/responses"
+    body = sent["body"]
+    assert body["store"] is False and "temperature" not in body
+    assert body["text"]["format"]["type"] == "json_schema" and body["text"]["format"]["strict"]
+    assert body["input"][-1]["role"] == "user" and "instructions" in body
+
+
+async def test_openai_chat_tools_and_reasoning_carry_over(wp_client, fake_llm):
+    await _two_wildcards(wp_client)
+    _openai(fake_llm)
+    fake_llm.chat_steps.extend([
+        {"content": "Let me look.", "tool_calls": [
+            {"id": "call_x", "function": {"name": "search", "arguments": '{"query": "weapon"}'}}]},
+        {"content": "You have Weapon."},
+    ])
+    first = await _chat(wp_client, "what weapons do I have?")
+    assert first["message"] == "You have [[Weapon]]." or "Weapon" in first["message"]
+    assert all(s["path"] == "/v1/responses" for s in fake_llm.seen)
+    turn1 = fake_llm.seen[-2]["body"]
+    tool = turn1["tools"][0]
+    assert tool["type"] == "function" and tool["strict"] is False and "name" in tool
+    assert turn1["store"] is False and turn1["include"] == ["reasoning.encrypted_content"]
+    assert "temperature" not in turn1
+    turn2 = fake_llm.seen[-1]["body"]["input"]
+    # The model's own items come back as they were, reasoning included.
+    kinds = [it.get("type") or it.get("role") for it in turn2]
+    at = kinds.index("reasoning")
+    assert turn2[at] == {"type": "reasoning", "id": "rs_1", "summary": [],
+                         "encrypted_content": "ENC1"}
+    assert turn2[at + 1]["type"] == "message" and turn2[at + 1]["phase"] == "final_answer"
+    assert "id" not in turn2[at + 1]
+    assert turn2[at + 2] == {"type": "function_call", "call_id": "call_x", "name": "search",
+                             "arguments": '{"query": "weapon"}'}
+    assert turn2[at + 3]["type"] == "function_call_output"
+    assert turn2[at + 3]["call_id"] == "call_x" and "Weapon" in turn2[at + 3]["output"]
+    # Append-only: the next message starts with exactly what went before.
+    second = await _chat(wp_client, "thanks", chat_id=first["chat_id"])
+    assert second["message"] == "Done."
+    turn3 = fake_llm.seen[-1]["body"]["input"]
+    assert turn3[:len(turn2)] == turn2
+    assert fake_llm.seen[-1]["body"]["prompt_cache_key"] == first["chat_id"]
+
+
+async def test_openai_thinking_off_asks_for_no_reasoning_then_drops_it(wp_client, fake_llm):
+    _openai(fake_llm, thinking="off")
+    first = await _chat(wp_client, "hi")
+    assert fake_llm.seen[-1]["body"]["reasoning"] == {"effort": "none"}
+    assert first["message"] == "Done."
+    _openai(fake_llm, thinking="off", model="gpt-must-think")
+    second = await _chat(wp_client, "hi")
+    assert second["message"] == "Done." and "reasoning" not in fake_llm.seen[-1]["body"]
+
+
+def test_responses_input_rebuilds_steps_it_cannot_replay():
+    from wp_api import _ai_chat
+    log = [
+        {"role": "user", "content": "hi", "images": [{"media_type": "image/jpeg", "data": "QQ"}]},
+        # Written by another model: rebuilt, its reasoning not sent.
+        {"role": "assistant", "content": "", "model": "other", "answer": None,
+         "raw": [{"type": "reasoning", "id": "r", "summary": [], "encrypted_content": "X"}],
+         "calls": [{"id": "c1", "tool": "search", "args_text": "{}"}]},
+        {"role": "tool", "items": [{"id": "c1", "tool": "search", "content": "found"}],
+         "tail": " now answer"},
+        # Same model, but a call salvaged from text has no function_call item.
+        {"role": "assistant", "content": "", "model": "me", "answer": None,
+         "raw": [{"type": "message", "role": "assistant",
+                  "content": [{"type": "output_text", "text": "read {}"}]}],
+         "calls": [{"id": "c2", "tool": "read", "args_text": "{}"}]},
+        {"role": "tool", "items": [{"id": "c2", "tool": "read", "content": "item"}], "tail": ""},
+    ]
+    out = _ai_chat.responses_input(log, "native", "me")
+    assert out[0]["content"][1] == {"type": "input_image", "detail": "auto",
+                                    "image_url": "data:image/jpeg;base64,QQ"}
+    assert out[1] == {"type": "function_call", "call_id": "c1", "name": "search",
+                      "arguments": "{}"}
+    assert out[2] == {"type": "function_call_output", "call_id": "c1",
+                      "output": "found now answer"}
+    assert out[3]["type"] == "message"
+    assert out[4]["call_id"] == "c2" and out[5]["call_id"] == "c2"
+    assert not any(it.get("type") == "reasoning" for it in out)
+
+
+def test_responses_raw_keeps_only_replayable_items():
+    from wp_api import _ai_chat
+    raw = _ai_chat.responses_raw([
+        {"type": "reasoning", "id": "rs", "summary": [], "status": "completed"},  # no content
+        {"type": "reasoning", "id": "rs2", "summary": [], "encrypted_content": "E"},
+        {"type": "message", "id": "msg", "role": "assistant", "status": "completed",
+         "content": [{"type": "output_text", "text": "hi​", "annotations": []}]},
+        {"type": "function_call", "id": "fc", "call_id": "kept", "name": "a", "arguments": "{}"},
+        {"type": "function_call", "id": "fc2", "call_id": "dropped", "name": "b",
+         "arguments": "{}"},
+        {"type": "web_search_call", "id": "ws"},
+    ], {"kept"})
+    assert raw == [
+        {"type": "reasoning", "id": "rs2", "summary": [], "encrypted_content": "E"},
+        {"type": "message", "role": "assistant", "content": [{"type": "output_text",
+                                                              "text": "hi"}]},
+        {"type": "function_call", "call_id": "kept", "name": "a", "arguments": "{}"},
+    ]
+
+
+def test_only_openai_itself_uses_responses():
+    from wp_api import _ai_chat
+    assert _ai_chat.uses_responses({"api": "openai", "provider": "openai", "base_url": "x"})
+    assert _ai_chat.uses_responses({"api": "openai", "provider": "custom",
+                                    "base_url": "https://api.openai.com/v1"})
+    assert not _ai_chat.uses_responses({"api": "openai", "provider": "custom",
+                                        "base_url": "https://openrouter.ai/api/v1"})
+    assert not _ai_chat.uses_responses({"api": "openai", "provider": "lmstudio", "local": True,
+                                        "base_url": "http://127.0.0.1:1234/v1"})

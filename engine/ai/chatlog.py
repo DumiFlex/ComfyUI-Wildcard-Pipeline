@@ -14,8 +14,11 @@ Entries, oldest first:
   "images"?: [{"media_type", "data" (base64), "w", "h"}]}`` — images the
   user attached, checked and re-encoded by `wp_api/_ai_images.py`.
 - ``{"kind": "step", "text": str, "calls": [{"id", "tool", "args",
-  "args_text"}], "answer": the JSON-mode object or None, "usage": {…}}`` —
-  one model step. `text` is what the model wrote (JSON mode: the raw JSON).
+  "args_text"}], "answer": the JSON-mode object or None, "usage": {…},
+  "model"?: str, "raw"?: [...]}`` — one model step. `text` is what the model
+  wrote (JSON mode: the raw JSON). `raw` is what OpenAI's Responses API
+  returned (encrypted reasoning, the message, the calls), replayed as is to
+  the same model.
 - ``{"kind": "results", "items": [{"id", "tool", "text"}], "tail": str}`` —
   every call of the step before it gets exactly one item.
 - ``{"kind": "note", "text": str}`` — a nudge from the server.
@@ -101,9 +104,11 @@ def move_images(entries: list[dict[str, Any]], meta: dict[str, Any]) -> dict[str
 
 def step_entry(text: str, calls: list[dict[str, Any]], *, answer: Any = None,
                usage: dict[str, Any] | None = None, synthetic: bool = False,
-               model: str = "") -> dict[str, Any]:
+               model: str = "", raw: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     out: dict[str, Any] = {"kind": "step", "text": text, "calls": calls, "answer": answer,
                            "usage": usage or {}}
+    if raw:
+        out["raw"] = raw
     if model:
         out["model"] = model  # which model wrote it (the chat's model can change)
     if synthetic:
@@ -170,8 +175,12 @@ def render(entries: list[dict[str, Any]], meta: dict[str, Any]) -> list[dict[str
                     msg["images"] = images
                 out.append(msg)
         elif kind == "step":
-            out.append({"role": "assistant", "content": str(e.get("text") or ""),
-                        "calls": list(e.get("calls") or []), "answer": e.get("answer")})
+            msg = {"role": "assistant", "content": str(e.get("text") or ""),
+                   "calls": list(e.get("calls") or []), "answer": e.get("answer")}
+            if e.get("raw"):
+                msg["raw"] = e["raw"]
+                msg["model"] = e.get("model") or ""
+            out.append(msg)
         elif kind == "results":
             items = [{"id": it.get("id"), "tool": it.get("tool"),
                       "content": _first_line(str(it.get("text") or "")) if i < masked

@@ -1393,9 +1393,11 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         tool_use["calls"] += len(calls)
         if st.get("salvaged"):
             tool_use["salvaged"] += len(calls)
+        raw = (_ai_chat.responses_raw(st["raw"], {c["id"] for c in calls})
+               if st.get("raw") else None)
         new.append(ai_chatlog.step_entry(ai_safety.strip_invisible(st["text"]), calls,
                                          answer=st["answer"], usage=usage,
-                                         model=str(cfg.get("model") or "")))
+                                         model=str(cfg.get("model") or ""), raw=raw))
         if carry and not calls:
             said = ai_chat.join_continuation(carry, said)
             carry = ""

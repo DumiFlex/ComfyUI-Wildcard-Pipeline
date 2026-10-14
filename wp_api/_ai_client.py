@@ -418,6 +418,52 @@ def _chat_messages(system: str, history: list[tuple[str, Any]], user: str) -> li
     return messages
 
 
+def _official_openai(cfg: dict[str, Any]) -> bool:
+    """OpenAI's own API, which gets the Responses API (as `_ai_chat.uses_responses`)."""
+    if cfg.get("api") != "openai" or cfg.get("local"):
+        return False
+    host = (urllib.parse.urlsplit(str(cfg.get("base_url") or "")).hostname or "").lower()
+    return cfg.get("provider") == "openai" or host == "api.openai.com"
+
+
+async def _responses_json(
+    cfg: dict[str, Any], *, system: str, user: str, schema: dict[str, Any],
+    schema_name: str, history: list[tuple[str, Any]],
+) -> Any:
+    """`complete_json` on OpenAI's Responses API: the schema as `text.format`,
+    nothing stored on OpenAI's side, no temperature (reasoning models refuse
+    it)."""
+    items: list[dict[str, Any]] = []
+    for asked, answer in history:
+        items.append({"role": "user", "content": asked})
+        items.append({"role": "assistant", "content": json.dumps(answer, ensure_ascii=False)})
+    items.append({"role": "user", "content": user})
+    data = await _request(cfg, "POST", "/responses", timeout=_COMPLETE_TIMEOUT, body={
+        "model": cfg["model"],
+        "instructions": system,
+        "input": items,
+        "store": False,
+        "text": {"format": {"type": "json_schema", "name": schema_name, "schema": schema,
+                            "strict": True}},
+    })
+    if not isinstance(data, dict):
+        raise AIError("the model didn't return an answer")
+    details = data.get("incomplete_details") if isinstance(data.get("incomplete_details"),
+                                                           dict) else {}
+    texts: list[str] = []
+    for it in data.get("output") or []:
+        if not isinstance(it, dict) or it.get("type") != "message":
+            continue
+        for c in it.get("content") or []:
+            if isinstance(c, dict) and c.get("type") == "refusal":
+                raise AIError("the model declined this request", status=422)
+            if isinstance(c, dict) and c.get("type") == "output_text":
+                texts.append(str(c.get("text") or ""))
+    if details.get("reason") == "content_filter":
+        raise AIError("the model declined this request", status=422)
+    return _parse_text_json("".join(texts))
+
+
 async def complete_json(
     cfg: dict[str, Any], *, system: str, user: str, schema: dict[str, Any],
     schema_name: str, temperature: float = 0.8, max_tokens: int = 8192,
@@ -487,6 +533,10 @@ async def complete_json(
             })
             msg = data.get("message") if isinstance(data, dict) else None
             return _parse_text_json(msg.get("content") if isinstance(msg, dict) else None)
+
+        if _official_openai(cfg):
+            return await _responses_json(cfg, system=system, user=user, schema=schema,
+                                         schema_name=schema_name, history=history)
 
         body: dict[str, Any] = {
             "model": cfg["model"],

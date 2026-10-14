@@ -249,6 +249,7 @@ async def streamer(aiohttp_server):
     app.router.add_post("/v1/chat/completions", handler)
     app.router.add_post("/api/chat", handler)
     app.router.add_post("/v1/messages", handler)
+    app.router.add_post("/v1/responses", handler)
     server = await aiohttp_server(app)
     server.state = state
     return server
@@ -336,6 +337,55 @@ async def test_anthropic_stream_is_assembled(streamer):
     assert data["stop_reason"] == "tool_use"
     assert data["usage"] == {"input_tokens": 40, "cache_read_input_tokens": 30,
                              "output_tokens": 7}
+
+
+async def test_responses_stream_is_assembled(streamer):
+    _ai_chat._NO_STREAM.clear()
+    final = {"status": "completed", "usage": {"input_tokens": 50, "output_tokens": 4},
+             "output": [
+                 {"type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "E"},
+                 {"type": "message", "role": "assistant", "phase": "final_answer",
+                  "content": [{"type": "output_text", "text": "Hello"}]},
+                 {"type": "function_call", "call_id": "c1", "name": "read",
+                  "arguments": '{"id": "a"}'}]}
+    streamer.state["body"] = _sse(
+        {"type": "response.created", "response": {"status": "in_progress"}},
+        {"type": "response.reasoning_summary_text.delta", "delta": "hm"},
+        {"type": "response.output_text.delta", "delta": "Hel"},
+        {"type": "response.output_text.delta", "delta": "lo"},
+        {"type": "response.function_call_arguments.delta", "delta": '{"id"'},
+        {"type": "response.completed", "response": final},
+    )
+    events: list = []
+
+    async def emit(e):
+        events.append(e)
+
+    data = await _ai_chat._post(_cfg(streamer), "/responses", {"model": "m"},
+                                kind="responses", emit=emit, show=True)
+    assert data["output"] == final["output"] and data["status"] == "completed"
+    assert "_early" not in data
+    assert events[0] == {"type": "thinking"} and events[-1] == {"type": "text", "v": "Hello"}
+
+
+async def test_a_cut_responses_stream_keeps_finished_items(streamer):
+    _ai_chat._NO_STREAM.clear()
+    item = {"type": "message", "role": "assistant",
+            "content": [{"type": "output_text", "text": "Part"}]}
+    streamer.state["body"] = _sse(
+        {"type": "response.output_item.done", "output_index": 0, "item": item})
+    data = await _ai_chat._post(_cfg(streamer), "/responses", {"model": "m"},
+                                kind="responses", emit=None, show=True)
+    assert data["output"] == [item] and data["_early"] is True
+
+
+async def test_an_error_event_in_a_responses_stream_raises(streamer):
+    _ai_chat._NO_STREAM.clear()
+    streamer.state["body"] = _sse({"type": "error", "code": "server_error",
+                                   "message": "overloaded"})
+    with pytest.raises(_ai_client.AIError, match="overloaded"):
+        await _ai_chat._post(_cfg(streamer), "/responses", {"model": "m"},
+                             kind="responses", emit=None, show=True)
 
 
 async def test_an_error_inside_the_stream_raises(streamer):
