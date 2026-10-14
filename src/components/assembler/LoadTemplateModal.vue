@@ -12,6 +12,7 @@ import { computed, nextTick, ref, watch } from "vue";
 import { api } from "../../manager/api/client";
 import type { TemplateRow } from "../../manager/api/types";
 import ModalShell from "../shared/ModalShell.vue";
+import LoadingMark from "../shared/LoadingMark.vue";
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: []; pick: [TemplateRow] }>();
@@ -224,7 +225,7 @@ function pick(row: TemplateRow) {
 
       <div class="wp-ltm__body">
         <div v-if="loading" class="wp-ltm__state" aria-busy="true">
-          <i class="pi pi-spin pi-spinner" aria-hidden="true" /> Loading templates…
+          <LoadingMark decorative /> Loading templates…
         </div>
         <div v-else-if="loadError" class="wp-ltm__state wp-ltm__state--error">
           <i class="pi pi-exclamation-triangle" aria-hidden="true" />

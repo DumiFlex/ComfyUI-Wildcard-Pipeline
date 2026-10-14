@@ -36,6 +36,7 @@ import { localPayloadFingerprint } from "../../manager/import-export/fingerprint
 import { app } from "#comfyui/app";
 import type { ModuleEntry } from "../../widgets/_shared";
 import WpCheck from "@/components/shared/WpCheck.vue";
+import LoadingMark from "../shared/LoadingMark.vue";
 
 interface Bundle {
   id: string;
@@ -520,7 +521,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
             </div>
 
             <div v-if="bundlesLoading" class="wp-ptl-bundles wp-ptl-bundles--loading">
-              Checking bundles…
+              <LoadingMark>Checking bundles…</LoadingMark>
             </div>
             <div
               v-else-if="bundles.length"
