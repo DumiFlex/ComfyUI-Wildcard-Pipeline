@@ -806,15 +806,23 @@ async def _post(cfg: dict[str, Any], path: str, body: dict[str, Any], *, kind: s
 
 def _no_thinking(cfg: dict[str, Any]) -> dict[str, Any]:
     """What asks an OpenAI-style server to skip a thinking model's
-    reasoning: OpenRouter's `reasoning` switch, the chat template switch
-    llama.cpp, vLLM and LM Studio pass to Qwen-style templates. OpenAI's own
-    reasoning models can't turn it off."""
+    reasoning: OpenRouter's `reasoning` switch, LM Studio's
+    `reasoning_effort`, the chat template switch llama.cpp and vLLM pass to
+    Qwen-style templates. OpenAI's own reasoning models can't turn it off."""
     if cfg.get("provider") == "openai":
         return {}
     if client.is_openrouter(str(cfg.get("base_url") or "")):
         # Documented off switch; models that must reason ignore or refuse it.
         return {"reasoning": {"effort": "none"}}
+    if cfg.get("provider") == "lmstudio":
+        # LM Studio ignores chat_template_kwargs; "none" flips the same
+        # on/off reasoning option as its chat window's toggle (checked
+        # against 0.4.26 with Qwen3.6-35B-A3B: no reasoning tokens).
+        return {"reasoning_effort": "none"}
     return {"chat_template_kwargs": {"enable_thinking": False}}
+
+
+_THINK_KEYS = ("reasoning", "reasoning_effort", "chat_template_kwargs")
 
 
 def _refused(e: AIError) -> bool:
@@ -1076,10 +1084,10 @@ async def _step_openai(cfg: dict[str, Any], system: str, log: list[dict[str, Any
         # A server or model that won't take the thinking switch (a model that
         # must reason, a template without enable_thinking): ask again as is.
         if not (cfg.get("thinking") == "off" and 400 <= (e.upstream or 0) < 500
-                and ("reasoning" in body or "chat_template_kwargs" in body)):
+                and any(k in body for k in _THINK_KEYS)):
             raise
-        body.pop("reasoning", None)
-        body.pop("chat_template_kwargs", None)
+        for k in _THINK_KEYS:
+            body.pop(k, None)
         data = await _post(cfg, "/chat/completions", body, kind="openai", emit=emit,
                            show=fmt == "native")
     choices = data.get("choices") if isinstance(data, dict) else None
