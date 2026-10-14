@@ -152,3 +152,85 @@ def test_tags_style_keeps_joined_variables_apart():
     key = next(i["key"] for i in plan["items"] if i["name"] == "Look")
     out = pack.compile_item(plan, key, _built(plan), {"template": "$hair $race", "negative": ""})
     assert out["payload"]["template"] == "$hair, $race"
+
+
+# ── Round 2 of the real-model run ───────────────────────────────────────
+
+
+def test_a_constraint_on_an_input_named_loosely_gets_a_wildcard():
+    raw = _raw(inputs=[{"var": "season", "about": "the season", "example": "winter"}])
+    raw["items"].append(_item(kind="constraint", name="Winter Footwear Rule",
+                              source="the Season input", target="Outfit",
+                              about="#winter never gets #robe"))
+    plan = pack.compile_plan(raw)
+    assert plan["inputs"] == []
+    season = next(i for i in plan["items"] if i["var"] == "season")
+    assert season["kind"] == "wildcard" and season["tags"] == ["winter"]
+    rule = next(i for i in plan["items"] if i["name"] == "Winter Footwear Rule")
+    assert (rule["source"], rule["target"]) == ("season", "outfit")
+    assert plan["dropped"] == []
+    assert any("Made the input $season a wildcard" in w for w in plan["warnings"])
+
+
+def test_presets_without_a_variable_get_one_and_negatives_move_to_the_template():
+    raw = _raw()
+    raw["items"].insert(0, _item(kind="fixed_values", name="Quality Tags",
+                                 about="masterpiece, best quality"))
+    raw["items"].insert(0, _item(name="Base Negatives", var="base_negatives",
+                                 about="lowres, bad hands"))
+    plan = pack.compile_plan(raw)
+    q = next(i for i in plan["items"] if i["name"] == "Quality Tags")
+    assert q["var"] == "quality_tags"
+    assert not any(i["name"] == "Base Negatives" for i in plan["items"])
+    tpl = next(i for i in plan["items"] if i["kind"] == "template")
+    assert "Standing negative: lowres, bad hands" in tpl["about"]
+
+
+def test_a_rule_on_a_tag_or_a_piece_of_an_option_tests_what_is_there():
+    from engine.ai import derivation as ai_derivation
+    cat = {"race": {"name": "race", "sources": [{"kind": "wildcard", "module": "Race"}],
+                    "values": ["pale skin, pointed ears", "green skin, tusks"], "tags": [],
+                    "tagged": {"elf": ["pale skin, pointed ears"]}, "axes": []}}
+    def rule(op, value):
+        return {"summary": value, "branches": [{"match": "all", "conditions": [
+            {"var": "race", "op": op, "value": value}], "actions": [
+            {"target_var": "title", "mode": "replace", "value": "x"}]}], "else_actions": []}
+    out = ai_derivation.compile_rules(
+        {"rules": [rule("equals", "elf"), rule("not_equals", "tusks")]}, catalog=cat)
+    tests = [r["rule"]["branches"][0]["condition"] for r in out["rules"]]
+    assert tests[0]["op"] == "matches"
+    assert tests[0]["value"] == "^(?:pale\\ skin,\\ pointed\\ ears)$"
+    assert (tests[1]["op"], tests[1]["value"]) == ("not_contains", "tusks")
+
+
+def test_bad_axis_reads_and_double_reads_and_unread_inputs():
+    raw = _raw(inputs=[{"var": "gender", "about": "who", "example": "girl"}])
+    raw["items"].append(_item(kind="combine", name="Look", var="look", about="$hair $race"))
+    plan = pack.compile_plan(raw)
+    built = _built(plan)
+    keys = {i["name"]: i["key"] for i in plan["items"]}
+    look = pack.compile_item(plan, keys["Look"], built,
+                             {"template": "$hair.tags, $race", "negative": ""})
+    assert look["payload"]["template"] == "$hair, $race"
+    assert any("Read $hair instead of $hair.tags" in w for w in look["warnings"])
+    built[keys["Look"]] = {"id": look["id"], "payload": look["payload"]}
+    built[keys["Prompt"]]["payload"]["template_string"] = "$look, $race, $outfit, $place, $light"
+    report = pack.check_pack(plan, built, seeds=10)
+    probs = report["problems"][keys["Prompt"]]
+    assert any("reads $race and $look (Look)" in t for t in probs)
+    assert any("doesn't read the input $gender" in t for t in probs)
+
+
+def test_options_pointing_at_a_rolled_sibling_are_flagged_and_junk_dropped():
+    plan = pack.compile_plan(_raw())
+    built = _built(plan)
+    place = next(i for i in plan["items"] if i["var"] == "place")
+    light = next(i for i in plan["items"] if i["var"] == "light")
+    out = pack.compile_item(plan, light["key"], {k: v for k, v in built.items()
+                                                 if k != light["key"]}, {"options": [
+        {"text": f"lamp glow near @{{{place['id']}}} @@LIGHTING=night", "weight": 1,
+         "tags": [], "negative": ""},
+        {"text": "sunlight", "weight": 1, "tags": [], "negative": ""}]})
+    assert any("points at Place, which the pack already rolls" in w for w in out["warnings"])
+    assert all("@@" not in o["value"] for o in out["payload"]["options"])
+    assert "already rolls" in out["repair"]

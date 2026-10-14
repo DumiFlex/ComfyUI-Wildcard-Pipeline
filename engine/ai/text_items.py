@@ -205,6 +205,25 @@ def _new_id(taken: set[Any]) -> str:
             return vid
 
 
+_AXIS_READ = re.compile(r"\$([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)")
+
+
+def _fix_axes(text: str, catalog: dict[str, Any] | None,
+              warnings: list[str]) -> str:
+    """``$x.WORD`` reads x's accepts tag group WORD (or ``.neg``). A word that
+    isn't one of x's groups ("$race.tags", "$outerwear.AXIS") renders as
+    nothing at run time, so it becomes a plain ``$x``."""
+    def sub(m: re.Match[str]) -> str:
+        var, word = m.group(1), m.group(2)
+        entry = (catalog or {}).get(var)
+        if word == "neg" or not entry or not entry.get("sources") \
+                or word in (entry.get("axes") or []):
+            return m.group(0)
+        warnings.append(f"Read ${var} instead of ${var}.{word}: ${var} has no {word} tag group")
+        return f"${var}"
+    return _AXIS_READ.sub(sub, text)
+
+
 def compile_combine(
     raw: Any, *, out_var: str, catalog: dict[str, Any] | None = None,
     existing: dict[str, Any] | None = None,
@@ -216,7 +235,8 @@ def compile_combine(
     if not text:
         raise ValueError("the template is empty")
     negative = ai_refs.compile_text(_flat(raw.get("negative"), MAX_TEXT), surface="combine")
-    warnings = []
+    warnings: list[str] = []
+    text = _fix_axes(text, catalog, warnings)
     if out_var in reads(text):
         raise ValueError(f"the template reads ${out_var}, which it sets itself")
     unknown = _unknown(text, catalog, out_var)
@@ -243,7 +263,8 @@ def compile_template(raw: Any, *, catalog: dict[str, Any] | None = None) -> dict
         raise ValueError("the template is empty")
     negative = ai_refs.compile_text(_flat(raw.get("negative"), MAX_TEMPLATE),
                                     surface="template")
-    warnings = []
+    warnings: list[str] = []
+    text = _fix_axes(text, catalog, warnings)
     unknown = _unknown(text, catalog)
     if unknown:
         warnings.append("Reads $" + ", $".join(unknown) + ", which nothing in the library sets")

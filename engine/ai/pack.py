@@ -374,6 +374,33 @@ _PRESETISH = re.compile(r"\b(preset|quality|fixed|standing)\b", re.I)
 _LIB_SUFFIX = re.compile(r"\s*\((?:user'?s? )?library\)\s*$", re.I)
 
 
+_NEGATIVEISH = re.compile(r"\bnegatives?\b|negative_|_negatives?\b", re.I)
+
+
+def _slug_var(name: str) -> str:
+    """A variable name from an item's name ("Quality Tags" → quality_tags)."""
+    v = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")[:40].strip("_")
+    return _var(v if not v[:1].isdigit() else f"v_{v}")
+
+
+def _side(raw: Any, known: dict[str, str]) -> str:
+    """A constraint's source or target as a variable: written as one, or as
+    an item's name ("Season", "the Season wildcard", "$season (input)")."""
+    v = _var(raw)
+    if v in known:
+        return v
+    if v and v.lower() in known:
+        return v.lower()
+    text = _clean(raw, MAX_NAME).lower()
+    for m in re.finditer(r"\$?([a-zA-Z_][a-zA-Z0-9_]*)", text):
+        if m.group(1) in known:
+            return m.group(1)
+    for var, name in known.items():
+        if name and name.lower() in text:
+            return var
+    return v
+
+
 #: Library rows a "library" item may name, and the module type each becomes.
 REUSABLE = ("wildcard", "fixed_values")
 
@@ -494,14 +521,42 @@ def compile_plan(
     inputs = _inputs(raw.get("inputs"), warnings)
     # An input that shares its variable with a wildcard a constraint needs
     # would leave the constraint without its wildcard: the wildcard wins.
-    raw_items = [x for x in raw["items"] if isinstance(x, dict)]
-    ruled = {_var(x.get(side)) for x in raw_items if x.get("kind") == "constraint"
+    raw_items = [dict(x) for x in raw["items"] if isinstance(x, dict)]
+    known_sides = {_var(x.get("var")): _clean(x.get("name"), MAX_NAME)
+                   for x in raw_items if _var(x.get("var"))}
+    known_sides.update({i["var"]: i["var"] for i in inputs})
+    for x in raw_items:
+        if x.get("kind") == "constraint":
+            for side in ("source", "target"):
+                x[side] = _side(x.get(side), known_sides)
+    ruled = {x[side] for x in raw_items if x.get("kind") == "constraint"
              for side in ("source", "target")}
     picked = {_var(x.get("var")) for x in raw_items if x.get("kind") in ("wildcard", "library")}
-    for i in [i for i in inputs if i["var"] in ruled & picked]:
-        warnings.append(f"Dropped the input ${i['var']}: a constraint needs the wildcard "
-                        "that sets it")
+    for i in [i for i in inputs if i["var"] in ruled]:
         inputs.remove(i)
+        if i["var"] in picked:
+            warnings.append(f"Dropped the input ${i['var']}: a constraint needs the wildcard "
+                            "that sets it")
+            continue
+        # No wildcard for it: make one, just before the first constraint on
+        # it, so the constraint has a side to key on.
+        cons = [x for x in raw_items if x.get("kind") == "constraint"
+                and i["var"] in (x["source"], x["target"])]
+        # The tags its rules name, less those the other side's wildcard has.
+        other = {_tag(t) for c in cons for x in raw_items if x.get("kind") in (
+            "wildcard", "library") and _var(x.get("var")) in (c["source"], c["target"])
+            for t in x.get("tags") or []}
+        tags = [t for t in dict.fromkeys(t for c in cons for t in _TAG_REF.findall(
+            str(c.get("about") or "").lower())) if t not in other]
+        at = raw_items.index(cons[0])
+        raw_items.insert(at, {
+            "kind": "wildcard", "name": i["var"].replace("_", " ").title(), "var": i["var"],
+            "about": (i["about"] or f"the {i['var']}") + (
+                f" (for example {i['example']})" if i["example"] else ""),
+            "count": 0, "tags": tags, "section": cons[0].get("section") or "", "use": ""})
+        picked.add(i["var"])
+        warnings.append(f"Made the input ${i['var']} a wildcard: "
+                        f"{cons[0].get('name') or 'a constraint'} keys on it")
     dropped: list[dict[str, str]] = []
     taken_ids = {r["id"] for r in library or [] if isinstance(r.get("id"), str)}
     items: list[dict[str, Any]] = []
@@ -524,11 +579,12 @@ def compile_plan(
         if not any(x["name"].lower() == name.lower() for x in sections):
             sections.insert(0, {"name": name, "about": "already in the bundle"})
     used_prev: set[str] = set()
-    sent_keys = {x.get("key") for x in raw["items"] if isinstance(x, dict)}
+    sent_keys = {x.get("key") for x in raw_items}
     next_key = 1
     template_seen = False
-    for it in raw["items"]:
-        if not isinstance(it, dict) or it.get("kind") not in KINDS:
+    standing_neg: list[str] = []
+    for it in raw_items:
+        if it.get("kind") not in KINDS:
             continue
         if base is not None and (it.get("existing") or str(it.get("key") or "").startswith("e")):
             continue  # the bundle's own items come from ``base``
@@ -543,11 +599,11 @@ def compile_plan(
                 continue  # already in the bundle
             if lib_row is None:
                 # Make it new instead: leaving it out loses part of the pack.
-                if not var:
-                    warnings.append(f"Left out {name or 'a library item'}: it isn't in the "
-                                    "library and has no variable")
-                    continue
                 name = _LIB_SUFFIX.sub("", name).strip()
+                var = var or _slug_var(name)
+                if not var:
+                    warnings.append("Left out a library item with no name or variable")
+                    continue
                 kind = "fixed_values" if _PRESETISH.search(f"{name} {about}") else "wildcard"
                 warnings.append(f"Made {name or '$' + var} new: " + (
                     "the settings say to make everything new" if cfg["library"] != "reuse"
@@ -560,8 +616,17 @@ def compile_plan(
                 continue
             template_seen = True
         if kind in ("combine", "fixed_values") and not var:
-            warnings.append(f"Left out {kind.replace('_', ' ')} {name or 'unnamed'}: "
-                            "it needs a variable")
+            var = _slug_var(name)
+            if not var:
+                warnings.append(f"Left out a {kind.replace('_', ' ')} with no name or "
+                                "variable")
+                continue
+        if kind in ("wildcard", "fixed_values") and _NEGATIVEISH.search(f"{name} {var}"):
+            # Negative words picked at random (or set as a positive variable)
+            # land in the prompt or flip from run to run: they belong in the
+            # template's standing negative.
+            standing_neg.append(about or name)
+            warnings.append(f"Moved {name or '$' + var} into the template's standing negative")
             continue
         if kind == "wildcard" and not var and not name:
             warnings.append("Left out a wildcard with no name or variable")
@@ -637,13 +702,18 @@ def compile_plan(
         if len(items) - len(base_items) >= MAX_ITEMS:
             warnings.append(f"Kept the first {MAX_ITEMS} items")
             break
+    tpl = next((i for i in items if i["kind"] == "template"), None)
+    if standing_neg and tpl is not None:
+        tpl["about"] = (tpl["about"].rstrip(". ") + ". Standing negative: "
+                        + "; ".join(standing_neg))[:MAX_ABOUT]
     wildcard_vars = {i["var"]: i for i in items if is_wild(i)}
     kept: list[dict[str, Any]] = []
     for i in items:
         if i["kind"] == "constraint":
             bad = [s for s in (i["source"], i["target"]) if s not in wildcard_vars]
             if bad or i["source"] == i["target"]:
-                why = (f"${bad[0] or '?'} isn't a wildcard in this pack" if bad
+                why = ((f"${bad[0]} isn't a wildcard in this pack" if bad[0] else
+                        "its source or target names no variable") if bad
                        else "its source and target are the same")
                 warnings.append(f"Left out constraint {i['name']}: {why}")
                 dropped.append({"kind": "constraint", "name": i["name"], "source": i["source"],
@@ -1894,6 +1964,7 @@ def compile_item(
         missing = [t for t in item["tags"] if t not in used]
         if missing:
             warnings.append("No option carries #" + ", #".join(missing))
+        warnings += _sibling_refs(plan, built, key, payload)
         warnings += compiled["warnings"]
         preview = [ai_wildcard.option_line(o, idx) for o in payload["options"]]
         if item["use"]:
@@ -2013,6 +2084,7 @@ _STOP = {"the", "and", "with", "type", "list", "option", "options", "pack", "wil
 #: Compile warnings worth one automatic rebuild: the item doesn't fit the
 #: rest of the pack (a rule tests a value or tag that isn't there).
 _REPAIRABLE = re.compile(r"has no option|No option carries|unknown tag|nothing sets|"
+                         r"already rolls|"
                          r"isn't set|not a variable|doesn't set|which no", re.I)
 
 
@@ -2025,7 +2097,34 @@ def tag_commas(text: str) -> str:
     return _VAR_GAP.sub(r"\1, ", text)
 
 
-_PLAIN_REF = re.compile(r"@\{([0-9a-f]{8})\}")
+_ANY_REF = re.compile(r"@\{([0-9a-f]{8})(?:[#:][^}]*)?\}")
+_JUNK = re.compile(r"@@[A-Za-z_]+=\S*")
+
+
+def _sibling_refs(plan: dict[str, Any], built: dict[str, Any], key: str,
+                  payload: dict[str, Any]) -> list[str]:
+    """Options that point at another wildcard the pack already rolls: the
+    fresh pick can disagree with the one in the prompt ("night" weather on a
+    daytime scene). Stray "@@KEY=value" text is dropped."""
+    rolled = {built[i["key"]]["id"]: i for i in plan["items"]
+              if is_wild(i) and i["key"] in built and i["key"] != key}
+    hits: list[str] = []
+    for o in payload.get("options") or []:
+        if not isinstance(o, dict) or not isinstance(o.get("value"), str):
+            continue
+        if _JUNK.search(o["value"]):
+            o["value"] = re.sub(r"\s{2,}", " ", _JUNK.sub("", o["value"])).strip(" ,") \
+                or o["value"]
+        for m in _ANY_REF.finditer(o["value"]):
+            hit = rolled.get(m.group(1))
+            if hit is not None and hit["name"] not in hits:
+                hits.append(hit["name"])
+    return [f"An option points at {n}, which the pack already rolls, so the two can "
+            "disagree; describe it in words instead" for n in hits]
+
+
+# A ref without a tag filter (``@{id}`` or ``@{id#Label}``).
+_PLAIN_REF = re.compile(r"@\{([0-9a-f]{8})(?:#[^}:]*)?\}")
 
 
 def read_rolled(plan: dict[str, Any], built: dict[str, Any],
@@ -2341,7 +2440,9 @@ def check_pack(
         vals = [str(ctx.get(i["var"]) or "").strip() for ctx in runs]
         if not runs or not all(vals):
             continue
-        twin = next((o for o in seen if o["vals"] == vals), None)
+        # A rule that rewrites a variable another item set is one variable,
+        # not a copy of it.
+        twin = next((o for o in seen if o["vals"] == vals and o["var"] != i["var"]), None)
         if twin is not None:
             problems.setdefault(i["key"], []).append(
                 f"${i['var']} always holds the same text as ${twin['var']}; drop one or make "
@@ -2415,6 +2516,26 @@ def unread_notes(plan: dict[str, Any], built: dict[str, Any],
                 "prompt; read it")
         else:
             notes.append(f"Nothing reads ${i['var']} ({i['name']})")
+    for inp in plan.get("inputs") or []:
+        if inp["var"] in reads | ruled:
+            continue
+        if tpl is not None:
+            problems.setdefault(tpl["key"], []).append(
+                f"it doesn't read the input ${inp['var']}, so what the user gives never "
+                "reaches the prompt; read it")
+        else:
+            notes.append(f"Nothing reads the input ${inp['var']}")
+    # The template reading a variable and a combine of it prints it twice.
+    if tpl is not None:
+        shown = item_io(tpl, built[tpl["key"]]["payload"])[0]
+        for c in plan["items"]:
+            if c["kind"] != "combine" or c["key"] not in built or c["var"] not in shown:
+                continue
+            twice = sorted(item_io(c, built[c["key"]]["payload"])[0] & shown)
+            if twice:
+                problems.setdefault(tpl["key"], []).append(
+                    f"it reads ${', $'.join(twice)} and ${c['var']} ({c['name']}), which "
+                    "already holds it, so it shows twice; read one of them")
     return notes
 
 

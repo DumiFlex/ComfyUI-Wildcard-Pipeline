@@ -136,6 +136,18 @@ def build_catalog(
             kinds = p.get("tag_group_kinds") if isinstance(p.get("tag_group_kinds"), dict) else {}
             axes = [k for k, v in kinds.items() if v == "accepts" and isinstance(k, str)]
             _add(out, p.get("var_binding") or "", "wildcard", mname, values, tags, desc, axes)
+            # Which options carry each tag, so a test on a tag ("elf") can
+            # become a test on those options.
+            var = p.get("var_binding") or ""
+            if var in out:
+                tagged = out[var].setdefault("tagged", {})
+                for o in p.get("options") or []:
+                    if not isinstance(o, dict) or o.get("is_null") \
+                            or not isinstance(o.get("value"), str) or not o["value"].strip():
+                        continue
+                    for t in o.get("sub_categories") or []:
+                        if isinstance(t, str) and o["value"].strip() not in tagged.get(t, []):
+                            tagged.setdefault(t, []).append(o["value"].strip())
         elif kind == "fixed_values":
             for v in p.get("values") or []:
                 if isinstance(v, dict) and isinstance(v.get("name"), str):

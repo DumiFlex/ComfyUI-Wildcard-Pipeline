@@ -709,6 +709,10 @@ async def _complete_json(
         body: dict[str, Any] = {
             "model": cfg["model"],
             "messages": _chat_messages(system, history, user, images),
+            # Without a cap a local model that loops writes until the
+            # request times out (LM Studio ran 25k tokens into a 16k window);
+            # a cut answer comes back as finish_reason "length" instead.
+            "max_tokens": max_tokens,
             "response_format": {
                 "type": "json_schema",
                 "json_schema": {"name": schema_name, "schema": schema, "strict": True},

@@ -361,8 +361,31 @@ def _compile_condition(
             if fixed is not None:
                 value = fixed
             elif any(s["kind"] == "wildcard" for s in entry["sources"]):
-                warnings.append(f'${var} has no option "{value}"')
+                op, value = _near_test(var, op, value, entry, warnings)
     return {"var": var, "op": op, "value": value}
+
+
+def _near_test(var: str, op: str, value: str, entry: dict[str, Any],
+               warnings: list[str]) -> tuple[str, str]:
+    """An ``equals`` test on text no option has. A tag ("elf" on options
+    that only say "pointed ears") becomes a test on the options carrying
+    it; a piece of an option ("dense forest") becomes a ``contains`` test.
+    Anything else is a warning a rebuild should fix."""
+    neg = op == "not_equals"
+    tagged = (entry.get("tagged") or {}).get(value.lower().lstrip("#")) or []
+    if tagged:
+        pattern = "^(?:" + "|".join(re.escape(v) for v in tagged) + ")$"
+        if len(pattern) <= MAX_VALUE_LEN:
+            warnings.append(f'Tests the ${var} options tagged #{value.lower().lstrip("#")} '
+                            f'("{value}" is a tag, not an option)')
+            return ("not_matches" if neg else "matches"), pattern
+    low = value.lower()
+    hits = [v for v in entry["values"] if low and low in v.lower()]
+    if hits:
+        at = hits[0].lower().index(low)
+        return ("not_contains" if neg else "contains"), hits[0][at:at + len(value)]
+    warnings.append(f'${var} has no option "{value}"')
+    return op, value
 
 
 def unset_note(var: str) -> str:
