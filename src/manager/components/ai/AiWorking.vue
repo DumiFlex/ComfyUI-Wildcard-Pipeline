@@ -135,6 +135,12 @@ const word = ref(pickWord(""));
 const step = ref(0);
 const showReal = computed(() => step.value % REAL_EVERY === 0);
 const shown = computed(() => (showReal.value ? real.value : word.value));
+/** What the word transition keys on: a new status animates in, a token
+ *  count ticking up while writing doesn't. */
+const wordKey = computed(() => {
+  if (!showReal.value) return `w:${word.value}`;
+  return props.text !== undefined ? `r:${real.value}` : `r:${shownPhase.value}`;
+});
 let wordTimer: ReturnType<typeof setInterval> | null = null;
 
 // A new phase (or chat status) is said straight away.
@@ -216,7 +222,7 @@ const TYPING = [[250, "#6366f1"], [512, "#a970ff"], [774, "#33d6c6"]] as const;
       </g>
     </svg>
     <Transition name="wp-aiw-word" mode="out-in">
-      <span :key="showReal ? 'real' : word" class="wp-aiw__word" data-test="ai-working-word">{{ shown }}…</span>
+      <span :key="wordKey" class="wp-aiw__word" data-test="ai-working-word">{{ shown }}…</span>
     </Transition>
     <span class="wp-aiw__time" data-test="ai-working-time">{{ time }}</span>
     <span class="wp-aiw__sr" data-test="ai-working-detail">{{ detail }}</span>
@@ -238,6 +244,7 @@ const TYPING = [[250, "#6366f1"], [512, "#a970ff"], [774, "#33d6c6"]] as const;
 .wp-aiw[data-tempo="fast"] { --wp-aiw-t: 1.5s; }
 .wp-aiw__logo { flex-shrink: 0; overflow: visible; }
 .wp-aiw__word {
+  display: inline-block;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -252,9 +259,14 @@ const TYPING = [[250, "#6366f1"], [512, "#a970ff"], [774, "#33d6c6"]] as const;
   position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
-.wp-aiw-word-enter-active, .wp-aiw-word-leave-active { transition: opacity 0.25s ease, transform 0.25s ease; }
-.wp-aiw-word-enter-from { opacity: 0; transform: translateY(4px); }
-.wp-aiw-word-leave-to { opacity: 0; transform: translateY(-4px); }
+.wp-aiw-word-enter-active { transition: opacity 0.32s ease-out, transform 0.32s cubic-bezier(0.2, 0.7, 0.2, 1), filter 0.32s ease-out; }
+.wp-aiw-word-leave-active { transition: opacity 0.18s ease-in, transform 0.18s ease-in, filter 0.18s ease-in; }
+.wp-aiw-word-enter-from { opacity: 0; transform: translateY(7px); filter: blur(3px); }
+.wp-aiw-word-leave-to { opacity: 0; transform: translateY(-7px); filter: blur(3px); }
+@media (prefers-reduced-motion: reduce) {
+  .wp-aiw-word-enter-active, .wp-aiw-word-leave-active { transition: opacity 0.2s; }
+  .wp-aiw-word-enter-from, .wp-aiw-word-leave-to { transform: none; filter: none; }
+}
 
 .wp-aiw__star, .wp-aiw__dot, .wp-aiw__hop { transform-box: fill-box; transform-origin: center; }
 .wp-aiw__vb { transform-box: view-box; transform-origin: 512px 512px; }
