@@ -71,14 +71,16 @@ describe("RichTextInput — insertTextAtCaret", () => {
     expect(w.findAll(".wp-rt-var").map((c) => c.text())).toContain("$subject");
   });
 
-  it("still chipifies on a surface that chips vars", async () => {
+  it("renders an inserted $var as coloured text on the combine surface too", async () => {
     const w = mount(RichTextInput, {
       props: { modelValue: "a portrait of", surface: "combine", multiline: true },
     });
     await w.vm.$nextTick();
     insert(w, "$subject");
     await w.vm.$nextTick();
-    expect(w.findAll(".wp-refchip__label").map((c) => c.text())).toContain("$subject");
+    expect(emitted(w)).toBe("a portrait of $subject");
+    expect(w.findAll(".wp-refchip").length).toBe(0);
+    expect(w.findAll(".wp-rt-var").map((c) => c.text())).toContain("$subject");
   });
 
   it("separates on the trailing side too, so the token keeps its identity", async () => {

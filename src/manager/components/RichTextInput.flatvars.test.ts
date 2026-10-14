@@ -25,11 +25,20 @@ describe("RichTextInput — template variables are text, not chips", () => {
     expect(w.findAll(".wp-refchip").length).toBe(0);
   });
 
-  it("still emits chips on a surface that chips vars", async () => {
-    // Guard against fixing the assembler by breaking everyone else.
+  it("renders vars as text on the other surfaces that read them too", async () => {
+    // Every var-reading surface (combine, derivation, …) now collapses `$name`
+    // to coloured text — the assembler is no longer special.
     const w = mountAt("combine", "$quality, portrait", ["quality"]);
     await w.vm.$nextTick();
-    expect(w.findAll(".wp-refchip").length).toBe(1);
+    expect(w.findAll(".wp-refchip").length).toBe(0);
+    expect(w.get(".wp-rt-var").text()).toBe("$quality");
+  });
+
+  it("still chips nested @{uuid} refs on the wildcard surface", async () => {
+    // Guard against flattening vars by flattening refs too: refs stay atoms.
+    const w = mountAt("wildcard", "@{abcd1234}, portrait");
+    await w.vm.$nextTick();
+    expect(w.findAll(".wp-refchip--ref").length).toBe(1);
   });
 
   it("colours the run from the same hash the variable strip uses", async () => {

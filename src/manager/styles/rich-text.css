@@ -30,15 +30,13 @@
 .wp-rt .wp-rt-tail,
 .wp-rt-preview .wp-rt-tail { color: transparent; }
 
+/* `$var` is syntax-coloured text, never a pill: no fill, no ring, no padding.
+   The per-name colour comes inline from `varSpanAttrs` (editor) or from
+   RefChip's `--wp-refchip-var-tone` (previews); this is the fallback. */
 .wp-rt .wp-rt-var,
 .wp-rt-preview .wp-rt-var {
   color: var(--wp-accent-text-strong, var(--wp-accent-text, #c4b5fd));
-  background: rgba(139, 92, 246, 0.24);
-  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 24%, transparent);
-  box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.50);
-  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 50%, transparent);
-  border-radius: 4px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 /* The AXIS tail of a `$var.AXIS` reference. Amber — the same accent the
@@ -116,14 +114,12 @@
    inside a chip but the contrast win is worth it.
    When blurred, chips get a hair of horizontal padding so they read
    as proper pills with breathing room from adjacent text. */
-.wp-rt--focused .wp-rt-var,
 .wp-rt--focused .wp-rt-ref {
   /* Zero in-flow padding keeps width identical to the textarea, so
    * caret position stays correct character-for-character. The visible
    * pill comes from the chip background + box-shadow alone. */
   padding: 0;
 }
-.wp-rt--rest .wp-rt-var,
 .wp-rt--rest .wp-rt-ref {
   /* Pill chrome at rest — bigger horizontal padding + a breathing
    * margin so chips don't merge with adjacent text. The width drift
@@ -228,12 +224,6 @@
 }
 
 /* ── Light-mode overrides: rich-text token chrome ── */
-.wp-theme-light .wp-rt .wp-rt-var,
-.wp-theme-light .wp-rt-preview .wp-rt-var {
-  /* color auto-adapts (--wp-accent-text-strong → accent-800 in light mode) */
-  background: rgba(139, 92, 246, 0.13);
-  box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.36);
-}
 .wp-theme-light .wp-rt .wp-rt-ref,
 .wp-theme-light .wp-rt-preview .wp-rt-ref {
   color: #86198f;

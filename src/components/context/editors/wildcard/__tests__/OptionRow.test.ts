@@ -317,10 +317,11 @@ describe("OptionRow", () => {
     expect(w.find('[data-test="opt-name"] .opt__tok--brace').exists()).toBe(false);
   });
 
-  it("renders $varname as a var token", () => {
+  it("shows $varname as plain text: wildcards don't read variables", () => {
     const opt = { id: "o9", value: "uses $style here", weight: 1, sub_categories: ["warm"] };
     const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
-    expect(w.find('[data-test="opt-name"] .wp-refchip--var .wp-refchip__label').text()).toBe("$style");
+    expect(w.find('[data-test="opt-name"] .wp-refchip--var').exists()).toBe(false);
+    expect(w.find('[data-test="opt-name"]').text()).toContain("uses $style here");
   });
 
   it("typing weight back to library default clears the override (null)", async () => {

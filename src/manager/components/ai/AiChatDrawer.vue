@@ -38,6 +38,10 @@ import AiCardPreview from "./AiCardPreview.vue";
 import AiPointer from "./AiPointer.vue";
 import AiChatList from "./AiChatList.vue";
 import AiWorking from "./AiWorking.vue";
+import ChatCompletions from "./ChatCompletions.vue";
+import { mentionItems, mentionRefs } from "../../utils/chat-completions";
+import { useModuleStore } from "../../stores/moduleStore";
+import { useBundleStore } from "../../stores/bundleStore";
 import type { AiPhase } from "../../api/ai-progress";
 import { useAiChat, type ChatAssistantEntry, type SearchApproval } from "../../composables/useAiChat";
 import { clearPointer, EDIT_ROUTES } from "../../composables/useAiActions";
@@ -47,8 +51,6 @@ import type { AiCardFix, AiChatPage, AiChatProposal, AiChatStep, AiPendingCall, 
 import { currentPageNote, editorForPage } from "../../composables/useOpenEditor";
 import { usePackBuilder } from "../../composables/usePackBuilder";
 import { useCategoryStore } from "../../stores/categoryStore";
-import { useModuleStore } from "../../stores/moduleStore";
-import { useBundleStore } from "../../stores/bundleStore";
 import { useTemplateStore } from "../../stores/templateStore";
 import { starterQuestions, type StarterLibrary } from "../../utils/chat-starters";
 import { cardMeta, cardOptions, cardView, draftRoute, otherPreview, type CardOption } from "../../composables/aiCards";
@@ -72,6 +74,10 @@ const route = useRoute();
 const router = useRouter();
 const scroller = ref<HTMLElement | null>(null);
 const box = ref<HTMLTextAreaElement | null>(null);
+const moduleStore = useModuleStore();
+const bundleStore = useBundleStore();
+/** Items picked with `@` show as chips in the user's own bubble. */
+const libraryItems = computed(() => mentionItems(moduleStore.catalog, bundleStore.catalog));
 const expanded = ref(new Set<string>());
 
 /* ── The magnifier: a card or test run shown whole in a modal ── */
@@ -345,8 +351,6 @@ async function compact(): Promise<void> {
   chat.error.value = err ? `Couldn't summarise: ${err}` : "";
 }
 
-const moduleStore = useModuleStore();
-const bundleStore = useBundleStore();
 const templateStore = useTemplateStore();
 
 /** What the library holds, for starters that fit it. */
@@ -729,7 +733,13 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
               @click="toggleImage(i, j)"
             ><img :src="src" alt="" /></button>
           </span>
-          <template v-if="entry.text">{{ entry.text }}</template>
+          <AiMessage
+            v-if="entry.text && entry.text.includes('[[')"
+            class="wp-ai-chat__user-text"
+            :text="entry.text"
+            :refs="mentionRefs(entry.text, libraryItems)"
+          />
+          <template v-else-if="entry.text">{{ entry.text }}</template>
           <button
             v-if="i === lastUserAt && !chat.loading.value && !chat.editBlocked()"
             type="button"
@@ -1081,6 +1091,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
         @keydown="onKeydown"
         @paste="onPaste"
       ></textarea>
+      <ChatCompletions :target="box" />
       <input ref="picker" type="file" accept="image/*" multiple hidden aria-label="Attach images" data-test="ai-chat-file" @change="onPick" />
       <div class="wp-ai-chat__controls">
         <span v-if="meter && chat.started.value" class="wp-ai-chat__meter" :data-high="meter.high || undefined" :title="meter.why" data-test="ai-chat-meter">

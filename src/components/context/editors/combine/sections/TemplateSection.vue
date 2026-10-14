@@ -510,14 +510,11 @@ function onResetNegative(): void {
 .wp-tpl__detected-pills {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 2px 10px;
 }
+/* Coloured names, not chips: variables read as text everywhere. */
 .wp-tpl__pill {
-  padding: 2px 6px;
   font: 600 10px var(--wp-font-mono);
-  background: color-mix(in srgb, currentColor 12%, var(--wp-bg-deep, var(--wp-bg)));
-  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
-  border-radius: 999px;
 }
 
 .wp-tpl__preview-label {
