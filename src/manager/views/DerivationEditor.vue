@@ -13,6 +13,7 @@ import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import SendToTestRunner from "../components/SendToTestRunner.vue";
 import IdentityCard from "../components/IdentityCard.vue";
+import { usePanelAction, viaPanel } from "../composables/usePanelAction";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
@@ -171,6 +172,10 @@ const fillFromChat = registerOpenEditor({
     if (Array.isArray(next.rules)) rules.value = next.rules.map(migrateRule);
   },
 });
+// The chat's `use_panel`: Describe, or ask the Draft with AI panel.
+const identityCard = ref<InstanceType<typeof IdentityCard> | null>(null);
+const aiPanelRef = ref<InstanceType<typeof AiDerivationPanel> | null>(null);
+usePanelAction({ id: () => props.id, identity: identityCard, panels: { draft: viaPanel(aiOpen, aiPanelRef) } });
 
 const draft = useEditorDraft({
   kind: "derivation",
@@ -620,6 +625,7 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
       >Delete</Button>
     </template>
     <IdentityCard
+      ref="identityCard"
       ai-kind="derivation"
       :ai-payload="() => ({ rules })"
       :name="name"
@@ -711,6 +717,7 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
         </div>
       </template>
       <AiDerivationPanel
+        ref="aiPanelRef"
         v-if="aiOpen && ai.config.value?.enabled"
         :name="name"
         :rules="rules"

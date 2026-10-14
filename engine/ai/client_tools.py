@@ -21,6 +21,20 @@ MAX_STACK = 40
 MAX_QUERY = 200
 #: Most parts one highlight call points at.
 MAX_POINTS = 5
+#: The AI panels each kind of editor has, for `use_panel`. "describe" is
+#: the Identity card's (name, description, tags); the wildcard's tabs are
+#: add / remove / rewrite / retag / reweight; "draft" is Draft with AI.
+PANELS: dict[str, tuple[str, ...]] = {
+    "wildcard": ("describe", "add", "remove", "rewrite", "retag", "reweight"),
+    "fixed_values": ("describe", "draft"),
+    "combine": ("describe", "draft"),
+    "template": ("describe", "draft"),
+    "derivation": ("describe", "draft"),
+    "constraint": ("describe", "draft"),
+    "bundle": ("describe",),
+}
+MAX_PIN_VALUE = 300
+
 #: Pages the model may send the user to (route names in the manager).
 PAGES = ("dashboard", "all", "wildcards", "fixed-values", "combines", "derivations",
          "constraints", "bundles", "templates", "categories", "tags", "import-export", "test",
@@ -199,9 +213,43 @@ def _show_test(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
                              "bundles")
         stack.append({"bundle": row["id"]} if kind == "bundle" else {"module": row["id"]})
     seeds = args.get("seeds") if isinstance(args.get("seeds"), int) else 20
-    seeds = max(1, min(500, seeds))
-    return {"stack": stack, "seeds": seeds}, f"Ran {len(stack)} item" + (
-        "" if len(stack) == 1 else "s") + " in the Test Runner"
+    out: dict[str, Any] = {"stack": stack, "seeds": max(1, min(500, seeds))}
+    if isinstance(args.get("from"), int) and not isinstance(args.get("from"), bool):
+        out["from"] = max(0, args["from"])
+    pins = args.get("pins")
+    if isinstance(pins, dict) and pins:
+        out["pins"] = {_text(str(k), 60).lstrip("$"): _text(v, MAX_PIN_VALUE)
+                       for k, v in list(pins.items())[:30] if _text(str(k), 60).lstrip("$")}
+    if args.get("output"):
+        out["output"] = _text(args.get("output"), 60).lstrip("$")
+    if args.get("save"):
+        out["save"] = _text(args.get("save"), 80)
+    run = args.get("run") is not False
+    if not run:
+        out["run"] = False
+    n = len(stack)
+    what = f"{n} item" + ("" if n == 1 else "s")
+    label = (f"Ran {what} in the Test Runner" if run else f"Set up {what} in the Test Runner")
+    if out.get("save"):
+        label += f", saved as {out['save']}"
+    return out, label
+
+
+def _use_panel(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    row = _row(lib, args.get("id"))
+    kind = lib._kind(row)
+    panels = PANELS.get(kind, ())
+    panel = _text(args.get("panel"), 20).lower()
+    if panel not in panels:
+        raise ValueError(f"a {kind.replace('_', ' ')} has no {panel or 'such'} panel; its "
+                         "panels: " + ", ".join(panels))
+    request = _text(args.get("request"), 1000)
+    if len(request) < 3:
+        raise ValueError("say what to ask the panel")
+    name = row.get("name") or row["id"]
+    what = {"describe": "Describe", "draft": "Draft with AI"}.get(panel, panel.capitalize())
+    return ({"id": row["id"], "type": kind, "panel": panel, "request": request},
+            f"Asked {what} in {name}")
 
 
 def _web_search(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
@@ -214,7 +262,7 @@ def _web_search(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
 _PREPARE = {
     "open": _open, "read_page": _read_page, "highlight": _highlight,
     "select_rows": _select_rows, "organize": _organize, "draft_options": _draft_options,
-    "show_test": _show_test, "web_search": _web_search,
+    "show_test": _show_test, "use_panel": _use_panel, "web_search": _web_search,
 }
 
 #: Longest browser answer kept for the model.

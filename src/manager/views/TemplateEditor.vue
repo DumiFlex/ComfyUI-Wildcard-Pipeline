@@ -15,6 +15,7 @@ import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
+import { usePanelAction, viaPanel } from "../composables/usePanelAction";
 import Card from "../components/ui/Card.vue";
 import Field from "../components/ui/Field.vue";
 import RichTextInput from "../components/RichTextInput.vue";
@@ -91,6 +92,10 @@ const fillFromChat = registerOpenEditor({
   id: editingId.value ?? undefined, type: "template", dirty: () => dirty.value,
   name, description, tags, categoryId, contentRating,
 });
+// The chat's `use_panel`: Describe, or ask the Draft with AI panel.
+const identityCard = ref<InstanceType<typeof IdentityCard> | null>(null);
+const aiPanelRef = ref<InstanceType<typeof AiTextPanel> | null>(null);
+usePanelAction({ id: () => editingId.value, identity: identityCard, panels: { draft: viaPanel(aiOpen, aiPanelRef) } });
 /** The chat's draft this new template was opened with (Save creates it at
  *  the id the card reserved, if any, and marks the card applied). */
 let chatDraft: StagedDraft | null = null;
@@ -184,6 +189,7 @@ function cancel() {
     <div v-if="loading" class="wp-dim wp-tpl-editor__loading">Loading template…</div>
     <template v-else>
       <IdentityCard
+        ref="identityCard"
         ai-kind="template"
         :ai-payload="() => ({ template: templateString, negative: negativeTemplate })"
         :name="name"
@@ -207,6 +213,7 @@ function cancel() {
           >AI</Button>
         </template>
         <AiTextPanel
+          ref="aiPanelRef"
           v-if="aiOpen && ai.config.value?.enabled"
           kind="template"
           :item="{ id: editingId ?? undefined, name, description, tags, template_string: templateString, negative_template: negativeTemplate }"

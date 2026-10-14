@@ -76,7 +76,17 @@ async function draft(instruction: string, count: number): Promise<string> {
   return drafter.value ? drafter.value.run(instruction, count) : "couldn't: the Add tab didn't open";
 }
 
-defineExpose({ draft });
+const editor = ref<InstanceType<typeof AiEditPanel> | null>(null);
+
+/** One of the edits (the chat's `use_panel`): switch to its tab and ask. It
+ *  works on the selected options, or all of them when none are. */
+async function edit(action: AiWildcardEditAction, text: string): Promise<string> {
+  mode.value = action;
+  await nextTick();
+  return editor.value ? editor.value.run(text) : "couldn't: the edit tab didn't open";
+}
+
+defineExpose({ draft, edit });
 </script>
 
 <template>
@@ -106,6 +116,7 @@ defineExpose({ draft });
     />
     <AiEditPanel
       v-show="mode !== 'add'"
+      ref="editor"
       :action="editAction"
       :name="name"
       :var-binding="varBinding"

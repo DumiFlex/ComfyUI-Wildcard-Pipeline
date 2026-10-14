@@ -15,6 +15,7 @@ import { useEngagementStore, measureSubstance } from "../stores/engagementStore"
 import { useReleaseCheck } from "../composables/useReleaseCheck";
 import StarPrompt from "../components/StarPrompt.vue";
 import { useBundleStore } from "../stores/bundleStore";
+import { registerPageNote } from "../composables/useOpenEditor";
 
 /** Stat-tile + recent-row metadata. `type` is the ModuleType for module
  *  kinds; bundles get `key: "bundle"` with no `type` since they live in
@@ -173,6 +174,11 @@ interface HealthIssue {
   detail: string;
   count: number;
   route: string;
+  /** The items it is about, "Name (id)", for the AI chat's page note. */
+  items: string[];
+}
+function itemLabels(rows: { id: string; name?: string | null }[]): string[] {
+  return rows.map((r) => `${r.name?.trim() || "(unnamed)"} (${r.id})`);
 }
 const healthIssues = computed<HealthIssue[]>(() => {
   const issues: HealthIssue[] = [];
@@ -188,6 +194,7 @@ const healthIssues = computed<HealthIssue[]>(() => {
       detail: "Wildcards need at least one non-empty option to resolve.",
       count: blankWildcards.length,
       route: "/wildcards",
+      items: itemLabels(blankWildcards),
     });
   }
   const emptyBundles = bundleStore.catalog.filter((b) => {
@@ -201,6 +208,7 @@ const healthIssues = computed<HealthIssue[]>(() => {
       detail: "Bundles without children won't surface anything at run time.",
       count: emptyBundles.length,
       route: "/bundles",
+      items: itemLabels(emptyBundles),
     });
   }
   const unnamed = [
@@ -214,6 +222,7 @@ const healthIssues = computed<HealthIssue[]>(() => {
       detail: "Items without names are hard to find in pickers and references.",
       count: unnamed.length,
       route: "/all",
+      items: itemLabels(unnamed),
     });
   }
   return issues;
@@ -411,6 +420,30 @@ async function refresh() {
     refreshing.value = false;
   }
 }
+// Tell the AI chat what the dashboard shows: the counts, the warnings and
+// the list under the open tab.
+const TAB_LABEL = { opened: "Recently opened", recent: "Recent edits", favorites: "Favorites" } as const;
+registerPageNote(() => {
+  const tiles = KIND_META.map((k) => {
+    const n = counts.value[k.key] ?? 0;
+    return `${n} ${(n === 1 ? k.label.replace(/s$/, "") : k.label).toLowerCase()}`;
+  });
+  const bits = [`Dashboard: ${totalItems.value} items (${tiles.join(", ")})`];
+  if (healthIssues.value.length) {
+    const issues = healthIssues.value.map((i) =>
+      `${i.label}${i.items.length ? `: ${i.items.slice(0, 8).join(", ")}${i.items.length > 8 ? ", …" : ""}` : ""}`);
+    bits.push(`Things to look at: ${issues.join("; ")}`);
+  } else {
+    bits.push("No warnings");
+  }
+  const rows = visibleItems.value;
+  bits.push(rows.length
+    ? `${TAB_LABEL[tab.value]} tab: ${rows.map((r) => `${r.name} (${r.moduleType ?? r.kind}, ${r.id})`).join(", ")}`
+    : `${TAB_LABEL[tab.value]} tab: empty`);
+  if (showOnboardingCard.value) bits.push("The \"New here?\" intro card is showing");
+  return bits.join(". ");
+});
+
 onMounted(async () => {
   await refresh();
   // Only meaningful once the catalog is loaded: an existing user is recognised
@@ -442,7 +475,7 @@ onMounted(async () => {
           @click="refresh"
         >Refresh</Button>
         <Button variant="outline" icon="pi-book" @click="openDocs">Docs</Button>
-        <Button variant="primary" icon="pi-plus" @click="newWildcard">New module</Button>
+        <Button variant="primary" icon="pi-plus" data-ai-anchor="new-module" data-ai-label="New module button" @click="newWildcard">New module</Button>
       </div>
     </div>
 
@@ -451,7 +484,7 @@ onMounted(async () => {
     <StarPrompt />
 
     <!-- Stats -->
-    <div class="wp-stats" aria-label="Library counts">
+    <div class="wp-stats" aria-label="Library counts" data-ai-anchor="counts" data-ai-label="Library counts">
       <button
         v-for="kind in KIND_META"
         :key="kind.key"
@@ -485,7 +518,7 @@ onMounted(async () => {
 
     <!-- Quick-create row — one '+ New <kind>' button per module type so
          creation is one click from the dashboard for every shape. -->
-    <div class="dashboard__quick" data-test="dashboard-quick-create">
+    <div class="dashboard__quick" data-test="dashboard-quick-create" data-ai-anchor="quick-create" data-ai-label="Quick create">
       <span class="dashboard__quick-label">Quick create</span>
       <Button
         v-for="kind in KIND_META"
@@ -504,7 +537,7 @@ onMounted(async () => {
     <!-- Health issues — advisory card, surfaced only when the catalog
          has real editor-time problems. Each row links to the list view
          where the user can find + fix the offending items. -->
-    <Card v-if="healthIssues.length" data-test="dashboard-health">
+    <Card v-if="healthIssues.length" data-test="dashboard-health" data-ai-anchor="health" data-ai-label="Things to look at">
       <template #default>
         <div class="dashboard__health-head">
           <Icon name="pi-exclamation-triangle" />
@@ -562,7 +595,7 @@ onMounted(async () => {
     <!-- Recent / Favorites — always rendered now. The intro card above
          no longer hides it; an empty library just shows the empty-state
          line under the tabs. -->
-    <Card padding>
+    <Card padding data-ai-anchor="recent" data-ai-label="Recently opened, recent edits and favorites">
       <!-- Tabs sit at the top-LEFT of the card body now, not in the
            Card's right-aligned #actions slot. The View-all link stays
            on the right via wp-spacer so the row balances. Earlier

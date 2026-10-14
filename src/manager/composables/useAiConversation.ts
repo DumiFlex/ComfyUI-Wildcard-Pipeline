@@ -188,9 +188,23 @@ export function useAiConversation<Res extends { answer: Record<string, unknown>;
     loading.value = false;
   }
 
+  /** The chat's `use_panel`: ask as if the user typed it (a follow-up when
+   *  an answer is showing), leave the answer in the panel for the user to
+   *  review, and tell the chat what came back. */
+  async function chat(text: string, summary?: (res: Res) => string): Promise<string> {
+    instruction.value = text;
+    await (current.value ? refine() : ask());
+    const res = result.value;
+    if (error.value || !res) return `couldn't: ${error.value || "the model didn't answer"}`;
+    const what = summary ? summary(res) : JSON.stringify(res.answer);
+    const short = what.length > 900 ? `${what.slice(0, 899)}…` : what;
+    return `the panel shows its answer: ${short}. Nothing changed yet: the user reviews it in `
+      + "the panel, applies what they want, then saves the item.";
+  }
+
   return {
     instruction, loading, error, result, asked, index, count, research, searching,
-    ask, refine, retry, go, clear, restart, stop, allowResearch, skipResearch,
+    ask, refine, retry, go, clear, restart, stop, chat, allowResearch, skipResearch,
   };
 }
 

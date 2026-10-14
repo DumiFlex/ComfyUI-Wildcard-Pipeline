@@ -26,6 +26,7 @@ import urllib.parse
 from typing import Any
 
 from engine.ai import chatlog
+from engine.ai.tools import registry
 from wp_api import _ai_client as client
 from wp_api._ai_client import AIError
 
@@ -229,7 +230,8 @@ def openai_messages(system: str, log: list[dict[str, Any]], fmt: str,
         elif m["role"] == "assistant":
             if fmt == "native" and m["calls"]:
                 if api == "ollama":
-                    calls = [{"function": {"name": c["tool"], "arguments": _args_obj(c)}}
+                    calls = [{"function": {"name": c["tool"],
+                                           "arguments": registry.alias_args(_args_obj(c))}}
                              for c in m["calls"]]
                 else:
                     calls = [{"id": c["id"], "type": "function",
@@ -791,6 +793,12 @@ async def _step_ollama(cfg: dict[str, Any], system: str, log: list[dict[str, Any
         fn = c.get("function") if isinstance(c, dict) else None
         if isinstance(fn, dict) and isinstance(fn.get("name"), str):
             args = fn.get("arguments")
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except ValueError:
+                    pass
+            args = registry.alias_args(args, back=True)
             calls.append({"id": new_call_id(), "tool": fn["name"],
                           "args": args if isinstance(args, dict) else None,
                           "args_text": args if isinstance(args, str)

@@ -19,6 +19,7 @@ import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import SendToTestRunner from "../components/SendToTestRunner.vue";
 import IdentityCard from "../components/IdentityCard.vue";
+import { usePanelAction, viaPanel } from "../composables/usePanelAction";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
@@ -291,6 +292,10 @@ const fillFromChat = registerOpenEditor({
     setPayload: (p: Record<string, unknown>) => loadPayload(p as Partial<CombinePayload>, name.value),
   }),
 });
+// The chat's `use_panel`: Describe, or ask the Draft with AI panel.
+const identityCard = ref<InstanceType<typeof IdentityCard> | null>(null);
+const aiPanelRef = ref<InstanceType<typeof AiTextPanel> | null>(null);
+usePanelAction({ id: () => props.id, identity: identityCard, panels: { draft: viaPanel(aiOpen, aiPanelRef) } });
 /** The chat's draft this new combine was opened with (Save creates it at the
  *  id the card reserved and marks the card applied). */
 let chatDraft: StagedDraft | null = null;
@@ -654,6 +659,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
       >Delete</Button>
     </template>
     <IdentityCard
+      ref="identityCard"
       ai-kind="combine"
       :ai-payload="() => ({ template, output_var: outputVar, negative })"
       :name="name"
@@ -679,6 +685,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
         >AI</Button>
       </template>
       <AiTextPanel
+        ref="aiPanelRef"
         v-if="aiOpen && ai.config.value?.enabled"
         kind="combine"
         :item="{ id: props.id, name, description, tags, payload: { template, negative, output_var: outputVar || toIdentifier(name) } }"

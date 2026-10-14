@@ -30,14 +30,15 @@ import Select, { type SelectOption } from "../ui/Select.vue";
 import { api } from "../../api/client";
 import AiMessage from "./AiMessage.vue";
 import AiCardView from "./AiCardView.vue";
+import AiTestCard from "./AiTestCard.vue";
 import AiPointer from "./AiPointer.vue";
 import AiChatList from "./AiChatList.vue";
 import { useAiChat, type ChatAssistantEntry, type SearchApproval } from "../../composables/useAiChat";
 import { clearPointer, EDIT_ROUTES } from "../../composables/useAiActions";
 import { useAiConfig } from "../../composables/useAiConfig";
 import { useAiChatWidth } from "../../composables/useAiChatWidth";
-import type { AiChatPage, AiChatProposal, AiPendingCall } from "../../api/types";
-import { currentPageNote, openEditor } from "../../composables/useOpenEditor";
+import type { AiChatPage, AiChatProposal, AiChatStep, AiPendingCall, AiTestCard as TestCard } from "../../api/types";
+import { currentPageNote, editorForPage } from "../../composables/useOpenEditor";
 import { usePackBuilder } from "../../composables/usePackBuilder";
 import { useCategoryStore } from "../../stores/categoryStore";
 import { cardMeta, cardOptions, cardView, draftRoute, otherPreview, type CardOption } from "../../composables/aiCards";
@@ -62,6 +63,18 @@ const EDITOR_SUGGESTIONS = [
 ];
 
 const chat = useAiChat();
+
+/** The run_test steps' cards, in order. */
+function testCards(steps: AiChatStep[]): TestCard[] {
+  return steps.flatMap((x) => (x.card ? [x.card] : []));
+}
+
+const testError = ref("");
+async function openTest(card: TestCard): Promise<void> {
+  testError.value = "";
+  const out = await chat.openTest(card);
+  if (out.startsWith("couldn't")) testError.value = `Couldn't open it: ${out.slice(10)}`;
+}
 const { config, save: saveConfig } = useAiConfig();
 const route = useRoute();
 const router = useRouter();
@@ -286,8 +299,8 @@ function page(): AiChatPage {
   }
   const note = currentPageNote();
   if (note) out.note = note;
-  const ed = openEditor();
-  if (ed && ed.id === out.id) out.editor = ed.read();
+  const ed = editorForPage(out.id);
+  if (ed) out.editor = ed;
   return out;
 }
 
@@ -632,6 +645,13 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
               {{ s.note }}
             </li>
           </ul>
+          <AiTestCard
+            v-for="(card, j) in testCards(entry.result.steps)"
+            :key="`t${j}`"
+            :card="card"
+            @open="openTest(card)"
+          />
+          <p v-if="testError" class="wp-ai-chat__warning" role="status">{{ testError }}</p>
           <AiMessage :text="entry.result.message" :refs="entry.result.refs" />
 
           <article
@@ -784,8 +804,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
                   variant="secondary"
                   size="sm"
                   icon="pi-pencil"
-                  :disabled="!!chat.blockedReason(entry, p) || (!!cardOptions(p) && keptCount(entry, p) === 0)"
-                  :title="p.op.op === 'create' ? 'Open it in a new editor to check and change it before saving' : 'Put it into the item\'s editor, unsaved'"
+                  :disabled="(p.op.op !== 'create' && !!chat.blockedReason(entry, p)) || (!!cardOptions(p) && keptCount(entry, p) === 0)"
+                  :title="p.op.op === 'create' ? 'Open it in a new editor to check and change it before saving (links to cards not applied yet are kept)' : 'Put it into the item\'s editor, unsaved'"
                   data-test="ai-chat-open-editor"
                   @click="chat.openInEditor(entry, p)"
                 >Open in editor</Button>

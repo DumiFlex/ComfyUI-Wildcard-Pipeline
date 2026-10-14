@@ -221,12 +221,53 @@ def _strip_schema(schema: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+#: Parameter names Ollama's Gemma 4 renderer drops from the prompt
+#: (ollama#18468): sent to Ollama as ``name_`` and mapped back on the way in.
+OLLAMA_RESERVED = frozenset({"description", "type", "properties", "required", "nullable"})
+
+
+def _alias_schema(schema: Any) -> Any:
+    if not isinstance(schema, dict):
+        return schema
+    out = dict(schema)
+    if isinstance(schema.get("properties"), dict):
+        out["properties"] = {(f"{k}_" if k in OLLAMA_RESERVED else k): _alias_schema(v)
+                             for k, v in schema["properties"].items()}
+        if isinstance(schema.get("required"), list):
+            out["required"] = [f"{k}_" if k in OLLAMA_RESERVED else k
+                               for k in schema["required"]]
+    if isinstance(schema.get("items"), dict):
+        out["items"] = _alias_schema(schema["items"])
+    if isinstance(schema.get("anyOf"), list):
+        out["anyOf"] = [_alias_schema(o) for o in schema["anyOf"]]
+    return out
+
+
+def alias_args(value: Any, back: bool = False) -> Any:
+    """Arguments with the reserved names aliased for Ollama (``back``: the
+    model's ``description_`` turned into ``description`` again)."""
+    if isinstance(value, list):
+        return [alias_args(v, back) for v in value]
+    if not isinstance(value, dict):
+        return value
+    out = {}
+    for k, v in value.items():
+        if back and isinstance(k, str) and k.endswith("_") and k[:-1] in OLLAMA_RESERVED:
+            k = k[:-1]
+        elif not back and k in OLLAMA_RESERVED:
+            k = f"{k}_"
+        out[k] = alias_args(v, back)
+    return out
+
+
 def native(tools: list[Tool], api: str) -> list[dict[str, Any]]:
     """Tool declarations in the provider's own format, in a fixed order so
     the request prefix stays the same from step to step."""
     out: list[dict[str, Any]] = []
     for t in tools:
         params = _strip_schema(t.params or obj())
+        if api == "ollama":
+            params = _alias_schema(params)
         if api == "anthropic":
             out.append({"name": t.name, "description": t.summary, "input_schema": params})
         else:

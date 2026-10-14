@@ -28,7 +28,8 @@ _ACTION = obj({
     "value": s(),
 }, ("target_var", "value"))
 _COND_OP = s("equals, not_equals, contains, not_contains, matches, not_matches, exists, "
-              "not_exists, is_empty, is_not_empty (has a value) or is_unset (missing or empty)")
+              "not_exists, is_empty, is_not_empty, is_set (set and not empty) or is_unset "
+              "(missing or empty)")
 _RULE = obj({
     "summary": s("what the rule does, in a few words"),
     "branches": arr(obj({
@@ -84,9 +85,12 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         "variables", "read",
-        "List every variable the library sets, with its options.",
-        "{}: every variable the library sets, with its options.",
-        obj(),
+        "List every variable the library sets, with its options; or, for one variable, "
+        "what sets it and what reads it.",
+        '{} for every variable the library sets, with its options; {"var": name} for one '
+        "variable: what sets it and every item that reads it (what breaks if it's renamed "
+        "or removed).",
+        obj({"var": s("one variable name")}),
         ("core",),
     ),
     Tool(
@@ -172,9 +176,10 @@ TOOLS: list[Tool] = [
         '(0 removes it), "axes": [{"name", "kind", "tags"}] to group existing tags (a tag '
         'moves out of its old group), "groups": [{"group", "rename", "kind": classify|accepts, '
         '"ungroup": true}] to change groups as they are, "rename_tags": [{"from", "to"}] '
-        '(onto an existing tag merges), "drop_tags": [tags] to take off every option}: change '
-        "options that exist. The numbers are the ones read shows. Leave out what you don't "
-        "change.",
+        '(onto an existing tag merges), "drop_tags": [tags] to take off every option, "move": '
+        '[{"n", "to"}] to reorder (original numbers), "var": new variable name it sets}: '
+        "change options that exist. The numbers are the ones read shows. Leave out what you "
+        "don't change.",
         obj({
             "id": s("wildcard id or name"), "remove": _NUMS,
             "rewrite": arr(obj({"n": n(integer=True), "text": s()}, ("n", "text"))),
@@ -191,6 +196,8 @@ TOOLS: list[Tool] = [
             "rename_tags": arr(obj({"from": s("option tag"), "to": s("new tag")},
                                    ("from", "to"))),
             "drop_tags": arr(s("option tag")),
+            "move": arr(obj({"n": n(integer=True), "to": n(integer=True)}, ("n", "to"))),
+            "var": s("new variable name"),
         }, ("id",)),
         ("wildcards",),
     ),
@@ -200,10 +207,13 @@ TOOLS: list[Tool] = [
         "rule runs on its own; its branches are IF, ELIF, ELIF… (the first whose test holds "
         "runs its actions) and else_actions is its ELSE. A branch's test is one condition or "
         "several joined by match all (AND) / any (OR), and a condition can itself be a "
-        "nested group. A branch can run several actions in order.",
+        "nested group. A branch can run several actions in order. At most 20 rules, 12 "
+        "branches a rule, 8 conditions a branch and 6 actions a branch: split bigger jobs, "
+        "or use a constraint.",
         '{"name", "description", "tags", "category", "rules": [{"summary", "branches": '
         '[{"match": "all"|"any", "conditions": [{"var", "op": equals|not_equals|contains|'
-        "not_contains|matches|not_matches|exists|not_exists|is_empty|is_not_empty|is_unset, "
+        "not_contains|matches|not_matches|exists|not_exists|is_empty|is_not_empty|is_set|"
+        "is_unset, "
         '"value"} or a '
         'nested group {"match", "conditions": [tests]}], "actions": [{"target_var", "mode": '
         'replace|append|prepend|negative|negative_replace, "value"}]}], "else_actions": '
@@ -253,12 +263,15 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         "edit_values", "change",
-        "Propose changes to fixed values that exist: set or remove variables.",
+        "Propose changes to fixed values that exist: set, rename or remove variables.",
         '{"id", "set": [same as values; on a name that exists, a left-out value or negative '
-        'stays as it is and "negative": "" clears it], "remove": [variable names]}',
+        'stays as it is and "negative": "" clears it], "rename": [{"from", "to"}], "remove": '
+        "[variable names]}",
         obj({"id": s("fixed values id or name"), "set": arr(obj({
             "name": s(), "value": s("left out on a name that exists: keep it"),
             "negative": s("left out: keep it; \"\": clear it")}, ("name",))),
+            "rename": arr(obj({"from": s("variable name"), "to": s("new name")},
+                              ("from", "to"))),
             "remove": arr(s("variable name"))}, ("id",)),
         ("fixed-values",),
     ),
@@ -274,19 +287,22 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         "edit_combine", "change",
-        "Propose a new template or negative for a combine that exists.",
-        '{"id", "template"?, "negative"?}',
-        obj({"id": s("combine id or name"), "template": s(), "negative": s()}, ("id",)),
+        "Propose a new template, negative or variable for a combine that exists.",
+        '{"id", "template"?, "negative"?, "var"?: the variable it sets}',
+        obj({"id": s("combine id or name"), "template": s(), "negative": s(),
+             "var": s("new variable name")}, ("id",)),
         ("combines",),
     ),
     Tool(
         "create_template", "change",
         "Propose a prompt template for the WP Prompt Assembler (prompt and negative, "
         "reading variables).",
-        '{"name", "description", "tags", "template": the final prompt reading $variables '
-        'only (no picks), "negative": standing negative with $negatives where the used '
-        "variables' negatives go}",
+        '{"name", "description", "tags", "category", "template": the final prompt reading '
+        '$variables only (no picks), "negative": standing negative with $negatives where '
+        "the used variables' negatives go (always give one: lowres, watermark, … plus "
+        "$negatives)}",
         obj({"name": s(), "description": _META["description"], "tags": _META["tags"],
+             "category": _META["category"],
              "template": s("the prompt, reading $variables only"),
              "negative": s("standing negative; $negatives marks where variables' negatives "
                            "go")}, ("name", "template")),
@@ -315,30 +331,38 @@ TOOLS: list[Tool] = [
     Tool(
         "edit_constraint", "change",
         "Propose changes to a constraint that exists: add or replace rules, remove rules by "
-        "number, change its reach.",
+        "number, change its reach, or point it at another source or target wildcard.",
         '{"id", "rules": [like create_constraint; a pair that exists is replaced], "remove": '
         '[rule numbers read shows], "reach": "all" | "first" | "next N" (which target '
-        "wildcards after it it changes)}",
+        'wildcards after it it changes), "source_id" / "target_id": another wildcard (rules '
+        "it can't match are dropped)}",
         obj({"id": s("constraint id or name"), "rules": arr(_CRULE), "remove": _NUMS,
-             "reach": _REACH}, ("id",)),
+             "reach": _REACH, "source_id": s("new source wildcard"),
+             "target_id": s("new target wildcard")}, ("id",)),
         ("constraints",),
     ),
     Tool(
         "create_bundle", "change",
-        "Propose a bundle: a saved stack of modules in order, each with per-use settings.",
-        '{"name", "description", "tags", "category", "items": [name or id, or {"item": name or id, '
-        '"use": per-use settings}], "order": "auto" (default: producers, then constraints '
-        'before their target, rules, combines) or "as_given"}',
+        "Propose a bundle: a saved stack of modules in order, each with per-use settings. "
+        "A bundle can hold other bundles (sub-bundles, one level deep) to group a pack's "
+        "parts, e.g. an Outfit sub-bundle and a Scene sub-bundle in one Character bundle.",
+        '{"name", "description", "tags", "category", "items": [name or id (modules or '
+        'sub-bundles), or {"item": name or id, "use": per-use settings}], "order": "auto" '
+        '(default: producers, then constraints before their target, rules, combines; '
+        'sub-bundles stay where given) or "as_given"}. A sub-bundle can\'t hold bundles '
+        "itself, and a bundle inside another can't get sub-bundles.",
         obj({"name": s(), **_META, "items": arr(_ITEM),
              "order": s("auto (default) or as_given")}, ("name", "items")),
         ("bundles",),
     ),
     Tool(
         "edit_bundle", "change",
-        "Propose changes to a bundle that exists: add or remove children, change their use "
-        "settings or order.",
-        '{"id", "add": [like items], "remove": [numbers], "use": [{"n", "use"}], "order"?}',
+        "Propose changes to a bundle that exists: add or remove children (modules or "
+        "sub-bundles), switch them off or on, change their use settings or order.",
+        '{"id", "add": [like items], "remove": [numbers], "off": [numbers], "on": [numbers], '
+        '"use": [{"n", "use"}], "order"?}. Numbers are the order read shows.',
         obj({"id": s("bundle id or name"), "add": arr(_ITEM), "remove": _NUMS,
+             "off": _NUMS, "on": _NUMS,
              "use": arr(obj({"n": n(integer=True), "use": _USE}, ("n", "use"))),
              "order": s("auto or as_given")}, ("id",)),
         ("bundles",),
@@ -498,20 +522,48 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         "show_test", "client",
-        "Open the Test Runner with a stack and run it, so the user sees the results.",
-        '{"stack": [names or ids of modules and bundles], "seeds": how many runs (20)}: opens '
-        "the Test Runner with that stack and runs it for the user to see. Use run_test to "
-        "check something yourself.",
-        obj({"stack": arr(s("name or id")), "seeds": n("how many runs", integer=True)},
+        "Set up the Test Runner with a stack (seeds, pinned variables) and run it, so the "
+        "user sees the results; it can save it as a scenario.",
+        '{"stack": [names or ids of modules and bundles], "seeds": how many runs (20), '
+        '"from": first seed for a fixed run (random when left out), "pins": {"var": value '
+        'set from outside}, "output": variable to show first, "save": scenario name to save '
+        'it as, "run": false to only set it up}: opens the Test Runner with that set-up and '
+        "runs it for the user to see. Use run_test to check something yourself.",
+        obj({"stack": arr(s("name or id")), "seeds": n("how many runs", integer=True),
+             "from": n("first seed (fixed seeds)", integer=True),
+             "pins": obj(desc="variable -> value set from outside, like an Injector"),
+             "output": s("variable to show first"), "save": s("save as a scenario named"),
+             "run": b("false to set it up without running")},
             ("stack",)),
         ("test",),
     ),
     Tool(
+        "use_panel", "client",
+        "Open an item's editor and ask one of its AI panels, as if the user typed it there "
+        "(Describe for name, description and tags; a wildcard's add / remove / rewrite / "
+        "retag / reweight tabs; Draft with AI in the other editors). The user reviews the "
+        "answer in the panel and applies it.",
+        '{"id": item, "panel": "describe" | "add" | "remove" | "rewrite" | "retag" | '
+        '"reweight" (wildcards) | "draft" (fixed values, combines, templates, derivations, '
+        'constraints), "request": what to ask}: opens the item and asks that panel. Use it '
+        "when the user asks for this on the page, or wants to look before anything changes; "
+        "a wildcard edit works on the options the user selected, else all.",
+        obj({"id": s("item id or name"),
+             "panel": s("describe, add, remove, rewrite, retag, reweight or draft"),
+             "request": s("what to ask the panel")}, ("id", "panel", "request")),
+        ("wildcards", "text", "rules", "bundles"),
+    ),
+    Tool(
         "web_search", "web",
         "Search the web with the user's search engine. The user sees the query and allows "
-        "it first; you get short result snippets.",
+        "it first; you get short result snippets. Use it on your own whenever facts would "
+        "make the answer better, without being asked: a character, franchise, outfit, art "
+        "style, artist, place or era you don't know well; which tags a model family (Pony, "
+        "Illustrious, Flux) understands; a new model or LoRA. Search before you write the "
+        "options, not after; asking costs the user one click, guessing costs a wrong pack.",
         '{"query": a short search, no private details}: searches the web with the user\'s '
-        "own engine after the user allows the query; returns a few snippets with links.",
+        "own engine after the user allows the query; returns a few snippets with links. "
+        "Call it yourself when references would help; don't wait to be asked.",
         obj({"query": s("a short search")}, ("query",)),
         ("web",),
     ),
@@ -566,14 +618,14 @@ def toolset(route: str | None, *, scoped: bool, web: bool = False,
     return [*names, "more_tools"]
 
 
-def sync_delete(names: list[str], allowed: bool) -> list[str]:
-    """A chat's tool list with the delete tools added or removed to match
-    the setting now, in catalog order (unchanged when it already matches,
-    so the cached prompt prefix stays)."""
+def sync_delete(names: list[str], allowed: bool, group: tuple[str, ...] = DELETE) -> list[str]:
+    """A chat's tool list with the delete tools (or another ``group``)
+    added or removed to match the setting now, in catalog order (unchanged
+    when it already matches, so the cached prompt prefix stays)."""
     have = set(names)
-    if allowed == have.issuperset(DELETE) and (allowed or not have.intersection(DELETE)):
+    if allowed == have.issuperset(group) and (allowed or not have.intersection(group)):
         return names
-    want = (have | set(DELETE)) if allowed else (have - set(DELETE))
+    want = (have | set(group)) if allowed else (have - set(group))
     return [t.name for t in TOOLS if t.name in want]
 
 

@@ -196,8 +196,9 @@ async function openFirst(): Promise<void> {
   }
 }
 
-// The chat's `show_test`: run that stack as a quick run where the user can
-// see it, and tell the chat what came out (the same text as the page note).
+// The chat's `show_test`: set the stack (seeds, pins, output) up as a quick
+// run where the user can see it, run it unless told not to, save it when
+// named, and tell the chat what came out (the same text as the page note).
 registerAiAction("show_test", async (args) => {
   await ready;
   if (wb.dirty.value && draft.value.stack.length) {
@@ -208,11 +209,26 @@ registerAiAction("show_test", async (args) => {
   const count = Math.min(500, Math.max(1, Number(args.seeds) || 20));
   wb.newQuickRun(stack[0]);
   draft.value.stack = stack.map((item) => ({ ...item }));
-  const seeds = draft.value.seeds;
-  draft.value.seeds = "random" in seeds ? { random: true, count } : { from: "from" in seeds ? seeds.from : 0, count };
-  await wb.run();
-  if (wb.runError.value) return `couldn't run it: ${wb.runError.value}`;
-  return `ran it in the Test Runner, where the user sees the results. ${currentPageNote()}`;
+  const from = typeof args.from === "number" ? Math.max(0, Math.floor(args.from)) : null;
+  draft.value.seeds = from !== null ? { from, count } : { random: true, count };
+  const pins = args.pins && typeof args.pins === "object" ? args.pins as Record<string, unknown> : {};
+  draft.value.pins = Object.fromEntries(Object.entries(pins).map(([k, v]) => [k, String(v)]));
+  if (typeof args.output === "string" && args.output) draft.value.output_var = args.output;
+  if (typeof args.save === "string" && args.save) draft.value.name = args.save;
+  const notes: string[] = [];
+  if (args.run !== false) {
+    await wb.run();
+    if (wb.runError.value) return `couldn't run it: ${wb.runError.value}`;
+  }
+  if (typeof args.save === "string" && args.save) {
+    notes.push((await wb.save()) ? `saved it as the scenario "${args.save}"` : "couldn't save it");
+  }
+  if (args.run === false) {
+    return `set it up in the Test Runner without running${notes.length ? `; ${notes.join("; ")}` : ""}. `
+      + "The user presses Run when ready.";
+  }
+  return `ran it in the Test Runner, where the user sees the results${notes.length ? `; ${notes.join("; ")}` : ""}. `
+    + currentPageNote();
 });
 
 /* ---------------------------- actions ----------------------------- */

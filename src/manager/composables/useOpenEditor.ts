@@ -8,13 +8,24 @@
  * row behind the editor's back. Any view can register a short note saying
  * what it shows (filters, selection, results) so "these" and "this" mean
  * what's on screen. Both are single slots, cleared on unmount.
+ *
+ * A new, never-saved item registers too, under an id reserved for it when
+ * the editor opens (the id of the chat card it was opened from, if any,
+ * else a fresh 8-hex one), with `isNew` set. The chat reads it and fills
+ * it like a saved one; nothing exists on the server until the user saves.
+ * Once the chat has read it, Save creates the item AT that id
+ * (`draftCreateId`), so cards that already point at it (a constraint, a
+ * bundle child, an @{id} ref) still work.
  */
 import { onBeforeUnmount, shallowRef, type Ref } from "vue";
 import type { AiChatEditorState, ModuleUpdateInput } from "../api/types";
+import { newShortId } from "../utils/ids";
 
 export interface OpenEditor {
   id: string;
   type: string;
+  /** A new item, not saved yet: `id` is only reserved for it. */
+  isNew?: boolean;
   read(): AiChatEditorState;
   /** Put changes into the editor's draft. */
   write(body: ModuleUpdateInput): void;
@@ -68,47 +79,70 @@ function write(spec: OpenEditorSpec, body: ModuleUpdateInput): void {
   if (body.payload !== undefined && spec.setPayload) spec.setPayload(body.payload);
 }
 
-/** Register the mounted editor's item (call in setup). A new item has no
- *  id yet: it isn't registered, but gets back a function to call once the
- *  blank editor is ready, which fills it with a draft the chat staged for
- *  this type (returns that draft, or null). */
+/** The new item's editor, while one is registered, and whether the chat
+ *  has read it (then Save creates the item at its reserved id). */
+let fresh: { entry: OpenEditor; read: boolean } | null = null;
+
+/** Register the mounted editor's item (call in setup). Returns a function
+ *  a new item's editor calls once its blank form is ready: it fills the
+ *  form with a draft the chat staged for this type (returns that draft,
+ *  or null). A saved item's editor gets a no-op. */
 export function registerOpenEditor(spec: OpenEditorSpec): () => StagedDraft | null {
-  if (!spec.id) {
-    return () => {
-      const draft = staged;
-      if (!draft || draft.type !== spec.type) return null;
-      staged = null;
-      write(spec, draft.body);
-      return draft;
-    };
-  }
-  const id = spec.id;
+  const isNew = !spec.id;
   const entry: OpenEditor = {
-    id,
+    id: spec.id ?? newShortId(),
     type: spec.type,
-    read: () => ({
-      id,
-      name: spec.name.value,
-      description: spec.description.value,
-      tags: [...spec.tags.value],
-      category_id: spec.categoryId.value,
-      content_rating: spec.contentRating.value,
-      ...(spec.payload ? { payload: spec.payload() } : {}),
-      dirty: spec.dirty(),
-    }),
+    ...(isNew ? { isNew: true } : {}),
+    read: () => {
+      if (fresh?.entry === entry) fresh.read = true;
+      return {
+        id: entry.id,
+        ...(isNew ? { new: true, type: spec.type } : {}),
+        name: spec.name.value,
+        description: spec.description.value,
+        tags: [...spec.tags.value],
+        category_id: spec.categoryId.value,
+        content_rating: spec.contentRating.value,
+        ...(spec.payload ? { payload: spec.payload() } : {}),
+        dirty: spec.dirty(),
+      };
+    },
     write: (body) => write(spec, body),
   };
   editor.value = entry;
+  if (isNew) fresh = { entry, read: false };
   onBeforeUnmount(() => {
     if (editor.value === entry) editor.value = null;
+    if (fresh?.entry === entry) fresh = null;
   });
-  return () => null;
+  if (!isNew) return () => null;
+  return () => {
+    const draft = staged;
+    if (!draft || draft.type !== spec.type) return null;
+    staged = null;
+    // The card's reserved id is the one other cards point at.
+    if (draft.id) entry.id = draft.id;
+    write(spec, draft.body);
+    return draft;
+  };
 }
 
-/** What a new-item editor's create call adds for a draft from the chat:
- *  the reserved id, so the item lands where other cards expect it. */
+/** What a new-item editor's create call adds: the id a chat card reserved,
+ *  or the one the open new item was registered under once the chat has
+ *  read it, so the item lands where the chat's other cards expect it. */
 export function draftCreateId(d: StagedDraft | null | undefined): { id?: string } {
-  return d?.id ? { id: d.id } : {};
+  if (d?.id) return { id: d.id };
+  return fresh?.read ? { id: fresh.entry.id } : {};
+}
+
+/** The open editor's item for the chat request on a page showing item
+ *  `routeId` (the route's id): a saved item open on its own page, or a new
+ *  item (which has no route id). */
+export function editorForPage(routeId: string | undefined): AiChatEditorState | undefined {
+  const ed = editor.value;
+  if (!ed) return undefined;
+  if (ed.isNew ? !routeId : ed.id === routeId) return ed.read();
+  return undefined;
 }
 
 /** Tell the chat its draft was saved (Save = Apply). */
@@ -139,6 +173,7 @@ export function currentPageNote(): string {
 /** Test seam. */
 export function _resetOpenEditorForTests(): void {
   staged = null;
+  fresh = null;
   editor.value = null;
   pageNote.value = null;
 }

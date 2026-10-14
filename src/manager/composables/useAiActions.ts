@@ -44,7 +44,7 @@ export interface AiActionHost {
   page(): AiChatPage;
 }
 
-export type AiDelegate = "draft_options" | "select_rows" | "organize" | "show_test";
+export type AiDelegate = "draft_options" | "select_rows" | "organize" | "show_test" | "use_panel";
 
 interface Registered {
   run: (args: Record<string, unknown>) => Promise<string>;
@@ -466,6 +466,10 @@ async function waitFor(name: AiDelegate, args: Record<string, unknown>): Promise
 function delegatePage(call: AiPendingCall): AiRoute {
   if (call.tool === "draft_options") return { name: EDIT_ROUTES.wildcard, params: { id: call.args.id } };
   if (call.tool === "show_test") return { name: "test" };
+  if (call.tool === "use_panel") {
+    const name = EDIT_ROUTES[call.args.type];
+    if (name) return { name, params: { id: call.args.id } };
+  }
   return { name: "all" };
 }
 

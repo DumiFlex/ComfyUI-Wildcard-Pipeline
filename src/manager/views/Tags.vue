@@ -22,6 +22,7 @@ import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import { useTemplateStore } from "../stores/templateStore";
 import { libraryTagCounts, type LibraryTagCount } from "../utils/library-tags";
+import { registerPageNote } from "../composables/useOpenEditor";
 
 const router = useRouter();
 const toast = useToast();
@@ -148,6 +149,33 @@ async function confirmDelete() {
     reportError(e, "Delete failed");
   }
 }
+
+// Tell the AI chat which tags are on screen (after the filter), so "these
+// tags" means the rows shown.
+const NOTE_MAX = 60;
+function countLabel(c: LibraryTagCount): string {
+  const parts = [
+    c.modules ? `${c.modules} module${c.modules === 1 ? "" : "s"}` : "",
+    c.bundles ? `${c.bundles} bundle${c.bundles === 1 ? "" : "s"}` : "",
+    c.templates ? `${c.templates} template${c.templates === 1 ? "" : "s"}` : "",
+  ].filter(Boolean);
+  return parts.join(", ") || "0 items";
+}
+registerPageNote(() => {
+  const all = counts.value;
+  if (!all.length) return "Tags page: no tags in the library yet";
+  const q = query.value.trim();
+  const rows = shown.value;
+  const head = q
+    ? `Tags page, filtered by "${q}": ${rows.length} of ${all.length} tags shown`
+    : `Tags page, ${all.length} tag${all.length === 1 ? "" : "s"}`;
+  const listed = rows.slice(0, NOTE_MAX).map((c) => `#${c.tag} (${countLabel(c)})`);
+  const bits = [rows.length ? `${head}: ${listed.join(", ")}${rows.length > NOTE_MAX ? ", …" : ""}` : head];
+  if (editing.value) bits.push(`Renaming #${editing.value.tag} to "${editing.value.name}" (not saved)`);
+  if (mergePending.value) bits.push(`Asking whether to merge #${mergePending.value.from} into #${mergePending.value.into}`);
+  if (deletePending.value) bits.push(`Asking whether to delete #${deletePending.value.tag}`);
+  return bits.join(". ");
+});
 </script>
 
 <template>
@@ -168,6 +196,8 @@ async function confirmDelete() {
           variant="ghost"
           icon="pi pi-refresh"
           aria-label="Refresh tags"
+          data-ai-anchor="refresh"
+          data-ai-label="Refresh button"
           :disabled="loading"
           :class="{ 'wp-refresh-btn--spin': loading }"
           @click="refresh"
@@ -175,7 +205,7 @@ async function confirmDelete() {
       </div>
     </div>
 
-    <div v-if="counts.length" class="wp-tags-search">
+    <div v-if="counts.length" class="wp-tags-search" data-ai-anchor="filter" data-ai-label="Filter tags">
       <Input
         v-model="query"
         placeholder="Filter tags…"
@@ -185,14 +215,14 @@ async function confirmDelete() {
     </div>
 
     <div class="wp-table-wrap wp-table-wrap--scroll">
-      <table class="wp-table wp-table--sticky-head">
+      <table class="wp-table wp-table--sticky-head" data-ai-anchor="tags" data-ai-label="Tags table">
         <thead>
           <tr>
             <th>Tag</th>
             <th class="wp-tags-col--count">Modules</th>
             <th class="wp-tags-col--count">Bundles</th>
             <th class="wp-tags-col--count">Templates</th>
-            <th class="wp-tags-col--actions">Actions</th>
+            <th class="wp-tags-col--actions" data-ai-anchor="actions" data-ai-label="Open, rename (or merge) and delete">Actions</th>
           </tr>
         </thead>
         <tbody>

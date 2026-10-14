@@ -24,7 +24,7 @@
 import { computed, ref, shallowRef, triggerRef } from "vue";
 import { api, ApiError } from "../api/client";
 import type {
-  AiCallAnswer, AiChatContext, AiChatEvent, AiChatPage, AiChatProposal, AiChatResult,
+  AiChatStep, AiTestCard, AiCallAnswer, AiChatContext, AiChatEvent, AiChatPage, AiChatProposal, AiChatResult,
   AiChatRetry, AiChatRequest, AiChatResume, AiChatStreamEvent, AiPendingCall,
 } from "../api/types";
 import { useModuleStore } from "../stores/moduleStore";
@@ -100,7 +100,7 @@ export interface LiveAnswer {
   text: string;
   status: string;
   thinking: boolean;
-  steps: Array<{ tool: string; note: string; ok: boolean }>;
+  steps: AiChatStep[];
 }
 const EMPTY_LIVE: LiveAnswer = { text: "", status: "", thinking: false, steps: [] };
 const live = shallowRef<LiveAnswer>(EMPTY_LIVE);
@@ -447,6 +447,16 @@ function answerSearch(id: string, choice: SearchApproval): void {
 }
 
 /** The drawer hands over how to navigate and read the page. */
+/** A test card's "Open in Test Runner": the same run, on the page. */
+async function openTest(card: AiTestCard): Promise<string> {
+  if (!host) return "couldn't: the page isn't ready";
+  if (!card.stack.length) return "couldn't: everything in that run is still a card";
+  return runCall({
+    id: "test-card", tool: "show_test", label: "Open in Test Runner",
+    args: { stack: card.stack, seeds: card.seeds, ...(card.pins ? { pins: card.pins } : {}) },
+  }, host);
+}
+
 function attach(next: AiActionHost | null): void {
   host = next;
 }
@@ -804,7 +814,7 @@ export function useAiChat() {
     open, input, entries, loading, error, started, queued, chatId, asking, running, live,
     context, compacting,
     send, stop, reset, apply, applyAll, chainOf, linkWarnings, undo, dismiss, blockedReason, ask, answerSearch, attach,
-    toggleOption, setAllOptions, openInEditor,
+    toggleOption, setAllOptions, openInEditor, openTest,
     retry, retryBlocked, load, compact,
     attachments, vision, visionModel, addFiles, removeAttachment, checkVision,
   };

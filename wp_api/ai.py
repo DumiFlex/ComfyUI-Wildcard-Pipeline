@@ -893,6 +893,9 @@ _PERM_NOTES = {
                     "from update_info, and new categories, are applied as soon as you "
                     "propose them; the user can undo them. Other changes stay cards.)",
     ("auto", False): "(Auto-apply is off: every change is a card the user applies.)",
+    ("web", True): "(The user set up web search: web_search is available now. Use it on "
+                   "your own whenever references would help; the user allows each query.)",
+    ("web", False): "(Web search is off now: web_search is gone.)",
 }
 
 
@@ -907,7 +910,12 @@ def _sync_permissions(meta: dict[str, Any], cfg: dict[str, Any]) -> str:
         if bool(meta.get(key)) != now:
             meta[key] = now
             notes.append(_PERM_NOTES[(key, now)])
-    meta["tools"] = ai_tools.sync_delete(list(meta.get("tools") or []), bool(meta.get("delete")))
+    web = _ai_search.enabled(cfg)
+    if bool(meta.get("web")) != web:
+        meta["web"] = web
+        notes.append(_PERM_NOTES[("web", web)])
+    tools = ai_tools.sync_delete(list(meta.get("tools") or []), bool(meta.get("delete")))
+    meta["tools"] = ai_tools.sync_delete(tools, web, ai_tools.WEB)
     return " ".join(notes)
 
 
@@ -1549,8 +1557,13 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 needs_reply = True
                 result(f"{tool} {_json.dumps(args, ensure_ascii=False, sort_keys=True)[:200]}:\n"
                        + ai_budget.clip(out, prof["result_chars"]) + extra)
-                steps.append({"tool": tool, "note": ai_chat.args_note(tool, args, lib),
-                              "ok": True})
+                step_ = {"tool": tool, "note": ai_chat.args_note(tool, args, lib), "ok": True}
+                card = getattr(lib, "last_card", None) if tool == "run_test" else None
+                if card:
+                    # The run as a card the user can open in the Test Runner.
+                    step_["card"] = card
+                    lib.last_card = None
+                steps.append(step_)
             else:
                 # Hidden characters can't ride into the library on a card.
                 out = ai_safety.clean(out)

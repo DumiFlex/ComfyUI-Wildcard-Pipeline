@@ -44,6 +44,8 @@ const convo = useAiConversation<AiDescribeResult, unknown>({
   },
 });
 const { instruction: hint, loading, error, result } = convo;
+/** The chat's `use_panel` (see useAiConversation `chat`). */
+defineExpose({ run: (text: string) => convo.chat(text) });
 watch(result, (r) => {
   if (!r) return;
   useDescription.value = !!r.description && r.description !== props.description;
