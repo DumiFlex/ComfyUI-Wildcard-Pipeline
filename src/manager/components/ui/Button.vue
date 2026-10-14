@@ -35,6 +35,7 @@
  */
 import { computed, useSlots } from "vue";
 import Icon from "./Icon.vue";
+import LoadingMark from "@/components/shared/LoadingMark.vue";
 
 type Variant = "primary" | "secondary" | "ghost" | "danger" | "link" | "outline";
 type Size = "sm" | "md" | "lg";
@@ -93,7 +94,7 @@ function onClick(e: MouseEvent) {
     :aria-busy="loading || undefined"
     @click="onClick"
   >
-    <Icon v-if="loading" name="spin pi-spinner" />
+    <LoadingMark v-if="loading" decorative />
     <Icon v-else-if="icon" :name="icon" />
     <slot />
     <Icon v-if="iconRight" :name="iconRight" />

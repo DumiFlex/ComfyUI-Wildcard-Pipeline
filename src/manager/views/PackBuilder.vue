@@ -33,6 +33,7 @@ import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import { useTemplateStore } from "../stores/templateStore";
 import type { AiPackItem } from "../api/types";
+import LoadingMark from "@/components/shared/LoadingMark.vue";
 
 const pb = usePackBuilder();
 
@@ -628,7 +629,7 @@ function stopExtending(): void {
           <li v-for="i in builtItems" :key="i.key" class="wp-pack__built" data-test="pack-built" :data-status="status(i.key)">
             <div class="wp-pack__item">
               <span class="wp-pack__state" :data-status="status(i.key)">
-                <i v-if="spinning(i.key)" class="pi pi-spin pi-spinner" aria-hidden="true" />
+                <LoadingMark v-if="spinning(i.key)" decorative />
                 <i v-else-if="status(i.key) === 'failed'" class="pi pi-times-circle" aria-hidden="true" />
                 <i v-else-if="status(i.key) === 'skipped'" class="pi pi-forward" aria-hidden="true" />
                 <i v-else-if="status(i.key) === 'waiting'" class="pi pi-circle" aria-hidden="true" />

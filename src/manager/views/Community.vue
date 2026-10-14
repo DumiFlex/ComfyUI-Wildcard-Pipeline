@@ -21,6 +21,7 @@ import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import Card from "../components/ui/Card.vue";
 import Icon from "../components/ui/Icon.vue";
+import LoadingMark from "@/components/shared/LoadingMark.vue";
 import { DISCORD_INVITE, WPC_API_URL } from "../config/links";
 import {
   EmbedLoadError,
@@ -179,6 +180,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="wp-community-root">
+    <LoadingMark v-if="loading" :size="48" block>Opening Community…</LoadingMark>
     <div
       v-if="loading || !loadError"
       ref="containerEl"

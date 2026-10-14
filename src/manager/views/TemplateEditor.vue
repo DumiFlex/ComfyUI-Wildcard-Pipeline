@@ -29,6 +29,7 @@ import {
 } from "../composables/useOpenEditor";
 import { useTemplateStore } from "../stores/templateStore";
 import { useCategoryStore } from "../stores/categoryStore";
+import LoadingMark from "@/components/shared/LoadingMark.vue";
 
 const props = defineProps<{ id?: string }>();
 
@@ -186,7 +187,7 @@ function cancel() {
     @save="save"
     @cancel="cancel"
   >
-    <div v-if="loading" class="wp-dim wp-tpl-editor__loading">Loading template…</div>
+    <LoadingMark v-if="loading" :size="40" block>Loading template…</LoadingMark>
     <template v-else>
       <IdentityCard
         ref="identityCard"
@@ -258,7 +259,6 @@ function cancel() {
 </template>
 
 <style scoped>
-.wp-tpl-editor__loading { padding: var(--wp-space-6); }
 .wp-tpl-editor__neg {
   border-color: color-mix(in srgb, var(--wp-danger) 40%, var(--wp-border));
 }
