@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseInline, parseMarkdown, stripInvisible, type Block } from "../chat-markdown";
+import { closeOpen, parseInline, parseMarkdown, plainText, stripInvisible, type Block } from "../chat-markdown";
 
 const text = (v: string) => ({ t: "text", v });
 const para = (v: string): Block => ({ t: "p", c: [text(v)] } as Block);
@@ -144,5 +144,79 @@ describe("chat-markdown blocks", () => {
     expect(() => parseMarkdown(">".repeat(200) + " x")).not.toThrow();
     expect(() => parseMarkdown(Array.from({ length: 50 }, (_, i) => `${" ".repeat(i * 2)}- x`).join("\n"))).not.toThrow();
     expect(parseMarkdown("")).toEqual([]);
+  });
+});
+
+describe("chat-markdown GitHub alerts", () => {
+  it("tags a quote opening with an alert marker, any case", () => {
+    expect(parseMarkdown("> [!NOTE]\n> Keep names short.")).toEqual([
+      { t: "quote", tone: "tip", blocks: [para("Keep names short.")] },
+    ]);
+    expect(parseMarkdown("> [!tip] Keep names short.")[0]).toMatchObject({ tone: "tip", blocks: [para("Keep names short.")] });
+    expect(parseMarkdown("> [!Important]\n> x")[0]).toMatchObject({ tone: "tip" });
+    expect(parseMarkdown("> [!WARNING]\n> x")[0]).toMatchObject({ tone: "warn" });
+    expect(parseMarkdown("> [!caution] x")[0]).toMatchObject({ tone: "warn" });
+  });
+
+  it("accepts the older **Note** / **Warning** form", () => {
+    expect(parseMarkdown("> **Note**\n> x")[0]).toMatchObject({ tone: "tip", blocks: [para("x")] });
+    expect(parseMarkdown("> **Warning:** this replaces Pose.")[0]).toMatchObject({ tone: "warn", blocks: [para("this replaces Pose.")] });
+  });
+
+  it("keeps every block inside, lists too", () => {
+    const [q] = parseMarkdown("> [!WARNING]\n> Before you apply:\n> - back up\n> - check $pose");
+    expect(q.t === "quote" && q.blocks.map((b) => b.t)).toEqual(["p", "list"]);
+  });
+
+  it("leaves other quotes and unknown markers alone", () => {
+    expect(parseMarkdown("> plain quote")[0]).not.toHaveProperty("tone");
+    expect(parseMarkdown("> [!FOO] x")[0]).not.toHaveProperty("tone");
+    expect(parseMarkdown("> **Bold** start")[0]).not.toHaveProperty("tone");
+  });
+});
+
+describe("closeOpen", () => {
+  it("closes an odd bold, strike or code on the last line", () => {
+    expect(closeOpen("Use **bold tex")).toBe("Use **bold tex**");
+    expect(closeOpen("Use ~~old")).toBe("Use ~~old~~");
+    expect(closeOpen("Set `$hai")).toBe("Set `$hai`");
+    expect(closeOpen("**Hair** and `$ey")).toBe("**Hair** and `$ey`");
+  });
+
+  it("closes the innermost first", () => {
+    expect(closeOpen("**bold `co")).toBe("**bold `co`**");
+    expect(closeOpen("`a` ~~x **y")).toBe("`a` ~~x **y**~~");
+  });
+
+  it("drops a marker with nothing after it yet", () => {
+    expect(closeOpen("Some **")).toBe("Some");
+    expect(closeOpen("Some `")).toBe("Some");
+    expect(closeOpen("**bold `")).toBe("**bold**");
+  });
+
+  it("ignores stars inside code spans and earlier lines", () => {
+    expect(closeOpen("`a**b` done")).toBe("`a**b` done");
+    expect(closeOpen("**open\nnext line")).toBe("**open\nnext line");
+    expect(closeOpen("all **closed** here")).toBe("all **closed** here");
+  });
+
+  it("drops an unfinished [[ mention", () => {
+    expect(closeOpen("See [[ab12cd34#Hai")).toBe("See");
+    expect(closeOpen("See [[ab12cd34#Hair]] and [[x")).toBe("See [[ab12cd34#Hair]] and");
+    expect(closeOpen("See [[ab12cd34#Hair]]")).toBe("See [[ab12cd34#Hair]]");
+  });
+
+  it("leaves an open code fence alone", () => {
+    expect(closeOpen("```json\n{\"a\": `x")).toBe("```json\n{\"a\": `x");
+    expect(closeOpen("```\nx\n```\nnow **b")).toBe("```\nx\n```\nnow **b**");
+    expect(closeOpen("")).toBe("");
+  });
+});
+
+describe("plainText", () => {
+  it("turns mentions into names", () => {
+    expect(plainText("See [[ab12cd34#Hair Color]] and [[Pose]].")).toBe("See Hair Color and Pose.");
+    expect(plainText("See [[ab12cd34#Hair]].", { "ab12cd34#Hair": { name: "Hair Color" } })).toBe("See Hair Color.");
+    expect(plainText("**keep** `markdown`")).toBe("**keep** `markdown`");
   });
 });

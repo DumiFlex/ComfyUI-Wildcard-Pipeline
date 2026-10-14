@@ -61,6 +61,27 @@ async def test_a_page_tool_pauses_the_turn_and_its_answer_continues_it(wp_client
     assert "waiting" in again["error"]
 
 
+async def test_pointing_twice_is_turned_into_an_answer(wp_client, fake_llm):
+    _on(fake_llm)
+    point = {"tool": "highlight", "args": '{"anchor": "settings", "caption": "Settings button"}'}
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [point]},
+        {"message": "", "calls": [point]},  # the same part again
+        {"message": "", "calls": []},
+        {"message": "", "calls": []},
+    ])
+    first = await _chat(wp_client, "where is the settings button?")
+    assert first["pending"][0]["tool"] == "highlight"
+    done = await _resume(wp_client, first["chat_id"],
+                         [{"id": first["pending"][0]["id"], "text": "pointed"}])
+    # No second pause: the model is told it already pointed there.
+    assert done["pending"] == []
+    told = json.dumps(fake_llm.seen[-2]["body"]["messages"])
+    assert "already pointed at that" in told
+    # It still said nothing: the answer says where in words.
+    assert done["message"] == "It's highlighted on the page: Settings button."
+
+
 async def test_a_new_message_cancels_what_was_waiting(wp_client, fake_llm):
     _on(fake_llm)
     fake_llm.chat_steps.extend([

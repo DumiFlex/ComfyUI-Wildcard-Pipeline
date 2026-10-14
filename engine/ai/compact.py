@@ -17,7 +17,7 @@ import json
 import re
 from typing import Any
 
-from engine.ai import chatlog
+from engine.ai import ask, chatlog
 
 #: Compact once the prompt is estimated past this share of the window.
 TRIGGER = 0.75
@@ -146,14 +146,19 @@ def ids_in(entries: list[dict[str, Any]], meta: dict[str, Any], cut: int) -> lis
     return out[:MAX_IDS]
 
 
-def finish(summary: str, ids: list[str]) -> str:
+def finish(summary: str, ids: list[str], decisions: Any = None) -> str:
     """The model's summary, with any id it dropped listed (small models do
-    drop them, and the next turns need them), cut to size."""
+    drop them, and the next turns need them), cut to size. The answers the
+    user gave to `ask` questions (`meta["decisions"]`) follow verbatim and
+    are never cut, so a compacted chat doesn't ask them again."""
     text = re.sub(r"\n{3,}", "\n\n", (summary or "").strip())
     missing = [i for i in ids if i not in text]
     if missing:
         text += "\nItems mentioned (ids): " + ", ".join(missing)
-    return text[:MAX_SUMMARY]
+    settled = ask.decisions_text(decisions)
+    if not settled:
+        return text[:MAX_SUMMARY]
+    return text[:MAX_SUMMARY] + "\n\n" + settled
 
 
 def apply(meta: dict[str, Any], summary: str, cut: int) -> dict[str, Any]:

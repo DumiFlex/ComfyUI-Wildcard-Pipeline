@@ -14,8 +14,11 @@ Entries, oldest first:
   "images"?: [{"media_type", "data" (base64), "w", "h"}]}`` — images the
   user attached, checked and re-encoded by `wp_api/_ai_images.py`.
 - ``{"kind": "step", "text": str, "calls": [{"id", "tool", "args",
-  "args_text"}], "answer": the JSON-mode object or None, "usage": {…}}`` —
-  one model step. `text` is what the model wrote (JSON mode: the raw JSON).
+  "args_text"}], "answer": the JSON-mode object or None, "usage": {…},
+  "model"?: str, "raw"?: [...]}`` — one model step. `text` is what the model
+  wrote (JSON mode: the raw JSON). `raw` is what OpenAI's Responses API
+  returned (encrypted reasoning, the message, the calls), replayed as is to
+  the same model.
 - ``{"kind": "results", "items": [{"id", "tool", "text"}], "tail": str}`` —
   every call of the step before it gets exactly one item.
 - ``{"kind": "note", "text": str}`` — a nudge from the server.
@@ -101,9 +104,11 @@ def move_images(entries: list[dict[str, Any]], meta: dict[str, Any]) -> dict[str
 
 def step_entry(text: str, calls: list[dict[str, Any]], *, answer: Any = None,
                usage: dict[str, Any] | None = None, synthetic: bool = False,
-               model: str = "") -> dict[str, Any]:
+               model: str = "", raw: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     out: dict[str, Any] = {"kind": "step", "text": text, "calls": calls, "answer": answer,
                            "usage": usage or {}}
+    if raw:
+        out["raw"] = raw
     if model:
         out["model"] = model  # which model wrote it (the chat's model can change)
     if synthetic:
@@ -170,8 +175,12 @@ def render(entries: list[dict[str, Any]], meta: dict[str, Any]) -> list[dict[str
                     msg["images"] = images
                 out.append(msg)
         elif kind == "step":
-            out.append({"role": "assistant", "content": str(e.get("text") or ""),
-                        "calls": list(e.get("calls") or []), "answer": e.get("answer")})
+            msg = {"role": "assistant", "content": str(e.get("text") or ""),
+                   "calls": list(e.get("calls") or []), "answer": e.get("answer")}
+            if e.get("raw"):
+                msg["raw"] = e["raw"]
+                msg["model"] = e.get("model") or ""
+            out.append(msg)
         elif kind == "results":
             items = [{"id": it.get("id"), "tool": it.get("tool"),
                       "content": _first_line(str(it.get("text") or "")) if i < masked
@@ -299,6 +308,18 @@ def apply_events(meta: dict[str, Any], events: Any) -> tuple[dict[str, Any], str
         if not isinstance(ev, dict):
             continue
         pid, status = ev.get("pid"), ev.get("status")
+        fix = ev.get("fix")
+        if isinstance(pid, str) and pid in proposals and isinstance(fix, str):
+            # The user used one of the card's own fixes (`lint.fixes`).
+            info = dict(proposals[pid])
+            done = list(info.get("fixes") or [])
+            if fix not in done and len(done) < 8:
+                info["fixes"] = [*done, fix]
+                proposals[pid] = info
+                label = ev.get("label") if isinstance(ev.get("label"), str) else fix
+                said.append(f"{pid} \"{info.get('title', '')}\": used the card's fix "
+                            f"\"{label[:60]}\" (the card changed; the user still has to apply it)")
+            continue
         if not isinstance(pid, str) or pid not in proposals or status not in _STATUS_WORDS:
             continue
         info = dict(proposals[pid])
@@ -399,12 +420,37 @@ def display(entries: list[dict[str, Any]], meta: dict[str, Any]) -> list[dict[st
                                   for im in e["images"]]
             out.append(turn)
         elif kind == "shown" and isinstance(e.get("view"), dict):
-            status, created = status_of(e["view"])
-            out.append({"role": "assistant", "view": e["view"], "status": status,
+            view = answered_view(fixed_view(e["view"], meta), meta)
+            status, created = status_of(view)
+            out.append({"role": "assistant", "view": view, "status": status,
                         "created": created})
         span.append(e)
     close()
     return out
+
+
+def answered_view(view: dict[str, Any], meta: dict[str, Any]) -> dict[str, Any]:
+    """A shown answer with what the user answered to its `ask` questions
+    (`meta["asked"]`, call id -> answers), as ``view["answered"]``."""
+    asked = meta.get("asked") or {}
+    ids = [c.get("id") for c in view.get("pending") or []
+           if isinstance(c, dict) and c.get("tool") == "ask" and c.get("id") in asked]
+    if not ids:
+        return view
+    return {**view, "answered": {i: asked[i] for i in ids}}
+
+
+def fixed_view(view: dict[str, Any], meta: dict[str, Any]) -> dict[str, Any]:
+    """A shown answer with the card fixes the user used made (`meta["fixes"]`,
+    pid -> keys), so a reopened chat shows its cards as they were left."""
+    fixes = meta.get("fixes") or {}
+    props = view.get("proposals") or []
+    if not fixes or not any(isinstance(p, dict) and p.get("pid") in fixes for p in props):
+        return view
+    from engine.ai import lint
+    return {**view, "proposals": [
+        lint.with_fixes(p, list(fixes.get(p.get("pid")) or []))
+        if isinstance(p, dict) and p.get("pid") in fixes else p for p in props]}
 
 
 def last_turn_start(entries: list[dict[str, Any]]) -> int | None:

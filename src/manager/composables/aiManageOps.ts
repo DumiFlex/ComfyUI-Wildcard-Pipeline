@@ -65,14 +65,18 @@ async function run(steps: Array<() => Promise<Step | null>>): Promise<void> {
   }
 }
 
-/** Run a management card. Throws (after undoing what ran) on failure. */
-export async function applyManage(op: ManageOp): Promise<void> {
+/** Run a management card. Throws (after undoing what ran) on failure.
+ *  Returns the ids of the categories it made, which Undo removes (and only
+ *  those: a category that already existed stays). */
+export async function applyManage(op: ManageOp): Promise<string[]> {
   const cats = useCategoryStore();
+  const made: string[] = [];
   if (op.op === "categories") {
     await run([
       ...op.create.map((name) => async (): Promise<Step | null> => {
         if (cats.items.some((c) => sameName(c.name, name))) return null;
         const row = await cats.create({ name });
+        made.push(row.id);
         return () => cats.remove(row.id);
       }),
       ...op.rename.map((r) => async (): Promise<Step> => {
@@ -89,7 +93,7 @@ export async function applyManage(op: ManageOp): Promise<void> {
         return before ? async () => { await cats.update(row.id, { color: before.color, icon: before.icon }); } : null;
       }),
     ]);
-    return;
+    return made;
   }
   if (op.op === "bulk") {
     let catId: string | null = null;
@@ -100,6 +104,7 @@ export async function applyManage(op: ManageOp): Promise<void> {
         if (have) { catId = have.id; return null; }
         const row = await cats.create({ name: op.new_category });
         catId = row.id;
+        made.push(row.id);
         return () => cats.remove(row.id);
       },
       ...op.items.map((it) => async (): Promise<Step> => {
@@ -108,7 +113,7 @@ export async function applyManage(op: ManageOp): Promise<void> {
         return () => update(it.kind, it.id, it.before as ItemBody);
       }),
     ]);
-    return;
+    return made;
   }
   if (op.op === "tags") {
     try {
@@ -119,32 +124,37 @@ export async function applyManage(op: ManageOp): Promise<void> {
     } finally {
       await refreshCatalogs();
     }
-    return;
+    return made;
   }
   const modules = useModuleStore();
   const bundles = useBundleStore();
   const templates = useTemplateStore();
+  // What ran, so a failure is taken back in Undo's order (categories
+  // before the items that go back into them).
+  const ran: DeleteOp = { ...op, items: [], categories: [], tags: [] };
   try {
-    await run([
-      ...op.items.map((it) => async (): Promise<Step> => {
-        if (it.kind === "bundle") await bundles.remove(it.id);
-        else if (it.kind === "template") await templates.remove(it.id);
-        else await modules.remove(it.id);
-        return () => recreate(it, new Map());
-      }),
-      ...op.categories.map((c) => async (): Promise<Step> => {
-        await cats.remove(c.id);
-        return async () => { await restoreCategory(c); };
-      }),
-      ...op.tags.map((t) => async (): Promise<Step> => {
-        await api.libraryTags.delete(t.tag);
-        return () => restoreTags(t.members);
-      }),
-    ]);
+    for (const it of op.items) {
+      if (it.kind === "bundle") await bundles.remove(it.id);
+      else if (it.kind === "template") await templates.remove(it.id);
+      else await modules.remove(it.id);
+      ran.items.push(it);
+    }
+    for (const c of op.categories) {
+      await cats.remove(c.id);
+      ran.categories.push(c);
+    }
+    for (const t of op.tags) {
+      await api.libraryTags.delete(t.tag);
+      ran.tags.push(t);
+    }
+  } catch (err) {
+    await undoManage(ran).catch(() => undefined);
+    throw err;
   } finally {
     // The server cleared deleted categories off their items.
     if (op.tags.length || op.categories.length) await refreshCatalogs();
   }
+  return made;
 }
 
 type DeleteOp = Extract<ManageOp, { op: "delete" }>;
@@ -193,23 +203,31 @@ async function recreate(it: DeleteOp["items"][number], catIds: Map<string, strin
   }
 }
 
-/** Take back an applied management card. */
-export async function undoManage(op: ManageOp): Promise<void> {
+/** Take back an applied management card. `made` is what `applyManage`
+ *  returned; without it (cards applied before it was kept) a created
+ *  category is found by name. */
+export async function undoManage(op: ManageOp, made?: string[]): Promise<void> {
   const cats = useCategoryStore();
   if (op.op === "categories") {
     for (const r of [...op.rename].reverse()) await cats.update(r.id, { name: r.from });
     for (const st of op.styles ?? []) {
       if (st.id && st.before) await cats.update(st.id, { color: st.before.color, icon: st.before.icon });
     }
-    for (const name of op.create) {
-      const row = cats.items.find((c) => sameName(c.name, name));
-      if (row) await cats.remove(row.id);
+    if (made) {
+      for (const id of made) await cats.remove(id).catch(() => undefined);
+    } else {
+      for (const name of op.create) {
+        const row = cats.items.find((c) => sameName(c.name, name));
+        if (row) await cats.remove(row.id);
+      }
     }
     return;
   }
   if (op.op === "bulk") {
     for (const it of [...op.items].reverse()) await update(it.kind, it.id, it.before as ItemBody);
-    if (op.new_category) {
+    if (made) {
+      for (const id of made) await cats.remove(id).catch(() => undefined);
+    } else if (op.new_category) {
       const row = cats.items.find((c) => sameName(c.name, op.new_category));
       if (row) await cats.remove(row.id).catch(() => undefined);
     }

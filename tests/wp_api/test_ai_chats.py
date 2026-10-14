@@ -37,6 +37,9 @@ async def test_chats_are_listed_searched_renamed_pinned_and_deleted(wp_client, f
     found = (await _json(await wp_client.get("/wp/api/ai/chats?q=Sure")))["chats"]
     assert [c["id"] for c in found] == [b["chat_id"]]
     assert (await _json(await wp_client.get("/wp/api/ai/chats?q=%25")))["chats"] == []
+    # Only the words count, not the stored JSON around them.
+    for q in ("kind", "proposals", "steps"):
+        assert (await _json(await wp_client.get(f"/wp/api/ai/chats?q={q}")))["chats"] == []
 
     # Renaming and pinning don't make a chat newer, but pins come first.
     out = await _json(await wp_client.patch(f"/wp/api/ai/chats/{a['chat_id']}",
@@ -249,6 +252,7 @@ async def streamer(aiohttp_server):
     app.router.add_post("/v1/chat/completions", handler)
     app.router.add_post("/api/chat", handler)
     app.router.add_post("/v1/messages", handler)
+    app.router.add_post("/v1/responses", handler)
     server = await aiohttp_server(app)
     server.state = state
     return server
@@ -338,6 +342,55 @@ async def test_anthropic_stream_is_assembled(streamer):
                              "output_tokens": 7}
 
 
+async def test_responses_stream_is_assembled(streamer):
+    _ai_chat._NO_STREAM.clear()
+    final = {"status": "completed", "usage": {"input_tokens": 50, "output_tokens": 4},
+             "output": [
+                 {"type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "E"},
+                 {"type": "message", "role": "assistant", "phase": "final_answer",
+                  "content": [{"type": "output_text", "text": "Hello"}]},
+                 {"type": "function_call", "call_id": "c1", "name": "read",
+                  "arguments": '{"id": "a"}'}]}
+    streamer.state["body"] = _sse(
+        {"type": "response.created", "response": {"status": "in_progress"}},
+        {"type": "response.reasoning_summary_text.delta", "delta": "hm"},
+        {"type": "response.output_text.delta", "delta": "Hel"},
+        {"type": "response.output_text.delta", "delta": "lo"},
+        {"type": "response.function_call_arguments.delta", "delta": '{"id"'},
+        {"type": "response.completed", "response": final},
+    )
+    events: list = []
+
+    async def emit(e):
+        events.append(e)
+
+    data = await _ai_chat._post(_cfg(streamer), "/responses", {"model": "m"},
+                                kind="responses", emit=emit, show=True)
+    assert data["output"] == final["output"] and data["status"] == "completed"
+    assert "_early" not in data
+    assert events[0] == {"type": "thinking"} and events[-1] == {"type": "text", "v": "Hello"}
+
+
+async def test_a_cut_responses_stream_keeps_finished_items(streamer):
+    _ai_chat._NO_STREAM.clear()
+    item = {"type": "message", "role": "assistant",
+            "content": [{"type": "output_text", "text": "Part"}]}
+    streamer.state["body"] = _sse(
+        {"type": "response.output_item.done", "output_index": 0, "item": item})
+    data = await _ai_chat._post(_cfg(streamer), "/responses", {"model": "m"},
+                                kind="responses", emit=None, show=True)
+    assert data["output"] == [item] and data["_early"] is True
+
+
+async def test_an_error_event_in_a_responses_stream_raises(streamer):
+    _ai_chat._NO_STREAM.clear()
+    streamer.state["body"] = _sse({"type": "error", "code": "server_error",
+                                   "message": "overloaded"})
+    with pytest.raises(_ai_client.AIError, match="overloaded"):
+        await _ai_chat._post(_cfg(streamer), "/responses", {"model": "m"},
+                             kind="responses", emit=None, show=True)
+
+
 async def test_an_error_inside_the_stream_raises(streamer):
     _ai_chat._NO_STREAM.clear()
     streamer.state["body"] = _sse({"error": {"message": "model crashed"}})
@@ -376,3 +429,67 @@ async def test_an_auth_error_is_not_retried_without_streaming(streamer):
         await _ai_chat._post(_cfg(streamer), "/chat/completions", {"model": "m"},
                              kind="openai", emit=None, show=False)
     assert len(streamer.state["seen"]) == 1
+
+
+async def test_a_card_fix_changes_the_card_reopens_fixed_and_tells_the_model(wp_client, fake_llm):
+    _on(fake_llm)
+    fake_llm.chat_steps.append({"message": "Here.", "calls": [{"tool": "create_wildcard",
+        "args": json.dumps({"name": "Pose", "var": "pose", "options": [
+            {"text": "standing"}, {"text": "close-up, sitting"}, {"text": "full body"}]})}]})
+    first = await _chat(wp_client, "make poses")
+    card = first["proposals"][0]
+    [fix] = card["fixes"]
+    assert fix["key"] == "scope:camera"
+    url = f"/wp/api/ai/chats/{first['chat_id']}"
+    out = await _json(await wp_client.patch(url, json={"events": [
+        {"pid": card["pid"], "fix": fix["key"]}, {"pid": card["pid"], "fix": "nope"}]}))
+    body = out["fixed"][card["pid"]]
+    assert [o["value"] for o in body["payload"]["options"]] == ["standing", "sitting"]
+    assert body["id"] == card["op"]["body"]["id"]
+
+    chat = await _json(await wp_client.get(url))
+    shown = chat["turns"][1]["view"]["proposals"][0]
+    assert shown["op"]["body"] == body and shown["fixes"] == []
+    assert fix["warning"] not in shown["warnings"]
+
+    fake_llm.chat_steps.append({"message": "Ok.", "calls": []})
+    await _chat(wp_client, "thanks", chat_id=first["chat_id"],
+                events=[{"pid": card["pid"], "fix": fix["key"], "label": fix["label"]}])
+    sent = json.dumps(fake_llm.seen[-1]["body"])
+    assert "used the card's fix" in sent and "Remove camera words" in sent
+
+
+async def test_retry_drops_the_old_turns_card_fixes(wp_client, fake_llm):
+    _on(fake_llm)
+    step = {"message": "Here.", "calls": [{"tool": "create_wildcard",
+        "args": json.dumps({"name": "Pose", "var": "pose", "options": [
+            {"text": "standing"}, {"text": "close-up, sitting"}, {"text": "full body"}]})}]}
+    fake_llm.chat_steps.append(step)
+    first = await _chat(wp_client, "make poses")
+    card = first["proposals"][0]
+    url = f"/wp/api/ai/chats/{first['chat_id']}"
+    await _json(await wp_client.patch(url, json={"events": [
+        {"pid": card["pid"], "fix": card["fixes"][0]["key"]}]}))
+    fake_llm.chat_steps.append(step)
+    again = await _chat(wp_client, "", chat_id=first["chat_id"], retry=True)
+    # Same pid, new card: the fix made to the discarded one doesn't carry over.
+    assert again["proposals"][0]["pid"] == card["pid"]
+    chat = await _json(await wp_client.get(url))
+    shown = chat["turns"][1]["view"]["proposals"][0]
+    assert len(shown["op"]["body"]["payload"]["options"]) == 3 and shown["fixes"]
+
+
+async def test_a_second_request_for_a_busy_chat_is_refused(wp_client, fake_llm):
+    from wp_api import ai as ai_routes
+    _on(fake_llm)
+    fake_llm.chat_steps.append({"message": "Hi!", "calls": []})
+    first = await _chat(wp_client, "hello")
+    ai_routes._BUSY.add(first["chat_id"])
+    try:
+        out = await _json(await wp_client.post("/wp/api/ai/chat", json={
+            "message": "again", "chat_id": first["chat_id"]}), 409)
+        assert "still answering" in out["error"]
+    finally:
+        ai_routes._BUSY.discard(first["chat_id"])
+    fake_llm.chat_steps.append({"message": "Back.", "calls": []})
+    assert (await _chat(wp_client, "again", chat_id=first["chat_id"]))["message"] == "Back."

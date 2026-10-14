@@ -1,7 +1,9 @@
 """Talk to the model the user configured. Three wire formats cover them all.
 
 - ``anthropic``: Claude's Messages API. Structured output is a forced tool
-  call (``tool_choice`` names our one tool), which every Claude model supports.
+  call (``tool_choice`` names our one tool). The newest Claude models refuse a
+  forced choice and any sampling setting, so ``claude_body`` fits each request
+  to the model (see there).
 - ``openai``: Chat Completions with ``response_format: json_schema``. OpenAI,
   LM Studio, llama.cpp's ``llama-server``, vLLM, OpenRouter and most other
   local servers speak it.
@@ -65,6 +67,16 @@ _TOOL_NAME = "submit"
 
 _semaphore = asyncio.Semaphore(2)
 
+#: Claude models that answer 400 to `temperature` (removed, or only the
+#: default allowed) and models that answer 400 to a forced `tool_choice`
+#: (`tool` / `any`). Models not listed here are fitted after their first 400
+#: (`claude_send`), which is remembered per address + model.
+_CLAUDE_NO_SAMPLING = re.compile(
+    r"claude-(?:fable|mythos|opus-5|opus-4-[78]|sonnet-5|haiku-5)", re.I)
+_CLAUDE_NO_FORCED_TOOL = re.compile(
+    r"claude-(?:fable-5-1|mythos-5-1|opus-5-5|sonnet-5-5|haiku-5-5)", re.I)
+_CLAUDE_DROPPED: dict[tuple[str, str], set[str]] = {}
+
 
 class AIError(Exception):
     """Anything that stopped a model call. `message` is shown to the user."""
@@ -126,6 +138,65 @@ async def _read_json(resp: aiohttp.ClientResponse) -> Any:
         raise AIError("the server didn't answer with JSON. Is the address right?") from e
 
 
+def _model_key(cfg: dict[str, Any]) -> tuple[str, str]:
+    return (str(cfg.get("base_url")), str(cfg.get("model")))
+
+
+def claude_body(cfg: dict[str, Any], body: dict[str, Any], *,
+                forced_tool: str | None = None) -> dict[str, Any]:
+    """`body` as this Claude model accepts it: no `temperature` where it is
+    refused, and `forced_tool` asked for in words with `tool_choice: auto`
+    where a forced choice is refused (the answer then may come as text,
+    which the callers parse as JSON)."""
+    model = str(cfg.get("model") or "")
+    dropped = _CLAUDE_DROPPED.get(_model_key(cfg), set())
+    out = dict(body)
+    if "temperature" in dropped or _CLAUDE_NO_SAMPLING.search(model):
+        out.pop("temperature", None)
+    if forced_tool:
+        if "tool_choice" in dropped or _CLAUDE_NO_FORCED_TOOL.search(model):
+            out["tool_choice"] = {"type": "auto"}
+            ask = (f"Always answer by calling the {forced_tool} tool once, "
+                   "never with plain text.")
+            system = out.get("system")
+            # After the cached block, so the cached prefix stays the same.
+            out["system"] = ([*system, {"type": "text", "text": ask}]
+                             if isinstance(system, list)
+                             else f"{system or ''}\n\n{ask}".strip())
+        else:
+            out["tool_choice"] = {"type": "tool", "name": forced_tool}
+    return out
+
+
+def claude_refused(e: AIError) -> str | None:
+    """The request field a Claude 400 complains about, when it is one
+    `claude_body` can leave out."""
+    if not e.message.startswith("the server answered 400"):
+        return None
+    m = e.message.lower()
+    if "tool_choice" in m:
+        return "tool_choice"
+    if re.search(r"temperature|top_p|top_k|sampling", m):
+        return "temperature"
+    return None
+
+
+async def claude_send(cfg: dict[str, Any], body: dict[str, Any], send: Any, *,
+                      forced_tool: str | None = None) -> Any:
+    """`send(body)` with the body fitted to the model. A 400 naming a field
+    we can leave out is asked again without it, and remembered."""
+    key = _model_key(cfg)
+    while True:
+        try:
+            return await send(claude_body(cfg, body, forced_tool=forced_tool))
+        except AIError as e:
+            field = claude_refused(e)
+            dropped = _CLAUDE_DROPPED.setdefault(key, set())
+            if not field or field in dropped:
+                raise
+            dropped.add(field)
+
+
 def _upstream_error(status: int, body: Any) -> AIError:
     """A short, user-facing message for a non-2xx reply."""
     detail = ""
@@ -146,7 +217,9 @@ def _upstream_error(status: int, body: Any) -> AIError:
         msg = "the provider is rate-limiting or out of credit"
     else:
         msg = f"the server answered {status}"
-    return AIError(f"{msg}{': ' + detail if detail else ''}")
+    err = AIError(f"{msg}{': ' + detail if detail else ''}")
+    err.upstream = status
+    return err
 
 
 #: A streamed answer may take as long as it likes while it keeps sending;
@@ -285,6 +358,11 @@ async def list_models(cfg: dict[str, Any]) -> list[str]:
 _FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.DOTALL)
 _THINK = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
 _TRAILING_COMMA = re.compile(r",(\s*[}\]])")
+
+
+def claude_text(blocks: Any) -> str:
+    return "\n".join(str(b.get("text") or "") for b in blocks or []
+                     if isinstance(b, dict) and b.get("type") == "text")
 
 
 def strip_think(text: str) -> str:
@@ -455,6 +533,58 @@ def _chat_messages(
     return messages
 
 
+def _official_openai(cfg: dict[str, Any]) -> bool:
+    """OpenAI's own API, which gets the Responses API (as `_ai_chat.uses_responses`)."""
+    if cfg.get("api") != "openai" or cfg.get("local"):
+        return False
+    host = (urllib.parse.urlsplit(str(cfg.get("base_url") or "")).hostname or "").lower()
+    return cfg.get("provider") == "openai" or host == "api.openai.com"
+
+
+async def _responses_json(
+    cfg: dict[str, Any], *, system: str, user: str, schema: dict[str, Any],
+    schema_name: str, history: list[tuple[str, Any]],
+    images: list[dict[str, Any]] | None = None,
+) -> Any:
+    """`complete_json` on OpenAI's Responses API: the schema as `text.format`,
+    nothing stored on OpenAI's side, no temperature (reasoning models refuse
+    it). Images go with the last request as `input_image` parts."""
+    items: list[dict[str, Any]] = []
+    for asked, answer in history:
+        items.append({"role": "user", "content": asked})
+        items.append({"role": "assistant", "content": json.dumps(answer, ensure_ascii=False)})
+    items.append({"role": "user", "content": [
+        {"type": "input_text", "text": user},
+        *({"type": "input_image",
+           "image_url": f"data:{im['media_type']};base64,{im['data']}"} for im in images)]}
+        if images else {"role": "user", "content": user})
+    data = await _request(cfg, "POST", "/responses", timeout=_COMPLETE_TIMEOUT, body={
+        "model": cfg["model"],
+        "instructions": system,
+        "input": items,
+        "store": False,
+        "text": {"format": {"type": "json_schema", "name": schema_name, "schema": schema,
+                            "strict": True}},
+    })
+    if not isinstance(data, dict):
+        raise AIError("the model didn't return an answer")
+    details = data.get("incomplete_details") if isinstance(data.get("incomplete_details"),
+                                                           dict) else {}
+    texts: list[str] = []
+    for it in data.get("output") or []:
+        if not isinstance(it, dict) or it.get("type") != "message":
+            continue
+        for c in it.get("content") or []:
+            if isinstance(c, dict) and c.get("type") == "refusal":
+                raise AIError("the model declined this request", status=422)
+            if isinstance(c, dict) and c.get("type") == "output_text":
+                texts.append(str(c.get("text") or ""))
+    if details.get("reason") == "content_filter":
+        raise AIError("the model declined this request", status=422)
+    return _parse_text_json("".join(texts),
+                            cut_off=details.get("reason") == "max_output_tokens")
+
+
 async def complete_json(
     cfg: dict[str, Any], *, system: str, user: str, schema: dict[str, Any],
     schema_name: str, temperature: float = 0.8, max_tokens: int = 8192,
@@ -493,7 +623,10 @@ async def _complete_json(
         raise AIError("the assistant is already busy with two requests", status=429)
     async with _semaphore:
         if cfg["api"] == "anthropic":
-            data = await _request(cfg, "POST", "/messages", timeout=_COMPLETE_TIMEOUT, body={
+            async def send(body: dict[str, Any]) -> Any:
+                return await _request(cfg, "POST", "/messages", timeout=_COMPLETE_TIMEOUT,
+                                      body=body)
+            data = await claude_send(cfg, {
                 "model": cfg["model"],
                 "max_tokens": max_tokens,
                 "temperature": temperature,
@@ -504,8 +637,7 @@ async def _complete_json(
                     "description": f"Submit the {schema_name}.",
                     "input_schema": schema,
                 }],
-                "tool_choice": {"type": "tool", "name": _TOOL_NAME},
-            })
+            }, send, forced_tool=_TOOL_NAME)
             if isinstance(data, dict) and data.get("stop_reason") == "max_tokens":
                 # A tool call cut off mid-way is not the answer it started.
                 raise AIError(CUT_OFF_MESSAGE)
@@ -515,6 +647,10 @@ async def _complete_json(
                     return block.get("input")
             if isinstance(data, dict) and data.get("stop_reason") == "refusal":
                 raise AIError("the model declined this request", status=422)
+            text = claude_text(blocks)
+            if text.strip():
+                # A model asked in words (no forced choice) may answer in text.
+                return _parse_text_json(text)
             raise AIError("the model didn't return the expected answer")
 
         if cfg["api"] == "ollama":
@@ -546,6 +682,10 @@ async def _complete_json(
             return _parse_text_json(
                 msg.get("content") if isinstance(msg, dict) else None,
                 cut_off=isinstance(data, dict) and data.get("done_reason") == "length")
+
+        if _official_openai(cfg):
+            return await _responses_json(cfg, system=system, user=user, schema=schema,
+                                         schema_name=schema_name, history=history, images=images)
 
         body: dict[str, Any] = {
             "model": cfg["model"],

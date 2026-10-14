@@ -656,7 +656,7 @@ const off = computed(() => !config.value?.enabled);
           <SettingRow
             form
             label="Thinking"
-            hint="Thinking models (Qwen3, DeepSeek R1, …) reason before they answer, which takes time and counts against the reply's limit: a long think can leave a cut-off answer. Off asks the server to skip it (Ollama, llama.cpp, LM Studio and OpenRouter understand this)."
+            hint="Thinking models (Qwen3, DeepSeek R1, …) reason before they answer, which takes time and counts against the reply's limit: a long think can leave a cut-off answer. Off asks the server to skip it (Ollama, llama.cpp, LM Studio, OpenRouter and OpenAI understand this; a model that must reason ignores it)."
             setting-key="ai-thinking"
           >
             <Select

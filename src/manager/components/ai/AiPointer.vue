@@ -53,6 +53,16 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(v, Math.max(lo, hi)));
 }
 
+/** The ring around ``r``, kept inside the window (a part at the edge
+ *  would otherwise lose its outline past it). */
+function fit(r: DOMRect, pad: number): Box {
+  const left = Math.max(1, r.left - pad);
+  const top = Math.max(1, r.top - pad);
+  const right = Math.min(window.innerWidth - 1, r.right + pad);
+  const bottom = Math.min(window.innerHeight - 1, r.bottom + pad);
+  return { top, left, width: Math.max(0, right - left), height: Math.max(0, bottom - top) };
+}
+
 function track(): void {
   const list = pointers.value;
   if (list.some((p) => !p.el.isConnected)) {
@@ -66,7 +76,13 @@ function track(): void {
     const cap = caps[i];
     const w = cap?.offsetWidth ?? 0;
     const h = cap?.offsetHeight ?? 0;
-    const left = clamp(r.left, a.left + GAP, a.right - w - GAP);
+    // A part outside the page area (the top bar's buttons above the chat)
+    // gets its caption beside it in the whole window, right-aligned to it,
+    // not dragged back into the page area far from it.
+    const outside = r.right > a.right;
+    const right = outside ? window.innerWidth : a.right;
+    const want = outside ? r.right - w : r.left;
+    const left = clamp(want, a.left + GAP, right - w - GAP);
     if (r.bottom < a.top) return { ring: null, cap: { top: a.top + GAP, left }, off: "up" };
     if (r.top > a.bottom) return { ring: null, cap: { top: a.bottom - h - GAP, left }, off: "down" };
     let top: number;
@@ -75,7 +91,7 @@ function track(): void {
     // Taller than the window: inside the part, at the top of what shows.
     else top = clamp(r.top + GAP, a.top + GAP, a.bottom - h - GAP);
     return {
-      ring: { top: r.top - pad, left: r.left - pad, width: r.width + pad * 2, height: r.height + pad * 2 },
+      ring: fit(r, pad),
       cap: { top, left },
       off: "",
     };

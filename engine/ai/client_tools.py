@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from engine.ai import ask as ai_ask
 from engine.ai import docs as ai_docs
 from engine.ai import safety
 
@@ -259,10 +260,15 @@ def _web_search(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
     return {"query": query}, f"Web search: {query}"
 
 
+def _ask(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    # The chat's settled answers ride on the library for the turn.
+    return ai_ask.prepare(args, getattr(lib, "decisions", None))
+
+
 _PREPARE = {
     "open": _open, "read_page": _read_page, "highlight": _highlight,
     "select_rows": _select_rows, "organize": _organize, "draft_options": _draft_options,
-    "show_test": _show_test, "use_panel": _use_panel, "web_search": _web_search,
+    "show_test": _show_test, "use_panel": _use_panel, "web_search": _web_search, "ask": _ask,
 }
 
 #: Longest browser answer kept for the model.

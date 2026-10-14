@@ -29,15 +29,19 @@ import Button from "../ui/Button.vue";
 import Select, { type SelectOption } from "../ui/Select.vue";
 import { api } from "../../api/client";
 import AiMessage from "./AiMessage.vue";
+import AiAsk from "./AiAsk.vue";
+import { copyText } from "../../utils/clipboard";
+import { plainText } from "../../utils/chat-markdown";
 import AiCardView from "./AiCardView.vue";
 import AiTestCard from "./AiTestCard.vue";
+import AiCardPreview from "./AiCardPreview.vue";
 import AiPointer from "./AiPointer.vue";
 import AiChatList from "./AiChatList.vue";
 import { useAiChat, type ChatAssistantEntry, type SearchApproval } from "../../composables/useAiChat";
 import { clearPointer, EDIT_ROUTES } from "../../composables/useAiActions";
 import { useAiConfig } from "../../composables/useAiConfig";
 import { useAiChatWidth } from "../../composables/useAiChatWidth";
-import type { AiChatPage, AiChatProposal, AiChatStep, AiPendingCall, AiTestCard as TestCard } from "../../api/types";
+import type { AiCardFix, AiChatPage, AiChatProposal, AiChatStep, AiPendingCall, AiTestCard as TestCard } from "../../api/types";
 import { currentPageNote, editorForPage } from "../../composables/useOpenEditor";
 import { usePackBuilder } from "../../composables/usePackBuilder";
 import { useCategoryStore } from "../../stores/categoryStore";
@@ -81,6 +85,39 @@ const router = useRouter();
 const scroller = ref<HTMLElement | null>(null);
 const box = ref<HTMLTextAreaElement | null>(null);
 const expanded = ref(new Set<string>());
+
+/* ── The magnifier: a card or test run shown whole in a modal ── */
+
+const zoom = ref<{ i: number; pid: string } | null>(null);
+const zoomTest = ref<TestCard | null>(null);
+const zoomed = computed(() => {
+  const z = zoom.value;
+  const entry = z ? chat.entries.value[z.i] : undefined;
+  if (!z || entry?.role !== "assistant") return null;
+  const p = entry.result.proposals.find((x) => x.pid === z.pid);
+  return p ? { entry, p } : null;
+});
+
+function zoomCanApply(entry: ChatAssistantEntry, p: AiChatProposal): boolean {
+  if (entry.status[p.pid] || p.op.op === "open" || p.op.op === "delete") return false;
+  if (cardOptions(p) && keptCount(entry, p) === 0) return false;
+  return !chat.blockedReason(entry, p) || chat.chainOf(entry, p).length > 0;
+}
+
+function zoomApplyLabel(entry: ChatAssistantEntry, p: AiChatProposal): string {
+  return chat.blockedReason(entry, p) && chat.chainOf(entry, p).length
+    ? `Apply all ${chat.chainOf(entry, p).length + 1}` : applyLabel(entry, p);
+}
+
+function zoomAct(what: "apply" | "dismiss" | "open-editor"): void {
+  const z = zoomed.value;
+  zoom.value = null;
+  if (!z) return;
+  if (what === "dismiss") chat.dismiss(z.entry, z.p);
+  else if (what === "open-editor") void chat.openInEditor(z.entry, z.p);
+  else if (chat.blockedReason(z.entry, z.p)) void chat.applyAll(z.entry, z.p);
+  else void chat.apply(z.entry, z.p);
+}
 /** Delete cards showing their confirm step. */
 const confirming = ref(new Set<string>());
 
@@ -234,6 +271,26 @@ function toggleImage(i: number, j: number): void {
   bigImage.value = bigImage.value === k ? "" : k;
 }
 
+/** The latest user message, the one the pencil can edit. */
+const lastUserAt = computed(() => chat.entries.value.map((e) => e.role).lastIndexOf("user"));
+/** The last answer still waits on questions (the box answers them too). */
+const waitingOnAsk = computed(() => {
+  const last = chat.entries.value[chat.entries.value.length - 1];
+  return last?.role === "assistant" && chat.askCalls(last).some((c) => !last.answered?.[c.id]);
+});
+const placeholder = computed(() => chat.editing.value ? "Edit your message…"
+  : waitingOnAsk.value ? "Or answer in your own words…" : "Ask or ask for a change…");
+
+/* ── Copy an answer ── */
+const copied = ref<number | null>(null);
+let copiedTimer: ReturnType<typeof setTimeout> | undefined;
+async function copyAnswer(i: number, text: string, refs?: Record<string, { name: string }>): Promise<void> {
+  if (!(await copyText(plainText(text, refs)))) return;
+  copied.value = i;
+  clearTimeout(copiedTimer);
+  copiedTimer = setTimeout(() => { copied.value = null; }, 1500);
+}
+
 /* ── Retry, the live answer, the meter ── */
 
 const canRetry = computed(() => {
@@ -348,6 +405,8 @@ function onKeydown(ev: KeyboardEvent): void {
   if (ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) {
     ev.preventDefault();
     send();
+  } else if (ev.key === "Escape" && chat.editing.value) {
+    chat.cancelEdit();
   } else if (ev.key === "Escape") {
     chat.open.value = false;
   }
@@ -431,8 +490,22 @@ function applyLabel(entry: ChatAssistantEntry, p: AiChatProposal): string {
   return kept === opts.length ? "Apply" : `Apply ${kept}`;
 }
 
-function toggle(i: number, p: AiChatProposal): void {
-  const k = key(i, p);
+/** Warnings a card shows before "N more warnings". */
+const WARNINGS_SHOWN = 3;
+/** Tags a card shows before "+N" (the magnifier shows them all). */
+const TAGS_SHOWN = 10;
+
+function shownWarnings(i: number, p: AiChatProposal): string[] {
+  return expanded.value.has(`${key(i, p)}:w`) ? p.warnings : p.warnings.slice(0, WARNINGS_SHOWN);
+}
+
+/** The card's own fix for a warning, when it has one (else the model fixes it). */
+function fixFor(p: AiChatProposal, w: string): AiCardFix | undefined {
+  return p.fixes?.find((f) => f.warning === w);
+}
+
+function toggle(i: number, p: AiChatProposal, part = ""): void {
+  const k = part ? `${key(i, p)}:${part}` : key(i, p);
   const next = new Set(expanded.value);
   if (next.has(k)) next.delete(k);
   else next.add(k);
@@ -503,6 +576,8 @@ function scrollDown(): void {
 watch(() => [chat.entries.value.length, chat.loading.value, chat.live.value], scrollDown);
 
 function onGlobalKey(ev: KeyboardEvent): void {
+  // Esc with the card preview open closes only the preview.
+  if (zoom.value || zoomTest.value) return;
   if (ev.key === "Escape" && chat.open.value && !chat.loading.value) chat.open.value = false;
 }
 onMounted(() => {
@@ -625,6 +700,15 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
             ><img :src="src" alt="" /></button>
           </span>
           <template v-if="entry.text">{{ entry.text }}</template>
+          <button
+            v-if="i === lastUserAt && !chat.loading.value && !chat.editBlocked()"
+            type="button"
+            class="wp-ai-chat__icon-btn wp-ai-chat__edit"
+            aria-label="Edit message"
+            title="Edit and send again"
+            data-test="ai-chat-edit"
+            @click="chat.editLast(); box?.focus()"
+          ><i class="pi pi-pencil" aria-hidden="true" /></button>
         </div>
         <div v-else class="wp-ai-chat__reply" data-test="ai-chat-reply">
           <p v-if="byLine(i)" class="wp-ai-chat__by" data-test="ai-chat-by" :title="`Answered by ${byLine(i)}`">
@@ -650,9 +734,28 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
             :key="`t${j}`"
             :card="card"
             @open="openTest(card)"
+            @zoom="zoomTest = card"
           />
           <p v-if="testError" class="wp-ai-chat__warning" role="status">{{ testError }}</p>
           <AiMessage :text="entry.result.message" :refs="entry.result.refs" />
+          <AiAsk
+            v-for="c in chat.askCalls(entry)"
+            :key="c.id"
+            :questions="c.args.questions"
+            :answered="entry.answered?.[c.id]"
+            :disabled="chat.loading.value"
+            @answer="(a) => chat.answerAsk(c.id, a)"
+          />
+          <div v-if="entry.result.message.trim()" class="wp-ai-chat__msg-tools">
+            <button
+              type="button"
+              class="wp-ai-chat__icon-btn"
+              :aria-label="copied === i ? 'Copied' : 'Copy this answer'"
+              :title="copied === i ? 'Copied' : 'Copy this answer'"
+              data-test="ai-chat-copy"
+              @click="copyAnswer(i, entry.result.message, entry.result.refs)"
+            ><i :class="['pi', copied === i ? 'pi-check' : 'pi-copy']" aria-hidden="true" /></button>
+          </div>
 
           <article
             v-for="c in searches(entry)"
@@ -687,16 +790,25 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
             <div class="wp-ai-chat__card-head">
               <span class="wp-ai-chat__card-title">{{ p.title }}</span>
               <span class="wp-ai-chat__card-summary">{{ p.summary }}</span>
+              <button
+                type="button"
+                class="wp-ai-chat__zoom"
+                aria-label="Show the whole card"
+                title="Show the whole card"
+                data-test="ai-chat-zoom"
+                @click="zoom = { i, pid: p.pid }"
+              ><i class="pi pi-search-plus" aria-hidden="true" /></button>
             </div>
             <dl v-if="cardMeta(p)" class="wp-ai-chat__meta" data-test="ai-chat-card-meta">
               <template v-if="cardMeta(p)!.variable">
                 <dt>Variable</dt><dd><code>${{ cardMeta(p)!.variable }}</code></dd>
               </template>
               <dt>Description</dt>
-              <dd :data-empty="!cardMeta(p)!.description || undefined" data-test="ai-chat-card-description">{{ cardMeta(p)!.description || "None" }}</dd>
+              <dd :data-empty="!cardMeta(p)!.description || undefined" class="wp-ai-chat__clamp" :title="cardMeta(p)!.description || undefined" data-test="ai-chat-card-description">{{ cardMeta(p)!.description || "None" }}</dd>
               <dt>Tags</dt>
               <dd data-test="ai-chat-card-tags">
-                <span v-for="t in cardMeta(p)!.tags" :key="t" class="wp-ai-chat__chip">#{{ t }}</span>
+                <span v-for="t in cardMeta(p)!.tags.slice(0, TAGS_SHOWN)" :key="t" class="wp-ai-chat__chip">#{{ t }}</span>
+                <span v-if="cardMeta(p)!.tags.length > TAGS_SHOWN" class="wp-ai-chat__chip" data-tone="more">+{{ cardMeta(p)!.tags.length - TAGS_SHOWN }}</span>
                 <span v-if="!cardMeta(p)!.tags.length" data-empty="true">None</span>
               </dd>
               <dt>Category</dt>
@@ -724,11 +836,11 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
                       data-test="ai-chat-card-option"
                       @change="chat.toggleOption(entry, p, o.id)"
                     />
-                    <span class="wp-ai-chat__opt-text">{{ o.empty ? "∅ nothing" : o.text }}</span>
+                    <span class="wp-ai-chat__opt-text wp-ai-chat__clamp" :title="o.empty ? undefined : o.text">{{ o.empty ? "∅ nothing" : o.text }}</span>
                     <span v-if="o.weight !== 1" class="wp-ai-chat__opt-weight">×{{ o.weight }}</span>
                     <span v-if="o.fallback" class="wp-ai-chat__chip" data-tone="accent">fallback</span>
                     <span v-for="t in o.tags" :key="t" class="wp-ai-chat__chip">#{{ t }}</span>
-                    <span v-if="o.negative" class="wp-ai-chat__opt-neg" :title="`Negative: ${o.negative}`">− {{ o.negative }}</span>
+                    <span v-if="o.negative" class="wp-ai-chat__opt-neg wp-ai-chat__clamp" :title="`Negative: ${o.negative}`">− {{ o.negative }}</span>
                   </label>
                 </li>
               </ul>
@@ -753,7 +865,35 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
             >{{ expanded.has(key(i, p)) ? "Show less" : `Show all ${p.preview.length}` }}</button>
             <ul v-if="p.warnings.length || chat.linkWarnings(entry, p).length" class="wp-ai-chat__warnings">
               <li v-for="w in chat.linkWarnings(entry, p)" :key="w" data-test="ai-chat-link-warning"><i class="pi pi-exclamation-triangle" aria-hidden="true" /> {{ w }}</li>
-              <li v-for="(w, j) in p.warnings" :key="j"><i class="pi pi-exclamation-triangle" aria-hidden="true" /> <AiMessage v-if="w.includes('[[')" class="wp-ai-chat__warning-text" :text="w" :refs="entry.result.refs" /><template v-else>{{ w }}</template></li>
+              <li v-for="(w, j) in shownWarnings(i, p)" :key="j" data-test="ai-chat-warning">
+                <i class="pi pi-exclamation-triangle" aria-hidden="true" />
+                <span class="wp-ai-chat__warning-body"><AiMessage v-if="w.includes('[[')" class="wp-ai-chat__warning-text" :text="w" :refs="entry.result.refs" /><template v-else>{{ w }}</template></span>
+                <template v-if="!entry.status[p.pid] && p.op.op !== 'delete'">
+                  <button
+                    v-if="fixFor(p, w)"
+                    type="button"
+                    class="wp-ai-chat__fix"
+                    :title="`Fix it on the card: ${fixFor(p, w)!.label}`"
+                    data-test="ai-chat-fix"
+                    @click="chat.fix(entry, p, fixFor(p, w)!.key)"
+                  ><i class="pi pi-wrench" aria-hidden="true" /> {{ fixFor(p, w)!.label }}</button>
+                  <button
+                    v-else
+                    type="button"
+                    class="wp-ai-chat__fix"
+                    :disabled="chat.loading.value"
+                    title="Send this warning back to the assistant; its new card replaces this one"
+                    data-test="ai-chat-ask-fix"
+                    @click="chat.askFix(p, w)"
+                  ><i class="pi pi-sparkles" aria-hidden="true" /> Ask to fix</button>
+                </template>
+              </li>
+              <li v-if="p.warnings.length > shownWarnings(i, p).length" class="wp-ai-chat__warn-more">
+                <button type="button" class="wp-ai-chat__link" data-test="ai-chat-more-warnings" @click="toggle(i, p, 'w')">{{ p.warnings.length - shownWarnings(i, p).length }} more warning{{ p.warnings.length - shownWarnings(i, p).length === 1 ? "" : "s" }}</button>
+              </li>
+              <li v-if="!entry.status[p.pid] && (p.fixes?.length ?? 0) > 1" class="wp-ai-chat__warn-more">
+                <button type="button" class="wp-ai-chat__fix" data-test="ai-chat-fix-all" @click="chat.fixAll(entry, p)"><i class="pi pi-wrench" aria-hidden="true" /> Fix all {{ p.fixes!.length }}</button>
+              </li>
             </ul>
             <p v-if="entry.errors[p.pid]" class="wp-ai-chat__error" role="alert">{{ entry.errors[p.pid] }}</p>
             <div class="wp-ai-chat__actions">
@@ -852,7 +992,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
             {{ s.note }}
           </li>
         </ul>
-        <AiMessage v-if="chat.live.value.text" :text="chat.live.value.text" />
+        <AiMessage v-if="chat.live.value.text" :text="chat.live.value.text" live />
         <p class="wp-ai-chat__status" role="status" data-test="ai-chat-loading">
           <i class="pi pi-spin pi-spinner" aria-hidden="true" />
           {{ liveStatus }}
@@ -879,12 +1019,16 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
           @click="suggest(s)"
         >{{ s }}</button>
       </div>
+      <p v-if="chat.editing.value" class="wp-ai-chat__editing" data-test="ai-chat-editing">
+        Editing your last message
+        <button type="button" class="wp-ai-chat__link" data-test="ai-chat-edit-cancel" @click="chat.cancelEdit()">Cancel</button>
+      </p>
       <textarea
         ref="box"
         v-model="chat.input.value"
         class="wp-textarea wp-ai-chat__input"
         rows="2"
-        placeholder="Ask or ask for a change…"
+        :placeholder="placeholder"
         aria-label="Message the assistant"
         data-test="ai-chat-input"
         :disabled="chat.loading.value"
@@ -936,6 +1080,20 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
         >Send</Button>
       </div>
     </footer>
+    <AiCardPreview
+      :proposal="zoomed?.p ?? null"
+      :test="zoomTest"
+      :skipped="zoomed ? zoomed.entry.skip?.[zoomed.p.pid] ?? [] : []"
+      :can-apply="zoomed && !zoomed.entry.status[zoomed.p.pid] && zoomed.p.op.op !== 'open' && zoomed.p.op.op !== 'delete' ? zoomCanApply(zoomed.entry, zoomed.p) : undefined"
+      :blocked="zoomed ? chat.blockedReason(zoomed.entry, zoomed.p) : ''"
+      :apply-label="zoomed ? zoomApplyLabel(zoomed.entry, zoomed.p) : ''"
+      :can-open-in-editor="zoomed ? canOpenInEditor(zoomed.p) : false"
+      @close="zoom = null; zoomTest = null"
+      @apply="zoomAct('apply')"
+      @dismiss="zoomAct('dismiss')"
+      @open-editor="zoomAct('open-editor')"
+      @open-test="zoomTest && openTest(zoomTest); zoomTest = null"
+    />
   </aside>
 </template>
 
@@ -1015,6 +1173,11 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__opts li[data-off] .wp-ai-chat__opt-text { color: var(--wp-text-dim); text-decoration: line-through; }
 .wp-ai-chat__opts input { accent-color: var(--wp-accent-500); margin: 0; }
 .wp-ai-chat__opt-text { flex: 1 1 140px; min-width: 0; overflow-wrap: anywhere; }
+/* Long text on a card: three lines, the rest in the tooltip and the magnifier. */
+.wp-ai-chat__clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
+.wp-ai-chat__meta dd.wp-ai-chat__clamp { display: -webkit-box; }
+.wp-ai-chat__opt-neg.wp-ai-chat__clamp { -webkit-line-clamp: 1; line-clamp: 1; }
+.wp-ai-chat__chip[data-tone="more"] { color: var(--wp-text-muted); }
 .wp-ai-chat__opt-weight { font-family: var(--wp-font-mono, monospace); font-size: 11px; color: var(--wp-accent-text); }
 .wp-ai-chat__opt-neg { font-size: 11px; color: var(--wp-danger, #f87171); overflow-wrap: anywhere; }
 .wp-ai-chat__link {
@@ -1046,7 +1209,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__user {
   align-self: flex-end; max-width: 85%; padding: 8px 11px; border-radius: 10px 10px 2px 10px;
   background: color-mix(in oklab, var(--wp-accent-500) 18%, var(--wp-bg-2));
-  white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px;
+  white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; position: relative;
 }
 .wp-ai-chat__reply { display: flex; flex-direction: column; gap: 8px; }
 .wp-ai-chat__steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -1063,8 +1226,22 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__card[data-kind="delete"][data-status="pending"] { border-color: color-mix(in oklab, var(--wp-danger) 40%, var(--wp-border)); }
 .wp-ai-chat__confirm { margin-right: auto; font-size: 12px; color: var(--wp-danger); }
 .wp-ai-chat__card[data-status="failed"] { border-color: color-mix(in oklab, var(--wp-danger) 50%, var(--wp-border)); }
-.wp-ai-chat__card-head { display: flex; flex-direction: column; gap: 1px; }
-.wp-ai-chat__card-title { font-weight: 600; font-size: 13px; }
+.wp-ai-chat__card-head { position: relative; display: flex; flex-direction: column; gap: 1px; padding-right: 26px; }
+.wp-ai-chat__card-title { font-weight: 600; font-size: 13px; overflow-wrap: anywhere; }
+.wp-ai-chat__zoom {
+  position: absolute; top: -2px; right: -4px; background: none; border: 0; padding: 3px 5px;
+  color: var(--wp-text-muted); cursor: pointer; border-radius: var(--wp-radius-sm);
+}
+.wp-ai-chat__edit { position: absolute; left: -28px; bottom: 2px; opacity: 0.5; }
+.wp-ai-chat__user:hover .wp-ai-chat__edit, .wp-ai-chat__edit:focus-visible { opacity: 1; }
+.wp-ai-chat__editing { margin: 0 0 4px; font-size: 12px; color: var(--wp-text-muted); display: flex; gap: 8px; }
+.wp-ai-chat__msg-tools { display: flex; gap: 2px; margin-top: -4px; }
+.wp-ai-chat__icon-btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px;
+  border: 0; border-radius: 4px; background: none; color: var(--wp-text-dim); cursor: pointer; font-size: 12px;
+}
+.wp-ai-chat__icon-btn:hover, .wp-ai-chat__icon-btn:focus-visible { color: var(--wp-text); background: var(--wp-bg-3); }
+.wp-ai-chat__zoom:hover { color: var(--wp-text); background: var(--wp-bg-3); }
 .wp-ai-chat__card-summary { font-size: 12px; color: var(--wp-text-muted); }
 .wp-ai-chat__preview {
   margin: 0; padding: 6px 8px 6px 22px; font-size: 12px; border-radius: 6px;
@@ -1078,9 +1255,25 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__warning-text { display: inline; }
 .wp-ai-chat__warning-text :deep(p) { display: inline; margin: 0; }
 .wp-ai-chat__warnings { list-style: none; margin: 0; padding: 0; font-size: 12px; color: var(--wp-warn); display: flex; flex-direction: column; gap: 2px; }
+.wp-ai-chat__warnings li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; }
+.wp-ai-chat__warning-body { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+.wp-ai-chat__warn-more { justify-content: flex-end; }
+/* Fix it: a small outlined action in the warning's tone, at the end of its line. */
+.wp-ai-chat__fix {
+  flex: none; margin-left: auto; display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 8px; border-radius: var(--wp-radius-sm); font-size: 11.5px; cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--wp-warn) 45%, transparent);
+  background: color-mix(in srgb, var(--wp-warn) 10%, transparent); color: var(--wp-text);
+}
+.wp-ai-chat__fix:hover:not(:disabled) { background: color-mix(in srgb, var(--wp-warn) 22%, transparent); }
+.wp-ai-chat__fix:disabled { opacity: 0.5; cursor: default; }
+.wp-ai-chat__fix .pi { font-size: 10px; color: var(--wp-warn); }
 .wp-ai-chat__actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .wp-ai-chat__done { font-size: 12px; color: var(--wp-success); margin-right: auto; display: inline-flex; gap: 5px; align-items: center; }
 .wp-ai-chat__dismissed, .wp-ai-chat__blocked { font-size: 12px; color: var(--wp-text-muted); margin-right: auto; }
+/* Why a card waits gets a row of its own above the buttons, so Dismiss
+ * stays with Open in editor and Apply instead of wrapping beside it. */
+.wp-ai-chat__blocked { flex: 1 0 100%; }
 .wp-ai-chat__status { margin: 0; font-size: 12px; color: var(--wp-text-muted); display: flex; gap: 6px; align-items: center; }
 .wp-ai-chat__foot { border-top: 1px solid var(--wp-border); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
 .wp-ai-chat__input { width: 100%; resize: vertical; font-size: 13px; max-height: 40vh; }

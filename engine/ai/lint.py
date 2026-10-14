@@ -83,27 +83,34 @@ def concept_of(name: str, var: str = "") -> str:
     return found.pop() if len(found) == 1 else ""
 
 
-def scope_bleed(name: str, var: str, options: list[dict[str, Any]]) -> list[str]:
-    """Options of a one-concept wildcard that also set another concept."""
+def bleeding(name: str, var: str, options: list[dict[str, Any]]) -> dict[str, list[str]]:
+    """Other concept -> the option texts of a one-concept wildcard that set it."""
     concept = concept_of(name, var)
     if not concept:
-        return []
+        return {}
     texts = [str(o.get("value") or "") for o in options
              if isinstance(o, dict) and not o.get("is_null")]
-    if not texts:
-        return []
-    out = []
+    out: dict[str, list[str]] = {}
     for other, words in CONCEPTS.items():
         if other == concept or other in ALLOWED.get(concept, set()):
             continue
         hits = [t for t in texts if any(_has(_words(t), w) for w in words)]
         if len(hits) >= 2 or (hits and len(texts) <= 4):
-            sample = ", ".join(f'"{h[:40]}"' for h in hits[:3])
-            out.append(
-                f"{len(hits)} of {name}'s options also set {other} ({sample}). Keep one "
-                f"concept per wildcard: leave {other} to its own wildcard unless the user "
-                "asked for it here")
+            out[other] = hits
     return out
+
+
+def scope_bleed(name: str, var: str, options: list[dict[str, Any]]) -> list[str]:
+    """Options of a one-concept wildcard that also set another concept."""
+    return [_bleed_text(name, other, hits)
+            for other, hits in bleeding(name, var, options).items()]
+
+
+def _bleed_text(name: str, other: str, hits: list[str]) -> str:
+    sample = ", ".join(f'"{h[:40]}"' for h in hits[:3])
+    return (f"{len(hits)} of {name}'s options also set {other} ({sample}). Keep one "
+            f"concept per wildcard: leave {other} to its own wildcard unless the user "
+            "asked for it here")
 
 
 def weights(name: str, options: list[dict[str, Any]]) -> list[str]:
@@ -209,3 +216,148 @@ def check(op: dict[str, Any], item: dict[str, Any],
     elif kind == "constraint":
         out += constraint_fallback(payload, get)
     return out[:MAX_WARNINGS]
+
+
+# --- Fixes ------------------------------------------------------------------
+#
+# A warning the card can fix by itself carries a fix ``{warning, key, label,
+# only?}``. The user's Fix sends the key; the server records it per card
+# (`meta["fixes"]`), makes it with `apply_fix` on the card's body and hands
+# the new body back, so there is no TS copy of these rules. Reopening the
+# chat and reading the card back later replay the same keys (`fixed_body`).
+
+#: Lowest weight a fix leaves, as a share of the heaviest option's.
+FIX_WEIGHT_SHARE = 0.1
+
+
+def _strip_concept(text: str, other: str) -> str:
+    """``text`` without its comma parts that set ``other``."""
+    words = CONCEPTS.get(other, ())
+    parts = [p.strip() for p in text.split(",")]
+    keep = [p for p in parts if p and not any(_has(_words(p), w) for w in words)]
+    return ", ".join(keep)
+
+
+def apply_fix(body: dict[str, Any], key: str,
+              only: set[str] | None = None) -> dict[str, Any] | None:
+    """``body`` (a card's op body) with fix ``key`` made, or None when it
+    changes nothing. ``only`` limits a scope fix to those option ids (an
+    edit fixes only the options it adds)."""
+    import copy
+    payload = body.get("payload") if isinstance(body.get("payload"), dict) else None
+    opts = payload.get("options") if payload else None
+    if not isinstance(opts, list):
+        return None
+    out = copy.deepcopy(body)
+    new: list[dict[str, Any]] = []
+    if key.startswith("scope:"):
+        other = key.split(":", 1)[1]
+        for o in out["payload"]["options"]:
+            if not isinstance(o, dict) or o.get("is_null") or (
+                    only is not None and o.get("id") not in only):
+                new.append(o)
+                continue
+            text = _strip_concept(str(o.get("value") or ""), other)
+            if text:
+                new.append({**o, "value": text})
+            # An option that only set the other concept goes.
+    elif key == "dupes":
+        seen: dict[str, dict[str, Any]] = {}
+        for o in out["payload"]["options"]:
+            k = " ".join(str(o.get("value") or "").lower().split()) \
+                if isinstance(o, dict) and not o.get("is_null") else ""
+            if k and k in seen:
+                first = seen[k]
+                w = o.get("weight", 1)
+                if isinstance(w, (int, float)) and isinstance(first.get("weight", 1), (int, float)):
+                    first["weight"] = round(float(first.get("weight", 1)) + float(w), 3)
+                continue
+            if k:
+                seen[k] = o
+            new.append(o)
+    elif key == "weights":
+        ws = [float(o.get("weight", 1)) for o in out["payload"]["options"]
+              if isinstance(o, dict) and not o.get("is_null")
+              and isinstance(o.get("weight", 1), (int, float)) and o.get("weight", 1) > 0]
+        floor = round(max(ws) * FIX_WEIGHT_SHARE, 3) if ws else 0
+        for o in out["payload"]["options"]:
+            w = o.get("weight", 1) if isinstance(o, dict) else None
+            if isinstance(w, (int, float)) and 0 < w < floor:
+                o = {**o, "weight": floor}
+            new.append(o)
+    else:
+        return None
+    out["payload"]["options"] = new
+    return None if out == body else out
+
+
+_FIX_LABELS = {"dupes": "Merge the repeats", "weights": "Even out the weights"}
+
+
+def fixes(op: dict[str, Any], item: dict[str, Any],
+          base: dict[str, Any] | None, warnings: list[str]) -> list[dict[str, Any]]:
+    """For each warning ``check`` gave that the card can fix by itself:
+    ``{warning, key, label, only?}`` (``only``: the option ids a scope fix
+    may touch). Warnings left out here are fixed by asking the model."""
+    if item.get("type") != "wildcard":
+        return []
+    body = op.get("body") if isinstance(op.get("body"), dict) else {}
+    payload = item.get("payload") if isinstance(item.get("payload"), dict) else {}
+    name = str(item.get("name") or "This item")
+    var = str(payload.get("var_binding") or "")
+    old = ((base or {}).get("payload") or {}).get("options") or []
+    known = {o.get("id") for o in old if isinstance(o, dict)}
+    opts = [o for o in payload.get("options") or [] if isinstance(o, dict)]
+    added = {o.get("id") for o in opts if o.get("id") not in known}
+    wanted: list[tuple[str, str, str]] = []
+    for other, hits in bleeding(name, var, [o for o in opts if o.get("id") in added]).items():
+        wanted.append((_bleed_text(name, other, hits), f"scope:{other}", f"Remove {other} words"))
+    for w in warnings:
+        if "more than once" in w:
+            wanted.append((w, "dupes", _FIX_LABELS["dupes"]))
+        elif "weights run from" in w:
+            wanted.append((w, "weights", _FIX_LABELS["weights"]))
+    out = []
+    for text, key, label in wanted:
+        if text not in warnings:
+            continue
+        only = added if key.startswith("scope:") else None
+        if apply_fix(body, key, only) is not None:
+            fix: dict[str, Any] = {"warning": text, "key": key, "label": label}
+            if only is not None:
+                fix["only"] = sorted(str(i) for i in only if i is not None)
+            out.append(fix)
+    return out
+
+
+def fixed_body(proposal: dict[str, Any], keys: list[str]) -> dict[str, Any] | None:
+    """The card's op body with the fixes ``keys`` made in order (each key
+    one of its own ``fixes``), or None when none changes anything."""
+    op = proposal.get("op") if isinstance(proposal.get("op"), dict) else {}
+    body = op.get("body") if isinstance(op.get("body"), dict) else None
+    if body is None:
+        return None
+    known = {f.get("key"): f for f in proposal.get("fixes") or [] if isinstance(f, dict)}
+    out = body
+    for key in keys:
+        fix = known.get(key)
+        if fix is None:
+            continue
+        only = set(fix["only"]) if isinstance(fix.get("only"), list) else None
+        out = apply_fix(out, key, only) or out
+    return None if out is body else out
+
+
+def with_fixes(proposal: dict[str, Any], keys: list[str]) -> dict[str, Any]:
+    """A copy of the card as it is after the fixes ``keys``: the new body,
+    and those warnings and fixes gone."""
+    body = fixed_body(proposal, keys)
+    done = [f for f in proposal.get("fixes") or [] if isinstance(f, dict) and f.get("key") in keys]
+    if body is None and not done:
+        return proposal
+    gone = {f.get("warning") for f in done}
+    out = {**proposal, "warnings": [w for w in proposal.get("warnings") or [] if w not in gone],
+           "fixes": [f for f in proposal.get("fixes") or [] if f not in done]}
+    if body is not None:
+        out["op"] = {**proposal["op"], "body": body}
+    return out

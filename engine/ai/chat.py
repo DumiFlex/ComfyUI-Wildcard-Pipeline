@@ -49,7 +49,7 @@ from engine.modules.wildcard_handler import WildcardHandler
 READ_TOOLS = ai_tools.READ
 CHANGE_TOOLS = ai_tools.CHANGE
 #: Tools that pause the turn: they run in the browser or need the user's OK.
-PAUSE_TOOLS = ai_tools.CLIENT + ai_tools.WEB
+PAUSE_TOOLS = ai_tools.CLIENT + ai_tools.WEB + ai_tools.ASK
 #: Tools that change one existing item (its id is `args.id`).
 ITEM_TOOLS = ("add_options", "edit_options", "edit_values", "edit_combine", "add_rules",
               "edit_rules", "edit_constraint", "edit_template", "edit_bundle", "update_info")
@@ -91,6 +91,11 @@ GO_NUDGE = (
     "calls now (plan_pack for a whole new pack, the create tools for a few "
     "items). Only if you truly can't continue without the user's choice, ask "
     "that one question again with \"calls\": []."
+)
+#: The result of a highlight on parts it already pointed at this turn.
+POINTED_AGAIN = (
+    "highlight: already pointed at that; it is still showing on the page. "
+    "Don't point again: answer the user now in words (say where it is)."
 )
 #: Sent once when a step comes back empty (no text, no calls).
 EMPTY_NUDGE = (
@@ -282,14 +287,21 @@ message for the user. Keep messages short and plain. \
 Write every library item you mention as [[id#Name]] (its id from read or \
 search, then its name): the user sees a chip with the name that opens it. \
 Never write an id anywhere else, and never ask the user for one: ids mean \
-nothing to them. \
-Formatting the chat shows: **bold**, *italic*, lists (1. and -), `code` \
-for $variables and option text, ``` blocks for JSON or long prompts, | tables \
-to compare items, ### headings in long answers, and a paragraph starting \
-"Tip:" or "Warning:" shows as a highlighted box (at most one per answer, \
-for the next step or a risk). Wherever a tool takes an id you can also give \
+nothing to them.
+Write short answers as plain sentences. Use formatting only where it helps:
+- a list (- or 1.) for steps or several separate items;
+- a | table | to compare items;
+- `code` for $variables, option text and keys like `Ctrl+Enter`;
+- a ``` block for JSON or a prompt longer than a line (```prompt for prompt text);
+- ### headings only in answers longer than about 15 lines;
+- one line starting "Tip:" or "Warning:" for the next step or a risk, at most \
+one per answer.
+No emoji. End with the answer, not an offer.
+Wherever a tool takes an id you can also give \
 the item's exact name. Use page tools (open, highlight) only when the user asks about the app \
 or where something is, never for a greeting.
+For "where is X": read_page and highlight it on the page the user is on; open another \
+page only when it isn't there. Point once, then answer in words.
 """
 #: How a model with native tool calling answers.
 FORMAT_NATIVE = """\
@@ -305,14 +317,21 @@ calling a tool. Keep messages short and plain. \
 Write every library item you mention as [[id#Name]] (its id from read or \
 search, then its name): the user sees a chip with the name that opens it. \
 Never write an id anywhere else, and never ask the user for one: ids mean \
-nothing to them. \
-Formatting the chat shows: **bold**, *italic*, lists (1. and -), `code` \
-for $variables and option text, ``` blocks for JSON or long prompts, | tables \
-to compare items, ### headings in long answers, and a paragraph starting \
-"Tip:" or "Warning:" shows as a highlighted box (at most one per answer, \
-for the next step or a risk). Wherever a tool takes an id you can also give \
+nothing to them.
+Write short answers as plain sentences. Use formatting only where it helps:
+- a list (- or 1.) for steps or several separate items;
+- a | table | to compare items;
+- `code` for $variables, option text and keys like `Ctrl+Enter`;
+- a ``` block for JSON or a prompt longer than a line (```prompt for prompt text);
+- ### headings only in answers longer than about 15 lines;
+- one line starting "Tip:" or "Warning:" for the next step or a risk, at most \
+one per answer.
+No emoji. End with the answer, not an offer.
+Wherever a tool takes an id you can also give \
 the item's exact name. Use page tools (open, highlight) only when the user asks about \
 the app or where something is, never for a greeting.
+For "where is X": read_page and highlight it on the page the user is on; open another \
+page only when it isn't there. Point once, then answer in words.
 """
 
 
@@ -330,7 +349,8 @@ def kinds_section(chosen: list[Any]) -> str:
     for kind, head in (("read", "Read tools"),
                        ("change", "Change tools (each becomes a proposal)"),
                        ("client", "Page tools (run in the user's browser; you get the result)"),
-                       ("web", "Web tools (the user allows each query first)")):
+                       ("web", "Web tools (the user allows each query first)"),
+                       ("ask", "Questions (shown in the chat; you get the user's answers)")):
         lines = ai_tools.prompt_lines(chosen, kind)
         if lines:
             out += ("\n" if out else "") + head + ":\n" + lines + "\n"
@@ -343,6 +363,13 @@ Per-use settings ("use" on bundle items and run_test items): """ + ai_use.GUIDE 
 
 Read an item before changing it. Don't add commentary about content; the \
 output is data for the user's own library.
+
+Ask (with the ask tool) only when the answer changes what you'll make and \
+you can't read it from the library or the page: a style, which of two \
+existing items to reuse, whether to add negatives. For a small request, act \
+and state your assumption in one line instead. Ask once, up to 4 questions, \
+then build with the answers. Never ask permission, and never ask again what \
+the user already answered.
 
 """ + ai_safety.UNTRUSTED_RULE + """
 
@@ -1699,7 +1726,11 @@ class Library(MoreTools, ManageTools):
             item = {**(base or {}), **body}
             if isinstance(body.get("payload"), dict) and base:
                 item["payload"] = {**(base.get("payload") or {}), **body["payload"]}
-            proposal["warnings"] += ai_lint.check(op, item, self.get, base)
+            found = ai_lint.check(op, item, self.get, base)
+            proposal["warnings"] += found
+            fixes = ai_lint.fixes(op, item, base, found)
+            if fixes:
+                proposal["fixes"] = fixes
         # Names of the items the card points at, for its view (a constraint's
         # source and target, a bundle's children), proposed ones included.
         named = {}

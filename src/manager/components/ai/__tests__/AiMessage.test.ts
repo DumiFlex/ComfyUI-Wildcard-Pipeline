@@ -1,5 +1,6 @@
 import { mount } from "@vue/test-utils";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { nextTick } from "vue";
 import AiMessage from "../AiMessage.vue";
 
 const push = vi.fn();
@@ -71,4 +72,94 @@ describe("AiMessage", () => {
     expect(w.find("a").exists()).toBe(false);
     expect(w.find("s").text()).toBe("old");
   });
+
+  it("draws GitHub alerts as callouts with all their blocks", () => {
+    const w = mount(AiMessage, {
+      props: { text: "> [!NOTE]\n> Keep names short.\n\n> [!CAUTION] Before you apply:\n> - back up\n> - check `$pose`" },
+    });
+    const alerts = w.findAll("[data-test='ai-msg-alert']");
+    expect(alerts.map((a) => a.attributes("data-tone"))).toEqual(["tip", "warn"]);
+    expect(alerts[0].text()).toBe("Keep names short.");
+    expect(alerts[1].findAll("li").length).toBe(2);
+    expect(w.text()).not.toContain("[!");
+    expect(w.find("blockquote").exists()).toBe(false);
+  });
+
+  it("shows a key-combo code span as keys", () => {
+    const w = mount(AiMessage, { props: { text: "Press `Ctrl+Enter`, `Shift + Click` or `Esc`; type `red` or `A`." } });
+    const keys = w.findAll("[data-test='ai-msg-keys']");
+    expect(keys.map((k) => k.findAll("kbd").map((b) => b.text()))).toEqual([["Ctrl", "Enter"], ["Shift", "Click"], ["Esc"]]);
+    expect(w.findAll("code").map((c) => c.text())).toEqual(["red", "A"]);
+  });
+
+  it("folds a long code block until opened", async () => {
+    const body = Array.from({ length: 30 }, (_, i) => `line ${i + 1}`).join("\n");
+    const w = mount(AiMessage, { props: { text: "```\n" + body + "\n```" } });
+    expect(w.find("pre").text().split("\n").length).toBe(12);
+    const fold = w.find("[data-test='ai-msg-fold']");
+    expect(fold.text()).toBe("Show all 30 lines");
+    await fold.trigger("click");
+    expect(w.find("pre").text()).toBe(body);
+    expect(w.find("[data-test='ai-msg-fold']").attributes("aria-expanded")).toBe("true");
+    // Short blocks and live ones never fold.
+    expect(mount(AiMessage, { props: { text: "```\na\n```" } }).find("[data-test='ai-msg-fold']").exists()).toBe(false);
+    expect(mount(AiMessage, { props: { text: "```\n" + body + "\n```", live: true } }).find("[data-test='ai-msg-fold']").exists()).toBe(false);
+  });
+
+  it("copies code with a textarea when navigator.clipboard is missing", async () => {
+    Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+    let copiedText = "";
+    const exec = vi.fn(() => {
+      copiedText = (document.activeElement as HTMLTextAreaElement | null)?.value ?? "";
+      return true;
+    });
+    Object.defineProperty(document, "execCommand", { value: exec, configurable: true });
+    const w = mount(AiMessage, { props: { text: "```\nportrait, $hair\n```" }, attachTo: document.body });
+    await w.find("[data-test='ai-msg-copy']").trigger("click");
+    await vi.waitFor(() => expect(w.find("[data-test='ai-msg-copy']").attributes("aria-label")).toBe("Copied"));
+    expect(exec).toHaveBeenCalledWith("copy");
+    expect(copiedText).toBe("portrait, $hair");
+    expect(document.querySelector("textarea")).toBeNull();
+    w.unmount();
+  });
+
+  describe("live", () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it("hides half-written markup while streaming", () => {
+      const w = mount(AiMessage, { props: { text: "Use **bold tex and [[ab12", live: true } });
+      expect(w.find("strong").text()).toBe("bold tex and");
+      expect(w.text()).not.toContain("**");
+      expect(w.text()).not.toContain("[[");
+      // The finished text is parsed as written.
+      expect(mount(AiMessage, { props: { text: "Use **bold tex" } }).text()).toBe("Use **bold tex");
+    });
+
+    it("fades in only the words added since the last update", async () => {
+      const w = mount(AiMessage, { props: { text: "Hair is", live: true } });
+      expect(w.classes()).toContain("wp-ai-msg--live");
+      await w.setProps({ text: "Hair is red and **short** now" });
+      await nextTick();
+      const fresh = w.findAll(".wp-ai-msg__new").map((s) => s.text()).join("|");
+      expect(fresh).toContain("red and");
+      expect(fresh).toContain("short");
+      expect(fresh).not.toContain("Hair");
+      expect(w.text()).toBe("Hair is red and short now");
+      // No marker leaks into the text, chips or code.
+      await w.setProps({ text: "Hair is red and **short** now, see `$hair` and [[ab12cd34#Hair]]" });
+      expect(w.text()).not.toMatch(/\u{e000}/u);
+      expect(w.find("code").text()).toBe("$hair");
+      expect(w.find("code .wp-ai-msg__new").exists()).toBe(false);
+    });
+
+    it("keeps block markup working where new lines start", async () => {
+      const w = mount(AiMessage, { props: { text: "Steps:", live: true } });
+      await w.setProps({ text: "Steps:\n\n### Plan ahead\n\n- first one\n- second one" });
+      expect(w.find("h5.wp-ai-msg__h").text()).toBe("Plan ahead");
+      expect(w.findAll("li").map((l) => l.text())).toEqual(["first one", "second one"]);
+      await w.setProps({ text: "Steps:\n\n### Plan ahead\n\n- first one\n- second one\n\n| a | b |\n| --- | --- |\n| 1 | 2 |" });
+      expect(w.findAll("td").map((c) => c.text())).toEqual(["1", "2"]);
+    });
+  });
 });
+
