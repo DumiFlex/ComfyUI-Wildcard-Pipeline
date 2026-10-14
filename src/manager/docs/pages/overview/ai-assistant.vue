@@ -280,7 +280,9 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         duplicate options and adds up their weights, <b>Even out the weights</b> lifts the rarest
         options to a tenth of the most common one); <b>Fix all</b> runs every one. The card
         changes in place, you still apply it, and the assistant is told what you fixed. Any other
-        warning has <b>Ask to fix</b>, which asks the assistant for a corrected card.
+        warning the assistant can act on has <b>Ask to fix</b>, which asks it for a corrected
+        card. Notes that only tell you something (what was kept, which card to apply first, a
+        card that replaces an earlier one you didn't apply) show in grey with no button.
       </p>
       <p>
         It can <b>show you around</b>. It opens an item's editor, a docs page or a manager page
@@ -500,8 +502,12 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       </p>
       <ol>
         <li><b>Describe</b> what the pack makes and the rules between its parts ("elves never use
-          guns, mages get robes"). <b>Settings and images</b> holds the pack settings and
-          reference images (drop, paste or pick up to 4; needs a model that sees images):
+          guns, mages get robes"), and add reference images if you have them (drop, paste or pick
+          up to 4; needs a model that sees images). With several, the thumbnails are numbered, so
+          you can say "the skirt in image 2".</li>
+        <li><b>Settings.</b> <b>Next: pack settings</b> opens the pack settings, each with a line
+          saying what the chosen option does. They are kept in this browser, so next time
+          <b>Plan it</b> is the only click needed:
           <DocKeyList
             :items="[
               { term: 'Your library', desc: 'Reuse what fits (wildcards and fixed values you already have, marked yours), New, in its style (built fresh but written like your library), or Everything new.' },
@@ -522,9 +528,26 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           assumed</b>, each one changeable. Click an item to edit it by hand (name, variable,
           section, tags, what it holds, per-use settings), ask the AI to change just that item,
           remove it, or <b>Add an item</b> (described for the AI, or blank). Your edits are kept
-          when the plan updates. When web search is set up, the planner may ask to search
-          (a franchise's characters, an era's clothing): <b>Allow and update the plan</b> runs
-          the searches and revises the plan with what they found, <b>Skip</b> doesn't.</li>
+          when the plan updates. <b>Settings and images</b> under <b>Change the plan</b> changes the
+          settings and images for the next update, which reworks the plan to follow them. Images
+          go with the first plan and again only when you add or remove one, when your update
+          mentions them ("like the photo"), or when you tick <b>Show the images again</b>; each
+          costs about 1,000 tokens a request. A removed image isn't sent again, but what the
+          planner took from it stays unless you ask it to drop that. Clicking a decision or a guess puts it in <b>Change the plan</b>
+          (the box lights up and says so); a decision you click stays listed, crossed out, until
+          the plan updates, and a second click keeps it as it was. With reference images
+          attached, what the planner took from them is listed under <b>From your images</b>, so
+          you can see it read them. After an update, each item says whether it is
+          <b>new</b> or what changed (options, description…), and a line above the plan sums up
+          the round, removed items included. When web search is set up, the planner may ask to
+          search first (a franchise's characters, an era's clothing). The ask sits at the top,
+          and answers, plan updates and Build wait until you choose: <b>Search and update the
+          plan</b> runs the searches and revises the plan with what they found (answers you
+          picked go along), <b>Skip the search</b> doesn't. Under the request, a meter shows how
+          much of the model's context the last plan request took; every update sends the whole
+          conversation again, so it grows. <b>Plan 2 of 3</b> flips between plans; updating an
+          earlier one adds a new plan after the others (it says which plan it came from), so
+          nothing is overwritten.</li>
         <li><b>Plan review.</b> The plan is checked as you edit it for what would break: a
           template or rule that reads a variable nothing sets, a constraint keyed on a tag
           neither wildcard lists, two constraints that loop, wildcards that ignore the pack's
@@ -553,6 +576,12 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         the standing negatives in your templates, so the pack matches what you have. Open
         <b>Start from a prompt you like</b> and paste a prompt to build a pack that makes more like
         it: the planner splits it into slots, one wildcard each.
+      </p>
+      <p>
+        While the model works, the animated logo shows a changing word and the time so far, with
+        what the model is doing under it: reading the prompt, thinking, or writing (with about
+        how many tokens so far). The same line sits in the top bar on every page while any AI
+        request runs, so you can leave the page and still see it working.
       </p>
       <DocCallout variant="tip">
         Building a pack takes one request per item, so a local model needs a few minutes. Use a
@@ -618,15 +647,20 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
 
     <DocSection title="Which model">
       <p>
-        Hosted models (Claude, OpenAI) follow instructions best but may refuse explicit content.
-        For NSFW packs, run an uncensored model yourself. Not refusing isn't enough, though: a
-        model also has to know the words, so the suggestions come in two groups. Install one in
-        Ollama with <code>ollama pull</code> and the name below, or download it from Hugging Face
-        for LM Studio or llama.cpp. With a 24 GB GPU, one of the 24 GB builders is enough on its
-        own; below 16 GB, Gemma 4 12B heretic is the best single model. "Heretic" and
-        "abliterated" builds are the original model with its refusals removed; heretic ones keep
-        more of the original. None of these is proven to know Danbooru tags, so check a draft
-        before you rely on it.
+        <b>Settings › AI assistant › Suggested models</b> lists picks for the provider you
+        chose: Claude models for Claude, OpenAI models for OpenAI (GPT-6 Luna is plenty; GPT-6.1
+        Sol costs more and isn't needed), unmoderated open models for OpenRouter (it reaches many
+        more models, most of them paid with credits), and uncensored models for a server you run
+        yourself. They are picked from benchmarks and community reports; only the ones marked
+        <b>Tested</b> were tried with Wildcard Pipeline. Claude and OpenAI don't allow explicit
+        writing, so use them for organizing, rules and safe packs. For NSFW packs, run an
+        uncensored model yourself or use an unmoderated OpenRouter model. Not refusing isn't
+        enough, though: a model also has to know the words, so the local suggestions come in two
+        groups. Install one in Ollama with <code>ollama pull</code> and the name below, or
+        download it from Hugging Face for LM Studio or llama.cpp. "Heretic" and "abliterated"
+        builds are the original model with its refusals removed; heretic ones keep more of the
+        original. None of these is proven to know Danbooru tags, so check a draft before you rely
+        on it.
       </p>
       <template v-for="g in SUGGESTED_MODEL_GROUPS" :key="g.use">
         <p><b>{{ g.title }}.</b> {{ g.note }}</p>

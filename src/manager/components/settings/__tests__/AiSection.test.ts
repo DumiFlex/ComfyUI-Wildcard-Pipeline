@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryHistory, createRouter } from "vue-router";
 import AiSection from "../sections/AiSection.vue";
 import Select from "../../ui/Select.vue";
-import { SUGGESTED_LOCAL_MODELS } from "../ai-models";
+import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODELS, suggestionsFor } from "../ai-models";
 import { api } from "../../../api/client";
 import { _resetAiConfigForTests } from "../../../composables/useAiConfig";
 import type { AiConfig, AiIndexStatus } from "../../../api/types";
@@ -53,13 +53,17 @@ describe("Settings › AI assistant", () => {
     await flushPromises();
     expect(w.get('[data-test="ai-test"]').attributes("disabled")).toBeDefined();
     expect(w.get('[data-test="ai-privacy"]').text()).toContain("Stays on your machine");
-    expect(w.get('[data-test="ai-suggested-models"]').text()).toContain("abliterated");
+    const card = w.get('[data-test="ai-suggested-models"]');
+    expect(card.text()).toContain("Only the ones marked Tested were tried");
+    expect(card.text()).toContain("ollama pull");
     const ollama = w.findAll('[data-test="ai-model-ollama"]');
     const hf = w.findAll('[data-test="ai-model-hf"]');
     expect(ollama.length).toBe(SUGGESTED_LOCAL_MODELS.filter((m) => m.ollamaUrl).length);
-    expect(w.find('[data-test="ai-models-writing"]').text()).toContain("Rocinante");
-    expect(w.find('[data-test="ai-models-building"]').text()).toContain("abliterated");
+    expect(w.find('[data-test="ai-models-writing"]').text()).toContain("HammerAI/cydonia-v4.3:24b-q4_K_M");
+    expect(w.find('[data-test="ai-models-building"]').text()).toContain("hf.co/filvyb/Qwen3.5-9B-heretic-v2-GGUF:Q4_K_M");
+    expect(card.text()).not.toContain("Rocinante");
     expect(hf.length).toBe(SUGGESTED_LOCAL_MODELS.length);
+    expect(w.findAll('[data-test="ai-model-tested"]').length).toBe(SUGGESTED_LOCAL_MODELS.filter((m) => m.tested).length);
     for (const a of [...ollama, ...hf]) {
       expect(a.attributes("href")).toMatch(/^https:\/\/(ollama\.com|huggingface\.co)\//);
       expect(a.attributes("target")).toBe("_blank");
@@ -351,5 +355,71 @@ describe("Settings › AI assistant", () => {
     expect(w.get('[data-test="ai-key-elsewhere"]').text()).toBe("Saved for api.anthropic.com");
     expect(w.get('[data-test="ai-key-elsewhere-note"]').text()).toContain("isn't sent to this address");
     expect(w.find('[data-test="ai-key-set"]').exists()).toBe(false);
+  });
+});
+
+describe("Settings › AI assistant suggested models per provider", () => {
+  beforeEach(() => {
+    _resetAiConfigForTests();
+    vi.mocked(api.ai.config).mockReset();
+    vi.mocked(api.ai.models).mockReset().mockResolvedValue({ models: [] });
+    vi.mocked(api.ai.index).mockReset().mockResolvedValue(INDEX);
+  });
+
+  async function card(provider: AiConfig["provider"], over: Partial<AiConfig> = {}) {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({ provider, ...over }));
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    return w;
+  }
+
+  it("LM Studio shows the local list by Hugging Face repo, without Ollama links", async () => {
+    const w = await card("lmstudio");
+    const c = w.get('[data-test="ai-suggested-models"]');
+    expect(c.attributes("data-group")).toBe("local");
+    expect(c.text()).toContain("filvyb/Qwen3.5-9B-heretic-v2-GGUF");
+    expect(c.text()).not.toContain("hf.co/");
+    expect(w.findAll('[data-test="ai-model-ollama"]').length).toBe(0);
+    expect(w.findAll('[data-test="ai-model-hf"]').length).toBe(SUGGESTED_LOCAL_MODELS.length);
+  });
+
+  it("Claude shows its own models, prices and the policy note, no local ones", async () => {
+    const w = await card("anthropic");
+    const c = w.get('[data-test="ai-suggested-models"]');
+    expect(c.attributes("data-group")).toBe("anthropic");
+    for (const n of ["claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-5-5"]) expect(c.text()).toContain(n);
+    expect(c.text()).toContain("$2 / $10");
+    expect(c.text()).toContain("doesn't allow sexually explicit writing");
+    expect(c.text()).not.toContain("heretic");
+    expect(w.findAll('[data-test="ai-model-hf"]').length).toBe(0);
+    expect(w.findAll('[data-test="ai-model-tested"]').length).toBe(0);
+  });
+
+  it("OpenAI and OpenRouter show their own picks", async () => {
+    const o = await card("openai");
+    expect(o.get('[data-test="ai-suggested-models"]').text()).toContain("gpt-6-luna");
+    o.unmount();
+    _resetAiConfigForTests();
+    const r = await card("openrouter");
+    const t = r.get('[data-test="ai-suggested-models"]').text();
+    expect(t).toContain("deepseek/deepseek-v4-flash");
+    expect(t).toContain("moderated");
+    expect(r.findAll('[data-test="ai-model-row"]').length).toBe(SUGGESTED_MODELS.openrouter[0].models.length);
+  });
+
+  it("hides the card for Other set to an internet address", async () => {
+    const w = await card("custom", { local: false });
+    expect(w.find('[data-test="ai-suggested-models"]').exists()).toBe(false);
+  });
+
+  it("suggestionsFor picks the list by provider and locality", () => {
+    expect(suggestionsFor("ollama", true)?.key).toBe("local");
+    expect(suggestionsFor("custom", true)?.key).toBe("local");
+    expect(suggestionsFor("custom", false)).toBeNull();
+    expect(suggestionsFor("anthropic", false)?.key).toBe("anthropic");
+    expect(suggestionsFor("openrouter", false)?.groups[0].models.every((m) => m.price)).toBe(true);
+    const all = Object.values(SUGGESTED_MODELS).flatMap((gs) => gs.flatMap((g) => g.models));
+    expect(all.filter((m) => m.tested).map((m) => m.name)).toEqual([SUGGESTED_LOCAL_MODELS[0].name]);
+    for (const m of all) expect(`${m.goodFor}`).not.toMatch(/\u2014/);
   });
 });

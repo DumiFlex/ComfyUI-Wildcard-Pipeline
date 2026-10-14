@@ -8,10 +8,18 @@
 import { computed } from "vue";
 import Button from "../ui/Button.vue";
 import { pickAnswer, usePackBuilder } from "../../composables/usePackBuilder";
+import { autogrow } from "../../utils/autogrow";
+import type { AiPackQuestion } from "../../api/types";
 
 const pb = usePackBuilder();
 const { convo } = pb;
 const open = computed(() => pb.questions.value.length - pb.answeredCount.value);
+
+function onOther(q: AiPackQuestion, ev: Event): void {
+  const el = ev.target as HTMLTextAreaElement;
+  autogrow(el);
+  pb.setOther(q, el.value);
+}
 
 function isPicked(q: string, c: string): boolean {
   return pb.pickFor(q).chosen.includes(c);
@@ -54,20 +62,22 @@ function isPicked(q: string, c: string): boolean {
           @click="pb.decideFor(q)"
         ><i class="pi pi-sparkles" aria-hidden="true" /> Decide for me</button>
       </div>
-      <input
-        class="wp-input wp-input--sm wp-pack-qs__other"
+      <textarea
+        class="wp-textarea wp-pack-qs__other"
+        rows="1"
         :value="pb.pickFor(q.question).other"
         :placeholder="q.multi ? 'Add your own…' : 'Or type your own answer…'"
         :aria-label="`Your own answer to: ${q.question}`"
         :disabled="convo.loading.value"
         data-test="pack-other"
-        @input="pb.setOther(q, ($event.target as HTMLInputElement).value)"
-      >
+        @input="onOther(q, $event)"
+      ></textarea>
     </div>
     <div class="wp-pack-qs__row">
       <span class="wp-pack-qs__dim">
         {{ open > 0 ? `${open} of ${pb.questions.value.length} open` : 'All answered' }}.
-        Answers become decisions the planner keeps.
+        <template v-if="pb.awaitingSearch.value">They go along when you answer the web search above.</template>
+        <template v-else>Answers become decisions the planner keeps.</template>
       </span>
       <Button
         v-if="open > 0"
@@ -81,8 +91,9 @@ function isPicked(q: string, c: string): boolean {
       <Button
         size="sm"
         icon="pi-reply"
-        :disabled="!pb.answeredCount.value || convo.loading.value"
+        :disabled="!pb.answeredCount.value || convo.loading.value || pb.awaitingSearch.value"
         :loading="convo.loading.value"
+        :title="pb.awaitingSearch.value ? 'Answer the web search above first; your answers go along with it' : undefined"
         data-test="pack-answer"
         @click="pb.refinePlan"
       >Send answers</Button>
@@ -110,7 +121,7 @@ function isPicked(q: string, c: string): boolean {
   background: color-mix(in oklab, var(--wp-accent-500) 16%, var(--wp-bg-2));
 }
 .wp-pack-qs__decide { border-style: dashed; color: var(--wp-text-muted); }
-.wp-pack-qs__other { width: 100%; font-size: 12.5px; }
+.wp-pack-qs__other { width: 100%; font-size: 12.5px; min-height: 30px; resize: vertical; line-height: 1.4; }
 .wp-pack-qs__row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .wp-pack-qs__dim { flex: 1; font-size: 12px; color: var(--wp-text-dim); }
 </style>

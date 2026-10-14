@@ -8,6 +8,8 @@ import { useBrowserHistory } from "../composables/useBrowserHistory";
 import { useReleaseCheck } from "../composables/useReleaseCheck";
 import { useUiStore } from "../stores/uiStore";
 import { useAiChat } from "../composables/useAiChat";
+import AiWorking from "../components/ai/AiWorking.vue";
+import { activeAiRequests } from "../api/ai-progress";
 import { useAiConfig } from "../composables/useAiConfig";
 import { useTweaksStore } from "../stores/tweaksStore";
 import { useEngagementStore } from "../stores/engagementStore";
@@ -17,6 +19,11 @@ const ui = useUiStore();
 const tweaks = useTweaksStore();
 const engagement = useEngagementStore();
 const aiChat = useAiChat();
+/** Something is waiting on the model: shown here on every page, so it's
+ *  never a guess whether the AI is still working. The open chat shows its
+ *  own line, so it only counts here while the drawer is closed. */
+const aiRequests = computed(() => activeAiRequests.value.length);
+const chatBusy = computed(() => aiChat.loading.value && !aiChat.open.value);
 const { ready: aiReady } = useAiConfig();
 
 // Version is injected at build time from package.json via vite's
@@ -133,6 +140,24 @@ function openPalette(): void {
     </RouterLink>
 
     <div class="wp-topbar__spacer" />
+    <AiWorking
+      v-if="aiRequests"
+      :key="activeAiRequests[0]?.id"
+      inline
+      :size="20"
+      label=""
+      class="wp-topbar__ai-working"
+      data-test="topbar-ai-working"
+    />
+    <AiWorking
+      v-else-if="chatBusy"
+      inline
+      :size="20"
+      text="the chat is answering"
+      :phase="aiChat.live.value.text ? 'writing' : aiChat.live.value.thinking ? 'thinking' : 'reading'"
+      class="wp-topbar__ai-working"
+      data-test="topbar-ai-working"
+    />
 
     <button
       type="button"
@@ -254,6 +279,8 @@ function openPalette(): void {
 .wp-topbar__discord:hover { color: #5865f2; }
 
 .wp-topbar__ai[aria-pressed="true"] { color: var(--wp-accent-text); }
+.wp-topbar__ai-working { margin-right: 14px; min-width: 0; }
+@media (max-width: 900px) { .wp-topbar__ai-working :deep(.wp-aiw__detail) { display: none; } }
 
 /* What's new — an unread dot in the icon's BOTTOM-right corner, which is the
  * only corner the megaphone's horn leaves empty; at top-right it merged into

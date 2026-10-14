@@ -32,6 +32,10 @@ export interface AiExchange<Res, Ctx> {
   history: AiTurn[];
   ctx: Ctx;
   result: Res;
+  /** The exchange this one follows up (its index), or -1 for the first.
+   *  Going back to an earlier answer and refining it starts a branch: the
+   *  new answer is added at the end, and nothing is overwritten. */
+  parent: number;
 }
 
 export interface AiConversationOptions<Res, Ctx> {
@@ -78,14 +82,28 @@ export function useAiConversation<Res extends { answer: Record<string, unknown>;
     current.value ? [...current.value.history.map((t) => t.instruction), current.value.instruction] : [],
   );
   const count = computed(() => exchanges.value.length);
-  /** Searches the shown answer asks for that weren't run or skipped yet. */
-  const research = computed(() => {
-    const done = new Set(searched.value.map((q) => q.toLowerCase()));
-    return (result.value?.research ?? []).filter((q) => !done.has(q.toLowerCase()));
+  /** The answers that led to the shown one, oldest first, it included. */
+  const chain = computed<Res[]>(() => {
+    const out: Res[] = [];
+    const all = exchanges.value;
+    for (let i = index.value; i >= 0 && i < all.length && out.length <= all.length; i = all[i].parent) {
+      out.unshift(all[i].result);
+    }
+    return out;
   });
+  /** The plan number (1-based) the shown answer follows up, when it isn't
+   *  the one just before it (a branch), else null. */
+  const branchedFrom = computed<number | null>(() => {
+    const cur = current.value;
+    return cur && cur.parent >= 0 && cur.parent !== index.value - 1 ? cur.parent + 1 : null;
+  });
+  /** Searches asked for along the way that weren't run or skipped yet: an
+   *  answer that doesn't repeat them (the user answered questions instead)
+   *  doesn't drop them. */
+  const research = computed(() => pendingResearch(chain.value.map((r) => r.research ?? []), searched.value));
 
   async function request(
-    text: string, history: AiTurn[], ctx: Ctx, fresh: boolean,
+    text: string, history: AiTurn[], ctx: Ctx, fresh: boolean, parent = -1,
   ): Promise<boolean> {
     controller?.abort();
     const mine = new AbortController();
@@ -101,7 +119,7 @@ export function useAiConversation<Res extends { answer: Record<string, unknown>;
         ...(skip ? { skipped: true } : {}),
       }, mine.signal);
       skipped = false;
-      const entry = { instruction: text, history, ctx, result: res };
+      const entry = { instruction: text, history, ctx, result: res, parent: fresh ? -1 : parent };
       exchanges.value = fresh ? [entry] : [...exchanges.value, entry];
       index.value = exchanges.value.length - 1;
       error.value = opts.emptyMessage?.(res) ?? "";
@@ -140,7 +158,7 @@ export function useAiConversation<Res extends { answer: Record<string, unknown>;
       { instruction: cur.instruction, answer: cur.result.answer, ...(note ? { note } : {}) },
     ];
     if (history.length > MAX_TURNS) history = [history[0], ...history.slice(1 - MAX_TURNS)];
-    return request(text, history, cur.ctx, false);
+    return request(text, history, cur.ctx, false, index.value);
   }
 
   /** Run the searches the shown answer asks for, then refine with them. */
@@ -177,7 +195,7 @@ export function useAiConversation<Res extends { answer: Record<string, unknown>;
   /** The shown answer's request again, same context. */
   async function retry(): Promise<void> {
     const cur = current.value;
-    if (cur) await request(cur.instruction, cur.history, cur.ctx, false);
+    if (cur) await request(cur.instruction, cur.history, cur.ctx, false, cur.parent);
   }
 
   function go(delta: number): void {
@@ -224,9 +242,23 @@ export function useAiConversation<Res extends { answer: Record<string, unknown>;
   }
 
   return {
-    instruction, loading, error, result, asked, index, count, research, searching,
+    instruction, loading, error, result, asked, index, count, chain, branchedFrom, research, searching,
     ask, refine, retry, go, clear, restart, stop, chat, allowResearch, skipResearch,
   };
+}
+
+/** Searches asked for in any of `rounds`, newest first, minus `searched`
+ *  (case-insensitive, each once). */
+export function pendingResearch(rounds: string[][], searched: string[]): string[] {
+  const done = new Set(searched.map((q) => q.toLowerCase()));
+  const out: string[] = [];
+  for (const round of [...rounds].reverse()) {
+    for (const q of round) {
+      const k = q.toLowerCase();
+      if (!done.has(k)) { done.add(k); out.push(q); }
+    }
+  }
+  return out;
 }
 
 /** What the user kept from a ticked list, by label, or "" when they kept

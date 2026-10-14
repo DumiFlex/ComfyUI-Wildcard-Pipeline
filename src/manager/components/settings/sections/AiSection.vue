@@ -17,7 +17,7 @@ import SettingRow from "../SettingRow.vue";
 import { api } from "../../../api/client";
 import type { AiConfigPatch, AiEmbedApi, AiIndexStatus, AiModelSize, AiProviderId, AiTestResult, AiToolFormat } from "../../../api/types";
 import { useAiConfig } from "../../../composables/useAiConfig";
-import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../ai-models";
+import { SUGGESTIONS_SOURCE_NOTE, hfRepo, suggestionsFor, type SuggestedModel } from "../ai-models";
 
 const { config, error, save } = useAiConfig();
 
@@ -39,6 +39,13 @@ const providers = computed(() => {
 
 const preset = computed(() => (config.value ? config.value.presets[config.value.provider] : null));
 const isLocal = computed(() => config.value?.local ?? preset.value?.local ?? true);
+
+/* ── Suggested models (only the selected provider's list) ────────────── */
+const suggestions = computed(() => (config.value ? suggestionsFor(config.value.provider, isLocal.value) : null));
+/** Ollama takes the pull name; LM Studio and llama.cpp users start from the repo. */
+function suggestedName(m: SuggestedModel): string {
+  return suggestions.value?.key === "local" && config.value?.provider !== "ollama" ? hfRepo(m) : m.name;
+}
 
 const saveError = ref("");
 async function patch(p: Parameters<typeof save>[0]): Promise<boolean> {
@@ -953,23 +960,24 @@ const off = computed(() => !config.value?.enabled);
           <p class="wp-ai-set__muted">The assistant only proposes changes. Nothing is saved until you press Save.</p>
         </section>
 
-        <section class="wp-ai-set__card" data-test="ai-suggested-models">
-          <h3 class="wp-ai-set__card-title">Suggested local models</h3>
-          <p class="wp-ai-set__muted">
-            Uncensored models you run yourself. Pull one with Ollama (<code>ollama pull &lt;name&gt;</code>), or
-            download it from Hugging Face for LM Studio or llama.cpp.
-          </p>
-          <div v-for="g in SUGGESTED_MODEL_GROUPS" :key="g.use" class="wp-ai-set__model-group" :data-test="`ai-models-${g.use}`">
+        <section v-if="suggestions" class="wp-ai-set__card wp-ai-set__card--models" data-test="ai-suggested-models" :data-group="suggestions.key">
+          <h3 class="wp-ai-set__card-title">Suggested models</h3>
+          <p class="wp-ai-set__muted" data-test="ai-models-source">{{ SUGGESTIONS_SOURCE_NOTE }}</p>
+          <p class="wp-ai-set__muted">{{ suggestions.intro }}</p>
+          <div v-for="g in suggestions.groups" :key="g.title" class="wp-ai-set__model-group" :data-test="`ai-models-${g.models[0]?.use ?? 'group'}`">
             <div class="wp-ai-set__model-group-title">{{ g.title }}</div>
             <div class="wp-ai-set__muted">{{ g.note }}</div>
             <ul class="wp-ai-set__models">
-              <li v-for="m in SUGGESTED_LOCAL_MODELS.filter((x) => x.use === g.use)" :key="m.name" class="wp-ai-set__model">
-                <span class="wp-ai-set__vram" title="GPU memory">{{ m.vram }}</span>
-                <div class="wp-ai-set__model-body">
-                  <code>{{ m.name }}</code>
-                  <span class="wp-ai-set__muted">{{ m.goodFor }}</span>
-                  <span class="wp-ai-set__links">
-                    <a v-if="m.ollamaUrl" :href="m.ollamaUrl" target="_blank" rel="noopener noreferrer" data-test="ai-model-ollama">Ollama</a>
+              <li v-for="m in g.models" :key="m.name" class="wp-ai-set__model" data-test="ai-model-row">
+                <div class="wp-ai-set__model-head">
+                  <code>{{ suggestedName(m) }}</code>
+                  <span v-if="m.tested" class="wp-ai-set__tested" data-test="ai-model-tested">Tested</span>
+                  <span class="wp-ai-set__vram" :title="m.vram ? 'GPU memory' : 'USD per million tokens, input / output'">{{ m.vram ?? m.price }}</span>
+                </div>
+                <div class="wp-ai-set__muted">
+                  {{ m.goodFor }}.
+                  <span v-if="m.hfUrl" class="wp-ai-set__links">
+                    <a v-if="m.ollamaUrl && config.provider === 'ollama'" :href="m.ollamaUrl" target="_blank" rel="noopener noreferrer" data-test="ai-model-ollama">Ollama</a>
                     <a :href="m.hfUrl" target="_blank" rel="noopener noreferrer" data-test="ai-model-hf">Hugging Face</a>
                   </span>
                 </div>
@@ -1060,16 +1068,21 @@ const off = computed(() => !config.value?.enabled);
 }
 .wp-ai-set__muted { color: var(--wp-text-dim); font-size: 12px; }
 .wp-ai-set__card code { font-family: var(--wp-font-mono); font-size: 12px; color: var(--wp-text); }
+.wp-ai-set__card--models { gap: var(--wp-space-2); line-height: 1.45; }
 .wp-ai-set__model-group { margin-top: var(--wp-space-3); }
 .wp-ai-set__model-group-title { font-weight: 600; color: var(--wp-text); }
-.wp-ai-set__models { list-style: none; margin: var(--wp-space-3) 0 0; padding: 0; }
-.wp-ai-set__model { display: flex; gap: var(--wp-space-4); padding: var(--wp-space-3) 0; border-top: 1px solid var(--wp-border); }
+.wp-ai-set__models { list-style: none; margin: var(--wp-space-2) 0 0; padding: 0; }
+.wp-ai-set__model { padding: var(--wp-space-2) 0; border-top: 1px solid var(--wp-border); }
+.wp-ai-set__model-head { display: flex; align-items: baseline; gap: var(--wp-space-3); }
+.wp-ai-set__model-head code { min-width: 0; overflow-wrap: anywhere; }
 .wp-ai-set__vram {
-  flex: none; width: 58px; font-family: var(--wp-font-mono); font-size: 11px; color: var(--wp-text-muted); padding-top: 1px;
+  flex: none; margin-left: auto; font-family: var(--wp-font-mono); font-size: 11px; color: var(--wp-text-muted); white-space: nowrap;
 }
-.wp-ai-set__model-body { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.wp-ai-set__model-body code { overflow-wrap: anywhere; }
-.wp-ai-set__links { font-size: 12px; white-space: nowrap; }
+.wp-ai-set__tested {
+  flex: none; padding: 0 6px; font-size: 10px; font-weight: 600; line-height: 16px; border-radius: 999px;
+  color: var(--wp-success); background: color-mix(in oklab, var(--wp-success) 14%, transparent);
+}
+.wp-ai-set__links { white-space: nowrap; }
 .wp-ai-set__links a { color: var(--wp-accent); text-decoration: none; }
 .wp-ai-set__links a:hover { text-decoration: underline; }
 .wp-ai-set__links a + a { margin-left: var(--wp-space-4); }

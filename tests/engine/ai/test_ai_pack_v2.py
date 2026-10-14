@@ -312,3 +312,15 @@ def test_parse_built_uses_the_reserved_ids():
         b["id"] = "00000000"
     got = pack.parse_built(plan, sent)
     assert {k: v["id"] for k, v in got.items()} == {k: v["id"] for k, v in built.items()}
+
+
+def test_what_the_planner_took_from_the_images_is_kept_and_capped():
+    plan = pack.compile_plan(_raw(from_images=["walking away", " ", *[f"x{i}" for i in range(6)]]))
+    assert plan["from_images"] == ["walking away", "x0", "x1", "x2"]
+    assert pack.plan_answer(plan)["from_images"] == plan["from_images"]
+    assert pack.compile_plan(_raw())["from_images"] == []
+
+
+def test_several_images_are_numbered_in_the_prompt():
+    assert "image 1 first" in pack.plan_prompt("a pack", images=2)
+    assert "image 1 first" not in pack.plan_prompt("a pack", images=1)

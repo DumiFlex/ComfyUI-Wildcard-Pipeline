@@ -129,6 +129,18 @@ describe("chat card fixes, caps and the magnifier", () => {
     w.unmount();
   });
 
+  it("shows notes without an Ask to fix, and the replaced-card line as a note", async () => {
+    const note = "Builds on the earlier change to Outfit; apply that one first";
+    const w = await start(card({ warnings: [note, MODEL_ONLY], fixes: [], notes: [note], replaces: "p0" }));
+    const c = w.get('[data-test="ai-chat-proposal"]');
+    const rows = c.findAll('[data-test="ai-chat-warning"]');
+    expect(rows[0].attributes("data-note")).toBe("true");
+    expect(rows[0].find('[data-test="ai-chat-ask-fix"]').exists()).toBe(false);
+    expect(rows[1].find('[data-test="ai-chat-ask-fix"]').exists()).toBe(true);
+    expect(c.get('[data-test="ai-chat-replaces"]').text()).toContain("Replaces the earlier card");
+    w.unmount();
+  });
+
   it("opens the whole card in the magnifier and applies from there", async () => {
     vi.mocked(api.modules.create).mockReset().mockImplementation(
       async (body) => ({ id: "new1", ...body }) as never);

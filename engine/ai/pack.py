@@ -71,6 +71,7 @@ MAX_QUESTIONS = 4
 MAX_CHOICES = 5
 MAX_SECTIONS = 8
 MAX_ASSUMPTIONS = 6
+MAX_FROM_IMAGES = 4
 MAX_DECISIONS = 24
 MAX_RESEARCH = 2
 MAX_WEB_CHARS = 6000
@@ -119,6 +120,7 @@ PLAN_SCHEMA: dict[str, Any] = _obj({
     "questions": {"type": "array", "items": _obj({
         "header": _STR, "question": _STR, "multi": {"type": "boolean"}, "choices": _STRS})},
     "assumptions": _STRS,
+    "from_images": _STRS,
     "research": _STRS,
     "inputs": {"type": "array", "items": _obj({"var": _STR, "about": _STR, "example": _STR})},
     "sections": {"type": "array", "items": _obj({"name": _STR, "about": _STR})},
@@ -233,6 +235,9 @@ questions their answers raise. [] when nothing important is open. Always \
 write the full plan anyway, using the most likely answers.
 - assumptions: up to 6 short lines on what you guessed that the user might \
 want differently ("one character per image", "outdoor scenes only"). [] if none.
+- from_images: when reference images are attached, up to 4 short lines on \
+what you took from them ("walking away, looking back", "pleated skirt, \
+loose shirt"), so the user can see you read them. [] when none are attached.
 - research: web searches that would make the pack more accurate, when web \
 search is on (the request says so): up to 2 short queries (a franchise's \
 characters, a real art style's vocabulary, a clothing era). The user allows \
@@ -412,6 +417,8 @@ def compile_plan(
                           "choices": choices})
     assumptions = [a for a in (_clean(x, 200) for x in raw.get("assumptions") or []
                                if isinstance(raw.get("assumptions"), list)) if a]
+    from_images = [a for a in (_clean(x, 200) for x in raw.get("from_images") or []
+                               if isinstance(raw.get("from_images"), list)) if a]
     research = list(dict.fromkeys(q for q in (
         _clean(x, 120) for x in (raw.get("research") if isinstance(raw.get("research"), list)
                                  else [])) if q))[:MAX_RESEARCH]
@@ -600,6 +607,7 @@ def compile_plan(
         "anchor": anchor,
         "questions": questions[:MAX_QUESTIONS],
         "assumptions": assumptions[:MAX_ASSUMPTIONS],
+        "from_images": from_images[:MAX_FROM_IMAGES],
         "research": research,
         "decisions": decided,
         "settings": cfg,
@@ -620,6 +628,7 @@ def plan_answer(plan: dict[str, Any]) -> dict[str, Any]:
         "questions": [{k: q[k] for k in ("header", "question", "multi", "choices")}
                       for q in plan.get("questions") or []],
         "assumptions": list(plan.get("assumptions") or []),
+        "from_images": list(plan.get("from_images") or []),
         "research": [],
         "inputs": list(plan.get("inputs") or []),
         "sections": list(plan.get("sections") or []),
@@ -925,6 +934,9 @@ def plan_prompt(instruction: str, *, library_note: str = "", sample: str = "",
             "has one. Write in the sample's style.")
     if images:
         out += "\n\n" + IMAGE_NOTE.format(n=images, s="" if images == 1 else "s")
+        if images > 1:
+            out += (" They come in the order the user numbered them (image 1 first), so "
+                    "\"image 2\" means the second.")
     out += "\n\n" + settings_note(cfg)
     out += "\n" + WEB_LINES[web]
     if decisions:

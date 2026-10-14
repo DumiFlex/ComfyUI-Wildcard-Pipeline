@@ -1,4 +1,5 @@
 import type { CommitOk, CommitPayload } from "../import-export/commit";
+import { endAiRequest, startAiRequest, watchesProgress } from "./ai-progress";
 import type { WildcardFilesResult } from "../import-export/wildcard-files";
 import type {
   BundleCreateInput, BundleListResponse, BundleRow, BundleUpdateInput,
@@ -100,7 +101,14 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (init.body !== undefined && !(init.body instanceof FormData)) {
     headers["content-type"] = "application/json";
   }
-  const resp = await fetch(path, { ...init, headers });
+  const progress = watchesProgress(path, init.method) ? startAiRequest(path) : null;
+  if (progress) headers["X-WP-Progress"] = progress;
+  let resp: Response;
+  try {
+    resp = await fetch(path, { ...init, headers });
+  } finally {
+    if (progress) endAiRequest(progress);
+  }
   checkStartupId(resp);
   if (resp.status === 204) return undefined as T;
   let body: unknown;

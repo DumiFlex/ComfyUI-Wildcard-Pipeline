@@ -57,6 +57,7 @@ from typing import Any
 import aiohttp
 
 from engine.ai import budget
+from wp_api import _ai_progress
 
 _MAX_BODY = 4 * 1024 * 1024
 _LIST_TIMEOUT = aiohttp.ClientTimeout(total=15)
@@ -541,6 +542,23 @@ def _official_openai(cfg: dict[str, Any]) -> bool:
     return cfg.get("provider") == "openai" or host == "api.openai.com"
 
 
+async def _answer(cfg: dict[str, Any], path: str, body: dict[str, Any], kind: str) -> Any:
+    """`complete_json`'s request. Streamed when the browser is watching its
+    progress (`_ai_progress`), so it can say whether the model is reading
+    the prompt, thinking or writing; a plain request otherwise."""
+    if not _ai_progress.active():
+        return await _request(cfg, "POST", path, timeout=_COMPLETE_TIMEOUT, body=body)
+    from wp_api import _ai_chat  # imports this module
+    _ai_progress.call_started()
+    return await _ai_chat._post(cfg, path, body, kind=kind, emit=_ai_progress.on_event,
+                                show=True)
+
+
+def _early(data: Any) -> bool:
+    """A streamed answer that stopped before its end marker."""
+    return isinstance(data, dict) and bool(data.get("_early"))
+
+
 async def _responses_json(
     cfg: dict[str, Any], *, system: str, user: str, schema: dict[str, Any],
     schema_name: str, history: list[tuple[str, Any]],
@@ -558,7 +576,7 @@ async def _responses_json(
         *({"type": "input_image",
            "image_url": f"data:{im['media_type']};base64,{im['data']}"} for im in images)]}
         if images else {"role": "user", "content": user})
-    data = await _request(cfg, "POST", "/responses", timeout=_COMPLETE_TIMEOUT, body={
+    data = await _answer(cfg, "/responses", kind="responses", body={
         "model": cfg["model"],
         "instructions": system,
         "input": items,
@@ -582,7 +600,7 @@ async def _responses_json(
     if details.get("reason") == "content_filter":
         raise AIError("the model declined this request", status=422)
     return _parse_text_json("".join(texts),
-                            cut_off=details.get("reason") == "max_output_tokens")
+                            cut_off=details.get("reason") == "max_output_tokens" or _early(data))
 
 
 async def complete_json(
@@ -624,8 +642,7 @@ async def _complete_json(
     async with _semaphore:
         if cfg["api"] == "anthropic":
             async def send(body: dict[str, Any]) -> Any:
-                return await _request(cfg, "POST", "/messages", timeout=_COMPLETE_TIMEOUT,
-                                      body=body)
+                return await _answer(cfg, "/messages", body, "anthropic")
             data = await claude_send(cfg, {
                 "model": cfg["model"],
                 "max_tokens": max_tokens,
@@ -638,7 +655,8 @@ async def _complete_json(
                     "input_schema": schema,
                 }],
             }, send, forced_tool=_TOOL_NAME)
-            if isinstance(data, dict) and data.get("stop_reason") == "max_tokens":
+            if isinstance(data, dict) and (data.get("stop_reason") == "max_tokens"
+                                           or _early(data)):
                 # A tool call cut off mid-way is not the answer it started.
                 raise AIError(CUT_OFF_MESSAGE)
             blocks = data.get("content") if isinstance(data, dict) else None
@@ -654,7 +672,7 @@ async def _complete_json(
             raise AIError("the model didn't return the expected answer")
 
         if cfg["api"] == "ollama":
-            data = await _request(cfg, "POST", "/api/chat", timeout=_COMPLETE_TIMEOUT, body={
+            data = await _answer(cfg, "/api/chat", kind="ollama", body={
                 "model": cfg["model"],
                 "stream": False,
                 "format": schema,
@@ -681,7 +699,8 @@ async def _complete_json(
             msg = data.get("message") if isinstance(data, dict) else None
             return _parse_text_json(
                 msg.get("content") if isinstance(msg, dict) else None,
-                cut_off=isinstance(data, dict) and data.get("done_reason") == "length")
+                cut_off=isinstance(data, dict) and data.get("done_reason") == "length"
+                or _early(data))
 
         if _official_openai(cfg):
             return await _responses_json(cfg, system=system, user=user, schema=schema,
@@ -704,9 +723,22 @@ async def _complete_json(
             ttl = int(cfg.get("unload_after_s", 60))
             if ttl > 0:
                 body["ttl"] = ttl
-        data = await _request(
-            cfg, "POST", "/chat/completions", timeout=_COMPLETE_TIMEOUT, body=body,
-        )
+        think_keys: tuple[str, ...] = ()
+        if cfg.get("thinking") == "off":
+            from wp_api import _ai_chat  # imports this module
+            off = _ai_chat._no_thinking(cfg)
+            body.update(off)
+            think_keys = tuple(off)
+        try:
+            data = await _answer(cfg, "/chat/completions", body, "openai")
+        except AIError as e:
+            # A server or model that won't take the thinking switch: ask
+            # again as is, as the chat does.
+            if not (think_keys and 400 <= (e.upstream or 0) < 500):
+                raise
+            for k in think_keys:
+                body.pop(k, None)
+            data = await _answer(cfg, "/chat/completions", body, "openai")
         choices = data.get("choices") if isinstance(data, dict) else None
         if not choices or not isinstance(choices[0], dict):
             raise AIError("the model didn't return an answer")
@@ -714,7 +746,8 @@ async def _complete_json(
         if message.get("refusal"):
             raise AIError("the model declined this request", status=422)
         return _parse_text_json(message.get("content"),
-                                cut_off=choices[0].get("finish_reason") == "length")
+                                cut_off=choices[0].get("finish_reason") == "length"
+                                or _early(data))
 
 
 _PROBE_SCHEMA = {

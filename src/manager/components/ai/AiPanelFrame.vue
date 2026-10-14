@@ -13,6 +13,7 @@
 import { computed } from "vue";
 import Button from "../ui/Button.vue";
 import AiImagePicker from "./AiImagePicker.vue";
+import AiWorking from "./AiWorking.vue";
 import { useAiConfig } from "../../composables/useAiConfig";
 import type { AiImages } from "../../composables/useAiImages";
 
@@ -171,9 +172,7 @@ function onKeydown(ev: KeyboardEvent): void {
         @click="emit('run')"
       >{{ verb }}</Button>
     </div>
-    <p v-if="loading" class="wp-ai-frame__status" role="status" data-test="ai-loading">
-      <i class="pi pi-spin pi-spinner" aria-hidden="true" /> Asking {{ modelLabel || "the model" }}… local models can take a minute.
-    </p>
+    <AiWorking v-if="loading" class="wp-ai-frame__status" :label="`Asking ${modelLabel || 'the model'}`" data-test="ai-loading" />
     <p v-if="error" class="wp-ai-frame__error" role="alert" data-test="ai-error">{{ error }}</p>
     <div v-if="answered && research?.length && !loading" class="wp-ai-frame__research" data-test="ai-research">
       <i class="pi pi-globe" aria-hidden="true" />
