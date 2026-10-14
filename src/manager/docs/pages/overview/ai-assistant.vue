@@ -195,6 +195,16 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         answer.
       </p>
       <p>
+        Point at things instead of describing them. In the chat box, and in every Draft with AI
+        and pack builder box, type <b>@</b> and a few letters to pick a wildcard, any other module
+        or a bundle: it goes in as a mention the assistant reads as that exact item, so "add more
+        options to @Hairstyle" needs no search and can't pick a look-alike. Your own message shows
+        the picked items as chips. Type <b>$</b> for a variable some item writes, and, when tag
+        and model completion are on in the completion settings, a few letters of a word offer
+        Danbooru tags, LoRAs and embeddings (<code>&lt;lora:</code> and <code>embedding:</code>
+        complete file names). Up and Down choose, Enter or Tab inserts, Esc closes the list.
+      </p>
+      <p>
         When a request could go several ways that change the result (a style, how many, which
         item), the assistant asks before it builds: up to four short questions under its answer,
         each with a few answers to click (some take several), <b>Other…</b> for your own words

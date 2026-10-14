@@ -106,6 +106,20 @@ def test_retrieve_is_gated(idx):
     assert short.splitlines()[1] == "- Weather (aaaa0002, wildcard, $weather, 3 options)"
 
 
+def test_mentioned_names_the_picked_items(idx):
+    block, ids = ai_index.mentioned(
+        idx, "add to [[aaaa0001#Hair Color]] and @{aaaa0002#Weather}, not [[ffffffff#Gone]]",
+        full=False)
+    assert ids == ["aaaa0001", "aaaa0002"]
+    assert block.startswith("Items the user picked by id")
+    assert "- Hair Color (aaaa0001, wildcard, $hair, 3 options)" in block
+    assert "- Weather (aaaa0002, wildcard, $weather, 3 options)" in block
+    assert "- ffffffff: not in the library" in block
+    # Repeats count once; plain text names nothing.
+    assert ai_index.mentioned(idx, "[[aaaa0001]] [[aaaa0001#x]]", full=False)[1] == ["aaaa0001"]
+    assert ai_index.mentioned(idx, "more hair colors", full=True) == ("", [])
+
+
 def test_index_file_survives_and_rebuilds_on_format_change(tmp_path, monkeypatch):
     path = ai_index.index_path(tmp_path / "wildcard-pipeline.db")
     assert path.name == ai_index.INDEX_FILENAME
