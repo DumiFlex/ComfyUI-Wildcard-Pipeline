@@ -9,6 +9,7 @@
 import { onMounted, ref, watch } from "vue";
 import { useAiConfig } from "../../composables/useAiConfig";
 import { checkVision, type AiImages } from "../../composables/useAiImages";
+import LoadingMark from "@/components/shared/LoadingMark.vue";
 
 const props = withDefaults(defineProps<{
   images: AiImages;
@@ -99,7 +100,8 @@ function onPaste(ev: ClipboardEvent): void {
           ><i class="pi pi-times" aria-hidden="true" /></button>
         </div>
         <span v-if="!images.full.value" class="wp-ai-images__add">
-          <i :class="['pi', images.busy.value ? 'pi-spin pi-spinner' : 'pi-image']" aria-hidden="true" />
+          <LoadingMark v-if="images.busy.value" decorative />
+          <i v-else class="pi pi-image" aria-hidden="true" />
           {{ images.images.value.length ? 'Add' : compact ? 'Add images' : 'Drop, paste or pick reference images' }}
         </span>
         <input

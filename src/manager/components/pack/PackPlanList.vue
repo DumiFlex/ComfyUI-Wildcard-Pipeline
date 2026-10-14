@@ -10,6 +10,7 @@ import Button from "../ui/Button.vue";
 import PackItemEditor from "./PackItemEditor.vue";
 import type { AiPackItem, AiPackKind } from "../../api/types";
 import { usePackBuilder } from "../../composables/usePackBuilder";
+import LoadingMark from "@/components/shared/LoadingMark.vue";
 
 const pb = usePackBuilder();
 const open = ref<string>("");
@@ -128,7 +129,7 @@ async function addWithAi(): Promise<void> {
               <span class="wp-pack-list__name">
                 <code v-if="i.kind !== 'template'">{{ label(i) }}</code>
                 {{ i.kind === 'template' || i.var ? i.name : '' }}
-                <i v-if="pb.changing.value === i.key" class="pi pi-spin pi-spinner" aria-hidden="true" />
+                <LoadingMark v-if="pb.changing.value === i.key" decorative />
                 <span
                   v-if="pb.changes.value[i.key]"
                   class="wp-pack-list__change"

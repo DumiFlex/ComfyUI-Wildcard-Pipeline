@@ -7,6 +7,7 @@ import Modal from "../components/ui/Modal.vue";
 import { useCascadeApply, type CascadeApplyRequest } from "./useCascadeApply";
 import { useBundleStore } from "../stores/bundleStore";
 import Checkbox from "../components/ui/Checkbox.vue";
+import LoadingMark from "@/components/shared/LoadingMark.vue";
 
 interface Props {
   open: boolean;
@@ -233,7 +234,7 @@ function onOpenUpdate(v: boolean): void {
     @update:open="onOpenUpdate"
   >
     <div v-if="loading" class="wp-cascade-confirm__body">
-      <p class="wp-cascade-confirm__msg">Scanning impact…</p>
+      <p class="wp-cascade-confirm__msg"><LoadingMark>Scanning impact…</LoadingMark></p>
     </div>
     <div v-else-if="error" class="wp-cascade-confirm__body">
       <p class="wp-cascade-confirm__error">⚠ {{ error }}</p>

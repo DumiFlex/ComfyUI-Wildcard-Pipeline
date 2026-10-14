@@ -164,6 +164,7 @@ import {
 } from "../community/community-posts";
 import { collectTransitiveDeps } from "../community/transitive-deps";
 import { downloadDepsForDangling } from "../community/download-and-reattach";
+import LoadingMark from "@/components/shared/LoadingMark.vue";
 
 const props = defineProps<{ id?: string }>();
 
@@ -1177,7 +1178,7 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
         @discard="draft.discard"
       />
     </template>
-    <div v-if="loading" class="wp-dim wp-bundle-editor__loading">Loading bundle…</div>
+    <LoadingMark v-if="loading" :size="40" block>Loading bundle…</LoadingMark>
 
     <template v-else>
       <div id="editor-section-identity">
@@ -1366,7 +1367,6 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
   margin-right: var(--wp-space-2);
   color: var(--wp-text-dim);
 }
-.wp-bundle-editor__loading { padding: var(--wp-space-8) 0; text-align: center; }
 .wp-bundle-editor__empty { padding: var(--wp-space-6) 0; font-size: var(--wp-text-base); }
 
 .wp-bundle-children-grid {

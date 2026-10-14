@@ -16,6 +16,7 @@ import ConfirmDialog from "../../../components/shared/ConfirmDialog.vue";
 import { useDatabaseStore } from "../../stores/databaseStore";
 import { useSystemStore } from "../../stores/systemStore";
 import type { MaintenanceOp, MaintenanceResult } from "../../api/types";
+import LoadingMark from "@/components/shared/LoadingMark.vue";
 
 interface OpSpec {
   op: MaintenanceOp;
@@ -152,7 +153,7 @@ onMounted(() => {
     </div>
 
     <div v-else-if="store.loading && !store.info" data-test="database-loading" class="wp-db__loading">
-      <Icon name="spin pi-spinner" />
+      <LoadingMark decorative />
       <span>Loading database info…</span>
     </div>
 

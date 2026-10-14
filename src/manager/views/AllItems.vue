@@ -42,6 +42,7 @@ import { categoryAssignOptions, categoryFilterOptions } from "../utils/category-
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import type { BundleRow, CategoryRow, ModuleRow, ModuleType } from "../api/types";
+import LoadingMark from "@/components/shared/LoadingMark.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -471,7 +472,7 @@ function refresh() {
                mid-animation reflow. min-height matches roughly one
                wrapped row of chips. -->
           <div class="wp-tags-slot">
-            <div v-if="!hasLoaded" class="wp-dim wp-tags-empty">Loading tags…</div>
+            <div v-if="!hasLoaded" class="wp-dim wp-tags-empty"><LoadingMark>Loading tags…</LoadingMark></div>
             <div v-else-if="!allTags.length" class="wp-dim wp-tags-empty">No tags in this collection.</div>
             <div v-else class="wp-tags-row">
               <button

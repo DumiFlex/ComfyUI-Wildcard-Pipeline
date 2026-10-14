@@ -58,7 +58,8 @@ describe("Button variants × states", () => {
         const btn = wrap.get("button");
         expect(btn.attributes("aria-busy")).toBe("true");
         expect(btn.attributes("disabled")).toBeDefined();
-        expect(btn.find(".pi-spinner").exists()).toBe(true);
+        expect(btn.find("[data-test='loading-mark']").exists()).toBe(true);
+        expect(btn.find(".pi-spinner").exists()).toBe(false);
       });
 
       it("does not emit click when loading", async () => {
