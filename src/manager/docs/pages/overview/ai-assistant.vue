@@ -298,9 +298,12 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         Rewrite, Retag and Weights tabs, <b>Draft with AI</b> in the other editors), opens
         <b>Organize with AI</b> on the rows it means, or sets up the Test Runner (the stack,
         how many seeds, a fixed first seed, pinned values, the variable to show) and runs it,
-        or saves it as a scenario. Nothing is applied from a panel until you apply it there.
-        The chat is told what came back. A Test Runner scenario with unsaved changes is never replaced, and an editor with
-        unsaved changes asks before the chat moves you elsewhere.
+        or saves it as a scenario. Ask it to add a module to the run or take one out and it
+        changes the open stack instead, keeping your seeds and pins; a constraint brings its
+        source and target wildcards along, in run order. Nothing is applied from a panel until
+        you apply it there. The chat is told what came back. A Test Runner scenario with
+        unsaved changes you made is never replaced (its own earlier quick run is), and an
+        editor with unsaved changes asks before the chat moves you elsewhere.
       </p>
       <p>
         It can also <b>run a stack on the engine</b> before it answers: modules and bundles from
